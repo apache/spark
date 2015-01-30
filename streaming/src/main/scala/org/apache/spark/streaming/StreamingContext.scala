@@ -397,6 +397,11 @@ class StreamingContext private[streaming] (
    * generating one byte array per record. Files must be written to the monitored directory
    * by "moving" them from another location within the same file system. File names
    * starting with . are ignored.
+   *
+   * '''Note:''' Normally getBytes returns an array padded with extra values,
+   * but the FixedLengthBinaryInputFormat ensures that it will always be backed
+   * by a byte array of the correct length (the recordLength)
+   *
    * @param directory HDFS directory to monitor for new file
    * @param recordLength length of each record in bytes
    */
@@ -406,7 +411,10 @@ class StreamingContext private[streaming] (
     val conf = sc_.hadoopConfiguration
     conf.setInt(FixedLengthBinaryInputFormat.RECORD_LENGTH_PROPERTY, recordLength)
     val br = fileStream[LongWritable, BytesWritable, FixedLengthBinaryInputFormat](directory, conf)
-    val data = br.map{ case (k, v) => v.getBytes}
+    val data = br.map{ case (k, v) =>
+      val bytes = v.getBytes
+      assert(bytes.length == recordLength, "Byte array does not have correct length")
+      bytes}
     data
   }
 
