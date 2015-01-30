@@ -56,12 +56,6 @@ abstract class NamedExpression extends Expression {
     } else {
       ""
     }
-
-  override def equals(other: Any): Boolean = {
-    super.equals(other) &&
-    exprId == other.asInstanceOf[NamedExpression].exprId &&
-    qualifiers == other.asInstanceOf[NamedExpression].qualifiers
-  }
 }
 
 abstract class Attribute extends NamedExpression {
