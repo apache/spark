@@ -183,10 +183,9 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
 
   private def appRow(app: ApplicationInfo, active: Boolean): Seq[Node] = {
     val killLink = if (parent.killEnabled && app.state == ApplicationState.RUNNING) {
-    val killLinkUri = "app/kill?id=%s&terminate=true"
-      .format(app.id)
-    val confirm = "return window.confirm('Are you sure you want to kill application %s ?');"
-      .format(app.id)
+    val killLinkUri = s"app/kill?id=${app.id}&terminate=true"
+    val confirm = "return window.confirm(" +
+      s"'Are you sure you want to kill application ${app.id} ?');"
       <span class="kill-link">
         (<a href={killLinkUri} onclick={confirm}>kill</a>)
       </span>
