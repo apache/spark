@@ -17,19 +17,13 @@
 
 package org.apache.spark.mllib.feature
 
+import org.scalatest.FunSuite
+
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.scalatest.FunSuite
 
 class ChiSqSelectorSuite extends FunSuite with MLlibTestSparkContext {
-
-  lazy val labeledDiscreteData = sc.parallelize(
-    Seq( new LabeledPoint(0.0, Vectors.dense(Array(8.0, 7.0, 0.0))),
-      new LabeledPoint(1.0, Vectors.dense(Array(0.0, 9.0, 6.0))),
-      new LabeledPoint(1.0, Vectors.dense(Array(0.0, 9.0, 8.0))),
-      new LabeledPoint(2.0, Vectors.dense(Array(8.0, 9.0, 5.0)))
-    ), 2)
 
   /*
    *  Contingency tables
@@ -53,16 +47,23 @@ class ChiSqSelectorSuite extends FunSuite with MLlibTestSparkContext {
    *  Use chi-squared calculator from Internet
    */
 
-  test("ChiSqSelector transform test") {
+  test("ChiSqSelector transform test (sparse & dense vector)") {
+    val labeledDiscreteData = sc.parallelize(
+      Seq(new LabeledPoint(0.0, Vectors.sparse(3, Array((0, 8.0), (1, 7.0)))),
+        new LabeledPoint(1.0, Vectors.sparse(3, Array((1, 9.0), (2, 6.0)))),
+        new LabeledPoint(1.0, Vectors.dense(Array(0.0, 9.0, 8.0))),
+        new LabeledPoint(2.0, Vectors.dense(Array(8.0, 9.0, 5.0)))
+      ), 2)
     val preFilteredData =
-      Set( new LabeledPoint(0.0, Vectors.dense(Array(0.0))),
+      Set(new LabeledPoint(0.0, Vectors.dense(Array(0.0))),
         new LabeledPoint(1.0, Vectors.dense(Array(6.0))),
         new LabeledPoint(1.0, Vectors.dense(Array(8.0))),
         new LabeledPoint(2.0, Vectors.dense(Array(5.0)))
       )
-    val model = ChiSqSelector.fit(labeledDiscreteData, 1)
-    val filteredData = labeledDiscreteData.map(lp =>
-      new LabeledPoint(lp.label, model.transform(lp.features))).collect().toSet
+    val model = new ChiSqSelector(1).fit(labeledDiscreteData)
+    val filteredData = labeledDiscreteData.map { lp =>
+      new LabeledPoint(lp.label, model.transform(lp.features))
+    }.collect().toSet
     assert(filteredData == preFilteredData)
   }
 }
