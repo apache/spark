@@ -144,7 +144,8 @@ function update(source) {
       })
       .attr("height", barHeight)
       .attr("width", function(d, i) {return barWidth - d.y;})
-      .on("click", click);
+      .attr("task_id", function(d){return d.name})
+      .on("click", toggles);
 
   nodeEnter.append("text")
       .attr("dy", 3.5)
@@ -256,8 +257,31 @@ function set_tooltip(){
   });
 
 }
+function toggles(clicked_d) {
+    // Collapse nodes with the same task id
+    d3.selectAll("[task_id='" + clicked_d.name + "']").each(function(d){
+      if(clicked_d != d && d.children) {
+          d._children = d.children;
+          d.children = null;
+        update(d);
+      }
+    });
+
+    // Toggle clicked node
+    if(clicked_d._children) {
+        clicked_d.children = clicked_d._children;
+        clicked_d._children = null;
+    } else {
+        clicked_d._children = clicked_d.children;
+        clicked_d.children = null;
+    }
+    update(clicked_d);
+    set_tooltip();
+}
 // Toggle children on click.
 function click(d) {
+  console.log(d);
+
   if (d.children || d._children){
     if (d.children) {
       d._children = d.children;
