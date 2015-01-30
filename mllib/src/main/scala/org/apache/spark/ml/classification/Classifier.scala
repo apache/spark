@@ -21,9 +21,9 @@ import org.apache.spark.annotation.{DeveloperApi, AlphaComponent}
 import org.apache.spark.ml.impl.estimator.{PredictionModel, Predictor, PredictorParams}
 import org.apache.spark.ml.param.{Params, ParamMap, HasRawPredictionCol}
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
-import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.Star
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.Dsl._
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
 
 /**
@@ -95,7 +95,7 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
    * @param paramMap additional parameters, overwrite embedded params
    * @return transformed dataset
    */
-  override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
+  override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     // This default implementation should be overridden as needed.
 
     // Check schema
@@ -162,12 +162,9 @@ private[ml] object ClassificationModel {
    * @return (number of columns added, transformed dataset)
    */
   private[ml] def transformColumnsImpl[FeaturesType](
-      dataset: SchemaRDD,
+      dataset: DataFrame,
       model: ClassificationModel[FeaturesType, _],
-      map: ParamMap): (Int, SchemaRDD) = {
-
-    import org.apache.spark.sql.catalyst.dsl._
-    import dataset.sqlContext._
+      map: ParamMap): (Int, DataFrame) = {
 
     // Output selected columns only.
     // This is a bit complicated since it tries to avoid repeated computation.
@@ -176,22 +173,25 @@ private[ml] object ClassificationModel {
     if (map(model.rawPredictionCol) != "") {
       // output raw prediction
       val features2raw: FeaturesType => Vector = model.predictRaw
-      tmpData = tmpData.select(Star(None),
-        features2raw.call(map(model.featuresCol).attr) as map(model.rawPredictionCol))
+      tmpData = tmpData.select($"*",
+        callUDF(features2raw, new VectorUDT,
+          tmpData(map(model.featuresCol))).as(map(model.rawPredictionCol)))
       numColsOutput += 1
       if (map(model.predictionCol) != "") {
         val raw2pred: Vector => Double = (rawPred) => {
           rawPred.toArray.zipWithIndex.maxBy(_._1)._2
         }
-        tmpData = tmpData.select(Star(None),
-          raw2pred.call(map(model.rawPredictionCol).attr) as map(model.predictionCol))
+        tmpData = tmpData.select($"*",
+          callUDF(raw2pred, DoubleType,
+            tmpData(map(model.rawPredictionCol))).as(map(model.predictionCol)))
         numColsOutput += 1
       }
     } else if (map(model.predictionCol) != "") {
       // output prediction
       val features2pred: FeaturesType => Double = model.predict
-      tmpData = tmpData.select(Star(None),
-        features2pred.call(map(model.featuresCol).attr) as map(model.predictionCol))
+      tmpData = tmpData.select($"*",
+        callUDF(features2pred, DoubleType,
+          tmpData(map(model.featuresCol))).as(map(model.predictionCol)))
       numColsOutput += 1
     }
     (numColsOutput, tmpData)

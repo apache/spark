@@ -20,8 +20,8 @@ package org.apache.spark.ml.classification
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
 import org.apache.spark.ml.param.{HasProbabilityCol, ParamMap, Params}
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
-import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.Star
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.Dsl._
 import org.apache.spark.sql.types.{DataType, StructType}
 
 
@@ -91,10 +91,8 @@ abstract class ProbabilisticClassificationModel[
    * @param paramMap additional parameters, overwrite embedded params
    * @return transformed dataset
    */
-  override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
+  override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     // This default implementation should be overridden as needed.
-    import dataset.sqlContext._
-    import org.apache.spark.sql.catalyst.dsl._
 
     // Check schema
     transformSchema(dataset.schema, paramMap, logging = true)
@@ -118,8 +116,9 @@ abstract class ProbabilisticClassificationModel[
       val features2probs: FeaturesType => Vector = (features) => {
         tmpModel.predictProbabilities(features)
       }
-      outputData.select(Star(None),
-        features2probs.call(map(featuresCol).attr) as map(probabilityCol))
+      outputData.select($"*",
+        callUDF(features2probs, new VectorUDT,
+          outputData(map(featuresCol))).as(map(probabilityCol)))
     } else {
       if (numColsOutput == 0) {
         this.logWarning(s"$uid: ProbabilisticClassificationModel.transform() was called as NOOP" +

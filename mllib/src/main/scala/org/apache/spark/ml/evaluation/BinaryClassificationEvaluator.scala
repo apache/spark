@@ -18,11 +18,11 @@
 package org.apache.spark.ml.evaluation
 
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml._
+import org.apache.spark.ml.Evaluator
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
-import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.types.DoubleType
 
 
@@ -52,7 +52,7 @@ class BinaryClassificationEvaluator extends Evaluator with Params
     checkInputColumn(schema, map(labelCol), DoubleType)
 
     // TODO: When dataset metadata has been implemented, check rawPredictionCol vector length = 2.
-    val scoreAndLabels = dataset.select(map(rawPredictionCol).attr, map(labelCol).attr)
+    val scoreAndLabels = dataset.select(map(rawPredictionCol), map(labelCol))
       .map { case Row(rawPrediction: Vector, label: Double) =>
         (rawPrediction(1), label)
       }

@@ -42,14 +42,18 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
   test("logistic regression: default params") {
     val lr = new LogisticRegression
     assert(lr.getLabelCol == "label")
+    assert(lr.getFeaturesCol == "features")
+    assert(lr.getPredictionCol == "prediction")
+    assert(lr.getRawPredictionCol == "rawPrediction")
+    assert(lr.getProbabilityCol == "probability")
     val model = lr.fit(dataset)
     model.transform(dataset)
-      .select('label, 'probability, 'prediction)
+      .select("label", "probability", "prediction", "rawPrediction")
       .collect()
-    // Check defaults
     assert(model.getThreshold === 0.5)
     assert(model.getFeaturesCol == "features")
     assert(model.getPredictionCol == "prediction")
+    assert(model.getRawPredictionCol == "rawPrediction")
     assert(model.getProbabilityCol == "probability")
   }
 
@@ -61,16 +65,6 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
       .setThreshold(0.6)
       .setProbabilityCol("myProbability")
     val model = lr.fit(dataset)
-    model.transform(dataset, model.threshold -> 0.8) // overwrite threshold
-      .select("label", "score", "prediction")
-      .collect()
-  }
-
-  test("logistic regression fit and transform with varargs") {
-    val lr = new LogisticRegression
-    val model = lr.fit(dataset, lr.maxIter -> 10, lr.regParam -> 1.0)
-    model.transform(dataset, model.threshold -> 0.8, model.scoreCol -> "probability")
-      .select("label", "probability", "prediction")
     assert(model.fittingParamMap.get(lr.maxIter) === Some(10))
     assert(model.fittingParamMap.get(lr.regParam) === Some(1.0))
     assert(model.fittingParamMap.get(lr.threshold) === Some(0.6))
@@ -79,7 +73,7 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     // Modify model params, and check that the params worked.
     model.setThreshold(1.0)
     val predAllZero = model.transform(dataset)
-      .select('prediction, 'myProbability)
+      .select("prediction", "myProbability")
       .collect()
       .map { case Row(pred: Double, prob: Vector) => pred }
     assert(predAllZero.forall(_ === 0),
@@ -88,7 +82,7 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     // Call transform with params, and check that the params worked.
     val predNotAllZero =
       model.transform(dataset, model.threshold -> 0.0, model.probabilityCol -> "myProb")
-        .select('prediction, 'myProb)
+        .select("prediction", "myProb")
         .collect()
         .map { case Row(pred: Double, prob: Vector) => pred }
     assert(predNotAllZero.exists(_ !== 0.0))
@@ -105,7 +99,6 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
 
   test("logistic regression: Predictor, Classifier methods") {
     val sqlContext = this.sqlContext
-    import sqlContext._
     val lr = new LogisticRegression
 
     val model = lr.fit(dataset)
@@ -115,7 +108,7 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     val results = model.transform(dataset)
 
     // Compare rawPrediction with probability
-    results.select('rawPrediction, 'probability).collect().map {
+    results.select("rawPrediction", "probability").collect().map {
       case Row(raw: Vector, prob: Vector) =>
         assert(raw.size === 2)
         assert(prob.size === 2)
@@ -125,7 +118,7 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     }
 
     // Compare prediction with probability
-    results.select('prediction, 'probability).collect().map {
+    results.select("prediction", "probability").collect().map {
       case Row(pred: Double, prob: Vector) =>
         val predFromProb = prob.toArray.zipWithIndex.maxBy(_._1)._2
         assert(pred == predFromProb)

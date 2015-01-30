@@ -15,10 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.classification;
+package org.apache.spark.ml.regression;
 
 import java.io.Serializable;
-import java.util.ArrayList;
 import java.util.List;
 
 import org.junit.After;
@@ -27,32 +26,25 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.ml.regression.LinearRegression;
-import org.apache.spark.ml.regression.LinearRegressionModel;
 import static org.apache.spark.mllib.classification.LogisticRegressionSuite
     .generateLogisticInputAsList;
 import org.apache.spark.mllib.regression.LabeledPoint;
+import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.SQLContext;
-import org.apache.spark.sql.SchemaRDD;
 
 
 public class JavaLinearRegressionSuite implements Serializable {
 
   private transient JavaSparkContext jsc;
   private transient SQLContext jsql;
-  private transient SchemaRDD dataset;
+  private transient DataFrame dataset;
   private transient JavaRDD<LabeledPoint> datasetRDD;
-  private double eps = 1e-5;
 
   @Before
   public void setUp() {
     jsc = new JavaSparkContext("local", "JavaLinearRegressionSuite");
     jsql = new SQLContext(jsc);
-    List<LabeledPoint> points = new ArrayList<LabeledPoint>();
-    for (org.apache.spark.mllib.regression.LabeledPoint lp:
-        generateLogisticInputAsList(1.0, 1.0, 100, 42)) {
-      points.add(new LabeledPoint(lp.label(), lp.features()));
-    }
+    List<LabeledPoint> points = generateLogisticInputAsList(1.0, 1.0, 100, 42);
     datasetRDD = jsc.parallelize(points, 2);
     dataset = jsql.applySchema(datasetRDD, LabeledPoint.class);
     dataset.registerTempTable("dataset");
@@ -70,7 +62,7 @@ public class JavaLinearRegressionSuite implements Serializable {
     assert(lr.getLabelCol().equals("label"));
     LinearRegressionModel model = lr.fit(dataset);
     model.transform(dataset).registerTempTable("prediction");
-    SchemaRDD predictions = jsql.sql("SELECT label, prediction FROM prediction");
+    DataFrame predictions = jsql.sql("SELECT label, prediction FROM prediction");
     predictions.collect();
     // Check defaults
     assert(model.getFeaturesCol().equals("features"));

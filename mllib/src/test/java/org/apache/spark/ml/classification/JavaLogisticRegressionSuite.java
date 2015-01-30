@@ -19,7 +19,6 @@ package org.apache.spark.ml.classification;
 
 import java.io.Serializable;
 import java.lang.Math;
-import java.util.ArrayList;
 import java.util.List;
 
 import org.junit.After;
@@ -28,12 +27,11 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.SQLContext;
 import static org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInputAsList;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.regression.LabeledPoint;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.Row;
 
 
@@ -50,11 +48,7 @@ public class JavaLogisticRegressionSuite implements Serializable {
   public void setUp() {
     jsc = new JavaSparkContext("local", "JavaLogisticRegressionSuite");
     jsql = new SQLContext(jsc);
-    List<LabeledPoint> points = new ArrayList<LabeledPoint>();
-    for (org.apache.spark.mllib.regression.LabeledPoint lp:
-        generateLogisticInputAsList(1.0, 1.0, 100, 42)) {
-      points.add(new LabeledPoint(lp.label(), lp.features()));
-    }
+    List<LabeledPoint> points = generateLogisticInputAsList(1.0, 1.0, 100, 42);
     datasetRDD = jsc.parallelize(points, 2);
     dataset = jsql.applySchema(datasetRDD, LabeledPoint.class);
     dataset.registerTempTable("dataset");
@@ -98,21 +92,14 @@ public class JavaLogisticRegressionSuite implements Serializable {
     // Modify model params, and check that the params worked.
     model.setThreshold(1.0);
     model.transform(dataset).registerTempTable("predAllZero");
-    SchemaRDD predAllZero = jsql.sql("SELECT prediction, myProbability FROM predAllZero");
+    DataFrame predAllZero = jsql.sql("SELECT prediction, myProbability FROM predAllZero");
     for (Row r: predAllZero.collectAsList()) {
       assert(r.getDouble(0) == 0.0);
     }
     // Call transform with params, and check that the params worked.
-    /* TODO: USE THIS
-    model.transform(dataset, model.threshold().w(0.8)) // overwrite threshold
-        .registerTempTable("prediction");
-    DataFrame predictions = jsql.sql("SELECT label, score, prediction FROM prediction");
-    predictions.collectAsList();
-    */
-
     model.transform(dataset, model.threshold().w(0.0), model.probabilityCol().w("myProb"))
       .registerTempTable("predNotAllZero");
-    SchemaRDD predNotAllZero = jsql.sql("SELECT prediction, myProb FROM predNotAllZero");
+    DataFrame predNotAllZero = jsql.sql("SELECT prediction, myProb FROM predNotAllZero");
     boolean foundNonZero = false;
     for (Row r: predNotAllZero.collectAsList()) {
       if (r.getDouble(0) != 0.0) foundNonZero = true;
@@ -137,7 +124,7 @@ public class JavaLogisticRegressionSuite implements Serializable {
     assert(model.numClasses() == 2);
 
     model.transform(dataset).registerTempTable("transformed");
-    SchemaRDD trans1 = jsql.sql("SELECT rawPrediction, probability FROM transformed");
+    DataFrame trans1 = jsql.sql("SELECT rawPrediction, probability FROM transformed");
     for (Row row: trans1.collect()) {
       Vector raw = (Vector)row.get(0);
       Vector prob = (Vector)row.get(1);
@@ -148,7 +135,7 @@ public class JavaLogisticRegressionSuite implements Serializable {
       assert(Math.abs(prob.apply(0) - (1.0 - probFromRaw1)) < eps);
     }
 
-    SchemaRDD trans2 = jsql.sql("SELECT prediction, probability FROM transformed");
+    DataFrame trans2 = jsql.sql("SELECT prediction, probability FROM transformed");
     for (Row row: trans2.collect()) {
       double pred = row.getDouble(0);
       Vector prob = (Vector)row.get(1);

@@ -21,7 +21,7 @@ import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param.{Params, ParamMap, HasMaxIter, HasRegParam}
 import org.apache.spark.mllib.linalg.{BLAS, Vector}
 import org.apache.spark.mllib.regression.LinearRegressionWithSGD
-import org.apache.spark.sql._
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.storage.StorageLevel
 
 
@@ -47,10 +47,10 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
   def setRegParam(value: Double): this.type = set(regParam, value)
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
-  override protected def train(dataset: SchemaRDD, paramMap: ParamMap): LinearRegressionModel = {
+  override protected def train(dataset: DataFrame, paramMap: ParamMap): LinearRegressionModel = {
     // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
     val oldDataset = extractLabeledPoints(dataset, paramMap)
-    val handlePersistence = dataset.getStorageLevel == StorageLevel.NONE
+    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) {
       oldDataset.persist(StorageLevel.MEMORY_AND_DISK)
     }

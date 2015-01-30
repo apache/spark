@@ -20,12 +20,10 @@ package org.apache.spark.ml.classification
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
-import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
-import org.apache.spark.sql._
+import org.apache.spark.mllib.linalg.{VectorUDT, BLAS, Vector, Vectors}
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.Dsl._
-import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
-import org.apache.spark.sql.catalyst.analysis.Star
-import org.apache.spark.sql.catalyst.dsl._
+import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.storage.StorageLevel
 
 
@@ -55,10 +53,10 @@ class LogisticRegression
   def setMaxIter(value: Int): this.type = set(maxIter, value)
   def setThreshold(value: Double): this.type = set(threshold, value)
 
-  override protected def train(dataset: SchemaRDD, paramMap: ParamMap): LogisticRegressionModel = {
+  override protected def train(dataset: DataFrame, paramMap: ParamMap): LogisticRegressionModel = {
     // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
     val oldDataset = extractLabeledPoints(dataset, paramMap)
-    val handlePersistence = dataset.getStorageLevel == StorageLevel.NONE
+    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) {
       oldDataset.persist(StorageLevel.MEMORY_AND_DISK)
     }
@@ -106,25 +104,10 @@ class LogisticRegressionModel private[ml] (
     1.0 / (1.0 + math.exp(-m))
   }
 
-/*
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
-    transformSchema(dataset.schema, paramMap, logging = true)
-    val map = this.paramMap ++ paramMap
-    val scoreFunction = udf { v: Vector =>
-      val margin = BLAS.dot(v, weights)
-      1.0 / (1.0 + math.exp(-margin))
-    }
-    val t = map(threshold)
-    val predictFunction: Double => Double = (score) => { if (score > t) 1.0 else 0.0 }
-    dataset
-      .select($"*", callUDF(scoreFunction, col(map(featuresCol))).as(map(scoreCol)))
-      .select($"*", callUDF(predictFunction, col(map(scoreCol))).as(map(predictionCol)))
-*/
-  override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
     // Check schema
     transformSchema(dataset.schema, paramMap, logging = true)
 
-    import dataset.sqlContext._
     val map = this.paramMap ++ paramMap
 
     // Output selected columns only.
@@ -136,8 +119,8 @@ class LogisticRegressionModel private[ml] (
     var numColsOutput = 0
     if (map(rawPredictionCol) != "") {
       val features2raw: Vector => Vector = predictRaw
-      tmpData = tmpData.select(Star(None),
-        features2raw.call(map(featuresCol).attr) as map(rawPredictionCol))
+      tmpData = tmpData.select($"*",
+        callUDF(features2raw, new VectorUDT, tmpData(map(featuresCol))).as(map(rawPredictionCol)))
       numColsOutput += 1
     }
     if (map(probabilityCol) != "") {
@@ -146,12 +129,12 @@ class LogisticRegressionModel private[ml] (
           val prob1 = 1.0 / (1.0 + math.exp(-rawPreds(1)))
           Vectors.dense(1.0 - prob1, prob1)
         }
-        tmpData = tmpData.select(Star(None),
-          raw2prob.call(map(rawPredictionCol).attr) as map(probabilityCol))
+        tmpData = tmpData.select($"*",
+          callUDF(raw2prob, new VectorUDT, tmpData(map(rawPredictionCol))).as(map(probabilityCol)))
       } else {
         val features2prob: Vector => Vector = predictProbabilities
-        tmpData = tmpData.select(Star(None),
-          features2prob.call(map(featuresCol).attr) as map(probabilityCol))
+        tmpData = tmpData.select($"*",
+          callUDF(features2prob, new VectorUDT, tmpData(map(featuresCol))).as(map(probabilityCol)))
       }
       numColsOutput += 1
     }
@@ -161,19 +144,19 @@ class LogisticRegressionModel private[ml] (
         val predict: Vector => Double = (probs) => {
           if (probs(1) > t) 1.0 else 0.0
         }
-        tmpData = tmpData.select(Star(None),
-          predict.call(map(probabilityCol).attr) as map(predictionCol))
+        tmpData = tmpData.select($"*",
+          callUDF(predict, DoubleType, tmpData(map(probabilityCol))).as(map(predictionCol)))
       } else if (map(rawPredictionCol) != "") {
         val predict: Vector => Double = (rawPreds) => {
           val prob1 = 1.0 / (1.0 + math.exp(-rawPreds(1)))
           if (prob1 > t) 1.0 else 0.0
         }
-        tmpData = tmpData.select(Star(None),
-          predict.call(map(rawPredictionCol).attr) as map(predictionCol))
+        tmpData = tmpData.select($"*",
+          callUDF(predict, DoubleType, tmpData(map(rawPredictionCol))).as(map(predictionCol)))
       } else {
         val predict: Vector => Double = this.predict
-        tmpData = tmpData.select(Star(None),
-          predict.call(map(featuresCol).attr) as map(predictionCol))
+        tmpData = tmpData.select($"*",
+          callUDF(predict, DoubleType, tmpData(map(featuresCol))).as(map(predictionCol)))
       }
       numColsOutput += 1
     }

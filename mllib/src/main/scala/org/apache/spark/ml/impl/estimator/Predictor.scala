@@ -23,8 +23,8 @@ import org.apache.spark.ml.param._
 import org.apache.spark.mllib.linalg.{VectorUDT, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.Star
+import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.Dsl._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
 
@@ -85,7 +85,7 @@ abstract class Predictor[
   def setFeaturesCol(value: String): Learner = set(featuresCol, value).asInstanceOf[Learner]
   def setPredictionCol(value: String): Learner = set(predictionCol, value).asInstanceOf[Learner]
 
-  override def fit(dataset: SchemaRDD, paramMap: ParamMap): M = {
+  override def fit(dataset: DataFrame, paramMap: ParamMap): M = {
     // This handles a few items such as schema validation.
     // Developers only need to implement train().
     transformSchema(dataset.schema, paramMap, logging = true)
@@ -108,7 +108,7 @@ abstract class Predictor[
    * @return  Fitted model
    */
   @DeveloperApi
-  protected def train(dataset: SchemaRDD, paramMap: ParamMap): M
+  protected def train(dataset: DataFrame, paramMap: ParamMap): M
 
   /**
    * :: DeveloperApi ::
@@ -131,10 +131,9 @@ abstract class Predictor[
    * Extract [[labelCol]] and [[featuresCol]] from the given dataset,
    * and put it in an RDD with strong types.
    */
-  protected def extractLabeledPoints(dataset: SchemaRDD, paramMap: ParamMap): RDD[LabeledPoint] = {
-    import dataset.sqlContext._
+  protected def extractLabeledPoints(dataset: DataFrame, paramMap: ParamMap): RDD[LabeledPoint] = {
     val map = this.paramMap ++ paramMap
-    dataset.select(map(labelCol).attr, map(featuresCol).attr)
+    dataset.select(map(labelCol), map(featuresCol))
       .map { case Row(label: Double, features: Vector) =>
       LabeledPoint(label, features)
     }
@@ -184,10 +183,8 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
    * @param paramMap additional parameters, overwrite embedded params
    * @return transformed dataset with [[predictionCol]] of type [[Double]]
    */
-  override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
+  override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     // This default implementation should be overridden as needed.
-    import org.apache.spark.sql.catalyst.dsl._
-    import dataset.sqlContext._
 
     // Check schema
     transformSchema(dataset.schema, paramMap, logging = true)
@@ -206,7 +203,8 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
       val pred: FeaturesType => Double = (features) => {
         tmpModel.predict(features)
       }
-      dataset.select(Star(None), pred.call(map(featuresCol).attr) as map(predictionCol))
+      dataset.select($"*",
+        callUDF(pred, DoubleType, dataset(map(featuresCol))).as(map(predictionCol)))
     } else {
       this.logWarning(s"$uid: Predictor.transform() was called as NOOP" +
         " since no output columns were set.")
