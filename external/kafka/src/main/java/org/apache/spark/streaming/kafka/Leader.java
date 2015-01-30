@@ -15,54 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.kafka
-
-import kafka.common.TopicAndPartition
+package org.apache.spark.streaming.kafka;
 
 /** Host info for the leader of a Kafka TopicAndPartition */
-
-trait Leader {
-    /** kafka topic name */
-  def topic: String
+public interface Leader {
+  /** kafka topic name */
+  public String topic();
 
   /** kafka partition id */
-  def partition: Int
+  public int partition();
 
   /** kafka hostname */
-  def host: String
+  public String host();
   
   /** kafka host's port */
-  def port: Int
+  public int port();
 }
-
-private class LeaderImpl(
-  override val topic: String,
-  override val partition: Int,
-  override val host: String,
-  override val port: Int
-) extends Leader
-
-object Leader {
-  def create(
-    topic: String,
-    partition: Int,
-    host: String,
-    port: Int): Leader =
-    new LeaderImpl(
-      topic,
-      partition,
-      host,
-      port)
-
-    def create(
-    topicAndPartition: TopicAndPartition,
-    host: String,
-    port: Int): Leader =
-    new LeaderImpl(
-      topicAndPartition.topic,
-      topicAndPartition.partition,
-      host,
-      port)
-
-}
-

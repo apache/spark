@@ -330,4 +330,75 @@ object KafkaUtils {
       ok => ok
     )
   }
+
+  private class OffsetRangeImpl(
+      override val topic: String,
+      override val partition: Int,
+      override val fromOffset: Long,
+      override val untilOffset: Long) extends OffsetRange
+
+  /**
+   * Behaviorless container for a range of offsets from a single Kafka TopicAndPartition
+   * @param topic kafka topic name
+   * @param partition kafka partition id
+   * @param fromOffset inclusive starting offset
+   * @param untilOffset exclusive ending offset
+ */
+  @Experimental
+  def createOffsetRange(
+      topic: String,
+      partition: Int,
+      fromOffset: Long,
+      untilOffset: Long): OffsetRange =
+    new OffsetRangeImpl(topic, partition, fromOffset, untilOffset)
+
+  /**
+   * Behaviorless container for a range of offsets from a single Kafka TopicAndPartition
+   * @param topicAndPartition kafka TopicAndPartition
+   * @param fromOffset inclusive starting offset
+   * @param untilOffset exclusive ending offset
+ */
+  @Experimental
+  def createOffsetRange(
+      topicAndPartition: TopicAndPartition,
+      fromOffset: Long,
+      untilOffset: Long): OffsetRange =
+    new OffsetRangeImpl(
+      topicAndPartition.topic, topicAndPartition.partition, fromOffset, untilOffset)
+
+  private class LeaderImpl(
+      override val topic: String,
+      override val partition: Int,
+      override val host: String,
+      override val port: Int) extends Leader
+
+  /**
+   * Behaviorless container of host info for the leader of a Kafka TopicAndPartition
+   * @param topic kafka topic name
+   * @param partition kafka partition id
+   * @param host kafka hostname
+   * @param port kafka host's port
+   */
+  @Experimental
+  def createLeader(topic: String, partition: Int, host: String, port: Int): Leader =
+    new LeaderImpl(topic,partition,
+      host,
+      port)
+
+  /**
+   * Behaviorless container of host info for the leader of a Kafka TopicAndPartition
+   * @param topicAndPartition kafka TopicAndPartition
+   * @param host kafka hostname
+   * @param port kafka host's port
+   */
+  @Experimental
+  def createLeader(
+    topicAndPartition: TopicAndPartition,
+    host: String,
+    port: Int): Leader =
+    new LeaderImpl(
+      topicAndPartition.topic,
+      topicAndPartition.partition,
+      host,
+      port)
 }

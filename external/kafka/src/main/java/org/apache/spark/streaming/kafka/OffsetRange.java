@@ -15,57 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.kafka
-
-import kafka.common.TopicAndPartition
+package org.apache.spark.streaming.kafka;
 
 /** Represents a range of offsets from a single Kafka TopicAndPartition */
-trait OffsetRange {
+public interface OffsetRange {
   /** kafka topic name */
-  def topic: String
+  public String topic();
 
   /** kafka partition id */
-  def partition: Int
+  public int partition();
 
   /** inclusive starting offset */
-  def fromOffset: Long
+  public long fromOffset();
 
   /** exclusive ending offset */
-  def untilOffset: Long
-}
-
-/** Something that has a collection of OffsetRanges */
-trait HasOffsetRanges {
-  def offsetRanges: Array[OffsetRange]
-}
-
-private class OffsetRangeImpl(
-  override val topic: String,
-  override val partition: Int,
-  override val fromOffset: Long,
-  override val untilOffset: Long
-) extends OffsetRange
-
-object OffsetRange {
-  def create(
-    topic: String,
-    partition: Int,
-    fromOffset: Long,
-    untilOffset: Long): OffsetRange =
-    new OffsetRangeImpl(
-      topic,
-      partition,
-      fromOffset,
-      untilOffset)
-
-  def create(
-    topicAndPartition: TopicAndPartition,
-    fromOffset: Long,
-    untilOffset: Long): OffsetRange =
-    new OffsetRangeImpl(
-      topicAndPartition.topic,
-      topicAndPartition.partition,
-      fromOffset,
-      untilOffset)
-
+  public long untilOffset();
 }
