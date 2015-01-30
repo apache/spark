@@ -103,7 +103,7 @@ private[spark] abstract class SubmitRestServerHandler extends AbstractHandler wi
 
   /**
    * Construct the appropriate response message based on the type of the request message.
-   * If an [[IllegalArgumentException]] is thrown, construct an error message instead.
+   * If an exception is thrown, construct an error message instead.
    */
   private def constructResponseMessage(
       request: SubmitRestProtocolRequest): SubmitRestProtocolResponse = {
@@ -122,15 +122,14 @@ private[spark] abstract class SubmitRestServerHandler extends AbstractHandler wi
             s"Received message of unexpected type ${Utils.getFormattedClassName(unexpected)}.")
         }
       } catch {
-        case e: IllegalArgumentException => handleError(formatException(e))
+        case e: Exception => handleError(formatException(e))
       }
     // Validate the response message to ensure that it is correctly constructed. If it is not,
     // propagate the exception back to the client and signal that it is a server error.
     try {
       response.validate()
     } catch {
-      case e: IllegalArgumentException =>
-        handleError("Internal server error: " + formatException(e))
+      case e: Exception => handleError("Internal server error: " + formatException(e))
     }
     response
   }

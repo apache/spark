@@ -40,8 +40,8 @@ class DriverStatusResponse extends SubmitRestProtocolResponse {
   def setWorkerId(s: String): this.type = setField(workerId, s)
   def setWorkerHostPort(s: String): this.type = setField(workerHostPort, s)
 
-  override def validate(): Unit = {
-    super.validate()
+  protected override def doValidate(): Unit = {
+    super.doValidate()
     assertFieldIsSet(driverId)
     assertFieldIsSet(success)
   }

@@ -78,6 +78,7 @@ class StandaloneRestProtocolSuite extends FunSuite with BeforeAndAfterAll with B
     assert(killSuccess === "true")
     assert(statusSuccess === "true")
     assert(driverState === DriverState.KILLED.toString)
+    // we should not see the expected results because we killed the driver
     intercept[TestFailedException] { validateResult(resultsFile, numbers, size) }
   }
 

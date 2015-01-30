@@ -30,8 +30,8 @@ class SubmitDriverResponse extends SubmitRestProtocolResponse {
   def setSuccess(s: String): this.type = setBooleanField(success, s)
   def setDriverId(s: String): this.type = setField(driverId, s)
 
-  override def validate(): Unit = {
-    super.validate()
+  protected override def doValidate(): Unit = {
+    super.doValidate()
     assertFieldIsSet(success)
   }
 }

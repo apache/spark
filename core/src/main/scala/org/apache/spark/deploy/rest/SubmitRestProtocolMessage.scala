@@ -67,20 +67,42 @@ abstract class SubmitRestProtocolMessage {
     pretty(parse(mapper.writeValueAsString(this)))
   }
 
-  /** Assert the validity of the message. */
-  def validate(): Unit = {
-    assert(action != null, s"The action field is missing in $messageType!")
+  /**
+   * Assert the validity of the message.
+   * If the validation fails, throw a [[SubmitRestValidationException]].
+   */
+  final def validate(): Unit = {
+    try {
+      doValidate()
+    } catch {
+      case e: Exception =>
+        throw new SubmitRestValidationException(
+          s"Validation of message $messageType failed!", e)
+    }
+  }
+
+  /** Assert the validity of the message */
+  protected def doValidate(): Unit = {
+    assert(action != null, s"The action field is missing.")
     assertFieldIsSet(sparkVersion)
   }
 
   /** Assert that the specified field is set in this message. */
   protected def assertFieldIsSet(field: SubmitRestProtocolField[_]): Unit = {
-    assert(field.isSet, s"Field '${field.name}' is missing in $messageType!")
+    assert(field.isSet, s"Field '${field.name}' is missing.")
+  }
+
+  /**
+   * Assert a condition when validating this message.
+   * If the assertion fails, throw a [[SubmitRestValidationException]].
+   */
+  protected def assert(condition: Boolean, failMessage: String): Unit = {
+    if (!condition) { throw new SubmitRestValidationException(failMessage) }
   }
 
   /** Set the field to the given value, or clear the field if the value is null. */
-  protected def setField(field: SubmitRestProtocolField[String], value: String): this.type = {
-    if (value == null) { field.clearValue() } else { field.setValue(value) }
+  protected def setField(f: SubmitRestProtocolField[String], v: String): this.type = {
+    if (v == null) { f.clearValue() } else { f.setValue(v) }
     this
   }
 
@@ -88,10 +110,8 @@ abstract class SubmitRestProtocolMessage {
    * Set the field to the given boolean value, or clear the field if the value is null.
    * If the provided value does not represent a boolean, throw an exception.
    */
-  protected def setBooleanField(
-      field: SubmitRestProtocolField[Boolean],
-      value: String): this.type = {
-    if (value == null) { field.clearValue() } else { field.setValue(value.toBoolean) }
+  protected def setBooleanField(f: SubmitRestProtocolField[Boolean], v: String): this.type = {
+    if (v == null) { f.clearValue() } else { f.setValue(v.toBoolean) }
     this
   }
 
@@ -99,10 +119,8 @@ abstract class SubmitRestProtocolMessage {
    * Set the field to the given numeric value, or clear the field if the value is null.
    * If the provided value does not represent a numeric, throw an exception.
    */
-  protected def setNumericField(
-      field: SubmitRestProtocolField[Int],
-      value: String): this.type = {
-    if (value == null) { field.clearValue() } else { field.setValue(value.toInt) }
+  protected def setNumericField(f: SubmitRestProtocolField[Int], v: String): this.type = {
+    if (v == null) { f.clearValue() } else { f.setValue(v.toInt) }
     this
   }
 
@@ -111,12 +129,9 @@ abstract class SubmitRestProtocolMessage {
    * If the provided value does not represent a memory value, throw an exception.
    * Valid examples of memory values include "512m", "24g", and "128000".
    */
-  protected def setMemoryField(
-      field: SubmitRestProtocolField[String],
-      value: String): this.type = {
-    Utils.memoryStringToMb(value)
-    setField(field, value)
-    this
+  protected def setMemoryField(f: SubmitRestProtocolField[String], v: String): this.type = {
+    Utils.memoryStringToMb(v)
+    setField(f, v)
   }
 }
 
@@ -142,6 +157,14 @@ abstract class SubmitRestProtocolResponse extends SubmitRestProtocolMessage {
   override def setSparkVersion(s: String) = setServerSparkVersion(s)
 }
 
+/**
+ * An exception thrown if the validation of a [[SubmitRestProtocolMessage]] fails.
+ */
+class SubmitRestValidationException(
+    message: String,
+    cause: Exception = null)
+  extends Exception(message, cause)
+
 object SubmitRestProtocolMessage {
   private val mapper = new ObjectMapper
   private val packagePrefix = this.getClass.getPackage.getName
@@ -162,7 +185,7 @@ object SubmitRestProtocolMessage {
   /**
    * Construct a [[SubmitRestProtocolMessage]] from its JSON representation.
    *
-   * This method first parses the action from the JSON and uses it to infers the message type.
+   * This method first parses the action from the JSON and uses it to infer the message type.
    * Note that the action must represent one of the [[SubmitRestProtocolMessage]]s defined in
    * this package. Otherwise, a [[ClassNotFoundException]] will be thrown.
    */

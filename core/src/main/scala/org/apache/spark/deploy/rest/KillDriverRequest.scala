@@ -26,8 +26,8 @@ class KillDriverRequest extends SubmitRestProtocolRequest {
   def getDriverId: String = driverId.toString
   def setDriverId(s: String): this.type = setField(driverId, s)
 
-  override def validate(): Unit = {
-    super.validate()
+  protected override def doValidate(): Unit = {
+    super.doValidate()
     assertFieldIsSet(driverId)
   }
 }

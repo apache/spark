@@ -138,8 +138,8 @@ class SubmitDriverRequest extends SubmitRestProtocolRequest {
     if (map.nonEmpty) { compact(render(JsonProtocol.mapToJson(map))) } else null
   }
 
-  override def validate(): Unit = {
-    super.validate()
+  protected override def doValidate(): Unit = {
+    super.doValidate()
     assertFieldIsSet(appName)
     assertFieldIsSet(appResource)
   }
