@@ -77,8 +77,6 @@ RDD <- function(jrdd, serialized = TRUE, isCached = FALSE,
   new("RDD", jrdd, serialized, isCached, isCheckpointed)
 }
 
-#' @rdname PipelinedRDD
-#' @export
 PipelinedRDD <- function(prev, func) {
   new("PipelinedRDD", prev, func, NULL)
 }
