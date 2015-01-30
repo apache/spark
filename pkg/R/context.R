@@ -27,7 +27,7 @@ getMinSplits <- function(sc, minSplits) {
 #'}
 textFile <- function(sc, path, minSplits = NULL) {
   # Allow the user to have a more flexible definiton of the text file path
-  path <- normalizePath(path)
+  path <- suppressWarnings(normalizePath(path))
   #' Convert a string vector of paths to a string containing comma separated paths
   path <- paste(path, collapse = ",")
 
@@ -54,7 +54,7 @@ textFile <- function(sc, path, minSplits = NULL) {
 #'}
 objectFile <- function(sc, path, minSplits = NULL) {
   # Allow the user to have a more flexible definiton of the text file path
-  path <- normalizePath(path)
+  path <- suppressWarnings(normalizePath(path))
   #' Convert a string vector of paths to a string containing comma separated paths
   path <- paste(path, collapse = ",")
 
