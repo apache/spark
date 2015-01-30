@@ -1,3 +1,5 @@
+import sys
+
 from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy import create_engine
 
@@ -13,8 +15,12 @@ _____  |__|_______/ ____\  |   ______  _  __
 
 
 AIRFLOW_HOME = conf.get('core', 'AIRFLOW_HOME')
-BASE_LOG_URL = "/admin/airflow/log"
+BASE_LOG_URL = conf.get('core', 'BASE_LOG_URL')
+DAGS_FOLDER = conf.get('core', 'DAGS_FOLDER')
 SQL_ALCHEMY_CONN = conf.get('core', 'SQL_ALCHEMY_CONN')
+
+if DAGS_FOLDER not in sys.path:
+    sys.path.append(DAGS_FOLDER)
 
 engine_args = {}
 if 'sqlite' not in SQL_ALCHEMY_CONN:
