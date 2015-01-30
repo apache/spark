@@ -36,10 +36,10 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, Spar
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.HistoryServer
-import org.apache.spark.executor.{ChildExecutorURLClassLoader, ExecutorURLClassLoader}
 import org.apache.spark.scheduler.cluster.YarnSchedulerBackend
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
+import org.apache.spark.util.{AkkaUtils, ChildFirstURLClassLoader, MutableURLClassLoader,
+  SignalLogger, Utils}
 
 /**
  * Common application master functionality for Spark on Yarn.
@@ -459,9 +459,9 @@ private[spark] class ApplicationMaster(
     }
     val userClassLoader =
       if (Client.isUserClassPathFirst(sparkConf, true)) {
-        new ChildExecutorURLClassLoader(urls, Utils.getContextOrSparkClassLoader)
+        new ChildFirstURLClassLoader(urls, Utils.getContextOrSparkClassLoader)
       } else {
-        new ExecutorURLClassLoader(urls, Utils.getContextOrSparkClassLoader)
+        new MutableURLClassLoader(urls, Utils.getContextOrSparkClassLoader)
       }
 
     val mainMethod = userClassLoader.loadClass(args.userClass)

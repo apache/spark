@@ -23,9 +23,7 @@ import java.net.URL
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
-import org.apache.spark.executor.{ChildExecutorURLClassLoader, ExecutorURLClassLoader,
-  MutableURLClassLoader}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
 
 /**
  * Main gateway of launching a Spark application.
@@ -330,10 +328,10 @@ object SparkSubmit {
 
     val loader =
       if (sysProps.getOrElse("spark.driver.userClassPathFirst", "false").toBoolean) {
-        new ChildExecutorURLClassLoader(new Array[URL](0),
+        new ChildFirstURLClassLoader(new Array[URL](0),
           Thread.currentThread.getContextClassLoader)
       } else {
-        new ExecutorURLClassLoader(new Array[URL](0),
+        new MutableURLClassLoader(new Array[URL](0),
           Thread.currentThread.getContextClassLoader)
       }
     Thread.currentThread.setContextClassLoader(loader)

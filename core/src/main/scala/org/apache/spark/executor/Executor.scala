@@ -34,7 +34,8 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler._
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
-import org.apache.spark.util.{SparkUncaughtExceptionHandler, AkkaUtils, Utils}
+import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader,
+  SparkUncaughtExceptionHandler, AkkaUtils, Utils}
 
 /**
  * Spark executor used with Mesos, YARN, and the standalone scheduler.
@@ -304,9 +305,9 @@ private[spark] class Executor(
       new File(uri.split("/").last).toURI.toURL
     }).toArray
     if (conf.getBoolean("spark.executor.userClassPathFirst", false)) {
-      new ChildExecutorURLClassLoader(urls, currentLoader)
+      new ChildFirstURLClassLoader(urls, currentLoader)
     } else {
-      new ExecutorURLClassLoader(urls, currentLoader)
+      new MutableURLClassLoader(urls, currentLoader)
     }
   }
 

@@ -22,8 +22,7 @@ import java.io.File
 import akka.actor._
 
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.executor.{ChildExecutorURLClassLoader, ExecutorURLClassLoader}
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.{AkkaUtils, ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
 
 /**
  * Utility object for launching driver programs such that they share fate with the Worker process.
@@ -41,9 +40,9 @@ object DriverWrapper {
         val userJarUrl = new File(userJar).toURI().toURL()
         val loader =
           if (sys.props.getOrElse("spark.driver.userClassPathFirst", "false").toBoolean) {
-            new ChildExecutorURLClassLoader(Array(userJarUrl), currentLoader)
+            new ChildFirstURLClassLoader(Array(userJarUrl), currentLoader)
           } else {
-            new ExecutorURLClassLoader(Array(userJarUrl), currentLoader)
+            new MutableURLClassLoader(Array(userJarUrl), currentLoader)
           }
         Thread.currentThread.setContextClassLoader(loader)
 

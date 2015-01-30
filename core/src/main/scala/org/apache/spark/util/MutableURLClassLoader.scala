@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.executor
+package org.apache.spark.util
 
 import java.net.{URLClassLoader, URL}
 import java.util.Enumeration
@@ -26,20 +26,27 @@ import scala.collection.JavaConversions._
 import org.apache.spark.util.ParentClassLoader
 
 /**
- * The addURL method in URLClassLoader is protected. We subclass it to make this accessible.
- * We also make changes so user classes can come before the default classes.
+ * URL class loader that exposes the `addURL` and `getURLs` methods in URLClassLoader.
  */
-private[spark] trait MutableURLClassLoader extends ClassLoader {
-  def addURL(url: URL)
-  def getURLs: Array[URL]
+private[spark] class MutableURLClassLoader(urls: Array[URL], parent: ClassLoader)
+  extends URLClassLoader(urls, parent) {
+
+  override def addURL(url: URL): Unit = {
+    super.addURL(url)
+  }
+
+  override def getURLs(): Array[URL] = {
+    super.getURLs()
+  }
+
 }
 
 /**
- * A class loader that gives preference to its own URLs over the parent class loader
+ * A mutable class loader that gives preference to its own URLs over the parent class loader
  * when loading classes and resources.
  */
-private[spark] class ChildExecutorURLClassLoader(urls: Array[URL], parent: ClassLoader)
-  extends URLClassLoader(urls, null) with MutableURLClassLoader {
+private[spark] class ChildFirstURLClassLoader(urls: Array[URL], parent: ClassLoader)
+  extends MutableURLClassLoader(urls, null) {
 
   private val parentClassLoader = new ParentClassLoader(parent)
 
@@ -94,15 +101,3 @@ private[spark] class ChildExecutorURLClassLoader(urls: Array[URL], parent: Class
   }
 
 }
-
-/**
- * A MutableURLClassLoader that follows the standard parent-first hierarchy.
- */
-private[spark] class ExecutorURLClassLoader(urls: Array[URL], parent: ClassLoader)
-  extends URLClassLoader(urls, parent) with MutableURLClassLoader {
-
-  override def addURL(url: URL) {
-    super.addURL(url)
-  }
-}
-
