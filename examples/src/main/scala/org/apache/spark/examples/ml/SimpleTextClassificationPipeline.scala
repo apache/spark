@@ -80,7 +80,7 @@ object SimpleTextClassificationPipeline {
 
     // Make predictions on test documents.
     model.transform(test)
-      .select('id, 'text, 'probability, 'prediction)
+      .select("id", "text", "probability", "prediction")
       .collect()
       .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
         println("($id, $text) --> prob=$prob, prediction=$prediction")

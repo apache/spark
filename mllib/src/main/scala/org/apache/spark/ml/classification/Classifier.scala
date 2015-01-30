@@ -175,15 +175,14 @@ private[ml] object ClassificationModel {
       val features2raw: FeaturesType => Vector = model.predictRaw
       tmpData = tmpData.select($"*",
         callUDF(features2raw, new VectorUDT,
-          tmpData(map(model.featuresCol))).as(map(model.rawPredictionCol)))
+          col(map(model.featuresCol))).as(map(model.rawPredictionCol)))
       numColsOutput += 1
       if (map(model.predictionCol) != "") {
         val raw2pred: Vector => Double = (rawPred) => {
           rawPred.toArray.zipWithIndex.maxBy(_._1)._2
         }
         tmpData = tmpData.select($"*",
-          callUDF(raw2pred, DoubleType,
-            tmpData(map(model.rawPredictionCol))).as(map(model.predictionCol)))
+          callUDF(raw2pred, col(map(model.rawPredictionCol))).as(map(model.predictionCol)))
         numColsOutput += 1
       }
     } else if (map(model.predictionCol) != "") {
@@ -191,7 +190,7 @@ private[ml] object ClassificationModel {
       val features2pred: FeaturesType => Double = model.predict
       tmpData = tmpData.select($"*",
         callUDF(features2pred, DoubleType,
-          tmpData(map(model.featuresCol))).as(map(model.predictionCol)))
+          col(map(model.featuresCol))).as(map(model.predictionCol)))
       numColsOutput += 1
     }
     (numColsOutput, tmpData)

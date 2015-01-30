@@ -91,7 +91,7 @@ object SimpleParamsExample {
     // Note that model2.transform() outputs a 'myProbability' column instead of the usual
     // 'probability' column since we renamed the lr.probabilityCol parameter previously.
     model2.transform(test)
-      .select('features, 'label, 'myProbability, 'prediction)
+      .select("features", "label", "myProbability", "prediction")
       .collect()
       .foreach { case Row(features: Vector, label: Double, prob: Vector, prediction: Double) =>
         println("($features, $label) -> prob=$prob, prediction=$prediction")

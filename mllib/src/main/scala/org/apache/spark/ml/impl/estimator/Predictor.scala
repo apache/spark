@@ -203,8 +203,7 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
       val pred: FeaturesType => Double = (features) => {
         tmpModel.predict(features)
       }
-      dataset.select($"*",
-        callUDF(pred, DoubleType, dataset(map(featuresCol))).as(map(predictionCol)))
+      dataset.select($"*", callUDF(pred, DoubleType, col(map(featuresCol))).as(map(predictionCol)))
     } else {
       this.logWarning(s"$uid: Predictor.transform() was called as NOOP" +
         " since no output columns were set.")

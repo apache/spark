@@ -20,10 +20,9 @@ package org.apache.spark.ml.classification
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
-import org.apache.spark.mllib.linalg.{VectorUDT, BLAS, Vector, Vectors}
+import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.Dsl._
-import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.storage.StorageLevel
 
 
@@ -120,7 +119,7 @@ class LogisticRegressionModel private[ml] (
     if (map(rawPredictionCol) != "") {
       val features2raw: Vector => Vector = predictRaw
       tmpData = tmpData.select($"*",
-        callUDF(features2raw, new VectorUDT, tmpData(map(featuresCol))).as(map(rawPredictionCol)))
+        callUDF(features2raw, col(map(featuresCol))).as(map(rawPredictionCol)))
       numColsOutput += 1
     }
     if (map(probabilityCol) != "") {
@@ -130,11 +129,11 @@ class LogisticRegressionModel private[ml] (
           Vectors.dense(1.0 - prob1, prob1)
         }
         tmpData = tmpData.select($"*",
-          callUDF(raw2prob, new VectorUDT, tmpData(map(rawPredictionCol))).as(map(probabilityCol)))
+          callUDF(raw2prob, col(map(rawPredictionCol))).as(map(probabilityCol)))
       } else {
         val features2prob: Vector => Vector = predictProbabilities
         tmpData = tmpData.select($"*",
-          callUDF(features2prob, new VectorUDT, tmpData(map(featuresCol))).as(map(probabilityCol)))
+          callUDF(features2prob, col(map(featuresCol))).as(map(probabilityCol)))
       }
       numColsOutput += 1
     }
@@ -145,18 +144,18 @@ class LogisticRegressionModel private[ml] (
           if (probs(1) > t) 1.0 else 0.0
         }
         tmpData = tmpData.select($"*",
-          callUDF(predict, DoubleType, tmpData(map(probabilityCol))).as(map(predictionCol)))
+          callUDF(predict, col(map(probabilityCol))).as(map(predictionCol)))
       } else if (map(rawPredictionCol) != "") {
         val predict: Vector => Double = (rawPreds) => {
           val prob1 = 1.0 / (1.0 + math.exp(-rawPreds(1)))
           if (prob1 > t) 1.0 else 0.0
         }
         tmpData = tmpData.select($"*",
-          callUDF(predict, DoubleType, tmpData(map(rawPredictionCol))).as(map(predictionCol)))
+          callUDF(predict, col(map(rawPredictionCol))).as(map(predictionCol)))
       } else {
         val predict: Vector => Double = this.predict
         tmpData = tmpData.select($"*",
-          callUDF(predict, DoubleType, tmpData(map(featuresCol))).as(map(predictionCol)))
+          callUDF(predict, col(map(featuresCol))).as(map(predictionCol)))
       }
       numColsOutput += 1
     }

@@ -117,8 +117,7 @@ abstract class ProbabilisticClassificationModel[
         tmpModel.predictProbabilities(features)
       }
       outputData.select($"*",
-        callUDF(features2probs, new VectorUDT,
-          outputData(map(featuresCol))).as(map(probabilityCol)))
+        callUDF(features2probs, new VectorUDT, col(map(featuresCol))).as(map(probabilityCol)))
     } else {
       if (numColsOutput == 0) {
         this.logWarning(s"$uid: ProbabilisticClassificationModel.transform() was called as NOOP" +

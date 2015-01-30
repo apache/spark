@@ -22,7 +22,7 @@ import org.apache.spark.ml.classification.{Classifier, ClassifierParams, Classif
 import org.apache.spark.ml.param.{Params, IntParam, ParamMap}
 import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.sql.{SchemaRDD, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
 
 /**
@@ -68,13 +68,15 @@ object DeveloperApiExample {
 
     // Make predictions on test data.
     val sumPredictions: Double = model.transform(test)
-      .select('features, 'label, 'prediction)
+      .select("features", "label", "prediction")
       .collect()
       .map { case Row(features: Vector, label: Double, prediction: Double) =>
         prediction
       }.sum
     assert(sumPredictions == 0.0,
       "MyLogisticRegression predicted something other than 0, even though all weights are 0!")
+
+    sc.stop()
   }
 }
 
@@ -113,7 +115,7 @@ private class MyLogisticRegression
 
   // This method is used by fit()
   override protected def train(
-      dataset: SchemaRDD,
+      dataset: DataFrame,
       paramMap: ParamMap): MyLogisticRegressionModel = {
     // Extract columns from data using helper method.
     val oldDataset = extractLabeledPoints(dataset, paramMap)
