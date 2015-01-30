@@ -232,6 +232,15 @@ class BlockMatrix(
     new DenseMatrix(m, n, values)
   }
 
+  /** Transpose this `BlockMatrix`. Returns a new `BlockMatrix` instance sharing the
+    * same underlying data. Is a lazy operation. */
+  def transpose: BlockMatrix = {
+    val transposedBlocks = blocks.map { case ((blockRowIndex, blockColIndex), mat) =>
+      ((blockColIndex, blockRowIndex), mat.transpose)
+    }
+    new BlockMatrix(transposedBlocks, colsPerBlock, rowsPerBlock, nCols, nRows)
+  }
+
   /** Collects data and assembles a local dense breeze matrix (for test only). */
   private[mllib] def toBreeze(): BDM[Double] = {
     val localMat = toLocalMatrix()
