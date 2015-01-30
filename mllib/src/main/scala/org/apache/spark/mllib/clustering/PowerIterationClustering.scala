@@ -17,263 +17,190 @@
 
 package org.apache.spark.mllib.clustering
 
-import scala.language.existentials
-
-import breeze.linalg.{DenseVector => BDV}
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.graphx._
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.graphx.impl.GraphImpl
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.random.XORShiftRandom
 
 /**
- * Implements the scalable graph clustering algorithm Power Iteration Clustering (see
- * www.icml2010.org/papers/387.pdf).  From the abstract:
+ * Model produced by [[PowerIterationClustering]].
  *
- * The input data is normalized pair-wise similarity matrix of the data.
- * Power iteration is used to find a dimensionality-reduced
- * representation.  The resulting pseudo-eigenvector provides effective clustering - as
- * performed by Parallel KMeans.
- *
- * @param k  Number of clusters to create
- * @param maxIterations Number of iterations of the PIC algorithm
- *                      that calculates primary PseudoEigenvector and Eigenvalue
- * @return Tuple of (Seq[(Cluster Id,Cluster Center)],
- *         Seq[(VertexId, ClusterID Membership)]
+ * @param k number of clusters
+ * @param assignments an RDD of (vertexID, clusterID) pairs
  */
-class PowerIterationClustering(
-                                        private var k: Int,
-                                        private var maxIterations: Int)
-  extends Serializable with Logging {
+class PowerIterationClusteringModel(
+    val k: Int,
+    val assignments: RDD[(Long, Int)]) extends Serializable
 
-  import PowerIterationClustering._
+/**
+ * Power Iteration Clustering (PIC), a scalable graph clustering algorithm developed by Lin and
+ * Cohen (see http://www.icml2010.org/papers/387.pdf). From the abstract: PIC finds a very
+ * low-dimensional embedding of a dataset using truncated power iteration on a normalized pair-wise
+ * similarity matrix of the data.
+ *
+ * @param k Number of clusters.
+ * @param maxIterations Maximum number of iterations of the PIC algorithm.
+ */
+class PowerIterationClustering private[clustering] (
+    private var k: Int,
+    private var maxIterations: Int) extends Serializable {
+
+  import org.apache.spark.mllib.clustering.PowerIterationClustering._
+
+  /** Constructs a PIC instance with default parameters: {k: 2, maxIterations: 100}. */
+  def this() = this(k = 2, maxIterations = 100)
 
   /**
-   * Set the number of clusters
+   * Set the number of clusters.
    */
-  def setK(k: Int) = this.k = k
+  def setK(k: Int): this.type = {
+    this.k = k
+    this
+  }
 
   /**
    * Set maximum number of iterations of the power iteration loop
    */
-  def setMaxIterations(maxIterations: Int) = this.maxIterations = maxIterations
-
-  /**
-   *
-   * Run the Power Iteration Clustering algorithm
-   *
-   * @param affinityRdd  Set of Pairwise affinities of input points in following format:
-   *                     (SrcPointId, DestPointId, Affinity Value)
-   *                     SrcPointId : Long = Label of Source Point of Pair
-   *                     DestPointId : Long = Label of Destination Point Pair
-   *                     Note: this is a directed graph so if
-   *                     AffinityValue: Double = Scalar measure of
-   *                     inter-point affinity
-   *                     Note: this is a Directed Graph
-   *                     (a) In general: (a,b, affinity(a,b)) != (b,a,affinity(b,a))
-   *                     (b) If the input graph were symmetric, it is still necessary to
-   *                     provide both (a,b, affinityAB) and (b,a, affinityAB)
-   *                     where affinityAB is the identical bidirectional affinity between (a,b)
-   *
-   * @return Tuple of (Seq[(Cluster Id,Cluster Center)],
-   *         RDD[(VertexId, ClusterID Membership)]
-   */
-  def run(affinityRdd: RDD[(Long, Long, Double)])
-  : (Seq[(Int, Double)], RDD[((Long, Double), Int)]) = {
-    val edgesRdd = affinityRdd.map { case (v1, v2, vect) =>
-      Edge(v1, v2, vect)
-    }
-    val g: Graph[Double, Double] = Graph.fromEdges(edgesRdd, -1L)
-    run(g)
+  def setMaxIterations(maxIterations: Int): this.type = {
+    this.maxIterations = maxIterations
+    this
   }
 
   /**
+   * Run the PIC algorithm.
    *
-   * Run the Power Iteration Clustering algorithm
+   * @param similarities an RDD of (i, j, s_ij_) tuples representing the affinity matrix, which is
+   *                     the matrix A in the PIC paper. The similarity s_ij_ must be nonnegative.
+   *                     This is a symmetric matrix and hence s_ij_ = s_ji_. For any (i, j) with
+   *                     nonzero similarity, there should be either (i, j, s_ij_) or (j, i, s_ji_)
+   *                     in the input. Tuples with i = j are ignored, because we assume s_ij_ = 0.0.
    *
-   * @param g  The affinity matrix in a Sparse Graph structure
-   *           The Graph Vertices are the VertexId's associated with each input Data point
-   *             (Long type)
-   *           The Graph Edges are the Normalized Affinities between pairs of points
-   *           (srcId = from Point, dstId = toPoint, attr = affinity (Double type))
-   *           E.g. (3232L, 1122L, 0.0233442)
-   * @return Tuple of (Seq[(Cluster Id,Cluster Center)],
-   *         RDD[(VertexId, ClusterID Membership)]
+   * @return a [[PowerIterationClusteringModel]] that contains the clustering result
    */
-  def run(g: Graph[Double, Double]) = {
-
-    val (gUpdated, lambda, vt) = getPrincipalEigen(g, maxIterations)
-    val sc = g.vertices.sparkContext
-    val vectRdd = vt.map(v => (v._1, Vectors.dense(v._2)))
-    vectRdd.cache()
-    val nRuns = defaultKMeansRuns
-    val model = KMeans.train(vectRdd.map {
-      _._2
-    }, k, nRuns)
-    vectRdd.unpersist()
-
-    var localVt: Seq[(Long, Double)] = null // Only used when in trace logging mode
-    if (isTraceEnabled) {
-      localVt = vt.collect.sortBy(_._1)
-      logDebug(s"Eigenvalue = $lambda EigenVector: ${
-        localVt.mkString(",")
-      }")
-    }
-    val estimates = vectRdd.zip(model.predict(vectRdd.map(_._2)))
-      .map { case ((vid, vect), clustId) =>
-      ((vid, vect.toArray.apply(0)), clustId)
-    }
-    if (isTraceEnabled) {
-      logDebug(s"lambda=$lambda  eigen=${
-        localVt.mkString(",")
-      }")
-    }
-    val ccs = (0 until model.clusterCenters.length).zip(model.clusterCenters)
-      .map { case (vid, center) =>
-      (vid, center.toArray.apply(0))
-    }
-    if (isTraceEnabled) {
-      logDebug(s"Kmeans model cluster centers: ${
-        ccs.mkString(",")
-      }")
-    }
-    (ccs, estimates)
+  def run(similarities: RDD[(Long, Long, Double)]): PowerIterationClusteringModel = {
+    val w = normalize(similarities)
+    val w0 = randomInit(w)
+    pic(w0)
   }
 
+  /**
+   * Runs the PIC algorithm.
+   *
+   * @param w The normalized affinity matrix, which is the matrix W in the PIC paper with
+   *          w_ij_ = a_ij_ / d_ii_ as its edge properties and the initial vector of the power
+   *          iteration as its vertex properties.
+   */
+  private def pic(w: Graph[Double, Double]): PowerIterationClusteringModel = {
+    val v = powerIter(w, maxIterations)
+    val assignments = kMeans(v, k)
+    new PowerIterationClusteringModel(k, assignments)
+  }
 }
 
-object PowerIterationClustering extends Logging {
-  type LabeledPoint = (VertexId, BDV[Double])
-  type Points = Seq[LabeledPoint]
-  type DGraph = Graph[Double, Double]
-  type IndexedVector[Double] = (Long, BDV[Double])
-
-  // Terminate iteration when norm changes by less than this value
-  val defaultMinNormChange: Double = 1e-11
-
-  // Default number of iterations for PIC loop
-  val defaultIterations: Int = 20
-
-  // Do not allow divide by zero: change to this value instead
-  val defaultDivideByZeroVal: Double = 1e-15
-
-  // Default number of runs by the KMeans.run() method
-  private[mllib] val defaultKMeansRuns = 1
-
-
+private[clustering] object PowerIterationClustering extends Logging {
   /**
-   * Create a Graph given an initial Vt0 and a set of Edges that
-   * represent the Normalized Affinity Matrix (W)
+   * Normalizes the affinity matrix (A) by row sums and returns the normalized affinity matrix (W).
    */
-  private[mllib] def createGraphFromEdges(edgesRdd: RDD[Edge[Double]],
-                                          optInitialVt: Option[Seq[(VertexId, Double)]] = None) = {
-
-    val g = Graph.fromEdges(edgesRdd, -1.0)
-    val outG: Graph[Double, Double] = if (optInitialVt.isDefined) {
-      g.outerJoinVertices(
-        g.vertices.sparkContext.parallelize(optInitialVt.get)) {
-        case (vid, graphAttrib, optVtValue ) =>
-          optVtValue.getOrElse(graphAttrib)
+  def normalize(similarities: RDD[(Long, Long, Double)]): Graph[Double, Double] = {
+    val edges = similarities.flatMap { case (i, j, s) =>
+      if (s < 0.0) {
+        throw new SparkException("Similarity must be nonnegative but found s($i, $j) = $s.")
       }
-    } else {
-      g
+      if (i != j) {
+        Seq(Edge(i, j, s), Edge(j, i, s))
+      } else {
+        None
+      }
     }
-    outG
-  }
-
-  /**
-   * Creates an initial Vt(0) used within the first iteration of the PIC
-   */
-  private[mllib] def createInitialVector(sc: SparkContext,
-                                         labels: Seq[VertexId],
-                                         rowSums: Seq[Double]) = {
-    val volume = rowSums.fold(0.0) {
-      _ + _
-    }
-    val initialVt = labels.zip(rowSums.map(_ / volume))
-    initialVt
-  }
-
-  /**
-   * Calculate the dominant Eigenvalue and Eigenvector for a given sparse graph
-   * using the PIC method
-   * @param g  Input Graph representing the Normalized Affinity Matrix (W)
-   * @param maxIterations Number of iterations of the PIC algorithm
-   * @param optMinNormChange Minimum norm acceleration for detecting convergence
-   *                         - indicated as "epsilon" in the PIC paper
-   * @return
-   */
-  private[mllib] def getPrincipalEigen(g: DGraph,
-                                       maxIterations: Int = defaultIterations,
-                                       optMinNormChange: Option[Double] = None
-                                        ): (DGraph, Double, VertexRDD[Double]) = {
-
-    var priorNorm = Double.MaxValue
-    var norm = Double.MaxValue
-    var priorNormVelocity = Double.MaxValue
-    var normVelocity = Double.MaxValue
-    var normAccel = Double.MaxValue
-    val DummyVertexId = -99L
-    var vnorm: Double = -1.0
-    var outG: DGraph = null
-    var prevG: DGraph = g
-    // The epsilon calculation is provided by the original paper www.icml2010.org/papers/387.pdf
-    //   as epsilon = 1e-5/(#points)
-    // However that seems quite small for large#points
-    // Instead we use  epsilonPrime = Max(epsilon, 1e-10)
-
-    val epsilon = optMinNormChange
-      .getOrElse(math.max(1e-5 / g.vertices.count(), 1e-10))
-    for (iter <- 0 until maxIterations
-         if math.abs(normAccel) > epsilon) {
-
-      val tmpEigen = prevG.aggregateMessages[Double](ctx => {
-        ctx.sendToSrc(ctx.attr * ctx.srcAttr);
-        ctx.sendToDst(ctx.attr * ctx.dstAttr)
+    val gA = Graph.fromEdges(edges, 0.0)
+    val vD = gA.aggregateMessages[Double](
+      sendMsg = ctx => {
+        ctx.sendToSrc(ctx.attr)
       },
-        _ + _)
-      if (isTraceEnabled()) {
-        logTrace(s"tmpEigen[$iter]: ${
-          tmpEigen.collect.mkString(",")
-        }\n")
-      }
-      val vnorm =
-        prevG.vertices.map {
-          _._2
-        }.fold(0.0) {
-          case (sum, dval) =>
-            sum + math.abs(dval)
-        }
-      if (isTraceEnabled()) {
-        logTrace(s"vnorm[$iter]=$vnorm")
-      }
-      outG = prevG.outerJoinVertices(tmpEigen) {
-        case (vid, wval, optTmpEigJ) =>
-          val normedEig = optTmpEigJ.getOrElse {
-            -1.0
-          } / vnorm
-          if (isTraceEnabled()) {
-            logTrace(s"Updating vertex[$vid] from $wval to $normedEig")
-          }
-          normedEig
-      }
-      prevG = outG
-
-      if (isTraceEnabled()) {
-        val localVertices = outG.vertices.collect
-        val graphSize = localVertices.size
-        print(s"Vertices[$iter]: ${
-          localVertices.mkString(",")
-        }\n")
-      }
-      normVelocity = vnorm - priorNorm
-      normAccel = normVelocity - priorNormVelocity
-      if (isTraceEnabled()) {
-        logTrace(s"normAccel[$iter]= $normAccel")
-      }
-      priorNorm = vnorm
-      priorNormVelocity = vnorm - priorNorm
-    }
-    (outG, vnorm, outG.vertices)
+      mergeMsg = _ + _,
+      TripletFields.EdgeOnly)
+    GraphImpl.fromExistingRDDs(vD, gA.edges)
+      .mapTriplets(
+        e => e.attr / math.max(e.srcAttr, MLUtils.EPSILON),
+        TripletFields.Src)
   }
 
+  /**
+   * Generates random vertex properties (v0) to start power iteration.
+   * 
+   * @param g a graph representing the normalized affinity matrix (W)
+   * @return a graph with edges representing W and vertices representing a random vector
+   *         with unit 1-norm
+   */
+  def randomInit(g: Graph[Double, Double]): Graph[Double, Double] = {
+    val r = g.vertices.mapPartitionsWithIndex(
+      (part, iter) => {
+        val random = new XORShiftRandom(part)
+        iter.map { case (id, _) =>
+          (id, random.nextGaussian())
+        }
+      }, preservesPartitioning = true).cache()
+    val sum = r.values.map(math.abs).sum()
+    val v0 = r.mapValues(x => x / sum)
+    GraphImpl.fromExistingRDDs(VertexRDD(v0), g.edges)
+  }
+
+  /**
+   * Runs power iteration.
+   * @param g input graph with edges representing the normalized affinity matrix (W) and vertices
+   *          representing the initial vector of the power iterations.
+   * @param maxIterations maximum number of iterations
+   * @return a [[VertexRDD]] representing the pseudo-eigenvector
+   */
+  def powerIter(
+      g: Graph[Double, Double],
+      maxIterations: Int): VertexRDD[Double] = {
+    // the default tolerance used in the PIC paper, with a lower bound 1e-8
+    val tol = math.max(1e-5 / g.vertices.count(), 1e-8)
+    var prevDelta = Double.MaxValue
+    var diffDelta = Double.MaxValue
+    var curG = g
+    for (iter <- 0 until maxIterations if math.abs(diffDelta) > tol) {
+      val msgPrefix = s"Iteration $iter"
+      // multiply W by vt
+      val v = curG.aggregateMessages[Double](
+        sendMsg = ctx => ctx.sendToSrc(ctx.attr * ctx.dstAttr),
+        mergeMsg = _ + _,
+        TripletFields.Dst).cache()
+      // normalize v
+      val norm = v.values.map(math.abs).sum()
+      logInfo(s"$msgPrefix: norm(v) = $norm.")
+      val v1 = v.mapValues(x => x / norm)
+      // compare difference
+      val delta = curG.joinVertices(v1) { case (_, x, y) =>
+        math.abs(x - y)
+      }.vertices.values.sum()
+      logInfo(s"$msgPrefix: delta = $delta.")
+      diffDelta = math.abs(delta - prevDelta)
+      logInfo(s"$msgPrefix: diff(delta) = $diffDelta.")
+      // update v
+      curG = GraphImpl.fromExistingRDDs(VertexRDD(v1), g.edges)
+      prevDelta = delta
+    }
+    curG.vertices
+  }
+
+  /**
+   * Runs k-means clustering.
+   * @param v a [[VertexRDD]] representing the pseudo-eigenvector
+   * @param k number of clusters
+   * @return a [[VertexRDD]] representing the clustering assignments
+   */
+  def kMeans(v: VertexRDD[Double], k: Int): VertexRDD[Int] = {
+    val points = v.mapValues(x => Vectors.dense(x)).cache()
+    val model = new KMeans()
+      .setK(k)
+      .setRuns(5)
+      .setSeed(0L)
+      .run(points.values)
+    points.mapValues(p => model.predict(p)).cache()
+  }
 }
