@@ -193,7 +193,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
               None
           }
         }
-        .sortBy { info => (-info.endTime, -info.startTime) }
+        .sortWith(compareAppInfo)
 
       lastModifiedTime = newLastModifiedTime
 
@@ -213,7 +213,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         val newIterator = logInfos.iterator.buffered
         val oldIterator = applications.values.iterator.buffered
         while (newIterator.hasNext && oldIterator.hasNext) {
-          if (newIterator.head.endTime > oldIterator.head.endTime) {
+          if (compareAppInfo(newIterator.head, oldIterator.head)) {
             addIfAbsent(newIterator.next)
           } else {
             addIfAbsent(oldIterator.next)
@@ -227,6 +227,17 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     } catch {
       case e: Exception => logError("Exception in checking for event log updates", e)
     }
+  }
+
+  /**
+   * Comparison function that defines the sort order for the application listing.
+   *
+   * @return Whether `i1` should precede `i2`.
+   */
+  private def compareAppInfo(
+      i1: FsApplicationHistoryInfo,
+      i2: FsApplicationHistoryInfo): Boolean = {
+    i1.endTime >= i2.endTime && i1.startTime >= i2.startTime
   }
 
   /**

@@ -37,13 +37,8 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
 
   private var testDir: File = null
 
-  private var provider: FsHistoryProvider = null
-
   before {
     testDir = Utils.createTempDir()
-    provider = new FsHistoryProvider(new SparkConf()
-      .set("spark.history.fs.logDirectory", testDir.getAbsolutePath())
-      .set("spark.history.fs.updateInterval", "0"))
   }
 
   after {
@@ -51,10 +46,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
   }
 
   test("Parse new and old application logs") {
-    val conf = new SparkConf()
-      .set("spark.history.fs.logDirectory", testDir.getAbsolutePath())
-      .set("spark.history.fs.updateInterval", "0")
-    val provider = new FsHistoryProvider(conf)
+    val provider = new FsHistoryProvider(createTestConf())
 
     // Write a new-style application log.
     val logFile1 = new File(testDir, "new1")
@@ -79,6 +71,10 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
       )
     createEmptyFile(new File(oldLog, provider.APPLICATION_COMPLETE))
 
+    // Check for logs so that we force the older unfinished app to be loaded, to make
+    // sure unfinished apps are also sorted correctly.
+    provider.checkForLogs()
+
     // Write an unfinished app, old-style.
     val oldLog2 = new File(testDir, "old2")
     oldLog2.mkdir()
@@ -102,7 +98,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
       logFile1.lastModified(), "test", true))
     list(2) should be (ApplicationHistoryInfo(oldLog2.getName(), "app4", 2L, -1L,
       oldLog2.lastModified(), "test", false))
-     list(3) should be (ApplicationHistoryInfo(logFile2.getName(), "app2-2", 1L, -1L,
+    list(3) should be (ApplicationHistoryInfo(logFile2.getName(), "app2-2", 1L, -1L,
       logFile2.lastModified(), "test", false))
 
     // Make sure the UI can be rendered.
@@ -113,6 +109,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
   }
 
   test("Parse legacy logs with compression codec set") {
+    val provider = new FsHistoryProvider(createTestConf())
     val testCodecs = List((classOf[LZFCompressionCodec].getName(), true),
       (classOf[SnappyCompressionCodec].getName(), true),
       ("invalid.codec", false))
@@ -156,10 +153,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
       )
     logFile2.setReadable(false, false)
 
-    val conf = new SparkConf()
-      .set("spark.history.fs.logDirectory", testDir.getAbsolutePath())
-      .set("spark.history.fs.updateInterval", "0")
-    val provider = new FsHistoryProvider(conf)
+    val provider = new FsHistoryProvider(createTestConf())
     provider.checkForLogs()
 
     val list = provider.getListing().toSeq
@@ -168,10 +162,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
   }
 
   test("history file is renamed from inprogress to completed") {
-    val conf = new SparkConf()
-      .set("spark.history.fs.logDirectory", testDir.getAbsolutePath())
-      .set("spark.testing", "true")
-    val provider = new FsHistoryProvider(conf)
+    val provider = new FsHistoryProvider(createTestConf())
 
     val logFile1 = new File(testDir, "app1" + EventLoggingListener.IN_PROGRESS)
     writeFile(logFile1, true, None,
@@ -209,6 +200,10 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
 
   private def createEmptyFile(file: File) = {
     new FileOutputStream(file).close()
+  }
+
+  private def createTestConf(): SparkConf = {
+    new SparkConf().set("spark.history.fs.logDirectory", testDir.getAbsolutePath())
   }
 
 }
