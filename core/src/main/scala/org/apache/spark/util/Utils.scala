@@ -255,12 +255,17 @@ private[spark] object Utils extends Logging {
    * @return true if the permissions were successfully changed, false otherwise.
    */
   def chmod700(file: File): Boolean = {
-    file.setReadable(false, false) &&
-    file.setReadable(true, true) &&
-    file.setWritable(false, false) &&
-    file.setWritable(true, true) &&
-    file.setExecutable(false, false) &&
-    file.setExecutable(true, true)
+    if (!isWindows) {
+      file.setReadable(false, false) &&
+      file.setReadable(true, true) &&
+      file.setWritable(false, false) &&
+      file.setWritable(true, true) &&
+      file.setExecutable(false, false) &&
+      file.setExecutable(true, true)
+    } else {
+      // this logic does not work for Windows
+      true 
+    }
   }
 
   /**
