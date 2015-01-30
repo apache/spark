@@ -147,6 +147,63 @@ class BlockMatrixSuite extends FunSuite with MLlibTestSparkContext {
     assert(gridBasedMat.toBreeze() === expected)
   }
 
+  test("repartition") {
+    val brzA = gridBasedMat.toBreeze()
+    val threeBythree = gridBasedMat.repartition(3, 3)
+    assert(threeBythree.rowsPerBlock === 3)
+    assert(threeBythree.colsPerBlock === 3)
+    assert(threeBythree.numRows() === m)
+    assert(threeBythree.numCols() === n)
+    assert(threeBythree.numRowBlocks === 2)
+    assert(threeBythree.numColBlocks === 2)
+    assert(threeBythree.toBreeze() === brzA)
+
+    val twoByOne = threeBythree.repartition(2, 1)
+    assert(twoByOne.rowsPerBlock === 2)
+    assert(twoByOne.colsPerBlock === 1)
+    assert(twoByOne.numRows() === m)
+    assert(twoByOne.numCols() === n)
+    assert(twoByOne.numRowBlocks === 3)
+    assert(twoByOne.numColBlocks === 4)
+    assert(twoByOne.toBreeze() === brzA)
+
+    // if two blocks 'overlap' add them together
+    val overlappingBlocks: Seq[((Int, Int), Matrix)] = Seq(
+      ((0, 0), new DenseMatrix(2, 3, Array(1.0, 0.0, 0.0, 2.0, 0.0, 1.0))),
+      ((0, 1), new DenseMatrix(2, 2, Array(0.0, 1.0, 0.0, 0.0))),
+      ((1, 0), new DenseMatrix(2, 3, Array(3.0, 0.0, 1.0, 1.0, 1.0, 2.0))),
+      ((1, 1), new DenseMatrix(2, 2, Array(1.0, 2.0, 0.0, 1.0))),
+      ((2, 1), new DenseMatrix(1, 2, Array(1.0, 5.0))))
+
+    val expected = BDM(
+      (1.0, 0.0, 0.0, 0.0),
+      (0.0, 2.0, 2.0, 0.0),
+      (3.0, 1.0, 2.0, 0.0),
+      (0.0, 1.0, 4.0, 1.0),
+      (0.0, 0.0, 1.0, 5.0))
+
+    val overlap = new BlockMatrix(sc.parallelize(overlappingBlocks, numPartitions),
+      rowPerPart, colPerPart).repartition()
+
+    assert(overlap.numRows() === m)
+    assert(overlap.numCols() === n)
+    assert(overlap.rowsPerBlock === rowPerPart)
+    assert(overlap.colsPerBlock === colPerPart)
+    assert(overlap.numRowBlocks === 3)
+    assert(overlap.numColBlocks === 2)
+    assert(overlap.toBreeze() === expected)
+
+    intercept[IllegalArgumentException] {
+      gridBasedMat.repartition(0, 1)
+    }
+    intercept[IllegalArgumentException] {
+      gridBasedMat.repartition(1, 0)
+    }
+    intercept[IllegalArgumentException] {
+      gridBasedMat.repartition(1, 1, -1)
+    }
+  }
+
   test("transpose") {
     val expected = BDM(
       (1.0, 0.0, 3.0, 0.0, 0.0),
