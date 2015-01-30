@@ -186,6 +186,15 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Seq(Row(1,3), Row(2,3), Row(3,3)))
   }
 
+  test("literal in agg grouping expressions") {
+    checkAnswer(
+      sql("SELECT a, count(1) FROM testData2 GROUP BY a, 1"),
+      Seq(Row(1,2), Row(2,2), Row(3,2)))
+    checkAnswer(
+      sql("SELECT a, count(2) FROM testData2 GROUP BY a, 2"),
+      Seq(Row(1,2), Row(2,2), Row(3,2)))
+  }
+
   test("aggregates with nulls") {
     checkAnswer(
       sql("SELECT MIN(a), MAX(a), AVG(a), SUM(a), COUNT(a) FROM nullInts"),

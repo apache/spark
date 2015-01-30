@@ -78,7 +78,7 @@ sealed trait Vector extends Serializable {
         result = 31 * result + (bits ^ (bits >>> 32)).toInt
       }
     }
-    return result
+    result
   }
 
   /**

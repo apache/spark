@@ -1986,7 +1986,7 @@ object SparkContext extends Logging {
       case "yarn-client" =>
         val scheduler = try {
           val clazz =
-            Class.forName("org.apache.spark.scheduler.cluster.YarnClientClusterScheduler")
+            Class.forName("org.apache.spark.scheduler.cluster.YarnScheduler")
           val cons = clazz.getConstructor(classOf[SparkContext])
           cons.newInstance(sc).asInstanceOf[TaskSchedulerImpl]
 

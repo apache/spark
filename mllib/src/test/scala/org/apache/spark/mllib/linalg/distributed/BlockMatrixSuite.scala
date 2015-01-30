@@ -146,4 +146,33 @@ class BlockMatrixSuite extends FunSuite with MLlibTestSparkContext {
     assert(gridBasedMat.toLocalMatrix() === dense)
     assert(gridBasedMat.toBreeze() === expected)
   }
+
+  test("transpose") {
+    val expected = BDM(
+      (1.0, 0.0, 3.0, 0.0, 0.0),
+      (0.0, 2.0, 1.0, 1.0, 0.0),
+      (0.0, 1.0, 1.0, 2.0, 1.0),
+      (0.0, 0.0, 0.0, 1.0, 5.0))
+
+    val AT = gridBasedMat.transpose
+    assert(AT.numRows() === gridBasedMat.numCols())
+    assert(AT.numCols() === gridBasedMat.numRows())
+    assert(AT.toBreeze() === expected)
+
+    // partitioner must update as well
+    val originalPartitioner = gridBasedMat.partitioner
+    val ATpartitioner = AT.partitioner
+    assert(originalPartitioner.colsPerPart === ATpartitioner.rowsPerPart)
+    assert(originalPartitioner.rowsPerPart === ATpartitioner.colsPerPart)
+    assert(originalPartitioner.cols === ATpartitioner.rows)
+    assert(originalPartitioner.rows === ATpartitioner.cols)
+
+    // make sure it works when matrices are cached as well
+    gridBasedMat.cache()
+    val AT2 = gridBasedMat.transpose
+    AT2.cache()
+    assert(AT2.toBreeze() === AT.toBreeze())
+    val A = AT2.transpose
+    assert(A.toBreeze() === gridBasedMat.toBreeze())
+  }
 }

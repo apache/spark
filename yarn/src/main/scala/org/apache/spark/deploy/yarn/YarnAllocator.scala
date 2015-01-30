@@ -32,6 +32,8 @@ import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.util.RackResolver
 
+import org.apache.log4j.{Level, Logger}
+
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
@@ -59,6 +61,11 @@ private[yarn] class YarnAllocator(
   extends Logging {
 
   import YarnAllocator._
+
+  // RackResolver logs an INFO message whenever it resolves a rack, which is way too often.
+  if (Logger.getLogger(classOf[RackResolver]).getLevel == null) {
+    Logger.getLogger(classOf[RackResolver]).setLevel(Level.WARN)
+  }
 
   // Visible for testing.
   val allocatedHostToContainersMap =
