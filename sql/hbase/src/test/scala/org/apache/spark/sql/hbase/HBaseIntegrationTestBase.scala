@@ -49,7 +49,7 @@ abstract class HBaseIntegrationTestBase
           case o => o
         })
       }
-      if (!isSorted) converted.sortBy(_.toString) else converted
+      if (!isSorted) converted.sortBy(_.toString()) else converted
     }
     val sparkAnswer = try rdd.collect().toSeq catch {
       case e: Exception =>
@@ -75,9 +75,9 @@ abstract class HBaseIntegrationTestBase
         |${
         sideBySide(
           s"== Correct Answer - ${expectedAnswer.size} ==" +:
-            prepareAnswer(expectedAnswer).map(_.toString),
+            prepareAnswer(expectedAnswer).map(_.toString()),
           s"== Spark Answer - ${sparkAnswer.size} ==" +:
-            prepareAnswer(sparkAnswer).map(_.toString)).mkString("\n")
+            prepareAnswer(sparkAnswer).map(_.toString())).mkString("\n")
       }
       """.stripMargin)
     }

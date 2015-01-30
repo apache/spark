@@ -224,7 +224,7 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext,
     if (result.isDefined) {
       result.get.fetchPartitions()
     }
-    if (needToCloseAtTheEnd) metadataTable.close
+    if (needToCloseAtTheEnd) metadataTable.close()
 
     result
   }
@@ -326,7 +326,7 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext,
     val get = new Get(Bytes.toBytes(tableName))
     val result = metadataTable.get(get)
 
-    if (needToCloseAtTheEnd) metadataTable.close
+    if (needToCloseAtTheEnd) metadataTable.close()
     result.size() > 0
   }
 

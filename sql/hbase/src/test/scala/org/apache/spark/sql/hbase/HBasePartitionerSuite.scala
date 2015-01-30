@@ -183,7 +183,7 @@ class HBasePartitionerSuite extends HBaseIntegrationTestBase {
     def checkEqualToNode(x: Expression, leftExpected: String, rightExpected: String): Boolean = {
       x match {
         case EqualTo(left, right) => (left.asInstanceOf[AttributeReference].name.equals(leftExpected)
-          && right.toString.equals(rightExpected))
+          && right.toString().equals(rightExpected))
         case _ => false
       }
     }

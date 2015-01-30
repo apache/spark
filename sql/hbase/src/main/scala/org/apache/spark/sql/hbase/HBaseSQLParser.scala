@@ -104,9 +104,9 @@ class HBaseSQLParser extends SqlParser {
         // TODO: Now get the info by hacking, need to change it into normal way if possible
         val infoMap: Map[String, (String, String)] =
           mappingInfo.map { case EqualTo(e1, e2) =>
-            val info = e2.toString.substring(1).split('.')
+            val info = e2.toString().substring(1).split('.')
             if (info.length != 2) throw new Exception("\nSyntax Error of Create Table")
-            e1.toString.substring(1) ->(info(0), info(1))
+            e1.toString().substring(1) ->(info(0), info(1))
           }.toMap
 
 
@@ -211,9 +211,9 @@ class HBaseSQLParser extends SqlParser {
         // TODO: Now get the info by hacking, need to change it into normal way if possible
         val infoMap: Map[String, (String, String)] =
           mappingInfo.map { case EqualTo(e1, e2) =>
-            val info = e2.toString.substring(1).split('.')
+            val info = e2.toString().substring(1).split('.')
             if (info.length != 2) throw new Exception("\nSyntax Error of Create Table")
-            e1.toString.substring(1) ->(info(0), info(1))
+            e1.toString().substring(1) ->(info(0), info(1))
           }.toMap
         val familyAndQualifier = infoMap(tableColumn._1)
 
