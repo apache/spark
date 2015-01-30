@@ -34,8 +34,25 @@ a given dataset, the algorithm returns the best clustering result).
 * *initializationSteps* determines the number of steps in the k-means\|\| algorithm.
 * *epsilon* determines the distance threshold within which we consider k-means to have converged. 
 
-[Power Iteration Clustering](mllib-clustering-pic.md) that uses the Power Iteration method combined with KMeans clustering to 
-cluster points based on a Gaussian measure of the input data pairwise similarity.
+### Power Iteration Clustering
+
+Power iteration clustering is a scalable and efficient algorithm for clustering points given pointwise mutual affinity values.  Internally the algorithm:
+
+* accepts a [Graph](https://spark.apache.org/docs/0.9.2/api/graphx/index.html#org.apache.spark.graphx.Graph) that represents a  normalized pairwise affinity between all input points.
+* calculates the principal eigenvalue and eigenvector
+* Clusters each of the input points according to their principal eigenvector component value
+
+Details of this algorithm are found within [Power Iteration Clustering, Lin and Cohen]{www.icml2010.org/papers/387.pdf}
+
+Example outputs for a dataset inspired by the paper - but with five clusters instead of three- have he following output from our implementation:
+
+<p style="text-align: center;">
+  <img src="img/PIClusteringFiveCirclesInputsAndOutputs.png"
+       title="The Property Graph"
+       alt="The Property Graph"
+       width="50%" />
+  <!-- Images are downsized intentionally to improve quality on retina displays -->
+</p>
 
 ### Examples
 

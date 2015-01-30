@@ -19,16 +19,20 @@ package org.apache.spark.mllib.clustering
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV}
 import org.apache.log4j.Logger
-import org.apache.spark.SparkContext
+import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.graphx.{EdgeRDD, Edge, Graph}
 import org.apache.spark.mllib.clustering.PowerIterationClustering.{LabeledPoint, Points, IndexedVector}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.scalatest.FunSuite
 
+import scala.language.existentials
+import scala.language.implicitConversions
+
 import scala.util.Random
 
-class PowerIterationClusteringSuite extends FunSuite with MLlibTestSparkContext {
+class PowerIterationClusteringSuite extends FunSuite with MLlibTestSparkContext
+  with Logging {
 
   val logger = Logger.getLogger(getClass.getName)
 
@@ -59,8 +63,26 @@ class PowerIterationClusteringSuite extends FunSuite with MLlibTestSparkContext 
     })
 
     val nVertices = vertices.length
-    val G = createGaussianAffinityMatrix(sc, vertices)
-    val (ccenters, estCollected) = PIC.run(sc, G, nClusters, nIterations)
+    val g = createGaussianAffinityMatrix(sc, vertices)
+//    val PIC = new PowerIterationClustering(nClusters, nIterations)
+    val affinityRdd = g.edges.map { e =>
+      (e.srcId, e.dstId, e.attr)
+    }
+    val PIC = new PowerIterationClustering(nClusters, nIterations)
+    val (ccenters, estimates) = PIC.run(affinityRdd)
+    val estCollected = estimates.collect.sortBy(_._1._1)
+    if (isTraceEnabled) {
+      val clusters = estCollected.map(_._2)
+      val counts = estCollected.groupBy(_._2).mapValues {
+        _.length
+      }
+      logDebug(s"Cluster counts: Counts: ${
+        counts.mkString(",")
+      }"
+        + s"\nCluster Estimates: ${
+        estCollected.mkString(",")
+      }")
+    }
     logger.info(s"Cluster centers: ${ccenters.mkString(",")} " +
       s"\nEstimates: ${estCollected.mkString("[", ",", "]")}")
     assert(ccenters.size == circleSpecs.length, "Did not get correct number of centers")
@@ -69,8 +91,7 @@ class PowerIterationClusteringSuite extends FunSuite with MLlibTestSparkContext 
 
 }
 
-object PowerIterationClusteringSuite {
-  val logger = Logger.getLogger(getClass.getName)
+object PowerIterationClusteringSuite extends Logging {
   val A = Array
   val PIC = PowerIterationClustering
 
@@ -112,7 +133,7 @@ object PowerIterationClusteringSuite {
       circlePoints
     }
     val points = circles.flatten.sortBy(_.label)
-    logger.info(printPoints(points))
+    logInfo(printPoints(points))
     points
   }
 
@@ -150,21 +171,17 @@ object PowerIterationClusteringSuite {
 
     val (wRdd, rowSums) = createNormalizedAffinityMatrix(sc, points, sigma)
     val initialVt = PIC.createInitialVector(sc, points.map(_._1), rowSums)
-    if (logger.isDebugEnabled) {
-      logger.debug(s"Vt(0)=${
+    if (isTraceEnabled) {
+      logTrace(s"Vt(0)=${
         printVector(new BDV(initialVt.map {
           _._2
         }.toArray))
       }")
     }
-    val edgesRdd = createSparseEdgesRdd(sc, wRdd, minAffinity)
-    val G = PIC.createGraphFromEdges(sc, edgesRdd, points.size, Some(initialVt))
-    if (logger.isDebugEnabled) {
-      logger.debug(printMatrixFromEdges(G.edges))
-    }
-    G
+    val edgesRdd = createSparseEdgesRdd(wRdd, minAffinity)
+    val g = PIC.createGraphFromEdges(edgesRdd, Some(initialVt))
+    g
   }
-
 
   /**
    * Create the normalized affinity matrix "W" given a set of Points
@@ -195,8 +212,8 @@ object PowerIterationClusteringSuite {
         (ix, vect)
       }
     }, nVertices)
-    if (logger.isDebugEnabled) {
-      logger.debug(s"Affinity:\n${
+    if (isTraceEnabled) {
+      logTrace(s"Affinity:\n${
         printMatrix(affinityRddNotNorm.map(_._2), nVertices, nVertices)
       }")
     }
@@ -211,16 +228,16 @@ object PowerIterationClusteringSuite {
         _ / materializedRowSums(rowx)
       })
     }
-    if (logger.isDebugEnabled) {
-      logger.debug(s"W:\n${printMatrix(similarityRdd, nVertices, nVertices)}")
+    if (isTraceEnabled) {
+      println(s"W:\n${printMatrix(similarityRdd, nVertices, nVertices)}")
     }
     (similarityRdd, materializedRowSums)
   }
 
-  private[mllib] def printMatrix(denseVectorRDD: RDD[LabeledPoint], i: Int, i1: Int) = {
-    denseVectorRDD.collect.map {
+  private[mllib] def printMatrix(denseVectorRDD: RDD[LabeledPoint], i: Int, i1: Int): String = {
+    printMatrix(denseVectorRDD.collect.map {
       case (vid, dvect) => dvect.toArray
-    }.flatten
+    }.flatten, i, i1)
   }
 
 
@@ -245,17 +262,16 @@ object PowerIterationClusteringSuite {
     dist
   }
 
-    /**
+  /**
    * Create a sparse EdgeRDD from an array of densevectors. The elements that
    * are "close to" zero - as configured by the minAffinity value - do not
    * result in an Edge being created.
    *
-   * @param sc
    * @param wRdd
    * @param minAffinity
    * @return
    */
-  private[mllib] def createSparseEdgesRdd(sc: SparkContext, wRdd: RDD[IndexedVector[Double]],
+  private[mllib] def createSparseEdgesRdd(wRdd: RDD[IndexedVector[Double]],
                                           minAffinity: Double = defaultMinAffinity) = {
     val labels = wRdd.map { case (vid, vect) => vid}.collect
     val edgesRdd = wRdd.flatMap { case (vid, vect) =>
@@ -264,15 +280,6 @@ object PowerIterationClusteringSuite {
       yield Edge(vid, labels(ix), dval)
     }
     edgesRdd
-  }
-
-
-  private[mllib] def printMatrixFromEdges(edgesRdd: EdgeRDD[_]) = {
-    val edgec = edgesRdd.collect
-    val sorted = edgec.sortWith { case (e1, e2) =>
-      e1.srcId < e2.srcId || (e1.srcId == e2.srcId && e1.dstId <= e2.dstId)
-    }
-
   }
 
   private[mllib] def makeNonZero(dval: Double, tol: Double = PIC.defaultDivideByZeroVal) = {
