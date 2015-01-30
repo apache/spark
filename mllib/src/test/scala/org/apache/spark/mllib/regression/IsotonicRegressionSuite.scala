@@ -144,6 +144,30 @@ class IsotonicRegressionSuite extends FunSuite with MLlibTestSparkContext with M
     assert(model.predict(10) === 10d/3)
   }
 
+  test("isotonic regression prediction with duplicate features") {
+    val trainRDD = sc.parallelize(
+      Seq[(Double, Double, Double)](
+        (2, 1, 1), (1, 1, 1), (4, 2, 1), (2, 2, 1), (6, 3, 1), (5, 3, 1))).cache()
+    val model = new IsotonicRegression().run(trainRDD)
+
+    assert(model.predict(0) === 1)
+    assert(model.predict(1.5) === 2)
+    assert(model.predict(2.5) === 4.5)
+    assert(model.predict(4) === 6)
+  }
+
+  test("antitonic regression prediction with duplicate features") {
+    val trainRDD = sc.parallelize(
+      Seq[(Double, Double, Double)](
+        (5, 1, 1), (6, 1, 1), (2, 2, 1), (4, 2, 1), (1, 3, 1), (2, 3, 1))).cache()
+    val model = new IsotonicRegression().setIsotonic(false).run(trainRDD)
+
+    assert(model.predict(0) === 6)
+    assert(model.predict(1.5) === 4.5)
+    assert(model.predict(2.5) === 2)
+    assert(model.predict(4) === 1)
+  }
+
   test("isotonic regression RDD prediction") {
     val model = runIsotonicRegression(Seq(1, 2, 7, 1, 2), true)
     val testRDD = sc.parallelize(List(-1.0, 0.0, 1.5, 1.75, 2.0, 3.0, 10.0)).cache()
