@@ -106,7 +106,7 @@ object Dsl {
     CountDistinct((expr +: exprs).map(_.expr))
 
   def approxCountDistinct(e: Column): Column =
-    ApproxCountDistinct(e.expr, 0.05)
+    ApproxCountDistinct(e.expr)
   def approxCountDistinct(e: Column, rsd: Double): Column =
     ApproxCountDistinct(e.expr, rsd)
 
