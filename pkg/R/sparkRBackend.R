@@ -73,18 +73,22 @@ invokeJava <- function(isStatic, objId, methodName, ...) {
   writeInt(rc, length(args))
   writeArgs(rc, args)
 
+  # Construct the whole request message to send it once,
+  # avoiding write-write-read pattern in case of Nagle's algorithm.
+  # Refer to http://en.wikipedia.org/wiki/Nagle%27s_algorithm for the details.
   bytesToSend <- rawConnectionValue(rc)
+  close(rc)
+  rc <- rawConnection(raw(0), "r+")
+  writeInt(rc, length(bytesToSend))
+  writeBin(bytesToSend, rc)
+  requestMessage <- rawConnectionValue(rc)
+  close(rc)
 
   conn <- get(".sparkRCon", .sparkREnv)
-  writeInt(conn, length(bytesToSend))
-  writeBin(bytesToSend, conn)
-
-  close(rc) # TODO: Can we close this before ?
+  writeBin(requestMessage, conn)
 
   # TODO: check the status code to output error information
   returnStatus <- readInt(conn)
   stopifnot(returnStatus == 0)
-  ret <- readObject(conn)
-
-  ret
+  readObject(conn)
 }
