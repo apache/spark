@@ -161,11 +161,13 @@ class BlockMatrix(
   private[mllib] def createPartitioner(): GridPartitioner =
     GridPartitioner(numRowBlocks, numColBlocks, suggestedNumPartitions = blocks.partitions.size)
 
+  private lazy val blockInfo = blocks.mapValues(block => (block.numRows, block.numCols)).cache()
+
   /** Estimates the dimensions of the matrix. */
   private def estimateDim(): Unit = {
-    val (rows, cols) = blocks.map { case ((blockRowIndex, blockColIndex), mat) =>
-      (blockRowIndex.toLong * rowsPerBlock + mat.numRows,
-        blockColIndex.toLong * colsPerBlock + mat.numCols)
+    val (rows, cols) = blockInfo.map { case ((blockRowIndex, blockColIndex), (m, n)) =>
+      (blockRowIndex.toLong * rowsPerBlock + m,
+        blockColIndex.toLong * colsPerBlock + n)
     }.reduce { (x0, x1) =>
       (math.max(x0._1, x1._1), math.max(x0._2, x1._2))
     }
@@ -173,6 +175,41 @@ class BlockMatrix(
     assert(rows <= nRows, s"The number of rows $rows is more than claimed $nRows.")
     if (nCols <= 0L) nCols = cols
     assert(cols <= nCols, s"The number of columns $cols is more than claimed $nCols.")
+  }
+
+  def validate(): Unit = {
+    logDebug("Validating BlockMatrix...")
+    // check if the matrix is larger than the claimed dimensions
+    estimateDim()
+    logDebug("BlockMatrix dimensions are okay...")
+
+    // Check if there are multiple MatrixBlocks with the same index.
+    blockInfo.countByKey().foreach { case (key, cnt) =>
+      if (cnt > 1) {
+        throw new SparkException(s"Found multiple MatrixBlocks with the indices $key. Please " +
+          "remove blocks with duplicate indices.")
+      }
+    }
+    logDebug("MatrixBlock indices are okay...")
+    // Check if each MatrixBlock (except edges) has the dimensions rowsPerBlock x colsPerBlock
+    // The first tuple is the index and the second tuple is the dimensions of the MatrixBlock
+    val dimensionMsg = s"dimensions different than rowsPerBlock: $rowsPerBlock, and " +
+      s"colsPerBlock: $colsPerBlock. Blocks on the right and bottom edges can have smaller " +
+      s"dimensions. You may use the repartition method to fix this issue."
+    blockInfo.foreach { case ((blockRowIndex, blockColIndex), (m, n)) =>
+      if ((blockRowIndex < numRowBlocks - 1 && m != rowsPerBlock) ||
+          (blockRowIndex == numRowBlocks - 1 && (m <= 0 || m > rowsPerBlock))) {
+        throw new SparkException(s"The MatrixBlock at ($blockRowIndex, $blockColIndex) has " +
+          dimensionMsg)
+      }
+      if ((blockColIndex < numColBlocks - 1 && n != colsPerBlock) ||
+        (blockColIndex == numColBlocks - 1 && (n <= 0 || n > colsPerBlock))) {
+        throw new SparkException(s"The MatrixBlock at ($blockRowIndex, $blockColIndex) has " +
+          dimensionMsg)
+      }
+    }
+    logDebug("MatrixBlock dimensions are okay...")
+    logDebug("BlockMatrix is valid!")
   }
 
   /** Caches the underlying RDD. */
@@ -264,8 +301,8 @@ class BlockMatrix(
       val addedBlocks = blocks.cogroup(other.blocks, createPartitioner())
         .map { case ((blockRowIndex, blockColIndex), (a, b)) =>
           if (a.size > 1 || b.size > 1) {
-            throw new SparkException("There are MatrixBlocks with duplicate indices. Please " +
-              "remove them.")
+            throw new SparkException("There are multiple MatrixBlocks with indices: " +
+              s"($blockRowIndex, $blockColIndex). Please remove them.")
           }
           if (a.isEmpty) {
             new MatrixBlock((blockRowIndex, blockColIndex), b.head)
@@ -308,8 +345,8 @@ class BlockMatrix(
       val newBlocks: RDD[MatrixBlock] = flatA.cogroup(flatB, resultPartitioner)
         .flatMap { case ((blockRowIndex, blockColIndex, _), (a, b)) =>
           if (a.size > 1 || b.size > 1) {
-            throw new SparkException("There are MatrixBlocks with duplicate indices. Please " +
-              "remove them.")
+            throw new SparkException("There are multiple MatrixBlocks with indices: " +
+              s"($blockRowIndex, $blockColIndex). Please remove them.")
           }
           if (a.nonEmpty && b.nonEmpty) {
             val C = b.head match {

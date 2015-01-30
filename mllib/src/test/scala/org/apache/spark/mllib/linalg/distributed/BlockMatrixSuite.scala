@@ -215,7 +215,8 @@ class BlockMatrixSuite extends FunSuite with MLlibTestSparkContext {
     }
     val largerBlocks = Seq(((0, 0), DenseMatrix.eye(4)))
     val C2 = new BlockMatrix(sc.parallelize(largerBlocks, numPartitions), 4, 4)
-    intercept[SparkException] { // partitioning doesn't match
+    intercept[SparkException] {
+      // partitioning doesn't match
       gridBasedMat.multiply(C2)
     }
     val rand = new ju.Random(42)
@@ -231,6 +232,47 @@ class BlockMatrixSuite extends FunSuite with MLlibTestSparkContext {
     assert(largeC.numRows() === largeA.numRows())
     assert(largeC.numCols() === largeB.numCols())
     assert(localC ~== result absTol 1e-8)
+  }
+
+  test("validate") {
+    // No error
+    gridBasedMat.validate()
+    // Wrong MatrixBlock dimensions
+    val blocks: Seq[((Int, Int), Matrix)] = Seq(
+      ((0, 0), new DenseMatrix(2, 2, Array(1.0, 0.0, 0.0, 2.0))),
+      ((0, 1), new DenseMatrix(2, 2, Array(0.0, 1.0, 0.0, 0.0))),
+      ((1, 0), new DenseMatrix(2, 2, Array(3.0, 0.0, 1.0, 1.0))),
+      ((1, 1), new DenseMatrix(2, 2, Array(1.0, 2.0, 0.0, 1.0))),
+      ((2, 1), new DenseMatrix(1, 2, Array(1.0, 5.0))))
+    val rdd = sc.parallelize(blocks, numPartitions)
+    val wrongRowPerParts = new BlockMatrix(rdd, rowPerPart + 1, colPerPart)
+    val wrongColPerParts = new BlockMatrix(rdd, rowPerPart, colPerPart + 1)
+    intercept[SparkException] {
+      wrongRowPerParts.validate()
+    }
+    intercept[SparkException] {
+      wrongColPerParts.validate()
+    }
+    // Wrong BlockMatrix dimensions
+    val wrongRowSize = new BlockMatrix(rdd, rowPerPart, colPerPart, 4, 4)
+    intercept[AssertionError] {
+      wrongRowSize.validate()
+    }
+    val wrongColSize = new BlockMatrix(rdd, rowPerPart, colPerPart, 5, 2)
+    intercept[AssertionError] {
+      wrongColSize.validate()
+    }
+    // Duplicate indices
+    val duplicateBlocks: Seq[((Int, Int), Matrix)] = Seq(
+      ((0, 0), new DenseMatrix(2, 2, Array(1.0, 0.0, 0.0, 2.0))),
+      ((0, 0), new DenseMatrix(2, 2, Array(0.0, 1.0, 0.0, 0.0))),
+      ((1, 1), new DenseMatrix(2, 2, Array(3.0, 0.0, 1.0, 1.0))),
+      ((1, 1), new DenseMatrix(2, 2, Array(1.0, 2.0, 0.0, 1.0))),
+      ((2, 1), new DenseMatrix(1, 2, Array(1.0, 5.0))))
+    val dupMatrix = new BlockMatrix(sc.parallelize(duplicateBlocks, numPartitions), 2, 2)
+    intercept[SparkException] {
+      dupMatrix.validate()
+    }
   }
 
   test("transpose") {
