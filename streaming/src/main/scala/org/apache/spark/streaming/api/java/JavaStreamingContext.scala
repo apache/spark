@@ -303,6 +303,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * @param fClass class of input format for reading HDFS file
    * @param filter Function to filter paths to process
    * @param newFilesOnly Should process only new files and ignore existing files in the directory
+   * @param depth Searching depth of directory
    * @tparam K Key type for reading HDFS file
    * @tparam V Value type for reading HDFS file
    * @tparam F Input format for reading HDFS file
@@ -313,12 +314,13 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
       vClass: Class[V],
       fClass: Class[F],
       filter: JFunction[Path, JBoolean],
-      newFilesOnly: Boolean): JavaPairInputDStream[K, V] = {
+      newFilesOnly: Boolean,
+      depth: Int = 1): JavaPairInputDStream[K, V] = {
     implicit val cmk: ClassTag[K] = ClassTag(kClass)
     implicit val cmv: ClassTag[V] = ClassTag(vClass)
     implicit val cmf: ClassTag[F] = ClassTag(fClass)
     def fn: (Path) => Boolean = (x: Path) => filter.call(x).booleanValue()
-    ssc.fileStream[K, V, F](directory, fn, newFilesOnly)
+    ssc.fileStream[K, V, F](directory, fn, newFilesOnly, depth)
   }
 
   /**

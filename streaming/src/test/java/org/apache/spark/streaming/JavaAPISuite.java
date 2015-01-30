@@ -1808,7 +1808,11 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
   // Java arguments and assign it to a JavaDStream without producing type errors. Testing of the
   // InputStream functionality is deferred to the existing Scala tests.
   @Test
-  public void testSocketTextStream() {
+  public void testSocketTextStream(
+
+
+
+  ) {
       JavaReceiverInputDStream<String> test = ssc.socketTextStream("localhost", 12345);
   }
 
@@ -1865,7 +1869,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
           return Boolean.TRUE;
         }
       },
-      true);
+      true, 1);
 
     JavaDStream<String> test = inputStream.map(
       new Function<Tuple2<LongWritable, Text>, String>() {
