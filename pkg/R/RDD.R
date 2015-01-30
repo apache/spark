@@ -64,6 +64,9 @@ setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) 
     }
     .Object@func <- pipelinedFunc
     .Object@prev_jrdd <- prev@prev_jrdd # maintain the pipeline
+    # NOTE: Since we are computing on prev@prev_jrdd, we need to track if
+    # prev_jrdd was serialized or not
+    .Object@env$serialized <- prev@prev@env$serialized
   }
 
   .Object

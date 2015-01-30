@@ -122,3 +122,16 @@ test_that("textFile() on multiple paths", {
   unlink(fileName2)
 })
 
+test_that("Pipelined operations on RDDs created using textFile", {
+  fileName <- tempfile(pattern="spark-test", fileext=".tmp")
+  writeLines(mockFile, fileName)
+
+  rdd <- textFile(sc, fileName)
+
+  lengths <- lapply(rdd, function(x) { length(x) })
+  expect_equal(collect(lengths), list(1, 1))
+  lengthsPipelined <- lapply(lengths, function(x) { x + 10})
+  expect_equal(collect(lengthsPipelined), list(11, 11))
+  unlink(fileName)
+})
+
