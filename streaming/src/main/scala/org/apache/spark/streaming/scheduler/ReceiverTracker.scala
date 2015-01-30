@@ -218,7 +218,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   /** This thread class runs all the receivers on the cluster.  */
   class ReceiverLauncher {
     @transient val env = ssc.env
-    @volatile @transient private var running = true
+    @volatile @transient private var running = false
     @transient val thread  = new Thread() {
       override def run() {
         try {
@@ -306,9 +306,9 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
       // Distribute the receivers and start them
       logInfo("Starting " + receivers.length + " receivers")
-      running = false
-      ssc.sparkContext.runJob(tempRDD, ssc.sparkContext.clean(startReceiver))
       running = true
+      ssc.sparkContext.runJob(tempRDD, ssc.sparkContext.clean(startReceiver))
+      running = false
       logInfo("All of the receivers have been terminated")
     }
 
