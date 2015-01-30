@@ -29,6 +29,7 @@ import kafka.serializer.{Decoder, StringDecoder}
 
 
 import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
@@ -161,6 +162,7 @@ object KafkaUtils {
    * @param batch Each OffsetRange in the batch corresponds to a
    *   range of offsets for a given Kafka topic/partition
    */
+  @Experimental
   def createRDD[
     K: ClassTag,
     V: ClassTag,
@@ -199,6 +201,7 @@ object KafkaUtils {
    * @param leaders Kafka leaders for each offset range in batch
    * @param messageHandler function for translating each message into the desired type
    */
+  @Experimental
   def createRDD[
     K: ClassTag,
     V: ClassTag,
@@ -221,9 +224,8 @@ object KafkaUtils {
   }
 
   /**
-   * Compared to `createStream`, the stream created by this can guarantee that each message
-   * from Kafka is included in transformations (as opposed to output actions) exactly once,
-   * even in most failure situations.
+   * This stream can guarantee that each message from Kafka is included in transformations
+   * (as opposed to output actions) exactly once, even in most failure situations.
    *
    * Points to note:
    *
@@ -252,6 +254,7 @@ object KafkaUtils {
    *  starting point of the stream
    * @param maxRetries maximum number of times in a row to retry getting leaders' offsets
    */
+  @Experimental
   def createNewStream[
     K: ClassTag,
     V: ClassTag,
@@ -269,9 +272,8 @@ object KafkaUtils {
   }
 
   /**
-   * Compared to `createStream`, the stream created by this can guarantee that each message
-   * from Kafka is included in transformations (as opposed to output actions) exactly once,
-   * even in most failure situations.
+   * This stream can guarantee that each message from Kafka is included in transformations
+   * (as opposed to output actions) exactly once, even in most failure situations.
    *
    * Points to note:
    *
@@ -296,6 +298,7 @@ object KafkaUtils {
    *   to determine where the stream starts (defaults to "largest")
    * @param topics names of the topics to consume
    */
+  @Experimental
   def createNewStream[
     K: ClassTag,
     V: ClassTag,

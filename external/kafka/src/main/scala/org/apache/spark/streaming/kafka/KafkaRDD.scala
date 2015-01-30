@@ -31,17 +31,18 @@ import kafka.message.{MessageAndMetadata, MessageAndOffset}
 import kafka.serializer.Decoder
 import kafka.utils.VerifiableProperties
 
-/** A batch-oriented interface for consuming from Kafka.
-  * Starting and ending offsets are specified in advance,
-  * so that you can control exactly-once semantics.
-  * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
-  * configuration parameters</a>.
-  *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
-  *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
-  * @param batch Each KafkaRDDPartition in the batch corresponds to a
-  *   range of offsets for a given Kafka topic/partition
-  * @param messageHandler function for translating each message into the desired type
-  */
+/**
+ * A batch-oriented interface for consuming from Kafka.
+ * Starting and ending offsets are specified in advance,
+ * so that you can control exactly-once semantics.
+ * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+ * configuration parameters</a>.
+ *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
+ *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
+ * @param batch Each KafkaRDDPartition in the batch corresponds to a
+ *   range of offsets for a given Kafka topic/partition
+ * @param messageHandler function for translating each message into the desired type
+ */
 private[spark]
 class KafkaRDD[
   K: ClassTag,
@@ -65,16 +66,24 @@ class KafkaRDD[
     Seq(part.host)
   }
 
-  private def assertStartedCleanly(part: KafkaRDDPartition) {
-    assert(part.fromOffset <= part.untilOffset,
-      s"Beginning offset ${part.fromOffset} is after the ending offset ${part.untilOffset} " +
-        s"for topic ${part.topic} partition ${part.partition}. " +
-        "You either provided an invalid fromOffset, or the Kafka topic has been damaged")
-  }
+  private def errBeginAfterEnd(part: KafkaRDDPartition): String =
+    s"Beginning offset ${part.fromOffset} is after the ending offset ${part.untilOffset} " +
+      s"for topic ${part.topic} partition ${part.partition}. " +
+      "You either provided an invalid fromOffset, or the Kafka topic has been damaged"
+
+  private def errRanOutBeforeEnd(part: KafkaRDDPartition): String =
+    s"Ran out of messages before reaching ending offset ${part.untilOffset} " +
+    s"for topic ${part.topic} partition ${part.partition} start ${part.fromOffset}." +
+    " This should not happen, and indicates that messages may have been lost"
+
+  private def errOvershotEnd(itemOffset: Long, part: KafkaRDDPartition): String =
+    s"Got ${itemOffset} > ending offset ${part.untilOffset} " +
+    s"for topic ${part.topic} partition ${part.partition} start ${part.fromOffset}." +
+    " This should not happen, and indicates a message may have been skipped"
 
   override def compute(thePart: Partition, context: TaskContext): Iterator[R] = {
     val part = thePart.asInstanceOf[KafkaRDDPartition]
-    assertStartedCleanly(part)
+    assert(part.fromOffset <= part.untilOffset, errBeginAfterEnd(part))
     if (part.fromOffset == part.untilOffset) {
       log.warn("Beginning offset ${part.fromOffset} is the same as ending offset " +
         s"skipping ${part.topic} ${part.partition}")
@@ -85,7 +94,8 @@ class KafkaRDD[
   }
 
   private class KafkaRDDIterator(
-    part: KafkaRDDPartition, context: TaskContext) extends NextIterator[R] {
+      part: KafkaRDDPartition,
+      context: TaskContext) extends NextIterator[R] {
 
     context.addTaskCompletionListener{ context => closeIfNeeded() }
 
@@ -132,24 +142,10 @@ class KafkaRDD[
       }
     }
 
-    private def assertFinishedEmpty(requestOffset: Long) {
-      assert(requestOffset == part.untilOffset,
-        s"ran out of messages before reaching ending offset ${part.untilOffset} " +
-          s"for topic ${part.topic} partition ${part.partition} start ${part.fromOffset}." +
-          " This should not happen, and indicates that messages may have been lost")
-    }
-
-    private def assertFinishedWithoutOvershoot(itemOffset: Long) {
-      assert(itemOffset == part.untilOffset,
-        s"got ${itemOffset} > ending offset ${part.untilOffset} " +
-          s"for topic ${part.topic} partition ${part.partition} start ${part.fromOffset}." +
-          " This should not happen, and indicates a message may have been skipped")
-    }
-
     private def fetchBatch: Iterator[MessageAndOffset] = {
-      val req = new FetchRequestBuilder().
-        addFetch(part.topic, part.partition, requestOffset, kc.config.fetchMessageMaxBytes).
-        build()
+      val req = new FetchRequestBuilder()
+        .addFetch(part.topic, part.partition, requestOffset, kc.config.fetchMessageMaxBytes)
+        .build()
       val resp = consumer.fetch(req)
       handleFetchErr(resp)
       // kafka may return a batch that starts before the requested offset
@@ -160,18 +156,18 @@ class KafkaRDD[
 
     override def close() = consumer.close()
 
-    override def getNext: R = {
+    override def getNext(): R = {
       if (iter == null || !iter.hasNext) {
         iter = fetchBatch
       }
       if (!iter.hasNext) {
-        assertFinishedEmpty(requestOffset)
+        assert(requestOffset == part.untilOffset, errRanOutBeforeEnd(part))
         finished = true
         null.asInstanceOf[R]
       } else {
-        val item = iter.next
+        val item = iter.next()
         if (item.offset >= part.untilOffset) {
-          assertFinishedWithoutOvershoot(item.offset)
+          assert(item.offset == part.untilOffset, errOvershotEnd(item.offset, part))
           finished = true
           null.asInstanceOf[R]
         } else {
@@ -189,16 +185,16 @@ object KafkaRDD {
   import KafkaCluster.LeaderOffset
 
   /**
-    * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
-    * configuration parameters</a>.
-    *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
-    *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
-    * @param fromOffsets per-topic/partition Kafka offsets defining the (inclusive)
-    *  starting point of the batch
-    * @param untilOffsets per-topic/partition Kafka offsets defining the (exclusive)
-    *  ending point of the batch
-    * @param messageHandler function for translating each message into the desired type
-    */
+   * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+   * configuration parameters</a>.
+   *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
+   *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
+   * @param fromOffsets per-topic/partition Kafka offsets defining the (inclusive)
+   *  starting point of the batch
+   * @param untilOffsets per-topic/partition Kafka offsets defining the (exclusive)
+   *  ending point of the batch
+   * @param messageHandler function for translating each message into the desired type
+   */
   def apply[
     K: ClassTag,
     V: ClassTag,
