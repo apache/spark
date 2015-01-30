@@ -21,6 +21,8 @@ import java.io.Serializable
 import java.lang.{Double => JDouble}
 import java.util.Arrays.binarySearch
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.api.java.{JavaDoubleRDD, JavaRDD}
 import org.apache.spark.rdd.RDD
 
@@ -31,30 +33,28 @@ import org.apache.spark.rdd.RDD
  *                   Boundaries must be sorted in increasing order.
  * @param predictions Array of predictions associated to the boundaries at the same index.
  *                    Results of isotonic regression and therefore monotone.
+ * @param isotonic indicates whether this is isotonic or antitonic.
  */
 class IsotonicRegressionModel (
-    boundaries: Array[Double],
+    val boundaries: Array[Double],
     val predictions: Array[Double],
-    isotonic: Boolean)
-  extends Serializable {
+    val isotonic: Boolean) extends Serializable {
 
-  private def isSorted(xs: Array[Double]): Boolean = {
+  private val predictionOrd = if (isotonic) Ordering[Double] else Ordering[Double].reverse
+
+  require(boundaries.length == predictions.length)
+  assertOrdered(boundaries)
+  assertOrdered(predictions)(predictionOrd)
+
+  /** Asserts the input array is monotone with the given ordering. */
+  private def assertOrdered(xs: Array[Double])(implicit ord: Ordering[Double]): Unit = {
     var i = 1
     while (i < xs.length) {
-      if (xs(i) < xs(i - 1)) false
+      require(ord.compare(xs(i - 1), xs(i)) <= 0,
+        s"Elements (${xs(i - 1)}, ${xs(i)}) are not ordered.")
       i += 1
     }
-    true
   }
-
-  if (isotonic) {
-    assert(isSorted(predictions))
-  } else {
-    assert(isSorted(predictions.map(-_)))
-  }
-
-  assert(isSorted(boundaries))
-  assert(boundaries.length == predictions.length)
 
   /**
    * Predict labels for provided features.
@@ -175,10 +175,10 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
       input.map(x => (-x._1, x._2, x._3))
     }
 
-    val isotonicRegression = parallelPoolAdjacentViolators(preprocessedInput)
+    val pooled = parallelPoolAdjacentViolators(preprocessedInput)
 
-    val predictions = if (isotonic) isotonicRegression.map(_._1) else isotonicRegression.map(-_._1)
-    val boundaries = isotonicRegression.map(_._2)
+    val predictions = if (isotonic) pooled.map(_._1) else pooled.map(-_._1)
+    val boundaries = pooled.map(_._2)
 
     new IsotonicRegressionModel(boundaries, predictions, isotonic)
   }
@@ -209,6 +209,10 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
    */
   private def poolAdjacentViolators(
       input: Array[(Double, Double, Double)]): Array[(Double, Double, Double)] = {
+
+    if (input.isEmpty) {
+      return Array.empty
+    }
 
     // Pools sub array within given bounds assigning weighted average value to all elements.
     def pool(input: Array[(Double, Double, Double)], start: Int, end: Int): Unit = {
@@ -248,7 +252,35 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
       }
     }
 
-    input
+    // For points having the same prediction, we only keep two boundary points.
+    val compressed = ArrayBuffer.empty[(Double, Double, Double)]
+
+    var (curLabel, curFeature, curWeight) = input.head
+    var rightBound = curFeature
+    def merge(): Unit = {
+      compressed += ((curLabel, curFeature, curWeight))
+      if (rightBound > curFeature) {
+        compressed += ((curLabel, rightBound, 0.0))
+      }
+    }
+    i = 1
+    while (i < input.length) {
+      val (label, feature, weight) = input(i)
+      if (label == curLabel) {
+        curWeight += weight
+        rightBound = feature
+      } else {
+        merge()
+        curLabel = label
+        curFeature = feature
+        curWeight = weight
+        rightBound = curFeature
+      }
+      i += 1
+    }
+    merge()
+
+    compressed.toArray
   }
 
   /**
@@ -261,11 +293,12 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
    */
   private def parallelPoolAdjacentViolators(
       input: RDD[(Double, Double, Double)]): Array[(Double, Double, Double)] = {
-
     val parallelStepResult = input
       .sortBy(x => (x._2, x._1))
-      .mapPartitions(it => poolAdjacentViolators(it.toArray).toIterator)
-
-    poolAdjacentViolators(parallelStepResult.collect())
+      .glom()
+      .flatMap(poolAdjacentViolators)
+      .collect()
+      .sortBy(x => (x._2, x._1)) // Sort again because collect() doesn't promise ordering.
+    poolAdjacentViolators(parallelStepResult)
   }
 }
