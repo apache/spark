@@ -111,14 +111,16 @@ class DataFrame protected[sql](
   /** Returns the list of numeric columns, useful for doing aggregation. */
   protected[sql] def numericColumns: Seq[Expression] = {
     schema.fields.filter(_.dataType.isInstanceOf[NumericType]).map { n =>
-      logicalPlan.resolve(n.name, sqlContext.analyzer.resolver).get
+      queryExecution.analyzed.resolve(n.name, sqlContext.analyzer.resolver).get
     }
   }
 
   /** Resolves a column name into a Catalyst [[NamedExpression]]. */
   protected[sql] def resolve(colName: String): NamedExpression = {
-    logicalPlan.resolve(colName, sqlContext.analyzer.resolver).getOrElse(throw new RuntimeException(
-      s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})"""))
+    queryExecution.analyzed.resolve(colName, sqlContext.analyzer.resolver).getOrElse {
+      throw new RuntimeException(
+        s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""")
+    }
   }
 
   /** Left here for compatibility reasons. */
