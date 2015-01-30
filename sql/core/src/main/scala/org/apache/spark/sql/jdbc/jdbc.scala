@@ -26,51 +26,6 @@ import org.apache.spark.sql.jdbc.{JDBCPartitioningInfo, JDBCRelation, JDBCPartit
 import org.apache.spark.sql.types._
 
 package object jdbc {
-  /**
-   * Make it so that you can call jdbcRDD on a SQLContext.
-   */
-  implicit class JDBCContext(sql: SQLContext) {
-    /**
-     * Construct an RDD representing the database table accessible via JDBC URL
-     * url named table.
-     */
-    def jdbcRDD(url: String, table: String): DataFrame = {
-      jdbcRDD(url, table, null.asInstanceOf[JDBCPartitioningInfo])
-    }
-
-    /**
-     * Construct an RDD representing the database table accessible via JDBC URL
-     * url named table.  The PartitioningInfo parameter
-     * gives the name of a column of integral type, a number of partitions, and
-     * advisory minimum and maximum values for the column.  The RDD is
-     * partitioned according to said column.
-     */
-    def jdbcRDD(url: String, table: String, partitioning: JDBCPartitioningInfo):
-        DataFrame = {
-      val parts = JDBCRelation.columnPartition(partitioning)
-      jdbcRDD(url, table, parts)
-    }
-
-    /**
-     * Construct an RDD representing the database table accessible via JDBC URL
-     * url named table.  The theParts parameter gives a list expressions
-     * suitable for inclusion in WHERE clauses; each one defines one partition
-     * of the RDD.
-     */
-    def jdbcRDD(url: String, table: String, theParts: Array[String]):
-        DataFrame = {
-      val parts: Array[Partition] = theParts.zipWithIndex.map(
-          x => JDBCPartition(x._1, x._2).asInstanceOf[Partition])
-      jdbcRDD(url, table, parts)
-    }
-
-    private def jdbcRDD(url: String, table: String, parts: Array[Partition]):
-        DataFrame = {
-      val relation = JDBCRelation(url, table, parts)(sql)
-      sql.baseRelationToDataFrame(relation)
-    }
-  }
-
   object JDBCWriteDetails extends Logging {
     /**
      * Returns a PreparedStatement that inserts a row into table via conn.

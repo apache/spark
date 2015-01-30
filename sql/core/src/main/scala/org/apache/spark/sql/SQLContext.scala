@@ -24,7 +24,7 @@ import scala.collection.immutable
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, Partition}
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaSparkContext, JavaRDD}
 import org.apache.spark.rdd.RDD
@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.json._
+import org.apache.spark.sql.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
 import org.apache.spark.sql.sources.{LogicalRelation, BaseRelation, DDLParser, DataSourceStrategy}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -332,6 +333,52 @@ class SQLContext(@transient val sparkContext: SparkContext)
         JsonRDD.inferSchema(json, samplingRatio, columnNameOfCorruptJsonRecord))
     val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
     applySchema(rowRDD, appliedSchema)
+  }
+
+  /**
+   * :: Experimental ::
+   * Construct an RDD representing the database table accessible via JDBC URL
+   * url named table.
+   */
+  @Experimental
+  def jdbcRDD(url: String, table: String): DataFrame = {
+    jdbcRDD(url, table, null.asInstanceOf[JDBCPartitioningInfo])
+  }
+
+  /**
+   * :: Experimental ::
+   * Construct an RDD representing the database table accessible via JDBC URL
+   * url named table.  The PartitioningInfo parameter
+   * gives the name of a column of integral type, a number of partitions, and
+   * advisory minimum and maximum values for the column.  The RDD is
+   * partitioned according to said column.
+   */
+  @Experimental
+  def jdbcRDD(url: String, table: String, partitioning: JDBCPartitioningInfo):
+      DataFrame = {
+    val parts = JDBCRelation.columnPartition(partitioning)
+    jdbcRDD(url, table, parts)
+  }
+
+  /**
+   * :: Experimental ::
+   * Construct an RDD representing the database table accessible via JDBC URL
+   * url named table.  The theParts parameter gives a list expressions
+   * suitable for inclusion in WHERE clauses; each one defines one partition
+   * of the RDD.
+   */
+  @Experimental
+  def jdbcRDD(url: String, table: String, theParts: Array[String]):
+      DataFrame = {
+    val parts: Array[Partition] = theParts.zipWithIndex.map(
+        x => JDBCPartition(x._1, x._2).asInstanceOf[Partition])
+    jdbcRDD(url, table, parts)
+  }
+
+  private def jdbcRDD(url: String, table: String, parts: Array[Partition]):
+      DataFrame = {
+    val relation = JDBCRelation(url, table, parts)(this)
+    baseRelationToDataFrame(relation)
   }
 
   /**
