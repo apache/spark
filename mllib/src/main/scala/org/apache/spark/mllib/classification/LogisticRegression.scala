@@ -25,7 +25,7 @@ import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{DataValidators, Exportable, Importable, MLUtils}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, SQLContext, SchemaRDD}
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
 
 /**
@@ -141,15 +141,15 @@ class LogisticRegressionModel (
   override def save(sc: SparkContext, path: String): Unit = {
     val sqlContext = new SQLContext(sc)
     import sqlContext._
-    // TODO: Do we need to use a SELECT statement to make the column ordering deterministic?
+
     // Create JSON metadata.
     val metadata = LogisticRegressionModel.Metadata(
       clazz = this.getClass.getName, version = Exportable.latestVersion)
-    val metadataRDD: SchemaRDD = sc.parallelize(Seq(metadata))
+    val metadataRDD: DataFrame = sc.parallelize(Seq(metadata))
     metadataRDD.toJSON.saveAsTextFile(path + "/metadata")
     // Create Parquet data.
     val data = LogisticRegressionModel.Data(weights, intercept, threshold)
-    val dataRDD: SchemaRDD = sc.parallelize(Seq(data))
+    val dataRDD: DataFrame = sc.parallelize(Seq(data))
     dataRDD.saveAsParquetFile(path + "/data")
   }
 }
@@ -166,7 +166,7 @@ object LogisticRegressionModel extends Importable[LogisticRegressionModel] {
 
     // Load JSON metadata.
     val metadataRDD = sqlContext.jsonFile(path + "/metadata")
-    val metadataArray = metadataRDD.select("clazz".attr, "version".attr).take(1)
+    val metadataArray = metadataRDD.select("clazz", "version").take(1)
     assert(metadataArray.size == 1,
       s"Unable to load LogisticRegressionModel metadata from: ${path + "/metadata"}")
     metadataArray(0) match {
@@ -179,7 +179,7 @@ object LogisticRegressionModel extends Importable[LogisticRegressionModel] {
 
     // Load Parquet data.
     val dataRDD = sqlContext.parquetFile(path + "/data")
-    val dataArray = dataRDD.select("weights".attr, "intercept".attr, "threshold".attr).take(1)
+    val dataArray = dataRDD.select("weights", "intercept", "threshold").take(1)
     assert(dataArray.size == 1,
       s"Unable to load LogisticRegressionModel data from: ${path + "/data"}")
     val data = dataArray(0)
