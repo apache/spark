@@ -31,13 +31,14 @@ class PythonRDDSuite extends FunSuite {
 
   test("Handle nulls gracefully") {
     val buffer = new DataOutputStream(new ByteArrayOutputStream)
-    PythonRDD.writeIteratorToStream(List("a", null).iterator, buffer)
-    PythonRDD.writeIteratorToStream(List(null, "a").iterator, buffer)
-    PythonRDD.writeIteratorToStream(List("a".getBytes, null).iterator, buffer)
-    PythonRDD.writeIteratorToStream(List(null, "a".getBytes).iterator, buffer)
-
-    PythonRDD.writeIteratorToStream(List((null, null), ("a", null), (null, "b")).iterator, buffer)
+    // Should not have NPE when write an Iterator with null in it
+    // The correctness will be tested in Python
+    PythonRDD.writeIteratorToStream(Iterator("a", null), buffer)
+    PythonRDD.writeIteratorToStream(Iterator(null, "a"), buffer)
+    PythonRDD.writeIteratorToStream(Iterator("a".getBytes, null), buffer)
+    PythonRDD.writeIteratorToStream(Iterator(null, "a".getBytes), buffer)
+    PythonRDD.writeIteratorToStream(Iterator((null, null), ("a", null), (null, "b")), buffer)
     PythonRDD.writeIteratorToStream(
-      List((null, null), ("a".getBytes, null), (null, "b".getBytes)).iterator, buffer)
+      Iterator((null, null), ("a".getBytes, null), (null, "b".getBytes)), buffer)
   }
 }

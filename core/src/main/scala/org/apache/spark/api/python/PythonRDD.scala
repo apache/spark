@@ -376,19 +376,16 @@ private[spark] object PythonRDD extends Logging {
     def write(obj: Any): Unit = obj match {
       case null =>
         dataOut.writeInt(SpecialLengths.NULL)
-
       case arr: Array[Byte] =>
         dataOut.writeInt(arr.length)
         dataOut.write(arr)
       case str: String =>
         writeUTF(str, dataOut)
-
       case stream: PortableDataStream =>
         write(stream.toArray())
       case (key, value) =>
         write(key)
         write(value)
-
       case other =>
         throw new SparkException("Unexpected element type " + other.getClass)
     }

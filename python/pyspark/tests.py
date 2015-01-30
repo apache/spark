@@ -49,7 +49,7 @@ from pyspark.context import SparkContext
 from pyspark.rdd import RDD
 from pyspark.files import SparkFiles
 from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, PickleSerializer, \
-    CloudPickleSerializer, CompressedSerializer, UTF8Deserializer
+    CloudPickleSerializer, CompressedSerializer, UTF8Deserializer, NoOpSerializer
 from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, ExternalSorter
 from pyspark.sql import SQLContext, IntegerType, Row, ArrayType, StructType, StructField, \
     UserDefinedType, DoubleType
@@ -720,6 +720,8 @@ class RDDTests(ReusedPySparkTestCase):
         jrdd = self.sc._jvm.PythonUtils.generateRDDWithNull(self.sc._jsc)
         rdd = RDD(jrdd, self.sc, UTF8Deserializer())
         self.assertEqual([u"a", None, u"b"], rdd.collect())
+        rdd = RDD(jrdd, self.sc, NoOpSerializer())
+        self.assertEqual(["a", None, "b"], rdd.collect())
 
     def test_multiple_python_java_RDD_conversions(self):
         # Regression test for SPARK-5361
