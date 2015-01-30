@@ -24,7 +24,7 @@ import org.apache.spark.mllib.linalg.Vectors
 /**
  * An example Gaussian Mixture Model EM app. Run with
  * {{{
- * ./bin/run-example org.apache.spark.examples.mllib.DenseGaussianMixture <input> <k> <convergeTol>
+ * ./bin/run-example mllib.DenseGaussianMixture <input> <k> <convergenceTol>
  * }}}
  * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  */
