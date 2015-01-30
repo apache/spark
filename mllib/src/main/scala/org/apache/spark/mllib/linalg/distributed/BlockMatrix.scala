@@ -20,7 +20,7 @@ package org.apache.spark.mllib.linalg.distributed
 import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark.{Logging, Partitioner}
-import org.apache.spark.mllib.linalg.{DenseMatrix, Matrices, Matrix}
+import org.apache.spark.mllib.linalg.{SparseMatrix, DenseMatrix, Matrices, Matrix}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -294,10 +294,11 @@ class BlockMatrix(
     val newNumColBlocks = math.ceil(n * 1.0 / newColsPerBlock).toInt
     val slicedBlocks = blocks.flatMap { case ((blockRowIndex, blockColIndex), mat) =>
       val rowStartOffset = blockRowIndex * rowsPerBlock
-      val rowEndOffset = rowStartOffset + mat.numRows
+      //val rowEndOffset = rowStartOffset + mat.numRows
       val colStartOffset = blockColIndex * colsPerBlock
-      val colEndOffset = colStartOffset + mat.numCols
+      //val colEndOffset = colStartOffset + mat.numCols
 
+      /*
       // The range of indices that the parts of this block are going to be mapped to
       val rowIndex = rowStartOffset / newRowsPerBlock
       val endRowIndex = math.ceil(rowEndOffset * 1.0 / newRowsPerBlock).toInt
@@ -307,8 +308,10 @@ class BlockMatrix(
       // The (Int, Int) key correspond to the index in the grid that this block now belongs to
       // In (Int, Int, Matrix), the first Int is the row offset that the subBlock will have
       // in the new block it's going to be a part of. The second Int is the column offset.
+
+
       val subBlocks = new ArrayBuffer[((Int, Int), (Int, Int, Matrix))](
-        (endRowIndex - rowIndex) * (endColIndex - colIndex))
+      (endRowIndex - rowIndex) * (endColIndex - colIndex))
 
       var colIdx = colIndex
       while (colIdx < endColIndex) {
@@ -316,16 +319,17 @@ class BlockMatrix(
         while (rowIdx < endRowIndex) {
           // The indices to slice from the matrix
           val sliceRowStart =
-            math.max(rowStartOffset, rowIdx * newRowsPerBlock) - rowStartOffset
+           math.max(rowStartOffset, rowIdx * newRowsPerBlock) - rowStartOffset
           val sliceRowEnd =
-            math.min(rowEndOffset, (rowIdx + 1) * newRowsPerBlock) - rowStartOffset
+           math.min(rowEndOffset, (rowIdx + 1) * newRowsPerBlock) - rowStartOffset
           val sliceColStart =
-            math.max(colStartOffset, colIdx * newColsPerBlock) - colStartOffset
+           math.max(colStartOffset, colIdx * newColsPerBlock) - colStartOffset
           val sliceColEnd =
-            math.min(colEndOffset, (colIdx + 1) * newColsPerBlock) - colStartOffset
+           math.min(colEndOffset, (colIdx + 1) * newColsPerBlock) - colStartOffset
           // slice matrix
           val slicedMat = mat.toBreeze(sliceRowStart until sliceRowEnd,
             sliceColStart until sliceColEnd).toDenseMatrix
+
           subBlocks.append(((rowIdx, colIdx), (
             sliceRowStart + rowStartOffset - rowIdx * newRowsPerBlock,
             sliceColStart + colStartOffset - colIdx * newColsPerBlock,
@@ -335,20 +339,30 @@ class BlockMatrix(
         colIdx += 1
       }
       subBlocks
+      */
+      val values = new ArrayBuffer[((Int, Int), (Int, Int, Double))]()
+      mat.foreachActive { (i, j, v) =>
+        val targetBlockRowIndex = (rowStartOffset + i) / newRowsPerBlock
+        val targetBlockColIndex = (colStartOffset + j) / newColsPerBlock
+        val targetRowOffset = (rowStartOffset + i) - newRowsPerBlock * targetBlockRowIndex
+        val targetColOffset = (colStartOffset + j) - newColsPerBlock * targetBlockColIndex
+        values.append(
+          ((targetBlockRowIndex, targetBlockColIndex), (targetRowOffset, targetColOffset, v)))
+      }
+      values
     }
     val newPartitioner = GridPartitioner(newNumRowBlocks, newNumColBlocks, suggestedNumPartitions)
     val newMatrixBlocksRDD: RDD[MatrixBlock] = slicedBlocks.groupByKey(newPartitioner).
       map { case ((blockRowIndex, blockColIndex), subBlocks) =>
         // TODO: When SparseMatrices are supported for operations like multiply, optimize the
-        // following in terms of storage
+        // following in terms of storage. Not using fromCOO, because operations mostly support
+        // DenseMatrix
         val effRowsPerBlock = math.min(m - blockRowIndex * newRowsPerBlock, newRowsPerBlock).toInt
         val effColsPerBlock = math.min(n - blockColIndex * newColsPerBlock, newColsPerBlock).toInt
         val finalBlock = DenseMatrix.zeros(effRowsPerBlock, effColsPerBlock)
         val values = finalBlock.values
-        subBlocks.foreach { case (rowOffset, colOffset, subBlock) =>
-          subBlock.foreachActive { (i, j, v) =>
-            values((j + colOffset) * effRowsPerBlock + rowOffset + i) += v
-          }
+        subBlocks.foreach { case (rowIndex, colIndex, v) =>
+          values(colIndex * effRowsPerBlock + rowIndex) += v
         }
         ((blockRowIndex, blockColIndex), finalBlock)
       }
