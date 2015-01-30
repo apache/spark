@@ -29,11 +29,11 @@ import org.apache.spark.rdd.RDD
  * This class implements Parallel FP-growth algorithm to do frequent pattern matching on input data.
  * Parallel FPGrowth (PFP) partitions computation in such a way that each machine executes an
  * independent group of mining tasks. More detail of this algorithm can be found at
- * [[http://dx.doi.org/10.1145/1454008.1454027, PFP]], and the original FP-growth paper can be found at
- * [[http://dx.doi.org/10.1145/335191.335372, FP-growth]]
+ * [[http://dx.doi.org/10.1145/1454008.1454027, PFP]], and the original FP-growth paper can be
+ * found at [[http://dx.doi.org/10.1145/335191.335372, FP-growth]]
  *
- * @param minSupport the minimal support level of the frequent pattern, any pattern appears more than
- *                   (minSupport * size-of-the-dataset) times will be output
+ * @param minSupport the minimal support level of the frequent pattern, any pattern appears
+ *                   more than (minSupport * size-of-the-dataset) times will be output
  */
 class FPGrowth private(private var minSupport: Double) extends Logging with Serializable {
 

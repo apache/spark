@@ -64,7 +64,8 @@ class FPTree extends Serializable {
    * @return root node after merge
    */
   private def mergeTree(tree1: FPTreeNode, tree2: FPTreeNode): FPTreeNode = {
-    // firstly merge two roots, then iterate on the second tree, merge all children of it to the first tree
+    // firstly merge two roots, then iterate on the second tree, merge all
+    // children of it to the first tree
     require(tree1 != null)
     require(tree2 != null)
     if (!tree2.isRoot) {
@@ -108,7 +109,8 @@ class FPTree extends Serializable {
   }
 
   /**
-   * This function will walk through the tree and build all conditional pattern base out of it
+   * This function will walk through the tree and build all conditional pattern
+   * base out of it
    * @param tree the tree to expand
    * @return conditional pattern base
    */
@@ -187,7 +189,8 @@ class FPTree extends Serializable {
             val lineCom = v.toList.combinations(k)
             lineComListBuffer ++= lineCom.toList
           } else {
-            /* if each value length > k,it need calculate the intersect of each value & before combinations */
+            // if each value length > k,it need calculate the intersect of each
+            // value & before combinations 
             val union_lineComListTemp2v = v intersect lineComListTempBuffer.toArray.array
             // calculate each value combinations after intersect
             if (union_lineComListTemp2v.length >= k) {
