@@ -13,9 +13,8 @@ _____  |__|_______/ ____\  |   ______  _  __
 (____  /__||__|   |__|  |____/\____/ \/\_/
      \/"""
 
-
+BASE_LOG_URL = '/admin/airflow/log'
 AIRFLOW_HOME = conf.get('core', 'AIRFLOW_HOME')
-BASE_LOG_URL = conf.get('core', 'BASE_LOG_URL')
 DAGS_FOLDER = conf.get('core', 'DAGS_FOLDER')
 SQL_ALCHEMY_CONN = conf.get('core', 'SQL_ALCHEMY_CONN')
 
