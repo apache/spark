@@ -60,6 +60,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   var driverToKill: String = null
   var driverToRequestStatusFor: String = null
 
+  private val restEnabledKey = "spark.submit.rest.enabled"
+
   def action: SparkSubmitAction = {
     (driverToKill, driverToRequestStatusFor) match {
       case (null, null) => SparkSubmitAction.SUBMIT
@@ -237,6 +239,10 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
     if (!isStandaloneCluster) {
       SparkSubmit.printErrorAndExit("Killing drivers is only supported in standalone cluster mode")
     }
+    if (!isRestEnabled) {
+      SparkSubmit.printErrorAndExit("Killing drivers is currently only supported " +
+        s"through the REST interface. Please set $restEnabledKey to true.")
+    }
     if (driverToKill == null) {
       SparkSubmit.printErrorAndExit("Please specify a driver to kill")
     }
@@ -246,6 +252,10 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
     if (!isStandaloneCluster) {
       SparkSubmit.printErrorAndExit(
         "Requesting driver statuses is only supported in standalone cluster mode")
+    }
+    if (!isRestEnabled) {
+      SparkSubmit.printErrorAndExit("Requesting driver statuses is currently only " +
+        s"supported through the REST interface. Please set $restEnabledKey to true.")
     }
     if (driverToRequestStatusFor == null) {
       SparkSubmit.printErrorAndExit("Please specify a driver to request status for")
@@ -258,7 +268,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
 
   /** Return whether the REST application submission protocol is enabled. */
   def isRestEnabled: Boolean = {
-    sparkProperties.get("spark.submit.rest.enabled").getOrElse("false").toBoolean
+    sparkProperties.get(restEnabledKey).getOrElse("false").toBoolean
   }
 
   override def toString = {
