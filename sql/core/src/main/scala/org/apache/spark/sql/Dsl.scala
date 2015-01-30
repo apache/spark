@@ -63,6 +63,11 @@ object Dsl {
   def col(colName: String): Column = new Column(colName)
 
   /**
+   * Returns a [[Column]] based on the given column name. Alias of [[col]].
+   */
+  def column(colName: String): Column = new Column(colName)
+
+  /**
    * Creates a [[Column]] of literal value.
    */
   def lit(literal: Any): Column = {
@@ -96,6 +101,7 @@ object Dsl {
   def sumDistinct(e: Column): Column = SumDistinct(e.expr)
   def count(e: Column): Column = Count(e.expr)
 
+  @scala.annotation.varargs
   def countDistinct(expr: Column, exprs: Column*): Column =
     CountDistinct((expr +: exprs).map(_.expr))
 
