@@ -22,17 +22,10 @@ package org.apache.spark.deploy.rest
  */
 class KillDriverResponse extends SubmitRestProtocolResponse {
   private val driverId = new SubmitRestProtocolField[String]("driverId")
-  private val success = new SubmitRestProtocolField[Boolean]("success")
-
   def getDriverId: String = driverId.toString
-  def getSuccess: String = success.toString
-
   def setDriverId(s: String): this.type = setField(driverId, s)
-  def setSuccess(s: String): this.type = setBooleanField(success, s)
-
   protected override def doValidate(): Unit = {
     super.doValidate()
     assertFieldIsSet(driverId)
-    assertFieldIsSet(success)
   }
 }

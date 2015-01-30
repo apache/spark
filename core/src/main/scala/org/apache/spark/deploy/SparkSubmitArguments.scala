@@ -22,7 +22,7 @@ import java.util.jar.JarFile
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
-import org.apache.spark.deploy.SparkSubmitAction.SparkSubmitAction
+import org.apache.spark.deploy.SparkSubmitAction._
 import org.apache.spark.util.Utils
 
 /**
@@ -52,6 +52,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   var verbose: Boolean = false
   var isPython: Boolean = false
   var pyFiles: String = null
+  var action: SparkSubmitAction = null
   val sparkProperties: HashMap[String, String] = new HashMap[String, String]()
 
   // Standalone cluster mode only
@@ -61,17 +62,6 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   var driverToRequestStatusFor: String = null
 
   private val restEnabledKey = "spark.submit.rest.enabled"
-
-  def action: SparkSubmitAction = {
-    (driverToKill, driverToRequestStatusFor) match {
-      case (null, null) => SparkSubmitAction.SUBMIT
-      case (_, null) => SparkSubmitAction.KILL
-      case (null, _) => SparkSubmitAction.REQUEST_STATUS
-      case _ => SparkSubmit.printErrorAndExit(
-        "Requested to both kill and request status for a driver. Choose only one.")
-        null // never reached
-    }
-  }
 
   /** Default properties present in the currently defined defaults file. */
   lazy val defaultSparkProperties: HashMap[String, String] = {
@@ -189,14 +179,17 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
     if (name == null && primaryResource != null) {
       name = Utils.stripDirectory(primaryResource)
     }
+
+    // Action should be SUBMIT unless otherwise specified
+    action = Option(action).getOrElse(SUBMIT)
   }
 
   /** Ensure that required fields exists. Call this only once all defaults are loaded. */
   private def validateArguments(): Unit = {
     action match {
-      case SparkSubmitAction.SUBMIT => validateSubmitArguments()
-      case SparkSubmitAction.KILL => validateKillArguments()
-      case SparkSubmitAction.REQUEST_STATUS => validateStatusRequestArguments()
+      case SUBMIT => validateSubmitArguments()
+      case KILL => validateKillArguments()
+      case REQUEST_STATUS => validateStatusRequestArguments()
     }
   }
 
@@ -379,10 +372,18 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
 
       case ("--kill") :: value :: tail =>
         driverToKill = value
+        if (action != null) {
+          SparkSubmit.printErrorAndExit(s"Action cannot be both $action and $KILL.")
+        }
+        action = KILL
         parse(tail)
 
       case ("--status") :: value :: tail =>
         driverToRequestStatusFor = value
+        if (action != null) {
+          SparkSubmit.printErrorAndExit(s"Action cannot be both $action and $REQUEST_STATUS.")
+        }
+        action = REQUEST_STATUS
         parse(tail)
 
       case ("--supervise") :: tail =>

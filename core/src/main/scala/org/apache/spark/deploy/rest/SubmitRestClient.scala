@@ -39,7 +39,7 @@ private[spark] abstract class SubmitRestClient extends Logging {
     val url = getHttpUrl(args.master)
     val request = constructSubmitRequest(args)
     val response = sendHttp(url, request)
-    handleResponse(response)
+    validateResponse(response)
   }
 
   /** Request that the REST server kill the specified driver. */
@@ -48,7 +48,7 @@ private[spark] abstract class SubmitRestClient extends Logging {
     val url = getHttpUrl(master)
     val request = constructKillRequest(master, driverId)
     val response = sendHttp(url, request)
-    handleResponse(response)
+    validateResponse(response)
   }
 
   /** Request the status of the specified driver from the REST server. */
@@ -57,7 +57,7 @@ private[spark] abstract class SubmitRestClient extends Logging {
     val url = getHttpUrl(master)
     val request = constructStatusRequest(master, driverId)
     val response = sendHttp(url, request)
-    handleResponse(response)
+    validateResponse(response)
   }
 
   /** Return the HTTP URL of the REST server that corresponds to the given master URL. */
@@ -95,14 +95,10 @@ private[spark] abstract class SubmitRestClient extends Logging {
     }
   }
 
-  /** Validate the response and log any error messages produced by the server. */
-  private def handleResponse(response: SubmitRestProtocolResponse): SubmitRestProtocolResponse = {
+  /** Validate the response... */
+  private def validateResponse(response: SubmitRestProtocolResponse): SubmitRestProtocolResponse = {
     try {
       response.validate()
-      response match {
-        case error: ErrorResponse => logError(s"Server returned error:\n${error.getMessage}")
-        case _ =>
-      }
     } catch {
       case e: SubmitRestProtocolException =>
         throw new SubmitRestProtocolException("Malformed response received from server", e)

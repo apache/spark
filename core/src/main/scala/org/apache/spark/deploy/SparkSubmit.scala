@@ -93,7 +93,9 @@ object SparkSubmit {
    * Standalone cluster mode only.
    */
   private def kill(args: SparkSubmitArguments): Unit = {
-    new StandaloneRestClient().killDriver(args.master, args.driverToKill)
+    val client = new StandaloneRestClient
+    val response = client.killDriver(args.master, args.driverToKill)
+    printStream.println(response.toJson)
   }
 
   /**
@@ -101,7 +103,9 @@ object SparkSubmit {
    * Standalone cluster mode only.
    */
   private def requestStatus(args: SparkSubmitArguments): Unit = {
-    new StandaloneRestClient().requestDriverStatus(args.master, args.driverToRequestStatusFor)
+    val client = new StandaloneRestClient
+    val response = client.requestDriverStatus(args.master, args.driverToRequestStatusFor)
+    printStream.println(response.toJson)
   }
 
   /**

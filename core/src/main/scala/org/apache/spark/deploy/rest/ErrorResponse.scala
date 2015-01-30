@@ -21,8 +21,12 @@ package org.apache.spark.deploy.rest
  * An error response message used in the REST application submission protocol.
  */
 class ErrorResponse extends SubmitRestProtocolResponse {
+  // request was unsuccessful
+  setSuccess("false")
+
   protected override def doValidate(): Unit = {
     super.doValidate()
     assertFieldIsSet(message)
+    assert(!getSuccess.toBoolean, "The 'success' field cannot be true in an error response.")
   }
 }

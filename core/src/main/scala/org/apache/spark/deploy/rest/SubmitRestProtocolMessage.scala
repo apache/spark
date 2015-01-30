@@ -155,10 +155,20 @@ abstract class SubmitRestProtocolRequest extends SubmitRestProtocolMessage {
  */
 abstract class SubmitRestProtocolResponse extends SubmitRestProtocolMessage {
   protected override val sparkVersion = new SubmitRestProtocolField[String]("server_spark_version")
-  def getServerSparkVersion: String = sparkVersion.toString
-  def setServerSparkVersion(s: String): this.type = setField(sparkVersion, s)
+  private val success = new SubmitRestProtocolField[Boolean]("success")
+
   override def getSparkVersion: String = getServerSparkVersion
+  def getServerSparkVersion: String = sparkVersion.toString
+  def getSuccess: String = success.toString
+
   override def setSparkVersion(s: String) = setServerSparkVersion(s)
+  def setServerSparkVersion(s: String): this.type = setField(sparkVersion, s)
+  def setSuccess(s: String): this.type = setBooleanField(success, s)
+
+  protected override def doValidate(): Unit = {
+    super.doValidate()
+    assertFieldIsSet(success)
+  }
 }
 
 object SubmitRestProtocolMessage {
