@@ -19,24 +19,23 @@ package org.apache.spark.sql.parquet
 
 import java.io.IOException
 
+import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.Job
-
 import parquet.format.converter.ParquetMetadataConverter
-import parquet.hadoop.{ParquetFileReader, Footer, ParquetFileWriter}
-import parquet.hadoop.metadata.{ParquetMetadata, FileMetaData}
+import parquet.hadoop.metadata.{FileMetaData, ParquetMetadata}
 import parquet.hadoop.util.ContextUtil
-import parquet.schema.{Type => ParquetType, Types => ParquetTypes, PrimitiveType => ParquetPrimitiveType, MessageType}
-import parquet.schema.{GroupType => ParquetGroupType, OriginalType => ParquetOriginalType, ConversionPatterns, DecimalMetadata}
+import parquet.hadoop.{Footer, ParquetFileReader, ParquetFileWriter}
 import parquet.schema.PrimitiveType.{PrimitiveTypeName => ParquetPrimitiveTypeName}
 import parquet.schema.Type.Repetition
+import parquet.schema.{ConversionPatterns, DecimalMetadata, GroupType => ParquetGroupType, MessageType, OriginalType => ParquetOriginalType, PrimitiveType => ParquetPrimitiveType, Type => ParquetType, Types => ParquetTypes}
 
-import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.types._
+import org.apache.spark.{Logging, SparkException}
 
 // Implicits
 import scala.collection.JavaConversions._
@@ -523,4 +522,55 @@ private[parquet] object ParquetTypesConverter extends Logging {
       attributes
     }
   }
+
+  def mergeCatalystSchemas(left: StructType, right: StructType): StructType =
+    mergeCatalystDataTypes(left, right).asInstanceOf[StructType]
+
+  def mergeCatalystDataTypes(left: DataType, right: DataType): DataType =
+    (left, right) match {
+      case (ArrayType(leftElementType, leftContainsNull),
+            ArrayType(rightElementType, rightContainsNull)) =>
+        ArrayType(
+          mergeCatalystDataTypes(leftElementType, rightElementType),
+          leftContainsNull || rightContainsNull)
+
+      case (MapType(leftKeyType, leftValueType, leftContainsNull),
+            MapType(rightKeyType, rightValueType, rightContainsNull)) =>
+        MapType(
+          mergeCatalystDataTypes(leftKeyType, rightKeyType),
+          mergeCatalystDataTypes(leftValueType, rightValueType),
+          leftContainsNull || rightContainsNull)
+
+      case (StructType(leftFields), StructType(rightFields)) =>
+        val newFields = ArrayBuffer.empty[StructField]
+
+        leftFields.foreach {
+          case leftField @ StructField(leftName, leftType, leftNullable, leftMetadata) =>
+            rightFields
+              .find(_.name == leftName)
+              .map { case rightField @ StructField(_, rightType, rightNullable, rightMeatadata) =>
+                leftField.copy(
+                  dataType = mergeCatalystDataTypes(leftType, rightType),
+                  nullable = leftNullable || rightNullable)
+              }
+              .orElse(Some(leftField))
+              .foreach(newFields += _)
+        }
+
+        rightFields
+          .filterNot(f => leftFields.map(_.name).contains(f.name))
+          .foreach(newFields += _)
+
+        StructType(newFields)
+
+      case (DecimalType.Fixed(leftPrecision, leftScale),
+            DecimalType.Fixed(rightPrecision, rightScale)) =>
+        DecimalType(leftPrecision.max(rightPrecision), leftScale.max(rightScale))
+
+      case (leftType, rightType) if leftType == rightType =>
+        leftType
+
+      case _ =>
+        throw new SparkException(s"Failed to merge incompatible data types $left and $right")
+    }
 }
