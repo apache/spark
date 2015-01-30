@@ -129,12 +129,11 @@ object LDATiming {
       for (vocabSize <- params.vocabSizes) {
 
         val preprocessStart = System.nanoTime()
-        val (corpus, vocabArray) = preprocess(sc, params.input, corpusSize, vocabSize,
-          params.stopwordFile)
+        val (corpus, vocabArray, actualNumTokens) =
+          preprocess(sc, params.input, corpusSize, vocabSize, params.stopwordFile)
         corpus.repartition(params.numPartitions).cache()
         val actualCorpusSize = corpus.count()
         val actualVocabSize = vocabArray.size
-        val actualNumTokens = corpus.map(_._2.toArray.sum.toLong).sum().toLong
         val preprocessElapsed = (System.nanoTime() - preprocessStart) / 1e9
 
         println()
@@ -199,13 +198,14 @@ object LDATiming {
 
   /**
    * Load documents, tokenize them, create vocabulary, and prepare documents as word count vectors.
+   * @return (corpus, vocabulary as array, total token count in corpus)
    */
   private def preprocess(
       sc: SparkContext,
       paths: Seq[String],
       corpusSize: Long,
       vocabSize: Int,
-      stopwordFile: String): (RDD[(Long, Vector)], Array[String]) = {
+      stopwordFile: String): (RDD[(Long, Vector)], Array[String], Long) = {
 
     // Get dataset of document texts
     // One document per line in each text file.
@@ -230,23 +230,23 @@ object LDATiming {
     }
     tokenized.cache()
 
-    // Choose vocabulary: Map[word -> id]
-    val vocab: Map[String, Int] = {
-      // Counts words: RDD[(word, wordCount)]
-      val wordCounts: RDD[(String, Int)] = tokenized
-        .flatMap { case (_, tokens) => tokens.map(_ -> 1) }
-        .reduceByKey(_ + _)
-      val sortedWC = wordCounts
-        .sortBy(_._2, ascending = false)
-      val selectedWC = if (vocabSize == -1) {
-        sortedWC.collect()
-      } else {
-        sortedWC.take(vocabSize)
-      }
+    // Counts words: RDD[(word, wordCount)]
+    val wordCounts: RDD[(String, Long)] = tokenized
+      .flatMap { case (_, tokens) => tokens.map(_ -> 1L) }
+      .reduceByKey(_ + _)
+    // Sort words, and select vocab
+    val sortedWC = wordCounts.sortBy(_._2, ascending = false)
+    val selectedWC: Array[(String, Long)] = if (vocabSize == -1) {
+      sortedWC.collect()
+    } else {
+      sortedWC.take(vocabSize)
+    }
+    val totalTokenCount = selectedWC.map(_._2).sum
+    // vocabulary: Map[word -> id]
+    val vocab: Map[String, Int] =
       selectedWC.map(_._1)
         .zipWithIndex
         .toMap
-    }
 
     val documents = tokenized.map { case (id, tokens) =>
       // Filter tokens by vocabulary, and create word count vector representation of document.
@@ -267,7 +267,7 @@ object LDATiming {
     val vocabArray = new Array[String](vocab.size)
     vocab.foreach { case (term, i) => vocabArray(i) = term }
 
-    (documents, vocabArray)
+    (documents, vocabArray, totalTokenCount)
   }
 }
 
@@ -302,12 +302,20 @@ class Tokenizer(sc: SparkContext, stopwordFile: String) extends Serializable {
       // Remove short words and strings that aren't only letters
       word match {
         case allWordRegex(w) if w.length >= minWordLength && !stopwords.contains(w) =>
-          words += word
+          words += w
         case _ =>
       }
 
       current = end
-      end = wb.next()
+      try {
+        end = wb.next()
+      } catch {
+        case e: Exception =>
+          // Ignore remaining text in line.
+          // This is a known bug in BreakIterator (for some Java versions),
+          // which fails when it sees certain characters.
+          end = BreakIterator.DONE
+      }
     }
     words
   }
