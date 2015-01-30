@@ -217,8 +217,8 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       |   --hostname <hostname>
       |   --cores <cores>
       |   --app-id <appid>
-      |   [--worker-url <workerUrl>]
-      |   [--user-class-path <url>]
+      |   --worker-url <workerUrl>
+      |   --user-class-path <url>
       |""".stripMargin)
     System.exit(1)
   }
