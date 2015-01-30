@@ -137,7 +137,7 @@ class LinearRegressionClusterSuite extends FunSuite with LocalClusterSparkContex
     }.cache()
     // If we serialize data directly in the task closure, the size of the serialized task would be
     // greater than 1MB and hence Spark would throw an error.
-    val model = LinearRegressionWithSGD.train(points, 2 )
+    val model = LinearRegressionWithSGD.train(points, 2)
     val predictions = model.predict(points.map(_.features))
   }
 }
