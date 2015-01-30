@@ -23,6 +23,7 @@ from array import array
 from fileinput import input
 from glob import glob
 import os
+import pydoc
 import re
 import shutil
 import subprocess
@@ -1031,6 +1032,15 @@ class SQLTests(ReusedPySparkTestCase):
         # TODO(davies): fix aggregators
         from pyspark.sql import Aggregator as Agg
         # self.assertEqual((0, '100'), tuple(g.agg(Agg.first(df.key), Agg.last(df.value)).first()))
+
+    def test_help_command(self):
+        # Regression test for SPARK-5464
+        rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
+        df = self.sqlCtx.jsonRDD(rdd)
+        # render_doc() reproduces the help() exception without printing output
+        pydoc.render_doc(df)
+        pydoc.render_doc(df.foo)
+        pydoc.render_doc(df.take(1))
 
 
 class InputFormatTests(ReusedPySparkTestCase):

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.{SQLConf, execution}
-import org.apache.spark.sql.api.scala.dsl._
+import org.apache.spark.sql.Dsl._
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._

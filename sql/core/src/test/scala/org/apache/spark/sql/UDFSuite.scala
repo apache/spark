@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.api.scala.dsl.StringToColumn
+import org.apache.spark.sql.Dsl.StringToColumn
 import org.apache.spark.sql.test._
 
 /* Implicits */
@@ -45,7 +45,7 @@ class UDFSuite extends QueryTest {
   test("struct UDF") {
     udf.register("returnStruct", (f1: String, f2: String) => FunctionResult(f1, f2))
 
-    val result=
+    val result =
       sql("SELECT returnStruct('test', 'test2') as ret")
         .select($"ret.f1").head().getString(0)
     assert(result === "test")
