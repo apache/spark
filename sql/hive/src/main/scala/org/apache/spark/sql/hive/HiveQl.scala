@@ -1002,11 +1002,11 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       }
 
     /* Stars (*) */
-    case Token("TOK_ALLCOLREF", Nil) => Star(None)
+    case Token("TOK_ALLCOLREF", Nil) => UnresolvedStar(None)
     // The format of dbName.tableName.* cannot be parsed by HiveParser. TOK_TABNAME will only
     // has a single child which is tableName.
     case Token("TOK_ALLCOLREF", Token("TOK_TABNAME", Token(name, Nil) :: Nil) :: Nil) =>
-      Star(Some(name))
+      UnresolvedStar(Some(name))
 
     /* Aggregate Functions */
     case Token("TOK_FUNCTION", Token(AVG(), Nil) :: arg :: Nil) => Average(nodeToExpr(arg))
@@ -1145,7 +1145,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case Token("TOK_FUNCTION", Token(name, Nil) :: args) =>
       UnresolvedFunction(name, args.map(nodeToExpr))
     case Token("TOK_FUNCTIONSTAR", Token(name, Nil) :: args) =>
-      UnresolvedFunction(name, Star(None) :: Nil)
+      UnresolvedFunction(name, UnresolvedStar(None) :: Nil)
 
     /* Literals */
     case Token("TOK_NULL", Nil) => Literal(null, NullType)

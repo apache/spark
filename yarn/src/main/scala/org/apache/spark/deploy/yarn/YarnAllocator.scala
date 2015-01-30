@@ -32,6 +32,8 @@ import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.util.RackResolver
 
+import org.apache.log4j.{Level, Logger}
+
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
@@ -60,7 +62,11 @@ private[yarn] class YarnAllocator(
 
   import YarnAllocator._
 
-  // These two complementary data structures are locked on allocatedHostToContainersMap.
+  // RackResolver logs an INFO message whenever it resolves a rack, which is way too often.
+  if (Logger.getLogger(classOf[RackResolver]).getLevel == null) {
+    Logger.getLogger(classOf[RackResolver]).setLevel(Level.WARN)
+  }
+
   // Visible for testing.
   val allocatedHostToContainersMap =
     new HashMap[String, collection.mutable.Set[ContainerId]]
@@ -355,20 +361,18 @@ private[yarn] class YarnAllocator(
         }
       }
 
-      allocatedHostToContainersMap.synchronized {
-        if (allocatedContainerToHostMap.containsKey(containerId)) {
-          val host = allocatedContainerToHostMap.get(containerId).get
-          val containerSet = allocatedHostToContainersMap.get(host).get
+      if (allocatedContainerToHostMap.containsKey(containerId)) {
+        val host = allocatedContainerToHostMap.get(containerId).get
+        val containerSet = allocatedHostToContainersMap.get(host).get
 
-          containerSet.remove(containerId)
-          if (containerSet.isEmpty) {
-            allocatedHostToContainersMap.remove(host)
-          } else {
-            allocatedHostToContainersMap.update(host, containerSet)
-          }
-
-          allocatedContainerToHostMap.remove(containerId)
+        containerSet.remove(containerId)
+        if (containerSet.isEmpty) {
+          allocatedHostToContainersMap.remove(host)
+        } else {
+          allocatedHostToContainersMap.update(host, containerSet)
         }
+
+        allocatedContainerToHostMap.remove(containerId)
       }
     }
   }
