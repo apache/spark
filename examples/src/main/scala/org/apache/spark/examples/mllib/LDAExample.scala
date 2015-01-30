@@ -26,10 +26,8 @@ import scopt.OptionParser
 import org.apache.log4j.{Level, Logger}
 
 import org.apache.spark.{SparkContext, SparkConf}
-import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.clustering.LDA
-import org.apache.spark.mllib.clustering.LDA.Document
-import org.apache.spark.mllib.linalg.SparseVector
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
 
 
@@ -46,8 +44,8 @@ object LDAExample {
       input: Seq[String] = Seq.empty,
       k: Int = 20,
       maxIterations: Int = 10,
-      topicSmoothing: Double = -1,
-      termSmoothing: Double = -1,
+      docConcentration: Double = -1,
+      topicConcentration: Double = -1,
       vocabSize: Int = 10000,
       stopwordFile: String = "") extends AbstractParams[Params]
 
@@ -62,12 +60,14 @@ object LDAExample {
       opt[Int]("maxIterations")
         .text(s"number of iterations of learning. default: ${defaultParams.maxIterations}")
         .action((x, c) => c.copy(maxIterations = x))
-      opt[Double]("topicSmoothing")
-        .text(s"amount of topic smoothing to use (-1=auto).  default: ${defaultParams.topicSmoothing}")
-        .action((x, c) => c.copy(topicSmoothing = x))
-      opt[Double]("termSmoothing")
-        .text(s"amount of term (word) smoothing to use (-1=auto).  default: ${defaultParams.termSmoothing}")
-        .action((x, c) => c.copy(termSmoothing = x))
+      opt[Double]("docConcentration")
+        .text(s"amount of topic smoothing to use (> 1.0) (-1=auto)." +
+        s"  default: ${defaultParams.docConcentration}")
+        .action((x, c) => c.copy(docConcentration = x))
+      opt[Double]("topicConcentration")
+        .text(s"amount of term (word) smoothing to use (> 1.0) (-1=auto)." +
+        s"  default: ${defaultParams.topicConcentration}")
+        .action((x, c) => c.copy(topicConcentration = x))
       opt[Int]("vocabSize")
         .text(s"number of distinct word types to use, chosen by frequency." +
           s"  default: ${defaultParams.vocabSize}")
@@ -105,8 +105,8 @@ object LDAExample {
     val lda = new LDA()
     lda.setK(params.k)
       .setMaxIterations(params.maxIterations)
-      .setTopicSmoothing(params.topicSmoothing)
-      .setTermSmoothing(params.termSmoothing)
+      .setDocConcentration(params.docConcentration)
+      .setTopicConcentration(params.topicConcentration)
     val startTime = System.nanoTime()
     val ldaModel = lda.run(corpus)
     val elapsed = (System.nanoTime() - startTime) / 1e9
@@ -141,7 +141,7 @@ object LDAExample {
       sc: SparkContext,
       paths: Seq[String],
       vocabSize: Int,
-      stopwordFile: String): (RDD[Document], Array[String]) = {
+      stopwordFile: String): (RDD[(Long, Vector)], Array[String]) = {
 
     val files: Seq[RDD[(String, String)]] = for (p <- paths) yield {
       sc.wholeTextFiles(p)
@@ -183,8 +183,8 @@ object LDAExample {
       val indices = wc.keys.toArray.sorted
       val values = indices.map(i => wc(i).toDouble)
 
-      val sb = new SparseVector(vocab.size, indices, values)
-      LDA.Document(sb, id)
+      val sb = Vectors.sparse(vocab.size, indices, values)
+      (id, sb)
     }
 
     val vocabArray = new Array[String](vocab.size)

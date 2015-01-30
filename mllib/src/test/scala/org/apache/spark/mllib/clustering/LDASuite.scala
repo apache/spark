@@ -17,10 +17,11 @@
 
 package org.apache.spark.mllib.clustering
 
+import org.scalatest.FunSuite
+
 import org.apache.spark.mllib.linalg.{DenseMatrix, Matrix, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
-import org.scalatest.FunSuite
 
 class LDASuite extends FunSuite with MLlibTestSparkContext {
 
@@ -57,8 +58,8 @@ class LDASuite extends FunSuite with MLlibTestSparkContext {
     // Train a model
     val lda = new LDA()
     lda.setK(k)
-    lda.setTopicSmoothing(topicSmoothing)
-    lda.setTermSmoothing(termSmoothing)
+    lda.setDocConcentration(topicSmoothing)
+    lda.setTopicConcentration(termSmoothing)
     lda.setMaxIterations(5)
     lda.setSeed(12345)
     val corpus = sc.parallelize(tinyCorpus, 2)
@@ -91,7 +92,7 @@ class LDASuite extends FunSuite with MLlibTestSparkContext {
     val topicDistributions = model.topicDistributions.collect()
     //  Ensure all documents are covered.
     assert(topicDistributions.size === tinyCorpus.size)
-    assert(tinyCorpus.map(_.id).toSet === topicDistributions.map(_._1).toSet)
+    assert(tinyCorpus.map(_._1).toSet === topicDistributions.map(_._1).toSet)
     //  Ensure we have proper distributions
     topicDistributions.foreach { case (docId, topicDistribution) =>
       assert(topicDistribution.size === tinyK)
@@ -127,8 +128,8 @@ private object LDASuite {
   )
   def tinyTopics: Matrix = new DenseMatrix(numRows = tinyVocabSize, numCols = tinyK,
     values = tinyTopicsAsArray.fold(Array.empty[Double])(_ ++ _))
-  def tinyTopicDescription: Array[Array[(Double, String)]] = tinyTopicsAsArray.map { topic =>
-    topic.zipWithIndex.sortBy(-_._1).map { case (weight, term) => (weight, term.toString) }
+  def tinyTopicDescription: Array[Array[(Double, Int)]] = tinyTopicsAsArray.map { topic =>
+    topic.zipWithIndex.sortBy(-_._1)
   }
 
   def tinyCorpus = Array(
@@ -137,7 +138,7 @@ private object LDASuite {
     Vectors.dense(2, 3, 12, 3, 1),
     Vectors.dense(0, 3, 1, 9, 8),
     Vectors.dense(1, 1, 4, 2, 6)
-  ).zipWithIndex.map { case (wordCounts, docId) => LDA.Document(wordCounts, docId) }
-  assert(tinyCorpus.forall(_.counts.size == tinyVocabSize)) // sanity check for test data
+  ).zipWithIndex.map { case (wordCounts, docId) => (docId.toLong, wordCounts) }
+  assert(tinyCorpus.forall(_._2.size == tinyVocabSize)) // sanity check for test data
 
 }

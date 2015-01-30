@@ -121,25 +121,29 @@ abstract class LDAModel private[clustering] {
    *  - Even with the prior, this is NOT the same as the data log likelihood given the
    *    hyperparameters.
    *
-   * @param documents  A set of documents, where each is represented as a vector of term counts.
+   * @param documents  RDD of documents, which are term (word) count vectors paired with IDs.
+   *                   The term count vectors are "bags of words" with a fixed-size vocabulary
+   *                   (where the vocabulary size is the length of the vector).
    *                   This must use the same vocabulary (ordering of term counts) as in training.
-   *                   Document IDs must be >= 0.
+   *                   Document IDs must be unique and >= 0.
    * @return  Estimated log likelihood of the data under this model
    */
-  // def logLikelihood(documents: RDD[Document]): Double
+  // def logLikelihood(documents: RDD[(Long, Vector)]): Double
 
   /* TODO
    * Compute the estimated topic distribution for each document.
    * This is often called “theta” in the literature.
    *
-   * @param documents  A set of documents, where each is represented as a vector of term counts.
+   * @param documents  RDD of documents, which are term (word) count vectors paired with IDs.
+   *                   The term count vectors are "bags of words" with a fixed-size vocabulary
+   *                   (where the vocabulary size is the length of the vector).
    *                   This must use the same vocabulary (ordering of term counts) as in training.
-   *                   Document IDs must be >= 0.
+   *                   Document IDs must be unique and >= 0.
    * @return  Estimated topic distribution for each document.
    *          The returned RDD may be zipped with the given RDD, where each returned vector
    *          is a multinomial distribution over topics.
    */
-  // def topicDistributions(documents: RDD[Document]): RDD[(Long, Vector)]
+  // def topicDistributions(documents: RDD[(Long, Vector)]): RDD[(Long, Vector)]
 
 }
 
@@ -177,10 +181,10 @@ class LocalLDAModel private[clustering] (
   }
 
   // TODO
-  // override def logLikelihood(documents: RDD[Document]): Double = ???
+  // override def logLikelihood(documents: RDD[(Long, Vector)]): Double = ???
 
   // TODO:
-  // override def topicDistributions(documents: RDD[Document]): RDD[(Long, Vector)] = ???
+  // override def topicDistributions(documents: RDD[(Long, Vector)]): RDD[(Long, Vector)] = ???
 
 }
 
@@ -201,15 +205,15 @@ class DistributedLDAModel private (
     private val globalTopicTotals: LDA.TopicCounts,
     val k: Int,
     val vocabSize: Int,
-    private val topicSmoothing: Double,
-    private val termSmoothing: Double,
+    private val docConcentration: Double,
+    private val topicConcentration: Double,
     private[spark] val iterationTimes: Array[Double]) extends LDAModel {
 
   import LDA._
 
-  private[clustering] def this(state: LDA.LearningState, iterationTimes: Array[Double]) = {
-    this(state.graph, state.globalTopicTotals, state.k, state.vocabSize, state.topicSmoothing,
-      state.termSmoothing, iterationTimes)
+  private[clustering] def this(state: LDA.EMOptimizer, iterationTimes: Array[Double]) = {
+    this(state.graph, state.globalTopicTotals, state.k, state.vocabSize, state.docConcentration,
+      state.topicConcentration, iterationTimes)
   }
 
   /**
@@ -270,7 +274,7 @@ class DistributedLDAModel private (
   }
 
   // TODO
-  // override def logLikelihood(documents: RDD[Document]): Double = ???
+  // override def logLikelihood(documents: RDD[(Long, Vector)]): Double = ???
 
   /**
    * Log likelihood of the observed tokens in the training set,
@@ -283,8 +287,8 @@ class DistributedLDAModel private (
    *    hyperparameters.
    */
   lazy val logLikelihood: Double = {
-    val eta = termSmoothing
-    val alpha = topicSmoothing
+    val eta = topicConcentration
+    val alpha = docConcentration
     assert(eta > 1.0)
     assert(alpha > 1.0)
     val N_k = globalTopicTotals
@@ -308,8 +312,8 @@ class DistributedLDAModel private (
    *  log P(topics, topic distributions for docs | alpha, eta)
    */
   lazy val logPrior: Double = {
-    val eta = termSmoothing
-    val alpha = topicSmoothing
+    val eta = topicConcentration
+    val alpha = docConcentration
     // Term vertices: Compute phi_{wk}.  Use to compute prior log probability.
     // Doc vertex: Compute theta_{kj}.  Use to compute prior log probability.
     val N_k = globalTopicTotals
@@ -344,6 +348,6 @@ class DistributedLDAModel private (
   }
 
   // TODO:
-  // override def topicDistributions(documents: RDD[Document]): RDD[(Long, Vector)] = ???
+  // override def topicDistributions(documents: RDD[(Long, Vector)]): RDD[(Long, Vector)] = ???
 
 }

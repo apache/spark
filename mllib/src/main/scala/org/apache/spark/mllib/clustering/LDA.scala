@@ -19,7 +19,7 @@ package org.apache.spark.mllib.clustering
 
 import java.util.Random
 
-import breeze.linalg.{DenseVector => BDV, sum => brzSum, normalize, axpy => brzAxpy}
+import breeze.linalg.{DenseVector => BDV, normalize, axpy => brzAxpy}
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
@@ -59,15 +59,15 @@ import org.apache.spark.util.Utils
 class LDA private (
     private var k: Int,
     private var maxIterations: Int,
-    private var topicSmoothing: Double,
-    private var termSmoothing: Double,
+    private var docConcentration: Double,
+    private var topicConcentration: Double,
     private var seed: Long,
     private var checkpointDir: Option[String],
     private var checkpointInterval: Int) extends Logging {
 
   import LDA._
 
-  def this() = this(k = 10, maxIterations = 20, topicSmoothing = -1, termSmoothing = -1,
+  def this() = this(k = 10, maxIterations = 20, docConcentration = -1, topicConcentration = -1,
     seed = Utils.random.nextLong(), checkpointDir = None, checkpointInterval = 10)
 
   /**
@@ -85,69 +85,81 @@ class LDA private (
   /**
    * Topic smoothing parameter (commonly named "alpha").
    *
-   * This is the parameter to the Dirichlet prior placed on the per-document topic distributions
+   * This is the parameter to the Dirichlet prior placed on each document's distribution over topics
    * ("theta").  We use a symmetric Dirichlet prior.
    *
-   * This value should be > 0.0, where larger values mean more smoothing (more regularization).
-   * If set to -1, then topicSmoothing is set automatically.
+   * This value should be > 1.0, where larger values mean more smoothing (more regularization).
+   * If set to -1, then docConcentration is set automatically.
    *  (default = -1 = automatic)
    *
    * Automatic setting of parameter:
    *  - For EM: default = (50 / k) + 1.
    *     - The 50/k is common in LDA libraries.
    *     - The +1 follows Asuncion et al. (2009), who recommend a +1 adjustment for EM.
+   *
+   * Note: The restriction > 1.0 may be relaxed in the future (allowing sparse solutions),
+   *       but values in (0,1) are not yet supported.
    */
-  def getTopicSmoothing: Double = {
-    if (this.topicSmoothing > 0) {
-      this.topicSmoothing
-    } else {
+  def getDocConcentration: Double = {
+    if (this.docConcentration == -1) {
       (50.0 / k) + 1.0
+    } else {
+      this.docConcentration
     }
   }
 
-  def setTopicSmoothing(topicSmoothing: Double): this.type = {
-    require(topicSmoothing > 0.0 || topicSmoothing == -1.0,
-      s"LDA topicSmoothing must be > 0 (or -1 for auto), but was set to $topicSmoothing")
-    if (topicSmoothing > 0.0 && topicSmoothing <= 1.0) {
-      logWarning(s"LDA.topicSmoothing was set to $topicSmoothing, but for EM, we recommend > 1.0")
-    }
-    this.topicSmoothing = topicSmoothing
+  def setDocConcentration(docConcentration: Double): this.type = {
+    require(docConcentration > 1.0 || docConcentration == -1.0,
+      s"LDA docConcentration must be > 1.0 (or -1 for auto), but was set to $docConcentration")
+    this.docConcentration = docConcentration
     this
   }
 
+  /** Alias for [[getDocConcentration]] */
+  def getAlpha: Double = getDocConcentration
+
+  /** Alias for [[setDocConcentration()]] */
+  def setAlpha(alpha: Double): this.type = setDocConcentration(alpha)
+
   /**
-   * Term smoothing parameter (commonly named "eta").
+   * Term smoothing parameter (commonly named "beta" or "eta").
    *
-   * This is the parameter to the Dirichlet prior placed on the per-topic term distributions
+   * This is the parameter to the Dirichlet prior placed on each topic's distribution over terms
    * (which are called "beta" in the original LDA paper by Blei et al., but are called "phi" in many
-   *  later papers such as Asuncion et al., 2009.)
+   *  later papers such as Asuncion et al., 2009).
    *
    * This value should be > 0.0.
-   * If set to -1, then termSmoothing is set automatically.
+   * If set to -1, then topicConcentration is set automatically.
    *  (default = -1 = automatic)
    *
    * Automatic setting of parameter:
    *  - For EM: default = 0.1 + 1.
    *     - The 0.1 gives a small amount of smoothing.
    *     - The +1 follows Asuncion et al. (2009), who recommend a +1 adjustment for EM.
+   *
+   * Note: The restriction > 1.0 may be relaxed in the future (allowing sparse solutions),
+   *       but values in (0,1) are not yet supported.
    */
-  def getTermSmoothing: Double = {
-    if (this.termSmoothing > 0) {
-      this.termSmoothing
-    } else {
+  def getTopicConcentration: Double = {
+    if (this.topicConcentration == -1) {
       1.1
+    } else {
+      this.topicConcentration
     }
   }
 
-  def setTermSmoothing(termSmoothing: Double): this.type = {
-    require(termSmoothing > 0.0 || termSmoothing == -1.0,
-      s"LDA termSmoothing must be > 0 (or -1 for auto), but was set to $termSmoothing")
-    if (termSmoothing > 0.0 && termSmoothing <= 1.0) {
-      logWarning(s"LDA.termSmoothing was set to $termSmoothing, but for EM, we recommend > 1.0")
-    }
-    this.termSmoothing = termSmoothing
+  def setTopicConcentration(topicConcentration: Double): this.type = {
+    require(topicConcentration > 1.0 || topicConcentration == -1.0,
+      s"LDA topicConcentration must be > 1.0 (or -1 for auto), but was set to $topicConcentration")
+    this.topicConcentration = topicConcentration
     this
   }
+
+  /** Alias for [[getTopicConcentration]] */
+  def getBeta: Double = getTopicConcentration
+
+  /** Alias for [[setTopicConcentration()]] */
+  def setBeta(beta: Double): this.type = setBeta(beta)
 
   /**
    * Maximum number of iterations for learning.
@@ -200,12 +212,14 @@ class LDA private (
   /**
    * Learn an LDA model using the given dataset.
    *
-   * @param documents  RDD of documents, where each document is represented as a vector of term
-   *                   counts plus an ID.  Document IDs must be >= 0.
+   * @param documents  RDD of documents, which are term (word) count vectors paired with IDs.
+   *                   The term count vectors are "bags of words" with a fixed-size vocabulary
+   *                   (where the vocabulary size is the length of the vector).
+   *                   Document IDs must be unique and >= 0.
    * @return  Inferred LDA model
    */
-  def run(documents: RDD[Document]): DistributedLDAModel = {
-    var state = LDA.initialState(documents, k, getTopicSmoothing, getTermSmoothing, seed,
+  def run(documents: RDD[(Long, Vector)]): DistributedLDAModel = {
+    val state = LDA.initialState(documents, k, getDocConcentration, getTopicConcentration, seed,
       checkpointDir, checkpointInterval)
     var iter = 0
     val iterationTimes = Array.fill[Double](maxIterations)(0)
@@ -229,7 +243,7 @@ object LDA {
 
     This implementation uses GraphX, where the graph is bipartite with 2 types of vertices:
      - Document vertices
-        - indexed {0, 1, ..., numDocuments-1}
+        - indexed with unique indices >= 0
         - Store vectors of length k (# topics).
      - Term vertices
         - indexed {-1, -2, ..., -vocabSize}
@@ -274,24 +288,6 @@ object LDA {
    */
 
   /**
-   * :: DeveloperApi ::
-   *
-   * Document with an ID.
-   *
-   * @param counts  Vector of term (word) counts in the document.
-   *                This is the "bag of words" representation.
-   * @param id  Unique ID associated with this document.
-   *            Documents should be indexed {0, 1, ..., numDocuments-1}.
-   *
-   * TODO: Can we remove the id and still be able to zip predicted topics with the Documents?
-   *
-   * NOTE: This is currently marked DeveloperApi since it is under active development and may
-   *       undergo API changes.
-   */
-  @DeveloperApi
-  case class Document(counts: Vector, id: Long)
-
-  /**
    * Vector over topics (length k) of token counts.
    * The meaning of these counts can vary, and it may or may not be normalized to be a distribution.
    */
@@ -315,25 +311,25 @@ object LDA {
    *               data (token counts) in edge descriptors.
    * @param k  Number of topics
    * @param vocabSize  Number of unique terms
-   * @param topicSmoothing  "alpha"
-   * @param termSmoothing  "eta"
+   * @param docConcentration  "alpha"
+   * @param topicConcentration  "beta" or "eta"
    */
-  private[clustering] class LearningState(
+  private[clustering] class EMOptimizer(
       var graph: Graph[TopicCounts, TokenCount],
       val k: Int,
       val vocabSize: Int,
-      val topicSmoothing: Double,
-      val termSmoothing: Double,
+      val docConcentration: Double,
+      val topicConcentration: Double,
       checkpointDir: Option[String],
       checkpointInterval: Int) {
 
     private[LDA] val graphCheckpointer = new PeriodicGraphCheckpointer[TopicCounts, TokenCount](
       graph, checkpointDir, checkpointInterval)
 
-    def next(): LearningState = {
-      val eta = termSmoothing
+    def next(): EMOptimizer = {
+      val eta = topicConcentration
       val W = vocabSize
-      val alpha = topicSmoothing
+      val alpha = docConcentration
 
       val N_k = globalTopicTotals
       val sendMsg: EdgeContext[TopicCounts, TokenCount, (Boolean, TopicCounts)] => Unit =
@@ -366,17 +362,7 @@ object LDA {
         graph.aggregateMessages[(Boolean, TopicCounts)](sendMsg, mergeMsg)
           .mapValues(_._2)
       // Update the vertex descriptors with the new counts.
-      val newGraph =
-        GraphImpl.fromExistingRDDs(docTopicDistributions, graph.edges)
-      // graph.outerJoinVertices(docTopicDistributions) { (vid, oldDist, newDist) => newDist.get }
-      /*
-      previousGraph match {
-        case Some(prevG) =>
-          prevG.unpersist(blocking = false)
-        case None =>
-      }
-      copy(graph = newGraph, previousGraph = Some(graph))
-      */
+      val newGraph = GraphImpl.fromExistingRDDs(docTopicDistributions, graph.edges)
       graph = newGraph
       graphCheckpointer.updateGraph(newGraph)
       globalTopicTotals = computeGlobalTopicTotals()
@@ -431,22 +417,22 @@ object LDA {
    * Compute bipartite term/doc graph.
    */
   private def initialState(
-      docs: RDD[Document],
+      docs: RDD[(Long, Vector)],
       k: Int,
-      topicSmoothing: Double,
-      termSmoothing: Double,
+      docConcentration: Double,
+      topicConcentration: Double,
       randomSeed: Long,
       checkpointDir: Option[String],
-      checkpointInterval: Int): LearningState = {
+      checkpointInterval: Int): EMOptimizer = {
     // For each document, create an edge (Document -> Term) for each unique term in the document.
-    val edges: RDD[Edge[TokenCount]] = docs.flatMap { doc =>
+    val edges: RDD[Edge[TokenCount]] = docs.flatMap { case (docID: Long, termCounts: Vector) =>
       // Add edges for terms with non-zero counts.
-      doc.counts.toBreeze.activeIterator.filter(_._2 != 0.0).map { case (term, cnt) =>
-        Edge(doc.id, term2index(term), cnt)
+      termCounts.toBreeze.activeIterator.filter(_._2 != 0.0).map { case (term, cnt) =>
+        Edge(docID, term2index(term), cnt)
       }
     }
 
-    val vocabSize = docs.take(1).head.counts.size
+    val vocabSize = docs.take(1).head._2.size
 
     // Create vertices.
     // Initially, we use random soft assignments of tokens to topics (random gamma).
@@ -480,7 +466,7 @@ object LDA {
     val graph = Graph(docVertices ++ termVertices, edges)
       .partitionBy(PartitionStrategy.EdgePartition1D)
 
-    new LearningState(graph, k, vocabSize, topicSmoothing, termSmoothing, checkpointDir,
+    new EMOptimizer(graph, k, vocabSize, docConcentration, topicConcentration, checkpointDir,
       checkpointInterval)
   }
 
