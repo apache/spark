@@ -18,7 +18,6 @@
 package org.apache.spark.examples.ml
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.SparkContext._
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
@@ -101,7 +100,7 @@ object CrossValidatorExample {
 
     // Make predictions on test documents. cvModel uses the best model found (lrModel).
     cvModel.transform(test)
-      .select('id, 'text, 'score, 'prediction)
+      .select("id", "text", "score", "prediction")
       .collect()
       .foreach { case Row(id: Long, text: String, score: Double, prediction: Double) =>
       println("(" + id + ", " + text + ") --> score=" + score + ", prediction=" + prediction)

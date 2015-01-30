@@ -98,8 +98,8 @@ public class JavaApplySchemaSuite implements Serializable {
     fields.add(DataTypes.createStructField("age", DataTypes.IntegerType, false));
     StructType schema = DataTypes.createStructType(fields);
 
-    SchemaRDD schemaRDD = javaSqlCtx.applySchema(rowRDD.rdd(), schema);
-    schemaRDD.registerTempTable("people");
+    DataFrame df = javaSqlCtx.applySchema(rowRDD.rdd(), schema);
+    df.registerTempTable("people");
     Row[] actual = javaSqlCtx.sql("SELECT * FROM people").collect();
 
     List<Row> expected = new ArrayList<Row>(2);
@@ -147,17 +147,17 @@ public class JavaApplySchemaSuite implements Serializable {
         null,
         "this is another simple string."));
 
-    SchemaRDD schemaRDD1 = javaSqlCtx.jsonRDD(jsonRDD.rdd());
-    StructType actualSchema1 = schemaRDD1.schema();
+    DataFrame df1 = javaSqlCtx.jsonRDD(jsonRDD.rdd());
+    StructType actualSchema1 = df1.schema();
     Assert.assertEquals(expectedSchema, actualSchema1);
-    schemaRDD1.registerTempTable("jsonTable1");
+    df1.registerTempTable("jsonTable1");
     List<Row> actual1 = javaSqlCtx.sql("select * from jsonTable1").collectAsList();
     Assert.assertEquals(expectedResult, actual1);
 
-    SchemaRDD schemaRDD2 = javaSqlCtx.jsonRDD(jsonRDD.rdd(), expectedSchema);
-    StructType actualSchema2 = schemaRDD2.schema();
+    DataFrame df2 = javaSqlCtx.jsonRDD(jsonRDD.rdd(), expectedSchema);
+    StructType actualSchema2 = df2.schema();
     Assert.assertEquals(expectedSchema, actualSchema2);
-    schemaRDD2.registerTempTable("jsonTable2");
+    df2.registerTempTable("jsonTable2");
     List<Row> actual2 = javaSqlCtx.sql("select * from jsonTable2").collectAsList();
     Assert.assertEquals(expectedResult, actual2);
   }

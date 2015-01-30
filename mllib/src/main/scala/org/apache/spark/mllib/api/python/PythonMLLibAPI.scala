@@ -41,10 +41,11 @@ import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
 import org.apache.spark.mllib.stat.correlation.CorrelationNames
 import org.apache.spark.mllib.stat.test.ChiSqTestResult
-import org.apache.spark.mllib.tree.{RandomForest, DecisionTree}
-import org.apache.spark.mllib.tree.configuration.{Algo, Strategy}
+import org.apache.spark.mllib.tree.{GradientBoostedTrees, RandomForest, DecisionTree}
+import org.apache.spark.mllib.tree.configuration.{BoostingStrategy, Algo, Strategy}
 import org.apache.spark.mllib.tree.impurity._
-import org.apache.spark.mllib.tree.model.{RandomForestModel, DecisionTreeModel}
+import org.apache.spark.mllib.tree.loss.Losses
+import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel, RandomForestModel, DecisionTreeModel}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -527,6 +528,35 @@ class PythonMLLibAPI extends Serializable {
       } else {
         RandomForest.trainRegressor(cached, strategy, numTrees, featureSubsetStrategy, seed)
       }
+    } finally {
+      cached.unpersist(blocking = false)
+    }
+  }
+
+  /**
+   * Java stub for Python mllib GradientBoostedTrees.train().
+   * This stub returns a handle to the Java object instead of the content of the Java object.
+   * Extra care needs to be taken in the Python code to ensure it gets freed on exit;
+   * see the Py4J documentation.
+   */
+  def trainGradientBoostedTreesModel(
+      data: JavaRDD[LabeledPoint],
+      algoStr: String,
+      categoricalFeaturesInfo: JMap[Int, Int],
+      lossStr: String,
+      numIterations: Int,
+      learningRate: Double,
+      maxDepth: Int): GradientBoostedTreesModel = {
+    val boostingStrategy = BoostingStrategy.defaultParams(algoStr)
+    boostingStrategy.setLoss(Losses.fromString(lossStr))
+    boostingStrategy.setNumIterations(numIterations)
+    boostingStrategy.setLearningRate(learningRate)
+    boostingStrategy.treeStrategy.setMaxDepth(maxDepth)
+    boostingStrategy.treeStrategy.categoricalFeaturesInfo = categoricalFeaturesInfo.asScala.toMap
+
+    val cached = data.rdd.persist(StorageLevel.MEMORY_AND_DISK)
+    try {
+      GradientBoostedTrees.train(cached, boostingStrategy)
     } finally {
       cached.unpersist(blocking = false)
     }
