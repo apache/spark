@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import scala.language.implicitConversions
 
 import org.apache.spark.sql.Dsl.lit
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, Star}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedStar, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Project, LogicalPlan}
 import org.apache.spark.sql.types._
@@ -71,8 +71,8 @@ class Column(
    * - "df.*" becomes an expression selecting all columns in data frame "df".
    */
   def this(name: String) = this(name match {
-    case "*" => Star(None)
-    case _ if name.endsWith(".*") => Star(Some(name.substring(0, name.length - 2)))
+    case "*" => UnresolvedStar(None)
+    case _ if name.endsWith(".*") => UnresolvedStar(Some(name.substring(0, name.length - 2)))
     case _ => UnresolvedAttribute(name)
   })
 
