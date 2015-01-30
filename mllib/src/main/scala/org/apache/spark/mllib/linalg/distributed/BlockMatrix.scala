@@ -233,7 +233,7 @@ class BlockMatrix(
   }
 
   /** Transpose this `BlockMatrix`. Returns a new `BlockMatrix` instance sharing the
-    * same underlying data. */
+    * same underlying data. Is a lazy operation. */
   def transpose: BlockMatrix = {
     val transposedBlocks = blocks.map { case ((blockRowIndex, blockColIndex), mat) =>
       ((blockColIndex, blockRowIndex), mat.transpose)
