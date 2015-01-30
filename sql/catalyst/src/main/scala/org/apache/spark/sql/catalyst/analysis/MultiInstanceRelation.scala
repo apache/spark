@@ -30,7 +30,10 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
  * of itself with globally unique expression ids.
  */
 trait MultiInstanceRelation {
-  def newInstance(): this.type
+  self: LogicalPlan =>
+
+  def newInstance(): LogicalPlan
+  override def toMultiInstanceRelation: LogicalPlan = self
 }
 
 /**

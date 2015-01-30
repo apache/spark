@@ -17,12 +17,27 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.types._
 
-case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
+case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
+    extends UnaryNode
+    with MultiInstanceRelation {
+
   def output = projectList.map(_.toAttribute)
+
+  // This will be used when register the temp table, to create a new instance
+  // with the same attribute names, but totally different exprId
+  def newInstance(): Project = {
+    Project(projectList.map(e => e match {
+      case a @ Alias(child, name) => Alias(child, name)(qualifiers = a.qualifiers)
+      case a: AttributeReference => a.newInstance
+      case a @ UnresolvedAttribute(name) => Alias(a, name)()
+      case e => e
+    }), child)
+  }
 }
 
 /**

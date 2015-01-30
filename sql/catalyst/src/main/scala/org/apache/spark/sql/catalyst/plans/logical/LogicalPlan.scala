@@ -43,6 +43,8 @@ private[sql] case class Statistics(sizeInBytes: BigInt)
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   self: Product =>
 
+  def toMultiInstanceRelation: LogicalPlan = new Project(output, this)
+
   def statistics: Statistics = {
     if (children.size == 0) {
       throw new UnsupportedOperationException(s"LeafNode $nodeName must implement statistics.")

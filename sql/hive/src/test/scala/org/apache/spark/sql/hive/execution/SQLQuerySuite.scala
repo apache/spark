@@ -40,6 +40,85 @@ class SQLQuerySuite extends QueryTest {
     )
   }
 
+  test("SPARK-5454 Self Join Temp table causes incorrect attribute references") {
+    // Let's build a table with two columns with types String and Array[String]
+    val schema = StructType(
+      Array(
+        StructField("name", StringType, false),
+        StructField("friends", ArrayType(StringType, true), false)
+      )
+    )
+    // A few rows
+    val friends = Array(
+      Row("Adam", List("Larry")),
+      Row("Thoralf", List("Larry")),
+      Row("Larry", List("Adam")),
+      Row("Thoralf", List("Pierre")),
+      Row("Karim", List("Pierre"))
+    )
+    val friendsRDD = sparkContext.parallelize(friends)
+
+    // In the first case, the Array type of the field "friends" is predefined in the schema
+    val friendsSRDD1 = applySchema(friendsRDD, schema)
+    friendsSRDD1.registerTempTable("friends1")
+
+    // In the second case, the Array type of the field "friends" is obtained with a query
+    val friendsSRDD2 = sql("SELECT name, array(friends[0]) as friends FROM friends1")
+    friendsSRDD2.registerTempTable("friends2")
+
+    assert(friendsSRDD1.schema == friendsSRDD2.schema)
+    assert(friendsSRDD1.collect.deep == friendsSRDD2.collect.deep)
+    assert(sql("select * from friends1").collect.deep == sql("select * from friends2").collect.deep)
+
+    val fullJoinFriends1 = sql(
+      """
+        |SELECT * FROM friends1 as alias1
+        |FULL JOIN friends1 as alias2
+        |ON (alias1.friends[0] = alias2.name)""".stripMargin)
+    val fullJoinFriends2 = sql(
+      """
+        |SELECT * FROM friends2 as alias1
+        |FULL JOIN friends2 as alias2
+        |ON (alias1.friends[0] = alias2.name)""".stripMargin)
+    assert(fullJoinFriends1.collect.deep === fullJoinFriends2.collect.deep)
+
+    val innerJoinFriends1 = sql(
+      """
+        |SELECT * FROM friends1 as alias1
+        |JOIN friends1 as alias2
+        |ON (alias1.friends[0] = alias2.name)""".stripMargin)
+    val innerJoinFriends2 = sql(
+      """
+        |SELECT * FROM friends2 as alias1
+        |JOIN friends2 as alias2
+        |ON (alias1.friends[0] = alias2.name)""".stripMargin)
+    assert(innerJoinFriends1.collect.deep === innerJoinFriends2.collect.deep)
+
+    val leftJoinFriends1 = sql(
+      """
+        |SELECT * FROM friends1 as alias1
+        |LEFT JOIN friends1 as alias2
+        |ON (alias1.friends[0] = alias2.name)""".stripMargin)
+    val leftJoinFriends2 = sql(
+      """
+        |SELECT * FROM friends2 as alias1
+        |LEFT JOIN friends2 as alias2
+        |ON (alias1.friends[0] = alias2.name)""".stripMargin)
+    assert(leftJoinFriends1.collect.deep === leftJoinFriends2.collect.deep)
+
+    val rightJoinFriends1 = sql(
+      """
+        |SELECT * FROM friends1 as alias1
+        |RIGHT JOIN friends1 as alias2
+        |ON (alias1.friends[0] = alias2.name)""".stripMargin)
+    val rightJoinFriends2 = sql(
+      """
+        |SELECT * FROM friends2 as alias1
+        |RIGHT JOIN friends2 as alias2
+        |ON (alias1.friends[0] = alias2.name)""".stripMargin)
+    assert(rightJoinFriends1.collect.deep === rightJoinFriends2.collect.deep)
+  }
+
   test("CTAS with serde") {
     sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value").collect()
     sql(

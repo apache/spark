@@ -53,11 +53,11 @@ class Analyzer(catalog: Catalog,
   val extendedRules: Seq[Rule[LogicalPlan]] = Nil
 
   lazy val batches: Seq[Batch] = Seq(
+    Batch("PreRelationResolution", fixedPoint, ResolveRelations),
     Batch("MultiInstanceRelations", Once,
       NewRelationInstances),
     Batch("Resolution", fixedPoint,
       ResolveReferences ::
-      ResolveRelations ::
       ResolveGroupingAnalytics ::
       ResolveSortReferences ::
       NewRelationInstances ::
