@@ -135,7 +135,7 @@ class StandaloneRestProtocolSuite extends FunSuite with BeforeAndAfterAll with B
   }
 
   /** Wait until the given driver has finished running up to the specified timeout. */
-  private def waitUntilFinished(driverId: String, maxSeconds: Int = 10): Unit = {
+  private def waitUntilFinished(driverId: String, maxSeconds: Int = 30): Unit = {
     var finished = false
     val expireTime = System.currentTimeMillis + maxSeconds * 1000
     while (!finished) {
