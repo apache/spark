@@ -44,7 +44,7 @@ Type in expressions to have them evaluated.
 Type :help for more information.
 
 scala> val query = sql("SELECT * FROM (SELECT * FROM src) a")
-query: org.apache.spark.sql.SchemaRDD =
+query: org.apache.spark.sql.DataFrame =
 == Query Plan ==
 == Physical Plan ==
 HiveTableScan [key#10,value#11], (MetastoreRelation default, src, None), None

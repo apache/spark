@@ -68,6 +68,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   System.clearProperty("spark.hostPort")
   CommandProcessorFactory.clean(hiveconf)
 
+  hiveconf.set("hive.plan.serialization.format", "javaXML")
+
   lazy val warehousePath = getTempFilePath("sparkHiveWarehouse").getCanonicalPath
   lazy val metastorePath = getTempFilePath("sparkHiveMetastore").getCanonicalPath
 
@@ -99,7 +101,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   override def runSqlHive(sql: String): Seq[String] = super.runSqlHive(rewritePaths(sql))
 
   override def executePlan(plan: LogicalPlan): this.QueryExecution =
-    new this.QueryExecution { val logical = plan }
+    new this.QueryExecution(plan)
 
   /** Fewer partitions to speed up testing. */
   protected[sql] override lazy val conf: SQLConf = new SQLConf {
@@ -150,8 +152,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   val describedTable = "DESCRIBE (\\w+)".r
 
-  protected[hive] class HiveQLQueryExecution(hql: String) extends this.QueryExecution {
-    lazy val logical = HiveQl.parseSql(hql)
+  protected[hive] class HiveQLQueryExecution(hql: String)
+    extends this.QueryExecution(HiveQl.parseSql(hql)) {
     def hiveExec() = runSqlHive(hql)
     override def toString = hql + "\n" + super.toString
   }
@@ -159,7 +161,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   /**
    * Override QueryExecution with special debug workflow.
    */
-  abstract class QueryExecution extends super.QueryExecution {
+  class QueryExecution(logicalPlan: LogicalPlan)
+    extends super.QueryExecution(logicalPlan) {
     override lazy val analyzed = {
       val describedTables = logical match {
         case HiveNativeCommand(describedTable(tbl)) => tbl :: Nil
@@ -395,7 +398,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
         log.asInstanceOf[org.apache.log4j.Logger].setLevel(org.apache.log4j.Level.WARN)
       }
 
-      clearCache()
+      cacheManager.clearCache()
       loadedTables.clear()
       catalog.cachedDataSourceTables.invalidateAll()
       catalog.client.getAllTables("default").foreach { t =>

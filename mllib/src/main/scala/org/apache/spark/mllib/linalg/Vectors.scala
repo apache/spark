@@ -27,7 +27,8 @@ import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
 
 import org.apache.spark.SparkException
 import org.apache.spark.mllib.util.NumericParser
-import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, Row}
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.types._
 
 /**
@@ -77,7 +78,7 @@ sealed trait Vector extends Serializable {
         result = 31 * result + (bits ^ (bits >>> 32)).toInt
       }
     }
-    return result
+    result
   }
 
   /**
@@ -110,7 +111,7 @@ sealed trait Vector extends Serializable {
 
 /**
  * User-defined type for [[Vector]] which allows easy interaction with SQL
- * via [[org.apache.spark.sql.SchemaRDD]].
+ * via [[org.apache.spark.sql.DataFrame]].
  */
 private[spark] class VectorUDT extends UserDefinedType[Vector] {
 
@@ -333,7 +334,7 @@ object Vectors {
       math.pow(sum, 1.0 / p)
     }
   }
- 
+
   /**
    * Returns the squared distance between two Vectors.
    * @param v1 first Vector.
@@ -341,8 +342,9 @@ object Vectors {
    * @return squared distance between two Vectors.
    */
   def sqdist(v1: Vector, v2: Vector): Double = {
+    require(v1.size == v2.size, "vector dimension mismatch")
     var squaredDistance = 0.0
-    (v1, v2) match { 
+    (v1, v2) match {
       case (v1: SparseVector, v2: SparseVector) =>
         val v1Values = v1.values
         val v1Indices = v1.indices
@@ -350,12 +352,12 @@ object Vectors {
         val v2Indices = v2.indices
         val nnzv1 = v1Indices.size
         val nnzv2 = v2Indices.size
-        
+
         var kv1 = 0
         var kv2 = 0
         while (kv1 < nnzv1 || kv2 < nnzv2) {
           var score = 0.0
- 
+
           if (kv2 >= nnzv2 || (kv1 < nnzv1 && v1Indices(kv1) < v2Indices(kv2))) {
             score = v1Values(kv1)
             kv1 += 1
@@ -370,18 +372,23 @@ object Vectors {
           squaredDistance += score * score
         }
 
-      case (v1: SparseVector, v2: DenseVector) if v1.indices.length / v1.size < 0.5 =>
+      case (v1: SparseVector, v2: DenseVector) =>
         squaredDistance = sqdist(v1, v2)
 
-      case (v1: DenseVector, v2: SparseVector) if v2.indices.length / v2.size < 0.5 =>
+      case (v1: DenseVector, v2: SparseVector) =>
         squaredDistance = sqdist(v2, v1)
 
-      // When a SparseVector is approximately dense, we treat it as a DenseVector
-      case (v1, v2) =>
-        squaredDistance = v1.toArray.zip(v2.toArray).foldLeft(0.0){ (distance, elems) =>
-          val score = elems._1 - elems._2
-          distance + score * score
+      case (DenseVector(vv1), DenseVector(vv2)) =>
+        var kv = 0
+        val sz = vv1.size
+        while (kv < sz) {
+          val score = vv1(kv) - vv2(kv)
+          squaredDistance += score * score
+          kv += 1
         }
+      case _ =>
+        throw new IllegalArgumentException("Do not support vector type " + v1.getClass +
+          " and " + v2.getClass)
     }
     squaredDistance
   }
@@ -397,7 +404,7 @@ object Vectors {
     val nnzv1 = indices.size
     val nnzv2 = v2.size
     var iv1 = if (nnzv1 > 0) indices(kv1) else -1
-   
+
     while (kv2 < nnzv2) {
       var score = 0.0
       if (kv2 != iv1) {
