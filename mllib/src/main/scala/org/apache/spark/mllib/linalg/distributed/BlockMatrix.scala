@@ -181,23 +181,28 @@ class BlockMatrix(
     logDebug("BlockMatrix dimensions are okay...")
 
     // Check if there are multiple MatrixBlocks with the same index.
-    val indexCounts = blockInfo.countByKey().foreach { case (key, cnt) =>
+    blockInfo.countByKey().foreach { case (key, cnt) =>
       if (cnt > 1) {
-        throw new SparkException(s"There are MatrixBlocks with duplicate indices. Please remove " +
-          s"blocks with duplicate indices. You may call reduceByKey on the underlying RDD and " +
-          s"sum the duplicates. You may convert the matrices to Breeze before summing them up.")
+        throw new SparkException(s"Found multiple MatrixBlocks with the indices $key. Please " +
+          "remove blocks with duplicate indices.")
       }
     }
     logDebug("MatrixBlock indices are okay...")
     // Check if each MatrixBlock (except edges) has the dimensions rowsPerBlock x colsPerBlock
     // The first tuple is the index and the second tuple is the dimensions of the MatrixBlock
+    val dimensionMsg = s"dimensions different than rowsPerBlock: $rowsPerBlock, and " +
+      s"colsPerBlock: $colsPerBlock. Blocks on the right and bottom edges can have smaller " +
+      s"dimensions. You may use the repartition method to fix this issue."
     blockInfo.foreach { case ((blockRowIndex, blockColIndex), (m, n)) =>
-      if (m != rowsPerBlock || n != colsPerBlock) {
-        if (blockRowIndex != numRowBlocks - 1 || blockColIndex != numColBlocks - 1) {
-          throw new SparkException(s"There are MatrixBlocks with dimensions different than " +
-            s"rowsPerBlock: $rowsPerBlock, and colsPerBlock: $colsPerBlock. You may " +
-            s"use the repartition method to fix this issue.")
-        }
+      if ((blockRowIndex < numRowBlocks - 1 && m != rowsPerBlock) ||
+          (blockRowIndex == numRowBlocks - 1 && (m <= 0 || m > rowsPerBlock))) {
+        throw new SparkException(s"The MatrixBlock at ($blockRowIndex, $blockColIndex) has " +
+          dimensionMsg)
+      }
+      if ((blockColIndex < numColBlocks - 1 && n != colsPerBlock) ||
+        (blockColIndex == numColBlocks - 1 && (n <= 0 || n > colsPerBlock))) {
+        throw new SparkException(s"The MatrixBlock at ($blockRowIndex, $blockColIndex) has " +
+          dimensionMsg)
       }
     }
     logDebug("MatrixBlock dimensions are okay...")
