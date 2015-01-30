@@ -381,9 +381,7 @@ object KafkaUtils {
    */
   @Experimental
   def createLeader(topic: String, partition: Int, host: String, port: Int): Leader =
-    new LeaderImpl(topic,partition,
-      host,
-      port)
+    new LeaderImpl(topic,partition, host, port)
 
   /**
    * Behaviorless container of host info for the leader of a Kafka TopicAndPartition
@@ -393,12 +391,8 @@ object KafkaUtils {
    */
   @Experimental
   def createLeader(
-    topicAndPartition: TopicAndPartition,
-    host: String,
-    port: Int): Leader =
-    new LeaderImpl(
-      topicAndPartition.topic,
-      topicAndPartition.partition,
-      host,
-      port)
+      topicAndPartition: TopicAndPartition,
+      host: String,
+      port: Int): Leader =
+    new LeaderImpl(topicAndPartition.topic, topicAndPartition.partition, host, port)
 }
