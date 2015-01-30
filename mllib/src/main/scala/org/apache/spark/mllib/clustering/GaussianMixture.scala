@@ -44,7 +44,7 @@ import org.apache.spark.util.Utils
  * is considered to have occurred.
  * @param maxIterations The maximum number of iterations to perform
  */
-class GaussianMixtureEM private (
+class GaussianMixture private (
     private var k: Int, 
     private var convergenceTol: Double, 
     private var maxIterations: Int,
