@@ -41,7 +41,6 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
 
     try {
       val stdOutFileName = inputStream.readLine().trim()
-
       val dataStream = openDataStream(stdOutFileName)
 
       return new Iterator[U] {
@@ -91,7 +90,9 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
    * Start a thread to print the process's stderr to ours
    */
   private def startStderrThread(proc: Process): BufferedStreamThread = {
-    val errThread = new BufferedStreamThread(proc.getErrorStream, "stderr reader for R")
+    val ERR_BUFFER_SIZE = 100
+    val errThread = new BufferedStreamThread(proc.getErrorStream, "stderr reader for R",
+      ERR_BUFFER_SIZE)
     errThread.start()
     errThread
   }
@@ -314,23 +315,25 @@ private class StringRRDD[T: ClassTag](
   lazy val asJavaRDD : JavaRDD[String] = JavaRDD.fromRDD(this)
 }
 
-private class BufferedStreamThread(in: InputStream, name: String) extends Thread(name) {
-  val ERR_BUFFER_SIZE = 100
-  val lines = new Array[String](ERR_BUFFER_SIZE)
+private class BufferedStreamThread(
+    in: InputStream,
+    name: String,
+    errBufferSize: Int) extends Thread(name) {
+  val lines = new Array[String](errBufferSize)
   var lineIdx = 0
   override def run() {
     for (line <- Source.fromInputStream(in).getLines) {
       lines(lineIdx) = line
-      lineIdx = (lineIdx + 1) % ERR_BUFFER_SIZE
+      lineIdx = (lineIdx + 1) % errBufferSize
       System.err.println(line)
     }
   }
 
   def getLines(): String = {
-    (0 until ERR_BUFFER_SIZE).filter { x =>
-      lines((x + lineIdx) % ERR_BUFFER_SIZE) != null
+    (0 until errBufferSize).filter { x =>
+      lines((x + lineIdx) % errBufferSize) != null
     }.map { x =>
-      lines((x + lineIdx) % ERR_BUFFER_SIZE)
+      lines((x + lineIdx) % errBufferSize)
     }.mkString("\n")
   }
 }
