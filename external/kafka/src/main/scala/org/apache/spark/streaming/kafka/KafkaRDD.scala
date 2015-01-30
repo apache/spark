@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.rdd.kafka
+package org.apache.spark.streaming.kafka
 
 import scala.reflect.{classTag, ClassTag}
 

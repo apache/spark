@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.rdd.kafka
+package org.apache.spark.streaming.kafka
 
 import scala.util.control.NonFatal
 import scala.util.Random
@@ -302,6 +302,7 @@ private[spark]
 object KafkaCluster {
   type Err = ArrayBuffer[Throwable]
 
+  private[spark]
   case class LeaderOffset(host: String, port: Int, offset: Long)
 
   /** Make a consumer config without requiring group.id or zookeeper.connect,

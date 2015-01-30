@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.rdd.kafka
+package org.apache.spark.streaming.kafka
 
 import org.apache.spark.Partition
 
@@ -33,8 +33,8 @@ class KafkaRDDPartition(
   override val partition: Int,
   override val fromOffset: Long,
   override val untilOffset: Long,
-  override val host: String,
-  override val port: Int
+  val host: String,
+  val port: Int
 ) extends Partition with OffsetRange {
   def toTuple: (Int, String, Int, Long, Long, String, Int) = (
     index,

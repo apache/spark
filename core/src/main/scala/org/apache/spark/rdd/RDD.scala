@@ -805,20 +805,6 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * Applies a function to each partition of this RDD, while tracking the index
-   * of the original partition.
-   */
-  def foreachPartitionWithIndex(
-    f: (Int, Iterator[T]) => Unit) {
-    val func = (index: Int, iter: Iterator[T]) => {
-      f(index, iter)
-      Iterator.empty
-    }
-    sc.runJob(
-      mapPartitionsWithIndex(func, true), (iter: Iterator[T]) => ())
-  }
-
-  /**
    * Return an array that contains all of the elements in this RDD.
    */
   def collect(): Array[T] = {

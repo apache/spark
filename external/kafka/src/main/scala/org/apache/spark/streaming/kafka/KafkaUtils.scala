@@ -34,7 +34,6 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.api.java.{JavaPairReceiverInputDStream, JavaStreamingContext}
 import org.apache.spark.streaming.dstream.{InputDStream, ReceiverInputDStream}
-import org.apache.spark.rdd.kafka.{KafkaCluster, KafkaRDD, KafkaRDDPartition, OffsetRange, HasOffsetRanges}
 
 object KafkaUtils {
   /**
@@ -161,6 +160,43 @@ object KafkaUtils {
    *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
    * @param batch Each OffsetRange in the batch corresponds to a
    *   range of offsets for a given Kafka topic/partition
+   */
+  def createRDD[
+    K: ClassTag,
+    V: ClassTag,
+    U <: Decoder[_]: ClassTag,
+    T <: Decoder[_]: ClassTag,
+    R: ClassTag] (
+      sc: SparkContext,
+      kafkaParams: Map[String, String],
+      batch: Array[OffsetRange]
+  ): RDD[(K, V)] with HasOffsetRanges = {
+    val messageHandler = (mmd: MessageAndMetadata[K, V]) => (mmd.key, mmd.message)
+    val kc = new KafkaCluster(kafkaParams)
+    val topics = batch.map(o => TopicAndPartition(o.topic, o.partition)).toSet
+    val leaderMap = kc.findLeaders(topics).fold(
+      errs => throw new SparkException(errs.mkString("\n")),
+      ok => ok
+    )
+    val rddParts = batch.zipWithIndex.map { case (o, i) =>
+        val tp = TopicAndPartition(o.topic, o.partition)
+        val (host, port) = leaderMap(tp)
+        new KafkaRDDPartition(i, o.topic, o.partition, o.fromOffset, o.untilOffset, host, port)
+    }.toArray
+    new KafkaRDD[K, V, U, T, (K, V)](sc, kafkaParams, rddParts, messageHandler)
+  }
+
+  /** A batch-oriented interface for consuming from Kafka.
+   * Starting and ending offsets are specified in advance,
+   * so that you can control exactly-once semantics.
+   * @param sc SparkContext object
+   * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+   * configuration parameters</a>.
+   *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
+   *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
+   * @param batch Each OffsetRange in the batch corresponds to a
+   *   range of offsets for a given Kafka topic/partition
+   * @param leaders Kafka leaders for each offset range in batch
    * @param messageHandler function for translating each message into the desired type
    */
   def createRDD[
@@ -172,12 +208,16 @@ object KafkaUtils {
       sc: SparkContext,
       kafkaParams: Map[String, String],
       batch: Array[OffsetRange],
+      leaders: Array[Leader],
       messageHandler: MessageAndMetadata[K, V] => R
   ): RDD[R] with HasOffsetRanges = {
-    val parts = batch.zipWithIndex.map { case (o, i) =>
-        new KafkaRDDPartition(i, o.topic, o.partition, o.fromOffset, o.untilOffset, o.host, o.port)
+    val leaderMap = leaders.map(l => (l.topic, l.partition) -> (l.host, l.port)).toMap
+    val rddParts = batch.zipWithIndex.map { case (o, i) =>
+        val (host, port) = leaderMap((o.topic, o.partition))
+        new KafkaRDDPartition(i, o.topic, o.partition, o.fromOffset, o.untilOffset, host, port)
     }.toArray
-    new KafkaRDD[K, V, U, T, R](sc, kafkaParams, parts, messageHandler)
+
+    new KafkaRDD[K, V, U, T, R](sc, kafkaParams, rddParts, messageHandler)
   }
 
   /**

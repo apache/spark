@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.rdd.kafka
+package org.apache.spark.streaming.kafka
 
 import scala.util.Random
 
@@ -25,7 +25,6 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
 import org.apache.spark.SparkContext._
-import org.apache.spark.streaming.kafka.KafkaStreamSuiteBase
 
 class KafkaRDDSuite extends KafkaStreamSuiteBase with BeforeAndAfter {
   var sc: SparkContext = _
@@ -55,6 +54,8 @@ class KafkaRDDSuite extends KafkaStreamSuiteBase with BeforeAndAfter {
     val kc = new KafkaCluster(kafkaParams)
 
     val rdd = getRdd(kc, Set(topic))
+    // this is the "lots of messages" case
+    // make sure we get all of them
     assert(rdd.isDefined)
     assert(rdd.get.count === sent.values.sum)
 
@@ -65,16 +66,21 @@ class KafkaRDDSuite extends KafkaStreamSuiteBase with BeforeAndAfter {
     val rdd2 = getRdd(kc, Set(topic))
     val sent2 = Map("d" -> 1)
     produceAndSendMessage(topic, sent2)
+    // this is the "0 messages" case
+    // make sure we dont get anything, since messages were sent after rdd was defined
     assert(rdd2.isDefined)
     assert(rdd2.get.count === 0)
 
     val rdd3 = getRdd(kc, Set(topic))
     produceAndSendMessage(topic, Map("extra" -> 22))
+    // this is the "exactly 1 message" case
+    // make sure we get exactly one message, despite there being lots more available
     assert(rdd3.isDefined)
     assert(rdd3.get.count === sent2.values.sum)
 
   }
 
+  // get an rdd from the committed consumer offsets until the latest leader offsets,
   private def getRdd(kc: KafkaCluster, topics: Set[String]) = {
     val groupId = kc.kafkaParams("group.id")
     for {

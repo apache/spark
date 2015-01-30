@@ -15,56 +15,54 @@
  * limitations under the License.
  */
 
-package org.apache.spark.rdd.kafka
+package org.apache.spark.streaming.kafka
 
-/** Represents a range of offsets from a single Kafka TopicAndPartition */
-trait OffsetRange {
-  /** kafka topic name */
+import kafka.common.TopicAndPartition
+
+/** Host info for the leader of a Kafka TopicAndPartition */
+
+trait Leader {
+    /** kafka topic name */
   def topic: String
 
   /** kafka partition id */
   def partition: Int
 
-  /** inclusive starting offset */
-  def fromOffset: Long
-
-  /** exclusive ending offset */
-  def untilOffset: Long
-
-  /** preferred kafka host, i.e. the leader at the time of creation */
+  /** kafka hostname */
   def host: String
-
-  /** preferred kafka host's port */
+  
+  /** kafka host's port */
   def port: Int
 }
 
-/** Something that has a collection of OffsetRanges */
-trait HasOffsetRanges {
-  def offsetRanges: Array[OffsetRange]
-}
-
-private class OffsetRangeImpl(
+private class LeaderImpl(
   override val topic: String,
   override val partition: Int,
-  override val fromOffset: Long,
-  override val untilOffset: Long,
   override val host: String,
   override val port: Int
-) extends OffsetRange
+) extends Leader
 
-object OffsetRange {
-  def apply(
+object Leader {
+  def create(
     topic: String,
     partition: Int,
-    fromOffset: Long,
-    untilOffset: Long,
     host: String,
-    port: Int): OffsetRange =
-    new OffsetRangeImpl(
+    port: Int): Leader =
+    new LeaderImpl(
       topic,
       partition,
-      fromOffset,
-      untilOffset,
       host,
       port)
+
+    def create(
+    topicAndPartition: TopicAndPartition,
+    host: String,
+    port: Int): Leader =
+    new LeaderImpl(
+      topicAndPartition.topic,
+      topicAndPartition.partition,
+      host,
+      port)
+
 }
+

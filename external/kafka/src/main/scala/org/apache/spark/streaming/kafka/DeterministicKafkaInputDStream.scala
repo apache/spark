@@ -28,8 +28,7 @@ import kafka.serializer.Decoder
 
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.rdd.kafka.{KafkaCluster, KafkaRDD, KafkaRDDPartition}
-import org.apache.spark.rdd.kafka.KafkaCluster.LeaderOffset
+import org.apache.spark.streaming.kafka.KafkaCluster.LeaderOffset
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.dstream._
 
