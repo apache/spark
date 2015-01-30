@@ -35,7 +35,9 @@ private[jobs] object UIData {
     var outputBytes : Long = 0
     var outputRecords : Long = 0
     var shuffleRead : Long = 0
+    var shuffleReadRecords : Long = 0
     var shuffleWrite : Long = 0
+    var shuffleWriteRecords : Long = 0
     var memoryBytesSpilled : Long = 0
     var diskBytesSpilled : Long = 0
   }
@@ -79,7 +81,9 @@ private[jobs] object UIData {
     var outputBytes: Long = _
     var outputRecords: Long = _
     var shuffleReadBytes: Long = _
+    var shuffleReadRecords : Long = _
     var shuffleWriteBytes: Long = _
+    var shuffleWriteRecords: Long = _
     var memoryBytesSpilled: Long = _
     var diskBytesSpilled: Long = _
 

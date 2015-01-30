@@ -44,12 +44,12 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
         <th>Total Tasks</th>
         <th>Failed Tasks</th>
         <th>Succeeded Tasks</th>
-        <th><span data-toggle="tooltip" title={ToolTips.INPUT}>Input</span></th>
-        <th><span data-toggle="tooltip" title={ToolTips.INPUT_RECORDS}>Input Records</span></th>
-        <th><span data-toggle="tooltip" title={ToolTips.OUTPUT}>Output</span></th>
-        <th><span data-toggle="tooltip" title={ToolTips.OUTPUT_RECORDS}>Output Records</span></th>
-        <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>Shuffle Read</span></th>
-        <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_WRITE}>Shuffle Write</span></th>
+        <th><span data-toggle="tooltip" title={ToolTips.INPUT}>Input Size / Records</span></th>
+        <th><span data-toggle="tooltip" title={ToolTips.OUTPUT}>Output Size / Records</span></th>
+        <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>
+          Shuffle Read Size / Records</span></th>
+        <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_WRITE}>
+          Shuffle Write Size / Records</span></th>
         <th>Shuffle Spill (Memory)</th>
         <th>Shuffle Spill (Disk)</th>
       </thead>
@@ -79,17 +79,13 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
             <td>{v.failedTasks}</td>
             <td>{v.succeededTasks}</td>
             <td sorttable_customkey={v.inputBytes.toString}>
-              {Utils.bytesToString(v.inputBytes)}</td>
-            <td sorttable_customkey={v.inputRecords.toString}>
-              {v.inputRecords}</td>
+              {s"${Utils.bytesToString(v.inputBytes)} / ${v.inputRecords}"}</td>
             <td sorttable_customkey={v.outputBytes.toString}>
-              {Utils.bytesToString(v.outputBytes)}</td>
-            <td sorttable_customkey={v.outputRecords.toString}>
-              {v.outputRecords}</td>
+              {s"${Utils.bytesToString(v.outputBytes)} / ${v.outputRecords}"}</td>
             <td sorttable_customkey={v.shuffleRead.toString}>
-              {Utils.bytesToString(v.shuffleRead)}</td>
+              {s"${Utils.bytesToString(v.shuffleRead)} / ${v.shuffleReadRecords}"}</td>
             <td sorttable_customkey={v.shuffleWrite.toString}>
-              {Utils.bytesToString(v.shuffleWrite)}</td>
+              {s"${Utils.bytesToString(v.shuffleWrite)} / ${v.shuffleWriteRecords}"}</td>
             <td sorttable_customkey={v.memoryBytesSpilled.toString}>
               {Utils.bytesToString(v.memoryBytesSpilled)}</td>
             <td sorttable_customkey={v.diskBytesSpilled.toString}>
