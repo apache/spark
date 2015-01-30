@@ -238,7 +238,7 @@ class BlockMatrix(
     val transposedBlocks = blocks.map { case ((blockRowIndex, blockColIndex), mat) =>
       ((blockColIndex, blockRowIndex), mat.transpose)
     }
-    new BlockMatrix(transposedBlocks, colsPerBlock, rowsPerBlock, numCols(), numRows())
+    new BlockMatrix(transposedBlocks, colsPerBlock, rowsPerBlock, nCols, nRows)
   }
 
   /** Collects data and assembles a local dense breeze matrix (for test only). */
