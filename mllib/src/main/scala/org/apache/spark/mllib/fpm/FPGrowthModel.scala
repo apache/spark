@@ -20,5 +20,5 @@ package org.apache.spark.mllib.fpm
 /**
  * A FPGrowth Model for FPGrowth, each element is a frequent pattern with count.
  */
-class FPGrowthModel (val frequentPattern: Array[(String, Int)]) extends Serializable {
+class FPGrowthModel (val frequentPattern: Array[(Array[String], Long)]) extends Serializable {
 }
