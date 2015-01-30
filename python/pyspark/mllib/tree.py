@@ -24,16 +24,48 @@ from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.mllib.linalg import _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint
 
-__all__ = ['DecisionTreeModel', 'DecisionTree', 'RandomForestModel', 'RandomForest']
+__all__ = ['DecisionTreeModel', 'DecisionTree', 'RandomForestModel',
+           'RandomForest', 'GradientBoostedTrees']
+
+
+class TreeEnsembleModel(JavaModelWrapper):
+    def predict(self, x):
+        """
+        Predict values for a single data point or an RDD of points using
+        the model trained.
+        """
+        if isinstance(x, RDD):
+            return self.call("predict", x.map(_convert_to_vector))
+
+        else:
+            return self.call("predict", _convert_to_vector(x))
+
+    def numTrees(self):
+        """
+        Get number of trees in ensemble.
+        """
+        return self.call("numTrees")
+
+    def totalNumNodes(self):
+        """
+        Get total number of nodes, summed over all trees in the ensemble.
+        """
+        return self.call("totalNumNodes")
+
+    def __repr__(self):
+        """ Summary of model """
+        return self._java_model.toString()
+
+    def toDebugString(self):
+        """ Full model """
+        return self._java_model.toDebugString()
 
 
 class DecisionTreeModel(JavaModelWrapper):
-
     """
-    A decision tree model for classification or regression.
+    .. note:: Experimental
 
-    EXPERIMENTAL: This is an experimental API.
-                  It will probably be modified in future.
+    A decision tree model for classification or regression.
     """
     def predict(self, x):
         """
@@ -64,12 +96,10 @@ class DecisionTreeModel(JavaModelWrapper):
 
 
 class DecisionTree(object):
-
     """
-    Learning algorithm for a decision tree model for classification or regression.
+    .. note:: Experimental
 
-    EXPERIMENTAL: This is an experimental API.
-                  It will probably be modified in future.
+    Learning algorithm for a decision tree model for classification or regression.
     """
 
     @classmethod
@@ -186,51 +216,19 @@ class DecisionTree(object):
                           impurity, maxDepth, maxBins, minInstancesPerNode, minInfoGain)
 
 
-class RandomForestModel(JavaModelWrapper):
+class RandomForestModel(TreeEnsembleModel):
     """
+    .. note:: Experimental
+
     Represents a random forest model.
-
-    EXPERIMENTAL: This is an experimental API.
-                  It will probably be modified in future.
     """
-    def predict(self, x):
-        """
-        Predict values for a single data point or an RDD of points using
-        the model trained.
-        """
-        if isinstance(x, RDD):
-            return self.call("predict", x.map(_convert_to_vector))
-
-        else:
-            return self.call("predict", _convert_to_vector(x))
-
-    def numTrees(self):
-        """
-        Get number of trees in forest.
-        """
-        return self.call("numTrees")
-
-    def totalNumNodes(self):
-        """
-        Get total number of nodes, summed over all trees in the forest.
-        """
-        return self.call("totalNumNodes")
-
-    def __repr__(self):
-        """ Summary of model """
-        return self._java_model.toString()
-
-    def toDebugString(self):
-        """ Full model """
-        return self._java_model.toDebugString()
 
 
 class RandomForest(object):
     """
-    Learning algorithm for a random forest model for classification or regression.
+    .. note:: Experimental
 
-    EXPERIMENTAL: This is an experimental API.
-                  It will probably be modified in future.
+    Learning algorithm for a random forest model for classification or regression.
     """
 
     supportedFeatureSubsetStrategies = ("auto", "all", "sqrt", "log2", "onethird")
@@ -381,6 +379,137 @@ class RandomForest(object):
         """
         return cls._train(data, "regression", 0, categoricalFeaturesInfo, numTrees,
                           featureSubsetStrategy, impurity, maxDepth, maxBins, seed)
+
+
+class GradientBoostedTreesModel(TreeEnsembleModel):
+    """
+    .. note:: Experimental
+
+    Represents a gradient-boosted tree model.
+    """
+
+
+class GradientBoostedTrees(object):
+    """
+    .. note:: Experimental
+
+    Learning algorithm for a gradient boosted trees model for classification or regression.
+    """
+
+    @classmethod
+    def _train(cls, data, algo, categoricalFeaturesInfo,
+               loss, numIterations, learningRate, maxDepth):
+        first = data.first()
+        assert isinstance(first, LabeledPoint), "the data should be RDD of LabeledPoint"
+        model = callMLlibFunc("trainGradientBoostedTreesModel", data, algo, categoricalFeaturesInfo,
+                              loss, numIterations, learningRate, maxDepth)
+        return GradientBoostedTreesModel(model)
+
+    @classmethod
+    def trainClassifier(cls, data, categoricalFeaturesInfo,
+                        loss="logLoss", numIterations=100, learningRate=0.1, maxDepth=3):
+        """
+        Method to train a gradient-boosted trees model for classification.
+
+        :param data: Training dataset: RDD of LabeledPoint. Labels should take values {0, 1}.
+        :param categoricalFeaturesInfo: Map storing arity of categorical
+               features. E.g., an entry (n -> k) indicates that feature
+               n is categorical with k categories indexed from 0:
+               {0, 1, ..., k-1}.
+        :param loss: Loss function used for minimization during gradient boosting.
+                     Supported: {"logLoss" (default), "leastSquaresError", "leastAbsoluteError"}.
+        :param numIterations: Number of iterations of boosting.
+                              (default: 100)
+        :param learningRate: Learning rate for shrinking the contribution of each estimator.
+                             The learning rate should be between in the interval (0, 1]
+                             (default: 0.1)
+        :param maxDepth: Maximum depth of the tree. E.g., depth 0 means 1
+               leaf node; depth 1 means 1 internal node + 2 leaf nodes.
+               (default: 3)
+        :return: GradientBoostedTreesModel that can be used for prediction
+
+        Example usage:
+
+        >>> from pyspark.mllib.regression import LabeledPoint
+        >>> from pyspark.mllib.tree import GradientBoostedTrees
+        >>>
+        >>> data = [
+        ...     LabeledPoint(0.0, [0.0]),
+        ...     LabeledPoint(0.0, [1.0]),
+        ...     LabeledPoint(1.0, [2.0]),
+        ...     LabeledPoint(1.0, [3.0])
+        ... ]
+        >>>
+        >>> model = GradientBoostedTrees.trainClassifier(sc.parallelize(data), {})
+        >>> model.numTrees()
+        100
+        >>> model.totalNumNodes()
+        300
+        >>> print model,  # it already has newline
+        TreeEnsembleModel classifier with 100 trees
+        >>> model.predict([2.0])
+        1.0
+        >>> model.predict([0.0])
+        0.0
+        >>> rdd = sc.parallelize([[2.0], [0.0]])
+        >>> model.predict(rdd).collect()
+        [1.0, 0.0]
+        """
+        return cls._train(data, "classification", categoricalFeaturesInfo,
+                          loss, numIterations, learningRate, maxDepth)
+
+    @classmethod
+    def trainRegressor(cls, data, categoricalFeaturesInfo,
+                       loss="leastSquaresError", numIterations=100, learningRate=0.1, maxDepth=3):
+        """
+        Method to train a gradient-boosted trees model for regression.
+
+        :param data: Training dataset: RDD of LabeledPoint. Labels are
+               real numbers.
+        :param categoricalFeaturesInfo: Map storing arity of categorical
+               features. E.g., an entry (n -> k) indicates that feature
+               n is categorical with k categories indexed from 0:
+               {0, 1, ..., k-1}.
+        :param loss: Loss function used for minimization during gradient boosting.
+                     Supported: {"logLoss" (default), "leastSquaresError", "leastAbsoluteError"}.
+        :param numIterations: Number of iterations of boosting.
+                              (default: 100)
+        :param learningRate: Learning rate for shrinking the contribution of each estimator.
+                             The learning rate should be between in the interval (0, 1]
+                             (default: 0.1)
+        :param maxDepth: Maximum depth of the tree. E.g., depth 0 means 1
+               leaf node; depth 1 means 1 internal node + 2 leaf nodes.
+               (default: 3)
+        :return: GradientBoostedTreesModel that can be used for prediction
+
+        Example usage:
+
+        >>> from pyspark.mllib.regression import LabeledPoint
+        >>> from pyspark.mllib.tree import GradientBoostedTrees
+        >>> from pyspark.mllib.linalg import SparseVector
+        >>>
+        >>> sparse_data = [
+        ...     LabeledPoint(0.0, SparseVector(2, {0: 1.0})),
+        ...     LabeledPoint(1.0, SparseVector(2, {1: 1.0})),
+        ...     LabeledPoint(0.0, SparseVector(2, {0: 1.0})),
+        ...     LabeledPoint(1.0, SparseVector(2, {1: 2.0}))
+        ... ]
+        >>>
+        >>> model = GradientBoostedTrees.trainRegressor(sc.parallelize(sparse_data), {})
+        >>> model.numTrees()
+        100
+        >>> model.totalNumNodes()
+        102
+        >>> model.predict(SparseVector(2, {1: 1.0}))
+        1.0
+        >>> model.predict(SparseVector(2, {0: 1.0}))
+        0.0
+        >>> rdd = sc.parallelize([[0.0, 1.0], [1.0, 0.0]])
+        >>> model.predict(rdd).collect()
+        [1.0, 0.0]
+        """
+        return cls._train(data, "regression", categoricalFeaturesInfo,
+                          loss, numIterations, learningRate, maxDepth)
 
 
 def _test():
