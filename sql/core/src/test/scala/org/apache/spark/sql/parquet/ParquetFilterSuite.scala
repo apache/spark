@@ -21,7 +21,8 @@ import parquet.filter2.predicate.Operators._
 import parquet.filter2.predicate.{FilterPredicate, Operators}
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal, Predicate, Row}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal, Predicate, Row}
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.{DataFrame, QueryTest, SQLConf}
 
@@ -90,6 +91,30 @@ class ParquetFilterSuite extends QueryTest with ParquetTest {
 
       checkFilterPredicate('_1 === true, classOf[Eq   [_]], true)
       checkFilterPredicate('_1 !== true, classOf[NotEq[_]], false)
+    }
+  }
+
+  test("filter pushdown - short") {
+    withParquetRDD((1 to 4).map(i => Tuple1(Option(i.toShort)))) { implicit rdd =>
+      checkFilterPredicate(Cast('_1, IntegerType) === 1, classOf[Eq   [_]], 1)
+      checkFilterPredicate(Cast('_1, IntegerType) !== 1, classOf[NotEq[_]], (2 to 4).map(Row.apply(_)))
+      
+      checkFilterPredicate(Cast('_1, IntegerType) < 2,  classOf[Lt  [_]], 1)
+      checkFilterPredicate(Cast('_1, IntegerType) > 3,  classOf[Gt  [_]], 4)
+      checkFilterPredicate(Cast('_1, IntegerType) <= 1, classOf[LtEq[_]], 1)
+      checkFilterPredicate(Cast('_1, IntegerType) >= 4, classOf[GtEq[_]], 4)
+      
+      checkFilterPredicate(Literal(1) === Cast('_1, IntegerType), classOf[Eq  [_]], 1)
+      checkFilterPredicate(Literal(2) >   Cast('_1, IntegerType), classOf[Lt  [_]], 1)
+      checkFilterPredicate(Literal(3) <   Cast('_1, IntegerType), classOf[Gt  [_]], 4)
+      checkFilterPredicate(Literal(1) >=  Cast('_1, IntegerType), classOf[LtEq[_]], 1)
+      checkFilterPredicate(Literal(4) <=  Cast('_1, IntegerType), classOf[GtEq[_]], 4)
+      
+      checkFilterPredicate(!(Cast('_1, IntegerType) < 4), classOf[GtEq[_]], 4)
+      checkFilterPredicate(Cast('_1, IntegerType) > 2 && Cast('_1, IntegerType) < 4, 
+        classOf[Operators.And], 3)
+      checkFilterPredicate(Cast('_1, IntegerType) < 2 || Cast('_1, IntegerType) > 3, 
+        classOf[Operators.Or],  Seq(Row(1), Row(4)))
     }
   }
 

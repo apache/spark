@@ -21,7 +21,7 @@ import java.util.TimeZone
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.dsl._
+import org.apache.spark.sql.Dsl._
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types._
@@ -184,6 +184,15 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(
       sql("SELECT a, SUM(b) FROM testData2 GROUP BY a"),
       Seq(Row(1,3), Row(2,3), Row(3,3)))
+  }
+
+  test("literal in agg grouping expressions") {
+    checkAnswer(
+      sql("SELECT a, count(1) FROM testData2 GROUP BY a, 1"),
+      Seq(Row(1,2), Row(2,2), Row(3,2)))
+    checkAnswer(
+      sql("SELECT a, count(2) FROM testData2 GROUP BY a, 2"),
+      Seq(Row(1,2), Row(2,2), Row(3,2)))
   }
 
   test("aggregates with nulls") {
@@ -651,8 +660,8 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Row(values(0).toInt, values(1), values(2).toBoolean, v4)
     }
 
-    val schemaRDD1 = applySchema(rowRDD1, schema1)
-    schemaRDD1.registerTempTable("applySchema1")
+    val df1 = applySchema(rowRDD1, schema1)
+    df1.registerTempTable("applySchema1")
     checkAnswer(
       sql("SELECT * FROM applySchema1"),
       Row(1, "A1", true, null) ::
@@ -681,8 +690,8 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Row(Row(values(0).toInt, values(2).toBoolean), Map(values(1) -> v4))
     }
 
-    val schemaRDD2 = applySchema(rowRDD2, schema2)
-    schemaRDD2.registerTempTable("applySchema2")
+    val df2 = applySchema(rowRDD2, schema2)
+    df2.registerTempTable("applySchema2")
     checkAnswer(
       sql("SELECT * FROM applySchema2"),
       Row(Row(1, true), Map("A1" -> null)) ::
@@ -706,8 +715,8 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Row(Row(values(0).toInt, values(2).toBoolean), scala.collection.mutable.Map(values(1) -> v4))
     }
 
-    val schemaRDD3 = applySchema(rowRDD3, schema2)
-    schemaRDD3.registerTempTable("applySchema3")
+    val df3 = applySchema(rowRDD3, schema2)
+    df3.registerTempTable("applySchema3")
 
     checkAnswer(
       sql("SELECT f1.f11, f2['D4'] FROM applySchema3"),

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.dsl._
+import org.apache.spark.sql.Dsl._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.types.{BooleanType, IntegerType, StructField, StructType}
 
@@ -33,7 +33,7 @@ class ColumnExpressionSuite extends QueryTest {
 
   ignore("star qualified by data frame object") {
     // This is not yet supported.
-    val df = testData.toDF
+    val df = testData.toDataFrame
     checkAnswer(df.select(df("*")), df.collect().toSeq)
   }
 
@@ -106,13 +106,13 @@ class ColumnExpressionSuite extends QueryTest {
 
   test("isNull") {
     checkAnswer(
-      nullStrings.toDF.where($"s".isNull),
+      nullStrings.toDataFrame.where($"s".isNull),
       nullStrings.collect().toSeq.filter(r => r.getString(1) eq null))
   }
 
   test("isNotNull") {
     checkAnswer(
-      nullStrings.toDF.where($"s".isNotNull),
+      nullStrings.toDataFrame.where($"s".isNotNull),
       nullStrings.collect().toSeq.filter(r => r.getString(1) ne null))
   }
 
@@ -244,7 +244,7 @@ class ColumnExpressionSuite extends QueryTest {
     )
 
     checkAnswer(
-      testData.select(sqrt(Literal(null))),
+      testData.select(sqrt(lit(null))),
       (1 to 100).map(_ => Row(null))
     )
   }
@@ -261,7 +261,7 @@ class ColumnExpressionSuite extends QueryTest {
     )
 
     checkAnswer(
-      testData.select(abs(Literal(null))),
+      testData.select(abs(lit(null))),
       (1 to 100).map(_ => Row(null))
     )
   }
@@ -278,7 +278,7 @@ class ColumnExpressionSuite extends QueryTest {
     )
 
     checkAnswer(
-      testData.select(upper(Literal(null))),
+      testData.select(upper(lit(null))),
       (1 to 100).map(n => Row(null))
     )
   }
@@ -295,7 +295,7 @@ class ColumnExpressionSuite extends QueryTest {
     )
 
     checkAnswer(
-      testData.select(lower(Literal(null))),
+      testData.select(lower(lit(null))),
       (1 to 100).map(n => Row(null))
     )
   }

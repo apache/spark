@@ -60,6 +60,7 @@ case class OptionalData(
 
 case class ComplexData(
     arrayField: Seq[Int],
+    arrayField1: Array[Int],
     arrayFieldContainsNull: Seq[java.lang.Integer],
     mapField: Map[Int, Long],
     mapFieldValueContainsNull: Map[Int, java.lang.Long],
@@ -129,6 +130,10 @@ class ScalaReflectionSuite extends FunSuite {
       StructType(Seq(
         StructField(
           "arrayField",
+          ArrayType(IntegerType, containsNull = false),
+          nullable = true),
+        StructField(
+          "arrayField1",
           ArrayType(IntegerType, containsNull = false),
           nullable = true),
         StructField(

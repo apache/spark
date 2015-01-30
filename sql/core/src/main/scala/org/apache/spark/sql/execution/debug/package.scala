@@ -39,7 +39,7 @@ package object debug {
 
   /**
    * :: DeveloperApi ::
-   * Augments SchemaRDDs with debug methods.
+   * Augments [[DataFrame]]s with debug methods.
    */
   @DeveloperApi
   implicit class DebugQuery(query: DataFrame) {
@@ -166,7 +166,7 @@ package object debug {
 
   /**
    * :: DeveloperApi ::
-   * Augments SchemaRDDs with debug methods.
+   * Augments [[DataFrame]]s with debug methods.
    */
   @DeveloperApi
   private[sql] case class TypeCheck(child: SparkPlan) extends SparkPlan {

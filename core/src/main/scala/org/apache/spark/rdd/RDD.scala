@@ -901,6 +901,38 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * Reduces the elements of this RDD in a multi-level tree pattern.
+   *
+   * @param depth suggested depth of the tree (default: 2)
+   * @see [[org.apache.spark.rdd.RDD#reduce]]
+   */
+  def treeReduce(f: (T, T) => T, depth: Int = 2): T = {
+    require(depth >= 1, s"Depth must be greater than or equal to 1 but got $depth.")
+    val cleanF = context.clean(f)
+    val reducePartition: Iterator[T] => Option[T] = iter => {
+      if (iter.hasNext) {
+        Some(iter.reduceLeft(cleanF))
+      } else {
+        None
+      }
+    }
+    val partiallyReduced = mapPartitions(it => Iterator(reducePartition(it)))
+    val op: (Option[T], Option[T]) => Option[T] = (c, x) => {
+      if (c.isDefined && x.isDefined) {
+        Some(cleanF(c.get, x.get))
+      } else if (c.isDefined) {
+        c
+      } else if (x.isDefined) {
+        x
+      } else {
+        None
+      }
+    }
+    partiallyReduced.treeAggregate(Option.empty[T])(op, op, depth)
+      .getOrElse(throw new UnsupportedOperationException("empty collection"))
+  }
+
+  /**
    * Aggregate the elements of each partition, and then the results for all the partitions, using a
    * given associative function and a neutral "zero value". The function op(t1, t2) is allowed to
    * modify t1 and return it as its result value to avoid object allocation; however, it should not
@@ -933,6 +965,37 @@ abstract class RDD[T: ClassTag](
     val mergeResult = (index: Int, taskResult: U) => jobResult = combOp(jobResult, taskResult)
     sc.runJob(this, aggregatePartition, mergeResult)
     jobResult
+  }
+
+  /**
+   * Aggregates the elements of this RDD in a multi-level tree pattern.
+   *
+   * @param depth suggested depth of the tree (default: 2)
+   * @see [[org.apache.spark.rdd.RDD#aggregate]]
+   */
+  def treeAggregate[U: ClassTag](zeroValue: U)(
+      seqOp: (U, T) => U,
+      combOp: (U, U) => U,
+      depth: Int = 2): U = {
+    require(depth >= 1, s"Depth must be greater than or equal to 1 but got $depth.")
+    if (partitions.size == 0) {
+      return Utils.clone(zeroValue, context.env.closureSerializer.newInstance())
+    }
+    val cleanSeqOp = context.clean(seqOp)
+    val cleanCombOp = context.clean(combOp)
+    val aggregatePartition = (it: Iterator[T]) => it.aggregate(zeroValue)(cleanSeqOp, cleanCombOp)
+    var partiallyAggregated = mapPartitions(it => Iterator(aggregatePartition(it)))
+    var numPartitions = partiallyAggregated.partitions.size
+    val scale = math.max(math.ceil(math.pow(numPartitions, 1.0 / depth)).toInt, 2)
+    // If creating an extra level doesn't help reduce the wall-clock time, we stop tree aggregation.
+    while (numPartitions > scale + numPartitions / scale) {
+      numPartitions /= scale
+      val curNumPartitions = numPartitions
+      partiallyAggregated = partiallyAggregated.mapPartitionsWithIndex { (i, iter) =>
+        iter.map((i % curNumPartitions, _))
+      }.reduceByKey(new HashPartitioner(curNumPartitions), cleanCombOp).values
+    }
+    partiallyAggregated.reduce(cleanCombOp)
   }
 
   /**

@@ -68,6 +68,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   System.clearProperty("spark.hostPort")
   CommandProcessorFactory.clean(hiveconf)
 
+  hiveconf.set("hive.plan.serialization.format", "javaXML")
+
   lazy val warehousePath = getTempFilePath("sparkHiveWarehouse").getCanonicalPath
   lazy val metastorePath = getTempFilePath("sparkHiveMetastore").getCanonicalPath
 
@@ -396,7 +398,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
         log.asInstanceOf[org.apache.log4j.Logger].setLevel(org.apache.log4j.Level.WARN)
       }
 
-      clearCache()
+      cacheManager.clearCache()
       loadedTables.clear()
       catalog.cachedDataSourceTables.invalidateAll()
       catalog.client.getAllTables("default").foreach { t =>

@@ -114,6 +114,12 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.api.java.JavaRDDLike.isEmpty")
           ) ++ Seq(
+            // SPARK-5430
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaRDDLike.treeReduce"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaRDDLike.treeAggregate")
+          ) ++ Seq(
             // SPARK-5297 Java FileStream do not work with custom key/values
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.streaming.api.java.JavaStreamingContext.fileStream")

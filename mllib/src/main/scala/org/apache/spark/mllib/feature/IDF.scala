@@ -22,7 +22,6 @@ import breeze.linalg.{DenseVector => BDV}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
-import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.spark.rdd.RDD
 
 /**
