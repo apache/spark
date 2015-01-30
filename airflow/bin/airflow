@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import airflow
 from airflow.configuration import conf 
 from airflow.executors import DEFAULT_EXECUTOR
 from airflow import settings
@@ -181,8 +182,8 @@ def clear(args):
 
 
 def webserver(args):
-    log_to_stdout()
     print(settings.HEADER)
+    log_to_stdout()
     from airflow.www.app import app
     if args.debug:
         print(
@@ -293,11 +294,18 @@ def initdb(args):
         print("Bail.")
 
 
+def version(args):
+    print(settings.HEADER + "  v" + airflow.__version__)
+
+
 if __name__ == '__main__':
 
     logging.root.handlers = []
 
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-v", "--version",
+        help="Show version number")
     subparsers = parser.add_subparsers(help='sub-command help')
 
     ht = "Run subsections of a DAG for a specified date range"
@@ -447,6 +455,9 @@ if __name__ == '__main__':
     ht = "Serve logs generate by worker"
     parser_logs = subparsers.add_parser('serve_logs', help=ht)
     parser_logs.set_defaults(func=serve_logs)
+
+    parser_logs = subparsers.add_parser('version', help="Show version")
+    parser_logs.set_defaults(func=version)
 
     args = parser.parse_args()
     args.func(args)

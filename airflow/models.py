@@ -220,7 +220,7 @@ class DagPickle(Base):
     the database.
     """
     id = Column(Integer, primary_key=True)
-    pickle = Column(PickleType())
+    pickle = Column(PickleType(pickler=dill))
 
     __tablename__ = "dag_pickle"
 
@@ -621,7 +621,7 @@ class TaskInstance(Base):
             # if field has the right extension, look for the file.
             if attr.strip().endswith(ext):
                 template = env.get_template(attr)
-        return template or env.template_class(attr)
+        return template or env.from_string(attr)
 
     def templatify(self):
         task = self.task

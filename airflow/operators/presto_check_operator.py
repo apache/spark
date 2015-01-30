@@ -36,11 +36,13 @@ class PrestoCheckOperator(BaseOperator):
     def execute(self, execution_date=None):
         logging.info('Executing SQL check: ' + self.sql)
         records = self.hook.get_first(hql=self.sql)
+        logging.info("Record: " + str(records))
         if not records:
             raise Exception("The query returned None")
         elif not all([bool(r) for r in records]):
             exceptstr = "Test failed.\nQuery:\n{q}\nResults:\n{r!s}"
             raise Exception(exceptstr.format(q=self.sql, r=records))
+        logging.info("Success.")
 
 
 class PrestoIntervalCheckOperator(BaseOperator):
