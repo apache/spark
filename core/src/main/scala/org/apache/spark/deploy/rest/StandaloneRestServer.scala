@@ -104,6 +104,9 @@ private[spark] class StandaloneRestServerHandler(
     val appName = request.getAppName
     val appResource = request.getAppResource
     val mainClass = request.getMainClass
+    if (mainClass == null) {
+      throw new SubmitRestMissingFieldException("Main class must be set in submit request.")
+    }
 
     // Optional fields
     val jars = Option(request.getJars)

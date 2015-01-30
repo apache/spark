@@ -36,9 +36,10 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
    * just submitted and reports it to the user. Otherwise, if the submission was unsuccessful,
    * this reports failure and logs an error message provided by the REST server.
    */
-  override def submitDriver(args: SparkSubmitArguments): SubmitDriverResponse = {
+  override def submitDriver(args: SparkSubmitArguments): SubmitRestProtocolResponse = {
     validateSubmitArgs(args)
-    val submitResponse = super.submitDriver(args)
+    val response = super.submitDriver(args)
+    val submitResponse = getResponse[SubmitDriverResponse](response).getOrElse { return response }
     val submitSuccess = submitResponse.getSuccess.toBoolean
     if (submitSuccess) {
       val driverId = submitResponse.getDriverId
@@ -52,13 +53,13 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
   }
 
   /** Request that the REST server kill the specified driver. */
-  override def killDriver(master: String, driverId: String): KillDriverResponse = {
+  override def killDriver(master: String, driverId: String): SubmitRestProtocolResponse = {
     validateMaster(master)
     super.killDriver(master, driverId)
   }
 
   /** Request the status of the specified driver from the REST server. */
-  override def requestDriverStatus(master: String, driverId: String): DriverStatusResponse = {
+  override def requestDriverStatus(master: String, driverId: String): SubmitRestProtocolResponse = {
     validateMaster(master)
     super.requestDriverStatus(master, driverId)
   }
@@ -69,14 +70,19 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
    */
   private def pollSubmittedDriverStatus(master: String, driverId: String): Unit = {
     (1 to REPORT_DRIVER_STATUS_MAX_TRIES).foreach { _ =>
-      val statusResponse = requestDriverStatus(master, driverId)
+      val response = requestDriverStatus(master, driverId)
+      val statusResponse = getResponse[DriverStatusResponse](response).getOrElse { return }
       val statusSuccess = statusResponse.getSuccess.toBoolean
       if (statusSuccess) {
-        val driverState = statusResponse.getDriverState
+        val driverState = Option(statusResponse.getDriverState)
         val workerId = Option(statusResponse.getWorkerId)
         val workerHostPort = Option(statusResponse.getWorkerHostPort)
         val exception = Option(statusResponse.getMessage)
-        logInfo(s"State of driver $driverId is now $driverState.")
+        // Log driver state, if present
+        driverState match {
+          case Some(state) => logInfo(s"State of driver $driverId is now $state.")
+          case _ => logError(s"State of driver $driverId was not found!")
+        }
         // Log worker node, if present
         (workerId, workerHostPort) match {
           case (Some(id), Some(hp)) => logInfo(s"Driver is running on worker $id at $hp.")
@@ -152,6 +158,23 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
     if (!args.isStandaloneCluster) {
       throw new IllegalArgumentException(
         "This REST client is only supported in standalone cluster mode.")
+    }
+  }
+
+  /**
+   * Return the response as the expected type, or fail with an informative error message.
+   * Exposed for testing.
+   */
+  private[spark] def getResponse[T <: SubmitRestProtocolResponse](
+      response: SubmitRestProtocolResponse): Option[T] = {
+    try {
+      // Do not match on type T because types are erased at runtime
+      // Instead, manually try to cast it to type T ourselves
+      Some(response.asInstanceOf[T])
+    } catch {
+      case e: ClassCastException =>
+        logError(s"Server returned response of unexpected type:\n${response.toJson}")
+        None
     }
   }
 }

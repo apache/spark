@@ -129,7 +129,8 @@ private[spark] abstract class SubmitRestServerHandler extends AbstractHandler wi
     try {
       response.validate()
     } catch {
-      case e: Exception => handleError("Internal server error: " + formatException(e))
+      case e: Exception =>
+        return handleError("Internal server error: " + formatException(e))
     }
     response
   }

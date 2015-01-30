@@ -69,35 +69,39 @@ abstract class SubmitRestProtocolMessage {
 
   /**
    * Assert the validity of the message.
-   * If the validation fails, throw a [[SubmitRestValidationException]].
+   * If the validation fails, throw a [[SubmitRestProtocolException]].
    */
   final def validate(): Unit = {
     try {
       doValidate()
     } catch {
       case e: Exception =>
-        throw new SubmitRestValidationException(
-          s"Validation of message $messageType failed!", e)
+        throw new SubmitRestProtocolException(s"Validation of message $messageType failed!", e)
     }
   }
 
   /** Assert the validity of the message */
   protected def doValidate(): Unit = {
-    assert(action != null, s"The action field is missing.")
+    if (action == null) {
+      throw new SubmitRestMissingFieldException(s"The action field is missing in $messageType")
+    }
     assertFieldIsSet(sparkVersion)
   }
 
   /** Assert that the specified field is set in this message. */
   protected def assertFieldIsSet(field: SubmitRestProtocolField[_]): Unit = {
-    assert(field.isSet, s"Field '${field.name}' is missing.")
+    if (!field.isSet) {
+      throw new SubmitRestMissingFieldException(
+        s"Field '${field.name}' is missing in message $messageType.")
+    }
   }
 
   /**
    * Assert a condition when validating this message.
-   * If the assertion fails, throw a [[SubmitRestValidationException]].
+   * If the assertion fails, throw a [[SubmitRestProtocolException]].
    */
   protected def assert(condition: Boolean, failMessage: String): Unit = {
-    if (!condition) { throw new SubmitRestValidationException(failMessage) }
+    if (!condition) { throw new SubmitRestProtocolException(failMessage) }
   }
 
   /** Set the field to the given value, or clear the field if the value is null. */
@@ -157,29 +161,25 @@ abstract class SubmitRestProtocolResponse extends SubmitRestProtocolMessage {
   override def setSparkVersion(s: String) = setServerSparkVersion(s)
 }
 
-/**
- * An exception thrown if the validation of a [[SubmitRestProtocolMessage]] fails.
- */
-class SubmitRestValidationException(
-    message: String,
-    cause: Exception = null)
-  extends Exception(message, cause)
-
 object SubmitRestProtocolMessage {
   private val mapper = new ObjectMapper
   private val packagePrefix = this.getClass.getPackage.getName
 
-  /** Parse the value of the action field from the given JSON. */
-  def parseAction(json: String): String = parseField(json, "action")
+  /**
+   * Parse the value of the action field from the given JSON.
+   * If the action field is not found, throw a [[SubmitRestMissingFieldException]].
+   */
+  def parseAction(json: String): String = {
+    parseField(json, "action").getOrElse {
+      throw new SubmitRestMissingFieldException(s"Action field not found in JSON:\n$json")
+    }
+  }
 
   /** Parse the value of the specified field from the given JSON. */
-  def parseField(json: String, field: String): String = {
+  def parseField(json: String, field: String): Option[String] = {
     parse(json).asInstanceOf[JObject].obj
       .find { case (f, _) => f == field }
       .map { case (_, v) => v.asInstanceOf[JString].s }
-      .getOrElse {
-        throw new IllegalArgumentException(s"Could not find field '$field' in message:\n$json")
-      }
   }
 
   /**

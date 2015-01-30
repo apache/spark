@@ -72,22 +72,22 @@ class SubmitRestProtocolSuite extends FunSuite {
 
   test("validate") {
     val request = new DummyRequest
-    intercept[SubmitRestValidationException] { request.validate() } // missing everything
+    intercept[SubmitRestProtocolException] { request.validate() } // missing everything
     request.setSparkVersion("1.4.8")
-    intercept[SubmitRestValidationException] { request.validate() } // missing name and age
+    intercept[SubmitRestProtocolException] { request.validate() } // missing name and age
     request.setName("something")
-    intercept[SubmitRestValidationException] { request.validate() } // missing only age
+    intercept[SubmitRestProtocolException] { request.validate() } // missing only age
     request.setAge("2")
-    intercept[SubmitRestValidationException] { request.validate() } // age too low
+    intercept[SubmitRestProtocolException] { request.validate() } // age too low
     request.setAge("10")
     request.validate() // everything is set
     request.setSparkVersion(null)
-    intercept[SubmitRestValidationException] { request.validate() } // missing only Spark version
+    intercept[SubmitRestProtocolException] { request.validate() } // missing only Spark version
     request.setSparkVersion("1.2.3")
     request.setName(null)
-    intercept[SubmitRestValidationException] { request.validate() } // missing only name
+    intercept[SubmitRestProtocolException] { request.validate() } // missing only name
     request.setMessage("not-setting-name")
-    intercept[SubmitRestValidationException] { request.validate() } // still missing name
+    intercept[SubmitRestProtocolException] { request.validate() } // still missing name
   }
 
   test("request to and from JSON") {
@@ -119,7 +119,7 @@ class SubmitRestProtocolSuite extends FunSuite {
 
   test("SubmitDriverRequest") {
     val message = new SubmitDriverRequest
-    intercept[SubmitRestValidationException] { message.validate() }
+    intercept[SubmitRestProtocolException] { message.validate() }
     intercept[IllegalArgumentException] { message.setDriverCores("one hundred feet") }
     intercept[IllegalArgumentException] { message.setSuperviseDriver("nope, never") }
     intercept[IllegalArgumentException] { message.setTotalExecutorCores("two men") }
@@ -181,7 +181,7 @@ class SubmitRestProtocolSuite extends FunSuite {
 
   test("SubmitDriverResponse") {
     val message = new SubmitDriverResponse
-    intercept[SubmitRestValidationException] { message.validate() }
+    intercept[SubmitRestProtocolException] { message.validate() }
     intercept[IllegalArgumentException] { message.setSuccess("maybe not") }
     message.setSparkVersion("1.2.3")
     message.setDriverId("driver_123")
@@ -199,7 +199,7 @@ class SubmitRestProtocolSuite extends FunSuite {
 
   test("KillDriverRequest") {
     val message = new KillDriverRequest
-    intercept[SubmitRestValidationException] { message.validate() }
+    intercept[SubmitRestProtocolException] { message.validate() }
     message.setSparkVersion("1.2.3")
     message.setDriverId("driver_123")
     message.validate()
@@ -214,7 +214,7 @@ class SubmitRestProtocolSuite extends FunSuite {
 
   test("KillDriverResponse") {
     val message = new KillDriverResponse
-    intercept[SubmitRestValidationException] { message.validate() }
+    intercept[SubmitRestProtocolException] { message.validate() }
     intercept[IllegalArgumentException] { message.setSuccess("maybe not") }
     message.setSparkVersion("1.2.3")
     message.setDriverId("driver_123")
@@ -232,7 +232,7 @@ class SubmitRestProtocolSuite extends FunSuite {
 
   test("DriverStatusRequest") {
     val message = new DriverStatusRequest
-    intercept[SubmitRestValidationException] { message.validate() }
+    intercept[SubmitRestProtocolException] { message.validate() }
     message.setSparkVersion("1.2.3")
     message.setDriverId("driver_123")
     message.validate()
@@ -247,7 +247,7 @@ class SubmitRestProtocolSuite extends FunSuite {
 
   test("DriverStatusResponse") {
     val message = new DriverStatusResponse
-    intercept[SubmitRestValidationException] { message.validate() }
+    intercept[SubmitRestProtocolException] { message.validate() }
     intercept[IllegalArgumentException] { message.setSuccess("maybe") }
     message.setSparkVersion("1.2.3")
     message.setDriverId("driver_123")
@@ -264,12 +264,15 @@ class SubmitRestProtocolSuite extends FunSuite {
     assert(newMessage.getSparkVersion === "1.2.3")
     assert(newMessage.getServerSparkVersion === "1.2.3")
     assert(newMessage.getDriverId === "driver_123")
+    assert(newMessage.getDriverState === "RUNNING")
     assert(newMessage.getSuccess === "true")
+    assert(newMessage.getWorkerId === "worker_123")
+    assert(newMessage.getWorkerHostPort === "1.2.3.4:7780")
   }
 
   test("ErrorResponse") {
     val message = new ErrorResponse
-    intercept[SubmitRestValidationException] { message.validate() }
+    intercept[SubmitRestProtocolException] { message.validate() }
     message.setSparkVersion("1.2.3")
     message.setMessage("Field not found in submit request: X")
     message.validate()

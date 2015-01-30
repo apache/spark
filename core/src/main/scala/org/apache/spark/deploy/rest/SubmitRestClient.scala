@@ -34,27 +34,30 @@ import org.apache.spark.deploy.SparkSubmitArguments
 private[spark] abstract class SubmitRestClient extends Logging {
 
   /** Request that the REST server submit a driver using the provided arguments. */
-  def submitDriver(args: SparkSubmitArguments): SubmitDriverResponse = {
+  def submitDriver(args: SparkSubmitArguments): SubmitRestProtocolResponse = {
+    logInfo(s"Submitting a request to launch a driver in ${args.master}.")
     val url = getHttpUrl(args.master)
     val request = constructSubmitRequest(args)
-    logInfo(s"Submitting a request to launch a driver in ${args.master}.")
-    sendHttp(url, request).asInstanceOf[SubmitDriverResponse]
+    val response = sendHttp(url, request)
+    handleResponse(response)
   }
 
   /** Request that the REST server kill the specified driver. */
-  def killDriver(master: String, driverId: String): KillDriverResponse = {
+  def killDriver(master: String, driverId: String): SubmitRestProtocolResponse = {
+    logInfo(s"Submitting a request to kill driver $driverId in $master.")
     val url = getHttpUrl(master)
     val request = constructKillRequest(master, driverId)
-    logInfo(s"Submitting a request to kill driver $driverId in $master.")
-    sendHttp(url, request).asInstanceOf[KillDriverResponse]
+    val response = sendHttp(url, request)
+    handleResponse(response)
   }
 
   /** Request the status of the specified driver from the REST server. */
-  def requestDriverStatus(master: String, driverId: String): DriverStatusResponse = {
+  def requestDriverStatus(master: String, driverId: String): SubmitRestProtocolResponse = {
+    logInfo(s"Submitting a request for the status of driver $driverId in $master.")
     val url = getHttpUrl(master)
     val request = constructStatusRequest(master, driverId)
-    logInfo(s"Submitting a request for the status of driver $driverId in $master.")
-    sendHttp(url, request).asInstanceOf[DriverStatusResponse]
+    val response = sendHttp(url, request)
+    handleResponse(response)
   }
 
   /** Return the HTTP URL of the REST server that corresponds to the given master URL. */
@@ -90,5 +93,20 @@ private[spark] abstract class SubmitRestClient extends Logging {
       case e: FileNotFoundException =>
         throw new SparkException(s"Unable to connect to REST server $url", e)
     }
+  }
+
+  /** Validate the response and log any error messages produced by the server. */
+  private def handleResponse(response: SubmitRestProtocolResponse): SubmitRestProtocolResponse = {
+    try {
+      response.validate()
+      response match {
+        case error: ErrorResponse => logError(s"Server returned error:\n${error.getMessage}")
+        case _ =>
+      }
+    } catch {
+      case e: SubmitRestProtocolException =>
+        throw new SubmitRestProtocolException("Malformed response received from server", e)
+    }
+    response
   }
 }

@@ -59,7 +59,8 @@ class StandaloneRestProtocolSuite extends FunSuite with BeforeAndAfterAll with B
   }
 
   test("kill empty driver") {
-    val killResponse = client.killDriver(masterRestUrl, "driver-that-does-not-exist")
+    val response = client.killDriver(masterRestUrl, "driver-that-does-not-exist")
+    val killResponse = getResponse[KillDriverResponse](response, client)
     val killSuccess = killResponse.getSuccess
     assert(killSuccess === "false")
   }
@@ -69,10 +70,12 @@ class StandaloneRestProtocolSuite extends FunSuite with BeforeAndAfterAll with B
     val numbers = Seq(1, 2, 3)
     val size = 500
     val driverId = submitApplication(resultsFile, numbers, size)
-    val killResponse = client.killDriver(masterRestUrl, driverId)
+    val response = client.killDriver(masterRestUrl, driverId)
+    val killResponse = getResponse[KillDriverResponse](response, client)
     val killSuccess = killResponse.getSuccess
     waitUntilFinished(driverId)
-    val statusResponse = client.requestDriverStatus(masterRestUrl, driverId)
+    val response2 = client.requestDriverStatus(masterRestUrl, driverId)
+    val statusResponse = getResponse[DriverStatusResponse](response2, client)
     val statusSuccess = statusResponse.getSuccess
     val driverState = statusResponse.getDriverState
     assert(killSuccess === "true")
@@ -83,7 +86,8 @@ class StandaloneRestProtocolSuite extends FunSuite with BeforeAndAfterAll with B
   }
 
   test("request status for empty driver") {
-    val statusResponse = client.requestDriverStatus(masterRestUrl, "driver-that-does-not-exist")
+    val response = client.requestDriverStatus(masterRestUrl, "driver-that-does-not-exist")
+    val statusResponse = getResponse[DriverStatusResponse](response, client)
     val statusSuccess = statusResponse.getSuccess
     assert(statusSuccess === "false")
   }
@@ -125,7 +129,8 @@ class StandaloneRestProtocolSuite extends FunSuite with BeforeAndAfterAll with B
       mainJar) ++ appArgs
     val args = new SparkSubmitArguments(commandLineArgs)
     SparkSubmit.prepareSubmitEnvironment(args)
-    val submitResponse = client.submitDriver(args)
+    val response = client.submitDriver(args)
+    val submitResponse = getResponse[SubmitDriverResponse](response, client)
     submitResponse.getDriverId
   }
 
@@ -134,7 +139,8 @@ class StandaloneRestProtocolSuite extends FunSuite with BeforeAndAfterAll with B
     var finished = false
     val expireTime = System.currentTimeMillis + maxSeconds * 1000
     while (!finished) {
-      val statusResponse = client.requestDriverStatus(masterRestUrl, driverId)
+      val response = client.requestDriverStatus(masterRestUrl, driverId)
+      val statusResponse = getResponse[DriverStatusResponse](response, client)
       val driverState = statusResponse.getDriverState
       finished =
         driverState != DriverState.SUBMITTED.toString &&
@@ -142,7 +148,20 @@ class StandaloneRestProtocolSuite extends FunSuite with BeforeAndAfterAll with B
       if (System.currentTimeMillis > expireTime) {
         fail(s"Driver $driverId did not finish within $maxSeconds seconds.")
       }
-      Thread.sleep(1000)
+    }
+  }
+
+  /** Return the response as the expected type, or fail with an informative error message. */
+  private def getResponse[T <: SubmitRestProtocolResponse](
+      response: SubmitRestProtocolResponse,
+      client: StandaloneRestClient): T = {
+    response match {
+      case error: ErrorResponse =>
+        fail(s"Error from the server:\n${error.getMessage}")
+      case _ =>
+        client.getResponse[T](response).getOrElse {
+          fail(s"Response type was unexpected: ${response.toJson}")
+        }
     }
   }
 
