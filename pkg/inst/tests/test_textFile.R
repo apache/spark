@@ -130,8 +130,16 @@ test_that("Pipelined operations on RDDs created using textFile", {
 
   lengths <- lapply(rdd, function(x) { length(x) })
   expect_equal(collect(lengths), list(1, 1))
+
   lengthsPipelined <- lapply(lengths, function(x) { x + 10})
   expect_equal(collect(lengthsPipelined), list(11, 11))
+
+  lengths30 <- lapply(lengthsPipelined, function(x) { x + 20 })
+  expect_equal(collect(lengths30), list(31, 31))
+
+  lengths20 <- lapply(lengths, function(x) { x + 20 })
+  expect_equal(collect(lengths20), list(21, 21))
+
   unlink(fileName)
 })
 
