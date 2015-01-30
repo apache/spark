@@ -46,7 +46,11 @@ setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) 
   .Object@env$isCached <- FALSE
   .Object@env$isCheckpointed <- FALSE
   .Object@env$jrdd_val <- jrdd_val
+   # This tracks if jrdd_val is serialized
   .Object@env$serialized <- prev@env$serialized
+
+  # NOTE: We use prev_serialized to track if prev_jrdd is serialized
+  # prev_serialized is used during the delayed computation of JRDD in getJRDD
   .Object@prev <- prev
 
   isPipelinable <- function(rdd) {
@@ -58,12 +62,17 @@ setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) 
     # This transformation is the first in its stage:
     .Object@func <- func
     .Object@prev_jrdd <- getJRDD(prev)
+    # Since this is the first step in the pipeline, the prev_serialized
+    # is same as serialized here.
+    .Object@env$prev_serialized <- .Object@env$serialized
   } else {
     pipelinedFunc <- function(split, iterator) {
       func(split, prev@func(split, iterator))
     }
     .Object@func <- pipelinedFunc
     .Object@prev_jrdd <- prev@prev_jrdd # maintain the pipeline
+    # Get if the prev_jrdd was serialized from the parent RDD
+    .Object@env$prev_serialized <- prev@env$prev_serialized
   }
 
   .Object
@@ -116,7 +125,7 @@ setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
               rddRef <- newJObject("edu.berkeley.cs.amplab.sparkr.RRDD",
                                    callJMethod(prev_jrdd, "rdd"),
                                    serializedFuncArr,
-                                   rdd@env$serialized,
+                                   rdd@env$prev_serialized,
                                    depsBin,
                                    packageNamesArr,
                                    as.character(.sparkREnv[["libname"]]),
@@ -126,7 +135,7 @@ setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
               rddRef <- newJObject("edu.berkeley.cs.amplab.sparkr.StringRRDD",
                                    callJMethod(prev_jrdd, "rdd"),
                                    serializedFuncArr,
-                                   rdd@env$serialized,
+                                   rdd@env$prev_serialized,
                                    depsBin,
                                    packageNamesArr,
                                    as.character(.sparkREnv[["libname"]]),
