@@ -148,13 +148,13 @@ object LDAExample {
 
     // Print the topics, showing the top-weighted terms for each topic.
     val topicIndices = ldaModel.describeTopics(maxTermsPerTopic = 10)
-    val topics = topicIndices.map { topic =>
-      topic.map { case (weight, term) => (weight, vocabArray(term.toInt)) }
+    val topics = topicIndices.map { case (terms, termWeights) =>
+      terms.zip(termWeights).map { case (term, weight) => (vocabArray(term.toInt), weight) }
     }
     println(s"${params.k} topics:")
     topics.zipWithIndex.foreach { case (topic, i) =>
       println(s"TOPIC $i")
-      topic.foreach { case (weight, term) =>
+      topic.foreach { case (term, weight) =>
         println(s"$term\t$weight")
       }
       println()

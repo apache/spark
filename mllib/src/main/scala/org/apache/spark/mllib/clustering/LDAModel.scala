@@ -60,10 +60,10 @@ abstract class LDAModel private[clustering] {
    *
    * @param maxTermsPerTopic  Maximum number of terms to collect for each topic.
    * @return  Array over topics, where each element is a set of top terms represented
-   *          as (term weight in topic, term index).
+   *          as (term index, term weight in topic).
    *          Each topic's terms are sorted in order of decreasing weight.
    */
-  def describeTopics(maxTermsPerTopic: Int): Array[Array[(Double, Int)]]
+  def describeTopics(maxTermsPerTopic: Int): Array[(Array[Int], Array[Double])]
 
   /**
    * Return the topics described by weighted terms.
@@ -71,10 +71,10 @@ abstract class LDAModel private[clustering] {
    * WARNING: If vocabSize and k are large, this can return a large object!
    *
    * @return  Array over topics, where each element is a set of top terms represented
-   *          as (term weight in topic, term index).
+   *          as (term index, term weight in topic).
    *          Each topic's terms are sorted in order of decreasing weight.
    */
-  def describeTopics(): Array[Array[(Double, Int)]] = describeTopics(vocabSize)
+  def describeTopics(): Array[(Array[Int], Array[Double])] = describeTopics(vocabSize)
 
   /* TODO (once LDA can be trained with Strings or given a dictionary)
    * Return the topics described by weighted terms.
@@ -89,11 +89,11 @@ abstract class LDAModel private[clustering] {
    *
    * @param maxTermsPerTopic  Maximum number of terms to collect for each topic.
    * @return  Array over topics, where each element is a set of top terms represented
-   *          as (term weight in topic, term), where "term" is either the actual term text
+   *          as (term, term weight in topic), where "term" is either the actual term text
    *          (if available) or the term index.
    *          Each topic's terms are sorted in order of decreasing weight.
    */
-  //def describeTopicsAsStrings(maxTermsPerTopic: Int): Array[Array[(Double, String)]]
+  //def describeTopicsAsStrings(maxTermsPerTopic: Int): Array[(Array[Double], Array[String])]
 
   /* TODO (once LDA can be trained with Strings or given a dictionary)
    * Return the topics described by weighted terms.
@@ -105,11 +105,11 @@ abstract class LDAModel private[clustering] {
    * WARNING: If vocabSize and k are large, this can return a large object!
    *
    * @return  Array over topics, where each element is a set of top terms represented
-   *          as (term weight in topic, term), where "term" is either the actual term text
+   *          as (term, term weight in topic), where "term" is either the actual term text
    *          (if available) or the term index.
    *          Each topic's terms are sorted in order of decreasing weight.
    */
-  //def describeTopicsAsStrings(): Array[Array[(Double, String)]] =
+  //def describeTopicsAsStrings(): Array[(Array[Double], Array[String])] =
   //  describeTopicsAsStrings(vocabSize)
 
   /* TODO
@@ -172,11 +172,13 @@ class LocalLDAModel private[clustering] (
 
   override def topicsMatrix: Matrix = topics
 
-  override def describeTopics(maxTermsPerTopic: Int): Array[Array[(Double, Int)]] = {
+  override def describeTopics(maxTermsPerTopic: Int): Array[(Array[Int], Array[Double])] = {
     val brzTopics = topics.toBreeze.toDenseMatrix
     Range(0, k).map { topicIndex =>
       val topic = normalize(brzTopics(::, topicIndex), 1.0)
-      topic.toArray.zipWithIndex.sortBy(-_._1).take(maxTermsPerTopic)
+      val (termWeights, terms) =
+        topic.toArray.zipWithIndex.sortBy(-_._1).take(maxTermsPerTopic).unzip
+      (terms.toArray, termWeights.toArray)
     }.toArray
   }
 
@@ -248,29 +250,35 @@ class DistributedLDAModel private (
     Matrices.fromBreeze(brzTopics)
   }
 
-  override def describeTopics(maxTermsPerTopic: Int): Array[Array[(Double, Int)]] = {
+  override def describeTopics(maxTermsPerTopic: Int): Array[(Array[Int], Array[Double])] = {
     val numTopics = k
     // Note: N_k is not needed to find the top terms, but it is needed to normalize weights
     //       to a distribution over terms.
     val N_k: TopicCounts = globalTopicTotals
-    graph.vertices.filter(isTermVertex)
-      .mapPartitions { termVertices =>
-      // For this partition, collect the most common terms for each topic in queues:
-      //  queues(topic) = queue of (term weight, term index).
-      // Term weights are N_{wk} / N_k.
-      val queues = Array.fill(numTopics)(new BoundedPriorityQueue[(Double, Int)](maxTermsPerTopic))
-      for ((termId, n_wk) <- termVertices) {
-        var topic = 0
-        while (topic < numTopics) {
-          queues(topic) += (n_wk(topic) / N_k(topic) -> index2term(termId.toInt))
-          topic += 1
+    val topicsInQueues: Array[BoundedPriorityQueue[(Double, Int)]] =
+      graph.vertices.filter(isTermVertex)
+        .mapPartitions { termVertices =>
+        // For this partition, collect the most common terms for each topic in queues:
+        //  queues(topic) = queue of (term weight, term index).
+        // Term weights are N_{wk} / N_k.
+        val queues =
+          Array.fill(numTopics)(new BoundedPriorityQueue[(Double, Int)](maxTermsPerTopic))
+        for ((termId, n_wk) <- termVertices) {
+          var topic = 0
+          while (topic < numTopics) {
+            queues(topic) += (n_wk(topic) / N_k(topic) -> index2term(termId.toInt))
+            topic += 1
+          }
         }
+        Iterator(queues)
+      }.reduce { (q1, q2) =>
+        q1.zip(q2).foreach { case (a, b) => a ++= b}
+        q1
       }
-      Iterator(queues)
-    }.reduce { (q1, q2) =>
-      q1.zip(q2).foreach { case (a, b) => a ++= b}
-      q1
-    }.map(_.toArray.sortBy(-_._1))
+    topicsInQueues.map { q =>
+      val (termWeights, terms) = q.toArray.sortBy(-_._1).unzip
+      (terms.toArray, termWeights.toArray)
+    }
   }
 
   // TODO

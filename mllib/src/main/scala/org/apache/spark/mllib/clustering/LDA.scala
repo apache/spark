@@ -23,6 +23,7 @@ import breeze.linalg.{DenseVector => BDV, normalize, axpy => brzAxpy}
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.GraphImpl
 import org.apache.spark.mllib.impl.PeriodicGraphCheckpointer
@@ -233,10 +234,15 @@ class LDA private (
     state.graphCheckpointer.deleteAllCheckpoints()
     new DistributedLDAModel(state, iterationTimes)
   }
+
+  /** Java-friendly version of [[run()]] */
+  def run(documents: JavaRDD[(java.lang.Long, Vector)]): DistributedLDAModel = {
+    run(documents.rdd.map(id_counts => (id_counts._1.asInstanceOf[Long], id_counts._2)))
+  }
 }
 
 
-object LDA {
+private[clustering] object LDA {
 
   /*
     DEVELOPERS NOTE:
@@ -291,18 +297,18 @@ object LDA {
    * Vector over topics (length k) of token counts.
    * The meaning of these counts can vary, and it may or may not be normalized to be a distribution.
    */
-  private[clustering] type TopicCounts = BDV[Double]
+  type TopicCounts = BDV[Double]
 
-  private[clustering] type TokenCount = Double
+  type TokenCount = Double
 
   /** Term vertex IDs are {-1, -2, ..., -vocabSize} */
-  private[clustering] def term2index(term: Int): Long = -(1 + term.toLong)
+  def term2index(term: Int): Long = -(1 + term.toLong)
 
-  private[clustering] def index2term(termIndex: Long): Int = -(1 + termIndex).toInt
+  def index2term(termIndex: Long): Int = -(1 + termIndex).toInt
 
-  private[clustering] def isDocumentVertex(v: (VertexId, _)): Boolean = v._1 >= 0
+  def isDocumentVertex(v: (VertexId, _)): Boolean = v._1 >= 0
 
-  private[clustering] def isTermVertex(v: (VertexId, _)): Boolean = v._1 < 0
+  def isTermVertex(v: (VertexId, _)): Boolean = v._1 < 0
 
   /**
    * State for EM algorithm: data + parameter graph, plus algorithm parameters.
@@ -314,7 +320,7 @@ object LDA {
    * @param docConcentration  "alpha"
    * @param topicConcentration  "beta" or "eta"
    */
-  private[clustering] class EMOptimizer(
+  class EMOptimizer(
       var graph: Graph[TopicCounts, TokenCount],
       val k: Int,
       val vocabSize: Int,
@@ -374,7 +380,7 @@ object LDA {
      *
      * Note: This executes an action on the graph RDDs.
      */
-    private[clustering] var globalTopicTotals: TopicCounts = computeGlobalTopicTotals()
+    var globalTopicTotals: TopicCounts = computeGlobalTopicTotals()
 
     private def computeGlobalTopicTotals(): TopicCounts = {
       val numTopics = k

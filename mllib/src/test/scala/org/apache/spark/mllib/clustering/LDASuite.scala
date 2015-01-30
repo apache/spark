@@ -38,15 +38,19 @@ class LDASuite extends FunSuite with MLlibTestSparkContext {
     // Check: describeTopics() with all terms
     val fullTopicSummary = model.describeTopics()
     assert(fullTopicSummary.size === tinyK)
-    fullTopicSummary.zip(tinyTopicDescription).foreach { case (algSummary, tinySummary) =>
-      assert(algSummary === tinySummary)
+    fullTopicSummary.zip(tinyTopicDescription).foreach {
+      case ((algTerms, algTermWeights), (terms, termWeights)) =>
+        assert(algTerms === terms)
+        assert(algTermWeights === termWeights)
     }
 
     // Check: describeTopics() with some terms
     val smallNumTerms = 3
     val smallTopicSummary = model.describeTopics(maxTermsPerTopic = smallNumTerms)
-    smallTopicSummary.zip(tinyTopicDescription).foreach { case (algSummary, tinySummary) =>
-      assert(algSummary === tinySummary.slice(0, smallNumTerms))
+    smallTopicSummary.zip(tinyTopicDescription).foreach {
+      case ((algTerms, algTermWeights), (terms, termWeights)) =>
+        assert(algTerms === terms.slice(0, smallNumTerms))
+        assert(algTermWeights === termWeights.slice(0, smallNumTerms))
     }
   }
 
@@ -58,10 +62,10 @@ class LDASuite extends FunSuite with MLlibTestSparkContext {
     // Train a model
     val lda = new LDA()
     lda.setK(k)
-    lda.setDocConcentration(topicSmoothing)
-    lda.setTopicConcentration(termSmoothing)
-    lda.setMaxIterations(5)
-    lda.setSeed(12345)
+      .setDocConcentration(topicSmoothing)
+      .setTopicConcentration(termSmoothing)
+      .setMaxIterations(5)
+      .setSeed(12345)
     val corpus = sc.parallelize(tinyCorpus, 2)
 
     val model: DistributedLDAModel = lda.run(corpus)
@@ -76,13 +80,17 @@ class LDASuite extends FunSuite with MLlibTestSparkContext {
 
     // Check: topic summaries
     //  The odd decimal formatting and sorting is a hack to do a robust comparison.
-    val roundedTopicSummary = model.describeTopics().map { case topic =>
+    val roundedTopicSummary = model.describeTopics().map { case (terms, termWeights) =>
       // cut values to 3 digits after the decimal place
-      topic.map { case (weight, term) => ("%.3f".format(weight).toDouble, term.toInt)}
+      terms.zip(termWeights).map { case (term, weight) =>
+        ("%.3f".format(weight).toDouble, term.toInt)
+      }
     }.sortBy(_.mkString(""))
-    val roundedLocalTopicSummary = localModel.describeTopics().map { case topic =>
+    val roundedLocalTopicSummary = localModel.describeTopics().map { case (terms, termWeights) =>
       // cut values to 3 digits after the decimal place
-      topic.map { case (weight, term) => ("%.3f".format(weight).toDouble, term.toInt)}
+      terms.zip(termWeights).map { case (term, weight) =>
+        ("%.3f".format(weight).toDouble, term.toInt)
+      }
     }.sortBy(_.mkString(""))
     roundedTopicSummary.zip(roundedLocalTopicSummary).foreach { case (t1, t2) =>
       assert(t1 === t2)
@@ -117,7 +125,7 @@ class LDASuite extends FunSuite with MLlibTestSparkContext {
   }
 }
 
-private object LDASuite {
+private[clustering] object LDASuite {
 
   def tinyK: Int = 3
   def tinyVocabSize: Int = 5
@@ -128,8 +136,9 @@ private object LDASuite {
   )
   def tinyTopics: Matrix = new DenseMatrix(numRows = tinyVocabSize, numCols = tinyK,
     values = tinyTopicsAsArray.fold(Array.empty[Double])(_ ++ _))
-  def tinyTopicDescription: Array[Array[(Double, Int)]] = tinyTopicsAsArray.map { topic =>
-    topic.zipWithIndex.sortBy(-_._1)
+  def tinyTopicDescription: Array[(Array[Int], Array[Double])] = tinyTopicsAsArray.map { topic =>
+    val (termWeights, terms) = topic.zipWithIndex.sortBy(-_._1).unzip
+    (terms.toArray, termWeights.toArray)
   }
 
   def tinyCorpus = Array(
