@@ -8,6 +8,7 @@ DEV_NULL = '/dev/null'
 LOCAL_EXECUTOR = airflow.executors.LocalExecutor()
 DEFAULT_DATE = datetime(2015, 1, 1)
 
+
 class CoreTest(unittest.TestCase):
 
     def setUp(self):

@@ -108,7 +108,7 @@ def run(args):
         # Pickling the DAG
         session = settings.Session()
         pickle = DagPickle(dag)
-        session.add(pickle)
+        session.merge(pickle)
         session.commit()
         pickle_id = pickle.id
         print(
