@@ -87,8 +87,8 @@ if [[ ! "$@" =~ --package-only ]]; then
   git commit -a -m "Preparing development version $next_ver"
   git push origin $GIT_TAG
   git push origin HEAD:$GIT_BRANCH
-  git checkout -f $GIT_TAG 
-  
+  git checkout -f $GIT_TAG
+
   # Using Nexus API documented here:
   # https://support.sonatype.com/entries/39720203-Uploading-to-a-Staging-Repository-via-REST-API
   echo "Creating Nexus staging repository"
@@ -106,7 +106,7 @@ if [[ ! "$@" =~ --package-only ]]; then
     clean install
 
   ./dev/change-version-to-2.11.sh
-  
+
   mvn -DskipTests -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
     -Dscala-2.11 -Pyarn -Phive -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
     clean install
@@ -122,8 +122,14 @@ if [[ ! "$@" =~ --package-only ]]; then
   for file in $(find . -type f)
   do
     echo $GPG_PASSPHRASE | gpg --passphrase-fd 0 --output $file.asc --detach-sig --armour $file;
-    gpg --print-md MD5 $file > $file.md5;
-    gpg --print-md SHA1 $file > $file.sha1
+    if [ $(command -v md5) ]; then
+      # Available on OS X; -q to keep only hash
+      md5 -q $file > $file.md5
+    else
+      # Available on Linux; cut to keep only hash
+      md5sum $file | cut -f1 -d' ' > $file.md5
+    fi
+    shasum -a 1 $file | cut -f1 -d' ' > $file.sha1
   done
 
   nexus_upload=$NEXUS_ROOT/deployByRepositoryId/$staged_repo_id
@@ -174,7 +180,7 @@ make_binary_release() {
   NAME=$1
   FLAGS=$2
   cp -r spark spark-$RELEASE_VERSION-bin-$NAME
-  
+
   cd spark-$RELEASE_VERSION-bin-$NAME
 
   # TODO There should probably be a flag to make-distribution to allow 2.11 support
@@ -219,7 +225,7 @@ scp spark-* \
 
 # Docs
 cd spark
-sbt/sbt clean
+build/sbt clean
 cd docs
 # Compile docs with Java 7 to use nicer format
 JAVA_HOME=$JAVA_7_HOME PRODUCTION=1 jekyll build

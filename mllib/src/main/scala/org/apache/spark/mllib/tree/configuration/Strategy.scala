@@ -156,6 +156,9 @@ class Strategy (
       s"DecisionTree Strategy requires minInstancesPerNode >= 1 but was given $minInstancesPerNode")
     require(maxMemoryInMB <= 10240,
       s"DecisionTree Strategy requires maxMemoryInMB <= 10240, but was given $maxMemoryInMB")
+    require(subsamplingRate > 0 && subsamplingRate <= 1,
+      s"DecisionTree Strategy requires subsamplingRate <=1 and >0, but was given " +
+      s"$subsamplingRate")
   }
 
   /** Returns a shallow copy of this instance. */
@@ -173,11 +176,19 @@ object Strategy {
    * Construct a default set of parameters for [[org.apache.spark.mllib.tree.DecisionTree]]
    * @param algo  "Classification" or "Regression"
    */
-  def defaultStrategy(algo: String): Strategy = algo match {
-    case "Classification" =>
+  def defaultStrategy(algo: String): Strategy = {
+    defaultStategy(Algo.fromString(algo))
+  }
+
+  /**
+   * Construct a default set of parameters for [[org.apache.spark.mllib.tree.DecisionTree]]
+   * @param algo Algo.Classification or Algo.Regression
+   */
+  def defaultStategy(algo: Algo): Strategy = algo match {
+    case Algo.Classification =>
       new Strategy(algo = Classification, impurity = Gini, maxDepth = 10,
         numClasses = 2)
-    case "Regression" =>
+    case Algo.Regression =>
       new Strategy(algo = Regression, impurity = Variance, maxDepth = 10,
         numClasses = 0)
   }

@@ -18,8 +18,12 @@
 package org.apache.spark.sql.hive
 
 import java.net.URI
-import java.util.{ArrayList => JArrayList}
-import java.util.Properties
+import java.util.{ArrayList => JArrayList, Properties}
+
+import scala.collection.JavaConversions._
+import scala.language.implicitConversions
+
+import org.apache.hadoop.{io => hadoopIo}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
@@ -29,22 +33,17 @@ import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table}
 import org.apache.hadoop.hive.ql.plan.{CreateTableDesc, FileSinkDesc, TableDesc}
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.stats.StatsSetupConst
+import org.apache.hadoop.hive.serde2.{ColumnProjectionUtils, Deserializer, io => hiveIo}
+import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, PrimitiveObjectInspector}
 import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector.PrimitiveCategory
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.{HiveDecimalObjectInspector, PrimitiveObjectInspectorFactory}
-import org.apache.hadoop.hive.serde2.objectinspector.{PrimitiveObjectInspector, ObjectInspector}
 import org.apache.hadoop.hive.serde2.typeinfo.{TypeInfo, TypeInfoFactory}
-import org.apache.hadoop.hive.serde2.{Deserializer, ColumnProjectionUtils}
-import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.io.NullWritable
-import org.apache.hadoop.{io => hadoopIo}
 import org.apache.hadoop.mapred.InputFormat
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
-import scala.collection.JavaConversions._
-import scala.language.implicitConversions
 
-import org.apache.spark.sql.catalyst.types.DecimalType
+import org.apache.spark.sql.types.{Decimal, DecimalType}
 
-class HiveFunctionWrapper(var functionClassName: String) extends java.io.Serializable {
+case class HiveFunctionWrapper(functionClassName: String) extends java.io.Serializable {
   // for Serialization
   def this() = this(null)
 
@@ -175,7 +174,7 @@ private[hive] object HiveShim {
       null
     } else {
       new hiveIo.HiveDecimalWritable(
-        HiveShim.createDecimal(value.asInstanceOf[Decimal].toBigDecimal.underlying()))
+        HiveShim.createDecimal(value.asInstanceOf[Decimal].toJavaBigDecimal))
     }
 
   def getPrimitiveNullWritable: NullWritable = NullWritable.get()

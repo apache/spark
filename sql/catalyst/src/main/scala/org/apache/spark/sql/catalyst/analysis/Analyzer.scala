@@ -22,8 +22,8 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.types.StructType
-import org.apache.spark.sql.catalyst.types.IntegerType
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.IntegerType
 
 /**
  * A trivial [[Analyzer]] with an [[EmptyCatalog]] and [[EmptyFunctionRegistry]]. Used for testing
@@ -126,10 +126,10 @@ class Analyzer(catalog: Catalog,
     }
 
     /*
-     *  GROUP BY a, b, c, WITH ROLLUP
+     *  GROUP BY a, b, c WITH ROLLUP
      *  is equivalent to
-     *  GROUP BY a, b, c GROUPING SETS ( (a, b, c), (a, b), (a), ( )).
-     *  Group Count: N + 1 (N is the number of group expression)
+     *  GROUP BY a, b, c GROUPING SETS ( (a, b, c), (a, b), (a), ( ) ).
+     *  Group Count: N + 1 (N is the number of group expressions)
      *
      *  We need to get all of its subsets for the rule described above, the subset is
      *  represented as the bit masks.
@@ -139,12 +139,12 @@ class Analyzer(catalog: Catalog,
     }
 
     /*
-     *  GROUP BY a, b, c, WITH CUBE
+     *  GROUP BY a, b, c WITH CUBE
      *  is equivalent to
      *  GROUP BY a, b, c GROUPING SETS ( (a, b, c), (a, b), (b, c), (a, c), (a), (b), (c), ( ) ).
-     *  Group Count: 2^N (N is the number of group expression)
+     *  Group Count: 2 ^ N (N is the number of group expressions)
      *
-     *  We need to get all of its sub sets for a given GROUPBY expressions, the subset is
+     *  We need to get all of its subsets for a given GROUPBY expression, the subsets are
      *  represented as the bit masks.
      */
     def bitmasks(c: Cube): Seq[Int] = {
@@ -228,11 +228,11 @@ class Analyzer(catalog: Catalog,
    */
   object ResolveRelations extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case i @ InsertIntoTable(UnresolvedRelation(databaseName, name, alias), _, _, _) =>
+      case i @ InsertIntoTable(UnresolvedRelation(tableIdentifier, alias), _, _, _) =>
         i.copy(
-          table = EliminateAnalysisOperators(catalog.lookupRelation(databaseName, name, alias)))
-      case UnresolvedRelation(databaseName, name, alias) =>
-        catalog.lookupRelation(databaseName, name, alias)
+          table = EliminateAnalysisOperators(catalog.lookupRelation(tableIdentifier, alias)))
+      case UnresolvedRelation(tableIdentifier, alias) =>
+        catalog.lookupRelation(tableIdentifier, alias)
     }
   }
 
@@ -246,10 +246,16 @@ class Analyzer(catalog: Catalog,
       case p: LogicalPlan if !p.childrenResolved => p
 
       // If the projection list contains Stars, expand it.
-      case p@Project(projectList, child) if containsStar(projectList) =>
+      case p @ Project(projectList, child) if containsStar(projectList) =>
         Project(
           projectList.flatMap {
             case s: Star => s.expand(child.output, resolver)
+            case Alias(f @ UnresolvedFunction(_, args), name) if containsStar(args) =>
+              val expandedArgs = args.flatMap {
+                case s: Star => s.expand(child.output, resolver)
+                case o => o :: Nil
+              }
+              Alias(child = f.copy(children = expandedArgs), name)() :: Nil
             case o => o :: Nil
           },
           child)
@@ -273,10 +279,9 @@ class Analyzer(catalog: Catalog,
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
         q transformExpressions {
-          case u @ UnresolvedAttribute(name)
-              if resolver(name, VirtualColumn.groupingIdName) &&
-                q.isInstanceOf[GroupingAnalytics] =>
-              // Resolve the virtual column GROUPING__ID for the operator GroupingAnalytics
+          case u @ UnresolvedAttribute(name) if resolver(name, VirtualColumn.groupingIdName) &&
+            q.isInstanceOf[GroupingAnalytics] =>
+            // Resolve the virtual column GROUPING__ID for the operator GroupingAnalytics
             q.asInstanceOf[GroupingAnalytics].gid
           case u @ UnresolvedAttribute(name) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
@@ -299,7 +304,7 @@ class Analyzer(catalog: Catalog,
      * Returns true if `exprs` contains a [[Star]].
      */
     protected def containsStar(exprs: Seq[Expression]): Boolean =
-      exprs.collect { case _: Star => true}.nonEmpty
+      exprs.exists(_.collect { case _: Star => true }.nonEmpty)
   }
 
   /**
@@ -310,7 +315,8 @@ class Analyzer(catalog: Catalog,
    */
   object ResolveSortReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-      case s @ Sort(ordering, p @ Project(projectList, child)) if !s.resolved && p.resolved =>
+      case s @ Sort(ordering, global, p @ Project(projectList, child))
+          if !s.resolved && p.resolved =>
         val unresolved = ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name })
         val resolved = unresolved.flatMap(child.resolve(_, resolver))
         val requiredAttributes = AttributeSet(resolved.collect { case a: Attribute => a })
@@ -319,13 +325,14 @@ class Analyzer(catalog: Catalog,
         if (missingInProject.nonEmpty) {
           // Add missing attributes and then project them away after the sort.
           Project(projectList.map(_.toAttribute),
-            Sort(ordering,
+            Sort(ordering, global,
               Project(projectList ++ missingInProject, child)))
         } else {
           logDebug(s"Failed to find $missingInProject in ${p.output.mkString(", ")}")
           s // Nothing we can do here. Return original plan.
         }
-      case s @ Sort(ordering, a @ Aggregate(grouping, aggs, child)) if !s.resolved && a.resolved =>
+      case s @ Sort(ordering, global, a @ Aggregate(grouping, aggs, child))
+          if !s.resolved && a.resolved =>
         val unresolved = ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name })
         // A small hack to create an object that will allow us to resolve any references that
         // refer to named expressions that are present in the grouping expressions.
@@ -340,8 +347,7 @@ class Analyzer(catalog: Catalog,
         if (missingInAggs.nonEmpty) {
           // Add missing grouping exprs and then project them away after the sort.
           Project(a.output,
-            Sort(ordering,
-              Aggregate(grouping, aggs ++ missingInAggs, child)))
+            Sort(ordering, global, Aggregate(grouping, aggs ++ missingInAggs, child)))
         } else {
           s // Nothing we can do here. Return original plan.
         }

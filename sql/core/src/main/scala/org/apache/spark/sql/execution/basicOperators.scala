@@ -70,7 +70,7 @@ case class Sample(fraction: Double, withReplacement: Boolean, seed: Long, child:
   override def output = child.output
 
   // TODO: How to pick seed?
-  override def execute() = child.execute().sample(withReplacement, fraction, seed)
+  override def execute() = child.execute().map(_.copy()).sample(withReplacement, fraction, seed)
 }
 
 /**

@@ -18,10 +18,11 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.hive.HiveContext
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.types.StructType
 
 /**
  * :: DeveloperApi ::
@@ -52,8 +53,19 @@ case class DropTable(
   override def run(sqlContext: SQLContext) = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     val ifExistsClause = if (ifExists) "IF EXISTS " else ""
+    try {
+      hiveContext.cacheManager.tryUncacheQuery(hiveContext.table(tableName))
+    } catch {
+      // This table's metadata is not in
+      case _: org.apache.hadoop.hive.ql.metadata.InvalidTableException =>
+      // Other exceptions can be caused by users providing wrong parameters in OPTIONS
+      // (e.g. invalid paths). We catch it and log a warning message.
+      // Users should be able to drop such kinds of tables regardless if there is an exception.
+      case e: Exception => log.warn(s"${e.getMessage}")
+    }
+    hiveContext.invalidateTable(tableName)
     hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
-    hiveContext.catalog.unregisterTable(None, tableName)
+    hiveContext.catalog.unregisterTable(Seq(tableName))
     Seq.empty[Row]
   }
 }
@@ -82,6 +94,20 @@ case class AddFile(path: String) extends RunnableCommand {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     hiveContext.runSqlHive(s"ADD FILE $path")
     hiveContext.sparkContext.addFile(path)
+    Seq.empty[Row]
+  }
+}
+
+case class CreateMetastoreDataSource(
+    tableName: String,
+    userSpecifiedSchema: Option[StructType],
+    provider: String,
+    options: Map[String, String]) extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext) = {
+    val hiveContext = sqlContext.asInstanceOf[HiveContext]
+    hiveContext.catalog.createDataSourceTable(tableName, userSpecifiedSchema, provider, options)
+
     Seq.empty[Row]
   }
 }
