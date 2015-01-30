@@ -57,7 +57,11 @@ trait ScalaReflection {
     case (obj, udt: UserDefinedType[_]) => udt.serialize(obj)
     case (o: Option[_], _) => o.map(convertToCatalyst(_, dataType)).orNull
     case (s: Seq[_], arrayType: ArrayType) => s.map(convertToCatalyst(_, arrayType.elementType))
-    case (s: Array[_], arrayType: ArrayType) => s.toSeq
+    case (s: Array[_], arrayType: ArrayType) => if (arrayType.elementType.isPrimitive) {
+      s.toSeq
+    } else {
+      s.toSeq.map(convertToCatalyst(_, arrayType.elementType))
+    }
     case (m: Map[_, _], mapType: MapType) => m.map { case (k, v) =>
       convertToCatalyst(k, mapType.keyType) -> convertToCatalyst(v, mapType.valueType)
     }
