@@ -22,6 +22,8 @@ import static org.junit.Assert.*;
 import java.sql.Connection;
 import java.sql.DriverManager;
 
+import org.apache.spark.SparkEnv;
+import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
@@ -33,10 +35,22 @@ public class JavaJDBCTest {
 
   static Connection conn = null;
 
+  // This variable will always be null if TestSQLContext is intact when running
+  // these tests.  Some Java tests do not play nicely with others, however;
+  // they create a SparkContext of their own at startup and stop it at exit.
+  // This renders TestSQLContext inoperable, meaning we have to do the same
+  // thing.  If this variable is nonnull, that means we allocated a
+  // SparkContext of our own and that we need to stop it at teardown.
+  static JavaSparkContext localSparkContext = null;
+
   static SQLContext sql = TestSQLContext$.MODULE$;
 
   @Before
   public void beforeTest() throws Exception {
+    if (SparkEnv.get() == null) { // A previous test destroyed TestSQLContext.
+      localSparkContext = new JavaSparkContext("local", "JavaAPISuite");
+      sql = new SQLContext(localSparkContext);
+    }
     Class.forName("org.h2.Driver");
     conn = DriverManager.getConnection(url);
     conn.prepareStatement("create schema test").executeUpdate();
@@ -49,6 +63,10 @@ public class JavaJDBCTest {
 
   @After
   public void afterTest() throws Exception {
+    if (localSparkContext != null) {
+      localSparkContext.stop();
+      localSparkContext = null;
+    }
     try {
       conn.close();
     } finally {
