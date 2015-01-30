@@ -432,4 +432,16 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
     testALS(training, test, maxIter = 4, rank = 2, regParam = 0.01, implicitPrefs = true,
       targetRMSE = 0.3)
   }
+
+  test("using generic ID types") {
+    val (ratings, _) = genImplicitTestData(numUsers = 20, numItems = 40, rank = 2, noiseStd = 0.01)
+
+    val longRatings = ratings.map(r => Rating(r.user.toLong, r.item.toLong, r.rating))
+    val (longUserFactors, _) = ALS.train(longRatings, rank = 2, maxIter = 4)
+    assert(longUserFactors.first()._1.getClass === classOf[Long])
+
+    val strRatings = ratings.map(r => Rating(r.user.toString, r.item.toString, r.rating))
+    val (strUserFactors, _) = ALS.train(strRatings, rank = 2, maxIter = 4)
+    assert(strUserFactors.first()._1.getClass === classOf[String])
+  }
 }

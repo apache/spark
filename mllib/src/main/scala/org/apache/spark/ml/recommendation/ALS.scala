@@ -28,6 +28,7 @@ import com.github.fommil.netlib.LAPACK.{getInstance => lapack}
 import org.netlib.util.intW
 
 import org.apache.spark.{HashPartitioner, Logging, Partitioner}
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.rdd.RDD
@@ -201,7 +202,7 @@ class ALS extends Estimator[ALSModel] with ALSParams {
     val ratings = dataset
       .select(col(map(userCol)), col(map(itemCol)), col(map(ratingCol)).cast(FloatType))
       .map { row =>
-        new Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
+        Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
       }
     val (userFactors, itemFactors) = ALS.train(ratings, rank = map(rank),
       numUserBlocks = map(numUserBlocks), numItemBlocks = map(numItemBlocks),
@@ -217,14 +218,19 @@ class ALS extends Estimator[ALSModel] with ALSParams {
   }
 }
 
+/**
+ * :: DeveloperApi ::
+ * An implementation of ALS that supports generic ID types, specialized for Int and Long. This is
+ * exposed as a developer API for users who do need other ID types. But it is not recommended
+ * because it increases the shuffle size and memory requirement during training. For simplicity,
+ * users and items must have the same type. The number of distinct users/items should be smaller
+ * than 2 billion.
+ */
+@DeveloperApi
 object ALS extends Logging {
 
   /** Rating class for better code readability. */
-  private[recommendation]
-  case class Rating[@specialized(Int, Long) ID](
-      user: ID,
-      item: ID,
-      rating: Float)
+  case class Rating[@specialized(Int, Long) ID](user: ID, item: ID, rating: Float)
 
   /** Cholesky solver for least square problems. */
   private[recommendation] class CholeskySolver {
@@ -336,7 +342,7 @@ object ALS extends Logging {
   /**
    * Implementation of the ALS algorithm.
    */
-  private def train[ID: ClassTag](
+  def train[ID: ClassTag](
       ratings: RDD[Rating[ID]],
       rank: Int = 10,
       numUserBlocks: Int = 10,
@@ -489,7 +495,7 @@ object ALS extends Logging {
   /**
    * A rating block that contains src IDs, dst IDs, and ratings, stored in primitive arrays.
    */
-  case class RatingBlock[@specialized(Int, Long) ID: ClassTag](
+  private[recommendation] case class RatingBlock[@specialized(Int, Long) ID: ClassTag](
       srcIds: Array[ID],
       dstIds: Array[ID],
       ratings: Array[Float]) {
@@ -567,14 +573,14 @@ object ALS extends Logging {
         val idx = srcBlockId + srcPart.numPartitions * dstBlockId
         val builder = builders(idx)
         builder.add(r)
-        if (builder.length >= 2048) { // 2048 * (3 * 4) = 24k
+        if (builder.size >= 2048) { // 2048 * (3 * 4) = 24k
           builders(idx) = new RatingBlockBuilder
           Iterator.single(((srcBlockId, dstBlockId), builder.build()))
         } else {
           Iterator.empty
         }
       } ++ {
-        builders.view.zipWithIndex.filter(_._1.length > 0).map { case (block, idx) =>
+        builders.view.zipWithIndex.filter(_._1.size > 0).map { case (block, idx) =>
           val srcBlockId = idx % srcPart.numPartitions
           val dstBlockId = idx / srcPart.numPartitions
           ((srcBlockId, dstBlockId), block.build())
