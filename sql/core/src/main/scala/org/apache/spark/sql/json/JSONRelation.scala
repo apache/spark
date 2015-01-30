@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.json
 
-import org.apache.spark.sql.SQLContext
+import java.io.IOException
+
+import org.apache.hadoop.fs.Path
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 
@@ -28,10 +32,10 @@ private[sql] class DefaultSource extends RelationProvider with SchemaRelationPro
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
-    val fileName = parameters.getOrElse("path", sys.error("Option 'path' not specified"))
+    val path = parameters.getOrElse("path", sys.error("Option 'path' not specified"))
     val samplingRatio = parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
 
-    JSONRelation(fileName, samplingRatio, None)(sqlContext)
+    JSONRelation(path, samplingRatio, None)(sqlContext)
   }
 
   /** Returns a new base relation with the given schema and parameters. */
@@ -39,21 +43,22 @@ private[sql] class DefaultSource extends RelationProvider with SchemaRelationPro
       sqlContext: SQLContext,
       parameters: Map[String, String],
       schema: StructType): BaseRelation = {
-    val fileName = parameters.getOrElse("path", sys.error("Option 'path' not specified"))
+    val path = parameters.getOrElse("path", sys.error("Option 'path' not specified"))
     val samplingRatio = parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
 
-    JSONRelation(fileName, samplingRatio, Some(schema))(sqlContext)
+    JSONRelation(path, samplingRatio, Some(schema))(sqlContext)
   }
 }
 
 private[sql] case class JSONRelation(
-    fileName: String,
+    path: String,
     samplingRatio: Double,
     userSpecifiedSchema: Option[StructType])(
     @transient val sqlContext: SQLContext)
-  extends TableScan {
+  extends TableScan with InsertableRelation {
 
-  private def baseRDD = sqlContext.sparkContext.textFile(fileName)
+  // TODO: Support partitioned JSON relation.
+  private def baseRDD = sqlContext.sparkContext.textFile(path)
 
   override val schema = userSpecifiedSchema.getOrElse(
     JsonRDD.nullTypeToStringType(
@@ -64,4 +69,24 @@ private[sql] case class JSONRelation(
 
   override def buildScan() =
     JsonRDD.jsonStringToRow(baseRDD, schema, sqlContext.conf.columnNameOfCorruptRecord)
+
+  override def insertInto(data: DataFrame, overwrite: Boolean) = {
+    val filesystemPath = new Path(path)
+    val fs = filesystemPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+
+    if (overwrite) {
+      try {
+        fs.delete(filesystemPath, true)
+      } catch {
+        case e: IOException =>
+          throw new IOException(
+            s"Unable to clear output directory ${filesystemPath.toString} prior"
+              + s" to INSERT OVERWRITE a JSON table:\n${e.toString}")
+      }
+      data.toJSON.saveAsTextFile(path)
+    } else {
+      // TODO: Support INSERT INTO
+      sys.error("JSON table only support INSERT OVERWRITE for now.")
+    }
+  }
 }
