@@ -40,7 +40,7 @@ class IsotonicRegressionModel (
 
   private val predictionOrd = if (isotonic) Ordering[Double] else Ordering[Double].reverse
 
-  assert(boundaries.length == predictions.length)
+  require(boundaries.length == predictions.length)
   assertOrdered(boundaries)
   assertOrdered(predictions)(predictionOrd)
 
@@ -48,7 +48,7 @@ class IsotonicRegressionModel (
   private def assertOrdered(xs: Array[Double])(implicit ord: Ordering[Double]): Unit = {
     var i = 1
     while (i < xs.length) {
-      assert(ord.compare(xs(i - 1), xs(i)) <= 0,
+      require(ord.compare(xs(i - 1), xs(i)) <= 0,
         s"Elements (${xs(i - 1)}, ${xs(i)}) are not ordered.")
       i += 1
     }
