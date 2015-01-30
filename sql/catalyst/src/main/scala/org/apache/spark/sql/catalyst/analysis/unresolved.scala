@@ -109,10 +109,7 @@ trait Star extends Attribute with trees.LeafNode[Expression] {
  * @param table an optional table that should be the target of the expansion.  If omitted all
  *              tables' columns are produced.
  */
-case class UnresolvedStar(
-    table: Option[String],
-    mapFunction: Attribute => Expression = identity[Attribute])
-  extends Star {
+case class UnresolvedStar(table: Option[String]) extends Star {
 
   override def expand(input: Seq[Attribute], resolver: Resolver): Seq[NamedExpression] = {
     val expandedAttributes: Seq[Attribute] = table match {
@@ -121,12 +118,11 @@ case class UnresolvedStar(
       // If there is a table, pick out attributes that are part of this table.
       case Some(t) => input.filter(_.qualifiers.filter(resolver(_, t)).nonEmpty)
     }
-    val mappedAttributes = expandedAttributes.map(mapFunction).zip(input).map {
+    expandedAttributes.zip(input).map {
       case (n: NamedExpression, _) => n
       case (e, originalAttribute) =>
         Alias(e, originalAttribute.name)(qualifiers = originalAttribute.qualifiers)
     }
-    mappedAttributes
   }
 
   override def toString = table.map(_ + ".").getOrElse("") + "*"
