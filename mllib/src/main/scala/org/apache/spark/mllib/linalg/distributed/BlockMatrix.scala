@@ -158,7 +158,7 @@ class BlockMatrix(
   val numRowBlocks = math.ceil(numRows() * 1.0 / rowsPerBlock).toInt
   val numColBlocks = math.ceil(numCols() * 1.0 / colsPerBlock).toInt
 
-  private[mllib] var partitioner: GridPartitioner =
+  private[mllib] def createPartitioner(): GridPartitioner =
     GridPartitioner(numRowBlocks, numColBlocks, suggestedNumPartitions = blocks.partitions.size)
 
   /** Estimates the dimensions of the matrix. */
@@ -234,6 +234,15 @@ class BlockMatrix(
     new DenseMatrix(m, n, values)
   }
 
+  /** Transpose this `BlockMatrix`. Returns a new `BlockMatrix` instance sharing the
+    * same underlying data. Is a lazy operation. */
+  def transpose: BlockMatrix = {
+    val transposedBlocks = blocks.map { case ((blockRowIndex, blockColIndex), mat) =>
+      ((blockColIndex, blockRowIndex), mat.transpose)
+    }
+    new BlockMatrix(transposedBlocks, colsPerBlock, rowsPerBlock, nCols, nRows)
+  }
+
   /** Collects data and assembles a local dense breeze matrix (for test only). */
   private[mllib] def toBreeze(): BDM[Double] = {
     val localMat = toLocalMatrix()
@@ -241,15 +250,23 @@ class BlockMatrix(
   }
 
   /** Adds two block matrices together. The matrices must have the same size and matching
-    * `rowsPerBlock` and `colsPerBlock` values. */
+    * `rowsPerBlock` and `colsPerBlock` values. If one of the blocks that are being added are
+    * instances of [[SparseMatrix]], the resulting sub matrix will also be a [[SparseMatrix]], even
+    * if it is being added to a [[DenseMatrix]]. If two dense matrices are added, the output will
+    * also be a [[DenseMatrix]].
+    */
   def add(other: BlockMatrix): BlockMatrix = {
     require(numRows() == other.numRows(), "Both matrices must have the same number of rows. " +
       s"A.numRows: ${numRows()}, B.numRows: ${other.numRows()}")
     require(numCols() == other.numCols(), "Both matrices must have the same number of columns. " +
       s"A.numCols: ${numCols()}, B.numCols: ${other.numCols()}")
-    if (checkPartitioning(other, OperationNames.add)) {
-      val addedBlocks = blocks.cogroup(other.blocks, partitioner).
-        map { case ((blockRowIndex, blockColIndex), (a, b)) =>
+    if (rowsPerBlock == other.rowsPerBlock && colsPerBlock == other.colsPerBlock) {
+      val addedBlocks = blocks.cogroup(other.blocks, createPartitioner())
+        .map { case ((blockRowIndex, blockColIndex), (a, b)) =>
+          if (a.size > 1 || b.size > 1) {
+            throw new SparkException("There are MatrixBlocks with duplicate indices. Please " +
+              "remove them.")
+          }
           if (a.isEmpty) {
             new MatrixBlock((blockRowIndex, blockColIndex), b.head)
           } else if (b.isEmpty) {
@@ -261,66 +278,56 @@ class BlockMatrix(
       }
       new BlockMatrix(addedBlocks, rowsPerBlock, colsPerBlock, numRows(), numCols())
     } else {
-      throw new SparkException(
-        "Cannot add matrices with non-matching partitioners")
+      throw new SparkException("Cannot add matrices with different block dimensions")
     }
   }
 
   /** Left multiplies this [[BlockMatrix]] to `other`, another [[BlockMatrix]]. The `colsPerBlock`
     * of this matrix must equal the `rowsPerBlock` of `other`. If `other` contains
-    * [[SparseMatrix]], they will have to be converted to a
-    * [[DenseMatrix]]. This may cause some performance issues until support for multiplying
-    * two sparse matrices is added.
+    * [[SparseMatrix]], they will have to be converted to a [[DenseMatrix]]. The output
+    * [[BlockMatrix]] will only consist of blocks of [[DenseMatrix]]. This may cause
+    * some performance issues until support for multiplying two sparse matrices is added.
     */
   def multiply(other: BlockMatrix): BlockMatrix = {
     require(numCols() == other.numRows(), "The number of columns of A and the number of rows " +
       s"of B must be equal. A.numCols: ${numCols()}, B.numRows: ${other.numRows()}. If you " +
-      s"think they should be equal, try setting the dimensions of A and B explicitly while " +
-      s"initializing them.")
-    if (checkPartitioning(other, OperationNames.multiply)) {
+      "think they should be equal, try setting the dimensions of A and B explicitly while " +
+      "initializing them.")
+    if (colsPerBlock == other.rowsPerBlock) {
       val resultPartitioner = GridPartitioner(numRowBlocks, other.numColBlocks,
-        math.min(partitioner.numPartitions, other.partitioner.numPartitions))
+        math.max(blocks.partitions.length, other.blocks.partitions.length))
       // Each block of A must be multiplied with the corresponding blocks in each column of B.
-      val flatA = blocks.flatMap{ case ((blockRowIndex, blockColIndex), block) =>
-        Array.tabulate(other.numColBlocks)(j => ((blockRowIndex, j, blockColIndex), block))
+      // TODO: Optimize to send block to a partition once, similar to ALS
+      val flatA = blocks.flatMap { case ((blockRowIndex, blockColIndex), block) =>
+        Iterator.tabulate(other.numColBlocks)(j => ((blockRowIndex, j, blockColIndex), block))
       }
       // Each block of B must be multiplied with the corresponding blocks in each row of A.
-      val flatB = other.blocks.flatMap{ case ((blockRowIndex, blockColIndex), block) =>
-        Array.tabulate(numRowBlocks)(i => ((i, blockColIndex, blockRowIndex), block))
+      val flatB = other.blocks.flatMap { case ((blockRowIndex, blockColIndex), block) =>
+        Iterator.tabulate(numRowBlocks)(i => ((i, blockColIndex, blockRowIndex), block))
       }
-      val newBlocks: RDD[MatrixBlock] = flatA.join(flatB, resultPartitioner).
-        map { case ((blockRowIndex, blockColIndex, _), (mat1, mat2)) =>
-          val C = mat2 match {
-            case dense: DenseMatrix => mat1.multiply(dense)
-            case sparse: SparseMatrix => mat1.multiply(sparse.toDense())
-            case _ =>  throw new SparkException(s"Unrecognized matrix type ${mat2.getClass}.")
+      val newBlocks: RDD[MatrixBlock] = flatA.cogroup(flatB, resultPartitioner)
+        .flatMap { case ((blockRowIndex, blockColIndex, _), (a, b)) =>
+          if (a.size > 1 || b.size > 1) {
+            throw new SparkException("There are MatrixBlocks with duplicate indices. Please " +
+              "remove them.")
           }
-          ((blockRowIndex, blockColIndex), C.toBreeze)
-      }.reduceByKey(resultPartitioner, (a, b) => a + b).mapValues(Matrices.fromBreeze)
+          if (a.nonEmpty && b.nonEmpty) {
+            val C = b.head match {
+              case dense: DenseMatrix => a.head.multiply(dense)
+              case sparse: SparseMatrix => a.head.multiply(sparse.toDense())
+              case _ => throw new SparkException(s"Unrecognized matrix type ${b.head.getClass}.")
+            }
+            Iterator(((blockRowIndex, blockColIndex), C.toBreeze))
+          } else {
+            Iterator()
+          }
+      }.reduceByKey(resultPartitioner, (a, b) => a + b)
+        .mapValues(Matrices.fromBreeze)
+      // TODO: Try to use aggregateByKey instead of reduceByKey to get rid of intermediate matrices
       new BlockMatrix(newBlocks, rowsPerBlock, other.colsPerBlock, numRows(), other.numCols())
     } else {
-      throw new SparkException(
-        "Cannot multiply matrices with non-matching partitioners")
+      throw new SparkException("colsPerBlock of A doesn't match rowsPerBlock of B. " +
+        s"A.colsPerBlock: $colsPerBlock, B.rowsPerBlock: ${other.rowsPerBlock}")
     }
   }
-
-  /** Checks if the partitioning of `other` is valid for operations like add and multiply. */
-  private def checkPartitioning(other: BlockMatrix, operation: Int): Boolean = {
-    operation match {
-      case OperationNames.add =>
-        rowsPerBlock == other.rowsPerBlock && colsPerBlock == other.colsPerBlock
-      case OperationNames.multiply => colsPerBlock == other.rowsPerBlock
-      case _ => throw new IllegalArgumentException("Unrecognized operation")
-    }
-  }
-}
-
-/**
- * Maintains supported and default block matrix operation names.
- *
- * Currently supported operations: `add`, `multiply`.
- */
-private object OperationNames {
-  val add: Int = 1
-  val multiply: Int = 2
 }

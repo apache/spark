@@ -169,7 +169,7 @@ class ListTests(PySparkTestCase):
 
     def test_classification(self):
         from pyspark.mllib.classification import LogisticRegressionWithSGD, SVMWithSGD, NaiveBayes
-        from pyspark.mllib.tree import DecisionTree
+        from pyspark.mllib.tree import DecisionTree, RandomForest, GradientBoostedTrees
         data = [
             LabeledPoint(0.0, [1, 0, 0]),
             LabeledPoint(1.0, [0, 1, 1]),
@@ -198,18 +198,31 @@ class ListTests(PySparkTestCase):
         self.assertTrue(nb_model.predict(features[3]) > 0)
 
         categoricalFeaturesInfo = {0: 3}  # feature 0 has 3 categories
-        dt_model = \
-            DecisionTree.trainClassifier(rdd, numClasses=2,
-                                         categoricalFeaturesInfo=categoricalFeaturesInfo)
+        dt_model = DecisionTree.trainClassifier(
+            rdd, numClasses=2, categoricalFeaturesInfo=categoricalFeaturesInfo)
         self.assertTrue(dt_model.predict(features[0]) <= 0)
         self.assertTrue(dt_model.predict(features[1]) > 0)
         self.assertTrue(dt_model.predict(features[2]) <= 0)
         self.assertTrue(dt_model.predict(features[3]) > 0)
 
+        rf_model = RandomForest.trainClassifier(
+            rdd, numClasses=2, categoricalFeaturesInfo=categoricalFeaturesInfo, numTrees=100)
+        self.assertTrue(rf_model.predict(features[0]) <= 0)
+        self.assertTrue(rf_model.predict(features[1]) > 0)
+        self.assertTrue(rf_model.predict(features[2]) <= 0)
+        self.assertTrue(rf_model.predict(features[3]) > 0)
+
+        gbt_model = GradientBoostedTrees.trainClassifier(
+            rdd, categoricalFeaturesInfo=categoricalFeaturesInfo)
+        self.assertTrue(gbt_model.predict(features[0]) <= 0)
+        self.assertTrue(gbt_model.predict(features[1]) > 0)
+        self.assertTrue(gbt_model.predict(features[2]) <= 0)
+        self.assertTrue(gbt_model.predict(features[3]) > 0)
+
     def test_regression(self):
         from pyspark.mllib.regression import LinearRegressionWithSGD, LassoWithSGD, \
             RidgeRegressionWithSGD
-        from pyspark.mllib.tree import DecisionTree
+        from pyspark.mllib.tree import DecisionTree, RandomForest, GradientBoostedTrees
         data = [
             LabeledPoint(-1.0, [0, -1]),
             LabeledPoint(1.0, [0, 1]),
@@ -238,12 +251,26 @@ class ListTests(PySparkTestCase):
         self.assertTrue(rr_model.predict(features[3]) > 0)
 
         categoricalFeaturesInfo = {0: 2}  # feature 0 has 2 categories
-        dt_model = \
-            DecisionTree.trainRegressor(rdd, categoricalFeaturesInfo=categoricalFeaturesInfo)
+        dt_model = DecisionTree.trainRegressor(
+            rdd, categoricalFeaturesInfo=categoricalFeaturesInfo)
         self.assertTrue(dt_model.predict(features[0]) <= 0)
         self.assertTrue(dt_model.predict(features[1]) > 0)
         self.assertTrue(dt_model.predict(features[2]) <= 0)
         self.assertTrue(dt_model.predict(features[3]) > 0)
+
+        rf_model = RandomForest.trainRegressor(
+            rdd, categoricalFeaturesInfo=categoricalFeaturesInfo, numTrees=100)
+        self.assertTrue(rf_model.predict(features[0]) <= 0)
+        self.assertTrue(rf_model.predict(features[1]) > 0)
+        self.assertTrue(rf_model.predict(features[2]) <= 0)
+        self.assertTrue(rf_model.predict(features[3]) > 0)
+
+        gbt_model = GradientBoostedTrees.trainRegressor(
+            rdd, categoricalFeaturesInfo=categoricalFeaturesInfo)
+        self.assertTrue(gbt_model.predict(features[0]) <= 0)
+        self.assertTrue(gbt_model.predict(features[1]) > 0)
+        self.assertTrue(gbt_model.predict(features[2]) <= 0)
+        self.assertTrue(gbt_model.predict(features[3]) > 0)
 
 
 class StatTests(PySparkTestCase):

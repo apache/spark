@@ -19,13 +19,11 @@ package org.apache.spark.mllib.linalg.distributed
 
 import java.{util => ju}
 
-import scala.util.Random
-
 import breeze.linalg.{DenseMatrix => BDM}
 import org.scalatest.FunSuite
 
 import org.apache.spark.SparkException
-import org.apache.spark.mllib.linalg.{DenseMatrix, Matrices, Matrix}
+import org.apache.spark.mllib.linalg.{SparseMatrix, DenseMatrix, Matrices, Matrix}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
@@ -56,7 +54,7 @@ class BlockMatrixSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("grid partitioner") {
-    val random = new Random()
+    val random = new ju.Random()
     // This should generate a 4x4 grid of 1x2 blocks.
     val part0 = GridPartitioner(4, 7, suggestedNumPartitions = 12)
     val expected0 = Array(
@@ -184,6 +182,13 @@ class BlockMatrixSuite extends FunSuite with MLlibTestSparkContext {
     intercept[SparkException] { // partitioning doesn't match
       gridBasedMat.add(C2)
     }
+    // adding BlockMatrices composed of SparseMatrices
+    val sparseBlocks = for (i <- 0 until 4) yield ((i / 2, i % 2), SparseMatrix.speye(4))
+    val denseBlocks = for (i <- 0 until 4) yield ((i / 2, i % 2), DenseMatrix.eye(4))
+    val sparseBM = new BlockMatrix(sc.makeRDD(sparseBlocks, 4), 4, 4, 8, 8)
+    val denseBM = new BlockMatrix(sc.makeRDD(denseBlocks, 4), 4, 4, 8, 8)
+
+    assert(sparseBM.add(sparseBM).toBreeze() === sparseBM.add(denseBM).toBreeze())
   }
 
   test("multiply") {
@@ -226,5 +231,26 @@ class BlockMatrixSuite extends FunSuite with MLlibTestSparkContext {
     assert(largeC.numRows() === largeA.numRows())
     assert(largeC.numCols() === largeB.numCols())
     assert(localC ~== result absTol 1e-8)
+  }
+
+  test("transpose") {
+    val expected = BDM(
+      (1.0, 0.0, 3.0, 0.0, 0.0),
+      (0.0, 2.0, 1.0, 1.0, 0.0),
+      (0.0, 1.0, 1.0, 2.0, 1.0),
+      (0.0, 0.0, 0.0, 1.0, 5.0))
+
+    val AT = gridBasedMat.transpose
+    assert(AT.numRows() === gridBasedMat.numCols())
+    assert(AT.numCols() === gridBasedMat.numRows())
+    assert(AT.toBreeze() === expected)
+
+    // make sure it works when matrices are cached as well
+    gridBasedMat.cache()
+    val AT2 = gridBasedMat.transpose
+    AT2.cache()
+    assert(AT2.toBreeze() === AT.toBreeze())
+    val A = AT2.transpose
+    assert(A.toBreeze() === gridBasedMat.toBreeze())
   }
 }

@@ -19,8 +19,8 @@ package org.apache.spark.sql
 
 import scala.language.implicitConversions
 
-import org.apache.spark.sql.api.scala.dsl.lit
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, Star}
+import org.apache.spark.sql.Dsl.lit
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedStar, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Project, LogicalPlan}
 import org.apache.spark.sql.types._
@@ -28,8 +28,7 @@ import org.apache.spark.sql.types._
 
 object Column {
   /**
-   * Creates a [[Column]] based on the given column name.
-   * Same as [[api.scala.dsl.col]] and [[api.java.dsl.col]].
+   * Creates a [[Column]] based on the given column name. Same as [[Dsl.col]].
    */
   def apply(colName: String): Column = new Column(colName)
 
@@ -57,7 +56,7 @@ object Column {
 class Column(
     sqlContext: Option[SQLContext],
     plan: Option[LogicalPlan],
-    val expr: Expression)
+    protected[sql] val expr: Expression)
   extends DataFrame(sqlContext, plan) with ExpressionApi {
 
   /** Turns a Catalyst expression into a `Column`. */
@@ -72,8 +71,8 @@ class Column(
    * - "df.*" becomes an expression selecting all columns in data frame "df".
    */
   def this(name: String) = this(name match {
-    case "*" => Star(None)
-    case _ if name.endsWith(".*") => Star(Some(name.substring(0, name.length - 2)))
+    case "*" => UnresolvedStar(None)
+    case _ if name.endsWith(".*") => UnresolvedStar(Some(name.substring(0, name.length - 2)))
     case _ => UnresolvedAttribute(name)
   })
 
@@ -438,9 +437,7 @@ class Column(
   override def rlike(literal: String): Column = RLike(expr, lit(literal).expr)
 
   /**
-   * An expression that gets an
-   * @param ordinal
-   * @return
+   * An expression that gets an item at position `ordinal` out of an array.
    */
   override def getItem(ordinal: Int): Column = GetItem(expr, Literal(ordinal))
 
@@ -491,10 +488,37 @@ class Column(
    * {{{
    *   // Casts colA to IntegerType.
    *   import org.apache.spark.sql.types.IntegerType
-   *   df.select(df("colA").as(IntegerType))
+   *   df.select(df("colA").cast(IntegerType))
+   *
+   *   // equivalent to
+   *   df.select(df("colA").cast("int"))
    * }}}
    */
   override def cast(to: DataType): Column = Cast(expr, to)
+
+  /**
+   * Casts the column to a different data type, using the canonical string representation
+   * of the type. The supported types are: `string`, `boolean`, `byte`, `short`, `int`, `long`,
+   * `float`, `double`, `decimal`, `date`, `timestamp`.
+   * {{{
+   *   // Casts colA to integer.
+   *   df.select(df("colA").cast("int"))
+   * }}}
+   */
+  override def cast(to: String): Column = Cast(expr, to.toLowerCase match {
+    case "string" => StringType
+    case "boolean" => BooleanType
+    case "byte" => ByteType
+    case "short" => ShortType
+    case "int" => IntegerType
+    case "long" => LongType
+    case "float" => FloatType
+    case "double" => DoubleType
+    case "decimal" => DecimalType.Unlimited
+    case "date" => DateType
+    case "timestamp" => TimestampType
+    case _ => throw new RuntimeException(s"""Unsupported cast type: "$to"""")
+  })
 
   override def desc: Column = SortOrder(expr, Descending)
 

@@ -31,7 +31,7 @@ import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.{ResolvedStar, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -51,8 +51,7 @@ import org.apache.spark.util.Utils
  * }}}
  *
  * Once created, it can be manipulated using the various domain-specific-language (DSL) functions
- * defined in: [[DataFrame]] (this class), [[Column]], [[api.scala.dsl]] for Scala DSL, and
- * [[api.java.dsl]] for Java DSL.
+ * defined in: [[DataFrame]] (this class), [[Column]], [[Dsl]] for the DSL.
  *
  * To select a column from the data frame, use the apply method:
  * {{{
@@ -112,14 +111,16 @@ class DataFrame protected[sql](
   /** Returns the list of numeric columns, useful for doing aggregation. */
   protected[sql] def numericColumns: Seq[Expression] = {
     schema.fields.filter(_.dataType.isInstanceOf[NumericType]).map { n =>
-      logicalPlan.resolve(n.name, sqlContext.analyzer.resolver).get
+      queryExecution.analyzed.resolve(n.name, sqlContext.analyzer.resolver).get
     }
   }
 
   /** Resolves a column name into a Catalyst [[NamedExpression]]. */
   protected[sql] def resolve(colName: String): NamedExpression = {
-    logicalPlan.resolve(colName, sqlContext.analyzer.resolver).getOrElse(throw new RuntimeException(
-      s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})"""))
+    queryExecution.analyzed.resolve(colName, sqlContext.analyzer.resolver).getOrElse {
+      throw new RuntimeException(
+        s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""")
+    }
   }
 
   /** Left here for compatibility reasons. */
@@ -209,7 +210,7 @@ class DataFrame protected[sql](
   }
 
   /**
-   * Returns a new [[DataFrame]] sorted by the specified column, in ascending column.
+   * Returns a new [[DataFrame]] sorted by the specified column, all in ascending order.
    * {{{
    *   // The following 3 are equivalent
    *   df.sort("sortcol")
@@ -217,8 +218,9 @@ class DataFrame protected[sql](
    *   df.sort($"sortcol".asc)
    * }}}
    */
-  override def sort(colName: String): DataFrame = {
-    Sort(Seq(SortOrder(apply(colName).expr, Ascending)), global = true, logicalPlan)
+  @scala.annotation.varargs
+  override def sort(sortCol: String, sortCols: String*): DataFrame = {
+    orderBy(apply(sortCol), sortCols.map(apply) :_*)
   }
 
   /**
@@ -245,6 +247,15 @@ class DataFrame protected[sql](
    * This is an alias of the `sort` function.
    */
   @scala.annotation.varargs
+  override def orderBy(sortCol: String, sortCols: String*): DataFrame = {
+    sort(sortCol, sortCols :_*)
+  }
+
+  /**
+   * Returns a new [[DataFrame]] sorted by the given expressions.
+   * This is an alias of the `sort` function.
+   */
+  @scala.annotation.varargs
   override def orderBy(sortExpr: Column, sortExprs: Column*): DataFrame = {
     sort(sortExpr, sortExprs :_*)
   }
@@ -254,7 +265,7 @@ class DataFrame protected[sql](
    */
   override def apply(colName: String): Column = colName match {
     case "*" =>
-      Column("*")
+      new Column(ResolvedStar(schema.fieldNames.map(resolve)))
     case _ =>
       val expr = resolve(colName)
       new Column(Some(sqlContext), Some(Project(Seq(expr), logicalPlan)), expr)
@@ -401,6 +412,16 @@ class DataFrame protected[sql](
    * }}
    */
   override def agg(exprs: Map[String, String]): DataFrame = groupBy().agg(exprs)
+
+  /**
+   * Aggregates on the entire [[DataFrame]] without groups.
+   * {{
+   *   // df.agg(...) is a shorthand for df.groupBy().agg(...)
+   *   df.agg(Map("age" -> "max", "salary" -> "avg"))
+   *   df.groupBy().agg(Map("age" -> "max", "salary" -> "avg"))
+   * }}
+   */
+  override def agg(exprs: java.util.Map[String, String]): DataFrame = agg(exprs.toMap)
 
   /**
    * Aggregates on the entire [[DataFrame]] without groups.

@@ -68,6 +68,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   System.clearProperty("spark.hostPort")
   CommandProcessorFactory.clean(hiveconf)
 
+  hiveconf.set("hive.plan.serialization.format", "javaXML")
+
   lazy val warehousePath = getTempFilePath("sparkHiveWarehouse").getCanonicalPath
   lazy val metastorePath = getTempFilePath("sparkHiveMetastore").getCanonicalPath
 
