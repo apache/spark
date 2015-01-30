@@ -173,10 +173,10 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
       input.map(x => (-x._1, x._2, x._3))
     }
 
-    val isotonicRegression = parallelPoolAdjacentViolators(preprocessedInput)
+    val pooled = parallelPoolAdjacentViolators(preprocessedInput)
 
-    val predictions = if (isotonic) isotonicRegression.map(_._1) else isotonicRegression.map(-_._1)
-    val boundaries = isotonicRegression.map(_._2)
+    val predictions = if (isotonic) pooled.map(_._1) else pooled.map(-_._1)
+    val boundaries = pooled.map(_._2)
 
     new IsotonicRegressionModel(boundaries, predictions, isotonic)
   }
