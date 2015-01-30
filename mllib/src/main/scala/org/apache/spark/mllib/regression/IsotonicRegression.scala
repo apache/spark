@@ -31,30 +31,28 @@ import org.apache.spark.rdd.RDD
  *                   Boundaries must be sorted in increasing order.
  * @param predictions Array of predictions associated to the boundaries at the same index.
  *                    Results of isotonic regression and therefore monotone.
+ * @param isotonic indicates whether this is isotonic or antitonic.
  */
 class IsotonicRegressionModel (
-    boundaries: Array[Double],
+    val boundaries: Array[Double],
     val predictions: Array[Double],
-    isotonic: Boolean)
-  extends Serializable {
+    val isotonic: Boolean) extends Serializable {
 
-  private def isSorted(xs: Array[Double]): Boolean = {
+  private val predictionOrd = if (isotonic) Ordering[Double] else Ordering[Double].reverse
+
+  assert(boundaries.length == predictions.length)
+  assertOrdered(boundaries)
+  assertOrdered(predictions)(predictionOrd)
+
+  /** Asserts the input array is monotone with the given ordering. */
+  private def assertOrdered(xs: Array[Double])(implicit ord: Ordering[Double]): Unit = {
     var i = 1
     while (i < xs.length) {
-      if (xs(i) < xs(i - 1)) false
+      assert(ord.compare(xs(i - 1), xs(i)) <= 0,
+        s"Elements (${xs(i - 1)}, ${xs(i)}) are not ordered.")
       i += 1
     }
-    true
   }
-
-  if (isotonic) {
-    assert(isSorted(predictions))
-  } else {
-    assert(isSorted(predictions.map(-_)))
-  }
-
-  assert(isSorted(boundaries))
-  assert(boundaries.length == predictions.length)
 
   /**
    * Predict labels for provided features.
