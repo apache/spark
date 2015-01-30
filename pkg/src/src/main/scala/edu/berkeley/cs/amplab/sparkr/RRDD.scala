@@ -32,36 +32,42 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
     val pb = rWorkerProcessBuilder()
     val proc = pb.start()
 
-    startStderrThread(proc)
+    val errThread = startStderrThread(proc)
 
     val tempFile = startStdinThread(proc, parentIterator, split.index)
 
     // Return an iterator that read lines from the process's stdout
     val inputStream = new BufferedReader(new InputStreamReader(proc.getInputStream))
-    val stdOutFileName = inputStream.readLine().trim()
 
-    val dataStream = openDataStream(stdOutFileName)
+    try {
+      val stdOutFileName = inputStream.readLine().trim()
 
-    return new Iterator[U] {
-      def next(): U = {
-        val obj = _nextObj
-        if (hasNext) {
-          _nextObj = read()
+      val dataStream = openDataStream(stdOutFileName)
+
+      return new Iterator[U] {
+        def next(): U = {
+          val obj = _nextObj
+          if (hasNext) {
+            _nextObj = read()
+          }
+          obj
         }
-        obj
-      }
 
-      var _nextObj = read()
+        var _nextObj = read()
 
-      def hasNext(): Boolean = {
-        val hasMore = (_nextObj != null)
-        if (!hasMore) {
-          // Delete the temporary file we created as we are done reading it
-          dataStream.close()
-          tempFile.delete()
+        def hasNext(): Boolean = {
+          val hasMore = (_nextObj != null)
+          if (!hasMore) {
+            // Delete the temporary file we created as we are done reading it
+            dataStream.close()
+            tempFile.delete()
+          }
+          hasMore
         }
-        hasMore
       }
+    } catch {
+      case e: Exception =>
+        throw new SparkException("R computation failed with\n " + errThread.getLines())
     }
   }
 
@@ -84,14 +90,10 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
   /**
    * Start a thread to print the process's stderr to ours
    */
-  private def startStderrThread(proc: Process) {
-    new Thread("stderr reader for R") {
-      override def run() {
-        for (line <- Source.fromInputStream(proc.getErrorStream).getLines) {
-          System.err.println(line)
-        }
-      }
-    }.start()
+  private def startStderrThread(proc: Process): BufferedStreamThread = {
+    val errThread = new BufferedStreamThread(proc.getErrorStream, "stderr reader for R")
+    errThread.start()
+    errThread
   }
 
   /**
@@ -310,6 +312,27 @@ private class StringRRDD[T: ClassTag](
   }
 
   lazy val asJavaRDD : JavaRDD[String] = JavaRDD.fromRDD(this)
+}
+
+private class BufferedStreamThread(in: InputStream, name: String) extends Thread(name) {
+  val ERR_BUFFER_SIZE = 100
+  val lines = new Array[String](ERR_BUFFER_SIZE)
+  var lineIdx = 0
+  override def run() {
+    for (line <- Source.fromInputStream(in).getLines) {
+      lines(lineIdx) = line
+      lineIdx = (lineIdx + 1) % ERR_BUFFER_SIZE
+      System.err.println(line)
+    }
+  }
+
+  def getLines(): String = {
+    (0 until ERR_BUFFER_SIZE).filter { x =>
+      lines((x + lineIdx) % ERR_BUFFER_SIZE) != null
+    }.map { x =>
+      lines((x + lineIdx) % ERR_BUFFER_SIZE)
+    }.mkString("\n")
+  }
 }
 
 object RRDD {
