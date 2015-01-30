@@ -50,7 +50,7 @@ private[spark] class Executor(
   logInfo(s"Starting executor ID $executorId on host $executorHostname")
 
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
-  // Each map holds the master's timestamp for the version of that file, JAR, or directory we got.
+  // Each map holds the master's timestamp for the version of that file or JAR we got.
   private val currentFiles: HashMap[String, Long] = new HashMap[String, Long]()
   private val currentJars: HashMap[String, Long] = new HashMap[String, Long]()
 
@@ -171,8 +171,7 @@ private[spark] class Executor(
       startGCTime = gcTime
 
       try {
-        val (taskFiles, taskJars, taskBytes) =
-          Task.deserializeWithDependencies(serializedTask)
+        val (taskFiles, taskJars, taskBytes) = Task.deserializeWithDependencies(serializedTask)
         updateDependencies(taskFiles, taskJars)
         task = ser.deserialize[Task[Any]](taskBytes, Thread.currentThread.getContextClassLoader)
 
@@ -334,9 +333,7 @@ private[spark] class Executor(
    * Download any missing dependencies if we receive a new set of files and JARs from the
    * SparkContext. Also adds any new JARs we fetched to the class loader.
    */
-  private def updateDependencies(
-      newFiles: HashMap[String, Long],
-      newJars: HashMap[String, Long]) {
+  private def updateDependencies(newFiles: HashMap[String, Long], newJars: HashMap[String, Long]) {
     lazy val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
     synchronized {
       // Fetch missing dependencies
