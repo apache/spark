@@ -50,8 +50,8 @@ fi
 if [ -n "$SPARK_PREPEND_CLASSES" ]; then
   echo "NOTE: SPARK_PREPEND_CLASSES is set, placing locally compiled Spark"\
     "classes ahead of assembly." >&2
-  # Spark classes
   CLASSPATH="$CLASSPATH:$FWDIR/core/target/scala-$SPARK_SCALA_VERSION/classes"
+  CLASSPATH="$CLASSPATH:$FWDIR/core/target/jars/*"
   CLASSPATH="$CLASSPATH:$FWDIR/repl/target/scala-$SPARK_SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$FWDIR/mllib/target/scala-$SPARK_SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$FWDIR/bagel/target/scala-$SPARK_SCALA_VERSION/classes"
@@ -63,8 +63,6 @@ if [ -n "$SPARK_PREPEND_CLASSES" ]; then
   CLASSPATH="$CLASSPATH:$FWDIR/sql/hive/target/scala-$SPARK_SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$FWDIR/sql/hive-thriftserver/target/scala-$SPARK_SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$FWDIR/yarn/stable/target/scala-$SPARK_SCALA_VERSION/classes"
-  # Jars for shaded deps in their original form (copied here during build)
-  CLASSPATH="$CLASSPATH:$FWDIR/core/target/jars/*"
 fi
 
 # Use spark-assembly jar from either RELEASE or assembly directory

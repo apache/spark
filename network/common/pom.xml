@@ -101,6 +101,18 @@
           </execution>
         </executions>
       </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <configuration>
+          <shadedArtifactAttached>false</shadedArtifactAttached>
+          <artifactSet>
+            <includes>
+              <include>com.google.guava:guava</include>
+            </includes>
+          </artifactSet>
+        </configuration>
+      </plugin>
     </plugins>
   </build>
 </project>

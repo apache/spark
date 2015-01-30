@@ -337,39 +337,25 @@
           </exclusion>
         </exclusions>
       </dependency>
- 
-      <!-- Shaded deps marked as provided. These are promoted to compile scope
-           in the modules where we want the shaded classes to appear in the
-           associated jar. -->
-      <dependency>
-        <groupId>org.eclipse.jetty</groupId>
-        <artifactId>jetty-http</artifactId>
-        <version>${jetty.version}</version>
-        <scope>provided</scope>
-      </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-util</artifactId>
         <version>${jetty.version}</version>
-        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-security</artifactId>
         <version>${jetty.version}</version>
-        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-plus</artifactId>
         <version>${jetty.version}</version>
-        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-server</artifactId>
         <version>${jetty.version}</version>
-        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>com.google.guava</groupId>
@@ -377,8 +363,6 @@
         <version>14.0.1</version>
         <scope>provided</scope>
       </dependency>
-      <!-- End of shaded deps -->
- 
       <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-lang3</artifactId>
@@ -1292,26 +1276,10 @@
           <shadedArtifactAttached>false</shadedArtifactAttached>
           <artifactSet>
             <includes>
-              <!-- At a minimum we must include this to force effective pom generation -->
               <include>org.spark-project.spark:unused</include>
-
-              <include>org.eclipse.jetty:jetty-io</include>
-              <include>org.eclipse.jetty:jetty-http</include>
-              <include>org.eclipse.jetty:jetty-plus</include>
-              <include>org.eclipse.jetty:jetty-security</include>
-              <include>org.eclipse.jetty:jetty-util</include>
-              <include>org.eclipse.jetty:jetty-server</include>
-              <include>com.google.guava:guava</include>
             </includes>
           </artifactSet>
           <relocations>
-            <relocation>
-              <pattern>org.eclipse.jetty</pattern>
-              <shadedPattern>org.spark-project.jetty</shadedPattern>
-              <includes>
-                <include>org.eclipse.jetty.**</include>
-              </includes>
-            </relocation>
             <relocation>
               <pattern>com.google.common</pattern>
               <shadedPattern>org.spark-project.guava</shadedPattern>
