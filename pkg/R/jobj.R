@@ -33,10 +33,17 @@ jobj <- function(objId) {
   obj
 }
 
-print.jobj <- function(jobj) {
-  cls <- callJMethod(jobj, "getClass")
+#' Print a JVM object reference.
+#'
+#' This function prints the type and id for an object stored
+#' in the SparkR JVM backend.
+#'
+#' @param x The JVM object reference
+#' @param ... further arguments passed to or from other methods
+print.jobj <- function(x, ...) {
+  cls <- callJMethod(x, "getClass")
   name <- callJMethod(cls, "getName")
-  cat("Java ref type", name, "id", jobj$id, "\n", sep = " ")
+  cat("Java ref type", name, "id", x$id, "\n", sep = " ")
 }
 
 cleanup.jobj <- function(jobj) {

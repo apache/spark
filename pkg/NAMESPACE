@@ -1,6 +1,5 @@
 #exportPattern("^[[:alpha:]]+")
 exportClasses("RDD")
-exportClasses("PipelinedRDD")
 exportClasses("Broadcast")
 exportMethods(
               "cache",
@@ -67,3 +66,4 @@ export(
 export("sparkR.init")
 export("print.jobj")
 useDynLib(SparkR, stringHashCode)
+importFrom(methods, setGeneric, setMethod, setOldClass)

@@ -59,6 +59,8 @@ sparkR.stop <- function(env) {
 #' @param sparkEnvir Named list of environment variables to set on worker nodes.
 #' @param sparkExecutorEnv Named list of environment variables to be used when launching executors.
 #' @param sparkJars Character string vector of jar files to pass to the worker nodes.
+#' @param sparkRLibDir The path where R is installed on the worker nodes.
+#' @param sparkRBackendPort The port to use for SparkR JVM Backend.
 #' @export
 #' @examples
 #'\dontrun{
@@ -67,7 +69,7 @@ sparkR.stop <- function(env) {
 #'                  list(spark.executor.memory="1g"))
 #' sc <- sparkR.init("yarn-client", "SparkR", "/home/spark",
 #'                  list(spark.executor.memory="1g"),
-#'                  list(LD_LIBRARY_PATH="/directory of Java VM Library Files (libjvm.so) on worker nodes/"),
+#'                  list(LD_LIBRARY_PATH="/directory of JVM libraries (libjvm.so) on workers/"),
 #'                  c("jarfile1.jar","jarfile2.jar"))
 #'}
 

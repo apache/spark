@@ -51,7 +51,7 @@ writeBoolean <- function(con, value) {
 }
 
 writeRawSerialize <- function(outputCon, batch) {
-  outputSer <- serialize(batch, ascii = FALSE, conn = NULL)
+  outputSer <- serialize(batch, ascii = FALSE, connection = NULL)
   writeRaw(outputCon, outputSer)
 }
 

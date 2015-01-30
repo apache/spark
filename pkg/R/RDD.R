@@ -8,8 +8,8 @@ setOldClass("jobj")
 #' @rdname RDD
 #' @seealso parallelize, textFile
 #'
-#' @param env An R environment that stores bookkeeping states of the RDD
-#' @param jrdd Java object reference to the backing JavaRDD
+#' @slot env An R environment that stores bookkeeping states of the RDD
+#' @slot jrdd Java object reference to the backing JavaRDD
 #' @export
 setClass("RDD",
          slots = list(env = "environment",
@@ -72,6 +72,11 @@ setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) 
 
 #' @rdname RDD
 #' @export
+#'
+#' @param jrdd Java object reference to the backing JavaRDD
+#' @param serialized TRUE if the RDD stores data serialized in R
+#' @param isCached TRUE if the RDD is cached
+#' @param isCheckpointed TRUE if the RDD has been checkpointed
 RDD <- function(jrdd, serialized = TRUE, isCached = FALSE,
                 isCheckpointed = FALSE) {
   new("RDD", jrdd, serialized, isCached, isCheckpointed)
@@ -403,7 +408,7 @@ setMethod("lookup",
 
 #' Return the number of elements in the RDD.
 #'
-#' @param rdd The RDD to count
+#' @param x The RDD to count
 #' @return number of elements in the RDD.
 #' @rdname count
 #' @export
@@ -414,17 +419,17 @@ setMethod("lookup",
 #' count(rdd) # 10
 #' length(rdd) # Same as count
 #'}
-setGeneric("count", function(rdd) { standardGeneric("count") })
+setGeneric("count", function(x) { standardGeneric("count") })
 
 #' @rdname count
 #' @aliases count,RDD-method
 setMethod("count",
-          signature(rdd = "RDD"),
-          function(rdd) {
+          signature(x = "RDD"),
+          function(x) {
             countPartition <- function(part) {
               as.integer(length(part))
             }
-            valsRDD <- lapplyPartition(rdd, countPartition)
+            valsRDD <- lapplyPartition(x, countPartition)
             vals <- collect(valsRDD)
             sum(as.integer(vals))
           })
@@ -500,6 +505,7 @@ setMethod("countByKey",
 #' @param FUN the transformation to apply on each element
 #' @return a new RDD created by the transformation.
 #' @rdname lapply
+#' @aliases lapply
 #' @export
 #' @examples
 #'\dontrun{
@@ -655,8 +661,8 @@ setMethod("mapPartitionsWithIndex",
 #' a predicate (i.e. returning TRUE in a given logical function).
 #' The same as `filter()' in Spark.
 #'
-#' @param rdd The RDD to be filtered.
-#' @param filterFunc A unary predicate function.
+#' @param x The RDD to be filtered.
+#' @param f A unary predicate function.
 #' @rdname filterRDD
 #' @export
 #' @examples
@@ -666,21 +672,22 @@ setMethod("mapPartitionsWithIndex",
 #' unlist(collect(filterRDD(rdd, function (x) { x < 3 }))) # c(1, 2)
 #'}
 setGeneric("filterRDD", 
-           function(rdd, filterFunc) { standardGeneric("filterRDD") })
+           function(x, f) { standardGeneric("filterRDD") })
 
 #' @rdname filterRDD
 #' @aliases filterRDD,RDD,function-method
 setMethod("filterRDD",
-          signature(rdd = "RDD", filterFunc = "function"),
-          function(rdd, filterFunc) {
+          signature(x = "RDD", f = "function"),
+          function(x, f) {
             filter.func <- function(part) {
-              Filter(filterFunc, part)
+              Filter(f, part)
             }
-            lapplyPartition(rdd, filter.func)
+            lapplyPartition(x, filter.func)
           })
 
 #' @rdname filterRDD
-#' @aliases Filter,function,RDD-method
+#' @export
+#' @aliases Filter
 setMethod("Filter",
           signature(f = "function", x = "RDD"),
           function(f, x) {
@@ -791,9 +798,6 @@ setMethod("foreach",
 
 #' Applies a function to each partition in an RDD, and force evaluation.
 #'
-#' @param rdd The RDD to apply the function
-#' @param func The function to be applied to partitions.
-#' @return invisible NULL.
 #' @export
 #' @rdname foreach
 #' @examples
@@ -1641,7 +1645,8 @@ setMethod("join",
 #' sc <- sparkR.init()
 #' rdd1 <- parallelize(sc, list(list(1, 1), list(2, 4)))
 #' rdd2 <- parallelize(sc, list(list(1, 2), list(1, 3)))
-#' leftOuterJoin(rdd1, rdd2, 2L) # list(list(1, list(1, 2)), list(1, list(1, 3)), list(2, list(4, NULL)))
+#' leftOuterJoin(rdd1, rdd2, 2L)
+#' # list(list(1, list(1, 2)), list(1, list(1, 3)), list(2, list(4, NULL)))
 #'}
 setGeneric("leftOuterJoin", function(rdd1, rdd2, numPartitions) { standardGeneric("leftOuterJoin") })
 
@@ -1710,7 +1715,8 @@ setMethod("leftOuterJoin",
 #' sc <- sparkR.init()
 #' rdd1 <- parallelize(sc, list(list(1, 2), list(1, 3)))
 #' rdd2 <- parallelize(sc, list(list(1, 1), list(2, 4)))
-#' rightOuterJoin(rdd1, rdd2, 2L) # list(list(1, list(2, 1)), list(1, list(3, 1)), list(2, list(NULL, 4)))
+#' rightOuterJoin(rdd1, rdd2, 2L)
+#' # list(list(1, list(2, 1)), list(1, list(3, 1)), list(2, list(NULL, 4)))
 #'}
 setGeneric("rightOuterJoin", function(rdd1, rdd2, numPartitions) { standardGeneric("rightOuterJoin") })
 
