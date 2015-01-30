@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.classification
 
+import org.apache.spark.util.Utils
+
 import scala.util.Random
 
 import org.scalatest.FunSuite
@@ -58,6 +60,14 @@ object NaiveBayesSuite {
       LabeledPoint(y, Vectors.dense(xi))
     }
   }
+
+  private val smallPi = Array(0.5, 0.3, 0.2).map(math.log)
+
+  private val smallTheta = Array(
+    Array(0.91, 0.03, 0.03, 0.03), // label 0
+    Array(0.03, 0.91, 0.03, 0.03), // label 1
+    Array(0.03, 0.03, 0.91, 0.03)  // label 2
+  ).map(_.map(math.log))
 }
 
 class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
@@ -74,12 +84,8 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
   test("Naive Bayes") {
     val nPoints = 10000
 
-    val pi = Array(0.5, 0.3, 0.2).map(math.log)
-    val theta = Array(
-      Array(0.91, 0.03, 0.03, 0.03), // label 0
-      Array(0.03, 0.91, 0.03, 0.03), // label 1
-      Array(0.03, 0.03, 0.91, 0.03)  // label 2
-    ).map(_.map(math.log))
+    val pi = NaiveBayesSuite.smallPi
+    val theta = NaiveBayesSuite.smallTheta
 
     val testData = NaiveBayesSuite.generateNaiveBayesInput(pi, theta, nPoints, 42)
     val testRDD = sc.parallelize(testData, 2)
@@ -122,6 +128,30 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
     intercept[SparkException] {
       NaiveBayes.train(sc.makeRDD(nan, 2))
     }
+  }
+
+  test("model export/import") {
+    val nPoints = 10
+
+    val pi = NaiveBayesSuite.smallPi
+    val theta = NaiveBayesSuite.smallTheta
+
+    val data = NaiveBayesSuite.generateNaiveBayesInput(pi, theta, nPoints, 42)
+    val rdd = sc.parallelize(data, 2)
+    rdd.cache()
+
+    val model = NaiveBayes.train(rdd)
+
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+
+    // Save model, load it back, and compare.
+    model.save(sc, path)
+    val sameModel = NaiveBayesModel.load(sc, path)
+    assert(model.labels === sameModel.labels)
+    assert(model.pi === sameModel.pi)
+    assert(model.theta === sameModel.theta)
+    Utils.deleteRecursively(tempDir)
   }
 }
 

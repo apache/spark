@@ -19,11 +19,15 @@ package org.apache.spark.mllib.classification
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax => brzArgmax, sum => brzSum}
 
-import org.apache.spark.{SparkException, Logging}
-import org.apache.spark.SparkContext._
+import org.apache.spark.{SparkContext, SparkException, Logging}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.util.{Importable, Exportable}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{Row, DataFrame, SQLContext}
+
+import scala.collection.mutable.ArrayBuffer
+
 
 /**
  * Model for Naive Bayes Classifiers.
@@ -36,7 +40,7 @@ import org.apache.spark.rdd.RDD
 class NaiveBayesModel private[mllib] (
     val labels: Array[Double],
     val pi: Array[Double],
-    val theta: Array[Array[Double]]) extends ClassificationModel with Serializable {
+    val theta: Array[Array[Double]]) extends ClassificationModel with Serializable with Exportable {
 
   private val brzPi = new BDV[Double](pi)
   private val brzTheta = new BDM[Double](theta.length, theta(0).length)
@@ -64,6 +68,60 @@ class NaiveBayesModel private[mllib] (
 
   override def predict(testData: Vector): Double = {
     labels(brzArgmax(brzPi + brzTheta * testData.toBreeze))
+  }
+
+  override def save(sc: SparkContext, path: String): Unit = {
+    val sqlContext = new SQLContext(sc)
+    import sqlContext._
+
+    // Create JSON metadata.
+    val metadata = NaiveBayesModel.Metadata(
+      clazz = this.getClass.getName, version = Exportable.latestVersion)
+    val metadataRDD: DataFrame = sc.parallelize(Seq(metadata))
+    metadataRDD.toJSON.saveAsTextFile(path + "/metadata")
+    // Create Parquet data.
+    val data = NaiveBayesModel.Data(labels, pi, theta)
+    val dataRDD: DataFrame = sc.parallelize(Seq(data))
+    dataRDD.saveAsParquetFile(path + "/data")
+  }
+}
+
+object NaiveBayesModel extends Importable[NaiveBayesModel] {
+
+  /** Metadata for model import/export */
+  private case class Metadata(clazz: String, version: String)
+
+  /** Model data for model import/export */
+  private case class Data(labels: Array[Double], pi: Array[Double], theta: Array[Array[Double]])
+
+  override def load(sc: SparkContext, path: String): NaiveBayesModel = {
+    val sqlContext = new SQLContext(sc)
+    import sqlContext._
+
+    // Load JSON metadata.
+    val metadataRDD = sqlContext.jsonFile(path + "/metadata")
+    val metadataArray = metadataRDD.select("clazz", "version").take(1)
+    assert(metadataArray.size == 1,
+      s"Unable to load NaiveBayesModel metadata from: ${path + "/metadata"}")
+    metadataArray(0) match {
+      case Row(clazz: String, version: String) =>
+        assert(clazz == classOf[NaiveBayesModel].getName, s"NaiveBayesModel.load" +
+          s" was given model file with metadata specifying a different model class: $clazz")
+        assert(version == Exportable.latestVersion, // only 1 version exists currently
+          s"NaiveBayesModel.load did not recognize model format version: $version")
+    }
+
+    // Load Parquet data.
+    val dataRDD = sqlContext.parquetFile(path + "/data")
+    val dataArray = dataRDD.select("labels", "pi", "theta").take(1)
+    assert(dataArray.size == 1, s"Unable to load NaiveBayesModel data from: ${path + "/data"}")
+    val data = dataArray(0)
+    assert(data.size == 3, s"Unable to load NaiveBayesModel data from: ${path + "/data"}")
+    val nb = data match {
+      case Row(labels: Seq[Double], pi: Seq[Double], theta: Seq[Seq[Double]]) =>
+        new NaiveBayesModel(labels.toArray, pi.toArray, theta.map(_.toArray).toArray)
+    }
+    nb
   }
 }
 

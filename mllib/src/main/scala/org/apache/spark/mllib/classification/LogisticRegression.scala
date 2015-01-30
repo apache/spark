@@ -156,8 +156,10 @@ class LogisticRegressionModel (
 
 object LogisticRegressionModel extends Importable[LogisticRegressionModel] {
 
+  /** Metadata for model import/export */
   private case class Metadata(clazz: String, version: String)
 
+  /** Model data for model import/export */
   private case class Data(weights: Vector, intercept: Double, threshold: Option[Double])
 
   override def load(sc: SparkContext, path: String): LogisticRegressionModel = {

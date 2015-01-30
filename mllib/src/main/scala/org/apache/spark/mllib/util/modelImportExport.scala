@@ -46,6 +46,10 @@ trait Exportable {
 
 }
 
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 object Exportable {
 
   /** Current version of model import/export format. */
@@ -74,3 +78,35 @@ trait Importable[Model <: Exportable] {
   def load(sc: SparkContext, path: String): Model
 
 }
+
+/*
+/**
+ * :: DeveloperApi ::
+ *
+ * Trait for models and transformers which may be saved as files.
+ * This should be inherited by the class which implements model instances.
+ *
+ * This specializes [[Exportable]] for local models which can be stored on a single machine.
+ * This provides helper functionality, but developers can choose to use [[Exportable]] instead,
+ * even for local models.
+ */
+@DeveloperApi
+trait LocalExportable {
+
+  /**
+   * Save this model to the given path.
+   *
+   * This saves:
+   *  - human-readable (JSON) model metadata to path/metadata/
+   *  - Parquet formatted data to path/data/
+   *
+   * The model may be loaded using [[Importable.load]].
+   *
+   * @param sc  Spark context used to save model data.
+   * @param path  Path specifying the directory in which to save this model.
+   *              This directory and any intermediate directory will be created if needed.
+   */
+  def save(sc: SparkContext, path: String): Unit
+
+}
+*/
