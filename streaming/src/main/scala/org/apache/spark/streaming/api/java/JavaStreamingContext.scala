@@ -36,7 +36,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.scheduler.StreamingListener
 import org.apache.hadoop.conf.Configuration
-import org.apache.spark.streaming.dstream.{PluggableInputDStream, ReceiverInputDStream, DStream}
+import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
 
 /**
@@ -207,6 +207,25 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    */
   def textFileStream(directory: String): JavaDStream[String] = {
     ssc.textFileStream(directory)
+  }
+
+  /**
+   * Create an input stream by reflection on a
+   * [[org.apache.spark.streaming.dstream.ReflectedDStreamFactory]] subclass.
+   *
+   * This allows InputDStream implementations to be loaded dynamically, without having to be
+   * compiled in to the org.apache.spark hierarchy.
+   *
+   * @param reflectedStreamFactoryClass Fully-qualified classname of a ReflectedDStreamFactory
+   *    subclass (e.g. "org.apache.spark.streaming.zeromq.ReflectedZeroMQStreamFactory")
+   * @param factoryClassParams String parameters to be passed into factory constructor
+   * @return new JavaInputDStream[T] instance
+   */
+  def reflectedStream[T](reflectedStreamFactoryClass: String,
+                         factoryClassParams: java.util.List[String]): JavaInputDStream[T] = {
+    implicit val cmt: ClassTag[T] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
+    ssc.reflectedStream[T](reflectedStreamFactoryClass, factoryClassParams:_*)
   }
 
   /**
