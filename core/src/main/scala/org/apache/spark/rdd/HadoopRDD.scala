@@ -35,6 +35,7 @@ import org.apache.hadoop.mapred.Reporter
 import org.apache.hadoop.mapred.JobID
 import org.apache.hadoop.mapred.TaskAttemptID
 import org.apache.hadoop.mapred.TaskID
+import org.apache.hadoop.mapred.lib.CombineFileSplit
 import org.apache.hadoop.util.ReflectionUtils
 
 import org.apache.spark._
@@ -213,18 +214,19 @@ class HadoopRDD[K, V](
       logInfo("Input split: " + split.inputSplit)
       val jobConf = getJobConf()
 
-      val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
+      val inputMetrics = context.taskMetrics
+        .getInputMetricsForReadMethod(DataReadMethod.Hadoop)
+
       // Find a function that will return the FileSystem bytes read by this thread. Do this before
       // creating RecordReader, because RecordReader's constructor might read some bytes
-      val bytesReadCallback = if (split.inputSplit.value.isInstanceOf[FileSplit]) {
-        SparkHadoopUtil.get.getFSBytesReadOnThreadCallback(
-          split.inputSplit.value.asInstanceOf[FileSplit].getPath, jobConf)
-      } else {
-        None
+      val bytesReadCallback = inputMetrics.bytesReadCallback.orElse {
+        split.inputSplit.value match {
+          case _: FileSplit | _: CombineFileSplit =>
+            SparkHadoopUtil.get.getFSBytesReadOnThreadCallback()
+          case _ => None
+        }
       }
-      if (bytesReadCallback.isDefined) {
-        context.taskMetrics.inputMetrics = Some(inputMetrics)
-      }
+      inputMetrics.setBytesReadCallback(bytesReadCallback)
 
       var reader: RecordReader[K, V] = null
       val inputFormat = getInputFormat(jobConf)
@@ -237,8 +239,6 @@ class HadoopRDD[K, V](
       val key: K = reader.createKey()
       val value: V = reader.createValue()
 
-      var recordsSinceMetricsUpdate = 0
-
       override def getNext() = {
         try {
           finished = !reader.next(key, value)
@@ -247,15 +247,6 @@ class HadoopRDD[K, V](
             finished = true
         }
 
-        // Update bytes read metric every few records
-        if (recordsSinceMetricsUpdate == HadoopRDD.RECORDS_BETWEEN_BYTES_READ_METRIC_UPDATES
-            && bytesReadCallback.isDefined) {
-          recordsSinceMetricsUpdate = 0
-          val bytesReadFn = bytesReadCallback.get
-          inputMetrics.bytesRead = bytesReadFn()
-        } else {
-          recordsSinceMetricsUpdate += 1
-        }
         (key, value)
       }
 
@@ -263,14 +254,13 @@ class HadoopRDD[K, V](
         try {
           reader.close()
           if (bytesReadCallback.isDefined) {
-            val bytesReadFn = bytesReadCallback.get
-            inputMetrics.bytesRead = bytesReadFn()
-          } else if (split.inputSplit.value.isInstanceOf[FileSplit]) {
+            inputMetrics.updateBytesRead()
+          } else if (split.inputSplit.value.isInstanceOf[FileSplit] ||
+                     split.inputSplit.value.isInstanceOf[CombineFileSplit]) {
             // If we can't get the bytes read from the FS stats, fall back to the split size,
             // which may be inaccurate.
             try {
-              inputMetrics.bytesRead = split.inputSplit.value.getLength
-              context.taskMetrics.inputMetrics = Some(inputMetrics)
+              inputMetrics.addBytesRead(split.inputSplit.value.getLength)
             } catch {
               case e: java.io.IOException =>
                 logWarning("Unable to get input size to set InputMetrics for task", e)

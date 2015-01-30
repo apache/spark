@@ -20,7 +20,6 @@ package org.apache.spark.mllib.feature
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
-import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.rdd.RDD
 

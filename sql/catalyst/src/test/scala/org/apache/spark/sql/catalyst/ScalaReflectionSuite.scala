@@ -43,7 +43,7 @@ case class NullableData(
     byteField: java.lang.Byte,
     booleanField: java.lang.Boolean,
     stringField: String,
-    decimalField: BigDecimal,
+    decimalField: java.math.BigDecimal,
     dateField: Date,
     timestampField: Timestamp,
     binaryField: Array[Byte])
@@ -60,6 +60,7 @@ case class OptionalData(
 
 case class ComplexData(
     arrayField: Seq[Int],
+    arrayField1: Array[Int],
     arrayFieldContainsNull: Seq[java.lang.Integer],
     mapField: Map[Int, Long],
     mapFieldValueContainsNull: Map[Int, java.lang.Long],
@@ -129,6 +130,10 @@ class ScalaReflectionSuite extends FunSuite {
       StructType(Seq(
         StructField(
           "arrayField",
+          ArrayType(IntegerType, containsNull = false),
+          nullable = true),
+        StructField(
+          "arrayField1",
           ArrayType(IntegerType, containsNull = false),
           nullable = true),
         StructField(
@@ -204,7 +209,8 @@ class ScalaReflectionSuite extends FunSuite {
     assert(DoubleType === typeOfObject(1.7976931348623157E308))
 
     // DecimalType
-    assert(DecimalType.Unlimited === typeOfObject(BigDecimal("1.7976931348623157E318")))
+    assert(DecimalType.Unlimited ===
+      typeOfObject(new java.math.BigDecimal("1.7976931348623157E318")))
 
     // DateType
     assert(DateType === typeOfObject(Date.valueOf("2014-07-25")))
@@ -243,7 +249,7 @@ class ScalaReflectionSuite extends FunSuite {
 
   test("convert PrimitiveData to catalyst") {
     val data = PrimitiveData(1, 1, 1, 1, 1, 1, true)
-    val convertedData = Seq(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true)
+    val convertedData = Row(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true)
     val dataType = schemaFor[PrimitiveData].dataType
     assert(convertToCatalyst(data, dataType) === convertedData)
   }
