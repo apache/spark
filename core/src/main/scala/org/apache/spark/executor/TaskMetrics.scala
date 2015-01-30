@@ -201,7 +201,7 @@ class TaskMetrics extends Serializable {
       merged.incLocalBlocksFetched(depMetrics.localBlocksFetched)
       merged.incRemoteBlocksFetched(depMetrics.remoteBlocksFetched)
       merged.incRemoteBytesRead(depMetrics.remoteBytesRead)
-      merged.recordsRead += depMetrics.recordsRead
+      merged.incRecordsRead(depMetrics.recordsRead)
     }
     _shuffleReadMetrics = Some(merged)
   }
@@ -242,31 +242,22 @@ object DataWriteMethod extends Enumeration with Serializable {
  */
 @DeveloperApi
 case class InputMetrics(readMethod: DataReadMethod.Value) {
-
-  private val _bytesRead: AtomicLong = new AtomicLong()
-  private val _recordsRead: AtomicLong = new AtomicLong()
+ 
+  @volatile @transient var bytesReadCallback: Option[() => Long] = None
 
   /**
    * Total bytes read.
    */
+  private val _bytesRead: AtomicLong = new AtomicLong()
   def bytesRead: Long = _bytesRead.get()
+  def incBytesRead(bytes: Long) = _bytesRead.addAndGet(bytes)
 
   /**
    * Total records read.
    */
-  def recordsRead: Long = _recordsRead.get()
-  @volatile @transient var bytesReadCallback: Option[() => Long] = None
-
-  /**
-   * Adds additional bytes read for this read method.
-   */
-  def addBytesRead(bytes: Long) = {
-    _bytesRead.addAndGet(bytes)
-  }
-
-  def addRecordsRead(records: Long) = {
-    _recordsRead.addAndGet(records)
-  }
+  def recordsRead: Long = _recordsRead.get() 
+  private val _recordsRead: AtomicLong = new AtomicLong()
+  def incRecordsRead(records: Long) =  _recordsRead.addAndGet(records)
 
   /**
    * Invoke the bytesReadCallback and mutate bytesRead.
@@ -302,7 +293,9 @@ case class OutputMetrics(writeMethod: DataWriteMethod.Value) {
   /**
    * Total records written
    */
-  var recordsWritten: Long = 0L
+  private var _recordsWritten: Long = 0L
+  def recordsWritten = _recordsWritten
+  private[spark] def setRecordsWritten(value: Long) = _recordsWritten = value
 }
 
 /**
@@ -317,7 +310,7 @@ class ShuffleReadMetrics extends Serializable {
   private var _remoteBlocksFetched: Int = _
   def remoteBlocksFetched = _remoteBlocksFetched
   private[spark] def incRemoteBlocksFetched(value: Int) = _remoteBlocksFetched += value
-  private[spark] def defRemoteBlocksFetched(value: Int) = _remoteBlocksFetched -= value
+  private[spark] def decRemoteBlocksFetched(value: Int) = _remoteBlocksFetched -= value
   
   /**
    * Number of local blocks fetched in this shuffle by this task
@@ -325,8 +318,7 @@ class ShuffleReadMetrics extends Serializable {
   private var _localBlocksFetched: Int = _
   def localBlocksFetched = _localBlocksFetched
   private[spark] def incLocalBlocksFetched(value: Int) = _localBlocksFetched += value
-  private[spark] def defLocalBlocksFetched(value: Int) = _localBlocksFetched -= value
-
+  private[spark] def decLocalBlocksFetched(value: Int) = _localBlocksFetched -= value
 
   /**
    * Time the task spent waiting for remote shuffle blocks. This only includes the time
@@ -354,7 +346,10 @@ class ShuffleReadMetrics extends Serializable {
   /**
    * Total number of records read from the shuffle by this task
    */
-  var recordsRead: Long = _
+  private var _recordsRead: Long = _
+  def recordsRead = _recordsRead
+  private[spark] def incRecordsRead(value: Long) = _recordsRead += value
+  private[spark] def decRecordsRead(value: Long) = _recordsRead -= value
 }
 
 /**
@@ -380,7 +375,11 @@ class ShuffleWriteMetrics extends Serializable {
   private[spark] def decShuffleWriteTime(value: Long) = _shuffleWriteTime -= value
   
   /**
-   * Total number of records written from the shuffle by this task
+   * Total number of records written to the shuffle by this task
    */
-  var recordsWritten: Long = _
+  @volatile private var _recordsWritten: Long = _
+  def recordsWritten = _recordsWritten
+  private[spark] def incRecordsWritten(value: Long) = _recordsWritten += value
+  private[spark] def decRecordsWritten(value: Long) = _recordsWritten -= value
+  private[spark] def setRecordsWritten(value: Long) = _recordsWritten = value
 }

@@ -416,7 +416,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val outputRecords = maybeOutput.map(_.recordsWritten.toString).getOrElse("")
 
       val maybeShuffleRead = metrics.flatMap(_.shuffleReadMetrics)
-      val shuffleReadBlockedTimeSortable = maybeShuffleRead.map(_.fetchWaitTime.toString).getOrElse("")
+      val shuffleReadBlockedTimeSortable = maybeShuffleRead
+        .map(_.fetchWaitTime.toString).getOrElse("")
       val shuffleReadBlockedTimeReadable =
         maybeShuffleRead.map(ms => UIUtils.formatDuration(ms.fetchWaitTime)).getOrElse("")
 

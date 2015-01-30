@@ -168,7 +168,7 @@ private[spark] class DiskBlockObjectWriter(
   override def revertPartialWritesAndClose() {
     try {
       writeMetrics.decShuffleBytesWritten(reportedPosition - initialPosition)
-      writeMetrics.recordsWritten -= numRecordsWritten
+      writeMetrics.decRecordsWritten(numRecordsWritten)
 
       if (initialized) {
         objOut.flush()
@@ -195,7 +195,7 @@ private[spark] class DiskBlockObjectWriter(
 
     objOut.writeObject(value)
     numRecordsWritten += 1
-    writeMetrics.recordsWritten += 1
+    writeMetrics.incRecordsWritten(1)
 
     if (numRecordsWritten % 32 == 0) {
       updateBytesWritten()

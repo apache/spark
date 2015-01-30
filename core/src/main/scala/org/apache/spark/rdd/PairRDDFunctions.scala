@@ -1008,7 +1008,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       }
       committer.commitTask(hadoopContext)
       bytesWrittenCallback.foreach { fn => outputMetrics.setBytesWritten(fn()) }
-      outputMetrics.recordsWritten = recordsWritten
+      outputMetrics.setRecordsWritten(recordsWritten)
       1
     } : Int
 
@@ -1081,7 +1081,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       }
       writer.commit()
       bytesWrittenCallback.foreach { fn => outputMetrics.setBytesWritten(fn()) }
-      outputMetrics.recordsWritten = recordsWritten
+      outputMetrics.setRecordsWritten(recordsWritten)
     }
 
     self.context.runJob(self, writeToFile)
@@ -1099,7 +1099,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       outputMetrics: OutputMetrics, recordsWritten: Long): Unit = {
     if (recordsWritten % PairRDDFunctions.RECORDS_BETWEEN_BYTES_WRITTEN_METRIC_UPDATES == 0) {
       bytesWrittenCallback.foreach { fn => outputMetrics.setBytesWritten(fn()) }
-      outputMetrics.recordsWritten = recordsWritten
+      outputMetrics.setRecordsWritten(recordsWritten)
     }
   }
 

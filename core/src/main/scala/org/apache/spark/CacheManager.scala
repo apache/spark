@@ -49,11 +49,11 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
         val inputMetrics = blockResult.inputMetrics
         val existingMetrics = context.taskMetrics
           .getInputMetricsForReadMethod(inputMetrics.readMethod)
-        existingMetrics.addBytesRead(inputMetrics.bytesRead)
+        existingMetrics.incBytesRead(inputMetrics.bytesRead)
 
         val iter = blockResult.data.asInstanceOf[Iterator[T]]
         new InterruptibleIterator(context, AfterNextInterceptingIterator(iter, (next: T) => {
-          existingMetrics.addRecordsRead(1)
+          existingMetrics.incRecordsRead(1)
           next
         }))
 

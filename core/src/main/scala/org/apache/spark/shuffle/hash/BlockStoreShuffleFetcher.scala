@@ -83,9 +83,9 @@ private[hash] object BlockStoreShuffleFetcher extends Logging {
     val itr = blockFetcherItr.flatMap(unpackBlock)
 
     val itr2 = new AfterNextInterceptingIterator[T](itr) {
-      val readMetrics = context.taskMetrics().createShuffleReadMetricsForDependency()
-      override def afterNext(next: T) : T = {
-        readMetrics.recordsRead += 1
+      val readMetrics = context.taskMetrics.createShuffleReadMetricsForDependency()
+      override def afterNext(next: T): T = {
+        readMetrics.incRecordsRead(1)
         next
       }
     }
