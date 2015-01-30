@@ -21,6 +21,8 @@ import java.io.Serializable
 import java.lang.{Double => JDouble}
 import java.util.Arrays.binarySearch
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.api.java.{JavaDoubleRDD, JavaRDD}
 import org.apache.spark.rdd.RDD
 
@@ -208,9 +210,13 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
   private def poolAdjacentViolators(
       input: Array[(Double, Double, Double)]): Array[(Double, Double, Double)] = {
 
+    if (input.isEmpty) {
+      return Array.empty
+    }
+
     // Pools sub array within given bounds assigning weighted average value to all elements.
     def pool(input: Array[(Double, Double, Double)], start: Int, end: Int): Unit = {
-      val poolSubArray = input.view.slice(start, end + 1)
+      val poolSubArray = input.slice(start, end + 1)
 
       val weightedSum = poolSubArray.map(lp => lp._1 * lp._3).sum
       val weight = poolSubArray.map(_._3).sum
@@ -246,7 +252,35 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
       }
     }
 
-    input
+    // For points having the same prediction, we only keep two boundary points.
+    val compressed = ArrayBuffer.empty[(Double, Double, Double)]
+
+    var (curLabel, curFeature, curWeight) = input.head
+    var rightBound = curFeature
+    def merge(): Unit = {
+      compressed += ((curLabel, curFeature, curWeight))
+      if (rightBound > curFeature) {
+        compressed += ((curLabel, rightBound, 0.0))
+      }
+    }
+    i = 1
+    while (i < input.length) {
+      val (label, feature, weight) = input(i)
+      if (label == curLabel) {
+        curWeight += weight
+        rightBound = feature
+      } else {
+        merge()
+        curLabel = label
+        curFeature = feature
+        curWeight = weight
+        rightBound = curFeature
+      }
+      i += 1
+    }
+    merge()
+
+    compressed.toArray
   }
 
   /**
