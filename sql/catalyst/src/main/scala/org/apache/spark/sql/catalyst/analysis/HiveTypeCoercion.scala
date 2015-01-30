@@ -504,16 +504,20 @@ trait HiveTypeCoercion {
       case Sum(e @ TimestampType()) => Sum(Cast(e, DoubleType))
       case Average(e @ TimestampType()) => Average(Cast(e, DoubleType))
 
+      // Coalesce should return the first non-null value, which could be any column
+      // from the list. So we need to make sure the return type is deterministic and
+      // compatible with every child column.
       case Coalesce(es) if es.map(_.dataType).distinct.size > 1 =>
         val dt: Option[DataType] = Some(NullType)
-        val rt = es.map(_.dataType).foldLeft(dt)((r, c) => if (r != None) {
-          findTightestCommonType(r.get, c)
-        } else {
-          None
+        val types = es.map(_.dataType)
+        val rt = types.foldLeft(dt)((r, c) => r match {
+          case None => None
+          case Some(d) => findTightestCommonType(d, c)
         })
         rt match {
-          case Some(ddt) => Coalesce(es.map(Cast(_, ddt)))
-          case None => sys.error("Cannot do type coercion over coalesce")
+          case Some(finaldt) => Coalesce(es.map(Cast(_, finaldt)))
+          case None =>
+            sys.error(s"Could not determine return type of Coalesce for ${types.mkString(",")}")
         }
     }
   }
