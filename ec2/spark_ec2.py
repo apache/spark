@@ -577,11 +577,8 @@ def launch_cluster(conn, opts, cluster_name):
                 master.add_tag(
                     key='Name',
                     value='{cn}-master-{iid}'.format(cn=cluster_name, iid=master.id))
-            except boto.exception.EC2ResponseError as e:
-                if e.error_code == "InvalidInstanceID.NotFound":
-                    time.sleep(0.1)
-                else:
-                    raise e
+            except:
+                pass
             else:
                 break
     for slave in slave_nodes:
@@ -590,11 +587,8 @@ def launch_cluster(conn, opts, cluster_name):
                 slave.add_tag(
                     key='Name',
                     value='{cn}-slave-{iid}'.format(cn=cluster_name, iid=slave.id))
-            except boto.exception.EC2ResponseError as e:
-                if e.error_code == "InvalidInstanceID.NotFound":
-                    time.Sleep(0.1)
-                else:
-                    raise e
+            except:
+                pass
             else:
                 break
 
