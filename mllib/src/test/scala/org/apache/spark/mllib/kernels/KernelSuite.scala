@@ -16,13 +16,13 @@
  */
 package org.apache.spark.mllib.kernels
 
-import breeze.linalg.norm
+import org.scalatest.FunSuite
 import org.apache.spark.mllib.classification.SVMSuite
 import org.apache.spark.mllib.prototype.{QuadraticRenyiEntropy, GreedyEntropySelector}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.scalatest.FunSuite
 
 class KernelSuite extends FunSuite with MLlibTestSparkContext {
+
   test("Testing evaluate function of Polynomial and RBF Functions"){
 
     val nPoints = 100
@@ -76,18 +76,22 @@ class KernelSuite extends FunSuite with MLlibTestSparkContext {
     val kernelMatrixRBF = rbf.buildKernelMatrixasRDD(mappedData, nPoints)
 
     assert(mappedData.count() == nPoints)
-    val mappedFeaturespoly = kernelMatrixpoly.buildFeatureMap(3)
-    val mappedFeaturesrbf = kernelMatrixRBF.buildFeatureMap(5)
+    val mappedFeaturespoly = poly.featureMapping(
+      kernelMatrixpoly.eigenDecomposition(99)
+    )(mappedData)(mappedData)
+    val mappedFeaturesrbf = rbf.featureMapping(
+      kernelMatrixRBF.eigenDecomposition(99)
+    )(mappedData)(mappedData)
 
-    assert(mappedFeaturespoly.filter((point) => point.features.size == 3).count() == 100)
-    assert(mappedFeaturesrbf.filter((point) => point.features.size == 5).count() == 100)
+    assert(mappedFeaturespoly.filter((point) => point._2.features.size == 99).count() == 100)
+    assert(mappedFeaturesrbf.filter((point) => point._2.features.size == 99).count() == 100)
 
   }
 
   test("Testing optimal bandwidth calculation on Gaussian Kernel" +
     " and maximum entropy subset selection"){
-    val nPoints = 10000
-
+    val nPoints = 1000
+    val subsetSize = 100
     // NOTE: Intercept should be small for generating equal 0s and 1s
     val A = 0.01
     val B = -1.5
@@ -110,9 +114,63 @@ class KernelSuite extends FunSuite with MLlibTestSparkContext {
     val subsetsel: GreedyEntropySelector = new GreedyEntropySelector(entropy)
 
     val subsetRDD = subsetsel.selectPrototypes(
-      newIndexedRDD,
-      100)
+      SVMKernel.indexedRDD(testRDD),
+      subsetSize)
 
-    assert(subsetRDD.count() == 100)
+    assert(subsetRDD.count() == subsetSize)
+  }
+
+  test("Testing rbf kernel with subset selection and feature map extraction") {
+    val nPoints = 1000
+    val nDimensions = 5
+    val subsetSize = 100
+    val unZip = SVMKernel.unzipIndexedData _
+
+    // NOTE: Intercept should be small for generating equal 0s and 1s
+    val A = 0.01
+    val B = -1.5
+    val C = 1.0
+
+    val testData = SVMSuite.generateSVMInput(
+      A,
+      Array[Double](B, C),
+      nPoints,
+      42)
+
+    val testRDD = sc.parallelize(testData, 2)
+
+    val newtestRDD = testRDD.map(_.features)
+    newtestRDD.cache()
+    val kern = new GaussianDensityKernel()
+    kern.optimalBandwidth(newtestRDD)
+    newtestRDD.unpersist()
+    val mappedData = SVMKernel.indexedRDD(testRDD)
+    mappedData.cache()
+
+    val entropy: QuadraticRenyiEntropy = new QuadraticRenyiEntropy(kern)
+    val subsetsel: GreedyEntropySelector = new GreedyEntropySelector(entropy)
+    val subsetRDD = subsetsel.selectPrototypes(
+      mappedData,
+      subsetSize)
+
+    val rbf = new RBFKernel(0.8)
+    subsetRDD.cache()
+
+    val kernelMatrixRBF = rbf.buildKernelMatrixasRDD(
+      SVMKernel.indexedRDD(unZip(subsetRDD)),
+      subsetSize)
+
+    val featureMap = rbf.featureMapping(
+      kernelMatrixRBF.eigenDecomposition(nDimensions)
+    )(subsetRDD) _
+
+    val mappedFeaturesrbf = featureMap(mappedData)
+
+    mappedFeaturesrbf.cache()
+    mappedData.unpersist()
+
+    assert(mappedFeaturesrbf.count() == nPoints)
+    assert(mappedFeaturesrbf.first()._2.features.size == nDimensions)
+
   }
 }

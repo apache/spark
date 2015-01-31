@@ -18,8 +18,7 @@
 package org.apache.spark.mllib.kernels
 
 import org.apache.spark.Logging
-import org.apache.spark.mllib.linalg.{DenseVector, Vectors, Vector}
-import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.rdd.RDD
 
 /**
@@ -28,9 +27,9 @@ import org.apache.spark.rdd.RDD
  */
 trait KernelEstimator extends Logging {
 
-  protected def R(r: Int, N: Long, pilot: breeze.linalg.Vector[Double],
-                  kernel: RDD[((Long, Long), Vector)]): breeze.linalg.Vector[Double]
-
+  protected def R(
+      r: Int, N: Long, pilot: breeze.linalg.Vector[Double],
+      kernel: RDD[((Long, Long), Vector)]): breeze.linalg.Vector[Double]
 
   /**
    * Calculate the AMISE (Asymptotic Mean Integrated Square Error)

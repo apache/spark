@@ -19,18 +19,20 @@ package org.apache.spark.mllib.prototype
 import breeze.linalg.DenseVector
 import org.apache.spark.Logging
 import org.apache.spark.mllib.kernels.DensityKernel
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.linalg.{Vectors, Vector}
 
 /**
  * Implements the quadratic Renyi Entropy
  */
 class QuadraticRenyiEntropy(dist: DensityKernel)
-  extends EntropyMeasure with Serializable with Logging {
+  extends EntropyMeasure
+  with Serializable
+  with Logging {
 
   val log_e = scala.math.log _
   val sqrt = scala.math.sqrt _
-
   override protected val density: DensityKernel = dist
 
   /**
@@ -48,13 +50,11 @@ class QuadraticRenyiEntropy(dist: DensityKernel)
    *         parameter 'density'.
    * */
 
-  override def entropy[K](data: RDD[(K, Vector)]): Double = {
-    val dim = data.first()._2.size
+  override def entropy[K](data: RDD[(K, LabeledPoint)]): Double = {
+    val dim = data.first()._2.features.size
     val root_two: breeze.linalg.Vector[Double] = DenseVector.fill(dim, sqrt(2))
     -1*log_e(data.cartesian(data).map((couple) =>
-      density.evaluate(
-        Vectors.fromBreeze(couple._1._2.toBreeze :/ root_two),
-        Vectors.fromBreeze(couple._2._2.toBreeze :/ root_two)
-      )).reduce((a,b) => a + b))
+      density.eval(Vectors.fromBreeze(couple._1._2.features.toBreeze :/ root_two -
+        couple._2._2.features.toBreeze :/ root_two))).reduce((a,b) => a + b))
   }
 }

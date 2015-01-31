@@ -18,7 +18,6 @@ package org.apache.spark.mllib.kernels
 
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.rdd.RDD
 
 /**
  * Abstract class which can be extended to
@@ -26,14 +25,14 @@ import org.apache.spark.rdd.RDD
  * Kernels.
  */
 trait DensityKernel extends Kernel with Serializable  {
+  protected val mu: Double
+  protected val r: Double
 
   def eval(x: Vector):Double
 
-  override def evaluate(x: Vector, y: Vector): Double =
-    this.eval(Vectors.fromBreeze(x.toBreeze.-=(y.toBreeze)))
+  override def evaluate(x: LabeledPoint, y: LabeledPoint): Double =
+    this.eval(Vectors.fromBreeze(x.features.toBreeze.-=(y.features.toBreeze)))
 
   protected def derivative(n: Int, x: Double): Double
 
-  protected val mu: Double
-  protected val r: Double
-}
+  }
