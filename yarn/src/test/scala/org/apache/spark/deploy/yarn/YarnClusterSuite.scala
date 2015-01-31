@@ -51,11 +51,13 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     |
     |from pyspark import SparkConf , SparkContext
     |if __name__ == "__main__":
-    |        if len(sys.argv) != 2:
-    |        		print >> sys.stderr, "Usage: test.py <file>"
+    |        if len(sys.argv) != 3:
+    |        		print >> sys.stderr, "Usage: test.py [master] [result file]"
     |        		exit(-1)
-    |        sc = SparkContext(appName="python-test")
-    |        status = open(sys.argv[1],'w')
+    |        conf = SparkConf()
+    |        conf.setMaster(sys.argv[1]).setAppName("python test in yarn cluster mode")
+    |        sc = SparkContext(conf=conf)
+    |        status = open(sys.argv[2],'w')
     |        result = "failure"
     |        rdd = sc.parallelize(range(10))
     |        cnt = rdd.count()
@@ -176,8 +178,9 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
 
     val args = Array("--primary-py-file", primaryPyFile.getAbsolutePath(),
       "--py-files", pyFile.getAbsolutePath(),
+      "--arg", "yarn-cluster",
       "--arg", result.getAbsolutePath(),
-      "--name", "python test on yarn-cluster",
+      "--name", "python test in yarn-cluster mode",
       "--num-executors", "1")
     Client.main(args)
     checkResult(result)
