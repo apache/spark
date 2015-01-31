@@ -136,9 +136,11 @@ object SparkSubmit {
       }
     }
 
+    val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
+
     // Require all python files to be local, so we can add them to the PYTHONPATH
     // when yarn-cluster, all python files can be non-local
-    if (args.isPython && !isYarnClusterMode(clusterManager, deployMode)) {
+    if (args.isPython && !isYarnCluster) {
       if (Utils.nonLocalPaths(args.primaryResource).nonEmpty) {
         SparkSubmit.printErrorAndExit(
           s"Only local python files are supported: $args.primaryResource")
@@ -184,7 +186,7 @@ object SparkSubmit {
 
     // In yarn-cluster mode for a python app, add primary resource and pyFiles to files
     // that can be distributed with the job
-    if (args.isPython && isYarnClusterMode(clusterManager,deployMode)) {
+    if (args.isPython && isYarnCluster) {
       args.files = mergeFileLists(args.files, args.primaryResource)
       args.files = mergeFileLists(args.files, args.pyFiles)
     }
@@ -266,7 +268,6 @@ object SparkSubmit {
     // Add the application jar automatically so the user doesn't have to call sc.addJar
     // For YARN cluster mode, the jar is already distributed on each node as "app.jar"
     // For python files, the primary resource is already distributed as a regular file
-    val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
     if (!isYarnCluster && !args.isPython) {
       var jars = sysProps.get("spark.jars").map(x => x.split(",").toSeq).getOrElse(Seq.empty)
       if (isUserJar(args.primaryResource)) {
@@ -452,13 +453,6 @@ object SparkSubmit {
 
   private[spark] def isInternal(primaryResource: String): Boolean = {
     primaryResource == SPARK_INTERNAL
-  }
-
-  /**
-   * Return whether the cluster mode is yarn-cluster mode.
-   */
-  private[spark] def isYarnClusterMode(clusterManager: Int, deployMode: Int): Boolean = {
-    clusterManager == YARN && deployMode == CLUSTER
   }
 
   /**

@@ -45,6 +45,27 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     |log4j.appender.console.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
     """.stripMargin
 
+  private val TEST_PYFILE = """
+    |import sys
+    |from operator import add
+    |
+    |from pyspark import SparkConf , SparkContext
+    |if __name__ == "__main__":
+    |        if len(sys.argv) != 2:
+    |        		print >> sys.stderr, "Usage: test.py <file>"
+    |        		exit(-1)
+    |        sc = SparkContext(appName="python-test")
+    |        status = open(sys.argv[1],'w')
+    |        result = "failure"
+    |        rdd = sc.parallelize(range(10))
+    |        cnt = rdd.count()
+    |        if cnt == 10:
+    |        		result = "success"
+    |        status.write(result)
+    |        status.close()
+    |        sc.stop()
+    """.stripMargin
+
   private var yarnCluster: MiniYARNCluster = _
   private var tempDir: File = _
   private var fakeSparkJar: File = _
@@ -144,6 +165,22 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
       Client.main(args)
     }
     assert(Utils.exceptionString(exception).contains("Application finished with failed status"))
+  }
+
+  test("run Python application in yarn-cluster mode") {
+    val primaryPyFile = new File(tempDir, "test.py")
+    Files.write(TEST_PYFILE, primaryPyFile, Charsets.UTF_8)
+    val pyFile = new File(tempDir, "test2.py")
+    Files.write(TEST_PYFILE, pyFile, Charsets.UTF_8)
+    var result = File.createTempFile("result", null, tempDir)
+
+    val args = Array("--primary-py-file", primaryPyFile.getAbsolutePath(),
+      "--py-files", pyFile.getAbsolutePath(),
+      "--arg", result.getAbsolutePath(),
+      "--name", "python test on yarn-cluster",
+      "--num-executors", "1")
+    Client.main(args)
+    checkResult(result)
   }
 
   /**
