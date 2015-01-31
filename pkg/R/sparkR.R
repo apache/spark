@@ -131,12 +131,7 @@ sparkR.init <- function(
   }
 
   nonEmptyJars <- Filter(function(x) { x != "" }, jars)
-  # URIs don't work very well on Windows, so just use paths.
-  localJarPaths <- if (.Platform$OS.type == "unix") {
-    sapply(nonEmptyJars, function(j) { paste("file://", j, sep = "") })
-  } else {
-    nonEmptyJars
-  }
+  localJarPaths <- sapply(nonEmptyJars, function(j) { utils::URLencode(paste("file://", j, sep = "")) })
 
   assign(
     ".sparkRjsc",
