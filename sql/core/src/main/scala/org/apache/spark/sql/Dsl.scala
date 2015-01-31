@@ -55,17 +55,17 @@ object Dsl {
     }
   }
 
-  private[this] implicit def toColumn(expr: Expression): Column = new Column(expr)
+  private[this] implicit def toColumn(expr: Expression): Column = Column(expr)
 
   /**
    * Returns a [[Column]] based on the given column name.
    */
-  def col(colName: String): Column = new Column(colName)
+  def col(colName: String): Column = Column(colName)
 
   /**
    * Returns a [[Column]] based on the given column name. Alias of [[col]].
    */
-  def column(colName: String): Column = new Column(colName)
+  def column(colName: String): Column = Column(colName)
 
   /**
    * Creates a [[Column]] of literal value.
@@ -94,7 +94,7 @@ object Dsl {
       case _ =>
         throw new RuntimeException("Unsupported literal type " + literal.getClass + " " + literal)
     }
-    new Column(literalExpr)
+    Column(literalExpr)
   }
 
   def sum(e: Column): Column = Sum(e.expr)

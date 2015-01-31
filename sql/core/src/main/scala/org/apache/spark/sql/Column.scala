@@ -17,23 +17,26 @@
 
 package org.apache.spark.sql
 
+import scala.annotation.tailrec
 import scala.language.implicitConversions
 
 import org.apache.spark.sql.Dsl.lit
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedStar, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{Project, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Subquery, Project, LogicalPlan}
 import org.apache.spark.sql.types._
 
 
-object Column {
-  /**
-   * Creates a [[Column]] based on the given column name. Same as [[Dsl.col]].
-   */
-  def apply(colName: String): Column = new Column(colName)
+private[sql] object Column {
 
-  /** For internal pattern matching. */
-  private[sql] def unapply(col: Column): Option[Expression] = Some(col.expr)
+  def apply(colName: String): Column = new IncomputableColumn(colName)
+
+  def apply(expr: Expression): Column = new IncomputableColumn(expr)
+
+  def apply(sqlContext: SQLContext, plan: LogicalPlan, expr: Expression): Column = {
+    new ComputableColumn(sqlContext, plan, expr)
+  }
+
+  def unapply(col: Column): Option[Expression] = Some(col.expr)
 }
 
 
@@ -53,44 +56,42 @@ object Column {
  *
  */
 // TODO: Improve documentation.
-class Column(
-    sqlContext: Option[SQLContext],
-    plan: Option[LogicalPlan],
-    protected[sql] val expr: Expression)
-  extends DataFrame(sqlContext, plan) with ExpressionApi {
+trait Column extends DataFrame with ExpressionApi {
 
-  /** Turns a Catalyst expression into a `Column`. */
-  protected[sql] def this(expr: Expression) = this(None, None, expr)
+  protected[sql] def expr: Expression
 
   /**
-   * Creates a new `Column` expression based on a column or attribute name.
-   * The resolution of this is the same as SQL. For example:
-   *
-   * - "colName" becomes an expression selecting the column named "colName".
-   * - "*" becomes an expression selecting all columns.
-   * - "df.*" becomes an expression selecting all columns in data frame "df".
+   * Returns true iff the [[Column]] is computable.
    */
-  def this(name: String) = this(name match {
-    case "*" => UnresolvedStar(None)
-    case _ if name.endsWith(".*") => UnresolvedStar(Some(name.substring(0, name.length - 2)))
-    case _ => UnresolvedAttribute(name)
-  })
+  def isComputable: Boolean
 
-  override def isComputable: Boolean = sqlContext.isDefined && plan.isDefined
+  private def constructColumn(other: Column)(newExpr: Expression): Column = {
+    // Removes all the top level projection and subquery so we can get to the underlying plan.
+    @tailrec def stripProject(p: LogicalPlan): LogicalPlan = p match {
+      case Project(_, child) => stripProject(child)
+      case Subquery(_, child) => stripProject(child)
+      case _ => p
+    }
 
-  /**
-   * An implicit conversion function internal to this class. This function creates a new Column
-   * based on an expression. If the expression itself is not named, it aliases the expression
-   * by calling it "col".
-   */
-  private[this] implicit def toColumn(expr: Expression): Column = {
-    val projectedPlan = plan.map { p =>
-      Project(Seq(expr match {
+    def computableCol(baseCol: ComputableColumn, expr: Expression) = {
+      val plan = Project(Seq(expr match {
         case named: NamedExpression => named
         case unnamed: Expression => Alias(unnamed, "col")()
-      }), p)
+      }), baseCol.plan)
+      Column(baseCol.sqlContext, plan, expr)
     }
-    new Column(sqlContext, projectedPlan, expr)
+
+    (this, other) match {
+      case (left: ComputableColumn, right: ComputableColumn) =>
+        if (stripProject(left.plan).sameResult(stripProject(right.plan))) {
+          computableCol(right, newExpr)
+        } else {
+          Column(newExpr)
+        }
+      case (left: ComputableColumn, _) => computableCol(left, newExpr)
+      case (_, right: ComputableColumn) => computableCol(right, newExpr)
+      case (_, _) => Column(newExpr)
+    }
   }
 
   /**
@@ -100,7 +101,7 @@ class Column(
    *   df.select( -df("amount") )
    * }}}
    */
-  override def unary_- : Column = UnaryMinus(expr)
+  override def unary_- : Column = constructColumn(null) { UnaryMinus(expr) }
 
   /**
    * Bitwise NOT.
@@ -109,7 +110,7 @@ class Column(
    *   df.select( ~df("flags") )
    * }}}
    */
-  override def unary_~ : Column = BitwiseNot(expr)
+  override def unary_~ : Column = constructColumn(null) { BitwiseNot(expr) }
 
   /**
    * Inversion of boolean expression, i.e. NOT.
@@ -118,7 +119,7 @@ class Column(
    *   df.select( !df("isActive") )
    * }}
    */
-  override def unary_! : Column = Not(expr)
+  override def unary_! : Column = constructColumn(null) { Not(expr) }
 
 
   /**
@@ -129,7 +130,9 @@ class Column(
    *   df.select( df("colA".equalTo(df("colB")) )
    * }}}
    */
-  override def === (other: Column): Column = EqualTo(expr, other.expr)
+  override def === (other: Column): Column = constructColumn(other) {
+    EqualTo(expr, other.expr)
+  }
 
   /**
    * Equality test with a literal value.
@@ -169,7 +172,9 @@ class Column(
    *   df.select( !(df("colA") === df("colB")) )
    * }}}
    */
-  override def !== (other: Column): Column = Not(EqualTo(expr, other.expr))
+  override def !== (other: Column): Column = constructColumn(other) {
+    Not(EqualTo(expr, other.expr))
+  }
 
   /**
    * Inequality test with a literal value.
@@ -188,7 +193,9 @@ class Column(
    *   people.select( people("age") > Literal(21) )
    * }}}
    */
-  override def > (other: Column): Column = GreaterThan(expr, other.expr)
+  override def > (other: Column): Column =  constructColumn(other) {
+    GreaterThan(expr, other.expr)
+  }
 
   /**
    * Greater than a literal value.
@@ -206,7 +213,9 @@ class Column(
    *   people.select( people("age") < Literal(21) )
    * }}}
    */
-  override def < (other: Column): Column = LessThan(expr, other.expr)
+  override def < (other: Column): Column =  constructColumn(other) {
+    LessThan(expr, other.expr)
+  }
 
   /**
    * Less than a literal value.
@@ -224,7 +233,9 @@ class Column(
    *   people.select( people("age") <= Literal(21) )
    * }}}
    */
-  override def <= (other: Column): Column = LessThanOrEqual(expr, other.expr)
+  override def <= (other: Column): Column = constructColumn(other) {
+    LessThanOrEqual(expr, other.expr)
+  }
 
   /**
    * Less than or equal to a literal value.
@@ -242,7 +253,9 @@ class Column(
    *   people.select( people("age") >= Literal(21) )
    * }}}
    */
-  override def >= (other: Column): Column = GreaterThanOrEqual(expr, other.expr)
+  override def >= (other: Column): Column =  constructColumn(other) {
+    GreaterThanOrEqual(expr, other.expr)
+  }
 
   /**
    * Greater than or equal to a literal value.
@@ -256,9 +269,11 @@ class Column(
   /**
    * Equality test with an expression that is safe for null values.
    */
-  override def <=> (other: Column): Column = other match {
-    case null => EqualNullSafe(expr, lit(null).expr)
-    case _ => EqualNullSafe(expr, other.expr)
+  override def <=> (other: Column): Column = constructColumn(other) {
+    other match {
+      case null => EqualNullSafe(expr, lit(null).expr)
+      case _ => EqualNullSafe(expr, other.expr)
+    }
   }
 
   /**
@@ -269,12 +284,12 @@ class Column(
   /**
    * True if the current expression is null.
    */
-  override def isNull: Column = IsNull(expr)
+  override def isNull: Column = constructColumn(null) { IsNull(expr) }
 
   /**
    * True if the current expression is NOT null.
    */
-  override def isNotNull: Column = IsNotNull(expr)
+  override def isNotNull: Column = constructColumn(null) { IsNotNull(expr) }
 
   /**
    * Boolean OR with an expression.
@@ -283,7 +298,9 @@ class Column(
    *   people.select( people("inSchool") || people("isEmployed") )
    * }}}
    */
-  override def || (other: Column): Column = Or(expr, other.expr)
+  override def || (other: Column): Column = constructColumn(other) {
+    Or(expr, other.expr)
+  }
 
   /**
    * Boolean OR with a literal value.
@@ -301,7 +318,9 @@ class Column(
    *   people.select( people("inSchool") && people("isEmployed") )
    * }}}
    */
-  override def && (other: Column): Column = And(expr, other.expr)
+  override def && (other: Column): Column = constructColumn(other) {
+    And(expr, other.expr)
+  }
 
   /**
    * Boolean AND with a literal value.
@@ -315,7 +334,9 @@ class Column(
   /**
    * Bitwise AND with an expression.
    */
-  override def & (other: Column): Column = BitwiseAnd(expr, other.expr)
+  override def & (other: Column): Column = constructColumn(other) {
+    BitwiseAnd(expr, other.expr)
+  }
 
   /**
    * Bitwise AND with a literal value.
@@ -325,7 +346,9 @@ class Column(
   /**
    * Bitwise OR with an expression.
    */
-  override def | (other: Column): Column = BitwiseOr(expr, other.expr)
+  override def | (other: Column): Column = constructColumn(other) {
+    BitwiseOr(expr, other.expr)
+  }
 
   /**
    * Bitwise OR with a literal value.
@@ -335,7 +358,9 @@ class Column(
   /**
    * Bitwise XOR with an expression.
    */
-  override def ^ (other: Column): Column = BitwiseXor(expr, other.expr)
+  override def ^ (other: Column): Column = constructColumn(other) {
+    BitwiseXor(expr, other.expr)
+  }
 
   /**
    * Bitwise XOR with a literal value.
@@ -349,7 +374,9 @@ class Column(
    *   people.select( people("height") + people("weight") )
    * }}}
    */
-  override def + (other: Column): Column = Add(expr, other.expr)
+  override def + (other: Column): Column = constructColumn(other) {
+    Add(expr, other.expr)
+  }
 
   /**
    * Sum of this expression and another expression.
@@ -367,7 +394,9 @@ class Column(
    *   people.select( people("height") - people("weight") )
    * }}}
    */
-  override def - (other: Column): Column = Subtract(expr, other.expr)
+  override def - (other: Column): Column = constructColumn(other) {
+    Subtract(expr, other.expr)
+  }
 
   /**
    * Subtraction. Subtract a literal value from this expression.
@@ -385,7 +414,9 @@ class Column(
    *   people.select( people("height") * people("weight") )
    * }}}
    */
-  override def * (other: Column): Column = Multiply(expr, other.expr)
+  override def * (other: Column): Column = constructColumn(other) {
+    Multiply(expr, other.expr)
+  }
 
   /**
    * Multiplication this expression and a literal value.
@@ -403,7 +434,9 @@ class Column(
    *   people.select( people("height") / people("weight") )
    * }}}
    */
-  override def / (other: Column): Column = Divide(expr, other.expr)
+  override def / (other: Column): Column = constructColumn(other) {
+    Divide(expr, other.expr)
+  }
 
   /**
    * Division this expression by a literal value.
@@ -417,7 +450,9 @@ class Column(
   /**
    * Modulo (a.k.a. remainder) expression.
    */
-  override def % (other: Column): Column = Remainder(expr, other.expr)
+  override def % (other: Column): Column = constructColumn(other) {
+    Remainder(expr, other.expr)
+  }
 
   /**
    * Modulo (a.k.a. remainder) expression.
@@ -430,29 +465,40 @@ class Column(
    * by the evaluated values of the arguments.
    */
   @scala.annotation.varargs
-  override def in(list: Column*): Column = In(expr, list.map(_.expr))
+  override def in(list: Column*): Column = {
+    new IncomputableColumn(In(expr, list.map(_.expr)))
+  }
 
-  override def like(literal: String): Column = Like(expr, lit(literal).expr)
+  override def like(literal: String): Column = constructColumn(null) {
+    Like(expr, lit(literal).expr)
+  }
 
-  override def rlike(literal: String): Column = RLike(expr, lit(literal).expr)
+  override def rlike(literal: String): Column = constructColumn(null) {
+    RLike(expr, lit(literal).expr)
+  }
 
   /**
    * An expression that gets an item at position `ordinal` out of an array.
    */
-  override def getItem(ordinal: Int): Column = GetItem(expr, Literal(ordinal))
+  override def getItem(ordinal: Int): Column = constructColumn(null) {
+    GetItem(expr, Literal(ordinal))
+  }
 
   /**
    * An expression that gets a field by name in a [[StructField]].
    */
-  override def getField(fieldName: String): Column = GetField(expr, fieldName)
+  override def getField(fieldName: String): Column = constructColumn(null) {
+    GetField(expr, fieldName)
+  }
 
   /**
    * An expression that returns a substring.
    * @param startPos expression for the starting position.
    * @param len expression for the length of the substring.
    */
-  override def substr(startPos: Column, len: Column): Column =
-    Substring(expr, startPos.expr, len.expr)
+  override def substr(startPos: Column, len: Column): Column = {
+    new IncomputableColumn(Substring(expr, startPos.expr, len.expr))
+  }
 
   /**
    * An expression that returns a substring.
@@ -461,16 +507,21 @@ class Column(
    */
   override def substr(startPos: Int, len: Int): Column = this.substr(lit(startPos), lit(len))
 
-  override def contains(other: Column): Column = Contains(expr, other.expr)
+  override def contains(other: Column): Column = constructColumn(other) {
+    Contains(expr, other.expr)
+  }
 
   override def contains(literal: Any): Column = this.contains(lit(literal))
 
-
-  override def startsWith(other: Column): Column = StartsWith(expr, other.expr)
+  override def startsWith(other: Column): Column = constructColumn(other) {
+    StartsWith(expr, other.expr)
+  }
 
   override def startsWith(literal: String): Column = this.startsWith(lit(literal))
 
-  override def endsWith(other: Column): Column = EndsWith(expr, other.expr)
+  override def endsWith(other: Column): Column = constructColumn(other) {
+    EndsWith(expr, other.expr)
+  }
 
   override def endsWith(literal: String): Column = this.endsWith(lit(literal))
 
@@ -481,7 +532,7 @@ class Column(
    *   df.select($"colA".as("colB"))
    * }}}
    */
-  override def as(alias: String): Column = Alias(expr, alias)()
+  override def as(alias: String): Column = constructColumn(null) { Alias(expr, alias)() }
 
   /**
    * Casts the column to a different data type.
@@ -494,7 +545,7 @@ class Column(
    *   df.select(df("colA").cast("int"))
    * }}}
    */
-  override def cast(to: DataType): Column = Cast(expr, to)
+  override def cast(to: DataType): Column = constructColumn(null) { Cast(expr, to) }
 
   /**
    * Casts the column to a different data type, using the canonical string representation
@@ -505,28 +556,30 @@ class Column(
    *   df.select(df("colA").cast("int"))
    * }}}
    */
-  override def cast(to: String): Column = Cast(expr, to.toLowerCase match {
-    case "string" => StringType
-    case "boolean" => BooleanType
-    case "byte" => ByteType
-    case "short" => ShortType
-    case "int" => IntegerType
-    case "long" => LongType
-    case "float" => FloatType
-    case "double" => DoubleType
-    case "decimal" => DecimalType.Unlimited
-    case "date" => DateType
-    case "timestamp" => TimestampType
-    case _ => throw new RuntimeException(s"""Unsupported cast type: "$to"""")
-  })
+  override def cast(to: String): Column = constructColumn(null) {
+    Cast(expr, to.toLowerCase match {
+      case "string" => StringType
+      case "boolean" => BooleanType
+      case "byte" => ByteType
+      case "short" => ShortType
+      case "int" => IntegerType
+      case "long" => LongType
+      case "float" => FloatType
+      case "double" => DoubleType
+      case "decimal" => DecimalType.Unlimited
+      case "date" => DateType
+      case "timestamp" => TimestampType
+      case _ => throw new RuntimeException(s"""Unsupported cast type: "$to"""")
+    })
+  }
 
-  override def desc: Column = SortOrder(expr, Descending)
+  override def desc: Column = constructColumn(null) { SortOrder(expr, Descending) }
 
-  override def asc: Column = SortOrder(expr, Ascending)
+  override def asc: Column = constructColumn(null) { SortOrder(expr, Ascending) }
 }
 
 
-class ColumnName(name: String) extends Column(name) {
+class ColumnName(name: String) extends IncomputableColumn(name) {
 
   /** Creates a new AttributeReference of type boolean */
   def boolean: StructField = StructField(name, BooleanType)

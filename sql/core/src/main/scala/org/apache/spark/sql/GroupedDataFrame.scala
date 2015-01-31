@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 /**
  * A set of methods for aggregations on a [[DataFrame]], created by [[DataFrame.groupBy]].
  */
-class GroupedDataFrame protected[sql](df: DataFrame, groupingExprs: Seq[Expression])
+class GroupedDataFrame protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expression])
   extends GroupedDataFrameApi {
 
   private[this] implicit def toDataFrame(aggExprs: Seq[NamedExpression]): DataFrame = {
@@ -36,8 +36,8 @@ class GroupedDataFrame protected[sql](df: DataFrame, groupingExprs: Seq[Expressi
       case expr: NamedExpression => expr
       case expr: Expression => Alias(expr, expr.toString)()
     }
-    new DataFrame(df.sqlContext,
-      Aggregate(groupingExprs, namedGroupingExprs ++ aggExprs, df.logicalPlan))
+    DataFrame(
+      df.sqlContext, Aggregate(groupingExprs, namedGroupingExprs ++ aggExprs, df.logicalPlan))
   }
 
   private[this] def aggregateNumericColumns(f: Expression => Expression): Seq[NamedExpression] = {
@@ -112,8 +112,7 @@ class GroupedDataFrame protected[sql](df: DataFrame, groupingExprs: Seq[Expressi
       case expr: NamedExpression => expr
       case expr: Expression => Alias(expr, expr.toString)()
     }
-
-    new DataFrame(df.sqlContext, Aggregate(groupingExprs, aggExprs, df.logicalPlan))
+    DataFrame(df.sqlContext, Aggregate(groupingExprs, aggExprs, df.logicalPlan))
   }
 
   /**
