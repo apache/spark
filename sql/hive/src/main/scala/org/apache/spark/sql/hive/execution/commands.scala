@@ -102,11 +102,46 @@ case class CreateMetastoreDataSource(
     tableName: String,
     userSpecifiedSchema: Option[StructType],
     provider: String,
-    options: Map[String, String]) extends RunnableCommand {
+    options: Map[String, String],
+    allowExisting: Boolean) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext) = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
-    hiveContext.catalog.createDataSourceTable(tableName, userSpecifiedSchema, provider, options)
+    hiveContext.catalog.createDataSourceTable(
+      tableName,
+      userSpecifiedSchema,
+      provider,
+      options,
+      allowExisting)
+
+    Seq.empty[Row]
+  }
+}
+
+case class CreateMetastoreDataSourceAsSelect(
+    tableName: String,
+    provider: String,
+    options: Map[String, String],
+    allowExisting: Boolean,
+    query: String) extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext) = {
+    val hiveContext = sqlContext.asInstanceOf[HiveContext]
+
+    // The semantic of allowExisting for CREATE TABLE is if allowExisting is true
+    // and the table already exists, we will do nothing. If allowExisting is false,
+    // and the table already exists, an exception will be thrown.
+    val alreadyExists = hiveContext.catalog.tableExists(Seq(tableName))
+    if (!(alreadyExists && allowExisting)) {
+      val df = hiveContext.sql(query)
+      hiveContext.catalog.createDataSourceTable(
+        tableName,
+        Some(df.schema),
+        provider,
+        options,
+        allowExisting)
+      df.insertInto(tableName, true)
+    }
 
     Seq.empty[Row]
   }

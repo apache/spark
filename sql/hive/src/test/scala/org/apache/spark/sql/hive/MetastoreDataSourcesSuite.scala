@@ -19,10 +19,13 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
+import org.apache.hadoop.hive.metastore.api.AlreadyExistsException
+import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.commons.io.FileUtils
 
+import org.apache.spark.sql.catalyst.util
 import org.apache.spark.sql._
 import org.apache.spark.util.Utils
 import org.apache.spark.sql.types._
@@ -39,6 +42,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
   }
 
   val filePath = Utils.getSparkClassLoader.getResource("sample.json").getFile
+  var ctasPath: File = util.getTempFilePath("jsonCTAS").getCanonicalFile
 
   test ("persistent JSON table") {
     sql(
@@ -94,7 +98,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       StructField("<d>", innerStruct, true) ::
       StructField("b", StringType, true) :: Nil)
 
-    assert(expectedSchema == table("jsonTable").schema)
+    assert(expectedSchema === table("jsonTable").schema)
 
     jsonFile(filePath).registerTempTable("expectedJsonTable")
 
@@ -240,7 +244,93 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     invalidateTable("jsonTable")
     val expectedSchema = StructType(StructField("c_!@(3)", IntegerType, true) :: Nil)
 
-    assert(expectedSchema == table("jsonTable").schema)
+    assert(expectedSchema === table("jsonTable").schema)
+  }
+
+  test("CTAS") {
+    sql(
+      s"""
+        |CREATE TABLE jsonTable
+        |USING org.apache.spark.sql.json.DefaultSource
+        |OPTIONS (
+        |  path '${filePath}'
+        |)
+      """.stripMargin)
+
+    sql(
+      s"""
+        |CREATE TABLE ctasJsonTable
+        |USING org.apache.spark.sql.json.DefaultSource
+        |OPTIONS (
+        |  path '${ctasPath}'
+        |) AS
+        |SELECT * FROM jsonTable
+      """.stripMargin)
+
+    assert(table("ctasJsonTable").schema === table("jsonTable").schema)
+
+    checkAnswer(
+      sql("SELECT * FROM ctasJsonTable"),
+      sql("SELECT * FROM jsonTable").collect())
+  }
+
+  test("CTAS with IF NOT EXISTS") {
+    sql(
+      s"""
+        |CREATE TABLE jsonTable
+        |USING org.apache.spark.sql.json.DefaultSource
+        |OPTIONS (
+        |  path '${filePath}'
+        |)
+      """.stripMargin)
+
+    sql(
+      s"""
+        |CREATE TABLE ctasJsonTable
+        |USING org.apache.spark.sql.json.DefaultSource
+        |OPTIONS (
+        |  path '${ctasPath}'
+        |) AS
+        |SELECT * FROM jsonTable
+      """.stripMargin)
+
+    // Create the table again should trigger a AlreadyExistsException.
+    val exception = intercept[HiveException] {
+      sql(
+        s"""
+        |CREATE TABLE ctasJsonTable
+        |USING org.apache.spark.sql.json.DefaultSource
+        |OPTIONS (
+        |  path '${ctasPath}'
+        |) AS
+        |SELECT * FROM jsonTable
+      """.stripMargin)
+    }
+    assert(exception.getMessage.contains("AlreadyExistsException"),
+      "Hive should complain that ctasJsonTable already exists")
+
+    // The following statement should be fine if it has IF NOT EXISTS.
+    // It tries to create a table ctasJsonTable with a new schema.
+    // The actual table's schema and data should not be changed.
+    sql(
+      s"""
+        |CREATE TABLE IF NOT EXISTS ctasJsonTable
+        |USING org.apache.spark.sql.json.DefaultSource
+        |OPTIONS (
+        |  path '${ctasPath}'
+        |) AS
+        |SELECT a FROM jsonTable
+      """.stripMargin)
+
+    // Discard the cached relation.
+    invalidateTable("ctasJsonTable")
+
+    // Schema should not be changed.
+    assert(table("ctasJsonTable").schema === table("jsonTable").schema)
+    // Table data should not be changed.
+    checkAnswer(
+      sql("SELECT * FROM ctasJsonTable"),
+      sql("SELECT * FROM jsonTable").collect())
   }
 
   test("SPARK-5286 Fail to drop an invalid table when using the data source API") {

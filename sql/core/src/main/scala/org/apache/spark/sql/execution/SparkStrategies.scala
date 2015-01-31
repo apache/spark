@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.parquet._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.sources.{CreateTempTableUsing, CreateTableUsing}
+import org.apache.spark.sql.sources.{CreateTempTableUsingAsSelect, CreateTableUsingAsSelect, CreateTempTableUsing, CreateTableUsing}
 
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
@@ -314,11 +314,17 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object DDLStrategy extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case CreateTableUsing(tableName, userSpecifiedSchema, provider, true, options) =>
+      case CreateTableUsing(tableName, userSpecifiedSchema, provider, true, opts, allowExisting) =>
         ExecutedCommand(
-          CreateTempTableUsing(tableName, userSpecifiedSchema, provider, options)) :: Nil
+          CreateTempTableUsing(
+            tableName, userSpecifiedSchema, provider, opts, allowExisting)) :: Nil
+      case CreateTableUsing(_, _, _, false, _, _) =>
+        sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
 
-      case CreateTableUsing(tableName, userSpecifiedSchema, provider, false, options) =>
+      case CreateTableUsingAsSelect(tableName, provider, true, options, allowExisting, query) =>
+        ExecutedCommand(
+          CreateTempTableUsingAsSelect(tableName, provider, options, allowExisting, query)) :: Nil
+      case CreateTableUsingAsSelect(_, _, false, _, _, _) =>
         sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
 
       case _ => Nil

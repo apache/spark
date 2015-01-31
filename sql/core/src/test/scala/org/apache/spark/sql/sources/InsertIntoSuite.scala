@@ -29,9 +29,9 @@ class InsertIntoSuite extends DataSourceTest {
   import caseInsensisitiveContext._
 
   var path: File = util.getTempFilePath("jsonInsertInto").getCanonicalFile
-
   before {
-    jsonRDD(sparkContext.parallelize("""{"a":1, "b": "str"}""" :: Nil)).registerTempTable("jt")
+    val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
+    jsonRDD(rdd).registerTempTable("jt")
     sql(
       s"""
         |CREATE TEMPORARY TABLE jsonTable (a int, b string)
@@ -43,10 +43,12 @@ class InsertIntoSuite extends DataSourceTest {
   }
 
   after {
+    dropTempTable("jsonTable")
+    dropTempTable("jt")
     if (path.exists()) Utils.deleteRecursively(path)
   }
 
-  test("Simple INSERT OVERWRITE") {
+  test("Simple INSERT OVERWRITE a JSONRelation") {
     sql(
       s"""
         |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
@@ -54,11 +56,11 @@ class InsertIntoSuite extends DataSourceTest {
 
     checkAnswer(
       sql("SELECT a, b FROM jsonTable"),
-      Row(1, "str")
+      (1 to 10).map(i => Row(i, s"str$i"))
     )
   }
 
-  test("INSERT OVERWRITE multiple times") {
+  test("INSERT OVERWRITE a JSONRelation multiple times") {
     sql(
       s"""
         |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
@@ -76,7 +78,7 @@ class InsertIntoSuite extends DataSourceTest {
 
     checkAnswer(
       sql("SELECT a, b FROM jsonTable"),
-      Row(1, "str")
+      (1 to 10).map(i => Row(i, s"str$i"))
     )
   }
 

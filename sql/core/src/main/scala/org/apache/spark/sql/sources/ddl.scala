@@ -37,6 +37,7 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
     try {
       Some(apply(input))
     } catch {
+      case ddlException: DDLException => throw ddlException
       case _ if !exceptionOnError => None
       case x: Throwable => throw x
     }
@@ -46,8 +47,7 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
     lexical.initialize(reservedWords)
     phrase(dataType)(new lexical.Scanner(input)) match {
       case Success(r, x) => r
-      case x =>
-        sys.error(s"Unsupported dataType: $x")
+      case x => throw new DDLException(s"Unsupported dataType: $x")
     }
   }
 
@@ -57,8 +57,12 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
   protected val CREATE = Keyword("CREATE")
   protected val TEMPORARY = Keyword("TEMPORARY")
   protected val TABLE = Keyword("TABLE")
+  protected val IF = Keyword("IF")
+  protected val NOT = Keyword("NOT")
+  protected val EXISTS = Keyword("EXISTS")
   protected val USING = Keyword("USING")
   protected val OPTIONS = Keyword("OPTIONS")
+  protected val AS = Keyword("AS")
 
   // Data types.
   protected val STRING = Keyword("STRING")
@@ -83,22 +87,46 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
   protected def start: Parser[LogicalPlan] = ddl
 
   /**
-   * `CREATE [TEMPORARY] TABLE avroTable
+   * `CREATE [TEMPORARY] TABLE avroTable [IF NOT EXISTS]
    * USING org.apache.spark.sql.avro
    * OPTIONS (path "../hive/src/test/resources/data/files/episodes.avro")`
    * or
-   * `CREATE [TEMPORARY] TABLE avroTable(intField int, stringField string...)
+   * `CREATE [TEMPORARY] TABLE avroTable(intField int, stringField string...) [IF NOT EXISTS]
    * USING org.apache.spark.sql.avro
    * OPTIONS (path "../hive/src/test/resources/data/files/episodes.avro")`
+   * or
+   * `CREATE [TEMPORARY] TABLE avroTable [IF NOT EXISTS]
+   * USING org.apache.spark.sql.avro
+   * OPTIONS (path "../hive/src/test/resources/data/files/episodes.avro")`
+   * AS SELECT ...
    */
   protected lazy val createTable: Parser[LogicalPlan] =
   (
-    (CREATE ~> TEMPORARY.? <~ TABLE) ~ ident
-      ~ (tableCols).? ~ (USING ~> className) ~ (OPTIONS ~> options) ^^ {
-      case temp ~ tableName ~ columns ~ provider ~ opts =>
-        val userSpecifiedSchema = columns.flatMap(fields => Some(StructType(fields)))
-        CreateTableUsing(tableName, userSpecifiedSchema, provider, temp.isDefined, opts)
-    }
+    (CREATE ~> TEMPORARY.? <~ TABLE) ~ (IF ~> NOT <~ EXISTS).? ~ ident
+      ~ (tableCols).? ~ (USING ~> className) ~ (OPTIONS ~> options) ~ (AS ~> restInput).? ^^ {
+      case temp ~ allowExisting ~ tableName ~ columns ~ provider ~ opts ~ query =>
+        if (query.isDefined) {
+          if (columns.isDefined) {
+            throw new DDLException(
+              "a CREATE TABLE AS SELECT statement does not allow column definitions.")
+          }
+          CreateTableUsingAsSelect(tableName,
+            provider,
+            temp.isDefined,
+            opts,
+            allowExisting.isDefined,
+            query.get)
+        } else {
+          val userSpecifiedSchema = columns.flatMap(fields => Some(StructType(fields)))
+          CreateTableUsing(
+            tableName,
+            userSpecifiedSchema,
+            provider,
+            temp.isDefined,
+            opts,
+            allowExisting.isDefined)
+        }
+      }
   )
 
   protected lazy val tableCols: Parser[Seq[StructField]] =  "(" ~> repsep(column, ",") <~ ")"
@@ -215,18 +243,55 @@ private[sql] case class CreateTableUsing(
     userSpecifiedSchema: Option[StructType],
     provider: String,
     temporary: Boolean,
-    options: Map[String, String]) extends Command
+    options: Map[String, String],
+    allowExisting: Boolean) extends Command
+
+private[sql] case class CreateTableUsingAsSelect(
+    tableName: String,
+    provider: String,
+    temporary: Boolean,
+    options: Map[String, String],
+    allowExisting: Boolean,
+    query: String) extends Command
 
 private [sql] case class CreateTempTableUsing(
     tableName: String,
     userSpecifiedSchema: Option[StructType],
     provider: String,
-    options: Map[String, String])  extends RunnableCommand {
+    options: Map[String, String],
+    allowExisting: Boolean) extends RunnableCommand {
 
   def run(sqlContext: SQLContext) = {
-    val resolved = ResolvedDataSource(sqlContext, userSpecifiedSchema, provider, options)
-    sqlContext.registerRDDAsTable(
-      new DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
+    if (!sqlContext.catalog.tableExists(Seq(tableName))) {
+      val resolved = ResolvedDataSource(sqlContext, userSpecifiedSchema, provider, options)
+      sqlContext.registerRDDAsTable(
+        new DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
+    }
+
+    Seq.empty
+  }
+}
+
+private [sql] case class CreateTempTableUsingAsSelect(
+    tableName: String,
+    provider: String,
+    options: Map[String, String],
+    allowExisting: Boolean,
+    query: String) extends RunnableCommand {
+
+  def run(sqlContext: SQLContext) = {
+    // The semantic of allowExisting for CREATE TEMPORARY TABLE is if allowExisting is true
+    // and the table already exists, we will do nothing. If allowExisting is false,
+    // and the table already exists, we will overwrite it.
+    val alreadyExists = sqlContext.catalog.tableExists(Seq(tableName))
+    if (!(alreadyExists && allowExisting)) {
+      val df = sqlContext.sql(query)
+      val resolved = ResolvedDataSource(sqlContext, Some(df.schema), provider, options)
+      sqlContext.registerRDDAsTable(
+        new DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
+      df.insertInto(tableName, true)
+    }
+
     Seq.empty
   }
 }
@@ -248,3 +313,9 @@ protected class CaseInsensitiveMap(map: Map[String, String]) extends Map[String,
 
   override def -(key: String): Map[String, String] = baseMap - key.toLowerCase()
 }
+
+/**
+ * The exception thrown from the DDL parser.
+ * @param message
+ */
+protected[sql] class DDLException(message: String) extends Exception(message)

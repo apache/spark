@@ -103,7 +103,8 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       tableName: String,
       userSpecifiedSchema: Option[StructType],
       provider: String,
-      options: Map[String, String]) = {
+      options: Map[String, String],
+      allowExisting: Boolean) = {
     val (dbName, tblName) = processDatabaseAndTableName("default", tableName)
     val tbl = new Table(dbName, tblName)
 
@@ -118,7 +119,11 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
     // create the table
     synchronized {
-      client.createTable(tbl, false)
+      try client.createTable(tbl, allowExisting) catch {
+        case e: org.apache.hadoop.hive.metastore.api.AlreadyExistsException
+          if allowExisting => // Do nothing
+        case e: Throwable => throw e
+      }
     }
   }
 
