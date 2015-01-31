@@ -28,6 +28,21 @@ import scala.language.postfixOps
 class DataFrameSuite extends QueryTest {
   import org.apache.spark.sql.TestData._
 
+  test("analysis error should be eagerly reported") {
+    intercept[Exception] { testData.select('nonExistentName) }
+    intercept[Exception] {
+      testData.groupBy('key).agg(Map("nonExistentName" -> "sum"))
+    }
+    intercept[Exception] {
+      testData.groupBy("nonExistentName").agg(Map("key" -> "sum"))
+    }
+
+    // Uncomment the following once we report the errors properly.
+//    intercept[Exception] {
+//      testData.groupBy("nonExistentName").agg(Map("key" -> "sum"))
+//    }
+  }
+
   test("table scan") {
     checkAnswer(
       testData,

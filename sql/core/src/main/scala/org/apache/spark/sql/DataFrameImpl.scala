@@ -41,22 +41,28 @@ import org.apache.spark.util.Utils
 
 
 /**
- * Implementation for [[DataFrame]]. Refer to [[DataFrame]] directly for documentation.
+ * See [[DataFrame]] for documentation.
  */
-class DataFrameImpl protected[sql](
+private[sql] class DataFrameImpl protected[sql](
     override val sqlContext: SQLContext,
-    private val baseLogicalPlan: LogicalPlan)
+    val queryExecution: SQLContext#QueryExecution)
   extends DataFrame {
 
-  @transient override lazy val queryExecution = sqlContext.executePlan(baseLogicalPlan)
+  def this(sqlContext: SQLContext, logicalPlan: LogicalPlan) = {
+    this(sqlContext, {
+      val qe = sqlContext.executePlan(logicalPlan)
+      qe.analyzed  // This should force analysis and throw errors if there are any
+      qe
+    })
+  }
 
-  @transient protected[sql] override val logicalPlan: LogicalPlan = baseLogicalPlan match {
+  @transient protected[sql] override val logicalPlan: LogicalPlan = queryExecution.logical match {
     // For various commands (like DDL) and queries with side effects, we force query optimization to
     // happen right away to let these side effects take place eagerly.
     case _: Command | _: InsertIntoTable | _: CreateTableAsSelect[_] |_: WriteToFile =>
       LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sqlContext)
     case _ =>
-      baseLogicalPlan
+      queryExecution.logical
   }
 
   /**

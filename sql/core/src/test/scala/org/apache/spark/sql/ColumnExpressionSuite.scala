@@ -29,7 +29,11 @@ class ColumnExpressionSuite extends QueryTest {
 
   test("computability check") {
     def shouldBeComputable(c: Column): Unit = assert(c.isComputable === true)
-    def shouldNotBeComputable(c: Column): Unit = assert(c.isComputable === false)
+
+    def shouldNotBeComputable(c: Column): Unit = {
+      assert(c.isComputable === false)
+      intercept[UnsupportedOperationException] { c.head() }
+    }
 
     shouldBeComputable(testData2("a"))
     shouldBeComputable(testData2("b"))

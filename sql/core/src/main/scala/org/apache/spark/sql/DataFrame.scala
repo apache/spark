@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.StructType
 
 private[sql] object DataFrame {
   def apply(sqlContext: SQLContext, logicalPlan: LogicalPlan): DataFrame = {
-    new DataFrameImpl(sqlContext, logicalPlan)
+    new DataFrameImpl(sqlContext, sqlContext.executePlan(logicalPlan))
   }
 }
 
