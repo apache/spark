@@ -140,7 +140,8 @@ object SparkSubmit {
     // when yarn-cluster, all python files can be non-local
     if (args.isPython && !isYarnClusterMode(clusterManager, deployMode)) {
       if (Utils.nonLocalPaths(args.primaryResource).nonEmpty) {
-        SparkSubmit.printErrorAndExit(s"Only local python files are supported: $args.primaryResource")
+        SparkSubmit.printErrorAndExit(
+          s"Only local python files are supported: $args.primaryResource")
       }
       val nonLocalPyFiles = Utils.nonLocalPaths(args.pyFiles).mkString(",")
       if (nonLocalPyFiles.nonEmpty) {
