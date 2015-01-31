@@ -20,6 +20,7 @@ setup(
         'flask-bootstrap>=3.3.0.1',
         'flask-cache>=0.13.1',
         'flask-login>=0.2.11',
+        'flower>=0.7.3',
         'hive-thrift-py>=0.0.1',
         'jinja2>=2.7.3',
         'librabbitmq>=1.6.1',

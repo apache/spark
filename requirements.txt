@@ -7,6 +7,7 @@ flask-admin
 flask-bootstrap
 flask-cache
 flask-login
+flower
 hive-thrift-py
 ipython[all]
 jinja2
