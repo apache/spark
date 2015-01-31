@@ -16,10 +16,8 @@
  */
 package org.apache.spark.mllib.kernels
 
-import breeze.linalg.{DenseVector, norm}
 import org.apache.spark.Logging
-import org.apache.spark.mllib.linalg
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 
@@ -29,20 +27,22 @@ import org.apache.spark.rdd.RDD
  */
 
 class RBFKernel(private var bandwidth: Double)
-  extends SVMKernel[RDD[((Long, Long), Double)]] with Logging with Serializable {
+  extends SVMKernel[RDD[((Long, Long), Double)]]
+  with Logging
+  with Serializable {
 
   def setBandwidth(d: Double): Unit = {
     this.bandwidth = d
   }
 
-  override def evaluate(x: linalg.Vector, y: linalg.Vector): Double = {
-    val diff: linalg.Vector = Vectors.fromBreeze(x.toBreeze - y.toBreeze)
+  override def evaluate(x: LabeledPoint, y: LabeledPoint): Double = {
+    val diff: Vector = Vectors.fromBreeze(x.features.toBreeze - y.features.toBreeze)
     Math.exp(-1*Math.pow(Vectors.norm(diff, 2.0), 2)/(2*Math.pow(bandwidth, 2)))
   }
 
-  override def buildKernelMatrixasRDD(mappedData: RDD[(Long, LabeledPoint)],
-                                      length: Long):
-  KernelMatrix[RDD[((Long, Long), Double)]] =
+  override def buildKernelMatrixasRDD(
+      mappedData: RDD[(Long, LabeledPoint)],
+      length: Long): KernelMatrix[RDD[((Long, Long), Double)]] =
     SVMKernel.buildSVMKernelMatrix(mappedData, length, this.evaluate)
 
 }

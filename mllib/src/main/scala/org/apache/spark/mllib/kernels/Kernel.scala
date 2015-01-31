@@ -17,6 +17,8 @@
 package org.apache.spark.mllib.kernels
 
 import org.apache.spark.mllib.linalg._
+import org.apache.spark.mllib.regression.LabeledPoint
+
 /**
  * Declares a trait Kernel which would serve
  * as a base trait for all classes implementing
@@ -36,5 +38,5 @@ trait Kernel {
    * @return the value of the Kernel function.
    *
    * */
-  def evaluate(x: Vector, y:Vector): Double
+  def evaluate(x: LabeledPoint, y: LabeledPoint): Double
 }

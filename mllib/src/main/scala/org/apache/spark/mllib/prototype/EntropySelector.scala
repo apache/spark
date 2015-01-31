@@ -17,8 +17,8 @@
 
 package org.apache.spark.mllib.prototype
 
-import org.apache.spark.{SparkContext, Logging}
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.Logging
+import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 
 /**
@@ -26,27 +26,29 @@ import org.apache.spark.rdd.RDD
  * subset selector
  */
 abstract class EntropySelector
-  extends SubsetSelector[(Long, Vector)] with Serializable
+  extends SubsetSelector[(Long, LabeledPoint)]
+  with Serializable
   with Logging {
   protected val measure: EntropyMeasure
   protected val delta: Double
   protected val MAX_ITERATIONS: Int
 }
 
-class GreedyEntropySelector(m: EntropyMeasure,
-                            del: Double = 0.0001,
-                            max: Int = 5000)
-  extends EntropySelector with Serializable
+class GreedyEntropySelector(
+    m: EntropyMeasure,
+    del: Double = 0.0001,
+    max: Int = 5000)
+  extends EntropySelector
+  with Serializable
   with Logging {
 
   override protected val measure: EntropyMeasure = m
   override protected val delta: Double = del
   override protected val MAX_ITERATIONS: Int =  max
 
-  override def selectPrototypes(data: RDD[(Long, Vector)],
-                                M: Int): RDD[(Long, Vector)] = {
-
-    val context = data.context
+  override def selectPrototypes(
+      data: RDD[(Long, LabeledPoint)],
+      M: Int): RDD[(Long, LabeledPoint)] = {
 
     /*
     * Draw an initial sample of M points
@@ -56,7 +58,7 @@ class GreedyEntropySelector(m: EntropyMeasure,
     * will use as a prototype set to
     * to each iteration
     * */
-
+    logInfo("Initializing the working set, by drawing randomly from the training set")
     val workingset = data.keys.takeSample(false, M)
 
     val r = scala.util.Random
@@ -71,6 +73,7 @@ class GreedyEntropySelector(m: EntropyMeasure,
     var newEntropy: Double = 0.0
     var d: Double = Double.NegativeInfinity
     var rand: Int = 0
+    logInfo("Starting iterative, entropy based greedy subset selection")
     do {
       /*
        * Randomly select a point from
@@ -96,7 +99,7 @@ class GreedyEntropySelector(m: EntropyMeasure,
       * */
       d = newEntropy - oldEntropy
 
-      if(d < 0) {
+      if(d > 0) {
         /*
         * Improvement in entropy so
         * keep the updated working set
@@ -119,7 +122,7 @@ class GreedyEntropySelector(m: EntropyMeasure,
       it += 1
     } while(math.abs(d) >= this.delta &&
       it <= this.MAX_ITERATIONS)
-
+    logInfo("Working set obtained, now starting process of packaging it as an RDD")
     //Time to return the final working set
     data.filter((p) => workingset.contains(p._1))
   }

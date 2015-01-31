@@ -19,20 +19,22 @@ package org.apache.spark.mllib.kernels
 
 import breeze.linalg.{norm, DenseVector}
 import org.apache.spark.Logging
-import org.apache.spark.mllib.linalg
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.mllib.stat.Statistics
 import org.apache.spark.rdd.RDD
-import breeze.numerics.{sqrt => brsqrt}
-
 
 class GaussianDensityKernel
-  extends DensityKernel with KernelEstimator with Logging with Serializable {
+  extends DensityKernel
+  with KernelEstimator
+  with Logging
+  with Serializable {
   private val exp = scala.math.exp _
   private val pow = scala.math.pow _
   private val sqrt = scala.math.sqrt _
   private val Pi = scala.math.Pi
   protected var bandwidth: Vector = Vectors.zeros(10)
+  override protected val mu = (1/4)*(1/sqrt(Pi))
+  override protected val r = (1/2)*(1/sqrt(Pi))
 
   private def evalForDimension(x: Double, pilot: Double): Double =
     exp(-1*pow(x/pilot, 2)/2)/sqrt(Pi * 2)
@@ -64,12 +66,11 @@ class GaussianDensityKernel
     hermiteHelper(n, x, 1, x)
   }
 
-  def setBandwidth(b: linalg.Vector): Unit = {
+  def setBandwidth(b: Vector): Unit = {
     this.bandwidth = b
   }
 
-  override def eval(x: linalg.Vector) = evalWithBandwidth(x, this.bandwidth)
-
+  override def eval(x: Vector) = evalWithBandwidth(x, this.bandwidth)
 
   /**
    * Calculates the derivative at point x for the Gaussian
@@ -105,9 +106,9 @@ class GaussianDensityKernel
    * @return R the estimated value of the integral of the square
    *         of the rth derivative of the kernel over the Real domain.
    * */
-  override protected def R(r: Int, N: Long, pilot: breeze.linalg.Vector[Double],
-                           kernel: RDD[((Long, Long), Vector)]): breeze.linalg.Vector[Double] = {
-
+  override protected def R(
+      r: Int, N: Long, pilot: breeze.linalg.Vector[Double],
+      kernel: RDD[((Long, Long), Vector)]): breeze.linalg.Vector[Double] = {
 
     /*
     * Apply map to get values of the derivative of the kernel
@@ -128,9 +129,6 @@ class GaussianDensityKernel
 
     integralvalue._2.toBreeze
   }
-
-  override protected val mu = (1/4)*(1/sqrt(Pi))
-  override protected val r = (1/2)*(1/sqrt(Pi))
 
   /**
    * Use the Sheather and Jones plug-in
@@ -184,7 +182,6 @@ class GaussianDensityKernel
         prod._2._2.toBreeze))
       )
     kernel.cache()
-
 
     val newRf6: breeze.linalg.Vector[Double] = this.R(8, dataSize, h2, kernel)
 

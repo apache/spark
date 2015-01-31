@@ -18,16 +18,15 @@
 package org.apache.spark.mllib.prototype
 
 import org.apache.spark.mllib.kernels.DensityKernel
+import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.linalg.Vector
 
 /**
  * Models a general entropy measure.
  * Any entropy measure would require a
  * probability distribution
  */
-abstract class EntropyMeasure extends Measure[Vector]
-with Serializable{
+abstract class EntropyMeasure extends Measure[LabeledPoint] with Serializable {
 
   protected val density: DensityKernel
 
@@ -43,7 +42,7 @@ with Serializable{
    * @return The entropy of the data set.
    * */
 
-  def entropy[K](data: RDD[(K, Vector)]): Double
+  def entropy[K](data: RDD[(K, LabeledPoint)]): Double
 
-  override def evaluate[K](data: RDD[(K, Vector)]): Double = this.entropy(data)
+  override def evaluate[K](data: RDD[(K, LabeledPoint)]): Double = this.entropy(data)
 }

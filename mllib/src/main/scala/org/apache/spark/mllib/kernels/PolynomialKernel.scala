@@ -17,7 +17,6 @@
 package org.apache.spark.mllib.kernels
 
 import org.apache.spark.Logging
-import org.apache.spark.mllib.linalg
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 
@@ -25,9 +24,12 @@ import org.apache.spark.rdd.RDD
  * Standard Polynomial SVM Kernel
  * of the form K(Xi,Xj) = (Xi^T * Xj + d)^r
  */
-class PolynomialKernel(private var degree: Int,
-                       private var offset: Double)
-  extends SVMKernel[RDD[((Long, Long), Double)]] with Logging with Serializable{
+class PolynomialKernel(
+    private var degree: Int,
+    private var offset: Double)
+  extends SVMKernel[RDD[((Long, Long), Double)]]
+  with Logging
+  with Serializable{
 
   def setDegree(d: Int): Unit = {
     this.degree = d
@@ -37,11 +39,11 @@ class PolynomialKernel(private var degree: Int,
     this.offset = o
   }
 
-  override def evaluate(x: linalg.Vector, y: linalg.Vector): Double =
-    Math.pow(x.toBreeze dot y.toBreeze + this.offset, this.degree)
+  override def evaluate(x: LabeledPoint, y: LabeledPoint): Double =
+    Math.pow(x.features.toBreeze dot y.features.toBreeze + this.offset, this.degree)
 
-  override def buildKernelMatrixasRDD(mappedData: RDD[(Long, LabeledPoint)],
-                                      length: Long):
-  KernelMatrix[RDD[((Long, Long), Double)]] =
+  override def buildKernelMatrixasRDD(
+      mappedData: RDD[(Long, LabeledPoint)],
+      length: Long): KernelMatrix[RDD[((Long, Long), Double)]] =
     SVMKernel.buildSVMKernelMatrix(mappedData, length, this.evaluate)
 }
