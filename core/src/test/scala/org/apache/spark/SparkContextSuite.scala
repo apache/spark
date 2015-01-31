@@ -17,7 +17,10 @@
 
 package org.apache.spark
 
-import java.io.{File, PrintWriter}
+import java.io.File
+
+import com.google.common.base.Charsets._
+import com.google.common.io.Files
 
 import org.scalatest.FunSuite
 
@@ -79,9 +82,7 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
     val file = new File("somefile")
     val absolutePath = file.getAbsolutePath
     try {
-      val pw = new PrintWriter(file)
-      pw.print("somewords")
-      pw.close()
+      Files.write("somewords", file, UTF_8)
       val length = file.length()
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
       sc.addFile(file.getAbsolutePath)

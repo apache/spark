@@ -601,8 +601,10 @@ private[spark] object Utils extends Logging {
 
   /**
    * Fetch a file or directory from a Hadoop-compatible filesystem.
+   *
+   * Visible for testing
    */
-  private def fetchHcfsFile(
+  private[spark] def fetchHcfsFile(
       path: Path,
       targetDir: File,
       fs: FileSystem,
