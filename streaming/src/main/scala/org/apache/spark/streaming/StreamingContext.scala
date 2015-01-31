@@ -31,6 +31,7 @@ import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 import org.apache.spark._
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.input.FixedLengthBinaryInputFormat
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -405,6 +406,7 @@ class StreamingContext private[streaming] (
    * @param directory HDFS directory to monitor for new file
    * @param recordLength length of each record in bytes
    */
+  @Experimental
   def binaryRecordsStream(
       directory: String,
       recordLength: Int): DStream[Array[Byte]] = {
