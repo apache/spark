@@ -17,47 +17,84 @@
 
 package org.apache.spark.deploy
 
-import org.apache.spark.util.ResetSystemProperties
-import org.scalatest.{Matchers, FunSuite}
+import java.io.File
 
-class SparkSubmitUtilsSuite extends FunSuite with Matchers with ResetSystemProperties {
+import org.apache.ivy.core.module.descriptor.MDArtifact
+import org.apache.ivy.plugins.resolver.IBiblioResolver
+import org.scalatest.FunSuite
 
-  def beforeAll() {
-    System.setProperty("spark.testing", "true")
-  }
+class SparkSubmitUtilsSuite extends FunSuite {
 
   test("incorrect maven coordinate throws error") {
     val coordinates = Seq("a:b: ", " :a:b", "a: :b", "a:b:", ":a:b", "a::b", "::", "a:b", "a")
     for (coordinate <- coordinates) {
       intercept[IllegalArgumentException] {
-        SparkSubmitUtils.resolveMavenCoordinates(coordinate, null, null, true)
+        SparkSubmitUtils.extractMavenCoordinates(coordinate)
       }
     }
   }
 
+  test("create repo resolvers") {
+    val resolver1 = SparkSubmitUtils.createRepoResolvers(None)
+    // should have central by default
+    assert(resolver1.getResolvers.size() === 1)
+    assert(resolver1.getResolvers.get(0).asInstanceOf[IBiblioResolver].getName === "central")
+
+    val repos = "a/1,b/2,c/3"
+    val resolver2 = SparkSubmitUtils.createRepoResolvers(Option(repos))
+    assert(resolver2.getResolvers.size() === 4)
+    val expected = repos.split(",").map(r => s"$r/")
+    resolver2.getResolvers.toArray.zipWithIndex.foreach { case (resolver: IBiblioResolver, i) =>
+      if (i == 0) {
+        assert(resolver.getName === "central")
+      } else {
+        assert(resolver.getName === s"repo-$i")
+        assert(resolver.getRoot === expected(i - 1))
+      }
+    }
+  }
+
+  test("add dependencies works correctly") {
+    val md = SparkSubmitUtils.getModuleDescriptor
+    val artifacts = SparkSubmitUtils.extractMavenCoordinates("com.databricks:spark-csv_2.10:0.1," +
+      "com.databricks:spark-avro_2.10:0.1")
+
+    SparkSubmitUtils.addDependenciesToIvy(md, artifacts, "default")
+    assert(md.getDependencies.length === 2)
+  }
+
+  test("ivy path works correctly") {
+    val ivyPath = "dummy/ivy"
+    val md = SparkSubmitUtils.getModuleDescriptor
+    val artifacts = for (i <- 0 until 3) yield new MDArtifact(md, s"jar-$i", "jar", "jar")
+    var jPaths = SparkSubmitUtils.resolveDependencyPaths(artifacts.toArray, new File(ivyPath))
+    for (i <- 0 until 3) {
+      val index = jPaths.indexOf(ivyPath)
+      assert(index >= 0)
+      jPaths = jPaths.substring(index + ivyPath.length)
+    }
+    // end to end
+    val jarPath = SparkSubmitUtils.resolveMavenCoordinates(
+      "com.databricks:spark-csv_2.10:0.1", None, Option(ivyPath), true)
+    assert(jarPath.indexOf(ivyPath) >= 0, "should use non-default ivy path")
+  }
+
+  test("search for artifact at other repositories") {
+    val path = SparkSubmitUtils.resolveMavenCoordinates("com.agimatec:agimatec-validation:0.9.3",
+      Option("https://oss.sonatype.org/content/repositories/agimatec/"), None, true)
+    assert(path.indexOf("agimatec-validation") >= 0, "should find package. If it doesn't, check" +
+      "if package still exists. If it has been removed, replace the example in this test.")
+  }
+
   test("dependency not found throws RuntimeException") {
     intercept[RuntimeException] {
-      SparkSubmitUtils.resolveMavenCoordinates("a:b:c", null, null, true)
+      SparkSubmitUtils.resolveMavenCoordinates("a:b:c", None, None, true)
     }
   }
 
   test("neglects Spark and Spark's dependencies") {
     val path = SparkSubmitUtils.resolveMavenCoordinates(
-      "org.apache.spark:spark-core_2.10:1.2.0", null, null, true)
-    assert(path == "", "should return empty path")
-  }
-
-  test("search for artifact at other repositories") {
-    val path = SparkSubmitUtils.resolveMavenCoordinates("com.agimatec:agimatec-validation:0.9.3",
-      "https://oss.sonatype.org/content/repositories/agimatec/", null, true)
-    assert(path.indexOf("agimatec-validation") >= 0, "should find package. If it doesn't, check" +
-      "if package still exists. If it has been removed, replace the example in this test.")
-  }
-
-  test("ivy path works correctly") {
-    val ivyPath = "dummy/ivy"
-    val jarPath = SparkSubmitUtils.resolveMavenCoordinates(
-      "com.databricks:spark-csv_2.10:0.1", null, ivyPath, true)
-    assert(jarPath.indexOf(ivyPath) >= 0, "should use non-default ivy path")
+      "org.apache.spark:spark-core_2.10:1.2.0", None, None, true)
+    assert(path === "", "should return empty path")
   }
 }

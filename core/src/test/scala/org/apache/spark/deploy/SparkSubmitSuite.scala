@@ -307,7 +307,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       "--name", "testApp",
       "--master", "local-cluster[2,1,512]",
       "--jars", jarsString,
-      unusedJar.toString)
+      unusedJar.toString, "SparkSubmitClassA", "SparkSubmitClassB")
     runSparkSubmit(args)
   }
 
@@ -315,12 +315,13 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val packagesString = "com.databricks:spark-csv_2.10:0.1,com.databricks:spark-avro_2.10:0.1"
     val args = Seq(
-      "--class", MavenArtifactDownloadTest.getClass.getName.stripSuffix("$"),
+      "--class", JarCreationTest.getClass.getName.stripSuffix("$"),
       "--name", "testApp",
       "--master", "local-cluster[2,1,512]",
       "--packages", packagesString,
       "--conf", "spark.ui.enabled=false",
-      unusedJar.toString)
+      unusedJar.toString,
+      "com.databricks.spark.csv.DefaultSource", "com.databricks.spark.avro.DefaultSource")
     runSparkSubmit(args)
   }
 
@@ -480,33 +481,8 @@ object JarCreationTest extends Logging {
     val result = sc.makeRDD(1 to 100, 10).mapPartitions { x =>
       var exception: String = null
       try {
-        Class.forName("SparkSubmitClassA", true, Thread.currentThread().getContextClassLoader)
-        Class.forName("SparkSubmitClassB", true, Thread.currentThread().getContextClassLoader)
-      } catch {
-        case t: Throwable =>
-          exception = t + "\n" + t.getStackTraceString
-          exception = exception.replaceAll("\n", "\n\t")
-      }
-      Option(exception).toSeq.iterator
-    }.collect()
-    if (result.nonEmpty) {
-      throw new Exception("Could not load user class from jar:\n" + result(0))
-    }
-  }
-}
-
-object MavenArtifactDownloadTest extends Logging {
-  def main(args: Array[String]) {
-    Utils.configTestLog4j("INFO")
-    val conf = new SparkConf()
-    val sc = new SparkContext(conf)
-    val result = sc.makeRDD(1 to 100, 10).mapPartitions { x =>
-      var exception: String = null
-      try {
-        Class.forName("com.databricks.spark.csv.DefaultSource",
-          true, Thread.currentThread().getContextClassLoader)
-        Class.forName("com.databricks.spark.avro.DefaultSource",
-          true, Thread.currentThread().getContextClassLoader)
+        Class.forName(args(0), true, Thread.currentThread().getContextClassLoader)
+        Class.forName(args(1), true, Thread.currentThread().getContextClassLoader)
       } catch {
         case t: Throwable =>
           exception = t + "\n" + t.getStackTraceString
