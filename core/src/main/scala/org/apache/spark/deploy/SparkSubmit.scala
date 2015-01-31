@@ -580,8 +580,8 @@ private[spark] object SparkSubmitUtils extends Logging {
       val ivyConfName = "default"
       // set ivy settings for location of cache
       val ivySettings: IvySettings = new IvySettings
-      // Directories for caching downloads through ivy and storing the jars when maven coordinates are
-      // supplied to spark-submit
+      // Directories for caching downloads through ivy and storing the jars when maven coordinates
+      // are supplied to spark-submit
       val alternateIvyCache = ivyPath.getOrElse("")
       val packagesDirectory: File =
         if (alternateIvyCache.trim.isEmpty) {
