@@ -4,7 +4,6 @@ assemblyJarName <- "sparkr-assembly-0.1.jar"
 
 sparkR.onLoad <- function(libname, pkgname) {
   assemblyJarPath <- paste(libname, "/SparkR/", assemblyJarName, sep = "")
-  assemblyJarPath <- gsub(" ", "\\ ", assemblyJarPath, fixed = T)
   packageStartupMessage("[SparkR] Initializing with classpath ", assemblyJarPath, "\n")
  
   .sparkREnv$libname <- libname
@@ -87,9 +86,16 @@ sparkR.init <- function(
   }
 
   sparkMem <- Sys.getenv("SPARK_MEM", "512m")
-  jars <- c(as.character(.sparkREnv$assemblyJarPath), as.character(sparkJars))
+  jars <- suppressWarnings(
+    normalizePath(c(as.character(.sparkREnv$assemblyJarPath), as.character(sparkJars))))
 
-  cp <- paste0(jars, collapse = ":")
+  # Classpath separator is ";" on Windows
+  if (.Platform$OS.type == "unix") {
+    collapseChar <- ":"
+  } else {
+    collapseChar <- ";"
+  }
+  cp <- paste0(jars, collapse = collapseChar)
 
   yarn_conf_dir <- Sys.getenv("YARN_CONF_DIR", "")
   if (yarn_conf_dir != "") {
@@ -125,7 +131,12 @@ sparkR.init <- function(
   }
 
   nonEmptyJars <- Filter(function(x) { x != "" }, jars)
-  localJarPaths <- sapply(nonEmptyJars, function(j) { paste("file://", j, sep = "") })
+  # URIs don't work very well on Windows, so just use paths.
+  localJarPaths <- if (.Platform$OS.type == "unix") {
+    sapply(nonEmptyJars, function(j) { paste("file://", j, sep = "") })
+  } else {
+    nonEmptyJars
+  }
 
   assign(
     ".sparkRjsc",
