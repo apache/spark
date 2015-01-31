@@ -19,24 +19,29 @@ package org.apache.spark.sql.sources
 
 import java.io.File
 
+import org.scalatest.BeforeAndAfterAll
+
 import org.apache.spark.sql.catalyst.util
 import org.apache.spark.sql.types.{StringType, StructType, StructField}
 import org.apache.spark.util.Utils
 
-
-class CreateTableAsSelectSuite extends DataSourceTest {
+class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
 
   import caseInsensisitiveContext._
 
-  var path: File = util.getTempFilePath("jsonCTAS").getCanonicalFile
+  var path: File = null
 
-  before {
+  override def beforeAll(): Unit = {
+    path = util.getTempFilePath("jsonCTAS").getCanonicalFile
     val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
     jsonRDD(rdd).registerTempTable("jt")
   }
 
-  after {
+  override def afterAll(): Unit = {
     dropTempTable("jt")
+  }
+
+  after {
     if (path.exists()) Utils.deleteRecursively(path)
   }
 
@@ -103,6 +108,40 @@ class CreateTableAsSelectSuite extends DataSourceTest {
     checkAnswer(
       sql("SELECT a, b FROM jsonTable"),
       sql("SELECT a, b FROM jt").collect())
+
+    dropTempTable("jsonTable")
+  }
+
+  test("create a table, drop it and create another one with the same name") {
+    sql(
+      s"""
+        |CREATE TEMPORARY TABLE jsonTable
+        |USING org.apache.spark.sql.json.DefaultSource
+        |OPTIONS (
+        |  path '${path.toString}'
+        |) AS
+        |SELECT a, b FROM jt
+      """.stripMargin)
+
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      sql("SELECT a, b FROM jt").collect())
+
+    dropTempTable("jsonTable")
+
+    sql(
+      s"""
+        |CREATE TEMPORARY TABLE jsonTable
+        |USING org.apache.spark.sql.json.DefaultSource
+        |OPTIONS (
+        |  path '${path.toString}'
+        |) AS
+        |SELECT a * 4 FROM jt
+      """.stripMargin)
+
+    checkAnswer(
+      sql("SELECT * FROM jsonTable"),
+      sql("SELECT a * 4 FROM jt").collect())
 
     dropTempTable("jsonTable")
   }

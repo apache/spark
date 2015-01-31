@@ -19,17 +19,20 @@ package org.apache.spark.sql.sources
 
 import java.io.File
 
+import org.scalatest.BeforeAndAfterAll
+
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util
 import org.apache.spark.util.Utils
 
-
-class InsertIntoSuite extends DataSourceTest {
+class InsertIntoSuite extends DataSourceTest with BeforeAndAfterAll {
 
   import caseInsensisitiveContext._
 
-  var path: File = util.getTempFilePath("jsonInsertInto").getCanonicalFile
-  before {
+  var path: File = null
+
+  override def beforeAll: Unit = {
+    path = util.getTempFilePath("jsonCTAS").getCanonicalFile
     val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
     jsonRDD(rdd).registerTempTable("jt")
     sql(
@@ -42,7 +45,7 @@ class InsertIntoSuite extends DataSourceTest {
       """.stripMargin)
   }
 
-  after {
+  override def afterAll: Unit = {
     dropTempTable("jsonTable")
     dropTempTable("jt")
     if (path.exists()) Utils.deleteRecursively(path)
