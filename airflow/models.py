@@ -111,7 +111,6 @@ class DagBag(object):
 
             for dag in m.__dict__.values():
                 if type(dag) == DAG:
-                    dag.dagbag = self
                     dag.full_filepath = filepath
                     self.dags[dag.dag_id] = dag
                     logging.info('Loaded DAG {dag}'.format(**locals()))
@@ -228,6 +227,8 @@ class DagPickle(Base):
         self.dag_id = dag.dag_id
         for t in dag.tasks:
             t.templatify()
+        if hasattr(dag, 'template_env'):
+            dag.template_env = None
         self.pickle = dag
 
 
@@ -850,7 +851,7 @@ class BaseOperator(Base):
             content = getattr(self, attr)
             if any([content.endswith(ext) for ext in self.template_ext]):
                 env = self.dag.get_template_env()
-                setattr(self, attr, env.get_source(content))
+                setattr(self, attr, env.loader.get_source(env, content)[0])
 
     @property
     def upstream_list(self):
@@ -1118,7 +1119,7 @@ class DAG(Base):
         Returns a jinja2 Environment while taking into account the DAGs
         template_searchpath and user_defined_macros
         '''
-        if not hasattr(self, 'template_env'):
+        if not hasattr(self, 'template_env') or not self.template_env:
             searchpath = [self.folder]
             if self.template_searchpath:
                 searchpath += self.template_searchpath

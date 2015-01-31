@@ -17,4 +17,10 @@
             <pre><code>{{ v|safe }}</code></pre>
         {% endfor %}
     {% endif %}
+    {% if html_dict %}
+        {% for k, v in html_dict.iteritems() %}
+            <h4>{{ k }}</h4>
+            {{ v|safe }}
+        {% endfor %}
+    {% endif %}
 {% endblock %}
