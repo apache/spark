@@ -90,10 +90,13 @@ sparkR.init <- function(
     normalizePath(c(as.character(.sparkREnv$assemblyJarPath), as.character(sparkJars))))
 
   # Classpath separator is ";" on Windows
+  # URI needs four /// as from http://stackoverflow.com/a/18522792
   if (.Platform$OS.type == "unix") {
     collapseChar <- ":"
+    uriSep <- "//"
   } else {
     collapseChar <- ";"
+    uriSep <- "////"
   }
   cp <- paste0(jars, collapse = collapseChar)
 
@@ -131,7 +134,7 @@ sparkR.init <- function(
   }
 
   nonEmptyJars <- Filter(function(x) { x != "" }, jars)
-  localJarPaths <- sapply(nonEmptyJars, function(j) { utils::URLencode(paste("file://", j, sep = "")) })
+  localJarPaths <- sapply(nonEmptyJars, function(j) { utils::URLencode(paste("file:", uriSep, j, sep = "")) })
 
   assign(
     ".sparkRjsc",
