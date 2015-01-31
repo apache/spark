@@ -23,14 +23,16 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.stat.Statistics
 import org.apache.spark.rdd.RDD
 
+import scala.collection.mutable.ArrayBuilder
+
 /**
  * :: Experimental ::
  * Chi Squared selector model.
  *
- * @param indices list of indices to select (filter)
+ * @param indices list of indices to select (filter). Must be ordered asc
  */
 @Experimental
-class ChiSqSelectorModel(indices: Array[Int]) extends VectorTransformer {
+class ChiSqSelectorModel  private[mllib] (indices: Array[Int]) extends VectorTransformer {
   /**
    * Applies transformation on a vector.
    *
@@ -38,7 +40,47 @@ class ChiSqSelectorModel(indices: Array[Int]) extends VectorTransformer {
    * @return transformed vector.
    */
   override def transform(vector: Vector): Vector = {
-    Compress(vector, indices)
+    compress(vector, indices)
+  }
+
+  /**
+   * Returns a vector with features filtered.
+   * Preserves the order of filtered features the same as their indices are stored.
+   * Might be moved to Vector as .slice
+   * @param features vector
+   * @param filterIndices indices of features to filter, must be ordered asc
+   */
+  private def compress(features: Vector, filterIndices: Array[Int]): Vector = {
+    features match {
+      case SparseVector(size, indices, values) =>
+        val newSize = filterIndices.length
+        val newValues = new ArrayBuilder.ofDouble
+        val newIndices = new ArrayBuilder.ofInt
+        var i: Int = 0
+        var j: Int = 0
+        while(i < indices.length && j < filterIndices.length) {
+          if(indices(i) == filterIndices(j)) {
+            newIndices += j
+            newValues += values(i)
+            j += 1
+            i += 1
+          } else {
+            if(indices(i) > filterIndices(j)) {
+              j += 1
+            } else {
+              i += 1
+            }
+          }
+        }
+        /** Sparse representation might be ineffective if (newSize ~= newValues.size) */
+        Vectors.sparse(newSize, newIndices.result(), newValues.result())
+      case DenseVector(values) =>
+        val values = features.toArray
+        Vectors.dense(filterIndices.map(i => values(i)))
+      case other =>
+        throw new UnsupportedOperationException(
+          s"Only sparse and dense vectors are supported but got ${other.getClass}.")
+    }
   }
 }
 
@@ -61,56 +103,7 @@ class ChiSqSelector (val numTopFeatures: Int) {
       .zipWithIndex.sortBy { case(res, _) => -res.statistic }
       .take(numTopFeatures)
       .map{ case(_, indices) => indices }
+      .sorted
     new ChiSqSelectorModel(indices)
   }
 }
-
-/**
- * :: Experimental ::
- * Filters features in a given vector
- */
-@Experimental
-object Compress {
-  /**
-   * Returns a vector with features filtered.
-   * Preserves the order of filtered features the same as their indices are stored.
-   * @param features vector
-   * @param filterIndices indices of features to filter
-   */
-  def apply(features: Vector, filterIndices: Array[Int]): Vector = {
-    features match {
-      case SparseVector(size, indices, values) =>
-        val filterMap = filterIndices.zipWithIndex.toMap
-        val newSize = filterIndices.length
-        var k = 0
-        var intersectionSize = 0
-        while (k < indices.length) {
-          if( filterMap.contains(indices(k))) {
-            intersectionSize += 1
-          }
-          k += 1
-        }
-        val newIndices = new Array[Int](intersectionSize)
-        val newValues = new Array[Double](intersectionSize)
-        k = 0
-        var m = 0
-        while (k < indices.length) {
-          if( filterMap.contains(indices(k))) {
-            newIndices(m) = filterMap(indices(k))
-            newValues(m) = values(k)
-            m += 1
-          }
-          k += 1
-        }
-        /** Sparse representation might be ineffective if newIndices is small */
-        Vectors.sparse(newSize, newIndices, newValues)
-      case DenseVector(values) =>
-        val values = features.toArray
-        Vectors.dense(filterIndices.map(i => values(i)))
-      case other =>
-        throw new UnsupportedOperationException(
-          s"Only sparse and dense vectors are supported but got ${other.getClass}.")
-    }
-  }
-}
-
