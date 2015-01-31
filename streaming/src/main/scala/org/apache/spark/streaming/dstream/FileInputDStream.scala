@@ -241,7 +241,8 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
   private def filesToRDD(files: Seq[String]): RDD[(K, V)] = {
     val fileRDDs = files.map(file =>{
       val rdd = conf match {
-        case Some(config) => context.sparkContext.newAPIHadoopFile(file,
+        case Some(config) => context.sparkContext.newAPIHadoopFile(
+          file,
           fm.runtimeClass.asInstanceOf[Class[F]],
           km.runtimeClass.asInstanceOf[Class[K]],
           vm.runtimeClass.asInstanceOf[Class[V]],
