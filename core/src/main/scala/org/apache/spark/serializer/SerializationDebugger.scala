@@ -30,7 +30,8 @@ private[serializer] object SerializationDebugger extends Logging {
 
   /**
    * Improve the given NotSerializableException with the serialization path leading from the given
-   * object to the problematic object.
+   * object to the problematic object. This is turned off automatically if
+   * `sun.io.serialization.extendedDebugInfo` flag is turned on for the JVM.
    */
   def improveException(obj: Any, e: NotSerializableException): NotSerializableException = {
     if (enableDebugging && reflect != null) {
