@@ -18,6 +18,8 @@
 package org.apache.spark.mllib.classification
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax => brzArgmax, sum => brzSum}
+import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.types.{ArrayType, DataType, DoubleType, StructField, StructType}
 
 import org.apache.spark.{SparkContext, SparkException, Logging}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector}
@@ -79,6 +81,7 @@ class NaiveBayesModel private[mllib] (
       clazz = this.getClass.getName, version = Exportable.latestVersion)
     val metadataRDD: DataFrame = sc.parallelize(Seq(metadata))
     metadataRDD.toJSON.saveAsTextFile(path + "/metadata")
+
     // Create Parquet data.
     val data = NaiveBayesModel.Data(labels, pi, theta)
     val dataRDD: DataFrame = sc.parallelize(Seq(data))
@@ -117,11 +120,12 @@ object NaiveBayesModel extends Importable[NaiveBayesModel] {
     assert(dataArray.size == 1, s"Unable to load NaiveBayesModel data from: ${path + "/data"}")
     val data = dataArray(0)
     assert(data.size == 3, s"Unable to load NaiveBayesModel data from: ${path + "/data"}")
-    val nb = data match {
-      case Row(labels: Seq[Double], pi: Seq[Double], theta: Seq[Seq[Double]]) =>
-        new NaiveBayesModel(labels.toArray, pi.toArray, theta.map(_.toArray).toArray)
-    }
-    nb
+    // Check schema explicitly since erasure makes it hard to use match-case for checking.
+    Importable.checkSchema[Data](dataRDD.schema)
+    val labels = data.getAs[Seq[Double]](0).toArray
+    val pi = data.getAs[Seq[Double]](1).toArray
+    val theta = data.getAs[Seq[Seq[Double]]](2).map(_.toArray).toArray
+    new NaiveBayesModel(labels, pi, theta)
   }
 }
 

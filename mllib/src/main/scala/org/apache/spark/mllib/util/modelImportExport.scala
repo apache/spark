@@ -17,8 +17,13 @@
 
 package org.apache.spark.mllib.util
 
+import scala.reflect.runtime.universe.TypeTag
+
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.types.{DataType, StructType, StructField}
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
 /**
  * :: DeveloperApi ::
@@ -46,11 +51,7 @@ trait Exportable {
 
 }
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
-object Exportable {
+private[mllib] object Exportable {
 
   /** Current version of model import/export format. */
   val latestVersion: String = "1.0"
@@ -79,34 +80,32 @@ trait Importable[Model <: Exportable] {
 
 }
 
-/*
-/**
- * :: DeveloperApi ::
- *
- * Trait for models and transformers which may be saved as files.
- * This should be inherited by the class which implements model instances.
- *
- * This specializes [[Exportable]] for local models which can be stored on a single machine.
- * This provides helper functionality, but developers can choose to use [[Exportable]] instead,
- * even for local models.
- */
-@DeveloperApi
-trait LocalExportable {
+private[mllib] object Importable {
 
   /**
-   * Save this model to the given path.
+   * Check the schema of loaded model data.
    *
-   * This saves:
-   *  - human-readable (JSON) model metadata to path/metadata/
-   *  - Parquet formatted data to path/data/
+   * This checks every field in the expected schema to make sure that a field with the same
+   * name and DataType appears in the loaded schema.  Note that this does NOT check metadata
+   * or containsNull.
    *
-   * The model may be loaded using [[Importable.load]].
-   *
-   * @param sc  Spark context used to save model data.
-   * @param path  Path specifying the directory in which to save this model.
-   *              This directory and any intermediate directory will be created if needed.
+   * @param loadedSchema  Schema for model data loaded from file.
+   * @tparam Data  Expected data type from which an expected schema can be derived.
    */
-  def save(sc: SparkContext, path: String): Unit
+  def checkSchema[Data: TypeTag](loadedSchema: StructType): Unit = {
+    // Check schema explicitly since erasure makes it hard to use match-case for checking.
+    val expectedFields: Array[StructField] =
+      ScalaReflection.schemaFor[Data].dataType.asInstanceOf[StructType].fields
+    val loadedFields: Map[String, DataType] =
+      loadedSchema.map(field => field.name -> field.dataType).toMap
+    expectedFields.foreach { field =>
+      assert(loadedFields.contains(field.name), s"Unable to parse model data." +
+        s"  Expected field with name ${field.name} was missing in loaded schema:" +
+        s" ${loadedFields.mkString(", ")}")
+      assert(loadedFields(field.name) == field.dataType,
+        s"Unable to parse model data.  Expected field $field but found field" +
+          s" with different type: ${loadedFields(field.name)}")
+    }
+  }
 
 }
-*/

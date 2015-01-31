@@ -147,6 +147,7 @@ class LogisticRegressionModel (
       clazz = this.getClass.getName, version = Exportable.latestVersion)
     val metadataRDD: DataFrame = sc.parallelize(Seq(metadata))
     metadataRDD.toJSON.saveAsTextFile(path + "/metadata")
+
     // Create Parquet data.
     val data = LogisticRegressionModel.Data(weights, intercept, threshold)
     val dataRDD: DataFrame = sc.parallelize(Seq(data))
