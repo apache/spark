@@ -569,28 +569,15 @@ def launch_cluster(conn, opts, cluster_name):
         master_nodes = master_res.instances
         print "Launched master in %s, regid = %s" % (zone, master_res.id)
 
-    # Give the instances descriptive names.
-    # The code of handling exceptions corresponds to issue [SPARK-4983]
+    # Give the instances descriptive names
     for master in master_nodes:
-        while True:
-            try:
-                master.add_tag(
-                    key='Name',
-                    value='{cn}-master-{iid}'.format(cn=cluster_name, iid=master.id))
-            except:
-                pass
-            else:
-                break
+        master.add_tag(
+            key='Name',
+            value='{cn}-master-{iid}'.format(cn=cluster_name, iid=master.id))
     for slave in slave_nodes:
-        while True:
-            try:
-                slave.add_tag(
-                    key='Name',
-                    value='{cn}-slave-{iid}'.format(cn=cluster_name, iid=slave.id))
-            except:
-                pass
-            else:
-                break
+        slave.add_tag(
+            key='Name',
+            value='{cn}-slave-{iid}'.format(cn=cluster_name, iid=slave.id))
 
     # Return all the instances
     return (master_nodes, slave_nodes)
