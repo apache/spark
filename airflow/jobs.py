@@ -217,6 +217,7 @@ class MasterJob(BaseJob):
                 for task in dag.tasks:
                     if task.adhoc:
                         continue
+                    cmd = ti.command(local=True)
                     if task.task_id not in ti_dict:
                         # Brand new task, let's get started
                         ti = TI(task, task.start_date)
@@ -224,7 +225,7 @@ class MasterJob(BaseJob):
                         if ti.is_runnable():
                             logging.debug(
                                 'First run for {ti}'.format(**locals()))
-                            executor.queue_command(ti.key, ti.command())
+                            executor.queue_command(ti.key, cmd)
                     else:
                         ti = ti_dict[task.task_id]
                         ti.task = task  # Hacky but worky
@@ -235,7 +236,7 @@ class MasterJob(BaseJob):
                             # the retry delay is met
                             if ti.is_runnable():
                                 logging.debug('Queuing retry: ' + str(ti))
-                                executor.queue_command(ti.key, ti.command())
+                                executor.queue_command(ti.key, cmd)
                         else:
                             # Trying to run the next schedule
                             ti = TI(
@@ -246,7 +247,7 @@ class MasterJob(BaseJob):
                             ti.refresh_from_db()
                             if ti.is_runnable():
                                 logging.debug('Queuing next run: ' + str(ti))
-                                executor.queue_command(ti.key, ti.command())
+                                executor.queue_command(ti.key, cmd)
                     executor.heartbeat()
                 session.close()
         executor.end()
