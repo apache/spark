@@ -474,8 +474,8 @@ private[spark] class Client(
         Nil
       }
     val primaryResource =
-      if (args.primaryResource != null) {
-        Seq("--primaryResource", args.primaryResource)
+      if (args.primaryPyFile != null) {
+        Seq("--primary-py-file", args.primaryPyFile)
       } else {
         Nil
       }
@@ -491,8 +491,8 @@ private[spark] class Client(
       } else {
         Class.forName("org.apache.spark.deploy.yarn.ExecutorLauncher").getName
       }
-    if (args.primaryResource != null && args.primaryResource.endsWith(".py")) {
-      args.userArgs = ArrayBuffer(args.primaryResource, args.pyFiles) ++ args.userArgs
+    if (args.primaryPyFile != null && args.primaryPyFile.endsWith(".py")) {
+      args.userArgs = ArrayBuffer(args.primaryPyFile, args.pyFiles) ++ args.userArgs
     }
     val userArgs = args.userArgs.flatMap { arg =>
       Seq("--arg", YarnSparkHadoopUtil.escapeForShell(arg))

@@ -136,13 +136,26 @@ object SparkSubmit {
       }
     }
 
+    // Require all python files to be local, so we can add them to the PYTHONPATH
+    // when yarn-cluster, all python files can be non-local
+    if (args.isPython && !isYarnClusterMode(clusterManager, deployMode)) {
+      if (Utils.nonLocalPaths(args.primaryResource).nonEmpty) {
+        SparkSubmit.printErrorAndExit(s"Only local python files are supported: $args.primaryResource")
+      }
+      val nonLocalPyFiles = Utils.nonLocalPaths(args.pyFiles).mkString(",")
+      if (nonLocalPyFiles.nonEmpty) {
+        SparkSubmit.printErrorAndExit(
+          s"Only local additional python files are supported: $nonLocalPyFiles")
+      }
+    }
+
     // The following modes are not supported or applicable
     (clusterManager, deployMode) match {
       case (MESOS, CLUSTER) =>
         printErrorAndExit("Cluster deploy mode is currently not supported for Mesos clusters.")
       case (STANDALONE, CLUSTER) if args.isPython =>
-        printErrorAndExit("Standalone-Cluster deploy mode is currently not supported" +
-          "for python applications.")
+        printErrorAndExit("Cluster deploy mode is currently not supported for python " +
+          "applications on Standalone clusters")
       case (_, CLUSTER) if isShell(args.primaryResource) =>
         printErrorAndExit("Cluster deploy mode is not applicable to Spark shells.")
       case (_, CLUSTER) if isSqlShell(args.mainClass) =>
@@ -151,7 +164,7 @@ object SparkSubmit {
     }
 
     // If we're running a python app, set the main class to our specific python runner
-    if (args.isPython && deployMode != CLUSTER) {
+    if (args.isPython && deployMode == CLIENT) {
       if (args.primaryResource == PYSPARK_SHELL) {
         args.mainClass = "py4j.GatewayServer"
         args.childArgs = ArrayBuffer("--die-on-broken-pipe", "0")
@@ -168,9 +181,9 @@ object SparkSubmit {
       }
     }
 
-    // In yarn-cluster mode for a python app, add primary Resource and pyFiles to files
+    // In yarn-cluster mode for a python app, add primary resource and pyFiles to files
     // that can be distributed with the job
-    if (args.isPython && deployMode == CLUSTER) {
+    if (args.isPython && isYarnClusterMode(clusterManager,deployMode)) {
       args.files = mergeFileLists(args.files, args.primaryResource)
       args.files = mergeFileLists(args.files, args.pyFiles)
     }
@@ -277,15 +290,15 @@ object SparkSubmit {
     // In yarn-cluster mode, use yarn.Client as a wrapper around the user class
     if (isYarnCluster) {
       childMainClass = "org.apache.spark.deploy.yarn.Client"
-      if (args.isPython) {// yarn-cluster mode for python application
-      val primaryResourceLocalPath = new Path(args.primaryResource)
-        childArgs += ("--primaryResource", primaryResourceLocalPath.getName)
-        val pyFilesLocalNames:String = if (args.pyFiles != null) {
+      if (args.isPython) {
+        val mainPyFile = new Path(args.primaryResource).getName
+        childArgs += ("--primary-py-file", mainPyFile)
+        val pyFilesNames: String = if (args.pyFiles != null) {
           args.pyFiles.split(",").map { p => (new Path(p)).getName }.mkString(",")
         } else {
           "null"
         }
-        childArgs += ("--py-files", pyFilesLocalNames.toString)
+        childArgs += ("--py-files", pyFilesNames)
         childArgs += ("--class", "org.apache.spark.deploy.PythonRunner")
       } else {
         if (args.primaryResource != SPARK_INTERNAL) {
@@ -438,6 +451,13 @@ object SparkSubmit {
 
   private[spark] def isInternal(primaryResource: String): Boolean = {
     primaryResource == SPARK_INTERNAL
+  }
+
+  /**
+   * Return whether the cluster mode is yarn-cluster mode.
+   */
+  private[spark] def isYarnClusterMode(clusterManager: Int, deployMode: Int): Boolean = {
+    clusterManager == YARN && deployMode == CLUSTER
   }
 
   /**

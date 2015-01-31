@@ -31,7 +31,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var userJar: String = null
   var userClass: String = null
   var pyFiles: String = null
-  var primaryResource: String = null
+  var primaryPyFile: String = null
   var userArgs: ArrayBuffer[String] = new ArrayBuffer[String]()
   var executorMemory = 1024 // MB
   var executorCores = 1
@@ -104,8 +104,8 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
           userClass = value
           args = tail
 
-        case ("--primaryResource") :: value :: tail =>
-          primaryResource = value
+        case ("--primary-py-file") :: value :: tail =>
+          primaryPyFile = value
           args = tail
 
         case ("--args" | "--arg") :: value :: tail =>
@@ -192,7 +192,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
       |  --jar JAR_PATH           Path to your application's JAR file (required in yarn-cluster
       |                           mode)
       |  --class CLASS_NAME       Name of your application's main class (required)
-      |  --primaryResource        A primary resource Python file
+      |  --primary-py-file        A primary Python file
       |  --arg ARG                Argument to be passed to your application's main class.
       |                           Multiple invocations are possible, each will be passed in order.
       |  --num-executors NUM      Number of executors to start (Default: 2)

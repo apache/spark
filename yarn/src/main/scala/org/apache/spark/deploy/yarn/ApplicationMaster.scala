@@ -430,7 +430,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   private def startUserClass(): Thread = {
     logInfo("Starting the user JAR in a separate Thread")
     System.setProperty("spark.executor.instances", args.numExecutors.toString)
-    if (args.primaryResource != null && args.primaryResource.endsWith(".py")) {
+    if (args.primaryPyFile != null && args.primaryPyFile.endsWith(".py")) {
       System.setProperty("spark.submit.pyFiles",
         PythonRunner.formatPaths(args.pyFiles).mkString(","))
     }
