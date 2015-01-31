@@ -12,6 +12,7 @@ import dateutil.parser
 from datetime import datetime
 import logging
 import os
+import subprocess
 import sys
 
 import argparse
@@ -298,6 +299,15 @@ def version(args):
     print(settings.HEADER + "  v" + airflow.__version__)
 
 
+def flower(args):
+    broka = conf.get('celery', 'BROKER_URL')
+    port = '--port=' + args.port
+    api = ''
+    if args.broker_api:
+        api = '--broker_api=' + args.broker_api
+    sp = subprocess.Popen(['flower', '-b', broka, port, api])
+    sp.wait()
+
 if __name__ == '__main__':
 
     logging.root.handlers = []
@@ -456,8 +466,14 @@ if __name__ == '__main__':
     parser_logs = subparsers.add_parser('serve_logs', help=ht)
     parser_logs.set_defaults(func=serve_logs)
 
-    parser_logs = subparsers.add_parser('version', help="Show version")
-    parser_logs.set_defaults(func=version)
+    ht = "Start a Celery Flower"
+    parser_flower = subparsers.add_parser('flower', help=ht)
+    parser_flower.add_argument(
+        "-p", "--port", help="The port",
+        default='5555')
+    parser_flower.add_argument(
+        "-a", "--broker_api", help="Broker api")
+    parser_flower.set_defaults(func=flower)
 
     args = parser.parse_args()
     args.func(args)

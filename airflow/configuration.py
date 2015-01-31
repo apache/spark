@@ -30,6 +30,7 @@ celeryd_concurrency = 16
 worker_log_server_port = 8793
 broker_url = sqla+mysql://airflow:airflow@localhost:3306/airflow
 celery_result_backend = db+mysql://airflow:airflow@localhost:3306/airflow
+flower_port = 5555
 
 [hooks]
 presto_default_conn_id = presto_default
