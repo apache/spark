@@ -592,7 +592,7 @@ def launch_cluster(conn, opts, cluster_name):
                     value='{cn}-slave-{iid}'.format(cn=cluster_name, iid=slave.id))
             except boto.exception.EC2ResponseError as e:
                 if e.error_code == "InvalidInstanceID.NotFound":
-                    time.sleep(0.1)
+                    time.Sleep(0.1)
                 else:
                     raise e
             else:
