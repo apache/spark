@@ -336,6 +336,7 @@ class BackfillJob(BaseJob):
                     executor.queue_command(
                         key=ti.key, command=ti.command(
                             mark_success=self.mark_success,
+                            local=True,
                             pickle_id=pickle_id)
                     )
                     ti.state = State.RUNNING

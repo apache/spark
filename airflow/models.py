@@ -613,19 +613,6 @@ class TaskInstance(Base):
         session.commit()
         logging.error(str(error))
 
-    def get_template(self, attr):
-        if not hasattr(self, attr + '_template'):
-            if hasattr(self, 'task') and hasattr(self.task, 'dag'):
-                env = self.task.dag.get_template_env()
-            template = None
-            for ext in self.task.__class__.template_ext:
-                # if field has the right extension, look for the file.
-                if attr.strip().endswith(ext):
-                    template = env.get_template(attr)
-            return template or env.template_class(attr)
-        else:
-            return getattr(self, attr + '_template')
-
     def render_templates(self):
         task = self.task
         from airflow import macros
@@ -658,8 +645,7 @@ class TaskInstance(Base):
                     self.task.dag.user_defined_macros)
 
         for attr in task.__class__.template_fields:
-            source = getattr(task, attr)
-            template = self.get_template(source)
+            template = self.task.get_template(attr)
             setattr(
                 task, attr,
                 template.render(**jinja_context)
@@ -843,10 +829,28 @@ class BaseOperator(Base):
         '''
         pass
 
+    def get_template(self, attr):
+        content = getattr(self, attr)
+        if hasattr(self, 'dag'):
+            env = self.dag.get_template_env()
+        else:
+            env = jinja2.Environment()
+
+        exts = self.__class__.template_ext
+        if any([content.endswith(ext) for ext in exts]):
+            template = env.get_template(content)
+        else:
+            template = env.from_string(content)
+        return template
+
     def templatify(self):
         # Getting the content of files for template_field / template_ext
         for attr in self.template_fields:
             self.get_template(attr)
+            content = getattr(self, attr)
+            if any([content.endswith(ext) for ext in self.template_ext]):
+                env = self.dag.get_template_env()
+                setattr(self, attr, env.get_source(content))
 
     @property
     def upstream_list(self):

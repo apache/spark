@@ -107,10 +107,10 @@ def run(args):
             job_id=args.job_id,
         )
     else:
-        # Pickling the DAG
+        # Running remotely, so pickling the DAG
         session = settings.Session()
         pickle = DagPickle(dag)
-        session.merge(pickle)
+        session.add(pickle)
         session.commit()
         pickle_id = pickle.id
         print(
@@ -313,9 +313,6 @@ if __name__ == '__main__':
     logging.root.handlers = []
 
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-v", "--version",
-        help="Show version number")
     subparsers = parser.add_subparsers(help='sub-command help')
 
     ht = "Run subsections of a DAG for a specified date range"
