@@ -569,7 +569,8 @@ def launch_cluster(conn, opts, cluster_name):
         master_nodes = master_res.instances
         print "Launched master in %s, regid = %s" % (zone, master_res.id)
 
-    # Wait for the information of the just-launched instances to be propagated within AWS
+    # The insert of waiting time corresponds to issue [SPARK-4983]
+    print "Waiting for AWS to propagate the information of instances..."
     time.sleep(5)
     # Give the instances descriptive names
     for master in master_nodes:
