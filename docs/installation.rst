@@ -1,5 +1,5 @@
 
-Installation
+Getting Started
 ------------
 
 Quick Start

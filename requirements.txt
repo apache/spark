@@ -23,6 +23,7 @@ requests
 setproctitle
 snakebite
 sphinx
+sphinx-argparse
 sphinx_rtd_theme
 Sphinx-PyPI-upload
 sqlalchemy
