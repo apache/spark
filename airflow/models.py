@@ -9,7 +9,6 @@ import dill
 import re
 import signal
 import socket
-import traceback
 
 from sqlalchemy import (
     Column, Integer, String, DateTime, Text, Boolean, ForeignKey, PickleType)
@@ -81,6 +80,7 @@ class DagBag(object):
                 os.path.dirname(__file__),
                 'example_dags')
             self.collect_dags(example_dag_folder)
+        self.merge_dags()
 
     def process_file(self, filepath, only_if_updated=True):
         """
@@ -133,6 +133,23 @@ class DagBag(object):
                 for f in files:
                     filepath = root + '/' + f
                     self.process_file(filepath)
+
+    def merge_dags(self):
+        session = settings.Session()
+        for dag in self.dags.values():
+            session.merge(dag)
+        session.commit()
+        session.close()
+
+    def paused_dags(self):
+        session = settings.Session()
+        dag_ids = [dp.dag_id for dp in session.query(DAG).filter(
+            DAG.is_paused == True)]
+        session.commit()
+        session.close()
+        return dag_ids
+
+
 
 
 class User(Base):
@@ -369,9 +386,8 @@ class TaskInstance(Base):
             TI.dag_id == self.dag_id,
             TI.task_id == self.task_id,
             TI.execution_date == self.execution_date,
-        ).all()
+        ).first()
         if ti:
-            ti = ti[0]
             self.state = ti.state
             self.start_date = ti.start_date
             self.end_date = ti.end_date
@@ -503,11 +519,12 @@ class TaskInstance(Base):
             test_mode=False,  # Doesn't record success or failure in the DB
             job_id=None,):
         """
-        Runs the task instnace.
+        Runs the task instance.
         """
         task = self.task
         session = settings.Session()
         self.refresh_from_db(session)
+        session.commit()
         self.job_id = job_id
         iso = datetime.now().isoformat()
         self.hostname = socket.gethostname()
@@ -1042,8 +1059,7 @@ class DAG(Base):
     __tablename__ = "dag"
 
     dag_id = Column(String(ID_LEN), primary_key=True)
-    task_count = Column(Integer)
-    full_filepath = Column(String(2000))
+    is_paused = Column(Boolean, default=False)
 
     def __init__(
             self, dag_id,
