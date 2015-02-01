@@ -240,7 +240,7 @@ object ALS extends Logging {
   case class Rating[@specialized(Int, Long) ID](user: ID, item: ID, rating: Float)
 
   /** Trait for least squares solvers applied to the normal equation. */
-  private trait LeastSquaresNESolver {
+  private[recommendation] trait LeastSquaresNESolver extends Serializable {
     /** Solves a least squares problem (possibly with other constraints). */
     def solve(ne: NormalEquation, lambda: Double): Array[Float]
   }
@@ -249,7 +249,6 @@ object ALS extends Logging {
   private[recommendation] class CholeskySolver extends LeastSquaresNESolver {
 
     private val upper = "U"
-    private val info = new intW(0)
 
     /**
      * Solves a least squares problem with L2 regularization:
@@ -271,6 +270,7 @@ object ALS extends Logging {
         i += j
         j += 1
       }
+      val info = new intW(0)
       lapack.dppsv(upper, k, 1, ne.ata, ne.atb, k, info)
       val code = info.`val`
       assert(code == 0, s"lapack.dppsv returned $code.")
@@ -290,7 +290,6 @@ object ALS extends Logging {
     private var rank: Int = -1
     private var workspace: NNLS.Workspace = _
     private var ata: DoubleMatrix = _
-    private var atb: DoubleMatrix = _
     private var initialized: Boolean = false
 
     private def initialize(rank: Int): Unit = {
@@ -298,7 +297,6 @@ object ALS extends Logging {
         this.rank = rank
         workspace = NNLS.createWorkspace(rank)
         ata = new DoubleMatrix(rank, rank)
-        atb = new DoubleMatrix(rank)
         initialized = true
       } else {
         require(this.rank == rank)
@@ -316,6 +314,7 @@ object ALS extends Logging {
       initialize(rank)
       fillAtA(ne.ata, lambda * ne.n)
       val x = NNLS.solve(ata, new DoubleMatrix(rank, 1, ne.atb: _*), workspace)
+      ne.reset()
       x.map(x => x.toFloat)
     }
 
