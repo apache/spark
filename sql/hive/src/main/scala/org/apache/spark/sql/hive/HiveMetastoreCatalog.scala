@@ -24,9 +24,8 @@ import com.google.common.cache.{LoadingCache, CacheLoader, CacheBuilder}
 
 import org.apache.hadoop.util.ReflectionUtils
 import org.apache.hadoop.hive.metastore.TableType
-import org.apache.hadoop.hive.metastore.api.{Table => TTable, Partition => TPartition, FieldSchema}
-import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table, HiveException}
-import org.apache.hadoop.hive.ql.metadata.InvalidTableException
+import org.apache.hadoop.hive.metastore.api.{Table => TTable, Partition => TPartition, AlreadyExistsException, FieldSchema}
+import org.apache.hadoop.hive.ql.metadata._
 import org.apache.hadoop.hive.ql.plan.CreateTableDesc
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.{Deserializer, SerDeException}
@@ -99,12 +98,22 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
   val caseSensitive: Boolean = false
 
+  /** *
+    * Creates a data source table (a table created with USING clause) in Hive's metastore.
+    * Returns true when the table has been created. Otherwise, false.
+    * @param tableName
+    * @param userSpecifiedSchema
+    * @param provider
+    * @param options
+    * @param allowExisting
+    * @return
+    */
   def createDataSourceTable(
       tableName: String,
       userSpecifiedSchema: Option[StructType],
       provider: String,
       options: Map[String, String],
-      allowExisting: Boolean) = {
+      allowExisting: Boolean): Boolean = {
     val (dbName, tblName) = processDatabaseAndTableName("default", tableName)
     val tbl = new Table(dbName, tblName)
 
@@ -119,12 +128,17 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
     // create the table
     synchronized {
-      try client.createTable(tbl, allowExisting) catch {
-        case e: org.apache.hadoop.hive.metastore.api.AlreadyExistsException
-          if allowExisting => // Do nothing
-        case e: Throwable => throw e
+      // Always set ifNotExists to false for createTable since we need to
+      // know if the table has actually been created in Hive's metastore.
+      try {
+        client.createTable(tbl, false)
+      } catch {
+        case e: HiveException if e.getCause.isInstanceOf[AlreadyExistsException] && allowExisting =>
+          return false
       }
     }
+
+    return true
   }
 
   def tableExists(tableIdentifier: Seq[String]): Boolean = {

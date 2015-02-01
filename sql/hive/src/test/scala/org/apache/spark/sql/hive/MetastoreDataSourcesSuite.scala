@@ -306,7 +306,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
         |SELECT * FROM jsonTable
       """.stripMargin)
     }
-    assert(exception.getMessage.contains("AlreadyExistsException"),
+    assert(exception.getCause.isInstanceOf[AlreadyExistsException],
       "Hive should complain that ctasJsonTable already exists")
 
     // The following statement should be fine if it has IF NOT EXISTS.

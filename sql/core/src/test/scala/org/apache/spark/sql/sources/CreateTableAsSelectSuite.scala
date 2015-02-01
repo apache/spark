@@ -45,7 +45,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
     if (path.exists()) Utils.deleteRecursively(path)
   }
 
-  test("CTAS") {
+  test("CREATE TEMPORARY TABLE AS SELECT") {
     sql(
       s"""
         |CREATE TEMPORARY TABLE jsonTable
@@ -55,55 +55,6 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
         |) AS
         |SELECT a, b FROM jt
       """.stripMargin)
-
-    checkAnswer(
-      sql("SELECT a, b FROM jsonTable"),
-      sql("SELECT a, b FROM jt").collect())
-
-    dropTempTable("jsonTable")
-  }
-
-  test("CTAS with IF NOT EXISTS") {
-    sql(
-      s"""
-        |CREATE TEMPORARY TABLE jsonTable
-        |USING org.apache.spark.sql.json.DefaultSource
-        |OPTIONS (
-        |  path '${path.toString}'
-        |) AS
-        |SELECT b FROM jt
-      """.stripMargin)
-
-    sql(
-      s"""
-        |CREATE TEMPORARY TABLE IF NOT EXISTS jsonTable
-        |USING org.apache.spark.sql.json.DefaultSource
-        |OPTIONS (
-        |  path '${path.toString}'
-        |) AS
-        |SELECT a, b FROM jt
-      """.stripMargin)
-
-    // jsonTable should only have a single column.
-    val expectedSchema = StructType(StructField("b", StringType, true) :: Nil)
-    assert(expectedSchema === table("jsonTable").schema)
-
-    checkAnswer(
-      sql("SELECT * FROM jsonTable"),
-      sql("SELECT b FROM jt").collect())
-
-    // This statement does not have IF NOT EXISTS, so we will overwrite the table.
-    sql(
-      s"""
-        |CREATE TEMPORARY TABLE jsonTable
-        |USING org.apache.spark.sql.json.DefaultSource
-        |OPTIONS (
-        |  path '${path.toString}'
-        |) AS
-        |SELECT a, b FROM jt
-      """.stripMargin)
-
-    assert(table("jt").schema === table("jsonTable").schema)
 
     checkAnswer(
       sql("SELECT a, b FROM jsonTable"),
@@ -144,6 +95,23 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
       sql("SELECT a * 4 FROM jt").collect())
 
     dropTempTable("jsonTable")
+  }
+
+  test("CREATE TEMPORARY TABLE AS SELECT with IF NOT EXISTS is not allowed") {
+    val message = intercept[DDLException]{
+      sql(
+        s"""
+        |CREATE TEMPORARY TABLE IF NOT EXISTS jsonTable
+        |USING org.apache.spark.sql.json.DefaultSource
+        |OPTIONS (
+        |  path '${path.toString}'
+        |) AS
+        |SELECT b FROM jt
+      """.stripMargin)
+    }.getMessage
+    assert(
+      message.contains("a CREATE TEMPORARY TABLE statement does not allow IF NOT EXISTS clause."),
+      "CREATE TEMPORARY TABLE IF NOT EXISTS should not be allowed.")
   }
 
   test("a CTAS statement with column definitions is not allowed") {

@@ -105,6 +105,11 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
     (CREATE ~> TEMPORARY.? <~ TABLE) ~ (IF ~> NOT <~ EXISTS).? ~ ident
       ~ (tableCols).? ~ (USING ~> className) ~ (OPTIONS ~> options) ~ (AS ~> restInput).? ^^ {
       case temp ~ allowExisting ~ tableName ~ columns ~ provider ~ opts ~ query =>
+        if (temp.isDefined && allowExisting.isDefined) {
+          throw new DDLException(
+            "a CREATE TEMPORARY TABLE statement does not allow IF NOT EXISTS clause.")
+        }
+
         if (query.isDefined) {
           if (columns.isDefined) {
             throw new DDLException(
@@ -266,20 +271,12 @@ private [sql] case class CreateTempTableUsing(
     tableName: String,
     userSpecifiedSchema: Option[StructType],
     provider: String,
-    options: Map[String, String],
-    allowExisting: Boolean) extends RunnableCommand {
+    options: Map[String, String]) extends RunnableCommand {
 
   def run(sqlContext: SQLContext) = {
-    // The semantic of allowExisting for CREATE TEMPORARY TABLE is if allowExisting is true
-    // and the table already exists, we will do nothing. If allowExisting is false,
-    // and the table already exists, we will overwrite it.
-    val alreadyExists = sqlContext.catalog.tableExists(Seq(tableName))
-    if (!(alreadyExists && allowExisting)) {
-      val resolved = ResolvedDataSource(sqlContext, userSpecifiedSchema, provider, options)
-      sqlContext.registerRDDAsTable(
-        new DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
-    }
-
+    val resolved = ResolvedDataSource(sqlContext, userSpecifiedSchema, provider, options)
+    sqlContext.registerRDDAsTable(
+      new DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
     Seq.empty
   }
 }
@@ -288,21 +285,14 @@ private [sql] case class CreateTempTableUsingAsSelect(
     tableName: String,
     provider: String,
     options: Map[String, String],
-    allowExisting: Boolean,
     query: LogicalPlan) extends RunnableCommand {
 
   def run(sqlContext: SQLContext) = {
-    // The semantic of allowExisting for CREATE TEMPORARY TABLE is if allowExisting is true
-    // and the table already exists, we will do nothing. If allowExisting is false,
-    // and the table already exists, we will overwrite it.
-    val alreadyExists = sqlContext.catalog.tableExists(Seq(tableName))
-    if (!(alreadyExists && allowExisting)) {
-      val df = new DataFrame(sqlContext, query)
-      val resolved = ResolvedDataSource(sqlContext, Some(df.schema), provider, options)
-      sqlContext.registerRDDAsTable(
-        new DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
-      df.insertInto(tableName, true)
-    }
+    val df = new DataFrame(sqlContext, query)
+    val resolved = ResolvedDataSource(sqlContext, Some(df.schema), provider, options)
+    sqlContext.registerRDDAsTable(
+      new DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
+    df.insertInto(tableName, true)
 
     Seq.empty
   }
