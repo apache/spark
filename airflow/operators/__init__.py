@@ -3,6 +3,7 @@ from mysql_operator import MySqlOperator
 from hive_operator import HiveOperator
 from presto_check_operator import PrestoCheckOperator
 from presto_check_operator import PrestoIntervalCheckOperator
+from presto_check_operator import PrestoValueCheckOperator
 from sensors import SqlSensor
 from sensors import ExternalTaskSensor
 from sensors import HivePartitionSensor
