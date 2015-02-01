@@ -85,7 +85,6 @@ class KernelSuite extends FunSuite with MLlibTestSparkContext {
 
     assert(mappedFeaturespoly.filter((point) => point._2.features.size == 99).count() == 100)
     assert(mappedFeaturesrbf.filter((point) => point._2.features.size == 99).count() == 100)
-
   }
 
   test("Testing optimal bandwidth calculation on Gaussian Kernel" +
@@ -110,8 +109,8 @@ class KernelSuite extends FunSuite with MLlibTestSparkContext {
     newIndexedRDD.cache()
     newtestRDD.unpersist()
 
-    val entropy: QuadraticRenyiEntropy = new QuadraticRenyiEntropy(kern)
-    val subsetsel: GreedyEntropySelector = new GreedyEntropySelector(entropy)
+    val entropy = new QuadraticRenyiEntropy(kern)
+    val subsetsel = new GreedyEntropySelector(entropy)
 
     val subsetRDD = subsetsel.selectPrototypes(
       SVMKernel.indexedRDD(testRDD),
@@ -147,8 +146,8 @@ class KernelSuite extends FunSuite with MLlibTestSparkContext {
     val mappedData = SVMKernel.indexedRDD(testRDD)
     mappedData.cache()
 
-    val entropy: QuadraticRenyiEntropy = new QuadraticRenyiEntropy(kern)
-    val subsetsel: GreedyEntropySelector = new GreedyEntropySelector(entropy)
+    val entropy = new QuadraticRenyiEntropy(kern)
+    val subsetsel = new GreedyEntropySelector(entropy)
     val subsetRDD = subsetsel.selectPrototypes(
       mappedData,
       subsetSize)
