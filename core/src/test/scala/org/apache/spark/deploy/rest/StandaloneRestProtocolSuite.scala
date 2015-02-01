@@ -60,7 +60,7 @@ class StandaloneRestProtocolSuite extends FunSuite with BeforeAndAfterAll with B
 
   test("kill empty driver") {
     val response = client.killDriver(masterRestUrl, "driver-that-does-not-exist")
-    val killResponse = getResponse[KillDriverResponse](response, client)
+    val killResponse = getKillResponse(response)
     val killSuccess = killResponse.getSuccess
     assert(killSuccess === "false")
   }
@@ -71,11 +71,11 @@ class StandaloneRestProtocolSuite extends FunSuite with BeforeAndAfterAll with B
     val size = 500
     val driverId = submitApplication(resultsFile, numbers, size)
     val response = client.killDriver(masterRestUrl, driverId)
-    val killResponse = getResponse[KillDriverResponse](response, client)
+    val killResponse = getKillResponse(response)
     val killSuccess = killResponse.getSuccess
     waitUntilFinished(driverId)
     val response2 = client.requestDriverStatus(masterRestUrl, driverId)
-    val statusResponse = getResponse[DriverStatusResponse](response2, client)
+    val statusResponse = getStatusResponse(response2)
     val statusSuccess = statusResponse.getSuccess
     val driverState = statusResponse.getDriverState
     assert(killSuccess === "true")
@@ -87,7 +87,7 @@ class StandaloneRestProtocolSuite extends FunSuite with BeforeAndAfterAll with B
 
   test("request status for empty driver") {
     val response = client.requestDriverStatus(masterRestUrl, "driver-that-does-not-exist")
-    val statusResponse = getResponse[DriverStatusResponse](response, client)
+    val statusResponse = getStatusResponse(response)
     val statusSuccess = statusResponse.getSuccess
     assert(statusSuccess === "false")
   }
@@ -130,7 +130,7 @@ class StandaloneRestProtocolSuite extends FunSuite with BeforeAndAfterAll with B
     val args = new SparkSubmitArguments(commandLineArgs)
     SparkSubmit.prepareSubmitEnvironment(args)
     val response = client.submitDriver(args)
-    val submitResponse = getResponse[SubmitDriverResponse](response, client)
+    val submitResponse = getSubmitResponse(response)
     submitResponse.getDriverId
   }
 
@@ -140,7 +140,7 @@ class StandaloneRestProtocolSuite extends FunSuite with BeforeAndAfterAll with B
     val expireTime = System.currentTimeMillis + maxSeconds * 1000
     while (!finished) {
       val response = client.requestDriverStatus(masterRestUrl, driverId)
-      val statusResponse = getResponse[DriverStatusResponse](response, client)
+      val statusResponse = getStatusResponse(response)
       val driverState = statusResponse.getDriverState
       finished =
         driverState != DriverState.SUBMITTED.toString &&
@@ -151,17 +151,30 @@ class StandaloneRestProtocolSuite extends FunSuite with BeforeAndAfterAll with B
     }
   }
 
-  /** Return the response as the expected type, or fail with an informative error message. */
-  private def getResponse[T <: SubmitRestProtocolResponse](
-      response: SubmitRestProtocolResponse,
-      client: StandaloneRestClient): T = {
+  /** Return the response as a submit driver response, or fail with error otherwise. */
+  private def getSubmitResponse(response: SubmitRestProtocolResponse): SubmitDriverResponse = {
     response match {
-      case error: ErrorResponse =>
-        fail(s"Error from the server:\n${error.getMessage}")
-      case _ =>
-        client.getResponse[T](response).getOrElse {
-          fail(s"Response type was unexpected: ${response.toJson}")
-        }
+      case s: SubmitDriverResponse => s
+      case e: ErrorResponse => fail(s"Server returned error: ${e.toJson}")
+      case r => fail(s"Expected submit response. Actual: ${r.toJson}")
+    }
+  }
+
+  /** Return the response as a kill driver response, or fail with error otherwise. */
+  private def getKillResponse(response: SubmitRestProtocolResponse): KillDriverResponse = {
+    response match {
+      case k: KillDriverResponse => k
+      case e: ErrorResponse => fail(s"Server returned error: ${e.toJson}")
+      case r => fail(s"Expected kill response. Actual: ${r.toJson}")
+    }
+  }
+
+  /** Return the response as a driver status response, or fail with error otherwise. */
+  private def getStatusResponse(response: SubmitRestProtocolResponse): DriverStatusResponse = {
+    response match {
+      case s: DriverStatusResponse => s
+      case e: ErrorResponse => fail(s"Server returned error: ${e.toJson}")
+      case r => fail(s"Expected status response. Actual: ${r.toJson}")
     }
   }
 

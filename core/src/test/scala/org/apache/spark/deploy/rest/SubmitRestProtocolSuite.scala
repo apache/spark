@@ -108,12 +108,15 @@ class SubmitRestProtocolSuite extends FunSuite {
   }
 
   test("response to and from JSON") {
-    val response = new DummyResponse().setSparkVersion("3.3.4")
+    val response = new DummyResponse()
+      .setSparkVersion("3.3.4")
+      .setSuccess("true")
     val json = response.toJson
     assertJsonEquals(json, dummyResponseJson)
     val newResponse = SubmitRestProtocolMessage.fromJson(json, classOf[DummyResponse])
     assert(newResponse.getSparkVersion === "3.3.4")
     assert(newResponse.getServerSparkVersion === "3.3.4")
+    assert(newResponse.getSuccess === "true")
     assert(newResponse.getMessage === null)
   }
 
@@ -300,7 +303,8 @@ class SubmitRestProtocolSuite extends FunSuite {
     """
       |{
       |  "action" : "DummyResponse",
-      |  "serverSparkVersion" : "3.3.4"
+      |  "serverSparkVersion" : "3.3.4",
+      |  "success": "true"
       |}
     """.stripMargin
 
@@ -403,9 +407,9 @@ class SubmitRestProtocolSuite extends FunSuite {
 
 private class DummyResponse extends SubmitRestProtocolResponse
 private class DummyRequest extends SubmitRestProtocolRequest {
-  private val active = new SubmitRestProtocolField[Boolean]("active")
-  private val age = new SubmitRestProtocolField[Int]("age")
-  private val name = new SubmitRestProtocolField[String]("name")
+  private val active = new SubmitRestProtocolField[Boolean]
+  private val age = new SubmitRestProtocolField[Int]
+  private val name = new SubmitRestProtocolField[String]
 
   def getActive: String = active.toString
   def getAge: String = age.toString
@@ -417,8 +421,8 @@ private class DummyRequest extends SubmitRestProtocolRequest {
 
   protected override def doValidate(): Unit = {
     super.doValidate()
-    assertFieldIsSet(name)
-    assertFieldIsSet(age)
+    assertFieldIsSet(name, "name")
+    assertFieldIsSet(age, "age")
     assert(age.getValue.get > 5, "Not old enough!")
   }
 }

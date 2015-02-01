@@ -20,7 +20,7 @@ package org.apache.spark.deploy.rest
 import com.fasterxml.jackson.annotation._
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility
 import com.fasterxml.jackson.annotation.JsonInclude.Include
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.{ObjectMapper, SerializationFeature}
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
 
@@ -42,7 +42,7 @@ abstract class SubmitRestProtocolMessage {
   val messageType = Utils.getFormattedClassName(this)
   protected val action: String = messageType
   protected val sparkVersion: SubmitRestProtocolField[String]
-  protected val message = new SubmitRestProtocolField[String]("message")
+  protected val message = new SubmitRestProtocolField[String]
 
   // Required for JSON de/serialization and not explicitly used
   private def getAction: String = action
@@ -64,7 +64,8 @@ abstract class SubmitRestProtocolMessage {
   def toJson: String = {
     validate()
     val mapper = new ObjectMapper
-    pretty(parse(mapper.writeValueAsString(this)))
+    mapper.enable(SerializationFeature.INDENT_OUTPUT)
+    mapper.writeValueAsString(this)
   }
 
   /**
@@ -85,14 +86,13 @@ abstract class SubmitRestProtocolMessage {
     if (action == null) {
       throw new SubmitRestMissingFieldException(s"The action field is missing in $messageType")
     }
-    assertFieldIsSet(sparkVersion)
   }
 
   /** Assert that the specified field is set in this message. */
-  protected def assertFieldIsSet(field: SubmitRestProtocolField[_]): Unit = {
+  protected def assertFieldIsSet(field: SubmitRestProtocolField[_], name: String): Unit = {
     if (!field.isSet) {
       throw new SubmitRestMissingFieldException(
-        s"Field '${field.name}' is missing in message $messageType.")
+        s"Field '$name' is missing in message $messageType.")
     }
   }
 
@@ -143,19 +143,23 @@ abstract class SubmitRestProtocolMessage {
  * An abstract request sent from the client in the REST application submission protocol.
  */
 abstract class SubmitRestProtocolRequest extends SubmitRestProtocolMessage {
-  protected override val sparkVersion = new SubmitRestProtocolField[String]("client_spark_version")
+  protected override val sparkVersion = new SubmitRestProtocolField[String]
   def getClientSparkVersion: String = sparkVersion.toString
   def setClientSparkVersion(s: String): this.type = setField(sparkVersion, s)
   override def getSparkVersion: String = getClientSparkVersion
   override def setSparkVersion(s: String) = setClientSparkVersion(s)
+  protected override def doValidate(): Unit = {
+    super.doValidate()
+    assertFieldIsSet(sparkVersion, "clientSparkVersion")
+  }
 }
 
 /**
  * An abstract response sent from the server in the REST application submission protocol.
  */
 abstract class SubmitRestProtocolResponse extends SubmitRestProtocolMessage {
-  protected override val sparkVersion = new SubmitRestProtocolField[String]("server_spark_version")
-  private val success = new SubmitRestProtocolField[Boolean]("success")
+  protected override val sparkVersion = new SubmitRestProtocolField[String]
+  private val success = new SubmitRestProtocolField[Boolean]
 
   override def getSparkVersion: String = getServerSparkVersion
   def getServerSparkVersion: String = sparkVersion.toString
@@ -167,7 +171,8 @@ abstract class SubmitRestProtocolResponse extends SubmitRestProtocolMessage {
 
   protected override def doValidate(): Unit = {
     super.doValidate()
-    assertFieldIsSet(success)
+    assertFieldIsSet(sparkVersion, "serverSparkVersion")
+    assertFieldIsSet(success, "success")
   }
 }
 

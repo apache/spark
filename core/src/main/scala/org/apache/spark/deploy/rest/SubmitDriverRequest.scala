@@ -29,20 +29,20 @@ import org.apache.spark.util.JsonProtocol
  * A request to submit a driver in the REST application submission protocol.
  */
 class SubmitDriverRequest extends SubmitRestProtocolRequest {
-  private val appName = new SubmitRestProtocolField[String]("appName")
-  private val appResource = new SubmitRestProtocolField[String]("appResource")
-  private val mainClass = new SubmitRestProtocolField[String]("mainClass")
-  private val jars = new SubmitRestProtocolField[String]("jars")
-  private val files = new SubmitRestProtocolField[String]("files")
-  private val pyFiles = new SubmitRestProtocolField[String]("pyFiles")
-  private val driverMemory = new SubmitRestProtocolField[String]("driverMemory")
-  private val driverCores = new SubmitRestProtocolField[Int]("driverCores")
-  private val driverExtraJavaOptions = new SubmitRestProtocolField[String]("driverExtraJavaOptions")
-  private val driverExtraClassPath = new SubmitRestProtocolField[String]("driverExtraClassPath")
-  private val driverExtraLibraryPath = new SubmitRestProtocolField[String]("driverExtraLibraryPath")
-  private val superviseDriver = new SubmitRestProtocolField[Boolean]("superviseDriver")
-  private val executorMemory = new SubmitRestProtocolField[String]("executorMemory")
-  private val totalExecutorCores = new SubmitRestProtocolField[Int]("totalExecutorCores")
+  private val appName = new SubmitRestProtocolField[String]
+  private val appResource = new SubmitRestProtocolField[String]
+  private val mainClass = new SubmitRestProtocolField[String]
+  private val jars = new SubmitRestProtocolField[String]
+  private val files = new SubmitRestProtocolField[String]
+  private val pyFiles = new SubmitRestProtocolField[String]
+  private val driverMemory = new SubmitRestProtocolField[String]
+  private val driverCores = new SubmitRestProtocolField[Int]
+  private val driverExtraJavaOptions = new SubmitRestProtocolField[String]
+  private val driverExtraClassPath = new SubmitRestProtocolField[String]
+  private val driverExtraLibraryPath = new SubmitRestProtocolField[String]
+  private val superviseDriver = new SubmitRestProtocolField[Boolean]
+  private val executorMemory = new SubmitRestProtocolField[String]
+  private val totalExecutorCores = new SubmitRestProtocolField[Int]
 
   // Special fields
   private val appArgs = new ArrayBuffer[String]
@@ -140,7 +140,7 @@ class SubmitDriverRequest extends SubmitRestProtocolRequest {
 
   protected override def doValidate(): Unit = {
     super.doValidate()
-    assertFieldIsSet(appName)
-    assertFieldIsSet(appResource)
+    assertFieldIsSet(appName, "appName")
+    assertFieldIsSet(appResource, "appResource")
   }
 }

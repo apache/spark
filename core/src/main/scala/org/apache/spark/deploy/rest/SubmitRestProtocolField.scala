@@ -20,7 +20,7 @@ package org.apache.spark.deploy.rest
 /**
  * A field used in [[SubmitRestProtocolMessage]]s.
  */
-class SubmitRestProtocolField[T](val name: String) {
+class SubmitRestProtocolField[T] {
   protected var value: Option[T] = None
   def isSet: Boolean = value.isDefined
   def getValue: Option[T] = value
