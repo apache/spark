@@ -26,7 +26,7 @@ import org.apache.spark.rdd.RDD
 
 /**
  * :: Experimental ::
- * Standardizes features by removing the mean and scaling to unit standard deviation using column summary
+ * Standardizes features by removing the mean and scaling to unit std using column summary
  * statistics on the samples in the training set.
  *
  * @param withMean False by default. Centers the data with mean before scaling. It will build a
@@ -53,7 +53,11 @@ class StandardScaler(withMean: Boolean, withStd: Boolean) extends Logging {
     val summary = data.treeAggregate(new MultivariateOnlineSummarizer)(
       (aggregator, data) => aggregator.add(data),
       (aggregator1, aggregator2) => aggregator1.merge(aggregator2))
-    new StandardScalerModel(summary.variance, summary.mean, withStd, withMean)
+    new StandardScalerModel(
+      Vectors.dense(summary.variance.toArray.map(v => math.sqrt(v))),
+      summary.mean,
+      withStd,
+      withMean)
   }
 }
 
@@ -61,25 +65,29 @@ class StandardScaler(withMean: Boolean, withStd: Boolean) extends Logging {
  * :: Experimental ::
  * Represents a StandardScaler model that can transform vectors.
  *
- * @param variance column variance values
+ * @param std column standard deviation values
  * @param mean column mean values
  * @param withStd whether to scale the data to have unit standard deviation
  * @param withMean whether to center the data before scaling
  */
 @Experimental
 class StandardScalerModel (
-    val variance: Vector,
+    val std: Vector,
     val mean: Vector,
     var withStd: Boolean,
     var withMean: Boolean) extends VectorTransformer {
 
-  def this(variance: Vector, mean: Vector) {
-    this(variance, mean, withStd = variance != null, withMean = mean != null)
-    require(this.withStd || this.withMean, "at least one of variance or mean vectors must be provided")
-    if (this.withStd && this.withMean) require(mean.size == variance.size, "mean and variance vectors must have equal size if both are provided")
+  def this(std: Vector, mean: Vector) {
+    this(std, mean, withStd = std != null, withMean = mean != null)
+    require(this.withStd || this.withMean,
+      "at least one of std or mean vectors must be provided")
+    if (this.withStd && this.withMean) {
+      require(mean.size == std.size,
+        "mean and std vectors must have equal size if both are provided")
+    }
   }
 
-  def this(variance: Vector) = this(variance, null)
+  def this(std: Vector) = this(std, null)
 
   @DeveloperApi
   def setWithMean(withMean: Boolean): this.type = {
@@ -90,19 +98,10 @@ class StandardScalerModel (
 
   @DeveloperApi
   def setWithStd(withStd: Boolean): this.type = {
-    require(!(withStd && this.variance == null), "cannot set withStd to true while variance is null")
+    require(!(withStd && this.std == null),
+      "cannot set withStd to true while std is null")
     this.withStd = withStd
     this
-  }
-
-  private lazy val factor: Array[Double] = {
-    val f = Array.ofDim[Double](variance.size)
-    var i = 0
-    while (i < f.size) {
-      f(i) = if (variance(i) != 0.0) 1.0 / math.sqrt(variance(i)) else 0.0
-      i += 1
-    }
-    f
   }
 
   // Since `shift` will be only used in `withMean` branch, we have it as
@@ -114,8 +113,8 @@ class StandardScalerModel (
    * Applies standardization transformation on a vector.
    *
    * @param vector Vector to be standardized.
-   * @return Standardized vector. If the standard deviation of a column is zero, it will return default `0.0`
-   *         for the column with zero standard deviation.
+   * @return Standardized vector. If the std of a column is zero, it will return default `0.0`
+   *         for the column with zero std.
    */
   override def transform(vector: Vector): Vector = {
     require(mean.size == vector.size)
@@ -129,11 +128,9 @@ class StandardScalerModel (
           val values = vs.clone()
           val size = values.size
           if (withStd) {
-            // Having a local reference of `factor` to avoid overhead as the comment before.
-            val localFactor = factor
             var i = 0
             while (i < size) {
-              values(i) = (values(i) - localShift(i)) * localFactor(i)
+              values(i) = if (std(i) != 0.0) (values(i) - localShift(i)) * (1.0 / std(i)) else 0.0
               i += 1
             }
           } else {
@@ -147,15 +144,13 @@ class StandardScalerModel (
         case v => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
       }
     } else if (withStd) {
-      // Having a local reference of `factor` to avoid overhead as the comment before.
-      val localFactor = factor
       vector match {
         case DenseVector(vs) =>
           val values = vs.clone()
           val size = values.size
           var i = 0
           while(i < size) {
-            values(i) *= localFactor(i)
+            values(i) *= (if (std(i) != 0.0) 1.0 / std(i) else 0.0)
             i += 1
           }
           Vectors.dense(values)
@@ -166,7 +161,7 @@ class StandardScalerModel (
           val nnz = values.size
           var i = 0
           while (i < nnz) {
-            values(i) *= localFactor(indices(i))
+            values(i) *= (if (std(indices(i)) != 0.0) 1.0 / std(indices(i)) else 0.0)
             i += 1
           }
           Vectors.sparse(size, indices, values)

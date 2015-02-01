@@ -60,7 +60,7 @@ class StandardScalerSuite extends FunSuite with MLlibTestSparkContext {
       (aggregator1, aggregator2) => aggregator1.merge(aggregator2))
   }
 
-  test("Standardization with dense input when means and variances are provided") {
+  test("Standardization with dense input when means and stds are provided") {
 
     val dataRDD = sc.parallelize(denseData, 3)
 
@@ -72,9 +72,9 @@ class StandardScalerSuite extends FunSuite with MLlibTestSparkContext {
     val model2 = standardizer2.fit(dataRDD)
     val model3 = standardizer3.fit(dataRDD)
 
-    val equivalentModel1 = new StandardScalerModel(model1.variance, model1.mean)
-    val equivalentModel2 = new StandardScalerModel(model2.variance, model2.mean, true, false)
-    val equivalentModel3 = new StandardScalerModel(model3.variance, model3.mean, false, true)
+    val equivalentModel1 = new StandardScalerModel(model1.std, model1.mean)
+    val equivalentModel2 = new StandardScalerModel(model2.std, model2.mean, true, false)
+    val equivalentModel3 = new StandardScalerModel(model3.std, model3.mean, false, true)
 
     val data1 = denseData.map(equivalentModel1.transform)
     val data2 = denseData.map(equivalentModel2.transform)
@@ -193,7 +193,7 @@ class StandardScalerSuite extends FunSuite with MLlibTestSparkContext {
   }
 
 
-  test("Standardization with sparse input when means and variances are provided") {
+  test("Standardization with sparse input when means and stds are provided") {
 
     val dataRDD = sc.parallelize(sparseData, 3)
 
@@ -205,9 +205,9 @@ class StandardScalerSuite extends FunSuite with MLlibTestSparkContext {
     val model2 = standardizer2.fit(dataRDD)
     val model3 = standardizer3.fit(dataRDD)
 
-    val equivalentModel1 = new StandardScalerModel(model1.variance, model1.mean)
-    val equivalentModel2 = new StandardScalerModel(model2.variance, model2.mean, true, false)
-    val equivalentModel3 = new StandardScalerModel(model3.variance, model3.mean, false, true)
+    val equivalentModel1 = new StandardScalerModel(model1.std, model1.mean)
+    val equivalentModel2 = new StandardScalerModel(model2.std, model2.mean, true, false)
+    val equivalentModel3 = new StandardScalerModel(model3.std, model3.mean, false, true)
 
     val data2 = sparseData.map(equivalentModel2.transform)
 
@@ -288,7 +288,7 @@ class StandardScalerSuite extends FunSuite with MLlibTestSparkContext {
     assert(data2(5) ~== Vectors.sparse(3, Seq((1, 0.71580142))) absTol 1E-5)
   }
 
-  test("Standardization with constant input when means and variances are provided") {
+  test("Standardization with constant input when means and stds are provided") {
 
     val dataRDD = sc.parallelize(constantData, 2)
 
@@ -300,9 +300,9 @@ class StandardScalerSuite extends FunSuite with MLlibTestSparkContext {
     val model2 = standardizer2.fit(dataRDD)
     val model3 = standardizer3.fit(dataRDD)
 
-    val equivalentModel1 = new StandardScalerModel(model1.variance, model1.mean)
-    val equivalentModel2 = new StandardScalerModel(model2.variance, model2.mean, true, false)
-    val equivalentModel3 = new StandardScalerModel(model3.variance, model3.mean, false, true)
+    val equivalentModel1 = new StandardScalerModel(model1.std, model1.mean)
+    val equivalentModel2 = new StandardScalerModel(model2.std, model2.mean, true, false)
+    val equivalentModel3 = new StandardScalerModel(model3.std, model3.mean, false, true)
 
     val data1 = constantData.map(equivalentModel1.transform)
     val data2 = constantData.map(equivalentModel2.transform)
@@ -342,12 +342,12 @@ class StandardScalerSuite extends FunSuite with MLlibTestSparkContext {
 
   test("StandardScalerModel argument nulls are properly handled") {
 
-    withClue("model needs at least one of variance or mean vectors") {
+    withClue("model needs at least one of std or mean vectors") {
       intercept[IllegalArgumentException] {
         val model = new StandardScalerModel(null, null)
       }
     }
-    withClue("model needs variance to set withStd to true") {
+    withClue("model needs std to set withStd to true") {
       intercept[IllegalArgumentException] {
         val model = new StandardScalerModel(null, Vectors.dense(0.0))
         model.setWithStd(true)
@@ -359,7 +359,7 @@ class StandardScalerSuite extends FunSuite with MLlibTestSparkContext {
         model.setWithMean(true)
       }
     }
-    withClue("model needs variance and mean vectors to be equal size when both are provided") {
+    withClue("model needs std and mean vectors to be equal size when both are provided") {
       intercept[IllegalArgumentException] {
         val model = new StandardScalerModel(Vectors.dense(0.0), Vectors.dense(0.0,1.0))
       }
