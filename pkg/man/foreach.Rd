@@ -19,14 +19,8 @@ foreachPartition(rdd, func)
 \item{rdd}{The RDD to apply the function}
 
 \item{func}{The function to be applied.}
-
-\item{rdd}{The RDD to apply the function}
-
-\item{func}{The function to be applied to partitions.}
 }
 \value{
-invisible NULL.
-
 invisible NULL.
 }
 \description{

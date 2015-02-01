@@ -4,8 +4,8 @@
 # Returns TRUE if object is an instance of given class
 isInstanceOf <- function(jobj, className) {
   stopifnot(class(jobj) == "jobj")
-  cls <- SparkR:::callJStatic("java.lang.Class", "forName", className)
-  SparkR:::callJMethod(cls, "isInstance", jobj)
+  cls <- callJStatic("java.lang.Class", "forName", className)
+  callJMethod(cls, "isInstance", jobj)
 }
 
 # Call a Java method named methodName on the object
