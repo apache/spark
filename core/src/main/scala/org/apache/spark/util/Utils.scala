@@ -256,6 +256,7 @@ private[spark] object Utils extends Logging {
    */
   def chmod700(file: File): Boolean = {
     if (!isWindows) {
+      // this logic does not work for Windows
       file.setReadable(false, false) &&
       file.setReadable(true, true) &&
       file.setWritable(false, false) &&
@@ -263,7 +264,6 @@ private[spark] object Utils extends Logging {
       file.setExecutable(false, false) &&
       file.setExecutable(true, true)
     } else {
-      // this logic does not work for Windows
       true 
     }
   }
