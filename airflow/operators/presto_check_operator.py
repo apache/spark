@@ -45,6 +45,78 @@ class PrestoCheckOperator(BaseOperator):
         logging.info("Success.")
 
 
+def _convert_to_float_if_possible(s):
+    '''
+    A small helper function to convert a string to a numeric value
+    if appropriate
+
+    :param s: the string to be converted
+    :type s: str
+    '''
+    try:
+        ret = float(s)
+    except (ValueError, TypeError):
+        ret = s
+    return ret
+
+
+class PrestoValueCheckOperator(BaseOperator):
+    """
+    Performs a simple value check using sql code.
+
+    :param sql: the sql to be executed
+    :type sql: string
+    :param presto_dbid: reference to the Presto database
+    :type presto_dbid: string
+    """
+
+    __mapper_args__ = {
+        'polymorphic_identity': 'PrestoValueCheckOperator'
+    }
+    template_fields = ('sql',)
+    template_ext = ('.hql', '.sql',)
+
+    @apply_defaults
+    def __init__(
+            self, sql, pass_value, tolerance=None,
+            presto_conn_id=conf.get('hooks', 'PRESTO_DEFAULT_CONN_ID'),
+            *args, **kwargs):
+        super(PrestoValueCheckOperator, self).__init__(*args, **kwargs)
+        self.presto_conn_id = presto_conn_id
+        self.hook = PrestoHook(presto_conn_id=presto_conn_id)
+        self.sql = sql
+        self.pass_value = _convert_to_float_if_possible(pass_value)
+        tol = _convert_to_float_if_possible(tolerance)
+        self.tol = tol if isinstance(tol, float) else None
+        self.is_numeric_value_check = isinstance(self.pass_value, float)
+        self.has_tolerance = self.tol is not None
+
+    def execute(self, execution_date=None):
+        logging.info('Executing SQL check: ' + self.sql)
+        records = self.hook.get_first(hql=self.sql)
+        if not records:
+            raise Exception("The query returned None")
+        test_results = []
+        except_temp = ("Test failed.\nPass value:{self.pass_value}\n"
+                       "Query:\n{self.sql}\nResults:\n{records!s}")
+        if not self.is_numeric_value_check:
+            tests = [str(r) == self.pass_value for r in records]
+        elif self.is_numeric_value_check:
+            try:
+                num_rec = [float(r) for r in records]
+            except (ValueError, TypeError) as e:
+                cvestr = "Converting a result to float failed.\n"
+                raise Exception(cvestr+except_temp.format(**locals()))
+            if self.has_tolerance:
+                tests = [
+                    r / (1 + self.tol) <= self.pass_value <= r / (1 - self.tol)
+                    for r in num_rec]
+            else:
+                tests = [r == self.pass_value for r in num_rec]
+        if not all(tests):
+            raise Exception(except_temp.format(**locals()))
+
+
 class PrestoIntervalCheckOperator(BaseOperator):
     """
     Checks that the values of metrics given as SQL expressions are within
@@ -64,7 +136,7 @@ class PrestoIntervalCheckOperator(BaseOperator):
     __mapper_args__ = {
         'polymorphic_identity': 'PrestoIntervalCheckOperator'
     }
-    template_fields = ('sql1','sql2')
+    template_fields = ('sql1', 'sql2')
     template_ext = ('.hql', '.sql',)
 
     @apply_defaults
