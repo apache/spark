@@ -5,6 +5,19 @@ import datetime
 def max_partition(
         table, schema="default",
         hive_conn_id=conf.get('hooks', 'HIVE_DEFAULT_CONN_ID')):
+    '''
+    Gets the max partition for a table.
+
+    :param schema: The hive schema the table lives in
+    :type schema: string
+    :param table: The hive table you are interested in, supports the dot
+        notation as in "my_database.my_table", if a dot is found,
+        the schema param is disregarded
+    :type table: string
+    :param hive_conn_id: The hive connection you are interested in.
+        If your default is set you don't need to use this parameter.
+    :type hive_conn_id: string
+    '''
     from airflow.hooks.hive_hook import HiveHook
     if '.' in table:
         schema, table = table.split('.')

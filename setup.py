@@ -35,6 +35,7 @@ setup(
         'setproctitle>=1.1.8',
         'snakebite>=2.4.13',
         'sphinx>=1.2.3',
+        'sphinx-argparse>=0.1.13',
         'sphinx-rtd-theme>=0.1.6',
         'Sphinx-PyPI-upload>=0.2.1',
         'sqlalchemy>=0.9.8',

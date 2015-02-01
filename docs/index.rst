@@ -1,5 +1,6 @@
 .. image:: img/pin_large.png
     :width: 70
+
 Airflow's Documentation
 ================================
 
@@ -68,5 +69,6 @@ Content
 
     installation
     code
+    cli
     ui
     tutorial

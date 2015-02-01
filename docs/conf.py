@@ -32,6 +32,7 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.coverage',
     'sphinx.ext.viewcode',
+    'sphinxarg.ext',
 ]
 viewcode_import = True
 
