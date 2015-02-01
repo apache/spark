@@ -19,6 +19,8 @@ package org.apache.spark.sql
 
 import java.util.{List => JList}
 
+import org.apache.spark.sql.sources.{CreateTableUsingAsLogicalPlan, CreateTableUsingAsSelect}
+
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.collection.JavaConversions._
@@ -620,6 +622,51 @@ class DataFrame protected[sql](
   override def saveAsTable(tableName: String): Unit = {
     sqlContext.executePlan(
       CreateTableAsSelect(None, tableName, logicalPlan, allowExisting = false)).toRdd
+  }
+
+  /**
+   * :: Experimental ::
+   * Creates a table from the the contents of this DataFrame based on a given data source and
+   * a set of options. This will fail if the table already exists.
+   *
+   * Note that this currently only works with DataFrames that are created from a HiveContext as
+   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
+   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
+   * be the target of an `insertInto`.
+   */
+  @Experimental
+  override def saveAsTable(
+    tableName: String,
+    dataSourceName: String,
+    options: Map[String, String]): Unit = {
+    val cmd =
+      CreateTableUsingAsLogicalPlan(
+        tableName,
+        dataSourceName,
+        temporary = false,
+        options,
+        allowExisting = false,
+        logicalPlan)
+
+    sqlContext.executePlan(cmd).toRdd
+  }
+
+  /**
+   * :: Experimental ::
+   * Creates a table from the the contents of this DataFrame based on a given data source and
+   * a set of options. This will fail if the table already exists.
+   *
+   * Note that this currently only works with DataFrames that are created from a HiveContext as
+   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
+   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
+   * be the target of an `insertInto`.
+   */
+  @Experimental
+  override def saveAsTable(
+    tableName: String,
+    dataSourceName: String,
+    options: java.util.Map[String, String]): Unit = {
+    saveAsTable(tableName, dataSourceName, options.toMap)
   }
 
   /**

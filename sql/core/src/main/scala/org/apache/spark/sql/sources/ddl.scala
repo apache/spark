@@ -254,6 +254,14 @@ private[sql] case class CreateTableUsingAsSelect(
     allowExisting: Boolean,
     query: String) extends Command
 
+private[sql] case class CreateTableUsingAsLogicalPlan(
+    tableName: String,
+    provider: String,
+    temporary: Boolean,
+    options: Map[String, String],
+    allowExisting: Boolean,
+    query: LogicalPlan) extends Command
+
 private [sql] case class CreateTempTableUsing(
     tableName: String,
     userSpecifiedSchema: Option[StructType],
@@ -281,7 +289,7 @@ private [sql] case class CreateTempTableUsingAsSelect(
     provider: String,
     options: Map[String, String],
     allowExisting: Boolean,
-    query: String) extends RunnableCommand {
+    query: LogicalPlan) extends RunnableCommand {
 
   def run(sqlContext: SQLContext) = {
     // The semantic of allowExisting for CREATE TEMPORARY TABLE is if allowExisting is true
@@ -289,7 +297,7 @@ private [sql] case class CreateTempTableUsingAsSelect(
     // and the table already exists, we will overwrite it.
     val alreadyExists = sqlContext.catalog.tableExists(Seq(tableName))
     if (!(alreadyExists && allowExisting)) {
-      val df = sqlContext.sql(query)
+      val df = new DataFrame(sqlContext, query)
       val resolved = ResolvedDataSource(sqlContext, Some(df.schema), provider, options)
       sqlContext.registerRDDAsTable(
         new DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)

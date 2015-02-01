@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.sources.{CreateTableUsingAsSelect, CreateTableUsing}
+import org.apache.spark.sql.sources.{CreateTableUsingAsLogicalPlan, CreateTableUsingAsSelect, CreateTableUsing}
 import org.apache.spark.sql.types.StringType
 
 
@@ -216,10 +216,16 @@ private[hive] trait HiveStrategies {
           CreateMetastoreDataSource(
             tableName, userSpecifiedSchema, provider, opts, allowExisting)) :: Nil
 
-      case CreateTableUsingAsSelect(tableName, provider, false, options, allowExisting, query) =>
-        ExecutedCommand(
-          CreateMetastoreDataSourceAsSelect(
-            tableName, provider, options, allowExisting, query)) :: Nil
+      case CreateTableUsingAsSelect(tableName, provider, false, opts, allowExisting, query) =>
+        val logicalPlan = hiveContext.parseSql(query)
+        val cmd =
+          CreateMetastoreDataSourceAsSelect(tableName, provider, opts, allowExisting, logicalPlan)
+        ExecutedCommand(cmd) :: Nil
+
+      case CreateTableUsingAsLogicalPlan(tableName, provider, false, opts, allowExisting, query) =>
+        val cmd =
+          CreateMetastoreDataSourceAsSelect(tableName, provider, opts, allowExisting, query)
+        ExecutedCommand(cmd) :: Nil
 
       case _ => Nil
     }

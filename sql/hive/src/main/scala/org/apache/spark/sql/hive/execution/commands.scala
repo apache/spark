@@ -18,8 +18,9 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.types.StructType
@@ -123,7 +124,7 @@ case class CreateMetastoreDataSourceAsSelect(
     provider: String,
     options: Map[String, String],
     allowExisting: Boolean,
-    query: String) extends RunnableCommand {
+    query: LogicalPlan) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext) = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
@@ -133,7 +134,7 @@ case class CreateMetastoreDataSourceAsSelect(
     // and the table already exists, an exception will be thrown.
     val alreadyExists = hiveContext.catalog.tableExists(Seq(tableName))
     if (!(alreadyExists && allowExisting)) {
-      val df = hiveContext.sql(query)
+      val df = new DataFrame(hiveContext, query)
       hiveContext.catalog.createDataSourceTable(
         tableName,
         Some(df.schema),
