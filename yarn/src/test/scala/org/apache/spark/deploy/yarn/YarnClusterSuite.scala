@@ -122,7 +122,8 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
 
     fakeSparkJar = File.createTempFile("sparkJar", null, tempDir)
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
-    sys.props += ("SPARK_HOME" -> sparkHome)
+    sys.props += ("spark.yarn.appMasterEnv.SPARK_HOME" ->  sparkHome)
+    sys.props += ("spark.executorEnv.SPARK_HOME" -> sparkHome)
     sys.props += ("spark.yarn.jar" -> ("local:" + fakeSparkJar.getAbsolutePath()))
     sys.props += ("spark.executor.instances" -> "1")
     sys.props += ("spark.driver.extraClassPath" -> childClasspath)
