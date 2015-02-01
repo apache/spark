@@ -607,24 +607,20 @@ class Airflow(BaseView):
                 url = (
                     "http://{host}:{WORKER_LOG_SERVER_PORT}/log"
                     "{log_relative}").format(**locals())
-                log += "Log file isn't local."
+                log += "Log file isn't local.\n"
                 log += "Fetching here: {url}\n".format(**locals())
                 try:
-                    import urllib2
-                    w = urllib2.urlopen(url)
-                    log += w.read()
-                    w.close()
+                    import requests
+                    log += requests.get(url).text
                 except:
                     log += "Failed to fetch log file.".format(**locals())
             session.commit()
             session.close()
 
-        log = "<pre><code>{0}</code></pre>".format(log)
         title = "Logs for {task_id} on {execution_date}".format(**locals())
-        html_code = log
 
         return self.render(
-            'airflow/dag_code.html', html_code=html_code, dag=dag, title=title)
+            'airflow/dag_code.html', code=log, dag=dag, title=title)
 
     @expose('/task')
     def task(self):

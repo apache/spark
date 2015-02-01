@@ -8,13 +8,13 @@
         {{ html_code|safe }}
     {% endif %}
     {% if code %}
-        <pre><code>{{ code|safe }}</code></pre>
+        <pre>{{ code }}</pre>
     {% endif %}
 
     {% if code_dict %}
         {% for k, v in code_dict.iteritems() %}
             <h4>{{ k }}</h4>
-            <pre><code>{{ v|safe }}</code></pre>
+            <pre>{{ v }}</pre>
         {% endfor %}
     {% endif %}
     {% if html_dict %}

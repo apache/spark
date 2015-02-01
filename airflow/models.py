@@ -573,7 +573,6 @@ class TaskInstance(Base):
                     self.render_templates()
                     task_copy.execute(self.execution_date)
             except (Exception, StandardError, KeyboardInterrupt) as e:
-                logging.error(traceback.format_exc())
                 self.record_failure(e, test_mode)
                 raise e
 
@@ -589,6 +588,7 @@ class TaskInstance(Base):
         session.commit()
 
     def record_failure(self, error, test_mode=False):
+        logging.exception(error)
         task = self.task
         session = settings.Session()
         self.end_date = datetime.now()
