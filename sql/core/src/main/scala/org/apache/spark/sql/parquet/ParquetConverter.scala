@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.parquet
 
+import java.sql.Date
+
+import org.apache.spark.sql.types.decimal.Decimal
+
 import scala.collection.mutable.{Buffer, ArrayBuffer, HashMap}
 
 import parquet.column.Dictionary
@@ -175,6 +179,9 @@ private[parquet] abstract class CatalystConverter extends GroupConverter {
 
   protected[parquet] def updateInt(fieldIndex: Int, value: Int): Unit =
     updateField(fieldIndex, value)
+
+  protected[parquet] def updateDate(fieldIndex: Int, value: Int): Unit =
+    updateField(fieldIndex, new Date(value))
 
   protected[parquet] def updateLong(fieldIndex: Int, value: Long): Unit =
     updateField(fieldIndex, value)
@@ -362,6 +369,9 @@ private[parquet] class CatalystPrimitiveRowConverter(
 
   override protected[parquet] def updateInt(fieldIndex: Int, value: Int): Unit =
     current.setInt(fieldIndex, value)
+
+  override protected[parquet] def updateDate(fieldIndex: Int, value: Int): Unit =
+    current.update(fieldIndex, new Date(value))
 
   override protected[parquet] def updateLong(fieldIndex: Int, value: Long): Unit =
     current.setLong(fieldIndex, value)
