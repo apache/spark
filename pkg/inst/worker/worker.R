@@ -68,6 +68,9 @@ numPartitions <- SparkR:::readInt(inputCon)
 isEmpty <- SparkR:::readInt(inputCon)
 
 metadataEnd <- proc.time()[3]
+dataReadEnd <- metadataEnd
+computeEnd <- dataReadEnd
+writeEnd <- computeEnd
 
 if (isEmpty != 0) {
 
