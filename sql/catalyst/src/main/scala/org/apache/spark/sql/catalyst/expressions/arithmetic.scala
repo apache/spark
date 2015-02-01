@@ -261,3 +261,27 @@ case class Abs(child: Expression) extends UnaryExpression  {
 
   override def eval(input: Row): Any = n1(child, input, _.abs(_))
 }
+
+/**
+ * A function that concat two strings.
+ */
+case class Concat(childSeq: Seq[Expression]) extends Expression {
+  type EvaluatedType = Any
+
+  def dataType = StringType
+  def nullable = childSeq.forall(_.nullable)
+  override def foldable = childSeq.forall(_.foldable)
+  override def children = childSeq
+  override def toString = s"CONCAT($childSeq)"
+
+  override def eval(input: Row): Any = {
+    childSeq.foldLeft("")((r, c) => {
+      val e = c.eval(input)
+      if (e == null) {
+        r
+      } else {
+        r + e.asInstanceOf[String]
+      }
+    })
+  }
+}
