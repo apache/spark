@@ -39,7 +39,10 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
   override def submitDriver(args: SparkSubmitArguments): SubmitRestProtocolResponse = {
     validateSubmitArgs(args)
     val response = super.submitDriver(args)
-    val submitResponse = getResponse[SubmitDriverResponse](response).getOrElse { return response }
+    val submitResponse = response match {
+      case s: SubmitDriverResponse => s
+      case _ => return response
+    }
     val submitSuccess = submitResponse.getSuccess.toBoolean
     if (submitSuccess) {
       val driverId = submitResponse.getDriverId
@@ -71,7 +74,10 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
   private def pollSubmittedDriverStatus(master: String, driverId: String): Unit = {
     (1 to REPORT_DRIVER_STATUS_MAX_TRIES).foreach { _ =>
       val response = requestDriverStatus(master, driverId)
-      val statusResponse = getResponse[DriverStatusResponse](response).getOrElse { return }
+      val statusResponse = response match {
+        case s: DriverStatusResponse => s
+        case _ => return
+      }
       val statusSuccess = statusResponse.getSuccess.toBoolean
       if (statusSuccess) {
         val driverState = Option(statusResponse.getDriverState)
@@ -158,23 +164,6 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
     if (!args.isStandaloneCluster) {
       throw new IllegalArgumentException(
         "This REST client is only supported in standalone cluster mode.")
-    }
-  }
-
-  /**
-   * Return the response as the expected type, or fail with an informative error message.
-   * Exposed for testing.
-   */
-  private[spark] def getResponse[T <: SubmitRestProtocolResponse](
-      response: SubmitRestProtocolResponse): Option[T] = {
-    try {
-      // Do not match on type T because types are erased at runtime
-      // Instead, manually try to cast it to type T ourselves
-      Some(response.asInstanceOf[T])
-    } catch {
-      case e: ClassCastException =>
-        logError(s"Server returned response of unexpected type:\n${response.toJson}")
-        None
     }
   }
 }

@@ -39,7 +39,7 @@ import org.apache.spark.util.Utils
 @JsonAutoDetect(getterVisibility = Visibility.ANY, setterVisibility = Visibility.ANY)
 @JsonPropertyOrder(alphabetic = true)
 abstract class SubmitRestProtocolMessage {
-  private val messageType = Utils.getFormattedClassName(this)
+  val messageType = Utils.getFormattedClassName(this)
   protected val action: String = messageType
   protected val sparkVersion: SubmitRestProtocolField[String]
   protected val message = new SubmitRestProtocolField[String]("message")
