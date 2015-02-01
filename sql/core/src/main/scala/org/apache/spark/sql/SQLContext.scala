@@ -304,7 +304,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   def parquetFile(path: String): DataFrame =
-    DataFrame(this, parquet.ParquetRelation(path, Some(sparkContext.hadoopConfiguration), this))
+    baseRelationToDataFrame(parquet.ParquetRelation2(path, Map("path" -> path))(this))
 
   /**
    * Loads a JSON file (one object per line), returning the result as a [[DataFrame]].

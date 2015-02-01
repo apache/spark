@@ -122,6 +122,9 @@ case class ParquetRelation2
 
   private val PartitionSpec(partitionColumns, partitions) = {
     val partitionDirPaths = dataFiles
+      // When reading a single raw Parquet part-file, base path points to that single data file
+      // rather than its parent directory, shouldn't use it for partition discovery.
+      .filterNot(_.getPath == qualifiedBasePath)
       .map(f => fs.makeQualified(f.getPath.getParent))
       .filterNot(_ == qualifiedBasePath)
       .distinct
@@ -129,10 +132,8 @@ case class ParquetRelation2
     if (partitionDirPaths.nonEmpty) {
       ParquetRelation2.parsePartitions(qualifiedBasePath, partitionDirPaths)
     } else {
-      // No partition directories found, makes a pseudo single-partition specification
-      PartitionSpec(
-        StructType(Seq.empty[StructField]),
-        Seq(Partition(EmptyRow, qualifiedBasePath.toString)))
+      // No partition directories found, makes an empty specification
+      PartitionSpec(StructType(Seq.empty[StructField]), Seq.empty[Partition])
     }
   }
 
@@ -207,9 +208,7 @@ case class ParquetRelation2
   // TODO Should calculate per scan size
   // It's common that a query only scans a fraction of a large Parquet file.  Returning size of the
   // whole Parquet file disables some optimizations in this case (e.g. broadcast join).
-  override val sizeInBytes = partitions.map { part =>
-    dataFiles.find(_.getPath.getParent.toString == part.path).get.getLen
-  }.sum
+  override val sizeInBytes = dataFiles.map(_.getLen).sum
 
   private val dataSchema = readSchema()
 
@@ -247,8 +246,10 @@ case class ParquetRelation2
       partitions
     }
 
-    val selectedFiles = selectedPartitions.flatMap { p =>
-      dataFiles.filter(_.getPath.getParent.toString == p.path)
+    val selectedFiles = if (isPartitioned) {
+      selectedPartitions.flatMap(p => dataFiles.filter(_.getPath.getParent.toString == p.path))
+    } else {
+      dataFiles
     }
 
     // FileInputFormat cannot handle empty lists.
@@ -265,8 +266,10 @@ case class ParquetRelation2
       .filter(_ => sqlContext.conf.parquetFilterPushDown)
       .foreach(ParquetInputFormat.setFilterPredicate(jobConf, _))
 
-    def percentRead = selectedPartitions.size.toDouble / partitions.size.toDouble * 100
-    logInfo(s"Reading $percentRead% of $path partitions")
+    if (isPartitioned) {
+      def percentRead = selectedPartitions.size.toDouble / partitions.size.toDouble * 100
+      logInfo(s"Reading $percentRead% of $path partitions")
+    }
 
     val requiredColumns = output.map(_.name)
     val requestedSchema = StructType(requiredColumns.map(schema(_)))

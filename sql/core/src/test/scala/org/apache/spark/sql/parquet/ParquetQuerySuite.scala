@@ -34,7 +34,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest {
     }
   }
 
-  test("appending") {
+  ignore("appending") {
     val data = (0 until 10).map(i => (i, i.toString))
     withParquetTable(data, "t") {
       sql("INSERT INTO TABLE t SELECT * FROM t")
