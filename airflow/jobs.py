@@ -382,10 +382,12 @@ class LocalTaskJob(BaseJob):
             ignore_dependencies=False,
             force=False,
             mark_success=False,
+            pickle_id=None,
             *args, **kwargs):
         self.task_instance = task_instance
         self.ignore_dependencies = ignore_dependencies
         self.force = force
+        self.pickle_id = pickle_id
         self.mark_success = mark_success
         super(LocalTaskJob, self).__init__(*args, **kwargs)
 
@@ -394,6 +396,7 @@ class LocalTaskJob(BaseJob):
             raw=True,
             ignore_dependencies=self.ignore_dependencies,
             force=self.force,
+            pickle_id=self.pickle_id,
             mark_success=self.mark_success,
             job_id=self.id,
         )

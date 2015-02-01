@@ -96,6 +96,7 @@ def run(args):
             task_instance=ti,
             mark_success=args.mark_success,
             force=args.force,
+            pickle_id=args.pickle,
             ignore_dependencies=args.ignore_dependencies)
         run_job.run()
     elif args.raw:
