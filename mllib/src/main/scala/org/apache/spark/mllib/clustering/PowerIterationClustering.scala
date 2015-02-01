@@ -87,6 +87,16 @@ class PowerIterationClustering private[clustering] (
   }
 
   /**
+   * Run the PIC algorithm with degree vector d as suggected by the PIC paper.
+   */ 
+  def runWithDegreeVector(
+      similarities: RDD[(Long, Long, Double)]): PowerIterationClusteringModel = {
+    val w = normalize(similarities)
+    val w0 = initDegreeVector(w)
+    pic(w0)
+  }
+ 
+  /**
    * Runs the PIC algorithm.
    *
    * @param w The normalized affinity matrix, which is the matrix W in the PIC paper with
@@ -148,6 +158,18 @@ private[clustering] object PowerIterationClustering extends Logging {
     GraphImpl.fromExistingRDDs(VertexRDD(v0), g.edges)
   }
 
+  /**
+   * Generates the degree vector as the vertex properties (v0) to start power iteration.
+   * 
+   * @param g a graph representing the normalized affinity matrix (W)
+   * @return a graph with edges representing W and vertices representing the degree vector
+   */
+  def initDegreeVector(g: Graph[Double, Double]): Graph[Double, Double] = {
+    val sum = g.vertices.values.sum()
+    val v0 = g.vertices.mapValues(_ / sum)
+    GraphImpl.fromExistingRDDs(VertexRDD(v0), g.edges)
+  }
+ 
   /**
    * Runs power iteration.
    * @param g input graph with edges representing the normalized affinity matrix (W) and vertices
