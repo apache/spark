@@ -12,7 +12,7 @@ then
 elif [[ "${EXECUTION_MODE}" = "worker" ]]
 then
     export SPARK_MASTER_IP=${MASTER_IP_ADDRESS}
-    /root/spark1.3/bin/spark-class org.apache.spark.deploy.worker.Worker spark://${MASTER_IP_ADDRESS}:${MASTER_PORT} &
+    /root/spark1.3/bin/spark-class org.apache.spark.deploy.worker.Worker spark://${MASTER_IP_ADDRESS}:${MASTER_PORT}
 else
     /bin/bash
 fi
