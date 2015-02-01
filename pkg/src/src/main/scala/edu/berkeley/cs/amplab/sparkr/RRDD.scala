@@ -117,68 +117,77 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
     // Start a thread to feed the process input from our parent's iterator
     new Thread("stdin writer for R") {
       override def run() {
-        SparkEnv.set(env)
-        val streamStd = new BufferedOutputStream(proc.getOutputStream, bufferSize)
-        val printOutStd = new PrintStream(streamStd)
-        printOutStd.println(tempFileName)
-        printOutStd.println(rLibDir)
-        printOutStd.println(tempFileIn.getAbsolutePath())
-        printOutStd.flush()
+        try {
+          SparkEnv.set(env)
+          val stream = new BufferedOutputStream(new FileOutputStream(tempFileIn), bufferSize)
+          val printOut = new PrintStream(stream)
+          val dataOut = new DataOutputStream(stream)
 
-        streamStd.close()
+          dataOut.writeInt(splitIndex)
 
-        val stream = new BufferedOutputStream(new FileOutputStream(tempFileIn), bufferSize)
-        val printOut = new PrintStream(stream)
-        val dataOut = new DataOutputStream(stream)
+          dataOut.writeInt(func.length)
+          dataOut.write(func, 0, func.length)
 
-        dataOut.writeInt(splitIndex)
+          // R worker process input serialization flag
+          dataOut.writeInt(if (parentSerialized) 1 else 0)
+          // R worker process output serialization flag
+          dataOut.writeInt(if (dataSerialized) 1 else 0)
 
-        dataOut.writeInt(func.length)
-        dataOut.write(func, 0, func.length)
+          dataOut.writeInt(packageNames.length)
+          dataOut.write(packageNames, 0, packageNames.length)
 
-        // R worker process input serialization flag
-        dataOut.writeInt(if (parentSerialized) 1 else 0)
-        // R worker process output serialization flag
-        dataOut.writeInt(if (dataSerialized) 1 else 0)
+          dataOut.writeInt(functionDependencies.length)
+          dataOut.write(functionDependencies, 0, functionDependencies.length)
 
-        dataOut.writeInt(packageNames.length)
-        dataOut.write(packageNames, 0, packageNames.length)
-
-        dataOut.writeInt(functionDependencies.length)
-        dataOut.write(functionDependencies, 0, functionDependencies.length)
-
-        dataOut.writeInt(broadcastVars.length)
-        broadcastVars.foreach { broadcast =>
-          // TODO(shivaram): Read a Long in R to avoid this cast
-          dataOut.writeInt(broadcast.id.toInt)
-          // TODO: Pass a byte array from R to avoid this cast ?
-          val broadcastByteArr = broadcast.value.asInstanceOf[Array[Byte]]
-          dataOut.writeInt(broadcastByteArr.length)
-          dataOut.write(broadcastByteArr, 0, broadcastByteArr.length)
-        }
-
-        dataOut.writeInt(numPartitions)
-
-        if (!iter.hasNext) {
-          dataOut.writeInt(0)
-        } else {
-          dataOut.writeInt(1)
-        }
-
-        for (elem <- iter) {
-          if (parentSerialized) {
-            val elemArr = elem.asInstanceOf[Array[Byte]]
-            dataOut.writeInt(elemArr.length)
-            dataOut.write(elemArr, 0, elemArr.length)
-          } else {
-            printOut.println(elem)
+          dataOut.writeInt(broadcastVars.length)
+          broadcastVars.foreach { broadcast =>
+            // TODO(shivaram): Read a Long in R to avoid this cast
+            dataOut.writeInt(broadcast.id.toInt)
+            // TODO: Pass a byte array from R to avoid this cast ?
+            val broadcastByteArr = broadcast.value.asInstanceOf[Array[Byte]]
+            dataOut.writeInt(broadcastByteArr.length)
+            dataOut.write(broadcastByteArr, 0, broadcastByteArr.length)
           }
-        }
 
-        printOut.flush()
-        dataOut.flush()
-        stream.flush()
-        stream.close()
+          dataOut.writeInt(numPartitions)
+
+          if (!iter.hasNext) {
+            dataOut.writeInt(0)
+          } else {
+            dataOut.writeInt(1)
+          }
+
+          for (elem <- iter) {
+            if (parentSerialized) {
+              val elemArr = elem.asInstanceOf[Array[Byte]]
+              dataOut.writeInt(elemArr.length)
+              dataOut.write(elemArr, 0, elemArr.length)
+            } else {
+              printOut.println(elem)
+            }
+          }
+
+          printOut.flush()
+          dataOut.flush()
+          stream.flush()
+          stream.close()
+
+          // NOTE: We need to write out the temp file before writing out the 
+          // file name to stdin. Otherwise the R process could read partial state
+          val streamStd = new BufferedOutputStream(proc.getOutputStream, bufferSize)
+          val printOutStd = new PrintStream(streamStd)
+          printOutStd.println(tempFileName)
+          printOutStd.println(rLibDir)
+          printOutStd.println(tempFileIn.getAbsolutePath())
+          printOutStd.flush()
+
+          streamStd.close()
+        } catch {
+          // TODO: We should propogate this error to the task thread
+          case e: Exception =>
+            System.err.println("R Writer thread got an exception " + e)
+            e.printStackTrace()
+        }
       }
     }.start()
 
