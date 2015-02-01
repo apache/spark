@@ -9,6 +9,7 @@ import dill
 import re
 import signal
 import socket
+import traceback
 
 from sqlalchemy import (
     Column, Integer, String, DateTime, Text, Boolean, ForeignKey, PickleType)
@@ -572,6 +573,7 @@ class TaskInstance(Base):
                     self.render_templates()
                     task_copy.execute(self.execution_date)
             except (Exception, StandardError, KeyboardInterrupt) as e:
+                logging.error(traceback.format_exc())
                 self.record_failure(e, test_mode)
                 raise e
 
