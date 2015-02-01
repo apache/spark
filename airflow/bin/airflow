@@ -58,7 +58,6 @@ def backfill(args):
 def run(args):
 
     utils.pessimistic_connection_handling()
-
     # Setting up logging
     directory = conf.get('core', 'BASE_LOG_FOLDER') + \
         "/{args.dag_id}/{args.task_id}".format(args=args)
@@ -71,11 +70,12 @@ def run(args):
         filename=filename, 
         level=logging.INFO,
         format=settings.LOG_FORMAT)
-
     if not args.pickle:
         dagbag = DagBag(args.subdir)
         if args.dag_id not in dagbag.dags:
-            raise Exception('dag_id could not be found')
+            msg = 'DAG [{0}] could not be found'.format(args.dag_id)
+            logging.error(msg)
+            raise Exception(msg)
         dag = dagbag.dags[args.dag_id]
         task = dag.get_task(task_id=args.task_id)
     else:
@@ -88,7 +88,6 @@ def run(args):
         dag = dag_pickle.pickle
         task = dag.get_task(task_id=args.task_id)
 
-    # TODO: add run_local and fire it with the right executor from run
     ti = TaskInstance(task, args.execution_date)
 
     if args.local:
@@ -97,6 +96,7 @@ def run(args):
             task_instance=ti,
             mark_success=args.mark_success,
             force=args.force,
+            pickle_id=args.pickle,
             ignore_dependencies=args.ignore_dependencies)
         run_job.run()
     elif args.raw:
@@ -107,24 +107,30 @@ def run(args):
             job_id=args.job_id,
         )
     else:
-        # Pickling the DAG
-        session = settings.Session()
-        pickle = DagPickle(dag)
-        session.merge(pickle)
-        session.commit()
-        pickle_id = pickle.id
-        print(
-            'Pickled dag {dag} '
-            'as pickle_id:{pickle_id}').format(**locals())
+        try:
+            # Running remotely, so pickling the DAG
+            session = settings.Session()
+            pickle = DagPickle(dag)
+            session.add(pickle)
+            session.commit()
+            pickle_id = pickle.id
+            print(
+                'Pickled dag {dag} '
+                'as pickle_id:{pickle_id}').format(**locals())
+        except Exception as e:
+            print('Couldn not pickle the DAG')
+            print(e)
+            pickle_id = None
+
         executor = DEFAULT_EXECUTOR
         executor.start()
-        print("Sending run command to executor.")
         cmd = ti.command(
             force=args.force,
             local=True,
             mark_success=args.mark_success,
             ignore_dependencies=args.ignore_dependencies,
             pickle_id=pickle_id)
+        print("Sending run command to executor:\n" + cmd)
         executor.queue_command(ti.key, cmd)
         executor.end()
 
@@ -313,9 +319,6 @@ if __name__ == '__main__':
     logging.root.handlers = []
 
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-v", "--version",
-        help="Show version number")
     subparsers = parser.add_subparsers(help='sub-command help')
 
     ht = "Run subsections of a DAG for a specified date range"
@@ -474,6 +477,9 @@ if __name__ == '__main__':
     parser_flower.add_argument(
         "-a", "--broker_api", help="Broker api")
     parser_flower.set_defaults(func=flower)
+
+    parser_version = subparsers.add_parser('version', help="Show version")
+    parser_version.set_defaults(func=version)
 
     args = parser.parse_args()
     args.func(args)

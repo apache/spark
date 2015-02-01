@@ -41,6 +41,12 @@ from flask_login import login_required
 QUERY_LIMIT = 100000
 CHART_LIMIT = 200000
 
+special_attrs = {
+    'sql': SqlLexer,
+    'hql': SqlLexer,
+    'bash_command': BashLexer,
+}
+
 AUTHENTICATE = conf.getboolean('core', 'AUTHENTICATE')
 if AUTHENTICATE is False:
     login_required = lambda x: x
@@ -156,7 +162,7 @@ class Airflow(BaseView):
             hook = db.get_hook()
             try:
                 df = hook.get_pandas_df(wwwutils.limit_sql(sql, QUERY_LIMIT))
-                #df = hook.get_pandas_df(sql)
+                # df = hook.get_pandas_df(sql)
                 has_data = len(df) > 0
                 df = df.fillna('')
                 results = df.to_html(
@@ -242,12 +248,12 @@ class Airflow(BaseView):
             payload['error'] += "Empty result set. "
         elif (
                 not payload['error'] and
-                chart.sql_layout == 'series'  and
+                chart.sql_layout == 'series' and
                 len(df.columns) < 3):
             payload['error'] += "SQL needs to return at least 3 columns. "
         elif (
                 not payload['error'] and
-                chart.sql_layout == 'columns'  and
+                chart.sql_layout == 'columns'and
                 len(df.columns) < 2):
             payload['error'] += "SQL needs to return at least 2 columns. "
         elif not payload['error']:
@@ -488,7 +494,8 @@ class Airflow(BaseView):
         )
         f.close()
         return self.render(
-            'airflow/code.html', code_html=code_html, title=title, subtitle=subtitle)
+            'airflow/code.html',
+            code_html=code_html, title=title, subtitle=subtitle)
 
     @expose('/noaccess')
     def noaccess(self):
@@ -545,15 +552,25 @@ class Airflow(BaseView):
         dag = dagbag.dags[dag_id]
         task = copy.copy(dag.get_task(task_id))
         ti = models.TaskInstance(task=task, execution_date=dttm)
-        ti.templatify()
+        ti.render_templates()
         title = "{dag_id}.{task_id} [{execution_date}] rendered"
-        code_dict = {}
+        html_dict = {}
         for template_field in task.__class__.template_fields:
-            code_dict[template_field] = getattr(task, template_field)
+            content = getattr(task, template_field)
+            if template_field in special_attrs:
+                html_dict[template_field] = highlight(
+                        content,
+                        special_attrs[template_field](),  # Lexer call
+                        HtmlFormatter(noclasses=True)
+                )
+            else:
+                html_dict[template_field] = (
+                    "<pre><code>" + content + "</pre></code>")
+
 
         return self.render(
             'airflow/dag_code.html',
-            code_dict=code_dict,
+            html_dict=html_dict,
             dag=dag,
             title=title.format(**locals()))
 
@@ -616,13 +633,8 @@ class Airflow(BaseView):
         dag = dagbag.dags[dag_id]
         task = dag.get_task(task_id)
         task = copy.copy(task)
-        task.materialize_files()
+        task.templatify()
 
-        special_attrs = {
-            'sql': SqlLexer,
-            'hql': SqlLexer,
-            'bash_command': BashLexer,
-        }
         attributes = []
         for attr_name in dir(task):
             if not attr_name.startswith('_'):
@@ -1052,6 +1064,7 @@ mv = LogModelView(
     models.Log, Session, name="Logs", category="Browse")
 admin.add_view(mv)
 
+
 class TaskInstanceModelView(ModelView):
     column_filters = ('dag_id', 'task_id', 'state', 'execution_date')
     column_formatters = dict(
@@ -1070,6 +1083,7 @@ admin.add_link(
         category='Admin',
         name='Configuration',
         url='/admin/airflow/conf'))
+
 
 class ConnectionModelView(LoginMixin, ModelView):
     column_list = ('conn_id', 'conn_type', 'host', 'port')

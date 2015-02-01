@@ -111,7 +111,6 @@ class DagBag(object):
 
             for dag in m.__dict__.values():
                 if type(dag) == DAG:
-                    dag.dagbag = self
                     dag.full_filepath = filepath
                     self.dags[dag.dag_id] = dag
                     logging.info('Loaded DAG {dag}'.format(**locals()))
@@ -227,7 +226,9 @@ class DagPickle(Base):
     def __init__(self, dag):
         self.dag_id = dag.dag_id
         for t in dag.tasks:
-            t.materialize_files()
+            t.templatify()
+        if hasattr(dag, 'template_env'):
+            dag.template_env = None
         self.pickle = dag
 
 
@@ -568,7 +569,7 @@ class TaskInstance(Base):
                         raise Exception("Task received SIGTERM signal")
                     signal.signal(signal.SIGTERM, signal_handler)
 
-                    self.templatify()
+                    self.render_templates()
                     task_copy.execute(self.execution_date)
             except (Exception, StandardError, KeyboardInterrupt) as e:
                 self.record_failure(e, test_mode)
@@ -613,17 +614,7 @@ class TaskInstance(Base):
         session.commit()
         logging.error(str(error))
 
-    def get_template(self, attr):
-        if hasattr(self, 'task') and hasattr(self.task, 'dag'):
-            env = self.task.dag.get_template_env()
-        template = None
-        for ext in self.task.__class__.template_ext:
-            # if field has the right extension, look for the file.
-            if attr.strip().endswith(ext):
-                template = env.get_template(attr)
-        return template or env.from_string(attr)
-
-    def templatify(self):
+    def render_templates(self):
         task = self.task
         from airflow import macros
         tables = None
@@ -655,8 +646,7 @@ class TaskInstance(Base):
                     self.task.dag.user_defined_macros)
 
         for attr in task.__class__.template_fields:
-            source = getattr(task, attr)
-            template = self.get_template(source)
+            template = self.task.get_template(attr)
             setattr(
                 task, attr,
                 template.render(**jinja_context)
@@ -840,16 +830,28 @@ class BaseOperator(Base):
         '''
         pass
 
-    def materialize_files(self):
+    def get_template(self, attr):
+        content = getattr(self, attr)
+        if hasattr(self, 'dag'):
+            env = self.dag.get_template_env()
+        else:
+            env = jinja2.Environment()
+
+        exts = self.__class__.template_ext
+        if any([content.endswith(ext) for ext in exts]):
+            template = env.get_template(content)
+        else:
+            template = env.from_string(content)
+        return template
+
+    def templatify(self):
         # Getting the content of files for template_field / template_ext
-        for field in self.template_fields:
-            content = getattr(self, field)
+        for attr in self.template_fields:
+            self.get_template(attr)
+            content = getattr(self, attr)
             if any([content.endswith(ext) for ext in self.template_ext]):
                 env = self.dag.get_template_env()
-                template = env.get_template(content)
-                f = open(template.filename, 'r')
-                setattr(self, field, f.read())
-                f.close()
+                setattr(self, attr, env.loader.get_source(env, content)[0])
 
     @property
     def upstream_list(self):
@@ -1115,19 +1117,21 @@ class DAG(Base):
     def get_template_env(self):
         '''
         Returns a jinja2 Environment while taking into account the DAGs
-        template_searchpath and user_define_ macros
+        template_searchpath and user_defined_macros
         '''
-        searchpath = [self.folder]
-        if self.template_searchpath:
-            searchpath += self.template_searchpath
+        if not hasattr(self, 'template_env') or not self.template_env:
+            searchpath = [self.folder]
+            if self.template_searchpath:
+                searchpath += self.template_searchpath
 
-        env = jinja2.Environment(
-            loader=jinja2.FileSystemLoader(searchpath),
-            extensions=["jinja2.ext.do"])
-        if self.user_defined_macros:
-            env.globals.update(self.user_defined_macros)
+            env = jinja2.Environment(
+                loader=jinja2.FileSystemLoader(searchpath),
+                extensions=["jinja2.ext.do"])
+            if self.user_defined_macros:
+                env.globals.update(self.user_defined_macros)
 
-        return env
+            self.template_env = env
+        return self.template_env
 
     def set_dependency(self, upstream_task_id, downstream_task_id):
         """
