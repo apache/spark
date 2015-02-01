@@ -139,13 +139,12 @@ class DataFrame protected[sql](
    *   val rdd: RDD[(Int, String)] = ...
    *   rdd.toDataFrame  // this implicit conversion creates a DataFrame with column name _1 and _2
    *   rdd.toDataFrame("id", "name")  // this creates a DataFrame with column name "id" and "name"
-   *   rdd.toDataFrame("id")          // this creates a DataFrame with only column name "id"
    * }}}
    */
   @scala.annotation.varargs
   def toDataFrame(colName: String, colNames: String*): DataFrame = {
     val newNames = colName +: colNames
-    require(schema.size >= newNames.size,
+    require(schema.size == newNames.size,
       "The number of columns doesn't match.\n" +
       "Old column names: " + schema.fields.map(_.name).mkString(", ") + "\n" +
       "New column names: " + newNames.mkString(", "))
