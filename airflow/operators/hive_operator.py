@@ -1,4 +1,5 @@
 import logging
+import re
 
 from airflow.configuration import conf
 from airflow.hooks import HiveHook
@@ -14,6 +15,9 @@ class HiveOperator(BaseOperator):
     :type hql: string
     :param hive_conn_id: reference to the Hive database
     :type hive_conn_id: string
+    :param hiveconf_jinja_translate: when True, hiveconf-type templating
+        ${var} gets translated into jina-type templating {{ var }}
+    :type hiveconf_jinja_translate: boolean
     """
 
     __mapper_args__ = {
@@ -26,8 +30,12 @@ class HiveOperator(BaseOperator):
     def __init__(
             self, hql,
             hive_conn_id=conf.get('hooks', 'HIVE_DEFAULT_CONN_ID'),
+            hiveconf_jinja_translate=False,
             *args, **kwargs):
         super(HiveOperator, self).__init__(*args, **kwargs)
+
+        if hiveconf_jinja_translate:
+            hql = re.sub("(\$\{([ a-zA-Z0-9_]*)\})", "{{ \g<2> }}", hql)
 
         self.hive_conn_id = hive_conn_id
         self.hook = HiveHook(hive_conn_id=hive_conn_id)
