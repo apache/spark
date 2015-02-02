@@ -30,7 +30,9 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var archives: String = null
   var userJar: String = null
   var userClass: String = null
-  var userArgs: Seq[String] = Seq[String]()
+  var pyFiles: String = null
+  var primaryPyFile: String = null
+  var userArgs: ArrayBuffer[String] = new ArrayBuffer[String]()
   var executorMemory = 1024 // MB
   var executorCores = 1
   var numExecutors = DEFAULT_NUMBER_EXECUTORS
@@ -132,7 +134,6 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   }
 
   private def parseArgs(inputArgs: List[String]): Unit = {
-    val userArgsBuffer = new ArrayBuffer[String]()
     var args = inputArgs
 
     while (!args.isEmpty) {
@@ -145,11 +146,15 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
           userClass = value
           args = tail
 
+        case ("--primary-py-file") :: value :: tail =>
+          primaryPyFile = value
+          args = tail
+
         case ("--args" | "--arg") :: value :: tail =>
           if (args(0) == "--args") {
             println("--args is deprecated. Use --arg instead.")
           }
-          userArgsBuffer += value
+          userArgs += value
           args = tail
 
         case ("--master-class" | "--am-class") :: value :: tail =>
@@ -205,6 +210,10 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
           addJars = value
           args = tail
 
+        case ("--py-files") :: value :: tail =>
+          pyFiles = value
+          args = tail
+
         case ("--files") :: value :: tail =>
           files = value
           args = tail
@@ -219,8 +228,6 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
           throw new IllegalArgumentException(getUsageMessage(args))
       }
     }
-
-    userArgs = userArgsBuffer.readOnly
   }
 
   private def getUsageMessage(unknownParam: List[String] = null): String = {
@@ -232,6 +239,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
       |  --jar JAR_PATH           Path to your application's JAR file (required in yarn-cluster
       |                           mode)
       |  --class CLASS_NAME       Name of your application's main class (required)
+      |  --primary-py-file        A main Python file
       |  --arg ARG                Argument to be passed to your application's main class.
       |                           Multiple invocations are possible, each will be passed in order.
       |  --num-executors NUM      Number of executors to start (Default: 2)
@@ -244,6 +252,8 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
       |                           'default')
       |  --addJars jars           Comma separated list of local jars that want SparkContext.addJar
       |                           to work with.
+      |  --py-files PY_FILES      Comma-separated list of .zip, .egg, or .py files to
+      |                           place on the PYTHONPATH for Python apps.
       |  --files files            Comma separated list of files to be distributed with the job.
       |  --archives archives      Comma separated list of archives to be distributed with the job.
       """.stripMargin
