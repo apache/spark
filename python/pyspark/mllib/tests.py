@@ -183,9 +183,9 @@ class ListTests(PySparkTestCase):
 
     def test_gmm_deterministic(self):
         from pyspark.mllib.clustering import GaussianMixture
-        X = range(0, 100, 10)
-        Y = range(0, 100, 10)
-        data = self.sc.parallelize([[x, y] for x, y in zip(X, Y)])
+        x = range(0, 100, 10)
+        y = range(0, 100, 10)
+        data = self.sc.parallelize([[a, b] for a, b in zip(x, y)])
         clusters1 = GaussianMixture.train(data, 5, convergenceTol=0.001,
                                           maxIterations=100, seed=63)
         clusters2 = GaussianMixture.train(data, 5, convergenceTol=0.001,
