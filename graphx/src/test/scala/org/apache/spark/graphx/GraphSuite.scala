@@ -393,8 +393,8 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       val verts = sc.parallelize(List((1: VertexId, "a"), (2: VertexId, "b")), 1)
       val edges = sc.parallelize(List(Edge(1, 2, 0), Edge(2, 1, 0)), 2)
       val graph = Graph(verts, edges, "", StorageLevel.MEMORY_ONLY, StorageLevel.MEMORY_ONLY)
-      assert(graph.vertices.getStorageLevel == StorageLevel.MEMORY_ONLY)
-      assert(graph.edges.getStorageLevel == StorageLevel.NONE)
+      // Note: Before caching, graph.vertices is cached, but graph.edges is not (but graph.edges'
+      //       parent RDD is cached).
       graph.cache()
       assert(graph.vertices.getStorageLevel == StorageLevel.MEMORY_ONLY)
       assert(graph.edges.getStorageLevel == StorageLevel.MEMORY_ONLY)
