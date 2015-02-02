@@ -93,6 +93,10 @@ You can optionally configure the cluster further by setting environment variable
 <table class="table">
   <tr><th style="width:21%">Environment Variable</th><th>Meaning</th></tr>
   <tr>
+    <td><code>SPARK_MASTER</code></td>
+    <td>set the value in the form "HOST:SPARK_HOME", the worker nodes will sync the SPARK_HOME file from the master node when our cluster start(default: none).</td>
+  </tr>
+  <tr>
     <td><code>SPARK_MASTER_IP</code></td>
     <td>Bind the master to a specific IP address, for example a public one.</td>
   </tr>
