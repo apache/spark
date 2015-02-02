@@ -341,15 +341,15 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @Experimental
   def load(path: String): DataFrame = {
     val dataSourceName = conf.defaultDataSourceName
-    val options = Map("path" -> path)
-    load(dataSourceName, options)
+    load(dataSourceName, ("path", path))
   }
 
   @Experimental
   def load(
       dataSourceName: String,
-      options: Map[String, String]): DataFrame = {
-    val resolved = ResolvedDataSource(this, None, dataSourceName, options)
+      option: (String, String),
+      options: (String, String)*): DataFrame = {
+    val resolved = ResolvedDataSource(this, None, dataSourceName, (option +: options).toMap)
     new DataFrame(this, LogicalRelation(resolved.relation))
   }
 
@@ -357,7 +357,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def load(
       dataSourceName: String,
       options: java.util.Map[String, String]): DataFrame = {
-    load(dataSourceName, options.toMap)
+    val opts = options.toSeq
+    load(dataSourceName, opts.head, opts.tail:_*)
   }
 
   /**

@@ -345,4 +345,39 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
 
     sql("DROP TABLE jsonTable").collect().foreach(println)
   }
+
+  test("save and load table") {
+    val originalDefaultSource = conf.defaultDataSourceName
+    conf.setConf("spark.sql.default.datasource", "org.apache.spark.sql.json")
+
+    val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
+    val df = jsonRDD(rdd)
+
+    df.saveAsTable("savedJsonTable")
+
+    checkAnswer(
+      sql("SELECT * FROM savedJsonTable"),
+      df.collect())
+
+    createTable("createdJsonTable", catalog.hiveDefaultTableFilePath("savedJsonTable"), false)
+    assert(table("createdJsonTable").schema === df.schema)
+    checkAnswer(
+      sql("SELECT * FROM createdJsonTable"),
+      df.collect())
+
+    val exception = intercept[HiveException] {
+      createTable("createdJsonTable", filePath.toString, false)
+    }
+    assert(exception.getCause.isInstanceOf[AlreadyExistsException],
+      "Hive should complain that ctasJsonTable already exists")
+
+    createTable("createdJsonTable", filePath.toString, true)
+    // createdJsonTable should be not changed.
+    assert(table("createdJsonTable").schema === df.schema)
+    checkAnswer(
+      sql("SELECT * FROM createdJsonTable"),
+      df.collect())
+
+    conf.setConf("spark.sql.default.datasource", originalDefaultSource)
+  }
 }

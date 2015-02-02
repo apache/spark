@@ -22,7 +22,6 @@ import java.io.File
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.catalyst.util
-import org.apache.spark.sql.types.{StringType, StructType, StructField}
 import org.apache.spark.util.Utils
 
 class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {

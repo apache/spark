@@ -113,23 +113,23 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   @Experimental
   def createTable(tableName: String, path: String, allowExisting: Boolean): Unit = {
     val dataSourceName = conf.defaultDataSourceName
-    val options = Map("path" -> path)
-    createTable(tableName, dataSourceName, options, allowExisting)
+    createTable(tableName, dataSourceName, allowExisting, ("path", path))
   }
 
   @Experimental
   def createTable(
       tableName: String,
       dataSourceName: String,
-      options: Map[String, String],
-      allowExisting: Boolean): Unit = {
+      allowExisting: Boolean,
+      option: (String, String),
+      options: (String, String)*): Unit = {
     val cmd =
       CreateTableUsing(
         tableName,
         userSpecifiedSchema = None,
         dataSourceName,
         temporary = false,
-        options,
+        (option +: options).toMap,
         allowExisting)
     executePlan(cmd).toRdd
   }
@@ -138,16 +138,17 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   def createTable(
       tableName: String,
       dataSourceName: String,
-      options: Map[String, String],
       schema: StructType,
-      allowExisting: Boolean): Unit = {
+      allowExisting: Boolean,
+      option: (String, String),
+      options: (String, String)*): Unit = {
     val cmd =
       CreateTableUsing(
         tableName,
         userSpecifiedSchema = Some(schema),
         dataSourceName,
         temporary = false,
-        options,
+        (option +: options).toMap,
         allowExisting)
     executePlan(cmd).toRdd
   }
@@ -156,19 +157,21 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   def createTable(
       tableName: String,
       dataSourceName: String,
-      options: java.util.Map[String, String],
-      allowExisting: Boolean): Unit = {
-    createTable(tableName, dataSourceName, options.toMap, allowExisting)
+      allowExisting: Boolean,
+      options: java.util.Map[String, String]): Unit = {
+    val opts = options.toSeq
+    createTable(tableName, dataSourceName, allowExisting, opts.head, opts.tail:_*)
   }
 
   @Experimental
-  def loadAsTable(
+  def createTable(
       tableName: String,
       dataSourceName: String,
-      options: java.util.Map[String, String],
       schema: StructType,
-      allowExisting: Boolean): Unit = {
-    createTable(tableName, dataSourceName, options.toMap, schema, allowExisting)
+      allowExisting: Boolean,
+      options: java.util.Map[String, String]): Unit = {
+    val opts = options.toSeq
+    createTable(tableName, dataSourceName, schema, allowExisting, opts.head, opts.tail:_*)
   }
 
   /**

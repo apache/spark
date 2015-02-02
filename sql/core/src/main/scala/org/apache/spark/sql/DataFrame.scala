@@ -620,8 +620,7 @@ class DataFrame protected[sql](
   @Experimental
   override def saveAsTable(tableName: String): Unit = {
     val dataSourceName = sqlContext.conf.defaultDataSourceName
-    val options = Map("path" -> sqlContext.defaultTableFilePath(tableName))
-    saveAsTable(tableName, dataSourceName, options)
+    saveAsTable(tableName, dataSourceName, ("path", sqlContext.defaultTableFilePath(tableName)))
   }
 
   /**
@@ -638,13 +637,13 @@ class DataFrame protected[sql](
   override def saveAsTable(
       tableName: String,
       dataSourceName: String,
-      options: Map[String, String]): Unit = {
+      options: (String, String)*): Unit = {
     val cmd =
       CreateTableUsingAsLogicalPlan(
         tableName,
         dataSourceName,
         temporary = false,
-        options,
+        options.toMap,
         allowExisting = false,
         logicalPlan)
 
@@ -666,7 +665,7 @@ class DataFrame protected[sql](
       tableName: String,
       dataSourceName: String,
       options: java.util.Map[String, String]): Unit = {
-    saveAsTable(tableName, dataSourceName, options.toMap)
+    saveAsTable(tableName, dataSourceName, options.toSeq:_*)
   }
 
   @Experimental
@@ -677,16 +676,15 @@ class DataFrame protected[sql](
   @Experimental
   override def save(path: String, overwrite: Boolean): Unit = {
     val dataSourceName = sqlContext.conf.defaultDataSourceName
-    val options = Map("path" -> path)
-    save(dataSourceName, options, overwrite)
+    save(dataSourceName, overwrite, ("path" -> path))
   }
 
   @Experimental
   override def save(
       dataSourceName: String,
-      options: Map[String, String],
-      overwrite: Boolean): Unit = {
-    val resolved = ResolvedDataSource(sqlContext, Some(schema), dataSourceName, options)
+      overwrite: Boolean,
+      options: (String, String)*): Unit = {
+    val resolved = ResolvedDataSource(sqlContext, Some(schema), dataSourceName, options.toMap)
     resolved.relation match {
       case i: InsertableRelation => i.insertInto(new DataFrame(sqlContext, logicalPlan), overwrite)
       case o => sys.error(s"Data source $dataSourceName does not support save.")
@@ -696,9 +694,9 @@ class DataFrame protected[sql](
   @Experimental
   def save(
       dataSourceName: String,
-      options: java.util.Map[String, String],
-      overwrite: Boolean): Unit = {
-    save(dataSourceName, options.toMap, overwrite)
+      overwrite: Boolean,
+      options: java.util.Map[String, String]): Unit = {
+    save(dataSourceName, overwrite, options.toSeq:_*)
   }
 
   /**
