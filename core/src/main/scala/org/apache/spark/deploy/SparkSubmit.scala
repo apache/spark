@@ -534,7 +534,7 @@ private[spark] object SparkSubmitUtils extends Logging {
   private[spark] def resolveDependencyPaths(
       artifacts: Array[AnyRef],
       cacheDirectory: File): String = {
-    artifacts.map { case artifactInfo: MDArtifact =>
+    artifacts.map { artifactInfo =>
       val artifactString = artifactInfo.toString
       val jarName = artifactString.drop(artifactString.lastIndexOf("!") + 1)
       cacheDirectory.getAbsolutePath + "/" + jarName.substring(0, jarName.lastIndexOf(".jar") + 4)

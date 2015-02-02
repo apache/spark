@@ -225,6 +225,7 @@
     </dependency>
     <dependency>
       <groupId>oro</groupId>
+      <!-- oro is needed by ivy, but only listed as an optional dependency, so we include it. -->
       <artifactId>oro</artifactId>
       <version>${oro.version}</version>
     </dependency>
