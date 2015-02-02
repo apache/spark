@@ -43,7 +43,7 @@ class MesosSchedulerBackendSuite extends FunSuite with LocalSparkContext with Ea
     conf.set("spark.mesos.executor.home" , "/mesos-home")
 
     val listenerBus = EasyMock.createMock(classOf[LiveListenerBus])
-    listenerBus.post(SparkListenerExecutorAdded("s1", new ExecutorInfo("host1", 2)))
+    listenerBus.post(SparkListenerExecutorAdded(EasyMock.anyLong, "s1", new ExecutorInfo("host1", 2)))
     EasyMock.replay(listenerBus)
 
     val sc = EasyMock.createMock(classOf[SparkContext])
@@ -88,7 +88,7 @@ class MesosSchedulerBackendSuite extends FunSuite with LocalSparkContext with Ea
     val taskScheduler = EasyMock.createMock(classOf[TaskSchedulerImpl])
 
     val listenerBus = EasyMock.createMock(classOf[LiveListenerBus])
-    listenerBus.post(SparkListenerExecutorAdded("s1", new ExecutorInfo("host1", 2)))
+    listenerBus.post(SparkListenerExecutorAdded(EasyMock.anyLong, "s1", new ExecutorInfo("host1", 2)))
     EasyMock.replay(listenerBus)
 
     val sc = EasyMock.createMock(classOf[SparkContext])

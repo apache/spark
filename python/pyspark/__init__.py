@@ -45,6 +45,7 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.accumulators import Accumulator, AccumulatorParam
 from pyspark.broadcast import Broadcast
 from pyspark.serializers import MarshalSerializer, PickleSerializer
+from pyspark.profiler import Profiler, BasicProfiler
 
 from pyspark.graphx.vertex import VertexRDD
 from pyspark.graphx.edge import EdgeRDD, Edge
@@ -56,5 +57,6 @@ from pyspark.sql import SQLContext, HiveContext, SchemaRDD, Row
 __all__ = [
     "SparkConf", "SparkContext", "SparkFiles", "RDD", "StorageLevel", "Broadcast",
     "Accumulator", "AccumulatorParam", "MarshalSerializer", "PickleSerializer",
+    "Profiler", "BasicProfiler",
 ]
 
