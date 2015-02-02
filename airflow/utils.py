@@ -25,14 +25,18 @@ class State(object):
     FAILED = "failed"
     UP_FOR_RETRY = "up_for_retry"
 
+    state_color = {
+        QUEUED: 'grey',
+        RUNNING: 'lime',
+        SUCCESS: 'green',
+        SHUTDOWN: 'orange',
+        FAILED: 'red',
+        UP_FOR_RETRY: 'yellow',
+    }
+
     @classmethod
     def color(cls, state):
-        if state == cls.FAILED:
-            return "red"
-        elif state == cls.RUNNING:
-            return "lime"
-        elif state == cls.SUCCESS:
-            return "green"
+        return cls.state_color[state]
 
     @classmethod
     def runnable(cls):
