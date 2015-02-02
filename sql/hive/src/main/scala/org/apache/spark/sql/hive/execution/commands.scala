@@ -48,9 +48,11 @@ case class AnalyzeTable(tableName: String) extends RunnableCommand {
 @DeveloperApi
 case class DropTable(
     tableName: String,
-    ifExists: Boolean) extends RunnableCommand {
+    ifExists: Boolean,
+    temporary: Boolean) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext) = {
+    // TODO: support drop temporary table in Hive0.14
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     val ifExistsClause = if (ifExists) "IF EXISTS " else ""
     try {

@@ -230,7 +230,6 @@ private[hive] trait HiveStrategies {
           case o: LogicalPlan =>
             ExecutedCommand(RunnableDescribeCommand(planLater(o), describe.output)) :: Nil
         }
-
       case _ => Nil
     }
   }

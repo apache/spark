@@ -454,7 +454,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
            Token("TOK_TABNAME", tableNameParts) ::
            ifExists) =>
       val tableName = tableNameParts.map { case Token(p, Nil) => p }.mkString(".")
-      DropTable(tableName, ifExists.nonEmpty)
+      // TODO: support temp table in Hive0.14, currently temporary default is false
+      DropTable(tableName, ifExists.nonEmpty, false)
     // Support "ANALYZE TABLE tableNmae COMPUTE STATISTICS noscan"
     case Token("TOK_ANALYZE",
             Token("TOK_TAB", Token("TOK_TABNAME", tableNameParts) :: partitionSpec) ::
