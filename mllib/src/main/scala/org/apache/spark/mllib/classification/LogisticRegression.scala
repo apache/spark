@@ -32,7 +32,7 @@ import org.apache.spark.rdd.RDD
  * @param intercept Intercept computed for this model. (Only used in Binary Logistic Regression.
  *                  In Multinomial Logistic Regression, the intercepts will not be a single values,
  *                  so the intercepts will be part of the weights.)
- * @param numFeatures the dimension of the features
+ * @param numFeatures the dimension of the features.
  * @param numClasses the number of possible outcomes for k classes classification problem in
  *                   Multinomial Logistic Regression. By default, it is binary logistic regression
  *                   so numClasses will be set to 2.
