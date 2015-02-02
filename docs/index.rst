@@ -68,7 +68,8 @@ Content
     :maxdepth: 4
 
     installation
-    code
-    cli
     ui
     tutorial
+    profiling
+    cli
+    code
