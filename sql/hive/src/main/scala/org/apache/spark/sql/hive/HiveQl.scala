@@ -633,14 +633,28 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                    Token(script, Nil) ::
                    Token("TOK_SERDE", serdeClause) ::
                    Token("TOK_RECORDREADER", readerClause) ::
-                   outputClause :: Nil) :: Nil) =>
+                   outputClause) :: Nil) =>
 
+            // TODO the output should be bind with the output clause or RecordReader
             val output = outputClause match {
-              case Token("TOK_ALIASLIST", aliases) =>
+              case Token("TOK_ALIASLIST", aliases) :: Nil =>
                 aliases.map { case Token(name, Nil) => AttributeReference(name, StringType)() }
-              case Token("TOK_TABCOLLIST", attributes) =>
+              case Token("TOK_TABCOLLIST", attributes) :: Nil =>
                 attributes.map { case Token("TOK_TABCOL", Token(name, Nil) :: dataType :: Nil) =>
                   AttributeReference(name, nodeToDataType(dataType))() }
+              case Nil => // Not specified the output field names, let it be the same as input
+                (0 to inputExprs.length - 1).map { idx =>
+                  // Keep the same as Hive does, the first field names is "key", and second is
+                  // "value", however, Hive seems gives null string for the rest of the
+                  // field name, which supposed to be a bug of Hive.
+                  if (idx == 0) {
+                    AttributeReference("key", StringType)()
+                  } else if (idx == 1) {
+                    AttributeReference("value", StringType)()
+                  } else {
+                    AttributeReference(s"_col${idx - 2}", StringType)()
+                  }
+                }
             }
             val unescapedScript = BaseSemanticAnalyzer.unescapeSQLString(script)
 

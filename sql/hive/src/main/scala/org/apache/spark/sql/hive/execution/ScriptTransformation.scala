@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.execution
 import java.io.{BufferedReader, InputStreamReader}
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.types.StringType
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive.HiveContext
@@ -54,23 +55,44 @@ case class ScriptTransformation(
       val outputStream = proc.getOutputStream
       val reader = new BufferedReader(new InputStreamReader(inputStream))
 
+      // This projection outputs to the script, which runs in a single process
+      // TODO a Writer SerDe will be placed here.
+      val inputProjection = new InterpretedProjection(input, child.output)
+
+      // This projection is casting the scripts output into user specified data type
+      // TODO a Reader SerDe will be placed here for the casting the output
+      // data type into the required one
+      val outputProjection = new InterpretedProjection(output.zipWithIndex.map {
+        case (attr, idx) if (attr.dataType == StringType) => BoundReference(idx, StringType, true)
+        case (attr, idx) => Cast(BoundReference(idx, StringType, true), attr.dataType)
+      }, output)
+
       // TODO: This should be exposed as an iterator instead of reading in all the data at once.
       val outputLines = collection.mutable.ArrayBuffer[Row]()
       val readerThread = new Thread("Transform OutputReader") {
+        val row = new GenericMutableRow(output.length)
         override def run() {
           var curLine = reader.readLine()
           while (curLine != null) {
-            // TODO: Use SerDe
-            outputLines += new GenericRow(curLine.split("\t").asInstanceOf[Array[Any]])
+            // TODO: A Reader SerDe will be placed here.
+            val splits = curLine.split("\t")
+            var idx = 0
+            while (idx < output.length) {
+              row(idx) = if (idx < splits.length) splits(idx) else null
+              idx += 1
+            }
+
+            outputLines += outputProjection(row)
             curLine = reader.readLine()
           }
         }
       }
+
       readerThread.start()
-      val outputProjection = new InterpretedProjection(input, child.output)
+
       iter
-        .map(outputProjection)
-        // TODO: Use SerDe
+        .map(inputProjection)
+        // TODO: Use the Writer SerDe
         .map(_.mkString("", "\t", "\n").getBytes("utf-8")).foreach(outputStream.write)
       outputStream.close()
       readerThread.join()

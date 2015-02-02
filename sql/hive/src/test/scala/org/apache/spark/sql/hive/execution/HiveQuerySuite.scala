@@ -63,7 +63,26 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       sql("SHOW TABLES")
     }
   }
-  
+
+  createQueryTest("TRANSFORM #1 (without serde specified)",
+    """
+      |SELECT transform(key + 1, value) USING '/bin/cat' AS a, b
+      |FROM src ORDER BY a, b DESC LIMIT 3
+    """.stripMargin)
+
+  createQueryTest("TRANSFORM #2 (without output field names specified)",
+    """
+      |SELECT transform(key + 1, value) USING '/bin/cat'
+      |FROM src ORDER BY key, value DESC  LIMIT 3
+    """.stripMargin)
+
+  createQueryTest("TRANSFORM #3 (with data type specified)",
+    """
+      | SELECT a, b FROM (SELECT transform(key + 1, value)
+      |   USING '/bin/cat' AS (a FLOAT, b STRING)
+      | FROM src) t WHERE a = 239.0
+    """.stripMargin)
+
   createQueryTest("! operator",
     """
       |SELECT a FROM (
