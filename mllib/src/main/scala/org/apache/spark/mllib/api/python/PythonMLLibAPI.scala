@@ -306,6 +306,7 @@ class PythonMLLibAPI extends Serializable {
       var wtArray:Array[Double] = Array()
       var muArray:Array[Vector] = Array()
       var siArray :Array[Matrix] = Array()
+      
       for (i <- 0 until model.k) {
         wtArray = wtArray ++ Array(model.weights(i))
         muArray = muArray ++ Array(model.gaussians(i).mu)
@@ -329,6 +330,7 @@ class PythonMLLibAPI extends Serializable {
       val weight = wt.asInstanceOf[Array[Double]]
       val mean = mu.map(_.asInstanceOf[DenseVector])
       val sigma = si.map(_.asInstanceOf[DenseMatrix])
+
       val gaussians = Array.tabulate(weight.length){
         i => new MultivariateGaussian(mean(i),sigma(i))
       }      
