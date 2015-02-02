@@ -619,8 +619,9 @@ class DataFrame protected[sql](
    */
   @Experimental
   override def saveAsTable(tableName: String): Unit = {
-    sqlContext.executePlan(
-      CreateTableAsSelect(None, tableName, logicalPlan, allowExisting = false)).toRdd
+    val dataSourceName = sqlContext.conf.defaultDataSourceName
+    val options = Map("path" -> sqlContext.defaultTableFilePath(tableName))
+    saveAsTable(tableName, dataSourceName, options)
   }
 
   /**
@@ -666,6 +667,18 @@ class DataFrame protected[sql](
       dataSourceName: String,
       options: java.util.Map[String, String]): Unit = {
     saveAsTable(tableName, dataSourceName, options.toMap)
+  }
+
+  @Experimental
+  override def save(path: String): Unit = {
+    save(path, false)
+  }
+
+  @Experimental
+  override def save(path: String, overwrite: Boolean): Unit = {
+    val dataSourceName = sqlContext.conf.defaultDataSourceName
+    val options = Map("path" -> path)
+    save(dataSourceName, options, overwrite)
   }
 
   @Experimental

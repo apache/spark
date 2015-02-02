@@ -23,7 +23,7 @@ import java.util.{List => JList}
 import com.google.common.cache.{LoadingCache, CacheLoader, CacheBuilder}
 
 import org.apache.hadoop.util.ReflectionUtils
-import org.apache.hadoop.hive.metastore.TableType
+import org.apache.hadoop.hive.metastore.{Warehouse, TableType}
 import org.apache.hadoop.hive.metastore.api.{Table => TTable, Partition => TPartition, AlreadyExistsException, FieldSchema}
 import org.apache.hadoop.hive.ql.metadata._
 import org.apache.hadoop.hive.ql.plan.CreateTableDesc
@@ -50,6 +50,8 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
   /** Connection to hive metastore.  Usages should lock on `this`. */
   protected[hive] val client = Hive.get(hive.hiveconf)
+
+  protected[hive] lazy val hiveWarehouse = new Warehouse(hive.hiveconf)
 
   // TODO: Use this everywhere instead of tuples or databaseName, tableName,.
   /** A fully qualified identifier for a table (i.e., database.tableName) */
@@ -139,6 +141,10 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     }
 
     return true
+  }
+
+  def hiveDefaultTableFilePath(tableName: String): String = {
+    hiveWarehouse.getTablePath(client.getDatabaseCurrent, tableName).toString
   }
 
   def tableExists(tableIdentifier: Seq[String]): Boolean = {

@@ -55,6 +55,10 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
   }
 
+  protected[sql] override def defaultTableFilePath(tableName: String): String = {
+    catalog.hiveDefaultTableFilePath(tableName)
+  }
+
   /**
    * When true, enables an experimental feature where metastore tables that use the parquet SerDe
    * are automatically converted to use the Spark SQL parquet table scan, instead of the Hive
@@ -85,6 +89,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * @param allowExisting When false, an exception will be thrown if the table already exists.
    * @tparam A A case class that is used to describe the schema of the table to be created.
    */
+  @Deprecated
   def createTable[A <: Product : TypeTag](tableName: String, allowExisting: Boolean = true) {
     catalog.createTable("default", tableName, ScalaReflection.attributesFor[A], allowExisting)
   }
@@ -106,7 +111,14 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   }
 
   @Experimental
-  def loadAsTable(
+  def createTable(tableName: String, path: String, allowExisting: Boolean): Unit = {
+    val dataSourceName = conf.defaultDataSourceName
+    val options = Map("path" -> path)
+    createTable(tableName, dataSourceName, options, allowExisting)
+  }
+
+  @Experimental
+  def createTable(
       tableName: String,
       dataSourceName: String,
       options: Map[String, String],
@@ -123,7 +135,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   }
 
   @Experimental
-  def loadAsTable(
+  def createTable(
       tableName: String,
       dataSourceName: String,
       options: Map[String, String],
@@ -141,12 +153,12 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   }
 
   @Experimental
-  def loadAsTable(
+  def createTable(
       tableName: String,
       dataSourceName: String,
       options: java.util.Map[String, String],
       allowExisting: Boolean): Unit = {
-    loadAsTable(tableName, dataSourceName, options.toMap, allowExisting)
+    createTable(tableName, dataSourceName, options.toMap, allowExisting)
   }
 
   @Experimental
@@ -156,7 +168,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       options: java.util.Map[String, String],
       schema: StructType,
       allowExisting: Boolean): Unit = {
-    loadAsTable(tableName, dataSourceName, options.toMap, schema, allowExisting)
+    createTable(tableName, dataSourceName, options.toMap, schema, allowExisting)
   }
 
   /**

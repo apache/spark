@@ -162,6 +162,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /** Removes the specified table from the in-memory cache. */
   def uncacheTable(tableName: String): Unit = cacheManager.uncacheTable(tableName)
 
+  /** Returns the default file path for a table. */
+  protected[sql] def defaultTableFilePath(tableName: String): String = ???
+
   /**
    * Creates a DataFrame from an RDD of case classes.
    *
@@ -333,6 +336,13 @@ class SQLContext(@transient val sparkContext: SparkContext)
         JsonRDD.inferSchema(json, samplingRatio, columnNameOfCorruptJsonRecord))
     val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
     applySchema(rowRDD, appliedSchema)
+  }
+
+  @Experimental
+  def load(path: String): DataFrame = {
+    val dataSourceName = conf.defaultDataSourceName
+    val options = Map("path" -> path)
+    load(dataSourceName, options)
   }
 
   @Experimental
