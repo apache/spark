@@ -255,14 +255,12 @@ private[spark] object Utils extends Logging {
    * @return true if the permissions were successfully changed, false otherwise.
    */
   def chmod700(file: File): Boolean = {
-    if (!isWindows) {
-      // this logic does not work for Windows
-      file.setReadable(false, false) &&
-      file.setReadable(true, true) &&
-      file.setWritable(false, false) &&
-      file.setWritable(true, true) &&
-      file.setExecutable(false, false) &&
-      file.setExecutable(true, true)
+    file.setReadable(false, false) &&
+    file.setReadable(true, true) &&
+    file.setWritable(false, false) &&
+    file.setWritable(true, true) &&
+    file.setExecutable(false, false) &&
+    file.setExecutable(true, true)
     } else {
       true 
     }
@@ -287,7 +285,9 @@ private[spark] object Utils extends Logging {
         if (dir.exists() || !dir.mkdirs()) {
           dir = null
         } else {
-          if (!chmod700(dir)) {
+          // Restrict file permissions via chmod if available.
+          // For Windows this step is ignored.
+          if (!isWindows && !chmod700(dir)) {
             dir.delete()
             dir = null
           }
