@@ -320,6 +320,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             tableName, userSpecifiedSchema, provider, opts)) :: Nil
       case c: CreateTableUsing if !c.temporary =>
         sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
+      case c: CreateTableUsing if c.temporary && c.allowExisting =>
+        sys.error("allowExisting should be set to false when creating a temporary table.")
 
       case CreateTableUsingAsSelect(tableName, provider, true, opts, false, query) =>
         val logicalPlan = sqlContext.parseSql(query)
@@ -328,6 +330,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         ExecutedCommand(cmd) :: Nil
       case c: CreateTableUsingAsSelect if !c.temporary =>
         sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
+      case c: CreateTableUsingAsSelect if c.temporary && c.allowExisting =>
+        sys.error("allowExisting should be set to false when creating a temporary table.")
 
       case CreateTableUsingAsLogicalPlan(tableName, provider, true, opts, false, query) =>
         val cmd =
@@ -335,6 +339,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         ExecutedCommand(cmd) :: Nil
       case c: CreateTableUsingAsLogicalPlan if !c.temporary =>
         sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
+      case c: CreateTableUsingAsLogicalPlan if c.temporary && c.allowExisting =>
+        sys.error("allowExisting should be set to false when creating a temporary table.")
 
       case _ => Nil
     }

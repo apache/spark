@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.analysis.{Analyzer, EliminateAnalysisOperat
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUdfs, SetCommand, QueryExecutionException}
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DescribeHiveTableCommand}
-import org.apache.spark.sql.sources.DataSourceStrategy
+import org.apache.spark.sql.sources.{CreateTableUsing, DataSourceStrategy}
 import org.apache.spark.sql.types._
 
 /**
@@ -103,6 +103,60 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   protected[hive] def invalidateTable(tableName: String): Unit = {
     // TODO: Database support...
     catalog.invalidateTable("default", tableName)
+  }
+
+  @Experimental
+  def loadAsTable(
+    tableName: String,
+    dataSourceName: String,
+    options: Map[String, String],
+    allowExisting: Boolean): Unit = {
+    val cmd =
+      CreateTableUsing(
+        tableName,
+        None,
+        dataSourceName,
+        temporary = false,
+        options,
+        allowExisting)
+    executePlan(cmd).toRdd
+  }
+
+  @Experimental
+  def loadAsTable(
+    tableName: String,
+    dataSourceName: String,
+    options: Map[String, String],
+    schema: StructType,
+    allowExisting: Boolean): Unit = {
+    val cmd =
+      CreateTableUsing(
+        tableName,
+        Some(schema),
+        dataSourceName,
+        temporary = false,
+        options,
+        allowExisting)
+    executePlan(cmd).toRdd
+  }
+
+  @Experimental
+  def loadAsTable(
+    tableName: String,
+    dataSourceName: String,
+    options: java.util.Map[String, String],
+    allowExisting: Boolean): Unit = {
+    loadAsTable(tableName, dataSourceName, options.toMap, allowExisting)
+  }
+
+  @Experimental
+  def loadAsTable(
+    tableName: String,
+    dataSourceName: String,
+    options: java.util.Map[String, String],
+    schema: StructType,
+    allowExisting: Boolean): Unit = {
+    loadAsTable(tableName, dataSourceName, options.toMap, schema, allowExisting)
   }
 
   /**

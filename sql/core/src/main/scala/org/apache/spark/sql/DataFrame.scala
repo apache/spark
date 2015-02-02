@@ -19,8 +19,6 @@ package org.apache.spark.sql
 
 import java.util.{List => JList}
 
-import org.apache.spark.sql.sources.{CreateTableUsingAsLogicalPlan, CreateTableUsingAsSelect}
-
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.collection.JavaConversions._
@@ -39,6 +37,7 @@ import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{LogicalRDD, EvaluatePython}
 import org.apache.spark.sql.json.JsonRDD
+import org.apache.spark.sql.sources.{InsertableRelation, ResolvedDataSource, CreateTableUsingAsLogicalPlan}
 import org.apache.spark.sql.types.{NumericType, StructType}
 import org.apache.spark.util.Utils
 
@@ -667,6 +666,26 @@ class DataFrame protected[sql](
     dataSourceName: String,
     options: java.util.Map[String, String]): Unit = {
     saveAsTable(tableName, dataSourceName, options.toMap)
+  }
+
+  @Experimental
+  override def save(
+    dataSourceName: String,
+    options: Map[String, String],
+    overwrite: Boolean): Unit = {
+    val resolved = ResolvedDataSource(sqlContext, Some(schema), dataSourceName, options)
+    resolved.relation match {
+      case i: InsertableRelation => i.insertInto(new DataFrame(sqlContext, logicalPlan), overwrite)
+      case o => sys.error(s"Data source $dataSourceName does not support save.")
+    }
+  }
+
+  @Experimental
+  def save(
+    dataSourceName: String,
+    options: java.util.Map[String, String],
+    overwrite: Boolean): Unit = {
+    save(dataSourceName, options.toMap, overwrite)
   }
 
   /**

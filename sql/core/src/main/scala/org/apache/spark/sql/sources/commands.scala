@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.RunnableCommand
 
-private[sql] case class InsertIntoTable(
+private[sql] case class InsertIntoRelation(
     relation: InsertableRelation,
     query: LogicalPlan,
     overwrite: Boolean)

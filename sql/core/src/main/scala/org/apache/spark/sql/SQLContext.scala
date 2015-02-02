@@ -21,6 +21,7 @@ import java.beans.Introspector
 import java.util.Properties
 
 import scala.collection.immutable
+import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
@@ -36,7 +37,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.json._
-import org.apache.spark.sql.sources.{LogicalRelation, BaseRelation, DDLParser, DataSourceStrategy}
+import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -332,6 +333,71 @@ class SQLContext(@transient val sparkContext: SparkContext)
         JsonRDD.inferSchema(json, samplingRatio, columnNameOfCorruptJsonRecord))
     val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
     applySchema(rowRDD, appliedSchema)
+  }
+
+  @Experimental
+  def load(
+    dataSourceName: String,
+    options: Map[String, String]): DataFrame = {
+    val resolved = ResolvedDataSource(this, None, dataSourceName, options)
+    new DataFrame(this, LogicalRelation(resolved.relation))
+  }
+
+  @Experimental
+  def load(
+    dataSourceName: String,
+    options: java.util.Map[String, String]): DataFrame = {
+    load(dataSourceName, options.toMap)
+  }
+
+  @Experimental
+  def loadAsTempTable(
+    tableName: String,
+    dataSourceName: String,
+    options: Map[String, String]): Unit = {
+    val cmd =
+      CreateTableUsing(
+        tableName,
+        None,
+        dataSourceName,
+        temporary = true,
+        options,
+        allowExisting = false)
+    executePlan(cmd).toRdd
+  }
+
+  @Experimental
+  def loadAsTempTable(
+    tableName: String,
+    dataSourceName: String,
+    options: Map[String, String],
+    schema: StructType): Unit = {
+    val cmd =
+      CreateTableUsing(
+        tableName,
+        Some(schema),
+        dataSourceName,
+        temporary = true,
+        options,
+        allowExisting = false)
+    executePlan(cmd).toRdd
+  }
+
+  @Experimental
+  def loadAsTempTable(
+    tableName: String,
+    dataSourceName: String,
+    options: java.util.Map[String, String]): Unit = {
+    loadAsTempTable(tableName, dataSourceName, options.toMap)
+  }
+
+  @Experimental
+  def loadAsTempTable(
+    tableName: String,
+    dataSourceName: String,
+    options: java.util.Map[String, String],
+    schema: StructType): Unit = {
+    loadAsTempTable(tableName, dataSourceName, options.toMap, schema)
   }
 
   /**

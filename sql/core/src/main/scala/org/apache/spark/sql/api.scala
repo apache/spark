@@ -180,6 +180,18 @@ private[sql] trait DataFrameSpecificApi {
       options: java.util.Map[String, String]): Unit
 
   @Experimental
+  def save(
+      dataSourceName: String,
+      options: Map[String, String],
+      overwrite: Boolean): Unit
+
+  @Experimental
+  def save(
+      dataSourceName: String,
+      options: java.util.Map[String, String],
+      overwrite: Boolean): Unit
+
+  @Experimental
   def insertInto(tableName: String, overwrite: Boolean): Unit
 
   @Experimental
