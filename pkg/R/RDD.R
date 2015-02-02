@@ -1614,8 +1614,7 @@ setMethod("join",
             rdd2Tagged <- lapply(rdd2, function(x) { list(x[[1]], list(2L, x[[2]])) })
             
             doJoin <- function(v) {
-              result <- joinTaggedList(v, list(FALSE, FALSE))
-              result
+              joinTaggedList(v, list(FALSE, FALSE))
             }
             
             joined <- flatMapValues(groupByKey(unionRDD(rdd1Tagged, rdd2Tagged), numPartitions), doJoin)
@@ -1654,8 +1653,7 @@ setMethod("leftOuterJoin",
             rdd2Tagged <- lapply(rdd2, function(x) { list(x[[1]], list(2L, x[[2]])) })
             
             doJoin <- function(v) {
-              result <- joinTaggedList(v, list(FALSE, TRUE))
-              result
+              joinTaggedList(v, list(FALSE, TRUE))
             }
             
             joined <- flatMapValues(groupByKey(unionRDD(rdd1Tagged, rdd2Tagged), numPartitions), doJoin)
@@ -1694,8 +1692,7 @@ setMethod("rightOuterJoin",
             rdd2Tagged <- lapply(rdd2, function(x) { list(x[[1]], list(2L, x[[2]])) })
             
             doJoin <- function(v) {
-              result <- joinTaggedList(v, list(TRUE, FALSE))
-              result
+              joinTaggedList(v, list(TRUE, FALSE))
             }
             
             joined <- flatMapValues(groupByKey(unionRDD(rdd1Tagged, rdd2Tagged), numPartitions), doJoin)
@@ -1740,8 +1737,7 @@ setMethod("fullOuterJoin",
             rdd2Tagged <- lapply(rdd2, function(x) { list(x[[1]], list(2L, x[[2]])) })
 
             doJoin <- function(v) {
-              result <- joinTaggedList(v, list(TRUE, TRUE))
-              result
+              joinTaggedList(v, list(TRUE, TRUE))
             }
 
             joined <- flatMapValues(groupByKey(unionRDD(rdd1Tagged, rdd2Tagged), numPartitions), doJoin)

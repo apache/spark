@@ -219,11 +219,14 @@ sortKeyValueList <- function(kv_list) {
   kv_list[order(keys)]
 }
 
-## Utility function to generate compact R lists from grouped rdd 
-#  Used in Join-family functions
+# Utility function to generate compact R lists from grouped rdd
+# Used in Join-family functions
+# param:
+#   tagged_list R list generated via groupByKey with tags(1L, 2L, ...)
+#   cnull Boolean list where each element determines whether the corresponding list should
+#         be converted to list(NULL)
 genCompactLists <- function(tagged_list, cnull) {
   len <- length(tagged_list)
-  num <- length(cnull)
   lists <- list(vector("list", len), vector("list", len))
   index <- list(1, 1)
 
@@ -234,8 +237,8 @@ genCompactLists <- function(tagged_list, cnull) {
     index[[tag]] <- idx + 1
   }
 
-  len <- lapply(index, function(x) x-1)
-  for (i in (1:num)) {
+  len <- lapply(index, function(x) x - 1)
+  for (i in (1:2)) {
     if (cnull[[i]] && len[[i]] == 0) {
       lists[[i]] <- list(NULL)
     } else {
@@ -246,8 +249,10 @@ genCompactLists <- function(tagged_list, cnull) {
   lists
 }
 
-## Utility function to merge compact R lists
-#  Used in Join-family functions
+# Utility function to merge compact R lists
+# Used in Join-family functions
+# param:
+#   left/right Two compact lists ready for Cartesian product
 mergeCompactLists <- function(left, right) {
   result <- list()
   length(result) <- length(left) * length(right)
@@ -261,10 +266,13 @@ mergeCompactLists <- function(left, right) {
   result
 }
 
-## Utility function to wrapper above two operations
-#  Used in Join-family functions
+# Utility function to wrapper above two operations
+# Used in Join-family functions
+# param (same as genCompactLists):
+#   tagged_list R list generated via groupByKey with tags(1L, 2L, ...)
+#   cnull Boolean list where each element determines whether the corresponding list should
+#         be converted to list(NULL)
 joinTaggedList <- function(tagged_list, cnull) {
   lists <- genCompactLists(tagged_list, cnull)
-  result <- mergeCompactLists(lists[[1]], lists[[2]])
-  result
+  mergeCompactLists(lists[[1]], lists[[2]])
 }
