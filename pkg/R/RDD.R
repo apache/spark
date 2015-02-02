@@ -314,7 +314,7 @@ setMethod("checkpoint",
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, 1:10, 2L)
-#' numParititions(rdd)  # 2L
+#' numPartitions(rdd)  # 2L
 #'}
 setGeneric("numPartitions", function(rdd) { standardGeneric("numPartitions") })
 
@@ -1603,32 +1603,7 @@ setMethod("join",
             rdd2Tagged <- lapply(rdd2, function(x) { list(x[[1]], list(2L, x[[2]])) })
             
             doJoin <- function(v) {
-              t1 <- vector("list", length(v))
-              t2 <- vector("list", length(v))
-              index1 <- 1
-              index2 <- 1
-              for (x in v) {
-                if (x[[1]] == 1L) {
-                  t1[[index1]] <- x[[2]]
-                  index1 <- index1 + 1
-                } else {
-                  t2[[index2]] <- x[[2]]
-                  index2 <- index2 + 1
-                }
-              }
-              length(t1) <- index1 - 1
-              length(t2) <- index2 - 1
-
-              result <- list()
-              length(result) <- length(t1) * length(t2)
-              index <- 1
-              for (i in t1) {
-                for (j in t2) {
-                  result[[index]] <- list(i, j)
-                  index <- index + 1
-                }
-              }
-              result
+              joinTaggedList(v, list(FALSE, FALSE))
             }
             
             joined <- flatMapValues(groupByKey(unionRDD(rdd1Tagged, rdd2Tagged), numPartitions), doJoin)
@@ -1668,37 +1643,7 @@ setMethod("leftOuterJoin",
             rdd2Tagged <- lapply(rdd2, function(x) { list(x[[1]], list(2L, x[[2]])) })
             
             doJoin <- function(v) {
-              t1 <- vector("list", length(v))
-              t2 <- vector("list", length(v))
-              index1 <- 1
-              index2 <- 1
-              for (x in v) {
-                if (x[[1]] == 1L) {
-                  t1[[index1]] <- x[[2]]
-                  index1 <- index1 + 1
-                } else {
-                  t2[[index2]] <- x[[2]]
-                  index2 <- index2 + 1
-                }
-              }
-              length(t1) <- index1 - 1
-              len2 <- index2 - 1
-              if (len2 == 0) {
-                t2 <- list(NULL)
-              } else {
-                length(t2) <- len2
-              }
-
-              result <- list()
-              length(result) <- length(t1) * length(t2)
-              index <- 1
-              for (i in t1) {
-                for (j in t2) {
-                  result[[index]] <- list(i, j)
-                  index <- index + 1
-                }
-              }
-              result
+              joinTaggedList(v, list(FALSE, TRUE))
             }
             
             joined <- flatMapValues(groupByKey(unionRDD(rdd1Tagged, rdd2Tagged), numPartitions), doJoin)
@@ -1738,37 +1683,7 @@ setMethod("rightOuterJoin",
             rdd2Tagged <- lapply(rdd2, function(x) { list(x[[1]], list(2L, x[[2]])) })
             
             doJoin <- function(v) {
-              t1 <- vector("list", length(v))
-              t2 <- vector("list", length(v))
-              index1 <- 1
-              index2 <- 1
-              for (x in v) {
-                if (x[[1]] == 1L) {
-                  t1[[index1]] <- x[[2]]
-                  index1 <- index1 + 1
-                } else {
-                  t2[[index2]] <- x[[2]]
-                  index2 <- index2 + 1
-                }
-              }
-              len1 <- index1 - 1
-              if (len1 == 0) {
-                t1 <- list(NULL)
-              } else {
-                length(t1) <- len1
-              }
-              length(t2) <- index2 - 1
-              
-              result <- list()
-              length(result) <- length(t1) * length(t2)
-              index <- 1
-              for (i in t1) {
-                for (j in t2) {
-                  result[[index]] <- list(i, j)
-                  index <- index + 1
-                }
-              }
-              result
+              joinTaggedList(v, list(TRUE, FALSE))
             }
             
             joined <- flatMapValues(groupByKey(unionRDD(rdd1Tagged, rdd2Tagged), numPartitions), doJoin)
@@ -1798,13 +1713,14 @@ setMethod("rightOuterJoin",
 #' rdd2 <- parallelize(sc, list(list(1, 1), list(2, 4)))
 #' fullOuterJoin(rdd1, rdd2, 2L) # list(list(1, list(2, 1)),
 #'                               #      list(1, list(3, 1)),
-#'                               #      list(3, list(3, NULL)),
 #'                               #      list(2, list(NULL, 4)))
+#'                               #      list(3, list(3, NULL)),
 #'}
 setGeneric("fullOuterJoin", function(rdd1, rdd2, numPartitions) { standardGeneric("fullOuterJoin") })
 
 #' @rdname fullOuterJoin
 #' @aliases fullOuterJoin,RDD,RDD-method
+
 setMethod("fullOuterJoin",
           signature(rdd1 = "RDD", rdd2 = "RDD", numPartitions = "integer"),
           function(rdd1, rdd2, numPartitions) {
@@ -1812,45 +1728,9 @@ setMethod("fullOuterJoin",
             rdd2Tagged <- lapply(rdd2, function(x) { list(x[[1]], list(2L, x[[2]])) })
 
             doJoin <- function(v) {
-              t1 <- vector("list", length(v))
-              t2 <- vector("list", length(v))
-              index1 <- 1
-              index2 <- 1
-              for (x in v) {
-                if (x[[1]] == 1L) {
-                  t1[[index1]] <- x[[2]]
-                  index1 <- index1 + 1
-                } else {
-                  t2[[index2]] <- x[[2]]
-                  index2 <- index2 + 1
-                }
-              }
-              len1 <- index1 - 1
-              len2 <- index2 - 1
-
-              if (len1 == 0) {
-                t1 <- list(NULL)
-              } else {
-                length(t1) <- len1
-              }
-
-              if (len2 == 0) {
-                t2 <- list(NULL)
-              } else {
-                length(t2) <- len2
-              }
-
-              result <- list()
-              length(result) <- length(t1) * length(t2)
-              index <- 1
-              for(i in t1) {
-                for(j in t2) {
-                  result[[index]] <- list(i, j)
-                  index <- index + 1
-                }
-              }
-              result
+              joinTaggedList(v, list(TRUE, TRUE))
             }
+
             joined <- flatMapValues(groupByKey(unionRDD(rdd1Tagged, rdd2Tagged), numPartitions), doJoin)
           })
 

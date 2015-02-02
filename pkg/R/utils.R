@@ -201,3 +201,61 @@ sortKeyValueList <- function(kv_list) {
   keys <- sapply(kv_list, function(x) x[[1]])
   kv_list[order(keys)]
 }
+
+# Utility function to generate compact R lists from grouped rdd
+# Used in Join-family functions
+# param:
+#   tagged_list R list generated via groupByKey with tags(1L, 2L, ...)
+#   cnull Boolean list where each element determines whether the corresponding list should
+#         be converted to list(NULL)
+genCompactLists <- function(tagged_list, cnull) {
+  len <- length(tagged_list)
+  lists <- list(vector("list", len), vector("list", len))
+  index <- list(1, 1)
+
+  for (x in tagged_list) {
+    tag <- x[[1]]
+    idx <- index[[tag]]
+    lists[[tag]][[idx]] <- x[[2]]
+    index[[tag]] <- idx + 1
+  }
+
+  len <- lapply(index, function(x) x - 1)
+  for (i in (1:2)) {
+    if (cnull[[i]] && len[[i]] == 0) {
+      lists[[i]] <- list(NULL)
+    } else {
+      length(lists[[i]]) <- len[[i]]
+    }
+  }
+
+  lists
+}
+
+# Utility function to merge compact R lists
+# Used in Join-family functions
+# param:
+#   left/right Two compact lists ready for Cartesian product
+mergeCompactLists <- function(left, right) {
+  result <- list()
+  length(result) <- length(left) * length(right)
+  index <- 1
+  for (i in left) {
+    for (j in right) {
+      result[[index]] <- list(i, j)
+      index <- index + 1
+    }
+  }
+  result
+}
+
+# Utility function to wrapper above two operations
+# Used in Join-family functions
+# param (same as genCompactLists):
+#   tagged_list R list generated via groupByKey with tags(1L, 2L, ...)
+#   cnull Boolean list where each element determines whether the corresponding list should
+#         be converted to list(NULL)
+joinTaggedList <- function(tagged_list, cnull) {
+  lists <- genCompactLists(tagged_list, cnull)
+  mergeCompactLists(lists[[1]], lists[[2]])
+}
