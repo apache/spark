@@ -47,6 +47,7 @@ import org.apache.spark.util.{JsonProtocol, Utils}
  */
 private[spark] class EventLoggingListener(
     appId: String,
+    appAttemptId : String, 
     logBaseDir: String,
     sparkConf: SparkConf,
     hadoopConf: Configuration)
@@ -54,6 +55,9 @@ private[spark] class EventLoggingListener(
 
   import EventLoggingListener._
 
+  def this(appId: String, logBaseDir: String, sparkConf: SparkConf, hadoopConf: Configuration) =
+    this(appId, "", logBaseDir, sparkConf, hadoopConf)
+    
   def this(appId: String, logBaseDir: String, sparkConf: SparkConf) =
     this(appId, logBaseDir, sparkConf, SparkHadoopUtil.get.newConfiguration(sparkConf))
 
@@ -80,7 +84,7 @@ private[spark] class EventLoggingListener(
   private[scheduler] val loggedEvents = new ArrayBuffer[JValue]
 
   // Visible for tests only.
-  private[scheduler] val logPath = getLogPath(logBaseDir, appId)
+  private[scheduler] val logPath = getLogPath(logBaseDir, appId, appAttemptId)
 
   /**
    * Creates the log file in the configured log directory.
@@ -262,8 +266,26 @@ private[spark] object EventLoggingListener extends Logging {
    * @return A path which consists of file-system-safe characters.
    */
   def getLogPath(logBaseDir: String, appId: String): String = {
+    getLogPath(logBaseDir, appId, "")
+  }
+  
+  /**
+   * Return a file-system-safe path to the log directory for the given application.
+   *
+   * @param logBaseDir A base directory for the path to the log directory for given application.
+   * @param appId A unique app ID.
+   * @param appAttemptId A unique attempt id of appId.
+   * @return A path which consists of file-system-safe characters.
+   */
+  
+  def getLogPath(logBaseDir: String, appId: String, appAttemptId : String): String = {
     val name = appId.replaceAll("[ :/]", "-").replaceAll("[${}'\"]", "_").toLowerCase
-    Utils.resolveURI(logBaseDir) + "/" + name.stripSuffix("/")
+    
+   if (appAttemptId.equals("")) { 
+      Utils.resolveURI(logBaseDir) + "/" + name.stripSuffix("/")
+   } else {
+      Utils.resolveURI(logBaseDir) + "/" + appAttemptId + "/" + name.stripSuffix("/")
+   }
   }
 
   /**

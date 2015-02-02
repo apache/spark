@@ -370,6 +370,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   taskScheduler.start()
 
   val applicationId: String = taskScheduler.applicationId()
+  val applicationAttemptId : String = taskScheduler.applicationAttemptId()
   conf.set("spark.app.id", applicationId)
 
   env.blockManager.initialize(applicationId)
@@ -386,7 +387,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private[spark] val eventLogger: Option[EventLoggingListener] = {
     if (isEventLogEnabled) {
       val logger =
-        new EventLoggingListener(applicationId, eventLogDir.get, conf, hadoopConfiguration)
+        new EventLoggingListener(applicationId, applicationAttemptId,
+                                 eventLogDir.get, conf, hadoopConfiguration)
       logger.start()
       listenerBus.addListener(logger)
       Some(logger)
