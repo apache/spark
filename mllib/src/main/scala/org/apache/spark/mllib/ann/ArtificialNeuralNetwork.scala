@@ -422,24 +422,24 @@ private[ann] trait NeuralHelper {
     (for(i <- 1 until topology.size) yield (topology(i) * topology(i - 1))).sum +
       topology.sum - topology(0)
 
-  protected def unrollWeights(weights: linalg.Vector): (Array[BDM[Double]], Array[BDM[Double]]) = {
+  protected def unrollWeights(weights: linalg.Vector): (Array[BDM[Double]], Array[BDV[Double]]) = {
     require(weights.size == weightCount)
     val weightsCopy = weights.toArray
     val weightMatrices = new Array[BDM[Double]](topology.size)
-    val bias = new Array[BDM[Double]](topology.size)
+    val bias = new Array[BDV[Double]](topology.size)
     var offset = 0
     for(i <- 1 until topology.size){
       weightMatrices(i) = new BDM[Double](topology(i), topology(i - 1), weightsCopy, offset)
       offset += topology(i) * topology(i - 1)
       /* TODO: BDM */
-      bias(i) = (new BDV[Double](weightsCopy, offset, 1, topology(i))).toDenseMatrix.t
+      bias(i) = new BDV[Double](weightsCopy, offset, 1, topology(i))
       offset += topology(i)
     }
     (weightMatrices, bias)
   }
 
   protected def rollWeights(weightMatricesUpdate: Array[BDM[Double]],
-                            biasUpdate: Array[BDM[Double]],
+                            biasUpdate: Array[BDV[Double]],
                             cumGradient: Vector): Unit = {
     val wu = cumGradient.toArray
     var offset = 0
@@ -461,12 +461,12 @@ private[ann] trait NeuralHelper {
   }
 
   protected def forwardRun(data: BDM[Double], weightMatrices: Array[BDM[Double]],
-                           bias: Array[BDM[Double]]): Array[BDM[Double]] = {
+                           bias: Array[BDV[Double]]): Array[BDM[Double]] = {
     val outArray = new Array[BDM[Double]](topology.size)
     outArray(0) = data
     for(i <- 1 until topology.size) {
       outArray(i) = weightMatrices(i) * outArray(i - 1)// :+ bias(i))
-      outArray(i)(::, *) :+= bias(i).toDenseVector
+      outArray(i)(::, *) :+= bias(i)
       Bsigmoid.inPlace(outArray(i))
     }
     outArray
@@ -475,9 +475,10 @@ private[ann] trait NeuralHelper {
   protected def wGradient(weightMatrices: Array[BDM[Double]],
                           targetOutput: BDM[Double],
                           outputs: Array[BDM[Double]]):
-  (Array[BDM[Double]], Array[BDM[Double]]) = {
+  (Array[BDM[Double]], Array[BDV[Double]]) = {
     /* error back propagation */
     val deltas = new Array[BDM[Double]](topology.size)
+    val avgDeltas = new Array[BDV[Double]](topology.size)
     for(i <- (topology.size - 1) until (0, -1)){
       /* TODO: GEMM? */
       val outPrime = BDM.ones[Double](outputs(i).rows, outputs(i).cols)
@@ -488,6 +489,8 @@ private[ann] trait NeuralHelper {
       }else{
         deltas(i) = (weightMatrices(i + 1).t * deltas(i + 1)) :* outPrime
       }
+      avgDeltas(i) = Bsum(deltas(i)(*, ::))
+      avgDeltas(i) :/= outputs(i).cols.toDouble
     }
     /* gradient */
     val gradientMatrices = new Array[BDM[Double]](topology.size)
@@ -498,7 +501,7 @@ private[ann] trait NeuralHelper {
        * the batch to be transparent for the optimizer */
       gradientMatrices(i) :/= outputs(i).cols.toDouble
     }
-    (gradientMatrices, deltas)
+    (gradientMatrices, avgDeltas)
   }
 }
 
