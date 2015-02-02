@@ -176,7 +176,7 @@ class ListTests(PySparkTestCase):
             [-6, -7],
         ])
         clusters = GaussianMixture.train(data, 2, convergenceTol=0.001,
-                                           maxIterations=100, seed=56)
+                                         maxIterations=100, seed=56)
         labels = clusters.predict(data).collect()
         self.assertEquals(labels[0], labels[1])
         self.assertEquals(labels[2], labels[3])
@@ -187,9 +187,9 @@ class ListTests(PySparkTestCase):
         Y = range(0, 100, 10)
         data = self.sc.parallelize([[x, y] for x, y in zip(X, Y)])
         clusters1 = GaussianMixture.train(data, 5, convergenceTol=0.001,
-                                            maxIterations=100, seed=63)
+                                          maxIterations=100, seed=63)
         clusters2 = GaussianMixture.train(data, 5, convergenceTol=0.001,
-                                            maxIterations=100, seed=63)
+                                          maxIterations=100, seed=63)
         for c1, c2 in zip(clusters1.weights, clusters2.weights):
             self.assertEquals(round(c1, 7), round(c2, 7))
 
