@@ -124,6 +124,12 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   private var useFeatureScaling = false
 
   /**
+   * The dimension of training features.
+   */
+  protected var numFeatures: Int = 0
+
+
+  /**
    * Set if the algorithm should use feature scaling to improve the convergence during optimization.
    */
   private[mllib] def setFeatureScaling(useFeatureScaling: Boolean): this.type = {
@@ -158,7 +164,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    * RDD of LabeledPoint entries.
    */
   def run(input: RDD[LabeledPoint]): M = {
-    val numFeatures: Int = input.first().features.size
+    numFeatures = input.first().features.size
     /**
      * When `numOfLinearPredictor > 1`, the intercepts are encapsulated into weights,
      * so the `weights` will include the intercepts. When `numOfLinearPredictor == 1`,

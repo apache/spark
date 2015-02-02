@@ -32,28 +32,22 @@ import org.apache.spark.rdd.RDD
  * @param intercept Intercept computed for this model. (Only used in Binary Logistic Regression.
  *                  In Multinomial Logistic Regression, the intercepts will not be a single values,
  *                  so the intercepts will be part of the weights.)
+ * @param featureSize the dimension of the features
+ * @param numClasses the number of possible outcomes for k classes classification problem in
+ *                   Multinomial Logistic Regression. By default, it is binary logistic regression
+ *                   so numClasses will be set to 2.
  */
 class LogisticRegressionModel (
     override val weights: Vector,
-    override val intercept: Double)
+    override val intercept: Double,
+    val featureSize: Int,
+    val numClasses: Int)
   extends GeneralizedLinearModel(weights, intercept) with ClassificationModel with Serializable {
 
+  def this(weights: Vector, intercept: Double, featureSize: Int) =
+    this(weights, intercept, featureSize, 2)
+
   private var threshold: Option[Double] = Some(0.5)
-
-  private var nClasses = 2
-
-  /**
-   * :: Experimental ::
-   * Set the number of possible outcomes for k classes classification problem in
-   * Multinomial Logistic Regression.
-   * By default, it is binary logistic regression so k will be set to 2.
-   */
-  @Experimental
-  def setNumOfClasses(k: Int): this.type = {
-    assert(k > 1)
-    nClasses = k
-    this
-  }
 
   /**
    * :: Experimental ::
@@ -88,11 +82,11 @@ class LogisticRegressionModel (
         case None => score
       }
     } else {
-      val dataWithBiasSize = weightMatrix.size / (nClasses - 1)
+      val dataWithBiasSize = weightMatrix.size / (numClasses - 1)
       val dataWithBias = if (dataWithBiasSize == dataMatrix.size) {
         dataMatrix
       } else {
-        assert(dataMatrix.size + 1 == dataWithBiasSize)
+        require(dataMatrix.size + 1 == dataWithBiasSize)
         MLUtils.appendBias(dataMatrix)
       }
 
@@ -103,7 +97,7 @@ class LogisticRegressionModel (
             s"weights only supports dense vector but got type ${weights.getClass}.")
       }
 
-      val margins = (0 until nClasses - 1).map { i =>
+      val margins = (0 until numClasses - 1).map { i =>
         var margin = 0.0
         dataWithBias.foreachActive { (index, value) =>
           if (value != 0.0) margin += value * weightsArray((i * dataWithBiasSize) + index)
@@ -156,7 +150,7 @@ class LogisticRegressionWithSGD private (
   def this() = this(1.0, 100, 0.01, 1.0)
 
   override protected def createModel(weights: Vector, intercept: Double) = {
-    new LogisticRegressionModel(weights, intercept)
+    new LogisticRegressionModel(weights, intercept, numFeatures)
   }
 }
 
@@ -271,16 +265,17 @@ class LogisticRegressionWithLBFGS
    * By default, it is binary logistic regression so k will be set to 2.
    */
   @Experimental
-  def setNumOfClasses(k: Int): this.type = {
-    assert(k > 1)
-    numOfLinearPredictor = k - 1
-    if (k > 2) {
-      validators = List(DataValidators.multiLabelValidator(k))
+  def setNumClasses(numClasses: Int): this.type = {
+    require(numClasses > 1)
+    numOfLinearPredictor = numClasses - 1
+    if (numClasses > 2) {
+      validators = List(DataValidators.multiLabelValidator(numClasses))
+      optimizer.setGradient(new LogisticGradient(numClasses))
     }
     this
   }
 
   override protected def createModel(weights: Vector, intercept: Double) = {
-    new LogisticRegressionModel(weights, intercept).setNumOfClasses(numOfLinearPredictor + 1)
+    new LogisticRegressionModel(weights, intercept, numFeatures, numOfLinearPredictor + 1)
   }
 }

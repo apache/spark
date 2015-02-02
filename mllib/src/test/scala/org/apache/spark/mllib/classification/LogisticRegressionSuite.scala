@@ -135,7 +135,7 @@ object LogisticRegressionSuite {
       var y = 0
       breakable {
         for (i <- 0 until nClasses) {
-          if(p < probs(i)) {
+          if (p < probs(i)) {
             y = i
             break
           }
@@ -397,7 +397,7 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
-    val lr = new LogisticRegressionWithLBFGS().setIntercept(true).setNumOfClasses(3)
+    val lr = new LogisticRegressionWithLBFGS().setIntercept(true).setNumClasses(3)
     lr.optimizer.setConvergenceTol(1E-15).setNumIterations(200)
 
     val model = lr.run(testRDD)
@@ -413,7 +413,7 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
      * Using the following R code to load the data and train the model using glmnet package.
      *
      *    library("glmnet")
-     *    data <- read.csv("/Users/dbtsai/data.csv/a", header=FALSE)
+     *    data <- read.csv("path", header=FALSE)
      *    label = factor(data$V1)
      *    features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
      *    weights = coef(glmnet(features,label, family="multinomial", alpha = 0, lambda = 0))
@@ -446,18 +446,12 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
      *    data.V5 -0.29198337
      */
 
-    assert(model.weights(0) ~== -0.5837166 relTol 0.05)
-    assert(model.weights(1) ~== 0.9285260 relTol 0.05)
-    assert(model.weights(2) ~== -0.3783612 relTol 0.05)
-    assert(model.weights(3) ~== -0.8123411 relTol 0.05)
-    assert(model.weights(4) ~== 2.6228269 relTol 0.05)
+    val weightsR = Vectors.dense(Array(
+      -0.5837166, 0.9285260, -0.3783612, -0.8123411, 2.6228269,
+      -0.1691865, -0.811048, -0.0646380, -0.2919834, 4.1119745))
 
-    assert(model.weights(5) ~== -0.16918650 relTol 0.05)
-    assert(model.weights(6) ~== -0.81104784 relTol 0.05)
-    assert(model.weights(7) ~== -0.06463799 relTol 0.05)
-    assert(model.weights(8) ~== -0.29198337 relTol 0.05)
-    assert(model.weights(9) ~== 4.11197445 relTol 0.05)
-
+    assert(model.weights ~== weightsR relTol 0.05)
+    
     val validationData = LogisticRegressionSuite.generateMultinomialLogisticInput(
       weights, xMean, xVariance, true, nPoints, 17)
     val validationRDD = sc.parallelize(validationData, 2)

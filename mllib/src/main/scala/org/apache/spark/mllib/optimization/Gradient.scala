@@ -22,8 +22,6 @@ import org.apache.spark.mllib.linalg.{DenseVector, Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.{axpy, dot, scal}
 import org.apache.spark.mllib.util.MLUtils
 
-import scala.collection.immutable.IndexedSeq
-
 /**
  * :: DeveloperApi ::
  * Class used to compute the gradient for a loss function, given a single data point.
@@ -124,9 +122,16 @@ abstract class Gradient extends Serializable {
  *
  * For the detailed mathematical derivation, see the reference at
  * http://www.slideshare.net/dbtsai/2014-0620-mlor-36132297
+ *
+ * @param numClasses the number of possible outcomes for k classes classification problem in
+ *                   Multinomial Logistic Regression. By default, it is binary logistic regression
+ *                   so numClasses will be set to 2.
  */
 @DeveloperApi
-class LogisticGradient extends Gradient {
+class LogisticGradient(numClasses: Int) extends Gradient {
+
+  def this() = this(2)
+
   override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
     val gradient = Vectors.zeros(weights.size)
     val loss = compute(data, label, weights, gradient)
@@ -141,10 +146,10 @@ class LogisticGradient extends Gradient {
     assert((weights.size % data.size) == 0)
     val dataSize = data.size
 
-    // (n + 1) is number of classes
-    val n = weights.size / dataSize
-    n match {
-      case 1 =>
+    // (weights.size / dataSize + 1) is number of classes
+    require(numClasses == weights.size / dataSize + 1)
+    numClasses match {
+      case 2 =>
         /**
          * For Binary Logistic Regression.
          *
@@ -183,7 +188,7 @@ class LogisticGradient extends Gradient {
         var maxMargin = Double.NegativeInfinity
         var maxMarginIndex = 0
 
-        val margins = (0 until n).map { i =>
+        val margins = (0 until numClasses - 1).map { i =>
           var margin = 0.0
           data.foreachActive { (index, value) =>
             if (value != 0.0) margin += value * weightsArray((i * dataSize) + index)
@@ -204,20 +209,20 @@ class LogisticGradient extends Gradient {
          */
         val sum = {
           var temp = 0.0
-          if (maxMargin > 0) for (i <- 0 until n) {
+          if (maxMargin > 0) for (i <- 0 until numClasses - 1) {
             margins(i) -= maxMargin
             if (i == maxMarginIndex) {
               temp += math.exp(-maxMargin)
             } else {
               temp += math.exp(margins(i))
             }
-          } else for (i <- 0 until n) {
+          } else for (i <- 0 until numClasses - 1) {
             temp += math.exp(margins(i))
           }
           temp
         }
 
-        for (i <- 0 until n) {
+        for (i <- 0 until numClasses - 1) {
           val multiplier = math.exp(margins(i)) / (sum + 1.0) - {
             if (label != 0.0 && label == i + 1) 1.0 else 0.0
           }
