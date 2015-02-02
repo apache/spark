@@ -15,6 +15,7 @@ from flask.ext.admin import base
 from flask.ext.admin.contrib.sqla import ModelView
 from flask.ext.cache import Cache
 from flask import request
+import sqlalchemy as sqla
 from wtforms import Form, DateTimeField, SelectField, TextAreaField
 
 from pygments import highlight
@@ -467,6 +468,44 @@ class Airflow(BaseView):
         session.commit()
         session.close()
         return response
+
+    @expose('/dag_stats')
+    def dag_stats(self):
+        states = [State.SUCCESS, State.RUNNING, State.FAILED]
+        data = {}
+        TI = models.TaskInstance
+        session = Session()
+        qry = session.query(
+            TI.dag_id,
+            TI.state,
+            sqla.func.count(TI.task_id)
+        ).group_by(TI.dag_id, TI.state)
+        for dag_id, state, count in qry:
+            if dag_id not in data:
+                data[dag_id] = {}
+            data[dag_id][state] = count
+        session.commit()
+        session.close()
+
+        payload = {}
+        for dag in dagbag.dags.values():
+            payload[dag.dag_id] = []
+            for state in states:
+                try:
+                    count = data[dag.dag_id][state]
+                except:
+                    count = 0
+                d = {
+                    'state': state,
+                    'count': count,
+                    'dag_id': dag.dag_id,
+                    'color': State.color(state)
+                }
+                payload[dag.dag_id].append(d)
+        return Response(
+            response=json.dumps(payload, indent=4),
+            status=200, mimetype="application/json")
+
 
     @expose('/code')
     def code(self):
@@ -1018,9 +1057,11 @@ def log_link(v, c, m, p):
         'airflow.log',
         dag_id=m.dag_id,
         task_id=m.task_id,
-        execution_date=m.execution_date)
+        execution_date=m.execution_date.isoformat())
     return Markup(
-        '<a href="{url}"><i class="icon-book"></i></a>'.format(**locals()))
+        '<a href="{url}">'
+            '<span class="glyphicon glyphicon-book" aria-hidden="true">'
+        '</span></a>').format(**locals())
 
 
 def task_link(v, c, m, p):
@@ -1063,6 +1104,7 @@ admin.add_view(mv)
 
 class TaskInstanceModelView(ModelView):
     column_filters = ('dag_id', 'task_id', 'state', 'execution_date')
+    named_filter_urls = True
     column_formatters = dict(
         log=log_link, task_id=task_link, dag_id=dag_link, duration=duration_f)
     column_searchable_list = ('dag_id', 'task_id', 'state')
@@ -1107,6 +1149,7 @@ admin.add_view(mv)
 
 class DagModelView(ModelView):
     column_list = ('dag_id', 'is_paused')
+    column_editable_list = ('is_paused',)
 mv = DagModelView(
     models.DAG, Session, name="Pause DAGs", category="Admin")
 admin.add_view(mv)
