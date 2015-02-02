@@ -107,14 +107,14 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   @Experimental
   def loadAsTable(
-    tableName: String,
-    dataSourceName: String,
-    options: Map[String, String],
-    allowExisting: Boolean): Unit = {
+      tableName: String,
+      dataSourceName: String,
+      options: Map[String, String],
+      allowExisting: Boolean): Unit = {
     val cmd =
       CreateTableUsing(
         tableName,
-        None,
+        userSpecifiedSchema = None,
         dataSourceName,
         temporary = false,
         options,
@@ -124,15 +124,15 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   @Experimental
   def loadAsTable(
-    tableName: String,
-    dataSourceName: String,
-    options: Map[String, String],
-    schema: StructType,
-    allowExisting: Boolean): Unit = {
+      tableName: String,
+      dataSourceName: String,
+      options: Map[String, String],
+      schema: StructType,
+      allowExisting: Boolean): Unit = {
     val cmd =
       CreateTableUsing(
         tableName,
-        Some(schema),
+        userSpecifiedSchema = Some(schema),
         dataSourceName,
         temporary = false,
         options,
@@ -142,20 +142,20 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   @Experimental
   def loadAsTable(
-    tableName: String,
-    dataSourceName: String,
-    options: java.util.Map[String, String],
-    allowExisting: Boolean): Unit = {
+      tableName: String,
+      dataSourceName: String,
+      options: java.util.Map[String, String],
+      allowExisting: Boolean): Unit = {
     loadAsTable(tableName, dataSourceName, options.toMap, allowExisting)
   }
 
   @Experimental
   def loadAsTable(
-    tableName: String,
-    dataSourceName: String,
-    options: java.util.Map[String, String],
-    schema: StructType,
-    allowExisting: Boolean): Unit = {
+      tableName: String,
+      dataSourceName: String,
+      options: java.util.Map[String, String],
+      schema: StructType,
+      allowExisting: Boolean): Unit = {
     loadAsTable(tableName, dataSourceName, options.toMap, schema, allowExisting)
   }
 

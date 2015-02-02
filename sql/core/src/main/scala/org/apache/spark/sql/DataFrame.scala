@@ -635,9 +635,9 @@ class DataFrame protected[sql](
    */
   @Experimental
   override def saveAsTable(
-    tableName: String,
-    dataSourceName: String,
-    options: Map[String, String]): Unit = {
+      tableName: String,
+      dataSourceName: String,
+      options: Map[String, String]): Unit = {
     val cmd =
       CreateTableUsingAsLogicalPlan(
         tableName,
@@ -662,17 +662,17 @@ class DataFrame protected[sql](
    */
   @Experimental
   override def saveAsTable(
-    tableName: String,
-    dataSourceName: String,
-    options: java.util.Map[String, String]): Unit = {
+      tableName: String,
+      dataSourceName: String,
+      options: java.util.Map[String, String]): Unit = {
     saveAsTable(tableName, dataSourceName, options.toMap)
   }
 
   @Experimental
   override def save(
-    dataSourceName: String,
-    options: Map[String, String],
-    overwrite: Boolean): Unit = {
+      dataSourceName: String,
+      options: Map[String, String],
+      overwrite: Boolean): Unit = {
     val resolved = ResolvedDataSource(sqlContext, Some(schema), dataSourceName, options)
     resolved.relation match {
       case i: InsertableRelation => i.insertInto(new DataFrame(sqlContext, logicalPlan), overwrite)
@@ -682,9 +682,9 @@ class DataFrame protected[sql](
 
   @Experimental
   def save(
-    dataSourceName: String,
-    options: java.util.Map[String, String],
-    overwrite: Boolean): Unit = {
+      dataSourceName: String,
+      options: java.util.Map[String, String],
+      overwrite: Boolean): Unit = {
     save(dataSourceName, options.toMap, overwrite)
   }
 

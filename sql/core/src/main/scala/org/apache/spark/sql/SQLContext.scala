@@ -337,67 +337,17 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   @Experimental
   def load(
-    dataSourceName: String,
-    options: Map[String, String]): DataFrame = {
+      dataSourceName: String,
+      options: Map[String, String]): DataFrame = {
     val resolved = ResolvedDataSource(this, None, dataSourceName, options)
     new DataFrame(this, LogicalRelation(resolved.relation))
   }
 
   @Experimental
   def load(
-    dataSourceName: String,
-    options: java.util.Map[String, String]): DataFrame = {
+      dataSourceName: String,
+      options: java.util.Map[String, String]): DataFrame = {
     load(dataSourceName, options.toMap)
-  }
-
-  @Experimental
-  def loadAsTempTable(
-    tableName: String,
-    dataSourceName: String,
-    options: Map[String, String]): Unit = {
-    val cmd =
-      CreateTableUsing(
-        tableName,
-        None,
-        dataSourceName,
-        temporary = true,
-        options,
-        allowExisting = false)
-    executePlan(cmd).toRdd
-  }
-
-  @Experimental
-  def loadAsTempTable(
-    tableName: String,
-    dataSourceName: String,
-    options: Map[String, String],
-    schema: StructType): Unit = {
-    val cmd =
-      CreateTableUsing(
-        tableName,
-        Some(schema),
-        dataSourceName,
-        temporary = true,
-        options,
-        allowExisting = false)
-    executePlan(cmd).toRdd
-  }
-
-  @Experimental
-  def loadAsTempTable(
-    tableName: String,
-    dataSourceName: String,
-    options: java.util.Map[String, String]): Unit = {
-    loadAsTempTable(tableName, dataSourceName, options.toMap)
-  }
-
-  @Experimental
-  def loadAsTempTable(
-    tableName: String,
-    dataSourceName: String,
-    options: java.util.Map[String, String],
-    schema: StructType): Unit = {
-    loadAsTempTable(tableName, dataSourceName, options.toMap, schema)
   }
 
   /**
