@@ -36,11 +36,9 @@ class DataFrameSuite extends QueryTest {
     intercept[Exception] {
       testData.groupBy("nonExistentName").agg(Map("key" -> "sum"))
     }
-
-    // Uncomment the following once we report the errors properly.
-//    intercept[Exception] {
-//      testData.groupBy("nonExistentName").agg(Map("key" -> "sum"))
-//    }
+    intercept[Exception] {
+      testData.groupBy($"abcd").agg(Map("key" -> "sum"))
+    }
   }
 
   test("table scan") {

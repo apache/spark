@@ -260,7 +260,7 @@ private[sql] class DataFrameImpl protected[sql](
 
   override def take(n: Int): Array[Row] = head(n)
 
-  override def collect(): Array[Row] = rdd.collect()
+  override def collect(): Array[Row] = queryExecution.executedPlan.executeCollect()
 
   override def collectAsList(): java.util.List[Row] = java.util.Arrays.asList(rdd.collect() :_*)
 
