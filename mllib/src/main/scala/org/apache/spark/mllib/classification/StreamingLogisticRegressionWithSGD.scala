@@ -22,6 +22,7 @@ import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.StreamingLinearAlgorithm
 
 /**
+ * :: Experimental ::
  * Train or predict a logistic regression model on streaming data. Training uses
  * Stochastic Gradient Descent to update the model based on each new batch of
  * incoming data from a DStream (see `LogisticRegressionWithSGD` for model equation)

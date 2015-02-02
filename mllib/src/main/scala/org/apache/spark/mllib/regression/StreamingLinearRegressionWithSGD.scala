@@ -21,6 +21,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 
 /**
+ * :: Experimental ::
  * Train or predict a linear regression model on streaming data. Training uses
  * Stochastic Gradient Descent to update the model based on each new batch of
  * incoming data from a DStream (see `LinearRegressionWithSGD` for model equation)
