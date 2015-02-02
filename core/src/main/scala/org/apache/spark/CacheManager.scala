@@ -17,8 +17,6 @@
 
 package org.apache.spark
 
-import org.apache.spark.util.AfterNextInterceptingIterator
-
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -52,11 +50,12 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
         existingMetrics.incBytesRead(inputMetrics.bytesRead)
 
         val iter = blockResult.data.asInstanceOf[Iterator[T]]
-        new InterruptibleIterator(context, AfterNextInterceptingIterator(iter, (next: T) => {
-          existingMetrics.incRecordsRead(1)
-          next
-        }))
-
+        new InterruptibleIterator[T](context, iter) {
+          override def next(): T = {
+            existingMetrics.incRecordsRead(1)
+            delegate.next()
+          }
+        }
       case None =>
         // Acquire a lock for loading this partition
         // If another thread already holds the lock, wait for it to finish return its results
