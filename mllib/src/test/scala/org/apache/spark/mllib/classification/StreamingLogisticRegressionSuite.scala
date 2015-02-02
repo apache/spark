@@ -32,15 +32,6 @@ class StreamingLogisticRegressionSuite extends FunSuite with TestSuiteBase {
   // use longer wait time to ensure job completion
   override def maxWaitTimeMillis = 30000
 
-  // Assert that model predictions are correct
-//  def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]) {
-//    val numOffPredictions = predictions.zip(input).count { case (prediction, expected) =>
-//      prediction != expected.label
-//    }
-//    // At least 80% of the predictions should be on.
-//    assert(numOffPredictions < input.length / 4)
-//  }
-
   // Test if we can accurately learn B for Y = logistic(BX) on streaming data
   test("parameter accuracy") {
 
