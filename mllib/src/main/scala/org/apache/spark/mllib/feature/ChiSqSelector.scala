@@ -17,22 +17,34 @@
 
 package org.apache.spark.mllib.feature
 
+import scala.collection.mutable.ArrayBuilder
+
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vectors, Vector}
+import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.stat.Statistics
 import org.apache.spark.rdd.RDD
-
-import scala.collection.mutable.ArrayBuilder
 
 /**
  * :: Experimental ::
  * Chi Squared selector model.
  *
- * @param indices list of indices to select (filter). Must be ordered asc
+ * @param selectedFeatures list of indices to select (filter). Must be ordered asc
  */
 @Experimental
-class ChiSqSelectorModel  private[mllib] (indices: Array[Int]) extends VectorTransformer {
+class ChiSqSelectorModel (val selectedFeatures: Array[Int]) extends VectorTransformer {
+
+  require(isSorted(selectedFeatures), "Array has to be sorted asc")
+
+  protected def isSorted(array: Array[Int]): Boolean = {
+    var i = 1
+    while (i < array.length) {
+      if (array(i) < array(i-1)) return false
+      i += 1
+    }
+    true
+  }
+
   /**
    * Applies transformation on a vector.
    *
@@ -40,7 +52,7 @@ class ChiSqSelectorModel  private[mllib] (indices: Array[Int]) extends VectorTra
    * @return transformed vector.
    */
   override def transform(vector: Vector): Vector = {
-    compress(vector, indices)
+    compress(vector, selectedFeatures)
   }
 
   /**
@@ -56,23 +68,27 @@ class ChiSqSelectorModel  private[mllib] (indices: Array[Int]) extends VectorTra
         val newSize = filterIndices.length
         val newValues = new ArrayBuilder.ofDouble
         val newIndices = new ArrayBuilder.ofInt
-        var i: Int = 0
-        var j: Int = 0
-        while(i < indices.length && j < filterIndices.length) {
-          if(indices(i) == filterIndices(j)) {
+        var i = 0
+        var j = 0
+        var indicesIdx = 0
+        var filterIndicesIdx = 0
+        while (i < indices.length && j < filterIndices.length) {
+          indicesIdx = indices(i)
+          filterIndicesIdx = filterIndices(j)
+          if (indicesIdx == filterIndicesIdx) {
             newIndices += j
             newValues += values(i)
             j += 1
             i += 1
           } else {
-            if(indices(i) > filterIndices(j)) {
+            if (indicesIdx > filterIndicesIdx) {
               j += 1
             } else {
               i += 1
             }
           }
         }
-        /** Sparse representation might be ineffective if (newSize ~= newValues.size) */
+        // TODO: Sparse representation might be ineffective if (newSize ~= newValues.size)
         Vectors.sparse(newSize, newIndices.result(), newValues.result())
       case DenseVector(values) =>
         val values = features.toArray
@@ -96,13 +112,15 @@ class ChiSqSelector (val numTopFeatures: Int) {
   /**
    * Returns a ChiSquared feature selector.
    *
-   * @param data data used to compute the Chi Squared statistic.
+   * @param data an `RDD[LabeledPoint]` containing the labeled dataset with categorical features.
+   *             Real-valued features will be treated as categorical for each distinct value.
+   *             Apply feature discretizer before using this function.
    */
   def fit(data: RDD[LabeledPoint]): ChiSqSelectorModel = {
     val indices = Statistics.chiSqTest(data)
-      .zipWithIndex.sortBy { case(res, _) => -res.statistic }
+      .zipWithIndex.sortBy { case (res, _) => -res.statistic }
       .take(numTopFeatures)
-      .map{ case(_, indices) => indices }
+      .map { case (_, indices) => indices }
       .sorted
     new ChiSqSelectorModel(indices)
   }
