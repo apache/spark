@@ -17,16 +17,14 @@
 
 """
 A Gaussian Mixture Model clustering program using MLlib.
-
 """
-
 import sys
 import random
 import argparse
 import numpy as np
 
 from pyspark import SparkConf, SparkContext
-from pyspark.mllib.clustering import GaussianMixtureEM
+from pyspark.mllib.clustering import GaussianMixture
 
 
 def parseVector(line):
@@ -37,29 +35,29 @@ if __name__ == "__main__":
     """
     Parameters
     ----------
-    input_file : Input file path which contains data points
+    inputFile : Input file path which contains data points
     k : Number of mixture components
-    convergenceTol : convergence_threshold. Default to 1e-3
-    seed : random seed
+    convergenceTol : Convergence threshold. Default to 1e-3
     maxIterations : Number of EM iterations to perform. Default to 100
+    seed : Random seed
     """
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('input_file', help='input file')
-    parser.add_argument('k', type=int, help='num_of_clusters')
-    parser.add_argument('--convergenceTol', default=1e-3, type=float, help='convergence_threshold')
+    parser.add_argument('inputFile', help='Input File')
+    parser.add_argument('k', type=int, help='Number of clusters')
+    parser.add_argument('--convergenceTol', default=1e-3, type=float, help='convergence threshold')
+    parser.add_argument('--maxIterations', default=100, type=int, help='Number of iterations')
     parser.add_argument('--seed', default=random.getrandbits(19),
-                        type=long, help='num_of_iterations')
-    parser.add_argument('--maxIterations', default=100, type=int, help='max_num_of_iterations')
+                        type=long, help='Random seed')
     args = parser.parse_args()
 
     conf = SparkConf().setAppName("GMM")
     sc = SparkContext(conf=conf)
 
-    lines = sc.textFile(args.input_file)
+    lines = sc.textFile(args.inputFile)
     data = lines.map(parseVector)
-    model = GaussianMixtureEM.train(data, args.k, args.convergenceTol,
-                                    args.seed, args.maxIterations)
+    model = GaussianMixture.train(data, args.k, args.convergenceTol,
+                                  args.maxIterations, args.seed)
     for i in range(args.k):
         print ("weight = ", model.weights[i], "mu = ", model.gaussians[i].mu,
                "sigma = ", model.gaussians[i].sigma.toArray())
