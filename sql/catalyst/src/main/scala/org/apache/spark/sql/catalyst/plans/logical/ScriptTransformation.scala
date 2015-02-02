@@ -32,11 +32,10 @@ case class ScriptTransformation(
     script: String,
     output: Seq[Attribute],
     child: LogicalPlan,
-    ioschema: Option[ScriptInputOutputSchema]) extends UnaryNode
+    ioschema: ScriptInputOutputSchema) extends UnaryNode
 
 /**
- * The wrapper class of input and output schema properties for transforming with script.
- *
+ * A placeholder for implementation specific input and output properties when passing data
+ * to a script. For example, in Hive this would specify which SerDes to use.
  */
 trait ScriptInputOutputSchema
-

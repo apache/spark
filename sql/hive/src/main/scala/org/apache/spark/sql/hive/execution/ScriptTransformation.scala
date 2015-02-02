@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.types.DataType
-import org.apache.spark.sql.hive.{HiveContext, HiveInspectors, HiveShim, ShimWritable}
+import org.apache.spark.sql.hive.{HiveContext, HiveInspectors}
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.util.Utils
 
@@ -162,9 +162,8 @@ case class ScriptTransformation(
  
             outputStream.write(data)
           } else {
-            val writable = new ShimWritable(
-              inputSerde.serialize(row.asInstanceOf[GenericRow].values, inputSoi))
-            writable.write(dataOutputStream)
+            val writable = inputSerde.serialize(row.asInstanceOf[GenericRow].values, inputSoi)
+            prepareWritable(writable).write(dataOutputStream)
           }
         }
       outputStream.close()
@@ -175,7 +174,6 @@ case class ScriptTransformation(
 
 /**
  * The wrapper class of Hive input and output schema properties
- *
  */
 case class HiveScriptIOSchema (
     inputRowFormat: Seq[(String, String)],
@@ -270,4 +268,3 @@ case class HiveScriptIOSchema (
     }
   }
 }
-

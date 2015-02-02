@@ -397,27 +397,23 @@ private[hive] object HiveShim {
       Decimal(hdoi.getPrimitiveJavaObject(data).bigDecimalValue(), hdoi.precision(), hdoi.scale())
     }
   }
-
-  implicit def prepareWritable(shimW: ShimWritable): Writable = {
-    shimW.writable match {
+ 
+  /*
+   * Bug introduced in hive-0.13. AvroGenericRecordWritable has a member recordReaderID that
+   * is needed to initialize before serialization.
+   */
+  def prepareWritable(w: Writable): Writable = {
+    w match {
       case w: AvroGenericRecordWritable =>
         w.setRecordReaderID(new UID())
       case _ =>
-    } 
-    shimW.writable
+    }
+    w
   }
 }
 
 /*
- * Bug introdiced in hive-0.13. AvroGenericRecordWritable has a member recordReaderID that
- * is needed to initialize before serialization.
- * Fix it through wrapper.
- */
-case class ShimWritable(writable: Writable)
-
-
-/*
- * Bug introdiced in hive-0.13. FileSinkDesc is serilizable, but its member path is not.
+ * Bug introduced in hive-0.13. FileSinkDesc is serilizable, but its member path is not.
  * Fix it through wrapper.
  */
 class ShimFileSinkDesc(var dir: String, var tableInfo: TableDesc, var compressed: Boolean)

@@ -33,8 +33,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.ExplainCommand
-import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, AnalyzeTable,
-  HiveScriptIOSchema}
+import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, AnalyzeTable, HiveScriptIOSchema}
 import org.apache.spark.sql.types._
 
 /* Implicit conversions */
@@ -648,44 +647,37 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                   AttributeReference("value", StringType)()), true)
             }
 
-            val (inputRowFormat, inputSerdeClass, inputSerdeProps) = inputSerdeClause match {
-              case Token("TOK_SERDEPROPS", props) :: Nil =>
-                (props.map { case Token(name, Token(value, Nil) :: Nil) => (name, value) },
-                  "", Nil)
-              case Token("TOK_SERDENAME", Token(serde, Nil) :: Nil) :: Nil => (Nil, serde, Nil)
-              case Token("TOK_SERDENAME", Token(serde, Nil) ::
-                     Token("TOK_TABLEPROPERTIES",
-                     Token("TOK_TABLEPROPLIST", props) :: Nil) :: Nil) :: Nil =>
-                val tableprops = props.map {
+            def matchSerDe(clause: Seq[ASTNode]) = clause match {
+              case Token("TOK_SERDEPROPS", propsClause) :: Nil =>
+                val rowFormat = propsClause.map {
+                  case Token(name, Token(value, Nil) :: Nil) => (name, value)
+                }
+                (rowFormat, "", Nil)
+
+              case Token("TOK_SERDENAME", Token(serdeClass, Nil) :: Nil) :: Nil =>
+                (Nil, serdeClass, Nil)
+
+              case Token("TOK_SERDENAME", Token(serdeClass, Nil) ::
+                Token("TOK_TABLEPROPERTIES",
+                Token("TOK_TABLEPROPLIST", propsClause) :: Nil) :: Nil) :: Nil =>
+                val serdeProps = propsClause.map {
                   case Token("TOK_TABLEPROPERTY", Token(name, Nil) :: Token(value, Nil) :: Nil) =>
                     (name, value)
                 } 
-                (Nil, serde, tableprops)
+                (Nil, serdeClass, serdeProps)
+
               case Nil => (Nil, "", Nil)
             }
 
-            val (outputRowFormat, outputSerdeClass, outputSerdeProps) = outputSerdeClause match {
-              case Token("TOK_SERDEPROPS", props) :: Nil =>
-                (props.map { case Token(name, Token(value, Nil) :: Nil) => (name, value) },
-                  "", Nil)
-              case Token("TOK_SERDENAME", Token(serde, Nil) :: Nil) :: Nil => (Nil, serde, Nil)
-              case Token("TOK_SERDENAME", Token(serde, Nil) ::
-                     Token("TOK_TABLEPROPERTIES",
-                     Token("TOK_TABLEPROPLIST", props) :: Nil) :: Nil) :: Nil =>
-                val tableprops = props.map {
-                  case Token("TOK_TABLEPROPERTY", Token(name, Nil) :: Token(value, Nil) :: Nil) =>
-                    (name, value)
-                } 
-                (Nil, serde, tableprops)
-              case Nil => (Nil, "", Nil)
-            }
+            val (inRowFormat, inSerdeClass, inSerdeProps) = matchSerDe(inputSerdeClause)
+            val (outRowFormat, outSerdeClass, outSerdeProps) = matchSerDe(outputSerdeClause)
 
             val unescapedScript = BaseSemanticAnalyzer.unescapeSQLString(script)
 
-            val schema = Some(HiveScriptIOSchema(
-              inputRowFormat, outputRowFormat,
-              inputSerdeClass, outputSerdeClass,
-              inputSerdeProps, outputSerdeProps, schemaLess))
+            val schema = HiveScriptIOSchema(
+              inRowFormat, outRowFormat,
+              inSerdeClass, outSerdeClass,
+              inSerdeProps, outSerdeProps, schemaLess)
 
             Some(
               logical.ScriptTransformation(

@@ -242,12 +242,10 @@ private[hive] object HiveShim {
     }
   }
 
-  implicit def prepareWritable(shimW: ShimWritable): Writable = {
-    shimW.writable
+  def prepareWritable(w: Writable): Writable = {
+    w
   }
 }
-
-case class ShimWritable(writable: Writable)
 
 class ShimFileSinkDesc(var dir: String, var tableInfo: TableDesc, var compressed: Boolean)
   extends FileSinkDesc(dir, tableInfo, compressed) {
