@@ -1535,9 +1535,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * (e.g. after the web UI and event logging listeners have been registered).
    */
   private def setupAndStartListenerBus(): Unit = {
-    if (listenerBus.hasBeenStarted) {
-      throw new IllegalStateException("listener bus has already been started")
-    }
     // Use reflection to instantiate listeners specified via `spark.extraListeners`
     try {
       val listenerClassNames: Seq[String] =

@@ -20,6 +20,7 @@ package org.apache.spark.scheduler
 import java.util.concurrent.Semaphore
 
 import scala.collection.mutable
+import scala.collection.JavaConversions._
 
 import org.scalatest.{FunSuite, Matchers}
 
@@ -363,8 +364,8 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
       .set("spark.extraListeners", classOf[ListenerThatAcceptsSparkConf].getName + "," +
         classOf[BasicJobCounter].getName)
     sc = new SparkContext(conf)
-    sc.listenerBus.sparkListeners.collect { case x: BasicJobCounter => x}.size should be (1)
-    sc.listenerBus.sparkListeners.collect {
+    sc.listenerBus.listeners.collect { case x: BasicJobCounter => x}.size should be (1)
+    sc.listenerBus.listeners.collect {
       case x: ListenerThatAcceptsSparkConf => x
     }.size should be (1)
   }
