@@ -155,7 +155,7 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
   }
 
   test("RatingBlockBuilder") {
-    val emptyBuilder = new RatingBlockBuilder()
+    val emptyBuilder = new RatingBlockBuilder[Int]()
     assert(emptyBuilder.size === 0)
     val emptyBlock = emptyBuilder.build()
     assert(emptyBlock.srcIds.isEmpty)
@@ -179,12 +179,12 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
 
   test("UncompressedInBlock") {
     val encoder = new LocalIndexEncoder(10)
-    val uncompressed = new UncompressedInBlockBuilder(encoder)
+    val uncompressed = new UncompressedInBlockBuilder[Int](encoder)
       .add(0, Array(1, 0, 2), Array(0, 1, 4), Array(1.0f, 2.0f, 3.0f))
       .add(1, Array(3, 0), Array(2, 5), Array(4.0f, 5.0f))
       .build()
-    assert(uncompressed.size === 5)
-    val records = Seq.tabulate(uncompressed.size) { i =>
+    assert(uncompressed.length === 5)
+    val records = Seq.tabulate(uncompressed.length) { i =>
       val dstEncodedIndex = uncompressed.dstEncodedIndices(i)
       val dstBlockId = encoder.blockId(dstEncodedIndex)
       val dstLocalIndex = encoder.localIndex(dstEncodedIndex)
@@ -228,15 +228,15 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
       numItems: Int,
       rank: Int,
       noiseStd: Double = 0.0,
-      seed: Long = 11L): (RDD[Rating], RDD[Rating]) = {
+      seed: Long = 11L): (RDD[Rating[Int]], RDD[Rating[Int]]) = {
     val trainingFraction = 0.6
     val testFraction = 0.3
     val totalFraction = trainingFraction + testFraction
     val random = new Random(seed)
     val userFactors = genFactors(numUsers, rank, random)
     val itemFactors = genFactors(numItems, rank, random)
-    val training = ArrayBuffer.empty[Rating]
-    val test = ArrayBuffer.empty[Rating]
+    val training = ArrayBuffer.empty[Rating[Int]]
+    val test = ArrayBuffer.empty[Rating[Int]]
     for ((userId, userFactor) <- userFactors; (itemId, itemFactor) <- itemFactors) {
       val x = random.nextDouble()
       if (x < totalFraction) {
@@ -268,7 +268,7 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
       numItems: Int,
       rank: Int,
       noiseStd: Double = 0.0,
-      seed: Long = 11L): (RDD[Rating], RDD[Rating]) = {
+      seed: Long = 11L): (RDD[Rating[Int]], RDD[Rating[Int]]) = {
     // The assumption of the implicit feedback model is that unobserved ratings are more likely to
     // be negatives.
     val positiveFraction = 0.8
@@ -279,8 +279,8 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
     val random = new Random(seed)
     val userFactors = genFactors(numUsers, rank, random)
     val itemFactors = genFactors(numItems, rank, random)
-    val training = ArrayBuffer.empty[Rating]
-    val test = ArrayBuffer.empty[Rating]
+    val training = ArrayBuffer.empty[Rating[Int]]
+    val test = ArrayBuffer.empty[Rating[Int]]
     for ((userId, userFactor) <- userFactors; (itemId, itemFactor) <- itemFactors) {
       val rating = blas.sdot(rank, userFactor, 1, itemFactor, 1)
       val threshold = if (rating > 0) positiveFraction else negativeFraction
@@ -340,8 +340,8 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
    * @param targetRMSE target test RMSE
    */
   def testALS(
-      training: RDD[Rating],
-      test: RDD[Rating],
+      training: RDD[Rating[Int]],
+      test: RDD[Rating[Int]],
       rank: Int,
       maxIter: Int,
       regParam: Double,
@@ -431,5 +431,17 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
       genImplicitTestData(numUsers = 20, numItems = 40, rank = 2, noiseStd = 0.01)
     testALS(training, test, maxIter = 4, rank = 2, regParam = 0.01, implicitPrefs = true,
       targetRMSE = 0.3)
+  }
+
+  test("using generic ID types") {
+    val (ratings, _) = genImplicitTestData(numUsers = 20, numItems = 40, rank = 2, noiseStd = 0.01)
+
+    val longRatings = ratings.map(r => Rating(r.user.toLong, r.item.toLong, r.rating))
+    val (longUserFactors, _) = ALS.train(longRatings, rank = 2, maxIter = 4)
+    assert(longUserFactors.first()._1.getClass === classOf[Long])
+
+    val strRatings = ratings.map(r => Rating(r.user.toString, r.item.toString, r.rating))
+    val (strUserFactors, _) = ALS.train(strRatings, rank = 2, maxIter = 4)
+    assert(strUserFactors.first()._1.getClass === classOf[String])
   }
 }
