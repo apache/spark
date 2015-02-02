@@ -27,17 +27,17 @@ acquire_rat_jar () {
   if [[ ! -f "$rat_jar" ]]; then
     # Download rat launch jar if it hasn't been downloaded yet
     if [ ! -f "$JAR" ]; then
-    # Download
-    printf "Attempting to fetch rat\n"
-    JAR_DL="${JAR}.part"
-    if hash curl 2>/dev/null; then
-      curl --silent "${URL}" > "$JAR_DL" && mv "$JAR_DL" "$JAR"
-    elif hash wget 2>/dev/null; then
-      wget --quiet ${URL} -O "$JAR_DL" && mv "$JAR_DL" "$JAR"
-    else
-      printf "You do not have curl or wget installed, please install rat manually.\n"
-      exit -1
-    fi
+      # Download
+      printf "Attempting to fetch rat\n"
+      JAR_DL="${JAR}.part"
+      if [ $(command -v curl) ]; then
+        curl --silent "${URL}" > "$JAR_DL" && mv "$JAR_DL" "$JAR"
+      elif [ $(command -v wget) ]; then
+        wget --quiet ${URL} -O "$JAR_DL" && mv "$JAR_DL" "$JAR"
+      else
+        printf "You do not have curl or wget installed, please install rat manually.\n"
+        exit -1
+      fi
     fi
 
     unzip -tq $JAR &> /dev/null

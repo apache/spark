@@ -311,6 +311,9 @@ Apart from these, the following properties are also available, and may be useful
     or it will be displayed before the driver exiting. It also can be dumped into disk by
     `sc.dump_profiles(path)`. If some of the profile results had been displayed maually,
     they will not be displayed automatically before driver exiting.
+
+    By default the `pyspark.profiler.BasicProfiler` will be used, but this can be overridden by
+    passing a profiler class in as a parameter to the `SparkContext` constructor.
   </td>
 </tr>
 <tr>
