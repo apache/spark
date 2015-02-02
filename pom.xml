@@ -86,9 +86,9 @@
   </mailingLists>
 
   <modules>
-    <module>graphx</module>
     <module>core</module>
     <module>bagel</module>
+    <module>graphx</module>
     <module>mllib</module>
     <module>tools</module>
     <module>network/common</module>

@@ -50,8 +50,11 @@ from pyspark.graphx.vertex import VertexRDD
 from pyspark.graphx.edge import EdgeRDD, Edge
 from pyspark.graphx.graph import Graph
 
+# for back compatibility
+from pyspark.sql import SQLContext, HiveContext, SchemaRDD, Row
+
 __all__ = [
     "SparkConf", "SparkContext", "SparkFiles", "RDD", "StorageLevel", "Broadcast",
     "Accumulator", "AccumulatorParam", "MarshalSerializer", "PickleSerializer",
-    "VertexRDD", "EdgeRDD", "Edge", "Graph"]
+]
 

@@ -42,7 +42,7 @@ public class JavaAPISuite implements Serializable {
 
 
     @Before
-    public void initialize() {
+    public void before() {
         this.ssc = new JavaSparkContext("local", "GraphX JavaAPISuite");
 
         this.myList = new ArrayList<Tuple2<Object, VertexProperty<String, String>>>();
@@ -54,7 +54,7 @@ public class JavaAPISuite implements Serializable {
     }
 
     @After
-    public void finalize() {
+    public void after() {
         ssc.stop();
         ssc = null;
     }

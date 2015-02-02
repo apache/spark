@@ -37,10 +37,8 @@ __all__ = ["VertexRDD", "VertexId"]
 
 
 """
-The default type of vertex id is Long
-A separate VertexId type is defined
-here so that other types can be used
-for vertex ids in future
+The default type of vertex id is Long. A separate VertexId type is defined here so that other
+types can be used for vertex ids in future
 """
 VertexId = Long
 

@@ -24,7 +24,7 @@ import org.junit.Before;
 
 public abstract class LocalJavaStreamingContext {
 
-        protected transient JavaStreamingContext ssc;
+    protected transient JavaStreamingContext ssc;
 
     @Before
     public void setUp() {
