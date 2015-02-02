@@ -248,12 +248,14 @@ private [sql] case class CreateTempTableUsing(
 private[sql] case class DropTable(
     tableName: String,
     isExists: Boolean,
+    temporary: Boolean) extends Command
+
+private[sql] case class DropTempTable(
+    tableName: String,
+    isExists: Boolean,
     temporary: Boolean) extends RunnableCommand {
 
   def run(sqlContext: SQLContext) = {
-    if (!temporary && sqlContext.conf.dialect == "sql") {
-      sys.error(s"Table '$tableName' dropped with SQLContext must be TEMPORARY.")
-    }
     val tableExists = sqlContext.catalog.tableExists(Seq(tableName))
     if (isExists) {
       if (tableExists) sqlContext.dropTempTable(tableName)

@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.parquet._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.sources.{CreateTempTableUsing, CreateTableUsing}
+import org.apache.spark.sql.sources._
 
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
@@ -321,6 +321,11 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case CreateTableUsing(tableName, userSpecifiedSchema, provider, false, options) =>
         sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
 
+      case DropTable(tableName, isExists, isTemporary) =>
+        if (!isTemporary) {
+          sys.error(s"Table '$tableName' dropped with SQLContext must be TEMPORARY.")
+        }
+        ExecutedCommand(DropTempTable(tableName, isExists, isTemporary)) :: Nil
       case _ => Nil
     }
   }
