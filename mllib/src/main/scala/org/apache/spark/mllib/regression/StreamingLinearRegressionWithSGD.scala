@@ -42,7 +42,7 @@ import org.apache.spark.mllib.linalg.Vector
  *
  */
 @Experimental
-class StreamingLinearRegressionWithSGD (
+class StreamingLinearRegressionWithSGD private[mllib] (
     private var stepSize: Double,
     private var numIterations: Int,
     private var miniBatchFraction: Double,

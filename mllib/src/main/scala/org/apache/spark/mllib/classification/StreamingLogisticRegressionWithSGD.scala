@@ -43,7 +43,7 @@ import org.apache.spark.mllib.regression.StreamingLinearAlgorithm
  *
  */
 @Experimental
-class StreamingLogisticRegressionWithSGD (
+class StreamingLogisticRegressionWithSGD private[mllib] (
     private var stepSize: Double,
     private var numIterations: Int,
     private var miniBatchFraction: Double,
