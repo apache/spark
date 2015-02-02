@@ -239,9 +239,9 @@ private[spark] object AkkaUtils extends Logging {
   }
 
   def protocol(actorSystem: ActorSystem): String = {
-    protocol(Try {
-      actorSystem.settings.config.getBoolean("akka.remote.netty.tcp.enable-ssl")
-    }.getOrElse(false))
+    val akkaConf = actorSystem.settings.config
+    val sslProp = "akka.remote.netty.tcp.enable-ssl"
+    protocol(akkaConf.hasPath(sslProp) && akkaConf.getBoolean(sslProp))
   }
 
   def protocol(ssl: Boolean = false): String = {
