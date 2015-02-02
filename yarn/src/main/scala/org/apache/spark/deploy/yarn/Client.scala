@@ -24,7 +24,7 @@ import java.nio.file.Files
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap, ListBuffer, Map}
-import scala.util.{Try, Success, Failure}
+import scala.util.{Random, Try, Success, Failure}
 
 import com.google.common.base.Objects
 
@@ -69,6 +69,9 @@ private[spark] class Client(
   private val distCacheMgr = new ClientDistributedCacheManager()
   private val isClusterMode = args.isClusterMode
 
+  private var loginFromKeytab = false
+  private var kerberosFileName: String = null
+
 
   def stop(): Unit = yarnClient.stop()
 
@@ -86,6 +89,7 @@ private[spark] class Client(
    * available in the alpha API.
    */
   def submitApplication(): ApplicationId = {
+    setupCredentials()
     yarnClient.init(yarnConf)
     yarnClient.start()
 
@@ -380,7 +384,6 @@ private[spark] class Client(
   private def createContainerLaunchContext(newAppResponse: GetNewApplicationResponse)
     : ContainerLaunchContext = {
     logInfo("Setting up container launch context for our AM")
-
     val appId = newAppResponse.getApplicationId
     val appStagingDir = getAppStagingDir(appId)
     val localResources = prepareLocalResources(appStagingDir)
@@ -547,16 +550,19 @@ private[spark] class Client(
       case Some(principal) =>
         Option(args.keytab) match {
           case Some(keytabPath) =>
-            File principalFile = Files.createTempF
+            // Generate a file name that can be used for the keytab file, that does not conflict
+            // with any user file.
+            val f = new File(keytabPath)
+            kerberosFileName = f.getName + "-" + System.currentTimeMillis()
             val ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytabPath)
             credentials = ugi.getCredentials
+            loginFromKeytab = true
           case None =>
+            throw new SparkException("Keytab must be specified when principal is specified.")
         }
       case None =>
         credentials = UserGroupInformation.getCurrentUser.getCredentials
-
     }
-
   }
 
   /**
