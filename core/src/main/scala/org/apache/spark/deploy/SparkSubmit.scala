@@ -295,12 +295,10 @@ object SparkSubmit {
       if (args.isPython) {
         val mainPyFile = new Path(args.primaryResource).getName
         childArgs += ("--primary-py-file", mainPyFile)
-        val pyFilesNames: String = if (args.pyFiles != null) {
-          args.pyFiles.split(",").map { p => (new Path(p)).getName }.mkString(",")
-        } else {
-          "null"
+        if (args.pyFiles != null) {
+          val pyFilesNames = args.pyFiles.split(",").map(p => (new Path(p)).getName).mkString(",")
+          childArgs += ("--py-files", pyFilesNames)
         }
-        childArgs += ("--py-files", pyFilesNames)
         childArgs += ("--class", "org.apache.spark.deploy.PythonRunner")
       } else {
         if (args.primaryResource != SPARK_INTERNAL) {
