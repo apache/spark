@@ -300,6 +300,7 @@ private[yarn] class YarnAllocator(
       assert(container.getResource.getMemory >= resource.getMemory)
 
       logInfo("Launching container %s for on host %s".format(containerId, executorHostname))
+      executorIdToContainer(executorId) = container      
 
       val containerSet = allocatedHostToContainersMap.getOrElseUpdate(executorHostname,
         new HashSet[ContainerId])
