@@ -26,7 +26,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.graphx._
 
 class EdgeRDDImpl[ED: ClassTag, VD: ClassTag] private[graphx] (
-    override val partitionsRDD: RDD[(PartitionID, EdgePartition[ED, VD])],
+    @transient override val partitionsRDD: RDD[(PartitionID, EdgePartition[ED, VD])],
     val targetStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
   extends EdgeRDD[ED](partitionsRDD.context, List(new OneToOneDependency(partitionsRDD))) {
 
@@ -75,7 +75,7 @@ class EdgeRDDImpl[ED: ClassTag, VD: ClassTag] private[graphx] (
   }
 
   override def isCheckpointed: Boolean = {
-    partitionsRDD.isCheckpointed
+    firstParent[(PartitionID, EdgePartition[ED, VD])].isCheckpointed
   }
 
   override def getCheckpointFile: Option[String] = {
