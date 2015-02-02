@@ -1,7 +1,5 @@
 # Worker class
 
-begin <- proc.time()[3]
-
 # NOTE: We use "stdin" to get the process stdin instead of the command line
 inputConStdin  <- file("stdin", open = "rb")
 
@@ -67,11 +65,6 @@ numPartitions <- SparkR:::readInt(inputCon)
 
 isEmpty <- SparkR:::readInt(inputCon)
 
-metadataEnd <- proc.time()[3]
-dataReadEnd <- metadataEnd
-computeEnd <- dataReadEnd
-writeEnd <- computeEnd
-
 if (isEmpty != 0) {
 
   if (numPartitions == -1) {
@@ -81,15 +74,12 @@ if (isEmpty != 0) {
     } else {
       data <- readLines(inputCon)
     }
-    dataReadEnd <- proc.time()[3]
     output <- do.call(execFunctionName, list(splitIndex, data))
-    computeEnd <- proc.time()[3]
     if (isOutputSerialized) {
       SparkR:::writeRawSerialize(outputCon, output)
     } else {
       SparkR:::writeStrings(outputCon, output)
     }
-    writeEnd <- proc.time()[3]
   } else {
     if (isInputSerialized) {
       # Now read as many characters as described in funcLen
@@ -98,7 +88,6 @@ if (isEmpty != 0) {
       data <- readLines(inputCon)
     }
 
-    dataReadEnd <- proc.time()[3]
     res <- new.env()
 
     # Step 1: hash the data to an environment
@@ -116,8 +105,6 @@ if (isEmpty != 0) {
     }
     invisible(lapply(data, hashTupleToEnvir))
 
-    computeEnd <- proc.time()[3]
-
     # Step 2: write out all of the environment as key-value pairs.
     for (name in ls(res)) {
       SparkR:::writeInt(outputCon, 2L)
@@ -126,7 +113,6 @@ if (isEmpty != 0) {
       length(res[[name]]$data) <- res[[name]]$counter
       SparkR:::writeRawSerialize(outputCon, res[[name]]$data)
     }
-    writeEnd <- proc.time()[3]
   }
 }
 
@@ -141,14 +127,6 @@ unlink(inFileName)
 
 # Restore stdout
 sink()
-
-end <- proc.time()[3]
-
-cat("stats: total ", (end-begin), "\n", file=stderr())
-cat("stats: metadata ", (metadataEnd-begin), "\n", file=stderr())
-cat("stats: input read ", (dataReadEnd-metadataEnd), "\n", file=stderr())
-cat("stats: compute ", (computeEnd-dataReadEnd), "\n", file=stderr())
-cat("stats: output write ", (writeEnd-computeEnd), "\n", file=stderr())
 
 # Finally print the name of the output file
 cat(outputFileName, "\n")
