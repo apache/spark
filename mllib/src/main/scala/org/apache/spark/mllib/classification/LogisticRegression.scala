@@ -77,7 +77,7 @@ class LogisticRegressionModel (
  * NOTE: Labels used in Logistic Regression should be {0, 1}.
  * Using [[LogisticRegressionWithLBFGS]] is recommended over this.
  */
-class LogisticRegressionWithSGD private (
+class LogisticRegressionWithSGD private[mllib] (
     private var stepSize: Double,
     private var numIterations: Int,
     private var regParam: Double,
@@ -99,7 +99,7 @@ class LogisticRegressionWithSGD private (
    */
   def this() = this(1.0, 100, 0.01, 1.0)
 
-  override protected def createModel(weights: Vector, intercept: Double) = {
+  override protected[mllib] def createModel(weights: Vector, intercept: Double) = {
     new LogisticRegressionModel(weights, intercept)
   }
 }
