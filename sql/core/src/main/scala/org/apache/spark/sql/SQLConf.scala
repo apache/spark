@@ -107,7 +107,7 @@ private[sql] class SQLConf extends Serializable {
     getConf(PARQUET_FILTER_PUSHDOWN_ENABLED, "false").toBoolean
 
   /** When true uses Parquet implementation based on data source API */
-  private[spark] def parquetUseDataSourceApi=
+  private[spark] def parquetUseDataSourceApi =
     getConf(PARQUET_USE_DATA_SOURCE_API, "true").toBoolean
 
   /** When true the planner will use the external sort, which may spill to disk. */

@@ -87,7 +87,8 @@ private[hive] trait HiveStrategies {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalOperation(projectList, predicates, relation: MetastoreRelation)
           if relation.tableDesc.getSerdeClassName.contains("Parquet") &&
-             hiveContext.convertMetastoreParquet =>
+             hiveContext.convertMetastoreParquet &&
+             !hiveContext.conf.parquetUseDataSourceApi =>
 
         // Filter out all predicates that only deal with partition keys
         val partitionsKeys = AttributeSet(relation.partitionKeys)

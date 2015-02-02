@@ -181,6 +181,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
           table.getTTable, partitions.map(part => part.getTPartition))(hive)
 
       if (hive.convertMetastoreParquet &&
+          hive.conf.parquetUseDataSourceApi &&
           relation.tableDesc.getSerdeClassName.toLowerCase.contains("parquet")) {
         val metastoreSchema = StructType.fromAttributes(relation.output)
         val paths = if (relation.hiveQlTable.isPartitioned) {
