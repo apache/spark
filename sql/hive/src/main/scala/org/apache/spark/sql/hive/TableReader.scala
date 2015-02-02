@@ -188,7 +188,7 @@ class HadoopTableReader(
         val hconf = broadcastedHiveConf.value.value
         val deserializer = localDeserializer.newInstance()
         deserializer.initialize(hconf, partProps)
-        //get the table deserializer 
+        // get the table deserializer
         val tableSerDe = tableDesc.getDeserializerClass.newInstance()
         tableSerDe.initialize(hconf, tableDesc.getProperties)
 
@@ -280,7 +280,7 @@ private[hive] object HadoopTableReader extends HiveInspectors {
 
     val soi = convertdeserializer match {
       case Some(convert) =>
-        //check need to convert
+        // check need to convert
         if (deserializer.getObjectInspector.equals(convert.getObjectInspector)) {
           deserializer.getObjectInspector().asInstanceOf[StructObjectInspector]
         }
@@ -345,7 +345,7 @@ private[hive] object HadoopTableReader extends HiveInspectors {
           if (deserializer.getObjectInspector.equals(convert.getObjectInspector)) {
             deserializer.deserialize(value)
           }
-          //If partition schema does not match table schema, update the row to match  
+          // If partition schema does not match table schema, update the row to match
           else {
             partTblObjectInspectorConverter.convert(deserializer.deserialize(value))
           }
