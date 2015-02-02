@@ -24,8 +24,9 @@ import org.apache.spark.{SparkConf, SparkContext}
 
 
 object TestHbase
-  extends TestHbaseContext(
-    new SparkContext("local[2]", "TestSQLContext", new SparkConf(true))) {
+  extends HBaseSQLContext(
+    new SparkContext("local[2]", "TestSQLContext", new SparkConf(true)
+      .set("spark.hadoop.hbase.zookeeper.quorum", "localhost"))) {
 
   @transient val testUtil: HBaseTestingUtility =
     new HBaseTestingUtility(sparkContext.hadoopConfiguration)
@@ -43,13 +44,4 @@ object TestHbase
     + s"${sparkContext.hadoopConfiguration.get("hbase.zookeeper.property.clientPort")}")
 
   @transient lazy val hbaseAdmin: HBaseAdmin = new HBaseAdmin(sparkContext.hadoopConfiguration)
-}
-
-/**
- * A locally running test instance of Spark's Hbase execution engine.
- * A placeholder for future enhancements
- *
- */
-class TestHbaseContext(sc: SparkContext) extends HBaseSQLContext(sc) {
-  System.setProperty("spark.hadoop.hbase.zookeeper.quorum", "localhost")
 }
