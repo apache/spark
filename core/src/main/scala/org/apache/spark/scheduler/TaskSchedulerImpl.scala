@@ -490,6 +490,8 @@ private[spark] class TaskSchedulerImpl(
   }
 
   override def applicationId(): String = backend.applicationId()
+  
+  override def applicationAttemptId() : String = backend.applicationAttemptId()
 
 }
 

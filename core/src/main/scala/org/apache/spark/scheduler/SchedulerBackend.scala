@@ -41,4 +41,11 @@ private[spark] trait SchedulerBackend {
    */
   def applicationId(): String = appId
 
+  /**
+   * Get an application ID associated with the job.
+   *
+   * @return An application attempt id
+   */
+  def applicationAttemptId(): String = ""
+
 }

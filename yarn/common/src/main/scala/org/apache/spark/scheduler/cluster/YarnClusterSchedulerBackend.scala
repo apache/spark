@@ -46,5 +46,10 @@ private[spark] class YarnClusterSchedulerBackend(
       logError("Application ID is not set.")
       super.applicationId
     }
-
+  
+  override def applicationAttemptId(): String =
+    sc.getConf.getOption("spark.yarn.app.attemptid").getOrElse {
+      logError("Application attempt ID is not set.")
+      super.applicationAttemptId
+    }
 }
