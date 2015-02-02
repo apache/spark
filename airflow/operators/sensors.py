@@ -15,6 +15,18 @@ from snakebite.client import HAClient, Namenode
 
 
 class BaseSensorOperator(BaseOperator):
+    '''
+    Sensor operators are derived from this class an inherit these attributes.
+
+    Sensor operators keep executing at a time interval and succeed when
+        a criteria is met and fail if and when they time out.
+
+    :param poke_interval: Time in seconds that the job should wait in
+        between each tries
+    :type poke_interval: int
+    :param timeout: Time, in seconds before the task times out and fails.
+    :type timeout: int
+    '''
 
     @apply_defaults
     def __init__(
@@ -49,6 +61,11 @@ class SqlSensor(BaseSensorOperator):
     """
     Runs a sql statement until a criteria is met. It will keep trying until
     sql returns no row, or if the first cell in (0, '0', '').
+
+    :param conn_id: The connection to run the sensor agains
+    :type conn_id: string
+    :param sql: The sql to run. To pass, it needs to return at least one cell
+        that contains a non-zero / empty string value.
     """
     template_fields = ('sql',)
     template_ext = ('.hql', '.sql',)
@@ -89,6 +106,13 @@ class SqlSensor(BaseSensorOperator):
 class ExternalTaskSensor(BaseSensorOperator):
     """
     Waits for a task to complete in a different DAG
+
+    :param external_dag_id: The dag_id that contains the task you want to
+        wait for
+    :type external_dag_id: string
+    :param external_task_id: The task_id that contains the task you want to
+        wait for
+    :type external_task_id: string
     """
     template_fields = ('execution_date',)
     __mapper_args__ = {
@@ -123,7 +147,16 @@ class ExternalTaskSensor(BaseSensorOperator):
 
 class HivePartitionSensor(BaseSensorOperator):
     """
-    Waits for the apparition of a partition in Hive
+    Waits for a partition to show up in Hive
+
+    :param table: The name of the table to wait for, supports the dot
+        notation (my_database.my_table)
+    :type table: string
+    :param partition: The partition clause to wait for. This is passed as
+        is to the Metastor Thrift client "get_partitions_by_filter" method,
+        and apparently supports SQL like notation as in `ds='2015-01-01'
+        AND type='value'` and > < sings as in "ds>=2015-01-01"
+    :type partition: string
     """
     template_fields = ('table', 'partition',)
     __mapper_args__ = {
