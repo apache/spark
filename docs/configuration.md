@@ -896,6 +896,47 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.io.mode</code></td>
+  <td>NIO</td>
+  <td>
+    (Netty only) IO mode for channel implementation. If you set <code>NIO</code>, pure java socket is used for the channel.
+    Else if you set <code>EPOLL</code>, higher performance native socket is used through JNI.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.io.backLog</code></td>
+  <td>-1</td>
+  <td>
+    (Netty only) Maximum length of the queue incomming connections.
+    If this value &lt;= 0, the default length depending on your platform is used.
+    <code>200</code> is set for Windows, and <code>128</code> is set for others.
+    Especially, your platform has <code>/proc/sys/net/core/somaxconn</code>,
+    the value recorded in this file is preferred.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.io.receiveBuffer</code></td>
+  <td>-1</td>
+  <td>
+    (Netty only) Receive buffer size for transportation.
+    If this value &lt;= 0, the default value depending on your platform and
+    IO mode represented by <code>spark.shuffle.io.mode</code> is used.
+    The optimal size for receive buffer should be
+    <code>latency * network_bandwidth</code>. Assuming latency = 1ms, network_bandwidth = 10Gbps,
+    buffer size should be ~ 1.25MB.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.io.sendBuffer</code></td>
+  <td>-1</td>
+  <td>
+    (Netty only) Send buffer size for transportation.
+    If this value &lt;= 0, the default value is set as with <code>spark.shuffle.io.receiveBuffer</code>.
+    As well as receive buffer, the optimal size for send buffer should be
+    considered latency and network bandwidth.
+  </td>
+</tr>
+<tr>
   <td><code>spark.shuffle.io.preferDirectBufs</code></td>
   <td>true</td>
   <td>
