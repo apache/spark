@@ -1,6 +1,6 @@
 
 Airflow tutorial
-=============
+================
 
 This tutorial walks through some of the fundamental concepts, objects
 and their usage.

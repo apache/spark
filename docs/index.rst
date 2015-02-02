@@ -69,7 +69,7 @@ Content
 
     installation
     ui
-    code
-    cli
-    profiling
     tutorial
+    profiling
+    cli
+    code

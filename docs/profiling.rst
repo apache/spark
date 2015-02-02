@@ -13,3 +13,4 @@ The adhoc query UI allows for simple SQL interaction with the database
 connections registered in Airflow.
 
 .. image:: img/adhoc.png
+
