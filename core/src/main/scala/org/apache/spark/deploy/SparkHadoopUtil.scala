@@ -141,7 +141,7 @@ class SparkHadoopUtil extends Logging {
       val baselineBytesRead = f()
       Some(() => f() - baselineBytesRead)
     } catch {
-      case e: NoSuchMethodException => {
+      case e @ (_: NoSuchMethodException | _: ClassNotFoundException) => {
         logDebug("Couldn't find method for retrieving thread-level FileSystem input data", e)
         None
       }
@@ -163,7 +163,7 @@ class SparkHadoopUtil extends Logging {
       val baselineBytesWritten = f()
       Some(() => f() - baselineBytesWritten)
     } catch {
-      case e: NoSuchMethodException => {
+      case e @ (_: NoSuchMethodException | _: ClassNotFoundException) => {
         logDebug("Couldn't find method for retrieving thread-level FileSystem output data", e)
         None
       }
