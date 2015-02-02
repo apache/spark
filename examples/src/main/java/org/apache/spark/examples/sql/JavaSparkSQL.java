@@ -75,7 +75,7 @@ public class JavaSparkSQL {
 
     // Apply a schema to an RDD of Java Beans and register it as a table.
     DataFrame schemaPeople = sqlCtx.applySchema(people, Person.class);
-    schemaPeople.registerTempTable("people");
+    schemaPeople.registerTempTable("people", false);
 
     // SQL can be run over RDDs that have been registered as tables.
     DataFrame teenagers = sqlCtx.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19");
@@ -102,7 +102,7 @@ public class JavaSparkSQL {
     DataFrame parquetFile = sqlCtx.parquetFile("people.parquet");
 
     //Parquet files can also be registered as tables and then used in SQL statements.
-    parquetFile.registerTempTable("parquetFile");
+    parquetFile.registerTempTable("parquetFile", false);
     DataFrame teenagers2 =
       sqlCtx.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19");
     teenagerNames = teenagers2.toJavaRDD().map(new Function<Row, String>() {
@@ -131,7 +131,7 @@ public class JavaSparkSQL {
     //  |-- name: StringType
 
     // Register this DataFrame as a table.
-    peopleFromJsonFile.registerTempTable("people");
+    peopleFromJsonFile.registerTempTable("people", false);
 
     // SQL statements can be run by using the sql methods provided by sqlCtx.
     DataFrame teenagers3 = sqlCtx.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19");
@@ -162,7 +162,7 @@ public class JavaSparkSQL {
     //  |    |-- state: StringType
     //  |-- name: StringType
 
-    peopleFromJsonRDD.registerTempTable("people2");
+    peopleFromJsonRDD.registerTempTable("people2", false);
 
     DataFrame peopleWithCity = sqlCtx.sql("SELECT name, address.city FROM people2");
     List<String> nameAndCity = peopleWithCity.toJavaRDD().map(new Function<Row, String>() {

@@ -54,7 +54,7 @@ public class JavaLogisticRegressionSuite implements Serializable {
   public void logisticRegression() {
     LogisticRegression lr = new LogisticRegression();
     LogisticRegressionModel model = lr.fit(dataset);
-    model.transform(dataset).registerTempTable("prediction");
+    model.transform(dataset).registerTempTable("prediction", true);
     DataFrame predictions = jsql.sql("SELECT label, score, prediction FROM prediction");
     predictions.collectAsList();
   }
@@ -66,7 +66,7 @@ public class JavaLogisticRegressionSuite implements Serializable {
       .setRegParam(1.0);
     LogisticRegressionModel model = lr.fit(dataset);
     model.transform(dataset, model.threshold().w(0.8)) // overwrite threshold
-      .registerTempTable("prediction");
+      .registerTempTable("prediction", true);
     DataFrame predictions = jsql.sql("SELECT label, score, prediction FROM prediction");
     predictions.collectAsList();
   }

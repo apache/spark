@@ -1055,4 +1055,26 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     rdd.registerTempTable("distinctData")
     checkAnswer(sql("SELECT COUNT(DISTINCT key,value) FROM distinctData"), Row(2))
   }
+
+  test("SPARK-3298 registerTempTable add allowExisting flag, allowExisting = false ") {
+    val data = TestData(1,"val_1") :: TestData(2,"val_2") :: Nil
+    val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
+    rdd.registerTempTable("tableABC")
+    val ex = intercept[Exception] {
+      rdd.registerTempTable("tableABC", false)
+    }
+    assert(ex.getMessage.contains("tableABC already exists"))
+  }
+
+  test("SPARK-3298 registerTempTable add allowExisting flag, allowExisting = true ") {
+    val data = TestData(1,"val_1") :: TestData(2,"val_2") :: Nil
+    val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
+    rdd.registerTempTable("tableDEF", true)
+
+    val newData = TestData(1,"data_1") :: TestData(2,"data_2") :: TestData(3,"data_3") :: Nil
+    val newRdd = sparkContext.parallelize((0 to 2).map(i => newData(i)))
+    newRdd.registerTempTable("tableDEF", true)
+
+    checkAnswer(sql("SELECT count(*) FROM tableDEF"), Row(3))
+  }
 }

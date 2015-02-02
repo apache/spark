@@ -1469,7 +1469,7 @@ class SQLContext(object):
         df = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), schema.json())
         return DataFrame(df, self)
 
-    def registerRDDAsTable(self, rdd, tableName):
+    def registerRDDAsTable(self, rdd, tableName, allowExisting=False):
         """Registers the given RDD as a temporary table in the catalog.
 
         Temporary tables exist only during the lifetime of this instance of
@@ -1480,7 +1480,7 @@ class SQLContext(object):
         """
         if (rdd.__class__ is DataFrame):
             df = rdd._jdf
-            self._ssql_ctx.registerRDDAsTable(df, tableName)
+            self._ssql_ctx.registerRDDAsTable(df, tableName, allowExisting)
         else:
             raise ValueError("Can only register DataFrame as table")
 
@@ -1894,7 +1894,7 @@ class DataFrame(object):
         """
         self._jdf.saveAsParquetFile(path)
 
-    def registerTempTable(self, name):
+    def registerTempTable(self, name, allowExisting=False):
         """Registers this RDD as a temporary table using the given name.
 
         The lifetime of this temporary table is tied to the L{SQLContext}
@@ -1906,12 +1906,12 @@ class DataFrame(object):
         >>> sorted(df.collect()) == sorted(df2.collect())
         True
         """
-        self._jdf.registerTempTable(name)
+        self._jdf.registerTempTable(name, allowExisting)
 
-    def registerAsTable(self, name):
+    def registerAsTable(self, name, allowExisting=False):
         """DEPRECATED: use registerTempTable() instead"""
         warnings.warn("Use registerTempTable instead of registerAsTable.", DeprecationWarning)
-        self.registerTempTable(name)
+        self.registerTempTable(name, allowExisting)
 
     def insertInto(self, tableName, overwrite=False):
         """Inserts the contents of this DataFrame into the specified table.

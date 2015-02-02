@@ -163,7 +163,7 @@ private[sql] trait DataFrameSpecificApi {
 
   def toJSON: RDD[String]
 
-  def registerTempTable(tableName: String): Unit
+  def registerTempTable(tableName: String, allowExisting: Boolean = false): Unit
 
   def saveAsParquetFile(path: String): Unit
 
