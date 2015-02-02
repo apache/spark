@@ -312,7 +312,8 @@ class HadoopRDD[K, V](
   override def persist(storageLevel: StorageLevel): this.type = {
     if (storageLevel.deserialized) {
       throw new SparkException("Can't cache HadoopRDDs as deserialized objects because Hadoop's" +
-        " RecordReader reuses the same Writable object for all records.")
+        " RecordReader reuses the same Writable object for all records. Use a map transformation" +
+        " to make copies of the records.")
     }
     super.persist(storageLevel)
   }
