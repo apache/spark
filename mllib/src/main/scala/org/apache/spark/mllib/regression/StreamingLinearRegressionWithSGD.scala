@@ -47,8 +47,8 @@ class StreamingLinearRegressionWithSGD (
     private var numIterations: Int,
     private var miniBatchFraction: Double,
     private var initialWeights: Vector)
-  extends StreamingLinearAlgorithm[
-    LinearRegressionModel, LinearRegressionWithSGD] with Serializable {
+  extends StreamingLinearAlgorithm[LinearRegressionModel, LinearRegressionWithSGD]
+  with Serializable {
 
   /**
    * Construct a StreamingLinearRegression object with default parameters:
