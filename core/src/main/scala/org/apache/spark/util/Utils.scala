@@ -282,7 +282,9 @@ private[spark] object Utils extends Logging {
         if (dir.exists() || !dir.mkdirs()) {
           dir = null
         } else {
-          if (!chmod700(dir)) {
+          // Restrict file permissions via chmod if available.
+          // For Windows this step is ignored.
+          if (!isWindows && !chmod700(dir)) {
             dir.delete()
             dir = null
           }
