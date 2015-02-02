@@ -17,8 +17,9 @@
 
 package org.apache.spark
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
+
+import org.apache.spark.util.Utils
 
 /**
  * Configuration for a Spark application. Used to set various Spark parameters as key-value pairs.
@@ -49,9 +50,8 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
   if (loadDefaults) {
     // Load any spark.* system properties
-    val propNames = System.getProperties.stringPropertyNames().asScala
-    for (k <- propNames if k.startsWith("spark.")) {
-      settings(k) = System.getProperty(k)
+    for ((key, value) <- Utils.getSystemProperties if key.startsWith("spark.")) {
+      settings(key) = value
     }
   }
 
