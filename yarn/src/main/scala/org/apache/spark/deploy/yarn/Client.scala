@@ -473,7 +473,7 @@ private[spark] class Client(
       } else {
         Nil
       }
-    val primaryResource =
+    val primaryPyFile =
       if (args.primaryPyFile != null) {
         Seq("--primary-py-file", args.primaryPyFile)
       } else {
@@ -498,7 +498,7 @@ private[spark] class Client(
       Seq("--arg", YarnSparkHadoopUtil.escapeForShell(arg))
     }
     val amArgs =
-      Seq(amClass) ++ userClass ++ userJar ++ primaryResource ++ pyFiles ++ userArgs ++
+      Seq(amClass) ++ userClass ++ userJar ++ primaryPyFile ++ pyFiles ++ userArgs ++
         Seq(
           "--executor-memory", args.executorMemory.toString + "m",
           "--executor-cores", args.executorCores.toString,
