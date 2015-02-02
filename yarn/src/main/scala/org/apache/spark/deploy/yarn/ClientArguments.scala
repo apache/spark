@@ -75,14 +75,23 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
       .orElse(sparkConf.getOption("spark.yarn.dist.archives").map(p => Utils.resolveURIs(p)))
       .orElse(sys.env.get("SPARK_YARN_DIST_ARCHIVES"))
       .orNull
-    // If dynamic allocation is enabled, start at the max number of executors
+    // If dynamic allocation is enabled, start at the configured initial number of executors.
+    // Default to minExecutors if no initialExecutors is set.
     if (isDynamicAllocationEnabled) {
+      val minExecutorsConf = "spark.dynamicAllocation.minExecutors"
+      val initialExecutorsConf = "spark.dynamicAllocation.initialExecutors"
       val maxExecutorsConf = "spark.dynamicAllocation.maxExecutors"
-      if (!sparkConf.contains(maxExecutorsConf)) {
+      val minNumExecutors = sparkConf.getInt(minExecutorsConf, 0)
+      val initialNumExecutors = sparkConf.getInt(initialExecutorsConf, minNumExecutors)
+      val maxNumExecutors = sparkConf.getInt(maxExecutorsConf, Integer.MAX_VALUE)
+
+      // If defined, initial executors must be between min and max
+      if (initialNumExecutors < minNumExecutors || initialNumExecutors > maxNumExecutors) {
         throw new IllegalArgumentException(
-          s"$maxExecutorsConf must be set if dynamic allocation is enabled!")
+          s"$initialExecutorsConf must be between $minExecutorsConf and $maxNumExecutors!")
       }
-      numExecutors = sparkConf.get(maxExecutorsConf).toInt
+
+      numExecutors = initialNumExecutors
     }
   }
 
