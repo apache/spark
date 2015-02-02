@@ -1,3 +1,3 @@
 from models import DAG
 
-__version__ = "0.2.3.8"
+__version__ = "0.2.3.9"
