@@ -668,7 +668,7 @@ class Airflow(BaseView):
         dag = dagbag.dags[dag_id]
         task = dag.get_task(task_id)
         task = copy.copy(task)
-        task.templatify()
+        task.resolve_template_files()
 
         attributes = []
         for attr_name in dir(task):

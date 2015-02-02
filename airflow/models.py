@@ -114,6 +114,7 @@ class DagBag(object):
                 if type(dag) == DAG:
                     dag.full_filepath = filepath
                     self.dags[dag.dag_id] = dag
+                    dag.resolve_template_files()
                     logging.info('Loaded DAG {dag}'.format(**locals()))
 
             self.file_last_changed[filepath] = dttm
@@ -243,8 +244,6 @@ class DagPickle(Base):
 
     def __init__(self, dag):
         self.dag_id = dag.dag_id
-        for t in dag.tasks:
-            t.templatify()
         if hasattr(dag, 'template_env'):
             dag.template_env = None
         self.pickle = dag
@@ -863,14 +862,23 @@ class BaseOperator(Base):
             template = env.from_string(content)
         return template
 
-    def templatify(self):
+    def prepare_template(self):
+        '''
+        Hook that is trigerred after the templated fields get replaced
+        by their content. If you need your operator to alter the
+        content of the file before the template is rendered,
+        it should override this method to do so.
+        '''
+        pass
+
+    def resolve_template_files(self):
         # Getting the content of files for template_field / template_ext
         for attr in self.template_fields:
-            self.get_template(attr)
             content = getattr(self, attr)
             if any([content.endswith(ext) for ext in self.template_ext]):
                 env = self.dag.get_template_env()
                 setattr(self, attr, env.loader.get_source(env, content)[0])
+        self.prepare_template()
 
     @property
     def upstream_list(self):
@@ -1114,6 +1122,10 @@ class DAG(Base):
         session.commit()
         session.close()
         return execution_date
+
+    def resolve_template_files(self):
+        for t in self.tasks:
+            t.resolve_template_files()
 
     def crawl_for_tasks(objects):
         """

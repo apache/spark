@@ -32,17 +32,21 @@ class HiveOperator(BaseOperator):
             hive_conn_id=conf.get('hooks', 'HIVE_DEFAULT_CONN_ID'),
             hiveconf_jinja_translate=False,
             *args, **kwargs):
+
         super(HiveOperator, self).__init__(*args, **kwargs)
-
-        if hiveconf_jinja_translate:
-            hql = re.sub("(\$\{([ a-zA-Z0-9_]*)\})", "{{ \g<2> }}", hql)
-
+        self.hiveconf_jinja_translate = hiveconf_jinja_translate
         self.hive_conn_id = hive_conn_id
         self.hook = HiveHook(hive_conn_id=hive_conn_id)
         self.hql = hql
 
+    def prepare_template(self):
+        if False and self.hiveconf_jinja_translate:
+            self.hql = re.sub(
+                "(\$\{([ a-zA-Z0-9_]*)\})", "{{ \g<2> }}", self.hql)
+
     def execute(self, execution_date):
         logging.info('Executing: ' + self.hql)
+        print self.hql
         self.hook.run_cli(hql=self.hql)
 
     def on_kill(self):
