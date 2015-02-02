@@ -22,79 +22,52 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class FPGrowthSuite extends FunSuite with MLlibTestSparkContext {
 
-  test("test FPGrowth algorithm")
-  {
-    val arr = FPGrowthSuite.createFIMDataSet()
-
-    assert(arr.length == 6)
-    val dataSet = sc.parallelize(arr)
-    assert(dataSet.count() == 6)
-    val rdd = dataSet.map(line => line.split(" "))
-    assert(rdd.count() == 6)
-
-    val algorithm = new FPGrowth()
-    algorithm.setMinSupport(0.9)
-    assert(algorithm.run(rdd).frequentPattern.length == 0)
-    algorithm.setMinSupport(0.8)
-    assert(algorithm.run(rdd).frequentPattern.length == 1)
-    algorithm.setMinSupport(0.7)
-    assert(algorithm.run(rdd).frequentPattern.length == 1)
-    algorithm.setMinSupport(0.6)
-    assert(algorithm.run(rdd).frequentPattern.length == 2)
-    algorithm.setMinSupport(0.5)
-    assert(algorithm.run(rdd).frequentPattern.length == 18)
-    algorithm.setMinSupport(0.4)
-    assert(algorithm.run(rdd).frequentPattern.length == 18)
-    algorithm.setMinSupport(0.3)
-    assert(algorithm.run(rdd).frequentPattern.length == 54)
-    algorithm.setMinSupport(0.2)
-    assert(algorithm.run(rdd).frequentPattern.length == 54)
-    algorithm.setMinSupport(0.1)
-    assert(algorithm.run(rdd).frequentPattern.length == 625)
-  }
-}
-
-object FPGrowthSuite
-{
-  /**
-   * Create test data set
-   */
-  def createFIMDataSet():Array[String] =
-  {
-    val arr = Array[String](
+  test("FP-Growth") {
+    val transactions = Seq(
       "r z h k p",
       "z y x w v u t s",
       "s x o n r",
       "x z y m t s q e",
       "z",
       "x z y r q t p")
-    arr
-  }
+      .map(_.split(" "))
+    val rdd = sc.parallelize(transactions, 2).cache()
 
-  def printTree(tree: FPTree) = printTreeRoot(tree.root, 0)
+    val fpg = new FPGrowth()
 
-  private def printTreeRoot(tree: FPTreeNode, level: Int): Unit = {
-    printNode(tree, level)
-    if (tree.isLeaf) return
-    val it = tree.children.iterator
-    while (it.hasNext) {
-      val child = it.next()
-      printTreeRoot(child._2, level + 1)
+    val model6 = fpg
+      .setMinSupport(0.9)
+      .setNumPartitions(1)
+      .run(rdd)
+    assert(model6.freqItemsets.count() === 0)
+
+    val model3 = fpg
+      .setMinSupport(0.5)
+      .setNumPartitions(2)
+      .run(rdd)
+    val freqItemsets3 = model3.freqItemsets.collect().map { case (items, count) =>
+      (items.toSet, count)
     }
-  }
+    val expected = Set(
+      (Set("s"), 3L), (Set("z"), 5L), (Set("x"), 4L), (Set("t"), 3L), (Set("y"), 3L),
+      (Set("r"), 3L),
+      (Set("x", "z"), 3L), (Set("t", "y"), 3L), (Set("t", "x"), 3L), (Set("s", "x"), 3L),
+      (Set("y", "x"), 3L), (Set("y", "z"), 3L), (Set("t", "z"), 3L),
+      (Set("y", "x", "z"), 3L), (Set("t", "x", "z"), 3L), (Set("t", "y", "z"), 3L),
+      (Set("t", "y", "x"), 3L),
+      (Set("t", "y", "x", "z"), 3L))
+    assert(freqItemsets3.toSet === expected)
 
-  private def printNode(node: FPTreeNode, level: Int) = {
-    for (i <- 0 to level) {
-      print("\t")
-    }
-    println(node.item + " " + node.count)
-  }
+    val model2 = fpg
+      .setMinSupport(0.3)
+      .setNumPartitions(4)
+      .run(rdd)
+    assert(model2.freqItemsets.count() === 54)
 
-  def printFrequentPattern(pattern: Array[(Array[String], Long)]) = {
-    for (a <- pattern) {
-      a._1.foreach(x => print(x + " "))
-      print(a._2)
-      println
-    }
+    val model1 = fpg
+      .setMinSupport(0.1)
+      .setNumPartitions(8)
+      .run(rdd)
+    assert(model1.freqItemsets.count() === 625)
   }
 }

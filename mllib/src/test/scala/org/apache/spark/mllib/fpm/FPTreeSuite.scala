@@ -17,17 +17,19 @@
 
 package org.apache.spark.mllib.fpm
 
-import org.apache.spark.mllib.util.MLlibTestSparkContext
+import scala.language.existentials
+
 import org.scalatest.FunSuite
+
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class FPTreeSuite extends FunSuite with MLlibTestSparkContext {
 
-  test("add transaction to tree") {
-    val tree = new FPTree
-    tree.add(Array[String]("a", "b", "c"))
-    tree.add(Array[String]("a", "b", "y"))
-    tree.add(Array[String]("b"))
-    FPGrowthSuite.printTree(tree)
+  test("add transaction") {
+    val tree = new FPTree[String]
+      .add(Seq("a", "b", "c"))
+      .add(Seq("a", "b", "y"))
+      .add(Seq("b"))
 
     assert(tree.root.children.size == 2)
     assert(tree.root.children.contains("a"))
@@ -52,24 +54,21 @@ class FPTreeSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("merge tree") {
-    val tree1 = new FPTree
-    tree1.add(Array[String]("a", "b", "c"))
-    tree1.add(Array[String]("a", "b", "y"))
-    tree1.add(Array[String]("b"))
-    FPGrowthSuite.printTree(tree1)
+    val tree1 = new FPTree[String]
+      .add(Seq("a", "b", "c"))
+      .add(Seq("a", "b", "y"))
+      .add(Seq("b"))
 
-    val tree2 = new FPTree
-    tree2.add(Array[String]("a", "b"))
-    tree2.add(Array[String]("a", "b", "c"))
-    tree2.add(Array[String]("a", "b", "c", "d"))
-    tree2.add(Array[String]("a", "x"))
-    tree2.add(Array[String]("a", "x", "y"))
-    tree2.add(Array[String]("c", "n"))
-    tree2.add(Array[String]("c", "m"))
-    FPGrowthSuite.printTree(tree2)
+    val tree2 = new FPTree[String]
+      .add(Seq("a", "b"))
+      .add(Seq("a", "b", "c"))
+      .add(Seq("a", "b", "c", "d"))
+      .add(Seq("a", "x"))
+      .add(Seq("a", "x", "y"))
+      .add(Seq("c", "n"))
+      .add(Seq("c", "m"))
 
     val tree3 = tree1.merge(tree2)
-    FPGrowthSuite.printTree(tree3)
 
     assert(tree3.root.children.size == 3)
     assert(tree3.root.children("a").count == 7)
@@ -95,51 +94,22 @@ class FPTreeSuite extends FunSuite with MLlibTestSparkContext {
     assert(child5.children("m").count == 1)
   }
 
-  /*
-  test("expand tree") {
-    val tree = new FPTree
-    tree.add(Array[String]("a", "b", "c"))
-    tree.add(Array[String]("a", "b", "y"))
-    tree.add(Array[String]("a", "b"))
-    tree.add(Array[String]("a"))
-    tree.add(Array[String]("b"))
-    tree.add(Array[String]("b", "n"))
+  test("extract freq itemsets") {
+    val tree = new FPTree[String]
+      .add(Seq("a", "b", "c"))
+      .add(Seq("a", "b", "y"))
+      .add(Seq("a", "b"))
+      .add(Seq("a"))
+      .add(Seq("b"))
+      .add(Seq("b", "n"))
 
-    FPGrowthSuite.printTree(tree)
-    val buffer = tree.expandFPTree(tree)
-    for (a <- buffer) {
-      a.foreach(x => print(x + " "))
-      println
-    }
-  }
-  */
-
-  test("mine tree") {
-    val tree = new FPTree
-    tree.add(Array[String]("a", "b", "c"))
-    tree.add(Array[String]("a", "b", "y"))
-    tree.add(Array[String]("a", "b"))
-    tree.add(Array[String]("a"))
-    tree.add(Array[String]("b"))
-    tree.add(Array[String]("b", "n"))
-
-    FPGrowthSuite.printTree(tree)
-    val buffer = tree.mine(3.0, "t")
-
-    for (a <- buffer) {
-      a._1.foreach(x => print(x + " "))
-      print(a._2)
-      println
-    }
-    val s1 = buffer(0)._1
-    val s2 = buffer(1)._1
-    val s3 = buffer(2)._1
-    assert(s1(1).equals("a"))
-    assert(s2(1).equals("b"))
-    assert(s3(1).equals("b"))
-    assert(s3(2).equals("a"))
-    assert(buffer(0)._2 == 4)
-    assert(buffer(1)._2 == 5)
-    assert(buffer(2)._2 == 3)
+    val freqItemsets = tree.extract(3L).map { case (items, count) =>
+      (items.toSet, count)
+    }.toSet
+    val expected = Set(
+      (Set("a"), 4L),
+      (Set("b"), 5L),
+      (Set("a", "b"), 3L))
+    assert(freqItemsets === expected)
   }
 }
