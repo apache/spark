@@ -99,7 +99,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
   val caseSensitive: Boolean = false
 
-  def createDataSourceTable(
+  override def createDataSourceTable(
       tableName: String,
       userSpecifiedSchema: Option[StructType],
       provider: String,

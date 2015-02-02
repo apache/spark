@@ -97,7 +97,11 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
       ~ (tableCols).? ~ (USING ~> className) ~ (OPTIONS ~> options) ^^ {
       case temp ~ tableName ~ columns ~ provider ~ opts =>
         val userSpecifiedSchema = columns.flatMap(fields => Some(StructType(fields)))
-        CreateTableUsing(tableName, userSpecifiedSchema, provider, temp.isDefined, opts)
+        if (temp.isDefined) {
+          CreateTempTableUsing(tableName, userSpecifiedSchema, provider, opts)
+        } else {
+          CreateTableUsing(tableName, userSpecifiedSchema, provider, opts)
+        }
     }
   )
 
@@ -214,8 +218,13 @@ private[sql] case class CreateTableUsing(
     tableName: String,
     userSpecifiedSchema: Option[StructType],
     provider: String,
-    temporary: Boolean,
-    options: Map[String, String]) extends Command
+    options: Map[String, String]) extends RunnableCommand {
+
+  def run(sqlContext: SQLContext) = {
+    sqlContext.catalog.createDataSourceTable(tableName, userSpecifiedSchema, provider, options)
+    Seq.empty
+  }
+}
 
 private [sql] case class CreateTempTableUsing(
     tableName: String,

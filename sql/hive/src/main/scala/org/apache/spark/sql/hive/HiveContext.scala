@@ -330,8 +330,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     override def strategies: Seq[Strategy] = experimental.extraStrategies ++ Seq(
       DataSourceStrategy,
       HiveCommandStrategy(self),
-      HiveDDLStrategy,
-      DDLStrategy,
       TakeOrdered,
       ParquetOperations,
       InMemoryScans,

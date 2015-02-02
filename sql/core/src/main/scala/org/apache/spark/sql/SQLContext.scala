@@ -387,7 +387,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
     def strategies: Seq[Strategy] =
       experimental.extraStrategies ++ (
       DataSourceStrategy ::
-      DDLStrategy ::
       TakeOrdered ::
       HashAggregation ::
       LeftSemiJoin ::

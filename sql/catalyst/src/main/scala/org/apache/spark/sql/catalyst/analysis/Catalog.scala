@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery}
+import org.apache.spark.sql.types.StructType
 
 /**
  * An interface for looking up relations by name.  Used by an [[Analyzer]].
@@ -39,6 +40,12 @@ trait Catalog {
   def unregisterTable(tableIdentifier: Seq[String]): Unit
 
   def unregisterAllTables(): Unit
+
+  def createDataSourceTable(
+      tableName: String,
+      userSpecifiedSchema: Option[StructType],
+      provider: String,
+      options: Map[String, String]): Unit
 
   protected def processTableIdentifier(tableIdentifier: Seq[String]): Seq[String] = {
     if (!caseSensitive) {
@@ -79,6 +86,14 @@ class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
 
   override def unregisterAllTables() = {
     tables.clear()
+  }
+
+  override def createDataSourceTable(
+      tableName: String,
+      userSpecifiedSchema: Option[StructType],
+      provider: String,
+      options: Map[String, String]) = {
+    sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
   }
 
   override def tableExists(tableIdentifier: Seq[String]): Boolean = {
@@ -177,6 +192,14 @@ object EmptyCatalog extends Catalog {
   }
 
   def unregisterTable(tableIdentifier: Seq[String]): Unit = {
+    throw new UnsupportedOperationException
+  }
+
+  def createDataSourceTable(
+      tableName: String,
+      userSpecifiedSchema: Option[StructType],
+      provider: String,
+      options: Map[String, String]): Unit  = {
     throw new UnsupportedOperationException
   }
 
