@@ -286,8 +286,8 @@ private[hive] object HadoopTableReader extends HiveInspectors {
         }
         else {
           ObjectInspectorConverters.getConvertedOI(
-            deserializer.getObjectInspector(), convert.getObjectInspector(), true)
-            .asInstanceOf[StructObjectInspector]
+            deserializer.getObjectInspector(), convert.getObjectInspector(),
+            new java.lang.Boolean(true)).asInstanceOf[StructObjectInspector]
         }
       case None =>
         deserializer.getObjectInspector().asInstanceOf[StructObjectInspector]
