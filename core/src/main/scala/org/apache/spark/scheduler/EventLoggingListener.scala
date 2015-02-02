@@ -47,6 +47,7 @@ import org.apache.spark.util.{JsonProtocol, Utils}
  */
 private[spark] class EventLoggingListener(
     appId: String,
+    appAttemptId : String,
     logBaseDir: URI,
     sparkConf: SparkConf,
     hadoopConf: Configuration)
@@ -55,7 +56,7 @@ private[spark] class EventLoggingListener(
   import EventLoggingListener._
 
   def this(appId: String, logBaseDir: URI, sparkConf: SparkConf) =
-    this(appId, logBaseDir, sparkConf, SparkHadoopUtil.get.newConfiguration(sparkConf))
+    this(appId, "", logBaseDir, sparkConf, SparkHadoopUtil.get.newConfiguration(sparkConf))
 
   private val shouldCompress = sparkConf.getBoolean("spark.eventLog.compress", false)
   private val shouldOverwrite = sparkConf.getBoolean("spark.eventLog.overwrite", false)
@@ -89,7 +90,7 @@ private[spark] class EventLoggingListener(
   private[scheduler] val loggedEvents = new ArrayBuffer[JValue]
 
   // Visible for tests only.
-  private[scheduler] val logPath = getLogPath(logBaseDir, appId, compressionCodecName)
+  private[scheduler] val logPath = getLogPath(logBaseDir, appId, compressionCodecName, appAttemptId)
 
   /**
    * Creates the log file in the configured log directory.
@@ -254,18 +255,30 @@ private[spark] object EventLoggingListener extends Logging {
    *
    * @param logBaseDir Directory where the log file will be written.
    * @param appId A unique app ID.
+   * @param appAttemptId A unique attempt id of appId.
    * @param compressionCodecName Name to identify the codec used to compress the contents
    *                             of the log, or None if compression is not enabled.
    * @return A path which consists of file-system-safe characters.
    */
   def getLogPath(
-      logBaseDir: URI,
+      logBaseDir: String,
+      appId: String,
+      appAttemptId: String,
+      compressionCodecName: Option[String] = None): String = {
+    val name = appId.replaceAll("[ :/]", "-").replaceAll("[${}'\"]", "_").toLowerCase
+
+   if (appAttemptId.equals("")) {
+      Utils.resolveURI(logBaseDir) + "/" + name.stripSuffix("/")
+   } else {
+      Utils.resolveURI(logBaseDir) + "/" + appAttemptId + "/" + name.stripSuffix("/")
+   }
+  }
+
+  def getLogPath(
+      logBaseDir: String,
       appId: String,
       compressionCodecName: Option[String] = None): String = {
-    val sanitizedAppId = appId.replaceAll("[ :/]", "-").replaceAll("[.${}'\"]", "_").toLowerCase
-    // e.g. app_123, app_123.lzf
-    val logName = sanitizedAppId + compressionCodecName.map { "." + _ }.getOrElse("")
-    logBaseDir.toString.stripSuffix("/") + "/" + logName
+    getLogPath(logBaseDir, appId, "", compressionCodecName)
   }
 
   /**
