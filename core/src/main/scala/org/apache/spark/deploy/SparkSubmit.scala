@@ -158,6 +158,8 @@ object SparkSubmit {
         printErrorAndExit("Cluster deploy mode is not applicable to Spark shells.")
       case (_, CLUSTER) if isSqlShell(args.mainClass) =>
         printErrorAndExit("Cluster deploy mode is not applicable to Spark SQL shell.")
+      case (_, CLUSTER) if isThriftServer(args.mainClass) =>
+        printErrorAndExit("Cluster deploy mode is not applicable to Spark Thrift server.")
       case _ =>
     }
 
@@ -434,6 +436,13 @@ object SparkSubmit {
    */
   private[spark] def isSqlShell(mainClass: String): Boolean = {
     mainClass == "org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver"
+  }
+
+  /**
+   * Return whether the given main class represents a thrift server.
+   */
+  private[spark] def isThriftServer(mainClass: String): Boolean = {
+    mainClass == "org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"
   }
 
   /**

@@ -55,7 +55,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * @return an RDD containing the edges in this graph
    *
    * @see [[Edge]] for the edge type.
-   * @see [[triplets]] to get an RDD which contains all the edges
+   * @see [[Graph#triplets]] to get an RDD which contains all the edges
    * along with their vertex data.
    *
    */

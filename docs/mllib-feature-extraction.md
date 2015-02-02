@@ -240,11 +240,11 @@ following parameters in the constructor:
 
 * `withMean` False by default. Centers the data with mean before scaling. It will build a dense
 output, so this does not work on sparse input and will raise an exception.
-* `withStd` True by default. Scales the data to unit variance.
+* `withStd` True by default. Scales the data to unit standard deviation.
 
 We provide a [`fit`](api/scala/index.html#org.apache.spark.mllib.feature.StandardScaler) method in
 `StandardScaler` which can take an input of `RDD[Vector]`, learn the summary statistics, and then
-return a model which can transform the input dataset into unit variance and/or zero mean features
+return a model which can transform the input dataset into unit standard deviation and/or zero mean features
 depending how we configure the `StandardScaler`.
 
 This model implements [`VectorTransformer`](api/scala/index.html#org.apache.spark.mllib.feature.VectorTransformer)
@@ -257,7 +257,7 @@ for that feature.
 ### Example
 
 The example below demonstrates how to load a dataset in libsvm format, and standardize the features
-so that the new features have unit variance and/or zero mean.
+so that the new features have unit standard deviation and/or zero mean.
 
 <div class="codetabs">
 <div data-lang="scala">
@@ -271,6 +271,8 @@ val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
 
 val scaler1 = new StandardScaler().fit(data.map(x => x.features))
 val scaler2 = new StandardScaler(withMean = true, withStd = true).fit(data.map(x => x.features))
+// scaler3 is an identical model to scaler2, and will produce identical transformations
+val scaler3 = new StandardScalerModel(scaler2.std, scaler2.mean)
 
 // data1 will be unit variance.
 val data1 = data.map(x => (x.label, scaler1.transform(x.features)))
@@ -294,6 +296,9 @@ features = data.map(lambda x: x.features)
 
 scaler1 = StandardScaler().fit(features)
 scaler2 = StandardScaler(withMean=True, withStd=True).fit(features)
+# scaler3 is an identical model to scaler2, and will produce identical transformations
+scaler3 = StandardScalerModel(scaler2.std, scaler2.mean)
+
 
 # data1 will be unit variance.
 data1 = label.zip(scaler1.transform(features))

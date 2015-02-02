@@ -18,17 +18,17 @@
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.mllib.clustering.GaussianMixtureEM
+import org.apache.spark.mllib.clustering.GaussianMixture
 import org.apache.spark.mllib.linalg.Vectors
 
 /**
  * An example Gaussian Mixture Model EM app. Run with
  * {{{
- * ./bin/run-example org.apache.spark.examples.mllib.DenseGmmEM <input> <k> <covergenceTol>
+ * ./bin/run-example mllib.DenseGaussianMixture <input> <k> <convergenceTol>
  * }}}
  * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  */
-object DenseGmmEM {
+object DenseGaussianMixture {
   def main(args: Array[String]): Unit = {
     if (args.length < 3) {
       println("usage: DenseGmmEM <input file> <k> <convergenceTol> [maxIterations]")
@@ -46,7 +46,7 @@ object DenseGmmEM {
       Vectors.dense(line.trim.split(' ').map(_.toDouble))
     }.cache()
       
-    val clusters = new GaussianMixtureEM()
+    val clusters = new GaussianMixture()
       .setK(k)
       .setConvergenceTol(convergenceTol)
       .setMaxIterations(maxIterations)
