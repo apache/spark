@@ -19,7 +19,6 @@ package org.apache.spark.executor
 
 import java.util.concurrent.atomic.AtomicLong
 
-import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.executor.DataReadMethod.DataReadMethod
 
 import scala.collection.mutable.ArrayBuffer

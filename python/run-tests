@@ -57,6 +57,7 @@ function run_core_tests() {
     PYSPARK_DOC_TEST=1 run_test "pyspark/broadcast.py"
     PYSPARK_DOC_TEST=1 run_test "pyspark/accumulators.py"
     run_test "pyspark/serializers.py"
+    run_test "pyspark/profiler.py" 
     run_test "pyspark/shuffle.py"
     run_test "pyspark/tests.py"
 }
@@ -75,10 +76,17 @@ function run_mllib_tests() {
     run_test "pyspark/mllib/rand.py"
     run_test "pyspark/mllib/recommendation.py"
     run_test "pyspark/mllib/regression.py"
-    run_test "pyspark/mllib/stat.py"
+    run_test "pyspark/mllib/stat/_statistics.py"
     run_test "pyspark/mllib/tree.py"
     run_test "pyspark/mllib/util.py"
     run_test "pyspark/mllib/tests.py"
+}
+
+function run_ml_tests() {
+    echo "Run ml tests ..."
+    run_test "pyspark/ml/feature.py"
+    run_test "pyspark/ml/classification.py"
+    run_test "pyspark/ml/tests.py"
 }
 
 function run_streaming_tests() {
@@ -102,6 +110,7 @@ $PYSPARK_PYTHON --version
 run_core_tests
 run_sql_tests
 run_mllib_tests
+run_ml_tests
 run_streaming_tests
 
 # Try to test with PyPy

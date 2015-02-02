@@ -20,10 +20,11 @@ package org.apache.spark.mllib.clustering
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.linalg.{Vectors, Matrices}
+import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
-class GMMExpectationMaximizationSuite extends FunSuite with MLlibTestSparkContext {
+class GaussianMixtureSuite extends FunSuite with MLlibTestSparkContext {
   test("single cluster") {
     val data = sc.parallelize(Array(
       Vectors.dense(6.0, 9.0),
@@ -38,10 +39,10 @@ class GMMExpectationMaximizationSuite extends FunSuite with MLlibTestSparkContex
 
     val seeds = Array(314589, 29032897, 50181, 494821, 4660)
     seeds.foreach { seed =>
-      val gmm = new GaussianMixtureEM().setK(1).setSeed(seed).run(data)
-      assert(gmm.weight(0) ~== Ew absTol 1E-5)
-      assert(gmm.mu(0) ~== Emu absTol 1E-5)
-      assert(gmm.sigma(0) ~== Esigma absTol 1E-5)
+      val gmm = new GaussianMixture().setK(1).setSeed(seed).run(data)
+      assert(gmm.weights(0) ~== Ew absTol 1E-5)
+      assert(gmm.gaussians(0).mu ~== Emu absTol 1E-5)
+      assert(gmm.gaussians(0).sigma ~== Esigma absTol 1E-5)
     }
   }
   
@@ -57,24 +58,26 @@ class GMMExpectationMaximizationSuite extends FunSuite with MLlibTestSparkContex
     // we set an initial gaussian to induce expected results
     val initialGmm = new GaussianMixtureModel(
       Array(0.5, 0.5),
-      Array(Vectors.dense(-1.0), Vectors.dense(1.0)),
-      Array(Matrices.dense(1, 1, Array(1.0)), Matrices.dense(1, 1, Array(1.0)))
+      Array(
+        new MultivariateGaussian(Vectors.dense(-1.0), Matrices.dense(1, 1, Array(1.0))),
+        new MultivariateGaussian(Vectors.dense(1.0), Matrices.dense(1, 1, Array(1.0)))
+      )
     )
     
     val Ew = Array(1.0 / 3.0, 2.0 / 3.0)
     val Emu = Array(Vectors.dense(-4.3673), Vectors.dense(5.1604))
     val Esigma = Array(Matrices.dense(1, 1, Array(1.1098)), Matrices.dense(1, 1, Array(0.86644)))
     
-    val gmm = new GaussianMixtureEM()
+    val gmm = new GaussianMixture()
       .setK(2)
       .setInitialModel(initialGmm)
       .run(data)
       
-    assert(gmm.weight(0) ~== Ew(0) absTol 1E-3)
-    assert(gmm.weight(1) ~== Ew(1) absTol 1E-3)
-    assert(gmm.mu(0) ~== Emu(0) absTol 1E-3)
-    assert(gmm.mu(1) ~== Emu(1) absTol 1E-3)
-    assert(gmm.sigma(0) ~== Esigma(0) absTol 1E-3)
-    assert(gmm.sigma(1) ~== Esigma(1) absTol 1E-3)
+    assert(gmm.weights(0) ~== Ew(0) absTol 1E-3)
+    assert(gmm.weights(1) ~== Ew(1) absTol 1E-3)
+    assert(gmm.gaussians(0).mu ~== Emu(0) absTol 1E-3)
+    assert(gmm.gaussians(1).mu ~== Emu(1) absTol 1E-3)
+    assert(gmm.gaussians(0).sigma ~== Esigma(0) absTol 1E-3)
+    assert(gmm.gaussians(1).sigma ~== Esigma(1) absTol 1E-3)
   }
 }
