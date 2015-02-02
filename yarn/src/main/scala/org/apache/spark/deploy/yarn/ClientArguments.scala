@@ -192,7 +192,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
       |  --jar JAR_PATH           Path to your application's JAR file (required in yarn-cluster
       |                           mode)
       |  --class CLASS_NAME       Name of your application's main class (required)
-      |  --primary-py-file        A primary Python file
+      |  --primary-py-file        A main Python file
       |  --arg ARG                Argument to be passed to your application's main class.
       |                           Multiple invocations are possible, each will be passed in order.
       |  --num-executors NUM      Number of executors to start (Default: 2)

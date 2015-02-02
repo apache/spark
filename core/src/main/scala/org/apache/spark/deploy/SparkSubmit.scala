@@ -139,16 +139,14 @@ object SparkSubmit {
     val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
 
     // Require all python files to be local, so we can add them to the PYTHONPATH
-    // when yarn-cluster, all python files can be non-local
+    // In YARN cluster mode, python files are distributed as regular files, which can be non-local
     if (args.isPython && !isYarnCluster) {
       if (Utils.nonLocalPaths(args.primaryResource).nonEmpty) {
-        SparkSubmit.printErrorAndExit(
-          s"Only local python files are supported: $args.primaryResource")
+        printErrorAndExit(s"Only local python files are supported: $args.primaryResource")
       }
       val nonLocalPyFiles = Utils.nonLocalPaths(args.pyFiles).mkString(",")
       if (nonLocalPyFiles.nonEmpty) {
-        SparkSubmit.printErrorAndExit(
-          s"Only local additional python files are supported: $nonLocalPyFiles")
+        printErrorAndExit(s"Only local additional python files are supported: $nonLocalPyFiles")
       }
     }
 
@@ -296,6 +294,8 @@ object SparkSubmit {
         val mainPyFile = new Path(args.primaryResource).getName
         childArgs += ("--primary-py-file", mainPyFile)
         if (args.pyFiles != null) {
+          // These files will be distributed to each machine's working directory, so strip the
+          // path prefix
           val pyFilesNames = args.pyFiles.split(",").map(p => (new Path(p)).getName).mkString(",")
           childArgs += ("--py-files", pyFilesNames)
         }

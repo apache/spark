@@ -132,7 +132,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         .get().addShutdownHook(cleanupHook, ApplicationMaster.SHUTDOWN_HOOK_PRIORITY)
 
       // Call this to force generation of secret so it gets populated into the
-      // Hadoop UGI. This has to happen before the startUserClass which does a
+      // Hadoop UGI. This has to happen before the startUserApplication which does a
       // doAs in order for the credentials to be passed on to the executor containers.
       val securityMgr = new SecurityManager(sparkConf)
 
@@ -233,7 +233,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
   private def runDriver(securityMgr: SecurityManager): Unit = {
     addAmIpFilter()
-    userClassThread = startUserClass()
+    userClassThread = startUserApplication()
 
     // This a bit hacky, but we need to wait until the spark.driver.port property has
     // been set by the Thread executing the user class.
@@ -427,8 +427,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
    *
    * Returns the user thread that was started.
    */
-  private def startUserClass(): Thread = {
-    logInfo("Starting the user JAR in a separate Thread")
+  private def startUserApplication(): Thread = {
+    logInfo("Starting the user application in a separate Thread")
     System.setProperty("spark.executor.instances", args.numExecutors.toString)
     if (args.primaryPyFile != null && args.primaryPyFile.endsWith(".py")) {
       System.setProperty("spark.submit.pyFiles",
