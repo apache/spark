@@ -219,8 +219,12 @@ class RowMatrix(
 
     val computeMode = mode match {
       case "auto" =>
+        if(k > 5000) {
+          logWarning(s"computing svd with k=$k and n=$n, please check necessity")
+        }
+
         // TODO: The conditions below are not fully tested.
-        if (n < 100 || k > n / 2) {
+        if (n < 100 || (k > n / 2 && n <= 15000)) {
           // If n is small or k is large compared with n, we better compute the Gramian matrix first
           // and then compute its eigenvalues locally, instead of making multiple passes.
           if (k < n / 3) {
@@ -245,6 +249,8 @@ class RowMatrix(
         val G = computeGramianMatrix().toBreeze.asInstanceOf[BDM[Double]]
         EigenValueDecomposition.symmetricEigs(v => G * v, n, k, tol, maxIter)
       case SVDMode.LocalLAPACK =>
+        // breeze (v0.10) svd latent constraint, 7 * n * n + 4 * n < Int.MaxValue
+        require(n < 17515, s"$n exceeds the breeze svd capability")
         val G = computeGramianMatrix().toBreeze.asInstanceOf[BDM[Double]]
         val brzSvd.SVD(uFull: BDM[Double], sigmaSquaresFull: BDV[Double], _) = brzSvd(G)
         (sigmaSquaresFull, uFull)
