@@ -76,7 +76,7 @@ class VertexRDDImpl[VD] private[graphx] (
   }
 
   override def isCheckpointed: Boolean = {
-    firstParent.isCheckpointed
+    firstParent[ShippableVertexPartition[VD]].isCheckpointed
   }
 
   override def getCheckpointFile: Option[String] = {
