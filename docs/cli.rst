@@ -1,5 +1,5 @@
 Command Line Interface
-==========
+======================
 
 Airflow has a very rich command line interface allowing to perform 
 many types of operation on a DAG, starting services and supporting 

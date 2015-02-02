@@ -6,7 +6,13 @@ from airflow.utils import apply_defaults
 
 
 class BashOperator(BaseOperator):
+    '''
+    Execute a Bash script, command or set of commands.
 
+    :param bash_command: The command, set of commands or reference to a
+        bash script (must be '.sh') to be executed.
+    :type bash_command: string
+    '''
     template_fields = ('bash_command',)
     template_ext = ('.sh', '.bash',)
 

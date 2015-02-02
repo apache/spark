@@ -1,10 +1,34 @@
 Code / API
 ==========
 
+Operators
+---------
+Operators allows to generate a certain type of task that become a node in
+the DAG when instantiated. All operators derive from BaseOperator and
+inherit a whole lot of attributes and method that way. Refer to the 
+BaseOperator documentation for more details.
+
+.. automodule:: airflow.operators
+    :show-inheritance:
+    :members: MySqlOperator, BashOperator, ExternalTaskSensor, HiveOperator, 
+        SqlSensor, HivePartitionSensor, EmailOperator, PrestoCheckOperator
+
+Macros
+---------
+Sweet macros that can be used in your templates
+
+.. automodule:: airflow.macros.hive
+    :show-inheritance: 
+    :members:
+
+.. _models_ref:
+
 Models
 ------
+
 Models are built on top of th SQLAlchemy ORM Base class, instance are
 persisted in the database.
+
 
 .. automodule:: airflow.models
     :show-inheritance:
@@ -16,14 +40,6 @@ Hooks
     :show-inheritance:
     :members: MySqlHook, PrestoHook, HiveHook
 
-Operators
----------
-Operators allows to generate a certain type of task on the graph.
-
-.. automodule:: airflow.operators
-    :show-inheritance:
-    :members: MySqlOperator, BashOperator, ExternalTaskSensor, HiveOperator, SqlSensor, HivePartitionSensor, EmailOperator, PrestoCheckOperator
-
 Executors
 ---------
 Executors are the mechanism by which task instances get run. 
@@ -31,11 +47,3 @@ Executors are the mechanism by which task instances get run.
 .. automodule:: airflow.executors
     :show-inheritance: 
     :members: LocalExecutor, CeleryExecutor, SequentialExecutor
-
-Macros
----------
-Sweet macros that you can use in your templates
-
-.. automodule:: airflow.macros.hive
-    :show-inheritance: 
-    :members:

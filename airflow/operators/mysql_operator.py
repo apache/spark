@@ -7,7 +7,13 @@ from airflow.utils import apply_defaults
 
 class MySqlOperator(BaseOperator):
     """
-    Executes sql code in a specific mysql database.
+    Executes sql code in a specific MySQL database
+
+    :param mysql_conn_id: reference to a specific mysql database
+    :type mysql_conn_id: string
+    :param sql: the sql code to be executed
+    :type sql: string or string pointing to a template file. Fil must have
+        a '.sql' extensions.
     """
 
     __mapper_args__ = {
@@ -18,11 +24,6 @@ class MySqlOperator(BaseOperator):
 
     @apply_defaults
     def __init__(self, sql, mysql_conn_id, *args, **kwargs):
-        """
-        Parameters:
-        mysql_conn_id: reference to a specific mysql database
-        sql: the sql code you to be executed
-        """
         super(MySqlOperator, self).__init__(*args, **kwargs)
 
         self.hook = MySqlHook(mysql_conn_id=mysql_conn_id)

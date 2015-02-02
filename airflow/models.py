@@ -1271,6 +1271,12 @@ class DAG(Base):
             get_downstream(t)
 
     def add_task(self, task):
+        '''
+        Add a task to the DAG
+
+        :param task: the task you want to add
+        :type task: task
+        '''
         if not self.start_date and not task.start_date:
             raise Exception("Task is missing the start_date parameter")
         if not task.start_date:
@@ -1285,6 +1291,12 @@ class DAG(Base):
         self.task_count = len(self.tasks)
 
     def add_tasks(self, tasks):
+        '''
+        Add a list of tasks to the DAG
+
+        :param task: a lit of tasks you want to add
+        :type task: list of tasks
+        '''
         for task in tasks:
             self.add_task(task)
 
