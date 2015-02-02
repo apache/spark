@@ -235,9 +235,12 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       buildCast[String](_, s =>
         try Date.valueOf(s) catch { case _: java.lang.IllegalArgumentException => null })
     case TimestampType =>
-      // throw valid precision more than seconds, according to Hive.
-      // Timestamp.nanos is in 0 to 999,999,999, no more than a second.
-      buildCast[Timestamp](_, t => new Date(Math.floor(t.getTime / 1000.0).toLong * 1000))
+      // throw valid precision more than day, according to Hive.
+      buildCast[Timestamp](_, t => {
+        val tmp = new Date(t.getTime)
+        val dateFormat = new SimpleDateFormat("yyyy-MM-dd")
+        Date.valueOf(dateFormat.format(tmp))
+      })
     // Hive throws this exception as a Semantic Exception
     // It is never possible to compare result when hive return with exception, so we can return null
     // NULL is more reasonable here, since the query itself obeys the grammar.
