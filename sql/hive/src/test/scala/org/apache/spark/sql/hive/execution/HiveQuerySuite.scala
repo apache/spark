@@ -64,37 +64,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     }
   }
   
-  test("SPARK-5324 query result of describe command") {
-    loadTestTable("src")
-    
-    // register a describe command to be a temp table
-    sql("desc src").registerTempTable("mydesc")
-    assertResult(
-      Array(
-        Row("col_name", "StringType", null),
-        Row("data_type", "StringType", null),
-        Row("comment", "StringType", null)
-      )) {
-      sql("desc mydesc").collect()
-    }
-
-    assertResult(
-      Array(
-        Row("key", "int", null),
-        Row("value", "string", null)
-      )) {
-      sql("select * from mydesc").collect()
-    }
-
-    assertResult(
-      Array(
-        Row("key", "int", null),
-        Row("value", "string", null)
-      )) {
-      sql("select col_name, data_type, comment from mydesc").collect()
-    }
-  }
-  
   createQueryTest("! operator",
     """
       |SELECT a FROM (
