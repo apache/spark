@@ -22,6 +22,23 @@ import java.io.File
 import com.typesafe.config.{Config, ConfigFactory, ConfigValueFactory}
 import org.eclipse.jetty.util.ssl.SslContextFactory
 
+/** SSLOptions class is a common container for SSL configuration options. It offers methods to
+  * generate specific objects to configure SSL for different communication protocols.
+  *
+  * SSLOptions is intended to provide the maximum common set of SSL settings, which are supported
+  * by the protocol, which it can generate the configuration for. Since Akka doesn't support client
+  * authentication with SSL, SSLOptions cannot support it either.
+  *
+  * @param enabled             enables or disables SSL; if it is set to false, the rest of the
+  *                            settings are disregarded
+  * @param keyStore            a path to the key-store file
+  * @param keyStorePassword    a password to access the key-store file
+  * @param keyPassword         a password to access the private key in the key-store
+  * @param trustStore          a path to the trust-store file
+  * @param trustStorePassword  a password to access the trust-store file
+  * @param protocol            SSL protocol (remember that SSLv3 was compromised) supported by Java
+  * @param enabledAlgorithms   a set of encryption algorithms to use
+  */
 private[spark] case class SSLOptions(
     enabled: Boolean = false,
     keyStore: Option[File] = None,
@@ -32,9 +49,8 @@ private[spark] case class SSLOptions(
     protocol: Option[String] = None,
     enabledAlgorithms: Set[String] = Set.empty) {
 
-  /**
-   * Creates a Jetty SSL context factory according to the SSL settings represented by this object.
-   */
+  /** Creates a Jetty SSL context factory according to the SSL settings represented by this object.
+    */
   def createJettySslContextFactory(): Option[SslContextFactory] = {
     if (enabled) {
       val sslContextFactory = new SslContextFactory()
@@ -53,10 +69,9 @@ private[spark] case class SSLOptions(
     }
   }
 
-  /**
-   * Creates an Akka configuration object which contains all the SSL settings represented by this
-   * object. It can be used then to compose the ultimate Akka configuration.
-   */
+  /** Creates an Akka configuration object which contains all the SSL settings represented by this
+    * object. It can be used then to compose the ultimate Akka configuration.
+    */
   def createAkkaConfig: Option[Config] = {
     import scala.collection.JavaConversions._
     if (enabled) {
@@ -84,6 +99,7 @@ private[spark] case class SSLOptions(
     }
   }
 
+  /** Returns a string representation of this SSLOptions with all the passwords masked. */
   override def toString: String = s"SSLOptions{enabled=$enabled, " +
       s"keyStore=$keyStore, keyStorePassword=${keyStorePassword.map(_ => "xxx")}, " +
       s"trustStore=$trustStore, trustStorePassword=${trustStorePassword.map(_ => "xxx")}, " +
@@ -93,11 +109,31 @@ private[spark] case class SSLOptions(
 
 private[spark] object SSLOptions extends Logging {
 
-  /**
-   * Resolves SSLOptions settings from a given Spark configuration object at a given namespace.
-   * The parent directory of that location is used as a base directory to resolve relative paths
-   * to keystore and truststore.
-   */
+  /** Resolves SSLOptions settings from a given Spark configuration object at a given namespace.
+    *
+    * The following settings are allowed:
+    * $ - `[ns].enabled` - `true` or `false`, to enable or disable SSL respectively
+    * $ - `[ns].keyStore` - a path to the key-store file; can be relative to the current directory
+    * $ - `[ns].keyStorePassword` - a password to the key-store file
+    * $ - `[ns].keyPassword` - a password to the private key
+    * $ - `[ns].trustStore` - a path to the trust-store file; can be relative to the current
+    *                         directory
+    * $ - `[ns].trustStorePassword` - a password to the trust-store file
+    * $ - `[ns].protocol` - a protocol name supported by a particular Java version
+    * $ - `[ns].enabledAlgorithms` - a comma separated list of ciphers
+    *
+    * For a list of protocols and ciphers supported by particular Java versions, you may go to
+    * [[https://blogs.oracle.com/java-platform-group/entry/diagnosing_tls_ssl_and_https Oracle
+    * blog page]].
+    *
+    * You can optionally specify the default configuration. If you do, for each setting which is
+    * missing in SparkConf, the corresponding setting is used from the default configuration.
+    *
+    * @param conf Spark configuration object where the settings are collected from
+    * @param ns the namespace name
+    * @param defaults the default configuration
+    * @return [[org.apache.spark.SSLOptions]] object
+    */
   def parse(conf: SparkConf, ns: String, defaults: Option[SSLOptions] = None): SSLOptions = {
     val enabled = conf.getBoolean(s"$ns.enabled", defaultValue = defaults.exists(_.enabled))
 

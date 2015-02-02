@@ -59,7 +59,7 @@ import org.apache.spark.network.sasl.SecretKeyHolder
  * Spark also has a set of admin acls (`spark.admin.acls`) which is a set of users/administrators
  * who always have permission to view or modify the Spark application.
  *
- * Spark does not currently support encryption after authentication.
+ * Starting from version 1.3, Spark has partial support for encrypted connections with SSL.
  *
  * At this point spark has multiple communication protocols that need to be secured and
  * different underlying mechanisms are used depending on the protocol:
@@ -71,8 +71,9 @@ import org.apache.spark.network.sasl.SecretKeyHolder
  *            to connect to the server. There is no control of the underlying
  *            authentication mechanism so its not clear if the password is passed in
  *            plaintext or uses DIGEST-MD5 or some other mechanism.
- *            Akka also has an option to turn on SSL, this option is not currently supported
- *            but we could add a configuration option in the future.
+ *
+ *            Akka also has an option to turn on SSL, this option is currently supported (see
+ *            the details below).
  *
  *  - HTTP for broadcast and file server (via HttpServer) ->  Spark currently uses Jetty
  *            for the HttpServer. Jetty supports multiple authentication mechanisms -
@@ -81,8 +82,9 @@ import org.apache.spark.network.sasl.SecretKeyHolder
  *            to authenticate using DIGEST-MD5 via a single user and the shared secret.
  *            Since we are using DIGEST-MD5, the shared secret is not passed on the wire
  *            in plaintext.
- *            We currently do not support SSL (https), but Jetty can be configured to use it
- *            so we could add a configuration option for this in the future.
+ *
+ *            We currently support SSL (https) for this communication protocol (see the details
+ *            below).
  *
  *            The Spark HttpServer installs the HashLoginServer and configures it to DIGEST-MD5.
  *            Any clients must specify the user and password. There is a default
@@ -146,6 +148,35 @@ import org.apache.spark.network.sasl.SecretKeyHolder
  *  authentication. Spark will then use that user to compare against the view acls to do
  *  authorization. If not filter is in place the user is generally null and no authorization
  *  can take place.
+ *
+ *  Connection encryption (SSL) configuration is organized hierarchically. The user can configure
+ *  the default SSL settings which will be used for all the supported communication protocols unless
+ *  they are overwritten by protocol specific settings. This way the user can easily provide the
+ *  common settings for all the protocols without disabling the ability to configure each one
+ *  individually.
+ *
+ *  All the SSL settings like `spark.ssl.xxx` where `xxx` is a particular configuration property,
+ *  denote the global configuration for all the supported protocols. In order to override the global
+ *  configuration for the particular protocol, the properties must be overwritten in the
+ *  protocol-specific namespace. Use `spark.ssl.yyy.xxx` settings to overwrite the global
+ *  configuration for particular protocol denoted by `yyy`. Currently `yyy` can be either `akka` for
+ *  Akka based connections or `fs` for broadcast and file server.
+ *
+ *  Refer to [[org.apache.spark.SSLOptions]] documentation for the list of
+ *  options that can be specified.
+ *
+ *  SecurityManager initializes SSLOptions objects for different protocols separately. SSLOptions
+ *  object parses Spark configuration at a given namespace and builds the common representation
+ *  of SSL settings. SSLOptions is the used to provide protocol-specific configuration like TypeSafe
+ *  configuration for Akka or SSLContextFactory for Jetty.
+ *  SSL must be configured on each node and configured for each component involved in
+ *  communication using the particular protocol. In YARN clusters, the key-store can be prepared on
+ *  the client side then distributed and used by the executors as the part of the application
+ *  (YARN allows the user to deploy files before the application is started).
+ *  In standalone deployment, the user needs to provide key-stores and configuration
+ *  options for master and workers. In this mode, the user may allow the executors to use the SSL
+ *  settings inherited from the worker which spawned that executor. It can be accomplished by
+ *  setting `spark.ssl.useNodeLocalConf` to `true`.
  */
 
 private[spark] class SecurityManager(sparkConf: SparkConf)
