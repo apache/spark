@@ -124,6 +124,17 @@ class KryoSerializer(conf: SparkConf)
   override def newInstance(): SerializerInstance = {
     new KryoSerializerInstance(this)
   }
+
+  /**
+   * Returns true if auto-reset is on. The only reason this would be false is if the user-supplied
+   * register explicitly turns auto-reset off.
+   */
+  def getAutoReset(): Boolean = {
+    val kryo = newKryo()
+    val field = classOf[Kryo].getDeclaredField("autoReset")
+    field.setAccessible(true)
+    field.get(kryo).asInstanceOf[Boolean]
+  }
 }
 
 private[spark]

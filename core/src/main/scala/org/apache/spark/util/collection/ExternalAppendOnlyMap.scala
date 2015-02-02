@@ -172,7 +172,7 @@ class ExternalAppendOnlyMap[K, V, C](
       val it = currentMap.destructiveSortedIterator(keyComparator)
       while (it.hasNext) {
         val kv = it.next()
-        writer.write(kv)
+        writer.write(kv._1, kv._2)
         objectsWritten += 1
 
         if (objectsWritten == serializerBatchSize) {
@@ -433,7 +433,9 @@ class ExternalAppendOnlyMap[K, V, C](
      */
     private def readNextItem(): (K, C) = {
       try {
-        val item = deserializeStream.readObject().asInstanceOf[(K, C)]
+        val k = deserializeStream.readObject().asInstanceOf[K]
+        val c = deserializeStream.readObject().asInstanceOf[C]
+        val item = (k, c)
         objectsRead += 1
         if (objectsRead == serializerBatchSize) {
           objectsRead = 0
