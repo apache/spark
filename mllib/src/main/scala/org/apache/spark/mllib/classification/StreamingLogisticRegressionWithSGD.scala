@@ -59,7 +59,8 @@ class StreamingLogisticRegressionWithSGD (
    */
   def this() = this(0.1, 50, 1.0, 0.0, null)
 
-  val algorithm = new LogisticRegressionWithSGD(stepSize, numIterations, regParam, miniBatchFraction)
+  val algorithm = new LogisticRegressionWithSGD(
+    stepSize, numIterations, regParam, miniBatchFraction)
 
   var model = algorithm.createModel(initialWeights, 0.0)
 
