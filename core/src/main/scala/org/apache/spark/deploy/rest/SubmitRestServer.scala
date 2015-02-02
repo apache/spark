@@ -137,9 +137,10 @@ private[spark] abstract class SubmitRestServerHandler extends AbstractHandler wi
 
   /** Construct an error message to signal the fact that an exception has been thrown. */
   private def handleError(message: String): ErrorResponse = {
-    new ErrorResponse()
-      .setSparkVersion(sparkVersion)
-      .setMessage(message)
+    val e = new ErrorResponse
+    e.serverSparkVersion = sparkVersion
+    e.message = message
+    e
   }
 
   /** Return a human readable String representation of the exception. */

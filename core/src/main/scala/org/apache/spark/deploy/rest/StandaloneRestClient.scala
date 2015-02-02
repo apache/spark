@@ -43,14 +43,19 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
       case s: SubmitDriverResponse => s
       case _ => return response
     }
-    val submitSuccess = submitResponse.getSuccess.toBoolean
+    // Report status of submitted driver to user
+    val submitSuccess = submitResponse.success.toBoolean
     if (submitSuccess) {
-      val driverId = submitResponse.getDriverId
-      logInfo(s"Driver successfully submitted as $driverId. Polling driver state...")
-      pollSubmittedDriverStatus(args.master, driverId)
+      val driverId = submitResponse.driverId
+      if (driverId != null) {
+        logInfo(s"Driver successfully submitted as $driverId. Polling driver state...")
+        pollSubmittedDriverStatus(args.master, driverId)
+      } else {
+        logError("Application successfully submitted, but driver ID was not provided!")
+      }
     } else {
-      val submitMessage = submitResponse.getMessage
-      logError(s"Application submission failed: $submitMessage")
+      val failMessage = Option(submitResponse.message).map { ": " + _ }.getOrElse("")
+      logError("Application submission failed" + failMessage)
     }
     submitResponse
   }
@@ -78,12 +83,12 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
         case s: DriverStatusResponse => s
         case _ => return
       }
-      val statusSuccess = statusResponse.getSuccess.toBoolean
+      val statusSuccess = statusResponse.success.toBoolean
       if (statusSuccess) {
-        val driverState = Option(statusResponse.getDriverState)
-        val workerId = Option(statusResponse.getWorkerId)
-        val workerHostPort = Option(statusResponse.getWorkerHostPort)
-        val exception = Option(statusResponse.getMessage)
+        val driverState = Option(statusResponse.driverState)
+        val workerId = Option(statusResponse.workerId)
+        val workerHostPort = Option(statusResponse.workerHostPort)
+        val exception = Option(statusResponse.message)
         // Log driver state, if present
         driverState match {
           case Some(state) => logInfo(s"State of driver $driverId is now $state.")
@@ -105,21 +110,21 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
 
   /** Construct a submit driver request message. */
   protected override def constructSubmitRequest(args: SparkSubmitArguments): SubmitDriverRequest = {
-    val message = new SubmitDriverRequest()
-      .setSparkVersion(sparkVersion)
-      .setAppName(args.name)
-      .setAppResource(args.primaryResource)
-      .setMainClass(args.mainClass)
-      .setJars(args.jars)
-      .setFiles(args.files)
-      .setDriverMemory(args.driverMemory)
-      .setDriverCores(args.driverCores)
-      .setDriverExtraJavaOptions(args.driverExtraJavaOptions)
-      .setDriverExtraClassPath(args.driverExtraClassPath)
-      .setDriverExtraLibraryPath(args.driverExtraLibraryPath)
-      .setSuperviseDriver(args.supervise.toString)
-      .setExecutorMemory(args.executorMemory)
-      .setTotalExecutorCores(args.totalExecutorCores)
+    val message = new SubmitDriverRequest
+    message.clientSparkVersion = sparkVersion
+    message.appName = args.name
+    message.appResource = args.primaryResource
+    message.mainClass = args.mainClass
+    message.jars = args.jars
+    message.files = args.files
+    message.driverMemory = args.driverMemory
+    message.driverCores = args.driverCores
+    message.driverExtraJavaOptions = args.driverExtraJavaOptions
+    message.driverExtraClassPath = args.driverExtraClassPath
+    message.driverExtraLibraryPath = args.driverExtraLibraryPath
+    message.superviseDriver = args.supervise.toString
+    message.executorMemory = args.executorMemory
+    message.totalExecutorCores = args.totalExecutorCores
     args.childArgs.foreach(message.addAppArg)
     args.sparkProperties.foreach { case (k, v) => message.setSparkProperty(k, v) }
     sys.env.foreach { case (k, v) =>
@@ -132,18 +137,20 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
   protected override def constructKillRequest(
       master: String,
       driverId: String): KillDriverRequest = {
-    new KillDriverRequest()
-      .setSparkVersion(sparkVersion)
-      .setDriverId(driverId)
+    val k = new KillDriverRequest
+    k.clientSparkVersion = sparkVersion
+    k.driverId = driverId
+    k
   }
 
   /** Construct a driver status request message. */
   protected override def constructStatusRequest(
       master: String,
       driverId: String): DriverStatusRequest = {
-    new DriverStatusRequest()
-      .setSparkVersion(sparkVersion)
-      .setDriverId(driverId)
+    val d = new DriverStatusRequest
+    d.clientSparkVersion = sparkVersion
+    d.driverId = driverId
+    d
   }
 
   /** Extract the URL portion of the master address. */

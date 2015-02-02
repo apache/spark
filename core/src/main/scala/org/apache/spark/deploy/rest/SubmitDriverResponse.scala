@@ -21,7 +21,5 @@ package org.apache.spark.deploy.rest
  * A response to the [[SubmitDriverRequest]] in the REST application submission protocol.
  */
 class SubmitDriverResponse extends SubmitRestProtocolResponse {
-  private val driverId = new SubmitRestProtocolField[String]
-  def getDriverId: String = driverId.toString
-  def setDriverId(s: String): this.type = setField(driverId, s)
+  var driverId: String = null
 }

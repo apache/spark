@@ -21,9 +21,7 @@ package org.apache.spark.deploy.rest
  * A response to the [[KillDriverRequest]] in the REST application submission protocol.
  */
 class KillDriverResponse extends SubmitRestProtocolResponse {
-  private val driverId = new SubmitRestProtocolField[String]
-  def getDriverId: String = driverId.toString
-  def setDriverId(s: String): this.type = setField(driverId, s)
+  var driverId: String = null
   protected override def doValidate(): Unit = {
     super.doValidate()
     assertFieldIsSet(driverId, "driverId")

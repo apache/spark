@@ -21,21 +21,12 @@ package org.apache.spark.deploy.rest
  * A response to the [[DriverStatusRequest]] in the REST application submission protocol.
  */
 class DriverStatusResponse extends SubmitRestProtocolResponse {
-  private val driverId = new SubmitRestProtocolField[String]
+  var driverId: String = null
+
   // standalone cluster mode only
-  private val driverState = new SubmitRestProtocolField[String]
-  private val workerId = new SubmitRestProtocolField[String]
-  private val workerHostPort = new SubmitRestProtocolField[String]
-
-  def getDriverId: String = driverId.toString
-  def getDriverState: String = driverState.toString
-  def getWorkerId: String = workerId.toString
-  def getWorkerHostPort: String = workerHostPort.toString
-
-  def setDriverId(s: String): this.type = setField(driverId, s)
-  def setDriverState(s: String): this.type = setField(driverState, s)
-  def setWorkerId(s: String): this.type = setField(workerId, s)
-  def setWorkerHostPort(s: String): this.type = setField(workerHostPort, s)
+  var driverState: String = null
+  var workerId: String = null
+  var workerHostPort: String = null
 
   protected override def doValidate(): Unit = {
     super.doValidate()

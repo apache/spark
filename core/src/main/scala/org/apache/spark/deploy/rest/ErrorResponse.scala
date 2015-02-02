@@ -17,20 +17,17 @@
 
 package org.apache.spark.deploy.rest
 
-import com.fasterxml.jackson.annotation.JsonIgnore
-
 /**
  * An error response message used in the REST application submission protocol.
  */
 class ErrorResponse extends SubmitRestProtocolResponse {
-  setSuccess("false")
 
-  // Don't bother logging success = false in the JSON
-  @JsonIgnore
-  override def getSuccess: String = super.getSuccess
+  // request was unsuccessful
+  success = "false"
 
   protected override def doValidate(): Unit = {
     super.doValidate()
     assertFieldIsSet(message, "message")
+    assert(!success.toBoolean, s"The 'success' field must be false in $messageType.")
   }
 }

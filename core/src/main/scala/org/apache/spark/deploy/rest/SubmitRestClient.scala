@@ -100,7 +100,7 @@ private[spark] abstract class SubmitRestClient extends Logging {
     try {
       response.validate()
       response match {
-        case e: ErrorResponse => logError(s"Server responded with error:\n${e.getMessage}")
+        case e: ErrorResponse => logError(s"Server responded with error:\n${e.message}")
         case _ =>
       }
     } catch {

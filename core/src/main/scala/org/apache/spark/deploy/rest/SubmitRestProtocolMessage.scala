@@ -17,10 +17,13 @@
 
 package org.apache.spark.deploy.rest
 
+import scala.util.Try
+
 import com.fasterxml.jackson.annotation._
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.databind.{ObjectMapper, SerializationFeature}
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
 
@@ -39,23 +42,14 @@ import org.apache.spark.util.Utils
 @JsonAutoDetect(getterVisibility = Visibility.ANY, setterVisibility = Visibility.ANY)
 @JsonPropertyOrder(alphabetic = true)
 abstract class SubmitRestProtocolMessage {
+  @JsonIgnore
   val messageType = Utils.getFormattedClassName(this)
-  protected val action: String = messageType
-  protected val sparkVersion: SubmitRestProtocolField[String]
-  protected val message = new SubmitRestProtocolField[String]
 
-  // Required for JSON de/serialization and not explicitly used
-  private def getAction: String = action
-  private def setAction(s: String): this.type = this
+  val action: String = messageType
+  var message: String = null
 
-  // Intended for the user and not for JSON de/serialization, which expects more specific keys
-  @JsonIgnore
-  def getSparkVersion: String
-  @JsonIgnore
-  def setSparkVersion(s: String): this.type
-
-  def getMessage: String = message.toString
-  def setMessage(s: String): this.type = setField(message, s)
+  // For JSON deserialization
+  private def setAction(a: String): Unit = { }
 
   /**
    * Serialize the message to JSON.
@@ -63,9 +57,7 @@ abstract class SubmitRestProtocolMessage {
    */
   def toJson: String = {
     validate()
-    val mapper = new ObjectMapper
-    mapper.enable(SerializationFeature.INDENT_OUTPUT)
-    mapper.writeValueAsString(this)
+    SubmitRestProtocolMessage.mapper.writeValueAsString(this)
   }
 
   /**
@@ -89,10 +81,43 @@ abstract class SubmitRestProtocolMessage {
   }
 
   /** Assert that the specified field is set in this message. */
-  protected def assertFieldIsSet(field: SubmitRestProtocolField[_], name: String): Unit = {
-    if (!field.isSet) {
+  protected def assertFieldIsSet(value: String, name: String): Unit = {
+    if (value == null) {
       throw new SubmitRestMissingFieldException(
         s"Field '$name' is missing in message $messageType.")
+    }
+  }
+
+  /** Assert that the value of the specified field is a boolean. */
+  protected def assertFieldIsBoolean(value: String, name: String): Unit = {
+    if (value != null) {
+      Try(value.toBoolean).getOrElse {
+        throw new SubmitRestProtocolException(
+          s"Field '$name' expected boolean value: actual was '$value'.")
+      }
+    }
+  }
+
+  /** Assert that the value of the specified field is a numeric. */
+  protected def assertFieldIsNumeric(value: String, name: String): Unit = {
+    if (value != null) {
+      Try(value.toInt).getOrElse {
+        throw new SubmitRestProtocolException(
+          s"Field '$name' expected numeric value: actual was '$value'.")
+      }
+    }
+  }
+
+  /**
+   * Assert that the value of the specified field is a memory string.
+   * Examples of valid memory strings include 3g, 512m, 128k, 4096.
+   */
+  protected def assertFieldIsMemory(value: String, name: String): Unit = {
+    if (value != null) {
+      Try(Utils.memoryStringToMb(value)).getOrElse {
+        throw new SubmitRestProtocolException(
+          s"Field '$name' expected memory value: actual was '$value'.")
+      }
     }
   }
 
@@ -103,54 +128,16 @@ abstract class SubmitRestProtocolMessage {
   protected def assert(condition: Boolean, failMessage: String): Unit = {
     if (!condition) { throw new SubmitRestProtocolException(failMessage) }
   }
-
-  /** Set the field to the given value, or clear the field if the value is null. */
-  protected def setField(f: SubmitRestProtocolField[String], v: String): this.type = {
-    if (v == null) { f.clearValue() } else { f.setValue(v) }
-    this
-  }
-
-  /**
-   * Set the field to the given boolean value, or clear the field if the value is null.
-   * If the provided value does not represent a boolean, throw an exception.
-   */
-  protected def setBooleanField(f: SubmitRestProtocolField[Boolean], v: String): this.type = {
-    if (v == null) { f.clearValue() } else { f.setValue(v.toBoolean) }
-    this
-  }
-
-  /**
-   * Set the field to the given numeric value, or clear the field if the value is null.
-   * If the provided value does not represent a numeric, throw an exception.
-   */
-  protected def setNumericField(f: SubmitRestProtocolField[Int], v: String): this.type = {
-    if (v == null) { f.clearValue() } else { f.setValue(v.toInt) }
-    this
-  }
-
-  /**
-   * Set the field to the given memory value, or clear the field if the value is null.
-   * If the provided value does not represent a memory value, throw an exception.
-   * Valid examples of memory values include "512m", "24g", and "128000".
-   */
-  protected def setMemoryField(f: SubmitRestProtocolField[String], v: String): this.type = {
-    Utils.memoryStringToMb(v)
-    setField(f, v)
-  }
 }
 
 /**
  * An abstract request sent from the client in the REST application submission protocol.
  */
 abstract class SubmitRestProtocolRequest extends SubmitRestProtocolMessage {
-  protected override val sparkVersion = new SubmitRestProtocolField[String]
-  def getClientSparkVersion: String = sparkVersion.toString
-  def setClientSparkVersion(s: String): this.type = setField(sparkVersion, s)
-  override def getSparkVersion: String = getClientSparkVersion
-  override def setSparkVersion(s: String) = setClientSparkVersion(s)
+  var clientSparkVersion: String = null
   protected override def doValidate(): Unit = {
     super.doValidate()
-    assertFieldIsSet(sparkVersion, "clientSparkVersion")
+    assertFieldIsSet(clientSparkVersion, "clientSparkVersion")
   }
 }
 
@@ -158,27 +145,21 @@ abstract class SubmitRestProtocolRequest extends SubmitRestProtocolMessage {
  * An abstract response sent from the server in the REST application submission protocol.
  */
 abstract class SubmitRestProtocolResponse extends SubmitRestProtocolMessage {
-  protected override val sparkVersion = new SubmitRestProtocolField[String]
-  private val success = new SubmitRestProtocolField[Boolean]
-
-  override def getSparkVersion: String = getServerSparkVersion
-  def getServerSparkVersion: String = sparkVersion.toString
-  def getSuccess: String = success.toString
-
-  override def setSparkVersion(s: String) = setServerSparkVersion(s)
-  def setServerSparkVersion(s: String): this.type = setField(sparkVersion, s)
-  def setSuccess(s: String): this.type = setBooleanField(success, s)
-
+  var serverSparkVersion: String = null
+  var success: String = null
   protected override def doValidate(): Unit = {
     super.doValidate()
-    assertFieldIsSet(sparkVersion, "serverSparkVersion")
+    assertFieldIsSet(serverSparkVersion, "serverSparkVersion")
     assertFieldIsSet(success, "success")
+    assertFieldIsBoolean(success, "success")
   }
 }
 
 object SubmitRestProtocolMessage {
-  private val mapper = new ObjectMapper
   private val packagePrefix = this.getClass.getPackage.getName
+  private val mapper = new ObjectMapper()
+    .registerModule(DefaultScalaModule)
+    .enable(SerializationFeature.INDENT_OUTPUT)
 
   /**
    * Parse the value of the action field from the given JSON.

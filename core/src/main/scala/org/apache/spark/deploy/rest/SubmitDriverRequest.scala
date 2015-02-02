@@ -20,127 +20,51 @@ package org.apache.spark.deploy.rest
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import com.fasterxml.jackson.annotation.{JsonIgnore, JsonProperty}
-import org.json4s.jackson.JsonMethods._
-
-import org.apache.spark.util.JsonProtocol
+import com.fasterxml.jackson.annotation.{JsonProperty, JsonIgnore, JsonInclude}
 
 /**
  * A request to submit a driver in the REST application submission protocol.
  */
 class SubmitDriverRequest extends SubmitRestProtocolRequest {
-  private val appName = new SubmitRestProtocolField[String]
-  private val appResource = new SubmitRestProtocolField[String]
-  private val mainClass = new SubmitRestProtocolField[String]
-  private val jars = new SubmitRestProtocolField[String]
-  private val files = new SubmitRestProtocolField[String]
-  private val pyFiles = new SubmitRestProtocolField[String]
-  private val driverMemory = new SubmitRestProtocolField[String]
-  private val driverCores = new SubmitRestProtocolField[Int]
-  private val driverExtraJavaOptions = new SubmitRestProtocolField[String]
-  private val driverExtraClassPath = new SubmitRestProtocolField[String]
-  private val driverExtraLibraryPath = new SubmitRestProtocolField[String]
-  private val superviseDriver = new SubmitRestProtocolField[Boolean]
-  private val executorMemory = new SubmitRestProtocolField[String]
-  private val totalExecutorCores = new SubmitRestProtocolField[Int]
+  var appName: String = null
+  var appResource: String = null
+  var mainClass: String = null
+  var jars: String = null
+  var files: String = null
+  var pyFiles: String = null
+  var driverMemory: String = null
+  var driverCores: String = null
+  var driverExtraJavaOptions: String = null
+  var driverExtraClassPath: String = null
+  var driverExtraLibraryPath: String = null
+  var superviseDriver: String = null
+  var executorMemory: String = null
+  var totalExecutorCores: String = null
 
   // Special fields
-  private val appArgs = new ArrayBuffer[String]
-  private val sparkProperties = new mutable.HashMap[String, String]
-  private val envVars = new mutable.HashMap[String, String]
-
-  def getAppName: String = appName.toString
-  def getAppResource: String = appResource.toString
-  def getMainClass: String = mainClass.toString
-  def getJars: String = jars.toString
-  def getFiles: String = files.toString
-  def getPyFiles: String = pyFiles.toString
-  def getDriverMemory: String = driverMemory.toString
-  def getDriverCores: String = driverCores.toString
-  def getDriverExtraJavaOptions: String = driverExtraJavaOptions.toString
-  def getDriverExtraClassPath: String = driverExtraClassPath.toString
-  def getDriverExtraLibraryPath: String = driverExtraLibraryPath.toString
-  def getSuperviseDriver: String = superviseDriver.toString
-  def getExecutorMemory: String = executorMemory.toString
-  def getTotalExecutorCores: String = totalExecutorCores.toString
-
-  // Special getters required for JSON serialization
   @JsonProperty("appArgs")
-  private def getAppArgsJson: String = arrayToJson(getAppArgs)
+  private val _appArgs = new ArrayBuffer[String]
   @JsonProperty("sparkProperties")
-  private def getSparkPropertiesJson: String = mapToJson(getSparkProperties)
+  private val _sparkProperties = new mutable.HashMap[String, String]
   @JsonProperty("environmentVariables")
-  private def getEnvironmentVariablesJson: String = mapToJson(getEnvironmentVariables)
+  private val _envVars = new mutable.HashMap[String, String]
 
-  def setAppName(s: String): this.type = setField(appName, s)
-  def setAppResource(s: String): this.type = setField(appResource, s)
-  def setMainClass(s: String): this.type = setField(mainClass, s)
-  def setJars(s: String): this.type = setField(jars, s)
-  def setFiles(s: String): this.type = setField(files, s)
-  def setPyFiles(s: String): this.type = setField(pyFiles, s)
-  def setDriverMemory(s: String): this.type = setField(driverMemory, s)
-  def setDriverCores(s: String): this.type = setNumericField(driverCores, s)
-  def setDriverExtraJavaOptions(s: String): this.type = setField(driverExtraJavaOptions, s)
-  def setDriverExtraClassPath(s: String): this.type = setField(driverExtraClassPath, s)
-  def setDriverExtraLibraryPath(s: String): this.type = setField(driverExtraLibraryPath, s)
-  def setSuperviseDriver(s: String): this.type = setBooleanField(superviseDriver, s)
-  def setExecutorMemory(s: String): this.type = setField(executorMemory, s)
-  def setTotalExecutorCores(s: String): this.type = setNumericField(totalExecutorCores, s)
+  def appArgs: Array[String] = _appArgs.toArray
+  def sparkProperties: Map[String, String] = _sparkProperties.toMap
+  def environmentVariables: Map[String, String] = _envVars.toMap
 
-  // Special setters required for JSON deserialization
-  @JsonProperty("appArgs")
-  private def setAppArgsJson(s: String): Unit = {
-    appArgs.clear()
-    appArgs ++= JsonProtocol.arrayFromJson(parse(s))
-  }
-  @JsonProperty("sparkProperties")
-  private def setSparkPropertiesJson(s: String): Unit = {
-    sparkProperties.clear()
-    sparkProperties ++= JsonProtocol.mapFromJson(parse(s))
-  }
-  @JsonProperty("environmentVariables")
-  private def setEnvironmentVariablesJson(s: String): Unit = {
-    envVars.clear()
-    envVars ++= JsonProtocol.mapFromJson(parse(s))
-  }
-
-  /** Return an array of arguments to be passed to the application. */
-  @JsonIgnore
-  def getAppArgs: Array[String] = appArgs.toArray
-
-  /** Return a map of Spark properties to be passed to the application as java options. */
-  @JsonIgnore
-  def getSparkProperties: Map[String, String] = sparkProperties.toMap
-
-  /** Return a map of environment variables to be passed to the application. */
-  @JsonIgnore
-  def getEnvironmentVariables: Map[String, String] = envVars.toMap
-
-  /** Add a command line argument to be passed to the application. */
-  @JsonIgnore
-  def addAppArg(s: String): this.type = { appArgs += s; this }
-
-  /** Set a Spark property to be passed to the application as a java option. */
-  @JsonIgnore
-  def setSparkProperty(k: String, v: String): this.type = { sparkProperties(k) = v; this }
-
-  /** Set an environment variable to be passed to the application. */
-  @JsonIgnore
-  def setEnvironmentVariable(k: String, v: String): this.type = { envVars(k) = v; this }
-
-  /** Serialize the given Array to a compact JSON string. */
-  private def arrayToJson(arr: Array[String]): String = {
-    if (arr.nonEmpty) { compact(render(JsonProtocol.arrayToJson(arr))) } else null
-  }
-
-  /** Serialize the given Map to a compact JSON string. */
-  private def mapToJson(map: Map[String, String]): String = {
-    if (map.nonEmpty) { compact(render(JsonProtocol.mapToJson(map))) } else null
-  }
+  def addAppArg(s: String): this.type = { _appArgs += s; this }
+  def setSparkProperty(k: String, v: String): this.type = { _sparkProperties(k) = v; this }
+  def setEnvironmentVariable(k: String, v: String): this.type = { _envVars(k) = v; this }
 
   protected override def doValidate(): Unit = {
     super.doValidate()
     assertFieldIsSet(appName, "appName")
     assertFieldIsSet(appResource, "appResource")
+    assertFieldIsMemory(driverMemory, "driverMemory")
+    assertFieldIsNumeric(driverCores, "driverCores")
+    assertFieldIsBoolean(superviseDriver, "superviseDriver")
+    assertFieldIsMemory(executorMemory, "executorMemory")
+    assertFieldIsNumeric(totalExecutorCores, "totalExecutorCores")
   }
 }
