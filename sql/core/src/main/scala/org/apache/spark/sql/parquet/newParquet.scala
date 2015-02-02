@@ -482,12 +482,11 @@ object ParquetRelation2 {
    * Parses a single partition, returns column names and values of each partition column.  For
    * example, given:
    * {{{
-   *   basePath = hdfs://<host>:<port>/path/to/partition
-   *   partitionPath = hdfs://<host>:<port>/path/to/partition/a=42/b=hello/c=3.14
+   *   path = hdfs://<host>:<port>/path/to/partition/a=42/b=hello/c=3.14
    * }}}
    * it returns:
    * {{{
-   *   PartitionDesc(
+   *   PartitionValues(
    *     Seq("a", "b", "c"),
    *     Seq(
    *       Literal(42, IntegerType),
@@ -587,7 +586,12 @@ object ParquetRelation2 {
    * types.
    */
   private def resolveTypeConflicts(literals: Seq[Literal]): Seq[Literal] = {
-    val desiredType = literals.map(_.dataType).maxBy(upCastingOrder.indexOf(_))
+    val desiredType = {
+      val topType = literals.map(_.dataType).maxBy(upCastingOrder.indexOf(_))
+      // Falls back to string if all values of this column are null or empty string
+      if (topType == NullType) StringType else topType
+    }
+
     literals.map { case l @ Literal(_, dataType) =>
       Literal(Cast(l, desiredType).eval(), desiredType)
     }

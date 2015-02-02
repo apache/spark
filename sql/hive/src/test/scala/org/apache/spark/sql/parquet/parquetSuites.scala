@@ -245,7 +245,7 @@ abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll 
           Row(10))
       }
 
-      test(s"$prefix: non-existant partition $table") {
+      test(s"$prefix: non-existent partition $table") {
         checkAnswer(
           sql(s"SELECT COUNT(*) FROM $table WHERE p = 1000"),
           Row(0))
