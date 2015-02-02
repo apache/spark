@@ -68,3 +68,10 @@ class SubmitDriverRequest extends SubmitRestProtocolRequest {
     assertFieldIsNumeric(totalExecutorCores, "totalExecutorCores")
   }
 }
+
+/**
+ * A response to the [[SubmitDriverRequest]] in the REST application submission protocol.
+ */
+class SubmitDriverResponse extends SubmitRestProtocolResponse {
+  var driverId: String = null
+}

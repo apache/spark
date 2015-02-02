@@ -27,3 +27,14 @@ class KillDriverRequest extends SubmitRestProtocolRequest {
     assertFieldIsSet(driverId, "driverId")
   }
 }
+
+/**
+ * A response to the [[KillDriverRequest]] in the REST application submission protocol.
+ */
+class KillDriverResponse extends SubmitRestProtocolResponse {
+  var driverId: String = null
+  protected override def doValidate(): Unit = {
+    super.doValidate()
+    assertFieldIsSet(driverId, "driverId")
+  }
+}

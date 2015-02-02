@@ -155,6 +155,21 @@ abstract class SubmitRestProtocolResponse extends SubmitRestProtocolMessage {
   }
 }
 
+/**
+ * An error response message used in the REST application submission protocol.
+ */
+class ErrorResponse extends SubmitRestProtocolResponse {
+
+  // request was unsuccessful
+  success = "false"
+
+  protected override def doValidate(): Unit = {
+    super.doValidate()
+    assertFieldIsSet(message, "message")
+    assert(!success.toBoolean, s"The 'success' field must be false in $messageType.")
+  }
+}
+
 object SubmitRestProtocolMessage {
   private val packagePrefix = this.getClass.getPackage.getName
   private val mapper = new ObjectMapper()

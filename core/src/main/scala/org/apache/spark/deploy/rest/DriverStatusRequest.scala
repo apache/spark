@@ -27,3 +27,20 @@ class DriverStatusRequest extends SubmitRestProtocolRequest {
     assertFieldIsSet(driverId, "driverId")
   }
 }
+
+/**
+ * A response to the [[DriverStatusRequest]] in the REST application submission protocol.
+ */
+class DriverStatusResponse extends SubmitRestProtocolResponse {
+  var driverId: String = null
+
+  // standalone cluster mode only
+  var driverState: String = null
+  var workerId: String = null
+  var workerHostPort: String = null
+
+  protected override def doValidate(): Unit = {
+    super.doValidate()
+    assertFieldIsSet(driverId, "driverId")
+  }
+}
