@@ -58,7 +58,8 @@ class PowerIterationClusteringSuite extends FunSuite with MLlibTestSparkContext 
  
     val model2 = new PowerIterationClustering()
       .setK(2)
-      .runWithDegreeVector(sc.parallelize(similarities, 2))
+      .setInitialization("degree")
+      .run(sc.parallelize(similarities, 2))
     val predictions2 = Array.fill(2)(mutable.Set.empty[Long])
     model2.assignments.collect().foreach { case (i, c) =>
         predictions2(c) += i

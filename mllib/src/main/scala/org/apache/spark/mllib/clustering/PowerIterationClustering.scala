@@ -43,10 +43,12 @@ class PowerIterationClusteringModel(
  *
  * @param k Number of clusters.
  * @param maxIterations Maximum number of iterations of the PIC algorithm.
+ * @param initMethod Initialization method.
  */
 class PowerIterationClustering private[clustering] (
     private var k: Int,
-    private var maxIterations: Int) extends Serializable {
+    private var maxIterations: Int,
+    private var initMethod: String = "random") extends Serializable {
 
   import org.apache.spark.mllib.clustering.PowerIterationClustering._
 
@@ -70,6 +72,17 @@ class PowerIterationClustering private[clustering] (
   }
 
   /**
+   * Set the initialization method
+   */
+  def setInitialization(method: String): this.type = {
+    this.initMethod = method match {
+      case "random" | "degree" => method
+      case _ => throw new IllegalArgumentException("Incorrect initialization method")
+    }
+    this
+  }
+
+  /**
    * Run the PIC algorithm.
    *
    * @param similarities an RDD of (i, j, s_ij_) tuples representing the affinity matrix, which is
@@ -82,20 +95,13 @@ class PowerIterationClustering private[clustering] (
    */
   def run(similarities: RDD[(Long, Long, Double)]): PowerIterationClusteringModel = {
     val w = normalize(similarities)
-    val w0 = randomInit(w)
+    val w0 = initMethod match {
+      case "random" => randomInit(w)
+      case "degree" => initDegreeVector(w)
+    }
     pic(w0)
   }
 
-  /**
-   * Run the PIC algorithm with degree vector d as suggected by the PIC paper.
-   */ 
-  def runWithDegreeVector(
-      similarities: RDD[(Long, Long, Double)]): PowerIterationClusteringModel = {
-    val w = normalize(similarities)
-    val w0 = initDegreeVector(w)
-    pic(w0)
-  }
- 
   /**
    * Runs the PIC algorithm.
    *
