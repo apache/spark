@@ -20,13 +20,12 @@ package org.apache.spark.sql.sources
 import scala.language.implicitConversions
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.{SchemaRDD, SQLContext}
+import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
-
 
 /**
  * A parser for foreign DDL commands.
@@ -59,6 +58,7 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
   protected val TABLE = Keyword("TABLE")
   protected val USING = Keyword("USING")
   protected val OPTIONS = Keyword("OPTIONS")
+  protected val COMMENT = Keyword("COMMENT")
 
   // Data types.
   protected val STRING = Keyword("STRING")
@@ -111,8 +111,13 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
   protected lazy val pair: Parser[(String, String)] = ident ~ stringLit ^^ { case k ~ v => (k,v) }
 
   protected lazy val column: Parser[StructField] =
-    ident ~ dataType ^^ { case columnName ~ typ =>
-      StructField(columnName, typ)
+    ident ~ dataType ~ (COMMENT ~> stringLit).?  ^^ { case columnName ~ typ ~ cm =>
+      val meta = cm match {
+        case Some(comment) =>
+          new MetadataBuilder().putString(COMMENT.str.toLowerCase(), comment).build()
+        case None => Metadata.empty
+      }
+      StructField(columnName, typ, true, meta)
     }
 
   protected lazy val primitiveType: Parser[DataType] =
@@ -225,7 +230,8 @@ private [sql] case class CreateTempTableUsing(
 
   def run(sqlContext: SQLContext) = {
     val resolved = ResolvedDataSource(sqlContext, userSpecifiedSchema, provider, options)
-    new SchemaRDD(sqlContext, LogicalRelation(resolved.relation)).registerTempTable(tableName)
+    sqlContext.registerRDDAsTable(
+      new DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
     Seq.empty
   }
 }
