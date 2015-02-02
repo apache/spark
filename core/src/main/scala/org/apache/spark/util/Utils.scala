@@ -261,9 +261,6 @@ private[spark] object Utils extends Logging {
     file.setWritable(true, true) &&
     file.setExecutable(false, false) &&
     file.setExecutable(true, true)
-    } else {
-      true 
-    }
   }
 
   /**
