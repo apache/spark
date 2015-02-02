@@ -79,7 +79,7 @@ provide yet more context.
 ------------
 
 Task Instance Context Menu
-.........
+..........................
 From the pages seen above (tree view, graph view, gantt, ...), it is always
 possible to click on a task instance, and get to this rich context menu
 that can take you to more detailed metadata, and perform some actions.
@@ -87,5 +87,3 @@ that can take you to more detailed metadata, and perform some actions.
 ------------
 
 .. image:: img/context.png
-
-------------

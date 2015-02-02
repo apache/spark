@@ -14,3 +14,23 @@ connections registered in Airflow.
 
 .. image:: img/adhoc.png
 
+Charts
+-------------
+A simple UI built on top of flask-admin and highcharts allows to build
+data visualizations and charts easily. Fill in a form with a label, sql,
+chart tyoe, pick a source database from your environment's connecton, 
+select a few other otpions, and save it for later use. 
+
+You can even use the same templating and macros availlable when writting 
+airflow pipelines, parameterizing your queries and modifying parameters 
+direclty in the URL.
+
+These charts ain't Tableau, but they're easy to create, modify and share.
+
+-----
+
+.. image:: img/chart.png
+
+-----
+
+.. image:: img/chart_form.png
