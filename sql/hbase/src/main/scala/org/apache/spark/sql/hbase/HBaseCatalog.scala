@@ -21,6 +21,7 @@ import java.util.zip._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hbase.client._
+import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding
 import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.hbase.{HColumnDescriptor, HTableDescriptor, TableName}
 import org.apache.log4j.Logger
@@ -93,7 +94,12 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: SQLContext,
                                    families: Set[String],
                                    splitKeys: Array[Array[Byte]]): Unit = {
     val tableDescriptor = new HTableDescriptor(TableName.valueOf(tableName))
-    families.foreach(family => tableDescriptor.addFamily(new HColumnDescriptor(family)))
+    families.foreach(family => {
+        val colDsc = new HColumnDescriptor(family)
+        colDsc.setDataBlockEncoding(DataBlockEncoding.FAST_DIFF)
+        //colDsc.setMaxVersions(1)
+        tableDescriptor.addFamily(colDsc)
+    }    
 
     try {
       if (splitKeys == null) {
@@ -286,6 +292,7 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: SQLContext,
       if (!admin.tableExists(MetaData)) {
         val descriptor = new HTableDescriptor(TableName.valueOf(MetaData))
         val columnDescriptor = new HColumnDescriptor(ColumnFamily)
+        columnDescriptor.setDataBlockEncoding(DataBlockEncoding.FAST_DIFF)
         descriptor.addFamily(columnDescriptor)
         admin.createTable(descriptor)
       }
