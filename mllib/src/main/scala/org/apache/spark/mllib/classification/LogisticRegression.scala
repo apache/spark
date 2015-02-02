@@ -32,7 +32,7 @@ import org.apache.spark.rdd.RDD
  * @param intercept Intercept computed for this model. (Only used in Binary Logistic Regression.
  *                  In Multinomial Logistic Regression, the intercepts will not be a single values,
  *                  so the intercepts will be part of the weights.)
- * @param featureSize the dimension of the features
+ * @param numFeatures the dimension of the features
  * @param numClasses the number of possible outcomes for k classes classification problem in
  *                   Multinomial Logistic Regression. By default, it is binary logistic regression
  *                   so numClasses will be set to 2.
@@ -40,12 +40,11 @@ import org.apache.spark.rdd.RDD
 class LogisticRegressionModel (
     override val weights: Vector,
     override val intercept: Double,
-    val featureSize: Int,
+    val numFeatures: Int,
     val numClasses: Int)
   extends GeneralizedLinearModel(weights, intercept) with ClassificationModel with Serializable {
 
-  def this(weights: Vector, intercept: Double, featureSize: Int) =
-    this(weights, intercept, featureSize, 2)
+  def this(weights: Vector, intercept: Double) = this(weights, intercept, weights.size, 2)
 
   private var threshold: Option[Double] = Some(0.5)
 
@@ -73,11 +72,11 @@ class LogisticRegressionModel (
 
   override protected def predictPoint(dataMatrix: Vector, weightMatrix: Vector,
       intercept: Double) = {
-    require(dataMatrix.size == featureSize)
+    require(dataMatrix.size == numFeatures)
 
     // If dataMatrix and weightMatrix have the same dimension, it's binary logistic regression.
     if (numClasses == 2) {
-      require(featureSize == weightMatrix.size)
+      require(numFeatures == weightMatrix.size)
       val margin = dot(weights, dataMatrix) + intercept
       val score = 1.0 / (1.0 + math.exp(-margin))
       threshold match {
@@ -160,7 +159,7 @@ class LogisticRegressionWithSGD private (
   def this() = this(1.0, 100, 0.01, 1.0)
 
   override protected def createModel(weights: Vector, intercept: Double) = {
-    new LogisticRegressionModel(weights, intercept, numFeatures)
+    new LogisticRegressionModel(weights, intercept)
   }
 }
 

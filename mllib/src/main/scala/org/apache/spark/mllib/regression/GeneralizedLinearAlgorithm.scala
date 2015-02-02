@@ -128,7 +128,6 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    */
   protected var numFeatures: Int = 0
 
-
   /**
    * Set if the algorithm should use feature scaling to improve the convergence during optimization.
    */
