@@ -18,6 +18,7 @@ package org.apache.spark.sql.hbase
 
 import org.apache.hadoop.hbase.client.Result
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
 import org.apache.spark.sql.execution.SparkPlan
@@ -35,8 +36,8 @@ class HBaseSQLReaderRDD(
                          output: Seq[Attribute],
                          filterPred: Option[Expression],
                          coprocSubPlan: Option[SparkPlan],
-                         @transient hbaseContext: HBaseSQLContext)
-  extends RDD[Row](hbaseContext.sparkContext, Nil) with Logging {
+                         @transient sqlContext: SQLContext)
+  extends RDD[Row](sqlContext.sparkContext, Nil) with Logging {
 
   override def getPartitions: Array[Partition] = {
     RangeCriticalPoint.generatePrunedPartitions(relation, filterPred).toArray

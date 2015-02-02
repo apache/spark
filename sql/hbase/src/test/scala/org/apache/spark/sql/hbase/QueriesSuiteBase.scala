@@ -33,7 +33,6 @@ class QueriesSuiteBase() extends HBaseIntegrationTestBase
   override protected def afterAll(): Unit = {
     TestHbase.sql("Drop Table " + DefaultStagingTableName)
     TestHbase.sql("Drop Table " + DefaultTableName)
-    cleanUp()
   }
 
   def runQuery(sql: String) = {

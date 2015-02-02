@@ -40,8 +40,7 @@ class HBaseSource extends RelationProvider {
   override def createRelation(
        sqlContext: SQLContext,
        parameters: Map[String, String]): BaseRelation = {
-    val context = sqlContext.asInstanceOf[HBaseSQLContext]
-    val catalog = context.catalog
+    val catalog = sqlContext.catalog.asInstanceOf[HBaseCatalog]
 
     val tableName = parameters("tableName")
     val rawNamespace = parameters("namespace")
@@ -90,7 +89,7 @@ private[hbase] case class HBaseRelation(
      tableName: String,
      hbaseNamespace: String,
      hbaseTableName: String,
-     allColumns: Seq[AbstractColumn])(@transient var context: HBaseSQLContext)
+     allColumns: Seq[AbstractColumn])(@transient var context: SQLContext)
   extends CatalystScan with Serializable {
 
   @transient lazy val logger = Logger.getLogger(getClass.getName)

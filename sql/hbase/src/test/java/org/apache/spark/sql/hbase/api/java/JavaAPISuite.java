@@ -23,6 +23,7 @@ import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.spark.SparkConf;
+import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.hbase.*;
 import org.junit.After;
 import org.junit.Before;
@@ -33,7 +34,7 @@ import org.apache.spark.sql.Row;
 
 public class JavaAPISuite extends HBaseIntegrationTestBase implements Serializable {
     private transient JavaSparkContext sc;
-    private transient HBaseSQLContext hsc;
+    private transient SQLContext hsc;
     private transient MiniHBaseCluster cluster;
     private transient HBaseAdmin hbaseAdmin;
 
@@ -54,7 +55,8 @@ public class JavaAPISuite extends HBaseIntegrationTestBase implements Serializab
         sc = new JavaSparkContext("local[2]", "JavaAPISuite", new SparkConf(true));
         hsc = new HBaseSQLContext(sc);
 
-        HBaseTestingUtility testUtil = new HBaseTestingUtility(hsc.configuration());
+        HBaseTestingUtility testUtil = new HBaseTestingUtility(hsc.sparkContext().
+                hadoopConfiguration());
 
         int nRegionServers = 1;
         int nDataNodes = 1;
@@ -62,7 +64,7 @@ public class JavaAPISuite extends HBaseIntegrationTestBase implements Serializab
 
         try {
             cluster = testUtil.startMiniCluster(nMasters, nRegionServers, nDataNodes);
-            hbaseAdmin = new HBaseAdmin(hsc.configuration());
+            hbaseAdmin = new HBaseAdmin(hsc.sparkContext().hadoopConfiguration());
         } catch (Exception e) {
             e.printStackTrace();
         }

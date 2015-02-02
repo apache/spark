@@ -25,7 +25,7 @@ import org.apache.spark.sql.hbase.util.HBaseKVHelper
 import org.apache.spark.sql.sources.LogicalRelation
 
 class CatalogTestSuite extends HBaseIntegrationTestBase {
-  val (catalog, configuration) = (TestHbase.catalog, TestHbase.configuration)
+  val (catalog, configuration) = (TestHbase.catalog, TestHbase.sparkContext.hadoopConfiguration)
 
   test("Create Table") {
     // prepare the test data

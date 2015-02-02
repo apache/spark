@@ -25,6 +25,7 @@ import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.hbase.{HColumnDescriptor, HTableDescriptor, TableName}
 import org.apache.log4j.Logger
 import org.apache.spark.Logging
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.analysis.{Catalog, OverrideCatalog}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery}
 import org.apache.spark.sql.types._
@@ -67,7 +68,7 @@ case class NonKeyColumn(sqlName: String, dataType: DataType, family: String, qua
   }
 }
 
-private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext,
+private[hbase] class HBaseCatalog(@transient hbaseContext: SQLContext,
                                   @transient configuration: Configuration)
   extends Catalog with Logging with Serializable {
 

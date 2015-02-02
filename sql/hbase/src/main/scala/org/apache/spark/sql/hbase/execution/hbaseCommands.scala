@@ -47,8 +47,7 @@ import scala.collection.mutable.ArrayBuffer
 case class AlterDropColCommand(tableName: String, columnName: String) extends RunnableCommand {
 
   def run(sqlContext: SQLContext): Seq[Row] = {
-    val context = sqlContext.asInstanceOf[HBaseSQLContext]
-    context.catalog.alterTableDropNonKey(tableName, columnName)
+    sqlContext.catalog.asInstanceOf[HBaseCatalog].alterTableDropNonKey(tableName, columnName)
     Seq.empty[Row]
   }
 
@@ -64,10 +63,10 @@ case class AlterAddColCommand(
                                colQualifier: String) extends RunnableCommand {
 
   def run(sqlContext: SQLContext): Seq[Row] = {
-    val context = sqlContext.asInstanceOf[HBaseSQLContext]
-    context.catalog.alterTableAddNonKey(tableName,
+    val hbaseCatalog = sqlContext.catalog.asInstanceOf[HBaseCatalog]
+    hbaseCatalog.alterTableAddNonKey(tableName,
       NonKeyColumn(
-        colName, context.catalog.getDataType(colType), colFamily, colQualifier)
+        colName, hbaseCatalog.getDataType(colType), colFamily, colQualifier)
     )
     Seq.empty[Row]
   }
@@ -79,8 +78,8 @@ case class AlterAddColCommand(
 case class DropHbaseTableCommand(tableName: String) extends RunnableCommand {
 
   def run(sqlContext: SQLContext): Seq[Row] = {
-    val context = sqlContext.asInstanceOf[HBaseSQLContext]
-    context.catalog.deleteTable(tableName)
+    val hbaseCatalog = sqlContext.catalog.asInstanceOf[HBaseCatalog]
+    hbaseCatalog.deleteTable(tableName)
     Seq.empty[Row]
   }
 
@@ -91,9 +90,8 @@ case class DropHbaseTableCommand(tableName: String) extends RunnableCommand {
 case object ShowTablesCommand extends RunnableCommand {
 
   def run(sqlContext: SQLContext): Seq[Row] = {
-    val context = sqlContext.asInstanceOf[HBaseSQLContext]
     val buffer = new ArrayBuffer[Row]()
-    val tables = context.catalog.getAllTableName
+    val tables = sqlContext.catalog.asInstanceOf[HBaseCatalog].getAllTableName
     tables.foreach(x => buffer.append(Row(x)))
     buffer.toSeq
   }
@@ -105,9 +103,8 @@ case object ShowTablesCommand extends RunnableCommand {
 case class DescribeTableCommand(tableName: String) extends RunnableCommand {
 
   def run(sqlContext: SQLContext): Seq[Row] = {
-    val context = sqlContext.asInstanceOf[HBaseSQLContext]
     val buffer = new ArrayBuffer[Row]()
-    val relation = context.catalog.getTable(tableName)
+    val relation = sqlContext.catalog.asInstanceOf[HBaseCatalog].getTable(tableName)
     if (relation.isDefined) {
       relation.get.allColumns.foreach {
         case keyColumn: KeyColumn =>
@@ -174,8 +171,9 @@ case class BulkLoadIntoTableCommand(
     @transient val hbContext = sqlContext.asInstanceOf[HBaseSQLContext]
 
     // tmp path for storing HFile
-    @transient val tmpPath = Util.getTempFilePath(hbContext.configuration, relation.tableName)
-    @transient val job = new Job(hbContext.configuration)
+    @transient val tmpPath = Util.getTempFilePath(
+      hbContext.sparkContext.hadoopConfiguration, relation.tableName)
+    @transient val job = new Job(hbContext.sparkContext.hadoopConfiguration)
     job.setOutputKeyClass(classOf[ImmutableBytesWritable])
     job.setOutputValueClass(classOf[KeyValue])
     job.setOutputFormatClass(classOf[HFileOutputFormat2])
@@ -185,10 +183,10 @@ case class BulkLoadIntoTableCommand(
 
     @transient val hadoopReader = if (isLocal) {
       val fs = FileSystem.getLocal(conf)
-      val pathString = fs.pathToFile(new Path(inputPath)).getCanonicalPath
-      new HadoopReader(hbContext.sparkContext, pathString, delimiter)(relation)
+      val pathString = fs.pathToFile(new Path(inputPath)).toURI.toURL.toString
+      new HadoopReader(sqlContext.sparkContext, pathString, delimiter)(relation)
     } else {
-      new HadoopReader(hbContext.sparkContext, inputPath, delimiter)(relation)
+      new HadoopReader(sqlContext.sparkContext, inputPath, delimiter)(relation)
     }
 
     @transient val splitKeys = relation.getRegionStartKeys.toArray
@@ -280,7 +278,7 @@ case class BulkLoadIntoTableCommand(
     @transient val jobCommitter = jobFormat.getOutputCommitter(jobTaskContext)
     jobCommitter.setupJob(jobTaskContext)
     logDebug(s"Starting doBulkLoad on table ${relation.htable.getName} ...")
-    hbContext.sparkContext.runJob(shuffled, writeShard)
+    sqlContext.sparkContext.runJob(shuffled, writeShard)
     logDebug(s"finished BulkLoad : ${System.currentTimeMillis()}")
     jobCommitter.commitJob(jobTaskContext)
     if (!parallel) {

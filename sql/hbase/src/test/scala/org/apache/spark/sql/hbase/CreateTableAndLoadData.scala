@@ -167,19 +167,6 @@ trait CreateTableAndLoadData extends Logging {
     runSql(loadSql)
   }
 
-  def cleanUp() = {
-    // delete the temp files
-    val sparkHome = TestHbase.sparkContext.getSparkHome().getOrElse(".")
-
-    val fileSystem = FileSystem.get(TestHbase.sparkContext.hadoopConfiguration)
-    val files = fileSystem.listStatus(new Path(sparkHome))
-    for (file <- files) {
-      if (file.getPath.getName.indexOf(DefaultTableName) != -1) {
-        fileSystem.delete(file.getPath, true)
-      }
-    }
-  }
-
   def s2b(s: String) = Bytes.toBytes(s)
 
 }
