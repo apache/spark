@@ -55,7 +55,7 @@ private[hive] case object NativePlaceholder extends Command
 case class DescribeCommand(
     table: LogicalPlan,
     override val output: Seq[Attribute],
-    isExtended: Boolean) extends Command 
+    isExtended: Boolean) extends Command
 
 /** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
 private[hive] object HiveQl {
