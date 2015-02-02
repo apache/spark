@@ -1,0 +1,9 @@
+Package: [[deb.pkg.name]]-examples
+Version: [[version]]-[[buildNumber]]
+Depends: [[deb.pkg.name]] (= [[version]]-[[buildNumber]])
+Section: misc
+Priority: extra
+Architecture: all
+Maintainer: Matei Zaharia <matei.zaharia@gmail.com>
+Description: [[name]]
+Distribution: development
