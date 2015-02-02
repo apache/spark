@@ -78,7 +78,7 @@ class NaiveBayesModel private[mllib] (
 
     // Create JSON metadata.
     val metadata = NaiveBayesModel.Metadata(
-      clazz = this.getClass.getName, version = Exportable.latestVersion)
+      clazz = this.getClass.getName, version = latestVersion)
     val metadataRDD: DataFrame = sc.parallelize(Seq(metadata))
     metadataRDD.toJSON.saveAsTextFile(path + "/metadata")
 
@@ -87,6 +87,8 @@ class NaiveBayesModel private[mllib] (
     val dataRDD: DataFrame = sc.parallelize(Seq(data))
     dataRDD.saveAsParquetFile(path + "/data")
   }
+
+  override protected def latestVersion: String = NaiveBayesModel.latestVersion
 }
 
 object NaiveBayesModel extends Importable[NaiveBayesModel] {
@@ -110,7 +112,7 @@ object NaiveBayesModel extends Importable[NaiveBayesModel] {
       case Row(clazz: String, version: String) =>
         assert(clazz == classOf[NaiveBayesModel].getName, s"NaiveBayesModel.load" +
           s" was given model file with metadata specifying a different model class: $clazz")
-        assert(version == Exportable.latestVersion, // only 1 version exists currently
+        assert(version == latestVersion, // only 1 version exists currently
           s"NaiveBayesModel.load did not recognize model format version: $version")
     }
 
@@ -127,6 +129,8 @@ object NaiveBayesModel extends Importable[NaiveBayesModel] {
     val theta = data.getAs[Seq[Seq[Double]]](2).map(_.toArray).toArray
     new NaiveBayesModel(labels, pi, theta)
   }
+
+  override protected def latestVersion: String = "1.0"
 }
 
 /**

@@ -49,12 +49,8 @@ trait Exportable {
    */
   def save(sc: SparkContext, path: String): Unit
 
-}
-
-private[mllib] object Exportable {
-
   /** Current version of model import/export format. */
-  val latestVersion: String = "1.0"
+  protected def latestVersion: String
 
 }
 
@@ -77,6 +73,9 @@ trait Importable[Model <: Exportable] {
    * @return  Model instance
    */
   def load(sc: SparkContext, path: String): Model
+
+  /** Current version of model import/export format. */
+  protected def latestVersion: String
 
 }
 

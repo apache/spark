@@ -144,7 +144,7 @@ class LogisticRegressionModel (
 
     // Create JSON metadata.
     val metadata = LogisticRegressionModel.Metadata(
-      clazz = this.getClass.getName, version = Exportable.latestVersion)
+      clazz = this.getClass.getName, version = latestVersion)
     val metadataRDD: DataFrame = sc.parallelize(Seq(metadata))
     metadataRDD.toJSON.saveAsTextFile(path + "/metadata")
 
@@ -153,6 +153,9 @@ class LogisticRegressionModel (
     val dataRDD: DataFrame = sc.parallelize(Seq(data))
     dataRDD.saveAsParquetFile(path + "/data")
   }
+
+  override protected def latestVersion: String = LogisticRegressionModel.latestVersion
+
 }
 
 object LogisticRegressionModel extends Importable[LogisticRegressionModel] {
@@ -176,7 +179,7 @@ object LogisticRegressionModel extends Importable[LogisticRegressionModel] {
       case Row(clazz: String, version: String) =>
         assert(clazz == classOf[LogisticRegressionModel].getName, s"LogisticRegressionModel.load" +
           s" was given model file with metadata specifying a different model class: $clazz")
-        assert(version == Exportable.latestVersion, // only 1 version exists currently
+        assert(version == latestVersion, // only 1 version exists currently
           s"LogisticRegressionModel.load did not recognize model format version: $version")
     }
 
@@ -198,6 +201,8 @@ object LogisticRegressionModel extends Importable[LogisticRegressionModel] {
     }
     lr
   }
+
+  override protected def latestVersion: String = "1.0"
 
 }
 
