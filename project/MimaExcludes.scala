@@ -67,6 +67,10 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.Matrix.foreachActive")
           ) ++ Seq(
+            // SPARK-5540
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.recommendation.ALS.solveLeastSquares")
+          ) ++ Seq(
             // SPARK-3325
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.streaming.api.java.JavaDStreamLike.print"),
