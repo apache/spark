@@ -25,7 +25,7 @@ import org.scalatest.Matchers
 
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.util.{LocalClusterSparkContext, LocalSparkContext}
+import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
 
 object LogisticRegressionSuite {
@@ -57,7 +57,7 @@ object LogisticRegressionSuite {
   }
 }
 
-class LogisticRegressionSuite extends FunSuite with LocalSparkContext with Matchers {
+class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with Matchers {
   def validatePrediction(
       predictions: Seq[Double],
       input: Seq[LabeledPoint],
@@ -80,13 +80,16 @@ class LogisticRegressionSuite extends FunSuite with LocalSparkContext with Match
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
     val lr = new LogisticRegressionWithSGD().setIntercept(true)
-    lr.optimizer.setStepSize(10.0).setNumIterations(20)
+    lr.optimizer
+      .setStepSize(10.0)
+      .setRegParam(0.0)
+      .setNumIterations(20)
 
     val model = lr.run(testRDD)
 
     // Test the weights
-    assert(model.weights(0) ~== -1.52 relTol 0.01)
-    assert(model.intercept ~== 2.00 relTol 0.01)
+    assert(model.weights(0) ~== B relTol 0.02)
+    assert(model.intercept ~== A relTol 0.02)
 
     val validationData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 17)
     val validationRDD = sc.parallelize(validationData, 2)
@@ -112,10 +115,8 @@ class LogisticRegressionSuite extends FunSuite with LocalSparkContext with Match
     val model = lr.run(testRDD)
 
     // Test the weights
-    assert(model.weights(0) ~== -1.52 relTol 0.01)
-    assert(model.intercept ~== 2.00 relTol 0.01)
-    assert(model.weights(0) ~== model.weights(0) relTol 0.01)
-    assert(model.intercept ~== model.intercept relTol 0.01)
+    assert(model.weights(0) ~== B relTol 0.02)
+    assert(model.intercept ~== A relTol 0.02)
 
     val validationData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 17)
     val validationRDD = sc.parallelize(validationData, 2)
@@ -141,13 +142,16 @@ class LogisticRegressionSuite extends FunSuite with LocalSparkContext with Match
 
     // Use half as many iterations as the previous test.
     val lr = new LogisticRegressionWithSGD().setIntercept(true)
-    lr.optimizer.setStepSize(10.0).setNumIterations(10)
+    lr.optimizer
+      .setStepSize(10.0)
+      .setRegParam(0.0)
+      .setNumIterations(10)
 
     val model = lr.run(testRDD, initialWeights)
 
     // Test the weights
-    assert(model.weights(0) ~== -1.50 relTol 0.01)
-    assert(model.intercept ~== 1.97 relTol 0.01)
+    assert(model.weights(0) ~== B relTol 0.02)
+    assert(model.intercept ~== A relTol 0.02)
 
     val validationData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 17)
     val validationRDD = sc.parallelize(validationData, 2)
@@ -174,15 +178,16 @@ class LogisticRegressionSuite extends FunSuite with LocalSparkContext with Match
     // Use half as many iterations as the previous test.
     val lr = new LogisticRegressionWithSGD().setIntercept(true)
     lr.optimizer.
-      setStepSize(10.0).
+      setStepSize(1.0).
       setNumIterations(10).
       setRegParam(1.0)
 
     val model = lr.run(testRDD, initialWeights)
 
     // Test the weights
-    assert(model.weights(0) ~== -430000.0 relTol 20000.0)
-    assert(model.intercept ~== 370000.0 relTol 20000.0)
+    // With regularization, the resulting weights will be smaller.
+    assert(model.weights(0) ~== -0.14 relTol 0.02)
+    assert(model.intercept ~== 0.25 relTol 0.02)
 
     val validationData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 17)
     val validationRDD = sc.parallelize(validationData, 2)
@@ -212,8 +217,8 @@ class LogisticRegressionSuite extends FunSuite with LocalSparkContext with Match
     val model = lr.run(testRDD, initialWeights)
 
     // Test the weights
-    assert(model.weights(0) ~== -1.50 relTol 0.02)
-    assert(model.intercept ~== 1.97 relTol 0.02)
+    assert(model.weights(0) ~== B relTol 0.02)
+    assert(model.intercept ~== A relTol 0.02)
 
     val validationData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 17)
     val validationRDD = sc.parallelize(validationData, 2)

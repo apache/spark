@@ -17,23 +17,108 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.io.File
+import java.util.{Locale, TimeZone}
+
+import org.scalatest.BeforeAndAfter
+
 import scala.util.Try
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkFiles, SparkException}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.Dsl._
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.{Row, SchemaRDD}
 
 case class TestData(a: Int, b: String)
 
 /**
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
  */
-class HiveQuerySuite extends HiveComparisonTest {
+class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
+  private val originalTimeZone = TimeZone.getDefault
+  private val originalLocale = Locale.getDefault
+
+  override def beforeAll() {
+    TestHive.cacheTables = true
+    // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
+    TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+    // Add Locale setting
+    Locale.setDefault(Locale.US)
+  }
+
+  override def afterAll() {
+    TestHive.cacheTables = false
+    TimeZone.setDefault(originalTimeZone)
+    Locale.setDefault(originalLocale)
+  }
+
+  test("SPARK-4908: concurent hive native commands") {
+    (1 to 100).par.map { _ =>
+      sql("USE default")
+      sql("SHOW TABLES")
+    }
+  }
+  
+  createQueryTest("! operator",
+    """
+      |SELECT a FROM (
+      |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT 2 AS a FROM src LIMIT 1) table
+      |WHERE !(a>1)
+    """.stripMargin)
+
+  createQueryTest("constant object inspector for generic udf",
+    """SELECT named_struct(
+      lower("AA"), "10",
+      repeat(lower("AA"), 3), "11",
+      lower(repeat("AA", 3)), "12",
+      printf("Bb%d", 12), "13",
+      repeat(printf("s%d", 14), 2), "14") FROM src LIMIT 1""")
+
+  createQueryTest("NaN to Decimal",
+    "SELECT CAST(CAST('NaN' AS DOUBLE) AS DECIMAL(1,1)) FROM src LIMIT 1")
+
+  createQueryTest("constant null testing",
+    """SELECT
+      |IF(FALSE, CAST(NULL AS STRING), CAST(1 AS STRING)) AS COL1,
+      |IF(TRUE, CAST(NULL AS STRING), CAST(1 AS STRING)) AS COL2,
+      |IF(FALSE, CAST(NULL AS INT), CAST(1 AS INT)) AS COL3,
+      |IF(TRUE, CAST(NULL AS INT), CAST(1 AS INT)) AS COL4,
+      |IF(FALSE, CAST(NULL AS DOUBLE), CAST(1 AS DOUBLE)) AS COL5,
+      |IF(TRUE, CAST(NULL AS DOUBLE), CAST(1 AS DOUBLE)) AS COL6,
+      |IF(FALSE, CAST(NULL AS BOOLEAN), CAST(1 AS BOOLEAN)) AS COL7,
+      |IF(TRUE, CAST(NULL AS BOOLEAN), CAST(1 AS BOOLEAN)) AS COL8,
+      |IF(FALSE, CAST(NULL AS BIGINT), CAST(1 AS BIGINT)) AS COL9,
+      |IF(TRUE, CAST(NULL AS BIGINT), CAST(1 AS BIGINT)) AS COL10,
+      |IF(FALSE, CAST(NULL AS FLOAT), CAST(1 AS FLOAT)) AS COL11,
+      |IF(TRUE, CAST(NULL AS FLOAT), CAST(1 AS FLOAT)) AS COL12,
+      |IF(FALSE, CAST(NULL AS SMALLINT), CAST(1 AS SMALLINT)) AS COL13,
+      |IF(TRUE, CAST(NULL AS SMALLINT), CAST(1 AS SMALLINT)) AS COL14,
+      |IF(FALSE, CAST(NULL AS TINYINT), CAST(1 AS TINYINT)) AS COL15,
+      |IF(TRUE, CAST(NULL AS TINYINT), CAST(1 AS TINYINT)) AS COL16,
+      |IF(FALSE, CAST(NULL AS BINARY), CAST("1" AS BINARY)) AS COL17,
+      |IF(TRUE, CAST(NULL AS BINARY), CAST("1" AS BINARY)) AS COL18,
+      |IF(FALSE, CAST(NULL AS DATE), CAST("1970-01-01" AS DATE)) AS COL19,
+      |IF(TRUE, CAST(NULL AS DATE), CAST("1970-01-01" AS DATE)) AS COL20,
+      |IF(FALSE, CAST(NULL AS TIMESTAMP), CAST(1 AS TIMESTAMP)) AS COL21,
+      |IF(TRUE, CAST(NULL AS TIMESTAMP), CAST(1 AS TIMESTAMP)) AS COL22,
+      |IF(FALSE, CAST(NULL AS DECIMAL), CAST(1 AS DECIMAL)) AS COL23,
+      |IF(TRUE, CAST(NULL AS DECIMAL), CAST(1 AS DECIMAL)) AS COL24
+      |FROM src LIMIT 1""".stripMargin)
+
+  createQueryTest("constant array",
+  """
+    |SELECT sort_array(
+    |  sort_array(
+    |    array("hadoop distributed file system",
+    |          "enterprise databases", "hadoop map-reduce")))
+    |FROM src LIMIT 1;
+  """.stripMargin)
 
   createQueryTest("count distinct 0 values",
     """
@@ -142,7 +227,7 @@ class HiveQuerySuite extends HiveComparisonTest {
   // Jdk version leads to different query output for double, so not use createQueryTest here
   test("division") {
     val res = sql("SELECT 2 / 1, 1 / 2, 1 / 3, 1 / COUNT(*) FROM src LIMIT 1").collect().head
-    Seq(2.0, 0.5, 0.3333333333333333, 0.002).zip(res).foreach( x =>
+    Seq(2.0, 0.5, 0.3333333333333333, 0.002).zip(res.toSeq).foreach( x =>
       assert(x._1 == x._2.asInstanceOf[Double]))
   }
 
@@ -151,7 +236,7 @@ class HiveQuerySuite extends HiveComparisonTest {
 
   test("Query expressed in SQL") {
     setConf("spark.sql.dialect", "sql")
-    assert(sql("SELECT 1").collect() === Array(Seq(1)))
+    assert(sql("SELECT 1").collect() === Array(Row(1)))
     setConf("spark.sql.dialect", "hiveql")
   }
 
@@ -250,10 +335,8 @@ class HiveQuerySuite extends HiveComparisonTest {
   createQueryTest("DISTINCT",
     "SELECT DISTINCT key, value FROM src")
 
-  ignore("empty aggregate input") {
-    createQueryTest("empty aggregate input",
-      "SELECT SUM(key) FROM (SELECT * FROM src LIMIT 0) a")
-  }
+  createQueryTest("empty aggregate input",
+    "SELECT SUM(key) FROM (SELECT * FROM src LIMIT 0) a")
 
   createQueryTest("lateral view1",
     "SELECT tbl.* FROM src LATERAL VIEW explode(array(1,2)) tbl as a")
@@ -285,7 +368,7 @@ class HiveQuerySuite extends HiveComparisonTest {
     sql("SELECT * FROM src TABLESAMPLE(0.1 PERCENT) s")
   }
 
-  test("SchemaRDD toString") {
+  test("DataFrame toString") {
     sql("SHOW TABLES").toString
     sql("SELECT * FROM src").toString
   }
@@ -344,6 +427,15 @@ class HiveQuerySuite extends HiveComparisonTest {
   createQueryTest("select null from table",
     "SELECT null FROM src LIMIT 1")
 
+  test("predicates contains an empty AttributeSet() references") {
+    sql(
+      """
+        |SELECT a FROM (
+        |  SELECT 1 AS a FROM src LIMIT 1 ) table
+        |WHERE abs(20141202) is not null
+      """.stripMargin).collect()
+  }
+
   test("implement identity function using case statement") {
     val actual = sql("SELECT (CASE key WHEN key THEN key END) FROM src")
       .map { case Row(i: Int) => i }
@@ -376,18 +468,18 @@ class HiveQuerySuite extends HiveComparisonTest {
         TestData(2, "str2") :: Nil)
     testData.registerTempTable("REGisteredTABle")
 
-    assertResult(Array(Array(2, "str2"))) {
+    assertResult(Array(Row(2, "str2"))) {
       sql("SELECT tablealias.A, TABLEALIAS.b FROM reGisteredTABle TableAlias " +
         "WHERE TableAliaS.a > 1").collect()
     }
   }
 
-  def isExplanation(result: SchemaRDD) = {
+  def isExplanation(result: DataFrame) = {
     val explanation = result.select('plan).collect().map { case Row(plan: String) => plan }
     explanation.contains("== Physical Plan ==")
   }
 
-  test("SPARK-1704: Explain commands as a SchemaRDD") {
+  test("SPARK-1704: Explain commands as a DataFrame") {
     sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
 
     val rdd = sql("explain select key, count(value) from src group by key")
@@ -415,6 +507,11 @@ class HiveQuerySuite extends HiveComparisonTest {
 
   test("SPARK-2225: turn HAVING without GROUP BY into a simple filter") {
     assert(sql("select key from src having key > 490").collect().size < 100)
+  }
+
+  test("SPARK-5367: resolve star expression in udf") {
+    assert(sql("select concat(*) from src limit 5").collect().size == 5)
+    assert(sql("select array(*) from src limit 5").collect().size == 5)
   }
 
   test("Query Hive native command execution result") {
@@ -462,12 +559,12 @@ class HiveQuerySuite extends HiveComparisonTest {
     // Describe a table
     assertResult(
       Array(
-        Array("key", "int", null),
-        Array("value", "string", null),
-        Array("dt", "string", null),
-        Array("# Partition Information", "", ""),
-        Array("# col_name", "data_type", "comment"),
-        Array("dt", "string", null))
+        Row("key", "int", null),
+        Row("value", "string", null),
+        Row("dt", "string", null),
+        Row("# Partition Information", "", ""),
+        Row("# col_name", "data_type", "comment"),
+        Row("dt", "string", null))
     ) {
       sql("DESCRIBE test_describe_commands1")
         .select('col_name, 'data_type, 'comment)
@@ -477,12 +574,12 @@ class HiveQuerySuite extends HiveComparisonTest {
     // Describe a table with a fully qualified table name
     assertResult(
       Array(
-        Array("key", "int", null),
-        Array("value", "string", null),
-        Array("dt", "string", null),
-        Array("# Partition Information", "", ""),
-        Array("# col_name", "data_type", "comment"),
-        Array("dt", "string", null))
+        Row("key", "int", null),
+        Row("value", "string", null),
+        Row("dt", "string", null),
+        Row("# Partition Information", "", ""),
+        Row("# col_name", "data_type", "comment"),
+        Row("dt", "string", null))
     ) {
       sql("DESCRIBE default.test_describe_commands1")
         .select('col_name, 'data_type, 'comment)
@@ -508,19 +605,19 @@ class HiveQuerySuite extends HiveComparisonTest {
     // Describe a partition is a native command
     assertResult(
       Array(
-        Array("key", "int", "None"),
-        Array("value", "string", "None"),
-        Array("dt", "string", "None"),
-        Array("", "", ""),
-        Array("# Partition Information", "", ""),
+        Array("key", "int"),
+        Array("value", "string"),
+        Array("dt", "string"),
+        Array(""),
+        Array("# Partition Information"),
         Array("# col_name", "data_type", "comment"),
-        Array("", "", ""),
-        Array("dt", "string", "None"))
+        Array(""),
+        Array("dt", "string"))
     ) {
       sql("DESCRIBE test_describe_commands1 PARTITION (dt='2008-06-08')")
         .select('result)
         .collect()
-        .map(_.getString(0).split("\t").map(_.trim))
+        .map(_.getString(0).replaceAll("None", "").trim.split("\t").map(_.trim))
     }
 
     // Describe a registered temporary table.
@@ -532,9 +629,8 @@ class HiveQuerySuite extends HiveComparisonTest {
 
     assertResult(
       Array(
-        Array("# Registered as a temporary table", null, null),
-        Array("a", "IntegerType", null),
-        Array("b", "StringType", null))
+        Row("a", "IntegerType", null),
+        Row("b", "StringType", null))
     ) {
       sql("DESCRIBE test_describe_commands2")
         .select('col_name, 'data_type, 'comment)
@@ -561,12 +657,27 @@ class HiveQuerySuite extends HiveComparisonTest {
           |WITH serdeproperties('s1'='9')
         """.stripMargin)
     }
-    sql(s"ADD JAR $testJar")
-    sql(
-      """ALTER TABLE alter1 SET SERDE 'org.apache.hadoop.hive.serde2.TestSerDe'
-        |WITH serdeproperties('s1'='9')
-      """.stripMargin)
+    // Now only verify 0.12.0, and ignore other versions due to binary compatibility
+    // current TestSerDe.jar is from 0.12.0
+    if (HiveShim.version == "0.12.0") {
+      sql(s"ADD JAR $testJar")
+      sql(
+        """ALTER TABLE alter1 SET SERDE 'org.apache.hadoop.hive.serde2.TestSerDe'
+          |WITH serdeproperties('s1'='9')
+        """.stripMargin)
+    }
     sql("DROP TABLE alter1")
+  }
+
+  test("ADD FILE command") {
+    val testFile = TestHive.getHiveFile("data/files/v1.txt").getCanonicalFile
+    sql(s"ADD FILE $testFile")
+
+    val checkAddFileRDD = sparkContext.parallelize(1 to 2, 1).mapPartitions { _ =>
+      Iterator.single(new File(SparkFiles.get("v1.txt")).canRead)
+    }
+
+    assert(checkAddFileRDD.first())
   }
 
   case class LogEntry(filename: String, message: String)
@@ -737,14 +848,14 @@ class HiveQuerySuite extends HiveComparisonTest {
     val testVal = "test.val.0"
     val nonexistentKey = "nonexistent"
     val KV = "([^=]+)=([^=]*)".r
-    def collectResults(rdd: SchemaRDD): Set[(String, String)] =
+    def collectResults(rdd: DataFrame): Set[(String, String)] =
       rdd.collect().map {
         case Row(key: String, value: String) => key -> value
         case Row(KV(key, value)) => key -> value
       }.toSet
-    clear()
+    conf.clear()
 
-    // "set" itself returns all config variables currently specified in SQLConf.
+    // "SET" itself returns all config variables currently specified in SQLConf.
     // TODO: Should we be listing the default here always? probably...
     assert(sql("SET").collect().size == 0)
 
@@ -753,17 +864,19 @@ class HiveQuerySuite extends HiveComparisonTest {
     }
 
     assert(hiveconf.get(testKey, "") == testVal)
-    assertResult(Set(testKey -> testVal)) {
-      collectResults(sql("SET"))
-    }
+    assertResult(Set(testKey -> testVal))(collectResults(sql("SET")))
+    assertResult(Set(testKey -> testVal))(collectResults(sql("SET -v")))
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
     assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
     assertResult(Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
       collectResults(sql("SET"))
     }
+    assertResult(Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
+      collectResults(sql("SET -v"))
+    }
 
-    // "set key"
+    // "SET key"
     assertResult(Set(testKey -> testVal)) {
       collectResults(sql(s"SET $testKey"))
     }
@@ -772,39 +885,12 @@ class HiveQuerySuite extends HiveComparisonTest {
       collectResults(sql(s"SET $nonexistentKey"))
     }
 
-    // Assert that sql() should have the same effects as sql() by repeating the above using sql().
-    clear()
-    assert(sql("SET").collect().size == 0)
-
-    assertResult(Set(testKey -> testVal)) {
-      collectResults(sql(s"SET $testKey=$testVal"))
-    }
-
-    assert(hiveconf.get(testKey, "") == testVal)
-    assertResult(Set(testKey -> testVal)) {
-      collectResults(sql("SET"))
-    }
-
-    sql(s"SET ${testKey + testKey}=${testVal + testVal}")
-    assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
-    assertResult(Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
-      collectResults(sql("SET"))
-    }
-
-    assertResult(Set(testKey -> testVal)) {
-      collectResults(sql(s"SET $testKey"))
-    }
-
-    assertResult(Set(nonexistentKey -> "<undefined>")) {
-      collectResults(sql(s"SET $nonexistentKey"))
-    }
-
-    clear()
+    conf.clear()
   }
 
   createQueryTest("select from thrift based table",
     "SELECT * from src_thrift")
-  
+
   // Put tests that depend on specific Hive settings before these last two test,
   // since they modify /clear stuff.
 }

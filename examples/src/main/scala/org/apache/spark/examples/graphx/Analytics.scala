@@ -33,6 +33,10 @@ object Analytics extends Logging {
     if (args.length < 2) {
       System.err.println(
         "Usage: Analytics <taskType> <file> --numEPart=<num_edge_partitions> [other options]")
+      System.err.println("Supported 'taskType' as follows:")
+      System.err.println("  pagerank    Compute PageRank")
+      System.err.println("  cc          Compute the connected components of vertices")
+      System.err.println("  triangles   Count the number of triangles")
       System.exit(1)
     }
 
@@ -46,7 +50,7 @@ object Analytics extends Logging {
     }
     val options = mutable.Map(optionsList: _*)
 
-    val conf = new SparkConf().set("spark.locality.wait", "100000")
+    val conf = new SparkConf()
     GraphXUtils.registerKryoClasses(conf)
 
     val numEPart = options.remove("numEPart").map(_.toInt).getOrElse {
@@ -77,7 +81,7 @@ object Analytics extends Logging {
         val sc = new SparkContext(conf.setAppName("PageRank(" + fname + ")"))
 
         val unpartitionedGraph = GraphLoader.edgeListFile(sc, fname,
-          minEdgePartitions = numEPart,
+          numEdgePartitions = numEPart,
           edgeStorageLevel = edgeStorageLevel,
           vertexStorageLevel = vertexStorageLevel).cache()
         val graph = partitionStrategy.foldLeft(unpartitionedGraph)(_.partitionBy(_))
@@ -110,7 +114,7 @@ object Analytics extends Logging {
 
         val sc = new SparkContext(conf.setAppName("ConnectedComponents(" + fname + ")"))
         val unpartitionedGraph = GraphLoader.edgeListFile(sc, fname,
-          minEdgePartitions = numEPart,
+          numEdgePartitions = numEPart,
           edgeStorageLevel = edgeStorageLevel,
           vertexStorageLevel = vertexStorageLevel).cache()
         val graph = partitionStrategy.foldLeft(unpartitionedGraph)(_.partitionBy(_))
@@ -131,7 +135,7 @@ object Analytics extends Logging {
         val sc = new SparkContext(conf.setAppName("TriangleCount(" + fname + ")"))
         val graph = GraphLoader.edgeListFile(sc, fname,
           canonicalOrientation = true,
-          minEdgePartitions = numEPart,
+          numEdgePartitions = numEPart,
           edgeStorageLevel = edgeStorageLevel,
           vertexStorageLevel = vertexStorageLevel)
           // TriangleCount requires the graph to be partitioned

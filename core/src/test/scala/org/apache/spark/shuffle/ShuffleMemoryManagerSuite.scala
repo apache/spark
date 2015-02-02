@@ -159,7 +159,7 @@ class ShuffleMemoryManagerSuite extends FunSuite with Timeouts {
 
   test("threads can block to get at least 1 / 2N memory") {
     // t1 grabs 1000 bytes and then waits until t2 is ready to make a request. It sleeps
-    // for a bit and releases 250 bytes, which should then be greanted to t2. Further requests
+    // for a bit and releases 250 bytes, which should then be granted to t2. Further requests
     // by t2 will return false right away because it now has 1 / 2N of the memory.
 
     val manager = new ShuffleMemoryManager(1000L)
@@ -290,5 +290,20 @@ class ShuffleMemoryManagerSuite extends FunSuite with Timeouts {
       assert(state.t2Result3 === 0L, s"t2 got more bytes a third time (${state.t2Result3})")
       assert(state.t2WaitTime > 200, s"t2 waited less than 200 ms (${state.t2WaitTime})")
     }
+  }
+
+  test("threads should not be granted a negative size") {
+    val manager = new ShuffleMemoryManager(1000L)
+    manager.tryToAcquire(700L)
+
+    val latch = new CountDownLatch(1)
+    startThread("t1") {
+      manager.tryToAcquire(300L)
+      latch.countDown()
+    }
+    latch.await() // Wait until `t1` calls `tryToAcquire`
+
+    val granted = manager.tryToAcquire(300L)
+    assert(0 === granted, "granted is negative")
   }
 }

@@ -142,6 +142,10 @@ object SparkSubmit {
         printErrorAndExit("Cluster deploy mode is currently not supported for python applications.")
       case (_, CLUSTER) if isShell(args.primaryResource) =>
         printErrorAndExit("Cluster deploy mode is not applicable to Spark shells.")
+      case (_, CLUSTER) if isSqlShell(args.mainClass) =>
+        printErrorAndExit("Cluster deploy mode is not applicable to Spark SQL shell.")
+      case (_, CLUSTER) if isThriftServer(args.mainClass) =>
+        printErrorAndExit("Cluster deploy mode is not applicable to Spark Thrift server.")
       case _ =>
     }
 
@@ -158,8 +162,9 @@ object SparkSubmit {
         args.files = mergeFileLists(args.files, args.primaryResource)
       }
       args.files = mergeFileLists(args.files, args.pyFiles)
-      // Format python file paths properly before adding them to the PYTHONPATH
-      sysProps("spark.submit.pyFiles") = PythonRunner.formatPaths(args.pyFiles).mkString(",")
+      if (args.pyFiles != null) {
+        sysProps("spark.submit.pyFiles") = args.pyFiles
+      }
     }
 
     // Special flag to avoid deprecation warnings at the client
@@ -197,6 +202,7 @@ object SparkSubmit {
       // Yarn cluster only
       OptionAssigner(args.name, YARN, CLUSTER, clOption = "--name"),
       OptionAssigner(args.driverMemory, YARN, CLUSTER, clOption = "--driver-memory"),
+      OptionAssigner(args.driverCores, YARN, CLUSTER, clOption = "--driver-cores"),
       OptionAssigner(args.queue, YARN, CLUSTER, clOption = "--queue"),
       OptionAssigner(args.numExecutors, YARN, CLUSTER, clOption = "--num-executors"),
       OptionAssigner(args.executorMemory, YARN, CLUSTER, clOption = "--executor-memory"),
@@ -273,15 +279,37 @@ object SparkSubmit {
       }
     }
 
-    // Properties given with --conf are superceded by other options, but take precedence over
-    // properties in the defaults file.
+    // Load any properties specified through --conf and the default properties file
     for ((k, v) <- args.sparkProperties) {
       sysProps.getOrElseUpdate(k, v)
     }
 
-    // Read from default spark properties, if any
-    for ((k, v) <- args.defaultSparkProperties) {
-      sysProps.getOrElseUpdate(k, v)
+    // Ignore invalid spark.driver.host in cluster modes.
+    if (deployMode == CLUSTER) {
+      sysProps -= ("spark.driver.host")
+    }
+
+    // Resolve paths in certain spark properties
+    val pathConfigs = Seq(
+      "spark.jars",
+      "spark.files",
+      "spark.yarn.jar",
+      "spark.yarn.dist.files",
+      "spark.yarn.dist.archives")
+    pathConfigs.foreach { config =>
+      // Replace old URIs with resolved URIs, if they exist
+      sysProps.get(config).foreach { oldValue =>
+        sysProps(config) = Utils.resolveURIs(oldValue)
+      }
+    }
+
+    // Resolve and format python file paths properly before adding them to the PYTHONPATH.
+    // The resolving part is redundant in the case of --py-files, but necessary if the user
+    // explicitly sets `spark.submit.pyFiles` in his/her default properties file.
+    sysProps.get("spark.submit.pyFiles").foreach { pyFiles =>
+      val resolvedPyFiles = Utils.resolveURIs(pyFiles)
+      val formattedPyFiles = PythonRunner.formatPaths(resolvedPyFiles).mkString(",")
+      sysProps("spark.submit.pyFiles") = formattedPyFiles
     }
 
     (childArgs, childClasspath, sysProps, childMainClass)
@@ -322,9 +350,14 @@ object SparkSubmit {
         e.printStackTrace(printStream)
         if (childMainClass.contains("thriftserver")) {
           println(s"Failed to load main class $childMainClass.")
-          println("You need to build Spark with -Phive.")
+          println("You need to build Spark with -Phive and -Phive-thriftserver.")
         }
         System.exit(CLASS_NOT_FOUND_EXIT_STATUS)
+    }
+
+    // SPARK-4170
+    if (classOf[scala.App].isAssignableFrom(mainClass)) {
+      printWarning("Subclasses of scala.App may not work correctly. Use a main() method instead.")
     }
 
     val mainMethod = mainClass.getMethod("main", new Array[String](0).getClass)
@@ -368,6 +401,20 @@ object SparkSubmit {
    */
   private[spark] def isShell(primaryResource: String): Boolean = {
     primaryResource == SPARK_SHELL || primaryResource == PYSPARK_SHELL
+  }
+
+  /**
+   * Return whether the given main class represents a sql shell.
+   */
+  private[spark] def isSqlShell(mainClass: String): Boolean = {
+    mainClass == "org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver"
+  }
+
+  /**
+   * Return whether the given main class represents a thrift server.
+   */
+  private[spark] def isThriftServer(mainClass: String): Boolean = {
+    mainClass == "org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"
   }
 
   /**

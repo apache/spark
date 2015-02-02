@@ -24,7 +24,9 @@ import scala.collection.mutable.ArrayBuffer
 
 import akka.actor.ActorRef
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.ApplicationDescription
+import org.apache.spark.util.Utils
 
 private[spark] class ApplicationInfo(
     val startTime: Long,
@@ -36,8 +38,8 @@ private[spark] class ApplicationInfo(
   extends Serializable {
 
   @transient var state: ApplicationState.Value = _
-  @transient var executors: mutable.HashMap[Int, ExecutorInfo] = _
-  @transient var removedExecutors: ArrayBuffer[ExecutorInfo] = _
+  @transient var executors: mutable.HashMap[Int, ExecutorDesc] = _
+  @transient var removedExecutors: ArrayBuffer[ExecutorDesc] = _
   @transient var coresGranted: Int = _
   @transient var endTime: Long = _
   @transient var appSource: ApplicationSource = _
@@ -46,19 +48,19 @@ private[spark] class ApplicationInfo(
 
   init()
 
-  private def readObject(in: java.io.ObjectInputStream): Unit = {
+  private def readObject(in: java.io.ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
     init()
   }
 
   private def init() {
     state = ApplicationState.WAITING
-    executors = new mutable.HashMap[Int, ExecutorInfo]
+    executors = new mutable.HashMap[Int, ExecutorDesc]
     coresGranted = 0
     endTime = -1L
     appSource = new ApplicationSource(this)
     nextExecutorId = 0
-    removedExecutors = new ArrayBuffer[ExecutorInfo]
+    removedExecutors = new ArrayBuffer[ExecutorDesc]
   }
 
   private def newExecutorId(useID: Option[Int] = None): Int = {
@@ -73,14 +75,14 @@ private[spark] class ApplicationInfo(
     }
   }
 
-  def addExecutor(worker: WorkerInfo, cores: Int, useID: Option[Int] = None): ExecutorInfo = {
-    val exec = new ExecutorInfo(newExecutorId(useID), this, worker, cores, desc.memoryPerSlave)
+  def addExecutor(worker: WorkerInfo, cores: Int, useID: Option[Int] = None): ExecutorDesc = {
+    val exec = new ExecutorDesc(newExecutorId(useID), this, worker, cores, desc.memoryPerSlave)
     executors(exec.id) = exec
     coresGranted += cores
     exec
   }
 
-  def removeExecutor(exec: ExecutorInfo) {
+  def removeExecutor(exec: ExecutorDesc) {
     if (executors.contains(exec.id)) {
       removedExecutors += executors(exec.id)
       executors -= exec.id

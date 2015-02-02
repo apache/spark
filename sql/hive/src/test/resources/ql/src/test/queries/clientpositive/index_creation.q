@@ -1,3 +1,4 @@
+set hive.stats.dbclass=fs;
 drop index src_index_2 on src;
 drop index src_index_3 on src;
 drop index src_index_4 on src;

@@ -10,7 +10,7 @@ In addition to running on the Mesos or YARN cluster managers, Spark also provide
 
 # Installing Spark Standalone to a Cluster
 
-To install Spark Standalone mode, you simply place a compiled version of Spark on each node on the cluster. You can obtain pre-built versions of Spark with each release or [build it yourself](index.html#building).
+To install Spark Standalone mode, you simply place a compiled version of Spark on each node on the cluster. You can obtain pre-built versions of Spark with each release or [build it yourself](building-spark.html).
 
 # Starting a Cluster Manually
 
@@ -34,8 +34,12 @@ Finally, the following configuration options can be passed to the master and wor
 <table class="table">
   <tr><th style="width:21%">Argument</th><th>Meaning</th></tr>
   <tr>
-    <td><code>-i IP</code>, <code>--ip IP</code></td>
-    <td>IP address or DNS name to listen on</td>
+    <td><code>-h HOST</code>, <code>--host HOST</code></td>
+    <td>Hostname to listen on</td>
+  </tr>
+  <tr>
+    <td><code>-i HOST</code>, <code>--ip HOST</code></td>
+    <td>Hostname to listen on (deprecated, use -h or --host)</td>
   </tr>
   <tr>
     <td><code>-p PORT</code>, <code>--port PORT</code></td>
@@ -56,6 +60,10 @@ Finally, the following configuration options can be passed to the master and wor
   <tr>
     <td><code>-d DIR</code>, <code>--work-dir DIR</code></td>
     <td>Directory to use for scratch space and job output logs (default: SPARK_HOME/work); only on worker</td>
+  </tr>
+  <tr>
+    <td><code>--properties-file FILE</code></td>
+    <td>Path to a custom Spark properties file to load (default: conf/spark-defaults.conf)</td>
   </tr>
 </table>
 
@@ -249,7 +257,7 @@ To run an interactive Spark shell against the cluster, run the following command
 
 You can also pass an option `--total-executor-cores <numCores>` to control the number of cores that spark-shell uses on the cluster.
 
-# Launching Compiled Spark Applications
+# Launching Spark Applications
 
 The [`spark-submit` script](submitting-applications.html) provides the most straightforward way to
 submit a compiled Spark application to the cluster. For standalone clusters, Spark currently
@@ -263,6 +271,15 @@ distributed to all worker nodes. For any additional jars that your application d
 should specify them through the `--jars` flag using comma as a delimiter (e.g. `--jars jar1,jar2`).
 To control the application's configuration or execution environment, see
 [Spark Configuration](configuration.html).
+
+Additionally, standalone `cluster` mode supports restarting your application automatically if it
+exited with non-zero exit code. To use this feature, you may pass in the `--supervise` flag to
+`spark-submit` when launching your application. Then, if you wish to kill an application that is
+failing repeatedly, you may do so through:
+
+    ./bin/spark-class org.apache.spark.deploy.Client kill <master url> <driver ID>
+
+You can find the driver ID through the standalone Master web UI at `http://<master url>:8080`.
 
 # Resource Scheduling
 

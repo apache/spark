@@ -133,11 +133,16 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     ssc.stop()
   }
 
-  test("stop before start and start after stop") {
+  test("stop before start") {
     ssc = new StreamingContext(master, appName, batchDuration)
     addInputStream(ssc).register()
     ssc.stop()  // stop before start should not throw exception
-    ssc.start()
+  }
+
+  test("start after stop") {
+    // Regression test for SPARK-4301
+    ssc = new StreamingContext(master, appName, batchDuration)
+    addInputStream(ssc).register()
     ssc.stop()
     intercept[SparkException] {
       ssc.start() // start after stop should throw exception
@@ -155,6 +160,18 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     addInputStream(ssc).register()
     ssc.start()
     ssc.stop()
+  }
+
+  test("stop(stopSparkContext=true) after stop(stopSparkContext=false)") {
+    ssc = new StreamingContext(master, appName, batchDuration)
+    addInputStream(ssc).register()
+    ssc.stop(stopSparkContext = false)
+    assert(ssc.sc.makeRDD(1 to 100).collect().size === 100)
+    ssc.stop(stopSparkContext = true)
+    // Check that the SparkContext is actually stopped:
+    intercept[Exception] {
+      ssc.sc.makeRDD(1 to 100).collect()
+    }
   }
 
   test("stop gracefully") {
@@ -319,16 +336,20 @@ package object testPackage extends Assertions {
 
       // Verify creation site of generated RDDs
       var rddGenerated = false
-      var rddCreationSiteCorrect = true
+      var rddCreationSiteCorrect = false
+      var foreachCallSiteCorrect = false
 
       inputStream.foreachRDD { rdd =>
         rddCreationSiteCorrect = rdd.creationSite == creationSite
+        foreachCallSiteCorrect =
+          rdd.sparkContext.getCallSite().shortForm.contains("StreamingContextSuite")
         rddGenerated = true
       }
       ssc.start()
 
       eventually(timeout(10000 millis), interval(10 millis)) {
         assert(rddGenerated && rddCreationSiteCorrect, "RDD creation site was not correct")
+        assert(rddGenerated && foreachCallSiteCorrect, "Call site in foreachRDD was not correct")
       }
     } finally {
       ssc.stop()

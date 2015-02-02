@@ -38,7 +38,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     executorId: String,
     hostPort: String,
     cores: Int,
-    sparkProperties: Seq[(String, String)])
+    env: SparkEnv)
   extends Actor with ActorLogReceive with ExecutorBackend with Logging {
 
   Utils.checkHostPort(hostPort, "Expected hostport")
@@ -56,9 +56,8 @@ private[spark] class CoarseGrainedExecutorBackend(
   override def receiveWithLogging = {
     case RegisteredExecutor =>
       logInfo("Successfully registered with driver")
-      // Make this host instead of hostPort ?
-      executor = new Executor(executorId, Utils.parseHostPort(hostPort)._1, sparkProperties,
-        false)
+      val (hostname, _) = Utils.parseHostPort(hostPort)
+      executor = new Executor(executorId, hostname, env, isLocal = false)
 
     case RegisterExecutorFailed(message) =>
       logError("Slave registration failed: " + message)
@@ -69,10 +68,11 @@ private[spark] class CoarseGrainedExecutorBackend(
         logError("Received LaunchTask command but executor was null")
         System.exit(1)
       } else {
-        val ser = SparkEnv.get.closureSerializer.newInstance()
+        val ser = env.closureSerializer.newInstance()
         val taskDesc = ser.deserialize[TaskDescription](data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
-        executor.launchTask(this, taskDesc.taskId, taskDesc.name, taskDesc.serializedTask)
+        executor.launchTask(this, taskId = taskDesc.taskId, attemptNumber = taskDesc.attemptNumber,
+          taskDesc.name, taskDesc.serializedTask)
       }
 
     case KillTask(taskId, _, interruptThread) =>
@@ -84,8 +84,12 @@ private[spark] class CoarseGrainedExecutorBackend(
       }
 
     case x: DisassociatedEvent =>
-      logError(s"Driver $x disassociated! Shutting down.")
-      System.exit(1)
+      if (x.remoteAddress == driver.anchorPath.address) {
+        logError(s"Driver $x disassociated! Shutting down.")
+        System.exit(1)
+      } else {
+        logWarning(s"Received irrelevant DisassociatedEvent $x")
+      }
 
     case StopExecutor =>
       logInfo("Driver commanded a shutdown")
@@ -127,20 +131,25 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         Seq[(String, String)](("spark.app.id", appId))
       fetcher.shutdown()
 
-      // Create a new ActorSystem using driver's Spark properties to run the backend.
+      // Create SparkEnv using properties we fetched from the driver.
       val driverConf = new SparkConf().setAll(props)
-      val (actorSystem, boundPort) = AkkaUtils.createActorSystem(
-        "sparkExecutor", hostname, port, driverConf, new SecurityManager(driverConf))
-      // set it
+      val env = SparkEnv.createExecutorEnv(
+        driverConf, executorId, hostname, port, cores, isLocal = false)
+
+      // SparkEnv sets spark.driver.port so it shouldn't be 0 anymore.
+      val boundPort = env.conf.getInt("spark.executor.port", 0)
+      assert(boundPort != 0)
+
+      // Start the CoarseGrainedExecutorBackend actor.
       val sparkHostPort = hostname + ":" + boundPort
-      actorSystem.actorOf(
+      env.actorSystem.actorOf(
         Props(classOf[CoarseGrainedExecutorBackend],
-          driverUrl, executorId, sparkHostPort, cores, props),
+          driverUrl, executorId, sparkHostPort, cores, env),
         name = "Executor")
       workerUrl.foreach { url =>
-        actorSystem.actorOf(Props(classOf[WorkerWatcher], url), name = "WorkerWatcher")
+        env.actorSystem.actorOf(Props(classOf[WorkerWatcher], url), name = "WorkerWatcher")
       }
-      actorSystem.awaitTermination()
+      env.actorSystem.awaitTermination()
     }
   }
 

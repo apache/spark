@@ -33,6 +33,102 @@ import com.typesafe.tools.mima.core._
 object MimaExcludes {
     def excludes(version: String) =
       version match {
+        case v if v.startsWith("1.3") =>
+          Seq(
+            MimaBuild.excludeSparkPackage("deploy"),
+            // These are needed if checking against the sbt build, since they are part of
+            // the maven-generated artifacts in the 1.2 build.
+            MimaBuild.excludeSparkPackage("unused"),
+            ProblemFilters.exclude[MissingClassProblem]("com.google.common.base.Optional")
+          ) ++ Seq(
+            // SPARK-2321
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.SparkStageInfoImpl.this"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.SparkStageInfo.submissionTime")
+          ) ++ Seq(
+            // SPARK-4614
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Matrices.randn"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Matrices.rand")
+          ) ++ Seq(
+            // SPARK-5321
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.SparseMatrix.transposeMultiply"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Matrix.transpose"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.DenseMatrix.transposeMultiply"),
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.mllib.linalg.Matrix." +
+                "org$apache$spark$mllib$linalg$Matrix$_setter_$isTransposed_="),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Matrix.isTransposed"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Matrix.foreachActive")
+          ) ++ Seq(
+            // SPARK-3325
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.streaming.api.java.JavaDStreamLike.print"),
+            // SPARK-2757
+            ProblemFilters.exclude[IncompatibleResultTypeProblem](
+              "org.apache.spark.streaming.flume.sink.SparkAvroCallbackHandler." +
+                "removeAndGetProcessor")
+          ) ++ Seq(
+            // SPARK-5123 (SparkSQL data type change) - alpha component only
+            ProblemFilters.exclude[IncompatibleResultTypeProblem](
+              "org.apache.spark.ml.feature.HashingTF.outputDataType"),
+            ProblemFilters.exclude[IncompatibleResultTypeProblem](
+              "org.apache.spark.ml.feature.Tokenizer.outputDataType"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+              "org.apache.spark.ml.feature.Tokenizer.validateInputType"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+              "org.apache.spark.ml.classification.LogisticRegressionModel.validateAndTransformSchema"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+              "org.apache.spark.ml.classification.LogisticRegression.validateAndTransformSchema")
+          ) ++ Seq(
+            // SPARK-4014
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.TaskContext.taskAttemptId"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.TaskContext.attemptNumber")
+          ) ++ Seq(
+            // SPARK-5166 Spark SQL API stabilization
+            ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.Transformer.transform"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.Estimator.fit"),
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.ml.Transformer.transform"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.Pipeline.fit"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.PipelineModel.transform"),
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.ml.Estimator.fit"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.Evaluator.evaluate"),
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.ml.Evaluator.evaluate"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.tuning.CrossValidator.fit"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.tuning.CrossValidatorModel.transform"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.feature.StandardScaler.fit"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.feature.StandardScalerModel.transform"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.classification.LogisticRegressionModel.transform"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.classification.LogisticRegression.fit"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.evaluation.BinaryClassificationEvaluator.evaluate")
+          ) ++ Seq(
+            // SPARK-5270
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaRDDLike.isEmpty")
+          ) ++ Seq(
+            // SPARK-5430
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaRDDLike.treeReduce"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaRDDLike.treeAggregate")
+          ) ++ Seq(
+            // SPARK-5297 Java FileStream do not work with custom key/values
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.streaming.api.java.JavaStreamingContext.fileStream")
+          ) ++ Seq(
+            // SPARK-5315 Spark Streaming Java API returns Scala DStream
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.streaming.api.java.JavaDStreamLike.reduceByWindow")
+          )
+
         case v if v.startsWith("1.2") =>
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),
@@ -51,9 +147,16 @@ object MimaExcludes {
             // MapStatus should be private[spark]
             ProblemFilters.exclude[IncompatibleTemplateDefProblem](
               "org.apache.spark.scheduler.MapStatus"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.network.netty.PathResolver"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.network.netty.client.BlockClientListener"),
+
             // TaskContext was promoted to Abstract class
             ProblemFilters.exclude[AbstractClassProblem](
-              "org.apache.spark.TaskContext")
+              "org.apache.spark.TaskContext"),
+            ProblemFilters.exclude[IncompatibleTemplateDefProblem](
+              "org.apache.spark.util.collection.SortDataFormat")
           ) ++ Seq(
             // Adding new methods to the JavaRDDLike trait:
             ProblemFilters.exclude[MissingMethodProblem](
@@ -66,6 +169,22 @@ object MimaExcludes {
               "org.apache.spark.api.java.JavaRDDLike.foreachAsync"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.api.java.JavaRDDLike.collectAsync")
+          ) ++ Seq(
+            // SPARK-3822
+            ProblemFilters.exclude[IncompatibleResultTypeProblem](
+              "org.apache.spark.SparkContext.org$apache$spark$SparkContext$$createTaskScheduler")
+          ) ++ Seq(
+            // SPARK-1209
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.hadoop.mapreduce.SparkHadoopMapReduceUtil"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.hadoop.mapred.SparkHadoopMapRedUtil"),
+            ProblemFilters.exclude[MissingTypesProblem](
+              "org.apache.spark.rdd.PairRDDFunctions")
+          ) ++ Seq(
+            // SPARK-4062
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.streaming.kafka.KafkaReceiver#MessageHandler.this")
           )
 
         case v if v.startsWith("1.1") =>

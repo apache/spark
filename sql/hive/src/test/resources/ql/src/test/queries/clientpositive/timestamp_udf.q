@@ -1,13 +1,15 @@
+set hive.fetch.task.conversion=more;
+
 drop table timestamp_udf;
 drop table timestamp_udf_string;
 
 create table timestamp_udf (t timestamp);
 create table timestamp_udf_string (t string);
-from src
+from (select * from src tablesample (1 rows)) s
   insert overwrite table timestamp_udf 
-    select '2011-05-06 07:08:09.1234567' limit 1
+    select '2011-05-06 07:08:09.1234567'
   insert overwrite table timestamp_udf_string
-    select '2011-05-06 07:08:09.1234567' limit 1;
+    select '2011-05-06 07:08:09.1234567';
 
 -- Test UDFs with Timestamp input
 select unix_timestamp(t), year(t), month(t), day(t), dayofmonth(t),

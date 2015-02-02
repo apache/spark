@@ -17,14 +17,14 @@
 
 package org.apache.spark.serializer
 
-import java.io.{ByteArrayOutputStream, EOFException, InputStream, OutputStream}
+import java.io._
 import java.nio.ByteBuffer
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.util.{ByteBufferInputStream, NextIterator}
+import org.apache.spark.util.{Utils, ByteBufferInputStream, NextIterator}
 
 /**
  * :: DeveloperApi ::

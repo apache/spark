@@ -1,0 +1,6 @@
+ascii(str) - returns the numeric value of the first character of str
+Returns 0 if str is empty or NULL if str is NULL
+Example:
+  > SELECT ascii('222') FROM src LIMIT 1;  50
+  > SELECT ascii(2) FROM src LIMIT 1;
+  50

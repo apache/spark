@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, OrderedDistribution, SinglePartition, UnspecifiedDistribution}
 import org.apache.spark.util.MutablePair
+import org.apache.spark.util.collection.ExternalSorter
 
 /**
  * :: DeveloperApi ::
@@ -69,7 +70,7 @@ case class Sample(fraction: Double, withReplacement: Boolean, seed: Long, child:
   override def output = child.output
 
   // TODO: How to pick seed?
-  override def execute() = child.execute().sample(withReplacement, fraction, seed)
+  override def execute() = child.execute().map(_.copy()).sample(withReplacement, fraction, seed)
 }
 
 /**
@@ -143,7 +144,7 @@ case class Limit(limit: Int, child: SparkPlan)
       partsScanned += numPartsToTry
     }
 
-    buf.toArray
+    buf.toArray.map(ScalaReflection.convertRowToScala(_, this.schema))
   }
 
   override def execute() = {
@@ -176,10 +177,11 @@ case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan) 
   override def output = child.output
   override def outputPartitioning = SinglePartition
 
-  val ordering = new RowOrdering(sortOrder, child.output)
+  val ord = new RowOrdering(sortOrder, child.output)
 
   // TODO: Is this copying for no reason?
-  override def executeCollect() = child.execute().map(_.copy()).takeOrdered(limit)(ordering)
+  override def executeCollect() = child.execute().map(_.copy()).takeOrdered(limit)(ord)
+    .map(ScalaReflection.convertRowToScala(_, this.schema))
 
   // TODO: Terminal split should be implemented differently from non-terminal split.
   // TODO: Pick num splits based on |limit|.
@@ -188,6 +190,9 @@ case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan) 
 
 /**
  * :: DeveloperApi ::
+ * Performs a sort on-heap.
+ * @param global when true performs a global sort of all partitions by shuffling the data first
+ *               if necessary.
  */
 @DeveloperApi
 case class Sort(
@@ -198,12 +203,37 @@ case class Sort(
   override def requiredChildDistribution =
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
+  override def execute() = attachTree(this, "sort") {
+    child.execute().mapPartitions( { iterator =>
+      val ordering = newOrdering(sortOrder, child.output)
+      iterator.map(_.copy()).toArray.sorted(ordering).iterator
+    }, preservesPartitioning = true)
+  }
+
+  override def output = child.output
+}
+
+/**
+ * :: DeveloperApi ::
+ * Performs a sort, spilling to disk as needed.
+ * @param global when true performs a global sort of all partitions by shuffling the data first
+ *               if necessary.
+ */
+@DeveloperApi
+case class ExternalSort(
+    sortOrder: Seq[SortOrder],
+    global: Boolean,
+    child: SparkPlan)
+  extends UnaryNode {
+  override def requiredChildDistribution =
+    if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
   override def execute() = attachTree(this, "sort") {
-    child.execute()
-      .mapPartitions( { iterator =>
-        val ordering = newOrdering(sortOrder, child.output)
-        iterator.map(_.copy()).toArray.sorted(ordering).iterator
+    child.execute().mapPartitions( { iterator =>
+      val ordering = newOrdering(sortOrder, child.output)
+      val sorter = new ExternalSorter[Row, Null, Row](ordering = Some(ordering))
+      sorter.insertAll(iterator.map(r => (r, null)))
+      sorter.iterator.map(_._1)
     }, preservesPartitioning = true)
   }
 

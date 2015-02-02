@@ -35,6 +35,7 @@ import org.apache.hadoop.mapred.Reporter
 import org.apache.hadoop.mapred.JobID
 import org.apache.hadoop.mapred.TaskAttemptID
 import org.apache.hadoop.mapred.TaskID
+import org.apache.hadoop.mapred.lib.CombineFileSplit
 import org.apache.hadoop.util.ReflectionUtils
 
 import org.apache.spark._
@@ -45,7 +46,6 @@ import org.apache.spark.executor.{DataReadMethod, InputMetrics}
 import org.apache.spark.rdd.HadoopRDD.HadoopMapPartitionsWithSplitRDD
 import org.apache.spark.util.{NextIterator, Utils}
 import org.apache.spark.scheduler.{HostTaskLocation, HDFSCacheTaskLocation}
-
 
 /**
  * A Spark split class that wraps around a Hadoop InputSplit.
@@ -132,7 +132,7 @@ class HadoopRDD[K, V](
   // used to build JobTracker ID
   private val createTime = new Date()
 
-  private val shouldCloneJobConf = sc.conf.get("spark.hadoop.cloneConf", "false").toBoolean
+  private val shouldCloneJobConf = sc.conf.getBoolean("spark.hadoop.cloneConf", false)
 
   // Returns a JobConf that will be used on slaves to obtain input splits for Hadoop reads.
   protected def getJobConf(): JobConf = {
@@ -212,30 +212,32 @@ class HadoopRDD[K, V](
 
       val split = theSplit.asInstanceOf[HadoopPartition]
       logInfo("Input split: " + split.inputSplit)
-      var reader: RecordReader[K, V] = null
       val jobConf = getJobConf()
+
+      val inputMetrics = context.taskMetrics
+        .getInputMetricsForReadMethod(DataReadMethod.Hadoop)
+
+      // Find a function that will return the FileSystem bytes read by this thread. Do this before
+      // creating RecordReader, because RecordReader's constructor might read some bytes
+      val bytesReadCallback = inputMetrics.bytesReadCallback.orElse {
+        split.inputSplit.value match {
+          case _: FileSplit | _: CombineFileSplit =>
+            SparkHadoopUtil.get.getFSBytesReadOnThreadCallback()
+          case _ => None
+        }
+      }
+      inputMetrics.setBytesReadCallback(bytesReadCallback)
+
+      var reader: RecordReader[K, V] = null
       val inputFormat = getInputFormat(jobConf)
       HadoopRDD.addLocalConfiguration(new SimpleDateFormat("yyyyMMddHHmm").format(createTime),
-        context.stageId, theSplit.index, context.attemptId.toInt, jobConf)
+        context.stageId, theSplit.index, context.attemptNumber, jobConf)
       reader = inputFormat.getRecordReader(split.inputSplit.value, jobConf, Reporter.NULL)
 
       // Register an on-task-completion callback to close the input stream.
       context.addTaskCompletionListener{ context => closeIfNeeded() }
       val key: K = reader.createKey()
       val value: V = reader.createValue()
-
-      // Set the task input metrics.
-      val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
-      try {
-        /* bytesRead may not exactly equal the bytes read by a task: split boundaries aren't
-         * always at record boundaries, so tasks may need to read into other splits to complete
-         * a record. */
-        inputMetrics.bytesRead = split.inputSplit.value.getLength()
-      } catch {
-        case e: java.io.IOException =>
-          logWarning("Unable to get input size to set InputMetrics for task", e)
-      }
-      context.taskMetrics.inputMetrics = Some(inputMetrics)
 
       override def getNext() = {
         try {
@@ -244,12 +246,26 @@ class HadoopRDD[K, V](
           case eof: EOFException =>
             finished = true
         }
+
         (key, value)
       }
 
       override def close() {
         try {
           reader.close()
+          if (bytesReadCallback.isDefined) {
+            inputMetrics.updateBytesRead()
+          } else if (split.inputSplit.value.isInstanceOf[FileSplit] ||
+                     split.inputSplit.value.isInstanceOf[CombineFileSplit]) {
+            // If we can't get the bytes read from the FS stats, fall back to the split size,
+            // which may be inaccurate.
+            try {
+              inputMetrics.addBytesRead(split.inputSplit.value.getLength)
+            } catch {
+              case e: java.io.IOException =>
+                logWarning("Unable to get input size to set InputMetrics for task", e)
+            }
+          }
         } catch {
           case e: Exception => {
             if (!Utils.inShutdown()) {
@@ -301,6 +317,9 @@ private[spark] object HadoopRDD extends Logging {
    * Therefore, we synchronize on this lock before calling new JobConf() or new Configuration().
    */
   val CONFIGURATION_INSTANTIATION_LOCK = new Object()
+
+  /** Update the input bytes read metric each time this number of records has been read */
+  val RECORDS_BETWEEN_BYTES_READ_METRIC_UPDATES = 256
 
   /**
    * The three methods below are helpers for accessing the local map, a property of the SparkEnv of

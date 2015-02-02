@@ -47,7 +47,7 @@ object NewRelationInstances extends Rule[LogicalPlan] {
       .toSet
 
     plan transform {
-      case l: MultiInstanceRelation if multiAppearance contains l => l.newInstance
+      case l: MultiInstanceRelation if multiAppearance.contains(l) => l.newInstance()
     }
   }
 }

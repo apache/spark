@@ -25,7 +25,7 @@ import org.apache.spark.ui.jobs.UIData.StageUIData
 import org.apache.spark.util.Utils
 
 /** Stage summary grouped by executors. */
-private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: JobProgressTab) {
+private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: StagesTab) {
   private val listener = parent.listener
 
   def toNodeSeq: Seq[Node] = {
@@ -36,7 +36,7 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: JobPr
 
   /** Special table which merges two header cells. */
   private def executorTable[T](): Seq[Node] = {
-    <table class={UIUtils.TABLE_CLASS}>
+    <table class={UIUtils.TABLE_CLASS_STRIPED}>
       <thead>
         <th>Executor ID</th>
         <th>Address</th>
@@ -45,6 +45,7 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: JobPr
         <th>Failed Tasks</th>
         <th>Succeeded Tasks</th>
         <th><span data-toggle="tooltip" title={ToolTips.INPUT}>Input</span></th>
+        <th><span data-toggle="tooltip" title={ToolTips.OUTPUT}>Output</span></th>
         <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>Shuffle Read</span></th>
         <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_WRITE}>Shuffle Write</span></th>
         <th>Shuffle Spill (Memory)</th>
@@ -77,6 +78,8 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: JobPr
             <td>{v.succeededTasks}</td>
             <td sorttable_customkey={v.inputBytes.toString}>
               {Utils.bytesToString(v.inputBytes)}</td>
+            <td sorttable_customkey={v.outputBytes.toString}>
+              {Utils.bytesToString(v.outputBytes)}</td>
             <td sorttable_customkey={v.shuffleRead.toString}>
               {Utils.bytesToString(v.shuffleRead)}</td>
             <td sorttable_customkey={v.shuffleWrite.toString}>

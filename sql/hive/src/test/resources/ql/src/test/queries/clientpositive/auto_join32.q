@@ -32,10 +32,10 @@ from studenttab10k_smb s join votertab10k_smb v
 on (s.name = v.name)
 group by s.name;
 
-load data local inpath '../data/files/empty1.txt' into table studenttab10k_smb;
-load data local inpath '../data/files/empty2.txt' into table studenttab10k_smb;
-load data local inpath '../data/files/empty1.txt' into table votertab10k_smb;
-load data local inpath '../data/files/empty2.txt' into table votertab10k_smb;
+load data local inpath '../../data/files/empty1.txt' into table studenttab10k_smb;
+load data local inpath '../../data/files/empty2.txt' into table studenttab10k_smb;
+load data local inpath '../../data/files/empty1.txt' into table votertab10k_smb;
+load data local inpath '../../data/files/empty2.txt' into table votertab10k_smb;
 
 explain select s.name, count(distinct registration)
 from studenttab10k_smb s join votertab10k_smb v
@@ -51,10 +51,10 @@ group by s.name;
 create table studenttab10k_part (name string, age int, gpa double) partitioned by (p string) clustered by (name) sorted by (name) into 2 buckets;
 create table votertab10k_part (name string, age int, registration string, contributions float) partitioned by (p string) clustered by (name) sorted by (name) into 2 buckets;
 
-load data local inpath '../data/files/empty1.txt' into table studenttab10k_part partition (p='foo');
-load data local inpath '../data/files/empty2.txt' into table studenttab10k_part partition (p='foo');
-load data local inpath '../data/files/empty1.txt' into table votertab10k_part partition (p='foo');
-load data local inpath '../data/files/empty2.txt' into table votertab10k_part partition (p='foo');
+load data local inpath '../../data/files/empty1.txt' into table studenttab10k_part partition (p='foo');
+load data local inpath '../../data/files/empty2.txt' into table studenttab10k_part partition (p='foo');
+load data local inpath '../../data/files/empty1.txt' into table votertab10k_part partition (p='foo');
+load data local inpath '../../data/files/empty2.txt' into table votertab10k_part partition (p='foo');
 
 explain select s.name, count(distinct registration)
 from studenttab10k_part s join votertab10k_part v

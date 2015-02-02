@@ -12,5 +12,5 @@ INSERT OVERWRITE TABLE dest1 SELECT substr(src.key,1,1) GROUP BY substr(src.key,
 FROM src
 INSERT OVERWRITE TABLE dest1 SELECT substr(src.key,1,1) GROUP BY substr(src.key,1,1);
 
-SELECT dest1.* FROM dest1;
+SELECT dest1.* FROM dest1 ORDER BY c1;
 

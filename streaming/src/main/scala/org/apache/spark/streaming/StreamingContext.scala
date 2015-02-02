@@ -22,7 +22,6 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.Map
 import scala.collection.mutable.Queue
-import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 import akka.actor.{Props, SupervisorStrategy}
@@ -121,6 +120,11 @@ class StreamingContext private[streaming] (
     }
   }
 
+  if (sc.conf.get("spark.master") == "local" || sc.conf.get("spark.master") == "local[1]") {
+    logWarning("spark.master should be set as local[n], n > 1 in local mode if you have receivers" +
+      " to get data, otherwise Spark jobs will not get resources to process the received data.")
+  }
+
   private[streaming] val conf = sc.conf
 
   private[streaming] val env = SparkEnv.get
@@ -187,7 +191,7 @@ class StreamingContext private[streaming] (
   /**
    * Set each DStreams in this context to remember RDDs it generated in the last given duration.
    * DStreams remember RDDs only for a limited duration of time and releases them for garbage
-   * collection. This method allows the developer to specify how to long to remember the RDDs (
+   * collection. This method allows the developer to specify how long to remember the RDDs (
    * if the developer wishes to query old data outside the DStream computation).
    * @param duration Minimum duration that each DStream should remember its RDDs
    */
@@ -436,10 +440,10 @@ class StreamingContext private[streaming] (
 
   /**
    * Start the execution of the streams.
+   *
+   * @throws SparkException if the context has already been started or stopped.
    */
   def start(): Unit = synchronized {
-    // Throw exception if the context has already been started once
-    // or if a stopped context is being started again
     if (state == Started) {
       throw new SparkException("StreamingContext has already been started")
     }
@@ -472,8 +476,10 @@ class StreamingContext private[streaming] (
   /**
    * Stop the execution of the streams immediately (does not wait for all received data
    * to be processed).
-   * @param stopSparkContext Stop the associated SparkContext or not
    *
+   * @param stopSparkContext if true, stops the associated SparkContext. The underlying SparkContext
+   *                         will be stopped regardless of whether this StreamingContext has been
+   *                         started.
    */
   def stop(stopSparkContext: Boolean = true): Unit = synchronized {
     stop(stopSparkContext, false)
@@ -482,25 +488,27 @@ class StreamingContext private[streaming] (
   /**
    * Stop the execution of the streams, with option of ensuring all received data
    * has been processed.
-   * @param stopSparkContext Stop the associated SparkContext or not
-   * @param stopGracefully Stop gracefully by waiting for the processing of all
+   *
+   * @param stopSparkContext if true, stops the associated SparkContext. The underlying SparkContext
+   *                         will be stopped regardless of whether this StreamingContext has been
+   *                         started.
+   * @param stopGracefully if true, stops gracefully by waiting for the processing of all
    *                       received data to be completed
    */
   def stop(stopSparkContext: Boolean, stopGracefully: Boolean): Unit = synchronized {
-    // Warn (but not fail) if context is stopped twice,
-    // or context is stopped before starting
-    if (state == Initialized) {
-      logWarning("StreamingContext has not been started yet")
-      return
+    state match {
+      case Initialized => logWarning("StreamingContext has not been started yet")
+      case Stopped => logWarning("StreamingContext has already been stopped")
+      case Started =>
+        scheduler.stop(stopGracefully)
+        logInfo("StreamingContext stopped successfully")
+        waiter.notifyStop()
     }
-    if (state == Stopped) {
-      logWarning("StreamingContext has already been stopped")
-      return
-    } // no need to throw an exception as its okay to stop twice
-    scheduler.stop(stopGracefully)
-    logInfo("StreamingContext stopped successfully")
-    waiter.notifyStop()
+    // Even if the streaming context has not been started, we still need to stop the SparkContext.
+    // Even if we have already stopped, we still need to attempt to stop the SparkContext because
+    // a user might stop(stopSparkContext = false) and then call stop(stopSparkContext = true).
     if (stopSparkContext) sc.stop()
+    // The state should always be Stopped after calling `stop()`, even if we haven't started yet:
     state = Stopped
   }
 }
@@ -514,9 +522,11 @@ object StreamingContext extends Logging {
 
   private[streaming] val DEFAULT_CLEANER_TTL = 3600
 
-  implicit def toPairDStreamFunctions[K, V](stream: DStream[(K, V)])
+  @deprecated("Replaced by implicit functions in the DStream companion object. This is " +
+    "kept here only for backward compatibility.", "1.3.0")
+  def toPairDStreamFunctions[K, V](stream: DStream[(K, V)])
       (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null) = {
-    new PairDStreamFunctions[K, V](stream)
+    DStream.toPairDStreamFunctions(stream)(kt, vt, ord)
   }
 
   /**

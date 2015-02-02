@@ -58,13 +58,12 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
    * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
    * @return DecisionTreeModel that can be used for prediction
    */
-  def train(input: RDD[LabeledPoint]): DecisionTreeModel = {
+  def run(input: RDD[LabeledPoint]): DecisionTreeModel = {
     // Note: random seed will not be used since numTrees = 1.
     val rf = new RandomForest(strategy, numTrees = 1, featureSubsetStrategy = "all", seed = 0)
-    val rfModel = rf.train(input)
+    val rfModel = rf.run(input)
     rfModel.trees(0)
   }
-
 }
 
 object DecisionTree extends Serializable with Logging {
@@ -86,7 +85,7 @@ object DecisionTree extends Serializable with Logging {
    * @return DecisionTreeModel that can be used for prediction
   */
   def train(input: RDD[LabeledPoint], strategy: Strategy): DecisionTreeModel = {
-    new DecisionTree(strategy).train(input)
+    new DecisionTree(strategy).run(input)
   }
 
   /**
@@ -112,7 +111,7 @@ object DecisionTree extends Serializable with Logging {
       impurity: Impurity,
       maxDepth: Int): DecisionTreeModel = {
     val strategy = new Strategy(algo, impurity, maxDepth)
-    new DecisionTree(strategy).train(input)
+    new DecisionTree(strategy).run(input)
   }
 
   /**
@@ -130,7 +129,7 @@ object DecisionTree extends Serializable with Logging {
    * @param impurity impurity criterion used for information gain calculation
    * @param maxDepth Maximum depth of the tree.
    *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
-   * @param numClassesForClassification number of classes for classification. Default value of 2.
+   * @param numClasses number of classes for classification. Default value of 2.
    * @return DecisionTreeModel that can be used for prediction
    */
   def train(
@@ -138,9 +137,9 @@ object DecisionTree extends Serializable with Logging {
       algo: Algo,
       impurity: Impurity,
       maxDepth: Int,
-      numClassesForClassification: Int): DecisionTreeModel = {
-    val strategy = new Strategy(algo, impurity, maxDepth, numClassesForClassification)
-    new DecisionTree(strategy).train(input)
+      numClasses: Int): DecisionTreeModel = {
+    val strategy = new Strategy(algo, impurity, maxDepth, numClasses)
+    new DecisionTree(strategy).run(input)
   }
 
   /**
@@ -158,7 +157,7 @@ object DecisionTree extends Serializable with Logging {
    * @param impurity criterion used for information gain calculation
    * @param maxDepth Maximum depth of the tree.
    *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
-   * @param numClassesForClassification number of classes for classification. Default value of 2.
+   * @param numClasses number of classes for classification. Default value of 2.
    * @param maxBins maximum number of bins used for splitting features
    * @param quantileCalculationStrategy  algorithm for calculating quantiles
    * @param categoricalFeaturesInfo Map storing arity of categorical features.
@@ -171,13 +170,13 @@ object DecisionTree extends Serializable with Logging {
       algo: Algo,
       impurity: Impurity,
       maxDepth: Int,
-      numClassesForClassification: Int,
+      numClasses: Int,
       maxBins: Int,
       quantileCalculationStrategy: QuantileStrategy,
       categoricalFeaturesInfo: Map[Int,Int]): DecisionTreeModel = {
-    val strategy = new Strategy(algo, impurity, maxDepth, numClassesForClassification, maxBins,
+    val strategy = new Strategy(algo, impurity, maxDepth, numClasses, maxBins,
       quantileCalculationStrategy, categoricalFeaturesInfo)
-    new DecisionTree(strategy).train(input)
+    new DecisionTree(strategy).run(input)
   }
 
   /**
@@ -185,7 +184,7 @@ object DecisionTree extends Serializable with Logging {
    *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              Labels should take values {0, 1, ..., numClasses-1}.
-   * @param numClassesForClassification number of classes for classification.
+   * @param numClasses number of classes for classification.
    * @param categoricalFeaturesInfo Map storing arity of categorical features.
    *                                E.g., an entry (n -> k) indicates that feature n is categorical
    *                                with k categories indexed from 0: {0, 1, ..., k-1}.
@@ -200,13 +199,13 @@ object DecisionTree extends Serializable with Logging {
    */
   def trainClassifier(
       input: RDD[LabeledPoint],
-      numClassesForClassification: Int,
+      numClasses: Int,
       categoricalFeaturesInfo: Map[Int, Int],
       impurity: String,
       maxDepth: Int,
       maxBins: Int): DecisionTreeModel = {
     val impurityType = Impurities.fromString(impurity)
-    train(input, Classification, impurityType, maxDepth, numClassesForClassification, maxBins, Sort,
+    train(input, Classification, impurityType, maxDepth, numClasses, maxBins, Sort,
       categoricalFeaturesInfo)
   }
 
@@ -215,12 +214,12 @@ object DecisionTree extends Serializable with Logging {
    */
   def trainClassifier(
       input: JavaRDD[LabeledPoint],
-      numClassesForClassification: Int,
+      numClasses: Int,
       categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer],
       impurity: String,
       maxDepth: Int,
       maxBins: Int): DecisionTreeModel = {
-    trainClassifier(input.rdd, numClassesForClassification,
+    trainClassifier(input.rdd, numClasses,
       categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
       impurity, maxDepth, maxBins)
   }
@@ -437,6 +436,11 @@ object DecisionTree extends Serializable with Logging {
    * @param bins possible bins for all features, indexed (numFeatures)(numBins)
    * @param nodeQueue  Queue of nodes to split, with values (treeIndex, node).
    *                   Updated with new non-leaf nodes which are created.
+   * @param nodeIdCache Node Id cache containing an RDD of Array[Int] where
+   *                    each value in the array is the data point's node Id
+   *                    for a corresponding tree. This is used to prevent the need
+   *                    to pass the entire tree to the executors during
+   *                    the node stat aggregation phase.
    */
   private[tree] def findBestSplits(
       input: RDD[BaggedPoint[TreePoint]],
@@ -447,7 +451,8 @@ object DecisionTree extends Serializable with Logging {
       splits: Array[Array[Split]],
       bins: Array[Array[Bin]],
       nodeQueue: mutable.Queue[(Int, Node)],
-      timer: TimeTracker = new TimeTracker): Unit = {
+      timer: TimeTracker = new TimeTracker,
+      nodeIdCache: Option[NodeIdCache] = None): Unit = {
 
     /*
      * The high-level descriptions of the best split optimizations are noted here.
@@ -479,6 +484,37 @@ object DecisionTree extends Serializable with Logging {
     logDebug("isMulticlass = " + metadata.isMulticlass)
     logDebug("isMulticlassWithCategoricalFeatures = " +
       metadata.isMulticlassWithCategoricalFeatures)
+    logDebug("using nodeIdCache = " + nodeIdCache.nonEmpty.toString)
+
+    /**
+     * Performs a sequential aggregation over a partition for a particular tree and node.
+     *
+     * For each feature, the aggregate sufficient statistics are updated for the relevant
+     * bins.
+     *
+     * @param treeIndex Index of the tree that we want to perform aggregation for.
+     * @param nodeInfo The node info for the tree node.
+     * @param agg Array storing aggregate calculation, with a set of sufficient statistics
+     *            for each (node, feature, bin).
+     * @param baggedPoint Data point being aggregated.
+     */
+    def nodeBinSeqOp(
+        treeIndex: Int,
+        nodeInfo: RandomForest.NodeIndexInfo,
+        agg: Array[DTStatsAggregator],
+        baggedPoint: BaggedPoint[TreePoint]): Unit = {
+      if (nodeInfo != null) {
+        val aggNodeIndex = nodeInfo.nodeIndexInGroup
+        val featuresForNode = nodeInfo.featureSubset
+        val instanceWeight = baggedPoint.subsampleWeights(treeIndex)
+        if (metadata.unorderedFeatures.isEmpty) {
+          orderedBinSeqOp(agg(aggNodeIndex), baggedPoint.datum, instanceWeight, featuresForNode)
+        } else {
+          mixedBinSeqOp(agg(aggNodeIndex), baggedPoint.datum, bins, metadata.unorderedFeatures,
+            instanceWeight, featuresForNode)
+        }
+      }
+    }
 
     /**
      * Performs a sequential aggregation over a partition.
@@ -497,20 +533,25 @@ object DecisionTree extends Serializable with Logging {
       treeToNodeToIndexInfo.foreach { case (treeIndex, nodeIndexToInfo) =>
         val nodeIndex = predictNodeIndex(topNodes(treeIndex), baggedPoint.datum.binnedFeatures,
           bins, metadata.unorderedFeatures)
-        val nodeInfo = nodeIndexToInfo.getOrElse(nodeIndex, null)
-        // If the example does not reach a node in this group, then nodeIndex = null.
-        if (nodeInfo != null) {
-          val aggNodeIndex = nodeInfo.nodeIndexInGroup
-          val featuresForNode = nodeInfo.featureSubset
-          val instanceWeight = baggedPoint.subsampleWeights(treeIndex)
-          if (metadata.unorderedFeatures.isEmpty) {
-            orderedBinSeqOp(agg(aggNodeIndex), baggedPoint.datum, instanceWeight, featuresForNode)
-          } else {
-            mixedBinSeqOp(agg(aggNodeIndex), baggedPoint.datum, bins, metadata.unorderedFeatures,
-              instanceWeight, featuresForNode)
-          }
-        }
+        nodeBinSeqOp(treeIndex, nodeIndexToInfo.getOrElse(nodeIndex, null), agg, baggedPoint)
       }
+
+      agg
+    }
+
+    /**
+     * Do the same thing as binSeqOp, but with nodeIdCache.
+     */
+    def binSeqOpWithNodeIdCache(
+        agg: Array[DTStatsAggregator],
+        dataPoint: (BaggedPoint[TreePoint], Array[Int])): Array[DTStatsAggregator] = {
+      treeToNodeToIndexInfo.foreach { case (treeIndex, nodeIndexToInfo) =>
+        val baggedPoint = dataPoint._1
+        val nodeIdCache = dataPoint._2
+        val nodeIndex = nodeIdCache(treeIndex)
+        nodeBinSeqOp(treeIndex, nodeIndexToInfo.getOrElse(nodeIndex, null), agg, baggedPoint)
+      }
+
       agg
     }
 
@@ -553,7 +594,26 @@ object DecisionTree extends Serializable with Logging {
     // Finally, only best Splits for nodes are collected to driver to construct decision tree.
     val nodeToFeatures = getNodeToFeatures(treeToNodeToIndexInfo)
     val nodeToFeaturesBc = input.sparkContext.broadcast(nodeToFeatures)
-    val nodeToBestSplits =
+
+    val partitionAggregates : RDD[(Int, DTStatsAggregator)] = if (nodeIdCache.nonEmpty) {
+      input.zip(nodeIdCache.get.nodeIdsForInstances).mapPartitions { points =>
+        // Construct a nodeStatsAggregators array to hold node aggregate stats,
+        // each node will have a nodeStatsAggregator
+        val nodeStatsAggregators = Array.tabulate(numNodes) { nodeIndex =>
+          val featuresForNode = nodeToFeaturesBc.value.flatMap { nodeToFeatures =>
+            Some(nodeToFeatures(nodeIndex))
+          }
+          new DTStatsAggregator(metadata, featuresForNode)
+        }
+
+        // iterator all instances in current partition and update aggregate stats
+        points.foreach(binSeqOpWithNodeIdCache(nodeStatsAggregators, _))
+
+        // transform nodeStatsAggregators array to (nodeIndex, nodeAggregateStats) pairs,
+        // which can be combined with other partition using `reduceByKey`
+        nodeStatsAggregators.view.zipWithIndex.map(_.swap).iterator
+      }
+    } else {
       input.mapPartitions { points =>
         // Construct a nodeStatsAggregators array to hold node aggregate stats,
         // each node will have a nodeStatsAggregator
@@ -570,7 +630,10 @@ object DecisionTree extends Serializable with Logging {
         // transform nodeStatsAggregators array to (nodeIndex, nodeAggregateStats) pairs,
         // which can be combined with other partition using `reduceByKey`
         nodeStatsAggregators.view.zipWithIndex.map(_.swap).iterator
-      }.reduceByKey((a, b) => a.merge(b))
+      }
+    }
+
+    val nodeToBestSplits = partitionAggregates.reduceByKey((a, b) => a.merge(b))
         .map { case (nodeIndex, aggStats) =>
           val featuresForNode = nodeToFeaturesBc.value.flatMap { nodeToFeatures =>
             Some(nodeToFeatures(nodeIndex))
@@ -583,6 +646,13 @@ object DecisionTree extends Serializable with Logging {
         }.collectAsMap()
 
     timer.stop("chooseSplits")
+
+    val nodeIdUpdaters = if (nodeIdCache.nonEmpty) {
+      Array.fill[mutable.Map[Int, NodeIndexUpdater]](
+        metadata.numTrees)(mutable.Map[Int, NodeIndexUpdater]())
+    } else {
+      null
+    }
 
     // Iterate over all nodes in this group.
     nodesForGroup.foreach { case (treeIndex, nodesForTree) =>
@@ -613,6 +683,13 @@ object DecisionTree extends Serializable with Logging {
           node.rightNode = Some(Node(Node.rightChildIndex(nodeIndex),
             stats.rightPredict, stats.rightImpurity, rightChildIsLeaf))
 
+          if (nodeIdCache.nonEmpty) {
+            val nodeIndexUpdater = NodeIndexUpdater(
+              split = split,
+              nodeIndex = nodeIndex)
+            nodeIdUpdaters(treeIndex).put(nodeIndex, nodeIndexUpdater)
+          }
+
           // enqueue left child and right child if they are not leaves
           if (!leftChildIsLeaf) {
             nodeQueue.enqueue((treeIndex, node.leftNode.get))
@@ -629,6 +706,10 @@ object DecisionTree extends Serializable with Logging {
       }
     }
 
+    if (nodeIdCache.nonEmpty) {
+      // Update the cache if needed.
+      nodeIdCache.get.updateNodeIndices(input, nodeIdUpdaters, bins)
+    }
   }
 
   /**

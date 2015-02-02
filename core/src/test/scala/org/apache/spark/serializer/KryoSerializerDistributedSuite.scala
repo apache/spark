@@ -23,7 +23,6 @@ import com.esotericsoftware.kryo.Kryo
 import org.scalatest.FunSuite
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkEnv, TestUtils}
-import org.apache.spark.SparkContext._
 import org.apache.spark.serializer.KryoDistributedTest._
 
 class KryoSerializerDistributedSuite extends FunSuite {

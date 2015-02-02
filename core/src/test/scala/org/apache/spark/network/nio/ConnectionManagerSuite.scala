@@ -60,6 +60,7 @@ class ConnectionManagerSuite extends FunSuite {
     val conf = new SparkConf
     conf.set("spark.authenticate", "true")
     conf.set("spark.authenticate.secret", "good")
+    conf.set("spark.app.id", "app-id")
     val securityManager = new SecurityManager(conf)
     val manager = new ConnectionManager(0, conf, securityManager)
     var numReceivedMessages = 0
@@ -95,6 +96,7 @@ class ConnectionManagerSuite extends FunSuite {
   test("security mismatch password") {
     val conf = new SparkConf
     conf.set("spark.authenticate", "true")
+    conf.set("spark.app.id", "app-id")
     conf.set("spark.authenticate.secret", "good")
     val securityManager = new SecurityManager(conf)
     val manager = new ConnectionManager(0, conf, securityManager)
@@ -105,9 +107,7 @@ class ConnectionManagerSuite extends FunSuite {
       None
     })
 
-    val badconf = new SparkConf
-    badconf.set("spark.authenticate", "true")
-    badconf.set("spark.authenticate.secret", "bad")
+    val badconf = conf.clone.set("spark.authenticate.secret", "bad")
     val badsecurityManager = new SecurityManager(badconf)
     val managerServer = new ConnectionManager(0, badconf, badsecurityManager)
     var numReceivedServerMessages = 0

@@ -106,9 +106,11 @@ object MovieLensALS {
 
     Logger.getRootLogger.setLevel(Level.WARN)
 
+    val implicitPrefs = params.implicitPrefs
+
     val ratings = sc.textFile(params.input).map { line =>
       val fields = line.split("::")
-      if (params.implicitPrefs) {
+      if (implicitPrefs) {
         /*
          * MovieLens ratings are on a scale of 1-5:
          * 5: Must see

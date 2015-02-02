@@ -30,7 +30,7 @@ object MimaBuild {
 
   def excludeMember(fullName: String) = Seq(
       ProblemFilters.exclude[MissingMethodProblem](fullName),
-      // Sometimes excluded methods have default arguments and 
+      // Sometimes excluded methods have default arguments and
       // they are translated into public methods/fields($default$) in generated
       // bytecode. It is not possible to exhaustively list everything.
       // But this should be okay.
@@ -91,9 +91,9 @@ object MimaBuild {
 
   def mimaSettings(sparkHome: File, projectRef: ProjectRef) = {
     val organization = "org.apache.spark"
-    val previousSparkVersion = "1.1.0"
+    val previousSparkVersion = "1.2.0"
     val fullId = "spark-" + projectRef.project + "_2.10"
-    mimaDefaultSettings ++ 
+    mimaDefaultSettings ++
     Seq(previousArtifact := Some(organization % fullId % previousSparkVersion),
       binaryIssueFilters ++= ignoredABIProblems(sparkHome, version.value))
   }
