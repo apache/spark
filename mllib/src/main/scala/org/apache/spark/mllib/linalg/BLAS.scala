@@ -275,10 +275,8 @@ private[spark] object BLAS extends Serializable with Logging {
       logDebug("gemm: alpha is equal to 0. Returning C.")
     } else {
       A match {
-        case sparse: SparseMatrix =>
-          gemm(alpha, sparse, B, beta, C)
-        case dense: DenseMatrix =>
-          gemm(alpha, dense, B, beta, C)
+        case sparse: SparseMatrix => gemm(alpha, sparse, B, beta, C)
+        case dense: DenseMatrix => gemm(alpha, dense, B, beta, C)
         case _ =>
           throw new IllegalArgumentException(s"gemm doesn't support matrix type ${A.getClass}.")
       }
@@ -306,7 +304,6 @@ private[spark] object BLAS extends Serializable with Logging {
       s"The rows of C don't match the rows of A. C: ${C.numRows}, A: ${A.numRows}")
     require(B.numCols == C.numCols,
       s"The columns of C don't match the columns of B. C: ${C.numCols}, A: ${B.numCols}")
-
     nativeBLAS.dgemm(tAstr, tBstr, A.numRows, B.numCols, A.numCols, alpha, A.values, lda,
       B.values, ldb, beta, C.values, C.numRows)
   }
