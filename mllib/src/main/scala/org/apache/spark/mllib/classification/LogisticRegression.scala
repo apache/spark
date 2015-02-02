@@ -73,8 +73,11 @@ class LogisticRegressionModel (
 
   override protected def predictPoint(dataMatrix: Vector, weightMatrix: Vector,
       intercept: Double) = {
+    require(dataMatrix.size == featureSize)
+
     // If dataMatrix and weightMatrix have the same dimension, it's binary logistic regression.
-    if (dataMatrix.size == weightMatrix.size) {
+    if (numClasses == 2) {
+      require(featureSize == weightMatrix.size)
       val margin = dot(weights, dataMatrix) + intercept
       val score = 1.0 / (1.0 + math.exp(-margin))
       threshold match {
@@ -83,12 +86,6 @@ class LogisticRegressionModel (
       }
     } else {
       val dataWithBiasSize = weightMatrix.size / (numClasses - 1)
-      val dataWithBias = if (dataWithBiasSize == dataMatrix.size) {
-        dataMatrix
-      } else {
-        require(dataMatrix.size + 1 == dataWithBiasSize)
-        MLUtils.appendBias(dataMatrix)
-      }
 
       val weightsArray = weights match {
         case dv: DenseVector => dv.values
@@ -99,8 +96,12 @@ class LogisticRegressionModel (
 
       val margins = (0 until numClasses - 1).map { i =>
         var margin = 0.0
-        dataWithBias.foreachActive { (index, value) =>
+        dataMatrix.foreachActive { (index, value) =>
           if (value != 0.0) margin += value * weightsArray((i * dataWithBiasSize) + index)
+        }
+        // Intercept is required to be added into margin.
+        if (dataMatrix.size + 1 == dataWithBiasSize) {
+          margin += weightsArray((i * dataWithBiasSize) + dataMatrix.size)
         }
         margin
       }
@@ -113,8 +114,17 @@ class LogisticRegressionModel (
        * with maximum probability, remember to subtract the maxMargin from margins if maxMargin
        * is positive to prevent overflow.
        */
-      val maxMargin = margins.max
-      if (maxMargin > 0) (margins.indexOf(maxMargin) + 1).toDouble else 0.0
+      var bestClass = 0
+      var maxMargin = 0.0
+      var i = 0
+      while(i < margins.size) {
+        if (margins(i) > maxMargin) {
+          maxMargin = margins(i)
+          bestClass = i + 1
+        }
+        i += 1
+      }
+      bestClass.toDouble
     }
   }
 }
@@ -141,7 +151,7 @@ class LogisticRegressionWithSGD private (
     .setNumIterations(numIterations)
     .setRegParam(regParam)
     .setMiniBatchFraction(miniBatchFraction)
-  validators = List(DataValidators.binaryLabelValidator)
+  override protected val validators = List(DataValidators.binaryLabelValidator)
 
   /**
    * Construct a LogisticRegression object with default parameters: {stepSize: 1.0,
@@ -256,7 +266,15 @@ class LogisticRegressionWithLBFGS
 
   override val optimizer = new LBFGS(new LogisticGradient, new SquaredL2Updater)
 
-  validators = List(DataValidators.binaryLabelValidator)
+  override protected val validators = List(multiLabelValidator)
+
+  private def multiLabelValidator: RDD[LabeledPoint] => Boolean = { data =>
+    if (numOfLinearPredictor > 1) {
+      DataValidators.multiLabelValidator(numOfLinearPredictor + 1)(data)
+    } else {
+      DataValidators.binaryLabelValidator(data)
+    }
+  }
 
   /**
    * :: Experimental ::
@@ -269,7 +287,6 @@ class LogisticRegressionWithLBFGS
     require(numClasses > 1)
     numOfLinearPredictor = numClasses - 1
     if (numClasses > 2) {
-      validators = List(DataValidators.multiLabelValidator(numClasses))
       optimizer.setGradient(new LogisticGradient(numClasses))
     }
     this

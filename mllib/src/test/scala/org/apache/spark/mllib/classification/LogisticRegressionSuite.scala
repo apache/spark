@@ -451,7 +451,7 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
       -0.1691865, -0.811048, -0.0646380, -0.2919834, 4.1119745))
 
     assert(model.weights ~== weightsR relTol 0.05)
-    
+
     val validationData = LogisticRegressionSuite.generateMultinomialLogisticInput(
       weights, xMean, xVariance, true, nPoints, 17)
     val validationRDD = sc.parallelize(validationData, 2)

@@ -88,7 +88,7 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
 abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   extends Logging with Serializable {
 
-  protected var validators: Seq[RDD[LabeledPoint] => Boolean] = List()
+  protected val validators: Seq[RDD[LabeledPoint] => Boolean] = List()
 
   /** The optimizer to solve the problem. */
   def optimizer: Optimizer
@@ -165,6 +165,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    */
   def run(input: RDD[LabeledPoint]): M = {
     numFeatures = input.first().features.size
+
     /**
      * When `numOfLinearPredictor > 1`, the intercepts are encapsulated into weights,
      * so the `weights` will include the intercepts. When `numOfLinearPredictor == 1`,
@@ -193,6 +194,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    * of LabeledPoint entries starting from the initial weights provided.
    */
   def run(input: RDD[LabeledPoint], initialWeights: Vector): M = {
+    numFeatures = input.first().features.size
 
     if (input.getStorageLevel == StorageLevel.NONE) {
       logWarning("The input data is not directly cached, which may hurt performance if its"
@@ -289,21 +291,16 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
          * excluded when `addIntercept == true` since the intercepts are part of weights now.
          */
         var i = 0
+        val n = weights.size / numOfLinearPredictor
         val weightsArray = weights.toArray
         while (i < numOfLinearPredictor) {
-          val start = i * (weights.size / numOfLinearPredictor)
-          val end = (i + 1) * (weights.size / numOfLinearPredictor) - { if (addIntercept) 1 else 0 }
+          val start = i * n
+          val end = (i + 1) * n - { if (addIntercept) 1 else 0 }
 
           val partialWeightsArray = scaler.transform(
             Vectors.dense(weightsArray.slice(start, end))).toArray
 
-          var j = start
-          var k = 0
-          while (j < end) {
-            weightsArray(j) = partialWeightsArray(k)
-            j += 1
-            k += 1
-          }
+          System.arraycopy(partialWeightsArray, 0, weightsArray, start, partialWeightsArray.size)
           i += 1
         }
         weights = Vectors.dense(weightsArray)

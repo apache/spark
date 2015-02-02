@@ -143,11 +143,10 @@ class LogisticGradient(numClasses: Int) extends Gradient {
       label: Double,
       weights: Vector,
       cumGradient: Vector): Double = {
-    assert((weights.size % data.size) == 0)
     val dataSize = data.size
 
     // (weights.size / dataSize + 1) is number of classes
-    require(numClasses == weights.size / dataSize + 1)
+    require(weights.size % dataSize == 0 && numClasses == weights.size / dataSize + 1)
     numClasses match {
       case 2 =>
         /**
@@ -188,7 +187,7 @@ class LogisticGradient(numClasses: Int) extends Gradient {
         var maxMargin = Double.NegativeInfinity
         var maxMarginIndex = 0
 
-        val margins = (0 until numClasses - 1).map { i =>
+        val margins = Array.tabulate(numClasses - 1) { i =>
           var margin = 0.0
           data.foreachActive { (index, value) =>
             if (value != 0.0) margin += value * weightsArray((i * dataSize) + index)
@@ -199,7 +198,7 @@ class LogisticGradient(numClasses: Int) extends Gradient {
             maxMarginIndex = i
           }
           margin
-        }.toArray
+        }
 
         /**
          * When maxMargin > 0, the original formula will cause overflow as we discuss
@@ -209,15 +208,19 @@ class LogisticGradient(numClasses: Int) extends Gradient {
          */
         val sum = {
           var temp = 0.0
-          if (maxMargin > 0) for (i <- 0 until numClasses - 1) {
-            margins(i) -= maxMargin
-            if (i == maxMarginIndex) {
-              temp += math.exp(-maxMargin)
-            } else {
+          if (maxMargin > 0) {
+            for (i <- 0 until numClasses - 1) {
+              margins(i) -= maxMargin
+              if (i == maxMarginIndex) {
+                temp += math.exp(-maxMargin)
+              } else {
+                temp += math.exp(margins(i))
+              }
+            }
+          } else {
+            for (i <- 0 until numClasses - 1) {
               temp += math.exp(margins(i))
             }
-          } else for (i <- 0 until numClasses - 1) {
-            temp += math.exp(margins(i))
           }
           temp
         }
