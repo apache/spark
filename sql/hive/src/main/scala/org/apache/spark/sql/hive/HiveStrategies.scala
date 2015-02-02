@@ -137,7 +137,7 @@ private[hive] trait HiveStrategies {
             }
 
             hiveContext
-              .parquetFile(partitions.map(_.getLocation).mkString(","))
+              .parquetFile(partitions.map(_.getLocation): _*)
               .addPartitioningAttributes(relation.partitionKeys)
               .lowerCase
               .where(unresolvedOtherPredicates)

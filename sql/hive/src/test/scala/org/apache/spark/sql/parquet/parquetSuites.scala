@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.Row
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.execution.PhysicalRDD
 import org.apache.spark.sql.hive.execution.HiveTableScan
 import org.apache.spark.sql.hive.test.TestHive._
 
@@ -79,7 +80,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
        STORED AS
        INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
        OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-      location '${new File(partitionedTableDir, "p=1").getCanonicalPath}'
+      location '${new File(normalTableDir, "normal").getCanonicalPath}'
     """)
 
     (1 to 10).foreach { p =>
@@ -105,6 +106,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
     assert(
       sql("SELECT * FROM normal_parquet").queryExecution.executedPlan.collect {
         case _: ParquetTableScan => true
+        case _: PhysicalRDD => true
       }.nonEmpty)
   }
 }
@@ -147,6 +149,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
  */
 abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll {
   var partitionedTableDir: File = null
+  var normalTableDir: File = null
   var partitionedTableDirWithKey: File = null
 
   import org.apache.spark.sql.hive.test.TestHive.implicits._
@@ -156,12 +159,21 @@ abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll 
     partitionedTableDir.delete()
     partitionedTableDir.mkdir()
 
+    normalTableDir = File.createTempFile("parquettests", "sparksql")
+    normalTableDir.delete()
+    normalTableDir.mkdir()
+
     (1 to 10).foreach { p =>
       val partDir = new File(partitionedTableDir, s"p=$p")
       sparkContext.makeRDD(1 to 10)
         .map(i => ParquetData(i, s"part-$p"))
         .saveAsParquetFile(partDir.getCanonicalPath)
     }
+
+    sparkContext
+      .makeRDD(1 to 10)
+      .map(i => ParquetData(i, s"part-1"))
+      .saveAsParquetFile(new File(normalTableDir, "normal").getCanonicalPath)
 
     partitionedTableDirWithKey = File.createTempFile("parquettests", "sparksql")
     partitionedTableDirWithKey.delete()

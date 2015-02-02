@@ -303,8 +303,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group userf
    */
-  def parquetFile(path: String): DataFrame =
-    baseRelationToDataFrame(parquet.ParquetRelation2(path, Map("path" -> path))(this))
+  @scala.annotation.varargs
+  def parquetFile(paths: String*): DataFrame =
+    baseRelationToDataFrame(parquet.ParquetRelation2(paths, Map.empty)(this))
 
   /**
    * Loads a JSON file (one object per line), returning the result as a [[DataFrame]].

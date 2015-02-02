@@ -18,10 +18,10 @@ package org.apache.spark.sql.parquet
 
 import java.lang.{Double => JDouble, Float => JFloat, Long => JLong}
 import java.math.{BigDecimal => JBigDecimal}
-import java.net.URI
 import java.util.{List => JList}
 
 import scala.collection.JavaConversions._
+import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
@@ -36,7 +36,7 @@ import parquet.hadoop.util.ContextUtil
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.rdd.{NewHadoopPartition, RDD}
+import org.apache.spark.rdd.{NewHadoopPartition, NewHadoopRDD, RDD}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.parquet.ParquetTypesConverter._
 import org.apache.spark.sql.sources._
@@ -51,7 +51,7 @@ import org.apache.spark.{Logging, Partition => SparkPartition, SparkException}
  * required is `path`, which should be the location of a collection of, optionally partitioned,
  * parquet files.
  */
-class DefaultSource extends RelationProvider {
+class DefaultSource extends RelationProvider with SchemaRelationProvider {
   /** Returns a new base relation with the given parameters. */
   override def createRelation(
       sqlContext: SQLContext,
@@ -59,7 +59,17 @@ class DefaultSource extends RelationProvider {
     val path = parameters.getOrElse("path",
       sys.error("'path' must be specified for parquet tables."))
 
-    ParquetRelation2(path, parameters)(sqlContext)
+    ParquetRelation2(Seq(path), parameters, None)(sqlContext)
+  }
+
+  override def createRelation(
+      sqlContext: SQLContext,
+      parameters: Map[String, String],
+      schema: StructType): BaseRelation = {
+    val path = parameters.getOrElse("path",
+      sys.error("'path' must be specified for parquet tables."))
+
+    ParquetRelation2(Seq(path), parameters, Some(schema))(sqlContext)
   }
 }
 
@@ -92,64 +102,97 @@ private[parquet] case class PartitionSpec(partitionColumns: StructType, partitio
  */
 @DeveloperApi
 case class ParquetRelation2
-    (path: String, parameters: Map[String, String])
+    (paths: Seq[String], parameters: Map[String, String], maybeSchema: Option[StructType] = None)
     (@transient val sqlContext: SQLContext)
   extends CatalystScan with Logging {
 
   // Should we merge schemas from all Parquet part-files?
   private val shouldMergeSchemas =
-    parameters.getOrElse("parquet.schema.merge", "true").toBoolean
+    parameters.getOrElse(ParquetRelation2.MERGE_SCHEMA, "true").toBoolean
 
   def sparkContext = sqlContext.sparkContext
 
-  private val fs = FileSystem.get(new URI(path), sparkContext.hadoopConfiguration)
+  private val fs = FileSystem.get(sparkContext.hadoopConfiguration)
 
-  private val qualifiedBasePath = fs.makeQualified(new Path(path))
+  private val baseStatuses = {
+    val statuses = paths.distinct.map(p => fs.getFileStatus(fs.makeQualified(new Path(p))))
+    assert(statuses.forall(_.isFile) || statuses.forall(_.isDir))
+    statuses
+  }
 
-  // Cache `FileStatus` objects for Parquet data files, "_metadata", and "_common_metadata".
-  private val (dataFiles, metadataFile, commonMetadataFile) = {
-    val leaves = SparkHadoopUtil.get.listLeafStatuses(fs, qualifiedBasePath).filter { f =>
+  private val leafStatuses = baseStatuses.flatMap { f =>
+    val statuses = SparkHadoopUtil.get.listLeafStatuses(fs, f.getPath).filter { f =>
       isSummaryFile(f.getPath) ||
-        (!f.getPath.getName.startsWith("_") && !f.getPath.getName.startsWith("."))
+        !(f.getPath.getName.startsWith("_") || f.getPath.getName.startsWith("."))
     }
-
-    assert(leaves.nonEmpty, s"$qualifiedBasePath is either an empty folder or nonexistent.")
-
-    (leaves.filterNot(f => isSummaryFile(f.getPath)),
-      leaves.find(_.getPath.getName == ParquetFileWriter.PARQUET_METADATA_FILE),
-      leaves.find(_.getPath.getName == ParquetFileWriter.PARQUET_COMMON_METADATA_FILE))
+    assert(statuses.nonEmpty, s"${f.getPath} is an empty folder.")
+    statuses
   }
 
-  private val PartitionSpec(partitionColumns, partitions) = {
-    val partitionDirPaths = dataFiles
-      // When reading a single raw Parquet part-file, base path points to that single data file
-      // rather than its parent directory, shouldn't use it for partition discovery.
-      .filterNot(_.getPath == qualifiedBasePath)
-      .map(f => fs.makeQualified(f.getPath.getParent))
-      .filterNot(_ == qualifiedBasePath)
-      .distinct
-
-    if (partitionDirPaths.nonEmpty) {
-      ParquetRelation2.parsePartitions(qualifiedBasePath, partitionDirPaths)
-    } else {
-      // No partition directories found, makes an empty specification
-      PartitionSpec(StructType(Seq.empty[StructField]), Seq.empty[Partition])
-    }
+  private val (dataStatuses, metadataStatuses, commonMetadataStatuses) = {
+    (leafStatuses.filterNot(f => isSummaryFile(f.getPath)).toSeq,
+      leafStatuses.filter(f => f.getPath.getName == ParquetFileWriter.PARQUET_METADATA_FILE),
+      leafStatuses.filter(f => f.getPath.getName == ParquetFileWriter.PARQUET_COMMON_METADATA_FILE))
   }
-
-  private def isPartitioned = partitionColumns.nonEmpty
 
   private val footers = {
     // TODO Issue a Spark job to gather footers if there are too many files
-    (dataFiles ++ metadataFile ++ commonMetadataFile).par.map { f =>
+    (dataStatuses ++ metadataStatuses ++ commonMetadataStatuses).par.map { f =>
       val parquetMetadata = ParquetFileReader.readFooter(
         sparkContext.hadoopConfiguration, f, ParquetMetadataConverter.NO_FILTER)
       f -> new Footer(f.getPath, parquetMetadata)
     }.seq.toMap
   }
 
+  private val partitionSpec = {
+    val partitionDirs =
+      dataStatuses
+        .filterNot(baseStatuses.contains)
+        .map(_.getPath.getParent)
+        .distinct
+
+    // Hive uses this as part of the default partition name when the partition column value is null
+    // or empty string
+    val defaultPartitionName = parameters.getOrElse(
+      ParquetRelation2.DEFAULT_PARTITION_NAME,
+      "__HIVE_DEFAULT_PARTITION__")
+
+    if (partitionDirs.nonEmpty) {
+      ParquetRelation2.parsePartitions(partitionDirs, defaultPartitionName)
+    } else {
+      // No partition directories found, makes an empty specification
+      PartitionSpec(StructType(Seq.empty[StructField]), Seq.empty[Partition])
+    }
+  }
+
+  private val PartitionSpec(partitionColumns, partitions) = partitionSpec
+
+  private def isPartitioned = partitionColumns.nonEmpty
+
+  private val dataSchema = maybeSchema.getOrElse(readSchema())
+
+  private val dataSchemaIncludesPartitionKeys =
+    isPartitioned && partitionColumns.forall(f => dataSchema.fieldNames.contains(f.name))
+
+  override val schema = {
+    val fullParquetSchema = if (dataSchemaIncludesPartitionKeys) {
+      dataSchema
+    } else {
+      StructType(dataSchema.fields ++ partitionColumns.fields)
+    }
+
+    val maybeMetastoreSchema =
+      parameters
+        .get(ParquetRelation2.METASTORE_SCHEMA)
+        .map(s => DataType.fromJson(s).asInstanceOf[StructType])
+
+    maybeMetastoreSchema
+      .map(ParquetRelation2.mergeMetastoreParquetSchema(_, fullParquetSchema))
+      .getOrElse(fullParquetSchema)
+  }
+
   private def readSchema(): StructType = {
-    // Figures out which file(s) we need to touch in order to retrieve the schema.
+    // Sees which file(s) we need to touch in order to figure out the schema.
     val filesToTouch =
       // Always tries the summary files first if users don't require a merged schema.  In this case,
       // "_common_metadata" is more preferable than "_metadata" because it doesn't contain row
@@ -170,34 +213,16 @@ case class ParquetRelation2
       // we can't trust the summary files if users require a merged schema, and must touch all part-
       // files to do the merge.
       if (shouldMergeSchemas) {
-        dataFiles
+        dataStatuses.toSeq
       } else {
-        commonMetadataFile
-          .orElse(metadataFile)
+        commonMetadataStatuses.headOption
+          .orElse(metadataStatuses.headOption)
           // Summary file(s) not found, falls back to the first part-file.
-          .orElse(dataFiles.headOption).toSeq
+          .orElse(dataStatuses.headOption)
+          .toSeq
       }
 
-    filesToTouch.map { file =>
-      val metadata = footers(file).getParquetMetadata.getFileMetaData
-      val parquetSchema = metadata.getSchema
-      val maybeSparkSchema = metadata
-        .getKeyValueMetaData
-        .toMap
-        .get(RowReadSupport.SPARK_METADATA_KEY)
-        .map(DataType.fromJson(_).asInstanceOf[StructType])
-
-      maybeSparkSchema.getOrElse {
-        // Falls back to Parquet schema if Spark SQL schema is absent.
-        StructType.fromAttributes(
-          // TODO Really no need to use `Attribute` here, we only need to know the data type.
-          convertToAttributes(parquetSchema, sqlContext.conf.isParquetBinaryAsString))
-      }
-    }.reduce { (left, right) =>
-      try mergeCatalystSchemas(left, right) catch { case e: Throwable =>
-        throw new SparkException(s"Failed to merge incompatible schemas $left and $right", e)
-      }
-    }
+    ParquetRelation2.readSchema(filesToTouch.map(footers.apply), sqlContext)
   }
 
   private def isSummaryFile(file: Path): Boolean = {
@@ -208,18 +233,7 @@ case class ParquetRelation2
   // TODO Should calculate per scan size
   // It's common that a query only scans a fraction of a large Parquet file.  Returning size of the
   // whole Parquet file disables some optimizations in this case (e.g. broadcast join).
-  override val sizeInBytes = dataFiles.map(_.getLen).sum
-
-  private val dataSchema = readSchema()
-
-  private val dataSchemaIncludesPartitionKeys =
-    partitionColumns.forall(f => dataSchema.fieldNames.contains(f.name))
-
-  override val schema = if (dataSchemaIncludesPartitionKeys) {
-    dataSchema
-  } else {
-    StructType(dataSchema.fields ++ partitionColumns.fields)
-  }
+  override val sizeInBytes = dataStatuses.map(_.getLen).sum
 
   // This is mostly a hack so that we can use the existing parquet filter code.
   override def buildScan(output: Seq[Attribute], predicates: Seq[Expression]): RDD[Row] = {
@@ -227,29 +241,13 @@ case class ParquetRelation2
     ParquetInputFormat.setReadSupportClass(job, classOf[RowReadSupport])
     val jobConf: Configuration = ContextUtil.getConfiguration(job)
 
-    val partitionKeySet = partitionColumns.map(_.name).toSet
-    val partitionPruningPredicate =
-      predicates
-        .filter(_.references.map(_.name).toSet.subsetOf(partitionKeySet))
-        .reduceOption(And)
-        .getOrElse(Literal(true))
-
-    val pruningCondition = InterpretedPredicate(partitionPruningPredicate transform {
-      case a: AttributeReference =>
-        val idx = partitionColumns.indexWhere(a.name == _.name)
-        BoundReference(idx, partitionColumns(idx).dataType, nullable = true)
-    })
-
-    val selectedPartitions = if (isPartitioned && predicates.nonEmpty) {
-      partitions.filter(p => pruningCondition(p.values))
-    } else {
-      partitions
-    }
-
+    val selectedPartitions = prunePartitions(predicates, partitions)
     val selectedFiles = if (isPartitioned) {
-      selectedPartitions.flatMap(p => dataFiles.filter(_.getPath.getParent.toString == p.path))
+      selectedPartitions.flatMap { p =>
+        dataStatuses.filter(_.getPath.getParent.toString == p.path)
+      }
     } else {
-      dataFiles
+      dataStatuses.toSeq
     }
 
     // FileInputFormat cannot handle empty lists.
@@ -268,7 +266,7 @@ case class ParquetRelation2
 
     if (isPartitioned) {
       def percentRead = selectedPartitions.size.toDouble / partitions.size.toDouble * 100
-      logInfo(s"Reading $percentRead% of $path partitions")
+      logInfo(s"Reading $percentRead% of partitions")
     }
 
     val requiredColumns = output.map(_.name)
@@ -287,7 +285,7 @@ case class ParquetRelation2
     jobConf.set(SQLConf.PARQUET_CACHE_METADATA, useCache.toString)
 
     val baseRDD =
-      new org.apache.spark.rdd.NewHadoopRDD(
+      new NewHadoopRDD(
           sparkContext,
           classOf[FilteringParquetRowInputFormat],
           classOf[Void],
@@ -347,29 +345,134 @@ case class ParquetRelation2
       baseRDD.map(_._2)
     }
   }
+
+  private def prunePartitions(
+      predicates: Seq[Expression],
+      partitions: Seq[Partition]): Seq[Partition] = {
+    val partitionColumnNames = partitionColumns.map(_.name).toSet
+    val partitionPruningPredicates = predicates.filter {
+      _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
+    }
+
+    val rawPredicate = partitionPruningPredicates.reduceOption(And).getOrElse(Literal(true))
+    val boundPredicate = InterpretedPredicate(rawPredicate transform {
+      case a: AttributeReference =>
+        val index = partitionColumns.indexWhere(a.name == _.name)
+        BoundReference(index, partitionColumns(index).dataType, nullable = true)
+    })
+
+    if (isPartitioned && partitionPruningPredicates.nonEmpty) {
+      partitions.filter(p => boundPredicate(p.values))
+    } else {
+      partitions
+    }
+  }
 }
 
 object ParquetRelation2 {
+  // Whether we should merge schemas collected from all Parquet part-files.
+  val MERGE_SCHEMA = "parquet.mergeSchema"
+
+  // Hive Metastore schema, passed in when the Parquet relation is converted from Metastore
+  val METASTORE_SCHEMA = "parquet.metastoreSchema"
+
+  // Default partition name to use when the partition column value is null or empty string
+  val DEFAULT_PARTITION_NAME = "partition.defaultName"
+
+  private[parquet] def readSchema(footers: Seq[Footer], sqlContext: SQLContext): StructType = {
+    footers.map { footer =>
+      val metadata = footer.getParquetMetadata.getFileMetaData
+      val parquetSchema = metadata.getSchema
+      val maybeSparkSchema = metadata
+        .getKeyValueMetaData
+        .toMap
+        .get(RowReadSupport.SPARK_METADATA_KEY)
+        .map(DataType.fromJson(_).asInstanceOf[StructType])
+
+      maybeSparkSchema.getOrElse {
+        // Falls back to Parquet schema if Spark SQL schema is absent.
+        StructType.fromAttributes(
+          // TODO Really no need to use `Attribute` here, we only need to know the data type.
+          convertToAttributes(parquetSchema, sqlContext.conf.isParquetBinaryAsString))
+      }
+    }.reduce { (left, right) =>
+      try mergeCatalystSchemas(left, right) catch { case e: Throwable =>
+        throw new SparkException(s"Failed to merge incompatible schemas $left and $right", e)
+      }
+    }
+  }
+
+  private[parquet] def mergeMetastoreParquetSchema(
+      metastoreSchema: StructType,
+      parquetSchema: StructType): StructType = {
+    def schemaConflictMessage =
+      s"""Converting Hive Metastore Parquet, but detected conflicting schemas. Metastore schema:
+         |${metastoreSchema.prettyJson}
+         |
+         |Parquet schema:
+         |${parquetSchema.prettyJson}
+       """.stripMargin
+
+    assert(metastoreSchema.size == parquetSchema.size, schemaConflictMessage)
+
+    val ordinalMap = metastoreSchema.zipWithIndex.map {
+      case (field, index) => field.name.toLowerCase -> index
+    }.toMap
+    val reorderedParquetSchema = parquetSchema.sortBy(f => ordinalMap(f.name.toLowerCase))
+
+    StructType(metastoreSchema.zip(reorderedParquetSchema).map {
+      // Uses Parquet field names but retains Metastore data types.
+      case (mSchema, pSchema) if mSchema.name.toLowerCase == pSchema.name.toLowerCase =>
+        mSchema.copy(name = pSchema.name)
+      case _ =>
+        throw new SparkException(schemaConflictMessage)
+    })
+  }
+
   // TODO Data source implementations shouldn't touch Catalyst types (`Literal`).
   // However, we are already using Catalyst expressions for partition pruning and predicate
   // push-down here...
-  case class PartitionDesc(columnNames: Seq[String], literals: Seq[Literal]) {
+  private[parquet] case class PartitionValues(columnNames: Seq[String], literals: Seq[Literal]) {
     require(columnNames.size == literals.size)
   }
 
   /**
-   * Given a base path and all data file paths in it, returns a partition specification.
+   * Given a group of qualified paths, tries to parse them and returns a partition specification.
+   * For example, given:
+   * {{{
+   *   hdfs://<host>:<port>/path/to/partition/a=1/b=hello/c=3.14
+   *   hdfs://<host>:<port>/path/to/partition/a=2/b=world/c=6.28
+   * }}}
+   * it returns:
+   * {{{
+   *   PartitionSpec(
+   *     partitionColumns = StructType(
+   *       StructField(name = "a", dataType = IntegerType, nullable = true),
+   *       StructField(name = "b", dataType = StringType, nullable = true),
+   *       StructField(name = "c", dataType = DoubleType, nullable = true)),
+   *     partitions = Seq(
+   *       Partition(
+   *         values = Row(1, "hello", 3.14),
+   *         path = "hdfs://<host>:<port>/path/to/partition/a=1/b=hello/c=3.14"),
+   *       Partition(
+   *         values = Row(2, "world", 6.28),
+   *         path = "hdfs://<host>:<port>/path/to/partition/a=2/b=world/c=6.28")))
+   * }}}
    */
-  private[parquet] def parsePartitions(basePath: Path, dataPaths: Seq[Path]): PartitionSpec = {
-    val partitionDescs = resolvePartitions(dataPaths.map(parsePartition(basePath, _)))
-    val PartitionDesc(columnNames, columnLiterals) = partitionDescs.head
-    val fields = columnNames.zip(columnLiterals).map { case (name, Literal(_, dataType)) =>
-      StructField(name, dataType, nullable = true)
+  private[parquet] def parsePartitions(
+      paths: Seq[Path],
+      defaultPartitionName: String): PartitionSpec = {
+    val partitionValues = resolvePartitions(paths.map(parsePartition(_, defaultPartitionName)))
+    val fields = {
+      val (PartitionValues(columnNames, literals)) = partitionValues.head
+      columnNames.zip(literals).map { case (name, Literal(_, dataType)) =>
+        StructField(name, dataType, nullable = true)
+      }
     }
 
-    val partitions = (partitionDescs, dataPaths).zipped.map { (desc, path) =>
-      val values = desc.literals.map(_.value)
-      Partition(Row(values: _*), path.toString)
+    val partitions = partitionValues.zip(paths).map {
+      case (PartitionValues(_, literals), path) =>
+        Partition(Row(literals.map(_.value): _*), path.toString)
     }
 
     PartitionSpec(StructType(fields), partitions)
@@ -379,12 +482,12 @@ object ParquetRelation2 {
    * Parses a single partition, returns column names and values of each partition column.  For
    * example, given:
    * {{{
-   *   basePath = hdfs://host:9000/base/path/
-   *   dataPath = hdfs://host:9000/base/path/a=42/b=hello/c=3.14
+   *   basePath = hdfs://<host>:<port>/path/to/partition
+   *   partitionPath = hdfs://<host>:<port>/path/to/partition/a=42/b=hello/c=3.14
    * }}}
-   * we have:
+   * it returns:
    * {{{
-   *   PartitionSpec(
+   *   PartitionDesc(
    *     Seq("a", "b", "c"),
    *     Seq(
    *       Literal(42, IntegerType),
@@ -392,27 +495,49 @@ object ParquetRelation2 {
    *       Literal(3.14, FloatType)))
    * }}}
    */
-  private[parquet] def parsePartition(basePath: Path, dataPath: Path): PartitionDesc = {
-    val rawSpec = dataPath.toString.stripPrefix(basePath.toString).stripPrefix(Path.SEPARATOR)
-    val (columnNames, values) = rawSpec.split(Path.SEPARATOR).map { column =>
-      val equalSignIndex = column.indexOf('=')
-      assert(equalSignIndex > 0, s"Invalid partition column spec '$column' found in $dataPath")
-      val columnName = rawSpec.take(equalSignIndex)
-      val literal = inferPartitionColumnValue(rawSpec.drop(equalSignIndex + 1))
-      columnName -> literal
-    }.unzip
+  private[parquet] def parsePartition(
+      path: Path,
+      defaultPartitionName: String): PartitionValues = {
+    val columns = ArrayBuffer.empty[(String, Literal)]
+    var finished = path.isRoot
+    var chopped = path
 
-    PartitionDesc(columnNames, values)
+    while (!finished) {
+      val maybeColumn = parsePartitionColumn(chopped.getName, defaultPartitionName)
+      maybeColumn.foreach(columns += _)
+      chopped = chopped.getParent
+      finished = maybeColumn.isEmpty || chopped.isRoot
+    }
+
+    val (columnNames, values) = columns.unzip
+    PartitionValues(columnNames, values)
+  }
+
+  private def parsePartitionColumn(
+      columnSpec: String,
+      defaultPartitionName: String): Option[(String, Literal)] = {
+    val equalSignIndex = columnSpec.indexOf('=')
+    if (equalSignIndex == -1) {
+      None
+    } else {
+      val columnName = columnSpec.take(equalSignIndex)
+      val literal = inferPartitionColumnValue(
+        columnSpec.drop(equalSignIndex + 1), defaultPartitionName)
+      Some(columnName -> literal)
+    }
   }
 
   /**
    * Resolves possible type conflicts between partitions by up-casting "lower" types.  The up-
    * casting order is:
    * {{{
-   *   IntegerType -> LongType -> FloatType -> DoubleType -> DecimalType.Unlimited -> StringType
+   *   NullType ->
+   *   IntegerType -> LongType ->
+   *   FloatType -> DoubleType -> DecimalType.Unlimited ->
+   *   StringType
    * }}}
    */
-  private[parquet] def resolvePartitions(descs: Seq[PartitionDesc]): Seq[PartitionDesc] = {
+  private[parquet] def resolvePartitions(descs: Seq[PartitionValues]): Seq[PartitionValues] = {
     val distinctColNamesOfPartitions = descs.map(_.columnNames).distinct
     val columnCount = descs.head.columnNames.size
 
@@ -438,7 +563,9 @@ object ParquetRelation2 {
    * [[IntegerType]], [[LongType]], [[FloatType]], [[DoubleType]], [[DecimalType.Unlimited]], and
    * [[StringType]].
    */
-  private[parquet] def inferPartitionColumnValue(raw: String): Literal = {
+  private[parquet] def inferPartitionColumnValue(
+      raw: String,
+      defaultPartitionName: String): Literal = {
     // First tries integral types
     Try(Literal(Integer.parseInt(raw), IntegerType))
       .orElse(Try(Literal(JLong.parseLong(raw), LongType)))
@@ -447,11 +574,13 @@ object ParquetRelation2 {
       .orElse(Try(Literal(JDouble.parseDouble(raw), DoubleType)))
       .orElse(Try(Literal(new JBigDecimal(raw), DecimalType.Unlimited)))
       // Then falls back to string
-      .getOrElse(Literal(raw, StringType))
+      .getOrElse {
+        if (raw == defaultPartitionName) Literal(null, NullType) else Literal(raw, StringType)
+      }
   }
 
   private val upCastingOrder: Seq[DataType] =
-    Seq(IntegerType, LongType, FloatType, DoubleType, DecimalType.Unlimited, StringType)
+    Seq(NullType, IntegerType, LongType, FloatType, DoubleType, DecimalType.Unlimited, StringType)
 
   /**
    * Given a collection of [[Literal]]s, resolves possible type conflicts by up-casting "lower"
