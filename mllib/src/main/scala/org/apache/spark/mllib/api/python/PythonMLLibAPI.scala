@@ -261,7 +261,7 @@ class PythonMLLibAPI extends Serializable {
   }
 
   /**
-   * Java stub for Python mllib KMeans.train()
+   * Java stub for Python mllib KMeans.run()
    */
   def trainKMeansModel(
       data: JavaRDD[Vector],
@@ -286,22 +286,23 @@ class PythonMLLibAPI extends Serializable {
   }
 
   /**
-   * Java stub for Python mllib GaussianMixtureEM.train()
+   * Java stub for Python mllib GaussianMixture.run()
    * Returns a list containing weights, mean and covariance of each mixture component.
    */
-  def trainGaussianMixtureEM(
+  def trainGaussianMixture(
       data: JavaRDD[Vector], 
       k: Int, 
       convergenceTol: Double, 
-      seed: Long, 
-      maxIterations: Int): JList[Object] = {
-    val gmmAlg = new GaussianMixtureEM()
+      maxIterations: Int,
+      seed: Long): JList[Object] = {
+    val gmmAlg = new GaussianMixture()
       .setK(k)
       .setConvergenceTol(convergenceTol)
-      .setSeed(seed)
       .setMaxIterations(maxIterations)
+      .setSeed(seed)
     try {
       val model = gmmAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK))
+
       var wtArray:Array[Double] = Array()
       var muArray:Array[Vector] = Array()
       var siArray :Array[Matrix] = Array()
@@ -310,6 +311,7 @@ class PythonMLLibAPI extends Serializable {
         muArray = muArray ++ Array(model.gaussians(i).mu)
         siArray = siArray ++ Array(model.gaussians(i).sigma)
       }
+      
       List(wtArray, muArray, siArray).map(_.asInstanceOf[Object]).asJava
     } finally {
       data.rdd.unpersist(blocking = false)
@@ -319,12 +321,11 @@ class PythonMLLibAPI extends Serializable {
   /**
    * Java stub for Python mllib GaussianMixtureModel.predictSoft()
    */
-  def predictGMM(
+  def predictSoftGMM(
       data: JavaRDD[Vector],
       wt: Object,
       mu: Array[Object],
       si: Array[Object]):  RDD[Array[Double]]  = {
-    try {
       val weight = wt.asInstanceOf[Array[Double]]
       val mean = mu.map(_.asInstanceOf[DenseVector])
       val sigma = si.map(_.asInstanceOf[DenseMatrix])
@@ -332,10 +333,7 @@ class PythonMLLibAPI extends Serializable {
         i => new MultivariateGaussian(mean(i),sigma(i))
       }      
       val model = new GaussianMixtureModel(weight, gaussians)
-      model.predictSoft(data.rdd.persist(StorageLevel.MEMORY_AND_DISK))
-    } finally {
-      data.rdd.unpersist(blocking = false)
-    }
+      model.predictSoft(data)
   }
 
   /**
