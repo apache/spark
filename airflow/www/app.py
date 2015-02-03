@@ -518,6 +518,11 @@ class Airflow(BaseView):
         return self.render(
             'airflow/dag_code.html', html_code=html_code, dag=dag, title=title)
 
+    @expose('/circles')
+    def circles(self):
+        return self.render(
+            'airflow/circles.html')
+
     @expose('/conf')
     @login_required
     def conf(self):
@@ -1102,7 +1107,7 @@ mv = LogModelView(
 admin.add_view(mv)
 
 
-class TaskInstanceModelView(ModelView):
+class TaskInstanceModelView(ModelViewOnly):
     column_filters = ('dag_id', 'task_id', 'state', 'execution_date')
     named_filter_urls = True
     column_formatters = dict(
