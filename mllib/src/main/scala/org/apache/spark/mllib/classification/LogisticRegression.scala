@@ -19,12 +19,12 @@ package org.apache.spark.mllib.classification
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.mllib.classification.impl.GLMClassificationModel
 import org.apache.spark.mllib.linalg.BLAS.dot
 import org.apache.spark.mllib.linalg.{DenseVector, Vector}
-import org.apache.spark.mllib.classification.impl.GLMClassificationModel
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.util.{DataValidators, Exportable, Importable, MLUtils}
+import org.apache.spark.mllib.util.{DataValidators, Exportable, Importable}
 import org.apache.spark.rdd.RDD
 
 

@@ -17,11 +17,9 @@
 
 package org.apache.spark.mllib.classification
 
-import scala.util.control.Breaks._
-import org.apache.spark.util.Utils
-
-import scala.util.Random
 import scala.collection.JavaConversions._
+import scala.util.Random
+import scala.util.control.Breaks._
 
 import org.scalatest.FunSuite
 import org.scalatest.Matchers
@@ -31,6 +29,7 @@ import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.Utils
+
 
 object LogisticRegressionSuite {
 
