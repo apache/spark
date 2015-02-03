@@ -107,11 +107,10 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
   private def handleAskPermissionToCommit(
       stage: StageId,
       task: TaskId,
-      attempt: TaskAttemptId):
-      Boolean = {
+      attempt: TaskAttemptId): Boolean = {
     authorizedCommittersByStage.get(stage) match {
       case Some(authorizedCommitters) =>
-        authorizedCommitters.get(stage) match {
+        authorizedCommitters.get(task) match {
           case Some(existingCommitter) =>
             logDebug(s"Denying $attempt to commit for stage=$stage, task=$task; " +
               s"existingCommitter = $existingCommitter")
