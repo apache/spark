@@ -18,30 +18,41 @@
 package org.apache.spark.mllib.classification
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.BLAS.dot
+import org.apache.spark.mllib.linalg.{DenseVector, Vector}
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.util.DataValidators
+import org.apache.spark.mllib.util.{DataValidators, MLUtils}
 import org.apache.spark.rdd.RDD
 
 /**
- * Classification model trained using Logistic Regression.
+ * Classification model trained using Multinomial/Binary Logistic Regression.
  *
  * @param weights Weights computed for every feature.
- * @param intercept Intercept computed for this model.
+ * @param intercept Intercept computed for this model. (Only used in Binary Logistic Regression.
+ *                  In Multinomial Logistic Regression, the intercepts will not be a single values,
+ *                  so the intercepts will be part of the weights.)
+ * @param numFeatures the dimension of the features.
+ * @param numClasses the number of possible outcomes for k classes classification problem in
+ *                   Multinomial Logistic Regression. By default, it is binary logistic regression
+ *                   so numClasses will be set to 2.
  */
 class LogisticRegressionModel (
     override val weights: Vector,
-    override val intercept: Double)
+    override val intercept: Double,
+    val numFeatures: Int,
+    val numClasses: Int)
   extends GeneralizedLinearModel(weights, intercept) with ClassificationModel with Serializable {
+
+  def this(weights: Vector, intercept: Double) = this(weights, intercept, weights.size, 2)
 
   private var threshold: Option[Double] = Some(0.5)
 
   /**
    * :: Experimental ::
-   * Sets the threshold that separates positive predictions from negative predictions. An example
-   * with prediction score greater than or equal to this threshold is identified as an positive,
-   * and negative otherwise. The default value is 0.5.
+   * Sets the threshold that separates positive predictions from negative predictions
+   * in Binary Logistic Regression. An example with prediction score greater than or equal to
+   * this threshold is identified as an positive, and negative otherwise. The default value is 0.5.
    */
   @Experimental
   def setThreshold(threshold: Double): this.type = {
@@ -61,20 +72,68 @@ class LogisticRegressionModel (
 
   override protected def predictPoint(dataMatrix: Vector, weightMatrix: Vector,
       intercept: Double) = {
-    val margin = weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
-    val score = 1.0 / (1.0 + math.exp(-margin))
-    threshold match {
-      case Some(t) => if (score > t) 1.0 else 0.0
-      case None => score
+    require(dataMatrix.size == numFeatures)
+
+    // If dataMatrix and weightMatrix have the same dimension, it's binary logistic regression.
+    if (numClasses == 2) {
+      require(numFeatures == weightMatrix.size)
+      val margin = dot(weights, dataMatrix) + intercept
+      val score = 1.0 / (1.0 + math.exp(-margin))
+      threshold match {
+        case Some(t) => if (score > t) 1.0 else 0.0
+        case None => score
+      }
+    } else {
+      val dataWithBiasSize = weightMatrix.size / (numClasses - 1)
+
+      val weightsArray = weights match {
+        case dv: DenseVector => dv.values
+        case _ =>
+          throw new IllegalArgumentException(
+            s"weights only supports dense vector but got type ${weights.getClass}.")
+      }
+
+      val margins = (0 until numClasses - 1).map { i =>
+        var margin = 0.0
+        dataMatrix.foreachActive { (index, value) =>
+          if (value != 0.0) margin += value * weightsArray((i * dataWithBiasSize) + index)
+        }
+        // Intercept is required to be added into margin.
+        if (dataMatrix.size + 1 == dataWithBiasSize) {
+          margin += weightsArray((i * dataWithBiasSize) + dataMatrix.size)
+        }
+        margin
+      }
+
+      /**
+       * Find the one with maximum margins. If the maxMargin is negative, then the prediction
+       * result will be the first class.
+       *
+       * PS, if you want to compute the probabilities for each outcome instead of the outcome
+       * with maximum probability, remember to subtract the maxMargin from margins if maxMargin
+       * is positive to prevent overflow.
+       */
+      var bestClass = 0
+      var maxMargin = 0.0
+      var i = 0
+      while(i < margins.size) {
+        if (margins(i) > maxMargin) {
+          maxMargin = margins(i)
+          bestClass = i + 1
+        }
+        i += 1
+      }
+      bestClass.toDouble
     }
   }
 }
 
 /**
- * Train a classification model for Logistic Regression using Stochastic Gradient Descent. By
- * default L2 regularization is used, which can be changed via
- * [[LogisticRegressionWithSGD.optimizer]].
- * NOTE: Labels used in Logistic Regression should be {0, 1}.
+ * Train a classification model for Binary Logistic Regression
+ * using Stochastic Gradient Descent. By default L2 regularization is used,
+ * which can be changed via [[LogisticRegressionWithSGD.optimizer]].
+ * NOTE: Labels used in Logistic Regression should be {0, 1, ..., k - 1}
+ * for k classes multi-label classification problem.
  * Using [[LogisticRegressionWithLBFGS]] is recommended over this.
  */
 class LogisticRegressionWithSGD private (
@@ -194,9 +253,10 @@ object LogisticRegressionWithSGD {
 }
 
 /**
- * Train a classification model for Logistic Regression using Limited-memory BFGS.
- * Standard feature scaling and L2 regularization are used by default.
- * NOTE: Labels used in Logistic Regression should be {0, 1}
+ * Train a classification model for Multinomial/Binary Logistic Regression using
+ * Limited-memory BFGS. Standard feature scaling and L2 regularization are used by default.
+ * NOTE: Labels used in Logistic Regression should be {0, 1, ..., k - 1}
+ * for k classes multi-label classification problem.
  */
 class LogisticRegressionWithLBFGS
   extends GeneralizedLinearAlgorithm[LogisticRegressionModel] with Serializable {
@@ -205,9 +265,33 @@ class LogisticRegressionWithLBFGS
 
   override val optimizer = new LBFGS(new LogisticGradient, new SquaredL2Updater)
 
-  override protected val validators = List(DataValidators.binaryLabelValidator)
+  override protected val validators = List(multiLabelValidator)
+
+  private def multiLabelValidator: RDD[LabeledPoint] => Boolean = { data =>
+    if (numOfLinearPredictor > 1) {
+      DataValidators.multiLabelValidator(numOfLinearPredictor + 1)(data)
+    } else {
+      DataValidators.binaryLabelValidator(data)
+    }
+  }
+
+  /**
+   * :: Experimental ::
+   * Set the number of possible outcomes for k classes classification problem in
+   * Multinomial Logistic Regression.
+   * By default, it is binary logistic regression so k will be set to 2.
+   */
+  @Experimental
+  def setNumClasses(numClasses: Int): this.type = {
+    require(numClasses > 1)
+    numOfLinearPredictor = numClasses - 1
+    if (numClasses > 2) {
+      optimizer.setGradient(new LogisticGradient(numClasses))
+    }
+    this
+  }
 
   override protected def createModel(weights: Vector, intercept: Double) = {
-    new LogisticRegressionModel(weights, intercept)
+    new LogisticRegressionModel(weights, intercept, numFeatures, numOfLinearPredictor + 1)
   }
 }

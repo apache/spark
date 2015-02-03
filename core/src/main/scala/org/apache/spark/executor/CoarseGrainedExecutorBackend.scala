@@ -123,7 +123,11 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       val executorConf = new SparkConf
       val port = executorConf.getInt("spark.executor.port", 0)
       val (fetcher, _) = AkkaUtils.createActorSystem(
-        "driverPropsFetcher", hostname, port, executorConf, new SecurityManager(executorConf))
+        "driverPropsFetcher",
+        hostname,
+        port,
+        executorConf,
+        new SecurityManager(executorConf))
       val driver = fetcher.actorSelection(driverUrl)
       val timeout = AkkaUtils.askTimeout(executorConf)
       val fut = Patterns.ask(driver, RetrieveSparkProps, timeout)
@@ -132,7 +136,15 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       fetcher.shutdown()
 
       // Create SparkEnv using properties we fetched from the driver.
-      val driverConf = new SparkConf().setAll(props)
+      val driverConf = new SparkConf()
+      for ((key, value) <- props) {
+        // this is required for SSL in standalone mode
+        if (SparkConf.isExecutorStartupConf(key)) {
+          driverConf.setIfMissing(key, value)
+        } else {
+          driverConf.set(key, value)
+        }
+      }
       val env = SparkEnv.createExecutorEnv(
         driverConf, executorId, hostname, port, cores, isLocal = false)
 

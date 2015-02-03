@@ -822,7 +822,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * have a name matching the given name, `null` will be returned.
    */
   def apply(name: String): StructField = {
-    nameToField.getOrElse(name, throw new IllegalArgumentException(s"Field $name does not exist."))
+    nameToField.getOrElse(name,
+      throw new IllegalArgumentException(s"""Field "$name" does not exist."""))
   }
 
   /**

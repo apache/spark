@@ -38,7 +38,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorConverters,
 import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector.PrimitiveCategory
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.{HiveDecimalObjectInspector, PrimitiveObjectInspectorFactory}
 import org.apache.hadoop.hive.serde2.typeinfo.{TypeInfo, TypeInfoFactory}
-import org.apache.hadoop.io.NullWritable
+import org.apache.hadoop.io.{NullWritable, Writable}
 import org.apache.hadoop.mapred.InputFormat
 
 import org.apache.spark.sql.types.{Decimal, DecimalType}
@@ -246,7 +246,10 @@ private[hive] object HiveShim {
   def getConvertedOI(inputOI: ObjectInspector, outputOI: ObjectInspector): ObjectInspector = {
     ObjectInspectorConverters.getConvertedOI(inputOI, outputOI, new java.lang.Boolean(true))
   }
-}
+
+  def prepareWritable(w: Writable): Writable = {
+    w
+  }
 
 class ShimFileSinkDesc(var dir: String, var tableInfo: TableDesc, var compressed: Boolean)
   extends FileSinkDesc(dir, tableInfo, compressed) {

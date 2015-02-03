@@ -171,14 +171,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
     val rowRDD = RDDConversions.productToRowRdd(rdd, schema)
-    new DataFrame(this, LogicalRDD(attributeSeq, rowRDD)(self))
+    DataFrame(this, LogicalRDD(attributeSeq, rowRDD)(self))
   }
 
   /**
    * Convert a [[BaseRelation]] created for external data sources into a [[DataFrame]].
    */
   def baseRelationToDataFrame(baseRelation: BaseRelation): DataFrame = {
-    new DataFrame(this, LogicalRelation(baseRelation))
+    DataFrame(this, LogicalRelation(baseRelation))
   }
 
   /**
@@ -216,7 +216,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
     val logicalPlan = LogicalRDD(schema.toAttributes, rowRDD)(self)
-    new DataFrame(this, logicalPlan)
+    DataFrame(this, logicalPlan)
   }
 
   /**
@@ -243,7 +243,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
         ) : Row
       }
     }
-    new DataFrame(this, LogicalRDD(attributeSeq, rowRdd)(this))
+    DataFrame(this, LogicalRDD(attributeSeq, rowRdd)(this))
   }
 
   /**
@@ -262,7 +262,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   def parquetFile(path: String): DataFrame =
-    new DataFrame(this, parquet.ParquetRelation(path, Some(sparkContext.hadoopConfiguration), this))
+    DataFrame(this, parquet.ParquetRelation(path, Some(sparkContext.hadoopConfiguration), this))
 
   /**
    * Loads a JSON file (one object per line), returning the result as a [[DataFrame]].
@@ -365,7 +365,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   def sql(sqlText: String): DataFrame = {
     if (conf.dialect == "sql") {
-      new DataFrame(this, parseSql(sqlText))
+      DataFrame(this, parseSql(sqlText))
     } else {
       sys.error(s"Unsupported SQL dialect: ${conf.dialect}")
     }
@@ -373,7 +373,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /** Returns the specified table as a [[DataFrame]]. */
   def table(tableName: String): DataFrame =
-    new DataFrame(this, catalog.lookupRelation(Seq(tableName)))
+    DataFrame(this, catalog.lookupRelation(Seq(tableName)))
 
   protected[sql] class SparkPlanner extends SparkStrategies {
     val sparkContext: SparkContext = self.sparkContext
@@ -462,7 +462,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * access to the intermediate phases of query execution for developers.
    */
   @DeveloperApi
-  protected class QueryExecution(val logical: LogicalPlan) {
+  protected[sql] class QueryExecution(val logical: LogicalPlan) {
 
     lazy val analyzed: LogicalPlan = ExtractPythonUdfs(analyzer(logical))
     lazy val withCachedData: LogicalPlan = cacheManager.useCachedData(analyzed)
@@ -556,7 +556,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       iter.map { m => new GenericRow(m): Row}
     }
 
-    new DataFrame(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
+    DataFrame(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
   }
 
   /**
