@@ -40,7 +40,6 @@ import org.scalatest.concurrent.Eventually._
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Milliseconds, StreamingContext, TestOutputStream}
-import org.apache.spark.streaming.scheduler.{StreamingListener, StreamingListenerReceiverStarted}
 import org.apache.spark.util.Utils
 
 class FlumeStreamSuite extends FunSuite with BeforeAndAfter with Matchers with Logging {
@@ -76,7 +75,7 @@ class FlumeStreamSuite extends FunSuite with BeforeAndAfter with Matchers with L
 
   /** Find a free port */
   private def findFreePort(): Int = {
-    Utils.startServiceOnPort(23456, (trialPort: Int) => {
+    Utils.startServiceOnPort((math.random * Int.MaxValue).toInt, (trialPort: Int) => {
       val socket = new ServerSocket(trialPort)
       socket.close()
       (null, trialPort)
