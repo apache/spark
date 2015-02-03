@@ -54,11 +54,14 @@ object MQTTPublisher {
       val message = new MqttMessage(msgContent.getBytes("utf-8"))
 
       while (true) {
-        Thread.sleep(100)
-        msgtopic.publish(message)
-        println("Published data. topic: %s; Message: %s".format(msgtopic.getName(), message))
-      }
-      
+        try {
+          msgtopic.publish(message)
+          println("Published data. topic: %s; Message: %s".format(msgtopic.getName(), message))
+        } catch {
+          case e: MqttException if e.getReasonCode == MqttException.REASON_CODE_MAX_INFLIGHT =>
+          Thread.sleep(10) // wait for Spark streaming to consume something from the message queue
+        }  
+      }      
     } catch {
       case e: MqttException => println("Exception Caught: " + e)
     } finally {
