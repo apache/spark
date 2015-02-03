@@ -46,8 +46,10 @@ private[spark] case class TaskCompleted(
 /**
  * Authority that decides whether tasks can commit output to HDFS.
  *
- * This lives on the driver, but the actor allows the tasks that commit
- * to Hadoop to invoke it.
+ * This lives on the driver, but the actor allows the tasks that commit to Hadoop to invoke it.
+ *
+ * This class was introduced in SPARK-4879; see that JIRA issue (and the associated pull requests)
+ * for an extensive design discussion.
  */
 private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
 
@@ -67,6 +69,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
   def stageStart(stage: StageId) {
     sendToActor(StageStarted(stage))
   }
+
   def stageEnd(stage: StageId) {
     sendToActor(StageEnded(stage))
   }
