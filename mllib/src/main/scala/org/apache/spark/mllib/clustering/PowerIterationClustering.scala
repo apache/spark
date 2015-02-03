@@ -43,17 +43,19 @@ class PowerIterationClusteringModel(
  *
  * @param k Number of clusters.
  * @param maxIterations Maximum number of iterations of the PIC algorithm.
- * @param initMethod Initialization method.
+ * @param initMode Initialization mode.
  */
 class PowerIterationClustering private[clustering] (
     private var k: Int,
     private var maxIterations: Int,
-    private var initMethod: String = "random") extends Serializable {
+    private var initMode: String) extends Serializable {
 
   import org.apache.spark.mllib.clustering.PowerIterationClustering._
 
-  /** Constructs a PIC instance with default parameters: {k: 2, maxIterations: 100}. */
-  def this() = this(k = 2, maxIterations = 100)
+  /** Constructs a PIC instance with default parameters: {k: 2, maxIterations: 100,
+   *  initMode: "random"}. 
+   */
+  def this() = this(k = 2, maxIterations = 100, initMode = "random")
 
   /**
    * Set the number of clusters.
@@ -72,12 +74,13 @@ class PowerIterationClustering private[clustering] (
   }
 
   /**
-   * Set the initialization method
+   * Set the initialization mode. This can be either "random" to use a random vector
+   * as vertex properties, or "degree" to use normalized sum similarities. Default: random.
    */
-  def setInitialization(method: String): this.type = {
-    this.initMethod = method match {
-      case "random" | "degree" => method
-      case _ => throw new IllegalArgumentException("Incorrect initialization method")
+  def setInitializationMode(mode: String): this.type = {
+    this.initMode = mode match {
+      case "random" | "degree" => mode
+      case _ => throw new IllegalArgumentException("Invalid initialization mode: " + mode)
     }
     this
   }
@@ -95,7 +98,7 @@ class PowerIterationClustering private[clustering] (
    */
   def run(similarities: RDD[(Long, Long, Double)]): PowerIterationClusteringModel = {
     val w = normalize(similarities)
-    val w0 = initMethod match {
+    val w0 = initMode match {
       case "random" => randomInit(w)
       case "degree" => initDegreeVector(w)
     }
@@ -166,6 +169,8 @@ private[clustering] object PowerIterationClustering extends Logging {
 
   /**
    * Generates the degree vector as the vertex properties (v0) to start power iteration.
+   * It is not exactly the node degrees but just the normalized sum similarities. Call it
+   * as degree vector because it is used in the PIC paper.
    * 
    * @param g a graph representing the normalized affinity matrix (W)
    * @return a graph with edges representing W and vertices representing the degree vector
