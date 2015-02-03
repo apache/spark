@@ -25,6 +25,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.graphx.Graph._
 import org.apache.spark.graphx.PartitionStrategy._
 import org.apache.spark.rdd._
+import org.apache.spark.storage.StorageLevel
 
 class GraphSuite extends FunSuite with LocalSparkContext {
 
@@ -387,6 +388,20 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       assert(verticesDependencies.forall(_.rdd.isInstanceOf[CheckpointRDD[_]]))
       assert(graph.isCheckpointed)
       assert(graph.getCheckpointFiles.size === 2)
+    }
+  }
+
+  test("cache, getStorageLevel") {
+    // test to see if getStorageLevel returns correct value
+    withSpark { sc =>
+      val verts = sc.parallelize(List((1: VertexId, "a"), (2: VertexId, "b")), 1)
+      val edges = sc.parallelize(List(Edge(1, 2, 0), Edge(2, 1, 0)), 2)
+      val graph = Graph(verts, edges, "", StorageLevel.MEMORY_ONLY, StorageLevel.MEMORY_ONLY)
+      // Note: Before caching, graph.vertices is cached, but graph.edges is not (but graph.edges'
+      //       parent RDD is cached).
+      graph.cache()
+      assert(graph.vertices.getStorageLevel == StorageLevel.MEMORY_ONLY)
+      assert(graph.edges.getStorageLevel == StorageLevel.MEMORY_ONLY)
     }
   }
 
