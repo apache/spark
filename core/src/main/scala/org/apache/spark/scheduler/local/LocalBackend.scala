@@ -18,7 +18,8 @@
 package org.apache.spark.scheduler.local
 
 import java.nio.ByteBuffer
-import java.util.{Timer, TimerTask}
+
+import scala.concurrent.duration._
 
 import akka.actor.{Actor, ActorRef, Props}
 
@@ -55,8 +56,6 @@ private[spark] class LocalActor(
   private val executor = new Executor(
     localExecutorId, localExecutorHostname, SparkEnv.get, isLocal = true)
 
-  private val timer = new Timer("reviveOffers", true)
-
   override def receiveWithLogging = {
     case ReviveOffers =>
       reviveOffers()
@@ -86,11 +85,7 @@ private[spark] class LocalActor(
       }
     } else if (scheduler.activeTaskSets.nonEmpty) {
       // Try to reviveOffer after 1 second, because scheduler may wait for locality timeout
-      timer.schedule(new TimerTask {
-        override def run(): Unit = {
-          reviveOffers()
-        }
-      }, 1000)
+      context.system.scheduler.scheduleOnce(1000 millis , self, ReviveOffers)
     }
   }
 }
