@@ -1804,7 +1804,7 @@ class DataFrame(object):
         people = sqlContext.parquetFile("...")
 
     Once created, it can be manipulated using the various domain-specific-language
-    (DSL) functions defined in: [[DataFrame]], [[Column]].
+    (DSL) functions defined in: :class:`DataFrame`, :class:`Column`.
 
     To select a column from the data frame, use the apply method::
 
@@ -1835,8 +1835,9 @@ class DataFrame(object):
 
     @property
     def rdd(self):
-        """Return the content of the :class:`DataFrame` as an :class:`RDD`
-        of :class:`Row`s.
+        """
+        Return the content of the :class:`DataFrame` as an :class:`RDD`
+        of :class:`Row` s.
         """
         if not hasattr(self, '_lazy_rdd'):
             jrdd = self._jdf.javaToPython()
@@ -2089,9 +2090,6 @@ class DataFrame(object):
         """
         return [f.name for f in self.schema().fields]
 
-    def show(self):
-        raise NotImplemented
-
     def join(self, other, joinExprs=None, joinType=None):
         """
         Join with another DataFrame, using the given join expression.
@@ -2099,8 +2097,7 @@ class DataFrame(object):
 
         :param other: Right side of the join
         :param joinExprs: Join expression
-        :param joinType: One of `inner`, `outer`, `left_outer`, `right_outer`,
-                         `semijoin`.
+        :param joinType: One of `inner`, `outer`, `left_outer`, `right_outer`, `semijoin`.
 
         >>> df.join(df2, df.name == df2.name, 'outer').select(df.name, df2.height).collect()
         [Row(name=None, height=80), Row(name=u'Bob', height=85), Row(name=u'Alice', height=None)]
@@ -2156,17 +2153,15 @@ class DataFrame(object):
         """
         return self.head()
 
-    def tail(self):
-        raise NotImplemented
-
     def __getitem__(self, item):
         """ Return the column by given name
 
-        >>> df['age']
-        <pyspark.sql.Column object at ...>
+        >>> df['age'].collect()
+        [Row(age=2), Row(age=5)]
         """
         if isinstance(item, basestring):
-            return Column(self._jdf.apply(item))
+            jc = self._jdf.apply(item)
+            return Column(jc, self.sql_ctx)
 
         # TODO projection
         raise IndexError
@@ -2174,12 +2169,13 @@ class DataFrame(object):
     def __getattr__(self, name):
         """ Return the column by given name
 
-        >>> df.age
-        <pyspark.sql.Column object at ...>
+        >>> df.age.collect()
+        [Row(age=2), Row(age=5)]
         """
         if name.startswith("__"):
             raise AttributeError(name)
-        return Column(self._jdf.apply(name))
+        jc = self._jdf.apply(name)
+        return Column(jc, self.sql_ctx)
 
     def select(self, *cols):
         """ Selecting a set of expressions.
@@ -2213,7 +2209,7 @@ class DataFrame(object):
     where = filter
 
     def groupBy(self, *cols):
-        """ Group the [[DataFrame]] using the specified columns,
+        """ Group the :class:`DataFrame` using the specified columns,
         so we can run aggregation on them. See :class:`GroupedDataFrame`
         for all the available aggregate functions.
 
@@ -2230,8 +2226,8 @@ class DataFrame(object):
         return GroupedDataFrame(jdf, self.sql_ctx)
 
     def agg(self, *exprs):
-        """ Aggregate on the entire [[DataFrame]] without groups
-        (shorthand for df.groupBy.agg())::
+        """ Aggregate on the entire :class:`DataFrame` without groups
+        (shorthand for df.groupBy.agg()).
 
         >>> df.agg({"age": "max"}).collect()
         [Row(MAX(age#0)=5)]
@@ -2250,7 +2246,7 @@ class DataFrame(object):
         return DataFrame(self._jdf.unionAll(other._jdf), self.sql_ctx)
 
     def intersect(self, other):
-        """ Return a new [[DataFrame]] containing rows only in
+        """ Return a new :class:`DataFrame` containing rows only in
         both this frame and another frame.
 
         This is equivalent to `INTERSECT` in SQL.
@@ -2258,7 +2254,7 @@ class DataFrame(object):
         return DataFrame(self._jdf.intersect(other._jdf), self.sql_ctx)
 
     def subtract(self, other):
-        """ Return a new [[DataFrame]] containing rows in this frame
+        """ Return a new :class:`DataFrame` containing rows in this frame
         but not in another frame.
 
         This is equivalent to `EXCEPT` in SQL.
@@ -2278,14 +2274,12 @@ class DataFrame(object):
         return DataFrame(jdf, self.sql_ctx)
 
     def addColumn(self, colName, col):
-        """ Return a new [[DataFrame]] by adding a column.
+        """ Return a new :class:`DataFrame` by adding a column.
+
         >>> df.addColumn('age2', df.age + 2).collect()
         [Row(age=2, name=u'Alice', age2=4), Row(age=5, name=u'Bob', age2=7)]
         """
         return self.select('*', col.As(colName))
-
-    def removeColumn(self, colName):
-        raise NotImplemented
 
 
 # Having SchemaRDD for backward compatibility (for docs)
@@ -2437,7 +2431,7 @@ def _unary_op(name):
     """ Create a method for given unary operator """
     def _(self):
         jc = getattr(self._jc, _scalaMethod(name))()
-        return Column(jc, self._jdf, self.sql_ctx)
+        return Column(jc, self.sql_ctx)
     return _
 
 
@@ -2450,7 +2444,7 @@ def _bin_op(name):
     def _(self, other):
         jc = other._jc if isinstance(other, Column) else other
         njc = getattr(self._jc, _scalaMethod(name))(jc)
-        return Column(njc, self._jdf, self.sql_ctx)
+        return Column(njc, self.sql_ctx)
     return _
 
 
@@ -2460,7 +2454,7 @@ def _reverse_op(name):
     def _(self, other):
         jother = _create_column_from_literal(other)
         jc = getattr(jother, _scalaMethod(name))(self._jc)
-        return Column(jc, self._jdf, self.sql_ctx)
+        return Column(jc, self.sql_ctx)
     return _
 
 
@@ -2469,20 +2463,20 @@ class Column(DataFrame):
     """
     A column in a DataFrame.
 
-    `Column` instances can be created by:
-    {{{
-    // 1. Select a column out of a DataFrame
-    df.colName
-    df["colName"]
+    `Column` instances can be created by::
 
-    // 2. Create from an expression
-    df["colName"] + 1
-    }}}
+        # 1. Select a column out of a DataFrame
+        df.colName
+        df["colName"]
+
+        # 2. Create from an expression
+        df.colName + 1
+        1 / df.colName
     """
 
-    def __init__(self, jc, jdf=None, sql_ctx=None):
+    def __init__(self, jc, sql_ctx=None):
         self._jc = jc
-        super(Column, self).__init__(jdf, sql_ctx)
+        super(Column, self).__init__(jc, sql_ctx)
 
     # arithmetic operators
     __neg__ = _unary_op("unary_-")
@@ -2538,16 +2532,25 @@ class Column(DataFrame):
     upper = _unary_op("upper")
     lower = _unary_op("lower")
 
-    def substr(self, startPos, pos):
-        if type(startPos) != type(pos):
+    def substr(self, startPos, length):
+        """
+        Return a Column which is a substring of the column
+
+        :param startPos: start position (int or Column)
+        :param length:  length of the substring (int or Column)
+
+        >>> df.name.substr(1, 3).collect()
+        [Row(col=u'Ali'), Row(col=u'Bob')]
+        """
+        if type(startPos) != type(length):
             raise TypeError("Can not mix the type")
         if isinstance(startPos, (int, long)):
-            jc = self._jc.substr(startPos, pos)
+            jc = self._jc.substr(startPos, length)
         elif isinstance(startPos, Column):
-            jc = self._jc.substr(startPos._jc, pos._jc)
+            jc = self._jc.substr(startPos._jc, length._jc)
         else:
             raise TypeError("Unexpected type: %s" % type(startPos))
-        return Column(jc, self._jdf, self.sql_ctx)
+        return Column(jc, self.sql_ctx)
 
     __getslice__ = substr
 
@@ -2560,7 +2563,7 @@ class Column(DataFrame):
 
     # `as` is keyword
     def As(self, alias):
-        return Column(getattr(self._jc, "as")(alias), self._jdf, self.sql_ctx)
+        return Column(getattr(self._jc, "as")(alias), self.sql_ctx)
 
     def cast(self, dataType):
         """ Convert the column into type `dataType`
@@ -2574,7 +2577,7 @@ class Column(DataFrame):
         else:
             ssql_ctx = self.sql_ctx._ssql_ctx
         jdt = ssql_ctx.parseDataType(dataType.json())
-        return Column(self._jc.cast(jdt), self._jdf, self.sql_ctx)
+        return Column(self._jc.cast(jdt), self.sql_ctx)
 
 
 def _aggregate_func(name):
@@ -2636,7 +2639,7 @@ def _test():
     # let doctest run in pyspark.sql, so DataTypes can be picklable
     import pyspark.sql
     from pyspark.sql import Row, SQLContext
-    from pyspark.tests import ExamplePoint, ExamplePointUDT
+    from pyspark.sql_tests import ExamplePoint, ExamplePointUDT
     globs = pyspark.sql.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc

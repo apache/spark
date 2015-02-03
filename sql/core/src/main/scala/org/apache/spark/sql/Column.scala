@@ -496,8 +496,8 @@ trait Column extends DataFrame with ExpressionApi {
    * @param startPos expression for the starting position.
    * @param len expression for the length of the substring.
    */
-  override def substr(startPos: Column, len: Column): Column = {
-    new IncomputableColumn(Substring(expr, startPos.expr, len.expr))
+  override def substr(startPos: Column, len: Column): Column = constructColumn(null) {
+    Substring(expr, startPos.expr, len.expr)
   }
 
   /**
