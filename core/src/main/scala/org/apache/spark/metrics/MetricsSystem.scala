@@ -130,8 +130,8 @@ private[spark] class MetricsSystem private (
       if (appId.isDefined && executorId.isDefined) {
         MetricRegistry.name(appId.get, executorId.get, source.sourceName)
       } else {
-        // Only Driver and Executor are set spark.app.id and spark.executor.id.
-        // For instance, Master and Worker are not related to a specific application.
+        // Only Driver and Executor set spark.app.id and spark.executor.id.
+        // Other instance types, e.g. Master and Worker, are not related to a specific application.
         val warningMsg = s"Using default name $defaultName for source because %s is not set."
         if (appId.isEmpty) { logWarning(warningMsg.format("spark.app.id")) }
         if (executorId.isEmpty) { logWarning(warningMsg.format("spark.executor.id")) }

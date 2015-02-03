@@ -20,6 +20,7 @@ package org.apache.spark.util
 import scala.collection.JavaConversions.mapAsJavaMap
 import scala.concurrent.Await
 import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.util.Try
 
 import akka.actor.{ActorRef, ActorSystem, ExtendedActorSystem}
 import akka.pattern.ask
@@ -53,7 +54,7 @@ private[spark] object AkkaUtils extends Logging {
     val startService: Int => (ActorSystem, Int) = { actualPort =>
       doCreateActorSystem(name, host, actualPort, conf, securityManager)
     }
-    Utils.startServiceOnPort(port, startService, name)
+    Utils.startServiceOnPort(port, startService, conf, name)
   }
 
   private def doCreateActorSystem(
@@ -65,7 +66,7 @@ private[spark] object AkkaUtils extends Logging {
 
     val akkaThreads   = conf.getInt("spark.akka.threads", 4)
     val akkaBatchSize = conf.getInt("spark.akka.batchSize", 15)
-    val akkaTimeout = conf.getInt("spark.akka.timeout", 100)
+    val akkaTimeout = conf.getInt("spark.akka.timeout", conf.getInt("spark.network.timeout", 120))
     val akkaFrameSize = maxFrameSizeBytes(conf)
     val akkaLogLifecycleEvents = conf.getBoolean("spark.akka.logLifecycleEvents", false)
     val lifecycleEvents = if (akkaLogLifecycleEvents) "on" else "off"
@@ -89,10 +90,13 @@ private[spark] object AkkaUtils extends Logging {
     }
     val requireCookie = if (isAuthOn) "on" else "off"
     val secureCookie = if (isAuthOn) secretKey else ""
-    logDebug("In createActorSystem, requireCookie is: " + requireCookie)
+    logDebug(s"In createActorSystem, requireCookie is: $requireCookie")
 
-    val akkaConf = ConfigFactory.parseMap(conf.getAkkaConf.toMap[String, String]).withFallback(
-      ConfigFactory.parseString(
+    val akkaSslConfig = securityManager.akkaSSLOptions.createAkkaConfig
+        .getOrElse(ConfigFactory.empty())
+
+    val akkaConf = ConfigFactory.parseMap(conf.getAkkaConf.toMap[String, String])
+      .withFallback(akkaSslConfig).withFallback(ConfigFactory.parseString(
       s"""
       |akka.daemonic = on
       |akka.loggers = [""akka.event.slf4j.Slf4jLogger""]
@@ -140,8 +144,8 @@ private[spark] object AkkaUtils extends Logging {
   def maxFrameSizeBytes(conf: SparkConf): Int = {
     val frameSizeInMB = conf.getInt("spark.akka.frameSize", 10)
     if (frameSizeInMB > AKKA_MAX_FRAME_SIZE_IN_MB) {
-      throw new IllegalArgumentException("spark.akka.frameSize should not be greater than "
-        + AKKA_MAX_FRAME_SIZE_IN_MB + "MB")
+      throw new IllegalArgumentException(
+        s"spark.akka.frameSize should not be greater than $AKKA_MAX_FRAME_SIZE_IN_MB MB")
     }
     frameSizeInMB * 1024 * 1024
   }
@@ -182,8 +186,8 @@ private[spark] object AkkaUtils extends Logging {
       timeout: FiniteDuration): T = {
     // TODO: Consider removing multiple attempts
     if (actor == null) {
-      throw new SparkException("Error sending message as actor is null " +
-        "[message = " + message + "]")
+      throw new SparkException(s"Error sending message [message = $message]" +
+        " as actor is null ")
     }
     var attempts = 0
     var lastException: Exception = null
@@ -200,13 +204,13 @@ private[spark] object AkkaUtils extends Logging {
         case ie: InterruptedException => throw ie
         case e: Exception =>
           lastException = e
-          logWarning("Error sending message in " + attempts + " attempts", e)
+          logWarning(s"Error sending message [message = $message] in $attempts attempts", e)
       }
       Thread.sleep(retryInterval)
     }
 
     throw new SparkException(
-      "Error sending message [message = " + message + "]", lastException)
+      s"Error sending message [message = $message]", lastException)
   }
 
   def makeDriverRef(name: String, conf: SparkConf, actorSystem: ActorSystem): ActorRef = {
@@ -214,7 +218,7 @@ private[spark] object AkkaUtils extends Logging {
     val driverHost: String = conf.get("spark.driver.host", "localhost")
     val driverPort: Int = conf.getInt("spark.driver.port", 7077)
     Utils.checkHost(driverHost, "Expected hostname")
-    val url = s"akka.tcp://$driverActorSystemName@$driverHost:$driverPort/user/$name"
+    val url = address(protocol(actorSystem), driverActorSystemName, driverHost, driverPort, name)
     val timeout = AkkaUtils.lookupTimeout(conf)
     logInfo(s"Connecting to $name: $url")
     Await.result(actorSystem.actorSelection(url).resolveOne(timeout), timeout)
@@ -228,9 +232,33 @@ private[spark] object AkkaUtils extends Logging {
       actorSystem: ActorSystem): ActorRef = {
     val executorActorSystemName = SparkEnv.executorActorSystemName
     Utils.checkHost(host, "Expected hostname")
-    val url = s"akka.tcp://$executorActorSystemName@$host:$port/user/$name"
+    val url = address(protocol(actorSystem), executorActorSystemName, host, port, name)
     val timeout = AkkaUtils.lookupTimeout(conf)
     logInfo(s"Connecting to $name: $url")
     Await.result(actorSystem.actorSelection(url).resolveOne(timeout), timeout)
   }
+
+  def protocol(actorSystem: ActorSystem): String = {
+    val akkaConf = actorSystem.settings.config
+    val sslProp = "akka.remote.netty.tcp.enable-ssl"
+    protocol(akkaConf.hasPath(sslProp) && akkaConf.getBoolean(sslProp))
+  }
+
+  def protocol(ssl: Boolean = false): String = {
+    if (ssl) {
+      "akka.ssl.tcp"
+    } else {
+      "akka.tcp"
+    }
+  }
+
+  def address(
+      protocol: String,
+      systemName: String,
+      host: String,
+      port: Any,
+      actorName: String): String = {
+    s"$protocol://$systemName@$host:$port/user/$actorName"
+  }
+
 }

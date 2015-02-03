@@ -20,7 +20,7 @@ title: Spark Streaming + Kafka Integration Guide
         	streamingContext, [zookeeperQuorum], [group id of the consumer], [per-topic number of Kafka partitions to consume])
 
 	See the [API docs](api/scala/index.html#org.apache.spark.streaming.kafka.KafkaUtils$)
-	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/streaming/KafkaWordCount.scala).
+	and the [example]({{site.SPARK_GITHUB_URL}}/blob/master/examples/scala-2.10/src/main/scala/org/apache/spark/examples/streaming/KafkaWordCount.scala).
 	</div>
 	<div data-lang="java" markdown="1">
 		import org.apache.spark.streaming.kafka.*;
@@ -29,7 +29,7 @@ title: Spark Streaming + Kafka Integration Guide
         	streamingContext, [zookeeperQuorum], [group id of the consumer], [per-topic number of Kafka partitions to consume]);
 
 	See the [API docs](api/java/index.html?org/apache/spark/streaming/kafka/KafkaUtils.html)
-	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaKafkaWordCount.java).
+	and the [example]({{site.SPARK_GITHUB_URL}}/blob/master/examples/scala-2.10/src/main/java/org/apache/spark/examples/streaming/JavaKafkaWordCount.java).
 	</div>
 	</div>
 

@@ -312,7 +312,7 @@ object SparkEnv extends Logging {
     val httpFileServer =
       if (isDriver) {
         val fileServerPort = conf.getInt("spark.fileserver.port", 0)
-        val server = new HttpFileServer(securityManager, fileServerPort)
+        val server = new HttpFileServer(conf, securityManager, fileServerPort)
         server.initialize()
         conf.set("spark.fileserver.uri",  server.serverUri)
         server
@@ -326,6 +326,10 @@ object SparkEnv extends Logging {
       // Then we can start the metrics system.
       MetricsSystem.createMetricsSystem("driver", conf, securityManager)
     } else {
+      // We need to set the executor ID before the MetricsSystem is created because sources and
+      // sinks specified in the metrics configuration file will want to incorporate this executor's
+      // ID into the metrics they report.
+      conf.set("spark.executor.id", executorId)
       val ms = MetricsSystem.createMetricsSystem("executor", conf, securityManager)
       ms.start()
       ms
@@ -335,7 +339,7 @@ object SparkEnv extends Logging {
     // this is a temporary directory; in distributed mode, this is the executor's current working
     // directory.
     val sparkFilesDir: String = if (isDriver) {
-      Utils.createTempDir().getAbsolutePath
+      Utils.createTempDir(Utils.getLocalDir(conf), "userFiles").getAbsolutePath
     } else {
       "."
     }

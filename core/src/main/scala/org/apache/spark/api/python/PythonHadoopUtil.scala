@@ -138,6 +138,11 @@ private[python] class JavaToWritableConverter extends Converter[Any, Writable] {
           mapWritable.put(convertToWritable(k), convertToWritable(v))
         }
         mapWritable
+      case array: Array[Any] => {
+        val arrayWriteable = new ArrayWritable(classOf[Writable])
+        arrayWriteable.set(array.map(convertToWritable(_)))
+        arrayWriteable
+      }
       case other => throw new SparkException(
         s"Data of type ${other.getClass.getName} cannot be used")
     }

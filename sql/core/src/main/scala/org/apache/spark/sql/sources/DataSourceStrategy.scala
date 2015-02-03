@@ -18,19 +18,18 @@
 package org.apache.spark.sql.sources
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Row
-import org.apache.spark.sql._
+import org.apache.spark.sql.{Row, Strategy}
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, AttributeSet, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, InsertIntoTable => LogicalInsertIntoTable}
+import org.apache.spark.sql.execution
 
 /**
  * A Strategy for planning scans over data sources defined using the sources API.
  */
 private[sql] object DataSourceStrategy extends Strategy {
-  def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+  def apply(plan: LogicalPlan): Seq[execution.SparkPlan] = plan match {
     case PhysicalOperation(projectList, filters, l @ LogicalRelation(t: CatalystScan)) =>
       pruneFilterProjectRaw(
         l,
@@ -54,6 +53,13 @@ private[sql] object DataSourceStrategy extends Strategy {
 
     case l @ LogicalRelation(t: TableScan) =>
       execution.PhysicalRDD(l.output, t.buildScan()) :: Nil
+
+    case i @ LogicalInsertIntoTable(
+      l @ LogicalRelation(t: InsertableRelation), partition, query, overwrite) =>
+      if (partition.nonEmpty) {
+        sys.error(s"Insert into a partition is not allowed because $l is not partitioned.")
+      }
+      execution.ExecutedCommand(InsertIntoRelation(t, query, overwrite)) :: Nil
 
     case _ => Nil
   }
@@ -112,23 +118,26 @@ private[sql] object DataSourceStrategy extends Strategy {
     }
   }
 
+  /** Turn Catalyst [[Expression]]s into data source [[Filter]]s. */
   protected[sql] def selectFilters(filters: Seq[Expression]): Seq[Filter] = filters.collect {
-    case expressions.EqualTo(a: Attribute, Literal(v, _)) => EqualTo(a.name, v)
-    case expressions.EqualTo(Literal(v, _), a: Attribute) => EqualTo(a.name, v)
+    case expressions.EqualTo(a: Attribute, expressions.Literal(v, _)) => EqualTo(a.name, v)
+    case expressions.EqualTo(expressions.Literal(v, _), a: Attribute) => EqualTo(a.name, v)
 
-    case expressions.GreaterThan(a: Attribute, Literal(v, _)) => GreaterThan(a.name, v)
-    case expressions.GreaterThan(Literal(v, _), a: Attribute) => LessThan(a.name, v)
+    case expressions.GreaterThan(a: Attribute, expressions.Literal(v, _)) => GreaterThan(a.name, v)
+    case expressions.GreaterThan(expressions.Literal(v, _), a: Attribute) => LessThan(a.name, v)
 
-    case expressions.LessThan(a: Attribute, Literal(v, _)) => LessThan(a.name, v)
-    case expressions.LessThan(Literal(v, _), a: Attribute) => GreaterThan(a.name, v)
+    case expressions.LessThan(a: Attribute, expressions.Literal(v, _)) => LessThan(a.name, v)
+    case expressions.LessThan(expressions.Literal(v, _), a: Attribute) => GreaterThan(a.name, v)
 
-    case expressions.GreaterThanOrEqual(a: Attribute, Literal(v, _)) =>
+    case expressions.GreaterThanOrEqual(a: Attribute, expressions.Literal(v, _)) =>
       GreaterThanOrEqual(a.name, v)
-    case expressions.GreaterThanOrEqual(Literal(v, _), a: Attribute) =>
+    case expressions.GreaterThanOrEqual(expressions.Literal(v, _), a: Attribute) =>
       LessThanOrEqual(a.name, v)
 
-    case expressions.LessThanOrEqual(a: Attribute, Literal(v, _)) => LessThanOrEqual(a.name, v)
-    case expressions.LessThanOrEqual(Literal(v, _), a: Attribute) => GreaterThanOrEqual(a.name, v)
+    case expressions.LessThanOrEqual(a: Attribute, expressions.Literal(v, _)) =>
+      LessThanOrEqual(a.name, v)
+    case expressions.LessThanOrEqual(expressions.Literal(v, _), a: Attribute) =>
+      GreaterThanOrEqual(a.name, v)
 
     case expressions.InSet(a: Attribute, set) => In(a.name, set.toArray)
   }

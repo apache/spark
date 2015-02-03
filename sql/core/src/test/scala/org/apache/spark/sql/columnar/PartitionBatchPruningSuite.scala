@@ -23,8 +23,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.test.TestSQLContext._
 
 class PartitionBatchPruningSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfter {
-  val originalColumnBatchSize = columnBatchSize
-  val originalInMemoryPartitionPruning = inMemoryPartitionPruning
+  val originalColumnBatchSize = conf.columnBatchSize
+  val originalInMemoryPartitionPruning = conf.inMemoryPartitionPruning
 
   override protected def beforeAll(): Unit = {
     // Make a table with 5 partitions, 2 batches per partition, 10 elements per batch
@@ -104,14 +104,14 @@ class PartitionBatchPruningSuite extends FunSuite with BeforeAndAfterAll with Be
       expectedQueryResult: => Seq[Int]): Unit = {
 
     test(query) {
-      val schemaRdd = sql(query)
-      val queryExecution = schemaRdd.queryExecution
+      val df = sql(query)
+      val queryExecution = df.queryExecution
 
       assertResult(expectedQueryResult.toArray, s"Wrong query result: $queryExecution") {
-        schemaRdd.collect().map(_.head).toArray
+        df.collect().map(_(0)).toArray
       }
 
-      val (readPartitions, readBatches) = schemaRdd.queryExecution.executedPlan.collect {
+      val (readPartitions, readBatches) = df.queryExecution.executedPlan.collect {
         case in: InMemoryColumnarTableScan => (in.readPartitions.value, in.readBatches.value)
       }.head
 
