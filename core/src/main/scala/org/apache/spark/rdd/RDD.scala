@@ -19,6 +19,8 @@ package org.apache.spark.rdd
 
 import java.util.Random
 
+import org.apache.hadoop.fs.{Path, FileSystem}
+
 import scala.collection.{mutable, Map}
 import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
@@ -1264,7 +1266,21 @@ abstract class RDD[T: ClassTag](
   /**
    * Save this RDD as a text file, using string representations of elements.
    */
-  def saveAsTextFile(path: String) {
+  def saveAsTextFile(path: String): Unit = {
+    saveAsTextFile(path, overWrite = false)
+  }
+
+  /**
+   * Save this RDD as a text file, using string representations of elements,
+   * overwriting any data in the directory
+   * @param path The path of the directory to write to.
+   * @param overWrite If this is true, all data in the directory is overwritten.
+   */
+  // Exposed for Spark Streaming use.
+  private[spark] def saveAsTextFile(path: String, overWrite: Boolean): Unit = {
+    if (overWrite) {
+      deleteDirIfExists(path)
+    }
     // https://issues.apache.org/jira/browse/SPARK-2075
     //
     // NullWritable is a `Comparable` in Hadoop 1.+, so the compiler cannot find an implicit
@@ -1289,6 +1305,17 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * Deletes a directory on an HDFS compatible FS, if it exists.
+   * @param path The path of the directory to delete
+   */
+  private def deleteDirIfExists(path: String): Unit = {
+    val fs = FileSystem.get(context.hadoopConfiguration)
+    val dirPath = new Path(path)
+    if (fs.exists(dirPath)) {
+      fs.delete(dirPath, true)
+    }
+  }
+  /**
    * Save this RDD as a compressed text file, using string representations of elements.
    */
   def saveAsTextFile(path: String, codec: Class[_ <: CompressionCodec]) {
@@ -1309,7 +1336,20 @@ abstract class RDD[T: ClassTag](
   /**
    * Save this RDD as a SequenceFile of serialized objects.
    */
-  def saveAsObjectFile(path: String) {
+  def saveAsObjectFile(path: String): Unit = {
+    saveAsObjectFile(path, overWrite = false)
+  }
+
+  /**
+   * Save this RDD as a SequenceFile of serialized objects, overwriting any data in the directory.
+   * @param path The path of the directory to write to.
+   * @param overWrite If this is true, all data in the directory is overwritten.
+   */
+  // Exposed for Spark Streaming use.
+  private[spark] def saveAsObjectFile(path: String, overWrite: Boolean): Unit = {
+    if (overWrite) {
+      deleteDirIfExists(path)
+    }
     this.mapPartitions(iter => iter.grouped(10).map(_.toArray))
       .map(x => (NullWritable.get(), new BytesWritable(Utils.serialize(x))))
       .saveAsSequenceFile(path)
