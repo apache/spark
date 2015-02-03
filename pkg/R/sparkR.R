@@ -151,13 +151,18 @@ sparkR.init <- function(
   sc
 }
 
-#' Initialize a new Spark Context.
+#' Initialize a new SQLContext.
 #'
 #' This function creates a SparkContext from an existing JavaSparkContext and 
 #' then uses it to initialize a new SQLContext
 #'
 #' @param jsc The existing JavaSparkContext created with SparkR.init()
 #' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#'}
 
 sparkRSQL.init <- function(jsc) {
   
@@ -176,7 +181,7 @@ sparkRSQL.init <- function(jsc) {
       sparkContext),
     envir = .sparkREnv
   )
-  sqlctx <- get(".sparkRSQLsc", envir = .sparkREnv)
-
-  sqlctx
+  sqlCtx <- get(".sparkRSQLsc", envir = .sparkREnv)
+  
+  sqlCtx
 }

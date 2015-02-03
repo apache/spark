@@ -3,10 +3,10 @@
 \alias{cacheTable}
 \title{Cache Table}
 \usage{
-cacheTable(sqlctx, tableName)
+cacheTable(sqlCtx, tableName)
 }
 \arguments{
-\item{sqlctx}{SQLContext to use}
+\item{sqlCtx}{SQLContext to use}
 
 \item{tableName}{The name of the table being cached}
 }
@@ -15,5 +15,15 @@ DataFrame
 }
 \description{
 Caches the specified table in-memory.
+}
+\examples{
+\dontrun{
+sc <- sparkR.init()
+sqlCtx <- sparkRSQL.init(sc)
+path <- "path/to/file.json"
+df <- jsonFile(sqlCtx, path)
+registerTempTable(df, "table")
+cacheTable(sqlCtx, "table")
+}
 }
 
