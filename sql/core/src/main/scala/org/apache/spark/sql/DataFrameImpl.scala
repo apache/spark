@@ -19,9 +19,6 @@ package org.apache.spark.sql
 
 import java.util.{List => JList}
 
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.sources.{ResolvedDataSource, CreateTableUsingAsLogicalPlan}
-
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.collection.JavaConversions._
@@ -39,6 +36,7 @@ import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{LogicalRDD, EvaluatePython}
 import org.apache.spark.sql.json.JsonRDD
+import org.apache.spark.sql.sources.{ResolvedDataSource, CreateTableUsingAsLogicalPlan}
 import org.apache.spark.sql.types.{NumericType, StructType}
 import org.apache.spark.util.Utils
 
