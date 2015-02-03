@@ -39,9 +39,7 @@ namespace :deploy do
   end
 
   task :upload_to_hdfs, :roles => :uploader, :on_no_matching_servers => :continue do
-    # writing to latest is going away
-    run "hdfs dfs -copyFromLocal -f /u/apps/spark/current/lib/spark-assembly-*.jar hdfs://nn01.chi.shopify.com/user/sparkles/spark-assembly-latest.jar"
-    run "hdfs dfs -copyFromLocal -f /u/apps/spark/current/lib/spark-assembly-*.jar hdfs://nn01.chi.shopify.com/user/sparkles/spark-assembly-#{`git rev-parse HEAD`.gsub(/\s/,"")}.jar"
+    run "hdfs dfs -copyFromLocal -f /u/apps/spark/current/lib/spark-assembly-*.jar hdfs://nn01.chi.shopify.com/user/sparkles/spark-assembly-#{fetch(:sha)}.jar"
   end
 
   task :prevent_gateway do
@@ -62,7 +60,7 @@ namespace :deploy do
     puts "*    spark_production"
     puts "*      conf_options:"
     puts "*      <<: *spark_remote"
-    puts "*      spark.yarn.jar: \"hdfs://nn01.chi.shopify.com:8020/user/sparkles/spark-assembly-\033[31m#{`git rev-parse HEAD`.gsub(/\s/,"")}\033[0m.jar\""
+    puts "*      spark.yarn.jar: \"hdfs://nn01.chi.shopify.com:8020/user/sparkles/spark-assembly-\033[31m#{fetch(:sha)}\033[0m.jar\""
     puts "*"
     puts "****************************************************************"
   end
