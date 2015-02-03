@@ -24,7 +24,7 @@ import scala.collection.immutable
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, Partition}
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaSparkContext, JavaRDD}
 import org.apache.spark.rdd.RDD
@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.json._
+import org.apache.spark.sql.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
 import org.apache.spark.sql.sources.{LogicalRelation, BaseRelation, DDLParser, DataSourceStrategy}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -171,14 +172,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
     val rowRDD = RDDConversions.productToRowRdd(rdd, schema)
-    new DataFrame(this, LogicalRDD(attributeSeq, rowRDD)(self))
+    DataFrame(this, LogicalRDD(attributeSeq, rowRDD)(self))
   }
 
   /**
    * Convert a [[BaseRelation]] created for external data sources into a [[DataFrame]].
    */
   def baseRelationToDataFrame(baseRelation: BaseRelation): DataFrame = {
-    new DataFrame(this, LogicalRelation(baseRelation))
+    DataFrame(this, LogicalRelation(baseRelation))
   }
 
   /**
@@ -216,7 +217,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
     val logicalPlan = LogicalRDD(schema.toAttributes, rowRDD)(self)
-    new DataFrame(this, logicalPlan)
+    DataFrame(this, logicalPlan)
   }
 
   /**
@@ -243,7 +244,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
         ) : Row
       }
     }
-    new DataFrame(this, LogicalRDD(attributeSeq, rowRdd)(this))
+    DataFrame(this, LogicalRDD(attributeSeq, rowRdd)(this))
   }
 
   /**
@@ -262,7 +263,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   def parquetFile(path: String): DataFrame =
-    new DataFrame(this, parquet.ParquetRelation(path, Some(sparkContext.hadoopConfiguration), this))
+    DataFrame(this, parquet.ParquetRelation(path, Some(sparkContext.hadoopConfiguration), this))
 
   /**
    * Loads a JSON file (one object per line), returning the result as a [[DataFrame]].
@@ -335,6 +336,52 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
+   * :: Experimental ::
+   * Construct an RDD representing the database table accessible via JDBC URL
+   * url named table.
+   */
+  @Experimental
+  def jdbcRDD(url: String, table: String): DataFrame = {
+    jdbcRDD(url, table, null.asInstanceOf[JDBCPartitioningInfo])
+  }
+
+  /**
+   * :: Experimental ::
+   * Construct an RDD representing the database table accessible via JDBC URL
+   * url named table.  The PartitioningInfo parameter
+   * gives the name of a column of integral type, a number of partitions, and
+   * advisory minimum and maximum values for the column.  The RDD is
+   * partitioned according to said column.
+   */
+  @Experimental
+  def jdbcRDD(url: String, table: String, partitioning: JDBCPartitioningInfo):
+      DataFrame = {
+    val parts = JDBCRelation.columnPartition(partitioning)
+    jdbcRDD(url, table, parts)
+  }
+
+  /**
+   * :: Experimental ::
+   * Construct an RDD representing the database table accessible via JDBC URL
+   * url named table.  The theParts parameter gives a list expressions
+   * suitable for inclusion in WHERE clauses; each one defines one partition
+   * of the RDD.
+   */
+  @Experimental
+  def jdbcRDD(url: String, table: String, theParts: Array[String]):
+      DataFrame = {
+    val parts: Array[Partition] = theParts.zipWithIndex.map(
+        x => JDBCPartition(x._1, x._2).asInstanceOf[Partition])
+    jdbcRDD(url, table, parts)
+  }
+
+  private def jdbcRDD(url: String, table: String, parts: Array[Partition]):
+      DataFrame = {
+    val relation = JDBCRelation(url, table, parts)(this)
+    baseRelationToDataFrame(relation)
+  }
+
+  /**
    * Registers the given RDD as a temporary table in the catalog.  Temporary tables exist only
    * during the lifetime of this instance of SQLContext.
    *
@@ -365,7 +412,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   def sql(sqlText: String): DataFrame = {
     if (conf.dialect == "sql") {
-      new DataFrame(this, parseSql(sqlText))
+      DataFrame(this, parseSql(sqlText))
     } else {
       sys.error(s"Unsupported SQL dialect: ${conf.dialect}")
     }
@@ -373,7 +420,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /** Returns the specified table as a [[DataFrame]]. */
   def table(tableName: String): DataFrame =
-    new DataFrame(this, catalog.lookupRelation(Seq(tableName)))
+    DataFrame(this, catalog.lookupRelation(Seq(tableName)))
 
   protected[sql] class SparkPlanner extends SparkStrategies {
     val sparkContext: SparkContext = self.sparkContext
@@ -462,7 +509,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * access to the intermediate phases of query execution for developers.
    */
   @DeveloperApi
-  protected class QueryExecution(val logical: LogicalPlan) {
+  protected[sql] class QueryExecution(val logical: LogicalPlan) {
 
     lazy val analyzed: LogicalPlan = ExtractPythonUdfs(analyzer(logical))
     lazy val withCachedData: LogicalPlan = cacheManager.useCachedData(analyzed)
@@ -556,7 +603,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       iter.map { m => new GenericRow(m): Row}
     }
 
-    new DataFrame(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
+    DataFrame(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
   }
 
   /**

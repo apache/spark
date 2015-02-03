@@ -615,7 +615,7 @@ class ALS private (
    * Given A^T A and A^T b, find the x minimising ||Ax - b||_2, possibly subject
    * to nonnegativity constraints if `nonnegative` is true.
    */
-  def solveLeastSquares(ata: DoubleMatrix, atb: DoubleMatrix,
+  private def solveLeastSquares(ata: DoubleMatrix, atb: DoubleMatrix,
       ws: NNLS.Workspace): Array[Double] = {
     if (!nonnegative) {
       Solve.solvePositive(ata, atb).data
