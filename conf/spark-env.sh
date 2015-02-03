@@ -8,7 +8,7 @@
 # - HADOOP_CONF_DIR, to point Spark towards Hadoop configuration files
 # - SPARK_LOCAL_IP, to set the IP address Spark binds to on this node
 # - SPARK_PUBLIC_DNS, to set the public dns name of the driver program
-SPARK_CLASSPATH=/root/spark1.3/assembly/rptg-common_2.10-0.1-SNAPSHOT.jar:/root/spark1.3/assembly/protobuf-java-2.5.0.jar:$SPARK_CLASSPATH
+SPARK_CLASSPATH=/root/spark1.3/assembly/rptg_common/target/scala-2.10/rptg-common_2.10-0.1-SNAPSHOT.jar:/root/spark1.3/assembly/protobuf-java-2.5.0.jar:$SPARK_CLASSPATH
 
 # Options read by executors and drivers running insidel the cluster
 # - SPARK_LOCAL_IP="10.153.22.150"
