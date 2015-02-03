@@ -71,7 +71,6 @@ class Analyzer(catalog: Catalog,
     Batch("Check Analysis", Once,
       CheckResolution ::
       CheckAggregation ::
-      CheckMultiAlias ::
       Nil: _*),
     Batch("AnalysisOperators", fixedPoint,
       EliminateAnalysisOperators)
@@ -221,29 +220,6 @@ class Analyzer(catalog: Catalog,
           }
 
           aggregatePlan
-      }
-    }
-  }
-
-  /**
-   * Checks for multi alias, multi alias only support generator
-   */
-  object CheckMultiAlias extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case p @ Project(projectList, _)
-        if projectList.exists(_.isInstanceOf[MultiAlias]) && projectList.size != 1 =>
-        throw new TreeNodeException(p, "only single Generator supported for SELECT clause")
-
-      case q: LogicalPlan => q transformExpressions {
-        case multiAlias @ MultiAlias(generator, names) if generator.isInstanceOf[Generator] =>
-          assert(generator.asInstanceOf[Generator].output.size == names.size,
-            s"The number of multi aliases supplied in the AS clause does not match the number of" +
-              s" columns output by the Generator expected" +
-              s" ${generator.asInstanceOf[Generator].output.size} aliases but got ${names.size}")
-          multiAlias
-        case multiAlias @ MultiAlias(child, _) =>
-          throw new TreeNodeException(plan,
-            s"MultiAlias's child expression $child should be Generator")
       }
     }
   }
@@ -442,8 +418,6 @@ class Analyzer(catalog: Catalog,
   object ImplicitGenerate extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case Project(Seq(Alias(g: Generator, _)), child) =>
-        Generate(g, join = false, outer = false, None, child)
-      case Project(Seq(MultiAlias(g: Generator, _)), child) =>
         Generate(g, join = false, outer = false, None, child)
     }
   }

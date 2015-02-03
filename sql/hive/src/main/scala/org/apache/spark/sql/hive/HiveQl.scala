@@ -947,7 +947,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         case _ =>
         }
       }
-      Some(MultiAlias(nodeToExpr(e), aliasNames)())
+      Some(MultiAlias(nodeToExpr(e), aliasNames))
 
     /* Hints are ignored */
     case Token("TOK_HINTLIST", _) => None
