@@ -171,7 +171,7 @@ sparkRSQL.init <- function(jsc) {
   assign(
     ".sparkRSQLsc",
     callJStatic(
-      "edu.berkeley.cs.amplab.sparkr.sqlUtils",
+      "edu.berkeley.cs.amplab.sparkr.SQLUtils",
       "createSQLContext",
       sparkContext),
     envir = .sparkREnv
