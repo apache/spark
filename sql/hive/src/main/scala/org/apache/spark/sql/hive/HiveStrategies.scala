@@ -137,8 +137,10 @@ private[hive] trait HiveStrategies {
               pruningCondition(inputData)
             }
 
+            val partitionLocations = partitions.map(_.getLocation)
+
             hiveContext
-              .parquetFile(partitions.map(_.getLocation): _*)
+              .parquetFile(partitionLocations.head, partitionLocations.tail: _*)
               .addPartitioningAttributes(relation.partitionKeys)
               .lowerCase
               .where(unresolvedOtherPredicates)

@@ -304,9 +304,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   @scala.annotation.varargs
-  def parquetFile(paths: String*): DataFrame =
+  def parquetFile(path: String, paths: String*): DataFrame =
     if (conf.parquetUseDataSourceApi) {
-      baseRelationToDataFrame(parquet.ParquetRelation2(paths, Map.empty)(this))
+      baseRelationToDataFrame(parquet.ParquetRelation2(path +: paths, Map.empty)(this))
     } else {
       DataFrame(this, parquet.ParquetRelation(
         paths.mkString(","), Some(sparkContext.hadoopConfiguration), this))

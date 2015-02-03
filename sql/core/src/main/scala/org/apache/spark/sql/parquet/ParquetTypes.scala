@@ -567,6 +567,9 @@ private[parquet] object ParquetTypesConverter extends Logging {
             DecimalType.Fixed(rightPrecision, rightScale)) =>
         DecimalType(leftPrecision.max(rightPrecision), leftScale.max(rightScale))
 
+      case (leftUdt: UserDefinedType[_], rightUdt: UserDefinedType[_])
+        if leftUdt.userClass == rightUdt.userClass => leftUdt
+
       case (leftType, rightType) if leftType == rightType =>
         leftType
 
