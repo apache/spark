@@ -515,10 +515,9 @@ private[parquet] object CatalystTimestampConverter {
       Calendar.MINUTE, (remainder / (NANOS_PER_SECOND * SECONDS_PER_MINUTE)).toInt)
     remainder = remainder % (NANOS_PER_SECOND * SECONDS_PER_MINUTE)
     calendar.set(Calendar.SECOND, (remainder / NANOS_PER_SECOND).toInt)
-    // Hive-0.14 put all of the remainder into nanos, while we put the millis part away
     val nanos = remainder % NANOS_PER_SECOND
-    val ts = new Timestamp(calendar.getTimeInMillis + nanos / NANOS_PER_MILLI)
-    ts.setNanos((nanos % NANOS_PER_MILLI).toInt)
+    val ts = new Timestamp(calendar.getTimeInMillis)
+    ts.setNanos(nanos.toInt)
     ts
   }
 
@@ -535,8 +534,7 @@ private[parquet] object CatalystTimestampConverter {
     val hour = calendar.get(Calendar.HOUR_OF_DAY)
     val minute = calendar.get(Calendar.MINUTE)
     val second = calendar.get(Calendar.SECOND)
-    // Hive-0.14 would not consider millis part in ts itself
-    val nanos = ts.getNanos + ts.getTime % 1000 * NANOS_PER_MILLI
+    val nanos = ts.getNanos
     // Hive-0.14 would use hours directly, that might be wrong, since the day starts
     // from 12h in Julian. here we just follow what hive does.
     val nanosOfDay = nanos + second * NANOS_PER_SECOND +
