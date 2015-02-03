@@ -46,7 +46,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest {
 
     // This test case will trigger the NPE mentioned in
     // https://issues.apache.org/jira/browse/PARQUET-151.
-    ignore("overwriting") {
+    ignore(s"$prefix: overwriting") {
       val data = (0 until 10).map(i => (i, i.toString))
       withParquetTable(data, "t") {
         sql("INSERT OVERWRITE TABLE t SELECT * FROM t")
@@ -54,7 +54,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest {
       }
     }
 
-    test("self-join") {
+    test(s"$prefix: self-join") {
       // 4 rows, cells of column 1 of row 2 and row 4 are null
       val data = (1 to 4).map { i =>
         val maybeInt = if (i % 2 == 0) None else Some(i)
@@ -111,10 +111,10 @@ class ParquetQuerySuite extends QueryTest with ParquetTest {
   }
 
   withSQLConf(SQLConf.PARQUET_USE_DATA_SOURCE_API -> "true") {
-    run("Enable Parquet data source")
+    run("Parquet data source enabled")
   }
 
   withSQLConf(SQLConf.PARQUET_USE_DATA_SOURCE_API -> "false") {
-    run("Disable Parquet data source")
+    run("Parquet data source disabled")
   }
 }

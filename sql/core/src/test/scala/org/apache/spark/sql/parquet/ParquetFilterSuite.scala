@@ -312,10 +312,10 @@ class ParquetFilterSuite extends QueryTest with ParquetTest {
   }
 
   withSQLConf(SQLConf.PARQUET_USE_DATA_SOURCE_API -> "true") {
-    run("Enable Parquet data source")
+    run("Parquet data source enabled")
   }
 
   withSQLConf(SQLConf.PARQUET_USE_DATA_SOURCE_API -> "false") {
-    run("Disable Parquet data source")
+    run("Parquet data source disabled")
   }
 }

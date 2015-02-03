@@ -393,7 +393,10 @@ object ParquetRelation2 {
         // Falls back to Parquet schema if Spark SQL schema is absent.
         StructType.fromAttributes(
           // TODO Really no need to use `Attribute` here, we only need to know the data type.
-          convertToAttributes(parquetSchema, sqlContext.conf.isParquetBinaryAsString))
+          convertToAttributes(
+            parquetSchema,
+            sqlContext.conf.isParquetBinaryAsString,
+            sqlContext.conf.isParquetINT96AsTimestamp))
       }
     }.reduce { (left, right) =>
       try mergeCatalystSchemas(left, right) catch { case e: Throwable =>

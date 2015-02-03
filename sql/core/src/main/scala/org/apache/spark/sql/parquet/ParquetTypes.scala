@@ -545,10 +545,10 @@ private[parquet] object ParquetTypesConverter extends Logging {
         val newFields = ArrayBuffer.empty[StructField]
 
         leftFields.foreach {
-          case leftField @ StructField(leftName, leftType, leftNullable, leftMetadata) =>
+          case leftField @ StructField(leftName, leftType, leftNullable, _) =>
             rightFields
               .find(_.name == leftName)
-              .map { case rightField @ StructField(_, rightType, rightNullable, rightMeatadata) =>
+              .map { case rightField @ StructField(_, rightType, rightNullable, _) =>
                 leftField.copy(
                   dataType = mergeCatalystDataTypes(leftType, rightType),
                   nullable = leftNullable || rightNullable)

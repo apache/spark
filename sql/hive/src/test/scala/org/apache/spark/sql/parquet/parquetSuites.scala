@@ -286,8 +286,8 @@ abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll 
   }
 
   setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "false")
-  run("Enable Parquet data source")
+  run("Parquet data source enabled")
 
   setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
-  run("Disable Parquet data source")
+  run("Parquet data source disabled")
 }
