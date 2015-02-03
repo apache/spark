@@ -32,10 +32,8 @@ import org.apache.spark.api.java.StorageLevels
 import org.apache.spark.shuffle.FetchFailedException
 
 /**
- * Selenium tests for the Spark Web UI.  These tests are not run by default
- * because they're slow.
+ * Selenium tests for the Spark Web UI.
  */
-@DoNotDiscover
 class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
   implicit val webDriver: WebDriver = new HtmlUnitDriver
 
