@@ -33,9 +33,17 @@ object TaskContext {
 
   private val taskContext: ThreadLocal[TaskContext] = new ThreadLocal[TaskContext]
 
-  private[spark] def setTaskContext(tc: TaskContext): Unit = taskContext.set(tc)
+  // Note: protected[spark] instead of private[spark] to prevent the following two from
+  // showing up in JavaDoc.
+  /**
+   * Set the thread local TaskContext. Internal to Spark.
+   */
+  protected[spark] def setTaskContext(tc: TaskContext): Unit = taskContext.set(tc)
 
-  private[spark] def unset(): Unit = taskContext.remove()
+  /**
+   * Unset the thread local TaskContext. Internal to Spark.
+   */
+  protected[spark] def unset(): Unit = taskContext.remove()
 }
 
 
@@ -62,7 +70,6 @@ abstract class TaskContext extends Serializable {
    */
   def isInterrupted(): Boolean
 
-  /** @deprecated use { @link #isRunningLocally()}*/
   @deprecated("1.2.0", "use isRunningLocally")
   def runningLocally(): Boolean
 
@@ -91,8 +98,6 @@ abstract class TaskContext extends Serializable {
    * is for HadoopRDD to register a callback to close the input stream.
    * Will be called in any situation - success, failure, or cancellation.
    *
-   * @deprecated use { @link #addTaskCompletionListener(scala.Function1)}
-   *
    * @param f Callback function.
    */
   @deprecated("1.2.0", "use addTaskCompletionListener")
@@ -114,7 +119,6 @@ abstract class TaskContext extends Serializable {
    */
   def attemptNumber(): Int
 
-  /** @deprecated use { @link #taskAttemptId()}; it was renamed to avoid ambiguity. */
   @deprecated("1.3.0", "use attemptNumber")
   def attemptId(): Long
 
