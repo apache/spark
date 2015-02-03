@@ -15,11 +15,17 @@
 # limitations under the License.
 #
 
-"""
-Python package for statistical functions in MLlib.
-"""
+from collections import namedtuple
 
-from pyspark.mllib.stat._statistics import *
-from pyspark.mllib.stat.distribution import MultivariateGaussian
+__all__ = ['MultivariateGaussian']
 
-__all__ = ["Statistics", "MultivariateStatisticalSummary", "MultivariateGaussian"]
+
+class MultivariateGaussian(namedtuple('MultivariateGaussian', ['mu', 'sigma'])):
+
+    """ Represents a (mu, sigma) tuple
+    >>> m = MultivariateGaussian(Vectors.dense([11,12]),DenseMatrix(2, 2, (1.0, 3.0, 5.0, 2.0)))
+    >>> (m.mu, m.sigma.toArray())
+    (DenseVector([11.0, 12.0]), array([[ 1., 5.],[ 3., 2.]]))
+    >>> (m[0], m[1])
+    (DenseVector([11.0, 12.0]), array([[ 1., 5.],[ 3., 2.]]))
+    """

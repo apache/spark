@@ -22,6 +22,7 @@ import java.{util => ju}
 import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.util.Sorting
+import scala.util.hashing.byteswap64
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import com.github.fommil.netlib.LAPACK.{getInstance => lapack}
@@ -37,6 +38,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.Dsl._
 import org.apache.spark.sql.types.{DoubleType, FloatType, IntegerType, StructField, StructType}
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.{OpenHashMap, OpenHashSet, SortDataFormat, Sorter}
 import org.apache.spark.util.random.XORShiftRandom
@@ -412,7 +414,7 @@ object ALS extends Logging {
   /**
    * Implementation of the ALS algorithm.
    */
-  def train[ID: ClassTag](
+  def train[ID: ClassTag]( // scalastyle:ignore
       ratings: RDD[Rating[ID]],
       rank: Int = 10,
       numUserBlocks: Int = 10,
@@ -421,34 +423,47 @@ object ALS extends Logging {
       regParam: Double = 1.0,
       implicitPrefs: Boolean = false,
       alpha: Double = 1.0,
-      nonnegative: Boolean = false)(
+      nonnegative: Boolean = false,
+      intermediateRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
+      finalRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
+      seed: Long = 0L)(
       implicit ord: Ordering[ID]): (RDD[(ID, Array[Float])], RDD[(ID, Array[Float])]) = {
+    require(intermediateRDDStorageLevel != StorageLevel.NONE,
+      "ALS is not designed to run without persisting intermediate RDDs.")
+    val sc = ratings.sparkContext
     val userPart = new HashPartitioner(numUserBlocks)
     val itemPart = new HashPartitioner(numItemBlocks)
     val userLocalIndexEncoder = new LocalIndexEncoder(userPart.numPartitions)
     val itemLocalIndexEncoder = new LocalIndexEncoder(itemPart.numPartitions)
     val solver = if (nonnegative) new NNLSSolver else new CholeskySolver
-    val blockRatings = partitionRatings(ratings, userPart, itemPart).cache()
-    val (userInBlocks, userOutBlocks) = makeBlocks("user", blockRatings, userPart, itemPart)
+    val blockRatings = partitionRatings(ratings, userPart, itemPart)
+      .persist(intermediateRDDStorageLevel)
+    val (userInBlocks, userOutBlocks) =
+      makeBlocks("user", blockRatings, userPart, itemPart, intermediateRDDStorageLevel)
     // materialize blockRatings and user blocks
     userOutBlocks.count()
     val swappedBlockRatings = blockRatings.map {
       case ((userBlockId, itemBlockId), RatingBlock(userIds, itemIds, localRatings)) =>
         ((itemBlockId, userBlockId), RatingBlock(itemIds, userIds, localRatings))
     }
-    val (itemInBlocks, itemOutBlocks) = makeBlocks("item", swappedBlockRatings, itemPart, userPart)
+    val (itemInBlocks, itemOutBlocks) =
+      makeBlocks("item", swappedBlockRatings, itemPart, userPart, intermediateRDDStorageLevel)
     // materialize item blocks
     itemOutBlocks.count()
-    var userFactors = initialize(userInBlocks, rank)
-    var itemFactors = initialize(itemInBlocks, rank)
+    val seedGen = new XORShiftRandom(seed)
+    var userFactors = initialize(userInBlocks, rank, seedGen.nextLong())
+    var itemFactors = initialize(itemInBlocks, rank, seedGen.nextLong())
     if (implicitPrefs) {
       for (iter <- 1 to maxIter) {
-        userFactors.setName(s"userFactors-$iter").persist()
+        userFactors.setName(s"userFactors-$iter").persist(intermediateRDDStorageLevel)
         val previousItemFactors = itemFactors
         itemFactors = computeFactors(userFactors, userOutBlocks, itemInBlocks, rank, regParam,
           userLocalIndexEncoder, implicitPrefs, alpha, solver)
         previousItemFactors.unpersist()
-        itemFactors.setName(s"itemFactors-$iter").persist()
+        if (sc.checkpointDir.isDefined && (iter % 3 == 0)) {
+          itemFactors.checkpoint()
+        }
+        itemFactors.setName(s"itemFactors-$iter").persist(intermediateRDDStorageLevel)
         val previousUserFactors = userFactors
         userFactors = computeFactors(itemFactors, itemOutBlocks, userInBlocks, rank, regParam,
           itemLocalIndexEncoder, implicitPrefs, alpha, solver)
@@ -467,21 +482,23 @@ object ALS extends Logging {
       .join(userFactors)
       .values
       .setName("userFactors")
-      .cache()
-    userIdAndFactors.count()
-    itemFactors.unpersist()
+      .persist(finalRDDStorageLevel)
     val itemIdAndFactors = itemInBlocks
       .mapValues(_.srcIds)
       .join(itemFactors)
       .values
       .setName("itemFactors")
-      .cache()
-    itemIdAndFactors.count()
-    userInBlocks.unpersist()
-    userOutBlocks.unpersist()
-    itemInBlocks.unpersist()
-    itemOutBlocks.unpersist()
-    blockRatings.unpersist()
+      .persist(finalRDDStorageLevel)
+    if (finalRDDStorageLevel != StorageLevel.NONE) {
+      userIdAndFactors.count()
+      itemFactors.unpersist()
+      itemIdAndFactors.count()
+      userInBlocks.unpersist()
+      userOutBlocks.unpersist()
+      itemInBlocks.unpersist()
+      itemOutBlocks.unpersist()
+      blockRatings.unpersist()
+    }
     val userOutput = userIdAndFactors.flatMap { case (ids, factors) =>
       ids.view.zip(factors)
     }
@@ -546,14 +563,15 @@ object ALS extends Logging {
    */
   private def initialize[ID](
       inBlocks: RDD[(Int, InBlock[ID])],
-      rank: Int): RDD[(Int, FactorBlock)] = {
+      rank: Int,
+      seed: Long): RDD[(Int, FactorBlock)] = {
     // Choose a unit vector uniformly at random from the unit sphere, but from the
     // "first quadrant" where all elements are nonnegative. This can be done by choosing
     // elements distributed as Normal(0,1) and taking the absolute value, and then normalizing.
     // This appears to create factorizations that have a slightly better reconstruction
     // (<1%) compared picking elements uniformly at random in [0,1].
     inBlocks.map { case (srcBlockId, inBlock) =>
-      val random = new XORShiftRandom(srcBlockId)
+      val random = new XORShiftRandom(byteswap64(seed ^ srcBlockId))
       val factors = Array.fill(inBlock.srcIds.length) {
         val factor = Array.fill(rank)(random.nextGaussian().toFloat)
         val nrm = blas.snrm2(rank, factor, 1)
@@ -877,7 +895,8 @@ object ALS extends Logging {
       prefix: String,
       ratingBlocks: RDD[((Int, Int), RatingBlock[ID])],
       srcPart: Partitioner,
-      dstPart: Partitioner)(
+      dstPart: Partitioner,
+      storageLevel: StorageLevel)(
       implicit srcOrd: Ordering[ID]): (RDD[(Int, InBlock[ID])], RDD[(Int, OutBlock)]) = {
     val inBlocks = ratingBlocks.map {
       case ((srcBlockId, dstBlockId), RatingBlock(srcIds, dstIds, ratings)) =>
@@ -914,7 +933,8 @@ object ALS extends Logging {
         builder.add(dstBlockId, srcIds, dstLocalIndices, ratings)
       }
       builder.build().compress()
-    }.setName(prefix + "InBlocks").cache()
+    }.setName(prefix + "InBlocks")
+      .persist(storageLevel)
     val outBlocks = inBlocks.mapValues { case InBlock(srcIds, dstPtrs, dstEncodedIndices, _) =>
       val encoder = new LocalIndexEncoder(dstPart.numPartitions)
       val activeIds = Array.fill(dstPart.numPartitions)(mutable.ArrayBuilder.make[Int])
@@ -936,7 +956,8 @@ object ALS extends Logging {
       activeIds.map { x =>
         x.result()
       }
-    }.setName(prefix + "OutBlocks").cache()
+    }.setName(prefix + "OutBlocks")
+      .persist(storageLevel)
     (inBlocks, outBlocks)
   }
 
