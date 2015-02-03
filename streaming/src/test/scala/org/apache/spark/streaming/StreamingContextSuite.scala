@@ -207,7 +207,6 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
 
   test("stop slow receiver gracefully") {
     val conf = new SparkConf().setMaster(master).setAppName(appName)
-    conf.set("spark.cleaner.ttl", "3600")
     conf.set("spark.streaming.gracefulStopTimeout", "20000")
     sc = new SparkContext(conf)
     logInfo("==================================\n\n\n")
