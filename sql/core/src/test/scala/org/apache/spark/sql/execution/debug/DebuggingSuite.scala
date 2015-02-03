@@ -23,11 +23,11 @@ import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.test.TestSQLContext._
 
 class DebuggingSuite extends FunSuite {
-  test("SchemaRDD.debug()") {
+  test("DataFrame.debug()") {
     testData.debug()
   }
 
-  test("SchemaRDD.typeCheck()") {
+  test("DataFrame.typeCheck()") {
     testData.typeCheck()
   }
 }

@@ -23,7 +23,7 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
 
-import org.apache.spark.sql.{SQLContext, SchemaRDD}
+import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.util
 import org.apache.spark.util.Utils
 
@@ -95,12 +95,12 @@ trait ParquetTest {
   }
 
   /**
-   * Writes `data` to a Parquet file and reads it back as a SchemaRDD, which is then passed to `f`.
-   * The Parquet file will be deleted after `f` returns.
+   * Writes `data` to a Parquet file and reads it back as a [[DataFrame]],
+   * which is then passed to `f`. The Parquet file will be deleted after `f` returns.
    */
   protected def withParquetRDD[T <: Product: ClassTag: TypeTag]
       (data: Seq[T])
-      (f: SchemaRDD => Unit): Unit = {
+      (f: DataFrame => Unit): Unit = {
     withParquetFile(data)(path => f(parquetFile(path)))
   }
 
@@ -112,15 +112,15 @@ trait ParquetTest {
   }
 
   /**
-   * Writes `data` to a Parquet file, reads it back as a SchemaRDD and registers it as a temporary
-   * table named `tableName`, then call `f`. The temporary table together with the Parquet file will
-   * be dropped/deleted after `f` returns.
+   * Writes `data` to a Parquet file, reads it back as a [[DataFrame]] and registers it as a
+   * temporary table named `tableName`, then call `f`. The temporary table together with the
+   * Parquet file will be dropped/deleted after `f` returns.
    */
   protected def withParquetTable[T <: Product: ClassTag: TypeTag]
       (data: Seq[T], tableName: String)
       (f: => Unit): Unit = {
     withParquetRDD(data) { rdd =>
-      rdd.registerTempTable(tableName)
+      sqlContext.registerRDDAsTable(rdd, tableName)
       withTempTable(tableName)(f)
     }
   }

@@ -37,6 +37,9 @@ class JsonProtocolSuite extends FunSuite {
   val jobSubmissionTime = 1421191042750L
   val jobCompletionTime = 1421191296660L
 
+  val executorAddedTime = 1421458410000L
+  val executorRemovedTime = 1421458922000L
+
   test("SparkListenerEvent") {
     val stageSubmitted =
       SparkListenerStageSubmitted(makeStageInfo(100, 200, 300, 400L, 500L), properties)
@@ -73,9 +76,9 @@ class JsonProtocolSuite extends FunSuite {
     val unpersistRdd = SparkListenerUnpersistRDD(12345)
     val applicationStart = SparkListenerApplicationStart("The winner of all", None, 42L, "Garfield")
     val applicationEnd = SparkListenerApplicationEnd(42L)
-    val executorAdded = SparkListenerExecutorAdded("exec1",
+    val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
       new ExecutorInfo("Hostee.awesome.com", 11))
-    val executorRemoved = SparkListenerExecutorRemoved("exec2")
+    val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
 
     testEvent(stageSubmitted, stageSubmittedJsonString)
     testEvent(stageCompleted, stageCompletedJsonString)
@@ -641,13 +644,13 @@ class JsonProtocolSuite extends FunSuite {
       hasHadoopInput: Boolean,
       hasOutput: Boolean) = {
     val t = new TaskMetrics
-    t.hostname = "localhost"
-    t.executorDeserializeTime = a
-    t.executorRunTime = b
-    t.resultSize = c
-    t.jvmGCTime = d
-    t.resultSerializationTime = a + b
-    t.memoryBytesSpilled = a + c
+    t.setHostname("localhost")
+    t.setExecutorDeserializeTime(a)
+    t.setExecutorRunTime(b)
+    t.setResultSize(c)
+    t.setJvmGCTime(d)
+    t.setResultSerializationTime(a + b)
+    t.incMemoryBytesSpilled(a + c)
 
     if (hasHadoopInput) {
       val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
@@ -655,20 +658,20 @@ class JsonProtocolSuite extends FunSuite {
       t.setInputMetrics(Some(inputMetrics))
     } else {
       val sr = new ShuffleReadMetrics
-      sr.remoteBytesRead = b + d
-      sr.localBlocksFetched = e
-      sr.fetchWaitTime = a + d
-      sr.remoteBlocksFetched = f
+      sr.incRemoteBytesRead(b + d)
+      sr.incLocalBlocksFetched(e)
+      sr.incFetchWaitTime(a + d)
+      sr.incRemoteBlocksFetched(f)
       t.setShuffleReadMetrics(Some(sr))
     }
     if (hasOutput) {
       val outputMetrics = new OutputMetrics(DataWriteMethod.Hadoop)
-      outputMetrics.bytesWritten = a + b + c
+      outputMetrics.setBytesWritten(a + b + c)
       t.outputMetrics = Some(outputMetrics)
     } else {
       val sw = new ShuffleWriteMetrics
-      sw.shuffleBytesWritten = a + b + c
-      sw.shuffleWriteTime = b + c + d
+      sw.incShuffleBytesWritten(a + b + c)
+      sw.incShuffleWriteTime(b + c + d)
       t.shuffleWriteMetrics = Some(sw)
     }
     // Make at most 6 blocks
@@ -1453,9 +1456,10 @@ class JsonProtocolSuite extends FunSuite {
     """
 
   private val executorAddedJsonString =
-    """
+    s"""
       |{
       |  "Event": "SparkListenerExecutorAdded",
+      |  "Timestamp": ${executorAddedTime},
       |  "Executor ID": "exec1",
       |  "Executor Info": {
       |    "Host": "Hostee.awesome.com",
@@ -1465,10 +1469,12 @@ class JsonProtocolSuite extends FunSuite {
     """
 
   private val executorRemovedJsonString =
-    """
+    s"""
       |{
       |  "Event": "SparkListenerExecutorRemoved",
-      |  "Executor ID": "exec2"
+      |  "Timestamp": ${executorRemovedTime},
+      |  "Executor ID": "exec2",
+      |  "Removed Reason": "test reason"
       |}
     """
 }

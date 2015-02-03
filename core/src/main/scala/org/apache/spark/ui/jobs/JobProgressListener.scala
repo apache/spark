@@ -56,6 +56,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   val jobIdToData = new HashMap[JobId, JobUIData]
 
   // Stages:
+  val pendingStages = new HashMap[StageId, StageInfo]
   val activeStages = new HashMap[StageId, StageInfo]
   val completedStages = ListBuffer[StageInfo]()
   val skippedStages = ListBuffer[StageInfo]()
@@ -157,6 +158,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
         stageIds = jobStart.stageIds,
         jobGroup = jobGroup,
         status = JobExecutionStatus.RUNNING)
+    jobStart.stageInfos.foreach(x => pendingStages(x.stageId) = x)
     // Compute (a potential underestimate of) the number of tasks that will be run by this job.
     // This may be an underestimate because the job start event references all of the result
     // stages' transitive stage dependencies, but some of these stages might be skipped if their
@@ -187,6 +189,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     }
     jobData.completionTime = Option(jobEnd.time).filter(_ >= 0)
 
+    jobData.stageIds.foreach(pendingStages.remove)
     jobEnd.jobResult match {
       case JobSucceeded =>
         completedJobs += jobData
@@ -257,7 +260,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) = synchronized {
     val stage = stageSubmitted.stageInfo
     activeStages(stage.stageId) = stage
-
+    pendingStages.remove(stage.stageId)
     val poolName = Option(stageSubmitted.properties).map {
       p => p.getProperty("spark.scheduler.pool", DEFAULT_POOL_NAME)
     }.getOrElse(DEFAULT_POOL_NAME)

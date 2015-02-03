@@ -29,9 +29,8 @@ import warnings
 import heapq
 import bisect
 import random
-from math import sqrt, log, isinf, isnan
+from math import sqrt, log, isinf, isnan, pow, ceil
 
-from pyspark.accumulators import PStatsParam
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, \
     PickleSerializer, pack_long, AutoBatchedSerializer
@@ -140,6 +139,17 @@ class RDD(object):
 
     def __repr__(self):
         return self._jrdd.toString()
+
+    def __getnewargs__(self):
+        # This method is called when attempting to pickle an RDD, which is always an error:
+        raise Exception(
+            "It appears that you are attempting to broadcast an RDD or reference an RDD from an "
+            "action or transformation. RDD transformations and actions can only be invoked by the "
+            "driver, not inside of other transformations; for example, "
+            "rdd1.map(lambda x: rdd2.values.count() * x) is invalid because the values "
+            "transformation and count action cannot be performed inside of the rdd1.map "
+            "transformation. For more information, see SPARK-5063."
+        )
 
     @property
     def context(self):
@@ -716,6 +726,43 @@ class RDD(object):
             return reduce(f, vals)
         raise ValueError("Can not reduce() empty RDD")
 
+    def treeReduce(self, f, depth=2):
+        """
+        Reduces the elements of this RDD in a multi-level tree pattern.
+
+        :param depth: suggested depth of the tree (default: 2)
+
+        >>> add = lambda x, y: x + y
+        >>> rdd = sc.parallelize([-5, -4, -3, -2, -1, 1, 2, 3, 4], 10)
+        >>> rdd.treeReduce(add)
+        -5
+        >>> rdd.treeReduce(add, 1)
+        -5
+        >>> rdd.treeReduce(add, 2)
+        -5
+        >>> rdd.treeReduce(add, 5)
+        -5
+        >>> rdd.treeReduce(add, 10)
+        -5
+        """
+        if depth < 1:
+            raise ValueError("Depth cannot be smaller than 1 but got %d." % depth)
+
+        zeroValue = None, True  # Use the second entry to indicate whether this is a dummy value.
+
+        def op(x, y):
+            if x[1]:
+                return y
+            elif y[1]:
+                return x
+            else:
+                return f(x[0], y[0]), False
+
+        reduced = self.map(lambda x: (x, False)).treeAggregate(zeroValue, op, op, depth)
+        if reduced[1]:
+            raise ValueError("Cannot reduce empty RDD.")
+        return reduced[0]
+
     def fold(self, zeroValue, op):
         """
         Aggregate the elements of each partition, and then the results for all
@@ -766,6 +813,58 @@ class RDD(object):
             yield acc
 
         return self.mapPartitions(func).fold(zeroValue, combOp)
+
+    def treeAggregate(self, zeroValue, seqOp, combOp, depth=2):
+        """
+        Aggregates the elements of this RDD in a multi-level tree
+        pattern.
+
+        :param depth: suggested depth of the tree (default: 2)
+
+        >>> add = lambda x, y: x + y
+        >>> rdd = sc.parallelize([-5, -4, -3, -2, -1, 1, 2, 3, 4], 10)
+        >>> rdd.treeAggregate(0, add, add)
+        -5
+        >>> rdd.treeAggregate(0, add, add, 1)
+        -5
+        >>> rdd.treeAggregate(0, add, add, 2)
+        -5
+        >>> rdd.treeAggregate(0, add, add, 5)
+        -5
+        >>> rdd.treeAggregate(0, add, add, 10)
+        -5
+        """
+        if depth < 1:
+            raise ValueError("Depth cannot be smaller than 1 but got %d." % depth)
+
+        if self.getNumPartitions() == 0:
+            return zeroValue
+
+        def aggregatePartition(iterator):
+            acc = zeroValue
+            for obj in iterator:
+                acc = seqOp(acc, obj)
+            yield acc
+
+        partiallyAggregated = self.mapPartitions(aggregatePartition)
+        numPartitions = partiallyAggregated.getNumPartitions()
+        scale = max(int(ceil(pow(numPartitions, 1.0 / depth))), 2)
+        # If creating an extra level doesn't help reduce the wall-clock time, we stop the tree
+        # aggregation.
+        while numPartitions > scale + numPartitions / scale:
+            numPartitions /= scale
+            curNumPartitions = numPartitions
+
+            def mapPartition(i, iterator):
+                for obj in iterator:
+                    yield (i % curNumPartitions, obj)
+
+            partiallyAggregated = partiallyAggregated \
+                .mapPartitionsWithIndex(mapPartition) \
+                .reduceByKey(combOp, curNumPartitions) \
+                .values()
+
+        return partiallyAggregated.reduce(combOp)
 
     def max(self, key=None):
         """
@@ -1129,6 +1228,18 @@ class RDD(object):
         if rs:
             return rs[0]
         raise ValueError("RDD is empty")
+
+    def isEmpty(self):
+        """
+        Returns true if and only if the RDD contains no elements at all. Note that an RDD
+        may be empty even when it has at least 1 partition.
+
+        >>> sc.parallelize([]).isEmpty()
+        True
+        >>> sc.parallelize([1]).isEmpty()
+        False
+        """
+        return self._jrdd.partitions().size() == 0 or len(self.take(1)) == 0
 
     def saveAsNewAPIHadoopDataset(self, conf, keyConverter=None, valueConverter=None):
         """
@@ -1611,8 +1722,8 @@ class RDD(object):
         Hash-partitions the resulting RDD with into numPartitions partitions.
 
         Note: If you are grouping in order to perform an aggregation (such as a
-        sum or average) over each key, using reduceByKey will provide much
-        better performance.
+        sum or average) over each key, using reduceByKey or aggregateByKey will
+        provide much better performance.
 
         >>> x = sc.parallelize([("a", 1), ("b", 1), ("a", 1)])
         >>> map((lambda (x,y): (x, list(y))), sorted(x.groupByKey().collect()))
@@ -2036,6 +2147,20 @@ class RDD(object):
         hashRDD = self.map(lambda x: portable_hash(x) & 0xFFFFFFFF)
         return hashRDD._to_java_object_rdd().countApproxDistinct(relativeSD)
 
+    def toLocalIterator(self):
+        """
+        Return an iterator that contains all of the elements in this RDD.
+        The iterator will consume as much memory as the largest partition in this RDD.
+        >>> rdd = sc.parallelize(range(10))
+        >>> [x for x in rdd.toLocalIterator()]
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+        """
+        partitions = xrange(self.getNumPartitions())
+        for partition in partitions:
+            rows = self.context.runJob(self, lambda x: x, [partition])
+            for row in rows:
+                yield row
+
 
 class PipelinedRDD(RDD):
 
@@ -2095,9 +2220,13 @@ class PipelinedRDD(RDD):
             return self._jrdd_val
         if self._bypass_serializer:
             self._jrdd_deserializer = NoOpSerializer()
-        enable_profile = self.ctx._conf.get("spark.python.profile", "false") == "true"
-        profileStats = self.ctx.accumulator(None, PStatsParam) if enable_profile else None
-        command = (self.func, profileStats, self._prev_jrdd_deserializer,
+
+        if self.ctx.profiler_collector:
+            profiler = self.ctx.profiler_collector.new_profiler(self.ctx)
+        else:
+            profiler = None
+
+        command = (self.func, profiler, self._prev_jrdd_deserializer,
                    self._jrdd_deserializer)
         # the serialized command will be compressed by broadcast
         ser = CloudPickleSerializer()
@@ -2120,9 +2249,9 @@ class PipelinedRDD(RDD):
                                              broadcast_vars, self.ctx._javaAccumulator)
         self._jrdd_val = python_rdd.asJavaRDD()
 
-        if enable_profile:
+        if profiler:
             self._id = self._jrdd_val.id()
-            self.ctx._add_profile(self._id, profileStats)
+            self.ctx.profiler_collector.add_profiler(self._id, profiler)
         return self._jrdd_val
 
     def id(self):

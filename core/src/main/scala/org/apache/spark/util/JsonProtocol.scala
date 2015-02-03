@@ -32,7 +32,6 @@ import org.apache.spark.executor._
 import org.apache.spark.scheduler._
 import org.apache.spark.storage._
 import org.apache.spark._
-import org.apache.hadoop.hdfs.web.JsonUtil
 
 /**
  * Serializes SparkListener events to/from JSON.  This protocol provides strong backwards-
@@ -91,7 +90,6 @@ private[spark] object JsonProtocol {
       case executorRemoved: SparkListenerExecutorRemoved =>
         executorRemovedToJson(executorRemoved)
       // These aren't used, but keeps compiler happy
-      case SparkListenerShutdown => JNothing
       case SparkListenerExecutorMetricsUpdate(_, _) => JNothing
     }
   }
@@ -204,13 +202,16 @@ private[spark] object JsonProtocol {
 
   def executorAddedToJson(executorAdded: SparkListenerExecutorAdded): JValue = {
     ("Event" -> Utils.getFormattedClassName(executorAdded)) ~
+    ("Timestamp" -> executorAdded.time) ~
     ("Executor ID" -> executorAdded.executorId) ~
     ("Executor Info" -> executorInfoToJson(executorAdded.executorInfo))
   }
 
   def executorRemovedToJson(executorRemoved: SparkListenerExecutorRemoved): JValue = {
     ("Event" -> Utils.getFormattedClassName(executorRemoved)) ~
-    ("Executor ID" -> executorRemoved.executorId)
+    ("Timestamp" -> executorRemoved.time) ~
+    ("Executor ID" -> executorRemoved.executorId) ~
+    ("Removed Reason" -> executorRemoved.reason)
   }
 
   /** ------------------------------------------------------------------- *
@@ -554,14 +555,17 @@ private[spark] object JsonProtocol {
   }
 
   def executorAddedFromJson(json: JValue): SparkListenerExecutorAdded = {
+    val time = (json \ "Timestamp").extract[Long]
     val executorId = (json \ "Executor ID").extract[String]
     val executorInfo = executorInfoFromJson(json \ "Executor Info")
-    SparkListenerExecutorAdded(executorId, executorInfo)
+    SparkListenerExecutorAdded(time, executorId, executorInfo)
   }
 
   def executorRemovedFromJson(json: JValue): SparkListenerExecutorRemoved = {
+    val time = (json \ "Timestamp").extract[Long]
     val executorId = (json \ "Executor ID").extract[String]
-    SparkListenerExecutorRemoved(executorId)
+    val reason = (json \ "Removed Reason").extract[String]
+    SparkListenerExecutorRemoved(time, executorId, reason)
   }
 
   /** --------------------------------------------------------------------- *
@@ -632,14 +636,14 @@ private[spark] object JsonProtocol {
       return TaskMetrics.empty
     }
     val metrics = new TaskMetrics
-    metrics.hostname = (json \ "Host Name").extract[String]
-    metrics.executorDeserializeTime = (json \ "Executor Deserialize Time").extract[Long]
-    metrics.executorRunTime = (json \ "Executor Run Time").extract[Long]
-    metrics.resultSize = (json \ "Result Size").extract[Long]
-    metrics.jvmGCTime = (json \ "JVM GC Time").extract[Long]
-    metrics.resultSerializationTime = (json \ "Result Serialization Time").extract[Long]
-    metrics.memoryBytesSpilled = (json \ "Memory Bytes Spilled").extract[Long]
-    metrics.diskBytesSpilled = (json \ "Disk Bytes Spilled").extract[Long]
+    metrics.setHostname((json \ "Host Name").extract[String])
+    metrics.setExecutorDeserializeTime((json \ "Executor Deserialize Time").extract[Long])
+    metrics.setExecutorRunTime((json \ "Executor Run Time").extract[Long])
+    metrics.setResultSize((json \ "Result Size").extract[Long])
+    metrics.setJvmGCTime((json \ "JVM GC Time").extract[Long])
+    metrics.setResultSerializationTime((json \ "Result Serialization Time").extract[Long])
+    metrics.incMemoryBytesSpilled((json \ "Memory Bytes Spilled").extract[Long])
+    metrics.incDiskBytesSpilled((json \ "Disk Bytes Spilled").extract[Long])
     metrics.setShuffleReadMetrics(
       Utils.jsonOption(json \ "Shuffle Read Metrics").map(shuffleReadMetricsFromJson))
     metrics.shuffleWriteMetrics =
@@ -661,17 +665,17 @@ private[spark] object JsonProtocol {
 
   def shuffleReadMetricsFromJson(json: JValue): ShuffleReadMetrics = {
     val metrics = new ShuffleReadMetrics
-    metrics.remoteBlocksFetched = (json \ "Remote Blocks Fetched").extract[Int]
-    metrics.localBlocksFetched = (json \ "Local Blocks Fetched").extract[Int]
-    metrics.fetchWaitTime = (json \ "Fetch Wait Time").extract[Long]
-    metrics.remoteBytesRead = (json \ "Remote Bytes Read").extract[Long]
+    metrics.incRemoteBlocksFetched((json \ "Remote Blocks Fetched").extract[Int])
+    metrics.incLocalBlocksFetched((json \ "Local Blocks Fetched").extract[Int])
+    metrics.incFetchWaitTime((json \ "Fetch Wait Time").extract[Long])
+    metrics.incRemoteBytesRead((json \ "Remote Bytes Read").extract[Long])
     metrics
   }
 
   def shuffleWriteMetricsFromJson(json: JValue): ShuffleWriteMetrics = {
     val metrics = new ShuffleWriteMetrics
-    metrics.shuffleBytesWritten = (json \ "Shuffle Bytes Written").extract[Long]
-    metrics.shuffleWriteTime = (json \ "Shuffle Write Time").extract[Long]
+    metrics.incShuffleBytesWritten((json \ "Shuffle Bytes Written").extract[Long])
+    metrics.incShuffleWriteTime((json \ "Shuffle Write Time").extract[Long])
     metrics
   }
 
@@ -685,7 +689,7 @@ private[spark] object JsonProtocol {
   def outputMetricsFromJson(json: JValue): OutputMetrics = {
     val metrics = new OutputMetrics(
       DataWriteMethod.withName((json \ "Data Write Method").extract[String]))
-    metrics.bytesWritten = (json \ "Bytes Written").extract[Long]
+    metrics.setBytesWritten((json \ "Bytes Written").extract[Long])
     metrics
   }
 

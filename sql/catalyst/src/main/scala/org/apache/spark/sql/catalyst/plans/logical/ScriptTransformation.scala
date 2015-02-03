@@ -25,9 +25,17 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
  * @param input the set of expression that should be passed to the script.
  * @param script the command that should be executed.
  * @param output the attributes that are produced by the script.
+ * @param ioschema the input and output schema applied in the execution of the script.
  */
 case class ScriptTransformation(
     input: Seq[Expression],
     script: String,
     output: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode
+    child: LogicalPlan,
+    ioschema: ScriptInputOutputSchema) extends UnaryNode
+
+/**
+ * A placeholder for implementation specific input and output properties when passing data
+ * to a script. For example, in Hive this would specify which SerDes to use.
+ */
+trait ScriptInputOutputSchema

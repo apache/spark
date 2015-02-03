@@ -49,17 +49,20 @@ private[spark] object SQLConf {
   // This is only used for the thriftserver
   val THRIFTSERVER_POOL = "spark.sql.thriftserver.scheduler.pool"
 
+  // This is used to set the default data source
+  val DEFAULT_DATA_SOURCE_NAME = "spark.sql.default.datasource"
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
 }
 
 /**
- * A trait that enables the setting and getting of mutable config parameters/hints.
+ * A class that enables the setting and getting of mutable config parameters/hints.
  *
  * In the presence of a SQLContext, these can be set and queried by passing SET commands
- * into Spark SQL's query functions (i.e. sql()). Otherwise, users of this trait can
- * modify the hints by programmatically calling the setters and getters of this trait.
+ * into Spark SQL's query functions (i.e. sql()). Otherwise, users of this class can
+ * modify the hints by programmatically calling the setters and getters of this class.
  *
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
  */
@@ -157,6 +160,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
    */
   private[spark] def broadcastTimeout: Int =
     getConf(BROADCAST_TIMEOUT, (5 * 60).toString).toInt
+
+  private[spark] def defaultDataSourceName: String =
+    getConf(DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.parquet")
 
   /** ********************** SQLConf functionality methods ************ */
 
