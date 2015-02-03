@@ -23,9 +23,10 @@ import org.apache.spark.scheduler.*;
  * Class that allows users to receive all SparkListener events.
  * Users should override the onEvent method.
  *
- * This is a concrete class instead of abstract to enforce
- * new events get added to both the SparkListener and this adapter
- * in lockstep.
+ * This is a concrete Java class in order to ensure that we don't forget to update it when adding
+ * new methods to SparkListener: forgetting to add a method will result in a compilation error (if
+ * this was a concrete Scala class, default implementations of new event handlers would be inherited
+ * from the SparkListener trait).
  */
 public class SparkFirehoseListener implements SparkListener {
 
