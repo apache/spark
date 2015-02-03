@@ -496,7 +496,7 @@ trait Column extends DataFrame {
    * @param startPos expression for the starting position.
    * @param len expression for the length of the substring.
    */
-  override def substr(startPos: Column, len: Column): Column = constructColumn(null) {
+  def substr(startPos: Column, len: Column): Column = constructColumn(null) {
     Substring(expr, startPos.expr, len.expr)
   }
 
