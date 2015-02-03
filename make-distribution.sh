@@ -196,7 +196,6 @@ echo "Build flags: $@" >> "$DISTDIR/RELEASE"
 # Copy jars
 cp "$SPARK_HOME"/assembly/target/scala*/*assembly*hadoop*.jar "$DISTDIR/lib/"
 cp "$SPARK_HOME"/examples/target/scala*/spark-examples*.jar "$DISTDIR/lib/"
-cp "$SPARK_HOME"/external/kafka/scala*/*kafka*assembly*.jar "$DISTDIR/lib/"
 # This will fail if the -Pyarn profile is not provided
 # In this case, silence the error and ignore the return code of this command
 cp "$SPARK_HOME"/network/yarn/target/scala*/spark-*-yarn-shuffle.jar "$DISTDIR/lib/" &> /dev/null || :
