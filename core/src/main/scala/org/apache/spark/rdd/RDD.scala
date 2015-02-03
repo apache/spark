@@ -1276,7 +1276,7 @@ abstract class RDD[T: ClassTag](
    * @param path The path of the directory to write to.
    * @param overWrite If this is true, all data in the directory is overwritten.
    */
-  //Exposed for Spark Streaming use.
+  // Exposed for Spark Streaming use.
   private[spark] def saveAsTextFile(path: String, overWrite: Boolean): Unit = {
     if (overWrite) {
       deleteDirIfExists(path)
@@ -1345,7 +1345,7 @@ abstract class RDD[T: ClassTag](
    * @param path The path of the directory to write to.
    * @param overWrite If this is true, all data in the directory is overwritten.
    */
-  //Exposed for Spark Streaming use.
+  // Exposed for Spark Streaming use.
   private[spark] def saveAsObjectFile(path: String, overWrite: Boolean): Unit = {
     if (overWrite) {
       deleteDirIfExists(path)
