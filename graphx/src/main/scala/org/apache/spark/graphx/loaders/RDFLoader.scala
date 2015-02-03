@@ -24,6 +24,7 @@ import org.apache.spark.AccumulatorParam
 import org.apache.spark.rdd.RDD
 import org.apache.spark.graphx.Graph
 import org.apache.spark.graphx.Edge
+import java.security.MessageDigest
 
 /**
  * Provides utilities for loading RDF [[Graph]]s from .NT dumps.
@@ -60,104 +61,33 @@ object RDFLoader extends Logging {
         sc.textFile(path)
       }
     
-    val dict = buildDictionary(sc, lines) // dictionary might be too big to collect => try dictionary in RDD / hash ids
-    val dictBroadcast = sc.broadcast(dict)
-    
-    // build vertices and encode RDF properties into the vertex
-    val vertices = sc.parallelize(dict.toList).map(pair => {
-    	val x = pair._1
-    	val y = pair._2
-    	x match {
-    		case propvalregex(subjprop, value) => (y, value)
-    		case _ => (y, x)
-    	}
-    }).persist(vertexStorageLevel) // TODO: set name
-    
-    
-    val e = sc.parallelize(Array(Edge(1L, 2L, "edgelabel")))
-    val edges: RDD[Edge[String]] = lines.map( line => {
-    	val dictionary = dictBroadcast.value
+    val vertices = lines.flatMap(line => {
     	line match {
-    		case relregex(subj, rel, obj)		=> Edge(dictionary.get(subj).get, dictionary.get(obj).get, rel)
-    		case propregex(subj, rel, obj)		=> Edge(dictionary.get(subj).get, dictionary.get("<"+subj+"-"+rel+">"+obj).get, rel)
-    		case _ => Edge[String](0,0,null)
+    		case relregex(subj, rel, obj)		=> Set(subj, obj)
+    		case propregex(subj, rel, value)	=> Set(subj, "<"+subj+"-"+rel+">"+value)
+    	}
+    }).distinct().map(name => 
+    	name match {
+    		case propvalregex(pre, value) => (gethash("<"+pre+">"+value), value)
+    		case _ => (gethash(name), name)
+    	}
+    ).persist(vertexStorageLevel) // TODO: set name etc    
+    
+    val edges: RDD[Edge[String]] = lines.map( line => {
+    	line match {
+    		case relregex(subj, rel, obj)		=> Edge(gethash(subj), gethash(obj), rel)
+    		case propregex(subj, rel, obj)		=> Edge(gethash(subj), gethash("<"+subj+"-"+rel+">"+obj), rel)
     	}
     }).persist(edgeStorageLevel) // TODO: set name
     
     val graph = Graph(vertices, edges)
-    /*
-    	val dictionary = dictBroadcast.value
-    	line match {
-    		case relregex(subj, rel, obj) 		=> (dictionary.get(subj), (dictionary.get(rel), dictionary.get(obj)))
-    		case propregex(subj, prop, value) 	=> (dictionary.get(subj), (dictionary.get(prop), dictionary.get(subj+prop+value)))
-    	}
-    })
-    */
-    /*
-    val edges = lines.mapPartitionsWithIndex { (pid, iter) =>
-      val builder = new EdgePartitionBuilder[Int, Int]
-      iter.foreach { line =>
-        if (!line.isEmpty && line(0) != '#') {
-          val lineArray = line.split("\\s+")
-          if (lineArray.length < 2) {
-            logWarning("Invalid line: " + line)
-          }
-          val srcId = lineArray(0).toLong
-          val dstId = lineArray(1).toLong
-          if (srcId > dstId) {
-            builder.add(dstId, srcId, 1)
-          } else {
-            builder.add(srcId, dstId, 1)
-          }
-        }
-      }
-      Iterator((pid, builder.toEdgePartition))
-    }.persist(edgeStorageLevel).setName("GraphLoader.edgeListFile - edges (%s)".format(path))
-    edges.count()
-
-    logInfo("It took %d ms to load the edges".format(System.currentTimeMillis - startTime))
-
-    GraphImpl.fromEdgePartitions(edges, defaultVertexAttr = 1, edgeStorageLevel = edgeStorageLevel,
-      vertexStorageLevel = vertexStorageLevel)
-      * */
     return graph // so far
   } // end of edgeListFile
   
-  
-  
-  
-  /**
-   * Builds a dictionary mapping from Strings (URI's) to Long integer id's
-   */
-  def buildDictionary(sc: SparkContext, lines: RDD[String]): Map[String, Long] = 
-  {
-  	val dictaccum = sc.accumulator(Set[String]())(DictionaryAccumulatorParam)
-  	lines.foreach(
-  			line => {
-  		line match {
-  			case relregex(subj, rel, obj) 		=>	dictaccum += Set(subj, /*rel, */obj)
-  			case propregex(subj, rel, value) 	=> 	dictaccum += Set(subj, /*rel, */"<"+subj+"-"+rel+">"+value)
-  			case _ => 
-  		}
-  	})
-  	var map = Map[String, Long]()
-  	var counter = 1
-  	for (dictitem <- dictaccum.value) {
-  		map += (dictitem -> counter)
-  		counter += 1
-  	}
-  	return map
+  def gethash(in:String):Long = {
+  	val hasher = MessageDigest.getInstance("md5")
+  	val hash = hasher.digest(in.getBytes())
+  	hash.map(x => (x.toInt + 128).toString).reduce((x, y) => x+y).toLong
   }
 
-}
-
-object DictionaryAccumulatorParam extends AccumulatorParam[Set[String]] {
-	
-	def zero(init: Set[String]): Set[String] = {
-		return Set[String]()
-	}
-	
-	def addInPlace(a: Set[String], b: Set[String]): Set[String] = {
-		return a.union(b)
-	}
 }
