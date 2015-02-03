@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.util.{List => JList}
+
 import scala.language.implicitConversions
 import scala.collection.JavaConversions._
 
@@ -28,16 +30,15 @@ import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 /**
  * A set of methods for aggregations on a [[DataFrame]], created by [[DataFrame.groupBy]].
  */
-class GroupedDataFrame protected[sql](df: DataFrame, groupingExprs: Seq[Expression])
-  extends GroupedDataFrameApi {
+class GroupedDataFrame protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expression]) {
 
   private[this] implicit def toDataFrame(aggExprs: Seq[NamedExpression]): DataFrame = {
     val namedGroupingExprs = groupingExprs.map {
       case expr: NamedExpression => expr
       case expr: Expression => Alias(expr, expr.toString)()
     }
-    new DataFrame(df.sqlContext,
-      Aggregate(groupingExprs, namedGroupingExprs ++ aggExprs, df.logicalPlan))
+    DataFrame(
+      df.sqlContext, Aggregate(groupingExprs, namedGroupingExprs ++ aggExprs, df.logicalPlan))
   }
 
   private[this] def aggregateNumericColumns(f: Expression => Expression): Seq[NamedExpression] = {
@@ -70,7 +71,7 @@ class GroupedDataFrame protected[sql](df: DataFrame, groupingExprs: Seq[Expressi
    *   ))
    * }}}
    */
-  override def agg(exprs: Map[String, String]): DataFrame = {
+  def agg(exprs: Map[String, String]): DataFrame = {
     exprs.map { case (colName, expr) =>
       val a = strToExpr(expr)(df(colName).expr)
       Alias(a, a.toString)()
@@ -107,48 +108,47 @@ class GroupedDataFrame protected[sql](df: DataFrame, groupingExprs: Seq[Expressi
    * }}}
    */
   @scala.annotation.varargs
-  override def agg(expr: Column, exprs: Column*): DataFrame = {
+  def agg(expr: Column, exprs: Column*): DataFrame = {
     val aggExprs = (expr +: exprs).map(_.expr).map {
       case expr: NamedExpression => expr
       case expr: Expression => Alias(expr, expr.toString)()
     }
-
-    new DataFrame(df.sqlContext, Aggregate(groupingExprs, aggExprs, df.logicalPlan))
+    DataFrame(df.sqlContext, Aggregate(groupingExprs, aggExprs, df.logicalPlan))
   }
 
   /**
    * Count the number of rows for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
    */
-  override def count(): DataFrame = Seq(Alias(Count(LiteralExpr(1)), "count")())
+  def count(): DataFrame = Seq(Alias(Count(LiteralExpr(1)), "count")())
 
   /**
    * Compute the average value for each numeric columns for each group. This is an alias for `avg`.
    * The resulting [[DataFrame]] will also contain the grouping columns.
    */
-  override def mean(): DataFrame = aggregateNumericColumns(Average)
+  def mean(): DataFrame = aggregateNumericColumns(Average)
 
   /**
    * Compute the max value for each numeric columns for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
    */
-  override def max(): DataFrame = aggregateNumericColumns(Max)
+  def max(): DataFrame = aggregateNumericColumns(Max)
 
   /**
    * Compute the mean value for each numeric columns for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
    */
-  override def avg(): DataFrame = aggregateNumericColumns(Average)
+  def avg(): DataFrame = aggregateNumericColumns(Average)
 
   /**
    * Compute the min value for each numeric column for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
    */
-  override def min(): DataFrame = aggregateNumericColumns(Min)
+  def min(): DataFrame = aggregateNumericColumns(Min)
 
   /**
    * Compute the sum for each numeric columns for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
    */
-  override def sum(): DataFrame = aggregateNumericColumns(Sum)
+  def sum(): DataFrame = aggregateNumericColumns(Sum)
 }
