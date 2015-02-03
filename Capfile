@@ -42,6 +42,11 @@ namespace :deploy do
     run "hdfs dfs -copyFromLocal -f /u/apps/spark/current/lib/spark-assembly-*.jar hdfs://nn01.chi.shopify.com/user/sparkles/spark-assembly-#{fetch(:sha)}.jar"
   end
 
+  task :litmus_test_sha_jar, :roles => :uploader, :on_no_master_servers => :continue do
+    target_sha = ENV['SHA'] || `git rev-parse HEAD`.gsub(/\s/,"")
+    run "sudo -u azkaban sh -c '. /u/virtualenvs/starscream/bin/activate && cd /u/apps/starscream/current && exec python shopify/tools/canary.py'"
+  end
+
   task :prevent_gateway do
     set :gateway, nil
   end
@@ -72,7 +77,7 @@ namespace :deploy do
   after 'deploy:initialize_variables', 'deploy:prevent_gateway' # capistrano recipes packserv deploy always uses a gateway
   before  'deploy:symlink_current', 'deploy:symlink_shared'
   before 'deploy:upload_to_hdfs', 'deploy:clear_hdfs_executables'
-  after  'deploy:download', 'deploy:upload_to_hdfs'
+  after  'deploy:download', 'deploy:upload_sha_jar', 'deploy:litmus_test_sha_jar'
   after 'deploy:restart', 'deploy:cleanup'
   after 'deploy:cleanup', 'deploy:remind_us_to_update_starscream'
 end
