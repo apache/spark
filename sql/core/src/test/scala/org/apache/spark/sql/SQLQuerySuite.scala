@@ -52,6 +52,73 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     )
   }
 
+  test("SPARK-5454 Self Join Temp table causes incorrect attribute references") {
+    val schema = StructType(
+      Array(
+        StructField("name", StringType, false),
+        StructField("friend", StringType, false)
+      )
+    )
+    // A few rows
+    val friends = Array(
+      Row("Thoralf", "Karim"),
+      Row("Larry", "Larry"),
+      Row("Karim", "Thoralf")
+    )
+
+    val friendsRDD = sparkContext.parallelize(friends)
+
+    val friendsSRDD1 = applySchema(friendsRDD, schema)
+    friendsSRDD1.registerTempTable("friends1")
+
+    val friendsSRDD2 = sql("SELECT name as n, friend as f FROM friends1")
+    friendsSRDD2.registerTempTable("friends2")
+
+    val friendsSRDD3 = sql("SELECT n as nn, f as ff FROM friends2")
+    friendsSRDD3.registerTempTable("friends3")
+
+    val friendsSRDD4 = sql("SELECT nn, ff FROM friends3")
+    friendsSRDD4.registerTempTable("friends4")
+
+    val fullJoinFriends1 = sql(
+      """
+        |SELECT alias1.friend as a, alias2.friend as b
+        |FROM friends1 as alias1
+        |FULL OUTER JOIN friends1 as alias2
+        |ON (alias1.friend = alias2.name)
+        |ORDER BY a, b
+      """.stripMargin)
+
+    val fullJoinFriends2 = sql(
+      """SELECT alias1.f as a, alias2.f as b
+        |FROM friends2 as alias1
+        |FULL OUTER JOIN friends2 as alias2
+        |ON (alias1.f = alias2.n)
+        |ORDER BY a, b
+      """.stripMargin)
+
+    val fullJoinFriends3 = sql(
+      """SELECT alias1.ff as a, alias2.ff as b
+        |FROM friends3 as alias1
+        |FULL OUTER JOIN friends3 as alias2
+        |ON (alias1.ff = alias2.nn)
+        |ORDER BY a, b
+      """.stripMargin)
+
+    val fullJoinFriends4 = sql(
+      """SELECT alias1.ff as a, alias2.ff as b
+        |FROM friends4 as alias1
+        |FULL OUTER JOIN friends4 as alias2
+        |ON (alias1.ff = alias2.nn)
+        |ORDER BY a, b
+      """.stripMargin)
+
+    val expected = fullJoinFriends1.collect()
+    assert(expected === fullJoinFriends2.collect())
+    assert(expected === fullJoinFriends3.collect())
+    assert(expected === fullJoinFriends4.collect())
+  }
+
   test("grouping on nested fields") {
     jsonRDD(sparkContext.parallelize("""{"nested": {"attribute": 1}, "value": 2}""" :: Nil))
      .registerTempTable("rows")

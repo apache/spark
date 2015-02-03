@@ -69,7 +69,7 @@ class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
       tableIdentifier: Seq[String],
       plan: LogicalPlan): Unit = {
     val tableIdent = processTableIdentifier(tableIdentifier)
-    tables += ((getDbTableName(tableIdent), plan))
+    tables += ((getDbTableName(tableIdent), plan.toMultiInstanceRelation))
   }
 
   override def unregisterTable(tableIdentifier: Seq[String]) = {
@@ -141,7 +141,7 @@ trait OverrideCatalog extends Catalog {
       tableIdentifier: Seq[String],
       plan: LogicalPlan): Unit = {
     val tableIdent = processTableIdentifier(tableIdentifier)
-    overrides.put(getDBTable(tableIdent), plan)
+    overrides.put(getDBTable(tableIdent), plan.toMultiInstanceRelation)
   }
 
   override def unregisterTable(tableIdentifier: Seq[String]): Unit = {
