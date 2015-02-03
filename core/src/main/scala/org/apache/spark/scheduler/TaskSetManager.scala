@@ -507,15 +507,15 @@ private[spark] class TaskSetManager(
    */
   private def getAllowedLocalityLevel(curTime: Long): TaskLocality.TaskLocality = {
     // Remove the scheduled or finished tasks lazily
-    def hasNotScheduledTasks(list: ArrayBuffer[Int]): Boolean = {
-      var indexOffset = list.size
+    def hasNotScheduledTasks(taskIndexes: ArrayBuffer[Int]): Boolean = {
+      var indexOffset = taskIndexes.size
       while (indexOffset > 0) {
         indexOffset -= 1
-        val index = list(indexOffset)
+        val index = taskIndexes(indexOffset)
         if (copiesRunning(index) == 0 && !successful(index)) {
           return true
         } else {
-          list.remove(indexOffset)
+          taskIndexes.remove(indexOffset)
         }
       }
       false
@@ -524,11 +524,11 @@ private[spark] class TaskSetManager(
     def hasMoreTasks(pendingTasks: HashMap[String, ArrayBuffer[Int]]): Boolean = {
       val emptyKeys = new ArrayBuffer[String]
       val hasTasks = pendingTasks.exists{
-        case (key: String, list: ArrayBuffer[Int]) =>
-          if (hasNotScheduledTasks(list)) {
+        case (id: String, tasks: ArrayBuffer[Int]) =>
+          if (hasNotScheduledTasks(tasks)) {
             true
           } else {
-            emptyKeys += key
+            emptyKeys += id
             false
           }
       }
