@@ -88,8 +88,7 @@ class StreamingLogisticRegressionWithSGD private[mllib] (
 
   /** Set the initial weights. Default: [0.0, 0.0]. */
   def setInitialWeights(initialWeights: Vector): this.type = {
-    this.model = Option(algorithm.createModel(initialWeights, 0.0))
+    this.model = Some(algorithm.createModel(initialWeights, 0.0))
     this
   }
-
 }
