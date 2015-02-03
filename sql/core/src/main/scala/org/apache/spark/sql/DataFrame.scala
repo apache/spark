@@ -25,6 +25,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 
 private[sql] object DataFrame {
@@ -308,24 +309,41 @@ trait DataFrame extends RDDApi[Row] {
   def groupBy(col1: String, cols: String*): GroupedDataFrame
 
   /**
-   * Aggregates on the entire [[DataFrame]] without groups.
-   * {{
-   *   // df.agg(...) is a shorthand for df.groupBy().agg(...)
-   *   df.agg(Map("age" -> "max", "salary" -> "avg"))
-   *   df.groupBy().agg(Map("age" -> "max", "salary" -> "avg"))
-   * }}
+   * (Scala-specific) Compute aggregates by specifying a map from column name to
+   * aggregate methods. The resulting [[DataFrame]] will also contain the grouping columns.
+   *
+   * The available aggregate methods are `avg`, `max`, `min`, `sum`, `count`.
+   * {{{
+   *   // Selects the age of the oldest employee and the aggregate expense for each department
+   *   df.groupBy("department").agg(
+   *     "age" -> "max",
+   *     "expense" -> "sum"
+   *   )
+   * }}}
    */
-  def agg(exprs: Map[String, String]): DataFrame
+  def agg(aggExpr: (String, String), aggExprs: (String, String)*): DataFrame = {
+    groupBy().agg(aggExpr, aggExprs :_*)
+  }
 
   /**
-   * Aggregates on the entire [[DataFrame]] without groups.
+   * (Scala-specific) Aggregates on the entire [[DataFrame]] without groups.
    * {{
    *   // df.agg(...) is a shorthand for df.groupBy().agg(...)
    *   df.agg(Map("age" -> "max", "salary" -> "avg"))
    *   df.groupBy().agg(Map("age" -> "max", "salary" -> "avg"))
    * }}
    */
-  def agg(exprs: java.util.Map[String, String]): DataFrame
+  def agg(exprs: Map[String, String]): DataFrame = groupBy().agg(exprs)
+
+  /**
+   * (Java-specific) Aggregates on the entire [[DataFrame]] without groups.
+   * {{
+   *   // df.agg(...) is a shorthand for df.groupBy().agg(...)
+   *   df.agg(Map("age" -> "max", "salary" -> "avg"))
+   *   df.groupBy().agg(Map("age" -> "max", "salary" -> "avg"))
+   * }}
+   */
+  def agg(exprs: java.util.Map[String, String]): DataFrame = groupBy().agg(exprs)
 
   /**
    * Aggregates on the entire [[DataFrame]] without groups.
@@ -336,7 +354,7 @@ trait DataFrame extends RDDApi[Row] {
    * }}
    */
   @scala.annotation.varargs
-  def agg(expr: Column, exprs: Column*): DataFrame
+  def agg(expr: Column, exprs: Column*): DataFrame = groupBy().agg(expr, exprs :_*)
 
   /**
    * Returns a new [[DataFrame]] by taking the first `n` rows. The difference between this function
@@ -377,7 +395,9 @@ trait DataFrame extends RDDApi[Row] {
    * @param withReplacement Sample with replacement or not.
    * @param fraction Fraction of rows to generate.
    */
-  def sample(withReplacement: Boolean, fraction: Double): DataFrame
+  def sample(withReplacement: Boolean, fraction: Double): DataFrame = {
+    sample(withReplacement, fraction, Utils.random.nextLong)
+  }
 
   /////////////////////////////////////////////////////////////////////////////
 

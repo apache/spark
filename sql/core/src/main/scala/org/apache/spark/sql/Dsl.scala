@@ -36,21 +36,6 @@ object Dsl {
   /** An implicit conversion that turns a Scala `Symbol` into a [[Column]]. */
   implicit def symbolToColumn(s: Symbol): ColumnName = new ColumnName(s.name)
 
-  //  /**
-  //   * An implicit conversion that turns a RDD of product into a [[DataFrame]].
-  //   *
-  //   * This method requires an implicit SQLContext in scope. For example:
-  //   * {{{
-  //   *   implicit val sqlContext: SQLContext = ...
-  //   *   val rdd: RDD[(Int, String)] = ...
-  //   *   rdd.toDataFrame  // triggers the implicit here
-  //   * }}}
-  //   */
-  //  implicit def rddToDataFrame[A <: Product: TypeTag](rdd: RDD[A])(implicit context: SQLContext)
-  //    : DataFrame = {
-  //    context.createDataFrame(rdd)
-  //  }
-
   /** Converts $"col name" into an [[Column]]. */
   implicit class StringToColumn(val sc: StringContext) extends AnyVal {
     def $(args: Any*): ColumnName = {
@@ -106,6 +91,47 @@ object Dsl {
     Column(literalExpr)
   }
 
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /** Aggregate function: returns the sum of all values in the expression. */
+  def sum(e: Column): Column = Sum(e.expr)
+
+  /** Aggregate function: returns the sum of distinct values in the expression. */
+  def sumDistinct(e: Column): Column = SumDistinct(e.expr)
+
+  /** Aggregate function: returns the number of items in a group. */
+  def count(e: Column): Column = Count(e.expr)
+
+  /** Aggregate function: returns the number of distinct items in a group. */
+  @scala.annotation.varargs
+  def countDistinct(expr: Column, exprs: Column*): Column =
+    CountDistinct((expr +: exprs).map(_.expr))
+
+  /** Aggregate function: returns the approximate number of distinct items in a group. */
+  def approxCountDistinct(e: Column): Column = ApproxCountDistinct(e.expr)
+
+  /** Aggregate function: returns the approximate number of distinct items in a group. */
+  def approxCountDistinct(e: Column, rsd: Double): Column = ApproxCountDistinct(e.expr, rsd)
+
+  /** Aggregate function: returns the average of the values in a group. */
+  def avg(e: Column): Column = Average(e.expr)
+
+  /** Aggregate function: returns the first value in a group. */
+  def first(e: Column): Column = First(e.expr)
+
+  /** Aggregate function: returns the last value in a group. */
+  def last(e: Column): Column = Last(e.expr)
+
+  /** Aggregate function: returns the minimum value of the expression in a group. */
+  def min(e: Column): Column = Min(e.expr)
+
+  /** Aggregate function: returns the maximum value of the expression in a group. */
+  def max(e: Column): Column = Max(e.expr)
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
   /**
    * Unary minus, i.e. negate the expression.
    * {{{
@@ -114,35 +140,33 @@ object Dsl {
    *   df.select( -df("amount") )
    *
    *   // Java:
-   *   import static org.apache.spark.sql.Dsl.*;
    *   df.select( negate(df.col("amount")) );
    * }}}
    */
   def negate(e: Column): Column = -e
 
+  /**
+   * Inversion of boolean expression, i.e. NOT.
+   * {{
+   *   // Scala: select rows that are not active (isActive === false)
+   *   df.filter( !df("isActive") )
+   *
+   *   // Java:
+   *   df.filter( not(df.col("isActive")) );
+   * }}
+   */
   def not(e: Column): Column = !e
 
-  def sum(e: Column): Column = Sum(e.expr)
-  def sumDistinct(e: Column): Column = SumDistinct(e.expr)
-  def count(e: Column): Column = Count(e.expr)
-
-  @scala.annotation.varargs
-  def countDistinct(expr: Column, exprs: Column*): Column =
-    CountDistinct((expr +: exprs).map(_.expr))
-
-  def approxCountDistinct(e: Column): Column = ApproxCountDistinct(e.expr)
-  def approxCountDistinct(e: Column, rsd: Double): Column =
-    ApproxCountDistinct(e.expr, rsd)
-
-  def avg(e: Column): Column = Average(e.expr)
-  def first(e: Column): Column = First(e.expr)
-  def last(e: Column): Column = Last(e.expr)
-  def min(e: Column): Column = Min(e.expr)
-  def max(e: Column): Column = Max(e.expr)
-
+  /** Converts a string expression to upper case. */
   def upper(e: Column): Column = Upper(e.expr)
+
+  /** Converts a string exprsesion to lower case. */
   def lower(e: Column): Column = Lower(e.expr)
+
+  /** Computes the square root of the specified float value. */
   def sqrt(e: Column): Column = Sqrt(e.expr)
+
+  /** Computes the absolutle value. */
   def abs(e: Column): Column = Abs(e.expr)
 
   /**
@@ -152,6 +176,9 @@ object Dsl {
   def toColumns(cols: JList[Column]): Seq[Column] = {
     cols.toList.toSeq
   }
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////////////////////
 
   // scalastyle:off
 

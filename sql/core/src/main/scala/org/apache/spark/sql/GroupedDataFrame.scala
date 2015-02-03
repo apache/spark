@@ -57,7 +57,7 @@ class GroupedDataFrame protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expr
   }
 
   /**
-   * (Scala-specific version) Compute aggregates by specifying a map from column name to
+   * (Scala-specific) Compute aggregates by specifying a map from column name to
    * aggregate methods. The resulting [[DataFrame]] will also contain the grouping columns.
    *
    * The available aggregate methods are `avg`, `max`, `min`, `sum`, `count`.
@@ -74,7 +74,7 @@ class GroupedDataFrame protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expr
   }
 
   /**
-   * (Scala-specific version) Compute aggregates by specifying a map from column name to
+   * (Scala-specific) Compute aggregates by specifying a map from column name to
    * aggregate methods. The resulting [[DataFrame]] will also contain the grouping columns.
    *
    * The available aggregate methods are `avg`, `max`, `min`, `sum`, `count`.
@@ -94,7 +94,7 @@ class GroupedDataFrame protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expr
   }
 
   /**
-   * (Java-specific version) Compute aggregates by specifying a map from column name to
+   * (Java-specific) Compute aggregates by specifying a map from column name to
    * aggregate methods. The resulting [[DataFrame]] will also contain the grouping columns.
    *
    * The available aggregate methods are `avg`, `max`, `min`, `sum`, `count`.
