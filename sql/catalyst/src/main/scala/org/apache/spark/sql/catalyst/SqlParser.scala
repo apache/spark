@@ -52,6 +52,7 @@ class SqlParser extends AbstractSparkSQLParser {
   protected val CAST = Keyword("CAST")
   protected val COALESCE = Keyword("COALESCE")
   protected val COUNT = Keyword("COUNT")
+  protected val CUBE = Keyword("CUBE")
   protected val DECIMAL = Keyword("DECIMAL")
   protected val DESC = Keyword("DESC")
   protected val DISTINCT = Keyword("DISTINCT")
@@ -85,6 +86,7 @@ class SqlParser extends AbstractSparkSQLParser {
   protected val ON = Keyword("ON")
   protected val OR = Keyword("OR")
   protected val ORDER = Keyword("ORDER")
+  protected val ROLLUP = Keyword("ROLLUP")
   protected val SORT = Keyword("SORT")
   protected val OUTER = Keyword("OUTER")
   protected val OVERWRITE = Keyword("OVERWRITE")
@@ -129,22 +131,37 @@ class SqlParser extends AbstractSparkSQLParser {
       repsep(projection, ",") ~
       (FROM   ~> relations).? ~
       (WHERE  ~> expression).? ~
-      (GROUP  ~  BY ~> rep1sep(expression, ",")).? ~
+      groupBy.? ~
       (HAVING ~> expression).? ~
       sortType.? ~
       (LIMIT  ~> expression).? ^^ {
         case d ~ p ~ r ~ f ~ g ~ h ~ o ~ l  =>
           val base = r.getOrElse(NoRelation)
           val withFilter = f.map(Filter(_, base)).getOrElse(base)
-          val withProjection = g
-            .map(Aggregate(_, assignAliases(p), withFilter))
-            .getOrElse(Project(assignAliases(p), withFilter))
+          val withProjection =
+            g.map(_(withFilter, assignAliases(p))).getOrElse(Project(assignAliases(p), withFilter))
           val withDistinct = d.map(_ => Distinct(withProjection)).getOrElse(withProjection)
           val withHaving = h.map(Filter(_, withDistinct)).getOrElse(withDistinct)
           val withOrder = o.map(_(withHaving)).getOrElse(withHaving)
           val withLimit = l.map(Limit(_, withOrder)).getOrElse(withOrder)
           withLimit
       }
+
+  protected lazy val groupBy: Parser[(LogicalPlan, Seq[NamedExpression]) => LogicalPlan] =
+    GROUP ~ BY ~> (
+        rep1sep(expression, ",") ^^ { case g =>
+            (child: LogicalPlan, aggregates: Seq[NamedExpression]) =>
+              Aggregate(g, aggregates, child)
+        }
+        | ROLLUP ~ "(" ~> rep1sep(expression, ",") <~ ")" ^^ { case r =>
+            (child: LogicalPlan, aggregates: Seq[NamedExpression]) =>
+              Rollup(r, child, aggregates)
+        }
+        | CUBE ~ "(" ~> rep1sep(expression, ",") <~ ")" ^^ { case c =>
+            (child: LogicalPlan, aggregates: Seq[NamedExpression]) =>
+              Cube(c, child, aggregates)
+        }
+    )
 
   protected lazy val insert: Parser[LogicalPlan] =
     INSERT ~> (OVERWRITE ^^^ true | INTO ^^^ false) ~ (TABLE ~> relation) ~ select ^^ {
