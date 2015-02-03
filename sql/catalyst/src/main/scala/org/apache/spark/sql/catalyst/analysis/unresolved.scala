@@ -128,6 +128,44 @@ case class UnresolvedStar(table: Option[String]) extends Star {
   override def toString = table.map(_ + ".").getOrElse("") + "*"
 }
 
+/**
+ * Used to assign new names to Generator's output, such as hive udtf.
+ * For example the SQL expression "stack(2, key, value, key, value) as (a, b)" could be represented
+ * as follows:
+ *  MultiAlias(stack_function, Seq(a, b))
+
+ * @param child the computation being performed
+ * @param names the names to be associated with each output of computing [[child]].
+ */
+case class MultiAlias(child: Expression, names: Seq[String])
+  extends Attribute with trees.UnaryNode[Expression] {
+
+  override def name = throw new UnresolvedException(this, "name")
+
+  override def exprId = throw new UnresolvedException(this, "exprId")
+
+  override def dataType = throw new UnresolvedException(this, "dataType")
+
+  override def nullable = throw new UnresolvedException(this, "nullable")
+
+  override def qualifiers = throw new UnresolvedException(this, "qualifiers")
+
+  override lazy val resolved = false
+
+  override def newInstance = this
+
+  override def withNullability(newNullability: Boolean) = this
+
+  override def withQualifiers(newQualifiers: Seq[String]) = this
+
+  override def withName(newName: String) = this
+
+  override def eval(input: Row = null): EvaluatedType =
+    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
+
+  override def toString: String = s"$child AS $names"
+
+}
 
 /**
  * Represents all the resolved input attributes to a given relational operator. This is used
