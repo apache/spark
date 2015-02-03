@@ -77,12 +77,12 @@ trait SchemaRelationProvider {
       schema: StructType): BaseRelation
 }
 
-trait CreateableRelation {
+@DeveloperApi
+trait CreateableRelationProvider {
   def createRelation(
       sqlContext: SQLContext,
-      name: String,
-      options: Map[String, String],
-      data: DataFrame): Map[String, String]
+      parameters: Map[String, String],
+      data: DataFrame): BaseRelation
 }
 
 /**
@@ -158,6 +158,6 @@ trait CatalystScan extends BaseRelation {
 }
 
 @DeveloperApi
-trait WritableRelation extends BaseRelation {
-  def write(data: DataFrame, overwrite: Boolean): Unit
+trait InsertableRelation extends BaseRelation {
+  def insert(data: DataFrame, overwrite: Boolean): Unit
 }

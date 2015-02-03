@@ -244,17 +244,12 @@ object ResolvedDataSource {
 
     new ResolvedDataSource(clazz, relation)
   }
-}
 
-private[sql] case class ResolvedDataSource(provider: Class[_], relation: BaseRelation)
-
-object ResolvedCreatableDataSource {
   def apply(
       sqlContext: SQLContext,
       provider: String,
-      name: String,
       options: Map[String, String],
-      data: DataFrame): Map[String, String] = {
+      data: DataFrame): ResolvedDataSource = {
     val loader = Utils.getContextOrSparkClassLoader
     val clazz: Class[_] = try loader.loadClass(provider) catch {
       case cnf: java.lang.ClassNotFoundException =>
@@ -264,16 +259,20 @@ object ResolvedCreatableDataSource {
         }
     }
 
-    clazz.newInstance match {
-      case dataSource: org.apache.spark.sql.sources.CreateableRelation =>
+    val relation = clazz.newInstance match {
+      case dataSource: org.apache.spark.sql.sources.CreateableRelationProvider =>
         dataSource
-          .asInstanceOf[org.apache.spark.sql.sources.CreateableRelation]
-          .createRelation(sqlContext, name, options, data)
+          .asInstanceOf[org.apache.spark.sql.sources.CreateableRelationProvider]
+          .createRelation(sqlContext, options, data)
       case _ =>
         sys.error(s"${clazz.getCanonicalName} does not allow create table as select.")
     }
+
+    new ResolvedDataSource(clazz, relation)
   }
 }
+
+private[sql] case class ResolvedDataSource(provider: Class[_], relation: BaseRelation)
 
 private[sql] case class CreateTableUsing(
     tableName: String,
@@ -321,8 +320,7 @@ private [sql] case class CreateTempTableUsingAsSelect(
 
   def run(sqlContext: SQLContext) = {
     val df = new DataFrame(sqlContext, query)
-    val augmentedOptions = ResolvedCreatableDataSource(sqlContext, provider, tableName, options, df)
-    val resolved = ResolvedDataSource(sqlContext, None, provider, augmentedOptions)
+    val resolved = ResolvedDataSource(sqlContext, provider, options, df)
     sqlContext.registerRDDAsTable(
       new DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
 

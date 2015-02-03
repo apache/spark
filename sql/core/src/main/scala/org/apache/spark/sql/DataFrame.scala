@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{LogicalRDD, EvaluatePython}
 import org.apache.spark.sql.json.JsonRDD
-import org.apache.spark.sql.sources.{WritableRelation, ResolvedDataSource, CreateTableUsingAsLogicalPlan}
+import org.apache.spark.sql.sources.{InsertableRelation, ResolvedDataSource, CreateTableUsingAsLogicalPlan}
 import org.apache.spark.sql.types.{NumericType, StructType}
 import org.apache.spark.util.Utils
 
@@ -696,12 +696,7 @@ class DataFrame protected[sql](
       overwrite: Boolean,
       option: (String, String),
       options: (String, String)*): Unit = {
-    val resolved =
-      ResolvedDataSource(sqlContext, Some(schema), dataSourceName, (option +: options).toMap)
-    resolved.relation match {
-      case i: WritableRelation => i.write(new DataFrame(sqlContext, logicalPlan), overwrite)
-      case o => sys.error(s"Data source $dataSourceName does not support save.")
-    }
+    ResolvedDataSource(sqlContext, dataSourceName, (option +: options).toMap, this)
   }
 
   @Experimental

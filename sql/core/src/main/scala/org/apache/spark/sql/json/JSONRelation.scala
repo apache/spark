@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.StructType
 
 
 private[sql] class DefaultSource
-  extends RelationProvider with SchemaRelationProvider with CreateableRelation {
+  extends RelationProvider with SchemaRelationProvider with CreateableRelationProvider {
 
   /** Returns a new base relation with the parameters. */
   override def createRelation(
@@ -52,10 +52,9 @@ private[sql] class DefaultSource
 
   override def createRelation(
       sqlContext: SQLContext,
-      name: String,
-      options: Map[String, String],
-      data: DataFrame): Map[String, String] = {
-    val path = options.getOrElse("path", sys.error("Option 'path' not specified"))
+      parameters: Map[String, String],
+      data: DataFrame): BaseRelation = {
+    val path = parameters.getOrElse("path", sys.error("Option 'path' not specified"))
     val filesystemPath = new Path(path)
     val fs = filesystemPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
     if (fs.exists(filesystemPath)) {
@@ -63,7 +62,7 @@ private[sql] class DefaultSource
     }
     data.toJSON.saveAsTextFile(path)
 
-    options
+    createRelation(sqlContext, parameters, data.schema)
   }
 }
 
@@ -72,7 +71,7 @@ private[sql] case class JSONRelation(
     samplingRatio: Double,
     userSpecifiedSchema: Option[StructType])(
     @transient val sqlContext: SQLContext)
-  extends TableScan with WritableRelation {
+  extends TableScan with InsertableRelation {
 
   // TODO: Support partitioned JSON relation.
   private def baseRDD = sqlContext.sparkContext.textFile(path)
@@ -87,7 +86,7 @@ private[sql] case class JSONRelation(
   override def buildScan() =
     JsonRDD.jsonStringToRow(baseRDD, schema, sqlContext.conf.columnNameOfCorruptRecord)
 
-  override def write(data: DataFrame, overwrite: Boolean) = {
+  override def insert(data: DataFrame, overwrite: Boolean) = {
     val filesystemPath = new Path(path)
     val fs = filesystemPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
 

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.sources.ResolvedCreatableDataSource
+import org.apache.spark.sql.sources.ResolvedDataSource
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -166,14 +166,14 @@ case class CreateMetastoreDataSourceAsSelect(
         options
       }
 
-    val augmentedOptions =
-      ResolvedCreatableDataSource(sqlContext, provider, tableName, optionsWithPath, df)
+    // Create the relation based on the data of df.
+    ResolvedDataSource(sqlContext, provider, optionsWithPath, df)
 
     hiveContext.catalog.createDataSourceTable(
       tableName,
       None,
       provider,
-      augmentedOptions,
+      optionsWithPath,
       isExternal)
 
     Seq.empty[Row]
