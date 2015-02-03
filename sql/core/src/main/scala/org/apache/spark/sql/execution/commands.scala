@@ -138,7 +138,7 @@ case class CacheTableCommand(
 
   override def run(sqlContext: SQLContext) = {
     plan.foreach { logicalPlan =>
-      sqlContext.registerRDDAsTable(new DataFrame(sqlContext, logicalPlan), tableName)
+      sqlContext.registerRDDAsTable(DataFrame(sqlContext, logicalPlan), tableName)
     }
     sqlContext.cacheTable(tableName)
 

@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.spark.sql.catalyst.expressions.Row
+
 import scala.collection.JavaConversions._
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.{Column, DataFrame, SQLContext, Strategy}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
@@ -29,7 +31,6 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand}
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.hive
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.parquet.ParquetRelation
 import org.apache.spark.sql.sources.CreateTableUsing
@@ -56,14 +57,14 @@ private[hive] trait HiveStrategies {
   @Experimental
   object ParquetConversion extends Strategy {
     implicit class LogicalPlanHacks(s: DataFrame) {
-      def lowerCase = new DataFrame(s.sqlContext, s.logicalPlan)
+      def lowerCase = DataFrame(s.sqlContext, s.logicalPlan)
 
       def addPartitioningAttributes(attrs: Seq[Attribute]) = {
         // Don't add the partitioning key if its already present in the data.
         if (attrs.map(_.name).toSet.subsetOf(s.logicalPlan.output.map(_.name).toSet)) {
           s
         } else {
-          new DataFrame(
+          DataFrame(
             s.sqlContext,
             s.logicalPlan transform {
               case p: ParquetRelation => p.copy(partitioningAttributes = attrs)
@@ -96,13 +97,13 @@ private[hive] trait HiveStrategies {
         // We are going to throw the predicates and projection back at the whole optimization
         // sequence so lets unresolve all the attributes, allowing them to be rebound to the
         // matching parquet attributes.
-        val unresolvedOtherPredicates = new Column(otherPredicates.map(_ transform {
+        val unresolvedOtherPredicates = Column(otherPredicates.map(_ transform {
           case a: AttributeReference => UnresolvedAttribute(a.name)
         }).reduceOption(And).getOrElse(Literal(true)))
 
         val unresolvedProjection: Seq[Column] = projectList.map(_ transform {
           case a: AttributeReference => UnresolvedAttribute(a.name)
-        }).map(new Column(_))
+        }).map(Column(_))
 
         try {
           if (relation.hiveQlTable.isPartitioned) {
