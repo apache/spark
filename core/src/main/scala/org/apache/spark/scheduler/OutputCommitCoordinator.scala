@@ -137,7 +137,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
         }
       case None =>
         logDebug(s"Stage $stage has completed, so not allowing task attempt $attempt to commit")
-        return false
+        false
     }
   }
 

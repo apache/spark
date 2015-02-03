@@ -649,12 +649,8 @@ private[spark] class TaskSetManager(
             s"${ef.className} (${ef.description}) [duplicate $dupCount]")
         }
 
-      case e: TaskCommitDenied =>
-        logWarning(failureReason)
-
       case e: TaskFailedReason =>  // TaskResultLost, TaskKilled, and others
         logWarning(failureReason)
-        return
 
       case e: TaskEndReason =>
         logError("Unknown TaskEndReason: " + e)
@@ -663,20 +659,17 @@ private[spark] class TaskSetManager(
     failedExecutors.getOrElseUpdate(index, new HashMap[String, Long]()).
       put(info.executorId, clock.getTime())
     sched.dagScheduler.taskEnded(tasks(index), reason, null, null, info, taskMetrics)
-    if (!reason.isInstanceOf[TaskCommitDenied]) {
-      addPendingTask(index)
-      if (!isZombie && state != TaskState.KILLED) {
-        assert (null != failureReason)
-        numFailures(index) += 1
-        if (numFailures(index) >= maxTaskFailures) {
-          logError("Task %d in stage %s failed %d times; aborting job".format(
-            index, taskSet.id, maxTaskFailures))
-          abort("Task %d in stage %s failed %d times, most recent failure: %s\nDriver stacktrace:"
-            .format(index, taskSet.id, maxTaskFailures, failureReason))
-          return
-        }
+    addPendingTask(index)
+    if (!isZombie && state != TaskState.KILLED && !reason.isInstanceOf[TaskCommitDenied]) {
+      assert (null != failureReason)
+      numFailures(index) += 1
+      if (numFailures(index) >= maxTaskFailures) {
+        logError("Task %d in stage %s failed %d times; aborting job".format(
+          index, taskSet.id, maxTaskFailures))
+        abort("Task %d in stage %s failed %d times, most recent failure: %s\nDriver stacktrace:"
+          .format(index, taskSet.id, maxTaskFailures, failureReason))
+        return
       }
-
     }
     maybeFinishTaskSet()
   }
