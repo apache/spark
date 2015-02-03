@@ -579,7 +579,8 @@ private[spark] object SparkSubmitUtils extends Logging {
     artifacts.map { artifactInfo =>
       val artifactString = artifactInfo.toString
       val jarName = artifactString.drop(artifactString.lastIndexOf("!") + 1)
-      cacheDirectory.getAbsolutePath + "/" + jarName.substring(0, jarName.lastIndexOf(".jar") + 4)
+      cacheDirectory.getAbsolutePath + File.separator +
+        jarName.substring(0, jarName.lastIndexOf(".jar") + 4)
     }.mkString(",")
   }
 
@@ -682,7 +683,7 @@ private[spark] object SparkSubmitUtils extends Logging {
       }
       // retrieve all resolved dependencies
       ivy.retrieve(rr.getModuleDescriptor.getModuleRevisionId,
-        packagesDirectory.getAbsolutePath + "/[artifact](-[classifier]).[ext]",
+        packagesDirectory.getAbsolutePath + File.separator + "[artifact](-[classifier]).[ext]",
         retrieveOptions.setConfs(Array(ivyConfName)))
 
       resolveDependencyPaths(rr.getArtifacts.toArray, packagesDirectory)
