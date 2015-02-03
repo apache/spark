@@ -58,14 +58,14 @@ abstract class StreamingLinearAlgorithm[
     A <: GeneralizedLinearAlgorithm[M]] extends Logging {
 
   /** The model to be updated and used for prediction. */
-  protected var model: M
+  protected var model: Option[M] = null
 
   /** The algorithm to use for updating. */
   protected val algorithm: A
 
   /** Return the latest model. */
   def latestModel(): M = {
-    model
+    model.get
   }
 
   /**
@@ -77,16 +77,16 @@ abstract class StreamingLinearAlgorithm[
    * @param data DStream containing labeled data
    */
   def trainOn(data: DStream[LabeledPoint]) {
-    if (Option(model.weights) == None) {
-      logError("Initial weights must be set before starting training")
+    if (Option(model) == None) {
+      logError("Model must be initialized before starting training")
       throw new IllegalArgumentException
     }
     data.foreachRDD { (rdd, time) =>
-        model = algorithm.run(rdd, model.weights)
+        model = Option(algorithm.run(rdd, model.get.weights))
         logInfo("Model updated at time %s".format(time.toString))
-        val display = model.weights.size match {
-          case x if x > 100 => model.weights.toArray.take(100).mkString("[", ",", "...")
-          case _ => model.weights.toArray.mkString("[", ",", "]")
+        val display = model.get.weights.size match {
+          case x if x > 100 => model.get.weights.toArray.take(100).mkString("[", ",", "...")
+          case _ => model.get.weights.toArray.mkString("[", ",", "]")
         }
         logInfo("Current model: weights, %s".format (display))
     }
@@ -99,12 +99,12 @@ abstract class StreamingLinearAlgorithm[
    * @return DStream containing predictions
    */
   def predictOn(data: DStream[Vector]): DStream[Double] = {
-    if (Option(model.weights) == None) {
-      val msg = "Initial weights must be set before starting prediction"
+    if (Option(model) == None) {
+      val msg = "Model must be initialized before starting prediction"
       logError(msg)
       throw new IllegalArgumentException(msg)
     }
-    data.map(model.predict)
+    data.map(model.get.predict)
   }
 
   /**
@@ -114,11 +114,11 @@ abstract class StreamingLinearAlgorithm[
    * @return DStream containing the input keys and the predictions as values
    */
   def predictOnValues[K: ClassTag](data: DStream[(K, Vector)]): DStream[(K, Double)] = {
-    if (Option(model.weights) == None) {
-      val msg = "Initial weights must be set before starting prediction"
+    if (Option(model) == None) {
+      val msg = "Model must be initialized before starting prediction"
       logError(msg)
       throw new IllegalArgumentException(msg)
     }
-    data.mapValues(model.predict)
+    data.mapValues(model.get.predict)
   }
 }

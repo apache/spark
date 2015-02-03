@@ -15,26 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.regression
+package org.apache.spark.mllib.classification
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.regression.StreamingLinearAlgorithm
 
 /**
  * :: Experimental ::
- * Train or predict a linear regression model on streaming data. Training uses
+ * Train or predict a logistic regression model on streaming data. Training uses
  * Stochastic Gradient Descent to update the model based on each new batch of
- * incoming data from a DStream (see `LinearRegressionWithSGD` for model equation)
+ * incoming data from a DStream (see `LogisticRegressionWithSGD` for model equation)
  *
  * Each batch of data is assumed to be an RDD of LabeledPoints.
  * The number of data points per batch can vary, but the number
  * of features must be constant. An initial weight
  * vector must be provided.
  *
- * Use a builder pattern to construct a streaming linear regression
+ * Use a builder pattern to construct a streaming logistic regression
  * analysis in an application, like:
  *
- *  val model = new StreamingLinearRegressionWithSGD()
+ *  val model = new StreamingLogisticRegressionWithSGD()
  *    .setStepSize(0.5)
  *    .setNumIterations(10)
  *    .setInitialWeights(Vectors.dense(...))
@@ -42,22 +43,24 @@ import org.apache.spark.mllib.linalg.Vector
  *
  */
 @Experimental
-class StreamingLinearRegressionWithSGD private[mllib] (
+class StreamingLogisticRegressionWithSGD private[mllib] (
     private var stepSize: Double,
     private var numIterations: Int,
-    private var miniBatchFraction: Double)
-  extends StreamingLinearAlgorithm[LinearRegressionModel, LinearRegressionWithSGD]
+    private var miniBatchFraction: Double,
+    private var regParam: Double)
+  extends StreamingLinearAlgorithm[LogisticRegressionModel, LogisticRegressionWithSGD]
   with Serializable {
 
   /**
-   * Construct a StreamingLinearRegression object with default parameters:
-   * {stepSize: 0.1, numIterations: 50, miniBatchFraction: 1.0}.
+   * Construct a StreamingLogisticRegression object with default parameters:
+   * {stepSize: 0.1, numIterations: 50, miniBatchFraction: 1.0, regParam: 0.0}.
    * Initial weights must be set before using trainOn or predictOn
    * (see `StreamingLinearAlgorithm`)
    */
-  def this() = this(0.1, 50, 1.0)
+  def this() = this(0.1, 50, 1.0, 0.0)
 
-  val algorithm = new LinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction)
+  val algorithm = new LogisticRegressionWithSGD(
+    stepSize, numIterations, regParam, miniBatchFraction)
 
   /** Set the step size for gradient descent. Default: 0.1. */
   def setStepSize(stepSize: Double): this.type = {
@@ -74,6 +77,12 @@ class StreamingLinearRegressionWithSGD private[mllib] (
   /** Set the fraction of each batch to use for updates. Default: 1.0. */
   def setMiniBatchFraction(miniBatchFraction: Double): this.type = {
     this.algorithm.optimizer.setMiniBatchFraction(miniBatchFraction)
+    this
+  }
+
+  /** Set the regularization parameter. Default: 0.0. */
+  def setRegParam(regParam: Double): this.type = {
+    this.algorithm.optimizer.setRegParam(regParam)
     this
   }
 
