@@ -42,9 +42,6 @@ final class OffsetRange private(
 }
 
 object OffsetRange {
-  private[spark]
-  type OffsetRangeTuple = (String, Int, Long, Long)
-
   def create(topic: String, partition: Int, fromOffset: Long, untilOffset: Long): OffsetRange =
     new OffsetRange(topic, partition, fromOffset, untilOffset)
 
@@ -62,6 +59,10 @@ object OffsetRange {
       fromOffset: Long,
       untilOffset: Long): OffsetRange =
     new OffsetRange(topicAndPartition.topic, topicAndPartition.partition, fromOffset, untilOffset)
+
+  /** this is to avoid ClassNotFoundException during checkpoint restore */
+  private[spark]
+  type OffsetRangeTuple = (String, Int, Long, Long)
 
   private[streaming]
   def apply(t: OffsetRangeTuple) =

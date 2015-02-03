@@ -221,6 +221,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
   // https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol#AGuideToTheKafkaProtocol-OffsetCommit/FetchAPI
   // scalastyle:on
 
+  /** Requires Kafka >= 0.8.1.1 */
   def getConsumerOffsets(
       groupId: String,
       topicAndPartitions: Set[TopicAndPartition]
@@ -232,6 +233,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
     }
   }
 
+  /** Requires Kafka >= 0.8.1.1 */
   def getConsumerOffsetMetadata(
       groupId: String,
       topicAndPartitions: Set[TopicAndPartition]
@@ -261,6 +263,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
     Left(errs)
   }
 
+  /** Requires Kafka >= 0.8.1.1 */
   def setConsumerOffsets(
       groupId: String,
       offsets: Map[TopicAndPartition, Long]
@@ -270,6 +273,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
     })
   }
 
+  /** Requires Kafka >= 0.8.1.1 */
   def setConsumerOffsetMetadata(
       groupId: String,
       metadata: Map[TopicAndPartition, OffsetMetadataAndError]
