@@ -33,6 +33,7 @@ private[spark] object SQLConf {
   val DIALECT = "spark.sql.dialect"
 
   val PARQUET_BINARY_AS_STRING = "spark.sql.parquet.binaryAsString"
+  val PARQUET_INT96_AS_TIMESTAMP = "spark.sql.parquet.int96AsTimestamp"
   val PARQUET_CACHE_METADATA = "spark.sql.parquet.cacheMetadata"
   val PARQUET_COMPRESSION = "spark.sql.parquet.compression.codec"
   val PARQUET_FILTER_PUSHDOWN_ENABLED = "spark.sql.parquet.filterPushdown"
@@ -142,6 +143,12 @@ private[sql] class SQLConf extends Serializable {
    */
   private[spark] def isParquetBinaryAsString: Boolean =
     getConf(PARQUET_BINARY_AS_STRING, "false").toBoolean
+
+  /**
+   * When set to true, we always treat INT96Values in Parquet files as timestamp.
+   */
+  private[spark] def isParquetINT96AsTimestamp: Boolean =
+    getConf(PARQUET_INT96_AS_TIMESTAMP, "true").toBoolean
 
   /**
    * When set to true, partition pruning for in-memory columnar tables is enabled.
