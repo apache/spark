@@ -56,7 +56,7 @@ private[sql] object Column {
  *
  */
 // TODO: Improve documentation.
-trait Column extends DataFrame with ExpressionApi {
+trait Column extends DataFrame {
 
   protected[sql] def expr: Expression
 
@@ -101,7 +101,7 @@ trait Column extends DataFrame with ExpressionApi {
    *   df.select( -df("amount") )
    * }}}
    */
-  override def unary_- : Column = constructColumn(null) { UnaryMinus(expr) }
+  def unary_- : Column = constructColumn(null) { UnaryMinus(expr) }
 
   /**
    * Bitwise NOT.
@@ -110,7 +110,7 @@ trait Column extends DataFrame with ExpressionApi {
    *   df.select( ~df("flags") )
    * }}}
    */
-  override def unary_~ : Column = constructColumn(null) { BitwiseNot(expr) }
+  def unary_~ : Column = constructColumn(null) { BitwiseNot(expr) }
 
   /**
    * Inversion of boolean expression, i.e. NOT.
@@ -119,7 +119,7 @@ trait Column extends DataFrame with ExpressionApi {
    *   df.select( !df("isActive") )
    * }}
    */
-  override def unary_! : Column = constructColumn(null) { Not(expr) }
+  def unary_! : Column = constructColumn(null) { Not(expr) }
 
 
   /**
@@ -130,7 +130,7 @@ trait Column extends DataFrame with ExpressionApi {
    *   df.select( df("colA".equalTo(df("colB")) )
    * }}}
    */
-  override def === (other: Column): Column = constructColumn(other) {
+  def === (other: Column): Column = constructColumn(other) {
     EqualTo(expr, other.expr)
   }
 
@@ -142,7 +142,7 @@ trait Column extends DataFrame with ExpressionApi {
    *   df.select( df("colA".equalTo("Zaharia") )
    * }}}
    */
-  override def === (literal: Any): Column = this === lit(literal)
+  def === (literal: Any): Column = this === lit(literal)
 
   /**
    * Equality test with an expression.
@@ -152,7 +152,7 @@ trait Column extends DataFrame with ExpressionApi {
    *   df.select( df("colA".equalTo(df("colB")) )
    * }}}
    */
-  override def equalTo(other: Column): Column = this === other
+  def equalTo(other: Column): Column = this === other
 
   /**
    * Equality test with a literal value.
@@ -162,7 +162,7 @@ trait Column extends DataFrame with ExpressionApi {
    *   df.select( df("colA".equalTo("Zaharia") )
    * }}}
    */
-  override def equalTo(literal: Any): Column = this === literal
+  def equalTo(literal: Any): Column = this === literal
 
   /**
    * Inequality test with an expression.
@@ -172,7 +172,7 @@ trait Column extends DataFrame with ExpressionApi {
    *   df.select( !(df("colA") === df("colB")) )
    * }}}
    */
-  override def !== (other: Column): Column = constructColumn(other) {
+  def !== (other: Column): Column = constructColumn(other) {
     Not(EqualTo(expr, other.expr))
   }
 
@@ -184,7 +184,7 @@ trait Column extends DataFrame with ExpressionApi {
    *   df.select( !(df("colA") === 15) )
    * }}}
    */
-  override def !== (literal: Any): Column = this !== lit(literal)
+  def !== (literal: Any): Column = this !== lit(literal)
 
   /**
    * Greater than an expression.
@@ -193,7 +193,7 @@ trait Column extends DataFrame with ExpressionApi {
    *   people.select( people("age") > Literal(21) )
    * }}}
    */
-  override def > (other: Column): Column =  constructColumn(other) {
+  def > (other: Column): Column =  constructColumn(other) {
     GreaterThan(expr, other.expr)
   }
 
@@ -204,7 +204,7 @@ trait Column extends DataFrame with ExpressionApi {
    *   people.select( people("age") > 21 )
    * }}}
    */
-  override def > (literal: Any): Column = this > lit(literal)
+  def > (literal: Any): Column = this > lit(literal)
 
   /**
    * Less than an expression.
@@ -213,7 +213,7 @@ trait Column extends DataFrame with ExpressionApi {
    *   people.select( people("age") < Literal(21) )
    * }}}
    */
-  override def < (other: Column): Column =  constructColumn(other) {
+  def < (other: Column): Column =  constructColumn(other) {
     LessThan(expr, other.expr)
   }
 
@@ -224,7 +224,7 @@ trait Column extends DataFrame with ExpressionApi {
    *   people.select( people("age") < 21 )
    * }}}
    */
-  override def < (literal: Any): Column = this < lit(literal)
+  def < (literal: Any): Column = this < lit(literal)
 
   /**
    * Less than or equal to an expression.
@@ -233,7 +233,7 @@ trait Column extends DataFrame with ExpressionApi {
    *   people.select( people("age") <= Literal(21) )
    * }}}
    */
-  override def <= (other: Column): Column = constructColumn(other) {
+  def <= (other: Column): Column = constructColumn(other) {
     LessThanOrEqual(expr, other.expr)
   }
 
@@ -244,7 +244,7 @@ trait Column extends DataFrame with ExpressionApi {
    *   people.select( people("age") <= 21 )
    * }}}
    */
-  override def <= (literal: Any): Column = this <= lit(literal)
+  def <= (literal: Any): Column = this <= lit(literal)
 
   /**
    * Greater than or equal to an expression.
@@ -253,7 +253,7 @@ trait Column extends DataFrame with ExpressionApi {
    *   people.select( people("age") >= Literal(21) )
    * }}}
    */
-  override def >= (other: Column): Column =  constructColumn(other) {
+  def >= (other: Column): Column =  constructColumn(other) {
     GreaterThanOrEqual(expr, other.expr)
   }
 
@@ -264,12 +264,12 @@ trait Column extends DataFrame with ExpressionApi {
    *   people.select( people("age") >= 21 )
    * }}}
    */
-  override def >= (literal: Any): Column = this >= lit(literal)
+  def >= (literal: Any): Column = this >= lit(literal)
 
   /**
    * Equality test with an expression that is safe for null values.
    */
-  override def <=> (other: Column): Column = constructColumn(other) {
+  def <=> (other: Column): Column = constructColumn(other) {
     other match {
       case null => EqualNullSafe(expr, lit(null).expr)
       case _ => EqualNullSafe(expr, other.expr)
@@ -279,17 +279,17 @@ trait Column extends DataFrame with ExpressionApi {
   /**
    * Equality test with a literal value that is safe for null values.
    */
-  override def <=> (literal: Any): Column = this <=> lit(literal)
+  def <=> (literal: Any): Column = this <=> lit(literal)
 
   /**
    * True if the current expression is null.
    */
-  override def isNull: Column = constructColumn(null) { IsNull(expr) }
+  def isNull: Column = constructColumn(null) { IsNull(expr) }
 
   /**
    * True if the current expression is NOT null.
    */
-  override def isNotNull: Column = constructColumn(null) { IsNotNull(expr) }
+  def isNotNull: Column = constructColumn(null) { IsNotNull(expr) }
 
   /**
    * Boolean OR with an expression.
@@ -298,7 +298,7 @@ trait Column extends DataFrame with ExpressionApi {
    *   people.select( people("inSchool") || people("isEmployed") )
    * }}}
    */
-  override def || (other: Column): Column = constructColumn(other) {
+  def || (other: Column): Column = constructColumn(other) {
     Or(expr, other.expr)
   }
 
@@ -309,7 +309,7 @@ trait Column extends DataFrame with ExpressionApi {
    *   people.select( people("inSchool") || true )
    * }}}
    */
-  override def || (literal: Boolean): Column = this || lit(literal)
+  def || (literal: Boolean): Column = this || lit(literal)
 
   /**
    * Boolean AND with an expression.
@@ -318,7 +318,7 @@ trait Column extends DataFrame with ExpressionApi {
    *   people.select( people("inSchool") && people("isEmployed") )
    * }}}
    */
-  override def && (other: Column): Column = constructColumn(other) {
+  def && (other: Column): Column = constructColumn(other) {
     And(expr, other.expr)
   }
 
@@ -329,43 +329,43 @@ trait Column extends DataFrame with ExpressionApi {
    *   people.select( people("inSchool") && true )
    * }}}
    */
-  override def && (literal: Boolean): Column = this && lit(literal)
+  def && (literal: Boolean): Column = this && lit(literal)
 
   /**
    * Bitwise AND with an expression.
    */
-  override def & (other: Column): Column = constructColumn(other) {
+  def & (other: Column): Column = constructColumn(other) {
     BitwiseAnd(expr, other.expr)
   }
 
   /**
    * Bitwise AND with a literal value.
    */
-  override def & (literal: Any): Column = this & lit(literal)
+  def & (literal: Any): Column = this & lit(literal)
 
   /**
    * Bitwise OR with an expression.
    */
-  override def | (other: Column): Column = constructColumn(other) {
+  def | (other: Column): Column = constructColumn(other) {
     BitwiseOr(expr, other.expr)
   }
 
   /**
    * Bitwise OR with a literal value.
    */
-  override def | (literal: Any): Column = this | lit(literal)
+  def | (literal: Any): Column = this | lit(literal)
 
   /**
    * Bitwise XOR with an expression.
    */
-  override def ^ (other: Column): Column = constructColumn(other) {
+  def ^ (other: Column): Column = constructColumn(other) {
     BitwiseXor(expr, other.expr)
   }
 
   /**
    * Bitwise XOR with a literal value.
    */
-  override def ^ (literal: Any): Column = this ^ lit(literal)
+  def ^ (literal: Any): Column = this ^ lit(literal)
 
   /**
    * Sum of this expression and another expression.
@@ -374,7 +374,7 @@ trait Column extends DataFrame with ExpressionApi {
    *   people.select( people("height") + people("weight") )
    * }}}
    */
-  override def + (other: Column): Column = constructColumn(other) {
+  def + (other: Column): Column = constructColumn(other) {
     Add(expr, other.expr)
   }
 
@@ -385,7 +385,7 @@ trait Column extends DataFrame with ExpressionApi {
    *   people.select( people("height") + 10 )
    * }}}
    */
-  override def + (literal: Any): Column = this + lit(literal)
+  def + (literal: Any): Column = this + lit(literal)
 
   /**
    * Subtraction. Subtract the other expression from this expression.
@@ -394,7 +394,7 @@ trait Column extends DataFrame with ExpressionApi {
    *   people.select( people("height") - people("weight") )
    * }}}
    */
-  override def - (other: Column): Column = constructColumn(other) {
+  def - (other: Column): Column = constructColumn(other) {
     Subtract(expr, other.expr)
   }
 
@@ -405,7 +405,7 @@ trait Column extends DataFrame with ExpressionApi {
    *   people.select( people("height") - 10 )
    * }}}
    */
-  override def - (literal: Any): Column = this - lit(literal)
+  def - (literal: Any): Column = this - lit(literal)
 
   /**
    * Multiplication of this expression and another expression.
@@ -414,7 +414,7 @@ trait Column extends DataFrame with ExpressionApi {
    *   people.select( people("height") * people("weight") )
    * }}}
    */
-  override def * (other: Column): Column = constructColumn(other) {
+  def * (other: Column): Column = constructColumn(other) {
     Multiply(expr, other.expr)
   }
 
@@ -425,7 +425,7 @@ trait Column extends DataFrame with ExpressionApi {
    *   people.select( people("height") * 10 )
    * }}}
    */
-  override def * (literal: Any): Column = this * lit(literal)
+  def * (literal: Any): Column = this * lit(literal)
 
   /**
    * Division this expression by another expression.
@@ -434,7 +434,7 @@ trait Column extends DataFrame with ExpressionApi {
    *   people.select( people("height") / people("weight") )
    * }}}
    */
-  override def / (other: Column): Column = constructColumn(other) {
+  def / (other: Column): Column = constructColumn(other) {
     Divide(expr, other.expr)
   }
 
@@ -445,19 +445,19 @@ trait Column extends DataFrame with ExpressionApi {
    *   people.select( people("height") / 10 )
    * }}}
    */
-  override def / (literal: Any): Column = this / lit(literal)
+  def / (literal: Any): Column = this / lit(literal)
 
   /**
    * Modulo (a.k.a. remainder) expression.
    */
-  override def % (other: Column): Column = constructColumn(other) {
+  def % (other: Column): Column = constructColumn(other) {
     Remainder(expr, other.expr)
   }
 
   /**
    * Modulo (a.k.a. remainder) expression.
    */
-  override def % (literal: Any): Column = this % lit(literal)
+  def % (literal: Any): Column = this % lit(literal)
 
 
   /**
@@ -465,29 +465,29 @@ trait Column extends DataFrame with ExpressionApi {
    * by the evaluated values of the arguments.
    */
   @scala.annotation.varargs
-  override def in(list: Column*): Column = {
+  def in(list: Column*): Column = {
     new IncomputableColumn(In(expr, list.map(_.expr)))
   }
 
-  override def like(literal: String): Column = constructColumn(null) {
+  def like(literal: String): Column = constructColumn(null) {
     Like(expr, lit(literal).expr)
   }
 
-  override def rlike(literal: String): Column = constructColumn(null) {
+  def rlike(literal: String): Column = constructColumn(null) {
     RLike(expr, lit(literal).expr)
   }
 
   /**
    * An expression that gets an item at position `ordinal` out of an array.
    */
-  override def getItem(ordinal: Int): Column = constructColumn(null) {
+  def getItem(ordinal: Int): Column = constructColumn(null) {
     GetItem(expr, Literal(ordinal))
   }
 
   /**
    * An expression that gets a field by name in a [[StructField]].
    */
-  override def getField(fieldName: String): Column = constructColumn(null) {
+  def getField(fieldName: String): Column = constructColumn(null) {
     GetField(expr, fieldName)
   }
 
@@ -496,7 +496,7 @@ trait Column extends DataFrame with ExpressionApi {
    * @param startPos expression for the starting position.
    * @param len expression for the length of the substring.
    */
-  override def substr(startPos: Column, len: Column): Column = {
+  def substr(startPos: Column, len: Column): Column = {
     new IncomputableColumn(Substring(expr, startPos.expr, len.expr))
   }
 
@@ -505,25 +505,25 @@ trait Column extends DataFrame with ExpressionApi {
    * @param startPos starting position.
    * @param len length of the substring.
    */
-  override def substr(startPos: Int, len: Int): Column = this.substr(lit(startPos), lit(len))
+  def substr(startPos: Int, len: Int): Column = this.substr(lit(startPos), lit(len))
 
-  override def contains(other: Column): Column = constructColumn(other) {
+  def contains(other: Column): Column = constructColumn(other) {
     Contains(expr, other.expr)
   }
 
-  override def contains(literal: Any): Column = this.contains(lit(literal))
+  def contains(literal: Any): Column = this.contains(lit(literal))
 
-  override def startsWith(other: Column): Column = constructColumn(other) {
+  def startsWith(other: Column): Column = constructColumn(other) {
     StartsWith(expr, other.expr)
   }
 
-  override def startsWith(literal: String): Column = this.startsWith(lit(literal))
+  def startsWith(literal: String): Column = this.startsWith(lit(literal))
 
-  override def endsWith(other: Column): Column = constructColumn(other) {
+  def endsWith(other: Column): Column = constructColumn(other) {
     EndsWith(expr, other.expr)
   }
 
-  override def endsWith(literal: String): Column = this.endsWith(lit(literal))
+  def endsWith(literal: String): Column = this.endsWith(lit(literal))
 
   /**
    * Gives the column an alias.
@@ -545,7 +545,7 @@ trait Column extends DataFrame with ExpressionApi {
    *   df.select(df("colA").cast("int"))
    * }}}
    */
-  override def cast(to: DataType): Column = constructColumn(null) { Cast(expr, to) }
+  def cast(to: DataType): Column = constructColumn(null) { Cast(expr, to) }
 
   /**
    * Casts the column to a different data type, using the canonical string representation
@@ -556,7 +556,7 @@ trait Column extends DataFrame with ExpressionApi {
    *   df.select(df("colA").cast("int"))
    * }}}
    */
-  override def cast(to: String): Column = constructColumn(null) {
+  def cast(to: String): Column = constructColumn(null) {
     Cast(expr, to.toLowerCase match {
       case "string" => StringType
       case "boolean" => BooleanType
@@ -573,9 +573,9 @@ trait Column extends DataFrame with ExpressionApi {
     })
   }
 
-  override def desc: Column = constructColumn(null) { SortOrder(expr, Descending) }
+  def desc: Column = constructColumn(null) { SortOrder(expr, Descending) }
 
-  override def asc: Column = constructColumn(null) { SortOrder(expr, Ascending) }
+  def asc: Column = constructColumn(null) { SortOrder(expr, Ascending) }
 }
 
 

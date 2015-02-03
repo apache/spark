@@ -71,7 +71,7 @@ private[sql] object DataFrame {
  * }}}
  */
 // TODO: Improve documentation.
-trait DataFrame extends DataFrameSpecificApi with RDDApi[Row] {
+trait DataFrame extends RDDApi[Row] {
 
   val sqlContext: SQLContext
 
@@ -80,7 +80,7 @@ trait DataFrame extends DataFrameSpecificApi with RDDApi[Row] {
 
   protected[sql] def logicalPlan: LogicalPlan
 
-  /** Left here for compatibility reasons. */
+  /** Left here for backward compatibility. */
   @deprecated("1.3.0", "use toDataFrame")
   def toSchemaRDD: DataFrame = this
 
@@ -102,16 +102,16 @@ trait DataFrame extends DataFrameSpecificApi with RDDApi[Row] {
   def toDataFrame(colName: String, colNames: String*): DataFrame
 
   /** Returns the schema of this [[DataFrame]]. */
-  override def schema: StructType
+  def schema: StructType
 
   /** Returns all column names and their data types as an array. */
-  override def dtypes: Array[(String, String)]
+  def dtypes: Array[(String, String)]
 
   /** Returns all column names as an array. */
-  override def columns: Array[String] = schema.fields.map(_.name)
+  def columns: Array[String] = schema.fields.map(_.name)
 
   /** Prints the schema to the console in a nice tree format. */
-  override def printSchema(): Unit
+  def printSchema(): Unit
 
   /**
    * Cartesian join with another [[DataFrame]].
@@ -120,7 +120,7 @@ trait DataFrame extends DataFrameSpecificApi with RDDApi[Row] {
    *
    * @param right Right side of the join operation.
    */
-  override def join(right: DataFrame): DataFrame
+  def join(right: DataFrame): DataFrame
 
   /**
    * Inner join with another [[DataFrame]], using the given join expression.
@@ -131,7 +131,7 @@ trait DataFrame extends DataFrameSpecificApi with RDDApi[Row] {
    *   df1.join(df2).where($"df1Key" === $"df2Key")
    * }}}
    */
-  override def join(right: DataFrame, joinExprs: Column): DataFrame
+  def join(right: DataFrame, joinExprs: Column): DataFrame
 
   /**
    * Join with another [[DataFrame]], usin  g the given join expression. The following performs
@@ -145,7 +145,7 @@ trait DataFrame extends DataFrameSpecificApi with RDDApi[Row] {
    * @param joinExprs Join expression.
    * @param joinType One of: `inner`, `outer`, `left_outer`, `right_outer`, `semijoin`.
    */
-  override def join(right: DataFrame, joinExprs: Column, joinType: String): DataFrame
+  def join(right: DataFrame, joinExprs: Column, joinType: String): DataFrame
 
   /**
    * Returns a new [[DataFrame]] sorted by the specified column, all in ascending order.
@@ -157,7 +157,7 @@ trait DataFrame extends DataFrameSpecificApi with RDDApi[Row] {
    * }}}
    */
   @scala.annotation.varargs
-  override def sort(sortCol: String, sortCols: String*): DataFrame
+  def sort(sortCol: String, sortCols: String*): DataFrame
 
   /**
    * Returns a new [[DataFrame]] sorted by the given expressions. For example:
@@ -166,26 +166,26 @@ trait DataFrame extends DataFrameSpecificApi with RDDApi[Row] {
    * }}}
    */
   @scala.annotation.varargs
-  override def sort(sortExpr: Column, sortExprs: Column*): DataFrame
+  def sort(sortExpr: Column, sortExprs: Column*): DataFrame
 
   /**
    * Returns a new [[DataFrame]] sorted by the given expressions.
    * This is an alias of the `sort` function.
    */
   @scala.annotation.varargs
-  override def orderBy(sortCol: String, sortCols: String*): DataFrame
+  def orderBy(sortCol: String, sortCols: String*): DataFrame
 
   /**
    * Returns a new [[DataFrame]] sorted by the given expressions.
    * This is an alias of the `sort` function.
    */
   @scala.annotation.varargs
-  override def orderBy(sortExpr: Column, sortExprs: Column*): DataFrame
+  def orderBy(sortExpr: Column, sortExprs: Column*): DataFrame
 
   /**
    * Selects column based on the column name and return it as a [[Column]].
    */
-  override def apply(colName: String): Column
+  def apply(colName: String): Column
 
   /**
    * Selects a set of expressions, wrapped in a Product.
@@ -195,12 +195,12 @@ trait DataFrame extends DataFrameSpecificApi with RDDApi[Row] {
    *   df.select($"colA", $"colB" + 1)
    * }}}
    */
-  override def apply(projection: Product): DataFrame
+  def apply(projection: Product): DataFrame
 
   /**
    * Returns a new [[DataFrame]] with an alias set.
    */
-  override def as(name: String): DataFrame
+  def as(name: String): DataFrame
 
   /**
    * Selects a set of expressions.
@@ -209,7 +209,7 @@ trait DataFrame extends DataFrameSpecificApi with RDDApi[Row] {
    * }}}
    */
   @scala.annotation.varargs
-  override def select(cols: Column*): DataFrame
+  def select(cols: Column*): DataFrame
 
   /**
    * Selects a set of columns. This is a variant of `select` that can only select
@@ -222,7 +222,7 @@ trait DataFrame extends DataFrameSpecificApi with RDDApi[Row] {
    * }}}
    */
   @scala.annotation.varargs
-  override def select(col: String, cols: String*): DataFrame
+  def select(col: String, cols: String*): DataFrame
 
   /**
    * Filters rows using the given condition.
@@ -233,7 +233,7 @@ trait DataFrame extends DataFrameSpecificApi with RDDApi[Row] {
    *   peopleDf($"age" > 15)
    * }}}
    */
-  override def filter(condition: Column): DataFrame
+  def filter(condition: Column): DataFrame
 
   /**
    * Filters rows using the given condition. This is an alias for `filter`.
@@ -244,7 +244,7 @@ trait DataFrame extends DataFrameSpecificApi with RDDApi[Row] {
    *   peopleDf($"age" > 15)
    * }}}
    */
-  override def where(condition: Column): DataFrame
+  def where(condition: Column): DataFrame
 
   /**
    * Filters rows using the given condition. This is a shorthand meant for Scala.
@@ -255,7 +255,7 @@ trait DataFrame extends DataFrameSpecificApi with RDDApi[Row] {
    *   peopleDf($"age" > 15)
    * }}}
    */
-  override def apply(condition: Column): DataFrame
+  def apply(condition: Column): DataFrame
 
   /**
    * Groups the [[DataFrame]] using the specified columns, so we can run aggregation on them.
@@ -273,7 +273,7 @@ trait DataFrame extends DataFrameSpecificApi with RDDApi[Row] {
    * }}}
    */
   @scala.annotation.varargs
-  override def groupBy(cols: Column*): GroupedDataFrame
+  def groupBy(cols: Column*): GroupedDataFrame
 
   /**
    * Groups the [[DataFrame]] using the specified columns, so we can run aggregation on them.
@@ -294,7 +294,7 @@ trait DataFrame extends DataFrameSpecificApi with RDDApi[Row] {
    * }}}
    */
   @scala.annotation.varargs
-  override def groupBy(col1: String, cols: String*): GroupedDataFrame
+  def groupBy(col1: String, cols: String*): GroupedDataFrame
 
   /**
    * Aggregates on the entire [[DataFrame]] without groups.
@@ -304,7 +304,7 @@ trait DataFrame extends DataFrameSpecificApi with RDDApi[Row] {
    *   df.groupBy().agg(Map("age" -> "max", "salary" -> "avg"))
    * }}
    */
-  override def agg(exprs: Map[String, String]): DataFrame
+  def agg(exprs: Map[String, String]): DataFrame
 
   /**
    * Aggregates on the entire [[DataFrame]] without groups.
@@ -314,7 +314,7 @@ trait DataFrame extends DataFrameSpecificApi with RDDApi[Row] {
    *   df.groupBy().agg(Map("age" -> "max", "salary" -> "avg"))
    * }}
    */
-  override def agg(exprs: java.util.Map[String, String]): DataFrame
+  def agg(exprs: java.util.Map[String, String]): DataFrame
 
   /**
    * Aggregates on the entire [[DataFrame]] without groups.
@@ -325,31 +325,31 @@ trait DataFrame extends DataFrameSpecificApi with RDDApi[Row] {
    * }}
    */
   @scala.annotation.varargs
-  override def agg(expr: Column, exprs: Column*): DataFrame
+  def agg(expr: Column, exprs: Column*): DataFrame
 
   /**
    * Returns a new [[DataFrame]] by taking the first `n` rows. The difference between this function
    * and `head` is that `head` returns an array while `limit` returns a new [[DataFrame]].
    */
-  override def limit(n: Int): DataFrame
+  def limit(n: Int): DataFrame
 
   /**
    * Returns a new [[DataFrame]] containing union of rows in this frame and another frame.
    * This is equivalent to `UNION ALL` in SQL.
    */
-  override def unionAll(other: DataFrame): DataFrame
+  def unionAll(other: DataFrame): DataFrame
 
   /**
    * Returns a new [[DataFrame]] containing rows only in both this frame and another frame.
    * This is equivalent to `INTERSECT` in SQL.
    */
-  override def intersect(other: DataFrame): DataFrame
+  def intersect(other: DataFrame): DataFrame
 
   /**
    * Returns a new [[DataFrame]] containing rows in this frame but not in another frame.
    * This is equivalent to `EXCEPT` in SQL.
    */
-  override def except(other: DataFrame): DataFrame
+  def except(other: DataFrame): DataFrame
 
   /**
    * Returns a new [[DataFrame]] by sampling a fraction of rows.
@@ -358,7 +358,7 @@ trait DataFrame extends DataFrameSpecificApi with RDDApi[Row] {
    * @param fraction Fraction of rows to generate.
    * @param seed Seed for sampling.
    */
-  override def sample(withReplacement: Boolean, fraction: Double, seed: Long): DataFrame
+  def sample(withReplacement: Boolean, fraction: Double, seed: Long): DataFrame
 
   /**
    * Returns a new [[DataFrame]] by sampling a fraction of rows, using a random seed.
@@ -366,24 +366,24 @@ trait DataFrame extends DataFrameSpecificApi with RDDApi[Row] {
    * @param withReplacement Sample with replacement or not.
    * @param fraction Fraction of rows to generate.
    */
-  override def sample(withReplacement: Boolean, fraction: Double): DataFrame
+  def sample(withReplacement: Boolean, fraction: Double): DataFrame
 
   /////////////////////////////////////////////////////////////////////////////
 
   /**
    * Returns a new [[DataFrame]] by adding a column.
    */
-  override def addColumn(colName: String, col: Column): DataFrame
+  def addColumn(colName: String, col: Column): DataFrame
 
   /**
    * Returns the first `n` rows.
    */
-  override def head(n: Int): Array[Row]
+  def head(n: Int): Array[Row]
 
   /**
    * Returns the first row.
    */
-  override def head(): Row
+  def head(): Row
 
   /**
    * Returns the first row. Alias for head().
@@ -453,7 +453,17 @@ trait DataFrame extends DataFrameSpecificApi with RDDApi[Row] {
   /**
    * Returns the content of the [[DataFrame]] as an [[RDD]] of [[Row]]s.
    */
-  override def rdd: RDD[Row]
+  def rdd: RDD[Row]
+
+  /**
+   * Returns the content of the [[DataFrame]] as a [[JavaRDD]] of [[Row]]s.
+   */
+  def toJavaRDD: JavaRDD[Row] = rdd.toJavaRDD()
+
+  /**
+   * Returns the content of the [[DataFrame]] as a [[JavaRDD]] of [[Row]]s.
+   */
+  def javaRDD: JavaRDD[Row] = toJavaRDD
 
   /**
    * Registers this RDD as a temporary table using the given name.  The lifetime of this temporary
@@ -461,14 +471,14 @@ trait DataFrame extends DataFrameSpecificApi with RDDApi[Row] {
    *
    * @group schema
    */
-  override def registerTempTable(tableName: String): Unit
+  def registerTempTable(tableName: String): Unit
 
   /**
    * Saves the contents of this [[DataFrame]] as a parquet file, preserving the schema.
    * Files that are written out using this method can be read back in as a [[DataFrame]]
    * using the `parquetFile` function in [[SQLContext]].
    */
-  override def saveAsParquetFile(path: String): Unit
+  def saveAsParquetFile(path: String): Unit
 
   /**
    * :: Experimental ::
@@ -481,7 +491,7 @@ trait DataFrame extends DataFrameSpecificApi with RDDApi[Row] {
    * be the target of an `insertInto`.
    */
   @Experimental
-  override def saveAsTable(tableName: String): Unit
+  def saveAsTable(tableName: String): Unit
 
   /**
    * :: Experimental ::
@@ -494,7 +504,7 @@ trait DataFrame extends DataFrameSpecificApi with RDDApi[Row] {
    * be the target of an `insertInto`.
    */
   @Experimental
-  override def saveAsTable(
+  def saveAsTable(
       tableName: String,
       dataSourceName: String,
       option: (String, String),
@@ -511,22 +521,22 @@ trait DataFrame extends DataFrameSpecificApi with RDDApi[Row] {
    * be the target of an `insertInto`.
    */
   @Experimental
-  override def saveAsTable(
+  def saveAsTable(
       tableName: String,
       dataSourceName: String,
       options: java.util.Map[String, String]): Unit
 
   @Experimental
-  override def save(path: String): Unit
+  def save(path: String): Unit
 
   @Experimental
-  override def save(
+  def save(
       dataSourceName: String,
       option: (String, String),
       options: (String, String)*): Unit
 
   @Experimental
-  override def save(
+  def save(
       dataSourceName: String,
       options: java.util.Map[String, String]): Unit
 
@@ -535,12 +545,20 @@ trait DataFrame extends DataFrameSpecificApi with RDDApi[Row] {
    * Adds the rows from this RDD to the specified table, optionally overwriting the existing data.
    */
   @Experimental
-  override def insertInto(tableName: String, overwrite: Boolean): Unit
+  def insertInto(tableName: String, overwrite: Boolean): Unit
+
+  /**
+   * :: Experimental ::
+   * Adds the rows from this RDD to the specified table.
+   * Throws an exception if the table already exists.
+   */
+  @Experimental
+  def insertInto(tableName: String): Unit = insertInto(tableName, overwrite = false)
 
   /**
    * Returns the content of the [[DataFrame]] as a RDD of JSON strings.
    */
-  override def toJSON: RDD[String]
+  def toJSON: RDD[String]
 
   ////////////////////////////////////////////////////////////////////////////
   // for Python API
