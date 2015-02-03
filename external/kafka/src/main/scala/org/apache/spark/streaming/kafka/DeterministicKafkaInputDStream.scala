@@ -34,7 +34,7 @@ import org.apache.spark.streaming.dstream._
 
 /** A stream of {@link org.apache.spark.streaming.kafka.KafkaRDD} where
   * each given Kafka topic/partition corresponds to an RDD partition.
-  * The spark configuration spark.streaming.receiver.maxRate gives the maximum number of messages
+  * The spark configuration spark.streaming.kafka.maxRatePerPartition gives the maximum number of messages
   * per second that each '''partition''' will accept.
   * Starting offsets are specified in advance,
   * and this DStream is not responsible for committing offsets,
@@ -60,9 +60,10 @@ class DeterministicKafkaInputDStream[
     @transient ssc_ : StreamingContext,
     val kafkaParams: Map[String, String],
     val fromOffsets: Map[TopicAndPartition, Long],
-    messageHandler: MessageAndMetadata[K, V] => R,
-    maxRetries: Int
+    messageHandler: MessageAndMetadata[K, V] => R
 ) extends InputDStream[R](ssc_) with Logging {
+  val maxRetries = context.sparkContext.getConf.getInt(
+    "spark.streaming.kafka.maxRetries", 1)
 
   protected[streaming] override val checkpointData =
     new DeterministicKafkaInputDStreamCheckpointData
@@ -70,7 +71,8 @@ class DeterministicKafkaInputDStream[
   protected val kc = new KafkaCluster(kafkaParams)
 
   protected val maxMessagesPerPartition: Option[Long] = {
-    val ratePerSec = context.sparkContext.getConf.getInt("spark.streaming.receiver.maxRate", 0)
+    val ratePerSec = context.sparkContext.getConf.getInt(
+      "spark.streaming.kafka.maxRatePerPartition", 0)
     if (ratePerSec > 0) {
       val secsPerBatch = context.graph.batchDuration.milliseconds.toDouble / 1000
       Some((secsPerBatch * ratePerSec).toLong)
@@ -88,7 +90,7 @@ class DeterministicKafkaInputDStream[
     if (o.isLeft) {
       val err = o.left.get.toString
       if (retries <= 0) {
-        throw new Exception(err)
+        throw new SparkException(err)
       } else {
         log.error(err)
         Thread.sleep(kc.config.refreshLeaderBackoffMs)
@@ -99,6 +101,7 @@ class DeterministicKafkaInputDStream[
     }
   }
 
+  // limits the maximum number of messages per partition
   protected def clamp(
     leaderOffsets: Map[TopicAndPartition, LeaderOffset]): Map[TopicAndPartition, LeaderOffset] = {
     maxMessagesPerPartition.map { mmp =>

@@ -244,7 +244,6 @@ object KafkaUtils {
    * @param messageHandler function for translating each message into the desired type
    * @param fromOffsets per-topic/partition Kafka offsets defining the (inclusive)
    *  starting point of the stream
-   * @param maxRetries maximum number of times in a row to retry getting leaders' offsets
    */
   @Experimental
   def createNewStream[
@@ -256,11 +255,10 @@ object KafkaUtils {
       ssc: StreamingContext,
       kafkaParams: Map[String, String],
       fromOffsets: Map[TopicAndPartition, Long],
-      messageHandler: MessageAndMetadata[K, V] => R,
-      maxRetries: Int
+      messageHandler: MessageAndMetadata[K, V] => R
   ): InputDStream[R] = {
     new DeterministicKafkaInputDStream[K, V, U, T, R](
-      ssc, kafkaParams, fromOffsets, messageHandler, maxRetries)
+      ssc, kafkaParams, fromOffsets, messageHandler)
   }
 
   /**
@@ -316,7 +314,7 @@ object KafkaUtils {
           (tp, lo.offset)
       }
       new DeterministicKafkaInputDStream[K, V, U, T, (K, V)](
-        ssc, kafkaParams, fromOffsets, messageHandler, 1)
+        ssc, kafkaParams, fromOffsets, messageHandler)
     }).fold(
       errs => throw new SparkException(errs.mkString("\n")),
       ok => ok
