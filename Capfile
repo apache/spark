@@ -12,7 +12,7 @@ set :keep_releases, 5
 
 DATANODES = (2..47).map {|i| "dn%02d.chi.shopify.com" % i }
 OTHERNODES = ["hadoop-etl1.chi.shopify.com", "spark-etl1.chi.shopify.com", "reports-reportify-etl3.chi.shopify.com", "reports-reportify-skydb4.chi.shopify.com", "platfora2.chi.shopify.com"]
-BROKEN = ["dn16.chi.shopify.com"] # Node is down don't try to send code
+BROKEN = ["dn09.chi.shopify.com", "dn16.chi.shopify.com"] # Node is down don't try to send code
 
 task :production do
   role :app, *(DATANODES + OTHERNODES - BROKEN)
@@ -34,7 +34,7 @@ namespace :deploy do
     existing_releases.reject! {|element| element.end_with?("spark-assembly-latest.jar")}
     if existing_releases.count > count
       existing_releases.shift(existing_releases.count - count).each do |path|
-        run "hdfs dfs -rm -skipTrash #{path}"
+        run "hdfs dfs -rm #{path}"
       end
     end
   end
