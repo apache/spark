@@ -1483,7 +1483,11 @@ class SQLContext(object):
         >>> sorted(df.collect()) == sorted(df2.collect())
         True
         """
-        jdf = self._ssql_ctx.parquetFile(*path)
+        gateway = self._sc._gateway
+        jpaths = gateway.new_array(gateway.jvm.java.lang.String, len(paths))
+        for i in range(0, len(paths)):
+            jpaths[i] = paths[i]
+        jdf = self._ssql_ctx.parquetFile(jpaths)
         return DataFrame(jdf, self)
 
     def jsonFile(self, path, schema=None, samplingRatio=1.0):
