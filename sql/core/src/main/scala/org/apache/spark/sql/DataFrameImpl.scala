@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.util.{List => JList}
-
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.collection.JavaConversions._
@@ -42,13 +40,17 @@ import org.apache.spark.util.Utils
 
 
 /**
- * See [[DataFrame]] for documentation.
+ * Internal implementation of [[DataFrame]]. Users of the API should use [[DataFrame]] directly.
  */
 private[sql] class DataFrameImpl protected[sql](
     override val sqlContext: SQLContext,
     val queryExecution: SQLContext#QueryExecution)
   extends DataFrame {
 
+  /**
+   * A constructor that automatically analyzes the logical plan. This reports error eagerly
+   * as the [[DataFrame]] is constructed.
+   */
   def this(sqlContext: SQLContext, logicalPlan: LogicalPlan) = {
     this(sqlContext, {
       val qe = sqlContext.executePlan(logicalPlan)
