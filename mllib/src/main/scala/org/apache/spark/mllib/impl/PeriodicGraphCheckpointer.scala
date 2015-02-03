@@ -34,10 +34,35 @@ import org.apache.spark.storage.StorageLevel
  * checkpoint files are removed.
  *
  * Users should call [[PeriodicGraphCheckpointer.updateGraph()]] when a new graph has been created,
- * before the graph has been materialized.
+ * before the graph has been materialized.  When called, this does the following:
+ *  - Persist new graph (if not yet persisted), and put in queue of persisted graphs.
+ *  - Unpersist graphs from queue until there are at most 3 persisted graphs.
+ *  - If using checkpointing and the checkpoint interval has been reached,
+ *     - Checkpoint the new graph, and put in a queue of checkpointed graphs.
+ *     - Remove older checkpoints.
  *
- * NOTE: This class should NOT be copied (since copies may conflict on which Graphs should be
- *       checkpointed).
+ * WARNINGS:
+ *  - This class should NOT be copied (since copies may conflict on which Graphs should be
+ *    checkpointed).
+ *  - This class removes checkpoint files once later graphs have been checkpointed.
+ *    However, references to the older graphs will still return isCheckpointed = true.
+ *
+ * Example usage:
+ *  val (graph1, graph2, graph3, ...) = ...
+ *  val cp = new PeriodicGraphCheckpointer(graph, dir, 2)
+ *  // persisted: graph1
+ *  cp.updateGraph(graph2)
+ *  // persisted: graph1, graph2
+ *  // checkpointed: graph2
+ *  cp.updateGraph(graph3)
+ *  // persisted: graph1, graph2, graph3
+ *  // checkpointed: graph2
+ *  cp.updateGraph(graph4)
+ *  // persisted: graph2, graph3, graph4
+ *  // checkpointed: graph4
+ *  cp.updateGraph(graph5)
+ *  // persisted: graph3, graph4, graph5
+ *  // checkpointed: graph4
  *
  * @param currentGraph  Initial graph
  * @param checkpointDir The directory for storing checkpoint files
@@ -82,7 +107,6 @@ private[mllib] class PeriodicGraphCheckpointer[VD, ED](
    */
   def updateGraph(newGraph: Graph[VD, ED]): Unit = {
     if (newGraph.vertices.getStorageLevel == StorageLevel.NONE) {
-      println(s"PeriodicGraphCheckpointer.updateGraph: persisting ${newGraph.vertices.id}")
       newGraph.persist()
     }
     persistedQueue.enqueue(newGraph)
@@ -91,8 +115,6 @@ private[mllib] class PeriodicGraphCheckpointer[VD, ED](
     // before the graph has been materialized.
     while (persistedQueue.size > 3) {
       val graphToUnpersist = persistedQueue.dequeue()
-      println(s"PeriodicGraphCheckpointer.updateGraph:" +
-        s" unpersisting ${graphToUnpersist.vertices.id}")
       graphToUnpersist.unpersist(blocking = false)
     }
     updateCount += 1
@@ -100,7 +122,6 @@ private[mllib] class PeriodicGraphCheckpointer[VD, ED](
     // Handle checkpointing (after persisting)
     if ((updateCount % checkpointInterval) == 0 && sc.getCheckpointDir.nonEmpty) {
       // Add new checkpoint before removing old checkpoints.
-      println(s"PeriodicGraphCheckpointer.updateGraph: checkpointing ${newGraph.vertices.id}")
       newGraph.checkpoint()
       checkpointQueue.enqueue(newGraph)
       // Remove checkpoints before the latest one.
@@ -131,17 +152,13 @@ private[mllib] class PeriodicGraphCheckpointer[VD, ED](
    */
   private def removeCheckpointFile(): Unit = {
     val old = checkpointQueue.dequeue()
-    println(s"PeriodicGraphCheckpointer.updateGraph: removing checkpoint ${old.vertices.id}")
     // Since the old checkpoint is not deleted by Spark, we manually delete it.
     val fs = FileSystem.get(sc.hadoopConfiguration)
     old.getCheckpointFiles.foreach { checkpointFile =>
       try {
-        println(s"  --removing file: $checkpointFile")
         fs.delete(new Path(checkpointFile), true)
       } catch {
         case e: Exception =>
-          println("PeriodicGraphCheckpointer could not remove old checkpoint file: " +
-            checkpointFile)
           logWarning("PeriodicGraphCheckpointer could not remove old checkpoint file: " +
             checkpointFile)
       }

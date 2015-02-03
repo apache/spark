@@ -36,8 +36,6 @@ import org.apache.spark.util.BoundedPriorityQueue
 @DeveloperApi
 abstract class LDAModel private[clustering] {
 
-  import LDA._
-
   /** Number of topics */
   def k: Int
 
@@ -163,8 +161,6 @@ abstract class LDAModel private[clustering] {
 @DeveloperApi
 class LocalLDAModel private[clustering] (
     private val topics: Matrix) extends LDAModel with Serializable {
-
-  import LDA._
 
   override def k: Int = topics.numCols
 

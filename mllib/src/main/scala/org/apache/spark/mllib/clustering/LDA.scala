@@ -66,8 +66,6 @@ class LDA private (
     private var checkpointDir: Option[String],
     private var checkpointInterval: Int) extends Logging {
 
-  import LDA._
-
   def this() = this(k = 10, maxIterations = 20, docConcentration = -1, topicConcentration = -1,
     seed = Utils.random.nextLong(), checkpointDir = None, checkpointInterval = 10)
 
@@ -311,7 +309,7 @@ private[clustering] object LDA {
   def isTermVertex(v: (VertexId, _)): Boolean = v._1 < 0
 
   /**
-   * State for EM algorithm: data + parameter graph, plus algorithm parameters.
+   * Optimizer for EM algorithm which stores data + parameter graph, plus algorithm parameters.
    *
    * @param graph  EM graph, storing current parameter estimates in vertex descriptors and
    *               data (token counts) in edge descriptors.
