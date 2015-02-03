@@ -104,6 +104,7 @@
     <module>external/flume-sink</module>
     <module>external/flume-assembly</module>
     <module>external/mqtt</module>
+    <module>external/mqtt-assembly</module>
     <module>external/zeromq</module>
     <module>examples</module>
     <module>repl</module>
