@@ -12,7 +12,7 @@ set :keep_releases, 5
 
 DATANODES = (2..47).map {|i| "dn%02d.chi.shopify.com" % i }
 OTHERNODES = ["hadoop-etl1.chi.shopify.com", "spark-etl1.chi.shopify.com", "reports-reportify-etl3.chi.shopify.com", "reports-reportify-skydb4.chi.shopify.com", "platfora2.chi.shopify.com"]
-BROKEN = ["dn16.chi.shopify.com"] # Node is down don't try to send code
+BROKEN = ["dn09.chi.shopify.com", "dn16.chi.shopify.com"] # Node is down don't try to send code
 
 task :production do
   role :app, *(DATANODES + OTHERNODES - BROKEN)
@@ -26,6 +26,7 @@ namespace :deploy do
     run "ls -1dt /u/apps/spark/releases/* | tail -n +#{count + 1} | xargs rm -rf"
   end
 
+  #this needs to be re-enabled at some point. the problem with this is that if you test multiple SHAs of spark, you are potentially deleting production jars :/
   task :clear_hdfs_executables, :roles => :uploader, :on_no_matching_servers => :continue do
     count = fetch(:keep_releases, 5).to_i
     existing_releases = capture "hdfs dfs -ls #{fetch(:spark_jar_path)}/spark-assembly-*.jar | sort -k6 | sed 's/\\s\\+/ /g' | cut -d' ' -f8"
@@ -34,13 +35,19 @@ namespace :deploy do
     existing_releases.reject! {|element| element.end_with?("spark-assembly-latest.jar")}
     if existing_releases.count > count
       existing_releases.shift(existing_releases.count - count).each do |path|
-        run "hdfs dfs -rm -skipTrash #{path}"
+        run "hdfs dfs -rm #{path}"
       end
     end
   end
 
   task :upload_to_hdfs, :roles => :uploader, :on_no_matching_servers => :continue do
-    run "hdfs dfs -copyFromLocal -f /u/apps/spark/current/lib/spark-assembly-*.jar #{fetch(:spark_jar_path)}/spark-assembly-#{fetch(:sha)}.jar"
+    target_sha = ENV['SHA'] || fetch(:sha, `git rev-parse HEAD`.gsub(/\s/,""))
+    run "hdfs dfs -copyFromLocal -f /u/apps/spark/current/lib/spark-assembly-*.jar hdfs://nn01.chi.shopify.com/user/sparkles/spark-assembly-#{target_sha}.jar"
+  end
+
+  task :test_spark_jar, :roles => :uploader, :on_no_master_servers => :continue do
+    target_sha = ENV['SHA'] || fetch(:sha, `git rev-parse HEAD`.gsub(/\s/,""))
+    run "sudo -u azkaban sh -c '. /u/virtualenvs/starscream/bin/activate && cd /u/apps/starscream/current && PYTHON_ENV=production SPARK_OPTS=\"spark.yarn.jar=hdfs://nn01.chi.shopify.com:8020/user/sparkles/spark-assembly-#{target_sha}.jar\" exec python shopify/tools/canary.py'"
   end
 
   task :prevent_gateway do
@@ -72,8 +79,7 @@ namespace :deploy do
 
   after 'deploy:initialize_variables', 'deploy:prevent_gateway' # capistrano recipes packserv deploy always uses a gateway
   before  'deploy:symlink_current', 'deploy:symlink_shared'
-  before 'deploy:upload_to_hdfs', 'deploy:clear_hdfs_executables'
-  after  'deploy:download', 'deploy:upload_to_hdfs'
+  after  'deploy:download', 'deploy:upload_to_hdfs', 'deploy:test_spark_jar'
   after 'deploy:restart', 'deploy:cleanup'
   after 'deploy:cleanup', 'deploy:remind_us_to_update_starscream'
 end
