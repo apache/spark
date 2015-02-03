@@ -280,11 +280,11 @@ class DataFrameSuite extends QueryTest {
   }
 
   test("udf") {
-    val foo = (a: Int, b: String) => a.toString + b
+    val foo = defineUDF((a: Int, b: String) => a.toString + b)
 
     checkAnswer(
       // SELECT *, foo(key, value) FROM testData
-      testData.select($"*", callUDF(foo, 'key, 'value)).limit(3),
+      testData.select($"*", foo('key, 'value)).limit(3),
       Row(1, "1", "11") :: Row(2, "2", "22") :: Row(3, "3", "33") :: Nil
     )
   }
