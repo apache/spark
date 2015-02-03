@@ -61,10 +61,10 @@ private[hive] object HiveShim {
   val version = "0.12.0"
 
   def getTableDesc(
-    serdeClass: Class[_ <: Deserializer],
-    inputFormatClass: Class[_ <: InputFormat[_, _]],
-    outputFormatClass: Class[_],
-    properties: Properties) = {
+                    serdeClass: Class[_ <: Deserializer],
+                    inputFormatClass: Class[_ <: InputFormat[_, _]],
+                    outputFormatClass: Class[_],
+                    properties: Properties) = {
     new TableDesc(serdeClass, inputFormatClass, outputFormatClass, properties)
   }
 
@@ -187,7 +187,7 @@ private[hive] object HiveShim {
 
   def getStatsSetupConstRawDataSize = StatsSetupConst.RAW_DATA_SIZE
 
-  def createDefaultDBIfNeeded(context: HiveContext) = {  }
+  def createDefaultDBIfNeeded(context: HiveContext) = {}
 
   def getCommandProcessor(cmd: Array[String], conf: HiveConf) = {
     CommandProcessorFactory.get(cmd(0), conf)
@@ -208,7 +208,7 @@ private[hive] object HiveShim {
 
   def getDataLocationPath(p: Partition) = p.getPartitionPath
 
-  def getAllPartitionsOf(client: Hive, tbl: Table) =  client.getAllPartitionsForPruner(tbl)
+  def getAllPartitionsOf(client: Hive, tbl: Table) = client.getAllPartitionsForPruner(tbl)
 
   def compatibilityBlackList = Seq(
     "decimal_.*",
@@ -250,6 +250,7 @@ private[hive] object HiveShim {
   def prepareWritable(w: Writable): Writable = {
     w
   }
+}
 
 class ShimFileSinkDesc(var dir: String, var tableInfo: TableDesc, var compressed: Boolean)
   extends FileSinkDesc(dir, tableInfo, compressed) {
