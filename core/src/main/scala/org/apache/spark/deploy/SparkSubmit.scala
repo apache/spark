@@ -36,7 +36,6 @@ import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.resolver.{ChainResolver, IBiblioResolver}
 
-import org.apache.spark.Logging
 import org.apache.spark.executor.ExecutorURLClassLoader
 import org.apache.spark.util.Utils
 
@@ -410,8 +409,8 @@ object SparkSubmit {
       case e: ClassNotFoundException =>
         e.printStackTrace(printStream)
         if (childMainClass.contains("thriftserver")) {
-          println(s"Failed to load main class $childMainClass.")
-          println("You need to build Spark with -Phive and -Phive-thriftserver.")
+          printStream.println(s"Failed to load main class $childMainClass.")
+          printStream.println("You need to build Spark with -Phive and -Phive-thriftserver.")
         }
         System.exit(CLASS_NOT_FOUND_EXIT_STATUS)
     }
@@ -502,7 +501,9 @@ object SparkSubmit {
 }
 
 /** Provides utility functions to be used inside SparkSubmit. */
-private[spark] object SparkSubmitUtils extends Logging {
+private[spark] object SparkSubmitUtils {
+
+  private val printStream = SparkSubmit.printStream
 
   /**
    * Represents a Maven Coordinate
@@ -559,7 +560,7 @@ private[spark] object SparkSubmitUtils extends Logging {
         brr.setRoot(repo)
         brr.setName(s"repo-${i + 1}")
         cr.add(brr)
-        logInfo(s"$repo added as a remote repository with the name: ${brr.getName}")
+        printStream.println(s"$repo added as a remote repository with the name: ${brr.getName}")
       }
     }
     cr
@@ -593,7 +594,7 @@ private[spark] object SparkSubmitUtils extends Logging {
       val ri = ModuleRevisionId.newInstance(mvn.groupId, mvn.artifactId, mvn.version)
       val dd = new DefaultDependencyDescriptor(ri, false, false)
       dd.addDependencyConfiguration(ivyConfName, ivyConfName)
-      logInfo(s"${dd.getDependencyId} added as a dependency")
+      printStream.println(s"${dd.getDependencyId} added as a dependency")
       md.addDependency(dd)
     }
   }
@@ -633,8 +634,9 @@ private[spark] object SparkSubmitUtils extends Logging {
           ivySettings.setDefaultCache(new File(alternateIvyCache, "cache"))
           new File(alternateIvyCache, "jars")
         }
-      logInfo(s"Ivy Default Cache set to: ${ivySettings.getDefaultCache.getAbsolutePath}")
-      logInfo(s"The jars for the packages stored in: $packagesDirectory")
+      printStream.println(
+        s"Ivy Default Cache set to: ${ivySettings.getDefaultCache.getAbsolutePath}")
+      printStream.println(s"The jars for the packages stored in: $packagesDirectory")
       // create a pattern matcher
       ivySettings.addMatcher(new GlobPatternMatcher)
       // create the dependency resolvers
@@ -679,7 +681,7 @@ private[spark] object SparkSubmitUtils extends Logging {
       rr.getDependencies.toArray.foreach { case dependency: IvyNode =>
         var logMsg = s"$dependency will be retrieved as a dependency for:"
         dependency.getAllCallers.foreach (caller => logMsg += s"\n\t$caller")
-        logInfo(logMsg)
+        printStream.println(logMsg)
       }
       // retrieve all resolved dependencies
       ivy.retrieve(rr.getModuleDescriptor.getModuleRevisionId,
