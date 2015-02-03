@@ -2565,6 +2565,8 @@ class Column(DataFrame):
     def cast(self, dataType):
         """ Convert the column into type `dataType`
 
+        >>> df.select(df.age.cast("string").As('ages')).collect()
+        [Row(ages=u'2'), Row(ages=u'5')]
         >>> df.select(df.age.cast(StringType()).As('ages')).collect()
         [Row(ages=u'2'), Row(ages=u'5')]
         """
@@ -2573,8 +2575,12 @@ class Column(DataFrame):
             ssql_ctx = sc._jvm.SQLContext(sc._jsc.sc())
         else:
             ssql_ctx = self.sql_ctx._ssql_ctx
-        jdt = ssql_ctx.parseDataType(dataType.json())
-        return Column(self._jc.cast(jdt), self.sql_ctx)
+        if isinstance(dataType, basestring):
+            jc = self._jc.cast(dataType)
+        elif isinstance(dataType, DataType):
+            jdt = ssql_ctx.parseDataType(dataType.json())
+            jc = self._jc.cast(jdt)
+        return Column(jc, self.sql_ctx)
 
 
 def _aggregate_func(name, doc=""):
@@ -2593,9 +2599,9 @@ class Dsl(object):
     A collections of builtin aggregators
     """
     DSLS = {
-        'lit': 'Creates a [[Column]] of literal value.',
-        'col': 'Returns a [[Column]] based on the given column name.',
-        'column': 'Returns a [[Column]] based on the given column name.',
+        'lit': 'Creates a :class:`Column` of literal value.',
+        'col': 'Returns a :class:`Column` based on the given column name.',
+        'column': 'Returns a :class:`Column` based on the given column name.',
         'upper': 'Converts a string expression to upper case.',
         'lower': 'Converts a string expression to upper case.',
         'sqrt': 'Computes the square root of the specified float value.',
