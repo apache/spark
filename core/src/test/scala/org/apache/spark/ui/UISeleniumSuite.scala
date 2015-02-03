@@ -46,6 +46,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
       .setMaster("local")
       .setAppName("test")
       .set("spark.ui.enabled", "true")
+      .set("spark.ui.port", "0")
     val sc = new SparkContext(conf)
     assert(sc.ui.isDefined)
     sc
@@ -91,7 +92,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
       }
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
         go to (sc.ui.get.appUIAddress.stripSuffix("/") + "/stages")
-        find(id("active")).get.text should be("Active Stages (0)")
+        find(id("active")) should be(None)  // Since we hide empty tables
         find(id("failed")).get.text should be("Failed Stages (1)")
       }
 
@@ -103,7 +104,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
       }
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
         go to (sc.ui.get.appUIAddress.stripSuffix("/") + "/stages")
-        find(id("active")).get.text should be("Active Stages (0)")
+        find(id("active")) should be(None)  // Since we hide empty tables
         // The failure occurs before the stage becomes active, hence we should still show only one
         // failed stage, not two:
         find(id("failed")).get.text should be("Failed Stages (1)")
@@ -165,13 +166,14 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
 
   test("job progress bars should handle stage / task failures") {
     withSpark(newSparkContext()) { sc =>
-      val data = sc.parallelize(Seq(1, 2, 3)).map(identity).groupBy(identity)
+      val data = sc.parallelize(Seq(1, 2, 3), 1).map(identity).groupBy(identity)
       val shuffleHandle =
         data.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleHandle
       // Simulate fetch failures:
       val mappedData = data.map { x =>
         val taskContext = TaskContext.get
-        if (taskContext.attemptNumber == 0) {  // Cause this stage to fail on its first attempt.
+        if (taskContext.taskAttemptId() == 1) {
+          // Cause the post-shuffle stage to fail on its first attempt with a single task failure
           val env = SparkEnv.get
           val bmAddress = env.blockManager.blockManagerId
           val shuffleId = shuffleHandle.shuffleId
