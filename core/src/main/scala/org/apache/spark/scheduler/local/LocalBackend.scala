@@ -48,6 +48,8 @@ private[spark] class LocalActor(
     private val totalCores: Int)
   extends Actor with ActorLogReceive with Logging {
 
+  import context.dispatcher   // to use Akka's scheduler.scheduleOnce()
+
   private var freeCores = totalCores
 
   private val localExecutorId = SparkContext.DRIVER_IDENTIFIER
