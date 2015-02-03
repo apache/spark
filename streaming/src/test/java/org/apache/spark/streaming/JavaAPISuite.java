@@ -306,7 +306,17 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
   @SuppressWarnings("unchecked")
   @Test
-  public void testReduceByWindow() {
+  public void testReduceByWindowWithInverse() {
+    testReduceByWindow(true);
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void testReduceByWindowWithoutInverse() {
+    testReduceByWindow(false);
+  }
+
+  private void testReduceByWindow(boolean withInverse) {
     List<List<Integer>> inputData = Arrays.asList(
         Arrays.asList(1,2,3),
         Arrays.asList(4,5,6),
@@ -319,8 +329,14 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         Arrays.asList(24));
 
     JavaDStream<Integer> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
-    JavaDStream<Integer> reducedWindowed = stream.reduceByWindow(new IntegerSum(),
+    JavaDStream<Integer> reducedWindowed = null;
+    if (withInverse) {
+      reducedWindowed = stream.reduceByWindow(new IntegerSum(),
         new IntegerDifference(), new Duration(2000), new Duration(1000));
+    } else {
+      reducedWindowed = stream.reduceByWindow(new IntegerSum(),
+        new Duration(2000), new Duration(1000));
+    }
     JavaTestUtils.attachTestOutputStream(reducedWindowed);
     List<List<Integer>> result = JavaTestUtils.runStreams(ssc, 4, 4);
 
@@ -1753,7 +1769,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
   @SuppressWarnings("unchecked")
   @Test
   public void testTextFileStream() throws IOException {
-    File testDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"));
+    File testDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
     List<List<String>> expected = fileTestPrepare(testDir);
 
     JavaDStream<String> input = ssc.textFileStream(testDir.toString());
@@ -1766,7 +1782,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
   @SuppressWarnings("unchecked")
   @Test
   public void testFileStream() throws IOException {
-    File testDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"));
+    File testDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
     List<List<String>> expected = fileTestPrepare(testDir);
 
     JavaPairInputDStream<LongWritable, Text> inputStream = ssc.fileStream(

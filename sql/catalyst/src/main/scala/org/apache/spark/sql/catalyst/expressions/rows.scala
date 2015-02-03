@@ -114,7 +114,6 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
   }
 
   override def getString(i: Int): String = {
-    if (values(i) == null) sys.error("Failed to check null bit for primitive String value.")
     values(i).asInstanceOf[String]
   }
 
