@@ -39,8 +39,6 @@ class PeriodicGraphCheckpointerSuite extends FunSuite with MLlibTestSparkContext
 
     val graph1 = createGraph(sc)
     val checkpointer = new PeriodicGraphCheckpointer(graph1, None, 10)
-    graph1.vertices.count()
-    graph1.edges.count()
     graphsToCheck = graphsToCheck :+ GraphToCheck(graph1, 1)
     checkPersistence(graphsToCheck, 1)
 
@@ -48,8 +46,6 @@ class PeriodicGraphCheckpointerSuite extends FunSuite with MLlibTestSparkContext
     while (iteration < 9) {
       val graph = createGraph(sc)
       checkpointer.updateGraph(graph)
-      graph.vertices.count()
-      graph.edges.count()
       graphsToCheck = graphsToCheck :+ GraphToCheck(graph, iteration)
       checkPersistence(graphsToCheck, iteration)
       iteration += 1
@@ -64,8 +60,8 @@ class PeriodicGraphCheckpointerSuite extends FunSuite with MLlibTestSparkContext
 
     val graph1 = createGraph(sc)
     val checkpointer = new PeriodicGraphCheckpointer(graph1, Some(path), checkpointInterval)
-    graph1.edges.map(_.attr).count()
-    graph1.vertices.map(_._2).count()
+    graph1.edges.count()
+    graph1.vertices.count()
     graphsToCheck = graphsToCheck :+ GraphToCheck(graph1, 1)
     checkCheckpoint(graphsToCheck, 1, checkpointInterval)
 
@@ -73,8 +69,8 @@ class PeriodicGraphCheckpointerSuite extends FunSuite with MLlibTestSparkContext
     while (iteration < 9) {
       val graph = createGraph(sc)
       checkpointer.updateGraph(graph)
-      graph.vertices.map(_._2).count()
-      graph.edges.map(_.attr).count()
+      graph.vertices.count()
+      graph.edges.count()
       graphsToCheck = graphsToCheck :+ GraphToCheck(graph, iteration)
       checkCheckpoint(graphsToCheck, iteration, checkpointInterval)
       iteration += 1
