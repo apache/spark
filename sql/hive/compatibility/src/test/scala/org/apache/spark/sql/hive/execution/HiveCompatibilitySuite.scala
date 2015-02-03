@@ -36,8 +36,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
   private val originalTimeZone = TimeZone.getDefault
   private val originalLocale = Locale.getDefault
-  private val originalColumnBatchSize = TestHive.columnBatchSize
-  private val originalInMemoryPartitionPruning = TestHive.inMemoryPartitionPruning
+  private val originalColumnBatchSize = TestHive.conf.columnBatchSize
+  private val originalInMemoryPartitionPruning = TestHive.conf.inMemoryPartitionPruning
 
   def testCases = hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
 
@@ -89,7 +89,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "authorization_5",
     "keyword_1",
     "misc_json",
-    "create_like_tbl_props",
     "load_overwrite",
     "alter_table_serde2",
     "alter_table_not_sorted",
@@ -100,9 +99,9 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "protectmode2",
     //"describe_table",
     "describe_comment_nonascii",
-    "udf5",
-    "udf_java_method",
+
     "create_merge_compressed",
+    "create_view",
     "create_view_partitioned",
     "database_location",
     "database_properties",
@@ -112,7 +111,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
     // Weird DDL differences result in failures on jenkins.
     "create_like2",
-    "create_view_translate",
     "partitions_json",
 
     // This test is totally fine except that it includes wrong queries and expects errors, but error
@@ -221,16 +219,11 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "orc_predicate_pushdown",
 
     // Requires precision decimal support:
-    "decimal_1",
-    "udf_pmod",
     "udf_when",
     "udf_case",
-    "udf_to_double",
-    "udf_to_float",
 
     // Needs constant object inspectors
     "udf_round",
-    "udf7",
 
     // Sort with Limit clause causes failure.
     "ctas",
@@ -351,10 +344,12 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "count",
     "cp_mj_rc",
     "create_insert_outputformat",
+    "create_like_tbl_props",
     "create_like_view",
     "create_nested_type",
     "create_skewed_table1",
     "create_struct_table",
+    "create_view_translate",
     "cross_join",
     "cross_product_check_1",
     "cross_product_check_2",
@@ -409,6 +404,13 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "groupby11",
     "groupby12",
     "groupby1_limit",
+    "groupby_grouping_id1",
+    "groupby_grouping_id2",
+    "groupby_grouping_sets1",
+    "groupby_grouping_sets2",
+    "groupby_grouping_sets3",
+    "groupby_grouping_sets4",
+    "groupby_grouping_sets5",
     "groupby1_map",
     "groupby1_map_nomap",
     "groupby1_map_skew",
@@ -785,6 +787,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udaf_covar_samp",
     "udaf_histogram_numeric",
     "udf2",
+    "udf5",
     "udf6",
     "udf7",
     "udf8",

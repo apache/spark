@@ -132,13 +132,15 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
                   <span class="additional-metric-title">Task Deserialization Time</span>
                 </span>
               </li>
-              <li>
-                <span data-toggle="tooltip"
-                      title={ToolTips.GC_TIME} data-placement="right">
-                  <input type="checkbox" name={TaskDetailsClassNames.GC_TIME}/>
-                  <span class="additional-metric-title">GC Time</span>
-                </span>
-              </li>
+              {if (hasShuffleRead) {
+                <li>
+                  <span data-toggle="tooltip"
+                        title={ToolTips.SHUFFLE_READ_BLOCKED_TIME} data-placement="right">
+                    <input type="checkbox" name={TaskDetailsClassNames.SHUFFLE_READ_BLOCKED_TIME}/>
+                    <span class="additional-metric-title">Shuffle Read Blocked Time</span>
+                  </span>
+                </li>
+              }}
               <li>
                 <span data-toggle="tooltip"
                       title={ToolTips.RESULT_SERIALIZATION_TIME} data-placement="right">
@@ -168,13 +170,18 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           ("Executor ID / Host", ""), ("Launch Time", ""), ("Duration", ""),
           ("Scheduler Delay", TaskDetailsClassNames.SCHEDULER_DELAY),
           ("Task Deserialization Time", TaskDetailsClassNames.TASK_DESERIALIZATION_TIME),
-          ("GC Time", TaskDetailsClassNames.GC_TIME),
+          ("GC Time", ""),
           ("Result Serialization Time", TaskDetailsClassNames.RESULT_SERIALIZATION_TIME),
           ("Getting Result Time", TaskDetailsClassNames.GETTING_RESULT_TIME)) ++
         {if (hasAccumulators) Seq(("Accumulators", "")) else Nil} ++
         {if (hasInput) Seq(("Input", "")) else Nil} ++
         {if (hasOutput) Seq(("Output", "")) else Nil} ++
-        {if (hasShuffleRead) Seq(("Shuffle Read", ""))  else Nil} ++
+        {if (hasShuffleRead) {
+          Seq(("Shuffle Read Blocked Time", TaskDetailsClassNames.SHUFFLE_READ_BLOCKED_TIME),
+            ("Shuffle Read", ""))
+        } else {
+          Nil
+        }} ++
         {if (hasShuffleWrite) Seq(("Write Time", ""), ("Shuffle Write", "")) else Nil} ++
         {if (hasBytesSpilled) Seq(("Shuffle Spill (Memory)", ""), ("Shuffle Spill (Disk)", ""))
           else Nil} ++
@@ -278,6 +285,12 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           }
           val outputQuantiles = <td>Output</td> +: getFormattedSizeQuantiles(outputSizes)
 
+          val shuffleReadBlockedTimes = validTasks.map { case TaskUIData(_, metrics, _) =>
+            metrics.get.shuffleReadMetrics.map(_.fetchWaitTime).getOrElse(0L).toDouble
+          }
+          val shuffleReadBlockedQuantiles = <td>Shuffle Read Blocked Time</td> +:
+            getFormattedTimeQuantiles(shuffleReadBlockedTimes)
+
           val shuffleReadSizes = validTasks.map { case TaskUIData(_, metrics, _) =>
             metrics.get.shuffleReadMetrics.map(_.remoteBytesRead).getOrElse(0L).toDouble
           }
@@ -308,14 +321,21 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             <tr class={TaskDetailsClassNames.TASK_DESERIALIZATION_TIME}>
               {deserializationQuantiles}
             </tr>
-            <tr class={TaskDetailsClassNames.GC_TIME}>{gcQuantiles}</tr>,
+            <tr>{gcQuantiles}</tr>,
             <tr class={TaskDetailsClassNames.RESULT_SERIALIZATION_TIME}>
               {serializationQuantiles}
             </tr>,
             <tr class={TaskDetailsClassNames.GETTING_RESULT_TIME}>{gettingResultQuantiles}</tr>,
             if (hasInput) <tr>{inputQuantiles}</tr> else Nil,
             if (hasOutput) <tr>{outputQuantiles}</tr> else Nil,
-            if (hasShuffleRead) <tr>{shuffleReadQuantiles}</tr> else Nil,
+            if (hasShuffleRead) {
+              <tr class={TaskDetailsClassNames.SHUFFLE_READ_BLOCKED_TIME}>
+                {shuffleReadBlockedQuantiles}
+              </tr>
+              <tr>{shuffleReadQuantiles}</tr>
+            } else {
+              Nil
+            },
             if (hasShuffleWrite) <tr>{shuffleWriteQuantiles}</tr> else Nil,
             if (hasBytesSpilled) <tr>{memoryBytesSpilledQuantiles}</tr> else Nil,
             if (hasBytesSpilled) <tr>{diskBytesSpilledQuantiles}</tr> else Nil)
@@ -384,6 +404,11 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         .map(m => s"${Utils.bytesToString(m.bytesWritten)}")
         .getOrElse("")
 
+      val maybeShuffleReadBlockedTime = metrics.flatMap(_.shuffleReadMetrics).map(_.fetchWaitTime)
+      val shuffleReadBlockedTimeSortable = maybeShuffleReadBlockedTime.map(_.toString).getOrElse("")
+      val shuffleReadBlockedTimeReadable =
+        maybeShuffleReadBlockedTime.map(ms => UIUtils.formatDuration(ms)).getOrElse("")
+
       val maybeShuffleRead = metrics.flatMap(_.shuffleReadMetrics).map(_.remoteBytesRead)
       val shuffleReadSortable = maybeShuffleRead.map(_.toString).getOrElse("")
       val shuffleReadReadable = maybeShuffleRead.map(Utils.bytesToString).getOrElse("")
@@ -429,7 +454,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             class={TaskDetailsClassNames.TASK_DESERIALIZATION_TIME}>
           {UIUtils.formatDuration(taskDeserializationTime.toLong)}
         </td>
-        <td sorttable_customkey={gcTime.toString} class={TaskDetailsClassNames.GC_TIME}>
+        <td sorttable_customkey={gcTime.toString}>
           {if (gcTime > 0) UIUtils.formatDuration(gcTime) else ""}
         </td>
         <td sorttable_customkey={serializationTime.toString}
@@ -456,6 +481,10 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           </td>
         }}
         {if (hasShuffleRead) {
+           <td sorttable_customkey={shuffleReadBlockedTimeSortable}
+             class={TaskDetailsClassNames.SHUFFLE_READ_BLOCKED_TIME}>
+             {shuffleReadBlockedTimeReadable}
+           </td>
            <td sorttable_customkey={shuffleReadSortable}>
              {shuffleReadReadable}
            </td>

@@ -62,7 +62,7 @@ object LinearDataGenerator {
    * @param nPoints Number of points in sample.
    * @param seed Random seed
    * @param eps Epsilon scaling factor.
-   * @return
+   * @return Seq of input.
    */
   def generateLinearInput(
       intercept: Double,

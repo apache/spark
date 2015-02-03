@@ -42,7 +42,7 @@
     </dependency>
 
     <dependency>
-      <groupId>com.codahale.metrics</groupId>
+      <groupId>io.dropwizard.metrics</groupId>
       <artifactId>metrics-ganglia</artifactId>
     </dependency>
   </dependencies>
