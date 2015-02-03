@@ -311,7 +311,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   // Note that HiveUDFs will be overridden by functions registered in this context.
   @transient
   override protected[sql] lazy val functionRegistry =
-    new HiveFunctionRegistry with OverrideFunctionRegistry
+    new HiveFunctionRegistry with OverrideFunctionRegistry {
+      def caseSensitive = false
+    }
 
   /* An analyzer that uses the Hive metastore. */
   @transient
