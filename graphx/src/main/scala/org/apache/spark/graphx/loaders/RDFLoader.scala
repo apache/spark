@@ -15,13 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.graphx
+package org.apache.spark.graphx.loaders
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.graphx.impl.{EdgePartitionBuilder, GraphImpl}
 import org.apache.spark.AccumulatorParam
 import org.apache.spark.rdd.RDD
+import org.apache.spark.graphx.Graph
+import org.apache.spark.graphx.Edge
 
 /**
  * Provides utilities for loading RDF [[Graph]]s from .NT dumps.
@@ -30,6 +32,7 @@ object RDFLoader extends Logging {
 	
   val relregex = "<([^>]+)>\\s<([^>]+)>\\s<([^>]+)>\\s\\.".r
   val propregex = "<([^>]+)>\\s<([^>]+)>\\s(.+)\\.".r
+  val propvalregex = "<([^>]+)>\\s(.+)\\.".r
 
   /**
    * 
@@ -46,7 +49,7 @@ object RDFLoader extends Logging {
       numEdgePartitions: Int = -1,
       edgeStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY,
       vertexStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
-    : Graph[Int, Int] =
+    : Graph[String, String] =
   {
     val startTime = System.currentTimeMillis()
 
@@ -57,9 +60,39 @@ object RDFLoader extends Logging {
         sc.textFile(path)
       }
     
-    val dict = buildDictionary(sc, lines)
+    val dict = buildDictionary(sc, lines) // dictionary might be too big to collect => try dictionary in RDD / hash ids
     val dictBroadcast = sc.broadcast(dict)
     
+    // build vertices and encode RDF properties into the vertex
+    val vertices = sc.parallelize(dict.toList).map(pair => {
+    	val x = pair._1
+    	val y = pair._2
+    	x match {
+    		case propvalregex(subjprop, value) => (y, value)
+    		case _ => (y, x)
+    	}
+    }).persist(vertexStorageLevel) // TODO: set name
+    
+    
+    val e = sc.parallelize(Array(Edge(1L, 2L, "edgelabel")))
+    val edges: RDD[Edge[String]] = lines.map( line => {
+    	val dictionary = dictBroadcast.value
+    	line match {
+    		case relregex(subj, rel, obj)		=> Edge(dictionary.get(subj).get, dictionary.get(obj).get, rel)
+    		case propregex(subj, rel, obj)		=> Edge(dictionary.get(subj).get, dictionary.get("<"+subj+"-"+rel+">"+obj).get, rel)
+    		case _ => Edge[String](0,0,null)
+    	}
+    }).persist(edgeStorageLevel) // TODO: set name
+    
+    val graph = Graph(vertices, edges)
+    /*
+    	val dictionary = dictBroadcast.value
+    	line match {
+    		case relregex(subj, rel, obj) 		=> (dictionary.get(subj), (dictionary.get(rel), dictionary.get(obj)))
+    		case propregex(subj, prop, value) 	=> (dictionary.get(subj), (dictionary.get(prop), dictionary.get(subj+prop+value)))
+    	}
+    })
+    */
     /*
     val edges = lines.mapPartitionsWithIndex { (pid, iter) =>
       val builder = new EdgePartitionBuilder[Int, Int]
@@ -87,7 +120,7 @@ object RDFLoader extends Logging {
     GraphImpl.fromEdgePartitions(edges, defaultVertexAttr = 1, edgeStorageLevel = edgeStorageLevel,
       vertexStorageLevel = vertexStorageLevel)
       * */
-    return null // so far
+    return graph // so far
   } // end of edgeListFile
   
   
@@ -102,13 +135,13 @@ object RDFLoader extends Logging {
   	lines.foreach(
   			line => {
   		line match {
-  			case relregex(subj, rel, obj) 	=>	dictaccum += Set(subj, rel, obj)
-  			case propregex(subj, rel, value) 		=> 	dictaccum += Set(subj, rel)
+  			case relregex(subj, rel, obj) 		=>	dictaccum += Set(subj, /*rel, */obj)
+  			case propregex(subj, rel, value) 	=> 	dictaccum += Set(subj, /*rel, */"<"+subj+"-"+rel+">"+value)
   			case _ => 
   		}
   	})
   	var map = Map[String, Long]()
-  	var counter = 0
+  	var counter = 1
   	for (dictitem <- dictaccum.value) {
   		map += (dictitem -> counter)
   		counter += 1
