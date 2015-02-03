@@ -39,12 +39,13 @@ namespace :deploy do
   end
 
   task :upload_to_hdfs, :roles => :uploader, :on_no_matching_servers => :continue do
-    run "hdfs dfs -copyFromLocal -f /u/apps/spark/current/lib/spark-assembly-*.jar hdfs://nn01.chi.shopify.com/user/sparkles/spark-assembly-#{fetch(:sha)}.jar"
+    target_sha = ENV['SHA'] || `git rev-parse HEAD`.gsub(/\s/,"")
+    run "hdfs dfs -copyFromLocal -f /u/apps/spark/current/lib/spark-assembly-*.jar hdfs://nn01.chi.shopify.com/user/sparkles/spark-assembly-#{target_sha}.jar"
   end
 
   task :litmus_test_sha_jar, :roles => :uploader, :on_no_master_servers => :continue do
     target_sha = ENV['SHA'] || `git rev-parse HEAD`.gsub(/\s/,"")
-    run "sudo -u azkaban sh -c '. /u/virtualenvs/starscream/bin/activate && cd /u/apps/starscream/current && exec python shopify/tools/canary.py'"
+    run "sudo -u azkaban sh -c '. /u/virtualenvs/starscream/bin/activate && cd /u/apps/starscream/current && PYTHON_ENV=production SPARK_OPTS=\"spark.yarn.jar=hdfs://nn01.chi.shopify.com:8020/user/sparkles/spark-assembly-#{target_sha}.jar\" exec python shopify/tools/canary.py'"
   end
 
   task :prevent_gateway do
