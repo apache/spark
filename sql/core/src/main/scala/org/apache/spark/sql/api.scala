@@ -171,7 +171,11 @@ private[sql] trait DataFrameSpecificApi {
   def saveAsTable(tableName: String): Unit
 
   @Experimental
-  def saveAsTable(tableName: String, dataSourceName: String, options: (String, String)*): Unit
+  def saveAsTable(
+      tableName: String,
+      dataSourceName: String,
+      option: (String, String),
+      options: (String, String)*): Unit
 
   @Experimental
   def saveAsTable(
@@ -189,6 +193,7 @@ private[sql] trait DataFrameSpecificApi {
   def save(
       dataSourceName: String,
       overwrite: Boolean,
+      option: (String, String),
       options: (String, String)*): Unit
 
   @Experimental

@@ -22,13 +22,13 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.RunnableCommand
 
 private[sql] case class InsertIntoRelation(
-    relation: InsertableRelation,
+    relation: WritableRelation,
     query: LogicalPlan,
     overwrite: Boolean)
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext) = {
-    relation.insertInto(new DataFrame(sqlContext, query), overwrite)
+    relation.write(new DataFrame(sqlContext, query), overwrite)
 
     Seq.empty[Row]
   }

@@ -107,7 +107,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     * @param userSpecifiedSchema
     * @param provider
     * @param options
-    * @param allowExisting
+    * @param isExternal
     * @return
     */
   def createDataSourceTable(
@@ -115,7 +115,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       userSpecifiedSchema: Option[StructType],
       provider: String,
       options: Map[String, String],
-      allowExisting: Boolean): Boolean = {
+      isExternal: Boolean): Unit = {
     val (dbName, tblName) = processDatabaseAndTableName("default", tableName)
     val tbl = new Table(dbName, tblName)
 
@@ -125,22 +125,18 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     }
     options.foreach { case (key, value) => tbl.setSerdeParam(key, value) }
 
-    tbl.setProperty("EXTERNAL", "TRUE")
-    tbl.setTableType(TableType.EXTERNAL_TABLE)
+    if (isExternal) {
+      tbl.setProperty("EXTERNAL", "TRUE")
+      tbl.setTableType(TableType.EXTERNAL_TABLE)
+    } else {
+      tbl.setProperty("EXTERNAL", "FALSE")
+      tbl.setTableType(TableType.MANAGED_TABLE)
+    }
 
     // create the table
     synchronized {
-      // Always set ifNotExists to false for createTable since we need to
-      // know if the table has actually been created in Hive's metastore.
-      try {
-        client.createTable(tbl, false)
-      } catch {
-        case e: HiveException if e.getCause.isInstanceOf[AlreadyExistsException] && allowExisting =>
-          return false
-      }
+      client.createTable(tbl, false)
     }
-
-    return true
   }
 
   def hiveDefaultTableFilePath(tableName: String): String = {

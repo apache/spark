@@ -226,7 +226,7 @@ object ResolvedDataSource {
             dataSource
               .asInstanceOf[org.apache.spark.sql.sources.SchemaRelationProvider]
               .createRelation(sqlContext, new CaseInsensitiveMap(options), schema)
-          case _ =>
+          case dataSource: org.apache.spark.sql.sources.RelationProvider =>
             sys.error(s"${clazz.getCanonicalName} does not allow user-specified schemas.")
         }
       }
@@ -236,7 +236,7 @@ object ResolvedDataSource {
             dataSource
               .asInstanceOf[org.apache.spark.sql.sources.RelationProvider]
               .createRelation(sqlContext, new CaseInsensitiveMap(options))
-          case _ =>
+          case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
             sys.error(s"A schema needs to be specified when using ${clazz.getCanonicalName}.")
         }
       }
@@ -247,6 +247,33 @@ object ResolvedDataSource {
 }
 
 private[sql] case class ResolvedDataSource(provider: Class[_], relation: BaseRelation)
+
+object ResolvedCreatableDataSource {
+  def apply(
+      sqlContext: SQLContext,
+      provider: String,
+      name: String,
+      options: Map[String, String],
+      data: DataFrame): Map[String, String] = {
+    val loader = Utils.getContextOrSparkClassLoader
+    val clazz: Class[_] = try loader.loadClass(provider) catch {
+      case cnf: java.lang.ClassNotFoundException =>
+        try loader.loadClass(provider + ".DefaultSource") catch {
+          case cnf: java.lang.ClassNotFoundException =>
+            sys.error(s"Failed to load class for data source: $provider")
+        }
+    }
+
+    clazz.newInstance match {
+      case dataSource: org.apache.spark.sql.sources.CreateableRelation =>
+        dataSource
+          .asInstanceOf[org.apache.spark.sql.sources.CreateableRelation]
+          .createRelation(sqlContext, name, options, data)
+      case _ =>
+        sys.error(s"${clazz.getCanonicalName} does not allow create table as select.")
+    }
+  }
+}
 
 private[sql] case class CreateTableUsing(
     tableName: String,
@@ -294,10 +321,10 @@ private [sql] case class CreateTempTableUsingAsSelect(
 
   def run(sqlContext: SQLContext) = {
     val df = new DataFrame(sqlContext, query)
-    val resolved = ResolvedDataSource(sqlContext, Some(df.schema), provider, options)
+    val augmentedOptions = ResolvedCreatableDataSource(sqlContext, provider, tableName, options, df)
+    val resolved = ResolvedDataSource(sqlContext, None, provider, augmentedOptions)
     sqlContext.registerRDDAsTable(
       new DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
-    df.insertInto(tableName, true)
 
     Seq.empty
   }

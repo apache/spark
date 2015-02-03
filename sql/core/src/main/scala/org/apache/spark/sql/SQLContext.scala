@@ -162,9 +162,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /** Removes the specified table from the in-memory cache. */
   def uncacheTable(tableName: String): Unit = cacheManager.uncacheTable(tableName)
 
-  /** Returns the default file path for a table. */
-  protected[sql] def defaultTableFilePath(tableName: String): String = ???
-
   /**
    * Creates a DataFrame from an RDD of case classes.
    *

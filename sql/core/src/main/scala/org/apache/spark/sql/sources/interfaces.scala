@@ -77,6 +77,14 @@ trait SchemaRelationProvider {
       schema: StructType): BaseRelation
 }
 
+trait CreateableRelation {
+  def createRelation(
+      sqlContext: SQLContext,
+      name: String,
+      options: Map[String, String],
+      data: DataFrame): Map[String, String]
+}
+
 /**
  * ::DeveloperApi::
  * Represents a collection of tuples with a known schema.  Classes that extend BaseRelation must
@@ -150,6 +158,6 @@ trait CatalystScan extends BaseRelation {
 }
 
 @DeveloperApi
-trait InsertableRelation extends BaseRelation {
-  def insertInto(data: DataFrame, overwrite: Boolean): Unit
+trait WritableRelation extends BaseRelation {
+  def write(data: DataFrame, overwrite: Boolean): Unit
 }

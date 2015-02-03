@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{LogicalRDD, EvaluatePython}
 import org.apache.spark.sql.json.JsonRDD
-import org.apache.spark.sql.sources.{InsertableRelation, ResolvedDataSource, CreateTableUsingAsLogicalPlan}
+import org.apache.spark.sql.sources.{WritableRelation, ResolvedDataSource, CreateTableUsingAsLogicalPlan}
 import org.apache.spark.sql.types.{NumericType, StructType}
 import org.apache.spark.util.Utils
 
@@ -620,7 +620,16 @@ class DataFrame protected[sql](
   @Experimental
   override def saveAsTable(tableName: String): Unit = {
     val dataSourceName = sqlContext.conf.defaultDataSourceName
-    saveAsTable(tableName, dataSourceName, ("path", sqlContext.defaultTableFilePath(tableName)))
+    val cmd =
+      CreateTableUsingAsLogicalPlan(
+        tableName,
+        dataSourceName,
+        temporary = false,
+        Map.empty,
+        allowExisting = false,
+        logicalPlan)
+
+    sqlContext.executePlan(cmd).toRdd
   }
 
   /**
@@ -637,13 +646,14 @@ class DataFrame protected[sql](
   override def saveAsTable(
       tableName: String,
       dataSourceName: String,
+      option: (String, String),
       options: (String, String)*): Unit = {
     val cmd =
       CreateTableUsingAsLogicalPlan(
         tableName,
         dataSourceName,
         temporary = false,
-        options.toMap,
+        (option +: options).toMap,
         allowExisting = false,
         logicalPlan)
 
@@ -665,7 +675,8 @@ class DataFrame protected[sql](
       tableName: String,
       dataSourceName: String,
       options: java.util.Map[String, String]): Unit = {
-    saveAsTable(tableName, dataSourceName, options.toSeq:_*)
+    val opts = options.toSeq
+    saveAsTable(tableName, dataSourceName, opts.head, opts.tail:_*)
   }
 
   @Experimental
@@ -683,10 +694,12 @@ class DataFrame protected[sql](
   override def save(
       dataSourceName: String,
       overwrite: Boolean,
+      option: (String, String),
       options: (String, String)*): Unit = {
-    val resolved = ResolvedDataSource(sqlContext, Some(schema), dataSourceName, options.toMap)
+    val resolved =
+      ResolvedDataSource(sqlContext, Some(schema), dataSourceName, (option +: options).toMap)
     resolved.relation match {
-      case i: InsertableRelation => i.insertInto(new DataFrame(sqlContext, logicalPlan), overwrite)
+      case i: WritableRelation => i.write(new DataFrame(sqlContext, logicalPlan), overwrite)
       case o => sys.error(s"Data source $dataSourceName does not support save.")
     }
   }
@@ -696,7 +709,8 @@ class DataFrame protected[sql](
       dataSourceName: String,
       overwrite: Boolean,
       options: java.util.Map[String, String]): Unit = {
-    save(dataSourceName, overwrite, options.toSeq:_*)
+    val opts = options.toSeq
+    save(dataSourceName, overwrite, opts.head, opts.tail:_*)
   }
 
   /**

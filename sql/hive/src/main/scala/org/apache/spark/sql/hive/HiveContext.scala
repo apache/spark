@@ -55,10 +55,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
   }
 
-  protected[sql] override def defaultTableFilePath(tableName: String): String = {
-    catalog.hiveDefaultTableFilePath(tableName)
-  }
-
   /**
    * When true, enables an experimental feature where metastore tables that use the parquet SerDe
    * are automatically converted to use the Spark SQL parquet table scan, instead of the Hive

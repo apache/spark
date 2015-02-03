@@ -19,11 +19,10 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
-import org.apache.hadoop.hive.metastore.api.AlreadyExistsException
-import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.commons.io.FileUtils
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.catalyst.util
 import org.apache.spark.sql._
@@ -39,6 +38,7 @@ import org.apache.spark.sql.hive.test.TestHive._
 class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
   override def afterEach(): Unit = {
     reset()
+    if (ctasPath.exists()) Utils.deleteRecursively(ctasPath)
   }
 
   val filePath = Utils.getSparkClassLoader.getResource("sample.json").getFile
@@ -141,6 +141,11 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     intercept[Exception] {
       sql("SELECT * FROM jsonTable").collect()
     }
+
+    assert(
+      (new File(filePath)).exists(),
+      "The table with specified path is considered as an external table, " +
+        "its data should not deleted after DROP TABLE.")
   }
 
   test("check change without refresh") {
@@ -295,7 +300,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       """.stripMargin)
 
     // Create the table again should trigger a AlreadyExistsException.
-    val exception = intercept[HiveException] {
+    val message = intercept[RuntimeException] {
       sql(
         s"""
         |CREATE TABLE ctasJsonTable
@@ -305,9 +310,9 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
         |) AS
         |SELECT * FROM jsonTable
       """.stripMargin)
-    }
-    assert(exception.getCause.isInstanceOf[AlreadyExistsException],
-      "Hive should complain that ctasJsonTable already exists")
+    }.getMessage
+    assert(message.contains("Table ctasJsonTable already exists."),
+      "We should complain that ctasJsonTable already exists")
 
     // The following statement should be fine if it has IF NOT EXISTS.
     // It tries to create a table ctasJsonTable with a new schema.
@@ -331,6 +336,57 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     checkAnswer(
       sql("SELECT * FROM ctasJsonTable"),
       sql("SELECT * FROM jsonTable").collect())
+  }
+
+  test("CTAS a managed table") {
+    sql(
+      s"""
+        |CREATE TABLE jsonTable
+        |USING org.apache.spark.sql.json.DefaultSource
+        |OPTIONS (
+        |  path '${filePath}'
+        |)
+      """.stripMargin)
+
+    new Path("/Users/yhuai/Desktop/whatever")
+
+
+    val expectedPath = catalog.hiveDefaultTableFilePath("ctasJsonTable")
+    val filesystemPath = new Path(expectedPath)
+    val fs = filesystemPath.getFileSystem(sparkContext.hadoopConfiguration)
+    if (fs.exists(filesystemPath)) fs.delete(filesystemPath, true)
+
+    // It is a managed table when we do not specify the location.
+    sql(
+      s"""
+        |CREATE TABLE ctasJsonTable
+        |USING org.apache.spark.sql.json.DefaultSource
+        |OPTIONS (
+        |
+        |) AS
+        |SELECT * FROM jsonTable
+      """.stripMargin)
+
+    assert(fs.exists(filesystemPath), s"$expectedPath should exist after we create the table.")
+
+    sql(
+      s"""
+        |CREATE TABLE loadedTable
+        |USING org.apache.spark.sql.json.DefaultSource
+        |OPTIONS (
+        |  path '${expectedPath}'
+        |)
+      """.stripMargin)
+
+    assert(table("ctasJsonTable").schema === table("loadedTable").schema)
+
+    checkAnswer(
+      sql("SELECT * FROM ctasJsonTable"),
+      sql("SELECT * FROM loadedTable").collect()
+    )
+
+    sql("DROP TABLE ctasJsonTable")
+    assert(!fs.exists(filesystemPath), s"$expectedPath should not exist after we drop the table.")
   }
 
   test("SPARK-5286 Fail to drop an invalid table when using the data source API") {
@@ -365,11 +421,11 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       sql("SELECT * FROM createdJsonTable"),
       df.collect())
 
-    val exception = intercept[HiveException] {
+    val message = intercept[RuntimeException] {
       createTable("createdJsonTable", filePath.toString, false)
-    }
-    assert(exception.getCause.isInstanceOf[AlreadyExistsException],
-      "Hive should complain that ctasJsonTable already exists")
+    }.getMessage
+    assert(message.contains("Table createdJsonTable already exists."),
+      "We should complain that ctasJsonTable already exists")
 
     createTable("createdJsonTable", filePath.toString, true)
     // createdJsonTable should be not changed.

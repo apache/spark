@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.sources.ResolvedCreatableDataSource
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -106,14 +107,32 @@ case class CreateMetastoreDataSource(
     options: Map[String, String],
     allowExisting: Boolean) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext) = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
+
+    if (hiveContext.catalog.tableExists(tableName :: Nil)) {
+      if (allowExisting) {
+        return Seq.empty[Row]
+      } else {
+        sys.error(s"Table $tableName already exists.")
+      }
+    }
+
+    var isExternal = true
+    val optionsWithPath =
+      if (!options.contains("path")) {
+        isExternal = false
+        options + ("path" -> hiveContext.catalog.hiveDefaultTableFilePath(tableName))
+      } else {
+        options
+      }
+
     hiveContext.catalog.createDataSourceTable(
       tableName,
       userSpecifiedSchema,
       provider,
-      options,
-      allowExisting)
+      optionsWithPath,
+      isExternal)
 
     Seq.empty[Row]
   }
@@ -126,17 +145,36 @@ case class CreateMetastoreDataSourceAsSelect(
     allowExisting: Boolean,
     query: LogicalPlan) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext) = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
+
+    if (hiveContext.catalog.tableExists(tableName :: Nil)) {
+      if (allowExisting) {
+        return Seq.empty[Row]
+      } else {
+        sys.error(s"Table $tableName already exists.")
+      }
+    }
+
     val df = new DataFrame(hiveContext, query)
-    val hasCreated =
-      hiveContext.catalog.createDataSourceTable(
-        tableName,
-        Some(df.schema),
-        provider,
-        options,
-        allowExisting)
-    if (hasCreated) df.insertInto(tableName, true)
+    var isExternal = true
+    val optionsWithPath =
+      if (!options.contains("path")) {
+        isExternal = false
+        options + ("path" -> hiveContext.catalog.hiveDefaultTableFilePath(tableName))
+      } else {
+        options
+      }
+
+    val augmentedOptions =
+      ResolvedCreatableDataSource(sqlContext, provider, tableName, optionsWithPath, df)
+
+    hiveContext.catalog.createDataSourceTable(
+      tableName,
+      None,
+      provider,
+      augmentedOptions,
+      isExternal)
 
     Seq.empty[Row]
   }
