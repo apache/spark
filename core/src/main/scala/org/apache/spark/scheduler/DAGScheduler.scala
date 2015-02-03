@@ -1082,7 +1082,7 @@ class DAGScheduler(
         }
 
       case TaskCommitDenied(jobID, splitID, attemptID) =>
-      // Do nothing here, left up to the TaskScheduler to decide how to handle denied commits
+        // Do nothing here, left up to the TaskScheduler to decide how to handle denied commits
 
       case ExceptionFailure(className, description, stackTrace, fullStackTrace, metrics) =>
         // Do nothing here, left up to the TaskScheduler to decide how to handle user failures

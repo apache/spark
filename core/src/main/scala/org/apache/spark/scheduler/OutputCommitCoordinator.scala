@@ -24,24 +24,24 @@ import akka.actor.{ActorRef, Actor}
 import org.apache.spark._
 import org.apache.spark.util.{AkkaUtils, ActorLogReceive}
 
-private[spark] sealed trait OutputCommitCoordinationMessage extends Serializable
+private sealed trait OutputCommitCoordinationMessage extends Serializable
 
-private[spark] case class StageStarted(stage: Int) extends OutputCommitCoordinationMessage
-private[spark] case class StageEnded(stage: Int) extends OutputCommitCoordinationMessage
-private[spark] case object StopCoordinator extends OutputCommitCoordinationMessage
+private case class StageStarted(stage: Int) extends OutputCommitCoordinationMessage
+private case class StageEnded(stage: Int) extends OutputCommitCoordinationMessage
+private case object StopCoordinator extends OutputCommitCoordinationMessage
 
-private[spark] case class AskPermissionToCommitOutput(
+private case class AskPermissionToCommitOutput(
     stage: Int,
     task: Long,
     taskAttempt: Long)
-    extends OutputCommitCoordinationMessage
+  extends OutputCommitCoordinationMessage
 
-private[spark] case class TaskCompleted(
+private case class TaskCompleted(
     stage: Int,
     task: Long,
     attempt: Long,
     reason: TaskEndReason)
-    extends OutputCommitCoordinationMessage
+  extends OutputCommitCoordinationMessage
 
 /**
  * Authority that decides whether tasks can commit output to HDFS.
@@ -66,14 +66,18 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
 
   private val authorizedCommittersByStage: CommittersByStageMap = mutable.Map()
 
-  def stageStart(stage: StageId) {
-    sendToActor(StageStarted(stage))
-  }
-
-  def stageEnd(stage: StageId) {
-    sendToActor(StageEnded(stage))
-  }
-
+  /**
+   * Called by tasks to ask whether they can commit their output to HDFS.
+   *
+   * If a task attempt has been authorized to commit, then all other attempts to commit the same
+   * task will be denied.  If the authorized task attempt fails (e.g. due to its executor being
+   * lost), then a subsequent task attempt may be authorized to commit its output.
+   *
+   * @param stage the stage number
+   * @param task the task number
+   * @param attempt a unique identifier for this task attempt
+   * @return true if this task is authorized to commit, false otherwise
+   */
   def canCommit(
       stage: StageId,
       task: TaskId,
@@ -81,15 +85,26 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
     askActor(AskPermissionToCommitOutput(stage, task, attempt))
   }
 
-  def taskCompleted(
+  // Called by DAGScheduler
+  private[scheduler] def stageStart(stage: StageId): Unit = {
+    sendToActor(StageStarted(stage))
+  }
+
+  // Called by DAGScheduler
+  private[scheduler] def stageEnd(stage: StageId): Unit = {
+    sendToActor(StageEnded(stage))
+  }
+
+  // Called by DAGScheduler
+  private[scheduler] def taskCompleted(
       stage: StageId,
       task: TaskId,
       attempt: TaskAttemptId,
-      reason: TaskEndReason) {
+      reason: TaskEndReason): Unit = {
     sendToActor(TaskCompleted(stage, task, attempt, reason))
   }
 
-  def stop() {
+  def stop(): Unit = {
     sendToActor(StopCoordinator)
     coordinatorActor = None
     authorizedCommittersByStage.foreach(_._2.clear)
@@ -131,30 +146,33 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
       task: TaskId,
       attempt: TaskAttemptId,
       reason: TaskEndReason): Unit = {
-    authorizedCommittersByStage.get(stage) match {
-      case Some(authorizedCommitters) =>
-        reason match {
-          case Success => return
-          case TaskCommitDenied(jobID, splitID, attemptID) =>
-            logInfo(s"Task was denied committing, stage: $stage, taskId: $task, attempt: $attempt")
-          case otherReason =>
-            logDebug(s"Authorized committer $attempt (stage=$stage, task=$task) failed;" +
-              s" clearing lock")
-            authorizedCommitters.remove(task)
-        }
-      case None =>
-        logDebug(s"Ignoring task completion for completed stage")
+    val authorizedCommitters = authorizedCommittersByStage.getOrElse(stage, {
+      logDebug(s"Ignoring task completion for completed stage")
+      return
+    })
+    reason match {
+      case Success =>
+        // The task output has been committed successfully
+      case TaskCommitDenied(jobID, splitID, attemptID) =>
+        logInfo(s"Task was denied committing, stage: $stage, taskId: $task, attempt: $attempt")
+      case otherReason =>
+        logDebug(s"Authorized committer $attempt (stage=$stage, task=$task) failed;" +
+          s" clearing lock")
+        authorizedCommitters.remove(task)
     }
   }
 
-  private def sendToActor(msg: OutputCommitCoordinationMessage) {
+  private def sendToActor(msg: OutputCommitCoordinationMessage): Unit = {
     coordinatorActor.foreach(_ ! msg)
   }
 
   private def askActor(msg: OutputCommitCoordinationMessage): Boolean = {
-    coordinatorActor
-      .map(AkkaUtils.askWithReply[Boolean](msg, _, maxAttempts, retryInterval, timeout))
-      .getOrElse(false)
+    coordinatorActor match {
+      case Some(actor) =>
+        AkkaUtils.askWithReply[Boolean](msg, actor, maxAttempts, retryInterval, timeout)
+      case None =>
+        false
+    }
   }
 }
 
