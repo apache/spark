@@ -35,11 +35,11 @@ if __name__ == "__main__":
     """
     Parameters
     ----------
-    inputFile : Input file path which contains data points
-    k : Number of mixture components
-    convergenceTol : Convergence threshold. Default to 1e-3
-    maxIterations : Number of EM iterations to perform. Default to 100
-    seed : Random seed
+    :param inputFile:        Input file path which contains data points
+    :param k:                Number of mixture components
+    :param convergenceTol:   Convergence threshold. Default to 1e-3
+    :param maxIterations:    Number of EM iterations to perform. Default to 100
+    :param seed:             Random seed
     """
 
     parser = argparse.ArgumentParser()

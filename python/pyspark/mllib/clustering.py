@@ -129,13 +129,8 @@ class GaussianMixtureModel(object):
         Find the cluster to which the points in 'x' has maximum membership
         in this model.
 
-        Parameters
-        ----------
-        x : RDD of data points
-
-        Returns
-        -------
-        cluster_labels : RDD of cluster labels.
+        :param x:    RDD of data points.
+        :return:     cluster_labels. RDD of cluster labels.
         """
         if isinstance(x, RDD):
             cluster_labels = self.predictSoft(x).map(lambda z: z.index(max(z)))
@@ -145,31 +140,25 @@ class GaussianMixtureModel(object):
         """
         Find the membership of each point in 'x' to all mixture components.
 
-        Parameters
-        ----------
-        x : RDD of data points
-
-        Returns
-        -------
-        membership_matrix : RDD of array of double values.
+        :param x:    RDD of data points.
+        :return:     membership_matrix. RDD of array of double values.
         """
-        means, sigmas = zip(*[(g.mu, g.sigma) for g in self.gaussians])
-        membership_matrix = callMLlibFunc("predictSoftGMM", x.map(_convert_to_vector),
-                                          self.weights, means, sigmas)
-        return membership_matrix
+        if isinstance(x, RDD):
+            means, sigmas = zip(*[(g.mu, g.sigma) for g in self.gaussians])
+            membership_matrix = callMLlibFunc("predictSoftGMM", x.map(_convert_to_vector),
+                                              self.weights, means, sigmas)
+            return membership_matrix
 
 
 class GaussianMixture(object):
     """
     Estimate model parameters with the expectation-maximization algorithm.
 
-    Parameters
-    ----------
-    data - RDD of data points
-    k - Number of components
-    convergenceTol - Threshold value to check the convergence criteria. Defaults to 1e-3
-    maxIterations - Number of iterations. Default to 100
-    seed - Random Seed
+    :param data:            RDD of data points
+    :param k:               Number of components
+    :param convergenceTol:  Threshold value to check the convergence criteria. Defaults to 1e-3
+    :param maxIterations:   Number of iterations. Default to 100
+    :param seed:            Random Seed
     """
     @classmethod
     def train(cls, rdd, k, convergenceTol=1e-3, maxIterations=100, seed=None):
@@ -177,7 +166,7 @@ class GaussianMixture(object):
         weight, mu, sigma = callMLlibFunc("trainGaussianMixture",
                                           rdd.map(_convert_to_vector), k,
                                           convergenceTol, maxIterations, seed)
-        mvg_obj = array([MultivariateGaussian(mu[i], sigma[i]) for i in range(k)])
+        mvg_obj = [MultivariateGaussian(mu[i], sigma[i]) for i in range(k)]
         return GaussianMixtureModel(weight, mvg_obj)
 
 

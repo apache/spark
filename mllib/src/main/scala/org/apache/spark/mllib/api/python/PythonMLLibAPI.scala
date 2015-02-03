@@ -22,6 +22,7 @@ import java.nio.{ByteBuffer, ByteOrder}
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
 import scala.reflect.ClassTag
 
@@ -299,21 +300,20 @@ class PythonMLLibAPI extends Serializable {
       .setK(k)
       .setConvergenceTol(convergenceTol)
       .setMaxIterations(maxIterations)
-      .setSeed(seed)
+
+    if (seed != null) gmmAlg.setSeed(seed)
+
     try {
       val model = gmmAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK))
-
-      var wtArray:Array[Double] = Array()
-      var muArray:Array[Vector] = Array()
-      var siArray :Array[Matrix] = Array()
-      
+      var wt = ArrayBuffer.empty[Double]
+      var mu = ArrayBuffer.empty[Vector]      
+      var sigma = ArrayBuffer.empty[Matrix]
       for (i <- 0 until model.k) {
-        wtArray = wtArray ++ Array(model.weights(i))
-        muArray = muArray ++ Array(model.gaussians(i).mu)
-        siArray = siArray ++ Array(model.gaussians(i).sigma)
-      }
-      
-      List(wtArray, muArray, siArray).map(_.asInstanceOf[Object]).asJava
+          wt += model.weights(i)
+          mu += model.gaussians(i).mu
+          sigma += model.gaussians(i).sigma
+      }    
+      List(wt.toArray, mu.toArray, sigma.toArray).map(_.asInstanceOf[Object]).asJava
     } finally {
       data.rdd.unpersist(blocking = false)
     }
@@ -327,12 +327,12 @@ class PythonMLLibAPI extends Serializable {
       wt: Object,
       mu: Array[Object],
       si: Array[Object]):  RDD[Array[Double]]  = {
+
       val weight = wt.asInstanceOf[Array[Double]]
       val mean = mu.map(_.asInstanceOf[DenseVector])
       val sigma = si.map(_.asInstanceOf[DenseMatrix])
-
       val gaussians = Array.tabulate(weight.length){
-        i => new MultivariateGaussian(mean(i),sigma(i))
+        i => new MultivariateGaussian(mean(i), sigma(i))
       }      
       val model = new GaussianMixtureModel(weight, gaussians)
       model.predictSoft(data)
