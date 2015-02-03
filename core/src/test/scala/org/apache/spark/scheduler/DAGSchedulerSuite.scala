@@ -19,6 +19,7 @@ package org.apache.spark.scheduler
 
 import scala.collection.mutable.{ArrayBuffer, HashSet, HashMap, Map}
 import scala.language.reflectiveCalls
+import scala.util.control.NonFatal
 
 import org.mockito.Mockito.mock
 import org.scalatest.{BeforeAndAfter, FunSuiteLike}
@@ -31,6 +32,19 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
 import org.apache.spark.util.CallSite
 import org.apache.spark.executor.TaskMetrics
+
+class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
+  extends DAGSchedulerEventProcessLoop(dagScheduler) {
+
+  override def post(event: DAGSchedulerEvent): Unit = {
+    try {
+      // Forward event to `onReceive` directly to avoid processing event asynchronously.
+      onReceive(event)
+    } catch {
+      case NonFatal(e) => onError(e)
+    }
+  }
+}
 
 /**
  * An RDD for passing to DAGScheduler. These RDDs will use the dependencies and
@@ -158,7 +172,7 @@ class DAGSchedulerSuite extends FunSuiteLike  with BeforeAndAfter with LocalSpar
         runLocallyWithinThread(job)
       }
     }
-    dagEventProcessLoopTester = new DAGSchedulerSingleThreadedProcessLoop(scheduler)
+    dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(scheduler)
   }
 
   override def afterAll() {
@@ -386,7 +400,7 @@ class DAGSchedulerSuite extends FunSuiteLike  with BeforeAndAfter with LocalSpar
         runLocallyWithinThread(job)
       }
     }
-    dagEventProcessLoopTester = new DAGSchedulerSingleThreadedProcessLoop(noKillScheduler)
+    dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(noKillScheduler)
     val jobId = submit(new MyRDD(sc, 1, Nil), Array(0))
     cancel(jobId)
     // Because the job wasn't actually cancelled, we shouldn't have received a failure message.
