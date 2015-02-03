@@ -503,7 +503,8 @@ object SparkSubmit {
 /** Provides utility functions to be used inside SparkSubmit. */
 private[spark] object SparkSubmitUtils {
 
-  private val printStream = SparkSubmit.printStream
+  // Exposed for testing
+  private[spark] var printStream = SparkSubmit.printStream
 
   /**
    * Represents a Maven Coordinate
@@ -601,7 +602,7 @@ private[spark] object SparkSubmitUtils {
 
   /** A nice function to use in tests as well. Values are dummy strings. */
   private[spark] def getModuleDescriptor = DefaultModuleDescriptor.newDefaultInstance(
-    ModuleRevisionId.newInstance("org.apache.spark", "spark-submit-envelope", "1.0"))
+    ModuleRevisionId.newInstance("org.apache.spark", "spark-submit-parent", "1.0"))
 
   /**
    * Resolves any dependencies that were supplied through maven coordinates
@@ -676,12 +677,6 @@ private[spark] object SparkSubmitUtils {
       val rr: ResolveReport = ivy.resolve(md, resolveOptions)
       if (rr.hasError) {
         throw new RuntimeException(rr.getAllProblemMessages.toString)
-      }
-      // Log the callers for each dependency
-      rr.getDependencies.toArray.foreach { case dependency: IvyNode =>
-        var logMsg = s"$dependency will be retrieved as a dependency for:"
-        dependency.getAllCallers.foreach (caller => logMsg += s"\n\t$caller")
-        printStream.println(logMsg)
       }
       // retrieve all resolved dependencies
       ivy.retrieve(rr.getModuleDescriptor.getModuleRevisionId,

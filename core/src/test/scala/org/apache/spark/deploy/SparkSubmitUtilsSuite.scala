@@ -17,13 +17,34 @@
 
 package org.apache.spark.deploy
 
-import java.io.File
+import java.io.{PrintStream, OutputStream, File}
+
+import scala.collection.mutable.ArrayBuffer
+
+import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 import org.apache.ivy.core.module.descriptor.MDArtifact
 import org.apache.ivy.plugins.resolver.IBiblioResolver
-import org.scalatest.FunSuite
 
-class SparkSubmitUtilsSuite extends FunSuite {
+class SparkSubmitUtilsSuite extends FunSuite with BeforeAndAfterAll {
+
+  private val noOpOutputStream = new OutputStream {
+    def write(b: Int) = {}
+  }
+
+  /** Simple PrintStream that reads data into a buffer */
+  private class BufferPrintStream extends PrintStream(noOpOutputStream) {
+    var lineBuffer = ArrayBuffer[String]()
+    override def println(line: String) {
+      lineBuffer += line
+    }
+  }
+
+  override def beforeAll() {
+    super.beforeAll()
+    // We don't want to write logs during testing
+    SparkSubmitUtils.printStream = new BufferPrintStream
+  }
 
   test("incorrect maven coordinate throws error") {
     val coordinates = Seq("a:b: ", " :a:b", "a: :b", "a:b:", ":a:b", "a::b", "::", "a:b", "a")
