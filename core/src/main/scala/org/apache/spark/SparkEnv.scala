@@ -20,8 +20,6 @@ package org.apache.spark
 import java.io.File
 import java.net.Socket
 
-import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinatorActor
-
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.util.Properties
@@ -37,6 +35,7 @@ import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.network.nio.NioBlockTransferService
 import org.apache.spark.scheduler.{OutputCommitCoordinator, LiveListenerBus}
+import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinatorActor
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleMemoryManager, ShuffleManager}
 import org.apache.spark.storage._

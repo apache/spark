@@ -15,18 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.executor
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.{TaskCommitDenied, TaskEndReason}
 
 /**
- * :: DeveloperApi ::
  * Exception thrown when a task attempts to commit output to Hadoop, but
  * is denied by the driver.
  */
-@DeveloperApi
-class CommitDeniedException(msg: String, jobID: Int, splitID: Int, attemptID: Int)
+class CommitDeniedException(
+    msg: String,
+    jobID: Int,
+    splitID: Int,
+    attemptID: Int)
   extends Exception(msg) {
-  def toTaskEndReason(): TaskEndReason = new TaskCommitDenied(jobID, splitID, attemptID)
+
+  def toTaskEndReason: TaskEndReason = new TaskCommitDenied(jobID, splitID, attemptID)
+
 }
 
