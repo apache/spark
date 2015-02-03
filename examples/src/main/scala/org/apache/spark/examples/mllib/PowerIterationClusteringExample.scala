@@ -18,11 +18,10 @@
 package org.apache.spark.examples.mllib
 
 import org.apache.log4j.{Level, Logger}
-import scopt.OptionParser
-
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.mllib.clustering.KMeans
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.{SparkConf, SparkContext}
+import scopt.OptionParser
 
 /**
  * An example k-means app. Run with
@@ -38,7 +37,7 @@ object PowerIterationClusteringExample {
     val Random, Parallel = Value
   }
 
-  import InitializationMode._
+  import org.apache.spark.examples.mllib.PowerIterationClusteringExample.InitializationMode._
 
   case class Params(
       input: String = null,
