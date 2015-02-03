@@ -6,6 +6,7 @@ set :user, "deploy"
 set :shared_work_path, "/u/apps/spark/shared/work"
 set :shared_logs_path, "/u/apps/spark/shared/log"
 set :shared_conf_path, "/u/apps/spark/shared/conf"
+set :spark_jar_path, "hdfs://nn01.chi.shopify.com/user/sparkles"
 set :gateway, nil
 set :keep_releases, 5
 
@@ -27,7 +28,7 @@ namespace :deploy do
 
   task :clear_hdfs_executables, :roles => :uploader, :on_no_matching_servers => :continue do
     count = fetch(:keep_releases, 5).to_i
-    existing_releases = capture "hdfs dfs -ls hdfs://nn01.chi.shopify.com/user/sparkles/spark-assembly-*.jar | sort -k6 | sed 's/\\s\\+/ /g' | cut -d' ' -f8"
+    existing_releases = capture "hdfs dfs -ls #{fetch(:spark_jar_path)}/spark-assembly-*.jar | sort -k6 | sed 's/\\s\\+/ /g' | cut -d' ' -f8"
     existing_releases = existing_releases.split
     # hashtag paranoid. let the uploader overwrite the latest.jar
     existing_releases.reject! {|element| element.end_with?("spark-assembly-latest.jar")}
@@ -39,7 +40,7 @@ namespace :deploy do
   end
 
   task :upload_to_hdfs, :roles => :uploader, :on_no_matching_servers => :continue do
-    run "hdfs dfs -copyFromLocal -f /u/apps/spark/current/lib/spark-assembly-*.jar hdfs://nn01.chi.shopify.com/user/sparkles/spark-assembly-#{fetch(:sha)}.jar"
+    run "hdfs dfs -copyFromLocal -f /u/apps/spark/current/lib/spark-assembly-*.jar #{fetch(:spark_jar_path)}/spark-assembly-#{fetch(:sha)}.jar"
   end
 
   task :prevent_gateway do
@@ -60,7 +61,7 @@ namespace :deploy do
     puts "*    spark_production"
     puts "*      conf_options:"
     puts "*      <<: *spark_remote"
-    puts "*      spark.yarn.jar: \"hdfs://nn01.chi.shopify.com:8020/user/sparkles/spark-assembly-\033[31m#{fetch(:sha)}\033[0m.jar\""
+    puts "*      spark.yarn.jar: \"#{fetch(:spark_jar_path)}/spark-assembly-\033[31m#{fetch(:sha)}\033[0m.jar\""
     puts "*"
     puts "****************************************************************"
   end
