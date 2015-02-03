@@ -430,6 +430,7 @@ object ALS extends Logging {
       implicit ord: Ordering[ID]): (RDD[(ID, Array[Float])], RDD[(ID, Array[Float])]) = {
     require(intermediateRDDStorageLevel != StorageLevel.NONE,
       "ALS is not designed to run without persisting intermediate RDDs.")
+    val sc = ratings.sparkContext
     val userPart = new HashPartitioner(numUserBlocks)
     val itemPart = new HashPartitioner(numItemBlocks)
     val userLocalIndexEncoder = new LocalIndexEncoder(userPart.numPartitions)
@@ -459,6 +460,9 @@ object ALS extends Logging {
         itemFactors = computeFactors(userFactors, userOutBlocks, itemInBlocks, rank, regParam,
           userLocalIndexEncoder, implicitPrefs, alpha, solver)
         previousItemFactors.unpersist()
+        if (sc.checkpointDir.isDefined && (iter % 3 == 0)) {
+          itemFactors.checkpoint()
+        }
         itemFactors.setName(s"itemFactors-$iter").persist(intermediateRDDStorageLevel)
         val previousUserFactors = userFactors
         userFactors = computeFactors(itemFactors, itemOutBlocks, userInBlocks, rank, regParam,
