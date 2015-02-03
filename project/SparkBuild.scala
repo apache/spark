@@ -237,6 +237,13 @@ object SQL {
   lazy val settings = Seq(
     initialCommands in console :=
       """
+        |import org.apache.spark.sql.catalyst.analysis._
+        |import org.apache.spark.sql.catalyst.dsl._
+        |import org.apache.spark.sql.catalyst.errors._
+        |import org.apache.spark.sql.catalyst.expressions._
+        |import org.apache.spark.sql.catalyst.plans.logical._
+        |import org.apache.spark.sql.catalyst.rules._
+        |import org.apache.spark.sql.catalyst.util._
         |import org.apache.spark.sql.Dsl._
         |import org.apache.spark.sql.execution
         |import org.apache.spark.sql.test.TestSQLContext._
