@@ -21,7 +21,7 @@ import java.util.{List => JList, Map => JMap}
 
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.Accumulator
+import org.apache.spark.{Accumulator, Logging}
 import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.api.java._
@@ -34,7 +34,7 @@ import org.apache.spark.sql.types.DataType
 /**
  * Functions for registering user-defined functions.
  */
-class UDFRegistration (sqlContext: SQLContext) extends org.apache.spark.Logging {
+class UDFRegistration(sqlContext: SQLContext) extends Logging {
 
   private val functionRegistry = sqlContext.functionRegistry
 

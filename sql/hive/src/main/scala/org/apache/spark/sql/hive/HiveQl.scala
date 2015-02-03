@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.ExplainCommand
-import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, AnalyzeTable}
+import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, AnalyzeTable, HiveScriptIOSchema}
 import org.apache.spark.sql.types._
 
 /* Implicit conversions */
@@ -627,29 +627,64 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           case Token("TOK_SELEXPR",
                  Token("TOK_TRANSFORM",
                    Token("TOK_EXPLIST", inputExprs) ::
-                   Token("TOK_SERDE", Nil) ::
+                   Token("TOK_SERDE", inputSerdeClause) ::
                    Token("TOK_RECORDWRITER", writerClause) ::
                    // TODO: Need to support other types of (in/out)put
                    Token(script, Nil) ::
-                   Token("TOK_SERDE", serdeClause) ::
+                   Token("TOK_SERDE", outputSerdeClause) ::
                    Token("TOK_RECORDREADER", readerClause) ::
-                   outputClause :: Nil) :: Nil) =>
+                   outputClause) :: Nil) =>
 
-            val output = outputClause match {
-              case Token("TOK_ALIASLIST", aliases) =>
-                aliases.map { case Token(name, Nil) => AttributeReference(name, StringType)() }
-              case Token("TOK_TABCOLLIST", attributes) =>
-                attributes.map { case Token("TOK_TABCOL", Token(name, Nil) :: dataType :: Nil) =>
-                  AttributeReference(name, nodeToDataType(dataType))() }
+            val (output, schemaLess) = outputClause match {
+              case Token("TOK_ALIASLIST", aliases) :: Nil =>
+                (aliases.map { case Token(name, Nil) => AttributeReference(name, StringType)() },
+                  false)
+              case Token("TOK_TABCOLLIST", attributes) :: Nil =>
+                (attributes.map { case Token("TOK_TABCOL", Token(name, Nil) :: dataType :: Nil) =>
+                  AttributeReference(name, nodeToDataType(dataType))() }, false)
+              case Nil =>
+                (List(AttributeReference("key", StringType)(),
+                  AttributeReference("value", StringType)()), true)
             }
+
+            def matchSerDe(clause: Seq[ASTNode]) = clause match {
+              case Token("TOK_SERDEPROPS", propsClause) :: Nil =>
+                val rowFormat = propsClause.map {
+                  case Token(name, Token(value, Nil) :: Nil) => (name, value)
+                }
+                (rowFormat, "", Nil)
+
+              case Token("TOK_SERDENAME", Token(serdeClass, Nil) :: Nil) :: Nil =>
+                (Nil, serdeClass, Nil)
+
+              case Token("TOK_SERDENAME", Token(serdeClass, Nil) ::
+                Token("TOK_TABLEPROPERTIES",
+                Token("TOK_TABLEPROPLIST", propsClause) :: Nil) :: Nil) :: Nil =>
+                val serdeProps = propsClause.map {
+                  case Token("TOK_TABLEPROPERTY", Token(name, Nil) :: Token(value, Nil) :: Nil) =>
+                    (name, value)
+                } 
+                (Nil, serdeClass, serdeProps)
+
+              case Nil => (Nil, "", Nil)
+            }
+
+            val (inRowFormat, inSerdeClass, inSerdeProps) = matchSerDe(inputSerdeClause)
+            val (outRowFormat, outSerdeClass, outSerdeProps) = matchSerDe(outputSerdeClause)
+
             val unescapedScript = BaseSemanticAnalyzer.unescapeSQLString(script)
+
+            val schema = HiveScriptIOSchema(
+              inRowFormat, outRowFormat,
+              inSerdeClass, outSerdeClass,
+              inSerdeProps, outSerdeProps, schemaLess)
 
             Some(
               logical.ScriptTransformation(
                 inputExprs.map(nodeToExpr),
                 unescapedScript,
                 output,
-                withWhere))
+                withWhere, schema))
           case _ => None
         }
 
@@ -965,6 +1000,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
   /* Case insensitive matches */
   val ARRAY = "(?i)ARRAY".r
+  val COALESCE = "(?i)COALESCE".r
   val COUNT = "(?i)COUNT".r
   val AVG = "(?i)AVG".r
   val SUM = "(?i)SUM".r
@@ -1002,11 +1038,11 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       }
 
     /* Stars (*) */
-    case Token("TOK_ALLCOLREF", Nil) => Star(None)
+    case Token("TOK_ALLCOLREF", Nil) => UnresolvedStar(None)
     // The format of dbName.tableName.* cannot be parsed by HiveParser. TOK_TABNAME will only
     // has a single child which is tableName.
     case Token("TOK_ALLCOLREF", Token("TOK_TABNAME", Token(name, Nil) :: Nil) :: Nil) =>
-      Star(Some(name))
+      UnresolvedStar(Some(name))
 
     /* Aggregate Functions */
     case Token("TOK_FUNCTION", Token(AVG(), Nil) :: arg :: Nil) => Average(nodeToExpr(arg))
@@ -1140,12 +1176,13 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       Substring(nodeToExpr(string), nodeToExpr(pos), Literal(Integer.MAX_VALUE, IntegerType))
     case Token("TOK_FUNCTION", Token(SUBSTR(), Nil) :: string :: pos :: length :: Nil) =>
       Substring(nodeToExpr(string), nodeToExpr(pos), nodeToExpr(length))
+    case Token("TOK_FUNCTION", Token(COALESCE(), Nil) :: list) => Coalesce(list.map(nodeToExpr))
 
     /* UDFs - Must be last otherwise will preempt built in functions */
     case Token("TOK_FUNCTION", Token(name, Nil) :: args) =>
       UnresolvedFunction(name, args.map(nodeToExpr))
     case Token("TOK_FUNCTIONSTAR", Token(name, Nil) :: args) =>
-      UnresolvedFunction(name, Star(None) :: Nil)
+      UnresolvedFunction(name, UnresolvedStar(None) :: Nil)
 
     /* Literals */
     case Token("TOK_NULL", Nil) => Literal(null, NullType)

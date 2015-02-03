@@ -183,7 +183,7 @@ private[tree] object DecisionTreeMetadata extends Logging {
   }
 
   /**
-   * Version of [[buildMetadata()]] for DecisionTree.
+   * Version of [[DecisionTreeMetadata#buildMetadata]] for DecisionTree.
    */
   def buildMetadata(
       input: RDD[LabeledPoint],

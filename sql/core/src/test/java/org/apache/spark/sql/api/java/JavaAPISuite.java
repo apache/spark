@@ -61,7 +61,7 @@ public class JavaAPISuite implements Serializable {
       }
     }, DataTypes.IntegerType);
 
-    Row result = sqlContext.sql("SELECT stringLengthTest('test')").first();
+    Row result = sqlContext.sql("SELECT stringLengthTest('test')").head();
     assert(result.getInt(0) == 4);
   }
 
@@ -81,7 +81,7 @@ public class JavaAPISuite implements Serializable {
       }
     }, DataTypes.IntegerType);
 
-    Row result = sqlContext.sql("SELECT stringLengthTest('test', 'test2')").first();
+    Row result = sqlContext.sql("SELECT stringLengthTest('test', 'test2')").head();
     assert(result.getInt(0) == 9);
   }
 }

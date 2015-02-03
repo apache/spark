@@ -60,10 +60,12 @@ case class OptionalData(
 
 case class ComplexData(
     arrayField: Seq[Int],
+    arrayField1: Array[Int],
     arrayFieldContainsNull: Seq[java.lang.Integer],
     mapField: Map[Int, Long],
     mapFieldValueContainsNull: Map[Int, java.lang.Long],
-    structField: PrimitiveData)
+    structField: PrimitiveData,
+    nestedArrayField: Array[Array[Int]])
 
 case class GenericData[A](
     genericField: A)
@@ -132,6 +134,10 @@ class ScalaReflectionSuite extends FunSuite {
           ArrayType(IntegerType, containsNull = false),
           nullable = true),
         StructField(
+          "arrayField1",
+          ArrayType(IntegerType, containsNull = false),
+          nullable = true),
+        StructField(
           "arrayFieldContainsNull",
           ArrayType(IntegerType, containsNull = true),
           nullable = true),
@@ -153,7 +159,10 @@ class ScalaReflectionSuite extends FunSuite {
             StructField("shortField", ShortType, nullable = false),
             StructField("byteField", ByteType, nullable = false),
             StructField("booleanField", BooleanType, nullable = false))),
-          nullable = true))),
+          nullable = true),
+        StructField(
+          "nestedArrayField",
+          ArrayType(ArrayType(IntegerType, containsNull = false), containsNull = true)))),
       nullable = true))
   }
 
@@ -244,7 +253,7 @@ class ScalaReflectionSuite extends FunSuite {
 
   test("convert PrimitiveData to catalyst") {
     val data = PrimitiveData(1, 1, 1, 1, 1, 1, true)
-    val convertedData = Seq(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true)
+    val convertedData = Row(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true)
     val dataType = schemaFor[PrimitiveData].dataType
     assert(convertToCatalyst(data, dataType) === convertedData)
   }

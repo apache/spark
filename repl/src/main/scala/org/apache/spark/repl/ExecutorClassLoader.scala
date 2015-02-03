@@ -17,13 +17,13 @@
 
 package org.apache.spark.repl
 
-import java.io.{ByteArrayOutputStream, InputStream}
+import java.io.{ByteArrayOutputStream, InputStream, FileNotFoundException}
 import java.net.{URI, URL, URLEncoder}
 import java.util.concurrent.{Executors, ExecutorService}
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.{SparkConf, SparkEnv}
+import org.apache.spark.{SparkConf, SparkEnv, Logging}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.Utils
 import org.apache.spark.util.ParentClassLoader
@@ -37,7 +37,7 @@ import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
  * Allows the user to specify if user class path should be first
  */
 class ExecutorClassLoader(conf: SparkConf, classUri: String, parent: ClassLoader,
-    userClassPathFirst: Boolean) extends ClassLoader {
+    userClassPathFirst: Boolean) extends ClassLoader with Logging {
   val uri = new URI(classUri)
   val directory = uri.getPath
 
@@ -45,7 +45,7 @@ class ExecutorClassLoader(conf: SparkConf, classUri: String, parent: ClassLoader
 
   // Hadoop FileSystem object for our URI, if it isn't using HTTP
   var fileSystem: FileSystem = {
-    if (uri.getScheme() == "http") {
+    if (Set("http", "https", "ftp").contains(uri.getScheme)) {
       null
     } else {
       FileSystem.get(uri, SparkHadoopUtil.get.newConfiguration(conf))
@@ -78,20 +78,30 @@ class ExecutorClassLoader(conf: SparkConf, classUri: String, parent: ClassLoader
         if (fileSystem != null) {
           fileSystem.open(new Path(directory, pathInDirectory))
         } else {
-          if (SparkEnv.get.securityManager.isAuthenticationEnabled()) {
+          val url = if (SparkEnv.get.securityManager.isAuthenticationEnabled()) {
             val uri = new URI(classUri + "/" + urlEncode(pathInDirectory))
             val newuri = Utils.constructURIForAuthentication(uri, SparkEnv.get.securityManager)
-            newuri.toURL().openStream()
+            newuri.toURL
           } else {
-            new URL(classUri + "/" + urlEncode(pathInDirectory)).openStream()
+            new URL(classUri + "/" + urlEncode(pathInDirectory))
           }
+
+          Utils.setupSecureURLConnection(url.openConnection(), SparkEnv.get.securityManager)
+            .getInputStream
         }
       }
       val bytes = readAndTransformClass(name, inputStream)
       inputStream.close()
       Some(defineClass(name, bytes, 0, bytes.length))
     } catch {
-      case e: Exception => None
+      case e: FileNotFoundException =>
+        // We did not find the class
+        logDebug(s"Did not load class $name from REPL class server at $uri", e)
+        None
+      case e: Exception =>
+        // Something bad happened while checking if the class exists
+        logError(s"Failed to check existence of class $name on REPL class server at $uri", e)
+        None
     }
   }
 

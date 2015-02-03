@@ -314,7 +314,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
         // a && a  =>  a
         case (l, r) if l fastEquals r => l
         // (a || b) && (a || c)  =>  a || (b && c)
-        case (_, _) =>
+        case _ =>
           // 1. Split left and right to get the disjunctive predicates,
           //   i.e. lhsSet = (a, b), rhsSet = (a, c)
           // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
@@ -323,19 +323,20 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
           val lhsSet = splitDisjunctivePredicates(left).toSet
           val rhsSet = splitDisjunctivePredicates(right).toSet
           val common = lhsSet.intersect(rhsSet)
-          val ldiff = lhsSet.diff(common)
-          val rdiff = rhsSet.diff(common)
-          if (ldiff.size == 0 || rdiff.size == 0) {
-            // a && (a || b) => a
-            common.reduce(Or)
+          if (common.isEmpty) {
+            // No common factors, return the original predicate
+            and
           } else {
-            // (a || b || c || ...) && (a || b || d || ...) && (a || b || e || ...) ... =>
-            // (a || b) || ((c || ...) && (f || ...) && (e || ...) && ...)
-            (ldiff.reduceOption(Or) ++ rdiff.reduceOption(Or))
-              .reduceOption(And)
-              .map(_ :: common.toList)
-              .getOrElse(common.toList)
-              .reduce(Or)
+            val ldiff = lhsSet.diff(common)
+            val rdiff = rhsSet.diff(common)
+            if (ldiff.isEmpty || rdiff.isEmpty) {
+              // (a || b || c || ...) && (a || b) => (a || b)
+              common.reduce(Or)
+            } else {
+              // (a || b || c || ...) && (a || b || d || ...) =>
+              // ((c || ...) && (d || ...)) || a || b
+              (common + And(ldiff.reduce(Or), rdiff.reduce(Or))).reduce(Or)
+            }
           }
       }  // end of And(left, right)
 
@@ -351,7 +352,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
         // a || a => a
         case (l, r) if l fastEquals r => l
         // (a && b) || (a && c)  =>  a && (b || c)
-        case (_, _) =>
+        case _ =>
            // 1. Split left and right to get the conjunctive predicates,
            //   i.e.  lhsSet = (a, b), rhsSet = (a, c)
            // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
@@ -360,19 +361,20 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
           val lhsSet = splitConjunctivePredicates(left).toSet
           val rhsSet = splitConjunctivePredicates(right).toSet
           val common = lhsSet.intersect(rhsSet)
-          val ldiff = lhsSet.diff(common)
-          val rdiff = rhsSet.diff(common)
-          if ( ldiff.size == 0 || rdiff.size == 0) {
-            // a || (b && a) => a
-            common.reduce(And)
+          if (common.isEmpty) {
+            // No common factors, return the original predicate
+            or
           } else {
-            // (a && b && c && ...) || (a && b && d && ...) || (a && b && e && ...) ... =>
-            // a && b && ((c && ...) || (d && ...) || (e && ...) || ...)
-            (ldiff.reduceOption(And) ++ rdiff.reduceOption(And))
-              .reduceOption(Or)
-              .map(_ :: common.toList)
-              .getOrElse(common.toList)
-              .reduce(And)
+            val ldiff = lhsSet.diff(common)
+            val rdiff = rhsSet.diff(common)
+            if (ldiff.isEmpty || rdiff.isEmpty) {
+              // (a && b) || (a && b && c && ...) => a && b
+              common.reduce(And)
+            } else {
+              // (a && b && c && ...) || (a && b && d && ...) =>
+              // ((c && ...) || (d && ...)) && a && b
+              (common + Or(ldiff.reduce(And), rdiff.reduce(And))).reduce(And)
+            }
           }
       }  // end of Or(left, right)
 

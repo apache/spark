@@ -22,6 +22,9 @@ import java.util.Random
 import org.mockito.Mockito.when
 import org.scalatest.FunSuite
 import org.scalatest.mock.MockitoSugar._
+import scala.collection.mutable.{Map => MutableMap}
+
+import org.apache.spark.mllib.util.TestingUtils._
 
 class MatricesSuite extends FunSuite {
   test("dense matrix construction") {
@@ -32,7 +35,6 @@ class MatricesSuite extends FunSuite {
     assert(mat.numRows === m)
     assert(mat.numCols === n)
     assert(mat.values.eq(values), "should not copy data")
-    assert(mat.toArray.eq(values), "toArray should not copy data")
   }
 
   test("dense matrix construction with wrong dimension") {
@@ -161,7 +163,33 @@ class MatricesSuite extends FunSuite {
     assert(deMat1.toArray === deMat2.toArray)
   }
 
-  test("horzcat, vertcat, eye, speye") {
+  test("transpose") {
+    val dA =
+      new DenseMatrix(4, 3, Array(0.0, 1.0, 0.0, 0.0, 2.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 3.0))
+    val sA = new SparseMatrix(4, 3, Array(0, 1, 3, 4), Array(1, 0, 2, 3), Array(1.0, 2.0, 1.0, 3.0))
+
+    val dAT = dA.transpose.asInstanceOf[DenseMatrix]
+    val sAT = sA.transpose.asInstanceOf[SparseMatrix]
+    val dATexpected =
+      new DenseMatrix(3, 4, Array(0.0, 2.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 3.0))
+    val sATexpected =
+      new SparseMatrix(3, 4, Array(0, 1, 2, 3, 4), Array(1, 0, 1, 2), Array(2.0, 1.0, 1.0, 3.0))
+
+    assert(dAT.toBreeze === dATexpected.toBreeze)
+    assert(sAT.toBreeze === sATexpected.toBreeze)
+    assert(dA(1, 0) === dAT(0, 1))
+    assert(dA(2, 1) === dAT(1, 2))
+    assert(sA(1, 0) === sAT(0, 1))
+    assert(sA(2, 1) === sAT(1, 2))
+
+    assert(!dA.toArray.eq(dAT.toArray), "has to have a new array")
+    assert(dA.values.eq(dAT.transpose.asInstanceOf[DenseMatrix].values), "should not copy array")
+
+    assert(dAT.toSparse().toBreeze === sATexpected.toBreeze)
+    assert(sAT.toDense().toBreeze === dATexpected.toBreeze)
+  }
+
+  test("foreachActive") {
     val m = 3
     val n = 2
     val values = Array(1.0, 2.0, 4.0, 5.0)
@@ -169,8 +197,53 @@ class MatricesSuite extends FunSuite {
     val colPtrs = Array(0, 2, 4)
     val rowIndices = Array(0, 1, 1, 2)
 
+    val sp = new SparseMatrix(m, n, colPtrs, rowIndices, values)
+    val dn = new DenseMatrix(m, n, allValues)
+
+    val dnMap = MutableMap[(Int, Int), Double]()
+    dn.foreachActive { (i, j, value) =>
+      dnMap.put((i, j), value)
+    }
+    assert(dnMap.size === 6)
+    assert(dnMap(0, 0) === 1.0)
+    assert(dnMap(1, 0) === 2.0)
+    assert(dnMap(2, 0) === 0.0)
+    assert(dnMap(0, 1) === 0.0)
+    assert(dnMap(1, 1) === 4.0)
+    assert(dnMap(2, 1) === 5.0)
+
+    val spMap = MutableMap[(Int, Int), Double]()
+    sp.foreachActive { (i, j, value) =>
+      spMap.put((i, j), value)
+    }
+    assert(spMap.size === 4)
+    assert(spMap(0, 0) === 1.0)
+    assert(spMap(1, 0) === 2.0)
+    assert(spMap(1, 1) === 4.0)
+    assert(spMap(2, 1) === 5.0)
+  }
+
+  test("horzcat, vertcat, eye, speye") {
+    val m = 3
+    val n = 2
+    val values = Array(1.0, 2.0, 4.0, 5.0)
+    val allValues = Array(1.0, 2.0, 0.0, 0.0, 4.0, 5.0)
+    val colPtrs = Array(0, 2, 4)
+    val rowIndices = Array(0, 1, 1, 2)
+    // transposed versions
+    val allValuesT = Array(1.0, 0.0, 2.0, 4.0, 0.0, 5.0)
+    val colPtrsT = Array(0, 1, 3, 4)
+    val rowIndicesT = Array(0, 0, 1, 1)
+
     val spMat1 = new SparseMatrix(m, n, colPtrs, rowIndices, values)
     val deMat1 = new DenseMatrix(m, n, allValues)
+    val spMat1T = new SparseMatrix(n, m, colPtrsT, rowIndicesT, values)
+    val deMat1T = new DenseMatrix(n, m, allValuesT)
+
+    // should equal spMat1 & deMat1 respectively
+    val spMat1TT = spMat1T.transpose
+    val deMat1TT = deMat1T.transpose
+
     val deMat2 = Matrices.eye(3)
     val spMat2 = Matrices.speye(3)
     val deMat3 = Matrices.eye(2)
@@ -180,7 +253,6 @@ class MatricesSuite extends FunSuite {
     val spHorz2 = Matrices.horzcat(Array(spMat1, deMat2))
     val spHorz3 = Matrices.horzcat(Array(deMat1, spMat2))
     val deHorz1 = Matrices.horzcat(Array(deMat1, deMat2))
-
     val deHorz2 = Matrices.horzcat(Array[Matrix]())
 
     assert(deHorz1.numRows === 3)
@@ -195,8 +267,8 @@ class MatricesSuite extends FunSuite {
     assert(deHorz2.numCols === 0)
     assert(deHorz2.toArray.length === 0)
 
-    assert(deHorz1.toBreeze.toDenseMatrix === spHorz2.toBreeze.toDenseMatrix)
-    assert(spHorz2.toBreeze === spHorz3.toBreeze)
+    assert(deHorz1 ~== spHorz2.asInstanceOf[SparseMatrix].toDense absTol 1e-15)
+    assert(spHorz2 ~== spHorz3 absTol 1e-15)
     assert(spHorz(0, 0) === 1.0)
     assert(spHorz(2, 1) === 5.0)
     assert(spHorz(0, 2) === 1.0)
@@ -211,6 +283,17 @@ class MatricesSuite extends FunSuite {
     assert(deHorz1(1, 3) === 1.0)
     assert(deHorz1(2, 4) === 1.0)
     assert(deHorz1(1, 4) === 0.0)
+
+    // containing transposed matrices
+    val spHorzT = Matrices.horzcat(Array(spMat1TT, spMat2))
+    val spHorz2T = Matrices.horzcat(Array(spMat1TT, deMat2))
+    val spHorz3T = Matrices.horzcat(Array(deMat1TT, spMat2))
+    val deHorz1T = Matrices.horzcat(Array(deMat1TT, deMat2))
+
+    assert(deHorz1T ~== deHorz1 absTol 1e-15)
+    assert(spHorzT ~== spHorz absTol 1e-15)
+    assert(spHorz2T ~== spHorz2 absTol 1e-15)
+    assert(spHorz3T ~== spHorz3 absTol 1e-15)
 
     intercept[IllegalArgumentException] {
       Matrices.horzcat(Array(spMat1, spMat3))
@@ -238,8 +321,8 @@ class MatricesSuite extends FunSuite {
     assert(deVert2.numCols === 0)
     assert(deVert2.toArray.length === 0)
 
-    assert(deVert1.toBreeze.toDenseMatrix === spVert2.toBreeze.toDenseMatrix)
-    assert(spVert2.toBreeze === spVert3.toBreeze)
+    assert(deVert1 ~== spVert2.asInstanceOf[SparseMatrix].toDense absTol 1e-15)
+    assert(spVert2 ~== spVert3 absTol 1e-15)
     assert(spVert(0, 0) === 1.0)
     assert(spVert(2, 1) === 5.0)
     assert(spVert(3, 0) === 1.0)
@@ -250,6 +333,17 @@ class MatricesSuite extends FunSuite {
     assert(deVert1(3, 0) === 1.0)
     assert(deVert1(3, 1) === 0.0)
     assert(deVert1(4, 1) === 1.0)
+
+    // containing transposed matrices
+    val spVertT = Matrices.vertcat(Array(spMat1TT, spMat3))
+    val deVert1T = Matrices.vertcat(Array(deMat1TT, deMat3))
+    val spVert2T = Matrices.vertcat(Array(spMat1TT, deMat3))
+    val spVert3T = Matrices.vertcat(Array(deMat1TT, spMat3))
+
+    assert(deVert1T ~== deVert1 absTol 1e-15)
+    assert(spVertT ~== spVert absTol 1e-15)
+    assert(spVert2T ~== spVert2 absTol 1e-15)
+    assert(spVert3T ~== spVert3 absTol 1e-15)
 
     intercept[IllegalArgumentException] {
       Matrices.vertcat(Array(spMat1, spMat2))
