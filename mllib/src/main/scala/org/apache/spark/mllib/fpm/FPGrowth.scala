@@ -17,21 +17,30 @@
 
 package org.apache.spark.mllib.fpm
 
-import java.lang.{Iterable => JavaIterable}
 import java.{util => ju}
+import java.lang.{Iterable => JavaIterable}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
-import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.{HashPartitioner, Logging, Partitioner, SparkException}
+import org.apache.spark.api.java.{JavaPairRDD, JavaRDD}
+import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.{HashPartitioner, Logging, Partitioner, SparkException}
 
-class FPGrowthModel[Item](val freqItemsets: RDD[(Array[Item], Long)]) extends Serializable {
-  def javaFreqItemsets(): JavaRDD[(Array[Item], Long)] = {
-    freqItemsets.toJavaRDD()
+/**
+ * Model trained by [[FPGrowth]], which holds frequent itemsets.
+ * @param freqItemsets frequent itemset, which is an RDD of (itemset, frequency) pairs
+ * @tparam Item item type
+ */
+class FPGrowthModel[Item: ClassTag](
+    val freqItemsets: RDD[(Array[Item], Long)]) extends Serializable {
+
+  /** Returns frequent itemsets as a [[org.apache.spark.api.java.JavaPairRDD]]. */
+  def javaFreqItemsets(): JavaPairRDD[Array[Item], java.lang.Long] = {
+    JavaPairRDD.fromRDD(freqItemsets).asInstanceOf[JavaPairRDD[Array[Item], java.lang.Long]]
   }
 }
 
@@ -77,7 +86,7 @@ class FPGrowth private (
    * @param data input data set, each element contains a transaction
    * @return an [[FPGrowthModel]]
    */
-  def run[Item: ClassTag, Basket <: Iterable[Item]](data: RDD[Basket]): FPGrowthModel[Item] = {
+  def run[Item: ClassTag](data: RDD[Array[Item]]): FPGrowthModel[Item] = {
     if (data.getStorageLevel == StorageLevel.NONE) {
       logWarning("Input data is not cached.")
     }
@@ -85,14 +94,14 @@ class FPGrowth private (
     val minCount = math.ceil(minSupport * count).toLong
     val numParts = if (numPartitions > 0) numPartitions else data.partitions.length
     val partitioner = new HashPartitioner(numParts)
-    val freqItems = genFreqItems[Item, Basket](data, minCount, partitioner)
-    val freqItemsets = genFreqItemsets[Item, Basket](data, minCount, freqItems, partitioner)
+    val freqItems = genFreqItems(data, minCount, partitioner)
+    val freqItemsets = genFreqItemsets(data, minCount, freqItems, partitioner)
     new FPGrowthModel(freqItemsets)
   }
 
-  def run[Item: ClassTag, Basket <: JavaIterable[Item]](
-      data: JavaRDD[Basket]): FPGrowthModel[Item] = {
-    this.run(data.rdd.map(_.asScala))
+  def run[Item, Basket <: JavaIterable[Item]](data: JavaRDD[Basket]): FPGrowthModel[Item] = {
+    implicit val tag = fakeClassTag[Item]
+    run(data.rdd.map(_.asScala.toArray))
   }
 
   /**
@@ -101,8 +110,8 @@ class FPGrowth private (
    * @param partitioner partitioner used to distribute items
    * @return array of frequent pattern ordered by their frequencies
    */
-  private def genFreqItems[Item: ClassTag, Basket <: Iterable[Item]](
-      data: RDD[Basket],
+  private def genFreqItems[Item: ClassTag](
+      data: RDD[Array[Item]],
       minCount: Long,
       partitioner: Partitioner): Array[Item] = {
     data.flatMap { t =>
@@ -127,8 +136,8 @@ class FPGrowth private (
    * @param partitioner partitioner used to distribute transactions
    * @return an RDD of (frequent itemset, count)
    */
-  private def genFreqItemsets[Item: ClassTag, Basket <: Iterable[Item]](
-      data: RDD[Basket],
+  private def genFreqItemsets[Item: ClassTag](
+      data: RDD[Array[Item]],
       minCount: Long,
       freqItems: Array[Item],
       partitioner: Partitioner): RDD[(Array[Item], Long)] = {
@@ -152,13 +161,13 @@ class FPGrowth private (
    * @param partitioner partitioner used to distribute transactions
    * @return a map of (target partition, conditional transaction)
    */
-  private def genCondTransactions[Item: ClassTag, Basket <: Iterable[Item]](
-      transaction: Basket,
+  private def genCondTransactions[Item: ClassTag](
+      transaction: Array[Item],
       itemToRank: Map[Item, Int],
       partitioner: Partitioner): mutable.Map[Int, Array[Int]] = {
     val output = mutable.Map.empty[Int, Array[Int]]
     // Filter the basket by frequent items pattern and sort their ranks.
-    val filtered = transaction.flatMap(itemToRank.get).toArray
+    val filtered = transaction.flatMap(itemToRank.get)
     ju.Arrays.sort(filtered)
     val n = filtered.length
     var i = n - 1
