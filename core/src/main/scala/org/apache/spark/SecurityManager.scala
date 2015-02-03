@@ -18,7 +18,11 @@
 package org.apache.spark
 
 import java.net.{Authenticator, PasswordAuthentication}
+import java.security.KeyStore
+import java.security.cert.X509Certificate
+import javax.net.ssl._
 
+import com.google.common.io.Files
 import org.apache.hadoop.io.Text
 
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -55,7 +59,7 @@ import org.apache.spark.network.sasl.SecretKeyHolder
  * Spark also has a set of admin acls (`spark.admin.acls`) which is a set of users/administrators
  * who always have permission to view or modify the Spark application.
  *
- * Spark does not currently support encryption after authentication.
+ * Starting from version 1.3, Spark has partial support for encrypted connections with SSL.
  *
  * At this point spark has multiple communication protocols that need to be secured and
  * different underlying mechanisms are used depending on the protocol:
@@ -67,8 +71,9 @@ import org.apache.spark.network.sasl.SecretKeyHolder
  *            to connect to the server. There is no control of the underlying
  *            authentication mechanism so its not clear if the password is passed in
  *            plaintext or uses DIGEST-MD5 or some other mechanism.
- *            Akka also has an option to turn on SSL, this option is not currently supported
- *            but we could add a configuration option in the future.
+ *
+ *            Akka also has an option to turn on SSL, this option is currently supported (see
+ *            the details below).
  *
  *  - HTTP for broadcast and file server (via HttpServer) ->  Spark currently uses Jetty
  *            for the HttpServer. Jetty supports multiple authentication mechanisms -
@@ -77,8 +82,9 @@ import org.apache.spark.network.sasl.SecretKeyHolder
  *            to authenticate using DIGEST-MD5 via a single user and the shared secret.
  *            Since we are using DIGEST-MD5, the shared secret is not passed on the wire
  *            in plaintext.
- *            We currently do not support SSL (https), but Jetty can be configured to use it
- *            so we could add a configuration option for this in the future.
+ *
+ *            We currently support SSL (https) for this communication protocol (see the details
+ *            below).
  *
  *            The Spark HttpServer installs the HashLoginServer and configures it to DIGEST-MD5.
  *            Any clients must specify the user and password. There is a default
@@ -142,9 +148,40 @@ import org.apache.spark.network.sasl.SecretKeyHolder
  *  authentication. Spark will then use that user to compare against the view acls to do
  *  authorization. If not filter is in place the user is generally null and no authorization
  *  can take place.
+ *
+ *  Connection encryption (SSL) configuration is organized hierarchically. The user can configure
+ *  the default SSL settings which will be used for all the supported communication protocols unless
+ *  they are overwritten by protocol specific settings. This way the user can easily provide the
+ *  common settings for all the protocols without disabling the ability to configure each one
+ *  individually.
+ *
+ *  All the SSL settings like `spark.ssl.xxx` where `xxx` is a particular configuration property,
+ *  denote the global configuration for all the supported protocols. In order to override the global
+ *  configuration for the particular protocol, the properties must be overwritten in the
+ *  protocol-specific namespace. Use `spark.ssl.yyy.xxx` settings to overwrite the global
+ *  configuration for particular protocol denoted by `yyy`. Currently `yyy` can be either `akka` for
+ *  Akka based connections or `fs` for broadcast and file server.
+ *
+ *  Refer to [[org.apache.spark.SSLOptions]] documentation for the list of
+ *  options that can be specified.
+ *
+ *  SecurityManager initializes SSLOptions objects for different protocols separately. SSLOptions
+ *  object parses Spark configuration at a given namespace and builds the common representation
+ *  of SSL settings. SSLOptions is then used to provide protocol-specific configuration like
+ *  TypeSafe configuration for Akka or SSLContextFactory for Jetty.
+ *
+ *  SSL must be configured on each node and configured for each component involved in
+ *  communication using the particular protocol. In YARN clusters, the key-store can be prepared on
+ *  the client side then distributed and used by the executors as the part of the application
+ *  (YARN allows the user to deploy files before the application is started).
+ *  In standalone deployment, the user needs to provide key-stores and configuration
+ *  options for master and workers. In this mode, the user may allow the executors to use the SSL
+ *  settings inherited from the worker which spawned that executor. It can be accomplished by
+ *  setting `spark.ssl.useNodeLocalConf` to `true`.
  */
 
-private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging with SecretKeyHolder {
+private[spark] class SecurityManager(sparkConf: SparkConf)
+  extends Logging with SecretKeyHolder {
 
   // key used to store the spark secret in the Hadoop UGI
   private val sparkSecretLookupKey = "sparkCookie"
@@ -194,6 +231,57 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging with 
         }
       }
     )
+  }
+
+  // the default SSL configuration - it will be used by all communication layers unless overwritten
+  private val defaultSSLOptions = SSLOptions.parse(sparkConf, "spark.ssl", defaults = None)
+
+  // SSL configuration for different communication layers - they can override the default
+  // configuration at a specified namespace. The namespace *must* start with spark.ssl.
+  val fileServerSSLOptions = SSLOptions.parse(sparkConf, "spark.ssl.fs", Some(defaultSSLOptions))
+  val akkaSSLOptions = SSLOptions.parse(sparkConf, "spark.ssl.akka", Some(defaultSSLOptions))
+
+  logDebug(s"SSLConfiguration for file server: $fileServerSSLOptions")
+  logDebug(s"SSLConfiguration for Akka: $akkaSSLOptions")
+
+  val (sslSocketFactory, hostnameVerifier) = if (fileServerSSLOptions.enabled) {
+    val trustStoreManagers =
+      for (trustStore <- fileServerSSLOptions.trustStore) yield {
+        val input = Files.asByteSource(fileServerSSLOptions.trustStore.get).openStream()
+
+        try {
+          val ks = KeyStore.getInstance(KeyStore.getDefaultType)
+          ks.load(input, fileServerSSLOptions.trustStorePassword.get.toCharArray)
+
+          val tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm)
+          tmf.init(ks)
+          tmf.getTrustManagers
+        } finally {
+          input.close()
+        }
+      }
+
+    lazy val credulousTrustStoreManagers = Array({
+      logWarning("Using 'accept-all' trust manager for SSL connections.")
+      new X509TrustManager {
+        override def getAcceptedIssuers: Array[X509Certificate] = null
+
+        override def checkClientTrusted(x509Certificates: Array[X509Certificate], s: String) {}
+
+        override def checkServerTrusted(x509Certificates: Array[X509Certificate], s: String) {}
+      }: TrustManager
+    })
+
+    val sslContext = SSLContext.getInstance(fileServerSSLOptions.protocol.getOrElse("Default"))
+    sslContext.init(null, trustStoreManagers.getOrElse(credulousTrustStoreManagers), null)
+
+    val hostVerifier = new HostnameVerifier {
+      override def verify(s: String, sslSession: SSLSession): Boolean = true
+    }
+
+    (Some(sslContext.getSocketFactory), Some(hostVerifier))
+  } else {
+    (None, None)
   }
 
   /**

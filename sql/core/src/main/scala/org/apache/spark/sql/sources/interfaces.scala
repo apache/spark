@@ -18,7 +18,7 @@ package org.apache.spark.sql.sources
 
 import org.apache.spark.annotation.{Experimental, DeveloperApi}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.sql.catalyst.expressions.{Expression, Attribute}
 import org.apache.spark.sql.types.StructType
 
@@ -77,6 +77,14 @@ trait SchemaRelationProvider {
       schema: StructType): BaseRelation
 }
 
+@DeveloperApi
+trait CreateableRelationProvider {
+  def createRelation(
+      sqlContext: SQLContext,
+      parameters: Map[String, String],
+      data: DataFrame): BaseRelation
+}
+
 /**
  * ::DeveloperApi::
  * Represents a collection of tuples with a known schema.  Classes that extend BaseRelation must
@@ -108,7 +116,7 @@ abstract class BaseRelation {
  * A BaseRelation that can produce all of its tuples as an RDD of Row objects.
  */
 @DeveloperApi
-abstract class TableScan extends BaseRelation {
+trait TableScan extends BaseRelation {
   def buildScan(): RDD[Row]
 }
 
@@ -118,7 +126,7 @@ abstract class TableScan extends BaseRelation {
  * containing all of its tuples as Row objects.
  */
 @DeveloperApi
-abstract class PrunedScan extends BaseRelation {
+trait PrunedScan extends BaseRelation {
   def buildScan(requiredColumns: Array[String]): RDD[Row]
 }
 
@@ -132,7 +140,7 @@ abstract class PrunedScan extends BaseRelation {
  * as filtering partitions based on a bloom filter.
  */
 @DeveloperApi
-abstract class PrunedFilteredScan extends BaseRelation {
+trait PrunedFilteredScan extends BaseRelation {
   def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row]
 }
 
@@ -145,6 +153,11 @@ abstract class PrunedFilteredScan extends BaseRelation {
  * for experimentation.
  */
 @Experimental
-abstract class CatalystScan extends BaseRelation {
+trait CatalystScan extends BaseRelation {
   def buildScan(requiredColumns: Seq[Attribute], filters: Seq[Expression]): RDD[Row]
+}
+
+@DeveloperApi
+trait InsertableRelation extends BaseRelation {
+  def insert(data: DataFrame, overwrite: Boolean): Unit
 }

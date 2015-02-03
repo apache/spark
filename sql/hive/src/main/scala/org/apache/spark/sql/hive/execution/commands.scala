@@ -18,8 +18,10 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.sources.ResolvedDataSource
+import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.types.StructType
@@ -102,15 +104,79 @@ case class CreateMetastoreDataSource(
     tableIdentifier: Seq[String],
     userSpecifiedSchema: Option[StructType],
     provider: String,
-    options: Map[String, String]) extends RunnableCommand {
+    options: Map[String, String],
+    allowExisting: Boolean) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext) = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
+
+    if (hiveContext.catalog.tableExists(tableIdentifier)) {
+      if (allowExisting) {
+        return Seq.empty[Row]
+      } else {
+        sys.error(s"Table ${tableIdentifier.mkString(".")} already exists.")
+      }
+    }
+
+    var isExternal = true
+    val optionsWithPath =
+      if (!options.contains("path")) {
+        isExternal = false
+        options +
+          ("path" -> hiveContext.catalog.hiveDefaultTableFilePath(tableIdentifier.mkString(".")))
+      } else {
+        options
+      }
+
     hiveContext.catalog.createDataSourceTable(
       tableIdentifier,
       userSpecifiedSchema,
       provider,
-      options)
+      optionsWithPath,
+      isExternal)
+
+    Seq.empty[Row]
+  }
+}
+
+case class CreateMetastoreDataSourceAsSelect(
+    tableIdentifier: Seq[String],
+    provider: String,
+    options: Map[String, String],
+    allowExisting: Boolean,
+    query: LogicalPlan) extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val hiveContext = sqlContext.asInstanceOf[HiveContext]
+
+    if (hiveContext.catalog.tableExists(tableIdentifier)) {
+      if (allowExisting) {
+        return Seq.empty[Row]
+      } else {
+        sys.error(s"Table ${tableIdentifier.mkString(".")} already exists.")
+      }
+    }
+
+    val df = DataFrame(hiveContext, query)
+    var isExternal = true
+    val optionsWithPath =
+      if (!options.contains("path")) {
+        isExternal = false
+        options +
+          ("path" -> hiveContext.catalog.hiveDefaultTableFilePath(tableIdentifier.mkString(".")))
+      } else {
+        options
+      }
+
+    // Create the relation based on the data of df.
+    ResolvedDataSource(sqlContext, provider, optionsWithPath, df)
+
+    hiveContext.catalog.createDataSourceTable(
+      tableIdentifier,
+      None,
+      provider,
+      optionsWithPath,
+      isExternal)
 
     Seq.empty[Row]
   }

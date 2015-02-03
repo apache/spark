@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal, Predicate, Row}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.{DataFrame, QueryTest, SQLConf}
+import org.apache.spark.sql.{Column, DataFrame, QueryTest, SQLConf}
 
 /**
  * A test suite that tests Parquet filter2 API based filter pushdown optimization.
@@ -51,8 +51,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest {
 
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED -> "true") {
       val query = rdd
-        .select(output.map(e => new org.apache.spark.sql.Column(e)): _*)
-        .where(new org.apache.spark.sql.Column(predicate))
+        .select(output.map(e => Column(e)): _*)
+        .where(Column(predicate))
 
       val maybeAnalyzedPredicate = query.queryExecution.executedPlan.collect {
         case plan: ParquetTableScan => plan.columnPruningPred

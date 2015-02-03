@@ -23,10 +23,9 @@ import java.util.{List => JList}
 import com.google.common.cache.{LoadingCache, CacheLoader, CacheBuilder}
 
 import org.apache.hadoop.util.ReflectionUtils
-import org.apache.hadoop.hive.metastore.TableType
-import org.apache.hadoop.hive.metastore.api.{Table => TTable, Partition => TPartition, FieldSchema}
-import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table, HiveException}
-import org.apache.hadoop.hive.ql.metadata.InvalidTableException
+import org.apache.hadoop.hive.metastore.{Warehouse, TableType}
+import org.apache.hadoop.hive.metastore.api.{Table => TTable, Partition => TPartition, AlreadyExistsException, FieldSchema}
+import org.apache.hadoop.hive.ql.metadata._
 import org.apache.hadoop.hive.ql.plan.CreateTableDesc
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.{Deserializer, SerDeException}
@@ -51,6 +50,9 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
   /** Connection to hive metastore.  Usages should lock on `this`. */
   protected[hive] val client = Hive.get(hive.hiveconf)
+
+
+  protected[hive] lazy val hiveWarehouse = new Warehouse(hive.hiveconf)
 
   /** A cache of Spark SQL data source tables that have been accessed. */
   protected[hive] val cachedDataSourceTables: LoadingCache[Seq[String], LogicalPlan] = {
@@ -102,11 +104,23 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     (dbName, tblName)
   }
 
+
+  /** *
+    * Creates a data source table (a table created with USING clause) in Hive's metastore.
+    * Returns true when the table has been created. Otherwise, false.
+    * @param tableIdentifier
+    * @param userSpecifiedSchema
+    * @param provider
+    * @param options
+    * @param isExternal
+    * @return
+    */
   def createDataSourceTable(
       tableIdentifier: Seq[String],
       userSpecifiedSchema: Option[StructType],
       provider: String,
-      options: Map[String, String]) = {
+      options: Map[String, String],
+      isExternal: Boolean): Unit = {
     val (dbName, tblName) = getDBAndTableName(tableIdentifier)
     val tbl = new Table(dbName, tblName)
 
@@ -116,13 +130,22 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     }
     options.foreach { case (key, value) => tbl.setSerdeParam(key, value) }
 
-    tbl.setProperty("EXTERNAL", "TRUE")
-    tbl.setTableType(TableType.EXTERNAL_TABLE)
+    if (isExternal) {
+      tbl.setProperty("EXTERNAL", "TRUE")
+      tbl.setTableType(TableType.EXTERNAL_TABLE)
+    } else {
+      tbl.setProperty("EXTERNAL", "FALSE")
+      tbl.setTableType(TableType.MANAGED_TABLE)
+    }
 
     // create the table
     synchronized {
       client.createTable(tbl, false)
     }
+  }
+
+  def hiveDefaultTableFilePath(tableName: String): String = {
+    hiveWarehouse.getTablePath(client.getDatabaseCurrent, tableName).toString
   }
 
   def tableExists(tableIdentifier: Seq[String]): Boolean = {
@@ -513,6 +536,15 @@ private[hive] case class MetastoreRelation
           .getOrElse(sqlContext.conf.defaultSizeInBytes)))
     }
   )
+
+  /** Only compare database and tablename, not alias. */
+  override def sameResult(plan: LogicalPlan): Boolean = {
+    plan match {
+      case mr: MetastoreRelation =>
+        mr.databaseName == databaseName && mr.tableName == tableName
+      case _ => false
+    }
+  }
 
   val tableDesc = HiveShim.getTableDesc(
     Class.forName(

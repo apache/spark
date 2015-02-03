@@ -15,22 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler.cluster
+package test.org.apache.spark;
 
-import org.apache.hadoop.yarn.util.RackResolver
-
-import org.apache.spark._
-import org.apache.spark.scheduler.TaskSchedulerImpl
-import org.apache.spark.util.Utils
+import org.apache.spark.TaskContext;
 
 /**
- * This scheduler launches executors through Yarn - by calling into Client to launch the Spark AM.
+ * Something to make sure that TaskContext can be used in Java.
  */
-private[spark] class YarnClientClusterScheduler(sc: SparkContext) extends TaskSchedulerImpl(sc) {
+public class JavaTaskContextCompileCheck {
 
-  // By default, rack is unknown
-  override def getRackForHost(hostPort: String): Option[String] = {
-    val host = Utils.parseHostPort(hostPort)._1
-    Option(RackResolver.resolve(sc.hadoopConfiguration, host).getNetworkLocation)
+  public static void test() {
+    TaskContext tc = TaskContext.get();
+
+    tc.isCompleted();
+    tc.isInterrupted();
+    tc.isRunningLocally();
+
+    tc.addTaskCompletionListener(new JavaTaskCompletionListenerImpl());
+
+    tc.attemptNumber();
+    tc.partitionId();
+    tc.stageId();
+    tc.taskAttemptId();
   }
 }

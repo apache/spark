@@ -21,6 +21,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 
 /**
+ * :: Experimental ::
  * Train or predict a linear regression model on streaming data. Training uses
  * Stochastic Gradient Descent to update the model based on each new batch of
  * incoming data from a DStream (see `LinearRegressionWithSGD` for model equation)
@@ -41,13 +42,12 @@ import org.apache.spark.mllib.linalg.Vector
  *
  */
 @Experimental
-class StreamingLinearRegressionWithSGD (
+class StreamingLinearRegressionWithSGD private[mllib] (
     private var stepSize: Double,
     private var numIterations: Int,
-    private var miniBatchFraction: Double,
-    private var initialWeights: Vector)
-  extends StreamingLinearAlgorithm[
-    LinearRegressionModel, LinearRegressionWithSGD] with Serializable {
+    private var miniBatchFraction: Double)
+  extends StreamingLinearAlgorithm[LinearRegressionModel, LinearRegressionWithSGD]
+  with Serializable {
 
   /**
    * Construct a StreamingLinearRegression object with default parameters:
@@ -55,11 +55,9 @@ class StreamingLinearRegressionWithSGD (
    * Initial weights must be set before using trainOn or predictOn
    * (see `StreamingLinearAlgorithm`)
    */
-  def this() = this(0.1, 50, 1.0, null)
+  def this() = this(0.1, 50, 1.0)
 
   val algorithm = new LinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction)
-
-  var model = algorithm.createModel(initialWeights, 0.0)
 
   /** Set the step size for gradient descent. Default: 0.1. */
   def setStepSize(stepSize: Double): this.type = {
@@ -81,7 +79,7 @@ class StreamingLinearRegressionWithSGD (
 
   /** Set the initial weights. Default: [0.0, 0.0]. */
   def setInitialWeights(initialWeights: Vector): this.type = {
-    this.model = algorithm.createModel(initialWeights, 0.0)
+    this.model = Some(algorithm.createModel(initialWeights, 0.0))
     this
   }
 

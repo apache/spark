@@ -88,6 +88,18 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
   }
 
+  test("Add Parser of SQL COALESCE()") {
+    checkAnswer(
+      sql("""SELECT COALESCE(1, 2)"""),
+      Row(1))
+    checkAnswer(
+      sql("SELECT COALESCE(null, 1, 1.5)"),
+      Row(1.toDouble))
+    checkAnswer(
+      sql("SELECT COALESCE(null, null, null)"),
+      Row(null))
+  }
+
   test("SPARK-3176 Added Parser of SQL LAST()") {
     checkAnswer(
       sql("SELECT LAST(n) FROM lowerCaseData"),
@@ -795,13 +807,11 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
 
   test("throw errors for non-aggregate attributes with aggregation") {
     def checkAggregation(query: String, isInvalidQuery: Boolean = true) {
-      val logicalPlan = sql(query).queryExecution.logical
-
       if (isInvalidQuery) {
         val e = intercept[TreeNodeException[LogicalPlan]](sql(query).queryExecution.analyzed)
         assert(
           e.getMessage.startsWith("Expression not in GROUP BY"),
-          "Non-aggregate attribute(s) not detected\n" + logicalPlan)
+          "Non-aggregate attribute(s) not detected\n")
       } else {
         // Should not throw
         sql(query).queryExecution.analyzed
@@ -809,7 +819,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     }
 
     checkAggregation("SELECT key, COUNT(*) FROM testData")
-    checkAggregation("SELECT COUNT(key), COUNT(*) FROM testData", false)
+    checkAggregation("SELECT COUNT(key), COUNT(*) FROM testData", isInvalidQuery = false)
 
     checkAggregation("SELECT value, COUNT(*) FROM testData GROUP BY key")
     checkAggregation("SELECT COUNT(value), SUM(key) FROM testData GROUP BY key", false)

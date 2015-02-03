@@ -20,5 +20,6 @@ Python package for statistical functions in MLlib.
 """
 
 from pyspark.mllib.stat._statistics import *
+from pyspark.mllib.stat.distribution import MultivariateGaussian
 
-__all__ = ["Statistics", "MultivariateStatisticalSummary"]
+__all__ = ["Statistics", "MultivariateStatisticalSummary", "MultivariateGaussian"]

@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql
 
+import java.util.{List => JList}
+
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{TypeTag, typeTag}
+import scala.collection.JavaConversions._
 
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions._
@@ -55,12 +58,17 @@ object Dsl {
     }
   }
 
-  private[this] implicit def toColumn(expr: Expression): Column = new Column(expr)
+  private[this] implicit def toColumn(expr: Expression): Column = Column(expr)
 
   /**
    * Returns a [[Column]] based on the given column name.
    */
-  def col(colName: String): Column = new Column(colName)
+  def col(colName: String): Column = Column(colName)
+
+  /**
+   * Returns a [[Column]] based on the given column name. Alias of [[col]].
+   */
+  def column(colName: String): Column = Column(colName)
 
   /**
    * Creates a [[Column]] of literal value.
@@ -89,15 +97,20 @@ object Dsl {
       case _ =>
         throw new RuntimeException("Unsupported literal type " + literal.getClass + " " + literal)
     }
-    new Column(literalExpr)
+    Column(literalExpr)
   }
 
   def sum(e: Column): Column = Sum(e.expr)
   def sumDistinct(e: Column): Column = SumDistinct(e.expr)
   def count(e: Column): Column = Count(e.expr)
 
+  @scala.annotation.varargs
   def countDistinct(expr: Column, exprs: Column*): Column =
     CountDistinct((expr +: exprs).map(_.expr))
+
+  def approxCountDistinct(e: Column): Column = ApproxCountDistinct(e.expr)
+  def approxCountDistinct(e: Column, rsd: Double): Column =
+    ApproxCountDistinct(e.expr, rsd)
 
   def avg(e: Column): Column = Average(e.expr)
   def first(e: Column): Column = First(e.expr)
@@ -110,6 +123,13 @@ object Dsl {
   def sqrt(e: Column): Column = Sqrt(e.expr)
   def abs(e: Column): Column = Abs(e.expr)
 
+  /**
+   * This is a private API for Python
+   * TODO: move this to a private package
+   */
+  def toColumns(cols: JList[Column]): Seq[Column] = {
+    cols.toList.toSeq
+  }
 
   // scalastyle:off
 

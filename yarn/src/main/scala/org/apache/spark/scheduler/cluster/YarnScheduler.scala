@@ -15,24 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util;
+package org.apache.spark.scheduler.cluster
 
-import org.apache.spark.TaskContext;
+import org.apache.hadoop.yarn.util.RackResolver
 
+import org.apache.log4j.{Level, Logger}
 
-/**
- * A simple implementation of TaskCompletionListener that makes sure TaskCompletionListener and
- * TaskContext is Java friendly.
- */
-public class JavaTaskCompletionListenerImpl implements TaskCompletionListener {
+import org.apache.spark._
+import org.apache.spark.scheduler.TaskSchedulerImpl
+import org.apache.spark.util.Utils
 
-  @Override
-  public void onTaskCompletion(TaskContext context) {
-    context.isCompleted();
-    context.isInterrupted();
-    context.stageId();
-    context.partitionId();
-    context.isRunningLocally();
-    context.addTaskCompletionListener(this);
+private[spark] class YarnScheduler(sc: SparkContext) extends TaskSchedulerImpl(sc) {
+
+  // RackResolver logs an INFO message whenever it resolves a rack, which is way too often.
+  if (Logger.getLogger(classOf[RackResolver]).getLevel == null) {
+    Logger.getLogger(classOf[RackResolver]).setLevel(Level.WARN)
+  }
+
+  // By default, rack is unknown
+  override def getRackForHost(hostPort: String): Option[String] = {
+    val host = Utils.parseHostPort(hostPort)._1
+    Option(RackResolver.resolve(sc.hadoopConfiguration, host).getNetworkLocation)
   }
 }
