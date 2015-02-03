@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.util.{List => JList}
+
 import scala.language.implicitConversions
 import scala.collection.JavaConversions._
 

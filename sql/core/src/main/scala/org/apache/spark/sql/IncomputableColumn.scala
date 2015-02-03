@@ -156,7 +156,5 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
 
   override def toJSON: RDD[String] = err()
 
-  protected[sql] override def toColumnArray(cols: java.util.List[Column]): Array[Column] = err()
-
   protected[sql] override def javaToPython: JavaRDD[Array[Byte]] = err()
 }

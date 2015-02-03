@@ -1029,9 +1029,11 @@ class SQLTests(ReusedPySparkTestCase):
         g = df.groupBy()
         self.assertEqual([99, 100], sorted(g.agg({'key': 'max', 'value': 'count'}).collect()[0]))
         self.assertEqual([Row(**{"AVG(key#0)": 49.5})], g.mean().collect())
-        # TODO(davies): fix aggregators
+
         from pyspark.sql import Aggregator as Agg
-        # self.assertEqual((0, '100'), tuple(g.agg(Agg.first(df.key), Agg.last(df.value)).first()))
+        self.assertEqual((0, u'99'), tuple(g.agg(Agg.first(df.key), Agg.last(df.value)).first()))
+        self.assertTrue(95 < g.agg(Agg.approxCountDistinct(df.key)).first()[0])
+        self.assertEqual(100, g.agg(Agg.countDistinct(df.value)).first()[0])
 
     def test_help_command(self):
         # Regression test for SPARK-5464
