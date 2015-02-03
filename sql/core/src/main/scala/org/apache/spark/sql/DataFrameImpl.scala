@@ -36,7 +36,6 @@ import org.apache.spark.sql.execution.{LogicalRDD, EvaluatePython}
 import org.apache.spark.sql.json.JsonRDD
 import org.apache.spark.sql.sources.{ResolvedDataSource, CreateTableUsingAsLogicalPlan}
 import org.apache.spark.sql.types.{NumericType, StructType}
-import org.apache.spark.util.Utils
 
 
 /**
@@ -148,7 +147,7 @@ private[sql] class DataFrameImpl protected[sql](
     sort(sortExpr, sortExprs :_*)
   }
 
-  override def apply(colName: String): Column = colName match {
+  override def col(colName: String): Column = colName match {
     case "*" =>
       Column(ResolvedStar(schema.fieldNames.map(resolve)))
     case _ =>
@@ -201,18 +200,6 @@ private[sql] class DataFrameImpl protected[sql](
     new GroupedDataFrame(this, colNames.map(colName => resolve(colName)))
   }
 
-  override def agg(exprs: Map[String, String]): DataFrame = {
-    groupBy().agg(exprs)
-  }
-
-  override def agg(exprs: java.util.Map[String, String]): DataFrame = {
-    agg(exprs.toMap)
-  }
-
-  override def agg(expr: Column, exprs: Column*): DataFrame = {
-    groupBy().agg(expr, exprs :_*)
-  }
-
   override def limit(n: Int): DataFrame = {
     Limit(Literal(n), logicalPlan)
   }
@@ -231,10 +218,6 @@ private[sql] class DataFrameImpl protected[sql](
 
   override def sample(withReplacement: Boolean, fraction: Double, seed: Long): DataFrame = {
     Sample(fraction, withReplacement, seed, logicalPlan)
-  }
-
-  override def sample(withReplacement: Boolean, fraction: Double): DataFrame = {
-    sample(withReplacement, fraction, Utils.random.nextLong)
   }
 
   /////////////////////////////////////////////////////////////////////////////
