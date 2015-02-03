@@ -56,11 +56,6 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-graphx_${scala.binary.version}</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
       <groupId>org.jblas</groupId>
       <artifactId>jblas</artifactId>
       <version>${jblas.version}</version>
