@@ -442,7 +442,7 @@ private[spark] object Utils extends Logging {
       fileOverwrite: Boolean): Unit = {
     val tempFile = File.createTempFile("fetchFileTemp", null,
       new File(destFile.getParentFile.getAbsolutePath))
-    logInfo("Fetching " + url + " to " + tempFile)
+    logInfo(s"Fetching $url to $tempFile")
 
     try {
       val out = new FileOutputStream(tempFile)
@@ -527,9 +527,9 @@ private[spark] object Utils extends Logging {
       if (subfiles1.size != subfiles2.size) {
         return false
       }
-      subfiles1.sortBy(_.getName).zip(subfiles2.sortBy(_.getName)).dropWhile {
+      subfiles1.sortBy(_.getName).zip(subfiles2.sortBy(_.getName)).forall {
         case (f1, f2) => filesEqualRecursive(f1, f2)
-      }.isEmpty
+      }
     } else if (file1.isFile && file2.isFile) {
       Files.equal(file1, file2)
     } else {
@@ -611,7 +611,9 @@ private[spark] object Utils extends Logging {
       conf: SparkConf,
       hadoopConf: Configuration,
       fileOverwrite: Boolean): Unit = {
-    targetDir.mkdir()
+    if (!targetDir.mkdir()) {
+      throw new IOException(s"Failed to create directory ${targetDir.getPath}")
+    }
     fs.listStatus(path).foreach { fileStatus =>
       val innerPath = fileStatus.getPath
       if (fileStatus.isDir) {

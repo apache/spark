@@ -1018,7 +1018,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * supported for Hadoop-supported filesystems.
    */
   def addFile(path: String, recursive: Boolean): Unit = {
-    val isLocalMode = conf.get("spark.master").startsWith("local")
     val uri = new URI(path)
     val schemeCorrectedPath = uri.getScheme match {
       case null | "local" => "file:" + uri.getPath
@@ -1030,10 +1029,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     if (!Array("http", "https", "ftp").contains(scheme)) {
       val fs = hadoopPath.getFileSystem(hadoopConfiguration)
       if (!fs.exists(hadoopPath)) {
-        throw new SparkException(s"Added file $hadoopPath does not exist.")
+        throw new FileNotFoundException(s"Added file $hadoopPath does not exist.")
       }
       val isDir = fs.isDirectory(hadoopPath)
-      if (!isLocalMode && scheme == "file" && isDir) {
+      if (!isLocal && scheme == "file" && isDir) {
         throw new SparkException(s"addFile does not support local directories when not running " +
           "local mode.")
       }
@@ -1043,7 +1042,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       }
     }
 
-    val key = if (!isLocalMode && scheme == "file") {
+    val key = if (!isLocal && scheme == "file") {
       env.httpFileServer.addFile(new File(uri.getPath))
     } else {
       schemeCorrectedPath

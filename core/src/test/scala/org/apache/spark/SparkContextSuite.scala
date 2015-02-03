@@ -26,6 +26,8 @@ import org.scalatest.FunSuite
 
 import org.apache.hadoop.io.BytesWritable
 
+import org.apache.spark.util.Utils
+
 class SparkContextSuite extends FunSuite with LocalSparkContext {
 
   test("Only one SparkContext may be active at a time") {
@@ -79,7 +81,7 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
   }
 
   test("addFile works") {
-    val file = new File("somefile")
+    val file = File.createTempFile("someprefix", "somesuffix")
     val absolutePath = file.getAbsolutePath
     try {
       Files.write("somewords", file, UTF_8)
@@ -102,60 +104,49 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
       }).count()
     } finally {
       sc.stop()
-      file.delete()
     }
   }
 
   test("addFile recursive works") {
-    val pluto = new File("pluto")
-    val neptune = new File(pluto, "neptune")
-    val saturn = new File(neptune, "saturn")
-    val alien1 = new File(neptune, "alien1")
-    val alien2 = new File(saturn, "alien2")
+    val pluto = Utils.createTempDir()
+    val neptune = Utils.createTempDir(pluto.getAbsolutePath)
+    val saturn = Utils.createTempDir(neptune.getAbsolutePath)
+    val alien1 = File.createTempFile("alien", "1", neptune)
+    val alien2 = File.createTempFile("alien", "2", saturn)
 
     try {
-      assert(neptune.mkdirs())
-      assert(saturn.mkdir())
-      assert(alien1.createNewFile())
-      assert(alien2.createNewFile())
-
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
       sc.addFile(neptune.getAbsolutePath, true)
       sc.parallelize(Array(1), 1).map(x => {
         val sep = File.separator
-        if (!new File(SparkFiles.get("neptune" + sep + "alien1")).exists()) {
+        if (!new File(SparkFiles.get(neptune.getName + sep + alien1.getName)).exists()) {
           throw new SparkException("can't access file under root added directory")
         }
-        if (!new File(SparkFiles.get("neptune" + sep + "saturn" + sep + "alien2")).exists()) {
+        if (!new File(SparkFiles.get(neptune.getName + sep + saturn.getName + sep + alien2.getName))
+            .exists()) {
           throw new SparkException("can't access file in nested directory")
         }
-        if (new File(SparkFiles.get("pluto" + sep + "neptune" + sep + "alien1")).exists()) {
+        if (new File(SparkFiles.get(pluto.getName + sep + neptune.getName + sep + alien1.getName))
+            .exists()) {
           throw new SparkException("file exists that shouldn't")
         }
         x
       }).count()
     } finally {
       sc.stop()
-      alien2.delete()
-      saturn.delete()
-      alien1.delete()
-      neptune.delete()
-      pluto.delete()
     }
   }
 
   test("addFile recursive can't add directories by default") {
-    val dir = new File("dir")
+    val dir = Utils.createTempDir()
 
     try {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
-      sc.addFile(dir.getAbsolutePath)
-      assert(false, "should have thrown exception")
-    } catch {
-      case _: SparkException =>
+      intercept[SparkException] {
+        sc.addFile(dir.getAbsolutePath)
+      }
     } finally {
       sc.stop()
-      dir.delete()
     }
   }
 }
