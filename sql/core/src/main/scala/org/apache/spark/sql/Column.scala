@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedGetField
+
 import scala.annotation.tailrec
 import scala.language.implicitConversions
 
@@ -505,7 +507,7 @@ trait Column extends DataFrame {
   /**
    * An expression that gets a field by name in a [[StructField]].
    */
-  def getField(fieldName: String): Column = exprToColumn(GetField(expr, fieldName))
+  def getField(fieldName: String): Column = exprToColumn(UnresolvedGetField(expr, fieldName))
 
   /**
    * An expression that returns a substring.

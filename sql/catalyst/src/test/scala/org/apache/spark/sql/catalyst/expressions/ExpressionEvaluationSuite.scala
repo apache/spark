@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedGetField
+
 import scala.collection.immutable.HashSet
 
 import org.scalactic.TripleEqualsSupport.Spread
@@ -846,23 +848,33 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(GetItem(BoundReference(4, typeArray, true),
       Literal(null, IntegerType)), null, row)
 
-    checkEvaluation(GetField(BoundReference(2, typeS, nullable = true), "a"), "aa", row)
-    checkEvaluation(GetField(Literal(null, typeS), "a"), null, row)
+    def quickBuildGetField(expr: Expression, fieldName: String) = {
+      expr.dataType match {
+        case StructType(fields) =>
+          val field = fields.find(_.name == fieldName).get
+          GetField(expr, field, fields.indexOf(field))
+      }
+    }
+
+    def quickResolve(u: UnresolvedGetField) = quickBuildGetField(u.child, u.fieldName)
+
+    checkEvaluation(quickBuildGetField(BoundReference(2, typeS, nullable = true), "a"), "aa", row)
+    checkEvaluation(quickBuildGetField(Literal(null, typeS), "a"), null, row)
 
     val typeS_notNullable = StructType(
       StructField("a", StringType, nullable = false)
         :: StructField("b", StringType, nullable = false) :: Nil
     )
 
-    assert(GetField(BoundReference(2,typeS, nullable = true), "a").nullable === true)
-    assert(GetField(BoundReference(2, typeS_notNullable, nullable = false), "a").nullable === false)
+    assert(quickBuildGetField(BoundReference(2,typeS, nullable = true), "a").nullable === true)
+    assert(quickBuildGetField(BoundReference(2, typeS_notNullable, nullable = false), "a").nullable === false)
 
-    assert(GetField(Literal(null, typeS), "a").nullable === true)
-    assert(GetField(Literal(null, typeS_notNullable), "a").nullable === true)
+    assert(quickBuildGetField(Literal(null, typeS), "a").nullable === true)
+    assert(quickBuildGetField(Literal(null, typeS_notNullable), "a").nullable === true)
 
     checkEvaluation('c.map(typeMap).at(3).getItem("aa"), "bb", row)
     checkEvaluation('c.array(typeArray.elementType).at(4).getItem(1), "bb", row)
-    checkEvaluation('c.struct(typeS).at(2).getField("a"), "aa", row)
+    checkEvaluation(quickResolve('c.struct(typeS).at(2).getField("a")), "aa", row)
   }
 
   test("arithmetic") {

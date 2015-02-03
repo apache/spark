@@ -73,39 +73,19 @@ case class GetItem(child: Expression, ordinal: Expression) extends Expression {
 /**
  * Returns the value of fields in the Struct `child`.
  */
-case class GetField(child: Expression, fieldName: String) extends UnaryExpression {
+case class GetField(child: Expression, field: StructField, ordinal: Int) extends UnaryExpression {
   type EvaluatedType = Any
 
   def dataType = field.dataType
   override def nullable = child.nullable || field.nullable
   override def foldable = child.foldable
 
-  protected def structType = child.dataType match {
-    case s: StructType => s
-    case otherType => sys.error(s"GetField is not valid on fields of type $otherType")
-  }
-
-  lazy val field =
-    structType.fields
-        .find(_.name == fieldName)
-        .getOrElse(sys.error(s"No such field $fieldName in ${child.dataType}"))
-
-  lazy val ordinal = structType.fields.indexOf(field)
-
-  override lazy val resolved = childrenResolved && fieldResolved
-
-  /** Returns true only if the fieldName is found in the child struct. */
-  private def fieldResolved = child.dataType match {
-    case StructType(fields) => fields.map(_.name).contains(fieldName)
-    case _ => false
-  }
-
   override def eval(input: Row): Any = {
     val baseValue = child.eval(input).asInstanceOf[Row]
     if (baseValue == null) null else baseValue(ordinal)
   }
 
-  override def toString = s"$child.$fieldName"
+  override def toString = s"$child.${field.name}"
 }
 
 /**
