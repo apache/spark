@@ -398,6 +398,8 @@ class StreamingContext private[streaming] (
   }
 
   /**
+   * :: Experimental ::
+   * 
    * Create an input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them as flat binary files, assuming a fixed length per record,
    * generating one byte array per record. Files must be written to the monitored directory
