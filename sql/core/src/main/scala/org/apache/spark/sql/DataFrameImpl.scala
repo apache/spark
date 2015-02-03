@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{LogicalRDD, EvaluatePython}
 import org.apache.spark.sql.json.JsonRDD
+import org.apache.spark.sql.sources.{ResolvedDataSource, CreateTableUsingAsLogicalPlan}
 import org.apache.spark.sql.types.{NumericType, StructType}
 import org.apache.spark.util.Utils
 
@@ -303,8 +304,61 @@ private[sql] class DataFrameImpl protected[sql](
   }
 
   override def saveAsTable(tableName: String): Unit = {
-    sqlContext.executePlan(
-      CreateTableAsSelect(None, tableName, logicalPlan, allowExisting = false)).toRdd
+    val dataSourceName = sqlContext.conf.defaultDataSourceName
+    val cmd =
+      CreateTableUsingAsLogicalPlan(
+        tableName,
+        dataSourceName,
+        temporary = false,
+        Map.empty,
+        allowExisting = false,
+        logicalPlan)
+
+    sqlContext.executePlan(cmd).toRdd
+  }
+
+  override def saveAsTable(
+      tableName: String,
+      dataSourceName: String,
+      option: (String, String),
+      options: (String, String)*): Unit = {
+    val cmd =
+      CreateTableUsingAsLogicalPlan(
+        tableName,
+        dataSourceName,
+        temporary = false,
+        (option +: options).toMap,
+        allowExisting = false,
+        logicalPlan)
+
+    sqlContext.executePlan(cmd).toRdd
+  }
+
+  override def saveAsTable(
+      tableName: String,
+      dataSourceName: String,
+      options: java.util.Map[String, String]): Unit = {
+    val opts = options.toSeq
+    saveAsTable(tableName, dataSourceName, opts.head, opts.tail:_*)
+  }
+
+  override def save(path: String): Unit = {
+    val dataSourceName = sqlContext.conf.defaultDataSourceName
+    save(dataSourceName, ("path" -> path))
+  }
+
+  override def save(
+      dataSourceName: String,
+      option: (String, String),
+      options: (String, String)*): Unit = {
+    ResolvedDataSource(sqlContext, dataSourceName, (option +: options).toMap, this)
+  }
+
+  override def save(
+      dataSourceName: String,
+      options: java.util.Map[String, String]): Unit = {
+    val opts = options.toSeq
+    save(dataSourceName, opts.head, opts.tail:_*)
   }
 
   override def insertInto(tableName: String, overwrite: Boolean): Unit = {

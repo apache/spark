@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeComman
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.sources.CreateTableUsing
+import org.apache.spark.sql.sources.{CreateTableUsingAsLogicalPlan, CreateTableUsingAsSelect, CreateTableUsing}
 import org.apache.spark.sql.types.StringType
 
 
@@ -212,9 +212,21 @@ private[hive] trait HiveStrategies {
 
   object HiveDDLStrategy extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case CreateTableUsing(tableName, userSpecifiedSchema, provider, false, options) =>
+      case CreateTableUsing(tableName, userSpecifiedSchema, provider, false, opts, allowExisting) =>
         ExecutedCommand(
-          CreateMetastoreDataSource(tableName, userSpecifiedSchema, provider, options)) :: Nil
+          CreateMetastoreDataSource(
+            tableName, userSpecifiedSchema, provider, opts, allowExisting)) :: Nil
+
+      case CreateTableUsingAsSelect(tableName, provider, false, opts, allowExisting, query) =>
+        val logicalPlan = hiveContext.parseSql(query)
+        val cmd =
+          CreateMetastoreDataSourceAsSelect(tableName, provider, opts, allowExisting, logicalPlan)
+        ExecutedCommand(cmd) :: Nil
+
+      case CreateTableUsingAsLogicalPlan(tableName, provider, false, opts, allowExisting, query) =>
+        val cmd =
+          CreateMetastoreDataSourceAsSelect(tableName, provider, opts, allowExisting, query)
+        ExecutedCommand(cmd) :: Nil
 
       case _ => Nil
     }

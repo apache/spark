@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.util.{List => JList}
-
 import scala.reflect.ClassTag
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
@@ -484,6 +482,53 @@ trait DataFrame extends DataFrameSpecificApi with RDDApi[Row] {
    */
   @Experimental
   override def saveAsTable(tableName: String): Unit
+
+  /**
+   * :: Experimental ::
+   * Creates a table from the the contents of this DataFrame based on a given data source and
+   * a set of options. This will fail if the table already exists.
+   *
+   * Note that this currently only works with DataFrames that are created from a HiveContext as
+   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
+   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
+   * be the target of an `insertInto`.
+   */
+  @Experimental
+  override def saveAsTable(
+      tableName: String,
+      dataSourceName: String,
+      option: (String, String),
+      options: (String, String)*): Unit
+
+  /**
+   * :: Experimental ::
+   * Creates a table from the the contents of this DataFrame based on a given data source and
+   * a set of options. This will fail if the table already exists.
+   *
+   * Note that this currently only works with DataFrames that are created from a HiveContext as
+   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
+   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
+   * be the target of an `insertInto`.
+   */
+  @Experimental
+  override def saveAsTable(
+      tableName: String,
+      dataSourceName: String,
+      options: java.util.Map[String, String]): Unit
+
+  @Experimental
+  override def save(path: String): Unit
+
+  @Experimental
+  override def save(
+      dataSourceName: String,
+      option: (String, String),
+      options: (String, String)*): Unit
+
+  @Experimental
+  override def save(
+      dataSourceName: String,
+      options: java.util.Map[String, String]): Unit
 
   /**
    * :: Experimental ::

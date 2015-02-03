@@ -152,6 +152,28 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
 
   override def saveAsTable(tableName: String): Unit = err()
 
+  override def saveAsTable(
+      tableName: String,
+      dataSourceName: String,
+      option: (String, String),
+      options: (String, String)*): Unit = err()
+
+  override def saveAsTable(
+      tableName: String,
+      dataSourceName: String,
+      options: java.util.Map[String, String]): Unit = err()
+
+  override def save(path: String): Unit = err()
+
+  override def save(
+      dataSourceName: String,
+      option: (String, String),
+      options: (String, String)*): Unit = err()
+
+  override def save(
+      dataSourceName: String,
+      options: java.util.Map[String, String]): Unit = err()
+
   override def insertInto(tableName: String, overwrite: Boolean): Unit = err()
 
   override def toJSON: RDD[String] = err()
