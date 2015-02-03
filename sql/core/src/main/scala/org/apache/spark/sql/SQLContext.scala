@@ -168,8 +168,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   implicit def createDataFrame[A <: Product: TypeTag](rdd: RDD[A]): DataFrame = {
     SparkPlan.currentContext.set(self)
-    val attributeSeq = ScalaReflection.attributesFor[A]
-    val schema = StructType.fromAttributes(attributeSeq)
+    val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
+    val attributeSeq = schema.toAttributes
     val rowRDD = RDDConversions.productToRowRdd(rdd, schema)
     new DataFrame(this, LogicalRDD(attributeSeq, rowRDD)(self))
   }

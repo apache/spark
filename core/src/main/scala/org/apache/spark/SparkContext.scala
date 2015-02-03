@@ -687,9 +687,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @param minPartitions Minimum number of Hadoop Splits to generate.
    *
    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
-   * record, directly caching the returned RDD will create many references to the same object.
-   * If you plan to directly cache Hadoop writable objects, you should first copy them using
-   * a `map` function.
+   * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
+   * operation will create many references to the same object.
+   * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
+   * copy them using a `map` function.
    */
   def hadoopRDD[K, V](
       conf: JobConf,
@@ -705,12 +706,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /** Get an RDD for a Hadoop file with an arbitrary InputFormat
-    *
-    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
-    * record, directly caching the returned RDD will create many references to the same object.
-    * If you plan to directly cache Hadoop writable objects, you should first copy them using
-    * a `map` function.
-    * */
+   *
+   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
+   * operation will create many references to the same object.
+   * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
+   * copy them using a `map` function.
+   */
   def hadoopFile[K, V](
       path: String,
       inputFormatClass: Class[_ <: InputFormat[K, V]],
@@ -741,9 +743,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * }}}
    *
    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
-   * record, directly caching the returned RDD will create many references to the same object.
-   * If you plan to directly cache Hadoop writable objects, you should first copy them using
-   * a `map` function.
+   * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
+   * operation will create many references to the same object.
+   * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
+   * copy them using a `map` function.
    */
   def hadoopFile[K, V, F <: InputFormat[K, V]]
       (path: String, minPartitions: Int)
@@ -764,9 +767,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * }}}
    *
    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
-   * record, directly caching the returned RDD will create many references to the same object.
-   * If you plan to directly cache Hadoop writable objects, you should first copy them using
-   * a `map` function.
+   * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
+   * operation will create many references to the same object.
+   * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
+   * copy them using a `map` function.
    */
   def hadoopFile[K, V, F <: InputFormat[K, V]](path: String)
       (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] =
@@ -788,9 +792,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * and extra configuration options to pass to the input format.
    *
    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
-   * record, directly caching the returned RDD will create many references to the same object.
-   * If you plan to directly cache Hadoop writable objects, you should first copy them using
-   * a `map` function.
+   * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
+   * operation will create many references to the same object.
+   * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
+   * copy them using a `map` function.
    */
   def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]](
       path: String,
@@ -810,9 +815,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * and extra configuration options to pass to the input format.
    *
    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
-   * record, directly caching the returned RDD will create many references to the same object.
-   * If you plan to directly cache Hadoop writable objects, you should first copy them using
-   * a `map` function.
+   * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
+   * operation will create many references to the same object.
+   * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
+   * copy them using a `map` function.
    */
   def newAPIHadoopRDD[K, V, F <: NewInputFormat[K, V]](
       conf: Configuration = hadoopConfiguration,
@@ -826,9 +832,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /** Get an RDD for a Hadoop SequenceFile with given key and value types.
     *
     * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
-    * record, directly caching the returned RDD will create many references to the same object.
-    * If you plan to directly cache Hadoop writable objects, you should first copy them using
-    * a `map` function.
+    * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
+    * operation will create many references to the same object.
+    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
+    * copy them using a `map` function.
     */
   def sequenceFile[K, V](path: String,
       keyClass: Class[K],
@@ -843,9 +850,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /** Get an RDD for a Hadoop SequenceFile with given key and value types.
     *
     * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
-    * record, directly caching the returned RDD will create many references to the same object.
-    * If you plan to directly cache Hadoop writable objects, you should first copy them using
-    * a `map` function.
+    * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
+    * operation will create many references to the same object.
+    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
+    * copy them using a `map` function.
     * */
   def sequenceFile[K, V](path: String, keyClass: Class[K], valueClass: Class[V]): RDD[(K, V)] = {
     assertNotStopped()
@@ -869,9 +877,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * allow it to figure out the Writable class to use in the subclass case.
    *
    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
-   * record, directly caching the returned RDD will create many references to the same object.
-   * If you plan to directly cache Hadoop writable objects, you should first copy them using
-   * a `map` function.
+   * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
+   * operation will create many references to the same object.
+   * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
+   * copy them using a `map` function.
    */
    def sequenceFile[K, V]
        (path: String, minPartitions: Int = defaultMinPartitions)

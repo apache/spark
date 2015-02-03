@@ -541,7 +541,7 @@ class DataFrame protected[sql](
   /**
    * Returns an array that contains all of [[Row]]s in this [[DataFrame]].
    */
-  override def collect(): Array[Row] = rdd.collect()
+  override def collect(): Array[Row] = queryExecution.executedPlan.executeCollect()
 
   /**
    * Returns a Java list that contains all of [[Row]]s in this [[DataFrame]].

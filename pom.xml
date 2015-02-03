@@ -136,7 +136,7 @@
     <jblas.version>1.2.3</jblas.version>
     <jetty.version>8.1.14.v20131031</jetty.version>
     <chill.version>0.5.0</chill.version>
-    <codahale.metrics.version>3.0.0</codahale.metrics.version>
+    <codahale.metrics.version>3.1.0</codahale.metrics.version>
     <avro.version>1.7.6</avro.version>
     <avro.mapred.classifier></avro.mapred.classifier>
     <jets3t.version>0.7.1</jets3t.version>
@@ -337,25 +337,39 @@
           </exclusion>
         </exclusions>
       </dependency>
+ 
+      <!-- Shaded deps marked as provided. These are promoted to compile scope
+           in the modules where we want the shaded classes to appear in the
+           associated jar. -->
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-http</artifactId>
+        <version>${jetty.version}</version>
+        <scope>provided</scope>
+      </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-util</artifactId>
         <version>${jetty.version}</version>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-security</artifactId>
         <version>${jetty.version}</version>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-plus</artifactId>
         <version>${jetty.version}</version>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-server</artifactId>
         <version>${jetty.version}</version>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>com.google.guava</groupId>
@@ -363,6 +377,8 @@
         <version>14.0.1</version>
         <scope>provided</scope>
       </dependency>
+      <!-- End of shaded deps -->
+ 
       <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-lang3</artifactId>
@@ -521,27 +537,27 @@
         <version>${derby.version}</version>
       </dependency>
       <dependency>
-        <groupId>com.codahale.metrics</groupId>
+        <groupId>io.dropwizard.metrics</groupId>
         <artifactId>metrics-core</artifactId>
         <version>${codahale.metrics.version}</version>
       </dependency>
       <dependency>
-        <groupId>com.codahale.metrics</groupId>
+        <groupId>io.dropwizard.metrics</groupId>
         <artifactId>metrics-jvm</artifactId>
         <version>${codahale.metrics.version}</version>
       </dependency>
       <dependency>
-        <groupId>com.codahale.metrics</groupId>
+        <groupId>io.dropwizard.metrics</groupId>
         <artifactId>metrics-json</artifactId>
         <version>${codahale.metrics.version}</version>
       </dependency>
       <dependency>
-        <groupId>com.codahale.metrics</groupId>
+        <groupId>io.dropwizard.metrics</groupId>
         <artifactId>metrics-ganglia</artifactId>
         <version>${codahale.metrics.version}</version>
       </dependency>
       <dependency>
-        <groupId>com.codahale.metrics</groupId>
+        <groupId>io.dropwizard.metrics</groupId>
         <artifactId>metrics-graphite</artifactId>
         <version>${codahale.metrics.version}</version>
       </dependency>
@@ -1276,10 +1292,26 @@
           <shadedArtifactAttached>false</shadedArtifactAttached>
           <artifactSet>
             <includes>
+              <!-- At a minimum we must include this to force effective pom generation -->
               <include>org.spark-project.spark:unused</include>
+
+              <include>org.eclipse.jetty:jetty-io</include>
+              <include>org.eclipse.jetty:jetty-http</include>
+              <include>org.eclipse.jetty:jetty-plus</include>
+              <include>org.eclipse.jetty:jetty-security</include>
+              <include>org.eclipse.jetty:jetty-util</include>
+              <include>org.eclipse.jetty:jetty-server</include>
+              <include>com.google.guava:guava</include>
             </includes>
           </artifactSet>
           <relocations>
+            <relocation>
+              <pattern>org.eclipse.jetty</pattern>
+              <shadedPattern>org.spark-project.jetty</shadedPattern>
+              <includes>
+                <include>org.eclipse.jetty.**</include>
+              </includes>
+            </relocation>
             <relocation>
               <pattern>com.google.common</pattern>
               <shadedPattern>org.spark-project.guava</shadedPattern>

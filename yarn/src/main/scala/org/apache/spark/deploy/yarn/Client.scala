@@ -21,7 +21,7 @@ import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
 import java.nio.ByteBuffer
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.{HashMap, ListBuffer, Map}
+import scala.collection.mutable.{ArrayBuffer, HashMap, ListBuffer, Map}
 import scala.util.{Try, Success, Failure}
 
 import com.google.common.base.Objects
@@ -400,7 +400,10 @@ private[spark] class Client(
     // Add Xmx for AM memory
     javaOpts += "-Xmx" + args.amMemory + "m"
 
-    val tmpDir = new Path(Environment.PWD.$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR)
+    val tmpDir = new Path(
+      YarnSparkHadoopUtil.expandEnvironment(Environment.PWD),
+      YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR
+    )
     javaOpts += "-Djava.io.tmpdir=" + tmpDir
 
     // TODO: Remove once cpuset version is pushed out.
@@ -474,24 +477,41 @@ private[spark] class Client(
       } else {
         Nil
       }
+    val primaryPyFile =
+      if (args.primaryPyFile != null) {
+        Seq("--primary-py-file", args.primaryPyFile)
+      } else {
+        Nil
+      }
+    val pyFiles =
+      if (args.pyFiles != null) {
+        Seq("--py-files", args.pyFiles)
+      } else {
+        Nil
+      }
     val amClass =
       if (isClusterMode) {
         Class.forName("org.apache.spark.deploy.yarn.ApplicationMaster").getName
       } else {
         Class.forName("org.apache.spark.deploy.yarn.ExecutorLauncher").getName
       }
+    if (args.primaryPyFile != null && args.primaryPyFile.endsWith(".py")) {
+      args.userArgs = ArrayBuffer(args.primaryPyFile, args.pyFiles) ++ args.userArgs
+    }
     val userArgs = args.userArgs.flatMap { arg =>
       Seq("--arg", YarnSparkHadoopUtil.escapeForShell(arg))
     }
     val amArgs =
-      Seq(amClass) ++ userClass ++ userJar ++ userArgs ++
+      Seq(amClass) ++ userClass ++ userJar ++ primaryPyFile ++ pyFiles ++ userArgs ++
         Seq(
           "--executor-memory", args.executorMemory.toString + "m",
           "--executor-cores", args.executorCores.toString,
           "--num-executors ", args.numExecutors.toString)
 
     // Command for the ApplicationMaster
-    val commands = prefixEnv ++ Seq(Environment.JAVA_HOME.$() + "/bin/java", "-server") ++
+    val commands = prefixEnv ++ Seq(
+        YarnSparkHadoopUtil.expandEnvironment(Environment.JAVA_HOME) + "/bin/java", "-server"
+      ) ++
       javaOpts ++ amArgs ++
       Seq(
         "1>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout",
@@ -769,7 +789,9 @@ object Client extends Logging {
       env: HashMap[String, String],
       extraClassPath: Option[String] = None): Unit = {
     extraClassPath.foreach(addClasspathEntry(_, env))
-    addClasspathEntry(Environment.PWD.$(), env)
+    addClasspathEntry(
+      YarnSparkHadoopUtil.expandEnvironment(Environment.PWD), env
+    )
 
     // Normally the users app.jar is last in case conflicts with spark jars
     if (sparkConf.getBoolean("spark.yarn.user.classpath.first", false)) {
@@ -783,7 +805,9 @@ object Client extends Logging {
     }
 
     // Append all jar files under the working directory to the classpath.
-    addClasspathEntry(Environment.PWD.$() + Path.SEPARATOR + "*", env)
+    addClasspathEntry(
+      YarnSparkHadoopUtil.expandEnvironment(Environment.PWD) + Path.SEPARATOR + "*", env
+    )
   }
 
   /**
@@ -838,7 +862,9 @@ object Client extends Logging {
       }
     }
     if (fileName != null) {
-      addClasspathEntry(Environment.PWD.$() + Path.SEPARATOR + fileName, env)
+      addClasspathEntry(
+        YarnSparkHadoopUtil.expandEnvironment(Environment.PWD) + Path.SEPARATOR + fileName, env
+      )
     }
   }
 
