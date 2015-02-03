@@ -65,7 +65,15 @@ trait Column extends DataFrame {
    */
   def isComputable: Boolean
 
-  private def constructColumn(other: Column)(newExpr: Expression): Column = {
+  private def computableCol(baseCol: ComputableColumn, expr: Expression) = {
+    val plan = Project(Seq(expr match {
+      case named: NamedExpression => named
+      case unnamed: Expression => Alias(unnamed, "col")()
+    }), baseCol.plan)
+    Column(baseCol.sqlContext, plan, expr)
+  }
+
+  private def constructColumn(otherValue: Any)(newExpr: Column => Expression): Column = {
     // Removes all the top level projection and subquery so we can get to the underlying plan.
     @tailrec def stripProject(p: LogicalPlan): LogicalPlan = p match {
       case Project(_, child) => stripProject(child)
@@ -73,392 +81,423 @@ trait Column extends DataFrame {
       case _ => p
     }
 
-    def computableCol(baseCol: ComputableColumn, expr: Expression) = {
-      val plan = Project(Seq(expr match {
-        case named: NamedExpression => named
-        case unnamed: Expression => Alias(unnamed, "col")()
-      }), baseCol.plan)
-      Column(baseCol.sqlContext, plan, expr)
-    }
-
-    (this, other) match {
+    (this, lit(otherValue)) match {
       case (left: ComputableColumn, right: ComputableColumn) =>
         if (stripProject(left.plan).sameResult(stripProject(right.plan))) {
-          computableCol(right, newExpr)
+          computableCol(right, newExpr(right))
         } else {
-          Column(newExpr)
+          Column(newExpr(right))
         }
-      case (left: ComputableColumn, _) => computableCol(left, newExpr)
-      case (_, right: ComputableColumn) => computableCol(right, newExpr)
-      case (_, _) => Column(newExpr)
+      case (left: ComputableColumn, right) => computableCol(left, newExpr(right))
+      case (_, right: ComputableColumn) => computableCol(right, newExpr(right))
+      case (_, right) => Column(newExpr(right))
+    }
+  }
+
+  /** Creates a column based on the given expression. */
+  private def exprToColumn(newExpr: Expression, computable: Boolean = true): Column = {
+    this match {
+      case c: ComputableColumn if computable => computableCol(c, newExpr)
+      case _ => Column(newExpr)
     }
   }
 
   /**
    * Unary minus, i.e. negate the expression.
    * {{{
-   *   // Select the amount column and negates all values.
+   *   // Scala: select the amount column and negates all values.
    *   df.select( -df("amount") )
+   *
+   *   // Java:
+   *   import static org.apache.spark.sql.Dsl.*;
+   *   df.select( negate(col("amount") );
    * }}}
    */
-  def unary_- : Column = constructColumn(null) { UnaryMinus(expr) }
+  def unary_- : Column = exprToColumn(UnaryMinus(expr))
 
   /**
    * Bitwise NOT.
    * {{{
-   *   // Select the flags column and negate every bit.
+   *   // Scala: select the flags column and negate every bit.
    *   df.select( ~df("flags") )
    * }}}
    */
-  def unary_~ : Column = constructColumn(null) { BitwiseNot(expr) }
+  def unary_~ : Column = exprToColumn(BitwiseNot(expr))
 
   /**
    * Inversion of boolean expression, i.e. NOT.
    * {{
-   *   // Select rows that are not active (isActive === false)
-   *   df.select( !df("isActive") )
+   *   // Scala: select rows that are not active (isActive === false)
+   *   df.filter( !df("isActive") )
+   *
+   *   // Java:
+   *   import static org.apache.spark.sql.Dsl.*;
+   *   df.filter( not(df.col("isActive")) );
    * }}
    */
-  def unary_! : Column = constructColumn(null) { Not(expr) }
+  def unary_! : Column = exprToColumn(Not(expr))
 
 
   /**
-   * Equality test with an expression.
+   * Equality test.
    * {{{
-   *   // The following two both select rows in which colA equals colB.
-   *   df.select( df("colA") === df("colB") )
-   *   df.select( df("colA".equalTo(df("colB")) )
+   *   // Scala:
+   *   df.filter( df("colA") === df("colB") )
+   *
+   *   // Java
+   *   import static org.apache.spark.sql.Dsl.*;
+   *   df.filter( col("colA").equalTo(col("colB")) );
    * }}}
    */
-  def === (other: Column): Column = constructColumn(other) {
-    EqualTo(expr, other.expr)
+  def === (other: Any): Column = constructColumn(other) { o =>
+    EqualTo(expr, o.expr)
   }
 
   /**
-   * Equality test with a literal value.
+   * Equality test.
    * {{{
-   *   // The following two both select rows in which colA is "Zaharia".
-   *   df.select( df("colA") === "Zaharia")
-   *   df.select( df("colA".equalTo("Zaharia") )
+   *   // Scala:
+   *   df.filter( df("colA") === df("colB") )
+   *
+   *   // Java
+   *   import static org.apache.spark.sql.Dsl.*;
+   *   df.filter( col("colA").equalTo(col("colB")) );
    * }}}
    */
-  def === (literal: Any): Column = this === lit(literal)
+  def equalTo(other: Any): Column = this === other
 
   /**
-   * Equality test with an expression.
+   * Inequality test.
    * {{{
-   *   // The following two both select rows in which colA equals colB.
-   *   df.select( df("colA") === df("colB") )
-   *   df.select( df("colA".equalTo(df("colB")) )
-   * }}}
-   */
-  def equalTo(other: Column): Column = this === other
-
-  /**
-   * Equality test with a literal value.
-   * {{{
-   *   // The following two both select rows in which colA is "Zaharia".
-   *   df.select( df("colA") === "Zaharia")
-   *   df.select( df("colA".equalTo("Zaharia") )
-   * }}}
-   */
-  def equalTo(literal: Any): Column = this === literal
-
-  /**
-   * Inequality test with an expression.
-   * {{{
-   *   // The following two both select rows in which colA does not equal colB.
+   *   // Scala:
    *   df.select( df("colA") !== df("colB") )
    *   df.select( !(df("colA") === df("colB")) )
+   *
+   *   // Java:
+   *   import static org.apache.spark.sql.Dsl.*;
+   *   df.filter( not(col("colA").equalTo(col("colB"))) );
    * }}}
    */
-  def !== (other: Column): Column = constructColumn(other) {
-    Not(EqualTo(expr, other.expr))
+  def !== (other: Any): Column = constructColumn(other) { o =>
+    Not(EqualTo(expr, o.expr))
   }
 
   /**
-   * Inequality test with a literal value.
+   * Greater than.
    * {{{
-   *   // The following two both select rows in which colA does not equal equal 15.
-   *   df.select( df("colA") !== 15 )
-   *   df.select( !(df("colA") === 15) )
-   * }}}
-   */
-  def !== (literal: Any): Column = this !== lit(literal)
-
-  /**
-   * Greater than an expression.
-   * {{{
-   *   // The following selects people older than 21.
-   *   people.select( people("age") > Literal(21) )
-   * }}}
-   */
-  def > (other: Column): Column =  constructColumn(other) {
-    GreaterThan(expr, other.expr)
-  }
-
-  /**
-   * Greater than a literal value.
-   * {{{
-   *   // The following selects people older than 21.
+   *   // Scala: The following selects people older than 21.
    *   people.select( people("age") > 21 )
+   *
+   *   // Java:
+   *   import static org.apache.spark.sql.Dsl.*;
+   *   people.select( people("age").gt(21) );
    * }}}
    */
-  def > (literal: Any): Column = this > lit(literal)
-
-  /**
-   * Less than an expression.
-   * {{{
-   *   // The following selects people younger than 21.
-   *   people.select( people("age") < Literal(21) )
-   * }}}
-   */
-  def < (other: Column): Column =  constructColumn(other) {
-    LessThan(expr, other.expr)
+  def > (other: Any): Column = constructColumn(other) { o =>
+    GreaterThan(expr, o.expr)
   }
 
   /**
-   * Less than a literal value.
+   * Greater than.
    * {{{
-   *   // The following selects people younger than 21.
+   *   // Scala: The following selects people older than 21.
+   *   people.select( people("age") > lit(21) )
+   *
+   *   // Java:
+   *   import static org.apache.spark.sql.Dsl.*;
+   *   people.select( people("age").gt(21) );
+   * }}}
+   */
+  def gt(other: Any): Column = this > other
+
+  /**
+   * Less than.
+   * {{{
+   *   // Scala: The following selects people younger than 21.
    *   people.select( people("age") < 21 )
+   *
+   *   // Java:
+   *   people.select( people("age").lt(21) );
    * }}}
    */
-  def < (literal: Any): Column = this < lit(literal)
-
-  /**
-   * Less than or equal to an expression.
-   * {{{
-   *   // The following selects people age 21 or younger than 21.
-   *   people.select( people("age") <= Literal(21) )
-   * }}}
-   */
-  def <= (other: Column): Column = constructColumn(other) {
-    LessThanOrEqual(expr, other.expr)
+  def < (other: Any): Column = constructColumn(other) { o =>
+    LessThan(expr, o.expr)
   }
 
   /**
-   * Less than or equal to a literal value.
+   * Less than.
    * {{{
-   *   // The following selects people age 21 or younger than 21.
-   *   people.select( people("age") <= 21 )
+   *   // Scala: The following selects people younger than 21.
+   *   people.select( people("age") < 21 )
+   *
+   *   // Java:
+   *   people.select( people("age").lt(21) );
    * }}}
    */
-  def <= (literal: Any): Column = this <= lit(literal)
+  def lt(other: Any): Column = this < other
+
+  /**
+   * Less than or equal to.
+   * {{{
+   *   // Scala: The following selects people age 21 or younger than 21.
+   *   people.select( people("age") <= 21 )
+   *
+   *   // Java:
+   *   people.select( people("age").leq(21) );
+   * }}}
+   */
+  def <= (other: Any): Column = constructColumn(other) { o =>
+    LessThanOrEqual(expr, o.expr)
+  }
+
+  /**
+   * Less than or equal to.
+   * {{{
+   *   // Scala: The following selects people age 21 or younger than 21.
+   *   people.select( people("age") <= 21 )
+   *
+   *   // Java:
+   *   people.select( people("age").leq(21) );
+   * }}}
+   */
+  def leq(other: Any): Column = this <= other
 
   /**
    * Greater than or equal to an expression.
    * {{{
-   *   // The following selects people age 21 or older than 21.
-   *   people.select( people("age") >= Literal(21) )
-   * }}}
-   */
-  def >= (other: Column): Column =  constructColumn(other) {
-    GreaterThanOrEqual(expr, other.expr)
-  }
-
-  /**
-   * Greater than or equal to a literal value.
-   * {{{
-   *   // The following selects people age 21 or older than 21.
+   *   // Scala: The following selects people age 21 or older than 21.
    *   people.select( people("age") >= 21 )
+   *
+   *   // Java:
+   *   people.select( people("age").geq(21) )
    * }}}
    */
-  def >= (literal: Any): Column = this >= lit(literal)
-
-  /**
-   * Equality test with an expression that is safe for null values.
-   */
-  def <=> (other: Column): Column = constructColumn(other) {
-    other match {
-      case null => EqualNullSafe(expr, lit(null).expr)
-      case _ => EqualNullSafe(expr, other.expr)
-    }
+  def >= (other: Any): Column = constructColumn(other) { o =>
+    GreaterThanOrEqual(expr, o.expr)
   }
 
   /**
-   * Equality test with a literal value that is safe for null values.
+   * Greater than or equal to an expression.
+   * {{{
+   *   // Scala: The following selects people age 21 or older than 21.
+   *   people.select( people("age") >= 21 )
+   *
+   *   // Java:
+   *   people.select( people("age").geq(21) )
+   * }}}
    */
-  def <=> (literal: Any): Column = this <=> lit(literal)
+  def geq(other: Any): Column = this >= other
+
+  /**
+   * Equality test that is safe for null values.
+   */
+  def <=> (other: Any): Column = constructColumn(other) { o =>
+    EqualNullSafe(expr, o.expr)
+  }
+
+  /**
+   * Equality test that is safe for null values.
+   */
+  def eqNullSafe(other: Any): Column = this <=> other
 
   /**
    * True if the current expression is null.
    */
-  def isNull: Column = constructColumn(null) { IsNull(expr) }
+  def isNull: Column = exprToColumn(IsNull(expr))
 
   /**
    * True if the current expression is NOT null.
    */
-  def isNotNull: Column = constructColumn(null) { IsNotNull(expr) }
+  def isNotNull: Column = exprToColumn(IsNotNull(expr))
 
   /**
-   * Boolean OR with an expression.
+   * Boolean OR.
    * {{{
-   *   // The following selects people that are in school or employed.
-   *   people.select( people("inSchool") || people("isEmployed") )
+   *   // Scala: The following selects people that are in school or employed.
+   *   people.filter( people("inSchool") || people("isEmployed") )
+   *
+   *   // Java:
+   *   people.filter( people("inSchool").or(people("isEmployed")) );
    * }}}
    */
-  def || (other: Column): Column = constructColumn(other) {
-    Or(expr, other.expr)
+  def || (other: Any): Column = constructColumn(other) { o =>
+    Or(expr, o.expr)
   }
 
   /**
-   * Boolean OR with a literal value.
+   * Boolean OR.
    * {{{
-   *   // The following selects everything.
-   *   people.select( people("inSchool") || true )
+   *   // Scala: The following selects people that are in school or employed.
+   *   people.filter( people("inSchool") || people("isEmployed") )
+   *
+   *   // Java:
+   *   people.filter( people("inSchool").or(people("isEmployed")) );
    * }}}
    */
-  def || (literal: Boolean): Column = this || lit(literal)
+  def or(other: Column): Column = this || other
 
   /**
-   * Boolean AND with an expression.
+   * Boolean AND.
    * {{{
-   *   // The following selects people that are in school and employed at the same time.
+   *   // Scala: The following selects people that are in school and employed at the same time.
    *   people.select( people("inSchool") && people("isEmployed") )
+   *
+   *   // Java:
+   *   people.select( people("inSchool").and(people("isEmployed")) );
    * }}}
    */
-  def && (other: Column): Column = constructColumn(other) {
-    And(expr, other.expr)
+  def && (other: Any): Column = constructColumn(other) { o =>
+    And(expr, o.expr)
   }
 
   /**
-   * Boolean AND with a literal value.
+   * Boolean AND.
    * {{{
-   *   // The following selects people that are in school.
-   *   people.select( people("inSchool") && true )
+   *   // Scala: The following selects people that are in school and employed at the same time.
+   *   people.select( people("inSchool") && people("isEmployed") )
+   *
+   *   // Java:
+   *   people.select( people("inSchool").and(people("isEmployed")) );
    * }}}
    */
-  def && (literal: Boolean): Column = this && lit(literal)
+  def and(other: Column): Column = this && other
 
   /**
-   * Bitwise AND with an expression.
+   * Bitwise AND.
    */
-  def & (other: Column): Column = constructColumn(other) {
-    BitwiseAnd(expr, other.expr)
+  def & (other: Any): Column = constructColumn(other) { o =>
+    BitwiseAnd(expr, o.expr)
   }
-
-  /**
-   * Bitwise AND with a literal value.
-   */
-  def & (literal: Any): Column = this & lit(literal)
 
   /**
    * Bitwise OR with an expression.
    */
-  def | (other: Column): Column = constructColumn(other) {
-    BitwiseOr(expr, other.expr)
+  def | (other: Any): Column = constructColumn(other) { o =>
+    BitwiseOr(expr, o.expr)
   }
-
-  /**
-   * Bitwise OR with a literal value.
-   */
-  def | (literal: Any): Column = this | lit(literal)
 
   /**
    * Bitwise XOR with an expression.
    */
-  def ^ (other: Column): Column = constructColumn(other) {
-    BitwiseXor(expr, other.expr)
+  def ^ (other: Any): Column = constructColumn(other) { o =>
+    BitwiseXor(expr, o.expr)
   }
-
-  /**
-   * Bitwise XOR with a literal value.
-   */
-  def ^ (literal: Any): Column = this ^ lit(literal)
 
   /**
    * Sum of this expression and another expression.
    * {{{
-   *   // The following selects the sum of a person's height and weight.
+   *   // Scala: The following selects the sum of a person's height and weight.
    *   people.select( people("height") + people("weight") )
+   *
+   *   // Java:
+   *   people.select( people("height").plus(people("weight")) );
    * }}}
    */
-  def + (other: Column): Column = constructColumn(other) {
-    Add(expr, other.expr)
+  def + (other: Any): Column = constructColumn(other) { o =>
+    Add(expr, o.expr)
   }
 
   /**
    * Sum of this expression and another expression.
    * {{{
-   *   // The following selects the sum of a person's height and 10.
-   *   people.select( people("height") + 10 )
+   *   // Scala: The following selects the sum of a person's height and weight.
+   *   people.select( people("height") + people("weight") )
+   *
+   *   // Java:
+   *   people.select( people("height").plus(people("weight")) );
    * }}}
    */
-  def + (literal: Any): Column = this + lit(literal)
+  def plus(other: Any): Column = this + other
 
   /**
    * Subtraction. Subtract the other expression from this expression.
    * {{{
-   *   // The following selects the difference between people's height and their weight.
+   *   // Scala: The following selects the difference between people's height and their weight.
    *   people.select( people("height") - people("weight") )
+   *
+   *   // Java:
+   *   people.select( people("height").minus(people("weight")) );
    * }}}
    */
-  def - (other: Column): Column = constructColumn(other) {
-    Subtract(expr, other.expr)
+  def - (other: Any): Column = constructColumn(other) { o =>
+    Subtract(expr, o.expr)
   }
 
   /**
-   * Subtraction. Subtract a literal value from this expression.
+   * Subtraction. Subtract the other expression from this expression.
    * {{{
-   *   // The following selects a person's height and subtract it by 10.
-   *   people.select( people("height") - 10 )
+   *   // Scala: The following selects the difference between people's height and their weight.
+   *   people.select( people("height") - people("weight") )
+   *
+   *   // Java:
+   *   people.select( people("height").minus(people("weight")) );
    * }}}
    */
-  def - (literal: Any): Column = this - lit(literal)
+  def minus(other: Any): Column = this - other
 
   /**
    * Multiplication of this expression and another expression.
    * {{{
-   *   // The following multiplies a person's height by their weight.
+   *   // Scala: The following multiplies a person's height by their weight.
    *   people.select( people("height") * people("weight") )
+   *
+   *   // Java:
+   *   people.select( people("height").multiply(people("weight")) );
    * }}}
    */
-  def * (other: Column): Column = constructColumn(other) {
-    Multiply(expr, other.expr)
+  def * (other: Any): Column = constructColumn(other) { o =>
+    Multiply(expr, o.expr)
   }
 
   /**
-   * Multiplication this expression and a literal value.
+   * Multiplication of this expression and another expression.
    * {{{
-   *   // The following multiplies a person's height by 10.
-   *   people.select( people("height") * 10 )
+   *   // Scala: The following multiplies a person's height by their weight.
+   *   people.select( people("height") * people("weight") )
+   *
+   *   // Java:
+   *   people.select( people("height").multiply(people("weight")) );
    * }}}
    */
-  def * (literal: Any): Column = this * lit(literal)
+  def multiply(other: Any): Column = this * other
 
   /**
    * Division this expression by another expression.
    * {{{
-   *   // The following divides a person's height by their weight.
+   *   // Scala: The following divides a person's height by their weight.
    *   people.select( people("height") / people("weight") )
+   *
+   *   // Java:
+   *   people.select( people("height").divide(people("weight")) );
    * }}}
    */
-  def / (other: Column): Column = constructColumn(other) {
-    Divide(expr, other.expr)
+  def / (other: Any): Column = constructColumn(other) { o =>
+    Divide(expr, o.expr)
   }
 
   /**
-   * Division this expression by a literal value.
+   * Division this expression by another expression.
    * {{{
-   *   // The following divides a person's height by 10.
-   *   people.select( people("height") / 10 )
+   *   // Scala: The following divides a person's height by their weight.
+   *   people.select( people("height") / people("weight") )
+   *
+   *   // Java:
+   *   people.select( people("height").divide(people("weight")) );
    * }}}
    */
-  def / (literal: Any): Column = this / lit(literal)
+  def divide(other: Any): Column = this / other
 
   /**
    * Modulo (a.k.a. remainder) expression.
    */
-  def % (other: Column): Column = constructColumn(other) {
-    Remainder(expr, other.expr)
+  def % (other: Any): Column = constructColumn(other) { o =>
+    Remainder(expr, o.expr)
   }
 
   /**
    * Modulo (a.k.a. remainder) expression.
    */
-  def % (literal: Any): Column = this % lit(literal)
-
+  def mod(other: Any): Column = this % other
 
   /**
    * A boolean expression that is evaluated to true if the value of this expression is contained
@@ -469,27 +508,19 @@ trait Column extends DataFrame {
     new IncomputableColumn(In(expr, list.map(_.expr)))
   }
 
-  def like(literal: String): Column = constructColumn(null) {
-    Like(expr, lit(literal).expr)
-  }
+  def like(literal: String): Column = exprToColumn(Like(expr, lit(literal).expr))
 
-  def rlike(literal: String): Column = constructColumn(null) {
-    RLike(expr, lit(literal).expr)
-  }
+  def rlike(literal: String): Column = exprToColumn(RLike(expr, lit(literal).expr))
 
   /**
    * An expression that gets an item at position `ordinal` out of an array.
    */
-  def getItem(ordinal: Int): Column = constructColumn(null) {
-    GetItem(expr, Literal(ordinal))
-  }
+  def getItem(ordinal: Int): Column = exprToColumn(GetItem(expr, Literal(ordinal)))
 
   /**
    * An expression that gets a field by name in a [[StructField]].
    */
-  def getField(fieldName: String): Column = constructColumn(null) {
-    GetField(expr, fieldName)
-  }
+  def getField(fieldName: String): Column = exprToColumn(GetField(expr, fieldName))
 
   /**
    * An expression that returns a substring.
@@ -507,20 +538,18 @@ trait Column extends DataFrame {
    */
   def substr(startPos: Int, len: Int): Column = this.substr(lit(startPos), lit(len))
 
-  def contains(other: Column): Column = constructColumn(other) {
-    Contains(expr, other.expr)
+  def contains(other: Any): Column = constructColumn(other) { o =>
+    Contains(expr, o.expr)
   }
 
-  def contains(literal: Any): Column = this.contains(lit(literal))
-
-  def startsWith(other: Column): Column = constructColumn(other) {
-    StartsWith(expr, other.expr)
+  def startsWith(other: Column): Column = constructColumn(other) { o =>
+    StartsWith(expr, o.expr)
   }
 
   def startsWith(literal: String): Column = this.startsWith(lit(literal))
 
-  def endsWith(other: Column): Column = constructColumn(other) {
-    EndsWith(expr, other.expr)
+  def endsWith(other: Column): Column = constructColumn(other) { o =>
+    EndsWith(expr, o.expr)
   }
 
   def endsWith(literal: String): Column = this.endsWith(lit(literal))
@@ -532,7 +561,7 @@ trait Column extends DataFrame {
    *   df.select($"colA".as("colB"))
    * }}}
    */
-  override def as(alias: String): Column = constructColumn(null) { Alias(expr, alias)() }
+  override def as(alias: String): Column = exprToColumn(Alias(expr, alias)())
 
   /**
    * Casts the column to a different data type.
@@ -545,7 +574,7 @@ trait Column extends DataFrame {
    *   df.select(df("colA").cast("int"))
    * }}}
    */
-  def cast(to: DataType): Column = constructColumn(null) { Cast(expr, to) }
+  def cast(to: DataType): Column = exprToColumn(Cast(expr, to))
 
   /**
    * Casts the column to a different data type, using the canonical string representation
@@ -556,7 +585,7 @@ trait Column extends DataFrame {
    *   df.select(df("colA").cast("int"))
    * }}}
    */
-  def cast(to: String): Column = constructColumn(null) {
+  def cast(to: String): Column = exprToColumn(
     Cast(expr, to.toLowerCase match {
       case "string" => StringType
       case "boolean" => BooleanType
@@ -571,11 +600,11 @@ trait Column extends DataFrame {
       case "timestamp" => TimestampType
       case _ => throw new RuntimeException(s"""Unsupported cast type: "$to"""")
     })
-  }
+  )
 
-  def desc: Column = constructColumn(null) { SortOrder(expr, Descending) }
+  def desc: Column = exprToColumn(SortOrder(expr, Descending), computable = false)
 
-  def asc: Column = constructColumn(null) { SortOrder(expr, Ascending) }
+  def asc: Column = exprToColumn(SortOrder(expr, Ascending), computable = false)
 }
 
 

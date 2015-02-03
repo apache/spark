@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.util.{List => JList}
-
 import scala.language.implicitConversions
 import scala.collection.JavaConversions._
 
@@ -59,15 +57,32 @@ class GroupedDataFrame protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expr
   }
 
   /**
-   * Compute aggregates by specifying a map from column name to aggregate methods. The resulting
-   * [[DataFrame]] will also contain the grouping columns.
+   * (Scala-specific) Compute aggregates by specifying a map from column name to
+   * aggregate methods. The resulting [[DataFrame]] will also contain the grouping columns.
+   *
+   * The available aggregate methods are `avg`, `max`, `min`, `sum`, `count`.
+   * {{{
+   *   // Selects the age of the oldest employee and the aggregate expense for each department
+   *   df.groupBy("department").agg(
+   *     "age" -> "max",
+   *     "expense" -> "sum"
+   *   )
+   * }}}
+   */
+  def agg(aggExpr: (String, String), aggExprs: (String, String)*): DataFrame = {
+    agg((aggExpr +: aggExprs).toMap)
+  }
+
+  /**
+   * (Scala-specific) Compute aggregates by specifying a map from column name to
+   * aggregate methods. The resulting [[DataFrame]] will also contain the grouping columns.
    *
    * The available aggregate methods are `avg`, `max`, `min`, `sum`, `count`.
    * {{{
    *   // Selects the age of the oldest employee and the aggregate expense for each department
    *   df.groupBy("department").agg(Map(
-   *     "age" -> "max"
-   *     "sum" -> "expense"
+   *     "age" -> "max",
+   *     "expense" -> "sum"
    *   ))
    * }}}
    */
@@ -79,16 +94,17 @@ class GroupedDataFrame protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expr
   }
 
   /**
-   * Compute aggregates by specifying a map from column name to aggregate methods. The resulting
-   * [[DataFrame]] will also contain the grouping columns.
+   * (Java-specific) Compute aggregates by specifying a map from column name to
+   * aggregate methods. The resulting [[DataFrame]] will also contain the grouping columns.
    *
    * The available aggregate methods are `avg`, `max`, `min`, `sum`, `count`.
    * {{{
    *   // Selects the age of the oldest employee and the aggregate expense for each department
-   *   df.groupBy("department").agg(Map(
-   *     "age" -> "max"
-   *     "sum" -> "expense"
-   *   ))
+   *   import com.google.common.collect.ImmutableMap;
+   *   df.groupBy("department").agg(ImmutableMap.<String, String>builder()
+   *     .put("age", "max")
+   *     .put("expense", "sum")
+   *     .build());
    * }}}
    */
   def agg(exprs: java.util.Map[String, String]): DataFrame = {
@@ -103,8 +119,14 @@ class GroupedDataFrame protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expr
    *
    * {{{
    *   // Selects the age of the oldest employee and the aggregate expense for each department
+   *
+   *   // Scala:
    *   import org.apache.spark.sql.dsl._
    *   df.groupBy("department").agg($"department", max($"age"), sum($"expense"))
+   *
+   *   // Java:
+   *   import static org.apache.spark.sql.Dsl.*;
+   *   df.groupBy("department").agg(col("department"), max(col("age")), sum(col("expense")));
    * }}}
    */
   @scala.annotation.varargs
