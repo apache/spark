@@ -125,7 +125,7 @@ case class Star(
  * Used to assign new names to Generator's output, such as hive udtf.
  * For example the SQL expression "stack(2, key, value, key, value) as (a, b)" could be represented
  * as follows:
- *  Alias(stack_function, Seq(a, b))()
+ *  MultiAlias(stack_function, Seq(a, b))
 
  * @param child the computation being performed
  * @param names the names to be associated with each output of computing [[child]].
