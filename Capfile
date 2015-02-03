@@ -77,7 +77,7 @@ namespace :deploy do
   after 'deploy:initialize_variables', 'deploy:prevent_gateway' # capistrano recipes packserv deploy always uses a gateway
   before  'deploy:symlink_current', 'deploy:symlink_shared'
   before 'deploy:upload_to_hdfs', 'deploy:clear_hdfs_executables'
-  after  'deploy:download', 'deploy:upload_sha_jar', 'deploy:litmus_test_sha_jar'
+  after  'deploy:download', 'deploy:upload_to_hdfs', 'deploy:litmus_test_sha_jar'
   after 'deploy:restart', 'deploy:cleanup'
   after 'deploy:cleanup', 'deploy:remind_us_to_update_starscream'
 end
