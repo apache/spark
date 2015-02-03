@@ -90,7 +90,8 @@ class FPGrowth private (
     new FPGrowthModel(freqItemsets)
   }
 
-  def run[Item: ClassTag, Basket <: JavaIterable[Item]](data: JavaRDD[Basket]): FPGrowthModel[Item] = {
+  def run[Item: ClassTag, Basket <: JavaIterable[Item]](
+      data: JavaRDD[Basket]): FPGrowthModel[Item] = {
     this.run(data.rdd.map(_.asScala))
   }
 
