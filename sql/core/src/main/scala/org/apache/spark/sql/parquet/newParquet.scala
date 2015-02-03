@@ -508,7 +508,7 @@ object ParquetRelation2 {
       finished = maybeColumn.isEmpty || chopped.isRoot
     }
 
-    val (columnNames, values) = columns.unzip
+    val (columnNames, values) = columns.reverse.unzip
     PartitionValues(columnNames, values)
   }
 
@@ -520,8 +520,12 @@ object ParquetRelation2 {
       None
     } else {
       val columnName = columnSpec.take(equalSignIndex)
-      val literal = inferPartitionColumnValue(
-        columnSpec.drop(equalSignIndex + 1), defaultPartitionName)
+      assert(columnName.nonEmpty, s"Empty partition column name in '$columnSpec'")
+
+      val rawColumnValue = columnSpec.drop(equalSignIndex + 1)
+      assert(rawColumnValue.nonEmpty, s"Empty partition column value in '$columnSpec'")
+
+      val literal = inferPartitionColumnValue(rawColumnValue, defaultPartitionName)
       Some(columnName -> literal)
     }
   }
@@ -536,9 +540,9 @@ object ParquetRelation2 {
    *   StringType
    * }}}
    */
-  private[parquet] def resolvePartitions(descs: Seq[PartitionValues]): Seq[PartitionValues] = {
-    val distinctColNamesOfPartitions = descs.map(_.columnNames).distinct
-    val columnCount = descs.head.columnNames.size
+  private[parquet] def resolvePartitions(values: Seq[PartitionValues]): Seq[PartitionValues] = {
+    val distinctColNamesOfPartitions = values.map(_.columnNames).distinct
+    val columnCount = values.head.columnNames.size
 
     // Column names of all partitions must match
     assert(distinctColNamesOfPartitions.size == 1, {
@@ -548,11 +552,11 @@ object ParquetRelation2 {
 
     // Resolves possible type conflicts for each column
     val resolvedValues = (0 until columnCount).map { i =>
-      resolveTypeConflicts(descs.map(_.literals(i)))
+      resolveTypeConflicts(values.map(_.literals(i)))
     }
 
     // Fills resolved literals back to each partition
-    descs.zipWithIndex.map { case (d, index) =>
+    values.zipWithIndex.map { case (d, index) =>
       d.copy(literals = resolvedValues.map(_(index)))
     }
   }

@@ -257,7 +257,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest {
           '_1.isNotNull, classOf[NotEq[_]], (1 to 4).map(i => Row.apply(i.toString)))
 
         checkFilterPredicate('_1 === "1", classOf[Eq[_]], "1")
-        checkFilterPredicate('_1 !== "1", classOf[NotEq[_]], (2 to 4).map(i => Row.apply(i.toString)))
+        checkFilterPredicate(
+          '_1 !== "1", classOf[NotEq[_]], (2 to 4).map(i => Row.apply(i.toString)))
 
         checkFilterPredicate('_1 < "2", classOf[Lt[_]], "1")
         checkFilterPredicate('_1 > "3", classOf[Gt[_]], "4")

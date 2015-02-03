@@ -25,6 +25,7 @@ import parquet.schema.MessageTypeParser
 
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.types._
 
 class ParquetSchemaSuite extends FunSuite with ParquetTest {
   val sqlContext = TestSQLContext
@@ -190,6 +191,42 @@ class ParquetSchemaSuite extends FunSuite with ParquetTest {
       assert(a.name == b.name)
       assert(a.dataType === b.dataType)
       assert(a.nullable === b.nullable)
+    }
+  }
+
+  test("merge with metastore schema") {
+    // Field type conflict resolution
+    assertResult(
+      StructType(Seq(
+        StructField("lowerCase", StringType),
+        StructField("UPPERCase", DoubleType, nullable = false)))) {
+
+      ParquetRelation2.mergeMetastoreParquetSchema(
+        StructType(Seq(
+          StructField("lowercase", StringType),
+          StructField("uppercase", DoubleType, nullable = false))),
+
+        StructType(Seq(
+          StructField("lowerCase", BinaryType),
+          StructField("UPPERCase", IntegerType, nullable = true))))
+    }
+
+    // Conflicting field count
+    assert(intercept[Throwable] {
+      ParquetRelation2.mergeMetastoreParquetSchema(
+        StructType(Seq(
+          StructField("uppercase", DoubleType, nullable = false))),
+
+        StructType(Seq(
+          StructField("lowerCase", BinaryType),
+          StructField("UPPERCase", IntegerType, nullable = true))))
+    }.getMessage.contains("detected conflicting schemas"))
+
+    // Conflicting field names
+    intercept[Throwable] {
+      ParquetRelation2.mergeMetastoreParquetSchema(
+        StructType(Seq(StructField("lower", StringType))),
+        StructType(Seq(StructField("lowerCase", BinaryType))))
     }
   }
 }
