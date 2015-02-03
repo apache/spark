@@ -262,8 +262,8 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(all(isinstance(c, Column) for c in rcc))
         cb = [ci == 5, ci != 0, ci > 3, ci < 4, ci >= 0, ci <= 7, ci and cs, ci or cs]
         self.assertTrue(all(isinstance(c, Column) for c in cb))
-        cbit = (ci & ci), (ci | ci), (ci ^ ci), (~ci)
-        self.assertTrue(all(isinstance(c, Column) for c in cbit))
+        cbool = (ci & ci), (ci | ci), (~ci)
+        self.assertTrue(all(isinstance(c, Column) for c in cbool))
         css = cs.like('a'), cs.rlike('a'), cs.asc(), cs.desc(), cs.startswith('a'), cs.endswith('a')
         self.assertTrue(all(isinstance(c, Column) for c in css))
         self.assertTrue(isinstance(ci.cast(LongType()), Column))
