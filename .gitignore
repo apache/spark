@@ -20,3 +20,4 @@ work/
 SparkR-pkg.Rproj
 *.o
 *.so
+SparkR.Rcheck
