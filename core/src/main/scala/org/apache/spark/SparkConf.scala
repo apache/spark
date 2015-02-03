@@ -370,6 +370,7 @@ private[spark] object SparkConf {
     isAkkaConf(name) ||
     name.startsWith("spark.akka") ||
     name.startsWith("spark.auth") ||
+    name.startsWith("spark.ssl") ||
     isSparkPortConf(name)
   }
 

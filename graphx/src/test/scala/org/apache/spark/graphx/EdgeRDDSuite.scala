@@ -15,27 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy
+package org.apache.spark.graphx
 
-private[spark] class ApplicationDescription(
-    val name: String,
-    val maxCores: Option[Int],
-    val memoryPerSlave: Int,
-    val command: Command,
-    var appUiUrl: String,
-    val eventLogDir: Option[String] = None)
-  extends Serializable {
+import org.scalatest.FunSuite
 
-  val user = System.getProperty("user.name", "<unknown>")
+import org.apache.spark.storage.StorageLevel
 
-  def copy(
-      name: String = name,
-      maxCores: Option[Int] = maxCores,
-      memoryPerSlave: Int = memoryPerSlave,
-      command: Command = command,
-      appUiUrl: String = appUiUrl,
-      eventLogDir: Option[String] = eventLogDir): ApplicationDescription =
-    new ApplicationDescription(name, maxCores, memoryPerSlave, command, appUiUrl, eventLogDir)
+class EdgeRDDSuite extends FunSuite with LocalSparkContext {
 
-  override def toString: String = "ApplicationDescription(" + name + ")"
+  test("cache, getStorageLevel") {
+    // test to see if getStorageLevel returns correct value after caching
+    withSpark { sc =>
+      val verts = sc.parallelize(List((0L, 0), (1L, 1), (1L, 2), (2L, 3), (2L, 3), (2L, 3)))
+      val edges = EdgeRDD.fromEdges(sc.parallelize(List.empty[Edge[Int]]))
+      assert(edges.getStorageLevel == StorageLevel.NONE)
+      edges.cache()
+      assert(edges.getStorageLevel == StorageLevel.MEMORY_ONLY)
+    }
+  }
+
 }
