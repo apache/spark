@@ -72,7 +72,7 @@ abstract class TaskContext extends Serializable {
    */
   def isInterrupted(): Boolean
 
-  @deprecated("1.2.0", "use isRunningLocally")
+  @deprecated("use isRunningLocally", "1.2.0")
   def runningLocally(): Boolean
 
   /**
@@ -102,7 +102,7 @@ abstract class TaskContext extends Serializable {
    *
    * @param f Callback function.
    */
-  @deprecated("1.2.0", "use addTaskCompletionListener")
+  @deprecated("use addTaskCompletionListener", "1.2.0")
   def addOnCompleteCallback(f: () => Unit)
 
   /**
@@ -121,7 +121,7 @@ abstract class TaskContext extends Serializable {
    */
   def attemptNumber(): Int
 
-  @deprecated("1.3.0", "use attemptNumber")
+  @deprecated("use attemptNumber", "1.3.0")
   def attemptId(): Long
 
   /**
