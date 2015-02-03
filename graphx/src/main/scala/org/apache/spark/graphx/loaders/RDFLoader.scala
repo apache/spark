@@ -60,6 +60,7 @@ object RDFLoader extends Logging {
     val dict = buildDictionary(sc, lines)
     val dictBroadcast = sc.broadcast(dict)
     
+    /*
     val edges = lines.mapPartitionsWithIndex { (pid, iter) =>
       val builder = new EdgePartitionBuilder[Int, Int]
       iter.foreach { line =>
@@ -85,6 +86,8 @@ object RDFLoader extends Logging {
 
     GraphImpl.fromEdgePartitions(edges, defaultVertexAttr = 1, edgeStorageLevel = edgeStorageLevel,
       vertexStorageLevel = vertexStorageLevel)
+      * */
+    return null // so far
   } // end of edgeListFile
   
   
