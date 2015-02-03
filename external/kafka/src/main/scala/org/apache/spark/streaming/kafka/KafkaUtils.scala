@@ -159,7 +159,7 @@ object KafkaUtils {
    * configuration parameters</a>.
    *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
    *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
-   * @param batch Each OffsetRange in the batch corresponds to a
+   * @param offsetRanges Each OffsetRange in the batch corresponds to a
    *   range of offsets for a given Kafka topic/partition
    */
   @Experimental
@@ -167,25 +167,19 @@ object KafkaUtils {
     K: ClassTag,
     V: ClassTag,
     U <: Decoder[_]: ClassTag,
-    T <: Decoder[_]: ClassTag,
-    R: ClassTag] (
+    T <: Decoder[_]: ClassTag] (
       sc: SparkContext,
       kafkaParams: Map[String, String],
-      batch: Array[OffsetRange]
+      offsetRanges: Array[OffsetRange]
   ): RDD[(K, V)] with HasOffsetRanges = {
     val messageHandler = (mmd: MessageAndMetadata[K, V]) => (mmd.key, mmd.message)
     val kc = new KafkaCluster(kafkaParams)
-    val topics = batch.map(o => TopicAndPartition(o.topic, o.partition)).toSet
-    val leaderMap = kc.findLeaders(topics).fold(
+    val topics = offsetRanges.map(o => TopicAndPartition(o.topic, o.partition)).toSet
+    val leaders = kc.findLeaders(topics).fold(
       errs => throw new SparkException(errs.mkString("\n")),
       ok => ok
     )
-    val rddParts = batch.zipWithIndex.map { case (o, i) =>
-        val tp = TopicAndPartition(o.topic, o.partition)
-        val (host, port) = leaderMap(tp)
-        new KafkaRDDPartition(i, o.topic, o.partition, o.fromOffset, o.untilOffset, host, port)
-    }.toArray
-    new KafkaRDD[K, V, U, T, (K, V)](sc, kafkaParams, rddParts, messageHandler)
+    new KafkaRDD[K, V, U, T, (K, V)](sc, kafkaParams, offsetRanges, leaders, messageHandler)
   }
 
   /** A batch-oriented interface for consuming from Kafka.
@@ -196,7 +190,7 @@ object KafkaUtils {
    * configuration parameters</a>.
    *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
    *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
-   * @param batch Each OffsetRange in the batch corresponds to a
+   * @param offsetRanges Each OffsetRange in the batch corresponds to a
    *   range of offsets for a given Kafka topic/partition
    * @param leaders Kafka leaders for each offset range in batch
    * @param messageHandler function for translating each message into the desired type
@@ -210,17 +204,15 @@ object KafkaUtils {
     R: ClassTag] (
       sc: SparkContext,
       kafkaParams: Map[String, String],
-      batch: Array[OffsetRange],
+      offsetRanges: Array[OffsetRange],
       leaders: Array[Leader],
       messageHandler: MessageAndMetadata[K, V] => R
   ): RDD[R] with HasOffsetRanges = {
-    val leaderMap = leaders.map(l => (l.topic, l.partition) -> (l.host, l.port)).toMap
-    val rddParts = batch.zipWithIndex.map { case (o, i) =>
-        val (host, port) = leaderMap((o.topic, o.partition))
-        new KafkaRDDPartition(i, o.topic, o.partition, o.fromOffset, o.untilOffset, host, port)
-    }.toArray
 
-    new KafkaRDD[K, V, U, T, R](sc, kafkaParams, rddParts, messageHandler)
+    val leaderMap = leaders
+      .map(l => TopicAndPartition(l.topic, l.partition) -> (l.host, l.port))
+      .toMap
+    new KafkaRDD[K, V, U, T, R](sc, kafkaParams, offsetRanges, leaderMap, messageHandler)
   }
 
   /**
@@ -330,69 +322,4 @@ object KafkaUtils {
       ok => ok
     )
   }
-
-  private class OffsetRangeImpl(
-      override val topic: String,
-      override val partition: Int,
-      override val fromOffset: Long,
-      override val untilOffset: Long) extends OffsetRange
-
-  /**
-   * Behaviorless container for a range of offsets from a single Kafka TopicAndPartition
-   * @param topic kafka topic name
-   * @param partition kafka partition id
-   * @param fromOffset inclusive starting offset
-   * @param untilOffset exclusive ending offset
- */
-  @Experimental
-  def createOffsetRange(
-      topic: String,
-      partition: Int,
-      fromOffset: Long,
-      untilOffset: Long): OffsetRange =
-    new OffsetRangeImpl(topic, partition, fromOffset, untilOffset)
-
-  /**
-   * Behaviorless container for a range of offsets from a single Kafka TopicAndPartition
-   * @param topicAndPartition kafka TopicAndPartition
-   * @param fromOffset inclusive starting offset
-   * @param untilOffset exclusive ending offset
- */
-  @Experimental
-  def createOffsetRange(
-      topicAndPartition: TopicAndPartition,
-      fromOffset: Long,
-      untilOffset: Long): OffsetRange =
-    new OffsetRangeImpl(
-      topicAndPartition.topic, topicAndPartition.partition, fromOffset, untilOffset)
-
-  private class LeaderImpl(
-      override val topic: String,
-      override val partition: Int,
-      override val host: String,
-      override val port: Int) extends Leader
-
-  /**
-   * Behaviorless container of host info for the leader of a Kafka TopicAndPartition
-   * @param topic kafka topic name
-   * @param partition kafka partition id
-   * @param host kafka hostname
-   * @param port kafka host's port
-   */
-  @Experimental
-  def createLeader(topic: String, partition: Int, host: String, port: Int): Leader =
-    new LeaderImpl(topic,partition, host, port)
-
-  /**
-   * Behaviorless container of host info for the leader of a Kafka TopicAndPartition
-   * @param topicAndPartition kafka TopicAndPartition
-   * @param host kafka hostname
-   * @param port kafka host's port
-   */
-  @Experimental
-  def createLeader(
-      topicAndPartition: TopicAndPartition,
-      host: String,
-      port: Int): Leader =
-    new LeaderImpl(topicAndPartition.topic, topicAndPartition.partition, host, port)
 }

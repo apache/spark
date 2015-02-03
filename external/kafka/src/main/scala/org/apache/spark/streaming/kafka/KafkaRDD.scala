@@ -52,13 +52,16 @@ class KafkaRDD[
   R: ClassTag] private[spark] (
     sc: SparkContext,
     kafkaParams: Map[String, String],
-    private[spark] val batch: Array[KafkaRDDPartition],
+    val offsetRanges: Array[OffsetRange],
+    leaders: Map[TopicAndPartition, (String, Int)],
     messageHandler: MessageAndMetadata[K, V] => R
   ) extends RDD[R](sc, Nil) with Logging with HasOffsetRanges {
-
-  def offsetRanges: Array[OffsetRange] = batch.asInstanceOf[Array[OffsetRange]]
-
-  override def getPartitions: Array[Partition] = batch.asInstanceOf[Array[Partition]]
+  override def getPartitions: Array[Partition] = {
+    offsetRanges.zipWithIndex.map { case (o, i) =>
+        val (host, port) = leaders(TopicAndPartition(o.topic, o.partition))
+        new KafkaRDDPartition(i, o.topic, o.partition, o.fromOffset, o.untilOffset, host, port)
+    }.toArray
+  }
 
   override def getPreferredLocations(thePart: Partition): Seq[String] = {
     val part = thePart.asInstanceOf[KafkaRDDPartition]
@@ -207,14 +210,15 @@ object KafkaRDD {
       untilOffsets: Map[TopicAndPartition, LeaderOffset],
       messageHandler: MessageAndMetadata[K, V] => R
   ): KafkaRDD[K, V, U, T, R] = {
-    assert(fromOffsets.keys == untilOffsets.keys,
-      "Must provide both from and until offsets for each topic/partition")
+    val leaders = untilOffsets.map { case (tp, lo) =>
+        tp -> (lo.host, lo.port)
+    }.toMap
 
-    val partitions  = fromOffsets.zipWithIndex.map { case ((tp, from), index) =>
-      val lo = untilOffsets(tp)
-      new KafkaRDDPartition(index, tp.topic, tp.partition, from, lo.offset, lo.host, lo.port)
+    val offsetRanges = fromOffsets.map { case (tp, fo) =>
+        val uo = untilOffsets(tp)
+        OffsetRange(tp.topic, tp.partition, fo, uo.offset)
     }.toArray
 
-    new KafkaRDD[K, V, U, T, R](sc, kafkaParams, partitions, messageHandler)
+    new KafkaRDD[K, V, U, T, R](sc, kafkaParams, offsetRanges, leaders, messageHandler)
   }
 }

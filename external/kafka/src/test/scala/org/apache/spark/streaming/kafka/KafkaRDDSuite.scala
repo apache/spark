@@ -61,7 +61,7 @@ class KafkaRDDSuite extends KafkaStreamSuiteBase with BeforeAndAfter {
 
     kc.setConsumerOffsets(
       kafkaParams("group.id"),
-      rdd.get.batch.map(kp => TopicAndPartition(kp.topic, kp.partition) -> kp.untilOffset).toMap)
+      rdd.get.offsetRanges.map(o => TopicAndPartition(o.topic, o.partition) -> o.untilOffset).toMap)
 
     val rdd2 = getRdd(kc, Set(topic))
     val sent2 = Map("d" -> 1)

@@ -28,25 +28,14 @@ import org.apache.spark.Partition
   */
 private[spark]
 class KafkaRDDPartition(
-  override val index: Int,
-  override val topic: String,
-  override val partition: Int,
-  override val fromOffset: Long,
-  override val untilOffset: Long,
+  val index: Int,
+  val topic: String,
+  val partition: Int,
+  val fromOffset: Long,
+  val untilOffset: Long,
   val host: String,
   val port: Int
-) extends Partition with OffsetRange {
-  def toTuple: (Int, String, Int, Long, Long, String, Int) = (
-    index,
-    topic,
-    partition,
-    fromOffset,
-    untilOffset,
-    host,
-    port
-  )
-
-}
+) extends Partition
 
 private[spark]
 object KafkaRDDPartition {
@@ -67,16 +56,4 @@ object KafkaRDDPartition {
     host,
     port
   )
-
-  def apply(tuple: (Int, String, Int, Long, Long, String, Int)): KafkaRDDPartition = {
-    new KafkaRDDPartition(
-      tuple._1,
-      tuple._2,
-      tuple._3,
-      tuple._4,
-      tuple._5,
-      tuple._6,
-      tuple._7
-    )
-  }
 }

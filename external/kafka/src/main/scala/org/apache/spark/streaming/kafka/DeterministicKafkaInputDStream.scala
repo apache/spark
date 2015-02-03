@@ -26,13 +26,13 @@ import kafka.common.TopicAndPartition
 import kafka.message.MessageAndMetadata
 import kafka.serializer.Decoder
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.kafka.KafkaCluster.LeaderOffset
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.dstream._
 
-/** A stream of {@link org.apache.spark.rdd.kafka.KafkaRDD} where
+/** A stream of {@link org.apache.spark.streaming.kafka.KafkaRDD} where
   * each given Kafka topic/partition corresponds to an RDD partition.
   * The spark configuration spark.streaming.receiver.maxRate gives the maximum number of messages
   * per second that each '''partition''' will accept.
@@ -40,7 +40,7 @@ import org.apache.spark.streaming.dstream._
   * and this DStream is not responsible for committing offsets,
   * so that you can control exactly-once semantics.
   * For an easy interface to Kafka-managed offsets,
-  *  see {@link org.apache.spark.rdd.kafka.KafkaCluster}
+  *  see {@link org.apache.spark.streaming.kafka.KafkaCluster}
   * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
   * configuration parameters</a>.
   *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
@@ -126,12 +126,12 @@ class DeterministicKafkaInputDStream[
   private[streaming]
   class DeterministicKafkaInputDStreamCheckpointData extends DStreamCheckpointData(this) {
     def batchForTime = data.asInstanceOf[mutable.HashMap[
-      Time, Array[(Int, String, Int, Long, Long, String, Int)]]]
+      Time, Array[OffsetRange.OffsetRangeTuple]]]
 
     override def update(time: Time) {
       batchForTime.clear()
       generatedRDDs.foreach { kv =>
-        val a = kv._2.asInstanceOf[KafkaRDD[K, V, U, T, R]].batch.map(_.toTuple).toArray
+        val a = kv._2.asInstanceOf[KafkaRDD[K, V, U, T, R]].offsetRanges.map(_.toTuple).toArray
         batchForTime += kv._1 -> a
       }
     }
@@ -139,10 +139,17 @@ class DeterministicKafkaInputDStream[
     override def cleanup(time: Time) { }
 
     override def restore() {
+      // this is assuming that the topics don't change during execution, which is true currently
+      val topics = fromOffsets.keySet
+      val leaders = kc.findLeaders(topics).fold(
+        errs => throw new SparkException(errs.mkString("\n")),
+        ok => ok
+      )
+
       batchForTime.toSeq.sortBy(_._1)(Time.ordering).foreach { case (t, b) =>
           logInfo(s"Restoring KafkaRDD for time $t ${b.mkString("[", ", ", "]")}")
           generatedRDDs += t -> new KafkaRDD[K, V, U, T, R](
-            context.sparkContext, kafkaParams, b.map(KafkaRDDPartition(_)), messageHandler)
+            context.sparkContext, kafkaParams, b.map(OffsetRange(_)), leaders, messageHandler)
       }
     }
   }
