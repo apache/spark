@@ -38,7 +38,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   var origZone: TimeZone = _
   override protected def beforeAll() {
     origZone = TimeZone.getDefault
-    TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
+    TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
   }
 
   override protected def afterAll() {
@@ -143,26 +143,26 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
 
   test("SPARK-3173 Timestamp support in the parser") {
     checkAnswer(sql(
-      "SELECT time FROM timestamps WHERE time=CAST('1970-01-01 00:00:00.001' AS TIMESTAMP)"),
-      Row(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.001")))
+      "SELECT time FROM timestamps WHERE time=CAST('1969-12-31 16:00:00.001' AS TIMESTAMP)"),
+      Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.001")))
 
     checkAnswer(sql(
-      "SELECT time FROM timestamps WHERE time='1970-01-01 00:00:00.001'"),
-      Row(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.001")))
+      "SELECT time FROM timestamps WHERE time='1969-12-31 16:00:00.001'"),
+      Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.001")))
 
     checkAnswer(sql(
-      "SELECT time FROM timestamps WHERE '1970-01-01 00:00:00.001'=time"),
-      Row(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.001")))
+      "SELECT time FROM timestamps WHERE '1969-12-31 16:00:00.001'=time"),
+      Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.001")))
 
     checkAnswer(sql(
-      """SELECT time FROM timestamps WHERE time<'1970-01-01 00:00:00.003'
-          AND time>'1970-01-01 00:00:00.001'"""),
-      Row(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.002")))
+      """SELECT time FROM timestamps WHERE time<'1969-12-31 16:00:00.003'
+          AND time>'1969-12-31 16:00:00.001'"""),
+      Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.002")))
 
     checkAnswer(sql(
-      "SELECT time FROM timestamps WHERE time IN ('1970-01-01 00:00:00.001','1970-01-01 00:00:00.002')"),
-      Seq(Row(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.001")),
-        Row(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.002"))))
+      "SELECT time FROM timestamps WHERE time IN ('1969-12-31 16:00:00.001','1969-12-31 16:00:00.002')"),
+      Seq(Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.001")),
+        Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.002"))))
 
     checkAnswer(sql(
       "SELECT time FROM timestamps WHERE time='123'"),
@@ -294,6 +294,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(
       sql("SELECT * FROM mapData LIMIT 1"),
       mapData.collect().take(1).map(Row.fromTuple).toSeq)
+  }
+
+  test("date row") {
+    checkAnswer(sql(
+      """select cast("2015-01-28" as date) from testData limit 1"""),
+      Row(java.sql.Date.valueOf("2015-01-28"))
+    )
   }
 
   test("from follow multiple brackets") {
