@@ -19,10 +19,8 @@ setClass("DataFrame",
          slots = list(env = "environment",
                       sdf = "jobj"))
 
-setMethod("initialize", "DataFrame", function(.Object, sdf, isCached, isCheckpointed) {
+setMethod("initialize", "DataFrame", function(.Object, sdf) {
   .Object@env <- new.env()
-  .Object@env$isCached <- isCached
-  .Object@env$isCheckpointed <- isCheckpointed
   
   .Object@sdf <- sdf
   .Object
@@ -31,14 +29,9 @@ setMethod("initialize", "DataFrame", function(.Object, sdf, isCached, isCheckpoi
 #' @rdname DataFrame
 #' @export
 
-dataFrame <- function(sdf, isCached = FALSE, isCheckpointed = FALSE) {
-  new("DataFrame", sdf, isCached, isCheckpointed)
+dataFrame <- function(sdf) {
+  new("DataFrame", sdf)
 }
-
-# The DataFrame accessor function
-
-setGeneric("getsdf", function(df, ...) {standardGeneric("getsdf") })
-setMethod("getsdf", signature(df = "DataFrame" ), function(df) df@sdf )
 
 ############################ DataFrame Methods ##############################################
 
@@ -50,13 +43,21 @@ setMethod("getsdf", signature(df = "DataFrame" ), function(df) df@sdf )
 #' 
 #' @rdname printSchema
 #' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' printSchema(df)
+#'}
 
 setGeneric("printSchema", function(df) { standardGeneric("printSchema") })
 
 setMethod("printSchema",
           signature(df = "DataFrame"),
           function(df) {
-            sdf <- getsdf(df)
+            sdf <- df@sdf
             schemaString <- callJMethod(sdf, "printSchema")
             cat(schemaString)
           })
@@ -70,18 +71,23 @@ setMethod("printSchema",
 #' 
 #' @rdname registerTempTable
 #' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' registerTempTable(df, "json_df")
+#' new_df <- sql(sqlCtx, "SELECT * FROM json_df")
+#'}
 
 setGeneric("registerTempTable", function(df, tableName) { standardGeneric("registerTempTable") })
 
 setMethod("registerTempTable",
           signature(df = "DataFrame", tableName = "character"),
           function(df, tableName) {
-            if (class(df) == "DataFrame") {
-              sdf <- getsdf(df)
-              callJMethod(sdf, "registerTempTable", tableName)    
-            } else {
-              stop("You must specify a DataFrame.")
-            }
+              sdf <- df@sdf
+              callJMethod(sdf, "registerTempTable", tableName)
           })
 
 #' Count
@@ -92,11 +98,19 @@ setMethod("registerTempTable",
 #' 
 #' @rdname count
 #' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' count(df)
+#' }
 
 setMethod("count",
           signature(x = "DataFrame"),
           function(x) {
-            sdf <- getsdf(x)
+            sdf <- x@sdf
             callJMethod(sdf, "count")
           })
 
@@ -109,11 +123,11 @@ setMethod("count",
 #' @rdname collect-methods
 #' @export
 
+# TODO: Collect() currently returns a list of Generic Row objects and is WIP.  This will eventually 
+# be part of the process to read a DataFrame into R and create a data.frame.
 setMethod("collect",
           signature(rdd = "DataFrame"),
           function(rdd){
-            sdf <- getsdf(rdd)
-            list_obj <- callJMethod(sdf, "collect")
+            sdf <- rdd@sdf
+            listObj <- callJMethod(sdf, "collect")
           })
-
-# TODO: Add collect partition

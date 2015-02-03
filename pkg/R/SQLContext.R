@@ -5,19 +5,24 @@
 #' Loads a JSON file (one object per line), returning the result as a DataFrame 
 #' It goes through the entire dataset once to determine the schema.
 #'
-#' @param sqlctx SQLContext to use
+#' @param sqlCtx SQLContext to use
 #' @param path Path of file to read. A vector of multiple paths is allowed.
 #' @return DataFrame
 #' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' }
 
-jsonFile <- function(sqlctx, path) {
+jsonFile <- function(sqlCtx, path) {
   # Allow the user to have a more flexible definiton of the text file path
   path <- normalizePath(path)
   # Convert a string vector of paths to a string containing comma separated paths
   path <- paste(path, collapse=",")
-  
-  sdf<- callJMethod(sqlctx, "jsonFile", path)
-  
+  sdf <- callJMethod(sqlCtx, "jsonFile", path)
   dataFrame(sdf)
 }
 
@@ -25,19 +30,18 @@ jsonFile <- function(sqlctx, path) {
 #' 
 #' Loads a Parquet file, returning the result as a DataFrame.
 #'
-#' @param sqlctx SQLContext to use
+#' @param sqlCtx SQLContext to use
 #' @param path Path of file to read. A vector of multiple paths is allowed.
 #' @return DataFrame
 #' @export
 
-parquetFile <- function(sqlctx, path) {
+# TODO: Implement saveasParquetFile and write examples for both
+parquetFile <- function(sqlCtx, path) {
   # Allow the user to have a more flexible definiton of the text file path
   path <- normalizePath(path)
   # Convert a string vector of paths to a string containing comma separated paths
   path <- paste(path, collapse=",")
-  
-  sdf <- callJMethod(sqlctx, "parquetFile", path)
-  
+  sdf <- callJMethod(sqlCtx, "parquetFile", path)
   dataFrame(sdf)
 }
 
@@ -45,15 +49,22 @@ parquetFile <- function(sqlctx, path) {
 #' 
 #' Executes a SQL query using Spark, returning the result as a DataFrame.
 #'
-#' @param sqlctx SQLContext to use
+#' @param sqlCtx SQLContext to use
 #' @param sqlQuery A character vector containing the SQL query
 #' @return DataFrame
 #' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' registerTempTable(df, "table")
+#' new_df <- sql(sqlCtx, "SELECT * FROM table")
+#' }
 
-sql <- function(sqlctx, sqlQuery) {
-  
-  sdf <- callJMethod(sqlctx, "sql", sqlQuery)
-  
+sql <- function(sqlCtx, sqlQuery) {
+  sdf <- callJMethod(sqlCtx, "sql", sqlQuery)
   dataFrame(sdf)
 }
 
@@ -62,15 +73,22 @@ sql <- function(sqlctx, sqlQuery) {
 #' Returns the specified Table as a DataFrame.  The Table must have already been registered
 #' in the SQLContext.
 #'
-#' @param sqlctx SQLContext to use
-#' @param sqlQuery A character vector containing the SQL query
+#' @param sqlCtx SQLContext to use
+#' @param tableName The SparkSQL Table to convert to a DataFrame.
 #' @return DataFrame
 #' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' registerTempTable(df, "table")
+#' new_df <- table(sqlCtx, "table")
+#' }
 
-table <- function(sqlctx, tableName) {
-  
-  sdf <- callJMethod(sqlctx, "table", tableName)
-  
+table <- function(sqlCtx, tableName) {
+  sdf <- callJMethod(sqlCtx, "table", tableName)
   dataFrame(sdf) 
 }
 
@@ -78,28 +96,40 @@ table <- function(sqlctx, tableName) {
 #' 
 #' Caches the specified table in-memory.
 #'
-#' @param sqlctx SQLContext to use
+#' @param sqlCtx SQLContext to use
 #' @param tableName The name of the table being cached
 #' @return DataFrame
 #' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' registerTempTable(df, "table")
+#' cacheTable(sqlCtx, "table")
+#' }
 
-cacheTable <- function(sqlctx, tableName) {
-  
-  callJMethod(sqlctx, "cacheTable", tableName)
-  
+cacheTable <- function(sqlCtx, tableName) {
+  callJMethod(sqlCtx, "cacheTable", tableName)  
 }
 
 #' Uncache Table
 #' 
 #' Removes the specified table from the in-memory cache.
 #'
-#' @param sqlctx SQLContext to use
+#' @param sqlCtx SQLContext to use
 #' @param tableName The name of the table being uncached
 #' @return DataFrame
 #' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' df <- table(sqlCtx, "table")
+#' uncacheTable(sqlCtx, "table")
+#' }
 
-uncacheTable <- function(sqlctx, tableName){
-  
-  callJMethod(sqlctx, "uncacheTable", tableName)
-  
+uncacheTable <- function(sqlCtx, tableName) {
+  callJMethod(sqlCtx, "uncacheTable", tableName)
 }

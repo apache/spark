@@ -163,20 +163,20 @@ sparkRSQL.init <- function(jsc) {
   
   sparkContext = callJMethod(jsc, "sc")
   
-  if (exists(".sparkRSQLsc", envir=.sparkREnv)) {
+  if (exists(".sparkRSQLsc", envir = .sparkREnv)) {
     cat("Re-using existing SparkSQL Context. Please restart R to create a new SparkSQL Context\n")
-    return(get(".sparkRSQLsc", envir=.sparkREnv))
+    return(get(".sparkRSQLsc", envir = .sparkREnv))
   }
   
   assign(
     ".sparkRSQLsc",
     callJStatic(
-      "edu.berkeley.cs.amplab.sparkr.sparkRSQL",
+      "edu.berkeley.cs.amplab.sparkr.sqlUtils",
       "createSQLContext",
       sparkContext),
-    envir=.sparkREnv
+    envir = .sparkREnv
   )
-  sqlctx <- get(".sparkRSQLsc", envir=.sparkREnv)
+  sqlctx <- get(".sparkRSQLsc", envir = .sparkREnv)
 
   sqlctx
 }
