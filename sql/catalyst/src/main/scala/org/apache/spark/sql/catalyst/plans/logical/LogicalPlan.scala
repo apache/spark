@@ -209,6 +209,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
  */
 abstract class LeafNode extends LogicalPlan with trees.LeafNode[LogicalPlan] {
   self: Product =>
+
+  override def statistics: Statistics = Statistics(1)
 }
 
 /**
@@ -216,6 +218,8 @@ abstract class LeafNode extends LogicalPlan with trees.LeafNode[LogicalPlan] {
  */
 abstract class UnaryNode extends LogicalPlan with trees.UnaryNode[LogicalPlan] {
   self: Product =>
+
+  override def statistics: Statistics = child.statistics
 }
 
 /**
@@ -223,4 +227,8 @@ abstract class UnaryNode extends LogicalPlan with trees.UnaryNode[LogicalPlan] {
  */
 abstract class BinaryNode extends LogicalPlan with trees.BinaryNode[LogicalPlan] {
   self: Product =>
+
+  override def statistics: Statistics = {
+    Statistics(left.statistics.sizeInBytes + right.statistics.sizeInBytes)
+  }
 }
