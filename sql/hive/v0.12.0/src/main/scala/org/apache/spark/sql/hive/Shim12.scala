@@ -61,10 +61,10 @@ private[hive] object HiveShim {
   val version = "0.12.0"
 
   def getTableDesc(
-                    serdeClass: Class[_ <: Deserializer],
-                    inputFormatClass: Class[_ <: InputFormat[_, _]],
-                    outputFormatClass: Class[_],
-                    properties: Properties) = {
+    serdeClass: Class[_ <: Deserializer],
+    inputFormatClass: Class[_ <: InputFormat[_, _]],
+    outputFormatClass: Class[_],
+    properties: Properties) = {
     new TableDesc(serdeClass, inputFormatClass, outputFormatClass, properties)
   }
 
