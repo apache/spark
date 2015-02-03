@@ -19,6 +19,7 @@ package org.apache.spark.mllib.tree
 
 import scala.collection.mutable
 import scala.collection.JavaConverters._
+import scala.util.{Failure, Try}
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
@@ -244,7 +245,10 @@ private class RandomForest (
 
     // Delete any remaining checkpoints used for node Id cache.
     if (nodeIdCache.nonEmpty) {
-      nodeIdCache.get.deleteAllCheckpoints()
+      Try(nodeIdCache.get.deleteAllCheckpoints()) match {
+        case Failure(e) => logWarning(s"delete all chackpoints faild. Error reason: ${e.getMessage}")
+        case _ => _
+      }
     }
 
     val trees = topNodes.map(topNode => new DecisionTreeModel(topNode, strategy.algo))
