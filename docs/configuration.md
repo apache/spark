@@ -311,6 +311,9 @@ Apart from these, the following properties are also available, and may be useful
     or it will be displayed before the driver exiting. It also can be dumped into disk by
     `sc.dump_profiles(path)`. If some of the profile results had been displayed maually,
     they will not be displayed automatically before driver exiting.
+
+    By default the `pyspark.profiler.BasicProfiler` will be used, but this can be overridden by
+    passing a profiler class in as a parameter to the `SparkContext` constructor.
   </td>
 </tr>
 <tr>
@@ -1095,24 +1098,32 @@ Apart from these, the following properties are also available, and may be useful
     available on YARN mode. For more detail, see the description
     <a href="job-scheduling.html#dynamic-resource-allocation">here</a>.
     <br><br>
-    This requires the following configurations to be set:
+    This requires <code>spark.shuffle.service.enabled</code> to be set.
+    The following configurations are also relevant:
     <code>spark.dynamicAllocation.minExecutors</code>,
     <code>spark.dynamicAllocation.maxExecutors</code>, and
-    <code>spark.shuffle.service.enabled</code>
+    <code>spark.dynamicAllocation.initialExecutors</code>
   </td>
 </tr>
 <tr>
   <td><code>spark.dynamicAllocation.minExecutors</code></td>
-  <td>(none)</td>
+  <td>0</td>
   <td>
-    Lower bound for the number of executors if dynamic allocation is enabled (required).
+    Lower bound for the number of executors if dynamic allocation is enabled.
   </td>
 </tr>
 <tr>
   <td><code>spark.dynamicAllocation.maxExecutors</code></td>
-  <td>(none)</td>
+  <td>Integer.MAX_VALUE</td>
   <td>
-    Upper bound for the number of executors if dynamic allocation is enabled (required).
+    Upper bound for the number of executors if dynamic allocation is enabled.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.maxExecutors</code></td>
+  <td><code>spark.dynamicAllocation.minExecutors</code></td>
+  <td>
+    Initial number of executors to run if dynamic allocation is enabled.
   </td>
 </tr>
 <tr>

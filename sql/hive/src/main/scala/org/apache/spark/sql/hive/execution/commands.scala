@@ -54,7 +54,7 @@ case class DropTable(
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     val ifExistsClause = if (ifExists) "IF EXISTS " else ""
     try {
-      hiveContext.tryUncacheQuery(hiveContext.table(tableName))
+      hiveContext.cacheManager.tryUncacheQuery(hiveContext.table(tableName))
     } catch {
       // This table's metadata is not in
       case _: org.apache.hadoop.hive.ql.metadata.InvalidTableException =>
