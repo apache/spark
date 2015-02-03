@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql
 
+import java.util.{List => JList}
+
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{TypeTag, typeTag}
+import scala.collection.JavaConversions._
 
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions._
@@ -105,8 +108,7 @@ object Dsl {
   def countDistinct(expr: Column, exprs: Column*): Column =
     CountDistinct((expr +: exprs).map(_.expr))
 
-  def approxCountDistinct(e: Column): Column =
-    ApproxCountDistinct(e.expr)
+  def approxCountDistinct(e: Column): Column = ApproxCountDistinct(e.expr)
   def approxCountDistinct(e: Column, rsd: Double): Column =
     ApproxCountDistinct(e.expr, rsd)
 
@@ -121,6 +123,13 @@ object Dsl {
   def sqrt(e: Column): Column = Sqrt(e.expr)
   def abs(e: Column): Column = Abs(e.expr)
 
+  /**
+   * This is a private API for Python
+   * TODO: move this to a private package
+   */
+  def toColumns(cols: JList[Column]): Seq[Column] = {
+    cols.toList.toSeq
+  }
 
   // scalastyle:off
 

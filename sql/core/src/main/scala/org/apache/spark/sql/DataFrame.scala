@@ -500,10 +500,6 @@ trait DataFrame extends DataFrameSpecificApi with RDDApi[Row] {
   ////////////////////////////////////////////////////////////////////////////
   // for Python API
   ////////////////////////////////////////////////////////////////////////////
-  /**
-   * A helpful function for Py4j, convert a list of Column to an array
-   */
-  protected[sql] def toColumnArray(cols: JList[Column]): Array[Column]
 
   /**
    * Converts a JavaRDD to a PythonRDD.

@@ -323,10 +323,6 @@ private[sql] class DataFrameImpl protected[sql](
   ////////////////////////////////////////////////////////////////////////////
   // for Python API
   ////////////////////////////////////////////////////////////////////////////
-  protected[sql] override def toColumnArray(cols: JList[Column]): Array[Column] = {
-    cols.toList.toArray
-  }
-
   protected[sql] override def javaToPython: JavaRDD[Array[Byte]] = {
     val fieldTypes = schema.fields.map(_.dataType)
     val jrdd = rdd.map(EvaluatePython.rowToArray(_, fieldTypes)).toJavaRDD()
