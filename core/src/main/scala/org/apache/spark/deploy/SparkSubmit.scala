@@ -21,20 +21,20 @@ import java.io.{File, PrintStream}
 import java.lang.reflect.{Modifier, InvocationTargetException}
 import java.net.URL
 
+import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
+
+import org.apache.hadoop.fs.Path
+
 import org.apache.ivy.Ivy
-import org.apache.ivy.ant.AntMessageLogger
 import org.apache.ivy.core.LogOptions
-import org.apache.ivy.core.module.descriptor._
+import org.apache.ivy.core.module.descriptor.{DefaultExcludeRule, DefaultDependencyDescriptor, DefaultModuleDescriptor}
 import org.apache.ivy.core.module.id.{ModuleId, ArtifactId, ModuleRevisionId}
 import org.apache.ivy.core.report.ResolveReport
 import org.apache.ivy.core.resolve.{IvyNode, ResolveOptions}
 import org.apache.ivy.core.retrieve.RetrieveOptions
-import org.apache.ivy.core.settings.{IvyVariableContainerImpl, IvySettings}
+import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.resolver.{ChainResolver, IBiblioResolver}
-import org.apache.ivy.util.DefaultMessageLogger
-
-import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
 import org.apache.spark.Logging
 import org.apache.spark.executor.ExecutorURLClassLoader
@@ -148,12 +148,27 @@ object SparkSubmit {
       }
     }
 
+    val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
+
+    // Require all python files to be local, so we can add them to the PYTHONPATH
+    // In YARN cluster mode, python files are distributed as regular files, which can be non-local
+    if (args.isPython && !isYarnCluster) {
+      if (Utils.nonLocalPaths(args.primaryResource).nonEmpty) {
+        printErrorAndExit(s"Only local python files are supported: $args.primaryResource")
+      }
+      val nonLocalPyFiles = Utils.nonLocalPaths(args.pyFiles).mkString(",")
+      if (nonLocalPyFiles.nonEmpty) {
+        printErrorAndExit(s"Only local additional python files are supported: $nonLocalPyFiles")
+      }
+    }
+
     // The following modes are not supported or applicable
     (clusterManager, deployMode) match {
       case (MESOS, CLUSTER) =>
         printErrorAndExit("Cluster deploy mode is currently not supported for Mesos clusters.")
-      case (_, CLUSTER) if args.isPython =>
-        printErrorAndExit("Cluster deploy mode is currently not supported for python applications.")
+      case (STANDALONE, CLUSTER) if args.isPython =>
+        printErrorAndExit("Cluster deploy mode is currently not supported for python " +
+          "applications on standalone clusters.")
       case (_, CLUSTER) if isShell(args.primaryResource) =>
         printErrorAndExit("Cluster deploy mode is not applicable to Spark shells.")
       case (_, CLUSTER) if isSqlShell(args.mainClass) =>
@@ -164,7 +179,7 @@ object SparkSubmit {
     }
 
     // If we're running a python app, set the main class to our specific python runner
-    if (args.isPython) {
+    if (args.isPython && deployMode == CLIENT) {
       if (args.primaryResource == PYSPARK_SHELL) {
         args.mainClass = "py4j.GatewayServer"
         args.childArgs = ArrayBuffer("--die-on-broken-pipe", "0")
@@ -179,6 +194,13 @@ object SparkSubmit {
       if (args.pyFiles != null) {
         sysProps("spark.submit.pyFiles") = args.pyFiles
       }
+    }
+
+    // In yarn-cluster mode for a python app, add primary resource and pyFiles to files
+    // that can be distributed with the job
+    if (args.isPython && isYarnCluster) {
+      args.files = mergeFileLists(args.files, args.primaryResource)
+      args.files = mergeFileLists(args.files, args.pyFiles)
     }
 
     // Special flag to avoid deprecation warnings at the client
@@ -273,7 +295,6 @@ object SparkSubmit {
     // Add the application jar automatically so the user doesn't have to call sc.addJar
     // For YARN cluster mode, the jar is already distributed on each node as "app.jar"
     // For python files, the primary resource is already distributed as a regular file
-    val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
     if (!isYarnCluster && !args.isPython) {
       var jars = sysProps.get("spark.jars").map(x => x.split(",").toSeq).getOrElse(Seq.empty)
       if (isUserJar(args.primaryResource)) {
@@ -298,10 +319,22 @@ object SparkSubmit {
     // In yarn-cluster mode, use yarn.Client as a wrapper around the user class
     if (isYarnCluster) {
       childMainClass = "org.apache.spark.deploy.yarn.Client"
-      if (args.primaryResource != SPARK_INTERNAL) {
-        childArgs += ("--jar", args.primaryResource)
+      if (args.isPython) {
+        val mainPyFile = new Path(args.primaryResource).getName
+        childArgs += ("--primary-py-file", mainPyFile)
+        if (args.pyFiles != null) {
+          // These files will be distributed to each machine's working directory, so strip the
+          // path prefix
+          val pyFilesNames = args.pyFiles.split(",").map(p => (new Path(p)).getName).mkString(",")
+          childArgs += ("--py-files", pyFilesNames)
+        }
+        childArgs += ("--class", "org.apache.spark.deploy.PythonRunner")
+      } else {
+        if (args.primaryResource != SPARK_INTERNAL) {
+          childArgs += ("--jar", args.primaryResource)
+        }
+        childArgs += ("--class", args.mainClass)
       }
-      childArgs += ("--class", args.mainClass)
       if (args.childArgs != null) {
         args.childArgs.foreach { arg => childArgs += ("--arg", arg) }
       }

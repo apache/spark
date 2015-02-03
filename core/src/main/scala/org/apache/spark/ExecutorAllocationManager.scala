@@ -49,6 +49,7 @@ import org.apache.spark.scheduler._
  *   spark.dynamicAllocation.enabled - Whether this feature is enabled
  *   spark.dynamicAllocation.minExecutors - Lower bound on the number of executors
  *   spark.dynamicAllocation.maxExecutors - Upper bound on the number of executors
+ *   spark.dynamicAllocation.initialExecutors - Number of executors to start with
  *
  *   spark.dynamicAllocation.schedulerBacklogTimeout (M) -
  *     If there are backlogged tasks for this duration, add new executors
@@ -70,9 +71,10 @@ private[spark] class ExecutorAllocationManager(
 
   import ExecutorAllocationManager._
 
-  // Lower and upper bounds on the number of executors. These are required.
-  private val minNumExecutors = conf.getInt("spark.dynamicAllocation.minExecutors", -1)
-  private val maxNumExecutors = conf.getInt("spark.dynamicAllocation.maxExecutors", -1)
+  // Lower and upper bounds on the number of executors.
+  private val minNumExecutors = conf.getInt("spark.dynamicAllocation.minExecutors", 0)
+  private val maxNumExecutors = conf.getInt("spark.dynamicAllocation.maxExecutors",
+    Integer.MAX_VALUE)
 
   // How long there must be backlogged tasks for before an addition is triggered
   private val schedulerBacklogTimeout = conf.getLong(
@@ -132,10 +134,10 @@ private[spark] class ExecutorAllocationManager(
    */
   private def validateSettings(): Unit = {
     if (minNumExecutors < 0 || maxNumExecutors < 0) {
-      throw new SparkException("spark.dynamicAllocation.{min/max}Executors must be set!")
+      throw new SparkException("spark.dynamicAllocation.{min/max}Executors must be positive!")
     }
-    if (minNumExecutors == 0 || maxNumExecutors == 0) {
-      throw new SparkException("spark.dynamicAllocation.{min/max}Executors cannot be 0!")
+    if (maxNumExecutors == 0) {
+      throw new SparkException("spark.dynamicAllocation.maxExecutors cannot be 0!")
     }
     if (minNumExecutors > maxNumExecutors) {
       throw new SparkException(s"spark.dynamicAllocation.minExecutors ($minNumExecutors) must " +

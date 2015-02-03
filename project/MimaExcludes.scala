@@ -127,6 +127,12 @@ object MimaExcludes {
             // SPARK-5315 Spark Streaming Java API returns Scala DStream
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.streaming.api.java.JavaDStreamLike.reduceByWindow")
+          ) ++ Seq(
+            // SPARK-5461 Graph should have isCheckpointed, getCheckpointFiles methods
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.graphx.Graph.getCheckpointFiles"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.graphx.Graph.isCheckpointed")
           )
 
         case v if v.startsWith("1.2") =>
