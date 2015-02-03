@@ -29,6 +29,7 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.processors._
+import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 
@@ -63,14 +64,16 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     getConf("spark.sql.hive.convertMetastoreParquet", "true") == "true"
 
   override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
-    new this.QueryExecution { val logical = plan }
+    new this.QueryExecution(plan)
 
-  override def sql(sqlText: String): SchemaRDD = {
+  override def sql(sqlText: String): DataFrame = {
+    val substituted = new VariableSubstitution().substitute(hiveconf, sqlText)
     // TODO: Create a framework for registering parsers instead of just hardcoding if statements.
     if (conf.dialect == "sql") {
-      super.sql(sqlText)
+      super.sql(substituted)
     } else if (conf.dialect == "hiveql") {
-      new SchemaRDD(this, ddlParser(sqlText).getOrElse(HiveQl.parseSql(sqlText)))
+      DataFrame(this,
+        ddlParser(sqlText, exceptionOnError = false).getOrElse(HiveQl.parseSql(substituted)))
     }  else {
       sys.error(s"Unsupported SQL dialect: ${conf.dialect}.  Try 'sql' or 'hiveql'")
     }
@@ -350,7 +353,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   override protected[sql] val planner = hivePlanner
 
   /** Extends QueryExecution with hive specific features. */
-  protected[sql] abstract class QueryExecution extends super.QueryExecution {
+  protected[sql] class QueryExecution(logicalPlan: LogicalPlan)
+    extends super.QueryExecution(logicalPlan) {
 
     /**
      * Returns the result as a hive compatible sequence of strings.  For native commands, the

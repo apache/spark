@@ -203,7 +203,9 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       if (!logInfos.isEmpty) {
         val newApps = new mutable.LinkedHashMap[String, FsApplicationHistoryInfo]()
         def addIfAbsent(info: FsApplicationHistoryInfo) = {
-          if (!newApps.contains(info.id)) {
+          if (!newApps.contains(info.id) ||
+              newApps(info.id).logPath.endsWith(EventLoggingListener.IN_PROGRESS) &&
+              !info.logPath.endsWith(EventLoggingListener.IN_PROGRESS)) {
             newApps += (info.id -> info)
           }
         }

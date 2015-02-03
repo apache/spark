@@ -822,7 +822,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * have a name matching the given name, `null` will be returned.
    */
   def apply(name: String): StructField = {
-    nameToField.getOrElse(name, throw new IllegalArgumentException(s"Field $name does not exist."))
+    nameToField.getOrElse(name,
+      throw new IllegalArgumentException(s"""Field "$name" does not exist."""))
   }
 
   /**
@@ -930,13 +931,13 @@ case class MapType(
  *
  * This interface allows a user to make their own classes more interoperable with SparkSQL;
  * e.g., by creating a [[UserDefinedType]] for a class X, it becomes possible to create
- * a SchemaRDD which has class X in the schema.
+ * a `DataFrame` which has class X in the schema.
  *
  * For SparkSQL to recognize UDTs, the UDT must be annotated with
  * [[SQLUserDefinedType]].
  *
- * The conversion via `serialize` occurs when instantiating a `SchemaRDD` from another RDD.
- * The conversion via `deserialize` occurs when reading from a `SchemaRDD`.
+ * The conversion via `serialize` occurs when instantiating a `DataFrame` from another RDD.
+ * The conversion via `deserialize` occurs when reading from a `DataFrame`.
  */
 @DeveloperApi
 abstract class UserDefinedType[UserType] extends DataType with Serializable {

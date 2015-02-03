@@ -30,6 +30,7 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{Logging, SparkEnv, SparkException}
 import org.apache.spark.storage.StreamBlockId
+import org.apache.spark.streaming.Time
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.util.{AkkaUtils, Utils}
 
@@ -66,8 +67,12 @@ private[streaming] class ReceiverSupervisorImpl(
   private val trackerActor = {
     val ip = env.conf.get("spark.driver.host", "localhost")
     val port = env.conf.getInt("spark.driver.port", 7077)
-    val url = "akka.tcp://%s@%s:%s/user/ReceiverTracker".format(
-      SparkEnv.driverActorSystemName, ip, port)
+    val url = AkkaUtils.address(
+      AkkaUtils.protocol(env.actorSystem),
+      SparkEnv.driverActorSystemName,
+      ip,
+      port,
+      "ReceiverTracker")
     env.actorSystem.actorSelection(url)
   }
 
@@ -82,6 +87,9 @@ private[streaming] class ReceiverSupervisorImpl(
         case StopReceiver =>
           logInfo("Received stop signal")
           stop("Stopped by driver", None)
+        case CleanupOldBlocks(threshTime) =>
+          logDebug("Received delete old batch signal")
+          cleanupOldBlocks(threshTime)
       }
 
       def ref = self
@@ -193,4 +201,9 @@ private[streaming] class ReceiverSupervisorImpl(
 
   /** Generate new block ID */
   private def nextBlockId = StreamBlockId(streamId, newBlockId.getAndIncrement)
+
+  private def cleanupOldBlocks(cleanupThreshTime: Time): Unit = {
+    logDebug(s"Cleaning up blocks older then $cleanupThreshTime")
+    receivedBlockHandler.cleanupOldBlocks(cleanupThreshTime.milliseconds)
+  }
 }

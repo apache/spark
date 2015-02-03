@@ -34,7 +34,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.SparkException
-import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.{PythonRunner, SparkHadoopUtil}
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.scheduler.cluster.YarnSchedulerBackend
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -43,8 +43,11 @@ import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
 /**
  * Common application master functionality for Spark on Yarn.
  */
-private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
-  client: YarnRMClient) extends Logging {
+private[spark] class ApplicationMaster(
+    args: ApplicationMasterArguments,
+    client: YarnRMClient)
+  extends Logging {
+
   // TODO: Currently, task to container is computed once (TaskSetManager) - which need not be
   // optimal as more containers are available. Might need to handle this better.
 
@@ -132,7 +135,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         .get().addShutdownHook(cleanupHook, ApplicationMaster.SHUTDOWN_HOOK_PRIORITY)
 
       // Call this to force generation of secret so it gets populated into the
-      // Hadoop UGI. This has to happen before the startUserClass which does a
+      // Hadoop UGI. This has to happen before the startUserApplication which does a
       // doAs in order for the credentials to be passed on to the executor containers.
       val securityMgr = new SecurityManager(sparkConf)
 
@@ -231,9 +234,29 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     reporterThread = launchReporterThread()
   }
 
+  /**
+   * Create an actor that communicates with the driver.
+   *
+   * In cluster mode, the AM and the driver belong to same process
+   * so the AM actor need not monitor lifecycle of the driver.
+   */
+  private def runAMActor(
+      host: String,
+      port: String,
+      isDriver: Boolean): Unit = {
+    
+    val driverUrl = AkkaUtils.address(
+      AkkaUtils.protocol(actorSystem),
+      SparkEnv.driverActorSystemName,
+      host,
+      port,
+      YarnSchedulerBackend.ACTOR_NAME)
+    actor = actorSystem.actorOf(Props(new AMActor(driverUrl, isDriver)), name = "YarnAM")
+  }
+
   private def runDriver(securityMgr: SecurityManager): Unit = {
     addAmIpFilter()
-    userClassThread = startUserClass()
+    userClassThread = startUserApplication()
 
     // This a bit hacky, but we need to wait until the spark.driver.port property has
     // been set by the Thread executing the user class.
@@ -245,6 +268,11 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         ApplicationMaster.EXIT_SC_NOT_INITED,
         "Timed out waiting for SparkContext.")
     } else {
+      actorSystem = sc.env.actorSystem
+      runAMActor(
+        sc.getConf.get("spark.driver.host"),
+        sc.getConf.get("spark.driver.port"),
+        isDriver = true)
       registerAM(sc.ui.map(_.appUIAddress).getOrElse(""), securityMgr)
       userClassThread.join()
     }
@@ -253,7 +281,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   private def runExecutorLauncher(securityMgr: SecurityManager): Unit = {
     actorSystem = AkkaUtils.createActorSystem("sparkYarnAM", Utils.localHostName, 0,
       conf = sparkConf, securityManager = securityMgr)._1
-    actor = waitForSparkDriver()
+    waitForSparkDriver()
     addAmIpFilter()
     registerAM(sparkConf.get("spark.driver.appUIAddress", ""), securityMgr)
 
@@ -367,7 +395,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     }
   }
 
-  private def waitForSparkDriver(): ActorRef = {
+  private def waitForSparkDriver(): Unit = {
     logInfo("Waiting for Spark driver to be reachable.")
     var driverUp = false
     val hostport = args.userArgs(0)
@@ -399,12 +427,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     sparkConf.set("spark.driver.host", driverHost)
     sparkConf.set("spark.driver.port", driverPort.toString)
 
-    val driverUrl = "akka.tcp://%s@%s:%s/user/%s".format(
-      SparkEnv.driverActorSystemName,
-      driverHost,
-      driverPort.toString,
-      YarnSchedulerBackend.ACTOR_NAME)
-    actorSystem.actorOf(Props(new AMActor(driverUrl)), name = "YarnAM")
+    runAMActor(driverHost, driverPort.toString, isDriver = false)
   }
 
   /** Add the Yarn IP filter that is required for properly securing the UI. */
@@ -427,9 +450,13 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
    *
    * Returns the user thread that was started.
    */
-  private def startUserClass(): Thread = {
-    logInfo("Starting the user JAR in a separate Thread")
+  private def startUserApplication(): Thread = {
+    logInfo("Starting the user application in a separate Thread")
     System.setProperty("spark.executor.instances", args.numExecutors.toString)
+    if (args.primaryPyFile != null && args.primaryPyFile.endsWith(".py")) {
+      System.setProperty("spark.submit.pyFiles",
+        PythonRunner.formatPaths(args.pyFiles).mkString(","))
+    }
     val mainMethod = Class.forName(args.userClass, false,
       Thread.currentThread.getContextClassLoader).getMethod("main", classOf[Array[String]])
 
@@ -462,9 +489,9 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   }
 
   /**
-   * Actor that communicates with the driver in client deploy mode.
+   * An actor that communicates with the driver's scheduler backend.
    */
-  private class AMActor(driverUrl: String) extends Actor {
+  private class AMActor(driverUrl: String, isDriver: Boolean) extends Actor {
     var driver: ActorSelection = _
 
     override def preStart() = {
@@ -474,13 +501,21 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       // we can monitor Lifecycle Events.
       driver ! "Hello"
       driver ! RegisterClusterManager
-      context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
+      // In cluster mode, the AM can directly monitor the driver status instead
+      // of trying to deduce it from the lifecycle of the driver's actor
+      if (!isDriver) {
+        context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
+      }
     }
 
     override def receive = {
       case x: DisassociatedEvent =>
         logInfo(s"Driver terminated or disconnected! Shutting down. $x")
-        finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
+        // In cluster mode, do not rely on the disassociated event to exit
+        // This avoids potentially reporting incorrect exit codes if the driver fails
+        if (!isDriver) {
+          finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
+        }
 
       case x: AddWebUIFilter =>
         logInfo(s"Add WebUI Filter. $x")

@@ -58,7 +58,7 @@ class HiveUdfSuite extends QueryTest {
         |       getStruct(1).f3,
         |       getStruct(1).f4,
         |       getStruct(1).f5 FROM src LIMIT 1
-      """.stripMargin).first() === Row(1, 2, 3, 4, 5))
+      """.stripMargin).head() === Row(1, 2, 3, 4, 5))
   }
   
   test("SPARK-4785 When called with arguments referring column fields, PMOD throws NPE") {
