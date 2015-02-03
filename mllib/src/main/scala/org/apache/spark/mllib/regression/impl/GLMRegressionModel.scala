@@ -20,7 +20,7 @@ package org.apache.spark.mllib.regression.impl
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.util.Importable
-import org.apache.spark.sql.{Row, DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
 /**
  * Helper methods for import/export of GLM regression models.

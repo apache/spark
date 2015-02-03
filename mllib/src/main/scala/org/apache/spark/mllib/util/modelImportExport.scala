@@ -17,13 +17,14 @@
 
 package org.apache.spark.mllib.util
 
-import scala.reflect.runtime.universe.{TypeTag, typeTag}
+import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.types.{DataType, StructType, StructField}
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+
 
 /**
  * :: DeveloperApi ::

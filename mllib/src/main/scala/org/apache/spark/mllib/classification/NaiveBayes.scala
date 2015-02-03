@@ -18,17 +18,13 @@
 package org.apache.spark.mllib.classification
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax => brzArgmax, sum => brzSum}
-import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.types.{ArrayType, DataType, DoubleType, StructField, StructType}
 
 import org.apache.spark.{SparkContext, SparkException, Logging}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{Importable, Exportable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, DataFrame, SQLContext}
-
-import scala.collection.mutable.ArrayBuffer
+import org.apache.spark.sql.{DataFrame, SQLContext}
 
 
 /**

@@ -17,8 +17,6 @@
 
 package org.apache.spark.mllib.classification
 
-import org.apache.spark.util.Utils
-
 import scala.util.Random
 
 import org.scalatest.FunSuite
@@ -27,6 +25,8 @@ import org.apache.spark.SparkException
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
+import org.apache.spark.util.Utils
+
 
 object NaiveBayesSuite {
 
