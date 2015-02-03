@@ -18,12 +18,18 @@
 package org.apache.spark
 
 import java.io._
+import java.net.URI
 import java.util.jar.{JarEntry, JarOutputStream}
+import javax.net.ssl.SSLHandshakeException
 
 import com.google.common.io.ByteStreams
+import org.apache.commons.io.{FileUtils, IOUtils}
+import org.apache.commons.lang3.RandomUtils
 import org.scalatest.FunSuite
 
 import org.apache.spark.util.Utils
+
+import SSLSampleConfigs._
 
 class FileServerSuite extends FunSuite with LocalSparkContext {
 
@@ -166,6 +172,90 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
         throw new SparkException("jar not added")
       }
     }
+  }
+
+  test ("HttpFileServer should work with SSL") {
+    val sparkConf = sparkSSLConfig()
+    val sm = new SecurityManager(sparkConf)
+    val server = new HttpFileServer(sparkConf, sm, 0)
+    try {
+      server.initialize()
+
+      fileTransferTest(server, sm)
+    } finally {
+      server.stop()
+    }
+  }
+
+  test ("HttpFileServer should work with SSL and good credentials") {
+    val sparkConf = sparkSSLConfig()
+    sparkConf.set("spark.authenticate", "true")
+    sparkConf.set("spark.authenticate.secret", "good")
+
+    val sm = new SecurityManager(sparkConf)
+    val server = new HttpFileServer(sparkConf, sm, 0)
+    try {
+      server.initialize()
+
+      fileTransferTest(server, sm)
+    } finally {
+      server.stop()
+    }
+  }
+
+  test ("HttpFileServer should not work with valid SSL and bad credentials") {
+    val sparkConf = sparkSSLConfig()
+    sparkConf.set("spark.authenticate", "true")
+    sparkConf.set("spark.authenticate.secret", "bad")
+
+    val sm = new SecurityManager(sparkConf)
+    val server = new HttpFileServer(sparkConf, sm, 0)
+    try {
+      server.initialize()
+
+      intercept[IOException] {
+        fileTransferTest(server)
+      }
+    } finally {
+      server.stop()
+    }
+  }
+
+  test ("HttpFileServer should not work with SSL when the server is untrusted") {
+    val sparkConf = sparkSSLConfigUntrusted()
+    val sm = new SecurityManager(sparkConf)
+    val server = new HttpFileServer(sparkConf, sm, 0)
+    try {
+      server.initialize()
+
+      intercept[SSLHandshakeException] {
+        fileTransferTest(server)
+      }
+    } finally {
+      server.stop()
+    }
+  }
+
+  def fileTransferTest(server: HttpFileServer, sm: SecurityManager = null): Unit = {
+    val randomContent = RandomUtils.nextBytes(100)
+    val file = File.createTempFile("FileServerSuite", "sslTests", tmpDir)
+    FileUtils.writeByteArrayToFile(file, randomContent)
+    server.addFile(file)
+
+    val uri = new URI(server.serverUri + "/files/" + file.getName)
+
+    val connection = if (sm != null && sm.isAuthenticationEnabled()) {
+      Utils.constructURIForAuthentication(uri, sm).toURL.openConnection()
+    } else {
+      uri.toURL.openConnection()
+    }
+
+    if (sm != null) {
+      Utils.setupSecureURLConnection(connection, sm)
+    }
+
+    val buf = IOUtils.toByteArray(connection.getInputStream)
+    assert(buf === randomContent)
   }
 
 }

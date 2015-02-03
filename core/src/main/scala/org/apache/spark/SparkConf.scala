@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.LinkedHashSet
 
 import org.apache.spark.serializer.KryoSerializer
+import org.apache.spark.util.Utils
 
 /**
  * Configuration for a Spark application. Used to set various Spark parameters as key-value pairs.
@@ -54,8 +55,8 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
   if (loadDefaults) {
     // Load any spark.* system properties
-    for ((k, v) <- System.getProperties.asScala if k.startsWith("spark.")) {
-      set(k, v)
+    for ((key, value) <- Utils.getSystemProperties if key.startsWith("spark.")) {
+      set(key, value)
     }
   }
 
@@ -381,6 +382,7 @@ private[spark] object SparkConf extends Logging {
     isAkkaConf(name) ||
     name.startsWith("spark.akka") ||
     name.startsWith("spark.auth") ||
+    name.startsWith("spark.ssl") ||
     isSparkPortConf(name)
   }
 

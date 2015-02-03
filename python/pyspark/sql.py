@@ -931,7 +931,7 @@ def _parse_schema_abstract(s):
 
 def _infer_schema_type(obj, dataType):
     """
-    Fill the dataType with types infered from obj
+    Fill the dataType with types inferred from obj
 
     >>> schema = _parse_schema_abstract("a b c d")
     >>> row = (1, 1.0, "str", datetime.date(2014, 10, 10))
@@ -1794,20 +1794,6 @@ class Row(tuple):
             return "<Row(%s)>" % ", ".join(self)
 
 
-def inherit_doc(cls):
-    for name, func in vars(cls).items():
-        # only inherit docstring for public functions
-        if name.startswith("_"):
-            continue
-        if not func.__doc__:
-            for parent in cls.__bases__:
-                parent_func = getattr(parent, name, None)
-                if parent_func and getattr(parent_func, "__doc__", None):
-                    func.__doc__ = parent_func.__doc__
-                    break
-    return cls
-
-
 class DataFrame(object):
 
     """A collection of rows that have the same columns.
@@ -2138,6 +2124,10 @@ class DataFrame(object):
             return rs[0] if rs else None
         return self.take(n)
 
+    def first(self):
+        """ Return the first row. """
+        return self.head()
+
     def tail(self):
         raise NotImplemented
 
@@ -2150,11 +2140,11 @@ class DataFrame(object):
 
     def __getattr__(self, name):
         """ Return the column by given name """
-        if isinstance(name, basestring):
-            return Column(self._jdf.apply(name))
-        raise AttributeError
+        if name.startswith("__"):
+            raise AttributeError(name)
+        return Column(self._jdf.apply(name))
 
-    def As(self, name):
+    def alias(self, name):
         """ Alias the current DataFrame """
         return DataFrame(getattr(self._jdf, "as")(name), self.sql_ctx)
 
@@ -2173,7 +2163,7 @@ class DataFrame(object):
         else:
             cols = [c._jc for c in cols]
         jcols = ListConverter().convert(cols, self._sc._gateway._gateway_client)
-        jdf = self._jdf.select(self._jdf.toColumnArray(jcols))
+        jdf = self._jdf.select(self.sql_ctx._sc._jvm.Dsl.toColumns(jcols))
         return DataFrame(jdf, self.sql_ctx)
 
     def filter(self, condition):
@@ -2203,7 +2193,7 @@ class DataFrame(object):
         else:
             cols = [c._jc for c in cols]
         jcols = ListConverter().convert(cols, self._sc._gateway._gateway_client)
-        jdf = self._jdf.groupBy(self._jdf.toColumnArray(jcols))
+        jdf = self._jdf.groupBy(self.sql_ctx._sc._jvm.Dsl.toColumns(jcols))
         return GroupedDataFrame(jdf, self.sql_ctx)
 
     def agg(self, *exprs):
@@ -2230,7 +2220,7 @@ class DataFrame(object):
         """
         return DataFrame(self._jdf.intersect(other._jdf), self.sql_ctx)
 
-    def Except(self, other):
+    def subtract(self, other):
         """ Return a new [[DataFrame]] containing rows in this frame
         but not in another frame.
 
@@ -2248,7 +2238,7 @@ class DataFrame(object):
 
     def addColumn(self, colName, col):
         """ Return a new [[DataFrame]] by adding a column. """
-        return self.select('*', col.As(colName))
+        return self.select('*', col.alias(colName))
 
     def removeColumn(self, colName):
         raise NotImplemented
@@ -2292,14 +2282,17 @@ class GroupedDataFrame(object):
         :param exprs: list or aggregate columns or a map from column
                       name to agregate methods.
         """
+        assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):
             jmap = MapConverter().convert(exprs[0],
                                           self.sql_ctx._sc._gateway._gateway_client)
             jdf = self._jdf.agg(jmap)
         else:
             # Columns
-            assert all(isinstance(c, Column) for c in exprs), "all exprs should be Columns"
-            jdf = self._jdf.agg(*exprs)
+            assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
+            jcols = ListConverter().convert([c._jc for c in exprs[1:]],
+                                            self.sql_ctx._sc._gateway._gateway_client)
+            jdf = self._jdf.agg(exprs[0]._jc, self.sql_ctx._sc._jvm.Dsl.toColumns(jcols))
         return DataFrame(jdf, self.sql_ctx)
 
     @dfapi
@@ -2356,12 +2349,12 @@ SCALA_METHOD_MAPPINGS = {
 
 def _create_column_from_literal(literal):
     sc = SparkContext._active_spark_context
-    return sc._jvm.Literal.apply(literal)
+    return sc._jvm.org.apache.spark.sql.Dsl.lit(literal)
 
 
 def _create_column_from_name(name):
     sc = SparkContext._active_spark_context
-    return sc._jvm.Column(name)
+    return sc._jvm.IncomputableColumn(name)
 
 
 def _scalaMethod(name):
@@ -2385,13 +2378,20 @@ def _unary_op(name):
     return _
 
 
-def _bin_op(name):
-    """ Create a method for given binary operator """
+def _bin_op(name, pass_literal_through=True):
+    """ Create a method for given binary operator
+
+    Keyword arguments:
+    pass_literal_through -- whether to pass literal value directly through to the JVM.
+    """
     def _(self, other):
         if isinstance(other, Column):
             jc = other._jc
         else:
-            jc = _create_column_from_literal(other)
+            if pass_literal_through:
+                jc = other
+            else:
+                jc = _create_column_from_literal(other)
         return Column(getattr(self._jc, _scalaMethod(name))(jc), self._jdf, self.sql_ctx)
     return _
 
@@ -2483,7 +2483,6 @@ class Column(DataFrame):
         if type(startPos) != type(pos):
             raise TypeError("Can not mix the type")
         if isinstance(startPos, (int, long)):
-
             jc = self._jc.substr(startPos, pos)
         elif isinstance(startPos, Column):
             jc = self._jc.substr(startPos._jc, pos._jc)
@@ -2501,7 +2500,7 @@ class Column(DataFrame):
     isNotNull = _unary_op("isNotNull")
 
     # `as` is keyword
-    def As(self, alias):
+    def alias(self, alias):
         return Column(getattr(self._jsc, "as")(alias), self._jdf, self.sql_ctx)
 
     def cast(self, dataType):
@@ -2514,17 +2513,21 @@ class Column(DataFrame):
         return Column(self._jc.cast(jdt), self._jdf, self.sql_ctx)
 
 
+def _to_java_column(col):
+    if isinstance(col, Column):
+        jcol = col._jc
+    else:
+        jcol = _create_column_from_name(col)
+    return jcol
+
+
 def _aggregate_func(name):
-    """ Creat a function for aggregator by name"""
+    """ Create a function for aggregator by name"""
     def _(col):
         sc = SparkContext._active_spark_context
-        if isinstance(col, Column):
-            jcol = col._jc
-        else:
-            jcol = _create_column_from_name(col)
-        # FIXME: can not access dsl.min/max ...
-        jc = getattr(sc._jvm.org.apache.spark.sql.dsl(), name)(jcol)
+        jc = getattr(sc._jvm.Dsl, name)(_to_java_column(col))
         return Column(jc)
+
     return staticmethod(_)
 
 
@@ -2532,13 +2535,31 @@ class Aggregator(object):
     """
     A collections of builtin aggregators
     """
-    max = _aggregate_func("max")
-    min = _aggregate_func("min")
-    avg = mean = _aggregate_func("mean")
-    sum = _aggregate_func("sum")
-    first = _aggregate_func("first")
-    last = _aggregate_func("last")
-    count = _aggregate_func("count")
+    AGGS = [
+        'lit', 'col', 'column', 'upper', 'lower', 'sqrt', 'abs',
+        'min', 'max', 'first', 'last', 'count', 'avg', 'mean', 'sum', 'sumDistinct',
+    ]
+    for _name in AGGS:
+        locals()[_name] = _aggregate_func(_name)
+    del _name
+
+    @staticmethod
+    def countDistinct(col, *cols):
+        sc = SparkContext._active_spark_context
+        jcols = ListConverter().convert([_to_java_column(c) for c in cols],
+                                        sc._gateway._gateway_client)
+        jc = sc._jvm.Dsl.countDistinct(_to_java_column(col),
+                                       sc._jvm.Dsl.toColumns(jcols))
+        return Column(jc)
+
+    @staticmethod
+    def approxCountDistinct(col, rsd=None):
+        sc = SparkContext._active_spark_context
+        if rsd is None:
+            jc = sc._jvm.Dsl.approxCountDistinct(_to_java_column(col))
+        else:
+            jc = sc._jvm.Dsl.approxCountDistinct(_to_java_column(col), rsd)
+        return Column(jc)
 
 
 def _test():

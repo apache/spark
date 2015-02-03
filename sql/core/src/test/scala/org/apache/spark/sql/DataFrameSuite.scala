@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.dsl._
+import org.apache.spark.sql.Dsl._
 import org.apache.spark.sql.types._
 
 /* Implicits */
@@ -27,6 +27,19 @@ import scala.language.postfixOps
 
 class DataFrameSuite extends QueryTest {
   import org.apache.spark.sql.TestData._
+
+  test("analysis error should be eagerly reported") {
+    intercept[Exception] { testData.select('nonExistentName) }
+    intercept[Exception] {
+      testData.groupBy('key).agg(Map("nonExistentName" -> "sum"))
+    }
+    intercept[Exception] {
+      testData.groupBy("nonExistentName").agg(Map("key" -> "sum"))
+    }
+    intercept[Exception] {
+      testData.groupBy($"abcd").agg(Map("key" -> "sum"))
+    }
+  }
 
   test("table scan") {
     checkAnswer(
@@ -57,13 +70,13 @@ class DataFrameSuite extends QueryTest {
 
   test("convert $\"attribute name\" into unresolved attribute") {
     checkAnswer(
-      testData.where($"key" === Literal(1)).select($"value"),
+      testData.where($"key" === lit(1)).select($"value"),
       Row("1"))
   }
 
   test("convert Scala Symbol 'attrname into unresolved attribute") {
     checkAnswer(
-      testData.where('key === Literal(1)).select('value),
+      testData.where('key === lit(1)).select('value),
       Row("1"))
   }
 
@@ -75,13 +88,13 @@ class DataFrameSuite extends QueryTest {
 
   test("simple select") {
     checkAnswer(
-      testData.where('key === Literal(1)).select('value),
+      testData.where('key === lit(1)).select('value),
       Row("1"))
   }
 
   test("select with functions") {
     checkAnswer(
-      testData.select(sum('value), avg('value), count(Literal(1))),
+      testData.select(sum('value), avg('value), count(lit(1))),
       Row(5050.0, 50.5, 100))
 
     checkAnswer(
@@ -215,7 +228,7 @@ class DataFrameSuite extends QueryTest {
     )
 
     checkAnswer(
-      testData3.agg(count('a), count('b), count(Literal(1)), countDistinct('a), countDistinct('b)),
+      testData3.agg(count('a), count('b), count(lit(1)), countDistinct('a), countDistinct('b)),
       Row(2, 1, 2, 2, 1)
     )
 
@@ -276,5 +289,9 @@ class DataFrameSuite extends QueryTest {
     )
   }
 
+  test("apply on query results (SPARK-5462)") {
+    val df = testData.sqlContext.sql("select key from testData")
+    checkAnswer(df("key"), testData.select('key).collect().toSeq)
+  }
 
 }

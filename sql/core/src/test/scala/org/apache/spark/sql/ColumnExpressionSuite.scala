@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.dsl._
+import org.apache.spark.sql.Dsl._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.types.{BooleanType, IntegerType, StructField, StructType}
 
@@ -27,14 +27,57 @@ class ColumnExpressionSuite extends QueryTest {
 
   // TODO: Add test cases for bitwise operations.
 
+  test("computability check") {
+    def shouldBeComputable(c: Column): Unit = assert(c.isComputable === true)
+
+    def shouldNotBeComputable(c: Column): Unit = {
+      assert(c.isComputable === false)
+      intercept[UnsupportedOperationException] { c.head() }
+    }
+
+    shouldBeComputable(testData2("a"))
+    shouldBeComputable(testData2("b"))
+
+    shouldBeComputable(testData2("a") + testData2("b"))
+    shouldBeComputable(testData2("a") + testData2("b") + 1)
+
+    shouldBeComputable(-testData2("a"))
+    shouldBeComputable(!testData2("a"))
+
+    shouldBeComputable(testData2.select(($"a" + 1).as("c"))("c") + testData2("b"))
+    shouldBeComputable(
+      testData2.select(($"a" + 1).as("c"))("c") + testData2.select(($"b" / 2).as("d"))("d"))
+    shouldBeComputable(
+      testData2.select(($"a" + 1).as("c")).select(($"c" + 2).as("d"))("d") + testData2("b"))
+
+    // Literals and unresolved columns should not be computable.
+    shouldNotBeComputable(col("1"))
+    shouldNotBeComputable(col("1") + 2)
+    shouldNotBeComputable(lit(100))
+    shouldNotBeComputable(lit(100) + 10)
+    shouldNotBeComputable(-col("1"))
+    shouldNotBeComputable(!col("1"))
+
+    // Getting data from different frames should not be computable.
+    shouldNotBeComputable(testData2("a") + testData("key"))
+    shouldNotBeComputable(testData2("a") + 1 + testData("key"))
+
+    // Aggregate functions alone should not be computable.
+    shouldNotBeComputable(sum(testData2("a")))
+  }
+
   test("star") {
     checkAnswer(testData.select($"*"), testData.collect().toSeq)
   }
 
-  ignore("star qualified by data frame object") {
+  test("star qualified by data frame object") {
     // This is not yet supported.
     val df = testData.toDataFrame
-    checkAnswer(df.select(df("*")), df.collect().toSeq)
+    val goldAnswer = df.collect().toSeq
+    checkAnswer(df.select(df("*")), goldAnswer)
+
+    val df1 = df.select(df("*"), lit("abcd").as("litCol"))
+    checkAnswer(df1.select(df("*")), goldAnswer)
   }
 
   test("star qualified by table name") {
@@ -244,7 +287,7 @@ class ColumnExpressionSuite extends QueryTest {
     )
 
     checkAnswer(
-      testData.select(sqrt(Literal(null))),
+      testData.select(sqrt(lit(null))),
       (1 to 100).map(_ => Row(null))
     )
   }
@@ -261,7 +304,7 @@ class ColumnExpressionSuite extends QueryTest {
     )
 
     checkAnswer(
-      testData.select(abs(Literal(null))),
+      testData.select(abs(lit(null))),
       (1 to 100).map(_ => Row(null))
     )
   }
@@ -278,7 +321,7 @@ class ColumnExpressionSuite extends QueryTest {
     )
 
     checkAnswer(
-      testData.select(upper(Literal(null))),
+      testData.select(upper(lit(null))),
       (1 to 100).map(n => Row(null))
     )
   }
@@ -295,7 +338,7 @@ class ColumnExpressionSuite extends QueryTest {
     )
 
     checkAnswer(
-      testData.select(lower(Literal(null))),
+      testData.select(lower(lit(null))),
       (1 to 100).map(n => Row(null))
     )
   }

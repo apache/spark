@@ -23,6 +23,7 @@ from array import array
 from fileinput import input
 from glob import glob
 import os
+import pydoc
 import re
 import shutil
 import subprocess
@@ -46,9 +47,10 @@ else:
 
 from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
+from pyspark.rdd import RDD
 from pyspark.files import SparkFiles
 from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, PickleSerializer, \
-    CloudPickleSerializer, CompressedSerializer
+    CloudPickleSerializer, CompressedSerializer, UTF8Deserializer, NoOpSerializer
 from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, ExternalSorter
 from pyspark.sql import SQLContext, IntegerType, Row, ArrayType, StructType, StructField, \
     UserDefinedType, DoubleType
@@ -715,6 +717,13 @@ class RDDTests(ReusedPySparkTestCase):
         wr_s21 = rdd.sample(True, 0.4, 21).collect()
         self.assertNotEqual(set(wr_s11), set(wr_s21))
 
+    def test_null_in_rdd(self):
+        jrdd = self.sc._jvm.PythonUtils.generateRDDWithNull(self.sc._jsc)
+        rdd = RDD(jrdd, self.sc, UTF8Deserializer())
+        self.assertEqual([u"a", None, u"b"], rdd.collect())
+        rdd = RDD(jrdd, self.sc, NoOpSerializer())
+        self.assertEqual(["a", None, "b"], rdd.collect())
+
     def test_multiple_python_java_RDD_conversions(self):
         # Regression test for SPARK-5361
         data = [
@@ -1028,9 +1037,20 @@ class SQLTests(ReusedPySparkTestCase):
         g = df.groupBy()
         self.assertEqual([99, 100], sorted(g.agg({'key': 'max', 'value': 'count'}).collect()[0]))
         self.assertEqual([Row(**{"AVG(key#0)": 49.5})], g.mean().collect())
-        # TODO(davies): fix aggregators
+
         from pyspark.sql import Aggregator as Agg
-        # self.assertEqual((0, '100'), tuple(g.agg(Agg.first(df.key), Agg.last(df.value)).first()))
+        self.assertEqual((0, u'99'), tuple(g.agg(Agg.first(df.key), Agg.last(df.value)).first()))
+        self.assertTrue(95 < g.agg(Agg.approxCountDistinct(df.key)).first()[0])
+        self.assertEqual(100, g.agg(Agg.countDistinct(df.value)).first()[0])
+
+    def test_help_command(self):
+        # Regression test for SPARK-5464
+        rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
+        df = self.sqlCtx.jsonRDD(rdd)
+        # render_doc() reproduces the help() exception without printing output
+        pydoc.render_doc(df)
+        pydoc.render_doc(df.foo)
+        pydoc.render_doc(df.take(1))
 
 
 class InputFormatTests(ReusedPySparkTestCase):

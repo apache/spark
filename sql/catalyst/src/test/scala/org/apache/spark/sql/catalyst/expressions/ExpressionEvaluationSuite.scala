@@ -303,6 +303,7 @@ class ExpressionEvaluationSuite extends FunSuite {
 
     val sd = "1970-01-01"
     val d = Date.valueOf(sd)
+    val zts = sd + " 00:00:00"
     val sts = sd + " 00:00:02"
     val nts = sts + ".1"
     val ts = Timestamp.valueOf(nts)
@@ -319,14 +320,14 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Cast(Literal(1.toDouble) cast TimestampType, DoubleType), 1.toDouble)
 
     checkEvaluation(Cast(Literal(sd) cast DateType, StringType), sd)
-    checkEvaluation(Cast(Literal(d) cast StringType, DateType), d)
+    checkEvaluation(Cast(Literal(d) cast StringType, DateType), 0)
     checkEvaluation(Cast(Literal(nts) cast TimestampType, StringType), nts)
     checkEvaluation(Cast(Literal(ts) cast StringType, TimestampType), ts)
     // all convert to string type to check
     checkEvaluation(
       Cast(Cast(Literal(nts) cast TimestampType, DateType), StringType), sd)
     checkEvaluation(
-      Cast(Cast(Literal(ts) cast DateType, TimestampType), StringType), sts)
+      Cast(Cast(Literal(ts) cast DateType, TimestampType), StringType), zts)
 
     checkEvaluation(Cast("abdef" cast BinaryType, StringType), "abdef")
 
@@ -377,8 +378,8 @@ class ExpressionEvaluationSuite extends FunSuite {
   }
 
   test("date") {
-    val d1 = Date.valueOf("1970-01-01")
-    val d2 = Date.valueOf("1970-01-02")
+    val d1 = DateUtils.fromJavaDate(Date.valueOf("1970-01-01"))
+    val d2 = DateUtils.fromJavaDate(Date.valueOf("1970-01-02"))
     checkEvaluation(Literal(d1) < Literal(d2), true)
   }
 
@@ -459,22 +460,21 @@ class ExpressionEvaluationSuite extends FunSuite {
 
   test("date casting") {
     val d = Date.valueOf("1970-01-01")
-    checkEvaluation(Cast(d, ShortType), null)
-    checkEvaluation(Cast(d, IntegerType), null)
-    checkEvaluation(Cast(d, LongType), null)
-    checkEvaluation(Cast(d, FloatType), null)
-    checkEvaluation(Cast(d, DoubleType), null)
-    checkEvaluation(Cast(d, DecimalType.Unlimited), null)
-    checkEvaluation(Cast(d, DecimalType(10, 2)), null)
-    checkEvaluation(Cast(d, StringType), "1970-01-01")
-    checkEvaluation(Cast(Cast(d, TimestampType), StringType), "1970-01-01 00:00:00")
+    checkEvaluation(Cast(Literal(d), ShortType), null)
+    checkEvaluation(Cast(Literal(d), IntegerType), null)
+    checkEvaluation(Cast(Literal(d), LongType), null)
+    checkEvaluation(Cast(Literal(d), FloatType), null)
+    checkEvaluation(Cast(Literal(d), DoubleType), null)
+    checkEvaluation(Cast(Literal(d), DecimalType.Unlimited), null)
+    checkEvaluation(Cast(Literal(d), DecimalType(10, 2)), null)
+    checkEvaluation(Cast(Literal(d), StringType), "1970-01-01")
+    checkEvaluation(Cast(Cast(Literal(d), TimestampType), StringType), "1970-01-01 00:00:00")
   }
 
   test("timestamp casting") {
     val millis = 15 * 1000 + 2
     val seconds = millis * 1000 + 2
     val ts = new Timestamp(millis)
-    val ts1 = new Timestamp(15 * 1000)  // a timestamp without the milliseconds part
     val tss = new Timestamp(seconds)
     checkEvaluation(Cast(ts, ShortType), 15)
     checkEvaluation(Cast(ts, IntegerType), 15)

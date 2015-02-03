@@ -17,30 +17,22 @@
 
 package org.apache.spark.sql
 
-import scala.language.implicitConversions
 import scala.reflect.ClassTag
-import scala.collection.JavaConversions._
 
-import java.util.{ArrayList, List => JList}
-
-import com.fasterxml.jackson.core.JsonFactory
-import net.razorvine.pickle.Pickler
-
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.rdd.RDD
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.api.python.SerDeUtil
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Literal => LiteralExpr}
-import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.{LogicalRDD, EvaluatePython}
-import org.apache.spark.sql.json.JsonRDD
-import org.apache.spark.sql.types.{NumericType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
+
+
+private[sql] object DataFrame {
+  def apply(sqlContext: SQLContext, logicalPlan: LogicalPlan): DataFrame = {
+    new DataFrameImpl(sqlContext, logicalPlan)
+  }
+}
 
 
 /**
@@ -53,7 +45,7 @@ import org.apache.spark.util.Utils
  * }}}
  *
  * Once created, it can be manipulated using the various domain-specific-language (DSL) functions
- * defined in: [[DataFrame]] (this class), [[Column]], and [[dsl]] for Scala DSL.
+ * defined in: [[DataFrame]] (this class), [[Column]], [[Dsl]] for the DSL.
  *
  * To select a column from the data frame, use the apply method:
  * {{{
@@ -80,71 +72,47 @@ import org.apache.spark.util.Utils
  * }}}
  */
 // TODO: Improve documentation.
-class DataFrame protected[sql](
-    val sqlContext: SQLContext,
-    private val baseLogicalPlan: LogicalPlan,
-    operatorsEnabled: Boolean)
-  extends DataFrameSpecificApi with RDDApi[Row] {
+trait DataFrame extends RDDApi[Row] {
 
-  protected[sql] def this(sqlContext: Option[SQLContext], plan: Option[LogicalPlan]) =
-    this(sqlContext.orNull, plan.orNull, sqlContext.isDefined && plan.isDefined)
+  val sqlContext: SQLContext
 
-  protected[sql] def this(sqlContext: SQLContext, plan: LogicalPlan) = this(sqlContext, plan, true)
+  @DeveloperApi
+  def queryExecution: SQLContext#QueryExecution
 
-  @transient protected[sql] lazy val queryExecution = sqlContext.executePlan(baseLogicalPlan)
+  protected[sql] def logicalPlan: LogicalPlan
 
-  @transient protected[sql] val logicalPlan: LogicalPlan = baseLogicalPlan match {
-    // For various commands (like DDL) and queries with side effects, we force query optimization to
-    // happen right away to let these side effects take place eagerly.
-    case _: Command | _: InsertIntoTable | _: CreateTableAsSelect[_] |_: WriteToFile =>
-      LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sqlContext)
-    case _ =>
-      baseLogicalPlan
-  }
-
-  /**
-   * An implicit conversion function internal to this class for us to avoid doing
-   * "new DataFrame(...)" everywhere.
-   */
-  private implicit def logicalPlanToDataFrame(logicalPlan: LogicalPlan): DataFrame = {
-    new DataFrame(sqlContext, logicalPlan, true)
-  }
-
-  /** Return the list of numeric columns, useful for doing aggregation. */
-  protected[sql] def numericColumns: Seq[Expression] = {
-    schema.fields.filter(_.dataType.isInstanceOf[NumericType]).map { n =>
-      logicalPlan.resolve(n.name, sqlContext.analyzer.resolver).get
-    }
-  }
-
-  /** Resolve a column name into a Catalyst [[NamedExpression]]. */
-  protected[sql] def resolve(colName: String): NamedExpression = {
-    logicalPlan.resolve(colName, sqlContext.analyzer.resolver).getOrElse(
-      throw new RuntimeException(s"""Cannot resolve column name "$colName""""))
-  }
-
-  /** Left here for compatibility reasons. */
+  /** Left here for backward compatibility. */
   @deprecated("1.3.0", "use toDataFrame")
   def toSchemaRDD: DataFrame = this
 
   /**
-   * Return the object itself. Used to force an implicit conversion from RDD to DataFrame in Scala.
+   * Returns the object itself. Used to force an implicit conversion from RDD to DataFrame in Scala.
    */
   def toDataFrame: DataFrame = this
 
-  /** Return the schema of this [[DataFrame]]. */
-  override def schema: StructType = queryExecution.analyzed.schema
+  /**
+   * Returns a new [[DataFrame]] with columns renamed. This can be quite convenient in conversion
+   * from a RDD of tuples into a [[DataFrame]] with meaningful names. For example:
+   * {{{
+   *   val rdd: RDD[(Int, String)] = ...
+   *   rdd.toDataFrame  // this implicit conversion creates a DataFrame with column name _1 and _2
+   *   rdd.toDataFrame("id", "name")  // this creates a DataFrame with column name "id" and "name"
+   * }}}
+   */
+  @scala.annotation.varargs
+  def toDataFrame(colName: String, colNames: String*): DataFrame
 
-  /** Return all column names and their data types as an array. */
-  override def dtypes: Array[(String, String)] = schema.fields.map { field =>
-    (field.name, field.dataType.toString)
-  }
+  /** Returns the schema of this [[DataFrame]]. */
+  def schema: StructType
 
-  /** Return all column names as an array. */
-  override def columns: Array[String] = schema.fields.map(_.name)
+  /** Returns all column names and their data types as an array. */
+  def dtypes: Array[(String, String)]
 
-  /** Print the schema to the console in a nice tree format. */
-  override def printSchema(): Unit = println(schema.treeString)
+  /** Returns all column names as an array. */
+  def columns: Array[String] = schema.fields.map(_.name)
+
+  /** Prints the schema to the console in a nice tree format. */
+  def printSchema(): Unit
 
   /**
    * Cartesian join with another [[DataFrame]].
@@ -153,9 +121,7 @@ class DataFrame protected[sql](
    *
    * @param right Right side of the join operation.
    */
-  override def join(right: DataFrame): DataFrame = {
-    Join(logicalPlan, right.logicalPlan, joinType = Inner, None)
-  }
+  def join(right: DataFrame): DataFrame
 
   /**
    * Inner join with another [[DataFrame]], using the given join expression.
@@ -166,28 +132,30 @@ class DataFrame protected[sql](
    *   df1.join(df2).where($"df1Key" === $"df2Key")
    * }}}
    */
-  override def join(right: DataFrame, joinExprs: Column): DataFrame = {
-    Join(logicalPlan, right.logicalPlan, Inner, Some(joinExprs.expr))
-  }
+  def join(right: DataFrame, joinExprs: Column): DataFrame
 
   /**
    * Join with another [[DataFrame]], usin  g the given join expression. The following performs
    * a full outer join between `df1` and `df2`.
    *
    * {{{
+   *   // Scala:
+   *   import org.apache.spark.sql.dsl._
    *   df1.join(df2, "outer", $"df1Key" === $"df2Key")
+   *
+   *   // Java:
+   *   import static org.apache.spark.sql.Dsl.*;
+   *   df1.join(df2, "outer", col("df1Key") === col("df2Key"));
    * }}}
    *
    * @param right Right side of the join.
    * @param joinExprs Join expression.
    * @param joinType One of: `inner`, `outer`, `left_outer`, `right_outer`, `semijoin`.
    */
-  override def join(right: DataFrame, joinExprs: Column, joinType: String): DataFrame = {
-    Join(logicalPlan, right.logicalPlan, JoinType(joinType), Some(joinExprs.expr))
-  }
+  def join(right: DataFrame, joinExprs: Column, joinType: String): DataFrame
 
   /**
-   * Return a new [[DataFrame]] sorted by the specified column, in ascending column.
+   * Returns a new [[DataFrame]] sorted by the specified column, all in ascending order.
    * {{{
    *   // The following 3 are equivalent
    *   df.sort("sortcol")
@@ -195,89 +163,68 @@ class DataFrame protected[sql](
    *   df.sort($"sortcol".asc)
    * }}}
    */
-  override def sort(colName: String): DataFrame = {
-    Sort(Seq(SortOrder(apply(colName).expr, Ascending)), global = true, logicalPlan)
-  }
+  @scala.annotation.varargs
+  def sort(sortCol: String, sortCols: String*): DataFrame
 
   /**
-   * Return a new [[DataFrame]] sorted by the given expressions. For example:
+   * Returns a new [[DataFrame]] sorted by the given expressions. For example:
    * {{{
    *   df.sort($"col1", $"col2".desc)
    * }}}
    */
   @scala.annotation.varargs
-  override def sort(sortExpr: Column, sortExprs: Column*): DataFrame = {
-    val sortOrder: Seq[SortOrder] = (sortExpr +: sortExprs).map { col =>
-      col.expr match {
-        case expr: SortOrder =>
-          expr
-        case expr: Expression =>
-          SortOrder(expr, Ascending)
-      }
-    }
-    Sort(sortOrder, global = true, logicalPlan)
-  }
+  def sort(sortExpr: Column, sortExprs: Column*): DataFrame
 
   /**
-   * Return a new [[DataFrame]] sorted by the given expressions.
+   * Returns a new [[DataFrame]] sorted by the given expressions.
    * This is an alias of the `sort` function.
    */
   @scala.annotation.varargs
-  override def orderBy(sortExpr: Column, sortExprs: Column*): DataFrame = {
-    sort(sortExpr, sortExprs :_*)
-  }
+  def orderBy(sortCol: String, sortCols: String*): DataFrame
 
   /**
-   * Selecting a single column and return it as a [[Column]].
+   * Returns a new [[DataFrame]] sorted by the given expressions.
+   * This is an alias of the `sort` function.
    */
-  override def apply(colName: String): Column = colName match {
-    case "*" =>
-      Column("*")
-    case _ =>
-      val expr = resolve(colName)
-      new Column(Some(sqlContext), Some(Project(Seq(expr), logicalPlan)), expr)
-  }
+  @scala.annotation.varargs
+  def orderBy(sortExpr: Column, sortExprs: Column*): DataFrame
 
   /**
-   * Selecting a set of expressions, wrapped in a Product.
+   * Selects column based on the column name and return it as a [[Column]].
+   */
+  def apply(colName: String): Column = col(colName)
+
+  /**
+   * Selects column based on the column name and return it as a [[Column]].
+   */
+  def col(colName: String): Column
+
+  /**
+   * Selects a set of expressions, wrapped in a Product.
    * {{{
    *   // The following two are equivalent:
    *   df.apply(($"colA", $"colB" + 1))
    *   df.select($"colA", $"colB" + 1)
    * }}}
    */
-  override def apply(projection: Product): DataFrame = {
-    require(projection.productArity >= 1)
-    select(projection.productIterator.map {
-      case c: Column => c
-      case o: Any => new Column(Some(sqlContext), None, LiteralExpr(o))
-    }.toSeq :_*)
-  }
+  def apply(projection: Product): DataFrame
 
   /**
-   * Alias the current [[DataFrame]].
+   * Returns a new [[DataFrame]] with an alias set.
    */
-  override def as(name: String): DataFrame = Subquery(name, logicalPlan)
+  def as(name: String): DataFrame
 
   /**
-   * Selecting a set of expressions.
+   * Selects a set of expressions.
    * {{{
    *   df.select($"colA", $"colB" + 1)
    * }}}
    */
   @scala.annotation.varargs
-  override def select(cols: Column*): DataFrame = {
-    val exprs = cols.zipWithIndex.map {
-      case (Column(expr: NamedExpression), _) =>
-        expr
-      case (Column(expr: Expression), _) =>
-        Alias(expr, expr.toString)()
-    }
-    Project(exprs.toSeq, logicalPlan)
-  }
+  def select(cols: Column*): DataFrame
 
   /**
-   * Selecting a set of columns. This is a variant of `select` that can only select
+   * Selects a set of columns. This is a variant of `select` that can only select
    * existing columns using column names (i.e. cannot construct expressions).
    *
    * {{{
@@ -287,12 +234,10 @@ class DataFrame protected[sql](
    * }}}
    */
   @scala.annotation.varargs
-  override def select(col: String, cols: String*): DataFrame = {
-    select((col +: cols).map(new Column(_)) :_*)
-  }
+  def select(col: String, cols: String*): DataFrame
 
   /**
-   * Filtering rows using the given condition.
+   * Filters rows using the given condition.
    * {{{
    *   // The following are equivalent:
    *   peopleDf.filter($"age" > 15)
@@ -300,12 +245,10 @@ class DataFrame protected[sql](
    *   peopleDf($"age" > 15)
    * }}}
    */
-  override def filter(condition: Column): DataFrame = {
-    Filter(condition.expr, logicalPlan)
-  }
+  def filter(condition: Column): DataFrame
 
   /**
-   * Filtering rows using the given condition. This is an alias for `filter`.
+   * Filters rows using the given condition. This is an alias for `filter`.
    * {{{
    *   // The following are equivalent:
    *   peopleDf.filter($"age" > 15)
@@ -313,10 +256,10 @@ class DataFrame protected[sql](
    *   peopleDf($"age" > 15)
    * }}}
    */
-  override def where(condition: Column): DataFrame = filter(condition)
+  def where(condition: Column): DataFrame
 
   /**
-   * Filtering rows using the given condition. This is a shorthand meant for Scala.
+   * Filters rows using the given condition. This is a shorthand meant for Scala.
    * {{{
    *   // The following are equivalent:
    *   peopleDf.filter($"age" > 15)
@@ -324,10 +267,10 @@ class DataFrame protected[sql](
    *   peopleDf($"age" > 15)
    * }}}
    */
-  override def apply(condition: Column): DataFrame = filter(condition)
+  def apply(condition: Column): DataFrame
 
   /**
-   * Group the [[DataFrame]] using the specified columns, so we can run aggregation on them.
+   * Groups the [[DataFrame]] using the specified columns, so we can run aggregation on them.
    * See [[GroupedDataFrame]] for all the available aggregate functions.
    *
    * {{{
@@ -342,12 +285,10 @@ class DataFrame protected[sql](
    * }}}
    */
   @scala.annotation.varargs
-  override def groupBy(cols: Column*): GroupedDataFrame = {
-    new GroupedDataFrame(this, cols.map(_.expr))
-  }
+  def groupBy(cols: Column*): GroupedDataFrame
 
   /**
-   * Group the [[DataFrame]] using the specified columns, so we can run aggregation on them.
+   * Groups the [[DataFrame]] using the specified columns, so we can run aggregation on them.
    * See [[GroupedDataFrame]] for all the available aggregate functions.
    *
    * This is a variant of groupBy that can only group by existing columns using column names
@@ -365,23 +306,47 @@ class DataFrame protected[sql](
    * }}}
    */
   @scala.annotation.varargs
-  override def groupBy(col1: String, cols: String*): GroupedDataFrame = {
-    val colNames: Seq[String] = col1 +: cols
-    new GroupedDataFrame(this, colNames.map(colName => resolve(colName)))
+  def groupBy(col1: String, cols: String*): GroupedDataFrame
+
+  /**
+   * (Scala-specific) Compute aggregates by specifying a map from column name to
+   * aggregate methods. The resulting [[DataFrame]] will also contain the grouping columns.
+   *
+   * The available aggregate methods are `avg`, `max`, `min`, `sum`, `count`.
+   * {{{
+   *   // Selects the age of the oldest employee and the aggregate expense for each department
+   *   df.groupBy("department").agg(
+   *     "age" -> "max",
+   *     "expense" -> "sum"
+   *   )
+   * }}}
+   */
+  def agg(aggExpr: (String, String), aggExprs: (String, String)*): DataFrame = {
+    groupBy().agg(aggExpr, aggExprs :_*)
   }
 
   /**
-   * Aggregate on the entire [[DataFrame]] without groups.
+   * (Scala-specific) Aggregates on the entire [[DataFrame]] without groups.
    * {{
    *   // df.agg(...) is a shorthand for df.groupBy().agg(...)
    *   df.agg(Map("age" -> "max", "salary" -> "avg"))
    *   df.groupBy().agg(Map("age" -> "max", "salary" -> "avg"))
    * }}
    */
-  override def agg(exprs: Map[String, String]): DataFrame = groupBy().agg(exprs)
+  def agg(exprs: Map[String, String]): DataFrame = groupBy().agg(exprs)
 
   /**
-   * Aggregate on the entire [[DataFrame]] without groups.
+   * (Java-specific) Aggregates on the entire [[DataFrame]] without groups.
+   * {{
+   *   // df.agg(...) is a shorthand for df.groupBy().agg(...)
+   *   df.agg(Map("age" -> "max", "salary" -> "avg"))
+   *   df.groupBy().agg(Map("age" -> "max", "salary" -> "avg"))
+   * }}
+   */
+  def agg(exprs: java.util.Map[String, String]): DataFrame = groupBy().agg(exprs)
+
+  /**
+   * Aggregates on the entire [[DataFrame]] without groups.
    * {{
    *   // df.agg(...) is a shorthand for df.groupBy().agg(...)
    *   df.agg(max($"age"), avg($"salary"))
@@ -389,138 +354,147 @@ class DataFrame protected[sql](
    * }}
    */
   @scala.annotation.varargs
-  override def agg(expr: Column, exprs: Column*): DataFrame = groupBy().agg(expr, exprs :_*)
+  def agg(expr: Column, exprs: Column*): DataFrame = groupBy().agg(expr, exprs :_*)
 
   /**
-   * Return a new [[DataFrame]] by taking the first `n` rows. The difference between this function
+   * Returns a new [[DataFrame]] by taking the first `n` rows. The difference between this function
    * and `head` is that `head` returns an array while `limit` returns a new [[DataFrame]].
    */
-  override def limit(n: Int): DataFrame = Limit(LiteralExpr(n), logicalPlan)
+  def limit(n: Int): DataFrame
 
   /**
-   * Return a new [[DataFrame]] containing union of rows in this frame and another frame.
+   * Returns a new [[DataFrame]] containing union of rows in this frame and another frame.
    * This is equivalent to `UNION ALL` in SQL.
    */
-  override def unionAll(other: DataFrame): DataFrame = Union(logicalPlan, other.logicalPlan)
+  def unionAll(other: DataFrame): DataFrame
 
   /**
-   * Return a new [[DataFrame]] containing rows only in both this frame and another frame.
+   * Returns a new [[DataFrame]] containing rows only in both this frame and another frame.
    * This is equivalent to `INTERSECT` in SQL.
    */
-  override def intersect(other: DataFrame): DataFrame = Intersect(logicalPlan, other.logicalPlan)
+  def intersect(other: DataFrame): DataFrame
 
   /**
-   * Return a new [[DataFrame]] containing rows in this frame but not in another frame.
+   * Returns a new [[DataFrame]] containing rows in this frame but not in another frame.
    * This is equivalent to `EXCEPT` in SQL.
    */
-  override def except(other: DataFrame): DataFrame = Except(logicalPlan, other.logicalPlan)
+  def except(other: DataFrame): DataFrame
 
   /**
-   * Return a new [[DataFrame]] by sampling a fraction of rows.
+   * Returns a new [[DataFrame]] by sampling a fraction of rows.
    *
    * @param withReplacement Sample with replacement or not.
    * @param fraction Fraction of rows to generate.
    * @param seed Seed for sampling.
    */
-  override def sample(withReplacement: Boolean, fraction: Double, seed: Long): DataFrame = {
-    Sample(fraction, withReplacement, seed, logicalPlan)
-  }
+  def sample(withReplacement: Boolean, fraction: Double, seed: Long): DataFrame
 
   /**
-   * Return a new [[DataFrame]] by sampling a fraction of rows, using a random seed.
+   * Returns a new [[DataFrame]] by sampling a fraction of rows, using a random seed.
    *
    * @param withReplacement Sample with replacement or not.
    * @param fraction Fraction of rows to generate.
    */
-  override def sample(withReplacement: Boolean, fraction: Double): DataFrame = {
+  def sample(withReplacement: Boolean, fraction: Double): DataFrame = {
     sample(withReplacement, fraction, Utils.random.nextLong)
   }
 
   /////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Return a new [[DataFrame]] by adding a column.
+   * Returns a new [[DataFrame]] by adding a column.
    */
-  override def addColumn(colName: String, col: Column): DataFrame = {
-    select(Column("*"), col.as(colName))
-  }
+  def addColumn(colName: String, col: Column): DataFrame
 
   /**
-   * Return the first `n` rows.
+   * Returns the first `n` rows.
    */
-  override def head(n: Int): Array[Row] = limit(n).collect()
+  def head(n: Int): Array[Row]
 
   /**
-   * Return the first row.
+   * Returns the first row.
    */
-  override def head(): Row = head(1).head
+  def head(): Row
 
   /**
-   * Return the first row. Alias for head().
+   * Returns the first row. Alias for head().
    */
-  override def first(): Row = head()
-
-  override def map[R: ClassTag](f: Row => R): RDD[R] = {
-    rdd.map(f)
-  }
-
-  override def mapPartitions[R: ClassTag](f: Iterator[Row] => Iterator[R]): RDD[R] = {
-    rdd.mapPartitions(f)
-  }
+  override def first(): Row
 
   /**
-   * Return the first `n` rows in the [[DataFrame]].
+   * Returns a new RDD by applying a function to all rows of this DataFrame.
    */
-  override def take(n: Int): Array[Row] = head(n)
+  override def map[R: ClassTag](f: Row => R): RDD[R]
 
   /**
-   * Return an array that contains all of [[Row]]s in this [[DataFrame]].
+   * Returns a new RDD by first applying a function to all rows of this [[DataFrame]],
+   * and then flattening the results.
    */
-  override def collect(): Array[Row] = rdd.collect()
+  override def flatMap[R: ClassTag](f: Row => TraversableOnce[R]): RDD[R]
 
   /**
-   * Return a Java list that contains all of [[Row]]s in this [[DataFrame]].
+   * Returns a new RDD by applying a function to each partition of this DataFrame.
    */
-  override def collectAsList(): java.util.List[Row] = java.util.Arrays.asList(rdd.collect() :_*)
+  override def mapPartitions[R: ClassTag](f: Iterator[Row] => Iterator[R]): RDD[R]
+  /**
+   * Applies a function `f` to all rows.
+   */
+  override def foreach(f: Row => Unit): Unit
 
   /**
-   * Return the number of rows in the [[DataFrame]].
+   * Applies a function f to each partition of this [[DataFrame]].
    */
-  override def count(): Long = groupBy().count().rdd.collect().head.getLong(0)
+  override def foreachPartition(f: Iterator[Row] => Unit): Unit
 
   /**
-   * Return a new [[DataFrame]] that has exactly `numPartitions` partitions.
+   * Returns the first `n` rows in the [[DataFrame]].
    */
-  override def repartition(numPartitions: Int): DataFrame = {
-    sqlContext.applySchema(rdd.repartition(numPartitions), schema)
-  }
+  override def take(n: Int): Array[Row]
 
-  override def persist(): this.type = {
-    sqlContext.cacheManager.cacheQuery(this)
-    this
-  }
+  /**
+   * Returns an array that contains all of [[Row]]s in this [[DataFrame]].
+   */
+  override def collect(): Array[Row]
 
-  override def persist(newLevel: StorageLevel): this.type = {
-    sqlContext.cacheManager.cacheQuery(this, None, newLevel)
-    this
-  }
+  /**
+   * Returns a Java list that contains all of [[Row]]s in this [[DataFrame]].
+   */
+  override def collectAsList(): java.util.List[Row]
 
-  override def unpersist(blocking: Boolean): this.type = {
-    sqlContext.cacheManager.tryUncacheQuery(this, blocking)
-    this
-  }
+  /**
+   * Returns the number of rows in the [[DataFrame]].
+   */
+  override def count(): Long
+
+  /**
+   * Returns a new [[DataFrame]] that has exactly `numPartitions` partitions.
+   */
+  override def repartition(numPartitions: Int): DataFrame
+
+  override def persist(): this.type
+
+  override def persist(newLevel: StorageLevel): this.type
+
+  override def unpersist(blocking: Boolean): this.type
 
   /////////////////////////////////////////////////////////////////////////////
   // I/O
   /////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Return the content of the [[DataFrame]] as a [[RDD]] of [[Row]]s.
+   * Returns the content of the [[DataFrame]] as an [[RDD]] of [[Row]]s.
    */
-  override def rdd: RDD[Row] = {
-    val schema = this.schema
-    queryExecution.executedPlan.execute().map(ScalaReflection.convertRowToScala(_, schema))
-  }
+  def rdd: RDD[Row]
+
+  /**
+   * Returns the content of the [[DataFrame]] as a [[JavaRDD]] of [[Row]]s.
+   */
+  def toJavaRDD: JavaRDD[Row] = rdd.toJavaRDD()
+
+  /**
+   * Returns the content of the [[DataFrame]] as a [[JavaRDD]] of [[Row]]s.
+   */
+  def javaRDD: JavaRDD[Row] = toJavaRDD
 
   /**
    * Registers this RDD as a temporary table using the given name.  The lifetime of this temporary
@@ -528,72 +502,101 @@ class DataFrame protected[sql](
    *
    * @group schema
    */
-  override def registerTempTable(tableName: String): Unit = {
-    sqlContext.registerRDDAsTable(this, tableName)
-  }
+  def registerTempTable(tableName: String): Unit
 
   /**
    * Saves the contents of this [[DataFrame]] as a parquet file, preserving the schema.
    * Files that are written out using this method can be read back in as a [[DataFrame]]
    * using the `parquetFile` function in [[SQLContext]].
    */
-  override def saveAsParquetFile(path: String): Unit = {
-    sqlContext.executePlan(WriteToFile(path, logicalPlan)).toRdd
-  }
+  def saveAsParquetFile(path: String): Unit
 
   /**
    * :: Experimental ::
    * Creates a table from the the contents of this DataFrame.  This will fail if the table already
    * exists.
    *
-   * Note that this currently only works with DataFrame that are created from a HiveContext as
+   * Note that this currently only works with DataFrames that are created from a HiveContext as
    * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
    */
   @Experimental
-  override def saveAsTable(tableName: String): Unit = {
-    sqlContext.executePlan(
-      CreateTableAsSelect(None, tableName, logicalPlan, allowExisting = false)).toRdd
-  }
+  def saveAsTable(tableName: String): Unit
+
+  /**
+   * :: Experimental ::
+   * Creates a table from the the contents of this DataFrame based on a given data source and
+   * a set of options. This will fail if the table already exists.
+   *
+   * Note that this currently only works with DataFrames that are created from a HiveContext as
+   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
+   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
+   * be the target of an `insertInto`.
+   */
+  @Experimental
+  def saveAsTable(
+      tableName: String,
+      dataSourceName: String,
+      option: (String, String),
+      options: (String, String)*): Unit
+
+  /**
+   * :: Experimental ::
+   * Creates a table from the the contents of this DataFrame based on a given data source and
+   * a set of options. This will fail if the table already exists.
+   *
+   * Note that this currently only works with DataFrames that are created from a HiveContext as
+   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
+   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
+   * be the target of an `insertInto`.
+   */
+  @Experimental
+  def saveAsTable(
+      tableName: String,
+      dataSourceName: String,
+      options: java.util.Map[String, String]): Unit
+
+  @Experimental
+  def save(path: String): Unit
+
+  @Experimental
+  def save(
+      dataSourceName: String,
+      option: (String, String),
+      options: (String, String)*): Unit
+
+  @Experimental
+  def save(
+      dataSourceName: String,
+      options: java.util.Map[String, String]): Unit
 
   /**
    * :: Experimental ::
    * Adds the rows from this RDD to the specified table, optionally overwriting the existing data.
    */
   @Experimental
-  override def insertInto(tableName: String, overwrite: Boolean): Unit = {
-    sqlContext.executePlan(InsertIntoTable(UnresolvedRelation(Seq(tableName)),
-      Map.empty, logicalPlan, overwrite)).toRdd
-  }
+  def insertInto(tableName: String, overwrite: Boolean): Unit
 
   /**
-   * Return the content of the [[DataFrame]] as a RDD of JSON strings.
+   * :: Experimental ::
+   * Adds the rows from this RDD to the specified table.
+   * Throws an exception if the table already exists.
    */
-  override def toJSON: RDD[String] = {
-    val rowSchema = this.schema
-    this.mapPartitions { iter =>
-      val jsonFactory = new JsonFactory()
-      iter.map(JsonRDD.rowToJSON(rowSchema, jsonFactory))
-    }
-  }
+  @Experimental
+  def insertInto(tableName: String): Unit = insertInto(tableName, overwrite = false)
+
+  /**
+   * Returns the content of the [[DataFrame]] as a RDD of JSON strings.
+   */
+  def toJSON: RDD[String]
 
   ////////////////////////////////////////////////////////////////////////////
   // for Python API
   ////////////////////////////////////////////////////////////////////////////
-  /**
-   * A helpful function for Py4j, convert a list of Column to an array
-   */
-  protected[sql] def toColumnArray(cols: JList[Column]): Array[Column] = {
-    cols.toList.toArray
-  }
 
   /**
    * Converts a JavaRDD to a PythonRDD.
    */
-  protected[sql] def javaToPython: JavaRDD[Array[Byte]] = {
-    val fieldTypes = schema.fields.map(_.dataType)
-    val jrdd = rdd.map(EvaluatePython.rowToArray(_, fieldTypes)).toJavaRDD()
-    SerDeUtil.javaToPython(jrdd)
-  }
+  protected[sql] def javaToPython: JavaRDD[Array[Byte]]
 }

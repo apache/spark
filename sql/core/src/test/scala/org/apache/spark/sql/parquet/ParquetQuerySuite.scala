@@ -37,8 +37,18 @@ class ParquetQuerySuite extends QueryTest with ParquetTest {
   test("appending") {
     val data = (0 until 10).map(i => (i, i.toString))
     withParquetTable(data, "t") {
-      sql("INSERT INTO t SELECT * FROM t")
+      sql("INSERT INTO TABLE t SELECT * FROM t")
       checkAnswer(table("t"), (data ++ data).map(Row.fromTuple))
+    }
+  }
+
+  // This test case will trigger the NPE mentioned in
+  // https://issues.apache.org/jira/browse/PARQUET-151.
+  ignore("overwriting") {
+    val data = (0 until 10).map(i => (i, i.toString))
+    withParquetTable(data, "t") {
+      sql("INSERT OVERWRITE TABLE t SELECT * FROM t")
+      checkAnswer(table("t"), data.map(Row.fromTuple))
     }
   }
 
@@ -83,6 +93,17 @@ class ParquetQuerySuite extends QueryTest with ParquetTest {
   test("SPARK-1913 regression: columns only referenced by pushed down filters should remain") {
     withParquetTable((1 to 10).map(Tuple1.apply), "t") {
       checkAnswer(sql(s"SELECT _1 FROM t WHERE _1 < 10"), (1 to 9).map(Row.apply(_)))
+    }
+  }
+
+  test("SPARK-5309 strings stored using dictionary compression in parquet") {
+    withParquetTable((0 until 1000).map(i => ("same", "run_" + i /100, 1)), "t") {
+
+      checkAnswer(sql(s"SELECT _1, _2, SUM(_3) FROM t GROUP BY _1, _2"),
+        (0 until 10).map(i => Row("same", "run_" + i, 100)))
+
+      checkAnswer(sql(s"SELECT _1, _2, SUM(_3) FROM t WHERE _2 = 'run_5' GROUP BY _1, _2"),
+        List(Row("same", "run_5", 100)))
     }
   }
 }

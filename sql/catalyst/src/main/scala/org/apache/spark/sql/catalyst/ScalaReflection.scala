@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 
 import org.apache.spark.util.Utils
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute, AttributeReference, Row}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.types._
-
 
 /**
  * A default version of ScalaReflection that uses the runtime universe.
@@ -57,6 +56,11 @@ trait ScalaReflection {
     case (obj, udt: UserDefinedType[_]) => udt.serialize(obj)
     case (o: Option[_], _) => o.map(convertToCatalyst(_, dataType)).orNull
     case (s: Seq[_], arrayType: ArrayType) => s.map(convertToCatalyst(_, arrayType.elementType))
+    case (s: Array[_], arrayType: ArrayType) => if (arrayType.elementType.isPrimitive) {
+      s.toSeq
+    } else {
+      s.toSeq.map(convertToCatalyst(_, arrayType.elementType))
+    }
     case (m: Map[_, _], mapType: MapType) => m.map { case (k, v) =>
       convertToCatalyst(k, mapType.keyType) -> convertToCatalyst(v, mapType.valueType)
     }
@@ -67,6 +71,7 @@ trait ScalaReflection {
         }.toArray)
     case (d: BigDecimal, _) => Decimal(d)
     case (d: java.math.BigDecimal, _) => Decimal(d)
+    case (d: java.sql.Date, _) => DateUtils.fromJavaDate(d)
     case (other, _) => other
   }
 
@@ -80,6 +85,7 @@ trait ScalaReflection {
     }
     case (r: Row, s: StructType) => convertRowToScala(r, s)
     case (d: Decimal, _: DecimalType) => d.toJavaBigDecimal
+    case (i: Int, DateType) => DateUtils.toJavaDate(i)
     case (other, _) => other
   }
 
@@ -93,7 +99,7 @@ trait ScalaReflection {
   /** Returns a Sequence of attributes for the given case class type. */
   def attributesFor[T: TypeTag]: Seq[Attribute] = schemaFor[T] match {
     case Schema(s: StructType, _) =>
-      s.fields.map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
+      s.toAttributes
   }
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
@@ -140,7 +146,9 @@ trait ScalaReflection {
       // Need to decide if we actually need a special type here.
       case t if t <:< typeOf[Array[Byte]] => Schema(BinaryType, nullable = true)
       case t if t <:< typeOf[Array[_]] =>
-        sys.error(s"Only Array[Byte] supported now, use Seq instead of $t")
+        val TypeRef(_, _, Seq(elementType)) = t
+        val Schema(dataType, nullable) = schemaFor(elementType)
+        Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
       case t if t <:< typeOf[Seq[_]] =>
         val TypeRef(_, _, Seq(elementType)) = t
         val Schema(dataType, nullable) = schemaFor(elementType)
@@ -152,7 +160,7 @@ trait ScalaReflection {
           valueDataType, valueContainsNull = valueNullable), nullable = true)
       case t if t <:< typeOf[String] => Schema(StringType, nullable = true)
       case t if t <:< typeOf[Timestamp] => Schema(TimestampType, nullable = true)
-      case t if t <:< typeOf[Date] => Schema(DateType, nullable = true)
+      case t if t <:< typeOf[java.sql.Date] => Schema(DateType, nullable = true)
       case t if t <:< typeOf[BigDecimal] => Schema(DecimalType.Unlimited, nullable = true)
       case t if t <:< typeOf[java.math.BigDecimal] => Schema(DecimalType.Unlimited, nullable = true)
       case t if t <:< typeOf[Decimal] => Schema(DecimalType.Unlimited, nullable = true)
@@ -184,7 +192,7 @@ trait ScalaReflection {
     case obj: LongType.JvmType => LongType
     case obj: FloatType.JvmType => FloatType
     case obj: DoubleType.JvmType => DoubleType
-    case obj: DateType.JvmType => DateType
+    case obj: java.sql.Date => DateType
     case obj: java.math.BigDecimal => DecimalType.Unlimited
     case obj: Decimal => DecimalType.Unlimited
     case obj: TimestampType.JvmType => TimestampType

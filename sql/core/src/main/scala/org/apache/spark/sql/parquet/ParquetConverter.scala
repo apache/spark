@@ -17,14 +17,20 @@
 
 package org.apache.spark.sql.parquet
 
+import java.sql.Timestamp
+import java.util.{TimeZone, Calendar}
+
 import scala.collection.mutable.{Buffer, ArrayBuffer, HashMap}
 
+import jodd.datetime.JDateTime
+import parquet.column.Dictionary
 import parquet.io.api.{PrimitiveConverter, GroupConverter, Binary, Converter}
 import parquet.schema.MessageType
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.parquet.CatalystConverter.FieldType
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.parquet.timestamp.NanoTime
 
 /**
  * Collection of converters of Parquet types (group and primitive types) that
@@ -102,12 +108,8 @@ private[sql] object CatalystConverter {
       }
       // Strings, Shorts and Bytes do not have a corresponding type in Parquet
       // so we need to treat them separately
-      case StringType => {
-        new CatalystPrimitiveConverter(parent, fieldIndex) {
-          override def addBinary(value: Binary): Unit =
-            parent.updateString(fieldIndex, value)
-        }
-      }
+      case StringType =>
+        new CatalystPrimitiveStringConverter(parent, fieldIndex)
       case ShortType => {
         new CatalystPrimitiveConverter(parent, fieldIndex) {
           override def addInt(value: Int): Unit =
@@ -124,6 +126,12 @@ private[sql] object CatalystConverter {
         new CatalystPrimitiveConverter(parent, fieldIndex) {
           override def addBinary(value: Binary): Unit =
             parent.updateDecimal(fieldIndex, value, d)
+        }
+      }
+      case TimestampType => {
+        new CatalystPrimitiveConverter(parent, fieldIndex) {
+          override def addBinary(value: Binary): Unit =
+            parent.updateTimestamp(fieldIndex, value)
         }
       }
       // All other primitive types use the default converter
@@ -197,12 +205,14 @@ private[parquet] abstract class CatalystConverter extends GroupConverter {
   protected[parquet] def updateBinary(fieldIndex: Int, value: Binary): Unit =
     updateField(fieldIndex, value.getBytes)
 
-  protected[parquet] def updateString(fieldIndex: Int, value: Binary): Unit =
-    updateField(fieldIndex, value.toStringUsingUTF8)
+  protected[parquet] def updateString(fieldIndex: Int, value: String): Unit =
+    updateField(fieldIndex, value)
 
-  protected[parquet] def updateDecimal(fieldIndex: Int, value: Binary, ctype: DecimalType): Unit = {
+  protected[parquet] def updateTimestamp(fieldIndex: Int, value: Binary): Unit =
+    updateField(fieldIndex, readTimestamp(value))
+
+  protected[parquet] def updateDecimal(fieldIndex: Int, value: Binary, ctype: DecimalType): Unit =
     updateField(fieldIndex, readDecimal(new Decimal(), value, ctype))
-  }
 
   protected[parquet] def isRootConverter: Boolean = parent == null
 
@@ -234,6 +244,13 @@ private[parquet] abstract class CatalystConverter extends GroupConverter {
     val numBits = 8 * bytes.length
     unscaled = (unscaled << (64 - numBits)) >> (64 - numBits)
     dest.set(unscaled, precision, scale)
+  }
+
+  /**
+   * Read a Timestamp value from a Parquet Int96Value
+   */
+  protected[parquet] def readTimestamp(value: Binary): Timestamp = {
+    CatalystTimestampConverter.convertToTimestamp(value)
   }
 }
 
@@ -384,8 +401,11 @@ private[parquet] class CatalystPrimitiveRowConverter(
   override protected[parquet] def updateBinary(fieldIndex: Int, value: Binary): Unit =
     current.update(fieldIndex, value.getBytes)
 
-  override protected[parquet] def updateString(fieldIndex: Int, value: Binary): Unit =
-    current.setString(fieldIndex, value.toStringUsingUTF8)
+  override protected[parquet] def updateString(fieldIndex: Int, value: String): Unit =
+    current.setString(fieldIndex, value)
+
+  override protected[parquet] def updateTimestamp(fieldIndex: Int, value: Binary): Unit =
+    current.update(fieldIndex, readTimestamp(value))
 
   override protected[parquet] def updateDecimal(
       fieldIndex: Int, value: Binary, ctype: DecimalType): Unit = {
@@ -426,8 +446,102 @@ private[parquet] class CatalystPrimitiveConverter(
     parent.updateLong(fieldIndex, value)
 }
 
+/**
+ * A `parquet.io.api.PrimitiveConverter` that converts Parquet Binary to Catalyst String.
+ * Supports dictionaries to reduce Binary to String conversion overhead.
+ *
+ * Follows pattern in Parquet of using dictionaries, where supported, for String conversion.
+ *
+ * @param parent The parent group converter.
+ * @param fieldIndex The index inside the record.
+ */
+private[parquet] class CatalystPrimitiveStringConverter(parent: CatalystConverter, fieldIndex: Int)
+  extends CatalystPrimitiveConverter(parent, fieldIndex) {
+
+  private[this] var dict: Array[String] = null
+
+  override def hasDictionarySupport: Boolean = true
+
+  override def setDictionary(dictionary: Dictionary):Unit =
+    dict = Array.tabulate(dictionary.getMaxId + 1) {dictionary.decodeToBinary(_).toStringUsingUTF8}
+
+
+  override def addValueFromDictionary(dictionaryId: Int): Unit =
+    parent.updateString(fieldIndex, dict(dictionaryId))
+
+  override def addBinary(value: Binary): Unit =
+    parent.updateString(fieldIndex, value.toStringUsingUTF8)
+}
+
 private[parquet] object CatalystArrayConverter {
   val INITIAL_ARRAY_SIZE = 20
+}
+
+private[parquet] object CatalystTimestampConverter {
+  // TODO most part of this comes from Hive-0.14
+  // Hive code might have some issues, so we need to keep an eye on it.
+  // Also we use NanoTime and Int96Values from parquet-examples.
+  // We utilize jodd to convert between NanoTime and Timestamp
+  val parquetTsCalendar = new ThreadLocal[Calendar]
+  def getCalendar = {
+    // this is a cache for the calendar instance.
+    if (parquetTsCalendar.get == null) {
+      parquetTsCalendar.set(Calendar.getInstance(TimeZone.getTimeZone("GMT")))
+    }
+    parquetTsCalendar.get
+  }
+  val NANOS_PER_SECOND: Long = 1000000000
+  val SECONDS_PER_MINUTE: Long = 60
+  val MINUTES_PER_HOUR: Long = 60
+  val NANOS_PER_MILLI: Long = 1000000
+
+  def convertToTimestamp(value: Binary): Timestamp = {
+    val nt = NanoTime.fromBinary(value)
+    val timeOfDayNanos = nt.getTimeOfDayNanos
+    val julianDay = nt.getJulianDay
+    val jDateTime = new JDateTime(julianDay.toDouble)
+    val calendar = getCalendar
+    calendar.set(Calendar.YEAR, jDateTime.getYear)
+    calendar.set(Calendar.MONTH, jDateTime.getMonth - 1)
+    calendar.set(Calendar.DAY_OF_MONTH, jDateTime.getDay)
+
+    // written in command style
+    var remainder = timeOfDayNanos
+    calendar.set(
+      Calendar.HOUR_OF_DAY,
+      (remainder / (NANOS_PER_SECOND * SECONDS_PER_MINUTE * MINUTES_PER_HOUR)).toInt)
+    remainder = remainder % (NANOS_PER_SECOND * SECONDS_PER_MINUTE * MINUTES_PER_HOUR)
+    calendar.set(
+      Calendar.MINUTE, (remainder / (NANOS_PER_SECOND * SECONDS_PER_MINUTE)).toInt)
+    remainder = remainder % (NANOS_PER_SECOND * SECONDS_PER_MINUTE)
+    calendar.set(Calendar.SECOND, (remainder / NANOS_PER_SECOND).toInt)
+    val nanos = remainder % NANOS_PER_SECOND
+    val ts = new Timestamp(calendar.getTimeInMillis)
+    ts.setNanos(nanos.toInt)
+    ts
+  }
+
+  def convertFromTimestamp(ts: Timestamp): Binary = {
+    val calendar = getCalendar
+    calendar.setTime(ts)
+    val jDateTime = new JDateTime(calendar.get(Calendar.YEAR),
+      calendar.get(Calendar.MONTH) + 1, calendar.get(Calendar.DAY_OF_MONTH))
+    // Hive-0.14 didn't set hour before get day number, while the day number should
+    // has something to do with hour, since julian day number grows at 12h GMT
+    // here we just follow what hive does.
+    val julianDay = jDateTime.getJulianDayNumber
+
+    val hour = calendar.get(Calendar.HOUR_OF_DAY)
+    val minute = calendar.get(Calendar.MINUTE)
+    val second = calendar.get(Calendar.SECOND)
+    val nanos = ts.getNanos
+    // Hive-0.14 would use hours directly, that might be wrong, since the day starts
+    // from 12h in Julian. here we just follow what hive does.
+    val nanosOfDay = nanos + second * NANOS_PER_SECOND +
+      minute * NANOS_PER_SECOND * SECONDS_PER_MINUTE +
+      hour * NANOS_PER_SECOND * SECONDS_PER_MINUTE * MINUTES_PER_HOUR
+    NanoTime(julianDay, nanosOfDay).toBinary
+  }
 }
 
 /**
@@ -583,9 +697,9 @@ private[parquet] class CatalystNativeArrayConverter(
     elements += 1
   }
 
-  override protected[parquet] def updateString(fieldIndex: Int, value: Binary): Unit = {
+  override protected[parquet] def updateString(fieldIndex: Int, value: String): Unit = {
     checkGrowBuffer()
-    buffer(elements) = value.toStringUsingUTF8.asInstanceOf[NativeType]
+    buffer(elements) = value.asInstanceOf[NativeType]
     elements += 1
   }
 
