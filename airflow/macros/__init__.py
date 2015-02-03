@@ -6,7 +6,14 @@ import uuid
 
 
 def ds_add(ds, days):
-    '''Add or subtract days from a YYYY-MM-DD'''
+    '''
+    Add or subtract days from a YYYY-MM-DD
+
+    :param ds: anchor date in ``YYYY-MM-DD`` format to add to
+    :type ds: str
+    :param days: number of days to add to the ds, you can use negative values
+    :type days: int
+    '''
     ds = datetime.strptime(ds, '%Y-%m-%d')
     if days:
         ds = ds + timedelta(days)

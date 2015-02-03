@@ -59,7 +59,7 @@ def closest_ds_partition(
 
     :param table: A hive table name
     :type table: str
-    :param ds: A datestamp '%Y-%m-%d' i.e. 'yyyy-mm-dd'
+    :param ds: A datestamp ``%Y-%m-%d`` i.e. ``yyyy-mm-dd``
     :type ds: datetime.date list
     :param before: closest before (True), after (False) or either side of ds
     :type before: bool or None
