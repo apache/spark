@@ -356,7 +356,7 @@ class SlowTestReceiver(totalRecords: Int, recordsPerSecond: Int) extends Receive
       override def run() {
         logInfo("Receiving started")
         for(i <- 1 to totalRecords) {
-          Thread.sleep(recordsPerSecond * 1000)
+          Thread.sleep(1000 / recordsPerSecond)
           store(i)
         }
         SlowTestReceiver.receivedAllRecords = true
