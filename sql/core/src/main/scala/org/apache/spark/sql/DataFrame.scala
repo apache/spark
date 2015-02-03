@@ -138,7 +138,13 @@ trait DataFrame extends RDDApi[Row] {
    * a full outer join between `df1` and `df2`.
    *
    * {{{
+   *   // Scala:
+   *   import org.apache.spark.sql.dsl._
    *   df1.join(df2, "outer", $"df1Key" === $"df2Key")
+   *
+   *   // Java:
+   *   import static org.apache.spark.sql.Dsl.*;
+   *   df1.join(df2, "outer", col("df1Key") === col("df2Key"));
    * }}}
    *
    * @param right Right side of the join.
@@ -185,7 +191,12 @@ trait DataFrame extends RDDApi[Row] {
   /**
    * Selects column based on the column name and return it as a [[Column]].
    */
-  def apply(colName: String): Column
+  def apply(colName: String): Column = col(colName)
+
+  /**
+   * Selects column based on the column name and return it as a [[Column]].
+   */
+  def col(colName: String): Column
 
   /**
    * Selects a set of expressions, wrapped in a Product.

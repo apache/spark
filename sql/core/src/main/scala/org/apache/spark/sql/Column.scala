@@ -97,8 +97,12 @@ trait Column extends DataFrame {
   /**
    * Unary minus, i.e. negate the expression.
    * {{{
-   *   // Select the amount column and negates all values.
+   *   // Scala: select the amount column and negates all values.
    *   df.select( -df("amount") )
+   *
+   *   // Java:
+   *   import static org.apache.spark.sql.Dsl.*;
+   *   df.select( negate(col("amount") );
    * }}}
    */
   def unary_- : Column = constructColumn(null) { UnaryMinus(expr) }
@@ -106,7 +110,7 @@ trait Column extends DataFrame {
   /**
    * Bitwise NOT.
    * {{{
-   *   // Select the flags column and negate every bit.
+   *   // Scala: select the flags column and negate every bit.
    *   df.select( ~df("flags") )
    * }}}
    */
@@ -115,8 +119,12 @@ trait Column extends DataFrame {
   /**
    * Inversion of boolean expression, i.e. NOT.
    * {{
-   *   // Select rows that are not active (isActive === false)
+   *   // Scala: select rows that are not active (isActive === false)
    *   df.select( !df("isActive") )
+   *
+   *   // Java:
+   *   import static org.apache.spark.sql.Dsl.*;
+   *   df.select( not(df.col("isActive")) );
    * }}
    */
   def unary_! : Column = constructColumn(null) { Not(expr) }
@@ -125,14 +133,20 @@ trait Column extends DataFrame {
   /**
    * Equality test with an expression.
    * {{{
-   *   // The following two both select rows in which colA equals colB.
+   *   // Scala: the following two both select rows in which colA equals colB.
    *   df.select( df("colA") === df("colB") )
    *   df.select( df("colA".equalTo(df("colB")) )
+   *
+   *   // Java
+   *   import static org.apache.spark.sql.Dsl.*;
+   *   df.select( col("colA").eq(col("colB")) );
    * }}}
    */
   def === (other: Column): Column = constructColumn(other) {
     EqualTo(expr, other.expr)
   }
+
+  def eq(other: Column): Column = this === other
 
   /**
    * Equality test with a literal value.

@@ -148,7 +148,7 @@ private[sql] class DataFrameImpl protected[sql](
     sort(sortExpr, sortExprs :_*)
   }
 
-  override def apply(colName: String): Column = colName match {
+  override def col(colName: String): Column = colName match {
     case "*" =>
       Column(ResolvedStar(schema.fieldNames.map(resolve)))
     case _ =>

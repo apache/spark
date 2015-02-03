@@ -72,10 +72,16 @@ object Dsl {
 
   /**
    * Creates a [[Column]] of literal value.
+   *
+   * The passed in object is returned directly if it is already a [[Column]].
+   * If the object is a Scala Symbol, it is converted into a [[Column]] also.
+   * Otherwise, a new [[Column]] is created to represent the literal value.
    */
   def lit(literal: Any): Column = {
-    if (literal.isInstanceOf[Symbol]) {
-      return new ColumnName(literal.asInstanceOf[Symbol].name)
+    literal match {
+      case c: Column => return c
+      case s: Symbol => return new ColumnName(literal.asInstanceOf[Symbol].name)
+      case _ =>  // continue
     }
 
     val literalExpr = literal match {
@@ -99,6 +105,22 @@ object Dsl {
     }
     Column(literalExpr)
   }
+
+  /**
+   * Unary minus, i.e. negate the expression.
+   * {{{
+   *   // Select the amount column and negates all values.
+   *   // Scala:
+   *   df.select( -df("amount") )
+   *
+   *   // Java:
+   *   import static org.apache.spark.sql.Dsl.*;
+   *   df.select( negate(df.col("amount")) );
+   * }}}
+   */
+  def negate(e: Column): Column = -e
+
+  def not(e: Column): Column = !e
 
   def sum(e: Column): Column = Sum(e.expr)
   def sumDistinct(e: Column): Column = SumDistinct(e.expr)

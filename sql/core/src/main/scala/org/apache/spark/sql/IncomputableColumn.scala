@@ -72,7 +72,7 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
 
   override def orderBy(sortExpr: Column, sortExprs: Column*): DataFrame = err()
 
-  override def apply(colName: String): Column = err()
+  override def col(colName: String): Column = err()
 
   override def apply(projection: Product): DataFrame = err()
 
