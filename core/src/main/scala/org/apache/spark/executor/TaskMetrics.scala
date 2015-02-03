@@ -248,23 +248,23 @@ case class InputMetrics(readMethod: DataReadMethod.Value) {
   /**
    * Total bytes read.
    */
-  private val _bytesRead: AtomicLong = new AtomicLong()
-  def bytesRead: Long = _bytesRead.get()
-  def incBytesRead(bytes: Long) = _bytesRead.addAndGet(bytes)
+  private var _bytesRead: Long = _
+  def bytesRead: Long = _bytesRead
+  def incBytesRead(bytes: Long) = _bytesRead += bytes
 
   /**
    * Total records read.
    */
-  def recordsRead: Long = _recordsRead.get() 
-  private val _recordsRead: AtomicLong = new AtomicLong()
-  def incRecordsRead(records: Long) =  _recordsRead.addAndGet(records)
+  private var _recordsRead: Long = _
+  def recordsRead: Long = _recordsRead
+  def incRecordsRead(records: Long) =  _recordsRead += records
 
   /**
    * Invoke the bytesReadCallback and mutate bytesRead.
    */
   def updateBytesRead() {
     bytesReadCallback.foreach { c =>
-      _bytesRead.set(c())
+      _bytesRead = c()
     }
   }
 
