@@ -21,11 +21,11 @@ import org.apache.spark.sql.catalyst.expressions.ScalaUdf
 import org.apache.spark.sql.types.DataType
 
 /**
- * A user-defined function. To create one, use the `defineUDF` functions in [[Dsl]].
+ * A user-defined function. To create one, use the `udf` functions in [[Dsl]].
  * As an example:
  * {{{
  *   // Defined a UDF that returns true or false based on some numeric score.
- *   val predict = defineUDF((score: Double) => if (score > 0.5) true else false)
+ *   val predict = udf((score: Double) => if (score > 0.5) true else false)
  *
  *   // Projects a column that adds a prediction column based on the score column.
  *   df.select( predict(df("score")) )
