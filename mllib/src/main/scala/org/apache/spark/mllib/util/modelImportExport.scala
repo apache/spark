@@ -79,7 +79,7 @@ trait Importable[M <: Exportable] {
    */
   def load(sc: SparkContext, path: String): M
 
-  //def loadWithSchema(sc: SparkContext, path: String): (M, StructType)
+  // def loadWithSchema(sc: SparkContext, path: String): (M, StructType)
 
   /** Current version of model import/export format. */
   protected def formatVersion: String
