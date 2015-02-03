@@ -17,13 +17,13 @@
 
 package org.apache.spark.repl
 
-import java.io.{ByteArrayOutputStream, InputStream}
+import java.io.{ByteArrayOutputStream, InputStream, FileNotFoundException}
 import java.net.{URI, URL, URLEncoder}
 import java.util.concurrent.{Executors, ExecutorService}
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.{SparkConf, SparkEnv}
+import org.apache.spark.{SparkConf, SparkEnv, Logging}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.Utils
 import org.apache.spark.util.ParentClassLoader
@@ -37,7 +37,7 @@ import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
  * Allows the user to specify if user class path should be first
  */
 class ExecutorClassLoader(conf: SparkConf, classUri: String, parent: ClassLoader,
-    userClassPathFirst: Boolean) extends ClassLoader {
+    userClassPathFirst: Boolean) extends ClassLoader with Logging {
   val uri = new URI(classUri)
   val directory = uri.getPath
 
@@ -91,7 +91,14 @@ class ExecutorClassLoader(conf: SparkConf, classUri: String, parent: ClassLoader
       inputStream.close()
       Some(defineClass(name, bytes, 0, bytes.length))
     } catch {
-      case e: Exception => None
+      case e: FileNotFoundException =>
+        // We did not find the class
+        logDebug(s"Did not load class $name from REPL class server at $uri", e)
+        None
+      case e: Exception =>
+        // Something bad happened while checking if the class exists
+        logError(s"Failed to check existence of class $name on REPL class server at $uri", e)
+        None
     }
   }
 

@@ -88,6 +88,18 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
   }
 
+  test("Add Parser of SQL COALESCE()") {
+    checkAnswer(
+      sql("""SELECT COALESCE(1, 2)"""),
+      Row(1))
+    checkAnswer(
+      sql("SELECT COALESCE(null, 1, 1.5)"),
+      Row(1.toDouble))
+    checkAnswer(
+      sql("SELECT COALESCE(null, null, null)"),
+      Row(null))
+  }
+
   test("SPARK-3176 Added Parser of SQL LAST()") {
     checkAnswer(
       sql("SELECT LAST(n) FROM lowerCaseData"),
@@ -282,6 +294,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(
       sql("SELECT * FROM mapData LIMIT 1"),
       mapData.collect().take(1).map(Row.fromTuple).toSeq)
+  }
+
+  test("date row") {
+    checkAnswer(sql(
+      """select cast("2015-01-28" as date) from testData limit 1"""),
+      Row(java.sql.Date.valueOf("2015-01-28"))
+    )
   }
 
   test("from follow multiple brackets") {

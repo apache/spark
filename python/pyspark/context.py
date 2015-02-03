@@ -192,7 +192,8 @@ class SparkContext(object):
         # Create a temporary directory inside spark.local.dir:
         local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir(self._jsc.sc().conf())
         self._temp_dir = \
-            self._jvm.org.apache.spark.util.Utils.createTempDir(local_dir).getAbsolutePath()
+            self._jvm.org.apache.spark.util.Utils.createTempDir(local_dir, "pyspark") \
+                .getAbsolutePath()
 
         # profiling stats collected for each PythonRDD
         if self._conf.get("spark.python.profile", "false") == "true":
