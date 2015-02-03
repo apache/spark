@@ -21,7 +21,6 @@ import scala.collection.mutable.{ArrayBuffer, HashSet, HashMap, Map}
 import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
 
-import org.mockito.Mockito.mock
 import org.scalatest.{BeforeAndAfter, FunSuiteLike}
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
@@ -770,7 +769,11 @@ class DAGSchedulerSuite extends FunSuiteLike  with BeforeAndAfter with LocalSpar
 
   // Nothing in this test should break if the task info's fields are null, but
   // OutputCommitCoordinator requires the task info itself to not be null.
-  private def createFakeTaskInfo(): TaskInfo = mock(classOf[TaskInfo])
+  private def createFakeTaskInfo(): TaskInfo = {
+    val info = new TaskInfo(0, 0, 0, 0L, "", "", TaskLocality.ANY, false)
+    info.finishTime = 1  // to prevent spurious errors in JobProgressListener
+    info
+  }
 
 }
 
