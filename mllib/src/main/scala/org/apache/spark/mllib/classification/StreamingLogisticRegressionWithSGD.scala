@@ -47,8 +47,7 @@ class StreamingLogisticRegressionWithSGD private[mllib] (
     private var stepSize: Double,
     private var numIterations: Int,
     private var miniBatchFraction: Double,
-    private var regParam: Double,
-    private var initialWeights: Vector)
+    private var regParam: Double)
   extends StreamingLinearAlgorithm[LogisticRegressionModel, LogisticRegressionWithSGD]
   with Serializable {
 
@@ -58,12 +57,10 @@ class StreamingLogisticRegressionWithSGD private[mllib] (
    * Initial weights must be set before using trainOn or predictOn
    * (see `StreamingLinearAlgorithm`)
    */
-  def this() = this(0.1, 50, 1.0, 0.0, null)
+  def this() = this(0.1, 50, 1.0, 0.0)
 
   val algorithm = new LogisticRegressionWithSGD(
     stepSize, numIterations, regParam, miniBatchFraction)
-
-  var model = algorithm.createModel(initialWeights, 0.0)
 
   /** Set the step size for gradient descent. Default: 0.1. */
   def setStepSize(stepSize: Double): this.type = {
@@ -91,7 +88,7 @@ class StreamingLogisticRegressionWithSGD private[mllib] (
 
   /** Set the initial weights. Default: [0.0, 0.0]. */
   def setInitialWeights(initialWeights: Vector): this.type = {
-    this.model = algorithm.createModel(initialWeights, 0.0)
+    this.model = Option(algorithm.createModel(initialWeights, 0.0))
     this
   }
 
