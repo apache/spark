@@ -97,9 +97,8 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: SQLContext,
     families.foreach(family => {
         val colDsc = new HColumnDescriptor(family)
         colDsc.setDataBlockEncoding(DataBlockEncoding.FAST_DIFF)
-        //colDsc.setMaxVersions(1)
         tableDescriptor.addFamily(colDsc)
-    }    
+    })
 
     try {
       if (splitKeys == null) {
