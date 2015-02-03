@@ -1629,6 +1629,7 @@
       </properties>
       <modules>
         <module>external/kafka</module>
+        <module>external/kafka-assembly</module>
       </modules>
     </profile>
 
