@@ -95,27 +95,13 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
     if (processReceivedData) {
       logInfo("Stopping JobGenerator gracefully")
-      val timeWhenStopStarted = System.currentTimeMillis()
-      val stopTimeout = conf.getLong(
-        "spark.streaming.gracefulStopTimeout",
-        10 * ssc.graph.batchDuration.milliseconds
-      )
-      val pollTime = 100
 
-      // To prevent graceful stop to get stuck permanently
-      def hasTimedOut = {
-        val timedOut = System.currentTimeMillis() - timeWhenStopStarted > stopTimeout
-        if (timedOut) {
-          logWarning("Timed out while stopping the job generator (timeout = " + stopTimeout + ")")
-        }
-        timedOut
-      }
 
       // Wait until all the received blocks in the network input tracker has
       // been consumed by network input DStreams, and jobs have been generated with them
       logInfo("Waiting for all received blocks to be consumed for job generation")
-      while(!hasTimedOut && jobScheduler.receiverTracker.hasUnallocatedBlocks) {
-        Thread.sleep(pollTime)
+      while (jobScheduler.receiverTracker.hasUnallocatedBlocks) {
+        Thread.sleep(100)
       }
       logInfo("Waited for all received blocks to be consumed for job generation")
 
@@ -128,10 +114,13 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       def haveAllBatchesBeenProcessed = {
         lastProcessedBatch != null && lastProcessedBatch.milliseconds == stopTime
       }
+
       logInfo("Waiting for jobs to be processed and checkpoints to be written")
-      while (!hasTimedOut && !haveAllBatchesBeenProcessed) {
-        Thread.sleep(pollTime)
+
+      while (!haveAllBatchesBeenProcessed) {
+        Thread.sleep(100)
       }
+
       logInfo("Waited for jobs to be processed and checkpoints to be written")
     } else {
       logInfo("Stopping JobGenerator immediately")

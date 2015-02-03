@@ -17,7 +17,8 @@
 
 package org.apache.spark.streaming.scheduler
 
-import scala.util.{Failure, Success, Try}
+import scala.concurrent.{Future, ExecutionContext}
+import scala.util.{Failure, Success}
 import scala.collection.JavaConversions._
 import java.util.concurrent.{TimeUnit, ConcurrentHashMap, Executors}
 import akka.actor.{ActorRef, Actor, Props}
@@ -69,36 +70,60 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   }
 
   def stop(processAllReceivedData: Boolean): Unit = synchronized {
-    if (eventActor == null) return // scheduler has already been stopped
-    logDebug("Stopping JobScheduler")
+    val shutdownExecutor = Executors.newFixedThreadPool(1)
+    implicit val context = ExecutionContext.fromExecutorService(shutdownExecutor)
 
-    // First, stop receiving
-    receiverTracker.stop()
+    val shutdown = Future {
+      if (eventActor == null) return // scheduler has already been stopped
+      logDebug("Stopping JobScheduler")
 
-    // Second, stop generating jobs. If it has to process all received data,
-    // then this will wait for all the processing through JobScheduler to be over.
-    jobGenerator.stop(processAllReceivedData)
+      // First, stop receiving
+      receiverTracker.stop(processAllReceivedData)
 
-    // Stop the executor for receiving new jobs
-    logDebug("Stopping job executor")
-    jobExecutor.shutdown()
+      // Second, stop generating jobs. If it has to process all received data,
+      // then this will wait for all the processing through JobScheduler to be over.
+      jobGenerator.stop(processAllReceivedData)
 
-    // Wait for the queued jobs to complete if indicated
+      // Stop the executor for receiving new jobs
+      logDebug("Stopping job executor")
+      jobExecutor.shutdown()
+
+      // Wait for the queued jobs to complete if indicated
+      val terminated = if (processAllReceivedData) {
+        jobExecutor.awaitTermination(1, TimeUnit.HOURS) // just a very large period of time
+      } else {
+        jobExecutor.awaitTermination(2, TimeUnit.SECONDS)
+      }
+      if (!terminated) {
+        jobExecutor.shutdownNow()
+      }
+      logDebug("Stopped job executor")
+
+      // Stop everything else
+      listenerBus.stop()
+      ssc.env.actorSystem.stop(eventActor)
+      eventActor = null
+    }
+
+    shutdownExecutor.shutdown()
+
+    // Wait for the JobScheduler shutdown sequence to finish
     val terminated = if (processAllReceivedData) {
-      jobExecutor.awaitTermination(1, TimeUnit.HOURS)  // just a very large period of time
+      val gracefulTimeout = ssc.conf.getLong(
+        "spark.streaming.gracefulStopTimeout",
+        100 * ssc.graph.batchDuration.milliseconds
+      )
+      shutdownExecutor.awaitTermination(gracefulTimeout, TimeUnit.MILLISECONDS)
     } else {
-      jobExecutor.awaitTermination(2, TimeUnit.SECONDS)
+      shutdownExecutor.awaitTermination(5, TimeUnit.SECONDS)
     }
     if (!terminated) {
-      jobExecutor.shutdownNow()
+      logWarning("Timeout waiting for JobScheduler to stop")
+      shutdownExecutor.shutdownNow()
+    } else {
+      logInfo("Stopped JobScheduler")
     }
-    logDebug("Stopped job executor")
 
-    // Stop everything else
-    listenerBus.stop()
-    ssc.env.actorSystem.stop(eventActor)
-    eventActor = null
-    logInfo("Stopped JobScheduler")
   }
 
   def submitJobSet(jobSet: JobSet) {
