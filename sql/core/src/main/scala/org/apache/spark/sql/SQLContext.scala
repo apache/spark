@@ -308,7 +308,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     if (conf.parquetUseDataSourceApi) {
       baseRelationToDataFrame(parquet.ParquetRelation2(paths, Map.empty)(this))
     } else {
-      new DataFrame(this, parquet.ParquetRelation(
+      DataFrame(this, parquet.ParquetRelation(
         paths.mkString(","), Some(sparkContext.hadoopConfiguration), this))
     }
 
