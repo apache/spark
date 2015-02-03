@@ -199,6 +199,7 @@ private[broadcast] object HttpBroadcast extends Logging {
       uc = new URL(url).openConnection()
       uc.setConnectTimeout(httpReadTimeout)
     }
+    Utils.setupSecureURLConnection(uc, securityManager)
 
     val in = {
       uc.setReadTimeout(httpReadTimeout)
