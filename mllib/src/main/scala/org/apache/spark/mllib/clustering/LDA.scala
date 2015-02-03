@@ -66,6 +66,9 @@ class LDA private (
   def this() = this(k = 10, maxIterations = 20, docConcentration = -1, topicConcentration = -1,
     seed = Utils.random.nextLong(), checkpointDir = None, checkpointInterval = 10)
 
+  /**
+   * Number of topics to infer.  I.e., the number of soft cluster centers.
+   */
   def getK: Int = k
 
   /**
@@ -78,6 +81,12 @@ class LDA private (
     this
   }
 
+  /**
+   * Concentration parameter (commonly named "alpha") for the prior placed on documents'
+   * distributions over topics ("theta").
+   *
+   * This is the parameter to a symmetric Dirichlet distribution ("theta").
+   */
   def getDocConcentration: Double = {
     if (this.docConcentration == -1) {
       (50.0 / k) + 1.0
@@ -87,10 +96,10 @@ class LDA private (
   }
 
   /**
-   * Topic smoothing parameter (commonly named "alpha").
+   * Concentration parameter (commonly named "alpha") for the prior placed on documents'
+   * distributions over topics ("theta").
    *
-   * This is the parameter to the Dirichlet prior placed on each document's distribution over topics
-   * ("theta").  We use a symmetric Dirichlet prior.
+   * This is the parameter to a symmetric Dirichlet distribution ("theta").
    *
    * This value should be > 1.0, where larger values mean more smoothing (more regularization).
    * If set to -1, then docConcentration is set automatically.
@@ -117,6 +126,15 @@ class LDA private (
   /** Alias for [[setDocConcentration()]] */
   def setAlpha(alpha: Double): this.type = setDocConcentration(alpha)
 
+  /**
+   * Concentration parameter (commonly named "beta" or "eta") for the prior placed on topics'
+   * distributions over terms.
+   *
+   * This is the parameter to a symmetric Dirichlet distribution ("theta").
+   *
+   * Note: The topics' distributions over terms are called "beta" in the original LDA paper
+   * by Blei et al., but are called "phi" in many later papers such as Asuncion et al., 2009.
+   */
   def getTopicConcentration: Double = {
     if (this.topicConcentration == -1) {
       1.1
@@ -126,11 +144,13 @@ class LDA private (
   }
 
   /**
-   * Term smoothing parameter (commonly named "beta" or "eta").
+   * Concentration parameter (commonly named "beta" or "eta") for the prior placed on topics'
+   * distributions over terms.
    *
-   * This is the parameter to the Dirichlet prior placed on each topic's distribution over terms
-   * (which are called "beta" in the original LDA paper by Blei et al., but are called "phi" in many
-   *  later papers such as Asuncion et al., 2009).
+   * This is the parameter to a symmetric Dirichlet distribution ("theta").
+   *
+   * Note: The topics' distributions over terms are called "beta" in the original LDA paper
+   * by Blei et al., but are called "phi" in many later papers such as Asuncion et al., 2009.
    *
    * This value should be > 0.0.
    * If set to -1, then topicConcentration is set automatically.
@@ -157,6 +177,9 @@ class LDA private (
   /** Alias for [[setTopicConcentration()]] */
   def setBeta(beta: Double): this.type = setBeta(beta)
 
+  /**
+   * Maximum number of iterations for learning.
+   */
   def getMaxIterations: Int = maxIterations
 
   /**
@@ -168,6 +191,7 @@ class LDA private (
     this
   }
 
+  /** Random seed */
   def getSeed: Long = seed
 
   /** Random seed */
@@ -176,6 +200,15 @@ class LDA private (
     this
   }
 
+  /**
+   * Directory for storing checkpoint files during learning.
+   * This is not necessary, but checkpointing helps with recovery (when nodes fail).
+   * It also helps with eliminating temporary shuffle files on disk, which can be important when
+   * LDA is run for many iterations.
+   *
+   * NOTE: If the [[org.apache.spark.SparkContext.checkpointDir]] is already set, then the value
+   *       given to LDA is ignored, and the existing directory is kept.
+   */
   def getCheckpointDir: Option[String] = checkpointDir
 
   /**
@@ -194,11 +227,18 @@ class LDA private (
     this
   }
 
+  /**
+   * Remove the directory for storing checkpoint files during learning.
+   */
   def clearCheckpointDir(): this.type = {
     this.checkpointDir = None
     this
   }
 
+  /**
+   * Period (in iterations) between checkpoints.
+   * @see [[getCheckpointDir]]
+   */
   def getCheckpointInterval: Int = checkpointInterval
 
   /**

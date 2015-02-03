@@ -28,13 +28,15 @@ import org.apache.spark.storage.StorageLevel
 
 /**
  * This class helps with persisting and checkpointing Graphs.
- *
- * This class maintains a FIFO queue of Graphs, each of which is persisted and some of which are
- * checkpointed.  Once one Graph has been checkpointed, then previous RDDs are unpersisted and their
- * checkpoint files are removed.
+ * Specifically, it automatically handles persisting and (optionally) checkpointing, as well as
+ * unpersisting and removing checkpoint files.
  *
  * Users should call [[PeriodicGraphCheckpointer.updateGraph()]] when a new graph has been created,
- * before the graph has been materialized.  When called, this does the following:
+ * before the graph has been materialized.  After updating [[PeriodicGraphCheckpointer]], users are
+ * responsible for materializing the graph to ensure that persisting and checkpointing actually
+ * occur.
+ *
+ * When [[PeriodicGraphCheckpointer.updateGraph()]] is called, this does the following:
  *  - Persist new graph (if not yet persisted), and put in queue of persisted graphs.
  *  - Unpersist graphs from queue until there are at most 3 persisted graphs.
  *  - If using checkpointing and the checkpoint interval has been reached,
@@ -50,18 +52,23 @@ import org.apache.spark.storage.StorageLevel
  * Example usage:
  * {{{
  *  val (graph1, graph2, graph3, ...) = ...
- *  val cp = new PeriodicGraphCheckpointer(graph, dir, 2)
+ *  val cp = new PeriodicGraphCheckpointer(graph1, dir, 2)
+ *  graph1.vertices.count(); graph1.edges.count()
  *  // persisted: graph1
  *  cp.updateGraph(graph2)
+ *  graph2.vertices.count(); graph2.edges.count()
  *  // persisted: graph1, graph2
  *  // checkpointed: graph2
  *  cp.updateGraph(graph3)
+ *  graph3.vertices.count(); graph3.edges.count()
  *  // persisted: graph1, graph2, graph3
  *  // checkpointed: graph2
  *  cp.updateGraph(graph4)
+ *  graph4.vertices.count(); graph4.edges.count()
  *  // persisted: graph2, graph3, graph4
  *  // checkpointed: graph4
  *  cp.updateGraph(graph5)
+ *  graph5.vertices.count(); graph5.edges.count()
  *  // persisted: graph3, graph4, graph5
  *  // checkpointed: graph4
  * }}}
