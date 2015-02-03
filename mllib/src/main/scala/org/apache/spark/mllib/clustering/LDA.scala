@@ -85,7 +85,7 @@ class LDA private (
    * Concentration parameter (commonly named "alpha") for the prior placed on documents'
    * distributions over topics ("theta").
    *
-   * This is the parameter to a symmetric Dirichlet distribution ("theta").
+   * This is the parameter to a symmetric Dirichlet distribution.
    */
   def getDocConcentration: Double = {
     if (this.docConcentration == -1) {
@@ -99,7 +99,7 @@ class LDA private (
    * Concentration parameter (commonly named "alpha") for the prior placed on documents'
    * distributions over topics ("theta").
    *
-   * This is the parameter to a symmetric Dirichlet distribution ("theta").
+   * This is the parameter to a symmetric Dirichlet distribution.
    *
    * This value should be > 1.0, where larger values mean more smoothing (more regularization).
    * If set to -1, then docConcentration is set automatically.
@@ -130,7 +130,7 @@ class LDA private (
    * Concentration parameter (commonly named "beta" or "eta") for the prior placed on topics'
    * distributions over terms.
    *
-   * This is the parameter to a symmetric Dirichlet distribution ("theta").
+   * This is the parameter to a symmetric Dirichlet distribution.
    *
    * Note: The topics' distributions over terms are called "beta" in the original LDA paper
    * by Blei et al., but are called "phi" in many later papers such as Asuncion et al., 2009.
@@ -147,7 +147,7 @@ class LDA private (
    * Concentration parameter (commonly named "beta" or "eta") for the prior placed on topics'
    * distributions over terms.
    *
-   * This is the parameter to a symmetric Dirichlet distribution ("theta").
+   * This is the parameter to a symmetric Dirichlet distribution.
    *
    * Note: The topics' distributions over terms are called "beta" in the original LDA paper
    * by Blei et al., but are called "phi" in many later papers such as Asuncion et al., 2009.
@@ -205,9 +205,6 @@ class LDA private (
    * This is not necessary, but checkpointing helps with recovery (when nodes fail).
    * It also helps with eliminating temporary shuffle files on disk, which can be important when
    * LDA is run for many iterations.
-   *
-   * NOTE: If the [[org.apache.spark.SparkContext.checkpointDir]] is already set, then the value
-   *       given to LDA is ignored, and the existing directory is kept.
    */
   def getCheckpointDir: Option[String] = checkpointDir
 
@@ -228,7 +225,9 @@ class LDA private (
   }
 
   /**
-   * Remove the directory for storing checkpoint files during learning.
+   * Clear the directory for storing checkpoint files during learning.
+   * If one is already set in the [[org.apache.spark.SparkContext]], then checkpointing will still
+   * occur; otherwise, no checkpointing will be used.
    */
   def clearCheckpointDir(): this.type = {
     this.checkpointDir = None
