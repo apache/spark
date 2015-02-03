@@ -414,7 +414,7 @@ object ALS extends Logging {
   /**
    * Implementation of the ALS algorithm.
    */
-  def train[ID: ClassTag](
+  def train[ID: ClassTag]( // scalastyle:ignore
       ratings: RDD[Rating[ID]],
       rank: Int = 10,
       numUserBlocks: Int = 10,
