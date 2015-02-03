@@ -30,7 +30,7 @@ class ColumnStatsSuite extends FunSuite {
   testColumnStats(classOf[FloatColumnStats], FLOAT, Row(Float.MaxValue, Float.MinValue, 0))
   testColumnStats(classOf[DoubleColumnStats], DOUBLE, Row(Double.MaxValue, Double.MinValue, 0))
   testColumnStats(classOf[StringColumnStats], STRING, Row(null, null, 0))
-  testColumnStats(classOf[DateColumnStats], DATE, Row(Int.MaxValue, Int.MinValue, 0))
+  testColumnStats(classOf[DateColumnStats], DATE, Row(null, null, 0))
   testColumnStats(classOf[TimestampColumnStats], TIMESTAMP, Row(null, null, 0))
 
   def testColumnStats[T <: NativeType, U <: ColumnStats](

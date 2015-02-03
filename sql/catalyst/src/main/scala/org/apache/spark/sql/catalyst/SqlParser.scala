@@ -52,7 +52,6 @@ class SqlParser extends AbstractSparkSQLParser {
   protected val CAST = Keyword("CAST")
   protected val COALESCE = Keyword("COALESCE")
   protected val COUNT = Keyword("COUNT")
-  protected val DATE = Keyword("DATE")
   protected val DECIMAL = Keyword("DECIMAL")
   protected val DESC = Keyword("DESC")
   protected val DISTINCT = Keyword("DISTINCT")
@@ -384,7 +383,6 @@ class SqlParser extends AbstractSparkSQLParser {
     | DOUBLE ^^^ DoubleType
     | fixedDecimalType
     | DECIMAL ^^^ DecimalType.Unlimited
-    | DATE ^^^ DateType
     )
 
   protected lazy val fixedDecimalType: Parser[DataType] =

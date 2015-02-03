@@ -335,20 +335,21 @@ private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
   }
 }
 
-private[sql] object DATE extends NativeColumnType(DateType, 8, 4) {
+private[sql] object DATE extends NativeColumnType(DateType, 8, 8) {
   override def extract(buffer: ByteBuffer) = {
-    buffer.getInt
+    val date = new Date(buffer.getLong())
+    date
   }
 
-  override def append(v: Int, buffer: ByteBuffer): Unit = {
-    buffer.putInt(v)
+  override def append(v: Date, buffer: ByteBuffer): Unit = {
+    buffer.putLong(v.getTime)
   }
 
   override def getField(row: Row, ordinal: Int) = {
-    row(ordinal).asInstanceOf[Int]
+    row(ordinal).asInstanceOf[Date]
   }
 
-  def setField(row: MutableRow, ordinal: Int, value: Int): Unit = {
+  override def setField(row: MutableRow, ordinal: Int, value: Date): Unit = {
     row(ordinal) = value
   }
 }

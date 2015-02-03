@@ -253,30 +253,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   createQueryTest("Cast Timestamp to Timestamp in UDF",
     """
-      | SELECT DATEDIFF(CAST(value AS timestamp), CAST('2002-03-21 00:00:00' AS timestamp))
-      | FROM src LIMIT 1
-    """.stripMargin)
-
-  createQueryTest("Date comparison test 1",
-    """
-      | SELECT
-      | CAST(CAST('1970-01-01 22:00:00' AS timestamp) AS date) ==
-      | CAST(CAST('1970-01-01 23:00:00' AS timestamp) AS date)
-      | FROM src LIMIT 1
-    """.stripMargin)
-
-  createQueryTest("Date comparison test 2",
-    "SELECT CAST(CAST(0 AS timestamp) AS date) > CAST(0 AS timestamp) FROM src LIMIT 1")
-
-  createQueryTest("Date cast",
-    """
-      | SELECT
-      | CAST(CAST(0 AS timestamp) AS date),
-      | CAST(CAST(CAST(0 AS timestamp) AS date) AS string),
-      | CAST(0 AS timestamp),
-      | CAST(CAST(0 AS timestamp) AS string),
-      | CAST(CAST(CAST('1970-01-01 23:00:00' AS timestamp) AS date) AS timestamp)
-      | FROM src LIMIT 1
+       | SELECT DATEDIFF(CAST(value AS timestamp), CAST('2002-03-21 00:00:00' AS timestamp))
+       | FROM src LIMIT 1
     """.stripMargin)
 
   createQueryTest("Simple Average",
