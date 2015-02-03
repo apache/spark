@@ -279,9 +279,9 @@ object ResolvedDataSource {
     }
 
     val relation = clazz.newInstance match {
-      case dataSource: org.apache.spark.sql.sources.CreateableRelationProvider =>
+      case dataSource: org.apache.spark.sql.sources.CreatableRelationProvider =>
         dataSource
-          .asInstanceOf[org.apache.spark.sql.sources.CreateableRelationProvider]
+          .asInstanceOf[org.apache.spark.sql.sources.CreatableRelationProvider]
           .createRelation(sqlContext, options, data)
       case _ =>
         sys.error(s"${clazz.getCanonicalName} does not allow create table as select.")
@@ -366,7 +366,7 @@ private [sql] case class CreateTempTableUsingAsSelect(
 /**
  * Builds a map in which keys are case insensitive
  */
-protected class CaseInsensitiveMap(map: Map[String, String]) extends Map[String, String] 
+protected class CaseInsensitiveMap(map: Map[String, String]) extends Map[String, String]
   with Serializable {
 
   val baseMap = map.map(kv => kv.copy(_1 = kv._1.toLowerCase))
