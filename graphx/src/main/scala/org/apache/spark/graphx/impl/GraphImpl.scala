@@ -70,6 +70,17 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     replicatedVertexView.edges.checkpoint()
   }
 
+  override def isCheckpointed: Boolean = {
+    vertices.isCheckpointed && replicatedVertexView.edges.isCheckpointed
+  }
+
+  override def getCheckpointFiles: Seq[String] = {
+    Seq(vertices.getCheckpointFile, replicatedVertexView.edges.getCheckpointFile).flatMap {
+      case Some(path) => Seq(path)
+      case None => Seq()
+    }
+  }
+
   override def unpersist(blocking: Boolean = true): Graph[VD, ED] = {
     unpersistVertices(blocking)
     replicatedVertexView.edges.unpersist(blocking)

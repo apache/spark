@@ -63,7 +63,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       sql("SHOW TABLES")
     }
   }
-  
+
   createQueryTest("! operator",
     """
       |SELECT a FROM (
@@ -329,6 +329,80 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("transform",
     "SELECT TRANSFORM (key) USING 'cat' AS (tKey) FROM src")
 
+  createQueryTest("schema-less transform",
+    """
+      |SELECT TRANSFORM (key, value) USING 'cat' FROM src;
+      |SELECT TRANSFORM (*) USING 'cat' FROM src;
+    """.stripMargin)
+
+  val delimiter = "'\t'"
+
+  createQueryTest("transform with custom field delimiter",
+    s"""
+      |SELECT TRANSFORM (key) ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter}
+      |USING 'cat' AS (tKey) ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter} FROM src;
+    """.stripMargin.replaceAll("\n", " "))
+
+  createQueryTest("transform with custom field delimiter2",
+    s"""
+      |SELECT TRANSFORM (key, value) ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter}
+      |USING 'cat' ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter} FROM src;
+    """.stripMargin.replaceAll("\n", " "))
+
+  createQueryTest("transform with custom field delimiter3",
+    s"""
+      |SELECT TRANSFORM (*) ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter}
+      |USING 'cat' ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter} FROM src;
+    """.stripMargin.replaceAll("\n", " "))
+
+  createQueryTest("transform with SerDe",
+    """
+      |SELECT TRANSFORM (key, value) ROW FORMAT SERDE
+      |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+      |USING 'cat' AS (tKey, tValue) ROW FORMAT SERDE
+      |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' FROM src;
+    """.stripMargin.replaceAll("\n", " "))
+
+  test("transform with SerDe2") {
+
+    sql("CREATE TABLE small_src(key INT, value STRING)")
+    sql("INSERT OVERWRITE TABLE small_src SELECT key, value FROM src LIMIT 10")
+
+    val expected = sql("SELECT key FROM small_src").collect().head
+    val res = sql(
+      """
+        |SELECT TRANSFORM (key) ROW FORMAT SERDE
+        |'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
+        |WITH SERDEPROPERTIES ('avro.schema.literal'='{"namespace":
+        |"testing.hive.avro.serde","name": "src","type": "record","fields":
+        |[{"name":"key","type":"int"}]}') USING 'cat' AS (tKey INT) ROW FORMAT SERDE
+        |'org.apache.hadoop.hive.serde2.avro.AvroSerDe' WITH SERDEPROPERTIES
+        |('avro.schema.literal'='{"namespace": "testing.hive.avro.serde","name":
+        |"src","type": "record","fields": [{"name":"key","type":"int"}]}')
+        |FROM small_src
+      """.stripMargin.replaceAll("\n", " ")).collect().head
+
+    assert(expected(0) === res(0))
+  }
+
+  createQueryTest("transform with SerDe3",
+    """
+      |SELECT TRANSFORM (*) ROW FORMAT SERDE
+      |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' WITH SERDEPROPERTIES
+      |('serialization.last.column.takes.rest'='true') USING 'cat' AS (tKey, tValue)
+      |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+      |WITH SERDEPROPERTIES ('serialization.last.column.takes.rest'='true') FROM src;
+    """.stripMargin.replaceAll("\n", " "))
+
+  createQueryTest("transform with SerDe4",
+    """
+      |SELECT TRANSFORM (*) ROW FORMAT SERDE
+      |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' WITH SERDEPROPERTIES
+      |('serialization.last.column.takes.rest'='true') USING 'cat' ROW FORMAT SERDE
+      |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' WITH SERDEPROPERTIES
+      |('serialization.last.column.takes.rest'='true') FROM src;
+    """.stripMargin.replaceAll("\n", " "))
+ 
   createQueryTest("LIKE",
     "SELECT * FROM src WHERE value LIKE '%1%'")
 

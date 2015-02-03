@@ -31,10 +31,14 @@ class ColumnExpressionSuite extends QueryTest {
     checkAnswer(testData.select($"*"), testData.collect().toSeq)
   }
 
-  ignore("star qualified by data frame object") {
+  test("star qualified by data frame object") {
     // This is not yet supported.
     val df = testData.toDataFrame
-    checkAnswer(df.select(df("*")), df.collect().toSeq)
+    val goldAnswer = df.collect().toSeq
+    checkAnswer(df.select(df("*")), goldAnswer)
+
+    val df1 = df.select(df("*"), lit("abcd").as("litCol"))
+    checkAnswer(df1.select(df("*")), goldAnswer)
   }
 
   test("star qualified by table name") {

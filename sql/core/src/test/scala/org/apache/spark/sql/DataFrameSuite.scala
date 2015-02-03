@@ -276,5 +276,9 @@ class DataFrameSuite extends QueryTest {
     )
   }
 
+  test("apply on query results (SPARK-5462)") {
+    val df = testData.sqlContext.sql("select key from testData")
+    checkAnswer(df("key"), testData.select('key).collect().toSeq)
+  }
 
 }
