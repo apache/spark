@@ -296,6 +296,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       mapData.collect().take(1).map(Row.fromTuple).toSeq)
   }
 
+  test("date row") {
+    checkAnswer(sql(
+      """select cast("2015-01-28" as date) from testData limit 1"""),
+      Row(java.sql.Date.valueOf("2015-01-28"))
+    )
+  }
+
   test("from follow multiple brackets") {
     checkAnswer(sql(
       "select key from ((select * from testData limit 1) union all (select * from testData limit 1)) x limit 1"),

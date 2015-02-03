@@ -263,7 +263,7 @@ private[hive] object HiveShim {
     }
 
   def getDateWritable(value: Any): hiveIo.DateWritable =
-    if (value == null) null else new hiveIo.DateWritable(value.asInstanceOf[java.sql.Date])
+    if (value == null) null else new hiveIo.DateWritable(value.asInstanceOf[Int])
 
   def getTimestampWritable(value: Any): hiveIo.TimestampWritable =
     if (value == null) {
