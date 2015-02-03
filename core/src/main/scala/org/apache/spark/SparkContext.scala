@@ -657,9 +657,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    *
    * Load data from a flat binary file, assuming the length of each record is constant.
    *
-   * '''Note:''' Normally getBytes returns an array padded with extra values,
-   * but the FixedLengthBinaryInputFormat ensures that it will always be backed
-   * by a byte array of the correct length (the recordLength)
+   * '''Note:''' We ensure that each record in the resulting RDD
+   * has the provided record length.
    *
    * @param path Directory to the input data files
    * @param recordLength The length at which to split the records

@@ -212,6 +212,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
 
   /**
    * :: Experimental ::
+   *
    * Create an input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them as flat binary files with fixed record lengths,
    * yielding byte arrays

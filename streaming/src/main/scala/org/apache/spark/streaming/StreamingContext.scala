@@ -406,9 +406,8 @@ class StreamingContext private[streaming] (
    * by "moving" them from another location within the same file system. File names
    * starting with . are ignored.
    *
-   * '''Note:''' Normally getBytes returns an array padded with extra values,
-   * but the FixedLengthBinaryInputFormat ensures that it will always be backed
-   * by a byte array of the correct length (the recordLength)
+   * '''Note:''' We ensure that each record in the resulting RDDs of the DStream
+   * has the provided record length.
    *
    * @param directory HDFS directory to monitor for new file
    * @param recordLength length of each record in bytes
