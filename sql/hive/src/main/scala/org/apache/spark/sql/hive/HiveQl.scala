@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.sql.Date
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Context
@@ -968,13 +969,20 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   }
 
   protected def selExprNodeToExpr(node: Node): Option[Expression] = node match {
-    case Token("TOK_SELEXPR",
-           e :: Nil) =>
+    case Token("TOK_SELEXPR", e :: Nil) =>
       Some(nodeToExpr(e))
 
-    case Token("TOK_SELEXPR",
-           e :: Token(alias, Nil) :: Nil) =>
+    case Token("TOK_SELEXPR", e :: Token(alias, Nil) :: Nil) =>
       Some(Alias(nodeToExpr(e), cleanIdentifier(alias))())
+
+    case Token("TOK_SELEXPR", e :: aliasChildren) =>
+      var aliasNames = ArrayBuffer[String]()
+      aliasChildren.foreach { _ match {
+        case Token(name, Nil) => aliasNames += cleanIdentifier(name)
+        case _ =>
+        }
+      }
+      Some(MultiAlias(nodeToExpr(e), aliasNames))
 
     /* Hints are ignored */
     case Token("TOK_HINTLIST", _) => None
