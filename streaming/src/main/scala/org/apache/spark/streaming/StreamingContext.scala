@@ -367,6 +367,8 @@ class StreamingContext private[streaming] (
    * Files must be written to the monitored directory by "moving" them from another
    * location within the same file system. File names starting with . are ignored.
    * @param directory HDFS directory to monitor for new file
+   * @param filter Function to filter paths to process
+   * @param newFilesOnly Should process only new files and ignore existing files in the directory
    * @param conf Hadoop configuration
    * @tparam K Key type for reading HDFS file
    * @tparam V Value type for reading HDFS file
@@ -376,8 +378,11 @@ class StreamingContext private[streaming] (
     K: ClassTag,
     V: ClassTag,
     F <: NewInputFormat[K, V]: ClassTag
-  ] (directory: String, conf: Configuration): InputDStream[(K, V)] = {
-    new FileInputDStream[K, V, F](this, directory=directory, conf=Option(conf))
+  ] (directory: String,
+     filter: Path => Boolean,
+     newFilesOnly: Boolean,
+     conf: Configuration): InputDStream[(K, V)] = {
+    new FileInputDStream[K, V, F](this, directory, filter, newFilesOnly, Option(conf))
   }
 
   /**
@@ -412,7 +417,8 @@ class StreamingContext private[streaming] (
       recordLength: Int): DStream[Array[Byte]] = {
     val conf = sc_.hadoopConfiguration
     conf.setInt(FixedLengthBinaryInputFormat.RECORD_LENGTH_PROPERTY, recordLength)
-    val br = fileStream[LongWritable, BytesWritable, FixedLengthBinaryInputFormat](directory, conf)
+    val br = fileStream[LongWritable, BytesWritable, FixedLengthBinaryInputFormat](
+      directory, FileInputDStream.defaultFilter : Path => Boolean, newFilesOnly=true, conf)
     val data = br.map { case (k, v) =>
       val bytes = v.getBytes
       assert(bytes.length == recordLength, "Byte array does not have correct length")
