@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import java.sql.Date
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Context
@@ -900,7 +901,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
       val groups = (0 until joinExpressions.head.size).map(i => Coalesce(joinExpressions.map(_(i))))
 
-      val filterConditions = isPreserved.zip(joinExpressions).flatMap { case (preserved, expressions) =>
+      val filterConditions = isPreserved.zip(joinExpressions).flatMap {
+        case (preserved, expressions) =>
         if (preserved) {
           Seq(IsNotNull(expressions.get(0)))
         } else {
