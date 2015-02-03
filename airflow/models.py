@@ -1202,6 +1202,7 @@ class DAG(Base):
 
         TI = TaskInstance
         tis = session.query(TI).filter(TI.dag_id == self.dag_id)
+        tis = tis.filter(TI.task_id.in_(self.task_ids))
 
         if start_date:
             tis = tis.filter(TI.execution_date >= start_date)
