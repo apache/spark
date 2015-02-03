@@ -28,7 +28,7 @@ private[sql] case class InsertIntoRelation(
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext) = {
-    relation.insert(new DataFrame(sqlContext, query), overwrite)
+    relation.insert(DataFrame(sqlContext, query), overwrite)
 
     Seq.empty[Row]
   }

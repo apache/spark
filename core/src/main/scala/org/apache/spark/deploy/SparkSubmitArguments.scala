@@ -179,18 +179,6 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
       SparkSubmit.printErrorAndExit("--py-files given but primary resource is not a Python script")
     }
 
-    // Require all python files to be local, so we can add them to the PYTHONPATH
-    if (isPython) {
-      if (Utils.nonLocalPaths(primaryResource).nonEmpty) {
-        SparkSubmit.printErrorAndExit(s"Only local python files are supported: $primaryResource")
-      }
-      val nonLocalPyFiles = Utils.nonLocalPaths(pyFiles).mkString(",")
-      if (nonLocalPyFiles.nonEmpty) {
-        SparkSubmit.printErrorAndExit(
-          s"Only local additional python files are supported: $nonLocalPyFiles")
-      }
-    }
-
     if (master.startsWith("yarn")) {
       val hasHadoopEnv = env.contains("HADOOP_CONF_DIR") || env.contains("YARN_CONF_DIR")
       if (!hasHadoopEnv && !Utils.isTesting) {

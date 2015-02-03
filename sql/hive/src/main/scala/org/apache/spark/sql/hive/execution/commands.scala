@@ -156,7 +156,7 @@ case class CreateMetastoreDataSourceAsSelect(
       }
     }
 
-    val df = new DataFrame(hiveContext, query)
+    val df = DataFrame(hiveContext, query)
     var isExternal = true
     val optionsWithPath =
       if (!options.contains("path")) {
