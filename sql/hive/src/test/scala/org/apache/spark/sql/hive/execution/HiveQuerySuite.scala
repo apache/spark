@@ -27,11 +27,12 @@ import scala.util.Try
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.{SparkFiles, SparkException}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.Dsl._
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.{SQLConf, Row, SchemaRDD}
 
 case class TestData(a: Int, b: String)
 
@@ -62,7 +63,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       sql("SHOW TABLES")
     }
   }
-  
+
   createQueryTest("! operator",
     """
       |SELECT a FROM (
@@ -328,6 +329,80 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("transform",
     "SELECT TRANSFORM (key) USING 'cat' AS (tKey) FROM src")
 
+  createQueryTest("schema-less transform",
+    """
+      |SELECT TRANSFORM (key, value) USING 'cat' FROM src;
+      |SELECT TRANSFORM (*) USING 'cat' FROM src;
+    """.stripMargin)
+
+  val delimiter = "'\t'"
+
+  createQueryTest("transform with custom field delimiter",
+    s"""
+      |SELECT TRANSFORM (key) ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter}
+      |USING 'cat' AS (tKey) ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter} FROM src;
+    """.stripMargin.replaceAll("\n", " "))
+
+  createQueryTest("transform with custom field delimiter2",
+    s"""
+      |SELECT TRANSFORM (key, value) ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter}
+      |USING 'cat' ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter} FROM src;
+    """.stripMargin.replaceAll("\n", " "))
+
+  createQueryTest("transform with custom field delimiter3",
+    s"""
+      |SELECT TRANSFORM (*) ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter}
+      |USING 'cat' ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter} FROM src;
+    """.stripMargin.replaceAll("\n", " "))
+
+  createQueryTest("transform with SerDe",
+    """
+      |SELECT TRANSFORM (key, value) ROW FORMAT SERDE
+      |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+      |USING 'cat' AS (tKey, tValue) ROW FORMAT SERDE
+      |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' FROM src;
+    """.stripMargin.replaceAll("\n", " "))
+
+  test("transform with SerDe2") {
+
+    sql("CREATE TABLE small_src(key INT, value STRING)")
+    sql("INSERT OVERWRITE TABLE small_src SELECT key, value FROM src LIMIT 10")
+
+    val expected = sql("SELECT key FROM small_src").collect().head
+    val res = sql(
+      """
+        |SELECT TRANSFORM (key) ROW FORMAT SERDE
+        |'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
+        |WITH SERDEPROPERTIES ('avro.schema.literal'='{"namespace":
+        |"testing.hive.avro.serde","name": "src","type": "record","fields":
+        |[{"name":"key","type":"int"}]}') USING 'cat' AS (tKey INT) ROW FORMAT SERDE
+        |'org.apache.hadoop.hive.serde2.avro.AvroSerDe' WITH SERDEPROPERTIES
+        |('avro.schema.literal'='{"namespace": "testing.hive.avro.serde","name":
+        |"src","type": "record","fields": [{"name":"key","type":"int"}]}')
+        |FROM small_src
+      """.stripMargin.replaceAll("\n", " ")).collect().head
+
+    assert(expected(0) === res(0))
+  }
+
+  createQueryTest("transform with SerDe3",
+    """
+      |SELECT TRANSFORM (*) ROW FORMAT SERDE
+      |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' WITH SERDEPROPERTIES
+      |('serialization.last.column.takes.rest'='true') USING 'cat' AS (tKey, tValue)
+      |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+      |WITH SERDEPROPERTIES ('serialization.last.column.takes.rest'='true') FROM src;
+    """.stripMargin.replaceAll("\n", " "))
+
+  createQueryTest("transform with SerDe4",
+    """
+      |SELECT TRANSFORM (*) ROW FORMAT SERDE
+      |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' WITH SERDEPROPERTIES
+      |('serialization.last.column.takes.rest'='true') USING 'cat' ROW FORMAT SERDE
+      |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' WITH SERDEPROPERTIES
+      |('serialization.last.column.takes.rest'='true') FROM src;
+    """.stripMargin.replaceAll("\n", " "))
+ 
   createQueryTest("LIKE",
     "SELECT * FROM src WHERE value LIKE '%1%'")
 
@@ -367,7 +442,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     sql("SELECT * FROM src TABLESAMPLE(0.1 PERCENT) s")
   }
 
-  test("SchemaRDD toString") {
+  test("DataFrame toString") {
     sql("SHOW TABLES").toString
     sql("SELECT * FROM src").toString
   }
@@ -473,12 +548,12 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     }
   }
 
-  def isExplanation(result: SchemaRDD) = {
+  def isExplanation(result: DataFrame) = {
     val explanation = result.select('plan).collect().map { case Row(plan: String) => plan }
     explanation.contains("== Physical Plan ==")
   }
 
-  test("SPARK-1704: Explain commands as a SchemaRDD") {
+  test("SPARK-1704: Explain commands as a DataFrame") {
     sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
 
     val rdd = sql("explain select key, count(value) from src group by key")
@@ -506,6 +581,11 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   test("SPARK-2225: turn HAVING without GROUP BY into a simple filter") {
     assert(sql("select key from src having key > 490").collect().size < 100)
+  }
+
+  test("SPARK-5367: resolve star expression in udf") {
+    assert(sql("select concat(*) from src limit 5").collect().size == 5)
+    assert(sql("select array(*) from src limit 5").collect().size == 5)
   }
 
   test("Query Hive native command execution result") {
@@ -842,7 +922,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     val testVal = "test.val.0"
     val nonexistentKey = "nonexistent"
     val KV = "([^=]+)=([^=]*)".r
-    def collectResults(rdd: SchemaRDD): Set[(String, String)] =
+    def collectResults(rdd: DataFrame): Set[(String, String)] =
       rdd.collect().map {
         case Row(key: String, value: String) => key -> value
         case Row(KV(key, value)) => key -> value

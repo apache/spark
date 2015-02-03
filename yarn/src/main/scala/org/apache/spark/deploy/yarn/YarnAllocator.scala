@@ -32,9 +32,12 @@ import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.util.RackResolver
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.log4j.{Level, Logger}
+
+import org.apache.spark.{SparkEnv, Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
+import org.apache.spark.util.AkkaUtils
 
 /**
  * YarnAllocator is charged with requesting containers from the YARN ResourceManager and deciding
@@ -60,7 +63,11 @@ private[yarn] class YarnAllocator(
 
   import YarnAllocator._
 
-  // These two complementary data structures are locked on allocatedHostToContainersMap.
+  // RackResolver logs an INFO message whenever it resolves a rack, which is way too often.
+  if (Logger.getLogger(classOf[RackResolver]).getLevel == null) {
+    Logger.getLogger(classOf[RackResolver]).setLevel(Level.WARN)
+  }
+
   // Visible for testing.
   val allocatedHostToContainersMap =
     new HashMap[String, collection.mutable.Set[ContainerId]]
@@ -100,7 +107,9 @@ private[yarn] class YarnAllocator(
     new ThreadFactoryBuilder().setNameFormat("ContainerLauncher #%d").setDaemon(true).build())
   launcherPool.allowCoreThreadTimeOut(true)
 
-  private val driverUrl = "akka.tcp://sparkDriver@%s:%s/user/%s".format(
+  private val driverUrl = AkkaUtils.address(
+    AkkaUtils.protocol(securityMgr.akkaSSLOptions.enabled),
+    SparkEnv.driverActorSystemName,
     sparkConf.get("spark.driver.host"),
     sparkConf.get("spark.driver.port"),
     CoarseGrainedSchedulerBackend.ACTOR_NAME)
@@ -294,6 +303,7 @@ private[yarn] class YarnAllocator(
       assert(container.getResource.getMemory >= resource.getMemory)
 
       logInfo("Launching container %s for on host %s".format(containerId, executorHostname))
+      executorIdToContainer(executorId) = container      
 
       val containerSet = allocatedHostToContainersMap.getOrElseUpdate(executorHostname,
         new HashSet[ContainerId])
@@ -355,20 +365,18 @@ private[yarn] class YarnAllocator(
         }
       }
 
-      allocatedHostToContainersMap.synchronized {
-        if (allocatedContainerToHostMap.containsKey(containerId)) {
-          val host = allocatedContainerToHostMap.get(containerId).get
-          val containerSet = allocatedHostToContainersMap.get(host).get
+      if (allocatedContainerToHostMap.containsKey(containerId)) {
+        val host = allocatedContainerToHostMap.get(containerId).get
+        val containerSet = allocatedHostToContainersMap.get(host).get
 
-          containerSet.remove(containerId)
-          if (containerSet.isEmpty) {
-            allocatedHostToContainersMap.remove(host)
-          } else {
-            allocatedHostToContainersMap.update(host, containerSet)
-          }
-
-          allocatedContainerToHostMap.remove(containerId)
+        containerSet.remove(containerId)
+        if (containerSet.isEmpty) {
+          allocatedHostToContainersMap.remove(host)
+        } else {
+          allocatedHostToContainersMap.update(host, containerSet)
         }
+
+        allocatedContainerToHostMap.remove(containerId)
       }
     }
   }

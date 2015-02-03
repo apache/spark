@@ -250,6 +250,12 @@ class Analyzer(catalog: Catalog,
         Project(
           projectList.flatMap {
             case s: Star => s.expand(child.output, resolver)
+            case Alias(f @ UnresolvedFunction(_, args), name) if containsStar(args) =>
+              val expandedArgs = args.flatMap {
+                case s: Star => s.expand(child.output, resolver)
+                case o => o :: Nil
+              }
+              Alias(child = f.copy(children = expandedArgs), name)() :: Nil
             case o => o :: Nil
           },
           child)
@@ -273,10 +279,9 @@ class Analyzer(catalog: Catalog,
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
         q transformExpressions {
-          case u @ UnresolvedAttribute(name)
-              if resolver(name, VirtualColumn.groupingIdName) &&
-                q.isInstanceOf[GroupingAnalytics] =>
-              // Resolve the virtual column GROUPING__ID for the operator GroupingAnalytics
+          case u @ UnresolvedAttribute(name) if resolver(name, VirtualColumn.groupingIdName) &&
+            q.isInstanceOf[GroupingAnalytics] =>
+            // Resolve the virtual column GROUPING__ID for the operator GroupingAnalytics
             q.asInstanceOf[GroupingAnalytics].gid
           case u @ UnresolvedAttribute(name) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
@@ -299,7 +304,7 @@ class Analyzer(catalog: Catalog,
      * Returns true if `exprs` contains a [[Star]].
      */
     protected def containsStar(exprs: Seq[Expression]): Boolean =
-      exprs.collect { case _: Star => true}.nonEmpty
+      exprs.exists(_.collect { case _: Star => true }.nonEmpty)
   }
 
   /**
