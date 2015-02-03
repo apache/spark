@@ -520,19 +520,14 @@ trait DataFrame extends DataFrameSpecificApi with RDDApi[Row] {
   override def save(path: String): Unit
 
   @Experimental
-  override def save(path: String, overwrite: Boolean): Unit
-
-  @Experimental
   override def save(
       dataSourceName: String,
-      overwrite: Boolean,
       option: (String, String),
       options: (String, String)*): Unit
 
   @Experimental
   override def save(
       dataSourceName: String,
-      overwrite: Boolean,
       options: java.util.Map[String, String]): Unit
 
   /**

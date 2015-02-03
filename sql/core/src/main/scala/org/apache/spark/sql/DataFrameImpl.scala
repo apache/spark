@@ -343,17 +343,12 @@ private[sql] class DataFrameImpl protected[sql](
   }
 
   override def save(path: String): Unit = {
-    save(path, false)
-  }
-
-  override def save(path: String, overwrite: Boolean): Unit = {
     val dataSourceName = sqlContext.conf.defaultDataSourceName
-    save(dataSourceName, overwrite, ("path" -> path))
+    save(dataSourceName, ("path" -> path))
   }
 
   override def save(
       dataSourceName: String,
-      overwrite: Boolean,
       option: (String, String),
       options: (String, String)*): Unit = {
     ResolvedDataSource(sqlContext, dataSourceName, (option +: options).toMap, this)
@@ -361,10 +356,9 @@ private[sql] class DataFrameImpl protected[sql](
 
   override def save(
       dataSourceName: String,
-      overwrite: Boolean,
       options: java.util.Map[String, String]): Unit = {
     val opts = options.toSeq
-    save(dataSourceName, overwrite, opts.head, opts.tail:_*)
+    save(dataSourceName, opts.head, opts.tail:_*)
   }
 
   override def insertInto(tableName: String, overwrite: Boolean): Unit = {

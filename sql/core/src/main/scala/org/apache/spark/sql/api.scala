@@ -187,19 +187,14 @@ private[sql] trait DataFrameSpecificApi {
   def save(path: String): Unit
 
   @Experimental
-  def save(path: String, overwrite: Boolean): Unit
-
-  @Experimental
   def save(
       dataSourceName: String,
-      overwrite: Boolean,
       option: (String, String),
       options: (String, String)*): Unit
 
   @Experimental
   def save(
       dataSourceName: String,
-      overwrite: Boolean,
       options: java.util.Map[String, String]): Unit
 
   @Experimental

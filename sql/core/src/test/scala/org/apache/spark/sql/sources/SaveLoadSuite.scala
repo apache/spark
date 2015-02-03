@@ -60,34 +60,29 @@ class SaveLoadSuite extends DataSourceTest with BeforeAndAfterAll {
   }
 
   test("save with overwrite and load") {
-    df.save(path.toString, true)
-
+    df.save(path.toString)
     checkLoad
   }
 
   test("save with data source and options, and load") {
-    df.save("org.apache.spark.sql.json", true, ("path", path.toString))
-
+    df.save("org.apache.spark.sql.json", ("path", path.toString))
     checkLoad
   }
 
-  test("save and save again without overwrite") {
-    df.save(path.toString, true)
+  test("save and save again") {
+    df.save(path.toString)
 
-    val exception = intercept[RuntimeException] {
+    val message = intercept[RuntimeException] {
       df.save(path.toString)
-    }
+    }.getMessage
 
     assert(
-      exception.getMessage.contains("JSON table only support INSERT OVERWRITE for now."),
-      "JSON table should only support INSERT OVERWRITE for now.")
-  }
+      message.contains("already exists"),
+      "We should complain that the path already exists.")
 
-  test("save and save again with overwrite") {
-    df.save(path.toString, true)
-    df.save(path.toString, true)
+    if (path.exists()) Utils.deleteRecursively(path)
 
+    df.save(path.toString)
     checkLoad
   }
-
 }

@@ -165,17 +165,13 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
 
   override def save(path: String): Unit = err()
 
-  override def save(path: String, overwrite: Boolean): Unit = err()
-
   override def save(
       dataSourceName: String,
-      overwrite: Boolean,
       option: (String, String),
       options: (String, String)*): Unit = err()
 
   override def save(
       dataSourceName: String,
-      overwrite: Boolean,
       options: java.util.Map[String, String]): Unit = err()
 
   override def insertInto(tableName: String, overwrite: Boolean): Unit = err()
