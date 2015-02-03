@@ -1747,6 +1747,7 @@ object SparkContext extends Logging {
       rdd: RDD[(K, V)]) = {
     val kf = implicitly[K => Writable]
     val vf = implicitly[V => Writable]
+    // Set the Writable class to null and `SequenceFileRDDFunctions` will use Reflection to get it
     implicit val keyWritableFactory = new WritableFactory[K](_ => null, kf)
     implicit val valueWritableFactory = new WritableFactory[V](_ => null, vf)
     RDD.rddToSequenceFileRDDFunctions(rdd)

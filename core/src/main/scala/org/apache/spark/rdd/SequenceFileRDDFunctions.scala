@@ -45,6 +45,7 @@ class SequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable : ClassTag
 
   private val keyWritableClass =
     if (_keyWritableClass == null) {
+      // pre 1.3.0, we need to use Reflection to get the Writable class
       getWritableClass[K]()
     } else {
       _keyWritableClass
@@ -52,6 +53,7 @@ class SequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable : ClassTag
 
   private val valueWritableClass =
     if (_valueWritableClass == null) {
+      // pre 1.3.0, we need to use Reflection to get the Writable class
       getWritableClass[V]()
     } else {
       _valueWritableClass
@@ -86,6 +88,10 @@ class SequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable : ClassTag
   def saveAsSequenceFile(path: String, codec: Option[Class[_ <: CompressionCodec]] = None) {
     def anyToWritable[U <% Writable](u: U): Writable = u
 
+    // TODO We cannot force the return type of `anyToWritable` be same as keyWritableClass and
+    // valueWritableClass at the compile time. To implement that, we need to add type parameters to
+    // SequenceFileRDDFunctions. however, SequenceFileRDDFunctions is a public class so it will be a
+    // breaking change.
     val convertKey = self.keyClass != keyWritableClass
     val convertValue = self.valueClass != valueWritableClass
 
