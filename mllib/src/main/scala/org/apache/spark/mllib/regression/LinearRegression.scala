@@ -17,9 +17,12 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.rdd.RDD
+import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
+import org.apache.spark.mllib.regression.impl.GLMRegressionModel
+import org.apache.spark.mllib.util.{Exportable, Importable}
+import org.apache.spark.rdd.RDD
 
 /**
  * Regression model trained using LinearRegression.
@@ -30,7 +33,8 @@ import org.apache.spark.mllib.optimization._
 class LinearRegressionModel (
     override val weights: Vector,
     override val intercept: Double)
-  extends GeneralizedLinearModel(weights, intercept) with RegressionModel with Serializable {
+  extends GeneralizedLinearModel(weights, intercept) with RegressionModel with Serializable
+  with Exportable {
 
   override protected def predictPoint(
       dataMatrix: Vector,
@@ -38,12 +42,28 @@ class LinearRegressionModel (
       intercept: Double): Double = {
     weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
   }
+
+  override def save(sc: SparkContext, path: String): Unit = {
+    GLMRegressionModel.save(sc, path, this.getClass.getName, weights, intercept)
+  }
+
+  override protected def formatVersion: String = LinearRegressionModel.formatVersion
+}
+
+object LinearRegressionModel extends Importable[LinearRegressionModel] {
+
+  override def load(sc: SparkContext, path: String): LinearRegressionModel = {
+    val data = GLMRegressionModel.loadData(sc, path, classOf[LinearRegressionModel].getName)
+    new LinearRegressionModel(data.weights, data.intercept)
+  }
+
+  override protected def formatVersion: String = LinearRegressionModel.formatVersion
 }
 
 /**
  * Train a linear regression model with no regularization using Stochastic Gradient Descent.
  * This solves the least squares regression formulation
- *              f(weights) = 1/n ||A weights-y||^2
+ *              f(weights) = 1/n ||A weights-y||^2^
  * (which is the mean squared error).
  * Here the data matrix has n rows, and the input RDD holds the set of rows of A, each with
  * its corresponding right hand side label y.

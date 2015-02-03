@@ -476,6 +476,7 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
     val lr = new LogisticRegressionWithLBFGS().setIntercept(true)
     lr.optimizer.setNumIterations(1)
     val model = lr.run(testRDD)
+
     model.clearThreshold()
     assert(model.getThreshold.isEmpty)
 

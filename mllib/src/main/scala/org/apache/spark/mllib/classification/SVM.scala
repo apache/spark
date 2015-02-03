@@ -17,12 +17,15 @@
 
 package org.apache.spark.mllib.classification
 
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.mllib.classification.impl.GLMClassificationModel
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.util.DataValidators
+import org.apache.spark.mllib.util.{Importable, Exportable, DataValidators}
 import org.apache.spark.rdd.RDD
+
 
 /**
  * Model for Support Vector Machines (SVMs).
@@ -33,7 +36,8 @@ import org.apache.spark.rdd.RDD
 class SVMModel (
     override val weights: Vector,
     override val intercept: Double)
-  extends GeneralizedLinearModel(weights, intercept) with ClassificationModel with Serializable {
+  extends GeneralizedLinearModel(weights, intercept) with ClassificationModel with Serializable
+  with Exportable {
 
   private var threshold: Option[Double] = Some(0.0)
 
@@ -76,6 +80,28 @@ class SVMModel (
       case None => margin
     }
   }
+
+  override def save(sc: SparkContext, path: String): Unit = {
+    GLMClassificationModel.save(sc, path, this.getClass.getName, weights, intercept, threshold)
+  }
+
+  override protected def formatVersion: String = SVMModel.formatVersion
+}
+
+object SVMModel extends Importable[SVMModel] {
+
+  override def load(sc: SparkContext, path: String): SVMModel = {
+    val data = GLMClassificationModel.loadData(sc, path, classOf[SVMModel].getName)
+    val lr = new SVMModel(data.weights, data.intercept)
+    data.threshold match {
+      case Some(t) => lr.setThreshold(t)
+      case None => lr.clearThreshold()
+    }
+    lr
+  }
+
+  override protected def formatVersion: String = GLMClassificationModel.formatVersion
+
 }
 
 /**

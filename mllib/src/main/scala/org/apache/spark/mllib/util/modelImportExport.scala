@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.util
 
-import scala.reflect.runtime.universe.TypeTag
+import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
@@ -50,7 +50,7 @@ trait Exportable {
   def save(sc: SparkContext, path: String): Unit
 
   /** Current version of model import/export format. */
-  protected def latestVersion: String
+  protected def formatVersion: String
 
 }
 
@@ -61,7 +61,11 @@ trait Exportable {
  * This should be inherited by an object paired with the model class.
  */
 @DeveloperApi
-trait Importable[Model <: Exportable] {
+trait Importable[M <: Exportable] {
+
+  protected abstract class Importer {
+    def load(sc: SparkContext, path: String): M
+  }
 
   /**
    * Load a model from the given path.
@@ -72,10 +76,12 @@ trait Importable[Model <: Exportable] {
    * @param path  Path specifying the directory to which the model was saved.
    * @return  Model instance
    */
-  def load(sc: SparkContext, path: String): Model
+  def load(sc: SparkContext, path: String): M
+
+  //def loadWithSchema(sc: SparkContext, path: String): (M, StructType)
 
   /** Current version of model import/export format. */
-  protected def latestVersion: String
+  protected def formatVersion: String
 
 }
 
@@ -105,6 +111,26 @@ private[mllib] object Importable {
         s"Unable to parse model data.  Expected field $field but found field" +
           s" with different type: ${loadedFields(field.name)}")
     }
+  }
+
+  /**
+   * Load metadata from the given path.
+   * @return (class name, version, metadata)
+   */
+  def loadMetadata(sc: SparkContext, path: String): (String, String, DataFrame) = {
+    val sqlContext = new SQLContext(sc)
+    val metadata = sqlContext.jsonFile(path + "/metadata")
+    val (clazz, version) = try {
+      val metadataArray = metadata.select("class", "version").take(1)
+      assert(metadataArray.size == 1)
+      metadataArray(0) match {
+        case Row(clazz: String, version: String) => (clazz, version)
+      }
+    } catch {
+      case e: Exception =>
+        throw new Exception(s"Unable to load model metadata from: ${path + "/metadata"}")
+    }
+    (clazz, version, metadata)
   }
 
 }

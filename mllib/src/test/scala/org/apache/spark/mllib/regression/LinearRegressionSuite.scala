@@ -24,6 +24,7 @@ import org.scalatest.FunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, LinearDataGenerator,
   MLlibTestSparkContext}
+import org.apache.spark.util.Utils
 
 class LinearRegressionSuite extends FunSuite with MLlibTestSparkContext {
 
@@ -123,6 +124,27 @@ class LinearRegressionSuite extends FunSuite with MLlibTestSparkContext {
     // Test prediction on Array.
     validatePrediction(
       sparseValidationData.map(row => model.predict(row.features)), sparseValidationData)
+  }
+
+  test("model export/import") {
+    // Create dataset
+    val rdd = sc.parallelize(
+      LinearDataGenerator.generateLinearInput(0.0, Array(10.0, 10.0), 10, 42), 2)
+
+    // Train model
+    val linReg = new LinearRegressionWithSGD().setIntercept(false)
+    linReg.optimizer.setNumIterations(1)
+    val model = linReg.run(rdd)
+
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+
+    // Save model, load it back, and compare.
+    model.save(sc, path)
+    val sameModel = LinearRegressionModel.load(sc, path)
+    assert(model.weights == sameModel.weights)
+    assert(model.intercept == sameModel.intercept)
+    Utils.deleteRecursively(tempDir)
   }
 }
 

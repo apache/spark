@@ -21,11 +21,11 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.BLAS.dot
 import org.apache.spark.mllib.linalg.{DenseVector, Vector}
+import org.apache.spark.mllib.classification.impl.GLMClassificationModel
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{DataValidators, Exportable, Importable, MLUtils}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
 
 /**
@@ -139,70 +139,26 @@ class LogisticRegressionModel (
   }
 
   override def save(sc: SparkContext, path: String): Unit = {
-    val sqlContext = new SQLContext(sc)
-    import sqlContext._
-
-    // Create JSON metadata.
-    val metadata = LogisticRegressionModel.Metadata(
-      clazz = this.getClass.getName, version = latestVersion)
-    val metadataRDD: DataFrame = sc.parallelize(Seq(metadata))
-    metadataRDD.toJSON.saveAsTextFile(path + "/metadata")
-
-    // Create Parquet data.
-    val data = LogisticRegressionModel.Data(weights, intercept, threshold)
-    val dataRDD: DataFrame = sc.parallelize(Seq(data))
-    dataRDD.saveAsParquetFile(path + "/data")
+    GLMClassificationModel.save(sc, path, this.getClass.getName, weights, intercept, threshold)
   }
 
-  override protected def latestVersion: String = LogisticRegressionModel.latestVersion
+  override protected def formatVersion: String = LogisticRegressionModel.formatVersion
 
 }
 
 object LogisticRegressionModel extends Importable[LogisticRegressionModel] {
 
-  /** Metadata for model import/export */
-  private case class Metadata(clazz: String, version: String)
-
-  /** Model data for model import/export */
-  private case class Data(weights: Vector, intercept: Double, threshold: Option[Double])
-
   override def load(sc: SparkContext, path: String): LogisticRegressionModel = {
-    val sqlContext = new SQLContext(sc)
-    import sqlContext._
-
-    // Load JSON metadata.
-    val metadataRDD = sqlContext.jsonFile(path + "/metadata")
-    val metadataArray = metadataRDD.select("clazz", "version").take(1)
-    assert(metadataArray.size == 1,
-      s"Unable to load LogisticRegressionModel metadata from: ${path + "/metadata"}")
-    metadataArray(0) match {
-      case Row(clazz: String, version: String) =>
-        assert(clazz == classOf[LogisticRegressionModel].getName, s"LogisticRegressionModel.load" +
-          s" was given model file with metadata specifying a different model class: $clazz")
-        assert(version == latestVersion, // only 1 version exists currently
-          s"LogisticRegressionModel.load did not recognize model format version: $version")
-    }
-
-    // Load Parquet data.
-    val dataRDD = sqlContext.parquetFile(path + "/data")
-    val dataArray = dataRDD.select("weights", "intercept", "threshold").take(1)
-    assert(dataArray.size == 1,
-      s"Unable to load LogisticRegressionModel data from: ${path + "/data"}")
-    val data = dataArray(0)
-    assert(data.size == 3, s"Unable to load LogisticRegressionModel data from: ${path + "/data"}")
-    val lr = data match {
-      case Row(weights: Vector, intercept: Double, _) =>
-        new LogisticRegressionModel(weights, intercept)
-    }
-    if (data.isNullAt(2)) {
-      lr.clearThreshold()
-    } else {
-      lr.setThreshold(data.getDouble(2))
+    val data = GLMClassificationModel.loadData(sc, path, classOf[LogisticRegressionModel].getName)
+    val lr = new LogisticRegressionModel(data.weights, data.intercept)
+    data.threshold match {
+      case Some(t) => lr.setThreshold(t)
+      case None => lr.clearThreshold()
     }
     lr
   }
 
-  override protected def latestVersion: String = "1.0"
+  override protected def formatVersion: String = GLMClassificationModel.formatVersion
 
 }
 

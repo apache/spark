@@ -24,6 +24,7 @@ import org.scalatest.FunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, LinearDataGenerator,
   MLlibTestSparkContext}
+import org.apache.spark.util.Utils
 
 class LassoSuite extends FunSuite with MLlibTestSparkContext {
 
@@ -114,6 +115,30 @@ class LassoSuite extends FunSuite with MLlibTestSparkContext {
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+  }
+
+  test("model export/import") {
+    // Create dataset
+    val nPoints = 10
+    val A = 2.0
+    val B = -1.5
+    val C = 1.0e-2
+    val testData = LinearDataGenerator.generateLinearInput(A, Array[Double](B, C), nPoints, 42)
+    val testRDD = sc.parallelize(testData, 2).cache()
+
+    // Train model
+    val ls = new LassoWithSGD()
+    ls.optimizer.setNumIterations(1)
+    val model = ls.run(testRDD)
+
+    // Save model, load it back, and compare.
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+    model.save(sc, path)
+    val sameModel = LassoModel.load(sc, path)
+    assert(model.weights == sameModel.weights)
+    assert(model.intercept == sameModel.intercept)
+    Utils.deleteRecursively(tempDir)
   }
 }
 

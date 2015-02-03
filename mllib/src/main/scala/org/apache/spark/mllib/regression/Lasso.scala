@@ -17,9 +17,11 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
+import org.apache.spark.mllib.regression.impl.GLMRegressionModel
+import org.apache.spark.mllib.util.{Importable, Exportable}
 import org.apache.spark.rdd.RDD
 
 /**
@@ -32,7 +34,7 @@ class LassoModel (
     override val weights: Vector,
     override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept)
-  with RegressionModel with Serializable {
+  with RegressionModel with Serializable with Exportable {
 
   override protected def predictPoint(
       dataMatrix: Vector,
@@ -40,12 +42,28 @@ class LassoModel (
       intercept: Double): Double = {
     weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
   }
+
+  override def save(sc: SparkContext, path: String): Unit = {
+    GLMRegressionModel.save(sc, path, this.getClass.getName, weights, intercept)
+  }
+
+  override protected def formatVersion: String = LassoModel.formatVersion
+}
+
+object LassoModel extends Importable[LassoModel] {
+
+  override def load(sc: SparkContext, path: String): LassoModel = {
+    val data = GLMRegressionModel.loadData(sc, path, classOf[LassoModel].getName)
+    new LassoModel(data.weights, data.intercept)
+  }
+
+  override protected def formatVersion: String = LassoModel.formatVersion
 }
 
 /**
  * Train a regression model with L1-regularization using Stochastic Gradient Descent.
  * This solves the l1-regularized least squares regression formulation
- *          f(weights) = 1/2n ||A weights-y||^2  + regParam ||weights||_1
+ *          f(weights) = 1/2n ||A weights-y||^2^  + regParam ||weights||_1
  * Here the data matrix has n rows, and the input RDD holds the set of rows of A, each with
  * its corresponding right hand side label y.
  * See also the documentation for the precise formulation.

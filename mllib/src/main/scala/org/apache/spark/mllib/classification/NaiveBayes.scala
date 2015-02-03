@@ -77,60 +77,64 @@ class NaiveBayesModel private[mllib] (
     import sqlContext._
 
     // Create JSON metadata.
-    val metadata = NaiveBayesModel.Metadata(
-      clazz = this.getClass.getName, version = latestVersion)
-    val metadataRDD: DataFrame = sc.parallelize(Seq(metadata))
-    metadataRDD.toJSON.saveAsTextFile(path + "/metadata")
+    val metadataRDD =
+      sc.parallelize(Seq((this.getClass.getName, formatVersion))).toDataFrame("class", "version")
+    metadataRDD.toJSON.repartition(1).saveAsTextFile(path + "/metadata")
 
     // Create Parquet data.
     val data = NaiveBayesModel.Data(labels, pi, theta)
     val dataRDD: DataFrame = sc.parallelize(Seq(data))
-    dataRDD.saveAsParquetFile(path + "/data")
+    dataRDD.repartition(1).saveAsParquetFile(path + "/data")
   }
 
-  override protected def latestVersion: String = NaiveBayesModel.latestVersion
+  override protected def formatVersion: String = NaiveBayesModel.formatVersion
+
 }
 
 object NaiveBayesModel extends Importable[NaiveBayesModel] {
 
-  /** Metadata for model import/export */
-  private case class Metadata(clazz: String, version: String)
-
   /** Model data for model import/export */
   private case class Data(labels: Array[Double], pi: Array[Double], theta: Array[Array[Double]])
 
-  override def load(sc: SparkContext, path: String): NaiveBayesModel = {
-    val sqlContext = new SQLContext(sc)
-    import sqlContext._
+  private object ImporterV1 extends Importer {
 
-    // Load JSON metadata.
-    val metadataRDD = sqlContext.jsonFile(path + "/metadata")
-    val metadataArray = metadataRDD.select("clazz", "version").take(1)
-    assert(metadataArray.size == 1,
-      s"Unable to load NaiveBayesModel metadata from: ${path + "/metadata"}")
-    metadataArray(0) match {
-      case Row(clazz: String, version: String) =>
-        assert(clazz == classOf[NaiveBayesModel].getName, s"NaiveBayesModel.load" +
-          s" was given model file with metadata specifying a different model class: $clazz")
-        assert(version == latestVersion, // only 1 version exists currently
-          s"NaiveBayesModel.load did not recognize model format version: $version")
+    override def load(sc: SparkContext, path: String): NaiveBayesModel = {
+      val sqlContext = new SQLContext(sc)
+      // Load Parquet data.
+      val dataRDD = sqlContext.parquetFile(path + "/data")
+      // Check schema explicitly since erasure makes it hard to use match-case for checking.
+      Importable.checkSchema[Data](dataRDD.schema)
+      val dataArray = dataRDD.select("labels", "pi", "theta").take(1)
+      assert(dataArray.size == 1, s"Unable to load NaiveBayesModel data from: ${path + "/data"}")
+      val data = dataArray(0)
+      val labels = data.getAs[Seq[Double]](0).toArray
+      val pi = data.getAs[Seq[Double]](1).toArray
+      val theta = data.getAs[Seq[Seq[Double]]](2).map(_.toArray).toArray
+      new NaiveBayesModel(labels, pi, theta)
     }
-
-    // Load Parquet data.
-    val dataRDD = sqlContext.parquetFile(path + "/data")
-    val dataArray = dataRDD.select("labels", "pi", "theta").take(1)
-    assert(dataArray.size == 1, s"Unable to load NaiveBayesModel data from: ${path + "/data"}")
-    val data = dataArray(0)
-    assert(data.size == 3, s"Unable to load NaiveBayesModel data from: ${path + "/data"}")
-    // Check schema explicitly since erasure makes it hard to use match-case for checking.
-    Importable.checkSchema[Data](dataRDD.schema)
-    val labels = data.getAs[Seq[Double]](0).toArray
-    val pi = data.getAs[Seq[Double]](1).toArray
-    val theta = data.getAs[Seq[Seq[Double]]](2).map(_.toArray).toArray
-    new NaiveBayesModel(labels, pi, theta)
   }
 
-  override protected def latestVersion: String = "1.0"
+  protected object Importer {
+
+    def get(clazz: String, version: String): Importer = {
+      assert(clazz == classOf[NaiveBayesModel].getName, s"NaiveBayesModel.load" +
+        s" was given model file with metadata specifying a different model class: $clazz")
+      version match {
+        case "1.0" => ImporterV1
+        case _ => throw new Exception(
+          s"NaiveBayesModel.load did not recognize model format version: $version." +
+            s" Supported versions: 1.0.")
+      }
+    }
+  }
+
+  override def load(sc: SparkContext, path: String): NaiveBayesModel = {
+    val (clazz, version, metadata) = Importable.loadMetadata(sc, path)
+    val importer = Importer.get(clazz, version)
+    importer.load(sc, path)
+  }
+
+  override protected def formatVersion: String = "1.0"
 }
 
 /**

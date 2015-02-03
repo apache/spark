@@ -25,6 +25,7 @@ import org.scalatest.FunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, LinearDataGenerator,
   MLlibTestSparkContext}
+import org.apache.spark.util.Utils
 
 class RidgeRegressionSuite extends FunSuite with MLlibTestSparkContext {
 
@@ -74,6 +75,29 @@ class RidgeRegressionSuite extends FunSuite with MLlibTestSparkContext {
     // Ridge validation error should be lower than linear regression.
     assert(ridgeErr < linearErr,
       "ridgeError (" + ridgeErr + ") was not less than linearError(" + linearErr + ")")
+  }
+
+  test("model export/import") {
+    // Create dataset
+    val numExamples = 20
+    val numFeatures = 4
+    val w = DoubleMatrix.rand(numFeatures, 1).subi(0.5)
+    val data = LinearDataGenerator.generateLinearInput(3.0, w.toArray, numExamples, 42, 10.0)
+    val rdd = sc.parallelize(data, 2).cache()
+
+    // Train model
+    val lr = new RidgeRegressionWithSGD()
+    lr.optimizer.setNumIterations(1)
+    val model = lr.run(rdd)
+
+    // Save model, load it back, and compare.
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+    model.save(sc, path)
+    val sameModel = RidgeRegressionModel.load(sc, path)
+    assert(model.weights == sameModel.weights)
+    assert(model.intercept == sameModel.intercept)
+    Utils.deleteRecursively(tempDir)
   }
 }
 

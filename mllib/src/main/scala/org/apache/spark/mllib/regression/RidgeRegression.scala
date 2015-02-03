@@ -17,10 +17,13 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.optimization._
+import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.optimization._
+import org.apache.spark.mllib.regression.impl.GLMRegressionModel
+import org.apache.spark.mllib.util.{Importable, Exportable}
+import org.apache.spark.rdd.RDD
+
 
 /**
  * Regression model trained using RidgeRegression.
@@ -32,7 +35,7 @@ class RidgeRegressionModel (
     override val weights: Vector,
     override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept)
-  with RegressionModel with Serializable {
+  with RegressionModel with Serializable with Exportable {
 
   override protected def predictPoint(
       dataMatrix: Vector,
@@ -40,12 +43,28 @@ class RidgeRegressionModel (
       intercept: Double): Double = {
     weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
   }
+
+  override def save(sc: SparkContext, path: String): Unit = {
+    GLMRegressionModel.save(sc, path, this.getClass.getName, weights, intercept)
+  }
+
+  override protected def formatVersion: String = RidgeRegressionModel.formatVersion
+}
+
+object RidgeRegressionModel extends Importable[RidgeRegressionModel] {
+
+  override def load(sc: SparkContext, path: String): RidgeRegressionModel = {
+    val data = GLMRegressionModel.loadData(sc, path, classOf[RidgeRegressionModel].getName)
+    new RidgeRegressionModel(data.weights, data.intercept)
+  }
+
+  override protected def formatVersion: String = GLMRegressionModel.formatVersion
 }
 
 /**
  * Train a regression model with L2-regularization using Stochastic Gradient Descent.
  * This solves the l1-regularized least squares regression formulation
- *          f(weights) = 1/2n ||A weights-y||^2  + regParam/2 ||weights||^2
+ *          f(weights) = 1/2n ||A weights-y||^2^  + regParam/2 ||weights||^2^
  * Here the data matrix has n rows, and the input RDD holds the set of rows of A, each with
  * its corresponding right hand side label y.
  * See also the documentation for the precise formulation.
