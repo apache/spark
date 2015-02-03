@@ -3,10 +3,10 @@
 \alias{uncacheTable}
 \title{Uncache Table}
 \usage{
-uncacheTable(sqlctx, tableName)
+uncacheTable(sqlCtx, tableName)
 }
 \arguments{
-\item{sqlctx}{SQLContext to use}
+\item{sqlCtx}{SQLContext to use}
 
 \item{tableName}{The name of the table being uncached}
 }
@@ -15,5 +15,13 @@ DataFrame
 }
 \description{
 Removes the specified table from the in-memory cache.
+}
+\examples{
+\dontrun{
+sc <- sparkR.init()
+sqlCtx <- sparkRSQL.init(sc)
+df <- table(sqlCtx, "table")
+uncacheTable(sqlCtx, "table")
+}
 }
 

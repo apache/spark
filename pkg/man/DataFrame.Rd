@@ -5,7 +5,7 @@
 \alias{dataFrame}
 \title{S4 class that represents a DataFrame}
 \usage{
-dataFrame(sdf, isCached = FALSE, isCheckpointed = FALSE)
+dataFrame(sdf)
 }
 \arguments{
 \item{sdf}{A Java object reference to the backing Scala SchemaRDD}

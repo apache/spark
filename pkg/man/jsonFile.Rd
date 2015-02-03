@@ -3,10 +3,10 @@
 \alias{jsonFile}
 \title{Create a DataFrame from a JSON file.}
 \usage{
-jsonFile(sqlctx, path)
+jsonFile(sqlCtx, path)
 }
 \arguments{
-\item{sqlctx}{SQLContext to use}
+\item{sqlCtx}{SQLContext to use}
 
 \item{path}{Path of file to read. A vector of multiple paths is allowed.}
 }
@@ -16,5 +16,13 @@ DataFrame
 \description{
 Loads a JSON file (one object per line), returning the result as a DataFrame
 It goes through the entire dataset once to determine the schema.
+}
+\examples{
+\dontrun{
+sc <- sparkR.init()
+sqlCtx <- sparkRSQL.init(sc)
+path <- "path/to/file.json"
+df <- jsonFile(sqlCtx, path)
+}
 }
 

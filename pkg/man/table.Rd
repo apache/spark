@@ -3,12 +3,12 @@
 \alias{table}
 \title{Create a DataFrame from a SparkSQL Table}
 \usage{
-table(sqlctx, tableName)
+table(sqlCtx, tableName)
 }
 \arguments{
-\item{sqlctx}{SQLContext to use}
+\item{sqlCtx}{SQLContext to use}
 
-\item{sqlQuery}{A character vector containing the SQL query}
+\item{tableName}{The SparkSQL Table to convert to a DataFrame.}
 }
 \value{
 DataFrame
@@ -16,5 +16,15 @@ DataFrame
 \description{
 Returns the specified Table as a DataFrame.  The Table must have already been registered
 in the SQLContext.
+}
+\examples{
+\dontrun{
+sc <- sparkR.init()
+sqlCtx <- sparkRSQL.init(sc)
+path <- "path/to/file.json"
+df <- jsonFile(sqlCtx, path)
+registerTempTable(df, "table")
+new_df <- table(sqlCtx, "table")
+}
 }
 

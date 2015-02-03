@@ -13,4 +13,14 @@ registerTempTable(df, tableName)
 \description{
 Registers a DataFrame as a Temporary Table in the SQLContext
 }
+\examples{
+\dontrun{
+sc <- sparkR.init()
+sqlCtx <- sparkRSQL.init(sc)
+path <- "path/to/file.json"
+df <- jsonFile(sqlCtx, path)
+registerTempTable(df, "json_df")
+new_df <- sql(sqlCtx, "SELECT * FROM json_df")
+}
+}
 

@@ -3,10 +3,10 @@
 \alias{sql}
 \title{SQL Query}
 \usage{
-sql(sqlctx, sqlQuery)
+sql(sqlCtx, sqlQuery)
 }
 \arguments{
-\item{sqlctx}{SQLContext to use}
+\item{sqlCtx}{SQLContext to use}
 
 \item{sqlQuery}{A character vector containing the SQL query}
 }
@@ -15,5 +15,15 @@ DataFrame
 }
 \description{
 Executes a SQL query using Spark, returning the result as a DataFrame.
+}
+\examples{
+\dontrun{
+sc <- sparkR.init()
+sqlCtx <- sparkRSQL.init(sc)
+path <- "path/to/file.json"
+df <- jsonFile(sqlCtx, path)
+registerTempTable(df, "table")
+new_df <- sql(sqlCtx, "SELECT * FROM table")
+}
 }
 

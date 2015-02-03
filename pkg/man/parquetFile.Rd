@@ -3,10 +3,10 @@
 \alias{parquetFile}
 \title{Create a DataFrame from a Parquet file.}
 \usage{
-parquetFile(sqlctx, path)
+parquetFile(sqlCtx, path)
 }
 \arguments{
-\item{sqlctx}{SQLContext to use}
+\item{sqlCtx}{SQLContext to use}
 
 \item{path}{Path of file to read. A vector of multiple paths is allowed.}
 }

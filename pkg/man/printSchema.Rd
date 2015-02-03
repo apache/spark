@@ -11,4 +11,13 @@ printSchema(df)
 \description{
 Prints out the schema in tree format
 }
+\examples{
+\dontrun{
+sc <- sparkR.init()
+sqlCtx <- sparkRSQL.init(sc)
+path <- "path/to/file.json"
+df <- jsonFile(sqlCtx, path)
+printSchema(df)
+}
+}
 
