@@ -62,7 +62,7 @@ __all__ = [
     "StringType", "BinaryType", "BooleanType", "DateType", "TimestampType", "DecimalType",
     "DoubleType", "FloatType", "ByteType", "IntegerType", "LongType",
     "ShortType", "ArrayType", "MapType", "StructField", "StructType",
-    "SQLContext", "HiveContext", "DataFrame", "GroupedDataFrame", "Column", "Row",
+    "SQLContext", "HiveContext", "DataFrame", "GroupedDataFrame", "Column", "Row", "Dsl",
     "SchemaRDD"]
 
 
@@ -2121,6 +2121,8 @@ class DataFrame(object):
 
         >>> df.sort(df.age.desc()).collect()
         [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
+        >>> df.sortBy(df.age.desc()).collect()
+        [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
         """
         if not cols:
             raise ValueError("should sort by at least one column")
@@ -2427,34 +2429,34 @@ def _scalaMethod(name):
     return ''.join(SCALA_METHOD_MAPPINGS.get(c, c) for c in name)
 
 
-def _unary_op(name):
+def _unary_op(name, doc="unary operator"):
     """ Create a method for given unary operator """
     def _(self):
         jc = getattr(self._jc, _scalaMethod(name))()
         return Column(jc, self.sql_ctx)
+    _.__doc__ = doc
     return _
 
 
-def _bin_op(name):
+def _bin_op(name, doc="binary operator"):
     """ Create a method for given binary operator
-
-    Keyword arguments:
-    pass_literal_through -- whether to pass literal value directly through to the JVM.
     """
     def _(self, other):
         jc = other._jc if isinstance(other, Column) else other
         njc = getattr(self._jc, _scalaMethod(name))(jc)
         return Column(njc, self.sql_ctx)
+    _.__doc__ = doc
     return _
 
 
-def _reverse_op(name):
+def _reverse_op(name, doc="binary operator"):
     """ Create a method for binary operator (this object is on right side)
     """
     def _(self, other):
         jother = _create_column_from_literal(other)
         jc = getattr(jother, _scalaMethod(name))(self._jc)
         return Column(jc, self.sql_ctx)
+    _.__doc__ = doc
     return _
 
 
@@ -2491,8 +2493,6 @@ class Column(DataFrame):
     __rdiv__ = _reverse_op("/")
     __rmod__ = _reverse_op("%")
     __abs__ = _unary_op("abs")
-    abs = _unary_op("abs")
-    sqrt = _unary_op("sqrt")
 
     # logistic operators
     __eq__ = _bin_op("===")
@@ -2501,36 +2501,25 @@ class Column(DataFrame):
     __le__ = _bin_op("<=")
     __ge__ = _bin_op(">=")
     __gt__ = _bin_op(">")
-    # `and`, `or`, `not` cannot be overloaded in Python
-    And = _bin_op('&&')
-    Or = _bin_op('||')
-    Not = _unary_op('unary_!')
 
-    # bitwise operators
-    __and__ = _bin_op("&")
-    __or__ = _bin_op("|")
-    __invert__ = _unary_op("unary_~")
-    __xor__ = _bin_op("^")
-    # __lshift__ = _bin_op("<<")
-    # __rshift__ = _bin_op(">>")
-    __rand__ = _bin_op("&")
-    __ror__ = _bin_op("|")
-    __rxor__ = _bin_op("^")
-    # __rlshift__ = _reverse_op("<<")
-    # __rrshift__ = _reverse_op(">>")
+    # `and`, `or`, `not` cannot be overloaded in Python,
+    # so use bitwise operators as boolean operators
+    __and__ = _bin_op('&&')
+    __or__ = _bin_op('||')
+    __invert__ = _unary_op('unary_!')
+    __rand__ = _bin_op("&&")
+    __ror__ = _bin_op("||")
 
     # container operators
     __contains__ = _bin_op("contains")
     __getitem__ = _bin_op("getItem")
-    # __getattr__ = _bin_op("getField")
+    getField = _bin_op("getField", "An expression that gets a field by name in a StructField.")
 
     # string methods
     rlike = _bin_op("rlike")
     like = _bin_op("like")
     startswith = _bin_op("startsWith")
     endswith = _bin_op("endsWith")
-    upper = _unary_op("upper")
-    lower = _unary_op("lower")
 
     def substr(self, startPos, length):
         """
@@ -2558,12 +2547,20 @@ class Column(DataFrame):
     asc = _unary_op("asc")
     desc = _unary_op("desc")
 
-    isNull = _unary_op("isNull")
-    isNotNull = _unary_op("isNotNull")
+    isNull = _unary_op("isNull", "True if the current expression is null.")
+    isNotNull = _unary_op("isNotNull", "True if the current expression is not null.")
 
     # `as` is keyword
-    def As(self, alias):
+    def alias(self, alias):
+        """Return a alias for this column
+
+        >>> df.age.As("age2").collect()
+        [Row(age2=2), Row(age2=5)]
+        >>> df.age.alias("age2").collect()
+        [Row(age2=2), Row(age2=5)]
+        """
         return Column(getattr(self._jc, "as")(alias), self.sql_ctx)
+    As = alias
 
     def cast(self, dataType):
         """ Convert the column into type `dataType`
@@ -2580,13 +2577,14 @@ class Column(DataFrame):
         return Column(self._jc.cast(jdt), self.sql_ctx)
 
 
-def _aggregate_func(name):
+def _aggregate_func(name, doc=""):
     """ Create a function for aggregator by name"""
     def _(col):
         sc = SparkContext._active_spark_context
         jc = getattr(sc._jvm.Dsl, name)(_to_java_column(col))
         return Column(jc)
-
+    _.__name__ = name
+    _.__doc__ = doc
     return staticmethod(_)
 
 
@@ -2594,13 +2592,29 @@ class Dsl(object):
     """
     A collections of builtin aggregators
     """
-    AGGS = [
-        'lit', 'col', 'column', 'upper', 'lower', 'sqrt', 'abs',
-        'min', 'max', 'first', 'last', 'count', 'avg', 'mean', 'sum', 'sumDistinct',
-    ]
-    for _name in AGGS:
-        locals()[_name] = _aggregate_func(_name)
-    del _name
+    DSLS = {
+        'lit': 'Creates a [[Column]] of literal value.',
+        'col': 'Returns a [[Column]] based on the given column name.',
+        'column': 'Returns a [[Column]] based on the given column name.',
+        'upper': 'Converts a string expression to upper case.',
+        'lower': 'Converts a string expression to upper case.',
+        'sqrt': 'Computes the square root of the specified float value.',
+        'abs': 'Computes the absolutle value.',
+
+        'max': 'Aggregate function: returns the maximum value of the expression in a group.',
+        'min': 'Aggregate function: returns the minimum value of the expression in a group.',
+        'first': 'Aggregate function: returns the first value in a group.',
+        'last': 'Aggregate function: returns the last value in a group.',
+        'count': 'Aggregate function: returns the number of items in a group.',
+        'sum': 'Aggregate function: returns the sum of all values in the expression.',
+        'avg': 'Aggregate function: returns the average of the values in a group.',
+        'mean': 'Aggregate function: returns the average of the values in a group.',
+        'sumDistinct': 'Aggregate function: returns the sum of distinct values in the expression.',
+    }
+
+    for _name, _doc in DSLS.items():
+        locals()[_name] = _aggregate_func(_name, _doc)
+    del _name, _doc
 
     @staticmethod
     def countDistinct(col, *cols):
