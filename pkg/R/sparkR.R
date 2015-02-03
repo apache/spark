@@ -165,7 +165,6 @@ sparkR.init <- function(
 #'}
 
 sparkRSQL.init <- function(jsc) {
-  
   sparkContext = callJMethod(jsc, "sc")
   
   if (exists(".sparkRSQLsc", envir = .sparkREnv)) {
