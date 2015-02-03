@@ -23,7 +23,7 @@ export HADOOP_HOME="<path to>/hadoop-1.0.4"
 Using the console
 =================
 An interactive scala console can be invoked by running `build/sbt hive/console`.
-From here you can execute queries with HiveQl and manipulate DataFrame using DSL.
+From here you can execute queries with HiveQl and manipulate DataFrame by using DSL.
 
 ```scala
 catalyst$ build/sbt hive/console
