@@ -17,13 +17,12 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{File, ObjectInputStream, ObjectOutputStream, IOException}
+import java.io.File
 
 import org.mockito.Matchers
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
-import org.scalatest.concurrent.Timeouts
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
 import org.apache.hadoop.mapred.{TaskAttemptID, JobConf, TaskAttemptContext, OutputCommitter}
@@ -31,8 +30,6 @@ import org.apache.hadoop.mapred.{TaskAttemptID, JobConf, TaskAttemptContext, Out
 import org.apache.spark._
 import org.apache.spark.rdd.FakeOutputCommitter
 import org.apache.spark.util.Utils
-
-import scala.collection.mutable.ArrayBuffer
 
 /**
  * Unit tests for the output commit coordination functionality.
@@ -62,29 +59,21 @@ import scala.collection.mutable.ArrayBuffer
  * increments would be captured even though the commit in both tasks was executed
  * erroneously.
  */
-class OutputCommitCoordinatorSuite
-    extends FunSuite
-    with BeforeAndAfter
-    with Timeouts {
-
-  val conf = new SparkConf()
-    .set("spark.localExecution.enabled", "true")
+class OutputCommitCoordinatorSuite extends FunSuite with BeforeAndAfter {
 
   var dagScheduler: DAGScheduler = null
   var tempDir: File = null
-  var tempDirPath: String = null
   var sc: SparkContext = null
 
   before {
-    sc = new SparkContext("local[4]", "Output Commit Coordinator Suite")
+    sc = new SparkContext("local[4]", classOf[OutputCommitCoordinatorSuite].getSimpleName)
     tempDir = Utils.createTempDir()
-    tempDirPath = tempDir.getAbsolutePath()
     // Use Mockito.spy() to maintain the default infrastructure everywhere else
     val mockTaskScheduler = spy(sc.taskScheduler.asInstanceOf[TaskSchedulerImpl])
 
     doAnswer(new Answer[Unit]() {
       override def answer(invoke: InvocationOnMock): Unit = {
-        // Submit the tasks, then, force the task scheduler to dequeue the
+        // Submit the tasks, then force the task scheduler to dequeue the
         // speculated task
         invoke.callRealMethod()
         mockTaskScheduler.backend.reviveOffers()
@@ -94,7 +83,7 @@ class OutputCommitCoordinatorSuite
     doAnswer(new Answer[TaskSetManager]() {
       override def answer(invoke: InvocationOnMock): TaskSetManager = {
         val taskSet = invoke.getArguments()(0).asInstanceOf[TaskSet]
-        return new TaskSetManager(mockTaskScheduler, taskSet, 4) {
+        new TaskSetManager(mockTaskScheduler, taskSet, 4) {
           var hasDequeuedSpeculatedTask = false
           override def dequeueSpeculativeTask(
               execId: String,
@@ -102,9 +91,9 @@ class OutputCommitCoordinatorSuite
               locality: TaskLocality.Value): Option[(Int, TaskLocality.Value)] = {
             if (!hasDequeuedSpeculatedTask) {
               hasDequeuedSpeculatedTask = true
-              return Some(0, TaskLocality.PROCESS_LOCAL)
+              Some(0, TaskLocality.PROCESS_LOCAL)
             } else {
-              return None
+              None
             }
           }
         }
@@ -122,82 +111,64 @@ class OutputCommitCoordinatorSuite
     tempDir.delete()
   }
 
-  /**
-   * Function that constructs a SparkHadoopWriter with a mock committer and runs its commit
-   */
-  private class OutputCommittingFunction(private var tempDirPath: String)
-      extends ((TaskContext, Iterator[Int]) => Int) with Serializable {
-
-    def apply(ctxt: TaskContext, it: Iterator[Int]): Int = {
-      val outputCommitter = new FakeOutputCommitter {
-        override def commitTask(context: TaskAttemptContext) : Unit = {
-          Utils.createDirectory(tempDirPath)
-        }
-      }
-      runCommitWithProvidedCommitter(ctxt, it, outputCommitter)
-    }
-
-    protected def runCommitWithProvidedCommitter(
-        ctxt: TaskContext,
-        it: Iterator[Int],
-        outputCommitter: OutputCommitter): Int = {
-      def jobConf = new JobConf {
-        override def getOutputCommitter(): OutputCommitter = outputCommitter
-      }
-      val sparkHadoopWriter = new SparkHadoopWriter(jobConf) {
-        override def newTaskAttemptContext(
-            conf: JobConf,
-            attemptId: TaskAttemptID): TaskAttemptContext = {
-          mock(classOf[TaskAttemptContext])
-        }
-      }
-      sparkHadoopWriter.setup(ctxt.stageId, ctxt.partitionId, ctxt.attemptNumber)
-      sparkHadoopWriter.commit
-      0
-    }
-
-    // Need this otherwise the entire test suite attempts to be serialized
-    @throws(classOf[IOException])
-    private def writeObject(out: ObjectOutputStream): Unit = {
-      out.writeUTF(tempDirPath)
-    }
-
-    @throws(classOf[IOException])
-    private def readObject(in: ObjectInputStream): Unit = {
-      tempDirPath = in.readUTF()
-    }
-  }
-
-  /**
-   * Function that will explicitly fail to commit on the first attempt
-   */
-  private class FailFirstTimeCommittingFunction(private var tempDirPath: String)
-      extends OutputCommittingFunction(tempDirPath) {
-    override def apply(ctxt: TaskContext, it: Iterator[Int]): Int = {
-      if (ctxt.attemptNumber == 0) {
-        val outputCommitter = new FakeOutputCommitter {
-          override def commitTask(taskAttemptContext: TaskAttemptContext) {
-            throw new RuntimeException
-          }
-        }
-        runCommitWithProvidedCommitter(ctxt, it, outputCommitter)
-      } else {
-        super.apply(ctxt, it)
-      }
-    }
-  }
-
   test("Only one of two duplicate commit tasks should commit") {
     val rdd = sc.parallelize(Seq(1), 1)
-    sc.runJob(rdd, new OutputCommittingFunction(tempDirPath),
-      0 until rdd.partitions.size, allowLocal = true)
+    sc.runJob(rdd, OutputCommitFunctions(tempDir.getAbsolutePath).commitSuccessfully _,
+      0 until rdd.partitions.size, allowLocal = false)
     assert(tempDir.list().size === 1)
   }
 
   test("If commit fails, if task is retried it should not be locked, and will succeed.") {
     val rdd = sc.parallelize(Seq(1), 1)
-    sc.runJob(rdd, new FailFirstTimeCommittingFunction(tempDirPath),
-      0 until rdd.partitions.size, allowLocal = true)
+    sc.runJob(rdd, OutputCommitFunctions(tempDir.getAbsolutePath).failFirstCommitAttempt _,
+      0 until rdd.partitions.size, allowLocal = false)
     assert(tempDir.list().size === 1)
+  }
+}
+
+/**
+ * Class with methods that can be passed to runJob to test commits with a mock committer.
+ */
+private case class OutputCommitFunctions(tempDirPath: String) {
+
+  // Mock output committer that simulates a successful commit (after commit is authorized)
+  private def successfulOutputCommitter = new FakeOutputCommitter {
+    override def commitTask(context: TaskAttemptContext): Unit = {
+      Utils.createDirectory(tempDirPath)
+    }
+  }
+
+  // Mock output committer that simulates a failed commit (after commit is authorized)
+  private def failingOutputCommitter = new FakeOutputCommitter {
+    override def commitTask(taskAttemptContext: TaskAttemptContext) {
+      throw new RuntimeException
+    }
+  }
+
+  def commitSuccessfully(ctx: TaskContext, iter: Iterator[Int]): Unit = {
+    runCommitWithProvidedCommitter(ctx, iter, successfulOutputCommitter)
+  }
+
+  def failFirstCommitAttempt(ctx: TaskContext, iter: Iterator[Int]): Unit = {
+    runCommitWithProvidedCommitter(ctx, iter,
+      if (ctx.attemptNumber == 0) failingOutputCommitter else successfulOutputCommitter)
+  }
+
+  private def runCommitWithProvidedCommitter(
+      ctx: TaskContext,
+      iter: Iterator[Int],
+      outputCommitter: OutputCommitter): Unit = {
+    def jobConf = new JobConf {
+      override def getOutputCommitter(): OutputCommitter = outputCommitter
+    }
+    val sparkHadoopWriter = new SparkHadoopWriter(jobConf) {
+      override def newTaskAttemptContext(
+        conf: JobConf,
+        attemptId: TaskAttemptID): TaskAttemptContext = {
+        mock(classOf[TaskAttemptContext])
+      }
+    }
+    sparkHadoopWriter.setup(ctx.stageId, ctx.partitionId, ctx.attemptNumber)
+    sparkHadoopWriter.commit()
   }
 }
