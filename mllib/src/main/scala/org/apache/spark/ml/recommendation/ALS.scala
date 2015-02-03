@@ -22,6 +22,7 @@ import java.{util => ju}
 import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.util.Sorting
+import scala.util.hashing.byteswap64
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import com.github.fommil.netlib.LAPACK.{getInstance => lapack}
@@ -424,7 +425,8 @@ object ALS extends Logging {
       alpha: Double = 1.0,
       nonnegative: Boolean = false,
       intermediateRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
-      finalRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK)(
+      finalRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
+      seed: Long = 0L)(
       implicit ord: Ordering[ID]): (RDD[(ID, Array[Float])], RDD[(ID, Array[Float])]) = {
     require(intermediateRDDStorageLevel != StorageLevel.NONE,
       "ALS is not designed to run without persisting intermediate RDDs.")
@@ -447,8 +449,9 @@ object ALS extends Logging {
       makeBlocks("item", swappedBlockRatings, itemPart, userPart, intermediateRDDStorageLevel)
     // materialize item blocks
     itemOutBlocks.count()
-    var userFactors = initialize(userInBlocks, rank)
-    var itemFactors = initialize(itemInBlocks, rank)
+    val seedGen = new XORShiftRandom(seed)
+    var userFactors = initialize(userInBlocks, rank, seedGen.nextLong())
+    var itemFactors = initialize(itemInBlocks, rank, seedGen.nextLong())
     if (implicitPrefs) {
       for (iter <- 1 to maxIter) {
         userFactors.setName(s"userFactors-$iter").persist(intermediateRDDStorageLevel)
@@ -556,14 +559,15 @@ object ALS extends Logging {
    */
   private def initialize[ID](
       inBlocks: RDD[(Int, InBlock[ID])],
-      rank: Int): RDD[(Int, FactorBlock)] = {
+      rank: Int,
+      seed: Long): RDD[(Int, FactorBlock)] = {
     // Choose a unit vector uniformly at random from the unit sphere, but from the
     // "first quadrant" where all elements are nonnegative. This can be done by choosing
     // elements distributed as Normal(0,1) and taking the absolute value, and then normalizing.
     // This appears to create factorizations that have a slightly better reconstruction
     // (<1%) compared picking elements uniformly at random in [0,1].
     inBlocks.map { case (srcBlockId, inBlock) =>
-      val random = new XORShiftRandom(srcBlockId)
+      val random = new XORShiftRandom(byteswap64(seed ^ srcBlockId))
       val factors = Array.fill(inBlock.srcIds.length) {
         val factor = Array.fill(rank)(random.nextGaussian().toFloat)
         val nrm = blas.snrm2(rank, factor, 1)

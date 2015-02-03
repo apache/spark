@@ -201,6 +201,8 @@ class ALS private (
    */
   @DeveloperApi
   def setIntermediateRDDStorageLevel(storageLevel: StorageLevel): this.type = {
+    require(storageLevel != StorageLevel.NONE,
+      "ALS is not designed to run without persisting intermediate RDDs.")
     this.intermediateRDDStorageLevel = storageLevel
     this
   }
