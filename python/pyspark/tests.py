@@ -23,7 +23,6 @@ from array import array
 from fileinput import input
 from glob import glob
 import os
-import pydoc
 import re
 import shutil
 import subprocess

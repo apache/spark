@@ -20,10 +20,19 @@ Unit tests for pyspark.sql; additional tests are implemented as doctests in
 individual modules.
 """
 import os
+import sys
 import pydoc
 import shutil
 import tempfile
-import unittest
+
+if sys.version_info[:2] <= (2, 6):
+    try:
+        import unittest2 as unittest
+    except ImportError:
+        sys.stderr.write('Please install unittest2 to test with Python 2.6 or earlier')
+        sys.exit(1)
+else:
+    import unittest
 
 from pyspark.sql import SQLContext, IntegerType, Row, ArrayType, StructType, StructField, \
     UserDefinedType, DoubleType
@@ -83,17 +92,15 @@ class SQLTests(ReusedPySparkTestCase):
         ReusedPySparkTestCase.setUpClass()
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
         os.unlink(cls.tempdir.name)
+        cls.sqlCtx = SQLContext(cls.sc)
+        cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
+        rdd = cls.sc.parallelize(cls.testData)
+        cls.df = cls.sqlCtx.inferSchema(rdd)
 
     @classmethod
     def tearDownClass(cls):
         ReusedPySparkTestCase.tearDownClass()
         shutil.rmtree(cls.tempdir.name, ignore_errors=True)
-
-    def setUp(self):
-        self.sqlCtx = SQLContext(self.sc)
-        self.testData = [Row(key=i, value=str(i)) for i in range(100)]
-        rdd = self.sc.parallelize(self.testData)
-        self.df = self.sqlCtx.inferSchema(rdd)
 
     def test_udf(self):
         self.sqlCtx.registerFunction("twoArgs", lambda x, y: len(x) + y, IntegerType())
