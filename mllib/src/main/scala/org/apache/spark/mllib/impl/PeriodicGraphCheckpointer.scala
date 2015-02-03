@@ -48,6 +48,7 @@ import org.apache.spark.storage.StorageLevel
  *    However, references to the older graphs will still return isCheckpointed = true.
  *
  * Example usage:
+ * {{{
  *  val (graph1, graph2, graph3, ...) = ...
  *  val cp = new PeriodicGraphCheckpointer(graph, dir, 2)
  *  // persisted: graph1
@@ -63,12 +64,15 @@ import org.apache.spark.storage.StorageLevel
  *  cp.updateGraph(graph5)
  *  // persisted: graph3, graph4, graph5
  *  // checkpointed: graph4
+ * }}}
  *
  * @param currentGraph  Initial graph
  * @param checkpointDir The directory for storing checkpoint files
  * @param checkpointInterval Graphs will be checkpointed at this interval
  * @tparam VD  Vertex descriptor type
  * @tparam ED  Edge descriptor type
+ *
+ * TODO: Generalize this for Graphs and RDDs, and move it out of MLlib.
  */
 private[mllib] class PeriodicGraphCheckpointer[VD, ED](
     var currentGraph: Graph[VD, ED],

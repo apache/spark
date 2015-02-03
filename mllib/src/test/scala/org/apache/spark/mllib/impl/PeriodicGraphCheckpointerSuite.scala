@@ -76,6 +76,11 @@ class PeriodicGraphCheckpointerSuite extends FunSuite with MLlibTestSparkContext
       iteration += 1
     }
 
+    checkpointer.deleteAllCheckpoints()
+    graphsToCheck.foreach { graph =>
+      confirmCheckpointRemoved(graph.graph)
+    }
+
     Utils.deleteRecursively(tempDir)
   }
 }
@@ -130,6 +135,18 @@ private object PeriodicGraphCheckpointerSuite {
     }
   }
 
+  def confirmCheckpointRemoved(graph: Graph[_, _]): Unit = {
+    // Note: We cannot check graph.isCheckpointed since that value is never updated.
+    //       Instead, we check for the presence of the checkpoint files.
+    //       This test should continue to work even after this graph.isCheckpointed issue
+    //       is fixed (though it can then be simplified and not look for the files).
+    val fs = FileSystem.get(graph.vertices.sparkContext.hadoopConfiguration)
+    graph.getCheckpointFiles.foreach { checkpointFile =>
+      assert(!fs.exists(new Path(checkpointFile)),
+        "Graph checkpoint file should have been removed")
+    }
+  }
+
   /**
    * Check checkpointed status of graph.
    * @param gIndex  Index of graph in order inserted into checkpointer (from 1).
@@ -148,15 +165,7 @@ private object PeriodicGraphCheckpointerSuite {
           assert(graph.isCheckpointed, "Graph should be checkpointed")
           assert(graph.getCheckpointFiles.length == 2, "Graph should have 2 checkpoint files")
         } else {
-          // Note: We cannot check graph.isCheckpointed since that value is never updated.
-          //       Instead, we check for the presence of the checkpoint files.
-          //       This test should continue to work even after this graph.isCheckpointed issue
-          //       is fixed (though it can then be simplified and not look for the files).
-          val fs = FileSystem.get(graph.vertices.sparkContext.hadoopConfiguration)
-          graph.getCheckpointFiles.foreach { checkpointFile =>
-            assert(!fs.exists(new Path(checkpointFile)),
-              "Graph checkpoint file should have been removed")
-          }
+          confirmCheckpointRemoved(graph)
         }
       } else {
         // Graph should never be checkpointed

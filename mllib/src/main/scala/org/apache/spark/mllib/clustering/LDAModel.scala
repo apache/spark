@@ -19,21 +19,21 @@ package org.apache.spark.mllib.clustering
 
 import breeze.linalg.{DenseMatrix => BDM, normalize, sum => brzSum}
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.graphx.{VertexId, EdgeContext, Graph}
 import org.apache.spark.mllib.linalg.{Vectors, Vector, Matrices, Matrix}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.BoundedPriorityQueue
 
 /**
- * :: DeveloperApi ::
+ * :: Experimental ::
  *
  * Latent Dirichlet Allocation (LDA) model.
  *
  * This abstraction permits for different underlying representations,
  * including local and distributed data structures.
  */
-@DeveloperApi
+@Experimental
 abstract class LDAModel private[clustering] {
 
   /** Number of topics */
@@ -57,8 +57,8 @@ abstract class LDAModel private[clustering] {
    * To get a more precise set of top terms, increase maxTermsPerTopic.
    *
    * @param maxTermsPerTopic  Maximum number of terms to collect for each topic.
-   * @return  Array over topics, where each element is a set of top terms represented
-   *          as (term index, term weight in topic).
+   * @return  Array over topics.  Each topic is represented as a pair of matching arrays:
+   *          (term indices, term weights in topic).
    *          Each topic's terms are sorted in order of decreasing weight.
    */
   def describeTopics(maxTermsPerTopic: Int): Array[(Array[Int], Array[Double])]
@@ -68,8 +68,8 @@ abstract class LDAModel private[clustering] {
    *
    * WARNING: If vocabSize and k are large, this can return a large object!
    *
-   * @return  Array over topics, where each element is a set of top terms represented
-   *          as (term index, term weight in topic).
+   * @return  Array over topics.  Each topic is represented as a pair of matching arrays:
+   *          (term indices, term weights in topic).
    *          Each topic's terms are sorted in order of decreasing weight.
    */
   def describeTopics(): Array[(Array[Int], Array[Double])] = describeTopics(vocabSize)
@@ -86,9 +86,9 @@ abstract class LDAModel private[clustering] {
    * To get a more precise set of top terms, increase maxTermsPerTopic.
    *
    * @param maxTermsPerTopic  Maximum number of terms to collect for each topic.
-   * @return  Array over topics, where each element is a set of top terms represented
-   *          as (term, term weight in topic), where "term" is either the actual term text
-   *          (if available) or the term index.
+   * @return  Array over topics.  Each topic is represented as a pair of matching arrays:
+   *          (terms, term weights in topic) where terms are either the actual term text
+   *          (if available) or the term indices.
    *          Each topic's terms are sorted in order of decreasing weight.
    */
   // def describeTopicsAsStrings(maxTermsPerTopic: Int): Array[(Array[Double], Array[String])]
@@ -102,9 +102,9 @@ abstract class LDAModel private[clustering] {
    *
    * WARNING: If vocabSize and k are large, this can return a large object!
    *
-   * @return  Array over topics, where each element is a set of top terms represented
-   *          as (term, term weight in topic), where "term" is either the actual term text
-   *          (if available) or the term index.
+   * @return  Array over topics.  Each topic is represented as a pair of matching arrays:
+   *          (terms, term weights in topic) where terms are either the actual term text
+   *          (if available) or the term indices.
    *          Each topic's terms are sorted in order of decreasing weight.
    */
   // def describeTopicsAsStrings(): Array[(Array[Double], Array[String])] =
@@ -146,19 +146,16 @@ abstract class LDAModel private[clustering] {
 }
 
 /**
- * :: DeveloperApi ::
+ * :: Experimental ::
  *
  * Local LDA model.
  * This model stores only the inferred topics.
  * It may be used for computing topics for new documents, but it may give less accurate answers
  * than the [[DistributedLDAModel]].
  *
- * NOTE: This is currently marked DeveloperApi since it is under active development and may undergo
- *       API changes.
- *
  * @param topics Inferred topics (vocabSize x k matrix).
  */
-@DeveloperApi
+@Experimental
 class LocalLDAModel private[clustering] (
     private val topics: Matrix) extends LDAModel with Serializable {
 
@@ -187,17 +184,14 @@ class LocalLDAModel private[clustering] (
 }
 
 /**
- * :: DeveloperApi ::
+ * :: Experimental ::
  *
  * Distributed LDA model.
  * This model stores the inferred topics, the full training dataset, and the topic distributions.
  * When computing topics for new documents, it may give more accurate answers
  * than the [[LocalLDAModel]].
- *
- * NOTE: This is currently marked DeveloperApi since it is under active development and may undergo
- *       API changes.
  */
-@DeveloperApi
+@Experimental
 class DistributedLDAModel private (
     private val graph: Graph[LDA.TopicCounts, LDA.TokenCount],
     private val globalTopicTotals: LDA.TopicCounts,

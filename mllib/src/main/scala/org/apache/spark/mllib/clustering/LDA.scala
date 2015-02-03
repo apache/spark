@@ -22,8 +22,8 @@ import java.util.Random
 import breeze.linalg.{DenseVector => BDV, normalize, axpy => brzAxpy}
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.api.java.JavaPairRDD
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.GraphImpl
 import org.apache.spark.mllib.impl.PeriodicGraphCheckpointer
@@ -33,7 +33,7 @@ import org.apache.spark.util.Utils
 
 
 /**
- * :: DeveloperApi ::
+ * :: Experimental ::
  *
  * Latent Dirichlet Allocation (LDA), a topic model designed for text documents.
  *
@@ -52,11 +52,8 @@ import org.apache.spark.util.Utils
  *  - Paper which clearly explains several algorithms, including EM:
  *    Asuncion, Welling, Smyth, and Teh.
  *    "On Smoothing and Inference for Topic Models."  UAI, 2009.
- *
- * NOTE: This is currently marked DeveloperApi since it is under active development and may undergo
- *       API changes.
  */
-@DeveloperApi
+@Experimental
 class LDA private (
     private var k: Int,
     private var maxIterations: Int,
@@ -69,16 +66,24 @@ class LDA private (
   def this() = this(k = 10, maxIterations = 20, docConcentration = -1, topicConcentration = -1,
     seed = Utils.random.nextLong(), checkpointDir = None, checkpointInterval = 10)
 
+  def getK: Int = k
+
   /**
    * Number of topics to infer.  I.e., the number of soft cluster centers.
    * (default = 10)
    */
-  def getK: Int = k
-
   def setK(k: Int): this.type = {
     require(k > 0, s"LDA k (number of clusters) must be > 0, but was set to $k")
     this.k = k
     this
+  }
+
+  def getDocConcentration: Double = {
+    if (this.docConcentration == -1) {
+      (50.0 / k) + 1.0
+    } else {
+      this.docConcentration
+    }
   }
 
   /**
@@ -99,14 +104,6 @@ class LDA private (
    * Note: The restriction > 1.0 may be relaxed in the future (allowing sparse solutions),
    *       but values in (0,1) are not yet supported.
    */
-  def getDocConcentration: Double = {
-    if (this.docConcentration == -1) {
-      (50.0 / k) + 1.0
-    } else {
-      this.docConcentration
-    }
-  }
-
   def setDocConcentration(docConcentration: Double): this.type = {
     require(docConcentration > 1.0 || docConcentration == -1.0,
       s"LDA docConcentration must be > 1.0 (or -1 for auto), but was set to $docConcentration")
@@ -119,6 +116,14 @@ class LDA private (
 
   /** Alias for [[setDocConcentration()]] */
   def setAlpha(alpha: Double): this.type = setDocConcentration(alpha)
+
+  def getTopicConcentration: Double = {
+    if (this.topicConcentration == -1) {
+      1.1
+    } else {
+      this.topicConcentration
+    }
+  }
 
   /**
    * Term smoothing parameter (commonly named "beta" or "eta").
@@ -139,14 +144,6 @@ class LDA private (
    * Note: The restriction > 1.0 may be relaxed in the future (allowing sparse solutions),
    *       but values in (0,1) are not yet supported.
    */
-  def getTopicConcentration: Double = {
-    if (this.topicConcentration == -1) {
-      1.1
-    } else {
-      this.topicConcentration
-    }
-  }
-
   def setTopicConcentration(topicConcentration: Double): this.type = {
     require(topicConcentration > 1.0 || topicConcentration == -1.0,
       s"LDA topicConcentration must be > 1.0 (or -1 for auto), but was set to $topicConcentration")
@@ -160,33 +157,38 @@ class LDA private (
   /** Alias for [[setTopicConcentration()]] */
   def setBeta(beta: Double): this.type = setBeta(beta)
 
+  def getMaxIterations: Int = maxIterations
+
   /**
    * Maximum number of iterations for learning.
    * (default = 20)
    */
-  def getMaxIterations: Int = maxIterations
-
   def setMaxIterations(maxIterations: Int): this.type = {
     this.maxIterations = maxIterations
     this
   }
 
-  /** Random seed */
   def getSeed: Long = seed
 
+  /** Random seed */
   def setSeed(seed: Long): this.type = {
     this.seed = seed
     this
   }
+
+  def getCheckpointDir: Option[String] = checkpointDir
 
   /**
    * Directory for storing checkpoint files during learning.
    * This is not necessary, but checkpointing helps with recovery (when nodes fail).
    * It also helps with eliminating temporary shuffle files on disk, which can be important when
    * LDA is run for many iterations.
+   *
+   * NOTE: If the [[org.apache.spark.SparkContext.checkpointDir]] is already set, then the value
+   *       given to LDA is ignored, and the existing directory is kept.
+   *
+   * (default = None)
    */
-  def getCheckpointDir: Option[String] = checkpointDir
-
   def setCheckpointDir(checkpointDir: String): this.type = {
     this.checkpointDir = Some(checkpointDir)
     this
@@ -197,12 +199,13 @@ class LDA private (
     this
   }
 
-  /**
-   * Period (in iterations) between checkpoints.
-   * @see [[getCheckpointDir]]
-   */
   def getCheckpointInterval: Int = checkpointInterval
 
+  /**
+   * Period (in iterations) between checkpoints.
+   * (default = 10)
+   * @see [[getCheckpointDir]]
+   */
   def setCheckpointInterval(checkpointInterval: Int): this.type = {
     this.checkpointInterval = checkpointInterval
     this
@@ -234,8 +237,8 @@ class LDA private (
   }
 
   /** Java-friendly version of [[run()]] */
-  def run(documents: JavaRDD[(java.lang.Long, Vector)]): DistributedLDAModel = {
-    run(documents.rdd.map(id_counts => (id_counts._1.asInstanceOf[Long], id_counts._2)))
+  def run(documents: JavaPairRDD[java.lang.Long, Vector]): DistributedLDAModel = {
+    run(documents.rdd.asInstanceOf[RDD[(Long, Vector)]])
   }
 }
 

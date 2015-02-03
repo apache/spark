@@ -17,9 +17,9 @@
 
 package org.apache.spark.examples.mllib
 
-import scala.collection.mutable
-
 import java.text.BreakIterator
+
+import scala.collection.mutable
 
 import scopt.OptionParser
 
@@ -174,10 +174,7 @@ object LDAExample {
 
     // Get dataset of document texts
     // One document per line in each text file.
-    val files: Seq[RDD[String]] = for (p <- paths) yield {
-      sc.textFile(p)
-    }
-    val textRDD: RDD[String] = files.reduce(_ ++ _) // combine results from multiple paths
+    val textRDD: RDD[String] = sc.textFile(paths.mkString(","))
 
     // Split text into words
     val tokenizer = new SimpleTokenizer(sc, stopwordFile)
@@ -190,19 +187,20 @@ object LDAExample {
     val wordCounts: RDD[(String, Long)] = tokenized
       .flatMap { case (_, tokens) => tokens.map(_ -> 1L) }
       .reduceByKey(_ + _)
-    // Sort words, and select vocab
-    val sortedWC = wordCounts.sortBy(_._2, ascending = false)
-    val selectedWC: Array[(String, Long)] = if (vocabSize == -1) {
-      sortedWC.collect()
-    } else {
-      sortedWC.take(vocabSize)
+    wordCounts.cache()
+    val fullVocabSize = wordCounts.count()
+    // Select vocab
+    //  (vocab: Map[word -> id], total tokens after selecting vocab)
+    val (vocab: Map[String, Int], selectedTokenCount: Long) = {
+      val tmpSortedWC: Array[(String, Long)] = if (vocabSize == -1 || fullVocabSize <= vocabSize) {
+        // Use all terms
+        wordCounts.collect().sortBy(-_._2)
+      } else {
+        // Sort terms to select vocab
+        wordCounts.sortBy(_._2, ascending = false).take(vocabSize)
+      }
+      (tmpSortedWC.map(_._1).zipWithIndex.toMap, tmpSortedWC.map(_._2).sum)
     }
-    val totalTokenCount = selectedWC.map(_._2).sum
-    // vocabulary: Map[word -> id]
-    val vocab: Map[String, Int] =
-      selectedWC.map(_._1)
-        .zipWithIndex
-        .toMap
 
     val documents = tokenized.map { case (id, tokens) =>
       // Filter tokens by vocabulary, and create word count vector representation of document.
@@ -223,7 +221,7 @@ object LDAExample {
     val vocabArray = new Array[String](vocab.size)
     vocab.foreach { case (term, i) => vocabArray(i) = term }
 
-    (documents, vocabArray, totalTokenCount)
+    (documents, vocabArray, selectedTokenCount)
   }
 }
 

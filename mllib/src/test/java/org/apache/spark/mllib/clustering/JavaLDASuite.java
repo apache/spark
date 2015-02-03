@@ -20,6 +20,7 @@ package org.apache.spark.mllib.clustering;
 import java.io.Serializable;
 import java.util.ArrayList;
 
+import org.apache.spark.api.java.JavaRDD;
 import scala.Tuple2;
 
 import org.junit.After;
@@ -28,7 +29,7 @@ import static org.junit.Assert.assertArrayEquals;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.linalg.Matrix;
 import org.apache.spark.mllib.linalg.Vector;
@@ -40,12 +41,13 @@ public class JavaLDASuite implements Serializable {
   @Before
   public void setUp() {
     sc = new JavaSparkContext("local", "JavaLDA");
-    tinyCorpus = new ArrayList<Tuple2<Long, Vector>>();
+    ArrayList<Tuple2<Long, Vector>> tinyCorpus = new ArrayList<Tuple2<Long, Vector>>();
     for (int i = 0; i < LDASuite$.MODULE$.tinyCorpus().length; i++) {
       tinyCorpus.add(new Tuple2<Long, Vector>((Long)LDASuite$.MODULE$.tinyCorpus()[i]._1(),
           LDASuite$.MODULE$.tinyCorpus()[i]._2()));
     }
-    corpus = sc.parallelize(tinyCorpus, 2);
+    JavaRDD<Tuple2<Long, Vector>> tmpCorpus = sc.parallelize(tinyCorpus, 2);
+    corpus = JavaPairRDD.fromJavaRDD(tmpCorpus);
   }
 
   @After
@@ -112,7 +114,6 @@ public class JavaLDASuite implements Serializable {
   private static Matrix tinyTopics = LDASuite$.MODULE$.tinyTopics();
   private static Tuple2<int[], double[]>[] tinyTopicDescription =
       LDASuite$.MODULE$.tinyTopicDescription();
-  private ArrayList<Tuple2<Long, Vector>> tinyCorpus;
-  JavaRDD<Tuple2<Long, Vector>> corpus;
+  JavaPairRDD<Long, Vector> corpus;
 
 }
