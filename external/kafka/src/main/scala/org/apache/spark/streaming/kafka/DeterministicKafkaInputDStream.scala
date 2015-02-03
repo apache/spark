@@ -32,24 +32,26 @@ import org.apache.spark.streaming.kafka.KafkaCluster.LeaderOffset
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.dstream._
 
-/** A stream of {@link org.apache.spark.streaming.kafka.KafkaRDD} where
-  * each given Kafka topic/partition corresponds to an RDD partition.
-  * The spark configuration spark.streaming.kafka.maxRatePerPartition gives the maximum number of messages
-  * per second that each '''partition''' will accept.
-  * Starting offsets are specified in advance,
-  * and this DStream is not responsible for committing offsets,
-  * so that you can control exactly-once semantics.
-  * For an easy interface to Kafka-managed offsets,
-  *  see {@link org.apache.spark.streaming.kafka.KafkaCluster}
-  * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
-  * configuration parameters</a>.
-  *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
-  *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
-  * @param fromOffsets per-topic/partition Kafka offsets defining the (inclusive)
-  *  starting point of the stream
-  * @param messageHandler function for translating each message into the desired type
-  * @param maxRetries maximum number of times in a row to retry getting leaders' offsets
-  */
+/**
+ *  A stream of {@link org.apache.spark.streaming.kafka.KafkaRDD} where
+ * each given Kafka topic/partition corresponds to an RDD partition.
+ * The spark configuration spark.streaming.kafka.maxRatePerPartition gives the maximum number
+ *  of messages
+ * per second that each '''partition''' will accept.
+ * Starting offsets are specified in advance,
+ * and this DStream is not responsible for committing offsets,
+ * so that you can control exactly-once semantics.
+ * For an easy interface to Kafka-managed offsets,
+ *  see {@link org.apache.spark.streaming.kafka.KafkaCluster}
+ * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+ * configuration parameters</a>.
+ *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
+ *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
+ * @param fromOffsets per-topic/partition Kafka offsets defining the (inclusive)
+ *  starting point of the stream
+ * @param messageHandler function for translating each message into the desired type
+ * @param maxRetries maximum number of times in a row to retry getting leaders' offsets
+ */
 private[streaming]
 class DeterministicKafkaInputDStream[
   K: ClassTag,
