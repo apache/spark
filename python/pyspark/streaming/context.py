@@ -191,6 +191,15 @@ class StreamingContext(object):
         else:
             self._jssc.awaitTermination(int(timeout * 1000))
 
+    def awaitTerminationOrTimeout(self, timeout):
+        """
+        Wait for the execution to stop. Return `true` if it's stopped; or
+        throw the reported error during the execution; or `false` if the
+        waiting time elapsed before returning from the method.
+        @param timeout: time to wait in seconds
+        """
+        self._jssc.awaitTerminationOrTimeout(int(timeout * 1000))
+
     def stop(self, stopSparkContext=True, stopGraceFully=False):
         """
         Stop the execution of the streams, with option of ensuring all
