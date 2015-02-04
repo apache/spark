@@ -657,7 +657,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    *
    * Load data from a flat binary file, assuming the length of each record is constant.
    *
-   * '''Note:''' We ensure that each record in the resulting RDD
+   * '''Note:''' We ensure that the byte array for each record in the resulting RDD
    * has the provided record length.
    *
    * @param path Directory to the input data files

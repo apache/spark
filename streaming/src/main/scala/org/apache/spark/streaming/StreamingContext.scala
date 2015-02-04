@@ -399,15 +399,15 @@ class StreamingContext private[streaming] (
 
   /**
    * :: Experimental ::
-   * 
+   *
    * Create an input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them as flat binary files, assuming a fixed length per record,
    * generating one byte array per record. Files must be written to the monitored directory
    * by "moving" them from another location within the same file system. File names
    * starting with . are ignored.
    *
-   * '''Note:''' We ensure that each record in the resulting RDDs of the DStream
-   * has the provided record length.
+   * '''Note:''' We ensure that the byte array for each record in the
+   * resulting RDDs of the DStream has the provided record length.
    *
    * @param directory HDFS directory to monitor for new file
    * @param recordLength length of each record in bytes
