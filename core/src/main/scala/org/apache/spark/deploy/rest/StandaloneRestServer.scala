@@ -19,7 +19,7 @@ package org.apache.spark.deploy.rest
 
 import java.io.{DataOutputStream, File}
 import java.net.InetSocketAddress
-import javax.servlet.http.{HttpServlet, HttpServletResponse, HttpServletRequest}
+import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import scala.io.Source
 
@@ -48,6 +48,15 @@ private[spark] class StandaloneRestServer(master: Master, host: String, requeste
   import StandaloneRestServer._
 
   private var _server: Option[Server] = None
+  private val basePrefix = s"/$PROTOCOL_VERSION/submissions"
+
+  // A mapping from servlets to the URL prefixes they are responsible for
+  private val servletToPrefix = Map[StandaloneRestServlet, String](
+    new SubmitRequestServlet(master) -> s"$basePrefix/create/*",
+    new KillRequestServlet(master) -> s"$basePrefix/kill/*",
+    new StatusRequestServlet(master) -> s"$basePrefix/status/*",
+    new ErrorServlet -> "/"
+  )
 
   /** Start the server and return the bound port. */
   def start(): Int = {
@@ -58,10 +67,7 @@ private[spark] class StandaloneRestServer(master: Master, host: String, requeste
   }
 
   /**
-   * Set up the mapping from contexts to the appropriate servlets:
-   *   (1) submit requests should be directed to /create
-   *   (2) kill requests should be directed to /kill
-   *   (3) status requests should be directed to /status
+   * Map the servlets to their corresponding contexts and attach them to a server.
    * Return a 2-tuple of the started server and the bound port.
    */
   private def doStart(startPort: Int): (Server, Int) = {
@@ -69,17 +75,11 @@ private[spark] class StandaloneRestServer(master: Master, host: String, requeste
     val threadPool = new QueuedThreadPool
     threadPool.setDaemon(true)
     server.setThreadPool(threadPool)
-    val pathPrefix = s"/$PROTOCOL_VERSION/submissions"
     val mainHandler = new ServletContextHandler
     mainHandler.setContextPath("/")
-    mainHandler.addServlet(
-      new ServletHolder(new SubmitRequestServlet(master)), s"$pathPrefix/create")
-    mainHandler.addServlet(
-      new ServletHolder(new KillRequestServlet(master)), s"$pathPrefix/kill/*")
-    mainHandler.addServlet(
-      new ServletHolder(new StatusRequestServlet(master)), s"$pathPrefix/status/*")
-    mainHandler.addServlet(
-      new ServletHolder(new ErrorServlet), "/")
+    servletToPrefix.foreach { case (servlet, prefix) =>
+      mainHandler.addServlet(new ServletHolder(servlet), prefix)
+    }
     server.setHandler(mainHandler)
     server.start()
     val boundPort = server.getConnectors()(0).getLocalPort
@@ -93,6 +93,7 @@ private[spark] class StandaloneRestServer(master: Master, host: String, requeste
 
 private object StandaloneRestServer {
   val PROTOCOL_VERSION = StandaloneRestClient.PROTOCOL_VERSION
+  val SC_UNKNOWN_PROTOCOL_VERSION = 468
 }
 
 /**
@@ -257,7 +258,6 @@ private[spark] class SubmitRequestServlet(master: Master) extends StandaloneRest
       responseServlet: HttpServletResponse): Unit = {
     val requestMessageJson = Source.fromInputStream(requestServlet.getInputStream).mkString
     val requestMessage = SubmitRestProtocolMessage.fromJson(requestMessageJson)
-      .asInstanceOf[SubmitRestProtocolRequest]
     val responseMessage = handleSubmit(requestMessage, responseServlet)
     responseServlet.setContentType("application/json")
     responseServlet.setCharacterEncoding("utf-8")
@@ -268,8 +268,13 @@ private[spark] class SubmitRequestServlet(master: Master) extends StandaloneRest
     out.close()
   }
 
+  /**
+   * Handle a submit request by first validating the request message, then submitting the
+   * application using the parameters specified in the message. If the message is not of
+   * the expected type, return error to the client.
+   */
   private def handleSubmit(
-      requestMessage: SubmitRestProtocolRequest,
+      requestMessage: SubmitRestProtocolMessage,
       responseServlet: HttpServletResponse): SubmitRestProtocolResponse = {
     // The response should have already been validated on the client.
     // In case this is not true, validate it ourselves to avoid potential NPEs.
@@ -293,8 +298,7 @@ private[spark] class SubmitRequestServlet(master: Master) extends StandaloneRest
         submitResponse
       case unexpected =>
         responseServlet.setStatus(HttpServletResponse.SC_BAD_REQUEST)
-        handleError(
-          s"Received message of unexpected type ${Utils.getFormattedClassName(unexpected)}.")
+        handleError(s"Received message of unexpected type ${unexpected.messageType}.")
     }
   }
 
@@ -366,23 +370,36 @@ private[spark] class SubmitRequestServlet(master: Master) extends StandaloneRest
  */
 private[spark] class ErrorServlet extends StandaloneRestServlet {
   private val expectedVersion = StandaloneRestServer.PROTOCOL_VERSION
+
+  /** Service a faulty request by returning an appropriate error message to the client. */
   protected override def service(
       request: HttpServletRequest,
       response: HttpServletResponse): Unit = {
-    val path = request.getPathInfo
-    val parts = path.stripPrefix("/").split("/")
-    if (parts.nonEmpty) {
-      val version = parts.head
-      if (version != expectedVersion) {
-        response.setStatus(HttpServletResponse.SC_BAD_REQUEST)
-        val error = handleError(s"Incompatible protocol version $version")
-        sendResponse(error, response)
-        return
-      }
-    }
     response.setStatus(HttpServletResponse.SC_BAD_REQUEST)
-    val error = handleError(
-      s"Unexpected path $path: Please submit requests through /$expectedVersion/submissions/")
+    val path = request.getPathInfo
+    val parts = path.stripPrefix("/").split("/").toSeq
+    var msg =
+      parts match {
+        case Nil =>
+          // http://host:port/
+          "Missing protocol version."
+        case `expectedVersion` :: Nil =>
+          // http://host:port/correct-version
+          "Missing the /submissions prefix."
+        case `expectedVersion` :: "submissions" :: Nil =>
+          // http://host:port/correct-version/submissions
+          "Missing an action: please specify one of /create, /kill, or /status."
+        case unknownVersion :: _ =>
+          // http://host:port/unknown-version/*
+          // Use a special response code in case the client wants to retry with a different version
+          response.setStatus(StandaloneRestServer.SC_UNKNOWN_PROTOCOL_VERSION)
+          s"Unknown protocol version '$unknownVersion'."
+        case _ =>
+          // never reached
+          s"Malformed path $path."
+      }
+    msg += s" Please submit requests through http://[host]:[port]/$expectedVersion/submissions/..."
+    val error = handleError(msg)
     sendResponse(error, response)
   }
 }
