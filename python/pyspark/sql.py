@@ -1276,13 +1276,13 @@ class SQLContext(object):
         func = lambda _, it: imap(lambda x: f(*x), it)
         ser = AutoBatchedSerializer(PickleSerializer())
         command = (func, None, ser, ser)
-        pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(self._sc, command)
+        pickled_cmd, bvars, env, includes = _prepare_for_python_RDD(self._sc, command, self)
         self._ssql_ctx.udf().registerPython(name,
-                                            bytearray(pickled_command),
+                                            bytearray(pickled_cmd),
                                             env,
                                             includes,
                                             self._sc.pythonExec,
-                                            broadcast_vars,
+                                            bvars,
                                             self._sc._javaAccumulator,
                                             returnType.json())
 
@@ -2540,6 +2540,7 @@ class UserDefinedFunction(object):
     def __init__(self, func, returnType):
         self.func = func
         self.returnType = returnType
+        self._broadcast = None
         self._judf = self._create_judf()
 
     def _create_judf(self):
@@ -2548,12 +2549,17 @@ class UserDefinedFunction(object):
         ser = AutoBatchedSerializer(PickleSerializer())
         command = (func, None, ser, ser)
         sc = SparkContext._active_spark_context
-        pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command)
+        pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command, self)
         ssql_ctx = sc._jvm.SQLContext(sc._jsc.sc())
         jdt = ssql_ctx.parseDataType(self.returnType.json())
         judf = sc._jvm.Dsl.pythonUDF(f.__name__, bytearray(pickled_command), env, includes,
                                      sc.pythonExec, broadcast_vars, sc._javaAccumulator, jdt)
         return judf
+
+    def __del__(self):
+        if self._broadcast is not None:
+            self._broadcast.unpersist()
+            self._broadcast = None
 
     def __call__(self, *cols):
         sc = SparkContext._active_spark_context

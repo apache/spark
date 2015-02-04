@@ -2247,12 +2247,12 @@ class PipelinedRDD(RDD):
 
         command = (self.func, profiler, self._prev_jrdd_deserializer,
                    self._jrdd_deserializer)
-        pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(self.ctx, command)
+        pickled_cmd, bvars, env, includes = _prepare_for_python_RDD(self.ctx, command, self)
         python_rdd = self.ctx._jvm.PythonRDD(self._prev_jrdd.rdd(),
-                                             bytearray(pickled_command),
+                                             bytearray(pickled_cmd),
                                              env, includes, self.preservesPartitioning,
                                              self.ctx.pythonExec,
-                                             broadcast_vars, self.ctx._javaAccumulator)
+                                             bvars, self.ctx._javaAccumulator)
         self._jrdd_val = python_rdd.asJavaRDD()
 
         if profiler:
