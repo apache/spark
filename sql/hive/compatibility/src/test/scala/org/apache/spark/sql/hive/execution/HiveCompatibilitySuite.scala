@@ -166,9 +166,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // we figure out why this is the case let just ignore all of avro related tests.
     ".*avro.*",
 
-    // Unique joins are weird and will require a lot of hacks (see comments in hive parser).
-    "uniquejoin",
-
     // Hive seems to get the wrong answer on some outer joins.  MySQL agrees with catalyst.
     "auto_join29",
 
@@ -972,6 +969,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "union_remove_3",
     "union_remove_6",
     "union_script",
+    "uniquejoin",
     "varchar_2",
     "varchar_join1",
     "varchar_union1",

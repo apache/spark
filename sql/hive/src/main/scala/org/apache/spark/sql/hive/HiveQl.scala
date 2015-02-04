@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import java.sql.Date
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Context
@@ -863,44 +864,58 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           case (arg, i) => arg.getText == "TOK_TABREF"
         }.map(_._2)
 
-      val isPreserved = tableOrdinals.map(i => (i - 1 < 0) || joinArgs(i - 1).getText == "PRESERVE")
+      val isPreserved = tableOrdinals.map { i =>
+        if(i == 0) false else joinArgs(i - 1).getText == "PRESERVE"
+      }
       val tables = tableOrdinals.map(i => nodeToRelation(joinArgs(i)))
       val joinExpressions = tableOrdinals.map(i => joinArgs(i + 1).getChildren.map(nodeToExpr))
-
-      val joinConditions = joinExpressions.sliding(2).map {
-        case Seq(c1, c2) =>
-          val predicates = (c1, c2).zipped.map { case (e1, e2) => EqualTo(e1, e2): Expression }
-          predicates.reduceLeft(And)
-      }.toBuffer
-
-      val joinType = isPreserved.sliding(2).map {
-        case Seq(true, true) => FullOuter
-        case Seq(true, false) => LeftOuter
-        case Seq(false, true) => RightOuter
-        case Seq(false, false) => Inner
-      }.toBuffer
-
-      val joinedTables = tables.reduceLeft(Join(_,_, Inner, None))
+      var i = 1
+      var nextJoinExpression: mutable.Buffer[Expression] = null
+      var joinConditions = new ArrayBuffer[Expression]()
+      while(i < joinExpressions.length) {
+        nextJoinExpression = joinExpressions(i)
+        val predicates = joinExpressions.take(i).map { exps =>
+          exps.zip(nextJoinExpression).map {
+            case (e1, e2) => EqualTo(e1, e2): Expression
+          }.reduceLeft(And)
+        }.reduceLeft(Or)
+        joinConditions += predicates
+        i = i + 1
+      }
 
       // Must be transform down.
-      val joinedResult = joinedTables transform {
+      i = joinConditions.length
+      val fullOuterJoinedResult = tables.reduceLeft(Join(_,_, FullOuter, None)) transform {
+        case j: Join =>
+          i = i - 1
+          j.copy(
+            condition = Some(joinConditions(i)))
+      }
+
+      // Must be transform down.
+      val fullInnerJoinedResult = tables.reduceLeft(Join(_,_, Inner, None)) transform {
         case j: Join =>
           j.copy(
-            condition = Some(joinConditions.remove(joinConditions.length - 1)),
-            joinType = joinType.remove(joinType.length - 1))
+            condition = Some(joinConditions.remove(joinConditions.length - 1)))
       }
 
       val groups = (0 until joinExpressions.head.size).map(i => Coalesce(joinExpressions.map(_(i))))
 
-      // Unique join is not really the same as an outer join so we must group together results where
-      // the joinExpressions are the same, taking the First of each value is only okay because the
-      // user of a unique join is implicitly promising that there is only one result.
-      // TODO: This doesn't actually work since [[Star]] is not a valid aggregate expression.
-      // instead we should figure out how important supporting this feature is and whether it is
-      // worth the number of hacks that will be required to implement it.  Namely, we need to add
-      // some sort of mapped star expansion that would expand all child output row to be similarly
-      // named output expressions where some aggregate expression has been applied (i.e. First).
-      ??? // Aggregate(groups, Star(None, First(_)) :: Nil, joinedResult)
+      val filterConditions = isPreserved.zip(joinExpressions).flatMap {
+        case (preserved, expressions) =>
+        if (preserved) {
+          Seq(IsNotNull(expressions.get(0)))
+        } else {
+          None
+        }
+      }
+      if (isPreserved.reduceLeft(_ && _)) {
+        fullOuterJoinedResult
+      } else if (filterConditions.isEmpty) {
+        fullInnerJoinedResult
+      } else {
+        Filter(filterConditions.reduceLeft(Or), fullOuterJoinedResult)
+      }
 
     case Token(allJoinTokens(joinToken),
            relation1 ::
