@@ -307,7 +307,21 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       "--name", "testApp",
       "--master", "local-cluster[2,1,512]",
       "--jars", jarsString,
-      unusedJar.toString)
+      unusedJar.toString, "SparkSubmitClassA", "SparkSubmitClassB")
+    runSparkSubmit(args)
+  }
+
+  test("includes jars passed in through --packages") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val packagesString = "com.databricks:spark-csv_2.10:0.1,com.databricks:spark-avro_2.10:0.1"
+    val args = Seq(
+      "--class", JarCreationTest.getClass.getName.stripSuffix("$"),
+      "--name", "testApp",
+      "--master", "local-cluster[2,1,512]",
+      "--packages", packagesString,
+      "--conf", "spark.ui.enabled=false",
+      unusedJar.toString,
+      "com.databricks.spark.csv.DefaultSource", "com.databricks.spark.avro.DefaultSource")
     runSparkSubmit(args)
   }
 
@@ -467,8 +481,8 @@ object JarCreationTest extends Logging {
     val result = sc.makeRDD(1 to 100, 10).mapPartitions { x =>
       var exception: String = null
       try {
-        Class.forName("SparkSubmitClassA", true, Thread.currentThread().getContextClassLoader)
-        Class.forName("SparkSubmitClassA", true, Thread.currentThread().getContextClassLoader)
+        Class.forName(args(0), true, Thread.currentThread().getContextClassLoader)
+        Class.forName(args(1), true, Thread.currentThread().getContextClassLoader)
       } catch {
         case t: Throwable =>
           exception = t + "\n" + t.getStackTraceString

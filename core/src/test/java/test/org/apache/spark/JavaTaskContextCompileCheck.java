@@ -15,24 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util;
+package test.org.apache.spark;
 
 import org.apache.spark.TaskContext;
 
-
 /**
- * A simple implementation of TaskCompletionListener that makes sure TaskCompletionListener and
- * TaskContext is Java friendly.
+ * Something to make sure that TaskContext can be used in Java.
  */
-public class JavaTaskCompletionListenerImpl implements TaskCompletionListener {
+public class JavaTaskContextCompileCheck {
 
-  @Override
-  public void onTaskCompletion(TaskContext context) {
-    context.isCompleted();
-    context.isInterrupted();
-    context.stageId();
-    context.partitionId();
-    context.isRunningLocally();
-    context.addTaskCompletionListener(this);
+  public static void test() {
+    TaskContext tc = TaskContext.get();
+
+    tc.isCompleted();
+    tc.isInterrupted();
+    tc.isRunningLocally();
+
+    tc.addTaskCompletionListener(new JavaTaskCompletionListenerImpl());
+
+    tc.attemptNumber();
+    tc.partitionId();
+    tc.stageId();
+    tc.taskAttemptId();
   }
 }

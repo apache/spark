@@ -21,17 +21,42 @@ import org.apache.spark.sql.Dsl._
 import org.apache.spark.sql.types._
 
 /* Implicits */
-import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.test.TestSQLContext.{createDataFrame, logicalPlanToSparkQuery}
 
 import scala.language.postfixOps
 
 class DataFrameSuite extends QueryTest {
   import org.apache.spark.sql.TestData._
 
+  test("analysis error should be eagerly reported") {
+    intercept[Exception] { testData.select('nonExistentName) }
+    intercept[Exception] {
+      testData.groupBy('key).agg(Map("nonExistentName" -> "sum"))
+    }
+    intercept[Exception] {
+      testData.groupBy("nonExistentName").agg(Map("key" -> "sum"))
+    }
+    intercept[Exception] {
+      testData.groupBy($"abcd").agg(Map("key" -> "sum"))
+    }
+  }
+
   test("table scan") {
     checkAnswer(
       testData,
       testData.collect().toSeq)
+  }
+
+  test("selectExpr") {
+    checkAnswer(
+      testData.selectExpr("abs(key)", "value"),
+      testData.collect().map(row => Row(math.abs(row.getInt(0)), row.getString(1))).toSeq)
+  }
+
+  test("filterExpr") {
+    checkAnswer(
+      testData.filter("key > 90"),
+      testData.collect().filter(_.getInt(0) > 90).toSeq)
   }
 
   test("repartition") {
@@ -267,11 +292,11 @@ class DataFrameSuite extends QueryTest {
   }
 
   test("udf") {
-    val foo = (a: Int, b: String) => a.toString + b
+    val foo = udf((a: Int, b: String) => a.toString + b)
 
     checkAnswer(
       // SELECT *, foo(key, value) FROM testData
-      testData.select($"*", callUDF(foo, 'key, 'value)).limit(3),
+      testData.select($"*", foo('key, 'value)).limit(3),
       Row(1, "1", "11") :: Row(2, "2", "22") :: Row(3, "3", "33") :: Nil
     )
   }

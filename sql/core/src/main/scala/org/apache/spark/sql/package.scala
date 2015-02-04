@@ -38,4 +38,10 @@ package object sql {
    */
   @DeveloperApi
   protected[sql] type Strategy = org.apache.spark.sql.catalyst.planning.GenericStrategy[SparkPlan]
+
+  /**
+   * Type alias for [[DataFrame]]. Kept here for backward source compatibility for Scala.
+   */
+  @deprecated("1.3.0", "use DataFrame")
+  type SchemaRDD = DataFrame
 }
