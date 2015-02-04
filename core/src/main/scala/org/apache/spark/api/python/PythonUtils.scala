@@ -17,8 +17,10 @@
 
 package org.apache.spark.api.python
 
-import java.io.{File, InputStream, IOException, OutputStream}
+import java.io.{File}
+import java.util.{List => JList}
 
+import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkContext
@@ -43,5 +45,12 @@ private[spark] object PythonUtils {
 
   def generateRDDWithNull(sc: JavaSparkContext): JavaRDD[String] = {
     sc.parallelize(List("a", null, "b"))
+  }
+
+  /**
+   * Convert list of T into seq of T (for calling API with varargs)
+   */
+  def toSeq[T](cols: JList[T]): Seq[T] = {
+    cols.toList.toSeq
   }
 }
