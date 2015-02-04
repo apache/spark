@@ -20,12 +20,23 @@ package org.apache.spark.deploy.rest
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import com.fasterxml.jackson.annotation.{JsonProperty, JsonIgnore, JsonInclude}
+import com.fasterxml.jackson.annotation.JsonProperty
+
+/**
+ * An abstract request sent from the client in the REST application submission protocol.
+ */
+private[spark] abstract class SubmitRestProtocolRequest extends SubmitRestProtocolMessage {
+  var clientSparkVersion: String = null
+  protected override def doValidate(): Unit = {
+    super.doValidate()
+    assertFieldIsSet(clientSparkVersion, "clientSparkVersion")
+  }
+}
 
 /**
  * A request to submit a driver in the REST application submission protocol.
  */
-class SubmitDriverRequest extends SubmitRestProtocolRequest {
+private[spark] class CreateSubmissionRequest extends SubmitRestProtocolRequest {
   var appName: String = null
   var appResource: String = null
   var mainClass: String = null
@@ -67,11 +78,4 @@ class SubmitDriverRequest extends SubmitRestProtocolRequest {
     assertFieldIsMemory(executorMemory, "executorMemory")
     assertFieldIsNumeric(totalExecutorCores, "totalExecutorCores")
   }
-}
-
-/**
- * A response to the [[SubmitDriverRequest]] in the REST application submission protocol.
- */
-class SubmitDriverResponse extends SubmitRestProtocolResponse {
-  var driverId: String = null
 }

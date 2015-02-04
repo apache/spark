@@ -96,9 +96,9 @@ object SparkSubmit {
    */
   private def kill(args: SparkSubmitArguments): Unit = {
     val client = new StandaloneRestClient
-    val response = client.killDriver(args.master, args.driverToKill)
+    val response = client.killSubmission(args.master, args.driverToKill)
     response match {
-      case k: KillDriverResponse => handleRestResponse(k)
+      case k: KillSubmissionResponse => handleRestResponse(k)
       case r => handleUnexpectedRestResponse(r)
     }
   }
@@ -109,9 +109,9 @@ object SparkSubmit {
    */
   private def requestStatus(args: SparkSubmitArguments): Unit = {
     val client = new StandaloneRestClient
-    val response = client.requestDriverStatus(args.master, args.driverToRequestStatusFor)
+    val response = client.requestSubmissionStatus(args.master, args.driverToRequestStatusFor)
     response match {
-      case s: DriverStatusResponse => handleRestResponse(s)
+      case s: SubmissionStatusResponse => handleRestResponse(s)
       case r => handleUnexpectedRestResponse(r)
     }
   }
@@ -135,9 +135,9 @@ object SparkSubmit {
     if (args.isStandaloneCluster && args.isRestEnabled) {
       printStream.println("Running Spark using the REST application submission protocol.")
       val client = new StandaloneRestClient
-      val response = client.submitDriver(args)
+      val response = client.createSubmission(args)
       response match {
-        case s: SubmitDriverResponse => handleRestResponse(s)
+        case s: CreateSubmissionResponse => handleRestResponse(s)
         case r => handleUnexpectedRestResponse(r)
       }
     } else {

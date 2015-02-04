@@ -94,8 +94,8 @@ class SubmitRestProtocolSuite extends FunSuite {
     assert(newResponse.message === null)
   }
 
-  test("SubmitDriverRequest") {
-    val message = new SubmitDriverRequest
+  test("CreateSubmissionRequest") {
+    val message = new CreateSubmissionRequest
     intercept[SubmitRestProtocolException] { message.validate() }
     message.clientSparkVersion = "1.2.3"
     message.appName = "SparkPie"
@@ -142,7 +142,7 @@ class SubmitRestProtocolSuite extends FunSuite {
     // test JSON
     val json = message.toJson
     assertJsonEquals(json, submitDriverRequestJson)
-    val newMessage = SubmitRestProtocolMessage.fromJson(json, classOf[SubmitDriverRequest])
+    val newMessage = SubmitRestProtocolMessage.fromJson(json, classOf[CreateSubmissionRequest])
     assert(newMessage.clientSparkVersion === "1.2.3")
     assert(newMessage.appName === "SparkPie")
     assert(newMessage.appResource === "honey-walnut-cherry.jar")
@@ -163,11 +163,11 @@ class SubmitRestProtocolSuite extends FunSuite {
     assert(newMessage.environmentVariables === message.environmentVariables)
   }
 
-  test("SubmitDriverResponse") {
-    val message = new SubmitDriverResponse
+  test("CreateSubmissionResponse") {
+    val message = new CreateSubmissionResponse
     intercept[SubmitRestProtocolException] { message.validate() }
     message.serverSparkVersion = "1.2.3"
-    message.driverId = "driver_123"
+    message.submissionId = "driver_123"
     message.success = "true"
     message.validate()
     // bad fields
@@ -177,31 +177,17 @@ class SubmitRestProtocolSuite extends FunSuite {
     // test JSON
     val json = message.toJson
     assertJsonEquals(json, submitDriverResponseJson)
-    val newMessage = SubmitRestProtocolMessage.fromJson(json, classOf[SubmitDriverResponse])
+    val newMessage = SubmitRestProtocolMessage.fromJson(json, classOf[CreateSubmissionResponse])
     assert(newMessage.serverSparkVersion === "1.2.3")
-    assert(newMessage.driverId === "driver_123")
+    assert(newMessage.submissionId === "driver_123")
     assert(newMessage.success === "true")
   }
 
-  test("KillDriverRequest") {
-    val message = new KillDriverRequest
-    intercept[SubmitRestProtocolException] { message.validate() }
-    message.clientSparkVersion = "1.2.3"
-    message.driverId = "driver_123"
-    message.validate()
-    // test JSON
-    val json = message.toJson
-    assertJsonEquals(json, killDriverRequestJson)
-    val newMessage = SubmitRestProtocolMessage.fromJson(json, classOf[KillDriverRequest])
-    assert(newMessage.clientSparkVersion === "1.2.3")
-    assert(newMessage.driverId === "driver_123")
-  }
-
-  test("KillDriverResponse") {
-    val message = new KillDriverResponse
+  test("KillSubmissionResponse") {
+    val message = new KillSubmissionResponse
     intercept[SubmitRestProtocolException] { message.validate() }
     message.serverSparkVersion = "1.2.3"
-    message.driverId = "driver_123"
+    message.submissionId = "driver_123"
     message.success = "true"
     message.validate()
     // bad fields
@@ -211,31 +197,17 @@ class SubmitRestProtocolSuite extends FunSuite {
     // test JSON
     val json = message.toJson
     assertJsonEquals(json, killDriverResponseJson)
-    val newMessage = SubmitRestProtocolMessage.fromJson(json, classOf[KillDriverResponse])
+    val newMessage = SubmitRestProtocolMessage.fromJson(json, classOf[KillSubmissionResponse])
     assert(newMessage.serverSparkVersion === "1.2.3")
-    assert(newMessage.driverId === "driver_123")
+    assert(newMessage.submissionId === "driver_123")
     assert(newMessage.success === "true")
   }
 
-  test("DriverStatusRequest") {
-    val message = new DriverStatusRequest
-    intercept[SubmitRestProtocolException] { message.validate() }
-    message.clientSparkVersion = "1.2.3"
-    message.driverId = "driver_123"
-    message.validate()
-    // test JSON
-    val json = message.toJson
-    assertJsonEquals(json, driverStatusRequestJson)
-    val newMessage = SubmitRestProtocolMessage.fromJson(json, classOf[DriverStatusRequest])
-    assert(newMessage.clientSparkVersion === "1.2.3")
-    assert(newMessage.driverId === "driver_123")
-  }
-
-  test("DriverStatusResponse") {
-    val message = new DriverStatusResponse
+  test("SubmissionStatusResponse") {
+    val message = new SubmissionStatusResponse
     intercept[SubmitRestProtocolException] { message.validate() }
     message.serverSparkVersion = "1.2.3"
-    message.driverId = "driver_123"
+    message.submissionId = "driver_123"
     message.success = "true"
     message.validate()
     // optional fields
@@ -249,9 +221,9 @@ class SubmitRestProtocolSuite extends FunSuite {
     // test JSON
     val json = message.toJson
     assertJsonEquals(json, driverStatusResponseJson)
-    val newMessage = SubmitRestProtocolMessage.fromJson(json, classOf[DriverStatusResponse])
+    val newMessage = SubmitRestProtocolMessage.fromJson(json, classOf[SubmissionStatusResponse])
     assert(newMessage.serverSparkVersion === "1.2.3")
-    assert(newMessage.driverId === "driver_123")
+    assert(newMessage.submissionId === "driver_123")
     assert(newMessage.driverState === "RUNNING")
     assert(newMessage.success === "true")
     assert(newMessage.workerId === "worker_123")
@@ -295,7 +267,7 @@ class SubmitRestProtocolSuite extends FunSuite {
   private val submitDriverRequestJson =
     """
       |{
-      |  "action" : "SubmitDriverRequest",
+      |  "action" : "CreateSubmissionRequest",
       |  "appArgs" : ["two slices","a hint of cinnamon"],
       |  "appName" : "SparkPie",
       |  "appResource" : "honey-walnut-cherry.jar",
@@ -320,48 +292,30 @@ class SubmitRestProtocolSuite extends FunSuite {
   private val submitDriverResponseJson =
     """
       |{
-      |  "action" : "SubmitDriverResponse",
-      |  "driverId" : "driver_123",
+      |  "action" : "CreateSubmissionResponse",
       |  "serverSparkVersion" : "1.2.3",
+      |  "submissionId" : "driver_123",
       |  "success" : "true"
-      |}
-    """.stripMargin
-
-  private val killDriverRequestJson =
-    """
-      |{
-      |  "action" : "KillDriverRequest",
-      |  "clientSparkVersion" : "1.2.3",
-      |  "driverId" : "driver_123"
       |}
     """.stripMargin
 
   private val killDriverResponseJson =
     """
       |{
-      |  "action" : "KillDriverResponse",
-      |  "driverId" : "driver_123",
+      |  "action" : "KillSubmissionResponse",
       |  "serverSparkVersion" : "1.2.3",
+      |  "submissionId" : "driver_123",
       |  "success" : "true"
-      |}
-    """.stripMargin
-
-  private val driverStatusRequestJson =
-    """
-      |{
-      |  "action" : "DriverStatusRequest",
-      |  "clientSparkVersion" : "1.2.3",
-      |  "driverId" : "driver_123"
       |}
     """.stripMargin
 
   private val driverStatusResponseJson =
     """
       |{
-      |  "action" : "DriverStatusResponse",
-      |  "driverId" : "driver_123",
+      |  "action" : "SubmissionStatusResponse",
       |  "driverState" : "RUNNING",
       |  "serverSparkVersion" : "1.2.3",
+      |  "submissionId" : "driver_123",
       |  "success" : "true",
       |  "workerHostPort" : "1.2.3.4:7780",
       |  "workerId" : "worker_123"

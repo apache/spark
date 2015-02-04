@@ -17,100 +17,170 @@
 
 package org.apache.spark.deploy.rest
 
-import java.net.URL
+import java.io.{FileNotFoundException, DataOutputStream}
+import java.net.{HttpURLConnection, URL}
 
-import org.apache.spark.{SPARK_VERSION => sparkVersion}
+import scala.io.Source
+
+import com.google.common.base.Charsets
+
+import org.apache.spark.{Logging, SparkException, SPARK_VERSION => sparkVersion}
 import org.apache.spark.deploy.SparkSubmitArguments
 
 /**
- * A client that submits applications to the standalone Master using the REST protocol
- * This client is intended to communicate with the [[StandaloneRestServer]]. Cluster mode only.
+ * A client that submits applications to the standalone Master using a REST protocol.
+ * This client is intended to communicate with the [[StandaloneRestServer]] and is
+ * currently used for cluster mode only.
+ *
+ * The specific request sent to the server depends on the action as follows:
+ *   (1) submit - POST to http://.../submissions/create
+ *   (2) kill - POST http://.../submissions/kill/[submissionId]
+ *   (3) status - GET http://.../submissions/status/[submissionId]
+ *
+ * In the case of (1), parameters are posted in the HTTP body in the form of JSON fields.
+ * Otherwise, the URL fully specifies the intended action of the client.
  */
-private[spark] class StandaloneRestClient extends SubmitRestClient {
+private[spark] class StandaloneRestClient extends Logging {
   import StandaloneRestClient._
 
   /**
-   * Request that the REST server submit a driver specified by the provided arguments.
+   * Submit an application specified by the provided arguments.
    *
-   * If the driver was successfully submitted, this polls the status of the driver that was
-   * just submitted and reports it to the user. Otherwise, if the submission was unsuccessful,
-   * this reports failure and logs an error message provided by the REST server.
+   * If the submission was successful, poll the status of the submission and report
+   * it to the user. Otherwise, report the error message provided by the server.
    */
-  override def submitDriver(args: SparkSubmitArguments): SubmitRestProtocolResponse = {
+  def createSubmission(args: SparkSubmitArguments): SubmitRestProtocolResponse = {
+    logInfo(s"Submitting a request to launch a driver in ${args.master}.")
     validateSubmitArgs(args)
-    val response = super.submitDriver(args)
-    val submitResponse = response match {
-      case s: SubmitDriverResponse => s
-      case _ => return response
+    val master = args.master
+    val url = getSubmitUrl(master)
+    val request = constructSubmitRequest(args)
+    val response = postJson(url, request.toJson)
+    response match {
+      case s: CreateSubmissionResponse => reportSubmissionStatus(master, s)
+      case _ => // unexpected type, let upstream caller handle it
     }
-    // Report status of submitted driver to user
-    val submitSuccess = submitResponse.success.toBoolean
-    if (submitSuccess) {
-      val driverId = submitResponse.driverId
-      if (driverId != null) {
-        logInfo(s"Driver successfully submitted as $driverId. Polling driver state...")
-        pollSubmittedDriverStatus(args.master, driverId)
-      } else {
-        logError("Application successfully submitted, but driver ID was not provided!")
-      }
-    } else {
-      val failMessage = Option(submitResponse.message).map { ": " + _ }.getOrElse("")
-      logError("Application submission failed" + failMessage)
-    }
-    submitResponse
+    response
   }
 
-  /** Request that the REST server kill the specified driver. */
-  override def killDriver(master: String, driverId: String): SubmitRestProtocolResponse = {
+  /** Request that the server kill the specified submission. */
+  def killSubmission(master: String, submissionId: String): SubmitRestProtocolResponse = {
+    logInfo(s"Submitting a request to kill submission $submissionId in $master.")
     validateMaster(master)
-    super.killDriver(master, driverId)
+    post(getKillUrl(master, submissionId))
   }
 
-  /** Request the status of the specified driver from the REST server. */
-  override def requestDriverStatus(master: String, driverId: String): SubmitRestProtocolResponse = {
+  /** Request the status of a submission from the server. */
+  def requestSubmissionStatus(master: String, submissionId: String): SubmitRestProtocolResponse = {
+    logInfo(s"Submitting a request for the status of submission $submissionId in $master.")
     validateMaster(master)
-    super.requestDriverStatus(master, driverId)
+    get(getStatusUrl(master, submissionId))
+  }
+
+  /** Send a GET request to the specified URL. */
+  private def get(url: URL): SubmitRestProtocolResponse = {
+    logDebug(s"Sending GET request to server at $url.")
+    val conn = url.openConnection().asInstanceOf[HttpURLConnection]
+    conn.setRequestMethod("GET")
+    readResponse(conn)
+  }
+
+  /** Send a POST request to the specified URL. */
+  private def post(url: URL): SubmitRestProtocolResponse = {
+    logDebug(s"Sending POST request to server at $url.")
+    val conn = url.openConnection().asInstanceOf[HttpURLConnection]
+    conn.setRequestMethod("POST")
+    readResponse(conn)
+  }
+
+  /** Send a POST request with the given JSON as the body to the specified URL. */
+  private def postJson(url: URL, json: String): SubmitRestProtocolResponse = {
+    logDebug(s"Sending POST request to server at $url:\n$json")
+    val conn = url.openConnection().asInstanceOf[HttpURLConnection]
+    conn.setRequestMethod("POST")
+    conn.setRequestProperty("Content-Type", "application/json")
+    conn.setRequestProperty("charset", "utf-8")
+    conn.setDoOutput(true)
+    val out = new DataOutputStream(conn.getOutputStream)
+    out.write(json.getBytes(Charsets.UTF_8))
+    out.close()
+    readResponse(conn)
   }
 
   /**
-   * Poll the status of the driver that was just submitted and log it.
-   * This retries up to a fixed number of times before giving up.
+   * Read the response from the given connection.
+   *
+   * The response is expected to represent a [[SubmitRestProtocolResponse]] in the form of JSON.
+   * Additionally, this validates the response to ensure that it is properly constructed.
+   * If the response represents an error, report the message from the server.
    */
-  private def pollSubmittedDriverStatus(master: String, driverId: String): Unit = {
-    (1 to REPORT_DRIVER_STATUS_MAX_TRIES).foreach { _ =>
-      val response = requestDriverStatus(master, driverId)
-      val statusResponse = response match {
-        case s: DriverStatusResponse => s
-        case _ => return
+  private def readResponse(connection: HttpURLConnection): SubmitRestProtocolResponse = {
+    try {
+      val responseJson = Source.fromInputStream(connection.getInputStream).mkString
+      logDebug(s"Response from the REST server:\n$responseJson")
+      val response = SubmitRestProtocolMessage.fromJson(responseJson)
+      // The response should have already been validated on the server.
+      // In case this is not true, validate it ourselves to avoid potential NPEs.
+      try {
+        response.validate()
+      } catch {
+        case e: SubmitRestProtocolException =>
+          throw new SubmitRestProtocolException("Malformed response received from server", e)
       }
-      val statusSuccess = statusResponse.success.toBoolean
-      if (statusSuccess) {
-        val driverState = Option(statusResponse.driverState)
-        val workerId = Option(statusResponse.workerId)
-        val workerHostPort = Option(statusResponse.workerHostPort)
-        val exception = Option(statusResponse.message)
-        // Log driver state, if present
-        driverState match {
-          case Some(state) => logInfo(s"State of driver $driverId is now $state.")
-          case _ => logError(s"State of driver $driverId was not found!")
-        }
-        // Log worker node, if present
-        (workerId, workerHostPort) match {
-          case (Some(id), Some(hp)) => logInfo(s"Driver is running on worker $id at $hp.")
-          case _ =>
-        }
-        // Log exception stack trace, if present
-        exception.foreach { e => logError(e) }
-        return
+      // If the response is an error, log the message
+      // Otherwise, simply return the response
+      response match {
+        case error: ErrorResponse =>
+          logError(s"Server responded with error:\n${error.message}")
+          error
+        case response: SubmitRestProtocolResponse =>
+          response
+        case unexpected =>
+          throw new SubmitRestProtocolException(
+            s"Unexpected message received from server:\n$unexpected")
       }
-      Thread.sleep(REPORT_DRIVER_STATUS_INTERVAL)
+    } catch {
+      case e: FileNotFoundException =>
+        throw new SparkException(s"Unable to connect to server ${connection.getURL}", e)
     }
-    logError(s"Error: Master did not recognize driver $driverId.")
   }
 
-  /** Construct a submit driver request message. */
-  protected override def constructSubmitRequest(args: SparkSubmitArguments): SubmitDriverRequest = {
-    val message = new SubmitDriverRequest
+  /** Return the REST URL for creating a new submission. */
+  private def getSubmitUrl(master: String): URL = {
+    val baseUrl = master.stripPrefix("spark://")
+    new URL(s"http://$baseUrl/submissions/create")
+  }
+
+  /** Return the REST URL for killing an existing submission. */
+  private def getKillUrl(master: String, submissionId: String): URL = {
+    val baseUrl = master.stripPrefix("spark://")
+    new URL(s"http://$baseUrl/submissions/kill/$submissionId")
+  }
+
+  /** Return the REST URL for requesting the status of an existing submission. */
+  private def getStatusUrl(master: String, submissionId: String): URL = {
+    val baseUrl = master.stripPrefix("spark://")
+    new URL(s"http://$baseUrl/submissions/status/$submissionId")
+  }
+
+  /** Throw an exception if this is not standalone mode. */
+  private def validateMaster(master: String): Unit = {
+    if (!master.startsWith("spark://")) {
+      throw new IllegalArgumentException("This REST client is only supported in standalone mode.")
+    }
+  }
+
+  /** Throw an exception if this is not standalone cluster mode. */
+  private def validateSubmitArgs(args: SparkSubmitArguments): Unit = {
+    if (!args.isStandaloneCluster) {
+      throw new IllegalArgumentException(
+        "This REST client is only supported in standalone cluster mode.")
+    }
+  }
+
+  /** Construct a message that captures the specified parameters for submitting an application. */
+  private def constructSubmitRequest(args: SparkSubmitArguments): CreateSubmissionRequest = {
+    val message = new CreateSubmissionRequest
     message.clientSparkVersion = sparkVersion
     message.appName = args.name
     message.appResource = args.primaryResource
@@ -130,48 +200,61 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
     sys.env.foreach { case (k, v) =>
       if (k.startsWith("SPARK_")) { message.setEnvironmentVariable(k, v) }
     }
+    message.validate()
     message
   }
 
-  /** Construct a kill driver request message. */
-  protected override def constructKillRequest(
-      master: String,
-      driverId: String): KillDriverRequest = {
-    val k = new KillDriverRequest
-    k.clientSparkVersion = sparkVersion
-    k.driverId = driverId
-    k
-  }
-
-  /** Construct a driver status request message. */
-  protected override def constructStatusRequest(
-      master: String,
-      driverId: String): DriverStatusRequest = {
-    val d = new DriverStatusRequest
-    d.clientSparkVersion = sparkVersion
-    d.driverId = driverId
-    d
-  }
-
-  /** Extract the URL portion of the master address. */
-  protected override def getHttpUrl(master: String): URL = {
-    validateMaster(master)
-    new URL("http://" + master.stripPrefix("spark://"))
-  }
-
-  /** Throw an exception if this is not standalone mode. */
-  private def validateMaster(master: String): Unit = {
-    if (!master.startsWith("spark://")) {
-      throw new IllegalArgumentException("This REST client is only supported in standalone mode.")
+  /** Report the status of a newly created submission. */
+  private def reportSubmissionStatus(master: String, submitResponse: CreateSubmissionResponse): Unit = {
+    val submitSuccess = submitResponse.success.toBoolean
+    if (submitSuccess) {
+      val submissionId = submitResponse.submissionId
+      if (submissionId != null) {
+        logInfo(s"Driver successfully submitted as $submissionId. Polling driver state...")
+        pollSubmissionStatus(master, submissionId)
+      } else {
+        logError("Application successfully submitted, but driver ID was not provided!")
+      }
+    } else {
+      val failMessage = Option(submitResponse.message).map { ": " + _ }.getOrElse("")
+      logError("Application submission failed" + failMessage)
     }
   }
 
-  /** Throw an exception if this is not standalone cluster mode. */
-  private def validateSubmitArgs(args: SparkSubmitArguments): Unit = {
-    if (!args.isStandaloneCluster) {
-      throw new IllegalArgumentException(
-        "This REST client is only supported in standalone cluster mode.")
+  /**
+   * Poll the status of the specified submission and log it.
+   * This retries up to a fixed number of times before giving up.
+   */
+  private def pollSubmissionStatus(master: String, submissionId: String): Unit = {
+    (1 to REPORT_DRIVER_STATUS_MAX_TRIES).foreach { _ =>
+      val response = requestSubmissionStatus(master, submissionId)
+      val statusResponse = response match {
+        case s: SubmissionStatusResponse => s
+        case _ => return // unexpected type, let upstream caller handle it
+      }
+      val statusSuccess = statusResponse.success.toBoolean
+      if (statusSuccess) {
+        val driverState = Option(statusResponse.driverState)
+        val workerId = Option(statusResponse.workerId)
+        val workerHostPort = Option(statusResponse.workerHostPort)
+        val exception = Option(statusResponse.message)
+        // Log driver state, if present
+        driverState match {
+          case Some(state) => logInfo(s"State of driver $submissionId is now $state.")
+          case _ => logError(s"State of driver $submissionId was not found!")
+        }
+        // Log worker node, if present
+        (workerId, workerHostPort) match {
+          case (Some(id), Some(hp)) => logInfo(s"Driver is running on worker $id at $hp.")
+          case _ =>
+        }
+        // Log exception stack trace, if present
+        exception.foreach { e => logError(e) }
+        return
+      }
+      Thread.sleep(REPORT_DRIVER_STATUS_INTERVAL)
     }
+    logError(s"Error: Master did not recognize submission $submissionId.")
   }
 }
 

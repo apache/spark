@@ -131,46 +131,9 @@ abstract class SubmitRestProtocolMessage {
 }
 
 /**
- * An abstract request sent from the client in the REST application submission protocol.
+ * Helper methods to process serialized [[SubmitRestProtocolMessage]]s.
  */
-abstract class SubmitRestProtocolRequest extends SubmitRestProtocolMessage {
-  var clientSparkVersion: String = null
-  protected override def doValidate(): Unit = {
-    super.doValidate()
-    assertFieldIsSet(clientSparkVersion, "clientSparkVersion")
-  }
-}
-
-/**
- * An abstract response sent from the server in the REST application submission protocol.
- */
-abstract class SubmitRestProtocolResponse extends SubmitRestProtocolMessage {
-  var serverSparkVersion: String = null
-  var success: String = null
-  protected override def doValidate(): Unit = {
-    super.doValidate()
-    assertFieldIsSet(serverSparkVersion, "serverSparkVersion")
-    assertFieldIsSet(success, "success")
-    assertFieldIsBoolean(success, "success")
-  }
-}
-
-/**
- * An error response message used in the REST application submission protocol.
- */
-class ErrorResponse extends SubmitRestProtocolResponse {
-
-  // request was unsuccessful
-  success = "false"
-
-  protected override def doValidate(): Unit = {
-    super.doValidate()
-    assertFieldIsSet(message, "message")
-    assert(!success.toBoolean, s"The 'success' field must be false in $messageType.")
-  }
-}
-
-object SubmitRestProtocolMessage {
+private[spark] object SubmitRestProtocolMessage {
   private val packagePrefix = this.getClass.getPackage.getName
   private val mapper = new ObjectMapper()
     .registerModule(DefaultScalaModule)
@@ -181,16 +144,12 @@ object SubmitRestProtocolMessage {
    * If the action field is not found, throw a [[SubmitRestMissingFieldException]].
    */
   def parseAction(json: String): String = {
-    parseField(json, "action").getOrElse {
-      throw new SubmitRestMissingFieldException(s"Action field not found in JSON:\n$json")
-    }
-  }
-
-  /** Parse the value of the specified field from the given JSON. */
-  def parseField(json: String, field: String): Option[String] = {
     parse(json).asInstanceOf[JObject].obj
-      .find { case (f, _) => f == field }
+      .find { case (f, _) => f == "action" }
       .map { case (_, v) => v.asInstanceOf[JString].s }
+      .getOrElse {
+        throw new SubmitRestMissingFieldException(s"Action field not found in JSON:\n$json")
+      }
   }
 
   /**
@@ -204,7 +163,7 @@ object SubmitRestProtocolMessage {
     val className = parseAction(json)
     val clazz = Class.forName(packagePrefix + "." + className)
       .asSubclass[SubmitRestProtocolMessage](classOf[SubmitRestProtocolMessage])
-    fromJson(json, clazz)
+    mapper.readValue(json, clazz)
   }
 
   /**

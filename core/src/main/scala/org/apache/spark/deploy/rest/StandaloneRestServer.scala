@@ -17,12 +17,19 @@
 
 package org.apache.spark.deploy.rest
 
-import java.io.File
+import java.io.{DataOutputStream, File}
+import java.net.InetSocketAddress
+import javax.servlet.http.{HttpServlet, HttpServletResponse, HttpServletRequest}
+
+import scala.io.Source
 
 import akka.actor.ActorRef
+import com.google.common.base.Charsets
+import org.eclipse.jetty.server.Server
+import org.eclipse.jetty.servlet.{ServletHolder, ServletContextHandler}
+import org.eclipse.jetty.util.thread.QueuedThreadPool
 
-import org.apache.spark.{SPARK_VERSION => sparkVersion}
-import org.apache.spark.SparkConf
+import org.apache.spark.{Logging, SparkConf, SPARK_VERSION => sparkVersion}
 import org.apache.spark.util.{AkkaUtils, Utils}
 import org.apache.spark.deploy.{Command, DeployMessages, DriverDescription}
 import org.apache.spark.deploy.ClientArguments._
@@ -30,64 +37,188 @@ import org.apache.spark.deploy.master.Master
 
 /**
  * A server that responds to requests submitted by the [[StandaloneRestClient]].
- * This is intended to be embedded in the standalone Master. Cluster mode only
+ * This is intended to be embedded in the standalone Master and used in cluster mode only.
  */
-private[spark] class StandaloneRestServer(master: Master, host: String, requestedPort: Int)
-  extends SubmitRestServer(host, requestedPort, master.conf) {
-  protected override val handler = new StandaloneRestServerHandler(master)
+private[spark] class StandaloneRestServer(
+    master: Master,
+    host: String,
+    requestedPort: Int)
+  extends Logging {
+
+  private var _server: Option[Server] = None
+
+  /** Start the server and return the bound port. */
+  def start(): Int = {
+    val (server, boundPort) = Utils.startServiceOnPort[Server](requestedPort, doStart, master.conf)
+    _server = Some(server)
+    logInfo(s"Started REST server for submitting applications on port $boundPort")
+    boundPort
+  }
+
+  /**
+   * Set up the mapping from contexts to the appropriate servlets:
+   *   (1) submit requests should be directed to /create
+   *   (2) kill requests should be directed to /kill
+   *   (3) status requests should be directed to /status
+   * Return a 2-tuple of the started server and the bound port.
+   */
+  private def doStart(startPort: Int): (Server, Int) = {
+    val server = new Server(new InetSocketAddress(host, requestedPort))
+    val threadPool = new QueuedThreadPool
+    threadPool.setDaemon(true)
+    server.setThreadPool(threadPool)
+    val mainHandler = new ServletContextHandler
+    mainHandler.setContextPath("/submissions")
+    mainHandler.addServlet(new ServletHolder(new KillRequestServlet(master)), "/kill/*")
+    mainHandler.addServlet(new ServletHolder(new StatusRequestServlet(master)), "/status/*")
+    mainHandler.addServlet(new ServletHolder(new SubmitRequestServlet(master)), "/create")
+    server.setHandler(mainHandler)
+    server.start()
+    val boundPort = server.getConnectors()(0).getLocalPort
+    (server, boundPort)
+  }
+
+  def stop(): Unit = {
+    _server.foreach(_.stop())
+  }
 }
 
 /**
- * A handler for requests submitted to the standalone
- * Master via the REST application submission protocol.
+ * An abstract servlet for handling requests passed to the [[StandaloneRestServer]].
  */
-private[spark] class StandaloneRestServerHandler(
-    conf: SparkConf,
-    masterActor: ActorRef,
-    masterUrl: String)
-  extends SubmitRestServerHandler {
+private[spark] abstract class StandaloneRestServlet(master: Master)
+  extends HttpServlet with Logging {
 
-  private val askTimeout = AkkaUtils.askTimeout(conf)
+  protected val conf: SparkConf = master.conf
+  protected val masterActor: ActorRef = master.self
+  protected val masterUrl: String = master.masterUrl
+  protected val askTimeout = AkkaUtils.askTimeout(conf)
 
-  def this(master: Master) = {
-    this(master.conf, master.self, master.masterUrl)
+  /**
+   * Serialize the given response message to JSON and send it through the response servlet.
+   * This validates the response before sending it to ensure it is properly constructed.
+   */
+  protected def handleResponse(
+      responseMessage: SubmitRestProtocolResponse,
+      responseServlet: HttpServletResponse): Unit = {
+    try {
+      val message = validateResponse(responseMessage)
+      responseServlet.setContentType("application/json")
+      responseServlet.setCharacterEncoding("utf-8")
+      responseServlet.setStatus(HttpServletResponse.SC_OK)
+      val content = message.toJson.getBytes(Charsets.UTF_8)
+      val out = new DataOutputStream(responseServlet.getOutputStream)
+      out.write(content)
+      out.close()
+    } catch {
+      case e: Exception =>
+        logError("Exception encountered when handling response.", e)
+    }
   }
 
-  /** Handle a request to submit a driver. */
-  protected override def handleSubmit(request: SubmitDriverRequest): SubmitDriverResponse = {
-    val driverDescription = buildDriverDescription(request)
-    val response = AkkaUtils.askWithReply[DeployMessages.SubmitDriverResponse](
-      DeployMessages.RequestSubmitDriver(driverDescription), masterActor, askTimeout)
-    val s = new SubmitDriverResponse
-    s.serverSparkVersion = sparkVersion
-    s.message = response.message
-    s.success = response.success.toString
-    s.driverId = response.driverId.orNull
-    s
+  /** Return a human readable String representation of the exception. */
+  protected def formatException(e: Exception): String = {
+    val stackTraceString = e.getStackTrace.map { "\t" + _ }.mkString("\n")
+    s"$e\n$stackTraceString"
   }
 
-  /** Handle a request to kill a driver. */
-  protected override def handleKill(request: KillDriverRequest): KillDriverResponse = {
-    val driverId = request.driverId
+  /** Construct an error message to signal the fact that an exception has been thrown. */
+  protected def handleError(message: String): ErrorResponse = {
+    val e = new ErrorResponse
+    e.serverSparkVersion = sparkVersion
+    e.message = message
+    e
+  }
+
+  /**
+   * Validate the response message to ensure that it is correctly constructed.
+   * If it is, simply return the response as is. Otherwise, return an error response
+   * to propagate the exception back to the client.
+   */
+  private def validateResponse(response: SubmitRestProtocolResponse): SubmitRestProtocolResponse = {
+    try {
+      response.validate()
+      response
+    } catch {
+      case e: Exception =>
+        handleError("Internal server error: " + formatException(e))
+    }
+  }
+}
+
+/**
+ * A servlet for handling kill requests passed to the [[StandaloneRestServer]].
+ */
+private[spark] class KillRequestServlet(master: Master) extends StandaloneRestServlet(master) {
+
+  /**
+   * If a submission ID is specified in the URL, have the Master kill the corresponding
+   * driver and return an appropriate response to the client. Otherwise, return error.
+   */
+  protected override def doPost(
+      request: HttpServletRequest,
+      response: HttpServletResponse): Unit = {
+    try {
+      val submissionId = request.getPathInfo.stripPrefix("/")
+      val responseMessage =
+        if (submissionId.nonEmpty) {
+          handleKill(submissionId)
+        } else {
+          handleError("Submission ID is missing in kill request")
+        }
+      handleResponse(responseMessage, response)
+    } catch {
+      case e: Exception =>
+        logError("Exception encountered when handling kill request", e)
+    }
+  }
+
+  private def handleKill(submissionId: String): KillSubmissionResponse = {
     val response = AkkaUtils.askWithReply[DeployMessages.KillDriverResponse](
-      DeployMessages.RequestKillDriver(driverId), masterActor, askTimeout)
-    val k = new KillDriverResponse
+      DeployMessages.RequestKillDriver(submissionId), masterActor, askTimeout)
+    val k = new KillSubmissionResponse
     k.serverSparkVersion = sparkVersion
     k.message = response.message
-    k.driverId = driverId
+    k.submissionId = submissionId
     k.success = response.success.toString
     k
   }
+}
 
-  /** Handle a request for a driver's status. */
-  protected override def handleStatus(request: DriverStatusRequest): DriverStatusResponse = {
-    val driverId = request.driverId
+/**
+ * A servlet for handling status requests passed to the [[StandaloneRestServer]].
+ */
+private[spark] class StatusRequestServlet(master: Master) extends StandaloneRestServlet(master) {
+
+  /**
+   * If a submission ID is specified in the URL, request the status of the corresponding
+   * driver from the Master and include it in the response. Otherwise, return error.
+   */
+  protected override def doGet(
+      request: HttpServletRequest,
+      response: HttpServletResponse): Unit = {
+    try {
+      val submissionId = request.getPathInfo.stripPrefix("/")
+      val responseMessage =
+        if (submissionId.nonEmpty) {
+          handleStatus(submissionId)
+        } else {
+          handleError("Submission ID is missing in status request")
+        }
+      handleResponse(responseMessage, response)
+    } catch {
+      case e: Exception =>
+        logError("Exception encountered when handling status request", e)
+    }
+  }
+
+  private def handleStatus(submissionId: String): SubmissionStatusResponse = {
     val response = AkkaUtils.askWithReply[DeployMessages.DriverStatusResponse](
-      DeployMessages.RequestDriverStatus(driverId), masterActor, askTimeout)
+      DeployMessages.RequestDriverStatus(submissionId), masterActor, askTimeout)
     val message = response.exception.map { s"Exception from the cluster:\n" + formatException(_) }
-    val d = new DriverStatusResponse
+    val d = new SubmissionStatusResponse
     d.serverSparkVersion = sparkVersion
-    d.driverId = driverId
+    d.submissionId = submissionId
     d.success = response.found.toString
     d.driverState = response.state.map(_.toString).orNull
     d.workerId = response.workerId.orNull
@@ -95,14 +226,73 @@ private[spark] class StandaloneRestServerHandler(
     d.message = message.orNull
     d
   }
+}
+
+/**
+ * A servlet for handling submit requests passed to the [[StandaloneRestServer]].
+ */
+private[spark] class SubmitRequestServlet(master: Master) extends StandaloneRestServlet(master) {
+
+  /**
+   * Submit an application to the Master with parameters specified in the request message.
+   *
+   * The request is assumed to be a [[SubmitRestProtocolRequest]] in the form of JSON.
+   * If this is successful, return an appropriate response to the client indicating so.
+   * Otherwise, return error instead.
+   */
+  protected override def doPost(
+      request: HttpServletRequest,
+      response: HttpServletResponse): Unit = {
+    try {
+      val requestMessageJson = Source.fromInputStream(request.getInputStream).mkString
+      val requestMessage = SubmitRestProtocolMessage.fromJson(requestMessageJson)
+        .asInstanceOf[SubmitRestProtocolRequest]
+      val responseMessage = handleSubmit(requestMessage)
+      response.setContentType("application/json")
+      response.setCharacterEncoding("utf-8")
+      response.setStatus(HttpServletResponse.SC_OK)
+      val content = responseMessage.toJson.getBytes(Charsets.UTF_8)
+      val out = new DataOutputStream(response.getOutputStream)
+      out.write(content)
+      out.close()
+    } catch {
+      case e: Exception => logError("Exception while handling request", e)
+    }
+  }
+
+  private def handleSubmit(request: SubmitRestProtocolRequest): SubmitRestProtocolResponse = {
+    // The response should have already been validated on the client.
+    // In case this is not true, validate it ourselves to avoid potential NPEs.
+    try {
+      request.validate()
+      request match {
+        case submitRequest: CreateSubmissionRequest =>
+          val driverDescription = buildDriverDescription(submitRequest)
+          val response = AkkaUtils.askWithReply[DeployMessages.SubmitDriverResponse](
+            DeployMessages.RequestSubmitDriver(driverDescription), masterActor, askTimeout)
+          val submitResponse = new CreateSubmissionResponse
+          submitResponse.serverSparkVersion = sparkVersion
+          submitResponse.message = response.message
+          submitResponse.success = response.success.toString
+          submitResponse.submissionId = response.driverId.orNull
+          submitResponse
+        case unexpected => handleError(
+          s"Received message of unexpected type ${Utils.getFormattedClassName(unexpected)}.")
+      }
+    } catch {
+      case e: Exception => handleError(formatException(e))
+    }
+  }
 
   /**
    * Build a driver description from the fields specified in the submit request.
    *
-   * This does not currently consider fields used by python applications since
-   * python is not supported in standalone cluster mode yet.
+   * This involves constructing a command that takes into account memory, java options,
+   * classpath and other settings to launch the driver. This does not currently consider
+   * fields used by python applications since python is not supported in standalone
+   * cluster mode yet.
    */
-  private def buildDriverDescription(request: SubmitDriverRequest): DriverDescription = {
+  private def buildDriverDescription(request: CreateSubmissionRequest): DriverDescription = {
     // Required fields, including the main class because python is not yet supported
     val appName = request.appName
     val appResource = request.appResource
