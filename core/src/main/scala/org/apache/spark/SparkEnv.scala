@@ -154,7 +154,8 @@ object SparkEnv extends Logging {
   private[spark] def createDriverEnv(
       conf: SparkConf,
       isLocal: Boolean,
-      listenerBus: LiveListenerBus): SparkEnv = {
+      listenerBus: LiveListenerBus,
+      mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
     assert(conf.contains("spark.driver.host"), "spark.driver.host is not set on the driver!")
     assert(conf.contains("spark.driver.port"), "spark.driver.port is not set on the driver!")
     val hostname = conf.get("spark.driver.host")
@@ -166,7 +167,8 @@ object SparkEnv extends Logging {
       port,
       isDriver = true,
       isLocal = isLocal,
-      listenerBus = listenerBus
+      listenerBus = listenerBus,
+      mockOutputCommitCoordinator = mockOutputCommitCoordinator
     )
   }
 
@@ -205,7 +207,8 @@ object SparkEnv extends Logging {
       isDriver: Boolean,
       isLocal: Boolean,
       listenerBus: LiveListenerBus = null,
-      numUsableCores: Int = 0): SparkEnv = {
+      numUsableCores: Int = 0,
+      mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
 
     // Listener bus is only used on the driver
     if (isDriver) {
@@ -353,10 +356,13 @@ object SparkEnv extends Logging {
         "levels using the RDD.persist() method instead.")
     }
 
-    val outputCommitCoordinator = new OutputCommitCoordinator(conf)
+    val outputCommitCoordinator = mockOutputCommitCoordinator.getOrElse {
+      new OutputCommitCoordinator(conf)
+    }
     val outputCommitCoordinatorActor = registerOrLookup("OutputCommitCoordinator",
       new OutputCommitCoordinatorActor(outputCommitCoordinator))
     outputCommitCoordinator.coordinatorActor = Some(outputCommitCoordinatorActor)
+
     new SparkEnv(
       executorId,
       actorSystem,

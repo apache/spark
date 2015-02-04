@@ -119,7 +119,8 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
     authorizedCommittersByStage.clear
   }
 
-  private def handleAskPermissionToCommit(
+  // Marked private[scheduler] instead of private so this can be mocked in tests
+  private[scheduler] def handleAskPermissionToCommit(
       stage: StageId,
       task: TaskId,
       attempt: TaskAttemptId): Boolean = synchronized {

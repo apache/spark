@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.io.File
+import java.util.concurrent.TimeoutException
 
 import org.mockito.Matchers
 import org.mockito.Mockito._
@@ -28,8 +29,12 @@ import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.apache.hadoop.mapred.{TaskAttemptID, JobConf, TaskAttemptContext, OutputCommitter}
 
 import org.apache.spark._
-import org.apache.spark.rdd.FakeOutputCommitter
+import org.apache.spark.rdd.{RDD, FakeOutputCommitter}
 import org.apache.spark.util.Utils
+
+import scala.concurrent.Await
+import scala.concurrent.duration._
+import scala.language.postfixOps
 
 /**
  * Unit tests for the output commit coordination functionality.
@@ -61,13 +66,23 @@ import org.apache.spark.util.Utils
  */
 class OutputCommitCoordinatorSuite extends FunSuite with BeforeAndAfter {
 
-  var dagScheduler: DAGScheduler = null
+  var outputCommitCoordinator: OutputCommitCoordinator = null
   var tempDir: File = null
   var sc: SparkContext = null
 
   before {
-    sc = new SparkContext("local[4]", classOf[OutputCommitCoordinatorSuite].getSimpleName)
     tempDir = Utils.createTempDir()
+    sc = new SparkContext("local[4]", classOf[OutputCommitCoordinatorSuite].getSimpleName) {
+      override private[spark] def createSparkEnv(
+        conf: SparkConf,
+        isLocal: Boolean,
+        listenerBus: LiveListenerBus): SparkEnv = {
+        outputCommitCoordinator = spy(new OutputCommitCoordinator(conf))
+        // Use Mockito.spy() to maintain the default infrastructure everywhere else.
+        // This mocking allows us to control the coordinator responses in test cases.
+        SparkEnv.createDriverEnv(conf, isLocal, listenerBus, Some(outputCommitCoordinator))
+      }
+    }
     // Use Mockito.spy() to maintain the default infrastructure everywhere else
     val mockTaskScheduler = spy(sc.taskScheduler.asInstanceOf[TaskSchedulerImpl])
 
@@ -109,6 +124,7 @@ class OutputCommitCoordinatorSuite extends FunSuite with BeforeAndAfter {
   after {
     sc.stop()
     tempDir.delete()
+    outputCommitCoordinator = null
   }
 
   test("Only one of two duplicate commit tasks should commit") {
@@ -123,6 +139,20 @@ class OutputCommitCoordinatorSuite extends FunSuite with BeforeAndAfter {
     sc.runJob(rdd, OutputCommitFunctions(tempDir.getAbsolutePath).failFirstCommitAttempt _,
       0 until rdd.partitions.size, allowLocal = false)
     assert(tempDir.list().size === 1)
+  }
+
+  test("Job should not complete if all commits are denied") {
+    doReturn(false).when(outputCommitCoordinator).handleAskPermissionToCommit(
+      Matchers.any(), Matchers.any(), Matchers.any())
+    val rdd: RDD[Int] = sc.parallelize(Seq(1), 1)
+    def resultHandler(x: Int, y: Unit): Unit = {}
+    val futureAction: SimpleFutureAction[Unit] = sc.submitJob[Int, Unit, Unit](rdd,
+      OutputCommitFunctions(tempDir.getAbsolutePath).commitSuccessfully,
+      0 until rdd.partitions.size, resultHandler, 0)
+    intercept[TimeoutException] {
+      Await.result(futureAction, 5 seconds)
+    }
+    assert(tempDir.list().size === 0)
   }
 }
 
@@ -145,11 +175,13 @@ private case class OutputCommitFunctions(tempDirPath: String) {
     }
   }
 
-  def commitSuccessfully(ctx: TaskContext, iter: Iterator[Int]): Unit = {
+  def commitSuccessfully(iter: Iterator[Int]): Unit = {
+    val ctx = TaskContext.get()
     runCommitWithProvidedCommitter(ctx, iter, successfulOutputCommitter)
   }
 
-  def failFirstCommitAttempt(ctx: TaskContext, iter: Iterator[Int]): Unit = {
+  def failFirstCommitAttempt(iter: Iterator[Int]): Unit = {
+    val ctx = TaskContext.get()
     runCommitWithProvidedCommitter(ctx, iter,
       if (ctx.attemptNumber == 0) failingOutputCommitter else successfulOutputCommitter)
   }
