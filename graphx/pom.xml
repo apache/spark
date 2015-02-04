@@ -57,7 +57,7 @@
     <dependency>
     	<groupId>org.scalatest</groupId>
     	<artifactId>scalatest_2.10</artifactId>
-    	</dependency>
+    </dependency>
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
