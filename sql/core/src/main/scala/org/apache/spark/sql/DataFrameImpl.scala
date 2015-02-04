@@ -27,7 +27,7 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.{SqlParser, ScalaReflection}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedStar, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
@@ -124,11 +124,11 @@ private[sql] class DataFrameImpl protected[sql](
   }
 
   override def sort(sortCol: String, sortCols: String*): DataFrame = {
-    orderBy(apply(sortCol), sortCols.map(apply) :_*)
+    sort((sortCol +: sortCols).map(apply) :_*)
   }
 
-  override def sort(sortExpr: Column, sortExprs: Column*): DataFrame = {
-    val sortOrder: Seq[SortOrder] = (sortExpr +: sortExprs).map { col =>
+  override def sort(sortExprs: Column*): DataFrame = {
+    val sortOrder: Seq[SortOrder] = sortExprs.map { col =>
       col.expr match {
         case expr: SortOrder =>
           expr
@@ -143,8 +143,8 @@ private[sql] class DataFrameImpl protected[sql](
     sort(sortCol, sortCols :_*)
   }
 
-  override def orderBy(sortExpr: Column, sortExprs: Column*): DataFrame = {
-    sort(sortExpr, sortExprs :_*)
+  override def orderBy(sortExprs: Column*): DataFrame = {
+    sort(sortExprs :_*)
   }
 
   override def col(colName: String): Column = colName match {
@@ -179,8 +179,18 @@ private[sql] class DataFrameImpl protected[sql](
     select((col +: cols).map(Column(_)) :_*)
   }
 
+  override def selectExpr(exprs: String*): DataFrame = {
+    select(exprs.map { expr =>
+      Column(new SqlParser().parseExpression(expr))
+    } :_*)
+  }
+
   override def filter(condition: Column): DataFrame = {
     Filter(condition.expr, logicalPlan)
+  }
+
+  override def filter(conditionExpr: String): DataFrame = {
+    filter(Column(new SqlParser().parseExpression(conditionExpr)))
   }
 
   override def where(condition: Column): DataFrame = {
