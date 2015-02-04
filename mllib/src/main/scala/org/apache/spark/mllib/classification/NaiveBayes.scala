@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.classification
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax => brzArgmax, sum => brzSum}
+import org.apache.spark.mllib.classification.impl.GLMClassificationModel
 
 import org.apache.spark.{SparkContext, SparkException, Logging}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector}
@@ -78,10 +79,13 @@ class NaiveBayesModel private[mllib] (
 
 object NaiveBayesModel extends Loader[NaiveBayesModel] {
 
+  import Loader._
+
   private object SaveLoadV1_0 {
 
     def thisFormatVersion = "1.0"
 
+    /** Hard-code class name string in case it changes in the future */
     def thisClassName = "org.apache.spark.mllib.classification.NaiveBayesModel"
 
     /** Model data for model import/export */
@@ -93,22 +97,23 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
 
       // Create JSON metadata.
       val metadataRDD =
-        sc.parallelize(Seq((thisClassName, thisFormatVersion))).toDataFrame("class", "version")
-      metadataRDD.toJSON.repartition(1).saveAsTextFile(path + "/metadata")
+        sc.parallelize(Seq((thisClassName, thisFormatVersion, data.theta(0).size, data.pi.size)), 1)
+          .toDataFrame("class", "version", "numFeatures", "numClasses")
+      metadataRDD.toJSON.saveAsTextFile(metadataPath(path))
 
       // Create Parquet data.
-      val dataRDD: DataFrame = sc.parallelize(Seq(data))
-      dataRDD.repartition(1).saveAsParquetFile(path + "/data")
+      val dataRDD: DataFrame = sc.parallelize(Seq(data), 1)
+      dataRDD.saveAsParquetFile(dataPath(path))
     }
 
     def load(sc: SparkContext, path: String): NaiveBayesModel = {
       val sqlContext = new SQLContext(sc)
       // Load Parquet data.
-      val dataRDD = sqlContext.parquetFile(path + "/data")
+      val dataRDD = sqlContext.parquetFile(dataPath(path))
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
-      Loader.checkSchema[Data](dataRDD.schema)
+      checkSchema[Data](dataRDD.schema)
       val dataArray = dataRDD.select("labels", "pi", "theta").take(1)
-      assert(dataArray.size == 1, s"Unable to load NaiveBayesModel data from: ${path + "/data"}")
+      assert(dataArray.size == 1, s"Unable to load NaiveBayesModel data from: ${dataPath(path)}")
       val data = dataArray(0)
       val labels = data.getAs[Seq[Double]](0).toArray
       val pi = data.getAs[Seq[Double]](1).toArray
@@ -118,11 +123,24 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
   }
 
   override def load(sc: SparkContext, path: String): NaiveBayesModel = {
-    val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)
+    val (loadedClassName, version, metadata) = loadMetadata(sc, path)
     val classNameV1_0 = SaveLoadV1_0.thisClassName
     (loadedClassName, version) match {
       case (className, "1.0") if className == classNameV1_0 =>
-        SaveLoadV1_0.load(sc, path)
+        val (numFeatures, numClasses) =
+          ClassificationModel.getNumFeaturesClasses(metadata, classNameV1_0, path)
+        val model = SaveLoadV1_0.load(sc, path)
+        assert(model.pi.size == numClasses,
+          s"NaiveBayesModel.load expected $numClasses classes," +
+          s" but class priors vector pi had ${model.pi.size} elements")
+        assert(model.theta.size == numClasses,
+          s"NaiveBayesModel.load expected $numClasses classes," +
+            s" but class conditionals array theta had ${model.theta.size} elements")
+        assert(model.theta.forall(_.size == numFeatures),
+          s"NaiveBayesModel.load expected $numFeatures features," +
+          s" but class conditionals array theta had elements of size:" +
+          s" ${model.theta.map(_.size).mkString(",")}")
+        model
       case _ => throw new Exception(
         s"NaiveBayesModel.load did not recognize model with (className, format version):" +
         s"($loadedClassName, $version).  Supported:\n" +

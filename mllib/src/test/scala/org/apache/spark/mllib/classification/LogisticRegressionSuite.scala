@@ -149,6 +149,14 @@ object LogisticRegressionSuite {
     val testData = (0 until nPoints).map(i => LabeledPoint(y(i), x(i)))
     testData
   }
+
+  /** Binary labels, 3 features */
+  private val binaryModel = new LogisticRegressionModel(
+    weights = Vectors.dense(0.1, 0.2, 0.3), intercept = 0.5, numFeatures = 3, numClasses = 2)
+
+  /** 3 classes, 2 features */
+  private val multiclassModel = new LogisticRegressionModel(
+    weights = Vectors.dense(0.1, 0.2, 0.3, 0.4), intercept = 1.0, numFeatures = 2, numClasses = 3)
 }
 
 class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with Matchers {
@@ -464,19 +472,9 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
 
   }
 
-  test("model save/load") {
+  test("model save/load: binary classification") {
     // NOTE: This will need to be generalized once there are multiple model format versions.
-    val nPoints = 20
-    val A = 2.0
-    val B = -1.5
-
-    val testData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 42)
-    val testRDD = sc.parallelize(testData, 2)
-    testRDD.cache()
-
-    val lr = new LogisticRegressionWithLBFGS().setIntercept(true)
-    lr.optimizer.setNumIterations(1)
-    val model = lr.run(testRDD)
+    val model = LogisticRegressionSuite.binaryModel
 
     model.clearThreshold()
     assert(model.getThreshold.isEmpty)
@@ -485,19 +483,47 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
     val path = tempDir.toURI.toString
 
     // Save model, load it back, and compare.
-    model.save(sc, path)
-    val sameModel = LogisticRegressionModel.load(sc, path)
-    assert(model.weights == sameModel.weights)
-    assert(model.intercept == sameModel.intercept)
-    assert(sameModel.getThreshold.isEmpty)
-    Utils.deleteRecursively(tempDir)
+    try {
+      model.save(sc, path)
+      val sameModel = LogisticRegressionModel.load(sc, path)
+      assert(model.weights == sameModel.weights)
+      assert(model.intercept == sameModel.intercept)
+      assert(model.numClasses == sameModel.numClasses)
+      assert(model.numFeatures == sameModel.numFeatures)
+      assert(sameModel.getThreshold.isEmpty)
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
 
     // Save model with threshold.
-    model.setThreshold(0.7)
-    model.save(sc, path)
-    val sameModel2 = LogisticRegressionModel.load(sc, path)
-    assert(model.getThreshold.get == sameModel2.getThreshold.get)
-    Utils.deleteRecursively(tempDir)
+    try {
+      model.setThreshold(0.7)
+      model.save(sc, path)
+      val sameModel2 = LogisticRegressionModel.load(sc, path)
+      assert(model.getThreshold.get == sameModel2.getThreshold.get)
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
+  }
+
+  test("model save/load: multiclass classification") {
+    // NOTE: This will need to be generalized once there are multiple model format versions.
+    val model = LogisticRegressionSuite.multiclassModel
+
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+
+    // Save model, load it back, and compare.
+    try {
+      model.save(sc, path)
+      val sameModel = LogisticRegressionModel.load(sc, path)
+      assert(model.weights == sameModel.weights)
+      assert(model.intercept == sameModel.intercept)
+      assert(model.numClasses == sameModel.numClasses)
+      assert(model.numFeatures == sameModel.numFeatures)
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
   }
 
 }

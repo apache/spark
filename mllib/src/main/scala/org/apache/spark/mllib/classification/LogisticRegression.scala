@@ -48,6 +48,20 @@ class LogisticRegressionModel (
   extends GeneralizedLinearModel(weights, intercept) with ClassificationModel with Serializable
   with Saveable {
 
+  if (numClasses == 2) {
+    require(weights.size == numFeatures,
+      s"LogisticRegressionModel with numClasses = 2 was given non-matching values:" +
+      s" numFeatures = $numFeatures, but weights.size = ${weights.size}")
+  } else {
+    val weightsSizeWithoutIntercept = (numClasses - 1) * numFeatures
+    val weightsSizeWithIntercept = (numClasses - 1) * (numFeatures + 1)
+    require(weights.size == weightsSizeWithoutIntercept || weights.size == weightsSizeWithIntercept,
+      s"LogisticRegressionModel.load with numClasses = $numClasses and numFeatures = $numFeatures" +
+      s" expected weights of length $weightsSizeWithoutIntercept (without intercept)" +
+      s" or $weightsSizeWithIntercept (with intercept)," +
+      s" but was given weights of length ${weights.size}")
+  }
+
   def this(weights: Vector, intercept: Double) = this(weights, intercept, weights.size, 2)
 
   private var threshold: Option[Double] = Some(0.5)
@@ -81,7 +95,9 @@ class LogisticRegressionModel (
     this
   }
 
-  override protected def predictPoint(dataMatrix: Vector, weightMatrix: Vector,
+  override protected def predictPoint(
+      dataMatrix: Vector,
+      weightMatrix: Vector,
       intercept: Double) = {
     require(dataMatrix.size == numFeatures)
 
@@ -140,7 +156,7 @@ class LogisticRegressionModel (
 
   override def save(sc: SparkContext, path: String): Unit = {
     GLMClassificationModel.SaveLoadV1_0.save(sc, path, this.getClass.getName,
-      weights, intercept, threshold)
+      numFeatures, numClasses, weights, intercept, threshold)
   }
 
   override protected def formatVersion: String = "1.0"
@@ -150,11 +166,16 @@ object LogisticRegressionModel extends Loader[LogisticRegressionModel] {
 
   override def load(sc: SparkContext, path: String): LogisticRegressionModel = {
     val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)
+    // Hard-code class name string in case it changes in the future
     val classNameV1_0 = "org.apache.spark.mllib.classification.LogisticRegressionModel"
     (loadedClassName, version) match {
       case (className, "1.0") if className == classNameV1_0 =>
+        val (numFeatures, numClasses) =
+          ClassificationModel.getNumFeaturesClasses(metadata, classNameV1_0, path)
         val data = GLMClassificationModel.SaveLoadV1_0.loadData(sc, path, classNameV1_0)
-        val model = new LogisticRegressionModel(data.weights, data.intercept)
+        // numFeatures, numClasses, weights are checked in model initialization
+        val model =
+          new LogisticRegressionModel(data.weights, data.intercept, numFeatures, numClasses)
         data.threshold match {
           case Some(t) => model.setThreshold(t)
           case None => model.clearThreshold()

@@ -26,6 +26,12 @@ import org.apache.spark.mllib.util.{LocalClusterSparkContext, LinearDataGenerato
   MLlibTestSparkContext}
 import org.apache.spark.util.Utils
 
+private object LassoSuite {
+
+  /** 3 features */
+  val model = new LassoModel(weights = Vectors.dense(0.1, 0.2, 0.3), intercept = 0.5)
+}
+
 class LassoSuite extends FunSuite with MLlibTestSparkContext {
 
   def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]) {
@@ -118,27 +124,20 @@ class LassoSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("model save/load") {
-    // Create dataset
-    val nPoints = 10
-    val A = 2.0
-    val B = -1.5
-    val C = 1.0e-2
-    val testData = LinearDataGenerator.generateLinearInput(A, Array[Double](B, C), nPoints, 42)
-    val testRDD = sc.parallelize(testData, 2).cache()
+    val model = LassoSuite.model
 
-    // Train model
-    val ls = new LassoWithSGD()
-    ls.optimizer.setNumIterations(1)
-    val model = ls.run(testRDD)
-
-    // Save model, load it back, and compare.
     val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString
-    model.save(sc, path)
-    val sameModel = LassoModel.load(sc, path)
-    assert(model.weights == sameModel.weights)
-    assert(model.intercept == sameModel.intercept)
-    Utils.deleteRecursively(tempDir)
+
+    // Save model, load it back, and compare.
+    try {
+      model.save(sc, path)
+      val sameModel = LassoModel.load(sc, path)
+      assert(model.weights == sameModel.weights)
+      assert(model.intercept == sameModel.intercept)
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
   }
 }
 

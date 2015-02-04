@@ -68,6 +68,10 @@ object NaiveBayesSuite {
     Array(0.03, 0.91, 0.03, 0.03), // label 1
     Array(0.03, 0.03, 0.91, 0.03)  // label 2
   ).map(_.map(math.log))
+
+  /** Binary labels, 3 features */
+  private val binaryModel = new NaiveBayesModel(labels = Array(0.0, 1.0), pi = Array(0.2, 0.8),
+    theta = Array(Array(0.1, 0.3, 0.6), Array(0.2, 0.4, 0.4)))
 }
 
 class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
@@ -131,27 +135,21 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("model save/load") {
-    val nPoints = 10
-
-    val pi = NaiveBayesSuite.smallPi
-    val theta = NaiveBayesSuite.smallTheta
-
-    val data = NaiveBayesSuite.generateNaiveBayesInput(pi, theta, nPoints, 42)
-    val rdd = sc.parallelize(data, 2)
-    rdd.cache()
-
-    val model = NaiveBayes.train(rdd)
+    val model = NaiveBayesSuite.binaryModel
 
     val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString
 
     // Save model, load it back, and compare.
-    model.save(sc, path)
-    val sameModel = NaiveBayesModel.load(sc, path)
-    assert(model.labels === sameModel.labels)
-    assert(model.pi === sameModel.pi)
-    assert(model.theta === sameModel.theta)
-    Utils.deleteRecursively(tempDir)
+    try {
+      model.save(sc, path)
+      val sameModel = NaiveBayesModel.load(sc, path)
+      assert(model.labels === sameModel.labels)
+      assert(model.pi === sameModel.pi)
+      assert(model.theta === sameModel.theta)
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
   }
 }
 

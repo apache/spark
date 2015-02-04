@@ -19,6 +19,7 @@ package org.apache.spark.mllib.regression.impl
 
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.util.Loader
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
 /**
@@ -33,6 +34,10 @@ private[regression] object GLMRegressionModel {
     /** Model data for model import/export */
     case class Data(weights: Vector, intercept: Double)
 
+    /**
+     * Helper method for saving GLM regression model metadata and data.
+     * @param modelClass  String name for model class, to be saved with metadata
+     */
     def save(
         sc: SparkContext,
         path: String,
@@ -44,25 +49,35 @@ private[regression] object GLMRegressionModel {
 
       // Create JSON metadata.
       val metadataRDD =
-        sc.parallelize(Seq((modelClass, thisFormatVersion))).toDataFrame("class", "version")
-      metadataRDD.toJSON.repartition(1).saveAsTextFile(path + "/metadata")
+        sc.parallelize(Seq((modelClass, thisFormatVersion, weights.size)), 1)
+          .toDataFrame("class", "version", "numFeatures")
+      metadataRDD.toJSON.saveAsTextFile(Loader.metadataPath(path))
 
       // Create Parquet data.
       val data = Data(weights, intercept)
-      val dataRDD: DataFrame = sc.parallelize(Seq(data))
+      val dataRDD: DataFrame = sc.parallelize(Seq(data), 1)
       // TODO: repartition with 1 partition after SPARK-5532 gets fixed
-      dataRDD.saveAsParquetFile(path + "/data")
+      dataRDD.saveAsParquetFile(Loader.dataPath(path))
     }
 
-    def loadData(sc: SparkContext, path: String, modelClass: String): Data = {
+    /**
+     * Helper method for loading GLM regression model data.
+     * @param modelClass  String name for model class (used for error messages)
+     * @param numFeatures  Number of features, to be checked against loaded data.
+     *                     The length of the weights vector should equal numFeatures.
+     */
+    def loadData(sc: SparkContext, path: String, modelClass: String, numFeatures: Int): Data = {
+      val datapath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)
-      val dataRDD = sqlContext.parquetFile(path + "/data")
+      val dataRDD = sqlContext.parquetFile(datapath)
       val dataArray = dataRDD.select("weights", "intercept").take(1)
-      assert(dataArray.size == 1, s"Unable to load $modelClass data from: ${path + "/data"}")
+      assert(dataArray.size == 1, s"Unable to load $modelClass data from: $datapath")
       val data = dataArray(0)
-      assert(data.size == 2, s"Unable to load $modelClass data from: ${path + "/data"}")
+      assert(data.size == 2, s"Unable to load $modelClass data from: $datapath")
       data match {
         case Row(weights: Vector, intercept: Double) =>
+          assert(weights.size == numFeatures, s"Expected $numFeatures features, but" +
+            s" found ${weights.size} features when loading $modelClass weights from $datapath")
           Data(weights, intercept)
       }
     }

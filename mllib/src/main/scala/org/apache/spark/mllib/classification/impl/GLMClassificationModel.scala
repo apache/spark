@@ -19,6 +19,7 @@ package org.apache.spark.mllib.classification.impl
 
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.util.Loader
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
 /**
@@ -30,13 +31,20 @@ private[classification] object GLMClassificationModel {
 
     def thisFormatVersion = "1.0"
 
-    /** Model data for model import/export */
+    /** Model data for import/export */
     case class Data(weights: Vector, intercept: Double, threshold: Option[Double])
 
+    /**
+     * Helper method for saving GLM classification model metadata and data.
+     * @param modelClass  String name for model class, to be saved with metadata
+     * @param numClasses  Number of classes label can take, to be saved with metadata
+     */
     def save(
         sc: SparkContext,
         path: String,
         modelClass: String,
+        numFeatures: Int,
+        numClasses: Int,
         weights: Vector,
         intercept: Double,
         threshold: Option[Double]): Unit = {
@@ -45,23 +53,32 @@ private[classification] object GLMClassificationModel {
 
       // Create JSON metadata.
       val metadataRDD =
-        sc.parallelize(Seq((modelClass, thisFormatVersion))).toDataFrame("class", "version")
-      metadataRDD.toJSON.repartition(1).saveAsTextFile(path + "/metadata")
+        sc.parallelize(Seq((modelClass, thisFormatVersion, numFeatures, numClasses)), 1)
+          .toDataFrame("class", "version", "numFeatures", "numClasses")
+      metadataRDD.toJSON.saveAsTextFile(Loader.metadataPath(path))
 
       // Create Parquet data.
       val data = Data(weights, intercept, threshold)
-      val dataRDD: DataFrame = sc.parallelize(Seq(data))
+      val dataRDD: DataFrame = sc.parallelize(Seq(data), 1)
       // TODO: repartition with 1 partition after SPARK-5532 gets fixed
-      dataRDD.saveAsParquetFile(path + "/data")
+      dataRDD.saveAsParquetFile(Loader.dataPath(path))
     }
 
+    /**
+     * Helper method for loading GLM classification model data.
+     *
+     * NOTE: Callers of this method should check numClasses, numFeatures on their own.
+     *
+     * @param modelClass  String name for model class (used for error messages)
+     */
     def loadData(sc: SparkContext, path: String, modelClass: String): Data = {
+      val datapath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)
-      val dataRDD = sqlContext.parquetFile(path + "/data")
+      val dataRDD = sqlContext.parquetFile(datapath)
       val dataArray = dataRDD.select("weights", "intercept", "threshold").take(1)
-      assert(dataArray.size == 1, s"Unable to load $modelClass data from: ${path + "/data"}")
+      assert(dataArray.size == 1, s"Unable to load $modelClass data from: $datapath")
       val data = dataArray(0)
-      assert(data.size == 3, s"Unable to load $modelClass data from: ${path + "/data"}")
+      assert(data.size == 3, s"Unable to load $modelClass data from: $datapath")
       val (weights, intercept) = data match {
         case Row(weights: Vector, intercept: Double, _) =>
           (weights, intercept)

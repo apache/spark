@@ -19,6 +19,8 @@ package org.apache.spark.mllib.util
 
 import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
@@ -82,6 +84,12 @@ trait Loader[M <: Saveable] {
  */
 private[mllib] object Loader {
 
+  /** Returns URI for path/data using the Hadoop filesystem */
+  def dataPath(path: String): String = new Path(path, "data").toUri.toString
+
+  /** Returns URI for path/metadata using the Hadoop filesystem */
+  def metadataPath(path: String): String = new Path(path, "metadata").toUri.toString
+
   /**
    * Check the schema of loaded model data.
    *
@@ -114,7 +122,7 @@ private[mllib] object Loader {
    */
   def loadMetadata(sc: SparkContext, path: String): (String, String, DataFrame) = {
     val sqlContext = new SQLContext(sc)
-    val metadata = sqlContext.jsonFile(path + "/metadata")
+    val metadata = sqlContext.jsonFile(metadataPath(path))
     val (clazz, version) = try {
       val metadataArray = metadata.select("class", "version").take(1)
       assert(metadataArray.size == 1)
@@ -123,7 +131,7 @@ private[mllib] object Loader {
       }
     } catch {
       case e: Exception =>
-        throw new Exception(s"Unable to load model metadata from: ${path + "/metadata"}")
+        throw new Exception(s"Unable to load model metadata from: ${metadataPath(path)}")
     }
     (clazz, version, metadata)
   }

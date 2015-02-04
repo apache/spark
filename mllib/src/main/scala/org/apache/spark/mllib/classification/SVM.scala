@@ -83,7 +83,7 @@ class SVMModel (
 
   override def save(sc: SparkContext, path: String): Unit = {
     GLMClassificationModel.SaveLoadV1_0.save(sc, path, this.getClass.getName,
-      weights, intercept, threshold)
+      numFeatures = weights.size, numClasses = 2, weights, intercept, threshold)
   }
 
   override protected def formatVersion: String = "1.0"
@@ -93,11 +93,18 @@ object SVMModel extends Loader[SVMModel] {
 
   override def load(sc: SparkContext, path: String): SVMModel = {
     val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)
+    // Hard-code class name string in case it changes in the future
     val classNameV1_0 = "org.apache.spark.mllib.classification.SVMModel"
     (loadedClassName, version) match {
       case (className, "1.0") if className == classNameV1_0 =>
+        val (numFeatures, numClasses) =
+          ClassificationModel.getNumFeaturesClasses(metadata, classNameV1_0, path)
         val data = GLMClassificationModel.SaveLoadV1_0.loadData(sc, path, classNameV1_0)
         val model = new SVMModel(data.weights, data.intercept)
+        assert(model.weights.size == numFeatures, s"SVMModel.load with numFeatures=$numFeatures" +
+          s" was given non-matching weights vector of size ${model.weights.size}")
+        assert(numClasses == 2,
+          s"SVMModel.load was given numClasses=$numClasses but only supports 2 classes")
         data.threshold match {
           case Some(t) => model.setThreshold(t)
           case None => model.clearThreshold()

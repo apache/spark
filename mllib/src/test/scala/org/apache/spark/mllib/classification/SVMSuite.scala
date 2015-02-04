@@ -57,6 +57,9 @@ object SVMSuite {
     y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2)))
   }
 
+  /** Binary labels, 3 features */
+  private val binaryModel = new SVMModel(weights = Vectors.dense(0.1, 0.2, 0.3), intercept = 0.5)
+
 }
 
 class SVMSuite extends FunSuite with MLlibTestSparkContext {
@@ -195,18 +198,7 @@ class SVMSuite extends FunSuite with MLlibTestSparkContext {
 
   test("model save/load") {
     // NOTE: This will need to be generalized once there are multiple model format versions.
-    val nPoints = 10
-    val A = 0.01
-    val B = -1.5
-    val C = 1.0
-
-    val data = SVMSuite.generateSVMInput(A, Array[Double](B,C), nPoints, 42)
-    val rdd = sc.parallelize(data, 2)
-    rdd.cache()
-
-    val svm = new SVMWithSGD()
-    svm.optimizer.setNumIterations(1)
-    val model = svm.run(rdd)
+    val model = SVMSuite.binaryModel
 
     model.clearThreshold()
     assert(model.getThreshold.isEmpty)
@@ -215,19 +207,25 @@ class SVMSuite extends FunSuite with MLlibTestSparkContext {
     val path = tempDir.toURI.toString
 
     // Save model, load it back, and compare.
-    model.save(sc, path)
-    val sameModel = SVMModel.load(sc, path)
-    assert(model.weights == sameModel.weights)
-    assert(model.intercept == sameModel.intercept)
-    assert(sameModel.getThreshold.isEmpty)
-    Utils.deleteRecursively(tempDir)
+    try {
+      model.save(sc, path)
+      val sameModel = SVMModel.load(sc, path)
+      assert(model.weights == sameModel.weights)
+      assert(model.intercept == sameModel.intercept)
+      assert(sameModel.getThreshold.isEmpty)
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
 
     // Save model with threshold.
-    model.setThreshold(0.7)
-    model.save(sc, path)
-    val sameModel2 = SVMModel.load(sc, path)
-    assert(model.getThreshold.get == sameModel2.getThreshold.get)
-    Utils.deleteRecursively(tempDir)
+    try {
+      model.setThreshold(0.7)
+      model.save(sc, path)
+      val sameModel2 = SVMModel.load(sc, path)
+      assert(model.getThreshold.get == sameModel2.getThreshold.get)
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
   }
 }
 

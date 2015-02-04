@@ -27,6 +27,12 @@ import org.apache.spark.mllib.util.{LocalClusterSparkContext, LinearDataGenerato
   MLlibTestSparkContext}
 import org.apache.spark.util.Utils
 
+private object RidgeRegressionSuite {
+
+  /** 3 features */
+  val model = new RidgeRegressionModel(weights = Vectors.dense(0.1, 0.2, 0.3), intercept = 0.5)
+}
+
 class RidgeRegressionSuite extends FunSuite with MLlibTestSparkContext {
 
   def predictionError(predictions: Seq[Double], input: Seq[LabeledPoint]) = {
@@ -78,26 +84,20 @@ class RidgeRegressionSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("model save/load") {
-    // Create dataset
-    val numExamples = 20
-    val numFeatures = 4
-    val w = DoubleMatrix.rand(numFeatures, 1).subi(0.5)
-    val data = LinearDataGenerator.generateLinearInput(3.0, w.toArray, numExamples, 42, 10.0)
-    val rdd = sc.parallelize(data, 2).cache()
+    val model = RidgeRegressionSuite.model
 
-    // Train model
-    val lr = new RidgeRegressionWithSGD()
-    lr.optimizer.setNumIterations(1)
-    val model = lr.run(rdd)
-
-    // Save model, load it back, and compare.
     val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString
-    model.save(sc, path)
-    val sameModel = RidgeRegressionModel.load(sc, path)
-    assert(model.weights == sameModel.weights)
-    assert(model.intercept == sameModel.intercept)
-    Utils.deleteRecursively(tempDir)
+
+    // Save model, load it back, and compare.
+    try {
+      model.save(sc, path)
+      val sameModel = RidgeRegressionModel.load(sc, path)
+      assert(model.weights == sameModel.weights)
+      assert(model.intercept == sameModel.intercept)
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
   }
 }
 
