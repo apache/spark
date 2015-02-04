@@ -30,6 +30,7 @@ title: GraphX Programming Guide
 [GraphOps.pregel]: api/scala/index.html#org.apache.spark.graphx.GraphOps@pregel[A](A,Int,EdgeDirection)((VertexId,VD,A)⇒VD,(EdgeTriplet[VD,ED])⇒Iterator[(VertexId,A)],(A,A)⇒A)(ClassTag[A]):Graph[VD,ED]
 [PartitionStrategy]: api/scala/index.html#org.apache.spark.graphx.PartitionStrategy$
 [GraphLoader.edgeListFile]: api/scala/index.html#org.apache.spark.graphx.GraphLoader$@edgeListFile(SparkContext,String,Boolean,Int):Graph[Int,Int]
+[RDFLoader.loadNTriples]: api/scala/index.html#org.apache.spark.graphx.loaders.RDFLoader@loadNTriples(SparkContext,String,Int,Int):Graph[String,String]
 [Graph.apply]: api/scala/index.html#org.apache.spark.graphx.Graph$@apply[VD,ED](RDD[(VertexId,VD)],RDD[Edge[ED]],VD)(ClassTag[VD],ClassTag[ED]):Graph[VD,ED]
 [Graph.fromEdgeTuples]: api/scala/index.html#org.apache.spark.graphx.Graph$@fromEdgeTuples[VD](RDD[(VertexId,VertexId)],VD,Option[PartitionStrategy])(ClassTag[VD]):Graph[VD,Int]
 [Graph.fromEdges]: api/scala/index.html#org.apache.spark.graphx.Graph$@fromEdges[VD,ED](RDD[Edge[ED]],VD)(ClassTag[VD],ClassTag[ED]):Graph[VD,ED]
@@ -872,6 +873,11 @@ object Graph {
 [`Graph.fromEdgeTuples`][Graph.fromEdgeTuples] allows creating a graph from only an RDD of edge tuples, assigning the edges the value 1, and automatically creating any vertices mentioned by edges and assigning them the default value. It also supports deduplicating the edges; to deduplicate, pass `Some` of a [`PartitionStrategy`][PartitionStrategy] as the `uniqueEdges` parameter (for example, `uniqueEdges = Some(PartitionStrategy.RandomVertexCut)`). A partition strategy is necessary to colocate identical edges on the same partition so they can be deduplicated.
 
 <a name="vertex_and_edge_rdds"></a>
+
+## RDF Graph Builder
+[`RDFLoader.loadNTriples`][RDFLoader.loadNTriples] loads an RDF graph from a .nt dump into a `Graph[String,String]`. 
+Both resource nodes and literal nodes are mapped to vertices, with the URI or the literal value (not processed in any way) as the String value. Each `Vertex[String]` is assigned an Id using a simple hash function applied to the URI of the resource node or to the value of the literal node prefixed by the subject and property URI's of the triple where that literal occurs. Thus, literal nodes identical in value but from non-identical triples are each assigned a separate `Vertex[String]` in the `Graph[String, String]`.
+ Each valid triple is mapped to an `Edge[String]`, carrying the RDF property URI as its `String` value.
 
 # Vertex and Edge RDDs
 
