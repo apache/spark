@@ -64,8 +64,6 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
   protected val OPTIONS = Keyword("OPTIONS")
   protected val AS = Keyword("AS")
   protected val COMMENT = Keyword("COMMENT")
-  protected val IF = Keyword("IF")
-  protected val EXISTS = Keyword("EXISTS")
 
   // Data types.
   protected val STRING = Keyword("STRING")
