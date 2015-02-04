@@ -33,12 +33,18 @@ import org.apache.spark.deploy.SparkSubmitArguments
  * currently used for cluster mode only.
  *
  * The specific request sent to the server depends on the action as follows:
- *   (1) submit - POST to http://.../submissions/create
- *   (2) kill - POST http://.../submissions/kill/[submissionId]
- *   (3) status - GET http://.../submissions/status/[submissionId]
+ *   (1) submit - POST to /submissions/create
+ *   (2) kill - POST /submissions/kill/[submissionId]
+ *   (3) status - GET /submissions/status/[submissionId]
  *
  * In the case of (1), parameters are posted in the HTTP body in the form of JSON fields.
  * Otherwise, the URL fully specifies the intended action of the client.
+ *
+ * Additionally, the base URL includes the version of the protocol. For instance:
+ * http://1.2.3.4:6066/v1/submissions/create. Since the protocol is expected to be stable
+ * across Spark versions, existing fields cannot be added or removed. In the rare event that
+ * backward compatibility is broken, Spark must introduce a new protocol version (e.g. v2).
+ * The client and the server must communicate on the same version of the protocol.
  */
 private[spark] class StandaloneRestClient extends Logging {
   import StandaloneRestClient._
@@ -147,20 +153,25 @@ private[spark] class StandaloneRestClient extends Logging {
 
   /** Return the REST URL for creating a new submission. */
   private def getSubmitUrl(master: String): URL = {
-    val baseUrl = master.stripPrefix("spark://")
-    new URL(s"http://$baseUrl/submissions/create")
+    val baseUrl = getBaseUrl(master)
+    new URL(s"$baseUrl/submissions/create")
   }
 
   /** Return the REST URL for killing an existing submission. */
   private def getKillUrl(master: String, submissionId: String): URL = {
-    val baseUrl = master.stripPrefix("spark://")
-    new URL(s"http://$baseUrl/submissions/kill/$submissionId")
+    val baseUrl = getBaseUrl(master)
+    new URL(s"$baseUrl/submissions/kill/$submissionId")
   }
 
   /** Return the REST URL for requesting the status of an existing submission. */
   private def getStatusUrl(master: String, submissionId: String): URL = {
-    val baseUrl = master.stripPrefix("spark://")
-    new URL(s"http://$baseUrl/submissions/status/$submissionId")
+    val baseUrl = getBaseUrl(master)
+    new URL(s"$baseUrl/submissions/status/$submissionId")
+  }
+
+  /** Return the base URL for communicating with the server, including the protocol version. */
+  private def getBaseUrl(master: String): String = {
+    "http://" + master.stripPrefix("spark://").stripSuffix("/") + "/" + PROTOCOL_VERSION
   }
 
   /** Throw an exception if this is not standalone mode. */
@@ -261,4 +272,5 @@ private[spark] class StandaloneRestClient extends Logging {
 private object StandaloneRestClient {
   val REPORT_DRIVER_STATUS_INTERVAL = 1000
   val REPORT_DRIVER_STATUS_MAX_TRIES = 10
+  val PROTOCOL_VERSION = "v1"
 }

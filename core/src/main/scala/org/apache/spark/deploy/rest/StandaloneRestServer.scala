@@ -45,6 +45,8 @@ private[spark] class StandaloneRestServer(
     requestedPort: Int)
   extends Logging {
 
+  import StandaloneRestServer._
+
   private var _server: Option[Server] = None
 
   /** Start the server and return the bound port. */
@@ -67,11 +69,17 @@ private[spark] class StandaloneRestServer(
     val threadPool = new QueuedThreadPool
     threadPool.setDaemon(true)
     server.setThreadPool(threadPool)
+    val pathPrefix = s"/$PROTOCOL_VERSION/submissions"
     val mainHandler = new ServletContextHandler
-    mainHandler.setContextPath("/submissions")
-    mainHandler.addServlet(new ServletHolder(new KillRequestServlet(master)), "/kill/*")
-    mainHandler.addServlet(new ServletHolder(new StatusRequestServlet(master)), "/status/*")
-    mainHandler.addServlet(new ServletHolder(new SubmitRequestServlet(master)), "/create")
+    mainHandler.setContextPath("/")
+    mainHandler.addServlet(
+      new ServletHolder(new SubmitRequestServlet(master)), s"$pathPrefix/create")
+    mainHandler.addServlet(
+      new ServletHolder(new KillRequestServlet(master)), s"$pathPrefix/kill/*")
+    mainHandler.addServlet(
+      new ServletHolder(new StatusRequestServlet(master)), s"$pathPrefix/status/*")
+    mainHandler.addServlet(
+      new ServletHolder(new ErrorServlet), "/")
     server.setHandler(mainHandler)
     server.start()
     val boundPort = server.getConnectors()(0).getLocalPort
@@ -81,6 +89,10 @@ private[spark] class StandaloneRestServer(
   def stop(): Unit = {
     _server.foreach(_.stop())
   }
+}
+
+private object StandaloneRestServer {
+  val PROTOCOL_VERSION = StandaloneRestClient.PROTOCOL_VERSION
 }
 
 /**
@@ -344,5 +356,25 @@ private[spark] class SubmitRequestServlet(master: Master) extends StandaloneRest
     val actualSuperviseDriver = superviseDriver.map(_.toBoolean).getOrElse(DEFAULT_SUPERVISE)
     new DriverDescription(
       appResource, actualDriverMemory, actualDriverCores, actualSuperviseDriver, command)
+  }
+}
+
+/**
+ * A default servlet that handles error cases that are not captured by other servlets.
+ */
+private[spark] class ErrorServlet extends HttpServlet {
+  private val expectedVersion = StandaloneRestServer.PROTOCOL_VERSION
+  override def service(request: HttpServletRequest, response: HttpServletResponse): Unit = {
+    val path = request.getPathInfo
+    val parts = path.stripPrefix("/").split("/")
+    if (parts.nonEmpty) {
+      val version = parts.head
+      if (version != expectedVersion) {
+        response.sendError(800, s"Incompatible protocol version $version")
+        return
+      }
+    }
+    response.sendError(801,
+      s"Unexpected path $path: Please submit requests through /$expectedVersion/submissions/")
   }
 }
