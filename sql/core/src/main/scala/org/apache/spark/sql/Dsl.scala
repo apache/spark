@@ -17,11 +17,8 @@
 
 package org.apache.spark.sql
 
-import java.util.{List => JList}
-
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{TypeTag, typeTag}
-import scala.collection.JavaConversions._
 
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions._
@@ -168,14 +165,6 @@ object Dsl {
 
   /** Computes the absolutle value. */
   def abs(e: Column): Column = Abs(e.expr)
-
-  /**
-   * This is a private API for Python
-   * TODO: move this to a private package
-   */
-  def toColumns(cols: JList[Column]): Seq[Column] = {
-    cols.toList.toSeq
-  }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////
