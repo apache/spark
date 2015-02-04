@@ -486,8 +486,8 @@ private[spark] class ExecutorAllocationManager(
       }
     }
 
-    override def onBlockManagerAdded(blockManagerAdded: SparkListenerBlockManagerAdded): Unit = {
-      val executorId = blockManagerAdded.blockManagerId.executorId
+    override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = {
+      val executorId = executorAdded.executorId
       if (executorId != SparkContext.DRIVER_IDENTIFIER) {
         // This guards against the race condition in which the `SparkListenerTaskStart`
         // event is posted before the `SparkListenerBlockManagerAdded` event, which is
@@ -498,9 +498,8 @@ private[spark] class ExecutorAllocationManager(
       }
     }
 
-    override def onBlockManagerRemoved(
-        blockManagerRemoved: SparkListenerBlockManagerRemoved): Unit = {
-      allocationManager.onExecutorRemoved(blockManagerRemoved.blockManagerId.executorId)
+    override def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved): Unit = {
+      allocationManager.onExecutorRemoved(executorRemoved.executorId)
     }
 
     /**
