@@ -31,13 +31,9 @@ collectAsMap(rdd)
 \item{flatten}{FALSE if the list should not flattened}
 
 \item{partitionId}{the partition to collect (starts from 0)}
-
-\item{rdd}{The RDD to collect as a map}
 }
 \value{
 a list containing elements in the RDD
-
-a named list containing elements in the RDD
 }
 \description{
 \code{collect} returns a list that contains all of the elements in this RDD.
@@ -46,7 +42,7 @@ a named list containing elements in the RDD
 in the specified partition of the RDD.
 
 \code{collectAsMap} returns a named list as a map that contains all of the elements
-in this key-value pair RDD.
+in a key-value pair RDD.
 }
 \examples{
 \dontrun{
@@ -57,7 +53,7 @@ collectPartition(rdd, 0L) # list from 1 to 5
 }
 \dontrun{
 sc <- sparkR.init()
-rdd <- parallelize(sc, list(list(1, 2),list(3, 4)), 2L)
+rdd <- parallelize(sc, list(list(1, 2), list(3, 4)), 2L)
 collectAsMap(rdd) # list(`1` = 2, `3` = 4)
 }
 }
