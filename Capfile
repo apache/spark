@@ -41,13 +41,11 @@ namespace :deploy do
   end
 
   task :upload_to_hdfs, :roles => :uploader, :on_no_matching_servers => :continue do
-    target_sha = ENV['SHA'] || fetch(:sha, `git rev-parse HEAD`.gsub(/\s/,""))
-    run "hdfs dfs -copyFromLocal -f /u/apps/spark/current/lib/spark-assembly-*.jar hdfs://nn01.chi.shopify.com/user/sparkles/spark-assembly-#{target_sha}.jar"
+    run "hdfs dfs -copyFromLocal -f /u/apps/spark/current/lib/spark-assembly-*.jar hdfs://nn01.chi.shopify.com/user/sparkles/spark-assembly-#{fetch(:sha)}.jar"
   end
 
   task :test_spark_jar, :roles => :uploader, :on_no_master_servers => :continue do
-    target_sha = ENV['SHA'] || fetch(:sha, `git rev-parse HEAD`.gsub(/\s/,""))
-    run "sudo -u azkaban sh -c '. /u/virtualenvs/starscream/bin/activate && cd /u/apps/starscream/current && PYTHON_ENV=production SPARK_OPTS=\"spark.yarn.jar=hdfs://nn01.chi.shopify.com:8020/user/sparkles/spark-assembly-#{target_sha}.jar\" exec python shopify/tools/canary.py'"
+    run "sudo -u azkaban sh -c '. /u/virtualenvs/starscream/bin/activate && cd /u/apps/starscream/current && PYTHON_ENV=production SPARK_OPTS=\"spark.yarn.jar=hdfs://nn01.chi.shopify.com:8020/user/sparkles/spark-assembly-#{fetch(:sha)}.jar\" exec python shopify/tools/canary.py'"
   end
 
   task :prevent_gateway do
@@ -79,6 +77,8 @@ namespace :deploy do
 
   after 'deploy:initialize_variables', 'deploy:prevent_gateway' # capistrano recipes packserv deploy always uses a gateway
   before  'deploy:symlink_current', 'deploy:symlink_shared'
+  before  'deploy:test_spark_jar', 'deploy:initialize_variables'
+  before  'deploy:upload_to_hdfs', 'deploy:initialize_variables'
   after  'deploy:download', 'deploy:upload_to_hdfs', 'deploy:test_spark_jar'
   after 'deploy:restart', 'deploy:cleanup'
   after 'deploy:cleanup', 'deploy:remind_us_to_update_starscream'
