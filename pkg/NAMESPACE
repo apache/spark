@@ -6,6 +6,7 @@ exportMethods(
               "checkpoint",
               "cogroup",
               "collect",
+              "collectAsMap",
               "collectPartition",
               "combineByKey",
               "count",

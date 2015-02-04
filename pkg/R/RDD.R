@@ -358,6 +358,7 @@ setMethod("collect",
             convertJListToRList(collected, flatten)
           })
 
+
 #' @rdname collect-methods
 #' @export
 #' @description
@@ -382,6 +383,29 @@ setMethod("collectPartition",
             convertJListToRList(jList, flatten = TRUE)
           })
 
+#' @rdname collect-methods
+#' @export
+#' @description
+#' \code{collectAsMap} returns a named list as a map that contains all of the elements
+#' in a key-value pair RDD. 
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, list(list(1, 2),list(3, 4)), 2L)
+#' collectAsMap(rdd) # list(`1` = 2, `3` = 4)
+#'}
+setGeneric("collectAsMap", function(rdd) { standardGeneric("collectAsMap") })
+
+#' @rdname collect-methods
+#' @aliases collectAsMap,RDD-method
+setMethod("collectAsMap",
+          signature(rdd = "RDD"),
+          function(rdd) {
+            pairList <- collect(rdd)
+            map <- new.env()
+            lapply(pairList, function(x) { assign(as.character(x[[1]]), x[[2]], envir = map) })
+            as.list(map)
+          })
 
 #' Look up elements of a key in an RDD
 #'
