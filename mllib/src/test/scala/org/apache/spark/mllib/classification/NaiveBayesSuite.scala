@@ -130,7 +130,7 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
     }
   }
 
-  test("model export/import") {
+  test("model save/load") {
     val nPoints = 10
 
     val pi = NaiveBayesSuite.smallPi

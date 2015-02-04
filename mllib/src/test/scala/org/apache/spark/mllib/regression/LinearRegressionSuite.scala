@@ -126,7 +126,7 @@ class LinearRegressionSuite extends FunSuite with MLlibTestSparkContext {
       sparseValidationData.map(row => model.predict(row.features)), sparseValidationData)
   }
 
-  test("model export/import") {
+  test("model save/load") {
     // Create dataset
     val rdd = sc.parallelize(
       LinearDataGenerator.generateLinearInput(0.0, Array(10.0, 10.0), 10, 42), 2)

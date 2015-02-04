@@ -117,7 +117,7 @@ class LassoSuite extends FunSuite with MLlibTestSparkContext {
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
   }
 
-  test("model export/import") {
+  test("model save/load") {
     // Create dataset
     val nPoints = 10
     val A = 2.0

@@ -77,7 +77,7 @@ class RidgeRegressionSuite extends FunSuite with MLlibTestSparkContext {
       "ridgeError (" + ridgeErr + ") was not less than linearError(" + linearErr + ")")
   }
 
-  test("model export/import") {
+  test("model save/load") {
     // Create dataset
     val numExamples = 20
     val numFeatures = 4

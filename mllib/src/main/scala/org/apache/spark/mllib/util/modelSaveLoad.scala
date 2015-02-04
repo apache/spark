@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.{DataType, StructType, StructField}
  * This should be inherited by the class which implements model instances.
  */
 @DeveloperApi
-trait Exportable {
+trait Saveable {
 
   /**
    * Save this model to the given path.
@@ -42,7 +42,7 @@ trait Exportable {
    *  - human-readable (JSON) model metadata to path/metadata/
    *  - Parquet formatted data to path/data/
    *
-   * The model may be loaded using [[Importable.load]].
+   * The model may be loaded using [[Loader.load]].
    *
    * @param sc  Spark context used to save model data.
    * @param path  Path specifying the directory in which to save this model.
@@ -50,7 +50,7 @@ trait Exportable {
    */
   def save(sc: SparkContext, path: String): Unit
 
-  /** Current version of model import/export format. */
+  /** Current version of model save/load format. */
   protected def formatVersion: String
 
 }
@@ -58,20 +58,16 @@ trait Exportable {
 /**
  * :: DeveloperApi ::
  *
- * Trait for models and transformers which may be loaded from files.
+ * Trait for classes which can load models and transformers from files.
  * This should be inherited by an object paired with the model class.
  */
 @DeveloperApi
-trait Importable[M <: Exportable] {
-
-  protected abstract class Importer {
-    def load(sc: SparkContext, path: String): M
-  }
+trait Loader[M <: Saveable] {
 
   /**
    * Load a model from the given path.
    *
-   * The model should have been saved by [[Exportable.save]].
+   * The model should have been saved by [[Saveable.save]].
    *
    * @param sc  Spark context used for loading model files.
    * @param path  Path specifying the directory to which the model was saved.
@@ -79,14 +75,12 @@ trait Importable[M <: Exportable] {
    */
   def load(sc: SparkContext, path: String): M
 
-  // def loadWithSchema(sc: SparkContext, path: String): (M, StructType)
-
-  /** Current version of model import/export format. */
-  protected def formatVersion: String
-
 }
 
-private[mllib] object Importable {
+/**
+ * Helper methods for loading models from files.
+ */
+private[mllib] object Loader {
 
   /**
    * Check the schema of loaded model data.

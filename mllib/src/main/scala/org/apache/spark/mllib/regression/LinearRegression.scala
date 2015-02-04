@@ -21,7 +21,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.regression.impl.GLMRegressionModel
-import org.apache.spark.mllib.util.{Exportable, Importable}
+import org.apache.spark.mllib.util.{Saveable, Loader}
 import org.apache.spark.rdd.RDD
 
 /**
@@ -34,7 +34,7 @@ class LinearRegressionModel (
     override val weights: Vector,
     override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept) with RegressionModel with Serializable
-  with Exportable {
+  with Saveable {
 
   override protected def predictPoint(
       dataMatrix: Vector,
@@ -44,20 +44,27 @@ class LinearRegressionModel (
   }
 
   override def save(sc: SparkContext, path: String): Unit = {
-    GLMRegressionModel.save(sc, path, this.getClass.getName, weights, intercept)
+    GLMRegressionModel.SaveLoadV1_0.save(sc, path, this.getClass.getName, weights, intercept)
   }
 
-  override protected def formatVersion: String = LinearRegressionModel.formatVersion
+  override protected def formatVersion: String = "1.0"
 }
 
-object LinearRegressionModel extends Importable[LinearRegressionModel] {
+object LinearRegressionModel extends Loader[LinearRegressionModel] {
 
   override def load(sc: SparkContext, path: String): LinearRegressionModel = {
-    val data = GLMRegressionModel.loadData(sc, path, classOf[LinearRegressionModel].getName)
-    new LinearRegressionModel(data.weights, data.intercept)
+    val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)
+    val classNameV1_0 = "org.apache.spark.mllib.regression.LinearRegressionModel"
+    (loadedClassName, version) match {
+      case (className, "1.0") if className == classNameV1_0 =>
+        val data = GLMRegressionModel.SaveLoadV1_0.loadData(sc, path, classNameV1_0)
+        new LinearRegressionModel(data.weights, data.intercept)
+      case _ => throw new Exception(
+        s"LinearRegressionModel.load did not recognize model with (className, format version):" +
+        s"($loadedClassName, $version).  Supported:\n" +
+        s"  ($classNameV1_0, 1.0)")
+    }
   }
-
-  override protected def formatVersion: String = LinearRegressionModel.formatVersion
 }
 
 /**

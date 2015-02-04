@@ -24,7 +24,7 @@ import org.apache.spark.mllib.linalg.BLAS.dot
 import org.apache.spark.mllib.linalg.{DenseVector, Vector}
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.util.{DataValidators, Exportable, Importable}
+import org.apache.spark.mllib.util.{DataValidators, Saveable, Loader}
 import org.apache.spark.rdd.RDD
 
 
@@ -46,7 +46,7 @@ class LogisticRegressionModel (
     val numFeatures: Int,
     val numClasses: Int)
   extends GeneralizedLinearModel(weights, intercept) with ClassificationModel with Serializable
-  with Exportable {
+  with Saveable {
 
   def this(weights: Vector, intercept: Double) = this(weights, intercept, weights.size, 2)
 
@@ -139,27 +139,33 @@ class LogisticRegressionModel (
   }
 
   override def save(sc: SparkContext, path: String): Unit = {
-    GLMClassificationModel.save(sc, path, this.getClass.getName, weights, intercept, threshold)
+    GLMClassificationModel.SaveLoadV1_0.save(sc, path, this.getClass.getName,
+      weights, intercept, threshold)
   }
 
-  override protected def formatVersion: String = LogisticRegressionModel.formatVersion
-
+  override protected def formatVersion: String = "1.0"
 }
 
-object LogisticRegressionModel extends Importable[LogisticRegressionModel] {
+object LogisticRegressionModel extends Loader[LogisticRegressionModel] {
 
   override def load(sc: SparkContext, path: String): LogisticRegressionModel = {
-    val data = GLMClassificationModel.loadData(sc, path, classOf[LogisticRegressionModel].getName)
-    val lr = new LogisticRegressionModel(data.weights, data.intercept)
-    data.threshold match {
-      case Some(t) => lr.setThreshold(t)
-      case None => lr.clearThreshold()
+    val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)
+    val classNameV1_0 = "org.apache.spark.mllib.classification.LogisticRegressionModel"
+    (loadedClassName, version) match {
+      case (className, "1.0") if className == classNameV1_0 =>
+        val data = GLMClassificationModel.SaveLoadV1_0.loadData(sc, path, classNameV1_0)
+        val model = new LogisticRegressionModel(data.weights, data.intercept)
+        data.threshold match {
+          case Some(t) => model.setThreshold(t)
+          case None => model.clearThreshold()
+        }
+        model
+      case _ => throw new Exception(
+        s"LogisticRegressionModel.load did not recognize model with (className, format version):" +
+        s"($loadedClassName, $version).  Supported:\n" +
+        s"  ($classNameV1_0, 1.0)")
     }
-    lr
   }
-
-  override protected def formatVersion: String = GLMClassificationModel.formatVersion
-
 }
 
 /**

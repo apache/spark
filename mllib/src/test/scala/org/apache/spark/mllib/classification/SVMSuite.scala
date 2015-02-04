@@ -193,7 +193,8 @@ class SVMSuite extends FunSuite with MLlibTestSparkContext {
     new SVMWithSGD().setValidateData(false).run(testRDDInvalid)
   }
 
-  test("model export/import") {
+  test("model save/load") {
+    // NOTE: This will need to be generalized once there are multiple model format versions.
     val nPoints = 10
     val A = 0.01
     val B = -1.5

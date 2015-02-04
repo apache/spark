@@ -19,7 +19,6 @@ package org.apache.spark.mllib.regression.impl
 
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.util.Importable
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
 /**
@@ -27,33 +26,35 @@ import org.apache.spark.sql.{DataFrame, Row, SQLContext}
  */
 private[regression] object GLMRegressionModel {
 
-  /** Model data for model import/export */
-  case class Data(weights: Vector, intercept: Double)
+  object SaveLoadV1_0 {
 
-  def save(
-      sc: SparkContext,
-      path: String,
-      modelClass: String,
-      weights: Vector,
-      intercept: Double): Unit = {
-    val sqlContext = new SQLContext(sc)
-    import sqlContext._
+    def thisFormatVersion = "1.0"
 
-    // Create JSON metadata.
-    val metadataRDD =
-      sc.parallelize(Seq((modelClass, formatVersion))).toDataFrame("class", "version")
-    metadataRDD.toJSON.repartition(1).saveAsTextFile(path + "/metadata")
+    /** Model data for model import/export */
+    case class Data(weights: Vector, intercept: Double)
 
-    // Create Parquet data.
-    val data = Data(weights, intercept)
-    val dataRDD: DataFrame = sc.parallelize(Seq(data))
-    // TODO: repartition with 1 partition after SPARK-5532 gets fixed
-    dataRDD.saveAsParquetFile(path + "/data")
-  }
+    def save(
+        sc: SparkContext,
+        path: String,
+        modelClass: String,
+        weights: Vector,
+        intercept: Double): Unit = {
+      val sqlContext = new SQLContext(sc)
+      import sqlContext._
 
-  private object ImporterV1 {
+      // Create JSON metadata.
+      val metadataRDD =
+        sc.parallelize(Seq((modelClass, thisFormatVersion))).toDataFrame("class", "version")
+      metadataRDD.toJSON.repartition(1).saveAsTextFile(path + "/metadata")
 
-    def load(sc: SparkContext, path: String, modelClass: String): Data = {
+      // Create Parquet data.
+      val data = Data(weights, intercept)
+      val dataRDD: DataFrame = sc.parallelize(Seq(data))
+      // TODO: repartition with 1 partition after SPARK-5532 gets fixed
+      dataRDD.saveAsParquetFile(path + "/data")
+    }
+
+    def loadData(sc: SparkContext, path: String, modelClass: String): Data = {
       val sqlContext = new SQLContext(sc)
       val dataRDD = sqlContext.parquetFile(path + "/data")
       val dataArray = dataRDD.select("weights", "intercept").take(1)
@@ -64,23 +65,6 @@ private[regression] object GLMRegressionModel {
         case Row(weights: Vector, intercept: Double) =>
           Data(weights, intercept)
       }
-    }
-  }
-
-  def formatVersion: String = "1.0"
-
-  def loadData(sc: SparkContext, path: String, modelClass: String): Data = {
-    val (clazz, version, metadata) = Importable.loadMetadata(sc, path)
-    // Note: This check of the class name should happen here since we may eventually want to load
-    //       other classes (such as deprecated versions).
-    assert(clazz == modelClass, s"$modelClass.load" +
-      s" was given model file with metadata specifying a different model class: $clazz")
-    version match {
-      case "1.0" =>
-        ImporterV1.load(sc, path, modelClass)
-      case _ => throw new Exception(
-        s"$modelClass.load did not recognize model format version: $version." +
-          s" Supported versions: 1.0.")
     }
   }
 
