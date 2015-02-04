@@ -373,3 +373,22 @@ test_that("fullOuterJoin() on pairwise RDDs", {
   expect_equal(sortKeyValueList(actual),
                sortKeyValueList(list(list("a", list(1, NULL)), list("b", list(2, NULL)), list("d", list(NULL, 4)), list("c", list(NULL, 3)))))
 })
+
+test_that("collectAsMap() on a pairwise RDD", {
+  rdd <- parallelize(sc, list(list(1, 2), list(3, 4)))
+  vals <- collectAsMap(rdd)
+  expect_equal(vals, list(`1` = 2, `3` = 4))
+
+  rdd <- parallelize(sc, list(list("a", 1), list("b", 2)))
+  vals <- collectAsMap(rdd)
+  expect_equal(vals, list(a = 1, b = 2))
+ 
+  rdd <- parallelize(sc, list(list(1.1, 2.2), list(1.2, 2.4)))
+  vals <- collectAsMap(rdd)
+  expect_equal(vals, list(`1.1` = 2.2, `1.2` = 2.4))
+ 
+  rdd <- parallelize(sc, list(list(1, "a"), list(2, "b")))
+  vals <- collectAsMap(rdd)
+  expect_equal(vals, list(`1` = "a", `2` = "b"))
+})
+
