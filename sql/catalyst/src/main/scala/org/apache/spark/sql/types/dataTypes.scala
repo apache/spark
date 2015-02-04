@@ -371,9 +371,9 @@ case object TimestampType extends NativeType {
   }
 
   /**
-   * The default size of a value of the TimestampType is 8 bytes.
+   * The default size of a value of the TimestampType is 12 bytes.
    */
-  override def defaultSize: Int = 8
+  override def defaultSize: Int = 12
 }
 
 
@@ -400,7 +400,7 @@ case object DateType extends NativeType {
 }
 
 
-protected[sql] abstract class NumericType extends NativeType with PrimitiveType {
+abstract class NumericType extends NativeType with PrimitiveType {
   // Unfortunately we can't get this implicitly as that breaks Spark Serialization. In order for
   // implicitly[Numeric[JvmType]] to be valid, we have to change JvmType from a type variable to a
   // type parameter and and add a numeric annotation (i.e., [JvmType : Numeric]). This gets

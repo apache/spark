@@ -36,6 +36,16 @@ import org.apache.spark.sql.types._
  * for a SQL like language should checkout the HiveQL support in the sql/hive sub-project.
  */
 class SqlParser extends AbstractSparkSQLParser {
+
+  def parseExpression(input: String): Expression = {
+    // Initialize the Keywords.
+    lexical.initialize(reservedWords)
+    phrase(expression)(new lexical.Scanner(input)) match {
+      case Success(plan, _) => plan
+      case failureOrError => sys.error(failureOrError.toString)
+    }
+  }
+
   // Keyword is a convention with AbstractSparkSQLParser, which will scan all of the `Keyword`
   // properties via reflection the class in runtime for constructing the SqlLexical object
   protected val ABS = Keyword("ABS")

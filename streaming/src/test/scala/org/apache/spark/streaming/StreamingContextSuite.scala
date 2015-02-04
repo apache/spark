@@ -304,6 +304,30 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     assert(exception.getMessage.contains("transform"), "Expected exception not thrown")
   }
 
+  test("awaitTerminationOrTimeout") {
+    ssc = new StreamingContext(master, appName, batchDuration)
+    val inputStream = addInputStream(ssc)
+    inputStream.map(x => x).register()
+
+    ssc.start()
+
+    // test whether awaitTerminationOrTimeout() return false after give amount of time
+    failAfter(1000 millis) {
+      assert(ssc.awaitTerminationOrTimeout(500) === false)
+    }
+
+    // test whether awaitTerminationOrTimeout() return true if context is stopped
+    failAfter(10000 millis) { // 10 seconds because spark takes a long time to shutdown
+      new Thread() {
+        override def run() {
+          Thread.sleep(500)
+          ssc.stop()
+        }
+      }.start()
+      assert(ssc.awaitTerminationOrTimeout(10000) === true)
+    }
+  }
+
   test("DStream and generated RDD creation sites") {
     testPackage.test()
   }

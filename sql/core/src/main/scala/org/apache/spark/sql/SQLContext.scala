@@ -221,6 +221,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
     DataFrame(this, logicalPlan)
   }
 
+  @DeveloperApi
+  def applySchema(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
+    applySchema(rowRDD.rdd, schema);
+  }
+
   /**
    * Applies a schema to an RDD of Java Beans.
    *
@@ -305,6 +310,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   def jsonRDD(json: RDD[String]): DataFrame = jsonRDD(json, 1.0)
 
+  def jsonRDD(json: JavaRDD[String]): DataFrame = jsonRDD(json.rdd, 1.0)
+
   /**
    * :: Experimental ::
    * Loads an RDD[String] storing JSON objects (one object per record) and applies the given schema,
@@ -323,6 +330,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
     applySchema(rowRDD, appliedSchema)
   }
 
+  @Experimental
+  def jsonRDD(json: JavaRDD[String], schema: StructType): DataFrame = {
+    jsonRDD(json.rdd, schema)
+  }
+
   /**
    * :: Experimental ::
    */
@@ -334,6 +346,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
         JsonRDD.inferSchema(json, samplingRatio, columnNameOfCorruptJsonRecord))
     val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
     applySchema(rowRDD, appliedSchema)
+  }
+
+  @Experimental
+  def jsonRDD(json: JavaRDD[String], samplingRatio: Double): DataFrame = {
+    jsonRDD(json.rdd, samplingRatio);
   }
 
   @Experimental
