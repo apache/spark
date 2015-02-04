@@ -37,8 +37,18 @@ class ParquetQuerySuite extends QueryTest with ParquetTest {
   test("appending") {
     val data = (0 until 10).map(i => (i, i.toString))
     withParquetTable(data, "t") {
-      sql("INSERT INTO t SELECT * FROM t")
+      sql("INSERT INTO TABLE t SELECT * FROM t")
       checkAnswer(table("t"), (data ++ data).map(Row.fromTuple))
+    }
+  }
+
+  // This test case will trigger the NPE mentioned in
+  // https://issues.apache.org/jira/browse/PARQUET-151.
+  ignore("overwriting") {
+    val data = (0 until 10).map(i => (i, i.toString))
+    withParquetTable(data, "t") {
+      sql("INSERT OVERWRITE TABLE t SELECT * FROM t")
+      checkAnswer(table("t"), data.map(Row.fromTuple))
     }
   }
 

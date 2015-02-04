@@ -170,7 +170,7 @@ class SQLQuerySuite extends QueryTest {
     sql("CREATE TABLE test2 (key INT, value STRING)")
     testData.insertInto("test2")
     testData.insertInto("test2")
-    sql("SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key").saveAsTable("test")
+    sql("CREATE TABLE test AS SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key")
     checkAnswer(
       table("test"),
       sql("SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key").collect().toSeq)

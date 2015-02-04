@@ -164,7 +164,7 @@ abstract class KafkaStreamSuiteBase extends FunSuite with Eventually with Loggin
   }
 
   private def waitUntilMetadataIsPropagated(topic: String, partition: Int) {
-    eventually(timeout(1000 milliseconds), interval(100 milliseconds)) {
+    eventually(timeout(10000 milliseconds), interval(100 milliseconds)) {
       assert(
         server.apis.leaderCache.keySet.contains(TopicAndPartition(topic, partition)),
         s"Partition [$topic, $partition] metadata not propagated after timeout"

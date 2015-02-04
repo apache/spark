@@ -22,6 +22,7 @@ import java.nio.{ByteBuffer, ByteOrder}
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
 import scala.reflect.ClassTag
 
@@ -40,6 +41,7 @@ import org.apache.spark.mllib.recommendation._
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
 import org.apache.spark.mllib.stat.correlation.CorrelationNames
+import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.stat.test.ChiSqTestResult
 import org.apache.spark.mllib.tree.{GradientBoostedTrees, RandomForest, DecisionTree}
 import org.apache.spark.mllib.tree.configuration.{BoostingStrategy, Algo, Strategy}
@@ -260,7 +262,7 @@ class PythonMLLibAPI extends Serializable {
   }
 
   /**
-   * Java stub for Python mllib KMeans.train()
+   * Java stub for Python mllib KMeans.run()
    */
   def trainKMeansModel(
       data: JavaRDD[Vector],
@@ -282,6 +284,58 @@ class PythonMLLibAPI extends Serializable {
     } finally {
       data.rdd.unpersist(blocking = false)
     }
+  }
+
+  /**
+   * Java stub for Python mllib GaussianMixture.run()
+   * Returns a list containing weights, mean and covariance of each mixture component.
+   */
+  def trainGaussianMixture(
+      data: JavaRDD[Vector], 
+      k: Int, 
+      convergenceTol: Double, 
+      maxIterations: Int,
+      seed: Long): JList[Object] = {
+    val gmmAlg = new GaussianMixture()
+      .setK(k)
+      .setConvergenceTol(convergenceTol)
+      .setMaxIterations(maxIterations)
+
+    if (seed != null) gmmAlg.setSeed(seed)
+
+    try {
+      val model = gmmAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK))
+      var wt = ArrayBuffer.empty[Double]
+      var mu = ArrayBuffer.empty[Vector]      
+      var sigma = ArrayBuffer.empty[Matrix]
+      for (i <- 0 until model.k) {
+          wt += model.weights(i)
+          mu += model.gaussians(i).mu
+          sigma += model.gaussians(i).sigma
+      }    
+      List(wt.toArray, mu.toArray, sigma.toArray).map(_.asInstanceOf[Object]).asJava
+    } finally {
+      data.rdd.unpersist(blocking = false)
+    }
+  }
+
+  /**
+   * Java stub for Python mllib GaussianMixtureModel.predictSoft()
+   */
+  def predictSoftGMM(
+      data: JavaRDD[Vector],
+      wt: Object,
+      mu: Array[Object],
+      si: Array[Object]):  RDD[Array[Double]]  = {
+
+      val weight = wt.asInstanceOf[Array[Double]]
+      val mean = mu.map(_.asInstanceOf[DenseVector])
+      val sigma = si.map(_.asInstanceOf[DenseMatrix])
+      val gaussians = Array.tabulate(weight.length){
+        i => new MultivariateGaussian(mean(i), sigma(i))
+      }      
+      val model = new GaussianMixtureModel(weight, gaussians)
+      model.predictSoft(data)
   }
 
   /**

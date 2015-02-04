@@ -136,7 +136,8 @@ case class ParquetRelation2(path: String)(@transient val sqlContext: SQLContext)
     ParquetTypesConverter.readSchemaFromFile(
       partitions.head.files.head.getPath,
       Some(sparkContext.hadoopConfiguration),
-      sqlContext.conf.isParquetBinaryAsString))
+      sqlContext.conf.isParquetBinaryAsString,
+      sqlContext.conf.isParquetINT96AsTimestamp))
 
   val dataIncludesKey =
     partitionKeys.headOption.map(dataSchema.fieldNames.contains(_)).getOrElse(true)

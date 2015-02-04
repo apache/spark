@@ -414,7 +414,7 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
     val (training, test) =
       genExplicitTestData(numUsers = 20, numItems = 40, rank = 2, noiseStd = 0.01)
     for ((numUserBlocks, numItemBlocks) <- Seq((1, 1), (1, 2), (2, 1), (2, 2))) {
-      testALS(training, test, maxIter = 4, rank = 2, regParam = 0.01, targetRMSE = 0.03,
+      testALS(training, test, maxIter = 4, rank = 3, regParam = 0.01, targetRMSE = 0.03,
         numUserBlocks = numUserBlocks, numItemBlocks = numItemBlocks)
     }
   }

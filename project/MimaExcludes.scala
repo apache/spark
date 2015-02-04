@@ -69,7 +69,12 @@ object MimaExcludes {
           ) ++ Seq(
             // SPARK-5540
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.mllib.recommendation.ALS.solveLeastSquares")
+              "org.apache.spark.mllib.recommendation.ALS.solveLeastSquares"),
+            // SPARK-5536
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$^dateFeatures"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$^dateBlock")
           ) ++ Seq(
             // SPARK-3325
             ProblemFilters.exclude[MissingMethodProblem](
