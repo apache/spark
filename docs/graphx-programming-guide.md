@@ -876,7 +876,7 @@ object Graph {
 
 ## RDF Graph Builder
 [`RDFLoader.loadNTriples`][RDFLoader.loadNTriples] loads an RDF graph from a .nt dump into a `Graph[String,String]`. 
-Both resource nodes and literal nodes are mapped to vertices, with the URI or the literal value (not processed in any way) as the String value. Each `Vertex[String]` is assigned an Id using a simple hash function applied to the URI of the resource node or to the value of the literal node prefixed by the subject and property URI's of the triple where that literal occurs. Thus, literal nodes identical in value but from non-unique triples are each assigned a separate `Vertex[String]` in the `Graph[String, String]`.
+Both resource nodes and literal nodes are mapped to vertices, with the URI or the literal value (not processed in any way) as the String value. Each `Vertex[String]` is assigned an Id using a simple hash function applied to the URI of the resource node or to the value of the literal node prefixed by the subject and property URI's of the triple where that literal occurs. Thus, literal nodes identical in value but from non-identical triples are each assigned a separate `Vertex[String]` in the `Graph[String, String]`.
  Each valid triple is mapped to an `Edge[String]`, carrying the RDF property URI as its `String` value.
 
 # Vertex and Edge RDDs
