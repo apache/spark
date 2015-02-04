@@ -22,6 +22,8 @@ import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
+import org.apache.spark.sql.hive.HiveShim
 
 case class Nested1(f1: Nested2)
 case class Nested2(f2: Nested3)
@@ -102,6 +104,31 @@ class SQLQuerySuite extends QueryTest {
       "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe",
       "serde_p1=p1", "serde_p2=p2", "tbl_p1=p11", "tbl_p2=p22","MANAGED_TABLE"
     )
+
+    if (HiveShim.version =="0.13.1") {
+      sql(
+        """CREATE TABLE ctas5
+          | STORED AS parquet AS
+          |   SELECT key, value
+          |   FROM src
+          |   ORDER BY key, value""".stripMargin).collect
+
+      checkExistence(sql("DESC EXTENDED ctas5"), true,
+        "name:key", "type:string", "name:value", "ctas5",
+        "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
+        "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
+        "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
+        "MANAGED_TABLE"
+      )
+
+      val default = getConf("spark.sql.hive.convertMetastoreParquet", "true")
+      // use the Hive SerDe for parquet tables
+      sql("set spark.sql.hive.convertMetastoreParquet = false")
+      checkAnswer(
+        sql("SELECT key, value FROM ctas5 ORDER BY key, value"),
+        sql("SELECT key, value FROM src ORDER BY key, value").collect().toSeq)
+      sql(s"set spark.sql.hive.convertMetastoreParquet = $default")
+    }
   }
 
   test("command substitution") {
@@ -159,7 +186,7 @@ class SQLQuerySuite extends QueryTest {
   test("test CTAS") {
     checkAnswer(sql("CREATE TABLE test_ctas_123 AS SELECT key, value FROM src"), Seq.empty[Row])
     checkAnswer(
-      sql("SELECT key, value FROM test_ctas_123 ORDER BY key"), 
+      sql("SELECT key, value FROM test_ctas_123 ORDER BY key"),
       sql("SELECT key, value FROM src ORDER BY key").collect().toSeq)
   }
 
