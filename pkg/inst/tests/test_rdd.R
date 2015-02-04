@@ -254,6 +254,12 @@ test_that("keyBy on RDDs", {
   expect_equal(actual, lapply(nums, function(x) { list(func(x), x) }))
 })
 
+test_that("sortBy() on RDDs", {
+  sortedRdd <- sortBy(rdd, function(x) { x }, ascending = FALSE)
+  actual <- collect(sortedRdd)
+  expect_equal(actual, as.list(sort(nums, decreasing = TRUE)))
+})
+
 test_that("keys() on RDDs", {
   keys <- keys(intRdd)
   actual <- collect(keys)
@@ -372,4 +378,12 @@ test_that("fullOuterJoin() on pairwise RDDs", {
   actual <- collect(fullOuterJoin(rdd1, rdd2, 2L))
   expect_equal(sortKeyValueList(actual),
                sortKeyValueList(list(list("a", list(1, NULL)), list("b", list(2, NULL)), list("d", list(NULL, 4)), list("c", list(NULL, 3)))))
+})
+
+test_that("sortByKey() on pairwise RDDs", {
+  numPairsRdd <- map(rdd, function(x) { list (x, x) })
+  sortedRdd <- sortByKey(numPairsRdd, ascending = FALSE)
+  actual <- collect(sortedRdd)
+  numPairs <- lapply(nums, function(x) { list (x, x) })
+  expect_equal(actual, sortKeyValueList(numPairs, decreasing = TRUE))
 })

@@ -1240,6 +1240,40 @@ setMethod("flatMapValues",
             flatMap(X, flatMapFunc)
           })
 
+#' Sort an RDD by the given key function.
+#'
+#' @param rdd An RDD to be sorted.
+#' @param func A function used to compute the sort key for each element.
+#' @param ascending A flag to indicate whether the sorting is ascending or descending.
+#' @param numPartitions Number of partitions to create.
+#' @return An RDD where all elements are sorted.
+#' @rdname sortBy
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, list(3, 2, 1))
+#' collect(sortBy(rdd, function(x) { x })) # list (1, 2, 3)
+#'}
+setGeneric("sortBy", function(rdd, func, ascending, numPartitions) { standardGeneric("sortBy") })
+
+setClassUnion("missingOrLogical", c("missing", "logical"))
+#' @rdname sortBy
+#' @aliases sortBy,RDD,RDD-method
+setMethod("sortBy",
+          signature(rdd = "RDD", func = "function", 
+                    ascending = "missingOrLogical", numPartitions = "missingOrInteger"),
+          function(rdd, func, ascending, numPartitions) {
+            if (missing(ascending)) {
+              ascending = TRUE
+            }
+            if (missing(numPartitions)) {
+              numPartitions = SparkR::numPartitions(rdd)
+            }
+            
+            values(sortByKey(keyBy(rdd, func), ascending, numPartitions))
+          })
+
 ############ Shuffle Functions ############
 
 #' Partition an RDD by key
@@ -1796,6 +1830,78 @@ setMethod("cogroup",
                                      group.func)
           })
 
+#' Sort an (k, v) pair RDD by k.
+#'
+#' @param rdd An (k, v) pair RDD to be sorted.
+#' @param ascending A flag to indicate whether the sorting is ascending or descending.
+#' @param numPartitions Number of partitions to create.
+#' @return An RDD where all (k, v) pair elements are sorted.
+#' @rdname sortByKey
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, list(list(3, 3), list(2, 2), list(1, 1)))
+#' collect(sortByKey(rdd)) # list (list(1, 1), list(2, 2), list(3, 3))
+#'}
+setGeneric("sortByKey", function(rdd, ascending, numPartitions) { standardGeneric("sortByKey") })
+
+#' @rdname sortByKey
+#' @aliases sortByKey,RDD,RDD-method
+setMethod("sortByKey",
+          signature(rdd = "RDD", ascending = "missingOrLogical", numPartitions = "missingOrInteger"),
+          function(rdd, ascending, numPartitions) {
+            if (missing(ascending)) {
+              ascending = TRUE
+            }
+            if (missing(numPartitions)) {
+              numPartitions = SparkR::numPartitions(rdd)
+            }
+
+            rangeBounds <- list()
+            
+            if (numPartitions > 1) {
+              rddSize <- count(rdd)
+              # constant from Spark's RangePartitioner
+              maxSampleSize <- numPartitions * 20
+              fraction <- min(maxSampleSize / max(rddSize, 1), 1.0)
+              
+              samples <- collect(keys(sampleRDD(rdd, FALSE, fraction, 1L)))
+              
+              # Note: the built-in R sort() function only atomic vectors
+              samples <- sort(unlist(samples, recursive = FALSE), decreasing = !ascending)
+              
+              if (length(samples) > 0) {
+                rangeBounds <- lapply(seq_len(numPartitions - 1),
+                                      function(i) {
+                                        j <- ceiling(length(samples) * i / numPartitions)
+                                        samples[j]
+                                      })
+              }
+            }
+
+            rangePartitionFunc <- function(key) {
+              partition <- 0
+              
+              while (partition < length(rangeBounds) && key > rangeBounds[[partition + 1]]) {
+                partition <- partition + 1
+              }
+              
+              if (ascending) {
+                partition
+              } else {
+                numPartitions - partition - 1
+              }
+            }
+            
+            partitionFunc <- function(part) {
+              sortKeyValueList(part, decreasing = !ascending)
+            }
+            
+            newRDD <- partitionBy(rdd, numPartitions, rangePartitionFunc)
+            lapplyPartition(newRDD, partitionFunc)
+          })
+          
 # TODO: Consider caching the name in the RDD's environment
 #' Return an RDD's name.
 #'
