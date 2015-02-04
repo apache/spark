@@ -86,6 +86,7 @@ class DAGSchedulerSuite extends FunSuiteLike  with BeforeAndAfter with LocalSpar
     override def stop() = {}
     override def executorHeartbeatReceived(execId: String, taskMetrics: Array[(Long, TaskMetrics)],
       blockManagerId: BlockManagerId): Boolean = true
+    override def executorLost(executorId: String, reason: ExecutorLossReason) = {}
     override def submitTasks(taskSet: TaskSet) = {
       // normally done by TaskSetManager
       taskSet.tasks.foreach(_.epoch = mapOutputTracker.getEpoch)
@@ -386,6 +387,7 @@ class DAGSchedulerSuite extends FunSuiteLike  with BeforeAndAfter with LocalSpar
       override def defaultParallelism() = 2
       override def executorHeartbeatReceived(execId: String, taskMetrics: Array[(Long, TaskMetrics)],
         blockManagerId: BlockManagerId): Boolean = true
+      override def executorLost(executorId: String, reason: ExecutorLossReason) = {}
     }
     val noKillScheduler = new DAGScheduler(
       sc,
