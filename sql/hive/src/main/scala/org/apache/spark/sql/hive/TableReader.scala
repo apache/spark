@@ -68,8 +68,6 @@ class HadoopTableReader(
     math.max(sc.hiveconf.getInt("mapred.map.tasks", 1), sc.sparkContext.defaultMinPartitions)
   }
 
-  @transient private lazy val fs = FileSystem.get(sc.hiveconf)
-
   // TODO: set aws s3 credentials.
 
   private val _broadcastedHiveConf =
@@ -220,6 +218,7 @@ class HadoopTableReader(
    * returned in a single, comma-separated string.
    */
   private def applyFilterIfNeeded(path: Path, filterOpt: Option[PathFilter]): Option[String] = {
+    val fs = path.getFileSystem(sc.hiveconf)
     if (fs.exists(path)) {
       // if the file exists
       filterOpt match {

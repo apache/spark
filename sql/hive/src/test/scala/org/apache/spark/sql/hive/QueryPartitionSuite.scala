@@ -19,8 +19,8 @@ package org.apache.spark.sql.hive
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.util.Utils
+import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.execution.HiveComparisonTest
 
 abstract class QueryPartitionSuite extends HiveComparisonTest with BeforeAndAfter {
