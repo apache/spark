@@ -54,6 +54,10 @@
       <artifactId>scalacheck_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+    	<groupId>org.scalatest</groupId>
+    	<artifactId>scalatest_2.10</artifactId>
+    	</dependency>
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
