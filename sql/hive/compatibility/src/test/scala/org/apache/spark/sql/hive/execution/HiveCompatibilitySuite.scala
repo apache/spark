@@ -248,7 +248,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "alter3",
     "alter4",
     "alter5",
-    "alter_db_owner",
     "alter_index",
     "alter_merge_2",
     "alter_partition_format_loc",
