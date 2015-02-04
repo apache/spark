@@ -314,7 +314,8 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
 
   test("delay scheduling with failed hosts") {
     sc = new SparkContext("local", "test")
-    val sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
+    val sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"),
+      ("exec3", "host3"))
     val taskSet = FakeTask.createTaskSet(3,
       Seq(TaskLocation("host1")),
       Seq(TaskLocation("host2")),
@@ -647,6 +648,47 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
 
     // schedule no-preference after node local ones
     assert(manager.resourceOffer("execA", "host3", NO_PREF).get.index === 2)
+  }
+
+  test("SPARK-4939: node-local tasks should be scheduled right after process-local tasks finished") {
+    sc = new SparkContext("local", "test")
+    val sched = new FakeTaskScheduler(sc, ("execA", "host1"), ("execB", "host2"))
+    val taskSet = FakeTask.createTaskSet(4,
+      Seq(TaskLocation("host1")),
+      Seq(TaskLocation("host2")),
+      Seq(ExecutorCacheTaskLocation("host1", "execA")),
+      Seq(ExecutorCacheTaskLocation("host2", "execB")))
+    val clock = new FakeClock
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
+
+    // process-local tasks are scheduled first
+    assert(manager.resourceOffer("execA", "host1", NODE_LOCAL).get.index === 2)
+    assert(manager.resourceOffer("execB", "host2", NODE_LOCAL).get.index === 3)
+    // node-local tasks are scheduled without delay
+    assert(manager.resourceOffer("execA", "host1", NODE_LOCAL).get.index === 0)
+    assert(manager.resourceOffer("execB", "host2", NODE_LOCAL).get.index === 1)
+    assert(manager.resourceOffer("execA", "host1", NODE_LOCAL) == None)
+    assert(manager.resourceOffer("execB", "host2", NODE_LOCAL) == None)
+  }
+
+  test("SPARK-4939: no-pref tasks should be scheduled after process-local tasks finished") {
+    sc = new SparkContext("local", "test")
+    val sched = new FakeTaskScheduler(sc, ("execA", "host1"), ("execB", "host2"))
+    val taskSet = FakeTask.createTaskSet(3,
+      Seq(),
+      Seq(ExecutorCacheTaskLocation("host1", "execA")),
+      Seq(ExecutorCacheTaskLocation("host2", "execB")))
+    val clock = new FakeClock
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
+
+    // process-local tasks are scheduled first
+    assert(manager.resourceOffer("execA", "host1", PROCESS_LOCAL).get.index === 1)
+    assert(manager.resourceOffer("execB", "host2", PROCESS_LOCAL).get.index === 2)
+    // no-pref tasks are scheduled without delay
+    assert(manager.resourceOffer("execA", "host1", PROCESS_LOCAL) == None)
+    assert(manager.resourceOffer("execA", "host1", NODE_LOCAL) == None)
+    assert(manager.resourceOffer("execA", "host1", NO_PREF).get.index === 0)
+    assert(manager.resourceOffer("execA", "host1", ANY) == None)
   }
 
   test("Ensure TaskSetManager is usable after addition of levels") {
