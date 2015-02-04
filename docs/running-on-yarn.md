@@ -108,7 +108,7 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
  <td><code>spark.executor.instances</code></td>
   <td>2</td>
   <td>
-    The number of executors.
+    The number of executors. Don't set this when dynamic allocation is enabled as they are not compatible.
   </td>
 </tr>
 <tr>
