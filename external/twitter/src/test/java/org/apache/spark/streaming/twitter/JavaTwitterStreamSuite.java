@@ -30,7 +30,7 @@ import org.apache.spark.streaming.api.java.JavaDStream;
 public class JavaTwitterStreamSuite extends LocalJavaStreamingContext {
   @Test
   public void testTwitterStream() {
-    Long[] follow = (Long[])Arrays.<Long>asList(1, 2).toArray();
+    long[] follow = new long[]{1L, 2L};
     String[] filters = (String[])Arrays.<String>asList("filter1", "filter2").toArray();
     BoundingBox[] locations = {new BoundingBox(-180.0,-90.0,180.0,90.0)};
     Authorization auth = NullAuthorization.getInstance();
