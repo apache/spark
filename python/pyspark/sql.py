@@ -2077,9 +2077,9 @@ class DataFrame(object):
         """Return all column names and their data types as a list.
 
         >>> df.dtypes
-        [(u'age', 'IntegerType'), (u'name', 'StringType')]
+        [('age', 'integer'), ('name', 'string')]
         """
-        return [(f.name, str(f.dataType)) for f in self.schema().fields]
+        return [(str(f.name), f.dataType.jsonValue()) for f in self.schema().fields]
 
     @property
     def columns(self):
@@ -2263,18 +2263,6 @@ class DataFrame(object):
         """
         return DataFrame(getattr(self._jdf, "except")(other._jdf), self.sql_ctx)
 
-    def sample(self, withReplacement, fraction, seed=None):
-        """ Return a new DataFrame by sampling a fraction of rows.
-
-        >>> df.sample(False, 0.5, 10).collect()
-        [Row(age=2, name=u'Alice')]
-        """
-        if seed is None:
-            jdf = self._jdf.sample(withReplacement, fraction)
-        else:
-            jdf = self._jdf.sample(withReplacement, fraction, seed)
-        return DataFrame(jdf, self.sql_ctx)
-
     def addColumn(self, colName, col):
         """ Return a new :class:`DataFrame` by adding a column.
 
@@ -2376,28 +2364,6 @@ class GroupedDataFrame(object):
         group."""
 
 
-SCALA_METHOD_MAPPINGS = {
-    '=': '$eq',
-    '>': '$greater',
-    '<': '$less',
-    '+': '$plus',
-    '-': '$minus',
-    '*': '$times',
-    '/': '$div',
-    '!': '$bang',
-    '@': '$at',
-    '#': '$hash',
-    '%': '$percent',
-    '^': '$up',
-    '&': '$amp',
-    '~': '$tilde',
-    '?': '$qmark',
-    '|': '$bar',
-    '\\': '$bslash',
-    ':': '$colon',
-}
-
-
 def _create_column_from_literal(literal):
     sc = SparkContext._active_spark_context
     return sc._jvm.Dsl.lit(literal)
@@ -2416,23 +2382,18 @@ def _to_java_column(col):
     return jcol
 
 
-def _scalaMethod(name):
-    """ Translate operators into methodName in Scala
-
-    >>> _scalaMethod('+')
-    '$plus'
-    >>> _scalaMethod('>=')
-    '$greater$eq'
-    >>> _scalaMethod('cast')
-    'cast'
-    """
-    return ''.join(SCALA_METHOD_MAPPINGS.get(c, c) for c in name)
-
-
 def _unary_op(name, doc="unary operator"):
     """ Create a method for given unary operator """
     def _(self):
-        jc = getattr(self._jc, _scalaMethod(name))()
+        jc = getattr(self._jc, name)()
+        return Column(jc, self.sql_ctx)
+    _.__doc__ = doc
+    return _
+
+
+def _dsl_op(name, doc=''):
+    def _(self):
+        jc = getattr(self._sc._jvm.Dsl, name)(self._jc)
         return Column(jc, self.sql_ctx)
     _.__doc__ = doc
     return _
@@ -2443,7 +2404,7 @@ def _bin_op(name, doc="binary operator"):
     """
     def _(self, other):
         jc = other._jc if isinstance(other, Column) else other
-        njc = getattr(self._jc, _scalaMethod(name))(jc)
+        njc = getattr(self._jc, name)(jc)
         return Column(njc, self.sql_ctx)
     _.__doc__ = doc
     return _
@@ -2454,7 +2415,7 @@ def _reverse_op(name, doc="binary operator"):
     """
     def _(self, other):
         jother = _create_column_from_literal(other)
-        jc = getattr(jother, _scalaMethod(name))(self._jc)
+        jc = getattr(jother, name)(self._jc)
         return Column(jc, self.sql_ctx)
     _.__doc__ = doc
     return _
@@ -2481,34 +2442,33 @@ class Column(DataFrame):
         super(Column, self).__init__(jc, sql_ctx)
 
     # arithmetic operators
-    __neg__ = _unary_op("unary_-")
-    __add__ = _bin_op("+")
-    __sub__ = _bin_op("-")
-    __mul__ = _bin_op("*")
-    __div__ = _bin_op("/")
-    __mod__ = _bin_op("%")
-    __radd__ = _bin_op("+")
-    __rsub__ = _reverse_op("-")
-    __rmul__ = _bin_op("*")
-    __rdiv__ = _reverse_op("/")
-    __rmod__ = _reverse_op("%")
-    __abs__ = _unary_op("abs")
+    __neg__ = _dsl_op("negate")
+    __add__ = _bin_op("plus")
+    __sub__ = _bin_op("minus")
+    __mul__ = _bin_op("multiply")
+    __div__ = _bin_op("divide")
+    __mod__ = _bin_op("mod")
+    __radd__ = _bin_op("plus")
+    __rsub__ = _reverse_op("minus")
+    __rmul__ = _bin_op("multiply")
+    __rdiv__ = _reverse_op("divide")
+    __rmod__ = _reverse_op("mod")
 
     # logistic operators
-    __eq__ = _bin_op("===")
-    __ne__ = _bin_op("!==")
-    __lt__ = _bin_op("<")
-    __le__ = _bin_op("<=")
-    __ge__ = _bin_op(">=")
-    __gt__ = _bin_op(">")
+    __eq__ = _bin_op("equalTo")
+    __ne__ = _bin_op("notEqual")
+    __lt__ = _bin_op("lt")
+    __le__ = _bin_op("leq")
+    __ge__ = _bin_op("geq")
+    __gt__ = _bin_op("gt")
 
     # `and`, `or`, `not` cannot be overloaded in Python,
     # so use bitwise operators as boolean operators
-    __and__ = _bin_op('&&')
-    __or__ = _bin_op('||')
-    __invert__ = _unary_op('unary_!')
-    __rand__ = _bin_op("&&")
-    __ror__ = _bin_op("||")
+    __and__ = _bin_op('and')
+    __or__ = _bin_op('or')
+    __invert__ = _dsl_op('not')
+    __rand__ = _bin_op("and")
+    __ror__ = _bin_op("or")
 
     # container operators
     __contains__ = _bin_op("contains")

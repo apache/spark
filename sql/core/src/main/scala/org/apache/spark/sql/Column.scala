@@ -128,7 +128,6 @@ trait Column extends DataFrame {
    */
   def unary_! : Column = exprToColumn(Not(expr))
 
-
   /**
    * Equality test.
    * {{{
@@ -170,6 +169,22 @@ trait Column extends DataFrame {
    * }}}
    */
   def !== (other: Any): Column = constructColumn(other) { o =>
+    Not(EqualTo(expr, o.expr))
+  }
+
+  /**
+   * Inequality test.
+   * {{{
+   *   // Scala:
+   *   df.select( df("colA") !== df("colB") )
+   *   df.select( !(df("colA") === df("colB")) )
+   *
+   *   // Java:
+   *   import static org.apache.spark.sql.Dsl.*;
+   *   df.filter( col("colA").notEqual(col("colB")) );
+   * }}}
+   */
+  def notEqual(other: Any): Column = constructColumn(other) { o =>
     Not(EqualTo(expr, o.expr))
   }
 
