@@ -295,7 +295,7 @@ class PythonMLLibAPI extends Serializable {
       k: Int, 
       convergenceTol: Double, 
       maxIterations: Int,
-      seed: Long): JList[Object] = {
+      seed: java.lang.Long): JList[Object] = {
     val gmmAlg = new GaussianMixture()
       .setK(k)
       .setConvergenceTol(convergenceTol)

@@ -66,11 +66,11 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
 
   override def sort(sortCol: String, sortCols: String*): DataFrame = err()
 
-  override def sort(sortExpr: Column, sortExprs: Column*): DataFrame = err()
+  override def sort(sortExprs: Column*): DataFrame = err()
 
   override def orderBy(sortCol: String, sortCols: String*): DataFrame = err()
 
-  override def orderBy(sortExpr: Column, sortExprs: Column*): DataFrame = err()
+  override def orderBy(sortExprs: Column*): DataFrame = err()
 
   override def col(colName: String): Column = err()
 
@@ -80,7 +80,11 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
 
   override def select(col: String, cols: String*): DataFrame = err()
 
+  override def selectExpr(exprs: String*): DataFrame = err()
+
   override def filter(condition: Column): DataFrame = err()
+
+  override def filter(conditionExpr: String): DataFrame = err()
 
   override def where(condition: Column): DataFrame = err()
 

@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.util.TimeZone
 
+import org.apache.spark.sql.test.TestSQLContext
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.Dsl._
@@ -26,9 +27,8 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types._
 
-/* Implicits */
 import org.apache.spark.sql.TestData._
-import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.test.TestSQLContext.{udf => _, _}
 
 
 class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
@@ -794,7 +794,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("SPARK-3371 Renaming a function expression with group by gives error") {
-    udf.register("len", (s: String) => s.length)
+    TestSQLContext.udf.register("len", (s: String) => s.length)
     checkAnswer(
       sql("SELECT len(value) as temp FROM testData WHERE key = 1 group by len(value)"),
       Row(1))
