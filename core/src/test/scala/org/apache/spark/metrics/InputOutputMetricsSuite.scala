@@ -26,7 +26,16 @@ import org.scalatest.FunSuite
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.{LongWritable, Text}
-import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
+import org.apache.hadoop.mapred.{FileSplit => OldFileSplit, InputSplit => OldInputSplit, JobConf,
+  LineRecordReader => OldLineRecordReader, RecordReader => OldRecordReader, Reporter,
+  TextInputFormat => OldTextInputFormat}
+import org.apache.hadoop.mapred.lib.{CombineFileInputFormat => OldCombineFileInputFormat,
+  CombineFileSplit => OldCombineFileSplit, CombineFileRecordReader => OldCombineFileRecordReader}
+import org.apache.hadoop.mapreduce.{InputSplit => NewInputSplit, RecordReader => NewRecordReader,
+  TaskAttemptContext}
+import org.apache.hadoop.mapreduce.lib.input.{CombineFileInputFormat => NewCombineFileInputFormat,
+  CombineFileRecordReader => NewCombineFileRecordReader, CombineFileSplit => NewCombineFileSplit,
+  FileSplit => NewFileSplit, TextInputFormat => NewTextInputFormat}
 
 import org.apache.spark.SharedSparkContext
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -202,7 +211,7 @@ class InputOutputMetricsSuite extends FunSuite with SharedSparkContext {
     val fs = FileSystem.getLocal(new Configuration())
     val outPath = new Path(fs.getWorkingDirectory, "outdir")
 
-    if (SparkHadoopUtil.get.getFSBytesWrittenOnThreadCallback(outPath, fs.getConf).isDefined) {
+    if (SparkHadoopUtil.get.getFSBytesWrittenOnThreadCallback().isDefined) {
       val taskBytesWritten = new ArrayBuffer[Long]()
       sc.addSparkListener(new SparkListener() {
         override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
@@ -225,4 +234,88 @@ class InputOutputMetricsSuite extends FunSuite with SharedSparkContext {
       }
     }
   }
+
+  test("input metrics with old CombineFileInputFormat") {
+    val bytesRead = runAndReturnBytesRead {
+      sc.hadoopFile(tmpFilePath, classOf[OldCombineTextInputFormat], classOf[LongWritable],
+        classOf[Text], 2).count()
+    }
+    assert(bytesRead >= tmpFile.length())
+  }
+
+  test("input metrics with new CombineFileInputFormat") {
+    val bytesRead = runAndReturnBytesRead {
+      sc.newAPIHadoopFile(tmpFilePath, classOf[NewCombineTextInputFormat], classOf[LongWritable],
+        classOf[Text], new Configuration()).count()
+    }
+    assert(bytesRead >= tmpFile.length())
+  }
+}
+
+/**
+ * Hadoop 2 has a version of this, but we can't use it for backwards compatibility
+ */
+class OldCombineTextInputFormat extends OldCombineFileInputFormat[LongWritable, Text] {
+  override def getRecordReader(split: OldInputSplit, conf: JobConf, reporter: Reporter)
+  : OldRecordReader[LongWritable, Text] = {
+    new OldCombineFileRecordReader[LongWritable, Text](conf,
+      split.asInstanceOf[OldCombineFileSplit], reporter, classOf[OldCombineTextRecordReaderWrapper]
+        .asInstanceOf[Class[OldRecordReader[LongWritable, Text]]])
+  }
+}
+
+class OldCombineTextRecordReaderWrapper(
+    split: OldCombineFileSplit,
+    conf: Configuration,
+    reporter: Reporter,
+    idx: Integer) extends OldRecordReader[LongWritable, Text] {
+
+  val fileSplit = new OldFileSplit(split.getPath(idx),
+    split.getOffset(idx),
+    split.getLength(idx),
+    split.getLocations())
+
+  val delegate: OldLineRecordReader = new OldTextInputFormat().getRecordReader(fileSplit,
+    conf.asInstanceOf[JobConf], reporter).asInstanceOf[OldLineRecordReader]
+
+  override def next(key: LongWritable, value: Text): Boolean = delegate.next(key, value)
+  override def createKey(): LongWritable = delegate.createKey()
+  override def createValue(): Text = delegate.createValue()
+  override def getPos(): Long = delegate.getPos
+  override def close(): Unit = delegate.close()
+  override def getProgress(): Float = delegate.getProgress
+}
+
+/**
+ * Hadoop 2 has a version of this, but we can't use it for backwards compatibility
+ */
+class NewCombineTextInputFormat extends NewCombineFileInputFormat[LongWritable,Text] {
+  def createRecordReader(split: NewInputSplit, context: TaskAttemptContext)
+  : NewRecordReader[LongWritable, Text] = {
+    new NewCombineFileRecordReader[LongWritable,Text](split.asInstanceOf[NewCombineFileSplit],
+      context, classOf[NewCombineTextRecordReaderWrapper])
+  }
+}
+
+class NewCombineTextRecordReaderWrapper(
+    split: NewCombineFileSplit,
+    context: TaskAttemptContext,
+    idx: Integer) extends NewRecordReader[LongWritable, Text] {
+
+  val fileSplit = new NewFileSplit(split.getPath(idx),
+    split.getOffset(idx),
+    split.getLength(idx),
+    split.getLocations())
+
+  val delegate = new NewTextInputFormat().createRecordReader(fileSplit, context)
+
+  override def initialize(split: NewInputSplit, context: TaskAttemptContext): Unit = {
+    delegate.initialize(fileSplit, context)
+  }
+
+  override def nextKeyValue(): Boolean = delegate.nextKeyValue()
+  override def getCurrentKey(): LongWritable = delegate.getCurrentKey
+  override def getCurrentValue(): Text = delegate.getCurrentValue
+  override def getProgress(): Float = delegate.getProgress
+  override def close(): Unit = delegate.close()
 }

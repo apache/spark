@@ -106,7 +106,7 @@ class DataTypeSuite extends FunSuite {
   checkDefaultSize(DoubleType, 8)
   checkDefaultSize(DecimalType(10, 5), 4096)
   checkDefaultSize(DecimalType.Unlimited, 4096)
-  checkDefaultSize(DateType, 8)
+  checkDefaultSize(DateType, 4)
   checkDefaultSize(TimestampType, 8)
   checkDefaultSize(StringType, 4096)
   checkDefaultSize(BinaryType, 4096)

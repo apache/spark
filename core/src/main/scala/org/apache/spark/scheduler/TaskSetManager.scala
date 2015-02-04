@@ -542,7 +542,7 @@ private[spark] class TaskSetManager(
   /**
    * Check whether has enough quota to fetch the result with `size` bytes
    */
-  def canFetchMoreResults(size: Long): Boolean = synchronized {
+  def canFetchMoreResults(size: Long): Boolean = sched.synchronized {
     totalResultSize += size
     calculatedTasks += 1
     if (maxResultSize > 0 && totalResultSize > maxResultSize) {
@@ -671,7 +671,7 @@ private[spark] class TaskSetManager(
     maybeFinishTaskSet()
   }
 
-  def abort(message: String) {
+  def abort(message: String): Unit = sched.synchronized {
     // TODO: Kill running tasks if we were not terminated due to a Mesos error
     sched.dagScheduler.taskSetFailed(taskSet, message)
     isZombie = true

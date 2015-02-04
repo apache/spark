@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.spark.sql.catalyst.expressions.Row
+
 import scala.collection.JavaConversions._
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.{SQLContext, SchemaRDD, Strategy}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
@@ -29,10 +31,9 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand}
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.hive
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.sources.CreateTableUsing
+import org.apache.spark.sql.sources.{CreateTableUsingAsLogicalPlan, CreateTableUsingAsSelect, CreateTableUsing}
 import org.apache.spark.sql.types.StringType
 
 
@@ -55,16 +56,15 @@ private[hive] trait HiveStrategies {
    */
   @Experimental
   object ParquetConversion extends Strategy {
-    implicit class LogicalPlanHacks(s: SchemaRDD) {
-      def lowerCase =
-        new SchemaRDD(s.sqlContext, s.logicalPlan)
+    implicit class LogicalPlanHacks(s: DataFrame) {
+      def lowerCase = DataFrame(s.sqlContext, s.logicalPlan)
 
       def addPartitioningAttributes(attrs: Seq[Attribute]) = {
         // Don't add the partitioning key if its already present in the data.
         if (attrs.map(_.name).toSet.subsetOf(s.logicalPlan.output.map(_.name).toSet)) {
           s
         } else {
-          new SchemaRDD(
+          DataFrame(
             s.sqlContext,
             s.logicalPlan transform {
               case p: ParquetRelation => p.copy(partitioningAttributes = attrs)
@@ -97,13 +97,13 @@ private[hive] trait HiveStrategies {
         // We are going to throw the predicates and projection back at the whole optimization
         // sequence so lets unresolve all the attributes, allowing them to be rebound to the
         // matching parquet attributes.
-        val unresolvedOtherPredicates = otherPredicates.map(_ transform {
+        val unresolvedOtherPredicates = Column(otherPredicates.map(_ transform {
           case a: AttributeReference => UnresolvedAttribute(a.name)
-        }).reduceOption(And).getOrElse(Literal(true))
+        }).reduceOption(And).getOrElse(Literal(true)))
 
-        val unresolvedProjection = projectList.map(_ transform {
+        val unresolvedProjection: Seq[Column] = projectList.map(_ transform {
           case a: AttributeReference => UnresolvedAttribute(a.name)
-        })
+        }).map(Column(_))
 
         try {
           if (relation.hiveQlTable.isPartitioned) {
@@ -167,8 +167,8 @@ private[hive] trait HiveStrategies {
 
   object Scripts extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.ScriptTransformation(input, script, output, child) =>
-        ScriptTransformation(input, script, output, planLater(child))(hiveContext) :: Nil
+      case logical.ScriptTransformation(input, script, output, child, schema: HiveScriptIOSchema) =>
+        ScriptTransformation(input, script, output, planLater(child), schema)(hiveContext) :: Nil
       case _ => Nil
     }
   }
@@ -212,9 +212,21 @@ private[hive] trait HiveStrategies {
 
   object HiveDDLStrategy extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case CreateTableUsing(tableName, userSpecifiedSchema, provider, false, options) =>
+      case CreateTableUsing(tableName, userSpecifiedSchema, provider, false, opts, allowExisting) =>
         ExecutedCommand(
-          CreateMetastoreDataSource(tableName, userSpecifiedSchema, provider, options)) :: Nil
+          CreateMetastoreDataSource(
+            tableName, userSpecifiedSchema, provider, opts, allowExisting)) :: Nil
+
+      case CreateTableUsingAsSelect(tableName, provider, false, opts, allowExisting, query) =>
+        val logicalPlan = hiveContext.parseSql(query)
+        val cmd =
+          CreateMetastoreDataSourceAsSelect(tableName, provider, opts, allowExisting, logicalPlan)
+        ExecutedCommand(cmd) :: Nil
+
+      case CreateTableUsingAsLogicalPlan(tableName, provider, false, opts, allowExisting, query) =>
+        val cmd =
+          CreateMetastoreDataSourceAsSelect(tableName, provider, opts, allowExisting, query)
+        ExecutedCommand(cmd) :: Nil
 
       case _ => Nil
     }

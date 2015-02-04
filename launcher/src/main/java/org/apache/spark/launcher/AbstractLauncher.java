@@ -256,6 +256,9 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
             project, scala));
         }
       }
+
+      // Add this path to include jars that are shaded in the final deliverable created during
+      // the maven build. These jars are copied to this directory during the build.
       addToClassPath(cp, String.format("%s/core/target/jars/*", sparkHome));
     }
 

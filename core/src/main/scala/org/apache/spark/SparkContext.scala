@@ -657,6 +657,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    *
    * Load data from a flat binary file, assuming the length of each record is constant.
    *
+   * '''Note:''' We ensure that the byte array for each record in the resulting RDD
+   * has the provided record length.
+   *
    * @param path Directory to the input data files
    * @param recordLength The length at which to split the records
    * @return An RDD of data with values, represented as byte arrays
@@ -671,7 +674,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       classOf[LongWritable],
       classOf[BytesWritable],
       conf=conf)
-    val data = br.map{ case (k, v) => v.getBytes}
+    val data = br.map { case (k, v) =>
+      val bytes = v.getBytes
+      assert(bytes.length == recordLength, "Byte array does not have correct length")
+      bytes
+    }
     data
   }
 
@@ -687,9 +694,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @param minPartitions Minimum number of Hadoop Splits to generate.
    *
    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
-   * record, directly caching the returned RDD will create many references to the same object.
-   * If you plan to directly cache Hadoop writable objects, you should first copy them using
-   * a `map` function.
+   * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
+   * operation will create many references to the same object.
+   * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
+   * copy them using a `map` function.
    */
   def hadoopRDD[K, V](
       conf: JobConf,
@@ -705,12 +713,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /** Get an RDD for a Hadoop file with an arbitrary InputFormat
-    *
-    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
-    * record, directly caching the returned RDD will create many references to the same object.
-    * If you plan to directly cache Hadoop writable objects, you should first copy them using
-    * a `map` function.
-    * */
+   *
+   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
+   * operation will create many references to the same object.
+   * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
+   * copy them using a `map` function.
+   */
   def hadoopFile[K, V](
       path: String,
       inputFormatClass: Class[_ <: InputFormat[K, V]],
@@ -741,9 +750,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * }}}
    *
    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
-   * record, directly caching the returned RDD will create many references to the same object.
-   * If you plan to directly cache Hadoop writable objects, you should first copy them using
-   * a `map` function.
+   * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
+   * operation will create many references to the same object.
+   * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
+   * copy them using a `map` function.
    */
   def hadoopFile[K, V, F <: InputFormat[K, V]]
       (path: String, minPartitions: Int)
@@ -764,9 +774,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * }}}
    *
    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
-   * record, directly caching the returned RDD will create many references to the same object.
-   * If you plan to directly cache Hadoop writable objects, you should first copy them using
-   * a `map` function.
+   * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
+   * operation will create many references to the same object.
+   * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
+   * copy them using a `map` function.
    */
   def hadoopFile[K, V, F <: InputFormat[K, V]](path: String)
       (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] =
@@ -788,9 +799,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * and extra configuration options to pass to the input format.
    *
    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
-   * record, directly caching the returned RDD will create many references to the same object.
-   * If you plan to directly cache Hadoop writable objects, you should first copy them using
-   * a `map` function.
+   * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
+   * operation will create many references to the same object.
+   * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
+   * copy them using a `map` function.
    */
   def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]](
       path: String,
@@ -799,6 +811,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       vClass: Class[V],
       conf: Configuration = hadoopConfiguration): RDD[(K, V)] = {
     assertNotStopped()
+    // The call to new NewHadoopJob automatically adds security credentials to conf, 
+    // so we don't need to explicitly add them ourselves
     val job = new NewHadoopJob(conf)
     NewFileInputFormat.addInputPath(job, new Path(path))
     val updatedConf = job.getConfiguration
@@ -810,9 +824,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * and extra configuration options to pass to the input format.
    *
    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
-   * record, directly caching the returned RDD will create many references to the same object.
-   * If you plan to directly cache Hadoop writable objects, you should first copy them using
-   * a `map` function.
+   * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
+   * operation will create many references to the same object.
+   * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
+   * copy them using a `map` function.
    */
   def newAPIHadoopRDD[K, V, F <: NewInputFormat[K, V]](
       conf: Configuration = hadoopConfiguration,
@@ -820,15 +835,19 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       kClass: Class[K],
       vClass: Class[V]): RDD[(K, V)] = {
     assertNotStopped()
-    new NewHadoopRDD(this, fClass, kClass, vClass, conf)
+    // Add necessary security credentials to the JobConf. Required to access secure HDFS.
+    val jconf = new JobConf(conf)
+    SparkHadoopUtil.get.addCredentials(jconf)
+    new NewHadoopRDD(this, fClass, kClass, vClass, jconf)
   }
 
   /** Get an RDD for a Hadoop SequenceFile with given key and value types.
     *
     * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
-    * record, directly caching the returned RDD will create many references to the same object.
-    * If you plan to directly cache Hadoop writable objects, you should first copy them using
-    * a `map` function.
+    * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
+    * operation will create many references to the same object.
+    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
+    * copy them using a `map` function.
     */
   def sequenceFile[K, V](path: String,
       keyClass: Class[K],
@@ -843,9 +862,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /** Get an RDD for a Hadoop SequenceFile with given key and value types.
     *
     * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
-    * record, directly caching the returned RDD will create many references to the same object.
-    * If you plan to directly cache Hadoop writable objects, you should first copy them using
-    * a `map` function.
+    * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
+    * operation will create many references to the same object.
+    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
+    * copy them using a `map` function.
     * */
   def sequenceFile[K, V](path: String, keyClass: Class[K], valueClass: Class[V]): RDD[(K, V)] = {
     assertNotStopped()
@@ -869,9 +889,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * allow it to figure out the Writable class to use in the subclass case.
    *
    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
-   * record, directly caching the returned RDD will create many references to the same object.
-   * If you plan to directly cache Hadoop writable objects, you should first copy them using
-   * a `map` function.
+   * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
+   * operation will create many references to the same object.
+   * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
+   * copy them using a `map` function.
    */
    def sequenceFile[K, V]
        (path: String, minPartitions: Int = defaultMinPartitions)
@@ -1210,7 +1231,19 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
                   null
               }
             } else {
-              env.httpFileServer.addJar(new File(uri.getPath))
+              try {
+                env.httpFileServer.addJar(new File(uri.getPath))
+              } catch {
+                case exc: FileNotFoundException =>
+                  logError(s"Jar not found at $path")
+                  null
+                case e: Exception =>
+                  // For now just log an error but allow to go through so spark examples work.
+                  // The spark examples don't really need the jar distributed since its also
+                  // the app jar.
+                  logError("Error adding jar (" + e + "), was the --addJars option used?")
+                  null
+              }
             }
           // A JAR file which exists locally on every worker node
           case "local" =>
@@ -1735,8 +1768,14 @@ object SparkContext extends Logging {
   @deprecated("Replaced by implicit functions in the RDD companion object. This is " +
     "kept here only for backward compatibility.", "1.3.0")
   def rddToSequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable: ClassTag](
-      rdd: RDD[(K, V)]) =
+      rdd: RDD[(K, V)]) = {
+    val kf = implicitly[K => Writable]
+    val vf = implicitly[V => Writable]
+    // Set the Writable class to null and `SequenceFileRDDFunctions` will use Reflection to get it
+    implicit val keyWritableFactory = new WritableFactory[K](_ => null, kf)
+    implicit val valueWritableFactory = new WritableFactory[V](_ => null, vf)
     RDD.rddToSequenceFileRDDFunctions(rdd)
+  }
 
   @deprecated("Replaced by implicit functions in the RDD companion object. This is " +
     "kept here only for backward compatibility.", "1.3.0")
@@ -1753,20 +1792,35 @@ object SparkContext extends Logging {
   def numericRDDToDoubleRDDFunctions[T](rdd: RDD[T])(implicit num: Numeric[T]) =
     RDD.numericRDDToDoubleRDDFunctions(rdd)
 
-  // Implicit conversions to common Writable types, for saveAsSequenceFile
+  // The following deprecated functions have already been moved to `object WritableFactory` to
+  // make the compiler find them automatically. They are still kept here for backward compatibility.
 
+  @deprecated("Replaced by implicit functions in the WritableFactory companion object. This is " +
+    "kept here only for backward compatibility.", "1.3.0")
   implicit def intToIntWritable(i: Int): IntWritable = new IntWritable(i)
 
+  @deprecated("Replaced by implicit functions in the WritableFactory companion object. This is " +
+    "kept here only for backward compatibility.", "1.3.0")
   implicit def longToLongWritable(l: Long): LongWritable = new LongWritable(l)
 
+  @deprecated("Replaced by implicit functions in the WritableFactory companion object. This is " +
+    "kept here only for backward compatibility.", "1.3.0")
   implicit def floatToFloatWritable(f: Float): FloatWritable = new FloatWritable(f)
 
+  @deprecated("Replaced by implicit functions in the WritableFactory companion object. This is " +
+    "kept here only for backward compatibility.", "1.3.0")
   implicit def doubleToDoubleWritable(d: Double): DoubleWritable = new DoubleWritable(d)
 
+  @deprecated("Replaced by implicit functions in the WritableFactory companion object. This is " +
+    "kept here only for backward compatibility.", "1.3.0")
   implicit def boolToBoolWritable (b: Boolean): BooleanWritable = new BooleanWritable(b)
 
+  @deprecated("Replaced by implicit functions in the WritableFactory companion object. This is " +
+    "kept here only for backward compatibility.", "1.3.0")
   implicit def bytesToBytesWritable (aob: Array[Byte]): BytesWritable = new BytesWritable(aob)
 
+  @deprecated("Replaced by implicit functions in the WritableFactory companion object. This is " +
+    "kept here only for backward compatibility.", "1.3.0")
   implicit def stringToText(s: String): Text = new Text(s)
 
   private implicit def arrayToArrayWritable[T <% Writable: ClassTag](arr: Traversable[T])
@@ -1986,7 +2040,7 @@ object SparkContext extends Logging {
       case "yarn-client" =>
         val scheduler = try {
           val clazz =
-            Class.forName("org.apache.spark.scheduler.cluster.YarnClientClusterScheduler")
+            Class.forName("org.apache.spark.scheduler.cluster.YarnScheduler")
           val cons = clazz.getConstructor(classOf[SparkContext])
           cons.newInstance(sc).asInstanceOf[TaskSchedulerImpl]
 
@@ -2056,7 +2110,7 @@ object WritableConverter {
     new WritableConverter[T](_ => wClass, x => convert(x.asInstanceOf[W]))
   }
 
-  // The following implicit functions were in SparkContext before 1.2 and users had to
+  // The following implicit functions were in SparkContext before 1.3 and users had to
   // `import SparkContext._` to enable them. Now we move them here to make the compiler find
   // them automatically. However, we still keep the old functions in SparkContext for backward
   // compatibility and forward to the following functions directly.
@@ -2088,4 +2142,47 @@ object WritableConverter {
 
   implicit def writableWritableConverter[T <: Writable](): WritableConverter[T] =
     new WritableConverter[T](_.runtimeClass.asInstanceOf[Class[T]], _.asInstanceOf[T])
+}
+
+/**
+ * A class encapsulating how to convert some type T to Writable. It stores both the Writable class
+ * corresponding to T (e.g. IntWritable for Int) and a function for doing the conversion.
+ * The Writable class will be used in `SequenceFileRDDFunctions`.
+ */
+private[spark] class WritableFactory[T](
+    val writableClass: ClassTag[T] => Class[_ <: Writable],
+    val convert: T => Writable) extends Serializable
+
+object WritableFactory {
+
+  private[spark] def simpleWritableFactory[T: ClassTag, W <: Writable : ClassTag](convert: T => W)
+    : WritableFactory[T] = {
+    val writableClass = implicitly[ClassTag[W]].runtimeClass.asInstanceOf[Class[W]]
+    new WritableFactory[T](_ => writableClass, convert)
+  }
+
+  implicit def intWritableFactory: WritableFactory[Int] =
+    simpleWritableFactory(new IntWritable(_))
+
+  implicit def longWritableFactory: WritableFactory[Long] =
+    simpleWritableFactory(new LongWritable(_))
+
+  implicit def floatWritableFactory: WritableFactory[Float] =
+    simpleWritableFactory(new FloatWritable(_))
+
+  implicit def doubleWritableFactory: WritableFactory[Double] =
+    simpleWritableFactory(new DoubleWritable(_))
+
+  implicit def booleanWritableFactory: WritableFactory[Boolean] =
+    simpleWritableFactory(new BooleanWritable(_))
+
+  implicit def bytesWritableFactory: WritableFactory[Array[Byte]] =
+    simpleWritableFactory(new BytesWritable(_))
+
+  implicit def stringWritableFactory: WritableFactory[String] =
+    simpleWritableFactory(new Text(_))
+
+  implicit def writableWritableFactory[T <: Writable: ClassTag]: WritableFactory[T] =
+    simpleWritableFactory(w => w)
+
 }

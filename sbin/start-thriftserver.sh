@@ -26,6 +26,8 @@ set -o posix
 # Figure out where Spark is installed
 FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 
+# NOTE: This exact class name is matched downstream by SparkSubmit.
+# Any changes need to be reflected there.
 CLASS="org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"
 
 function usage {

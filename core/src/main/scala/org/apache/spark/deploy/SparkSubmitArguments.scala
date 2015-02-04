@@ -54,6 +54,9 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   var name: String = null
   var childArgs: ArrayBuffer[String] = new ArrayBuffer[String]()
   var jars: String = null
+  var packages: String = null
+  var repositories: String = null
+  var ivyRepoPath: String = null
   var verbose: Boolean = false
   var isPython: Boolean = false
   var pyFiles: String = null
@@ -132,6 +135,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
       .orNull
     name = Option(name).orElse(sparkProperties.get("spark.app.name")).orNull
     jars = Option(jars).orElse(sparkProperties.get("spark.jars")).orNull
+    ivyRepoPath = sparkProperties.get("spark.jars.ivy").orNull
     deployMode = Option(deployMode).orElse(env.get("DEPLOY_MODE")).orNull
     numExecutors = Option(numExecutors)
       .getOrElse(sparkProperties.get("spark.executor.instances").orNull)
@@ -188,18 +192,6 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
       SparkSubmit.printErrorAndExit("--py-files given but primary resource is not a Python script")
     }
 
-    // Require all python files to be local, so we can add them to the PYTHONPATH
-    if (isPython) {
-      if (Utils.nonLocalPaths(primaryResource).nonEmpty) {
-        SparkSubmit.printErrorAndExit(s"Only local python files are supported: $primaryResource")
-      }
-      val nonLocalPyFiles = Utils.nonLocalPaths(pyFiles).mkString(",")
-      if (nonLocalPyFiles.nonEmpty) {
-        SparkSubmit.printErrorAndExit(
-          s"Only local additional python files are supported: $nonLocalPyFiles")
-      }
-    }
-
     if (master.startsWith("yarn")) {
       val hasHadoopEnv = env.contains("HADOOP_CONF_DIR") || env.contains("YARN_CONF_DIR")
       if (!hasHadoopEnv && !Utils.isTesting) {
@@ -233,6 +225,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
     |  name                    $name
     |  childArgs               [${childArgs.mkString(" ")}]
     |  jars                    $jars
+    |  packages                $packages
+    |  repositories            $repositories
     |  verbose                 $verbose
     |
     |Spark properties used, including those specified through
@@ -309,6 +303,12 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
       case JARS =>
         jars = Utils.resolveURIs(value)
 
+      case PACKAGES =>
+        packages = value
+
+      case REPOSITORIES =>
+        repositories = value
+
       case CONF =>
         value.split("=", 2).toSeq match {
           case Seq(k, v) => sparkProperties(k) = v
@@ -367,6 +367,13 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         |  --name NAME                 A name of your application.
         |  --jars JARS                 Comma-separated list of local jars to include on the driver
         |                              and executor classpaths.
+        |  --packages                  Comma-separated list of maven coordinates of jars to include
+        |                              on the driver and executor classpaths. Will search the local
+        |                              maven repo, then maven central and any additional remote
+        |                              repositories given by --repositories. The format for the
+        |                              coordinates should be groupId:artifactId:version.
+        |  --repositories              Comma-separated list of additional remote repositories to
+        |                              search for the maven coordinates given with --packages.
         |  --py-files PY_FILES         Comma-separated list of .zip, .egg, or .py files to place
         |                              on the PYTHONPATH for Python apps.
         |  --files FILES               Comma-separated list of files to be placed in the working

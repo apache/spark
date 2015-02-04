@@ -56,10 +56,12 @@ public class SparkSubmitOptionParserSuite {
       MASTER, MASTER,
       NAME, NAME,
       NUM_EXECUTORS, NUM_EXECUTORS,
+      PACKAGES, PACKAGES,
       PROPERTIES_FILE, PROPERTIES_FILE,
       PY_FILES, PY_FILES,
       QUEUE, QUEUE,
       TOTAL_EXECUTOR_CORES, TOTAL_EXECUTOR_CORES,
+      REPOSITORIES, REPOSITORIES,
       HELP,
       SUPERVISE,
       VERBOSE);
@@ -81,9 +83,11 @@ public class SparkSubmitOptionParserSuite {
     verify(parser).handle(eq(MASTER), eq(MASTER));
     verify(parser).handle(eq(NAME), eq(NAME));
     verify(parser).handle(eq(NUM_EXECUTORS), eq(NUM_EXECUTORS));
+    verify(parser).handle(eq(PACKAGES), eq(PACKAGES));
     verify(parser).handle(eq(PROPERTIES_FILE), eq(PROPERTIES_FILE));
     verify(parser).handle(eq(PY_FILES), eq(PY_FILES));
     verify(parser).handle(eq(QUEUE), eq(QUEUE));
+    verify(parser).handle(eq(REPOSITORIES), eq(REPOSITORIES));
     verify(parser).handle(eq(TOTAL_EXECUTOR_CORES), eq(TOTAL_EXECUTOR_CORES));
     verify(parser).handle(eq(HELP), same((String) null));
     verify(parser).handle(eq(SUPERVISE), same((String) null));

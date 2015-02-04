@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.{BufferedReader, InputStreamReader, PrintStream}
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.analysis.{Analyzer, EliminateAnalysisOperat
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUdfs, SetCommand, QueryExecutionException}
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DescribeHiveTableCommand}
-import org.apache.spark.sql.sources.DataSourceStrategy
+import org.apache.spark.sql.sources.{CreateTableUsing, DataSourceStrategy}
 import org.apache.spark.sql.types._
 
 /**
@@ -64,15 +64,16 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     getConf("spark.sql.hive.convertMetastoreParquet", "true") == "true"
 
   override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
-    new this.QueryExecution { val logical = plan }
+    new this.QueryExecution(plan)
 
-  override def sql(sqlText: String): SchemaRDD = {
+  override def sql(sqlText: String): DataFrame = {
     val substituted = new VariableSubstitution().substitute(hiveconf, sqlText)
     // TODO: Create a framework for registering parsers instead of just hardcoding if statements.
     if (conf.dialect == "sql") {
       super.sql(substituted)
     } else if (conf.dialect == "hiveql") {
-      new SchemaRDD(this, ddlParser(sqlText, false).getOrElse(HiveQl.parseSql(substituted)))
+      DataFrame(this,
+        ddlParser(sqlText, exceptionOnError = false).getOrElse(HiveQl.parseSql(substituted)))
     }  else {
       sys.error(s"Unsupported SQL dialect: ${conf.dialect}.  Try 'sql' or 'hiveql'")
     }
@@ -85,6 +86,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * @param allowExisting When false, an exception will be thrown if the table already exists.
    * @tparam A A case class that is used to describe the schema of the table to be created.
    */
+  @Deprecated
   def createTable[A <: Product : TypeTag](tableName: String, allowExisting: Boolean = true) {
     catalog.createTable("default", tableName, ScalaReflection.attributesFor[A], allowExisting)
   }
@@ -103,6 +105,70 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   protected[hive] def invalidateTable(tableName: String): Unit = {
     // TODO: Database support...
     catalog.invalidateTable("default", tableName)
+  }
+
+  @Experimental
+  def createTable(tableName: String, path: String, allowExisting: Boolean): Unit = {
+    val dataSourceName = conf.defaultDataSourceName
+    createTable(tableName, dataSourceName, allowExisting, ("path", path))
+  }
+
+  @Experimental
+  def createTable(
+      tableName: String,
+      dataSourceName: String,
+      allowExisting: Boolean,
+      option: (String, String),
+      options: (String, String)*): Unit = {
+    val cmd =
+      CreateTableUsing(
+        tableName,
+        userSpecifiedSchema = None,
+        dataSourceName,
+        temporary = false,
+        (option +: options).toMap,
+        allowExisting)
+    executePlan(cmd).toRdd
+  }
+
+  @Experimental
+  def createTable(
+      tableName: String,
+      dataSourceName: String,
+      schema: StructType,
+      allowExisting: Boolean,
+      option: (String, String),
+      options: (String, String)*): Unit = {
+    val cmd =
+      CreateTableUsing(
+        tableName,
+        userSpecifiedSchema = Some(schema),
+        dataSourceName,
+        temporary = false,
+        (option +: options).toMap,
+        allowExisting)
+    executePlan(cmd).toRdd
+  }
+
+  @Experimental
+  def createTable(
+      tableName: String,
+      dataSourceName: String,
+      allowExisting: Boolean,
+      options: java.util.Map[String, String]): Unit = {
+    val opts = options.toSeq
+    createTable(tableName, dataSourceName, allowExisting, opts.head, opts.tail:_*)
+  }
+
+  @Experimental
+  def createTable(
+      tableName: String,
+      dataSourceName: String,
+      schema: StructType,
+      allowExisting: Boolean,
+      options: java.util.Map[String, String]): Unit = {
+    val opts = options.toSeq
+    createTable(tableName, dataSourceName, schema, allowExisting, opts.head, opts.tail:_*)
   }
 
   /**
@@ -245,7 +311,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   // Note that HiveUDFs will be overridden by functions registered in this context.
   @transient
   override protected[sql] lazy val functionRegistry =
-    new HiveFunctionRegistry with OverrideFunctionRegistry
+    new HiveFunctionRegistry with OverrideFunctionRegistry {
+      def caseSensitive = false
+    }
 
   /* An analyzer that uses the Hive metastore. */
   @transient
@@ -255,6 +323,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         catalog.CreateTables ::
         catalog.PreInsertionCasts ::
         ExtractPythonUdfs ::
+        ResolveUdtfsAlias ::
         Nil
     }
 
@@ -352,7 +421,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   override protected[sql] val planner = hivePlanner
 
   /** Extends QueryExecution with hive specific features. */
-  protected[sql] abstract class QueryExecution extends super.QueryExecution {
+  protected[sql] class QueryExecution(logicalPlan: LogicalPlan)
+    extends super.QueryExecution(logicalPlan) {
 
     /**
      * Returns the result as a hive compatible sequence of strings.  For native commands, the
@@ -408,7 +478,7 @@ private object HiveContext {
           toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
       }.toSeq.sorted.mkString("{", ",", "}")
     case (null, _) => "NULL"
-    case (d: Date, DateType) => new DateWritable(d).toString
+    case (d: Int, DateType) => new DateWritable(d).toString
     case (t: Timestamp, TimestampType) => new TimestampWritable(t).toString
     case (bin: Array[Byte], BinaryType) => new String(bin, "UTF-8")
     case (decimal: java.math.BigDecimal, DecimalType()) =>

@@ -21,29 +21,30 @@ import java.beans.Introspector
 import java.util.Properties
 
 import scala.collection.immutable
+import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, Partition}
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaSparkContext, JavaRDD}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.dsl.ExpressionConversions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.json._
-import org.apache.spark.sql.sources.{LogicalRelation, BaseRelation, DDLParser, DataSourceStrategy}
+import org.apache.spark.sql.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
+import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 /**
  * :: AlphaComponent ::
- * The entry point for running relational queries using Spark.  Allows the creation of [[SchemaRDD]]
+ * The entry point for running relational queries using Spark.  Allows the creation of [[DataFrame]]
  * objects and the execution of SQL queries.
  *
  * @groupname userf Spark SQL Functions
@@ -52,8 +53,6 @@ import org.apache.spark.util.Utils
 @AlphaComponent
 class SQLContext(@transient val sparkContext: SparkContext)
   extends org.apache.spark.Logging
-  with CacheManager
-  with ExpressionConversions
   with Serializable {
 
   self =>
@@ -88,7 +87,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] lazy val catalog: Catalog = new SimpleCatalog(true)
 
   @transient
-  protected[sql] lazy val functionRegistry: FunctionRegistry = new SimpleFunctionRegistry
+  protected[sql] lazy val functionRegistry: FunctionRegistry = new SimpleFunctionRegistry(true)
 
   @transient
   protected[sql] lazy val analyzer: Analyzer =
@@ -111,227 +110,15 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   protected[sql] def executeSql(sql: String): this.QueryExecution = executePlan(parseSql(sql))
-  protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
-    new this.QueryExecution { val logical = plan }
+
+  protected[sql] def executePlan(plan: LogicalPlan) = new this.QueryExecution(plan)
 
   sparkContext.getConf.getAll.foreach {
     case (key, value) if key.startsWith("spark.sql") => setConf(key, value)
     case _ =>
   }
 
-  /**
-   * Creates a SchemaRDD from an RDD of case classes.
-   *
-   * @group userf
-   */
-  implicit def createSchemaRDD[A <: Product: TypeTag](rdd: RDD[A]): SchemaRDD = {
-    SparkPlan.currentContext.set(self)
-    val attributeSeq = ScalaReflection.attributesFor[A]
-    val schema = StructType.fromAttributes(attributeSeq)
-    val rowRDD = RDDConversions.productToRowRdd(rdd, schema)
-    new SchemaRDD(this, LogicalRDD(attributeSeq, rowRDD)(self))
-  }
-
-  /**
-   * Convert a [[BaseRelation]] created for external data sources into a [[SchemaRDD]].
-   */
-  def baseRelationToSchemaRDD(baseRelation: BaseRelation): SchemaRDD = {
-    new SchemaRDD(this, LogicalRelation(baseRelation))
-  }
-
-  /**
-   * :: DeveloperApi ::
-   * Creates a [[SchemaRDD]] from an [[RDD]] containing [[Row]]s by applying a schema to this RDD.
-   * It is important to make sure that the structure of every [[Row]] of the provided RDD matches
-   * the provided schema. Otherwise, there will be runtime exception.
-   * Example:
-   * {{{
-   *  import org.apache.spark.sql._
-   *  val sqlContext = new org.apache.spark.sql.SQLContext(sc)
-   *
-   *  val schema =
-   *    StructType(
-   *      StructField("name", StringType, false) ::
-   *      StructField("age", IntegerType, true) :: Nil)
-   *
-   *  val people =
-   *    sc.textFile("examples/src/main/resources/people.txt").map(
-   *      _.split(",")).map(p => Row(p(0), p(1).trim.toInt))
-   *  val peopleSchemaRDD = sqlContext. applySchema(people, schema)
-   *  peopleSchemaRDD.printSchema
-   *  // root
-   *  // |-- name: string (nullable = false)
-   *  // |-- age: integer (nullable = true)
-   *
-   *    peopleSchemaRDD.registerTempTable("people")
-   *  sqlContext.sql("select name from people").collect.foreach(println)
-   * }}}
-   *
-   * @group userf
-   */
-  @DeveloperApi
-  def applySchema(rowRDD: RDD[Row], schema: StructType): SchemaRDD = {
-    // TODO: use MutableProjection when rowRDD is another SchemaRDD and the applied
-    // schema differs from the existing schema on any field data type.
-    val logicalPlan = LogicalRDD(schema.toAttributes, rowRDD)(self)
-    new SchemaRDD(this, logicalPlan)
-  }
-
-  /**
-   * Applies a schema to an RDD of Java Beans.
-   *
-   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
-   *          SELECT * queries will return the columns in an undefined order.
-   */
-  def applySchema(rdd: RDD[_], beanClass: Class[_]): SchemaRDD = {
-    val attributeSeq = getSchema(beanClass)
-    val className = beanClass.getName
-    val rowRdd = rdd.mapPartitions { iter =>
-      // BeanInfo is not serializable so we must rediscover it remotely for each partition.
-      val localBeanInfo = Introspector.getBeanInfo(
-        Class.forName(className, true, Utils.getContextOrSparkClassLoader))
-      val extractors =
-        localBeanInfo.getPropertyDescriptors.filterNot(_.getName == "class").map(_.getReadMethod)
-
-      iter.map { row =>
-        new GenericRow(
-          extractors.zip(attributeSeq).map { case (e, attr) =>
-            DataTypeConversions.convertJavaToCatalyst(e.invoke(row), attr.dataType)
-          }.toArray[Any]
-        ) : Row
-      }
-    }
-    new SchemaRDD(this, LogicalRDD(attributeSeq, rowRdd)(this))
-  }
-
-  /**
-   * Applies a schema to an RDD of Java Beans.
-   *
-   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
-   *          SELECT * queries will return the columns in an undefined order.
-   */
-  def applySchema(rdd: JavaRDD[_], beanClass: Class[_]): SchemaRDD = {
-    applySchema(rdd.rdd, beanClass)
-  }
-
-  /**
-   * Loads a Parquet file, returning the result as a [[SchemaRDD]].
-   *
-   * @group userf
-   */
-  def parquetFile(path: String): SchemaRDD =
-    new SchemaRDD(this, parquet.ParquetRelation(path, Some(sparkContext.hadoopConfiguration), this))
-
-  /**
-   * Loads a JSON file (one object per line), returning the result as a [[SchemaRDD]].
-   * It goes through the entire dataset once to determine the schema.
-   *
-   * @group userf
-   */
-  def jsonFile(path: String): SchemaRDD = jsonFile(path, 1.0)
-
-  /**
-   * :: Experimental ::
-   * Loads a JSON file (one object per line) and applies the given schema,
-   * returning the result as a [[SchemaRDD]].
-   *
-   * @group userf
-   */
-  @Experimental
-  def jsonFile(path: String, schema: StructType): SchemaRDD = {
-    val json = sparkContext.textFile(path)
-    jsonRDD(json, schema)
-  }
-
-  /**
-   * :: Experimental ::
-   */
-  @Experimental
-  def jsonFile(path: String, samplingRatio: Double): SchemaRDD = {
-    val json = sparkContext.textFile(path)
-    jsonRDD(json, samplingRatio)
-  }
-
-  /**
-   * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
-   * [[SchemaRDD]].
-   * It goes through the entire dataset once to determine the schema.
-   *
-   * @group userf
-   */
-  def jsonRDD(json: RDD[String]): SchemaRDD = jsonRDD(json, 1.0)
-
-  /**
-   * :: Experimental ::
-   * Loads an RDD[String] storing JSON objects (one object per record) and applies the given schema,
-   * returning the result as a [[SchemaRDD]].
-   *
-   * @group userf
-   */
-  @Experimental
-  def jsonRDD(json: RDD[String], schema: StructType): SchemaRDD = {
-    val columnNameOfCorruptJsonRecord = conf.columnNameOfCorruptRecord
-    val appliedSchema =
-      Option(schema).getOrElse(
-        JsonRDD.nullTypeToStringType(
-          JsonRDD.inferSchema(json, 1.0, columnNameOfCorruptJsonRecord)))
-    val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
-    applySchema(rowRDD, appliedSchema)
-  }
-
-  /**
-   * :: Experimental ::
-   */
-  @Experimental
-  def jsonRDD(json: RDD[String], samplingRatio: Double): SchemaRDD = {
-    val columnNameOfCorruptJsonRecord = conf.columnNameOfCorruptRecord
-    val appliedSchema =
-      JsonRDD.nullTypeToStringType(
-        JsonRDD.inferSchema(json, samplingRatio, columnNameOfCorruptJsonRecord))
-    val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
-    applySchema(rowRDD, appliedSchema)
-  }
-
-  /**
-   * Registers the given RDD as a temporary table in the catalog.  Temporary tables exist only
-   * during the lifetime of this instance of SQLContext.
-   *
-   * @group userf
-   */
-  def registerRDDAsTable(rdd: SchemaRDD, tableName: String): Unit = {
-    catalog.registerTable(Seq(tableName), rdd.queryExecution.logical)
-  }
-
-  /**
-   * Drops the temporary table with the given table name in the catalog. If the table has been
-   * cached/persisted before, it's also unpersisted.
-   *
-   * @param tableName the name of the table to be unregistered.
-   *
-   * @group userf
-   */
-  def dropTempTable(tableName: String): Unit = {
-    tryUncacheQuery(table(tableName))
-    catalog.unregisterTable(Seq(tableName))
-  }
-
-  /**
-   * Executes a SQL query using Spark, returning the result as a SchemaRDD.  The dialect that is
-   * used for SQL parsing can be configured with 'spark.sql.dialect'.
-   *
-   * @group userf
-   */
-  def sql(sqlText: String): SchemaRDD = {
-    if (conf.dialect == "sql") {
-      new SchemaRDD(this, parseSql(sqlText))
-    } else {
-      sys.error(s"Unsupported SQL dialect: ${conf.dialect}")
-    }
-  }
-
-  /** Returns the specified table as a SchemaRDD */
-  def table(tableName: String): SchemaRDD =
-    new SchemaRDD(this, catalog.lookupRelation(Seq(tableName)))
+  protected[sql] val cacheManager = new CacheManager(this)
 
   /**
    * A collection of methods that are considered experimental, but can be used to hook into
@@ -350,22 +137,314 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * The following example registers a UDF in Java:
    * {{{
    *   sqlContext.udf().register("myUDF",
-   *     new UDF2<Integer, String, String>() {
-   *       @Override
-   *       public String call(Integer arg1, String arg2) {
-   *         return arg2 + arg1;
-   *       }
-   *     }, DataTypes.StringType);
+   *       new UDF2<Integer, String, String>() {
+   *           @Override
+   *           public String call(Integer arg1, String arg2) {
+   *               return arg2 + arg1;
+   *           }
+   *      }, DataTypes.StringType);
    * }}}
    *
    * Or, to use Java 8 lambda syntax:
    * {{{
    *   sqlContext.udf().register("myUDF",
-   *     (Integer arg1, String arg2) -> arg2 + arg1),
-   *     DataTypes.StringType);
+   *       (Integer arg1, String arg2) -> arg2 + arg1),
+   *       DataTypes.StringType);
    * }}}
    */
   val udf: UDFRegistration = new UDFRegistration(this)
+
+  /** Returns true if the table is currently cached in-memory. */
+  def isCached(tableName: String): Boolean = cacheManager.isCached(tableName)
+
+  /** Caches the specified table in-memory. */
+  def cacheTable(tableName: String): Unit = cacheManager.cacheTable(tableName)
+
+  /** Removes the specified table from the in-memory cache. */
+  def uncacheTable(tableName: String): Unit = cacheManager.uncacheTable(tableName)
+
+  /**
+   * Creates a DataFrame from an RDD of case classes.
+   *
+   * @group userf
+   */
+  implicit def createDataFrame[A <: Product: TypeTag](rdd: RDD[A]): DataFrame = {
+    SparkPlan.currentContext.set(self)
+    val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
+    val attributeSeq = schema.toAttributes
+    val rowRDD = RDDConversions.productToRowRdd(rdd, schema)
+    DataFrame(this, LogicalRDD(attributeSeq, rowRDD)(self))
+  }
+
+  /**
+   * Convert a [[BaseRelation]] created for external data sources into a [[DataFrame]].
+   */
+  def baseRelationToDataFrame(baseRelation: BaseRelation): DataFrame = {
+    DataFrame(this, LogicalRelation(baseRelation))
+  }
+
+  /**
+   * :: DeveloperApi ::
+   * Creates a [[DataFrame]] from an [[RDD]] containing [[Row]]s by applying a schema to this RDD.
+   * It is important to make sure that the structure of every [[Row]] of the provided RDD matches
+   * the provided schema. Otherwise, there will be runtime exception.
+   * Example:
+   * {{{
+   *  import org.apache.spark.sql._
+   *  val sqlContext = new org.apache.spark.sql.SQLContext(sc)
+   *
+   *  val schema =
+   *    StructType(
+   *      StructField("name", StringType, false) ::
+   *      StructField("age", IntegerType, true) :: Nil)
+   *
+   *  val people =
+   *    sc.textFile("examples/src/main/resources/people.txt").map(
+   *      _.split(",")).map(p => Row(p(0), p(1).trim.toInt))
+   *  val dataFrame = sqlContext. applySchema(people, schema)
+   *  dataFrame.printSchema
+   *  // root
+   *  // |-- name: string (nullable = false)
+   *  // |-- age: integer (nullable = true)
+   *
+   *  dataFrame.registerTempTable("people")
+   *  sqlContext.sql("select name from people").collect.foreach(println)
+   * }}}
+   *
+   * @group userf
+   */
+  @DeveloperApi
+  def applySchema(rowRDD: RDD[Row], schema: StructType): DataFrame = {
+    // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
+    // schema differs from the existing schema on any field data type.
+    val logicalPlan = LogicalRDD(schema.toAttributes, rowRDD)(self)
+    DataFrame(this, logicalPlan)
+  }
+
+  /**
+   * Applies a schema to an RDD of Java Beans.
+   *
+   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
+   *          SELECT * queries will return the columns in an undefined order.
+   */
+  def applySchema(rdd: RDD[_], beanClass: Class[_]): DataFrame = {
+    val attributeSeq = getSchema(beanClass)
+    val className = beanClass.getName
+    val rowRdd = rdd.mapPartitions { iter =>
+      // BeanInfo is not serializable so we must rediscover it remotely for each partition.
+      val localBeanInfo = Introspector.getBeanInfo(
+        Class.forName(className, true, Utils.getContextOrSparkClassLoader))
+      val extractors =
+        localBeanInfo.getPropertyDescriptors.filterNot(_.getName == "class").map(_.getReadMethod)
+
+      iter.map { row =>
+        new GenericRow(
+          extractors.zip(attributeSeq).map { case (e, attr) =>
+            DataTypeConversions.convertJavaToCatalyst(e.invoke(row), attr.dataType)
+          }.toArray[Any]
+        ) : Row
+      }
+    }
+    DataFrame(this, LogicalRDD(attributeSeq, rowRdd)(this))
+  }
+
+  /**
+   * Applies a schema to an RDD of Java Beans.
+   *
+   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
+   *          SELECT * queries will return the columns in an undefined order.
+   */
+  def applySchema(rdd: JavaRDD[_], beanClass: Class[_]): DataFrame = {
+    applySchema(rdd.rdd, beanClass)
+  }
+
+  /**
+   * Loads a Parquet file, returning the result as a [[DataFrame]].
+   *
+   * @group userf
+   */
+  def parquetFile(path: String): DataFrame =
+    DataFrame(this, parquet.ParquetRelation(path, Some(sparkContext.hadoopConfiguration), this))
+
+  /**
+   * Loads a JSON file (one object per line), returning the result as a [[DataFrame]].
+   * It goes through the entire dataset once to determine the schema.
+   *
+   * @group userf
+   */
+  def jsonFile(path: String): DataFrame = jsonFile(path, 1.0)
+
+  /**
+   * :: Experimental ::
+   * Loads a JSON file (one object per line) and applies the given schema,
+   * returning the result as a [[DataFrame]].
+   *
+   * @group userf
+   */
+  @Experimental
+  def jsonFile(path: String, schema: StructType): DataFrame = {
+    val json = sparkContext.textFile(path)
+    jsonRDD(json, schema)
+  }
+
+  /**
+   * :: Experimental ::
+   */
+  @Experimental
+  def jsonFile(path: String, samplingRatio: Double): DataFrame = {
+    val json = sparkContext.textFile(path)
+    jsonRDD(json, samplingRatio)
+  }
+
+  /**
+   * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
+   * [[DataFrame]].
+   * It goes through the entire dataset once to determine the schema.
+   *
+   * @group userf
+   */
+  def jsonRDD(json: RDD[String]): DataFrame = jsonRDD(json, 1.0)
+
+  /**
+   * :: Experimental ::
+   * Loads an RDD[String] storing JSON objects (one object per record) and applies the given schema,
+   * returning the result as a [[DataFrame]].
+   *
+   * @group userf
+   */
+  @Experimental
+  def jsonRDD(json: RDD[String], schema: StructType): DataFrame = {
+    val columnNameOfCorruptJsonRecord = conf.columnNameOfCorruptRecord
+    val appliedSchema =
+      Option(schema).getOrElse(
+        JsonRDD.nullTypeToStringType(
+          JsonRDD.inferSchema(json, 1.0, columnNameOfCorruptJsonRecord)))
+    val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
+    applySchema(rowRDD, appliedSchema)
+  }
+
+  /**
+   * :: Experimental ::
+   */
+  @Experimental
+  def jsonRDD(json: RDD[String], samplingRatio: Double): DataFrame = {
+    val columnNameOfCorruptJsonRecord = conf.columnNameOfCorruptRecord
+    val appliedSchema =
+      JsonRDD.nullTypeToStringType(
+        JsonRDD.inferSchema(json, samplingRatio, columnNameOfCorruptJsonRecord))
+    val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
+    applySchema(rowRDD, appliedSchema)
+  }
+
+  @Experimental
+  def load(path: String): DataFrame = {
+    val dataSourceName = conf.defaultDataSourceName
+    load(dataSourceName, ("path", path))
+  }
+
+  @Experimental
+  def load(
+      dataSourceName: String,
+      option: (String, String),
+      options: (String, String)*): DataFrame = {
+    val resolved = ResolvedDataSource(this, None, dataSourceName, (option +: options).toMap)
+    DataFrame(this, LogicalRelation(resolved.relation))
+  }
+
+  @Experimental
+  def load(
+      dataSourceName: String,
+      options: java.util.Map[String, String]): DataFrame = {
+    val opts = options.toSeq
+    load(dataSourceName, opts.head, opts.tail:_*)
+  }
+
+  /**
+   * :: Experimental ::
+   * Construct an RDD representing the database table accessible via JDBC URL
+   * url named table.
+   */
+  @Experimental
+  def jdbcRDD(url: String, table: String): DataFrame = {
+    jdbcRDD(url, table, null.asInstanceOf[JDBCPartitioningInfo])
+  }
+
+  /**
+   * :: Experimental ::
+   * Construct an RDD representing the database table accessible via JDBC URL
+   * url named table.  The PartitioningInfo parameter
+   * gives the name of a column of integral type, a number of partitions, and
+   * advisory minimum and maximum values for the column.  The RDD is
+   * partitioned according to said column.
+   */
+  @Experimental
+  def jdbcRDD(url: String, table: String, partitioning: JDBCPartitioningInfo):
+      DataFrame = {
+    val parts = JDBCRelation.columnPartition(partitioning)
+    jdbcRDD(url, table, parts)
+  }
+
+  /**
+   * :: Experimental ::
+   * Construct an RDD representing the database table accessible via JDBC URL
+   * url named table.  The theParts parameter gives a list expressions
+   * suitable for inclusion in WHERE clauses; each one defines one partition
+   * of the RDD.
+   */
+  @Experimental
+  def jdbcRDD(url: String, table: String, theParts: Array[String]):
+      DataFrame = {
+    val parts: Array[Partition] = theParts.zipWithIndex.map(
+        x => JDBCPartition(x._1, x._2).asInstanceOf[Partition])
+    jdbcRDD(url, table, parts)
+  }
+
+  private def jdbcRDD(url: String, table: String, parts: Array[Partition]):
+      DataFrame = {
+    val relation = JDBCRelation(url, table, parts)(this)
+    baseRelationToDataFrame(relation)
+  }
+
+  /**
+   * Registers the given RDD as a temporary table in the catalog.  Temporary tables exist only
+   * during the lifetime of this instance of SQLContext.
+   *
+   * @group userf
+   */
+  def registerRDDAsTable(rdd: DataFrame, tableName: String): Unit = {
+    catalog.registerTable(Seq(tableName), rdd.logicalPlan)
+  }
+
+  /**
+   * Drops the temporary table with the given table name in the catalog. If the table has been
+   * cached/persisted before, it's also unpersisted.
+   *
+   * @param tableName the name of the table to be unregistered.
+   *
+   * @group userf
+   */
+  def dropTempTable(tableName: String): Unit = {
+    cacheManager.tryUncacheQuery(table(tableName))
+    catalog.unregisterTable(Seq(tableName))
+  }
+
+  /**
+   * Executes a SQL query using Spark, returning the result as a [[DataFrame]]. The dialect that is
+   * used for SQL parsing can be configured with 'spark.sql.dialect'.
+   *
+   * @group userf
+   */
+  def sql(sqlText: String): DataFrame = {
+    if (conf.dialect == "sql") {
+      DataFrame(this, parseSql(sqlText))
+    } else {
+      sys.error(s"Unsupported SQL dialect: ${conf.dialect}")
+    }
+  }
+
+  /** Returns the specified table as a [[DataFrame]]. */
+  def table(tableName: String): DataFrame =
+    DataFrame(this, catalog.lookupRelation(Seq(tableName)))
 
   protected[sql] class SparkPlanner extends SparkStrategies {
     val sparkContext: SparkContext = self.sparkContext
@@ -454,15 +533,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * access to the intermediate phases of query execution for developers.
    */
   @DeveloperApi
-  protected abstract class QueryExecution {
-    def logical: LogicalPlan
+  protected[sql] class QueryExecution(val logical: LogicalPlan) {
 
-    lazy val analyzed = ExtractPythonUdfs(analyzer(logical))
-    lazy val withCachedData = useCachedData(analyzed)
-    lazy val optimizedPlan = optimizer(withCachedData)
+    lazy val analyzed: LogicalPlan = ExtractPythonUdfs(analyzer(logical))
+    lazy val withCachedData: LogicalPlan = cacheManager.useCachedData(analyzed)
+    lazy val optimizedPlan: LogicalPlan = optimizer(withCachedData)
 
     // TODO: Don't just pick the first one...
-    lazy val sparkPlan = {
+    lazy val sparkPlan: SparkPlan = {
       SparkPlan.currentContext.set(self)
       planner(optimizedPlan).next()
     }
@@ -512,7 +590,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   protected[sql] def applySchemaToPythonRDD(
       rdd: RDD[Array[Any]],
-      schemaString: String): SchemaRDD = {
+      schemaString: String): DataFrame = {
     val schema = parseDataType(schemaString).asInstanceOf[StructType]
     applySchemaToPythonRDD(rdd, schema)
   }
@@ -522,7 +600,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   protected[sql] def applySchemaToPythonRDD(
       rdd: RDD[Array[Any]],
-      schema: StructType): SchemaRDD = {
+      schema: StructType): DataFrame = {
 
     def needsConversion(dataType: DataType): Boolean = dataType match {
       case ByteType => true
@@ -549,7 +627,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       iter.map { m => new GenericRow(m): Row}
     }
 
-    new SchemaRDD(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
+    DataFrame(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
   }
 
   /**

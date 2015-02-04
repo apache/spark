@@ -170,7 +170,7 @@ class SQLQuerySuite extends QueryTest {
     sql("CREATE TABLE test2 (key INT, value STRING)")
     testData.insertInto("test2")
     testData.insertInto("test2")
-    sql("SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key").saveAsTable("test")
+    sql("CREATE TABLE test AS SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key")
     checkAnswer(
       table("test"),
       sql("SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key").collect().toSeq)
@@ -222,7 +222,7 @@ class SQLQuerySuite extends QueryTest {
       sql("SELECT distinct key FROM src order by key").collect().toSeq)
   }
 
-  test("SPARK-4963 SchemaRDD sample on mutable row return wrong result") {
+  test("SPARK-4963 DataFrame sample on mutable row return wrong result") {
     sql("SELECT * FROM src WHERE key % 2 = 0")
       .sample(withReplacement = false, fraction = 0.3)
       .registerTempTable("sampled")
@@ -266,5 +266,20 @@ class SQLQuerySuite extends QueryTest {
 
     sql("DROP TABLE nullValuesInInnerComplexTypes")
     dropTempTable("testTable")
+  }
+
+  test("SPARK-4296 Grouping field with Hive UDF as sub expression") {
+    val rdd = sparkContext.makeRDD( """{"a": "str", "b":"1", "c":"1970-01-01 00:00:00"}""" :: Nil)
+    jsonRDD(rdd).registerTempTable("data")
+    checkAnswer(
+      sql("SELECT concat(a, '-', b), year(c) FROM data GROUP BY concat(a, '-', b), year(c)"),
+      Row("str-1", 1970))
+
+    dropTempTable("data")
+
+    jsonRDD(rdd).registerTempTable("data")
+    checkAnswer(sql("SELECT year(c) + 1 FROM data GROUP BY year(c) + 1"), Row(1971))
+
+    dropTempTable("data")
   }
 }

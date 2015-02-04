@@ -21,7 +21,7 @@ import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml._
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
-import org.apache.spark.sql.{Row, SchemaRDD}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.types.DoubleType
 
 /**
@@ -41,7 +41,7 @@ class BinaryClassificationEvaluator extends Evaluator with Params
   def setScoreCol(value: String): this.type = set(scoreCol, value)
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
-  override def evaluate(dataset: SchemaRDD, paramMap: ParamMap): Double = {
+  override def evaluate(dataset: DataFrame, paramMap: ParamMap): Double = {
     val map = this.paramMap ++ paramMap
 
     val schema = dataset.schema
@@ -52,8 +52,7 @@ class BinaryClassificationEvaluator extends Evaluator with Params
     require(labelType == DoubleType,
       s"Label column ${map(labelCol)} must be double type but found $labelType")
 
-    import dataset.sqlContext._
-    val scoreAndLabels = dataset.select(map(scoreCol).attr, map(labelCol).attr)
+    val scoreAndLabels = dataset.select(map(scoreCol), map(labelCol))
       .map { case Row(score: Double, label: Double) =>
         (score, label)
       }

@@ -47,8 +47,10 @@ public abstract class SparkSubmitOptionParser {
   protected static final String JARS = "--jars";
   protected static final String MASTER = "--master";
   protected static final String NAME = "--name";
+  protected static final String PACKAGES = "--packages";
   protected static final String PROPERTIES_FILE = "--properties-file";
   protected static final String PY_FILES = "--py-files";
+  protected static final String REPOSITORIES = "--repositories";
   protected static final String TOTAL_EXECUTOR_CORES = "--total-executor-cores";
 
   // Options that do not take arguments.
@@ -87,9 +89,11 @@ public abstract class SparkSubmitOptionParser {
     { MASTER },
     { NAME },
     { NUM_EXECUTORS },
+    { PACKAGES },
     { PROPERTIES_FILE },
     { PY_FILES },
     { QUEUE },
+    { REPOSITORIES },
     { TOTAL_EXECUTOR_CORES },
   };
 

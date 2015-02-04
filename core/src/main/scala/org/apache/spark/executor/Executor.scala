@@ -75,7 +75,6 @@ private[spark] class Executor(
   }
 
   val executorSource = new ExecutorSource(this, executorId)
-  conf.set("spark.executor.id", executorId)
 
   if (!isLocal) {
     env.metricsSystem.registerSource(executorSource)
