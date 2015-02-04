@@ -47,6 +47,18 @@ class DataFrameSuite extends QueryTest {
       testData.collect().toSeq)
   }
 
+  test("selectExpr") {
+    checkAnswer(
+      testData.selectExpr("abs(key)", "value"),
+      testData.collect().map(row => Row(math.abs(row.getInt(0)), row.getString(1))).toSeq)
+  }
+
+  test("filterExpr") {
+    checkAnswer(
+      testData.filter("key > 90"),
+      testData.collect().filter(_.getInt(0) > 90).toSeq)
+  }
+
   test("repartition") {
     checkAnswer(
       testData.select('key).repartition(10).select('key),

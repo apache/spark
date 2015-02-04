@@ -173,7 +173,7 @@ trait DataFrame extends RDDApi[Row] {
    * }}}
    */
   @scala.annotation.varargs
-  def sort(sortExpr: Column, sortExprs: Column*): DataFrame
+  def sort(sortExprs: Column*): DataFrame
 
   /**
    * Returns a new [[DataFrame]] sorted by the given expressions.
@@ -187,7 +187,7 @@ trait DataFrame extends RDDApi[Row] {
    * This is an alias of the `sort` function.
    */
   @scala.annotation.varargs
-  def orderBy(sortExpr: Column, sortExprs: Column*): DataFrame
+  def orderBy(sortExprs: Column*): DataFrame
 
   /**
    * Selects column based on the column name and return it as a [[Column]].
@@ -237,6 +237,17 @@ trait DataFrame extends RDDApi[Row] {
   def select(col: String, cols: String*): DataFrame
 
   /**
+   * Selects a set of SQL expressions. This is a variant of `select` that accepts
+   * SQL expressions.
+   *
+   * {{{
+   *   df.selectExpr("colA", "colB as newName", "abs(colC)")
+   * }}}
+   */
+  @scala.annotation.varargs
+  def selectExpr(exprs: String*): DataFrame
+
+  /**
    * Filters rows using the given condition.
    * {{{
    *   // The following are equivalent:
@@ -246,6 +257,14 @@ trait DataFrame extends RDDApi[Row] {
    * }}}
    */
   def filter(condition: Column): DataFrame
+
+  /**
+   * Filters rows using the given SQL expression.
+   * {{{
+   *   peopleDf.filter("age > 15")
+   * }}}
+   */
+  def filter(conditionExpr: String): DataFrame
 
   /**
    * Filters rows using the given condition. This is an alias for `filter`.
