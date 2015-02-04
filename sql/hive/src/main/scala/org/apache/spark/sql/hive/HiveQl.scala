@@ -554,6 +554,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             "TOK_TBLTEXTFILE", // Stored as TextFile
             "TOK_TBLRCFILE", // Stored as RCFile
             "TOK_TBLORCFILE", // Stored as ORC File
+            "TOK_TBLPARQUETFILE", // Stored as PARQUET
             "TOK_TABLEFILEFORMAT", // User-provided InputFormat and OutputFormat
             "TOK_STORAGEHANDLER", // Storage handler
             "TOK_TABLELOCATION",
