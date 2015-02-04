@@ -21,7 +21,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.execution.RunnableCommand
-import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.hive.{MetastoreRelation, HiveContext}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -46,7 +46,7 @@ case class AnalyzeTable(tableName: String) extends RunnableCommand {
  * Drops a table from the metastore and removes it if it is cached.
  */
 @DeveloperApi
-case class DropTable(
+case class DropHiveTable(
     tableName: String,
     ifExists: Boolean,
     temporary: Boolean) extends RunnableCommand {

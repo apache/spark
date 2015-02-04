@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.sources
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+
 import scala.language.implicitConversions
 
 import org.apache.spark.Logging
@@ -251,12 +253,13 @@ private[sql] case class DropTable(
     temporary: Boolean) extends Command
 
 private[sql] case class DropTempTable(
-    tableName: String,
+    tableIdent: Seq[String],
     isExists: Boolean,
     temporary: Boolean) extends RunnableCommand {
 
   def run(sqlContext: SQLContext) = {
-    val tableExists = sqlContext.catalog.tableExists(Seq(tableName))
+    val tableExists = sqlContext.catalog.tableExists(tableIdent)
+    val tableName = tableIdent.head
     if (isExists) {
       if (tableExists) sqlContext.dropTempTable(tableName)
       else logWarning(s"Unknown table '$tableName'")

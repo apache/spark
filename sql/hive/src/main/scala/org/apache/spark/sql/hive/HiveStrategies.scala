@@ -32,8 +32,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.sources.CreateTableUsing
-import org.apache.spark.sql.sources.{DropTable => LogicalDropTable}
+import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StringType
 
 
@@ -232,9 +231,10 @@ private[hive] trait HiveStrategies {
             ExecutedCommand(RunnableDescribeCommand(planLater(o), describe.output)) :: Nil
         }
 
-      case drop: LogicalDropTable =>
+      case drop: DropTable =>
         // TODO: hive0.14 support drop temp table
-        ExecutedCommand(DropTable(drop.tableName, drop.isExists, drop.temporary)) :: Nil
+        ExecutedCommand(DropHiveTable(drop.tableName, drop.isExists, drop.temporary)) :: Nil
+
       case _ => Nil
     }
   }

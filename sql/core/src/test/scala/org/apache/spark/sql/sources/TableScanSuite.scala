@@ -331,7 +331,7 @@ class TableScanSuite extends DataSourceTest {
 
     //test drop without `temporary` keyword in SQLContext
     val dropEx = intercept[Exception] { sql(s"drop table $tableName") }
-    assert(dropEx.getMessage.contains(s"Table '$tableName' dropped with SQLContext must be TEMPORARY."))
+    assert(dropEx.getMessage.contains(s"Table dropped with SQLContext must be TEMPORARY."))
 
     // test drop `temporary` table
     sql(s"drop temporary table $tableName")
