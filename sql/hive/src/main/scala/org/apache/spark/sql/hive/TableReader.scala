@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{Path, PathFilter}
+import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants._
 import org.apache.hadoop.hive.ql.exec.Utilities
@@ -67,6 +67,8 @@ class HadoopTableReader(
   } else {
     math.max(sc.hiveconf.getInt("mapred.map.tasks", 1), sc.sparkContext.defaultMinPartitions)
   }
+
+  @transient private lazy val fs = FileSystem.get(sc.hiveconf)
 
   // TODO: set aws s3 credentials.
 
@@ -218,11 +220,10 @@ class HadoopTableReader(
    * returned in a single, comma-separated string.
    */
   private def applyFilterIfNeeded(path: Path, filterOpt: Option[PathFilter]): Option[String] = {
-    if (path.getFileSystem(sc.hiveconf).exists(path)) {
+    if (fs.exists(path)) {
       // if the file exists
       filterOpt match {
         case Some(filter) =>
-          val fs = path.getFileSystem(sc.hiveconf)
           val filteredFiles = fs.listStatus(path, filter).map(_.getPath.toString)
           if (filteredFiles.length > 0) {
             Some(filteredFiles.mkString(","))
