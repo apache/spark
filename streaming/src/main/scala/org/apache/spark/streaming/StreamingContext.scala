@@ -526,7 +526,20 @@ class StreamingContext private[streaming] (
    * will be thrown in this thread.
    * @param timeout time to wait in milliseconds
    */
+  @deprecated("Use awaitTerminationOrTimeout(Long) instead", "1.3.0")
   def awaitTermination(timeout: Long) {
+    waiter.waitForStopOrError(timeout)
+  }
+
+  /**
+   * Wait for the execution to stop. Any exceptions that occurs during the execution
+   * will be thrown in this thread.
+   *
+   * @param timeout time to wait in milliseconds
+   * @return `true` if it's stopped; or throw the reported error during the execution; or `false`
+   *         if the waiting time elapsed before returning from the method.
+   */
+  def awaitTerminationOrTimeout(timeout: Long): Boolean = {
     waiter.waitForStopOrError(timeout)
   }
 
