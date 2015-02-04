@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.catalyst.expressions.Row
-
 import scala.collection.JavaConversions._
 
 import org.apache.spark.annotation.Experimental
@@ -212,18 +210,22 @@ private[hive] trait HiveStrategies {
 
   object HiveDDLStrategy extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case CreateTableUsing(tableIdentifier, userSpecifiedSchema, provider, false, opts, allowExisting) =>
+      case CreateTableUsing(
+      tableIdentifier, userSpecifiedSchema, provider, false, opts, allowExisting) =>
         ExecutedCommand(
           CreateMetastoreDataSource(
             tableIdentifier, userSpecifiedSchema, provider, opts, allowExisting)) :: Nil
 
-      case CreateTableUsingAsSelect(tableIdentifier, provider, false, opts, allowExisting, query) =>
+      case CreateTableUsingAsSelect(
+      tableIdentifier, provider, false, opts, allowExisting, query) =>
         val logicalPlan = hiveContext.parseSql(query)
         val cmd =
-          CreateMetastoreDataSourceAsSelect(tableIdentifier, provider, opts, allowExisting, logicalPlan)
+          CreateMetastoreDataSourceAsSelect(
+            tableIdentifier, provider, opts, allowExisting, logicalPlan)
         ExecutedCommand(cmd) :: Nil
 
-      case CreateTableUsingAsLogicalPlan(tableIdentifier, provider, false, opts, allowExisting, query) =>
+      case CreateTableUsingAsLogicalPlan(
+      tableIdentifier, provider, false, opts, allowExisting, query) =>
         val cmd =
           CreateMetastoreDataSourceAsSelect(tableIdentifier, provider, opts, allowExisting, query)
         ExecutedCommand(cmd) :: Nil
