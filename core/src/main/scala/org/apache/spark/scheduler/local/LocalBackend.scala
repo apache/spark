@@ -79,15 +79,14 @@ private[spark] class LocalActor(
   def reviveOffers() {
     val offers = Seq(new WorkerOffer(localExecutorId, localExecutorHostname, freeCores))
     val tasks = scheduler.resourceOffers(offers).flatten
-    if (tasks.nonEmpty) {
-      for (task <- tasks) {
-        freeCores -= scheduler.CPUS_PER_TASK
-        executor.launchTask(executorBackend, taskId = task.taskId,
-          attemptNumber = task.attemptNumber, task.name, task.serializedTask)
-      }
-    } else if (scheduler.activeTaskSets.nonEmpty) {
+    for (task <- tasks) {
+      freeCores -= scheduler.CPUS_PER_TASK
+      executor.launchTask(executorBackend, taskId = task.taskId,
+        attemptNumber = task.attemptNumber, task.name, task.serializedTask)
+    }
+    if (tasks.isEmpty && scheduler.activeTaskSets.nonEmpty) {
       // Try to reviveOffer after 1 second, because scheduler may wait for locality timeout
-      context.system.scheduler.scheduleOnce(1000 millis , self, ReviveOffers)
+      context.system.scheduler.scheduleOnce(1000 millis, self, ReviveOffers)
     }
   }
 }
