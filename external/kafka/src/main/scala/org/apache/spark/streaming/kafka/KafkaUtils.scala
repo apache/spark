@@ -171,7 +171,7 @@ object KafkaUtils {
       sc: SparkContext,
       kafkaParams: Map[String, String],
       offsetRanges: Array[OffsetRange]
-  ): RDD[(K, V)] with HasOffsetRanges = {
+  ): RDD[(K, V)] = {
     val messageHandler = (mmd: MessageAndMetadata[K, V]) => (mmd.key, mmd.message)
     val kc = new KafkaCluster(kafkaParams)
     val topics = offsetRanges.map(o => TopicAndPartition(o.topic, o.partition)).toSet
@@ -207,7 +207,7 @@ object KafkaUtils {
       offsetRanges: Array[OffsetRange],
       leaders: Array[Leader],
       messageHandler: MessageAndMetadata[K, V] => R
-  ): RDD[R] with HasOffsetRanges = {
+  ): RDD[R] = {
 
     val leaderMap = leaders
       .map(l => TopicAndPartition(l.topic, l.partition) -> (l.host, l.port))
