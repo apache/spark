@@ -67,3 +67,19 @@ export("sparkR.init")
 export("print.jobj")
 useDynLib(SparkR, stringHashCode)
 importFrom(methods, setGeneric, setMethod, setOldClass)
+
+# SparkRSQL
+
+exportClasses("DataFrame")
+
+exportMethods("printSchema",
+              "registerTempTable")
+
+export("jsonFile",
+       "parquetFile",
+       "sql",
+       "table",
+       "cacheTable",
+       "uncacheTable")
+
+export("sparkRSQL.init")
