@@ -216,7 +216,9 @@ private[spark] class StandaloneRestClient extends Logging {
   }
 
   /** Report the status of a newly created submission. */
-  private def reportSubmissionStatus(master: String, submitResponse: CreateSubmissionResponse): Unit = {
+  private def reportSubmissionStatus(
+      master: String,
+      submitResponse: CreateSubmissionResponse): Unit = {
     val submitSuccess = submitResponse.success.toBoolean
     if (submitSuccess) {
       val submissionId = submitResponse.submissionId
