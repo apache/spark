@@ -124,7 +124,7 @@ private[sql] class DataFrameImpl protected[sql](
   }
 
   override def sort(sortCol: String, sortCols: String*): DataFrame = {
-    orderBy(apply(sortCol), sortCols.map(apply) :_*)
+    sort(apply(sortCol), sortCols.map(apply) :_*)
   }
 
   override def sort(sortExpr: Column, sortExprs: Column*): DataFrame = {
@@ -140,7 +140,7 @@ private[sql] class DataFrameImpl protected[sql](
   }
 
   override def orderBy(sortCol: String, sortCols: String*): DataFrame = {
-    sort(sortCol, sortCols :_*)
+    orderBy(sortCol, sortCols :_*)
   }
 
   override def orderBy(sortExpr: Column, sortExprs: Column*): DataFrame = {
