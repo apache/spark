@@ -391,7 +391,7 @@ setMethod("collectPartition",
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
-#' rdd <- parallelize(sc, list(list(1, 2),list(3, 4)), 2L)
+#' rdd <- parallelize(sc, list(list(1, 2), list(3, 4)), 2L)
 #' collectAsMap(rdd) # list(`1` = 2, `3` = 4)
 #'}
 setGeneric("collectAsMap", function(rdd) { standardGeneric("collectAsMap") })
