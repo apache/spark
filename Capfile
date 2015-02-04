@@ -6,7 +6,7 @@ set :user, "deploy"
 set :shared_work_path, "/u/apps/spark/shared/work"
 set :shared_logs_path, "/u/apps/spark/shared/log"
 set :shared_conf_path, "/u/apps/spark/shared/conf"
-set :spark_jar_path, "hdfs://nn01.chi.shopify.com/user/sparkles"
+set :spark_jar_path, "hdfs://hadoop-production/user/sparkles"
 set :gateway, nil
 set :keep_releases, 5
 
@@ -41,11 +41,11 @@ namespace :deploy do
   end
 
   task :upload_to_hdfs, :roles => :uploader, :on_no_matching_servers => :continue do
-    run "hdfs dfs -copyFromLocal -f /u/apps/spark/current/lib/spark-assembly-*.jar hdfs://nn01.chi.shopify.com/user/sparkles/spark-assembly-#{fetch(:sha)}.jar"
+    run "hdfs dfs -copyFromLocal -f /u/apps/spark/current/lib/spark-assembly-*.jar hdfs://hadoop-production/user/sparkles/spark-assembly-#{fetch(:sha)}.jar"
   end
 
   task :test_spark_jar, :roles => :uploader, :on_no_master_servers => :continue do
-    run "sudo -u azkaban sh -c '. /u/virtualenvs/starscream/bin/activate && cd /u/apps/starscream/current && PYTHON_ENV=production SPARK_OPTS=\"spark.yarn.jar=hdfs://nn01.chi.shopify.com:8020/user/sparkles/spark-assembly-#{fetch(:sha)}.jar\" exec python shopify/tools/canary.py'"
+    run "sudo -u azkaban sh -c '. /u/virtualenvs/starscream/bin/activate && cd /u/apps/starscream/current && PYTHON_ENV=production SPARK_OPTS=\"spark.yarn.jar=hdfs://hadoop-production/user/sparkles/spark-assembly-#{fetch(:sha)}.jar\" exec python shopify/tools/canary.py'"
   end
 
   task :prevent_gateway do
@@ -60,7 +60,7 @@ namespace :deploy do
 
   task :remind_us_to_update_starscream do
     puts "****************************************************************"
-    puts "*" 
+    puts "*"
     puts "*    Remember to update starscream/conf/config.yml"
     puts "*"
     puts "*    spark_production"
@@ -70,7 +70,7 @@ namespace :deploy do
     puts "*"
     puts "****************************************************************"
   end
- 
+
 
   task :restart do
   end
