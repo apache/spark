@@ -53,5 +53,7 @@ object SparkAPSP {
      }
      val finalres = distances.collect()
      finalres.foreach(res => println(res._1 + " -> distance " + res._2))
+    
   }	
+  
 }
