@@ -1773,33 +1773,33 @@ object SparkContext extends Logging {
 
   @deprecated("Replaced by implicit functions in the WritableFactory companion object. This is " +
     "kept here only for backward compatibility.", "1.3.0")
-  def intToIntWritable(i: Int): IntWritable = new IntWritable(i)
+  implicit def intToIntWritable(i: Int): IntWritable = new IntWritable(i)
 
   @deprecated("Replaced by implicit functions in the WritableFactory companion object. This is " +
     "kept here only for backward compatibility.", "1.3.0")
-  def longToLongWritable(l: Long): LongWritable = new LongWritable(l)
+  implicit def longToLongWritable(l: Long): LongWritable = new LongWritable(l)
 
   @deprecated("Replaced by implicit functions in the WritableFactory companion object. This is " +
     "kept here only for backward compatibility.", "1.3.0")
-  def floatToFloatWritable(f: Float): FloatWritable = new FloatWritable(f)
+  implicit def floatToFloatWritable(f: Float): FloatWritable = new FloatWritable(f)
 
   @deprecated("Replaced by implicit functions in the WritableFactory companion object. This is " +
     "kept here only for backward compatibility.", "1.3.0")
-  def doubleToDoubleWritable(d: Double): DoubleWritable = new DoubleWritable(d)
+  implicit def doubleToDoubleWritable(d: Double): DoubleWritable = new DoubleWritable(d)
 
   @deprecated("Replaced by implicit functions in the WritableFactory companion object. This is " +
     "kept here only for backward compatibility.", "1.3.0")
-  def boolToBoolWritable (b: Boolean): BooleanWritable = new BooleanWritable(b)
+  implicit def boolToBoolWritable (b: Boolean): BooleanWritable = new BooleanWritable(b)
 
   @deprecated("Replaced by implicit functions in the WritableFactory companion object. This is " +
     "kept here only for backward compatibility.", "1.3.0")
-  def bytesToBytesWritable (aob: Array[Byte]): BytesWritable = new BytesWritable(aob)
+  implicit def bytesToBytesWritable (aob: Array[Byte]): BytesWritable = new BytesWritable(aob)
 
   @deprecated("Replaced by implicit functions in the WritableFactory companion object. This is " +
     "kept here only for backward compatibility.", "1.3.0")
-  def stringToText(s: String): Text = new Text(s)
+  implicit def stringToText(s: String): Text = new Text(s)
 
-  private def arrayToArrayWritable[T <% Writable: ClassTag](arr: Traversable[T])
+  private implicit def arrayToArrayWritable[T <% Writable: ClassTag](arr: Traversable[T])
     : ArrayWritable = {
     def anyToWritable[U <% Writable](u: U): Writable = u
 
