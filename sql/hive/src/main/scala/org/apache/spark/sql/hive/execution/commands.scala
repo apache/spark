@@ -23,7 +23,7 @@ import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.RunnableCommand
-import org.apache.spark.sql.hive.{MetastoreRelation, HiveContext}
+import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.types.StructType
 
 /**

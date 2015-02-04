@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.sources
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-
 import scala.language.implicitConversions
 
 import org.apache.spark.Logging
