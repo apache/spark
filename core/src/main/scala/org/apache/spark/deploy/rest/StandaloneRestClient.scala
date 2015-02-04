@@ -17,14 +17,14 @@
 
 package org.apache.spark.deploy.rest
 
-import java.io.{FileNotFoundException, DataOutputStream}
-import java.net.{HttpURLConnection, URL}
+import java.io.{DataOutputStream, FileNotFoundException}
+import java.net.{HttpURLConnection, SocketException, URL}
 
 import scala.io.Source
 
 import com.google.common.base.Charsets
 
-import org.apache.spark.{Logging, SparkException, SPARK_VERSION => sparkVersion}
+import org.apache.spark.{Logging, SPARK_VERSION => sparkVersion}
 import org.apache.spark.deploy.SparkSubmitArguments
 
 /**
@@ -43,8 +43,8 @@ import org.apache.spark.deploy.SparkSubmitArguments
  * Additionally, the base URL includes the version of the protocol. For instance:
  * http://1.2.3.4:6066/v1/submissions/create. Since the protocol is expected to be stable
  * across Spark versions, existing fields cannot be added or removed. In the rare event that
- * backward compatibility is broken, Spark must introduce a new protocol version (e.g. v2).
- * The client and the server must communicate on the same version of the protocol.
+ * forward or backward compatibility is broken, Spark must introduce a new protocol version
+ * (e.g. v2). The client and the server must communicate on the same version of the protocol.
  */
 private[spark] class StandaloneRestClient extends Logging {
   import StandaloneRestClient._
@@ -123,7 +123,7 @@ private[spark] class StandaloneRestClient extends Logging {
   private def readResponse(connection: HttpURLConnection): SubmitRestProtocolResponse = {
     try {
       val responseJson = Source.fromInputStream(connection.getInputStream).mkString
-      logDebug(s"Response from the REST server:\n$responseJson")
+      logDebug(s"Response from the server:\n$responseJson")
       val response = SubmitRestProtocolMessage.fromJson(responseJson)
       // The response should have already been validated on the server.
       // In case this is not true, validate it ourselves to avoid potential NPEs.
@@ -139,39 +139,40 @@ private[spark] class StandaloneRestClient extends Logging {
         case error: ErrorResponse =>
           logError(s"Server responded with error:\n${error.message}")
           error
-        case response: SubmitRestProtocolResponse =>
-          response
+        case response: SubmitRestProtocolResponse => response
         case unexpected =>
           throw new SubmitRestProtocolException(
-            s"Unexpected message received from server:\n$unexpected")
+            s"Message received from server was not a response:\n${unexpected.toJson}")
       }
     } catch {
-      case e: FileNotFoundException =>
-        throw new SparkException(s"Unable to connect to server ${connection.getURL}", e)
+      case e @ (_: FileNotFoundException | _: SocketException) =>
+        throw new SubmitRestConnectionException(
+          s"Unable to connect to server ${connection.getURL}", e)
     }
   }
 
   /** Return the REST URL for creating a new submission. */
   private def getSubmitUrl(master: String): URL = {
     val baseUrl = getBaseUrl(master)
-    new URL(s"$baseUrl/submissions/create")
+    new URL(s"$baseUrl/create")
   }
 
   /** Return the REST URL for killing an existing submission. */
   private def getKillUrl(master: String, submissionId: String): URL = {
     val baseUrl = getBaseUrl(master)
-    new URL(s"$baseUrl/submissions/kill/$submissionId")
+    new URL(s"$baseUrl/kill/$submissionId")
   }
 
   /** Return the REST URL for requesting the status of an existing submission. */
   private def getStatusUrl(master: String, submissionId: String): URL = {
     val baseUrl = getBaseUrl(master)
-    new URL(s"$baseUrl/submissions/status/$submissionId")
+    new URL(s"$baseUrl/status/$submissionId")
   }
 
   /** Return the base URL for communicating with the server, including the protocol version. */
   private def getBaseUrl(master: String): String = {
-    "http://" + master.stripPrefix("spark://").stripSuffix("/") + "/" + PROTOCOL_VERSION
+    val masterUrl = master.stripPrefix("spark://").stripSuffix("/")
+    s"http://$masterUrl/$PROTOCOL_VERSION/submissions"
   }
 
   /** Throw an exception if this is not standalone mode. */
@@ -223,10 +224,11 @@ private[spark] class StandaloneRestClient extends Logging {
     if (submitSuccess) {
       val submissionId = submitResponse.submissionId
       if (submissionId != null) {
-        logInfo(s"Driver successfully submitted as $submissionId. Polling driver state...")
+        logInfo(s"Submission successfully created as $submissionId. Polling submission state...")
         pollSubmissionStatus(master, submissionId)
       } else {
-        logError("Application successfully submitted, but driver ID was not provided!")
+        // should never happen
+        logError("Application successfully submitted, but submission ID was not provided!")
       }
     } else {
       val failMessage = Option(submitResponse.message).map { ": " + _ }.getOrElse("")
@@ -267,7 +269,7 @@ private[spark] class StandaloneRestClient extends Logging {
       }
       Thread.sleep(REPORT_DRIVER_STATUS_INTERVAL)
     }
-    logError(s"Error: Master did not recognize submission $submissionId.")
+    logError(s"Error: Master did not recognize driver $submissionId.")
   }
 }
 

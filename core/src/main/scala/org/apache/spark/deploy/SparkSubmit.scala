@@ -124,22 +124,33 @@ object SparkSubmit {
    * running the child main class based on the cluster manager and the deploy mode.
    * Second, we use this launch environment to invoke the main method of the child
    * main class.
-   *
-   * As of Spark 1.3, a REST-based application submission gateway is introduced.
-   * If this is enabled, then we will run standalone cluster mode by passing the submit
-   * parameters directly to a REST client, which will submit the application using the
-   * REST protocol instead.
    */
   private[spark] def submit(args: SparkSubmitArguments): Unit = {
     val (childArgs, childClasspath, sysProps, childMainClass) = prepareSubmitEnvironment(args)
-    if (args.isStandaloneCluster && args.isRestEnabled) {
-      printStream.println("Running Spark using the REST application submission protocol.")
-      val client = new StandaloneRestClient
-      val response = client.createSubmission(args)
-      response match {
-        case s: CreateSubmissionResponse => handleRestResponse(s)
-        case r => handleUnexpectedRestResponse(r)
+    /*
+     * In standalone cluster mode, there are two submission gateways:
+     *   (1) The traditional Akka gateway using o.a.s.deploy.Client as a wrapper
+     *   (2) The new REST-based gateway introduced in Spark 1.3
+     * The latter is the default behavior as of Spark 1.3, but Spark submit will fail over
+     * to use the legacy gateway if the master endpoint turns out to be not a REST server.
+     */
+    if (args.isStandaloneCluster) {
+      try {
+        printStream.println("Running Spark using the REST application submission protocol.")
+        val client = new StandaloneRestClient
+        val response = client.createSubmission(args)
+        response match {
+          case s: CreateSubmissionResponse => handleRestResponse(s)
+          case r => handleUnexpectedRestResponse(r)
+        }
+      } catch {
+        // Fail over to use the legacy submission gateway
+        case e: SubmitRestConnectionException =>
+          printStream.println(s"Master endpoint ${args.master} was not a " +
+            s"REST server. Falling back to legacy submission gateway instead.")
+          runMain(childArgs, childClasspath, sysProps, childMainClass)
       }
+    // In all other modes, just run the main class as prepared
     } else {
       runMain(childArgs, childClasspath, sysProps, childMainClass)
     }
@@ -152,6 +163,7 @@ object SparkSubmit {
    *   (2) a list of classpath entries for the child,
    *   (3) a list of system properties and env vars, and
    *   (4) the main class for the child
+   * In standalone cluster mode, this mutates the original arguments passed in.
    * Exposed for testing.
    */
   private[spark] def prepareSubmitEnvironment(args: SparkSubmitArguments)
@@ -347,7 +359,7 @@ object SparkSubmit {
 
     // In standalone-cluster mode, use Client as a wrapper around the user class
     // Note that we won't actually launch this class if we're using the REST protocol
-    if (args.isStandaloneCluster && !args.isRestEnabled) {
+    if (args.isStandaloneCluster) {
       childMainClass = "org.apache.spark.deploy.Client"
       if (args.supervise) {
         childArgs += "--supervise"
@@ -419,7 +431,7 @@ object SparkSubmit {
     // NOTE: If we are using the REST gateway, we will use the original arguments directly.
     // Since we mutate the values of some configs in this method, we must update the
     // corresponding fields in the original SparkSubmitArguments to reflect these changes.
-    if (args.isStandaloneCluster && args.isRestEnabled) {
+    if (args.isStandaloneCluster) {
       args.sparkProperties.clear()
       args.sparkProperties ++= sysProps
       sysProps.get("spark.jars").foreach { args.jars = _ }

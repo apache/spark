@@ -38,11 +38,11 @@ import org.apache.spark.deploy.worker.Worker
 /**
  * End-to-end tests for the REST application submission protocol in standalone mode.
  */
-class StandaloneRestProtocolSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfterEach {
+class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfterEach {
   private val systemsToStop = new ArrayBuffer[ActorSystem]
   private val masterRestUrl = startLocalCluster()
   private val client = new StandaloneRestClient
-  private val mainJar = StandaloneRestProtocolSuite.createJar()
+  private val mainJar = StandaloneRestSubmitSuite.createJar()
   private val mainClass = StandaloneRestApp.getClass.getName.stripSuffix("$")
 
   override def afterAll() {
@@ -125,7 +125,6 @@ class StandaloneRestProtocolSuite extends FunSuite with BeforeAndAfterAll with B
       "--master", masterRestUrl,
       "--name", mainClass,
       "--class", mainClass,
-      "--conf", "spark.submit.rest.enabled=true",
       mainJar) ++ appArgs
     val args = new SparkSubmitArguments(commandLineArgs)
     SparkSubmit.prepareSubmitEnvironment(args)
@@ -195,7 +194,7 @@ class StandaloneRestProtocolSuite extends FunSuite with BeforeAndAfterAll with B
   }
 }
 
-private object StandaloneRestProtocolSuite {
+private object StandaloneRestSubmitSuite {
   private val pathPrefix = "org/apache/spark/deploy/rest"
 
   /**

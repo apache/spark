@@ -41,7 +41,7 @@ import org.apache.spark.util.Utils
 @JsonInclude(Include.NON_NULL)
 @JsonAutoDetect(getterVisibility = Visibility.ANY, setterVisibility = Visibility.ANY)
 @JsonPropertyOrder(alphabetic = true)
-abstract class SubmitRestProtocolMessage {
+private[spark] abstract class SubmitRestProtocolMessage {
   @JsonIgnore
   val messageType = Utils.getFormattedClassName(this)
 

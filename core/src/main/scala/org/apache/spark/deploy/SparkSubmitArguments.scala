@@ -61,8 +61,6 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   var driverToKill: String = null
   var driverToRequestStatusFor: String = null
 
-  private val restEnabledKey = "spark.submit.rest.enabled"
-
   /** Default properties present in the currently defined defaults file. */
   lazy val defaultSparkProperties: HashMap[String, String] = {
     val defaultProperties = new HashMap[String, String]()
@@ -220,10 +218,6 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
     if (!isStandaloneCluster) {
       SparkSubmit.printErrorAndExit("Killing drivers is only supported in standalone cluster mode")
     }
-    if (!isRestEnabled) {
-      SparkSubmit.printErrorAndExit("Killing drivers is currently only supported " +
-        s"through the REST interface. Please set $restEnabledKey to true.")
-    }
     if (driverToKill == null) {
       SparkSubmit.printErrorAndExit("Please specify a driver to kill")
     }
@@ -234,10 +228,6 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
       SparkSubmit.printErrorAndExit(
         "Requesting driver statuses is only supported in standalone cluster mode")
     }
-    if (!isRestEnabled) {
-      SparkSubmit.printErrorAndExit("Requesting driver statuses is currently only " +
-        s"supported through the REST interface. Please set $restEnabledKey to true.")
-    }
     if (driverToRequestStatusFor == null) {
       SparkSubmit.printErrorAndExit("Please specify a driver to request status for")
     }
@@ -245,11 +235,6 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
 
   def isStandaloneCluster: Boolean = {
     master.startsWith("spark://") && deployMode == "cluster"
-  }
-
-  /** Return whether the REST application submission protocol is enabled. */
-  def isRestEnabled: Boolean = {
-    sparkProperties.get(restEnabledKey).getOrElse("false").toBoolean
   }
 
   override def toString = {
@@ -472,8 +457,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         | Spark standalone with cluster deploy mode only:
         |  --driver-cores NUM          Cores for driver (Default: 1).
         |  --supervise                 If given, restarts the driver on failure.
-        |  --kill DRIVER_ID            If given, kills the driver specified.
-        |  --status DRIVER_ID          If given, requests the status of the driver specified.
+        |  --kill SUBMISSION_ID        If given, kills the driver specified.
+        |  --status SUBMISSION_ID      If given, requests the status of the driver specified.
         |
         | Spark standalone and Mesos only:
         |  --total-executor-cores NUM  Total cores for all executors.
