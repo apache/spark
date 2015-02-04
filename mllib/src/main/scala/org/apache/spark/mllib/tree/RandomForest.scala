@@ -246,8 +246,8 @@ private class RandomForest (
     // Delete any remaining checkpoints used for node Id cache.
     if (nodeIdCache.nonEmpty) {
       Try(nodeIdCache.get.deleteAllCheckpoints()) match {
-        case Failure(e) => logWarning(s"delete all chackpoints faild. Error reason: ${e.getMessage}")
-        case _ => _
+        case Failure(e) => logWarning(s"delete all chackpoints failed. Error reason: ${e.getMessage}")
+        case _ =>
       }
     }
 
