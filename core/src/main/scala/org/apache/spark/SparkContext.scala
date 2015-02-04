@@ -1767,6 +1767,10 @@ object SparkContext extends Logging {
   def numericRDDToDoubleRDDFunctions[T](rdd: RDD[T])(implicit num: Numeric[T]) =
     RDD.numericRDDToDoubleRDDFunctions(rdd)
 
+  implicit def rddToPromiseRDDFunctions[T: ClassTag](rdd: RDD[T]) = new PromiseRDDFunctions(rdd)
+
+  implicit def rddToDropRDDFunctions[T: ClassTag](rdd: RDD[T]) = new DropRDDFunctions(rdd)
+
   // Implicit conversions to common Writable types, for saveAsSequenceFile
 
   implicit def intToIntWritable(i: Int): IntWritable = new IntWritable(i)
