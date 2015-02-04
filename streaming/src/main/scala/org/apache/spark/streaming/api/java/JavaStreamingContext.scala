@@ -216,6 +216,10 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * Create an input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them as flat binary files with fixed record lengths,
    * yielding byte arrays
+   *
+   * '''Note:''' We ensure that the byte array for each record in the
+   * resulting RDDs of the DStream has the provided record length.
+   *
    * @param directory HDFS directory to monitor for new files
    * @param recordLength The length at which to split the records
    */
