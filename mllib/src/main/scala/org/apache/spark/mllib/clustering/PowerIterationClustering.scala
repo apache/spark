@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.clustering
 
 import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.GraphImpl
 import org.apache.spark.mllib.linalg.Vectors
@@ -26,25 +27,33 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
+ * :: Experimental ::
+ *
  * Model produced by [[PowerIterationClustering]].
  *
  * @param k number of clusters
  * @param assignments an RDD of (vertexID, clusterID) pairs
  */
+@Experimental
 class PowerIterationClusteringModel(
     val k: Int,
     val assignments: RDD[(Long, Int)]) extends Serializable
 
 /**
- * Power Iteration Clustering (PIC), a scalable graph clustering algorithm developed by Lin and
- * Cohen (see http://www.icml2010.org/papers/387.pdf). From the abstract: PIC finds a very
+ * :: Experimental ::
+ *
+ * Power Iteration Clustering (PIC), a scalable graph clustering algorithm developed by
+ * [[http://www.icml2010.org/papers/387.pdf Lin and Cohen]]. From the abstract: PIC finds a very
  * low-dimensional embedding of a dataset using truncated power iteration on a normalized pair-wise
  * similarity matrix of the data.
  *
  * @param k Number of clusters.
  * @param maxIterations Maximum number of iterations of the PIC algorithm.
  * @param initMode Initialization mode.
+ *
+ * @see [[http://en.wikipedia.org/wiki/Spectral_clustering Spectral clustering (Wikipedia)]]
  */
+@Experimental
 class PowerIterationClustering private[clustering] (
     private var k: Int,
     private var maxIterations: Int,
