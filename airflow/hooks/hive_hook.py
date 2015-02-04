@@ -130,6 +130,13 @@ class HiveHook(BaseHook):
         if sp.returncode:
             raise Exception(all_err)
 
+    def get_table(self, db, table_name):
+        self.hive._oprot.trans.open()
+        table = self.hive.get_table(dbname=db, tbl_name=table_name)
+        self.hive._oprot.trans.close()
+        return table
+
+
     def get_partitions(self, schema, table_name):
         '''
         Returns a list of all partitions in a table. Works only
