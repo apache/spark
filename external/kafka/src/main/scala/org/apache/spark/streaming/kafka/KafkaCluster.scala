@@ -35,23 +35,14 @@ import org.apache.spark.SparkException
  */
 private[spark]
 class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
-  import KafkaCluster.{Err, LeaderOffset}
-
-  val seedBrokers: Array[(String, Int)] =
-    kafkaParams.get("metadata.broker.list")
-      .orElse(kafkaParams.get("bootstrap.servers"))
-      .getOrElse(throw new SparkException("Must specify metadata.broker.list or bootstrap.servers"))
-      .split(",").map { hp =>
-        val hpa = hp.split(":")
-        (hpa(0), hpa(1).toInt)
-      }
+  import KafkaCluster.{Err, LeaderOffset, SimpleConsumerConfig}
 
   // ConsumerConfig isn't serializable
-  @transient private var _config: ConsumerConfig = null
+  @transient private var _config: SimpleConsumerConfig = null
 
-  def config: ConsumerConfig = this.synchronized {
+  def config: SimpleConsumerConfig = this.synchronized {
     if (_config == null) {
-      _config = KafkaCluster.consumerConfig(kafkaParams)
+      _config = SimpleConsumerConfig(kafkaParams)
     }
     _config
   }
@@ -72,7 +63,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
     val req = TopicMetadataRequest(TopicMetadataRequest.CurrentVersion,
       0, config.clientId, Seq(topic))
     val errs = new Err
-    withBrokers(Random.shuffle(seedBrokers), errs) { consumer =>
+    withBrokers(Random.shuffle(config.seedBrokers), errs) { consumer =>
       val resp: TopicMetadataResponse = consumer.send(req)
       resp.topicsMetadata.find(_.topic == topic).flatMap { tm: TopicMetadata =>
         tm.partitionsMetadata.find(_.partitionId == partition)
@@ -130,7 +121,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
     val req = TopicMetadataRequest(
       TopicMetadataRequest.CurrentVersion, 0, config.clientId, topics.toSeq)
     val errs = new Err
-    withBrokers(Random.shuffle(seedBrokers), errs) { consumer =>
+    withBrokers(Random.shuffle(config.seedBrokers), errs) { consumer =>
       val resp: TopicMetadataResponse = consumer.send(req)
       // error codes here indicate missing / just created topic,
       // repeating on a different broker wont be useful
@@ -241,7 +232,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
     var result = Map[TopicAndPartition, OffsetMetadataAndError]()
     val req = OffsetFetchRequest(groupId, topicAndPartitions.toSeq)
     val errs = new Err
-    withBrokers(Random.shuffle(seedBrokers), errs) { consumer =>
+    withBrokers(Random.shuffle(config.seedBrokers), errs) { consumer =>
       val resp = consumer.fetchOffsets(req)
       val respMap = resp.requestInfo
       val needed = topicAndPartitions.diff(result.keySet)
@@ -282,7 +273,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
     val req = OffsetCommitRequest(groupId, metadata)
     val errs = new Err
     val topicAndPartitions = metadata.keySet
-    withBrokers(Random.shuffle(seedBrokers), errs) { consumer =>
+    withBrokers(Random.shuffle(config.seedBrokers), errs) { consumer =>
       val resp = consumer.commitOffsets(req)
       val respMap = resp.requestInfo
       val needed = topicAndPartitions.diff(result.keySet)
@@ -332,17 +323,47 @@ object KafkaCluster {
   case class LeaderOffset(host: String, port: Int, offset: Long)
 
   /**
-   * Make a consumer config without requiring group.id or zookeeper.connect,
-   * since communicating with brokers also needs common settings such as timeout
+   * High-level kafka consumers connect to ZK.  ConsumerConfig assumes this use case.
+   * Simple consumers connect directly to brokers, but need many of the same configs.
+   * This subclass won't warn about missing ZK params, or presence of broker params.
    */
-  def consumerConfig(kafkaParams: Map[String, String]): ConsumerConfig = {
-    val props = new Properties()
-    kafkaParams.foreach(param => props.put(param._1, param._2))
-    Seq("zookeeper.connect", "group.id").foreach { s =>
-      if (!props.contains(s)) {
-        props.setProperty(s, "")
-      }
+  private[spark]
+  class SimpleConsumerConfig private(brokers: String, originalProps: Properties)
+      extends ConsumerConfig(originalProps) {
+    val seedBrokers: Array[(String, Int)] = brokers.split(",").map { hp =>
+      val hpa = hp.split(":")
+      (hpa(0), hpa(1).toInt)
     }
-    new ConsumerConfig(props)
+  }
+
+  private[spark]
+  object SimpleConsumerConfig {
+    /**
+     * Make a consumer config without requiring group.id or zookeeper.connect,
+     * since communicating with brokers also needs common settings such as timeout
+     */
+    def apply(kafkaParams: Map[String, String]): SimpleConsumerConfig = {
+      // These keys are from other pre-existing kafka configs for specifying brokers, accept either
+      val brokers = kafkaParams.get("metadata.broker.list")
+        .orElse(kafkaParams.get("bootstrap.servers"))
+        .getOrElse(throw new SparkException(
+          "Must specify metadata.broker.list or bootstrap.servers"))
+
+      val props = new Properties()
+      kafkaParams.foreach { case (key, value) =>
+        // prevent warnings on parameters ConsumerConfig doesn't know about
+        if (key != "metadata.broker.list" && key != "bootstrap.servers") {
+          props.put(key, value)
+        }
+      }
+
+      Seq("zookeeper.connect", "group.id").foreach { s =>
+        if (!props.contains(s)) {
+          props.setProperty(s, "")
+        }
+      }
+
+      new SimpleConsumerConfig(brokers, props)
+    }
   }
 }
