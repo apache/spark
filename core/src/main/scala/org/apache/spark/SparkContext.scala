@@ -1749,8 +1749,14 @@ object SparkContext extends Logging {
   @deprecated("Replaced by implicit functions in the RDD companion object. This is " +
     "kept here only for backward compatibility.", "1.3.0")
   def rddToSequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable: ClassTag](
-      rdd: RDD[(K, V)]) =
+      rdd: RDD[(K, V)]) = {
+    val kf = implicitly[K => Writable]
+    val vf = implicitly[V => Writable]
+    // Set the Writable class to null and `SequenceFileRDDFunctions` will use Reflection to get it
+    implicit val keyWritableFactory = new WritableFactory[K](_ => null, kf)
+    implicit val valueWritableFactory = new WritableFactory[V](_ => null, vf)
     RDD.rddToSequenceFileRDDFunctions(rdd)
+  }
 
   @deprecated("Replaced by implicit functions in the RDD companion object. This is " +
     "kept here only for backward compatibility.", "1.3.0")
@@ -1767,20 +1773,35 @@ object SparkContext extends Logging {
   def numericRDDToDoubleRDDFunctions[T](rdd: RDD[T])(implicit num: Numeric[T]) =
     RDD.numericRDDToDoubleRDDFunctions(rdd)
 
-  // Implicit conversions to common Writable types, for saveAsSequenceFile
+  // The following deprecated functions have already been moved to `object WritableFactory` to
+  // make the compiler find them automatically. They are still kept here for backward compatibility.
 
+  @deprecated("Replaced by implicit functions in the WritableFactory companion object. This is " +
+    "kept here only for backward compatibility.", "1.3.0")
   implicit def intToIntWritable(i: Int): IntWritable = new IntWritable(i)
 
+  @deprecated("Replaced by implicit functions in the WritableFactory companion object. This is " +
+    "kept here only for backward compatibility.", "1.3.0")
   implicit def longToLongWritable(l: Long): LongWritable = new LongWritable(l)
 
+  @deprecated("Replaced by implicit functions in the WritableFactory companion object. This is " +
+    "kept here only for backward compatibility.", "1.3.0")
   implicit def floatToFloatWritable(f: Float): FloatWritable = new FloatWritable(f)
 
+  @deprecated("Replaced by implicit functions in the WritableFactory companion object. This is " +
+    "kept here only for backward compatibility.", "1.3.0")
   implicit def doubleToDoubleWritable(d: Double): DoubleWritable = new DoubleWritable(d)
 
+  @deprecated("Replaced by implicit functions in the WritableFactory companion object. This is " +
+    "kept here only for backward compatibility.", "1.3.0")
   implicit def boolToBoolWritable (b: Boolean): BooleanWritable = new BooleanWritable(b)
 
+  @deprecated("Replaced by implicit functions in the WritableFactory companion object. This is " +
+    "kept here only for backward compatibility.", "1.3.0")
   implicit def bytesToBytesWritable (aob: Array[Byte]): BytesWritable = new BytesWritable(aob)
 
+  @deprecated("Replaced by implicit functions in the WritableFactory companion object. This is " +
+    "kept here only for backward compatibility.", "1.3.0")
   implicit def stringToText(s: String): Text = new Text(s)
 
   private implicit def arrayToArrayWritable[T <% Writable: ClassTag](arr: Traversable[T])
@@ -2070,7 +2091,7 @@ object WritableConverter {
     new WritableConverter[T](_ => wClass, x => convert(x.asInstanceOf[W]))
   }
 
-  // The following implicit functions were in SparkContext before 1.2 and users had to
+  // The following implicit functions were in SparkContext before 1.3 and users had to
   // `import SparkContext._` to enable them. Now we move them here to make the compiler find
   // them automatically. However, we still keep the old functions in SparkContext for backward
   // compatibility and forward to the following functions directly.
@@ -2102,4 +2123,47 @@ object WritableConverter {
 
   implicit def writableWritableConverter[T <: Writable](): WritableConverter[T] =
     new WritableConverter[T](_.runtimeClass.asInstanceOf[Class[T]], _.asInstanceOf[T])
+}
+
+/**
+ * A class encapsulating how to convert some type T to Writable. It stores both the Writable class
+ * corresponding to T (e.g. IntWritable for Int) and a function for doing the conversion.
+ * The Writable class will be used in `SequenceFileRDDFunctions`.
+ */
+private[spark] class WritableFactory[T](
+    val writableClass: ClassTag[T] => Class[_ <: Writable],
+    val convert: T => Writable) extends Serializable
+
+object WritableFactory {
+
+  private[spark] def simpleWritableFactory[T: ClassTag, W <: Writable : ClassTag](convert: T => W)
+    : WritableFactory[T] = {
+    val writableClass = implicitly[ClassTag[W]].runtimeClass.asInstanceOf[Class[W]]
+    new WritableFactory[T](_ => writableClass, convert)
+  }
+
+  implicit def intWritableFactory: WritableFactory[Int] =
+    simpleWritableFactory(new IntWritable(_))
+
+  implicit def longWritableFactory: WritableFactory[Long] =
+    simpleWritableFactory(new LongWritable(_))
+
+  implicit def floatWritableFactory: WritableFactory[Float] =
+    simpleWritableFactory(new FloatWritable(_))
+
+  implicit def doubleWritableFactory: WritableFactory[Double] =
+    simpleWritableFactory(new DoubleWritable(_))
+
+  implicit def booleanWritableFactory: WritableFactory[Boolean] =
+    simpleWritableFactory(new BooleanWritable(_))
+
+  implicit def bytesWritableFactory: WritableFactory[Array[Byte]] =
+    simpleWritableFactory(new BytesWritable(_))
+
+  implicit def stringWritableFactory: WritableFactory[String] =
+    simpleWritableFactory(new Text(_))
+
+  implicit def writableWritableFactory[T <: Writable: ClassTag]: WritableFactory[T] =
+    simpleWritableFactory(w => w)
+
 }
