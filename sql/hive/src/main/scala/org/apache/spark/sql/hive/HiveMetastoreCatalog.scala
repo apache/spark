@@ -140,7 +140,8 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
   }
 
   def hiveDefaultTableFilePath(tableName: String): String = {
-    hiveWarehouse.getTablePath(client.getDatabaseCurrent, tableName).toString
+    val currentDatabase = client.getDatabase(hive.sessionState.getCurrentDatabase())
+    hiveWarehouse.getTablePath(currentDatabase, tableName).toString
   }
 
   def tableExists(tableIdentifier: Seq[String]): Boolean = {
