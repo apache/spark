@@ -246,7 +246,7 @@ object KafkaUtils {
    *  starting point of the stream
    */
   @Experimental
-  def createNewStream[
+  def createDirectStream[
     K: ClassTag,
     V: ClassTag,
     U <: Decoder[_]: ClassTag,
@@ -257,7 +257,7 @@ object KafkaUtils {
       fromOffsets: Map[TopicAndPartition, Long],
       messageHandler: MessageAndMetadata[K, V] => R
   ): InputDStream[R] = {
-    new DeterministicKafkaInputDStream[K, V, U, T, R](
+    new DirectKafkaInputDStream[K, V, U, T, R](
       ssc, kafkaParams, fromOffsets, messageHandler)
   }
 
@@ -289,7 +289,7 @@ object KafkaUtils {
    * @param topics names of the topics to consume
    */
   @Experimental
-  def createNewStream[
+  def createDirectStream[
     K: ClassTag,
     V: ClassTag,
     U <: Decoder[_]: ClassTag,
@@ -313,7 +313,7 @@ object KafkaUtils {
       val fromOffsets = leaderOffsets.map { case (tp, lo) =>
           (tp, lo.offset)
       }
-      new DeterministicKafkaInputDStream[K, V, U, T, (K, V)](
+      new DirectKafkaInputDStream[K, V, U, T, (K, V)](
         ssc, kafkaParams, fromOffsets, messageHandler)
     }).fold(
       errs => throw new SparkException(errs.mkString("\n")),

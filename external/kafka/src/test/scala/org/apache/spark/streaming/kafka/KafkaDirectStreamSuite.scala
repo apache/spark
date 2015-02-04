@@ -29,7 +29,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Milliseconds, StreamingContext}
 
-class KafkaNewStreamSuite extends KafkaStreamSuiteBase with BeforeAndAfter with Eventually {
+class KafkaDirectStreamSuite extends KafkaStreamSuiteBase with BeforeAndAfter with Eventually {
   val sparkConf = new SparkConf()
     .setMaster("local[4]")
     .setAppName(this.getClass.getSimpleName)
@@ -63,7 +63,7 @@ class KafkaNewStreamSuite extends KafkaStreamSuiteBase with BeforeAndAfter with 
       createTopic(t)
       produceAndSendMessage(t, data)
     }
-    val stream = KafkaUtils.createNewStream[String, String, StringDecoder, StringDecoder](
+    val stream = KafkaUtils.createDirectStream[String, String, StringDecoder, StringDecoder](
       ssc, kafkaParams, topics)
     var total = 0L;
 

@@ -53,7 +53,7 @@ import org.apache.spark.streaming.dstream._
  * @param maxRetries maximum number of times in a row to retry getting leaders' offsets
  */
 private[streaming]
-class DeterministicKafkaInputDStream[
+class DirectKafkaInputDStream[
   K: ClassTag,
   V: ClassTag,
   U <: Decoder[_]: ClassTag,
@@ -68,7 +68,7 @@ class DeterministicKafkaInputDStream[
     "spark.streaming.kafka.maxRetries", 1)
 
   protected[streaming] override val checkpointData =
-    new DeterministicKafkaInputDStreamCheckpointData
+    new DirectKafkaInputDStreamCheckpointData
 
   protected val kc = new KafkaCluster(kafkaParams)
 
@@ -129,7 +129,7 @@ class DeterministicKafkaInputDStream[
   }
 
   private[streaming]
-  class DeterministicKafkaInputDStreamCheckpointData extends DStreamCheckpointData(this) {
+  class DirectKafkaInputDStreamCheckpointData extends DStreamCheckpointData(this) {
     def batchForTime = data.asInstanceOf[mutable.HashMap[
       Time, Array[OffsetRange.OffsetRangeTuple]]]
 
