@@ -51,7 +51,7 @@ from py4j.protocol import Py4JError
 from py4j.java_collections import ListConverter, MapConverter
 
 from pyspark.context import SparkContext
-from pyspark.rdd import RDD
+from pyspark.rdd import RDD, _prepare_for_python_RDD
 from pyspark.serializers import BatchedSerializer, AutoBatchedSerializer, PickleSerializer, \
     CloudPickleSerializer, UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
@@ -1274,22 +1274,9 @@ class SQLContext(object):
         [Row(c0=4)]
         """
         func = lambda _, it: imap(lambda x: f(*x), it)
-        command = (func, None,
-                   AutoBatchedSerializer(PickleSerializer()),
-                   AutoBatchedSerializer(PickleSerializer()))
-        ser = CloudPickleSerializer()
-        pickled_command = ser.dumps(command)
-        if len(pickled_command) > (1 << 20):  # 1M
-            broadcast = self._sc.broadcast(pickled_command)
-            pickled_command = ser.dumps(broadcast)
-        broadcast_vars = ListConverter().convert(
-            [x._jbroadcast for x in self._sc._pickled_broadcast_vars],
-            self._sc._gateway._gateway_client)
-        self._sc._pickled_broadcast_vars.clear()
-        env = MapConverter().convert(self._sc.environment,
-                                     self._sc._gateway._gateway_client)
-        includes = ListConverter().convert(self._sc._python_includes,
-                                           self._sc._gateway._gateway_client)
+        ser = AutoBatchedSerializer(PickleSerializer())
+        command = (func, None, ser, ser)
+        pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(self._sc, command)
         self._ssql_ctx.udf().registerPython(name,
                                             bytearray(pickled_command),
                                             env,
@@ -2187,7 +2174,7 @@ class DataFrame(object):
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         >>> df.select('name', 'age').collect()
         [Row(name=u'Alice', age=2), Row(name=u'Bob', age=5)]
-        >>> df.select(df.name, (df.age + 10).As('age')).collect()
+        >>> df.select(df.name, (df.age + 10).alias('age')).collect()
         [Row(name=u'Alice', age=12), Row(name=u'Bob', age=15)]
         """
         if not cols:
@@ -2268,7 +2255,7 @@ class DataFrame(object):
         >>> df.addColumn('age2', df.age + 2).collect()
         [Row(age=2, name=u'Alice', age2=4), Row(age=5, name=u'Bob', age2=7)]
         """
-        return self.select('*', col.As(colName))
+        return self.select('*', col.alias(colName))
 
 
 # Having SchemaRDD for backward compatibility (for docs)
@@ -2509,24 +2496,20 @@ class Column(DataFrame):
     isNull = _unary_op("isNull", "True if the current expression is null.")
     isNotNull = _unary_op("isNotNull", "True if the current expression is not null.")
 
-    # `as` is keyword
     def alias(self, alias):
         """Return a alias for this column
 
-        >>> df.age.As("age2").collect()
-        [Row(age2=2), Row(age2=5)]
         >>> df.age.alias("age2").collect()
         [Row(age2=2), Row(age2=5)]
         """
         return Column(getattr(self._jc, "as")(alias), self.sql_ctx)
-    As = alias
 
     def cast(self, dataType):
         """ Convert the column into type `dataType`
 
-        >>> df.select(df.age.cast("string").As('ages')).collect()
+        >>> df.select(df.age.cast("string").alias('ages')).collect()
         [Row(ages=u'2'), Row(ages=u'5')]
-        >>> df.select(df.age.cast(StringType()).As('ages')).collect()
+        >>> df.select(df.age.cast(StringType()).alias('ages')).collect()
         [Row(ages=u'2'), Row(ages=u'5')]
         """
         if self.sql_ctx is None:
@@ -2560,24 +2543,12 @@ class UserDefinedFunction(object):
         self._judf = self._create_judf()
 
     def _create_judf(self):
-        f = self.func
-        sc = SparkContext._active_spark_context
-        # TODO(davies): refactor
+        f = self.func  # put it in closure `func`
         func = lambda _, it: imap(lambda x: f(*x), it)
-        command = (func, None,
-                   AutoBatchedSerializer(PickleSerializer()),
-                   AutoBatchedSerializer(PickleSerializer()))
-        ser = CloudPickleSerializer()
-        pickled_command = ser.dumps(command)
-        if len(pickled_command) > (1 << 20):  # 1M
-            broadcast = sc.broadcast(pickled_command)
-            pickled_command = ser.dumps(broadcast)
-        broadcast_vars = ListConverter().convert(
-            [x._jbroadcast for x in sc._pickled_broadcast_vars],
-            sc._gateway._gateway_client)
-        sc._pickled_broadcast_vars.clear()
-        env = MapConverter().convert(sc.environment, sc._gateway._gateway_client)
-        includes = ListConverter().convert(sc._python_includes, sc._gateway._gateway_client)
+        ser = AutoBatchedSerializer(PickleSerializer())
+        command = (func, None, ser, ser)
+        sc = SparkContext._active_spark_context
+        pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command)
         ssql_ctx = sc._jvm.SQLContext(sc._jsc.sc())
         jdt = ssql_ctx.parseDataType(self.returnType.json())
         judf = sc._jvm.Dsl.pythonUDF(f.__name__, bytearray(pickled_command), env, includes,
@@ -2625,7 +2596,7 @@ class Dsl(object):
         """ Return a new Column for distinct count of (col, *cols)
 
         >>> from pyspark.sql import Dsl
-        >>> df.agg(Dsl.countDistinct(df.age, df.name).As('c')).collect()
+        >>> df.agg(Dsl.countDistinct(df.age, df.name).alias('c')).collect()
         [Row(c=2)]
         """
         sc = SparkContext._active_spark_context
@@ -2640,7 +2611,7 @@ class Dsl(object):
         """ Return a new Column for approxiate distinct count of (col, *cols)
 
         >>> from pyspark.sql import Dsl
-        >>> df.agg(Dsl.approxCountDistinct(df.age).As('c')).collect()
+        >>> df.agg(Dsl.approxCountDistinct(df.age).alias('c')).collect()
         [Row(c=2)]
         """
         sc = SparkContext._active_spark_context
@@ -2655,7 +2626,7 @@ class Dsl(object):
         """Create a user defined function (UDF)
 
         >>> slen = Dsl.udf(lambda s: len(s), IntegerType())
-        >>> df.select(slen(df.name).As('slen')).collect()
+        >>> df.select(slen(df.name).alias('slen')).collect()
         [Row(slen=5), Row(slen=3)]
         """
         return UserDefinedFunction(f, returnType)
