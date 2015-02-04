@@ -131,12 +131,7 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
         // attempts, which should only occur if speculation is enabled
         val speculationEnabled = sparkConf.getBoolean("spark.speculation", false)
         // This (undocumented) setting is an escape-hatch in case the commit code introduces bugs
-        // sparkConf.getBoolean("spark.hadoop.outputCommitCoordination.enabled", speculationEnabled)
-        
-        // TODO: revert this before merging the PR; this is enabled so this code path is exercised
-        // by more tests (even though it might not be _necessary_, it should be _safe_ to do the
-        // extra coordination)
-        true
+        sparkConf.getBoolean("spark.hadoop.outputCommitCoordination.enabled", speculationEnabled)
       }
       if (shouldCoordinateWithDriver) {
         val outputCommitCoordinator = SparkEnv.get.outputCommitCoordinator

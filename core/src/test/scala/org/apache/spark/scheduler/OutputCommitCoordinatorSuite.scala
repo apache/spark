@@ -72,7 +72,11 @@ class OutputCommitCoordinatorSuite extends FunSuite with BeforeAndAfter {
 
   before {
     tempDir = Utils.createTempDir()
-    sc = new SparkContext("local[4]", classOf[OutputCommitCoordinatorSuite].getSimpleName) {
+    val conf = new SparkConf()
+      .setMaster("local[4]")
+      .setAppName(classOf[OutputCommitCoordinatorSuite].getSimpleName)
+      .set("spark.speculation", "true")
+    sc = new SparkContext(conf) {
       override private[spark] def createSparkEnv(
         conf: SparkConf,
         isLocal: Boolean,
