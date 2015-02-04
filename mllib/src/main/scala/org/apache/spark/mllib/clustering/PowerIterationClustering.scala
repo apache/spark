@@ -88,11 +88,12 @@ class PowerIterationClustering private[clustering] (
   /**
    * Run the PIC algorithm.
    *
-   * @param similarities an RDD of (i, j, s_ij_) tuples representing the affinity matrix, which is
-   *                     the matrix A in the PIC paper. The similarity s_ij_ must be nonnegative.
-   *                     This is a symmetric matrix and hence s_ij_ = s_ji_. For any (i, j) with
-   *                     nonzero similarity, there should be either (i, j, s_ij_) or (j, i, s_ji_)
-   *                     in the input. Tuples with i = j are ignored, because we assume s_ij_ = 0.0.
+   * @param similarities an RDD of (i, j, s,,ij,,) tuples representing the affinity matrix, which is
+   *                     the matrix A in the PIC paper. The similarity s,,ij,, must be nonnegative.
+   *                     This is a symmetric matrix and hence s,,ij,, = s,,ji,,. For any (i, j) with
+   *                     nonzero similarity, there should be either (i, j, s,,ij,,) or
+   *                     (j, i, s,,ji,,) in the input. Tuples with i = j are ignored, because we
+   *                     assume s,,ij,, = 0.0.
    *
    * @return a [[PowerIterationClusteringModel]] that contains the clustering result
    */
@@ -109,7 +110,7 @@ class PowerIterationClustering private[clustering] (
    * Runs the PIC algorithm.
    *
    * @param w The normalized affinity matrix, which is the matrix W in the PIC paper with
-   *          w_ij_ = a_ij_ / d_ii_ as its edge properties and the initial vector of the power
+   *          w,,ij,, = a,,ij,, / d,,ii,, as its edge properties and the initial vector of the power
    *          iteration as its vertex properties.
    */
   private def pic(w: Graph[Double, Double]): PowerIterationClusteringModel = {
