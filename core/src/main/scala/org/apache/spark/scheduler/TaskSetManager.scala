@@ -523,7 +523,7 @@ private[spark] class TaskSetManager(
     // Walk through the list of tasks that can be scheduled at each location and returns true
     // if there are any tasks that still need to be scheduled. Lazily cleans up tasks that have
     // already been scheduled.
-    def noMoreTasksToRunIn(pendingTasks: HashMap[String, ArrayBuffer[Int]]): Boolean = {
+    def moreTasksToRunIn(pendingTasks: HashMap[String, ArrayBuffer[Int]]): Boolean = {
       val emptyKeys = new ArrayBuffer[String]
       val hasTasks = pendingTasks.exists {
         case (id: String, tasks: ArrayBuffer[Int]) =>
@@ -541,10 +541,10 @@ private[spark] class TaskSetManager(
 
     while (currentLocalityIndex < myLocalityLevels.length - 1) {
       val moreTasks = myLocalityLevels(currentLocalityIndex) match {
-        case TaskLocality.PROCESS_LOCAL => noMoreTasksToRunIn(pendingTasksForExecutor)
-        case TaskLocality.NODE_LOCAL => noMoreTasksToRunIn(pendingTasksForHost)
+        case TaskLocality.PROCESS_LOCAL => moreTasksToRunIn(pendingTasksForExecutor)
+        case TaskLocality.NODE_LOCAL => moreTasksToRunIn(pendingTasksForHost)
         case TaskLocality.NO_PREF => pendingTasksWithNoPrefs.nonEmpty
-        case TaskLocality.RACK_LOCAL => noMoreTasksToRunIn(pendingTasksForRack)
+        case TaskLocality.RACK_LOCAL => moreTasksToRunIn(pendingTasksForRack)
       }
       if (!moreTasks) {
         // This is a performance optimization: if there are no more tasks that can
