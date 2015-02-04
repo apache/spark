@@ -19,13 +19,11 @@ package org.apache.spark.mllib.optimization
 
 import org.jblas.{DoubleMatrix, SimpleBlas}
 
-import org.apache.spark.annotation.DeveloperApi
-
 /**
  * Object used to solve nonnegative least squares problems using a modified
  * projected gradient method.
  */
-private[mllib] object NNLS {
+private[spark] object NNLS {
   class Workspace(val n: Int) {
     val scratch = new DoubleMatrix(n, 1)
     val grad = new DoubleMatrix(n, 1)

@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql
 
+import java.util.{List => JList}
+
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{TypeTag, typeTag}
+import scala.collection.JavaConversions._
 
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions._
@@ -33,21 +36,6 @@ object Dsl {
   /** An implicit conversion that turns a Scala `Symbol` into a [[Column]]. */
   implicit def symbolToColumn(s: Symbol): ColumnName = new ColumnName(s.name)
 
-  //  /**
-  //   * An implicit conversion that turns a RDD of product into a [[DataFrame]].
-  //   *
-  //   * This method requires an implicit SQLContext in scope. For example:
-  //   * {{{
-  //   *   implicit val sqlContext: SQLContext = ...
-  //   *   val rdd: RDD[(Int, String)] = ...
-  //   *   rdd.toDataFrame  // triggers the implicit here
-  //   * }}}
-  //   */
-  //  implicit def rddToDataFrame[A <: Product: TypeTag](rdd: RDD[A])(implicit context: SQLContext)
-  //    : DataFrame = {
-  //    context.createDataFrame(rdd)
-  //  }
-
   /** Converts $"col name" into an [[Column]]. */
   implicit class StringToColumn(val sc: StringContext) extends AnyVal {
     def $(args: Any*): ColumnName = {
@@ -55,24 +43,30 @@ object Dsl {
     }
   }
 
-  private[this] implicit def toColumn(expr: Expression): Column = new Column(expr)
+  private[this] implicit def toColumn(expr: Expression): Column = Column(expr)
 
   /**
    * Returns a [[Column]] based on the given column name.
    */
-  def col(colName: String): Column = new Column(colName)
+  def col(colName: String): Column = Column(colName)
 
   /**
    * Returns a [[Column]] based on the given column name. Alias of [[col]].
    */
-  def column(colName: String): Column = new Column(colName)
+  def column(colName: String): Column = Column(colName)
 
   /**
    * Creates a [[Column]] of literal value.
+   *
+   * The passed in object is returned directly if it is already a [[Column]].
+   * If the object is a Scala Symbol, it is converted into a [[Column]] also.
+   * Otherwise, a new [[Column]] is created to represent the literal value.
    */
   def lit(literal: Any): Column = {
-    if (literal.isInstanceOf[Symbol]) {
-      return new ColumnName(literal.asInstanceOf[Symbol].name)
+    literal match {
+      case c: Column => return c
+      case s: Symbol => return new ColumnName(literal.asInstanceOf[Symbol].name)
+      case _ =>  // continue
     }
 
     val literalExpr = literal match {
@@ -94,33 +88,97 @@ object Dsl {
       case _ =>
         throw new RuntimeException("Unsupported literal type " + literal.getClass + " " + literal)
     }
-    new Column(literalExpr)
+    Column(literalExpr)
   }
 
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /** Aggregate function: returns the sum of all values in the expression. */
   def sum(e: Column): Column = Sum(e.expr)
+
+  /** Aggregate function: returns the sum of distinct values in the expression. */
   def sumDistinct(e: Column): Column = SumDistinct(e.expr)
+
+  /** Aggregate function: returns the number of items in a group. */
   def count(e: Column): Column = Count(e.expr)
 
+  /** Aggregate function: returns the number of distinct items in a group. */
   @scala.annotation.varargs
   def countDistinct(expr: Column, exprs: Column*): Column =
     CountDistinct((expr +: exprs).map(_.expr))
 
-  def approxCountDistinct(e: Column): Column =
-    ApproxCountDistinct(e.expr)
-  def approxCountDistinct(e: Column, rsd: Double): Column =
-    ApproxCountDistinct(e.expr, rsd)
+  /** Aggregate function: returns the approximate number of distinct items in a group. */
+  def approxCountDistinct(e: Column): Column = ApproxCountDistinct(e.expr)
 
+  /** Aggregate function: returns the approximate number of distinct items in a group. */
+  def approxCountDistinct(e: Column, rsd: Double): Column = ApproxCountDistinct(e.expr, rsd)
+
+  /** Aggregate function: returns the average of the values in a group. */
   def avg(e: Column): Column = Average(e.expr)
+
+  /** Aggregate function: returns the first value in a group. */
   def first(e: Column): Column = First(e.expr)
+
+  /** Aggregate function: returns the last value in a group. */
   def last(e: Column): Column = Last(e.expr)
+
+  /** Aggregate function: returns the minimum value of the expression in a group. */
   def min(e: Column): Column = Min(e.expr)
+
+  /** Aggregate function: returns the maximum value of the expression in a group. */
   def max(e: Column): Column = Max(e.expr)
 
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Unary minus, i.e. negate the expression.
+   * {{{
+   *   // Select the amount column and negates all values.
+   *   // Scala:
+   *   df.select( -df("amount") )
+   *
+   *   // Java:
+   *   df.select( negate(df.col("amount")) );
+   * }}}
+   */
+  def negate(e: Column): Column = -e
+
+  /**
+   * Inversion of boolean expression, i.e. NOT.
+   * {{
+   *   // Scala: select rows that are not active (isActive === false)
+   *   df.filter( !df("isActive") )
+   *
+   *   // Java:
+   *   df.filter( not(df.col("isActive")) );
+   * }}
+   */
+  def not(e: Column): Column = !e
+
+  /** Converts a string expression to upper case. */
   def upper(e: Column): Column = Upper(e.expr)
+
+  /** Converts a string exprsesion to lower case. */
   def lower(e: Column): Column = Lower(e.expr)
+
+  /** Computes the square root of the specified float value. */
   def sqrt(e: Column): Column = Sqrt(e.expr)
+
+  /** Computes the absolutle value. */
   def abs(e: Column): Column = Abs(e.expr)
 
+  /**
+   * This is a private API for Python
+   * TODO: move this to a private package
+   */
+  def toColumns(cols: JList[Column]): Seq[Column] = {
+    cols.toList.toSeq
+  }
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////////////////////
 
   // scalastyle:off
 

@@ -149,6 +149,7 @@
     <scala.binary.version>2.10</scala.binary.version>
     <jline.version>${scala.version}</jline.version>
     <jline.groupid>org.scala-lang</jline.groupid>
+    <jodd.version>3.6.3</jodd.version>
     <codehaus.jackson.version>1.8.8</codehaus.jackson.version>
     <fasterxml.jackson.version>2.3.0</fasterxml.jackson.version>
     <snappy.version>1.1.1.6</snappy.version>
@@ -345,6 +346,18 @@
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-http</artifactId>
+        <version>${jetty.version}</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-continuation</artifactId>
+        <version>${jetty.version}</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-servlet</artifactId>
         <version>${jetty.version}</version>
         <scope>provided</scope>
       </dependency>
@@ -1308,6 +1321,8 @@
 
               <include>org.eclipse.jetty:jetty-io</include>
               <include>org.eclipse.jetty:jetty-http</include>
+              <include>org.eclipse.jetty:jetty-continuation</include>
+              <include>org.eclipse.jetty:jetty-servlet</include>
               <include>org.eclipse.jetty:jetty-plus</include>
               <include>org.eclipse.jetty:jetty-security</include>
               <include>org.eclipse.jetty:jetty-util</include>
@@ -1640,6 +1655,7 @@
       </properties>
       <modules>
         <module>external/kafka</module>
+        <module>external/kafka-assembly</module>
       </modules>
     </profile>
 

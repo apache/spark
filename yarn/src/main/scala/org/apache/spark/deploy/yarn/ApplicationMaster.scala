@@ -244,7 +244,9 @@ private[spark] class ApplicationMaster(
       host: String,
       port: String,
       isDriver: Boolean): Unit = {
-    val driverUrl = "akka.tcp://%s@%s:%s/user/%s".format(
+    
+    val driverUrl = AkkaUtils.address(
+      AkkaUtils.protocol(actorSystem),
       SparkEnv.driverActorSystemName,
       host,
       port,

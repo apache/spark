@@ -581,6 +581,15 @@ Configuration of Parquet can be done using the `setConf` method on SQLContext or
   </td>
 </tr>
 <tr>
+  <td><code>spark.sql.parquet.int96AsTimestamp</code></td>
+  <td>true</td>
+  <td>
+    Some Parquet-producing systems, in particular Impala, store Timestamp into INT96. Spark would also
+    store Timestamp as INT96 because we need to avoid precision lost of the nanoseconds field. This
+    flag tells Spark SQL to interpret INT96 data as a timestamp to provide compatibility with these systems.
+  </td>
+</tr>
+<tr>
   <td><code>spark.sql.parquet.cacheMetadata</code></td>
   <td>true</td>
   <td>
