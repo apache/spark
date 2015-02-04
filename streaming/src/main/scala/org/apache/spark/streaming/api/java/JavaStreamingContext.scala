@@ -29,6 +29,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
 import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2}
 import org.apache.spark.rdd.RDD
@@ -177,7 +178,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
 
   /**
    * Create an input stream from network source hostname:port. Data is received using
-   * a TCP socket and the receive bytes it interepreted as object using the given
+   * a TCP socket and the receive bytes it interpreted as object using the given
    * converter.
    * @param hostname      Hostname to connect to for receiving data
    * @param port          Port to connect to for receiving data
@@ -207,6 +208,24 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    */
   def textFileStream(directory: String): JavaDStream[String] = {
     ssc.textFileStream(directory)
+  }
+
+  /**
+   * :: Experimental ::
+   *
+   * Create an input stream that monitors a Hadoop-compatible filesystem
+   * for new files and reads them as flat binary files with fixed record lengths,
+   * yielding byte arrays
+   *
+   * '''Note:''' We ensure that the byte array for each record in the
+   * resulting RDDs of the DStream has the provided record length.
+   *
+   * @param directory HDFS directory to monitor for new files
+   * @param recordLength The length at which to split the records
+   */
+  @Experimental
+  def binaryRecordsStream(directory: String, recordLength: Int): JavaDStream[Array[Byte]] = {
+    ssc.binaryRecordsStream(directory, recordLength)
   }
 
   /**
@@ -296,6 +315,37 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
     implicit val cmf: ClassTag[F] = ClassTag(fClass)
     def fn = (x: Path) => filter.call(x).booleanValue()
     ssc.fileStream[K, V, F](directory, fn, newFilesOnly)
+  }
+
+  /**
+   * Create an input stream that monitors a Hadoop-compatible filesystem
+   * for new files and reads them using the given key-value types and input format.
+   * Files must be written to the monitored directory by "moving" them from another
+   * location within the same file system. File names starting with . are ignored.
+   * @param directory HDFS directory to monitor for new file
+   * @param kClass class of key for reading HDFS file
+   * @param vClass class of value for reading HDFS file
+   * @param fClass class of input format for reading HDFS file
+   * @param filter Function to filter paths to process
+   * @param newFilesOnly Should process only new files and ignore existing files in the directory
+   * @param conf Hadoop configuration
+   * @tparam K Key type for reading HDFS file
+   * @tparam V Value type for reading HDFS file
+   * @tparam F Input format for reading HDFS file
+   */
+  def fileStream[K, V, F <: NewInputFormat[K, V]](
+      directory: String,
+      kClass: Class[K],
+      vClass: Class[V],
+      fClass: Class[F],
+      filter: JFunction[Path, JBoolean],
+      newFilesOnly: Boolean,
+      conf: Configuration): JavaPairInputDStream[K, V] = {
+    implicit val cmk: ClassTag[K] = ClassTag(kClass)
+    implicit val cmv: ClassTag[V] = ClassTag(vClass)
+    implicit val cmf: ClassTag[F] = ClassTag(fClass)
+    def fn = (x: Path) => filter.call(x).booleanValue()
+    ssc.fileStream[K, V, F](directory, fn, newFilesOnly, conf)
   }
 
   /**
