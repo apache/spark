@@ -17,52 +17,65 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.File
+import org.scalatest.BeforeAndAfter
 
-import com.google.common.io.Files
-import org.apache.spark.sql.{QueryTest, _}
-import org.apache.spark.sql.hive.test.TestHive
-/* Implicits */
 import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.util.Utils
+import org.apache.spark.sql.hive.execution.HiveComparisonTest
 
+abstract class QueryPartitionSuite extends HiveComparisonTest with BeforeAndAfter {
+  protected val tmpDir = Utils.createTempDir()
 
-class QueryPartitionSuite extends QueryTest {
-
-  test("SPARK-5068: query data when path doesn't exists"){
-    val testData = TestHive.sparkContext.parallelize(
-      (1 to 10).map(i => TestData(i, i.toString)))
-    testData.registerTempTable("testData")
-
-    val tmpDir = Files.createTempDir()
-    //create the table for test
-    sql(s"CREATE TABLE table_with_partition(key int,value string) PARTITIONED by (ds string) location '${tmpDir.toURI.toString}' ")
-    sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='1') SELECT key,value FROM testData")
-    sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='2') SELECT key,value FROM testData")
-    sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='3') SELECT key,value FROM testData")
-    sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='4') SELECT key,value FROM testData")
-    //test for the exist path
-    checkAnswer(sql("select key,value from table_with_partition"),
-      testData.toSchemaRDD.collect ++ testData.toSchemaRDD.collect
-        ++ testData.toSchemaRDD.collect ++ testData.toSchemaRDD.collect)
-
-    //delect the path of one partition
-    val folders = tmpDir.listFiles.filter(_.isDirectory).toList
-    def deleteAll(file:File){
-      if(file.isDirectory()){
-        for(f:File <-file.listFiles()){
-          deleteAll(f);
-        }
-      }
-      file.delete();
-    }
-    deleteAll(folders(0))
-
-    //test for the affter delete the path
-    checkAnswer(sql("select key,value from table_with_partition"),
-      testData.toSchemaRDD.collect ++ testData.toSchemaRDD.collect
-        ++ testData.toSchemaRDD.collect)
-
-    sql("DROP TABLE table_with_partition")
-    sql("DROP TABLE createAndInsertTest")
+  override def beforeAll() {
+    sql(
+      s"""CREATE TABLE table_with_partition(key int,value string)
+         |PARTITIONED by (ds string) location '${tmpDir.toURI.toString}'
+         |""".stripMargin)
+    sql(
+      s"""INSERT OVERWRITE TABLE table_with_partition
+         | partition (ds='1') SELECT key,value FROM src LIMIT 1""".stripMargin)
+    sql(
+      s"""INSERT OVERWRITE TABLE table_with_partition
+         | partition (ds='2') SELECT key,value FROM src LIMIT 1""".stripMargin)
+    sql(
+      s"""INSERT OVERWRITE TABLE table_with_partition
+         | partition (ds='3') SELECT key,value FROM src LIMIT 1""".stripMargin)
+    sql(
+      s"""INSERT OVERWRITE TABLE table_with_partition
+         | partition (ds='4') SELECT key,value FROM src LIMIT 1""".stripMargin)
   }
+
+  override def afterAll() {
+    sql("DROP TABLE table_with_partition")
+  }
+}
+
+class QueryPartitionSuite0 extends QueryPartitionSuite {
+  //test for the exist path
+  createQueryTest("SPARK-5068 scan partition with existed path",
+    "select key,value from table_with_partition", false)
+}
+
+class QueryPartitionSuite1 extends QueryPartitionSuite {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    //delete the one of the partition manually
+    val folders = tmpDir.listFiles.filter(_.isDirectory)
+    Utils.deleteRecursively(folders(0))
+  }
+
+  //test for the after deleting the partition path
+  createQueryTest("SPARK-5068 scan partition with non-existed path",
+    "select key,value from table_with_partition", false)
+}
+
+class QueryPartitionSuite2 extends QueryPartitionSuite {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    // delete the path of the table file
+    Utils.deleteRecursively(tmpDir)
+  }
+
+  createQueryTest("SPARK-5068 scan table with non-existed path",
+    "select key,value from table_with_partition", false)
 }
