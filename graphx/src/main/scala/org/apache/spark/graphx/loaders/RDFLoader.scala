@@ -86,15 +86,11 @@ object RDFLoader extends Logging {
   } // end of edgeListFile
   
   def gethash(in:String):Long = {
-  	// TODO: md5 produces 128bit hash, must have 64bit
-    /*val hasher = MessageDigest.getInstance("md5")
-    val hash = hasher.digest(in.getBytes())
-    hash.map(x => (x.toInt + 128).toString).reduce((x, y) => x + y).toLong // */
-  	var h = 1125899906842597L
-  	for (x <- in) {
-  		h = 31*h + x.toInt;
-  	}
-  	return h
+    var h = 1125899906842597L
+    for (x <- in) {
+  	  h = 31 * h + x;
+    }
+    return h
   }
 
 }
