@@ -24,7 +24,7 @@ import com.google.common.cache.{LoadingCache, CacheLoader, CacheBuilder}
 
 import org.apache.hadoop.util.ReflectionUtils
 import org.apache.hadoop.hive.metastore.{Warehouse, TableType}
-import org.apache.hadoop.hive.metastore.api.{Table => TTable, Partition => TPartition, AlreadyExistsException, FieldSchema}
+import org.apache.hadoop.hive.metastore.api.{Table => TTable, Partition => TPartition, FieldSchema}
 import org.apache.hadoop.hive.ql.metadata._
 import org.apache.hadoop.hive.ql.plan.CreateTableDesc
 import org.apache.hadoop.hive.serde.serdeConstants
@@ -148,11 +148,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     val databaseName = tableIdent.lift(tableIdent.size - 2).getOrElse(
       hive.sessionState.getCurrentDatabase)
     val tblName = tableIdent.last
-    try {
-      client.getTable(databaseName, tblName) != null
-    } catch {
-      case ie: InvalidTableException => false
-    }
+    client.getTable(databaseName, tblName, false) != null
   }
 
   def lookupRelation(
