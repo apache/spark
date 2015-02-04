@@ -57,13 +57,11 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     |
     |from pyspark import SparkConf , SparkContext
     |if __name__ == "__main__":
-    |    if len(sys.argv) != 3:
-    |        print >> sys.stderr, "Usage: test.py [master] [result file]"
+    |    if len(sys.argv) != 2:
+    |        print >> sys.stderr, "Usage: test.py [result file]"
     |        exit(-1)
-    |    conf = SparkConf()
-    |    conf.setMaster(sys.argv[1]).setAppName("python test in yarn cluster mode")
-    |    sc = SparkContext(conf=conf)
-    |    status = open(sys.argv[2],'w')
+    |    sc = SparkContext(conf=SparkConf())
+    |    status = open(sys.argv[1],'w')
     |    result = "failure"
     |    rdd = sc.parallelize(range(10))
     |    cnt = rdd.count()
@@ -138,9 +136,22 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
   test("run Spark in yarn-cluster mode unsuccessfully") {
     // Don't provide arguments so the driver will fail.
     val exception = intercept[SparkException] {
-      runSpark(false, YarnClusterDriver.getClass)
+      runSpark(false, mainClassName(YarnClusterDriver.getClass))
       fail("Spark application should have failed.")
     }
+  }
+
+  test("run Python application in yarn-cluster mode") {
+    val primaryPyFile = new File(tempDir, "test.py")
+    Files.write(TEST_PYFILE, primaryPyFile, UTF_8)
+    val pyFile = new File(tempDir, "test2.py")
+    Files.write(TEST_PYFILE, pyFile, UTF_8)
+    var result = File.createTempFile("result", null, tempDir)
+
+    runSpark(false, primaryPyFile.getAbsolutePath(),
+      sparkArgs = Seq("--py-files", pyFile.getAbsolutePath()),
+      appArgs = Seq(result.getAbsolutePath()))
+    checkResult(result)
   }
 
   test("user class path first in client mode") {
@@ -153,7 +164,8 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
 
   private def testBasicYarnApp(clientMode: Boolean) = {
     var result = File.createTempFile("result", null, tempDir)
-    runSpark(clientMode, YarnClusterDriver.getClass, Seq(result.getAbsolutePath()))
+    runSpark(clientMode, mainClassName(YarnClusterDriver.getClass),
+      appArgs = Seq(result.getAbsolutePath()))
     checkResult(result)
   }
 
@@ -162,10 +174,10 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     val jarFile = TestUtils.createJarWithFiles(Map("test.resource" -> "OVERRIDDEN"), tempDir)
     val driverResult = File.createTempFile("driver", null, tempDir)
     val executorResult = File.createTempFile("executor", null, tempDir)
-    runSpark(clientMode, YarnClasspathTest.getClass,
-      Seq(driverResult.getAbsolutePath(), executorResult.getAbsolutePath()),
-      Seq("local:" + jarFile.getPath()),
-      Map(
+    runSpark(clientMode, mainClassName(YarnClasspathTest.getClass),
+      appArgs = Seq(driverResult.getAbsolutePath(), executorResult.getAbsolutePath()),
+      extraJars = Seq("local:" + jarFile.getPath()),
+      extraConf = Map(
         "spark.driver.userClassPathFirst" -> "true",
         "spark.executor.userClassPathFirst" -> "true"))
     checkResult(driverResult, "OVERRIDDEN")
@@ -174,14 +186,12 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
 
   private def runSpark(
       clientMode: Boolean,
-      klass: Class[_],
-      args: Seq[String] = Nil,
+      klass: String,
+      appArgs: Seq[String] = Nil,
+      sparkArgs: Seq[String] = Nil,
       extraJars: Seq[String] = Nil,
-      settings: Map[String, String] = Map()) = {
+      extraConf: Map[String, String] = Map()) = {
     val master = if (clientMode) "yarn-client" else "yarn-cluster"
-    val main = klass.getName().stripSuffix("$")
-    val userJars = extraJars.mkString(",")
-
     val props = new Properties()
 
     props.setProperty("spark.yarn.jar", "local:" + fakeSparkJar.getAbsolutePath())
@@ -201,7 +211,7 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
       }
     }
 
-    settings.foreach { case (k, v) => props.setProperty(k, v) }
+    extraConf.foreach { case (k, v) => props.setProperty(k, v) }
 
     val propsFile = File.createTempFile("spark", ".properties", tempDir)
     val writer = new OutputStreamWriter(new FileOutputStream(propsFile), UTF_8)
@@ -209,37 +219,25 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     writer.close()
 
     val extraJarArgs = if (!extraJars.isEmpty()) Seq("--jars", extraJars.mkString(",")) else Nil
+    val mainArgs =
+      if (klass.endsWith(".py")) {
+        Seq(klass)
+      } else {
+        Seq("--class", klass, fakeSparkJar.getAbsolutePath())
+      }
     val argv =
       Seq(
         new File(sys.props("spark.test.home"), "bin/spark-submit").getAbsolutePath(),
         "--master", master,
-        "--class", main,
         "--num-executors", "1",
         "--properties-file", propsFile.getAbsolutePath()) ++
       extraJarArgs ++
-      Seq(fakeSparkJar.getAbsolutePath(), master) ++
-      args
+      sparkArgs ++
+      mainArgs ++
+      appArgs
 
     Utils.executeAndGetOutput(argv,
       extraEnvironment = Map("YARN_CONF_DIR" -> tempDir.getAbsolutePath()))
-  }
-
-  test("run Python application in yarn-cluster mode") {
-    val primaryPyFile = new File(tempDir, "test.py")
-    Files.write(TEST_PYFILE, primaryPyFile, UTF_8)
-    val pyFile = new File(tempDir, "test2.py")
-    Files.write(TEST_PYFILE, pyFile, UTF_8)
-    var result = File.createTempFile("result", null, tempDir)
-
-    val args = Array("--class", "org.apache.spark.deploy.PythonRunner",
-      "--primary-py-file", primaryPyFile.getAbsolutePath(),
-      "--py-files", pyFile.getAbsolutePath(),
-      "--arg", "yarn-cluster",
-      "--arg", result.getAbsolutePath(),
-      "--name", "python test in yarn-cluster mode",
-      "--num-executors", "1")
-    Client.main(args)
-    checkResult(result)
   }
 
   /**
@@ -257,24 +255,28 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     resultString should be (expected)
   }
 
+  private def mainClassName(klass: Class[_]): String = {
+    klass.getName().stripSuffix("$")
+  }
+
 }
 
 private object YarnClusterDriver extends Logging with Matchers {
 
   def main(args: Array[String]) = {
-    if (args.length != 2) {
+    if (args.length != 1) {
       System.err.println(
         s"""
         |Invalid command line: ${args.mkString(" ")}
         |
-        |Usage: YarnClusterDriver [master] [result file]
+        |Usage: YarnClusterDriver [result file]
         """.stripMargin)
       System.exit(1)
     }
 
-    val sc = new SparkContext(new SparkConf().setMaster(args(0))
+    val sc = new SparkContext(new SparkConf()
       .setAppName("yarn \"test app\" 'with quotes' and \\back\\slashes and $dollarSigns"))
-    val status = new File(args(1))
+    val status = new File(args(0))
     var result = "failure"
     try {
       val data = sc.parallelize(1 to 4, 4).collect().toSet
@@ -291,22 +293,20 @@ private object YarnClusterDriver extends Logging with Matchers {
 private object YarnClasspathTest {
 
   def main(args: Array[String]) = {
-    if (args.length != 3) {
+    if (args.length != 2) {
       System.err.println(
         s"""
         |Invalid command line: ${args.mkString(" ")}
         |
-        |Usage: YarnClasspathTest [master] [driver result file] [executor result file]
+        |Usage: YarnClasspathTest [driver result file] [executor result file]
         """.stripMargin)
       System.exit(1)
     }
 
-    readResource(args(1))
-    val sc = new SparkContext(new SparkConf().setMaster(args(0)).setAppName("User classpath test"))
-    val status = new File(args(1))
-    var result = "failure"
+    readResource(args(0))
+    val sc = new SparkContext(new SparkConf())
     try {
-      sc.parallelize(Seq(1)).foreach { x => readResource(args(2)) }
+      sc.parallelize(Seq(1)).foreach { x => readResource(args(1)) }
     } finally {
       sc.stop()
     }
