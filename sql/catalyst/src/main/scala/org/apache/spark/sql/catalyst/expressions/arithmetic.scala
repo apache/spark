@@ -29,7 +29,7 @@ case class UnaryPlus(child: Expression) extends UnaryExpression {
   override def toString = s"+$child"
 
   override def eval(input: Row): Any = {
-    n1(child, input, _)
+    n1(child, input, _.abs(_))
   }
 }
 
