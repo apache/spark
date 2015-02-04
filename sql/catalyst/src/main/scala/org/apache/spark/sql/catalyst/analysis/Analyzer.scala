@@ -311,10 +311,7 @@ class Analyzer(catalog: Catalog,
      * Returns true if `exprs` contains a [[Star]].
      */
     protected def containsStar(exprs: Seq[Expression]): Boolean =
-      exprs.flatMap { _ collect {
-          case s: Star => true
-        }
-      }.nonEmpty
+      exprs.exists(_.collect { case _: Star => true }.nonEmpty)
   }
 
   /**
