@@ -257,6 +257,12 @@ class Analyzer(catalog: Catalog,
                 case o => o :: Nil
               }
               Alias(child = f.copy(children = expandedArgs), name)() :: Nil
+            case Alias(c @ CreateArray(args), name) if containsStar(args) =>
+              val expandedArgs = args.flatMap {
+                case s: Star => s.expand(child.output, resolver)
+                case o => o :: Nil
+              }
+              Alias(c.copy(children = expandedArgs), name)() :: Nil
             case o => o :: Nil
           },
           child)
@@ -305,7 +311,14 @@ class Analyzer(catalog: Catalog,
      * Returns true if `exprs` contains a [[Star]].
      */
     protected def containsStar(exprs: Seq[Expression]): Boolean =
+<<<<<<< HEAD
       exprs.exists(_.collect { case _: Star => true }.nonEmpty)
+=======
+      exprs.flatMap { _ collect {
+          case s: Star => true
+        }
+      }.nonEmpty
+>>>>>>> 6ae00db691c4d51c6b99904b4b1984382add313b
   }
 
   /**
