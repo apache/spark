@@ -2554,6 +2554,45 @@ def _aggregate_func(name, doc=""):
     return staticmethod(_)
 
 
+class UserDefinedFunction(object):
+    def __init__(self, func, returnType):
+        self.func = func
+        self.returnType = returnType
+        self._judf = self._create_judf()
+
+    def _create_judf(self):
+        f = self.func
+        sc = SparkContext._active_spark_context
+        # TODO(davies): refactor
+        func = lambda _, it: imap(lambda x: f(*x), it)
+        command = (func, None,
+                   AutoBatchedSerializer(PickleSerializer()),
+                   AutoBatchedSerializer(PickleSerializer()))
+        ser = CloudPickleSerializer()
+        pickled_command = ser.dumps(command)
+        if len(pickled_command) > (1 << 20):  # 1M
+            broadcast = sc.broadcast(pickled_command)
+            pickled_command = ser.dumps(broadcast)
+        broadcast_vars = ListConverter().convert(
+            [x._jbroadcast for x in sc._pickled_broadcast_vars],
+            sc._gateway._gateway_client)
+        sc._pickled_broadcast_vars.clear()
+        env = MapConverter().convert(sc.environment, sc._gateway._gateway_client)
+        includes = ListConverter().convert(sc._python_includes, sc._gateway._gateway_client)
+        ssql_ctx = sc._jvm.SQLContext(sc._jsc.sc())
+        jdt = ssql_ctx.parseDataType(self.returnType.json())
+        judf = sc._jvm.Dsl.pythonUDF(f.__name__, bytearray(pickled_command), env, includes,
+                                     sc.pythonExec, broadcast_vars, sc._javaAccumulator, jdt)
+        return judf
+
+    def __call__(self, *cols):
+        sc = SparkContext._active_spark_context
+        jcols = ListConverter().convert([_to_java_column(c) for c in cols],
+                                        sc._gateway._gateway_client)
+        jc = self._judf.apply(sc._jvm.Dsl.toColumns(jcols))
+        return Column(jc)
+
+
 class Dsl(object):
     """
     A collections of builtin aggregators
@@ -2611,6 +2650,16 @@ class Dsl(object):
         else:
             jc = sc._jvm.Dsl.approxCountDistinct(_to_java_column(col), rsd)
         return Column(jc)
+
+    @staticmethod
+    def udf(f, returnType=StringType()):
+        """Create a user defined function (UDF)
+
+        >>> slen = Dsl.udf(lambda s: len(s), IntegerType())
+        >>> df.select(slen(df.name).As('slen')).collect()
+        [Row(slen=5), Row(slen=3)]
+        """
+        return UserDefinedFunction(f, returnType)
 
 
 def _test():

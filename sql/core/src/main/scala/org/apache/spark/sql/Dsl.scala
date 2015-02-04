@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql
 
-import java.util.{List => JList}
+import java.util.{List => JList, Map => JMap}
+
+import org.apache.spark.Accumulator
+import org.apache.spark.api.python.PythonBroadcast
+import org.apache.spark.broadcast.Broadcast
 
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{TypeTag, typeTag}
@@ -175,6 +179,23 @@ object Dsl {
    */
   def toColumns(cols: JList[Column]): Seq[Column] = {
     cols.toList.toSeq
+  }
+
+  /**
+   * This is a private API for Python
+   * TODO: move this to a private package
+   */
+  def pythonUDF(
+     name: String,
+     command: Array[Byte],
+     envVars: JMap[String, String],
+     pythonIncludes: JList[String],
+     pythonExec: String,
+     broadcastVars: JList[Broadcast[PythonBroadcast]],
+     accumulator: Accumulator[JList[Array[Byte]]],
+     dataType: DataType): UserDefinedPythonFunction = {
+    UserDefinedPythonFunction(name, command, envVars, pythonIncludes, pythonExec, broadcastVars,
+      accumulator, dataType)
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
