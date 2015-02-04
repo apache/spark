@@ -507,25 +507,27 @@ private[spark] class TaskSetManager(
    */
   private def getAllowedLocalityLevel(curTime: Long): TaskLocality.TaskLocality = {
     // Remove the scheduled or finished tasks lazily
-    def hasNotScheduledTasks(taskIndexes: ArrayBuffer[Int]): Boolean = {
-      var indexOffset = taskIndexes.size
+    def tasksNeedToBeScheduledFrom(pendingTaskIds: ArrayBuffer[Int]): Boolean = {
+      var indexOffset = pendingTaskIds.size
       while (indexOffset > 0) {
         indexOffset -= 1
-        val index = taskIndexes(indexOffset)
+        val index = pendingTaskIds(indexOffset)
         if (copiesRunning(index) == 0 && !successful(index)) {
           return true
         } else {
-          taskIndexes.remove(indexOffset)
+          pendingTaskIds.remove(indexOffset)
         }
       }
       false
     }
-    // It removes the empty lists after check
-    def hasMoreTasks(pendingTasks: HashMap[String, ArrayBuffer[Int]]): Boolean = {
+    // Walk through the list of tasks that can be scheduled at each location and returns true
+    // if there are any tasks that still need to be scheduled. Lazily cleans up tasks that have
+    // already been scheduled.
+    def noMoreTasksToRunIn(pendingTasks: HashMap[String, ArrayBuffer[Int]]): Boolean = {
       val emptyKeys = new ArrayBuffer[String]
       val hasTasks = pendingTasks.exists{
         case (id: String, tasks: ArrayBuffer[Int]) =>
-          if (hasNotScheduledTasks(tasks)) {
+          if (tasksNeedToBeScheduledFrom(tasks)) {
             true
           } else {
             emptyKeys += id
@@ -538,24 +540,26 @@ private[spark] class TaskSetManager(
 
     while (currentLocalityIndex < myLocalityLevels.length - 1) {
       val moreTasks = myLocalityLevels(currentLocalityIndex) match {
-        case TaskLocality.PROCESS_LOCAL => hasMoreTasks(pendingTasksForExecutor)
-        case TaskLocality.NODE_LOCAL => hasMoreTasks(pendingTasksForHost)
-        case TaskLocality.NO_PREF => pendingTasksWithNoPrefs.isEmpty
-        case TaskLocality.RACK_LOCAL => hasMoreTasks(pendingTasksForRack)
+        case TaskLocality.PROCESS_LOCAL => noMoreTasksToRunIn(pendingTasksForExecutor)
+        case TaskLocality.NODE_LOCAL => noMoreTasksToRunIn(pendingTasksForHost)
+        case TaskLocality.NO_PREF => pendingTasksWithNoPrefs.nonEmpty
+        case TaskLocality.RACK_LOCAL => noMoreTasksToRunIn(pendingTasksForRack)
       }
       if (!moreTasks) {
-        // Move to next locality level if there is no task for current level
+        // This is a performance optimization: if there are no more tasks that can
+        // be scheduled at a particular locality level, there is no point in waiting
+        // for the locality wait timeout (SPARK-4939).
         lastLaunchTime = curTime
-        logDebug(s"No tasks for locality level ${myLocalityLevels(currentLocalityIndex)} " +
-          s"move to ${myLocalityLevels(currentLocalityIndex + 1)}")
+        logDebug(s"No tasks for locality level ${myLocalityLevels(currentLocalityIndex)}, " +
+          s"so moving to locality level ${myLocalityLevels(currentLocalityIndex + 1)}")
         currentLocalityIndex += 1
       } else if (curTime - lastLaunchTime >= localityWaits(currentLocalityIndex)) {
-        // Jump to the next locality level, and remove our waiting time for the current one since
-        // we don't want to count it again on the next one
+        // Jump to the next locality level, and reset lastLaunchTime so that the next locality
+        // wait timer doesn't immediately expire
         lastLaunchTime += localityWaits(currentLocalityIndex)
         currentLocalityIndex += 1
-        logDebug(s"Move to ${myLocalityLevels(currentLocalityIndex)} after wait for " +
-          s"${localityWaits(currentLocalityIndex)} ms")
+        logDebug(s"Moving to ${myLocalityLevels(currentLocalityIndex)} after waiting for " +
+          s"${localityWaits(currentLocalityIndex)}ms")
       } else {
         return myLocalityLevels(currentLocalityIndex)
       }
