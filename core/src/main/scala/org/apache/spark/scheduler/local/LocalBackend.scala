@@ -19,6 +19,8 @@ package org.apache.spark.scheduler.local
 
 import java.nio.ByteBuffer
 
+import scala.concurrent.duration._
+
 import akka.actor.{Actor, ActorRef, Props}
 
 import org.apache.spark.{Logging, SparkContext, SparkEnv, TaskState}
@@ -44,6 +46,8 @@ private[spark] class LocalActor(
   scheduler: TaskSchedulerImpl,
   executorBackend: LocalBackend,
   private val totalCores: Int) extends Actor with ActorLogReceive with Logging {
+
+  import context.dispatcher   // to use Akka's scheduler.scheduleOnce()
 
   private var freeCores = totalCores
 
@@ -73,9 +77,14 @@ private[spark] class LocalActor(
 
   def reviveOffers() {
     val offers = Seq(new WorkerOffer(localExecutorId, localExecutorHostname, freeCores))
-    for (task <- scheduler.resourceOffers(offers).flatten) {
+    val tasks = scheduler.resourceOffers(offers).flatten
+    for (task <- tasks) {
       freeCores -= scheduler.CPUS_PER_TASK
       executor.launchTask(executorBackend, task.taskId, task.name, task.serializedTask)
+    }
+    if (tasks.isEmpty && scheduler.activeTaskSets.nonEmpty) {
+      // Try to reviveOffer after 1 second, because scheduler may wait for locality timeout
+      context.system.scheduler.scheduleOnce(1000 millis, self, ReviveOffers)
     }
   }
 }
