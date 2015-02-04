@@ -860,9 +860,9 @@ private[spark] object Master extends Logging {
    *
    * @throws SparkException if the url is invalid
    */
-  def toAkkaUrl(sparkUrl: String): String = {
+  def toAkkaUrl(sparkUrl: String, protocol: String): String = {
     val (host, port) = Utils.extractHostPortFromSparkUrl(sparkUrl)
-    "akka.tcp://%s@%s:%s/user/%s".format(systemName, host, port, actorName)
+    AkkaUtils.address(protocol, systemName, host, port, actorName)
   }
 
   /**
@@ -870,9 +870,9 @@ private[spark] object Master extends Logging {
    *
    * @throws SparkException if the url is invalid
    */
-  def toAkkaAddress(sparkUrl: String): Address = {
+  def toAkkaAddress(sparkUrl: String, protocol: String): Address = {
     val (host, port) = Utils.extractHostPortFromSparkUrl(sparkUrl)
-    Address("akka.tcp", systemName, host, port)
+    Address(protocol, systemName, host, port)
   }
 
   def startSystemAndActor(

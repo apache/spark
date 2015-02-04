@@ -22,7 +22,7 @@ import org.apache.spark.sql.{Row, Strategy}
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, AttributeSet, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, InsertIntoTable => LogicalInsertIntoTable}
 import org.apache.spark.sql.execution
 
 /**
@@ -53,6 +53,13 @@ private[sql] object DataSourceStrategy extends Strategy {
 
     case l @ LogicalRelation(t: TableScan) =>
       execution.PhysicalRDD(l.output, t.buildScan()) :: Nil
+
+    case i @ LogicalInsertIntoTable(
+      l @ LogicalRelation(t: InsertableRelation), partition, query, overwrite) =>
+      if (partition.nonEmpty) {
+        sys.error(s"Insert into a partition is not allowed because $l is not partitioned.")
+      }
+      execution.ExecutedCommand(InsertIntoRelation(t, query, overwrite)) :: Nil
 
     case _ => Nil
   }

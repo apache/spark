@@ -36,6 +36,16 @@ import org.apache.spark.sql.types._
  * for a SQL like language should checkout the HiveQL support in the sql/hive sub-project.
  */
 class SqlParser extends AbstractSparkSQLParser {
+
+  def parseExpression(input: String): Expression = {
+    // Initialize the Keywords.
+    lexical.initialize(reservedWords)
+    phrase(expression)(new lexical.Scanner(input)) match {
+      case Success(plan, _) => plan
+      case failureOrError => sys.error(failureOrError.toString)
+    }
+  }
+
   // Keyword is a convention with AbstractSparkSQLParser, which will scan all of the `Keyword`
   // properties via reflection the class in runtime for constructing the SqlLexical object
   protected val ABS = Keyword("ABS")
@@ -52,6 +62,7 @@ class SqlParser extends AbstractSparkSQLParser {
   protected val CAST = Keyword("CAST")
   protected val COALESCE = Keyword("COALESCE")
   protected val COUNT = Keyword("COUNT")
+  protected val DATE = Keyword("DATE")
   protected val DECIMAL = Keyword("DECIMAL")
   protected val DESC = Keyword("DESC")
   protected val DISTINCT = Keyword("DISTINCT")
@@ -147,8 +158,8 @@ class SqlParser extends AbstractSparkSQLParser {
       }
 
   protected lazy val insert: Parser[LogicalPlan] =
-    INSERT ~> OVERWRITE.? ~ (INTO ~> relation) ~ select ^^ {
-      case o ~ r ~ s => InsertIntoTable(r, Map.empty[String, Option[String]], s, o.isDefined)
+    INSERT ~> (OVERWRITE ^^^ true | INTO ^^^ false) ~ (TABLE ~> relation) ~ select ^^ {
+      case o ~ r ~ s => InsertIntoTable(r, Map.empty[String, Option[String]], s, o)
     }
 
   protected lazy val projection: Parser[Expression] =
@@ -383,6 +394,7 @@ class SqlParser extends AbstractSparkSQLParser {
     | DOUBLE ^^^ DoubleType
     | fixedDecimalType
     | DECIMAL ^^^ DecimalType.Unlimited
+    | DATE ^^^ DateType
     )
 
   protected lazy val fixedDecimalType: Parser[DataType] =

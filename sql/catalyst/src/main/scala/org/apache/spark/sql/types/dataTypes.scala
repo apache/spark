@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.types
 
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 
 import scala.math.Numeric.{FloatAsIfIntegral, DoubleAsIfIntegral}
 import scala.reflect.ClassTag
@@ -387,18 +387,16 @@ case object TimestampType extends NativeType {
  */
 @DeveloperApi
 case object DateType extends NativeType {
-  private[sql] type JvmType = Date
+  private[sql] type JvmType = Int
 
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
 
-  private[sql] val ordering = new Ordering[JvmType] {
-    def compare(x: Date, y: Date) = x.compareTo(y)
-  }
+  private[sql] val ordering = implicitly[Ordering[JvmType]]
 
   /**
-   * The default size of a value of the DateType is 8 bytes.
+   * The default size of a value of the DateType is 4 bytes.
    */
-  override def defaultSize: Int = 8
+  override def defaultSize: Int = 4
 }
 
 
@@ -822,7 +820,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * have a name matching the given name, `null` will be returned.
    */
   def apply(name: String): StructField = {
-    nameToField.getOrElse(name, throw new IllegalArgumentException(s"Field $name does not exist."))
+    nameToField.getOrElse(name,
+      throw new IllegalArgumentException(s"""Field "$name" does not exist."""))
   }
 
   /**

@@ -67,6 +67,15 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.Matrix.foreachActive")
           ) ++ Seq(
+            // SPARK-5540
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.recommendation.ALS.solveLeastSquares"),
+            // SPARK-5536
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$^dateFeatures"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$^dateBlock")
+          ) ++ Seq(
             // SPARK-3325
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.streaming.api.java.JavaDStreamLike.print"),
@@ -127,6 +136,12 @@ object MimaExcludes {
             // SPARK-5315 Spark Streaming Java API returns Scala DStream
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.streaming.api.java.JavaDStreamLike.reduceByWindow")
+          ) ++ Seq(
+            // SPARK-5461 Graph should have isCheckpointed, getCheckpointFiles methods
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.graphx.Graph.getCheckpointFiles"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.graphx.Graph.isCheckpointed")
           )
 
         case v if v.startsWith("1.2") =>

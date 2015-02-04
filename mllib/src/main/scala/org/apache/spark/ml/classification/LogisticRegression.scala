@@ -132,14 +132,14 @@ class LogisticRegressionModel private[ml] (
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     transformSchema(dataset.schema, paramMap, logging = true)
     val map = this.paramMap ++ paramMap
-    val scoreFunction: Vector => Double = (v) => {
+    val scoreFunction = udf((v: Vector) => {
       val margin = BLAS.dot(v, weights)
       1.0 / (1.0 + math.exp(-margin))
-    }
+    } : Double)
     val t = map(threshold)
-    val predictFunction: Double => Double = (score) => { if (score > t) 1.0 else 0.0 }
+    val predictFunction = udf((score: Double) => { if (score > t) 1.0 else 0.0 } : Double)
     dataset
-      .select($"*", callUDF(scoreFunction, col(map(featuresCol))).as(map(scoreCol)))
-      .select($"*", callUDF(predictFunction, col(map(scoreCol))).as(map(predictionCol)))
+      .select($"*", scoreFunction(col(map(featuresCol))).as(map(scoreCol)))
+      .select($"*", predictFunction(col(map(scoreCol))).as(map(predictionCol)))
   }
 }
