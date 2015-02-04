@@ -138,14 +138,13 @@ class FlumeStreamSuite extends FunSuite with BeforeAndAfter with Matchers with L
       status should be (avro.Status.OK)
     }
     
-    val decoder = Charset.forName("UTF-8").newDecoder()    
     eventually(timeout(10 seconds), interval(100 milliseconds)) {
       val outputEvents = outputBuffer.flatten.map { _.event }
       outputEvents.foreach {
         event =>
           event.getHeaders.get("test") should be("header")
       }
-      val output = outputEvents.map(event => decoder.decode(event.getBody()).toString)
+      val output = outputEvents.map(event => new String(event.getBody.array(), "UTF-8"))
       output should be (input)
     }
   }
