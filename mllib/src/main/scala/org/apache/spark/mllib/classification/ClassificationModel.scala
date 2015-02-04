@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.classification
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.api.java.{JavaDoubleRDD, JavaRDD}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.rdd.RDD
 
@@ -48,8 +48,8 @@ trait ClassificationModel extends Serializable {
   /**
    * Predict values for examples stored in a JavaRDD.
    * @param testData JavaRDD representing data points to be predicted
-   * @return a JavaRDD[java.lang.Double] where each entry contains the corresponding prediction
+   * @return a JavaDoubleRDD where each entry contains the corresponding prediction
    */
-  def predict(testData: JavaRDD[Vector]): JavaRDD[java.lang.Double] =
-    predict(testData.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Double]]
+  def predict(testData: JavaRDD[Vector]): JavaDoubleRDD =
+    JavaDoubleRDD.fromRDD(predict(testData.rdd))
 }
