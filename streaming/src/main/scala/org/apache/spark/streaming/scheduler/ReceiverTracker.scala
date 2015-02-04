@@ -254,7 +254,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
       // Check if all the receivers have been deregistered or not
       if (!receiverInfo.isEmpty) {
-        logWarning("All of the receivers have not deregistered, " + receiverInfo)
+        logWarning("Not all of the receivers have deregistered, " + receiverInfo)
       } else {
         logInfo("All of the receivers have deregistered successfully")
       }
