@@ -158,6 +158,20 @@ trait CatalystScan extends BaseRelation {
 }
 
 @DeveloperApi
+/**
+ * ::DeveloperApi::
+ * A BaseRelation that can be used to insert data into it through the insert method.
+ * If overwrite in insert method is true, the old data in the relation should be overwritten with
+ * the new data. If overwrite in insert method is false, the new data should be appended.
+ *
+ * InsertableRelation assumes that the data (Rows in the DataFrame) provided to the insert method
+ * exactly matches the ordinal of fields in the schema of the BaseRelation.
+ * InsertableRelation assumes that the schema of this relation will not be changed.
+ * Even if the insert method updates the schema, the new schema cannot be used.
+ */
 trait InsertableRelation extends BaseRelation {
+  /** If this relation treats fields with different nullability as the same fields */
+  def ignoreNullability: Boolean
+
   def insert(data: DataFrame, overwrite: Boolean): Unit
 }
