@@ -2126,10 +2126,9 @@ class DataFrame(object):
         """
         if not cols:
             raise ValueError("should sort by at least one column")
-        jcols = ListConverter().convert([_to_java_column(c) for c in cols[1:]],
+        jcols = ListConverter().convert([_to_java_column(c) for c in cols],
                                         self._sc._gateway._gateway_client)
-        jdf = self._jdf.sort(_to_java_column(cols[0]),
-                             self._sc._jvm.Dsl.toColumns(jcols))
+        jdf = self._jdf.sort(self._sc._jvm.Dsl.toColumns(jcols))
         return DataFrame(jdf, self.sql_ctx)
 
     sortBy = sort
