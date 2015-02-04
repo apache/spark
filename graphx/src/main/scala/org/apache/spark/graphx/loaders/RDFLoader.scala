@@ -30,7 +30,7 @@ import java.security.MessageDigest
  * Provides utilities for loading RDF [[Graph]]s from .NT dumps.
  */
 object RDFLoader extends Logging {
-	
+  
   val relregex = "<([^>]+)>\\s<([^>]+)>\\s<([^>]+)>\\s\\.".r
   val propregex = "<([^>]+)>\\s<([^>]+)>\\s(.+)\\.".r
   val propvalregex = "<([^>]+)>\\s(.+)\\.".r
@@ -62,22 +62,23 @@ object RDFLoader extends Logging {
       }
     
     val vertices = lines.flatMap(line => {
-    	line match {
-    		case relregex(subj, rel, obj)		=> Set(subj, obj)
-    		case propregex(subj, rel, value)	=> Set(subj, "<"+subj+"-"+rel+">"+value)
-    	}
+      line match {
+        case relregex(subj, rel, obj)     => Set(subj, obj)
+        case propregex(subj, rel, value)  => Set(subj, "<" + subj + "-" + rel + ">" + value)
+      }
     }).distinct().map(name => 
-    	name match {
-    		case propvalregex(pre, value) => (gethash("<"+pre+">"+value), value)
-    		case _ => (gethash(name), name)
-    	}
+      name match {
+        case propvalregex(pre, value) => (gethash("<" + pre + ">" + value), value)
+        case _ => (gethash(name), name)
+      }
     ).persist(vertexStorageLevel) // TODO: set name etc    
     
     val edges: RDD[Edge[String]] = lines.map( line => {
-    	line match {
-    		case relregex(subj, rel, obj)		=> Edge(gethash(subj), gethash(obj), rel)
-    		case propregex(subj, rel, obj)		=> Edge(gethash(subj), gethash("<"+subj+"-"+rel+">"+obj), rel)
-    	}
+      line match {
+        case relregex(subj, rel, obj)     => Edge(gethash(subj), gethash(obj), rel)
+        case propregex(subj, rel, obj)    
+            => Edge(gethash(subj), gethash("<" + subj + "-" + rel + ">" + obj), rel)
+      }
     }).persist(edgeStorageLevel) // TODO: set name
     
     val graph = Graph(vertices, edges)
@@ -85,9 +86,9 @@ object RDFLoader extends Logging {
   } // end of edgeListFile
   
   def gethash(in:String):Long = {
-  	val hasher = MessageDigest.getInstance("md5")
-  	val hash = hasher.digest(in.getBytes())
-  	hash.map(x => (x.toInt + 128).toString).reduce((x, y) => x+y).toLong
+    val hasher = MessageDigest.getInstance("md5")
+    val hash = hasher.digest(in.getBytes())
+    hash.map(x => (x.toInt + 128).toString).reduce((x, y) => x + y).toLong
   }
 
 }
