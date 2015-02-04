@@ -31,30 +31,27 @@ object SparkAPSP {
      System.err.println("Usage: SparkAPSP <file>")
      System.exit(1)
      }
-	
      val conf = new SparkConf().setAppName("Diameter Estimation")
      val sc = new SparkContext(conf)
      val lines = sc.textFile(args(0))
-     
      var edges = lines.map(s =>{  
-	val field = s.split("\\s+")
-	(field(0).toLong,field(1).toLong)
-	}).distinct().cache()
+     val field = s.split("\\s+")
+     (field(0).toLong,field(1).toLong)
+     }).distinct().cache()
+     
+     var distances = edges.map(pair => (pair, 1)).cache()
+     var prevDistsSize = 0L
+     var distsSize = distances.count()
+     
+     while (prevDistsSize < distsSize) {
+     val newDists = distances.map {case ((a, b), dist) => (b, (a, dist))}.join(edges)
+     .map {case (b, ((a, dist), c)) => ((a, c), dist + 1)}.cache() 
 
-	var distances = edges.map(pair => (pair, 1)).cache()
-	var prevDistsSize = 0L
-	var distsSize = distances.count()
-	
-	while (prevDistsSize < distsSize) {
-  	val newDists = distances.map {case ((a, b), dist) => (b, (a, dist))}.join(edges)
-   	.map {case (b, ((a, dist), c)) => ((a, c), dist + 1)}.cache() 
-
-         distances = distances.union(newDists).reduceByKey((a, b) => math.min(a,b)).cache()
-
- 	  prevDistsSize = distsSize 
- 	  distsSize = distances.count() 
-	}
-	val finalres = distances.collect()
-	finalres.foreach(res => println(res._1 + " -> distance " + res._2))
-}	
+     distances = distances.union(newDists).reduceByKey((a, b) => math.min(a,b)).cache()
+     prevDistsSize = distsSize 
+     distsSize = distances.count() 
+     }
+     val finalres = distances.collect()
+     finalres.foreach(res => println(res._1 + " -> distance " + res._2))
+  }	
 }
