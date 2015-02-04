@@ -8,7 +8,11 @@ sc <- sparkR.init()
 
 sqlCtx <- sparkRSQL.init(sc)
 
-jsonPath <- paste(getwd(), "/pkg/inst/tests/people.json", sep = "")
+mockLines <- c("{\"Name\":\"Michael\"}",
+               "{\"Name\":\"Andy\", \"Age\":30}",
+               "{\"Name\":\"Justin\", \"Age\":19}")
+jsonPath <- tempfile(pattern="sparkr-test", fileext=".tmp")
+writeLines(mockLines, jsonPath)
 
 test_that("jsonFile() on a local file returns a DataFrame", {
   df <- jsonFile(sqlCtx, jsonPath)
@@ -28,3 +32,5 @@ test_that("table() returns a new DataFrame", {
   expect_true(inherits(tabledf, "DataFrame"))
   expect_true(count(tabledf) == 3)
 })
+
+unlink(jsonPath)
