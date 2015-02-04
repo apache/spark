@@ -525,7 +525,7 @@ private[spark] class TaskSetManager(
     // already been scheduled.
     def noMoreTasksToRunIn(pendingTasks: HashMap[String, ArrayBuffer[Int]]): Boolean = {
       val emptyKeys = new ArrayBuffer[String]
-      val hasTasks = pendingTasks.exists{
+      val hasTasks = pendingTasks.exists {
         case (id: String, tasks: ArrayBuffer[Int]) =>
           if (tasksNeedToBeScheduledFrom(tasks)) {
             true
@@ -534,7 +534,8 @@ private[spark] class TaskSetManager(
             false
           }
       }
-      emptyKeys.foreach(x => pendingTasks.remove(x))
+      // The key could be executorId, host or rackId
+      emptyKeys.foreach(id => pendingTasks.remove(id))
       hasTasks
     }
 
