@@ -31,7 +31,7 @@ object SparkAPSP {
      System.err.println("Usage: SparkAPSP <file>")
      System.exit(1)
      }
-     val conf = new SparkConf().setAppName("Diameter Estimation")
+     val conf = new SparkConf().setAppName("All Pairs Shortest Paths")
      val sc = new SparkContext(conf)
      val lines = sc.textFile(args(0))
      var edges = lines.map(s =>{  
@@ -53,5 +53,5 @@ object SparkAPSP {
      }
      val finalres = distances.collect()
      finalres.foreach(res => println(res._1 + " -> distance " + res._2))
-}	
+  }	
 }
