@@ -181,23 +181,6 @@ object Dsl {
     cols.toList.toSeq
   }
 
-  /**
-   * This is a private API for Python
-   * TODO: move this to a private package
-   */
-  def pythonUDF(
-     name: String,
-     command: Array[Byte],
-     envVars: JMap[String, String],
-     pythonIncludes: JList[String],
-     pythonExec: String,
-     broadcastVars: JList[Broadcast[PythonBroadcast]],
-     accumulator: Accumulator[JList[Array[Byte]]],
-     dataType: DataType): UserDefinedPythonFunction = {
-    UserDefinedPythonFunction(name, command, envVars, pythonIncludes, pythonExec, broadcastVars,
-      accumulator, dataType)
-  }
-
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////
 

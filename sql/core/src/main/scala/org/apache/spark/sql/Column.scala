@@ -165,7 +165,7 @@ trait Column extends DataFrame {
    *
    *   // Java:
    *   import static org.apache.spark.sql.Dsl.*;
-   *   df.filter( not(col("colA").equalTo(col("colB"))) );
+   *   df.filter( col("colA").notEqual(col("colB")) );
    * }}}
    */
   def !== (other: Any): Column = constructColumn(other) { o =>

@@ -2552,8 +2552,9 @@ class UserDefinedFunction(object):
         pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command, self)
         ssql_ctx = sc._jvm.SQLContext(sc._jsc.sc())
         jdt = ssql_ctx.parseDataType(self.returnType.json())
-        judf = sc._jvm.Dsl.pythonUDF(f.__name__, bytearray(pickled_command), env, includes,
-                                     sc.pythonExec, broadcast_vars, sc._javaAccumulator, jdt)
+        judf = sc._jvm.UserDefinedPythonFunction(f.__name__, bytearray(pickled_command), env,
+                                                 includes, sc.pythonExec, broadcast_vars,
+                                                 sc._javaAccumulator, jdt)
         return judf
 
     def __del__(self):
