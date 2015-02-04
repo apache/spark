@@ -18,6 +18,8 @@
 package org.apache.spark.streaming.mqtt
 
 import java.net.{URI, ServerSocket}
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -32,6 +34,8 @@ import org.scalatest.concurrent.Eventually
 import org.apache.spark.streaming.{Milliseconds, StreamingContext}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
+import org.apache.spark.streaming.scheduler.StreamingListener
+import org.apache.spark.streaming.scheduler.StreamingListenerReceiverStarted
 import org.apache.spark.SparkConf
 import org.apache.spark.util.Utils
 
@@ -67,7 +71,7 @@ class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
     val sendMessage = "MQTT demo for spark streaming"
     val receiveStream: ReceiverInputDStream[String] =
       MQTTUtils.createStream(ssc, "tcp:" + brokerUri, topic, StorageLevel.MEMORY_ONLY)
-    var receiveMessage: List[String] = List()
+    @volatile var receiveMessage: List[String] = List()
     receiveStream.foreachRDD { rdd =>
       if (rdd.collect.length > 0) {
         receiveMessage = receiveMessage ::: List(rdd.first)
@@ -75,6 +79,11 @@ class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
       }
     }
     ssc.start()
+
+    // wait for the receiver to start before publishing data, or we risk failing
+    // the test nondeterministically. See SPARK-4631
+    waitForReceiverToStart()
+
     publishData(sendMessage)
     eventually(timeout(10000 milliseconds), interval(100 milliseconds)) {
       assert(sendMessage.equals(receiveMessage(0)))
@@ -121,8 +130,14 @@ class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
         val message: MqttMessage = new MqttMessage(data.getBytes("utf-8"))
         message.setQos(1)
         message.setRetained(true)
-        for (i <- 0 to 100) {
-          msgTopic.publish(message)
+
+        for (i <- 0 to 10) {
+          try {
+            msgTopic.publish(message)
+          } catch {
+            case e: MqttException if e.getReasonCode == MqttException.REASON_CODE_MAX_INFLIGHT =>
+              Thread.sleep(50) // wait for Spark streaming to consume something from the message queue
+          }
         }
       }
     } finally {
@@ -130,5 +145,19 @@ class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
       client.close()
       client = null
     }
+  }
+
+  /**
+   * Block until at least one receiver has started or timeout occurs.
+   */
+  private def waitForReceiverToStart() = {
+    val latch = new CountDownLatch(1)
+    ssc.addStreamingListener(new StreamingListener {
+      override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) {
+        latch.countDown()
+      }
+    })
+
+    assert(latch.await(10, TimeUnit.SECONDS), "Timeout waiting for receiver to start.")
   }
 }

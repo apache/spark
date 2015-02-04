@@ -205,6 +205,32 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     }
   }
 
+  test("stop slow receiver gracefully") {
+    val conf = new SparkConf().setMaster(master).setAppName(appName)
+    conf.set("spark.streaming.gracefulStopTimeout", "20000")
+    sc = new SparkContext(conf)
+    logInfo("==================================\n\n\n")
+    ssc = new StreamingContext(sc, Milliseconds(100))
+    var runningCount = 0
+    SlowTestReceiver.receivedAllRecords = false
+    //Create test receiver that sleeps in onStop()
+    val totalNumRecords = 15
+    val recordsPerSecond = 1
+    val input = ssc.receiverStream(new SlowTestReceiver(totalNumRecords, recordsPerSecond))
+    input.count().foreachRDD { rdd =>
+      val count = rdd.first()
+      runningCount += count.toInt
+      logInfo("Count = " + count + ", Running count = " + runningCount)
+    }
+    ssc.start()
+    ssc.awaitTermination(500)
+    ssc.stop(stopSparkContext = false, stopGracefully = true)
+    logInfo("Running count = " + runningCount)
+    assert(runningCount > 0)
+    assert(runningCount == totalNumRecords)
+    Thread.sleep(100)
+  }
+
   test("awaitTermination") {
     ssc = new StreamingContext(master, appName, batchDuration)
     val inputStream = addInputStream(ssc)
@@ -317,6 +343,38 @@ class TestReceiver extends Receiver[Int](StorageLevel.MEMORY_ONLY) with Logging 
 
 object TestReceiver {
   val counter = new AtomicInteger(1)
+}
+
+/** Custom receiver for testing whether a slow receiver can be shutdown gracefully or not */
+class SlowTestReceiver(totalRecords: Int, recordsPerSecond: Int) extends Receiver[Int](StorageLevel.MEMORY_ONLY) with Logging {
+
+  var receivingThreadOption: Option[Thread] = None
+
+  def onStart() {
+    val thread = new Thread() {
+      override def run() {
+        logInfo("Receiving started")
+        for(i <- 1 to totalRecords) {
+          Thread.sleep(1000 / recordsPerSecond)
+          store(i)
+        }
+        SlowTestReceiver.receivedAllRecords = true
+        logInfo(s"Received all $totalRecords records")
+      }
+    }
+    receivingThreadOption = Some(thread)
+    thread.start()
+  }
+
+  def onStop() {
+    // Simulate slow receiver by waiting for all records to be produced
+    while(!SlowTestReceiver.receivedAllRecords) Thread.sleep(100)
+    // no cleanup to be done, the receiving thread should stop on it own
+  }
+}
+
+object SlowTestReceiver {
+  var receivedAllRecords = false
 }
 
 /** Streaming application for testing DStream and RDD creation sites */

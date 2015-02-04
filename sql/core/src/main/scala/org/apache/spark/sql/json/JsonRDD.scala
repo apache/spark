@@ -377,10 +377,12 @@ private[sql] object JsonRDD extends Logging {
     }
   }
 
-  private def toDate(value: Any): Date = {
+  private def toDate(value: Any): Int = {
     value match {
       // only support string as date
-      case value: java.lang.String => new Date(DataTypeConversions.stringToTime(value).getTime)
+      case value: java.lang.String =>
+        DateUtils.millisToDays(DataTypeConversions.stringToTime(value).getTime)
+      case value: java.sql.Date => DateUtils.fromJavaDate(value)
     }
   }
 

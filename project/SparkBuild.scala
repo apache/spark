@@ -44,8 +44,9 @@ object BuildCommons {
     sparkKinesisAsl) = Seq("yarn", "yarn-stable", "java8-tests", "ganglia-lgpl",
     "kinesis-asl").map(ProjectRef(buildLocation, _))
 
-  val assemblyProjects@Seq(assembly, examples, networkYarn) =
-    Seq("assembly", "examples", "network-yarn").map(ProjectRef(buildLocation, _))
+  val assemblyProjects@Seq(assembly, examples, networkYarn, streamingKafkaAssembly) =
+    Seq("assembly", "examples", "network-yarn", "streaming-kafka-assembly")
+      .map(ProjectRef(buildLocation, _))
 
   val tools = ProjectRef(buildLocation, "tools")
   // Root project.
@@ -300,7 +301,14 @@ object Assembly {
       sys.props.get("hadoop.version")
         .getOrElse(SbtPomKeys.effectivePom.value.getProperties.get("hadoop.version").asInstanceOf[String])
     },
-    jarName in assembly := s"${moduleName.value}-${version.value}-hadoop${hadoopVersion.value}.jar",
+    jarName in assembly <<= (version, moduleName, hadoopVersion) map { (v, mName, hv) =>
+      if (mName.contains("streaming-kafka-assembly")) {
+        // This must match the same name used in maven (see external/kafka-assembly/pom.xml)
+        s"${mName}-${v}.jar"
+      } else {
+        s"${mName}-${v}-hadoop${hv}.jar"
+      }
+    },
     mergeStrategy in assembly := {
       case PathList("org", "datanucleus", xs @ _*)             => MergeStrategy.discard
       case m if m.toLowerCase.endsWith("manifest.mf")          => MergeStrategy.discard

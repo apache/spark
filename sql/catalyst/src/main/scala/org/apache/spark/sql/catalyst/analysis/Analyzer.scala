@@ -69,8 +69,9 @@ class Analyzer(catalog: Catalog,
       typeCoercionRules ++
       extendedRules : _*),
     Batch("Check Analysis", Once,
-      CheckResolution,
-      CheckAggregation),
+      CheckResolution ::
+      CheckAggregation ::
+      Nil: _*),
     Batch("AnalysisOperators", fixedPoint,
       EliminateAnalysisOperators)
   )
