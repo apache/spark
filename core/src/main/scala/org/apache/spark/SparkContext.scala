@@ -657,6 +657,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    *
    * Load data from a flat binary file, assuming the length of each record is constant.
    *
+   * '''Note:''' We ensure that the byte array for each record in the resulting RDD
+   * has the provided record length.
+   *
    * @param path Directory to the input data files
    * @param recordLength The length at which to split the records
    * @return An RDD of data with values, represented as byte arrays
@@ -671,7 +674,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       classOf[LongWritable],
       classOf[BytesWritable],
       conf=conf)
-    val data = br.map{ case (k, v) => v.getBytes}
+    val data = br.map { case (k, v) =>
+      val bytes = v.getBytes
+      assert(bytes.length == recordLength, "Byte array does not have correct length")
+      bytes
+    }
     data
   }
 
