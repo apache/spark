@@ -36,10 +36,10 @@ class ParquetQuerySuite extends QueryTest with ParquetTest {
     }
 
     // TODO Re-enable this after data source insertion API is merged
-    ignore(s"$prefix: appending") {
+    test(s"$prefix: appending") {
       val data = (0 until 10).map(i => (i, i.toString))
       withParquetTable(data, "t") {
-        sql("INSERT INTO t SELECT * FROM t")
+        sql("INSERT INTO TABLE t SELECT * FROM t")
         checkAnswer(table("t"), (data ++ data).map(Row.fromTuple))
       }
     }

@@ -105,7 +105,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
         sparkContext
           .parallelize(0 to 1000)
           .map(i => Tuple1(i / 100.0))
-          .select($"_1" cast decimal as "abcd")
+          // Parquet doesn't allow column names with spaces, have to add an alias here
+          .select($"_1" cast decimal as "dec")
 
       for ((precision, scale) <- Seq((5, 2), (1, 0), (1, 1), (18, 10), (18, 17))) {
         withTempPath { dir =>
