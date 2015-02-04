@@ -2599,7 +2599,7 @@ class UserDefinedFunction(object):
         sc = SparkContext._active_spark_context
         jcols = ListConverter().convert([_to_java_column(c) for c in cols],
                                         sc._gateway._gateway_client)
-        jc = self._judf.apply(sc._jvm.Dsl.toColumns(jcols))
+        jc = self._judf.apply(sc._jvm.PythonUtils.toSeq(jcols))
         return Column(jc)
 
 
