@@ -21,6 +21,7 @@ test_that("jsonFile() on a local file returns a DataFrame", {
 })
 
 test_that("registerTempTable() results in a queryable table and sql() results in a new DataFrame", {
+  df <- jsonFile(sqlCtx, jsonPath)
   registerTempTable(df, "table1")
   newdf <- sql(sqlCtx, "SELECT * FROM table1 where Name = 'Michael'")
   expect_true(inherits(newdf, "DataFrame"))
