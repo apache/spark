@@ -18,7 +18,6 @@
 package org.apache.spark.mllib.classification
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax => brzArgmax, sum => brzSum}
-import org.apache.spark.mllib.classification.impl.GLMClassificationModel
 
 import org.apache.spark.{SparkContext, SparkException, Logging}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector}

@@ -157,7 +157,16 @@ object LogisticRegressionSuite {
   /** 3 classes, 2 features */
   private val multiclassModel = new LogisticRegressionModel(
     weights = Vectors.dense(0.1, 0.2, 0.3, 0.4), intercept = 1.0, numFeatures = 2, numClasses = 3)
+
+  private def checkModelsEqual(a: LogisticRegressionModel, b: LogisticRegressionModel): Unit = {
+    assert(a.weights == b.weights)
+    assert(a.intercept == b.intercept)
+    assert(a.numClasses == b.numClasses)
+    assert(a.numFeatures == b.numFeatures)
+    assert(a.getThreshold == b.getThreshold)
+  }
 }
+
 
 class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with Matchers {
   def validatePrediction(
@@ -486,11 +495,7 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
     try {
       model.save(sc, path)
       val sameModel = LogisticRegressionModel.load(sc, path)
-      assert(model.weights == sameModel.weights)
-      assert(model.intercept == sameModel.intercept)
-      assert(model.numClasses == sameModel.numClasses)
-      assert(model.numFeatures == sameModel.numFeatures)
-      assert(sameModel.getThreshold.isEmpty)
+      LogisticRegressionSuite.checkModelsEqual(model, sameModel)
     } finally {
       Utils.deleteRecursively(tempDir)
     }
@@ -499,8 +504,8 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
     try {
       model.setThreshold(0.7)
       model.save(sc, path)
-      val sameModel2 = LogisticRegressionModel.load(sc, path)
-      assert(model.getThreshold.get == sameModel2.getThreshold.get)
+      val sameModel = LogisticRegressionModel.load(sc, path)
+      LogisticRegressionSuite.checkModelsEqual(model, sameModel)
     } finally {
       Utils.deleteRecursively(tempDir)
     }
@@ -517,10 +522,7 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
     try {
       model.save(sc, path)
       val sameModel = LogisticRegressionModel.load(sc, path)
-      assert(model.weights == sameModel.weights)
-      assert(model.intercept == sameModel.intercept)
-      assert(model.numClasses == sameModel.numClasses)
-      assert(model.numFeatures == sameModel.numFeatures)
+      LogisticRegressionSuite.checkModelsEqual(model, sameModel)
     } finally {
       Utils.deleteRecursively(tempDir)
     }
