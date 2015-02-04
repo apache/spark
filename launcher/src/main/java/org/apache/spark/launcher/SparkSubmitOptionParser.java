@@ -71,8 +71,10 @@ public abstract class SparkSubmitOptionParser {
    * <p/>
    * Options not listed here nor in the "switch" list below will result in a call to
    * {@link $#handleUnknown(String)}.
+   * <p/>
+   * These two arrays are visible for tests.
    */
-  private final String[][] opts = {
+  final String[][] opts = {
     { ARCHIVES },
     { CLASS },
     { CONF, "-c" },
@@ -100,7 +102,7 @@ public abstract class SparkSubmitOptionParser {
   /**
    * List of switches (command line options that do not take parameters) recognized by spark-submit.
    */
-  private final String[][] switches = {
+  final String[][] switches = {
     { HELP, "-h" },
     { SUPERVISE },
     { VERBOSE, "-v" },

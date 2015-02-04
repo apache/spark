@@ -39,60 +39,29 @@ public class SparkSubmitOptionParserSuite {
 
   @Test
   public void testAllOptions() {
-    List<String> args = Arrays.asList(
-      ARCHIVES, ARCHIVES,
-      CLASS, CLASS,
-      CONF, CONF,
-      DEPLOY_MODE, DEPLOY_MODE,
-      DRIVER_CLASS_PATH, DRIVER_CLASS_PATH,
-      DRIVER_CORES, DRIVER_CORES,
-      DRIVER_JAVA_OPTIONS, DRIVER_JAVA_OPTIONS,
-      DRIVER_LIBRARY_PATH, DRIVER_LIBRARY_PATH,
-      DRIVER_MEMORY, DRIVER_MEMORY,
-      EXECUTOR_CORES, EXECUTOR_CORES,
-      EXECUTOR_MEMORY, EXECUTOR_MEMORY,
-      FILES, FILES,
-      JARS, JARS,
-      MASTER, MASTER,
-      NAME, NAME,
-      NUM_EXECUTORS, NUM_EXECUTORS,
-      PACKAGES, PACKAGES,
-      PROPERTIES_FILE, PROPERTIES_FILE,
-      PY_FILES, PY_FILES,
-      QUEUE, QUEUE,
-      TOTAL_EXECUTOR_CORES, TOTAL_EXECUTOR_CORES,
-      REPOSITORIES, REPOSITORIES,
-      HELP,
-      SUPERVISE,
-      VERBOSE);
+    int count = 0;
+    for (String[] optNames : parser.opts) {
+      for (String optName : optNames) {
+        String value = optName + "-value";
+        parser.parse(Arrays.asList(optName, value));
+        count++;
+        verify(parser).handle(eq(optNames[0]), eq(value));
+        verify(parser, times(count)).handle(anyString(), anyString());
+        verify(parser, times(count)).handleExtraArgs(eq(Collections.<String>emptyList()));
+      }
+    }
 
-    parser.parse(args);
-    verify(parser).handle(eq(ARCHIVES), eq(ARCHIVES));
-    verify(parser).handle(eq(CLASS), eq(CLASS));
-    verify(parser).handle(eq(CONF), eq(CONF));
-    verify(parser).handle(eq(DEPLOY_MODE), eq(DEPLOY_MODE));
-    verify(parser).handle(eq(DRIVER_CLASS_PATH), eq(DRIVER_CLASS_PATH));
-    verify(parser).handle(eq(DRIVER_CORES), eq(DRIVER_CORES));
-    verify(parser).handle(eq(DRIVER_JAVA_OPTIONS), eq(DRIVER_JAVA_OPTIONS));
-    verify(parser).handle(eq(DRIVER_LIBRARY_PATH), eq(DRIVER_LIBRARY_PATH));
-    verify(parser).handle(eq(DRIVER_MEMORY), eq(DRIVER_MEMORY));
-    verify(parser).handle(eq(EXECUTOR_CORES), eq(EXECUTOR_CORES));
-    verify(parser).handle(eq(EXECUTOR_MEMORY), eq(EXECUTOR_MEMORY));
-    verify(parser).handle(eq(FILES), eq(FILES));
-    verify(parser).handle(eq(JARS), eq(JARS));
-    verify(parser).handle(eq(MASTER), eq(MASTER));
-    verify(parser).handle(eq(NAME), eq(NAME));
-    verify(parser).handle(eq(NUM_EXECUTORS), eq(NUM_EXECUTORS));
-    verify(parser).handle(eq(PACKAGES), eq(PACKAGES));
-    verify(parser).handle(eq(PROPERTIES_FILE), eq(PROPERTIES_FILE));
-    verify(parser).handle(eq(PY_FILES), eq(PY_FILES));
-    verify(parser).handle(eq(QUEUE), eq(QUEUE));
-    verify(parser).handle(eq(REPOSITORIES), eq(REPOSITORIES));
-    verify(parser).handle(eq(TOTAL_EXECUTOR_CORES), eq(TOTAL_EXECUTOR_CORES));
-    verify(parser).handle(eq(HELP), same((String) null));
-    verify(parser).handle(eq(SUPERVISE), same((String) null));
-    verify(parser).handle(eq(VERBOSE), same((String) null));
-    verify(parser).handleExtraArgs(eq(Collections.<String>emptyList()));
+    for (String[] switchNames : parser.switches) {
+      int switchCount = 0;
+      for (String name : switchNames) {
+        parser.parse(Arrays.asList(name));
+        count++;
+        switchCount++;
+        verify(parser, times(switchCount)).handle(eq(switchNames[0]), same((String) null));
+        verify(parser, times(count)).handle(anyString(), any(String.class));
+        verify(parser, times(count)).handleExtraArgs(eq(Collections.<String>emptyList()));
+      }
+    }
   }
 
   @Test
