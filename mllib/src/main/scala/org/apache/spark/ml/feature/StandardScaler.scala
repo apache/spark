@@ -81,10 +81,8 @@ class StandardScalerModel private[ml] (
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     transformSchema(dataset.schema, paramMap, logging = true)
     val map = this.paramMap ++ paramMap
-    val scale: (Vector) => Vector = (v) => {
-      scaler.transform(v)
-    }
-    dataset.select($"*", callUDF(scale, col(map(inputCol))).as(map(outputCol)))
+    val scale = udf((v: Vector) => { scaler.transform(v) } : Vector)
+    dataset.select($"*", scale(col(map(inputCol))).as(map(outputCol)))
   }
 
   private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
