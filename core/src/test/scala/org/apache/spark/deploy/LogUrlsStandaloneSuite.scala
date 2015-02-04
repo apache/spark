@@ -17,15 +17,15 @@
 
 package org.apache.spark.deploy
 
+import scala.collection.mutable
+
+import org.scalatest.{BeforeAndAfter, FunSuite}
+
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.scheduler.{SparkListenerExecutorAdded, SparkListener}
 import org.apache.spark.{SparkContext, LocalSparkContext}
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
 
-import scala.collection.mutable
-
-class LogUrlsStandaloneSuite extends FunSuite with LocalSparkContext
-  with BeforeAndAfter with BeforeAndAfterAll {
+class LogUrlsStandaloneSuite extends FunSuite with LocalSparkContext with BeforeAndAfter {
 
   /** Length of time to wait while draining listener events. */
   val WAIT_TIMEOUT_MILLIS = 10000
@@ -44,15 +44,15 @@ class LogUrlsStandaloneSuite extends FunSuite with LocalSparkContext
     rdd2.count()
 
     assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
-    listener.addedExecutorInfos.foreach(e => {
-      assert(e._2.logUrlMap.nonEmpty)
-    })
+    listener.addedExecutorInfos.values.foreach { info =>
+      assert(info.logUrlMap.nonEmpty)
+    }
   }
 
   private class SaveExecutorInfo extends SparkListener {
     val addedExecutorInfos = mutable.Map[String, ExecutorInfo]()
 
-    override def onExecutorAdded(executor : SparkListenerExecutorAdded) {
+    override def onExecutorAdded(executor: SparkListenerExecutorAdded) {
       addedExecutorInfos(executor.executorId) = executor.executorInfo
     }
   }

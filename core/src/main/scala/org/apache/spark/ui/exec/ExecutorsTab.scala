@@ -17,8 +17,6 @@
 
 package org.apache.spark.ui.exec
 
-import org.apache.spark.{SparkEnv, Logging, SparkException, TaskState}
-
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.ExceptionFailure
@@ -57,7 +55,7 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener) extends Sp
 
   def storageStatusList = storageStatusListener.storageStatusList
 
-  override def onExecutorAdded(executorAdded : SparkListenerExecutorAdded) = synchronized {
+  override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded) = synchronized {
     val eid = executorAdded.executorId
     executorToLogUrls(eid) = executorAdded.executorInfo.logUrlMap
   }

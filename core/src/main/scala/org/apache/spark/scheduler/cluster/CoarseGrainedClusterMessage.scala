@@ -39,8 +39,12 @@ private[spark] object CoarseGrainedClusterMessages {
   case class RegisterExecutorFailed(message: String) extends CoarseGrainedClusterMessage
 
   // Executors to driver
-  case class RegisterExecutor(executorId: String, hostPort: String, cores: Int,
-    logUrls : Map[String, String]) extends CoarseGrainedClusterMessage {
+  case class RegisterExecutor(
+      executorId: String,
+      hostPort: String,
+      cores: Int,
+      logUrls: Map[String, String])
+    extends CoarseGrainedClusterMessage {
     Utils.checkHostPort(hostPort, "Expected host port")
   }
 
