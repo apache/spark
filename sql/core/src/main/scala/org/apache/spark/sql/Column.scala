@@ -116,15 +116,6 @@ trait Column extends DataFrame {
   def unary_- : Column = exprToColumn(UnaryMinus(expr))
 
   /**
-   * Bitwise NOT.
-   * {{{
-   *   // Scala: select the flags column and negate every bit.
-   *   df.select( ~df("flags") )
-   * }}}
-   */
-  def unary_~ : Column = exprToColumn(BitwiseNot(expr))
-
-  /**
    * Inversion of boolean expression, i.e. NOT.
    * {{
    *   // Scala: select rows that are not active (isActive === false)
@@ -363,27 +354,6 @@ trait Column extends DataFrame {
   def and(other: Column): Column = this && other
 
   /**
-   * Bitwise AND.
-   */
-  def & (other: Any): Column = constructColumn(other) { o =>
-    BitwiseAnd(expr, o.expr)
-  }
-
-  /**
-   * Bitwise OR with an expression.
-   */
-  def | (other: Any): Column = constructColumn(other) { o =>
-    BitwiseOr(expr, o.expr)
-  }
-
-  /**
-   * Bitwise XOR with an expression.
-   */
-  def ^ (other: Any): Column = constructColumn(other) { o =>
-    BitwiseXor(expr, o.expr)
-  }
-
-  /**
    * Sum of this expression and another expression.
    * {{{
    *   // Scala: The following selects the sum of a person's height and weight.
@@ -527,16 +497,16 @@ trait Column extends DataFrame {
    * @param startPos expression for the starting position.
    * @param len expression for the length of the substring.
    */
-  def substr(startPos: Column, len: Column): Column = {
-    new IncomputableColumn(Substring(expr, startPos.expr, len.expr))
-  }
+  def substr(startPos: Column, len: Column): Column =
+    exprToColumn(Substring(expr, startPos.expr, len.expr), computable = false)
 
   /**
    * An expression that returns a substring.
    * @param startPos starting position.
    * @param len length of the substring.
    */
-  def substr(startPos: Int, len: Int): Column = this.substr(lit(startPos), lit(len))
+  def substr(startPos: Int, len: Int): Column =
+    exprToColumn(Substring(expr, lit(startPos).expr, lit(len).expr))
 
   def contains(other: Any): Column = constructColumn(other) { o =>
     Contains(expr, o.expr)
