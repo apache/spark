@@ -81,7 +81,8 @@ private[spark] class LocalActor(
     val tasks = scheduler.resourceOffers(offers).flatten
     for (task <- tasks) {
       freeCores -= scheduler.CPUS_PER_TASK
-      executor.launchTask(executorBackend, taskId = task.taskId, attemptNumber = task.attemptNumber, task.name, task.serializedTask)
+      executor.launchTask(executorBackend, taskId = task.taskId, attemptNumber = task.attemptNumber,
+        task.name, task.serializedTask)
     }
     if (tasks.isEmpty && scheduler.activeTaskSets.nonEmpty) {
       // Try to reviveOffer after 1 second, because scheduler may wait for locality timeout
