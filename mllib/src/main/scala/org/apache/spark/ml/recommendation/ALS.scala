@@ -126,22 +126,20 @@ class ALSModel private[ml] (
     val map = this.paramMap ++ paramMap
     val users = userFactors.toDataFrame("id", "features")
     val items = itemFactors.toDataFrame("id", "features")
-    val predict: (Seq[Float], Seq[Float]) => Float = (userFeatures, itemFeatures) => {
+
+    // Register a UDF for DataFrame, and then
+    // create a new column named map(predictionCol) by running the predict UDF.
+    val predict = udf((userFeatures: Seq[Float], itemFeatures: Seq[Float]) => {
       if (userFeatures != null && itemFeatures != null) {
         blas.sdot(k, userFeatures.toArray, 1, itemFeatures.toArray, 1)
       } else {
         Float.NaN
       }
-    }
-    val inputColumns = dataset.schema.fieldNames
-    val prediction = callUDF(predict, users("features"), items("features")).as(map(predictionCol))
-    val outputColumns = inputColumns.map(f => dataset(f)) :+ prediction
+    } : Float)
     dataset
       .join(users, dataset(map(userCol)) === users("id"), "left")
       .join(items, dataset(map(itemCol)) === items("id"), "left")
-      .select(outputColumns: _*)
-      // TODO: Just use a dataset("*")
-      // .select(dataset("*"), prediction)
+      .select(dataset("*"), predict(users("features"), items("features")).as(map(predictionCol)))
   }
 
   override private[ml] def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {

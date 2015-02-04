@@ -54,10 +54,10 @@ private[sql] object DataFrame {
  * }}}
  *
  * Note that the [[Column]] type can also be manipulated through its various functions.
- * {{
+ * {{{
  *   // The following creates a new column that increases everybody's age by 10.
  *   people("age") + 10  // in Scala
- * }}
+ * }}}
  *
  * A more concrete example:
  * {{{

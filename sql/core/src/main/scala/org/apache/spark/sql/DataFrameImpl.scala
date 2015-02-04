@@ -329,7 +329,7 @@ private[sql] class DataFrameImpl protected[sql](
 
   override def save(path: String): Unit = {
     val dataSourceName = sqlContext.conf.defaultDataSourceName
-    save(dataSourceName, ("path" -> path))
+    save(dataSourceName, "path" -> path)
   }
 
   override def save(
