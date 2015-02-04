@@ -50,7 +50,10 @@ class GaussianMixture private (
     private var maxIterations: Int,
     private var seed: Long) extends Serializable {
   
-  /** A default instance, 2 Gaussians, 100 iterations, 0.01 log-likelihood threshold */
+  /**
+   * Constructs a default instance. The default parameters are {k: 2, convergenceTol: 0.01,
+   * maxIterations: 100, seed: random}.
+   */
   def this() = this(2, 0.01, 100, Utils.random.nextLong())
   
   // number of samples per cluster to use when initializing Gaussians
