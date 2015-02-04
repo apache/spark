@@ -246,11 +246,11 @@ private[sql] class DataFrameImpl protected[sql](
 
   override def take(n: Int): Array[Row] = head(n)
 
-  override def collect(): Array[Row] = queryExecution.executedPlan.executeCollect()
+  override def collect(): Array[Row] = rdd.collect()
 
   override def collectAsList(): java.util.List[Row] = java.util.Arrays.asList(rdd.collect() :_*)
 
-  override def count(): Long = groupBy().count().rdd.collect().head.getLong(0)
+  override def count(): Long = rdd.count()
 
   override def repartition(numPartitions: Int): DataFrame = {
     sqlContext.applySchema(rdd.repartition(numPartitions), schema)
