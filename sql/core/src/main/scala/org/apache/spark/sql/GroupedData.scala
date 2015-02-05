@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 /**
  * A set of methods for aggregations on a [[DataFrame]], created by [[DataFrame.groupBy]].
  */
-class GroupedDataFrame protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expression]) {
+class GroupedData protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expression]) {
 
   private[this] implicit def toDataFrame(aggExprs: Seq[NamedExpression]): DataFrame = {
     val namedGroupingExprs = groupingExprs.map {
