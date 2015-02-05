@@ -49,7 +49,7 @@ private[classification] object GLMClassificationModel {
         intercept: Double,
         threshold: Option[Double]): Unit = {
       val sqlContext = new SQLContext(sc)
-      import sqlContext._
+      import sqlContext.implicits._
 
       // Create JSON metadata.
       val metadataRDD =
