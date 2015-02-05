@@ -22,21 +22,29 @@ import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types.DataType
 
-private[sql] case class PreInsertCastAndRename(
-    resolver: (String, String) => Boolean) extends Rule[LogicalPlan] {
+/**
+ * A rule to do pre-insert data type casting and field renaming. Before we insert into
+ * an [[InsertableRelation]], we will use this rule to make sure that
+ * the columns to be inserted have the correct data type and fields have the correct names.
+ * @param resolver The resolver used by the Analyzer.
+ */
+private[sql] object PreInsertCastAndRename extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan.transform {
       // Wait until children are resolved.
       case p: LogicalPlan if !p.childrenResolved => p
 
-      case i@InsertIntoTable(
+      // We are inserting into an InsertableRelation.
+      case i @ InsertIntoTable(
       l @ LogicalRelation(r: InsertableRelation), partition, child, overwrite) => {
+        // First, make sure the data to be inserted have the same number of fields with the
+        // schema of the relation.
         if (l.output.size != child.output.size) {
           sys.error(
             s"$l requires that the query in the SELECT clause of the INSERT INTO/OVERWRITE " +
               s"statement generates the same number of columns as its schema.")
         }
-        castAndRenameChildOutput(i, l.output, child, r.ignoreNullability)
+        castAndRenameChildOutput(i, l.output, child)
       }
     }
   }
@@ -45,19 +53,13 @@ private[sql] case class PreInsertCastAndRename(
   def castAndRenameChildOutput(
       insertInto: InsertIntoTable,
       expectedOutput: Seq[Attribute],
-      child: LogicalPlan,
-      ignoreNullability: Boolean) = {
-    def sameDataType(dataType1: DataType, dataType2: DataType, ignoreNullability: Boolean) = {
-      if (ignoreNullability)
-        DataType.equalsIgnoreNullability(dataType1, dataType2)
-      else
-        dataType1 == dataType2
-    }
-
+      child: LogicalPlan) = {
     val newChildOutput = expectedOutput.zip(child.output).map {
       case (expected, actual) =>
-        val needCast = !sameDataType(expected.dataType, actual.dataType, ignoreNullability)
-        val needRename = !resolver(expected.name, actual.name)
+        val needCast = !DataType.equalsIgnoreNullability(expected.dataType, actual.dataType)
+        // We want to make sure the filed names in the data to be inserted exactly match
+        // names in the schema.
+        val needRename = expected.name != actual.name
         (needCast, needRename) match {
           case (true, _) => Alias(Cast(actual, expected.dataType), expected.name)()
           case (false, true) => Alias(actual, expected.name)()
@@ -65,10 +67,10 @@ private[sql] case class PreInsertCastAndRename(
         }
     }
 
-    if (newChildOutput == child.output)
+    if (newChildOutput == child.output) {
       insertInto
-    else
+    } else {
       insertInto.copy(child = Project(newChildOutput, child))
+    }
   }
-
 }

@@ -73,6 +73,16 @@ class InsertIntoSuite extends DataSourceTest with BeforeAndAfterAll {
       sql("SELECT a, b FROM jsonTable"),
       (1 to 10).map(i => Row(i * 2, s"${i * 4}"))
     )
+
+    sql(
+      s"""
+        |INSERT OVERWRITE TABLE jsonTable SELECT a * 4 AS A, a * 6 as c FROM jt
+      """.stripMargin)
+
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      (1 to 10).map(i => Row(i * 4, s"${i * 6}"))
+    )
   }
 
   test("SELECT clause generating a different number of columns is not allowed.") {

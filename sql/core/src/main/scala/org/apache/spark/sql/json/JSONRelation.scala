@@ -72,9 +72,6 @@ private[sql] case class JSONRelation(
     userSpecifiedSchema: Option[StructType])(
     @transient val sqlContext: SQLContext)
   extends TableScan with InsertableRelation {
-
-  val ignoreNullability = true
-
   // TODO: Support partitioned JSON relation.
   private def baseRDD = sqlContext.sparkContext.textFile(path)
 
@@ -115,9 +112,7 @@ private[sql] case class JSONRelation(
 
   override def equals(other: Any): Boolean = other match {
     case that: JSONRelation =>
-      (that canEqual this) && (this.path == that.path) && (this.schema == that.schema)
+      (this.path == that.path) && (this.schema == that.schema)
     case _ => false
   }
-
-  override def canEqual(that: Any): Boolean = that.isInstanceOf[JSONRelation]
 }
