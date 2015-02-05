@@ -23,6 +23,7 @@ package org.apache.spark.deploy.rest
 private[spark] abstract class SubmitRestProtocolResponse extends SubmitRestProtocolMessage {
   var serverSparkVersion: String = null
   var success: String = null
+  var unknownFields: Array[String] = null
   protected override def doValidate(): Unit = {
     super.doValidate()
     assertFieldIsSet(serverSparkVersion, "serverSparkVersion")

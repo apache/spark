@@ -27,6 +27,8 @@ import com.google.common.base.Charsets
 import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.servlet.{ServletHolder, ServletContextHandler}
 import org.eclipse.jetty.util.thread.QueuedThreadPool
+import org.json4s._
+import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{Logging, SparkConf, SPARK_VERSION => sparkVersion}
 import org.apache.spark.util.{AkkaUtils, Utils}
@@ -129,6 +131,22 @@ private[spark] abstract class StandaloneRestServlet extends HttpServlet with Log
     val out = new DataOutputStream(responseServlet.getOutputStream)
     out.write(content)
     out.close()
+  }
+
+  /**
+   * Return any fields in the client request message that the server does not know about.
+   *
+   * The mechanism for this is to reconstruct the JSON on the server side and compare the
+   * diff between this JSON and the one generated on the client side. Any fields that are
+   * only in the client JSON are treated as unexpected.
+   */
+  protected def findUnknownFields(
+      requestJson: String,
+      requestMessage: SubmitRestProtocolMessage): Array[String] = {
+    val clientSideJson = parse(requestJson)
+    val serverSideJson = parse(requestMessage.toJson)
+    val Diff(_, _, unknown) = clientSideJson.diff(serverSideJson)
+    unknown.asInstanceOf[JObject].obj.map { case (k, _) => k }.toArray
   }
 
   /** Return a human readable String representation of the exception. */
@@ -259,6 +277,11 @@ private[spark] class SubmitRequestServlet(master: Master) extends StandaloneRest
     val requestMessageJson = Source.fromInputStream(requestServlet.getInputStream).mkString
     val requestMessage = SubmitRestProtocolMessage.fromJson(requestMessageJson)
     val responseMessage = handleSubmit(requestMessage, responseServlet)
+    val unknownFields = findUnknownFields(requestMessageJson, requestMessage)
+    if (unknownFields.nonEmpty) {
+      // If there are fields that the server does not know about, warn the client
+      responseMessage.unknownFields = unknownFields
+    }
     responseServlet.setContentType("application/json")
     responseServlet.setCharacterEncoding("utf-8")
     responseServlet.setStatus(HttpServletResponse.SC_OK)
