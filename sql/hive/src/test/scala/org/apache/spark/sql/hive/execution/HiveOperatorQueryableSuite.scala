@@ -31,18 +31,21 @@ class HiveOperatorQueryableSuite extends QueryTest {
     sql("desc src").registerTempTable("mydesc")
     checkAnswer(
       sql("desc mydesc"),
-      Seq(Row("col_name", "StringType", null),
+      Seq(
+        Row("col_name", "StringType", null),
         Row("data_type", "StringType", null),
         Row("comment", "StringType", null)))
 
     checkAnswer(
       sql("select * from mydesc"),
-      Seq(Row("key", "int", null),
+      Seq(
+        Row("key", "int", null),
         Row("value", "string", null)))
 
     checkAnswer(
       sql("select col_name, data_type, comment from mydesc"),
-      Seq(Row("key", "int", null),
+      Seq(
+        Row("key", "int", null),
         Row("value", "string", null)))
   }
 }
