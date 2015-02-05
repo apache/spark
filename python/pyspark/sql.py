@@ -2638,6 +2638,9 @@ class Dsl(object):
         >>> from pyspark.sql import Dsl
         >>> df.agg(Dsl.countDistinct(df.age, df.name).alias('c')).collect()
         [Row(c=2)]
+
+        >>> df.agg(Dsl.countDistinct("age", "name").alias('c')).collect()
+        [Row(c=2)]
         """
         sc = SparkContext._active_spark_context
         jcols = ListConverter().convert([_to_java_column(c) for c in cols],
