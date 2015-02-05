@@ -663,6 +663,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "partition_date",
     "partition_schema1",
     "partition_serde_format",
+    "partition_special_char",
     "partition_type_check",
     "partition_varchar1",
     "partition_wise_fileformat4",
