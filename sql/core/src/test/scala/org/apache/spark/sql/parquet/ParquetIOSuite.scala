@@ -98,6 +98,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
   }
 
   test("fixed-length decimals") {
+    import org.apache.spark.sql.test.TestSQLContext.implicits._
+
     def makeDecimalRDD(decimal: DecimalType): DataFrame =
       sparkContext
         .parallelize(0 to 1000)

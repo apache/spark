@@ -122,7 +122,7 @@ class ALSModel private[ml] (
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
-    import dataset.sqlContext.createDataFrame
+    import dataset.sqlContext.implicits._
     val map = this.paramMap ++ paramMap
     val users = userFactors.toDataFrame("id", "features")
     val items = itemFactors.toDataFrame("id", "features")

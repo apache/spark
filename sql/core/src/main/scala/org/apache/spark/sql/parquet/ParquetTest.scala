@@ -38,6 +38,7 @@ trait ParquetTest {
   val sqlContext: SQLContext
 
   import sqlContext._
+  import sqlContext.implicits._
 
   protected def configuration = sparkContext.hadoopConfiguration
 
@@ -89,7 +90,7 @@ trait ParquetTest {
       (data: Seq[T])
       (f: String => Unit): Unit = {
     withTempPath { file =>
-      sparkContext.parallelize(data).saveAsParquetFile(file.getCanonicalPath)
+      implicits.createDataFrame(sparkContext.parallelize(data)).saveAsParquetFile(file.getCanonicalPath)
       f(file.getCanonicalPath)
     }
   }
