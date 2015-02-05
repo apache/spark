@@ -1883,6 +1883,7 @@ setMethod("sortByKey",
             rangePartitionFunc <- function(key) {
               partition <- 0
               
+              // TODO: Use binary search instead of linear search, similar with Spark
               while (partition < length(rangeBounds) && key > rangeBounds[[partition + 1]]) {
                 partition <- partition + 1
               }
