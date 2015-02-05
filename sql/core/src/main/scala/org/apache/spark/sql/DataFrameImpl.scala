@@ -295,7 +295,11 @@ private[sql] class DataFrameImpl protected[sql](
   }
 
   override def saveAsParquetFile(path: String): Unit = {
-    sqlContext.executePlan(WriteToFile(path, logicalPlan)).toRdd
+    if (sqlContext.conf.parquetUseDataSourceApi) {
+      save("org.apache.spark.sql.parquet", "path" -> path)
+    } else {
+      sqlContext.executePlan(WriteToFile(path, logicalPlan)).toRdd
+    }
   }
 
   override def saveAsTable(tableName: String): Unit = {

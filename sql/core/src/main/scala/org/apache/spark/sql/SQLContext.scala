@@ -20,14 +20,13 @@ package org.apache.spark.sql
 import java.beans.Introspector
 import java.util.Properties
 
-import scala.collection.immutable
 import scala.collection.JavaConversions._
+import scala.collection.immutable
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.{SparkContext, Partition}
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
-import org.apache.spark.api.java.{JavaSparkContext, JavaRDD}
+import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis._
@@ -36,11 +35,12 @@ import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.json._
 import org.apache.spark.sql.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
-import org.apache.spark.sql.sources._
+import org.apache.spark.sql.json._
+import org.apache.spark.sql.sources.{BaseRelation, DDLParser, DataSourceStrategy, LogicalRelation, _}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
+import org.apache.spark.{Partition, SparkContext}
 
 /**
  * :: AlphaComponent ::
@@ -303,8 +303,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group userf
    */
-  def parquetFile(path: String): DataFrame =
-    DataFrame(this, parquet.ParquetRelation(path, Some(sparkContext.hadoopConfiguration), this))
+  @scala.annotation.varargs
+  def parquetFile(path: String, paths: String*): DataFrame =
+    if (conf.parquetUseDataSourceApi) {
+      baseRelationToDataFrame(parquet.ParquetRelation2(path +: paths, Map.empty)(this))
+    } else {
+      DataFrame(this, parquet.ParquetRelation(
+        paths.mkString(","), Some(sparkContext.hadoopConfiguration), this))
+    }
 
   /**
    * Loads a JSON file (one object per line), returning the result as a [[DataFrame]].
