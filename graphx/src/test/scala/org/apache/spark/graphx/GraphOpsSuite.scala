@@ -19,6 +19,9 @@ package org.apache.spark.graphx
 
 import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.graphx.Graph._
+import org.apache.spark.graphx.impl.EdgePartition
+import org.apache.spark.graphx.util.FrequencyDistribution
+import org.apache.spark.rdd._
 
 class GraphOpsSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -209,6 +212,33 @@ class GraphOpsSuite extends SparkFunSuite with LocalSparkContext {
             assert(edgeIds.contains(vid - 1))
           }
       }
+    }
+  }
+
+  test("collectDegreeDistEither") {
+    withSpark { sc =>
+      val edges = sc.parallelize((1 to 10).map(x => (x: VertexId, 0: VertexId)))
+      val graph = Graph.fromEdgeTuples(edges, 1)
+      val freq = graph.collectDegreeDist(EdgeDirection.Either, FrequencyDistribution.split(2))
+      assert(freq.toSet === Set(((1, 5), 10), ((6, 10), 1)))
+    }
+  }
+
+  test("collectDegreeDistIn") {
+    withSpark { sc =>
+      val edges = sc.parallelize((1 to 10).map(x => (x: VertexId, 0: VertexId)))
+      val graph = Graph.fromEdgeTuples(edges, 1)
+      val freq = graph.collectDegreeDist(EdgeDirection.In, FrequencyDistribution.split(2))
+      assert(freq.toSet === Set(((0, 5), 10), ((6, 10), 1)))
+    }
+  }
+
+  test("collectDegreeDistOut") {
+    withSpark { sc =>
+      val edges = sc.parallelize((1 to 10).map(x => (x: VertexId, 0: VertexId)))
+      val graph = Graph.fromEdgeTuples(edges, 1)
+      val freq = graph.collectDegreeDist(EdgeDirection.Out, FrequencyDistribution.split(2))
+      assert(freq.toSet === Set(((0, 0), 1), ((1, 1), 10)))
     }
   }
 
