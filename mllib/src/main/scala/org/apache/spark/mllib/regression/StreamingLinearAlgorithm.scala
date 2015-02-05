@@ -39,14 +39,14 @@ import org.apache.spark.streaming.dstream.DStream
  *
  * For example usage, see `StreamingLinearRegressionWithSGD`.
  *
- * NOTE(Freeman): In some use cases, the order in which trainOn and predictOn
+ * NOTE: In some use cases, the order in which trainOn and predictOn
  * are called in an application will affect the results. When called on
  * the same DStream, if trainOn is called before predictOn, when new data
  * arrive the model will update and the prediction will be based on the new
  * model. Whereas if predictOn is called first, the prediction will use the model
  * from the previous update.
  *
- * NOTE(Freeman): It is ok to call predictOn repeatedly on multiple streams; this
+ * NOTE: It is ok to call predictOn repeatedly on multiple streams; this
  * will generate predictions for each one all using the current model.
  * It is also ok to call trainOn on different streams; this will update
  * the model using each of the different sources, in sequence.
