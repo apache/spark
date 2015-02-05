@@ -26,7 +26,7 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.Random
 
-import kafka.admin.CreateTopicCommand
+import kafka.admin.AdminUtils
 import kafka.common.{KafkaException, TopicAndPartition}
 import kafka.producer.{KeyedMessage, Producer, ProducerConfig}
 import kafka.serializer.{StringDecoder, StringEncoder}
@@ -56,7 +56,7 @@ abstract class KafkaStreamSuiteBase extends FunSuite with Eventually with Loggin
   private val zkSessionTimeout = 6000
   private var zookeeper: EmbeddedZookeeper = _
   private var zkPort: Int = 0
-  private var brokerPort = 9092
+  protected var brokerPort = 9092
   private var brokerConf: KafkaConfig = _
   private var server: KafkaServer = _
   private var producer: Producer[String, String] = _
@@ -130,7 +130,7 @@ abstract class KafkaStreamSuiteBase extends FunSuite with Eventually with Loggin
   }
 
   def createTopic(topic: String) {
-    CreateTopicCommand.createTopic(zkClient, topic, 1, 1, "0")
+    AdminUtils.createTopic(zkClient, topic, 1, 1)
     logInfo("==================== 5 ====================")
     // wait until metadata is propagated
     waitUntilMetadataIsPropagated(topic, 0)
@@ -166,7 +166,7 @@ abstract class KafkaStreamSuiteBase extends FunSuite with Eventually with Loggin
   private def waitUntilMetadataIsPropagated(topic: String, partition: Int) {
     eventually(timeout(10000 milliseconds), interval(100 milliseconds)) {
       assert(
-        server.apis.leaderCache.keySet.contains(TopicAndPartition(topic, partition)),
+        server.apis.metadataCache.containsTopicAndPartition(topic, partition),
         s"Partition [$topic, $partition] metadata not propagated after timeout"
       )
     }
