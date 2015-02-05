@@ -241,20 +241,16 @@ object ResolvedDataSource {
     val relation = userSpecifiedSchema match {
       case Some(schema: StructType) => {
         clazz.newInstance match {
-          case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
-            dataSource
-              .asInstanceOf[org.apache.spark.sql.sources.SchemaRelationProvider]
-              .createRelation(sqlContext, new CaseInsensitiveMap(options), schema)
+          case dataSource: SchemaRelationProvider =>
+            dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options), schema)
           case dataSource: org.apache.spark.sql.sources.RelationProvider =>
             sys.error(s"${clazz.getCanonicalName} does not allow user-specified schemas.")
         }
       }
       case None => {
         clazz.newInstance match {
-          case dataSource: org.apache.spark.sql.sources.RelationProvider =>
-            dataSource
-              .asInstanceOf[org.apache.spark.sql.sources.RelationProvider]
-              .createRelation(sqlContext, new CaseInsensitiveMap(options))
+          case dataSource: RelationProvider =>
+            dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options))
           case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
             sys.error(s"A schema needs to be specified when using ${clazz.getCanonicalName}.")
         }
@@ -279,10 +275,8 @@ object ResolvedDataSource {
     }
 
     val relation = clazz.newInstance match {
-      case dataSource: org.apache.spark.sql.sources.CreateableRelationProvider =>
-        dataSource
-          .asInstanceOf[org.apache.spark.sql.sources.CreateableRelationProvider]
-          .createRelation(sqlContext, options, data)
+      case dataSource: CreatableRelationProvider =>
+        dataSource.createRelation(sqlContext, options, data)
       case _ =>
         sys.error(s"${clazz.getCanonicalName} does not allow create table as select.")
     }
@@ -366,7 +360,7 @@ private [sql] case class CreateTempTableUsingAsSelect(
 /**
  * Builds a map in which keys are case insensitive
  */
-protected class CaseInsensitiveMap(map: Map[String, String]) extends Map[String, String] 
+protected class CaseInsensitiveMap(map: Map[String, String]) extends Map[String, String]
   with Serializable {
 
   val baseMap = map.map(kv => kv.copy(_1 = kv._1.toLowerCase))

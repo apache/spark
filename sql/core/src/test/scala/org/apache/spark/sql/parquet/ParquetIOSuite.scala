@@ -73,218 +73,229 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
     withParquetRDD(data)(r => checkAnswer(r, data.map(Row.fromTuple)))
   }
 
-  test("basic data types (without binary)") {
-    val data = (1 to 4).map { i =>
-      (i % 2 == 0, i, i.toLong, i.toFloat, i.toDouble)
-    }
-    checkParquetFile(data)
-  }
-
-  test("raw binary") {
-    val data = (1 to 4).map(i => Tuple1(Array.fill(3)(i.toByte)))
-    withParquetRDD(data) { rdd =>
-      assertResult(data.map(_._1.mkString(",")).sorted) {
-        rdd.collect().map(_.getAs[Array[Byte]](0).mkString(",")).sorted
+  def run(prefix: String): Unit = {
+    test(s"$prefix: basic data types (without binary)") {
+      val data = (1 to 4).map { i =>
+        (i % 2 == 0, i, i.toLong, i.toFloat, i.toDouble)
       }
-    }
-  }
-
-  test("string") {
-    val data = (1 to 4).map(i => Tuple1(i.toString))
-    // Property spark.sql.parquet.binaryAsString shouldn't affect Parquet files written by Spark SQL
-    // as we store Spark SQL schema in the extra metadata.
-    withSQLConf(SQLConf.PARQUET_BINARY_AS_STRING -> "false")(checkParquetFile(data))
-    withSQLConf(SQLConf.PARQUET_BINARY_AS_STRING -> "true")(checkParquetFile(data))
-  }
-
-  test("fixed-length decimals") {
-    import org.apache.spark.sql.test.TestSQLContext.implicits._
-
-    def makeDecimalRDD(decimal: DecimalType): DataFrame =
-      sparkContext
-        .parallelize(0 to 1000)
-        .map(i => Tuple1(i / 100.0))
-        .select($"_1" cast decimal as "abcd")
-
-    for ((precision, scale) <- Seq((5, 2), (1, 0), (1, 1), (18, 10), (18, 17))) {
-      withTempPath { dir =>
-        val data = makeDecimalRDD(DecimalType(precision, scale))
-        data.saveAsParquetFile(dir.getCanonicalPath)
-        checkAnswer(parquetFile(dir.getCanonicalPath), data.collect().toSeq)
-      }
+      checkParquetFile(data)
     }
 
-    // Decimals with precision above 18 are not yet supported
-    intercept[RuntimeException] {
-      withTempPath { dir =>
-        makeDecimalRDD(DecimalType(19, 10)).saveAsParquetFile(dir.getCanonicalPath)
-        parquetFile(dir.getCanonicalPath).collect()
-      }
-    }
-
-    // Unlimited-length decimals are not yet supported
-    intercept[RuntimeException] {
-      withTempPath { dir =>
-        makeDecimalRDD(DecimalType.Unlimited).saveAsParquetFile(dir.getCanonicalPath)
-        parquetFile(dir.getCanonicalPath).collect()
-      }
-    }
-  }
-
-  test("map") {
-    val data = (1 to 4).map(i => Tuple1(Map(i -> s"val_$i")))
-    checkParquetFile(data)
-  }
-
-  test("array") {
-    val data = (1 to 4).map(i => Tuple1(Seq(i, i + 1)))
-    checkParquetFile(data)
-  }
-
-  test("struct") {
-    val data = (1 to 4).map(i => Tuple1((i, s"val_$i")))
-    withParquetRDD(data) { rdd =>
-      // Structs are converted to `Row`s
-      checkAnswer(rdd, data.map { case Tuple1(struct) =>
-        Row(Row(struct.productIterator.toSeq: _*))
-      })
-    }
-  }
-
-  test("nested struct with array of array as field") {
-    val data = (1 to 4).map(i => Tuple1((i, Seq(Seq(s"val_$i")))))
-    withParquetRDD(data) { rdd =>
-      // Structs are converted to `Row`s
-      checkAnswer(rdd, data.map { case Tuple1(struct) =>
-        Row(Row(struct.productIterator.toSeq: _*))
-      })
-    }
-  }
-
-  test("nested map with struct as value type") {
-    val data = (1 to 4).map(i => Tuple1(Map(i -> (i, s"val_$i"))))
-    withParquetRDD(data) { rdd =>
-      checkAnswer(rdd, data.map { case Tuple1(m) =>
-        Row(m.mapValues(struct => Row(struct.productIterator.toSeq: _*)))
-      })
-    }
-  }
-
-  test("nulls") {
-    val allNulls = (
-      null.asInstanceOf[java.lang.Boolean],
-      null.asInstanceOf[Integer],
-      null.asInstanceOf[java.lang.Long],
-      null.asInstanceOf[java.lang.Float],
-      null.asInstanceOf[java.lang.Double])
-
-    withParquetRDD(allNulls :: Nil) { rdd =>
-      val rows = rdd.collect()
-      assert(rows.size === 1)
-      assert(rows.head === Row(Seq.fill(5)(null): _*))
-    }
-  }
-
-  test("nones") {
-    val allNones = (
-      None.asInstanceOf[Option[Int]],
-      None.asInstanceOf[Option[Long]],
-      None.asInstanceOf[Option[String]])
-
-    withParquetRDD(allNones :: Nil) { rdd =>
-      val rows = rdd.collect()
-      assert(rows.size === 1)
-      assert(rows.head === Row(Seq.fill(3)(null): _*))
-    }
-  }
-
-  test("compression codec") {
-    def compressionCodecFor(path: String) = {
-      val codecs = ParquetTypesConverter
-        .readMetaData(new Path(path), Some(configuration))
-        .getBlocks
-        .flatMap(_.getColumns)
-        .map(_.getCodec.name())
-        .distinct
-
-      assert(codecs.size === 1)
-      codecs.head
-    }
-
-    val data = (0 until 10).map(i => (i, i.toString))
-
-    def checkCompressionCodec(codec: CompressionCodecName): Unit = {
-      withSQLConf(SQLConf.PARQUET_COMPRESSION -> codec.name()) {
-        withParquetFile(data) { path =>
-          assertResult(conf.parquetCompressionCodec.toUpperCase) {
-            compressionCodecFor(path)
-          }
+    test(s"$prefix: raw binary") {
+      val data = (1 to 4).map(i => Tuple1(Array.fill(3)(i.toByte)))
+      withParquetRDD(data) { rdd =>
+        assertResult(data.map(_._1.mkString(",")).sorted) {
+          rdd.collect().map(_.getAs[Array[Byte]](0).mkString(",")).sorted
         }
       }
     }
 
-    // Checks default compression codec
-    checkCompressionCodec(CompressionCodecName.fromConf(conf.parquetCompressionCodec))
+    test(s"$prefix: string") {
+      val data = (1 to 4).map(i => Tuple1(i.toString))
+      // Property spark.sql.parquet.binaryAsString shouldn't affect Parquet files written by Spark SQL
+      // as we store Spark SQL schema in the extra metadata.
+      withSQLConf(SQLConf.PARQUET_BINARY_AS_STRING -> "false")(checkParquetFile(data))
+      withSQLConf(SQLConf.PARQUET_BINARY_AS_STRING -> "true")(checkParquetFile(data))
+    }
 
-    checkCompressionCodec(CompressionCodecName.UNCOMPRESSED)
-    checkCompressionCodec(CompressionCodecName.GZIP)
-    checkCompressionCodec(CompressionCodecName.SNAPPY)
-  }
+    test(s"$prefix: fixed-length decimals") {
+      import org.apache.spark.sql.test.TestSQLContext.implicits._
 
-  test("read raw Parquet file") {
-    def makeRawParquetFile(path: Path): Unit = {
-      val schema = MessageTypeParser.parseMessageType(
-        """
-          |message root {
-          |  required boolean _1;
-          |  required int32   _2;
-          |  required int64   _3;
-          |  required float   _4;
-          |  required double  _5;
-          |}
-        """.stripMargin)
+      def makeDecimalRDD(decimal: DecimalType): DataFrame =
+        sparkContext
+          .parallelize(0 to 1000)
+          .map(i => Tuple1(i / 100.0))
+          // Parquet doesn't allow column names with spaces, have to add an alias here
+          .select($"_1" cast decimal as "dec")
 
-      val writeSupport = new TestGroupWriteSupport(schema)
-      val writer = new ParquetWriter[Group](path, writeSupport)
-
-      (0 until 10).foreach { i =>
-        val record = new SimpleGroup(schema)
-        record.add(0, i % 2 == 0)
-        record.add(1, i)
-        record.add(2, i.toLong)
-        record.add(3, i.toFloat)
-        record.add(4, i.toDouble)
-        writer.write(record)
+      for ((precision, scale) <- Seq((5, 2), (1, 0), (1, 1), (18, 10), (18, 17))) {
+        withTempPath { dir =>
+          val data = makeDecimalRDD(DecimalType(precision, scale))
+          data.saveAsParquetFile(dir.getCanonicalPath)
+          checkAnswer(parquetFile(dir.getCanonicalPath), data.collect().toSeq)
+        }
       }
 
-      writer.close()
+      // Decimals with precision above 18 are not yet supported
+      intercept[RuntimeException] {
+        withTempPath { dir =>
+          makeDecimalRDD(DecimalType(19, 10)).saveAsParquetFile(dir.getCanonicalPath)
+          parquetFile(dir.getCanonicalPath).collect()
+        }
+      }
+
+      // Unlimited-length decimals are not yet supported
+      intercept[RuntimeException] {
+        withTempPath { dir =>
+          makeDecimalRDD(DecimalType.Unlimited).saveAsParquetFile(dir.getCanonicalPath)
+          parquetFile(dir.getCanonicalPath).collect()
+        }
+      }
     }
 
-    withTempDir { dir =>
-      val path = new Path(dir.toURI.toString, "part-r-0.parquet")
-      makeRawParquetFile(path)
-      checkAnswer(parquetFile(path.toString), (0 until 10).map { i =>
-        Row(i % 2 == 0, i, i.toLong, i.toFloat, i.toDouble)
-      })
+    test(s"$prefix: map") {
+      val data = (1 to 4).map(i => Tuple1(Map(i -> s"val_$i")))
+      checkParquetFile(data)
+    }
+
+    test(s"$prefix: array") {
+      val data = (1 to 4).map(i => Tuple1(Seq(i, i + 1)))
+      checkParquetFile(data)
+    }
+
+    test(s"$prefix: struct") {
+      val data = (1 to 4).map(i => Tuple1((i, s"val_$i")))
+      withParquetRDD(data) { rdd =>
+        // Structs are converted to `Row`s
+        checkAnswer(rdd, data.map { case Tuple1(struct) =>
+          Row(Row(struct.productIterator.toSeq: _*))
+        })
+      }
+    }
+
+    test(s"$prefix: nested struct with array of array as field") {
+      val data = (1 to 4).map(i => Tuple1((i, Seq(Seq(s"val_$i")))))
+      withParquetRDD(data) { rdd =>
+        // Structs are converted to `Row`s
+        checkAnswer(rdd, data.map { case Tuple1(struct) =>
+          Row(Row(struct.productIterator.toSeq: _*))
+        })
+      }
+    }
+
+    test(s"$prefix: nested map with struct as value type") {
+      val data = (1 to 4).map(i => Tuple1(Map(i -> (i, s"val_$i"))))
+      withParquetRDD(data) { rdd =>
+        checkAnswer(rdd, data.map { case Tuple1(m) =>
+          Row(m.mapValues(struct => Row(struct.productIterator.toSeq: _*)))
+        })
+      }
+    }
+
+    test(s"$prefix: nulls") {
+      val allNulls = (
+        null.asInstanceOf[java.lang.Boolean],
+        null.asInstanceOf[Integer],
+        null.asInstanceOf[java.lang.Long],
+        null.asInstanceOf[java.lang.Float],
+        null.asInstanceOf[java.lang.Double])
+
+      withParquetRDD(allNulls :: Nil) { rdd =>
+        val rows = rdd.collect()
+        assert(rows.size === 1)
+        assert(rows.head === Row(Seq.fill(5)(null): _*))
+      }
+    }
+
+    test(s"$prefix: nones") {
+      val allNones = (
+        None.asInstanceOf[Option[Int]],
+        None.asInstanceOf[Option[Long]],
+        None.asInstanceOf[Option[String]])
+
+      withParquetRDD(allNones :: Nil) { rdd =>
+        val rows = rdd.collect()
+        assert(rows.size === 1)
+        assert(rows.head === Row(Seq.fill(3)(null): _*))
+      }
+    }
+
+    test(s"$prefix: compression codec") {
+      def compressionCodecFor(path: String) = {
+        val codecs = ParquetTypesConverter
+          .readMetaData(new Path(path), Some(configuration))
+          .getBlocks
+          .flatMap(_.getColumns)
+          .map(_.getCodec.name())
+          .distinct
+
+        assert(codecs.size === 1)
+        codecs.head
+      }
+
+      val data = (0 until 10).map(i => (i, i.toString))
+
+      def checkCompressionCodec(codec: CompressionCodecName): Unit = {
+        withSQLConf(SQLConf.PARQUET_COMPRESSION -> codec.name()) {
+          withParquetFile(data) { path =>
+            assertResult(conf.parquetCompressionCodec.toUpperCase) {
+              compressionCodecFor(path)
+            }
+          }
+        }
+      }
+
+      // Checks default compression codec
+      checkCompressionCodec(CompressionCodecName.fromConf(conf.parquetCompressionCodec))
+
+      checkCompressionCodec(CompressionCodecName.UNCOMPRESSED)
+      checkCompressionCodec(CompressionCodecName.GZIP)
+      checkCompressionCodec(CompressionCodecName.SNAPPY)
+    }
+
+    test(s"$prefix: read raw Parquet file") {
+      def makeRawParquetFile(path: Path): Unit = {
+        val schema = MessageTypeParser.parseMessageType(
+          """
+            |message root {
+            |  required boolean _1;
+            |  required int32   _2;
+            |  required int64   _3;
+            |  required float   _4;
+            |  required double  _5;
+            |}
+          """.stripMargin)
+
+        val writeSupport = new TestGroupWriteSupport(schema)
+        val writer = new ParquetWriter[Group](path, writeSupport)
+
+        (0 until 10).foreach { i =>
+          val record = new SimpleGroup(schema)
+          record.add(0, i % 2 == 0)
+          record.add(1, i)
+          record.add(2, i.toLong)
+          record.add(3, i.toFloat)
+          record.add(4, i.toDouble)
+          writer.write(record)
+        }
+
+        writer.close()
+      }
+
+      withTempDir { dir =>
+        val path = new Path(dir.toURI.toString, "part-r-0.parquet")
+        makeRawParquetFile(path)
+        checkAnswer(parquetFile(path.toString), (0 until 10).map { i =>
+          Row(i % 2 == 0, i, i.toLong, i.toFloat, i.toDouble)
+        })
+      }
+    }
+
+    test(s"$prefix: write metadata") {
+      withTempPath { file =>
+        val path = new Path(file.toURI.toString)
+        val fs = FileSystem.getLocal(configuration)
+        val attributes = ScalaReflection.attributesFor[(Int, String)]
+        ParquetTypesConverter.writeMetaData(attributes, path, configuration)
+
+        assert(fs.exists(new Path(path, ParquetFileWriter.PARQUET_COMMON_METADATA_FILE)))
+        assert(fs.exists(new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE)))
+
+        val metaData = ParquetTypesConverter.readMetaData(path, Some(configuration))
+        val actualSchema = metaData.getFileMetaData.getSchema
+        val expectedSchema = ParquetTypesConverter.convertFromAttributes(attributes)
+
+        actualSchema.checkContains(expectedSchema)
+        expectedSchema.checkContains(actualSchema)
+      }
     }
   }
 
-  test("write metadata") {
-    withTempPath { file =>
-      val path = new Path(file.toURI.toString)
-      val fs = FileSystem.getLocal(configuration)
-      val attributes = ScalaReflection.attributesFor[(Int, String)]
-      ParquetTypesConverter.writeMetaData(attributes, path, configuration)
+  withSQLConf(SQLConf.PARQUET_USE_DATA_SOURCE_API -> "true") {
+    run("Parquet data source enabled")
+  }
 
-      assert(fs.exists(new Path(path, ParquetFileWriter.PARQUET_COMMON_METADATA_FILE)))
-      assert(fs.exists(new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE)))
-
-      val metaData = ParquetTypesConverter.readMetaData(path, Some(configuration))
-      val actualSchema = metaData.getFileMetaData.getSchema
-      val expectedSchema = ParquetTypesConverter.convertFromAttributes(attributes)
-
-      actualSchema.checkContains(expectedSchema)
-      expectedSchema.checkContains(actualSchema)
-    }
+  withSQLConf(SQLConf.PARQUET_USE_DATA_SOURCE_API -> "false") {
+    run("Parquet data source disabled")
   }
 }

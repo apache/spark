@@ -87,7 +87,8 @@ private[hive] trait HiveStrategies {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalOperation(projectList, predicates, relation: MetastoreRelation)
           if relation.tableDesc.getSerdeClassName.contains("Parquet") &&
-             hiveContext.convertMetastoreParquet =>
+             hiveContext.convertMetastoreParquet &&
+             !hiveContext.conf.parquetUseDataSourceApi =>
 
         // Filter out all predicates that only deal with partition keys
         val partitionsKeys = AttributeSet(relation.partitionKeys)
@@ -136,8 +137,10 @@ private[hive] trait HiveStrategies {
               pruningCondition(inputData)
             }
 
+            val partitionLocations = partitions.map(_.getLocation)
+
             hiveContext
-              .parquetFile(partitions.map(_.getLocation).mkString(","))
+              .parquetFile(partitionLocations.head, partitionLocations.tail: _*)
               .addPartitioningAttributes(relation.partitionKeys)
               .lowerCase
               .where(unresolvedOtherPredicates)
