@@ -132,7 +132,7 @@ class LogisticRegressionModel private[ml] (
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     transformSchema(dataset.schema, paramMap, logging = true)
     val map = this.paramMap ++ paramMap
-    val scoreFunction = udf { v: Vector => {
+    val scoreFunction = udf { v: Vector =>
       val margin = BLAS.dot(v, weights)
       1.0 / (1.0 + math.exp(-margin))
     }
