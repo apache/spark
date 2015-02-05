@@ -22,7 +22,6 @@ import org.apache.spark.ml.param._
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
 import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.Dsl._
 import org.apache.spark.storage.StorageLevel
 
 
@@ -101,69 +100,6 @@ class LogisticRegressionModel private[ml] (
   private val score: Vector => Double = (features) => {
     val m = margin(features)
     1.0 / (1.0 + math.exp(-m))
-  }
-
-  override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
-    // Check schema
-    transformSchema(dataset.schema, paramMap, logging = true)
-
-    val map = this.paramMap ++ paramMap
-
-    // Output selected columns only.
-    // This is a bit complicated since it tries to avoid repeated computation.
-    //   rawPrediction (-margin, margin)
-    //   probability (1.0-score, score)
-    //   prediction (max margin)
-    var tmpData = dataset
-    var numColsOutput = 0
-    if (map(rawPredictionCol) != "") {
-      val features2raw: Vector => Vector = predictRaw
-      tmpData = tmpData.select($"*",
-        callUDF(features2raw, col(map(featuresCol))).as(map(rawPredictionCol)))
-      numColsOutput += 1
-    }
-    if (map(probabilityCol) != "") {
-      if (map(rawPredictionCol) != "") {
-        val raw2prob: Vector => Vector = (rawPreds) => {
-          val prob1 = 1.0 / (1.0 + math.exp(-rawPreds(1)))
-          Vectors.dense(1.0 - prob1, prob1)
-        }
-        tmpData = tmpData.select($"*",
-          callUDF(raw2prob, col(map(rawPredictionCol))).as(map(probabilityCol)))
-      } else {
-        val features2prob: Vector => Vector = predictProbabilities
-        tmpData = tmpData.select($"*",
-          callUDF(features2prob, col(map(featuresCol))).as(map(probabilityCol)))
-      }
-      numColsOutput += 1
-    }
-    if (map(predictionCol) != "") {
-      val t = map(threshold)
-      if (map(probabilityCol) != "") {
-        val predict: Vector => Double = (probs) => {
-          if (probs(1) > t) 1.0 else 0.0
-        }
-        tmpData = tmpData.select($"*",
-          callUDF(predict, col(map(probabilityCol))).as(map(predictionCol)))
-      } else if (map(rawPredictionCol) != "") {
-        val predict: Vector => Double = (rawPreds) => {
-          val prob1 = 1.0 / (1.0 + math.exp(-rawPreds(1)))
-          if (prob1 > t) 1.0 else 0.0
-        }
-        tmpData = tmpData.select($"*",
-          callUDF(predict, col(map(rawPredictionCol))).as(map(predictionCol)))
-      } else {
-        val predict: Vector => Double = this.predict
-        tmpData = tmpData.select($"*",
-          callUDF(predict, col(map(featuresCol))).as(map(predictionCol)))
-      }
-      numColsOutput += 1
-    }
-    if (numColsOutput == 0) {
-      this.logWarning(s"$uid: LogisticRegressionModel.transform() was called as NOOP" +
-        " since no output columns were set.")
-    }
-    tmpData
   }
 
   override val numClasses: Int = 2

@@ -40,10 +40,10 @@ object DeveloperApiExample {
     val conf = new SparkConf().setAppName("DeveloperApiExample")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
-    import sqlContext._
+    import sqlContext.implicits._
 
     // Prepare training data.
-    val training = sparkContext.parallelize(Seq(
+    val training = sc.parallelize(Seq(
       LabeledPoint(1.0, Vectors.dense(0.0, 1.1, 0.1)),
       LabeledPoint(0.0, Vectors.dense(2.0, 1.0, -1.0)),
       LabeledPoint(0.0, Vectors.dense(2.0, 1.3, 1.0)),
@@ -61,7 +61,7 @@ object DeveloperApiExample {
     val model = lr.fit(training)
 
     // Prepare test data.
-    val test = sparkContext.parallelize(Seq(
+    val test = sc.parallelize(Seq(
       LabeledPoint(1.0, Vectors.dense(-1.0, 1.5, 1.3)),
       LabeledPoint(0.0, Vectors.dense(3.0, 2.0, -0.1)),
       LabeledPoint(1.0, Vectors.dense(0.0, 2.2, -1.5))))

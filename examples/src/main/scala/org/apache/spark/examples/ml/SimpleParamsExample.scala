@@ -81,7 +81,7 @@ object SimpleParamsExample {
     println("Model 2 was fit using parameters: " + model2.fittingParamMap)
 
     // Prepare test data.
-    val test = sparkContext.parallelize(Seq(
+    val test = sc.parallelize(Seq(
       LabeledPoint(1.0, Vectors.dense(-1.0, 1.5, 1.3)),
       LabeledPoint(0.0, Vectors.dense(3.0, 2.0, -0.1)),
       LabeledPoint(1.0, Vectors.dense(0.0, 2.2, -1.5))))

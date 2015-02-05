@@ -181,8 +181,8 @@ private[ml] object ClassificationModel {
         val raw2pred: Vector => Double = (rawPred) => {
           rawPred.toArray.zipWithIndex.maxBy(_._1)._2
         }
-        tmpData = tmpData.select($"*",
-          callUDF(raw2pred, col(map(model.rawPredictionCol))).as(map(model.predictionCol)))
+        tmpData = tmpData.select($"*", callUDF(raw2pred, DoubleType,
+          col(map(model.rawPredictionCol))).as(map(model.predictionCol)))
         numColsOutput += 1
       }
     } else if (map(model.predictionCol) != "") {
