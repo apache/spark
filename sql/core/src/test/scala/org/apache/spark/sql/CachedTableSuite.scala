@@ -34,6 +34,8 @@ case class BigData(s: String)
 class CachedTableSuite extends QueryTest {
   TestData // Load test tables.
 
+  import org.apache.spark.sql.test.TestSQLContext.implicits._
+
   def rddIdOf(tableName: String): Int = {
     val executedPlan = table(tableName).queryExecution.executedPlan
     executedPlan.collect {

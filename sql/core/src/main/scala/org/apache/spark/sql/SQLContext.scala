@@ -166,6 +166,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   // scalastyle:off
   // Disable style checker so "implicits" object can start with lowercase i
   /**
+   * (Scala-specific)
    * Implicit methods available in Scala for converting common Scala objects into [[DataFrame]]s.
    */
   object implicits {
@@ -192,8 +193,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group userf
    */
-  // TODO: Remove implicit here.
-  implicit def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
+  def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
     SparkPlan.currentContext.set(self)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
