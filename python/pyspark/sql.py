@@ -1683,17 +1683,6 @@ class HiveContext(SQLContext):
         return self._jvm.HiveContext(self._jsc.sc())
 
 
-class LocalHiveContext(HiveContext):
-
-    def __init__(self, sparkContext, sqlContext=None):
-        HiveContext.__init__(self, sparkContext, sqlContext)
-        warnings.warn("LocalHiveContext is deprecated. "
-                      "Use HiveContext instead.", DeprecationWarning)
-
-    def _get_hive_ctx(self):
-        return self._jvm.LocalHiveContext(self._jsc.sc())
-
-
 def _create_row(fields, values):
     row = Row(*values)
     row.__FIELDS__ = fields
