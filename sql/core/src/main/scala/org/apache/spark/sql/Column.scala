@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedGetField
-
 import scala.annotation.tailrec
 import scala.language.implicitConversions
 
 import org.apache.spark.sql.Dsl.lit
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Subquery, Project, LogicalPlan}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedGetField
 import org.apache.spark.sql.types._
 
 
