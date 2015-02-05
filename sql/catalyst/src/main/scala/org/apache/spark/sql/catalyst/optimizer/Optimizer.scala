@@ -50,6 +50,7 @@ object DefaultOptimizer extends Optimizer {
       CombineFilters,
       PushPredicateThroughProject,
       PushPredicateThroughJoin,
+      PushPredicateThroughGenerate,
       ColumnPruning) ::
     Batch("LocalRelation", FixedPoint(100),
       ConvertToLocalRelation) :: Nil
@@ -452,6 +453,74 @@ object PushPredicateThroughProject extends Rule[LogicalPlan] {
     condition transform {
       case a: AttributeReference => sourceAliases.getOrElse(a, a)
     }
+  }
+}
+
+/**
+ * Push [[Filter]] operators through [[Generate]] operators. Part of the predicate which referenced
+ * attributes generated in [[Generate]] will remain above, and the rest should be pushed beneath.
+ */
+object PushPredicateThroughGenerate extends Rule[LogicalPlan] {
+  /**
+   * Split a condition / predicate into conjuncts
+   * @param condition predicate
+   * @return conjuncts
+   */
+  private def split(condition: Expression): List[Expression] = condition match {
+    case And(left, right) => split(left) ++ split(right)
+    case e: Expression => List(e)
+  }
+
+  /**
+   * Join a list of conjuncts into a single predicate
+   * @param conjuncts conjuncts
+   * @return Some(predicate) or None if conjunct list is empty
+   */
+  private def joinConjuncts(conjuncts: Seq[Expression]): Option[Expression] = {
+    conjuncts.foldRight(None.asInstanceOf[Option[Expression]]) {
+      (conjunct, joint) => (conjunct, joint) match {
+        case (c: Expression, Some(j)) => Some(And(c, j))
+        case (c: Expression, None) => Some(c)
+      }
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case filter @ Filter(condition,
+    generate @ Generate(generator, join, outer, alias, grandChild)) =>
+      val conjuncts = split(condition)
+      val referencedAttrsInConjuncts = conjuncts.zip(conjuncts.map(_.references))
+      val generatedAttrNames = generator match {
+        case Explode(attrs, expr) => attrs
+        case _ => Seq[String]()
+      }
+      // Those conjuncts referenced a attributes generated in `generate` can not
+      // be pushed below `generate`
+      val (predicatesUp, predicatesDown) = referencedAttrsInConjuncts.partition {
+        conjunctsWithReferences =>
+          conjunctsWithReferences._2.exists(attr => generatedAttrNames.contains(attr.name))
+      }
+      val upCondition = joinConjuncts(predicatesUp.map(_._1))
+      val downCondition = joinConjuncts(predicatesDown.map(_._1))
+      (upCondition, downCondition) match {
+        case (Some(upPredicate), Some(downPredicate)) =>
+          // UpPredicate <- Generate <- DownPredicate <- Grand Child
+          Filter(upPredicate,
+            generate.copy(generator, join, outer, alias,
+              Filter(downPredicate, grandChild)))
+
+        case (Some(upPredicate), None) =>
+          filter
+
+        case (None, Some(downPredicate)) =>
+          // Generate <- DownPredicate <- Grand Child
+          generate.copy(generator, join, outer, alias,
+            Filter(downPredicate, grandChild))
+
+        case (None, None) =>
+          // This seems not possible, but the correct handling would be remove the filter
+          generate.copy(generator, join, outer, alias, grandChild)
+      }
   }
 }
 
