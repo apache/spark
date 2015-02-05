@@ -335,23 +335,17 @@ private[hive] object HadoopTableReader extends HiveInspectors {
       }
     }
 
+    /**
+     * when the soi and deserializer.getObjectInspector is equal,
+     * we will get `IdentityConverter`,which mean it won't convert the
+     * value when schema match
+     */
     val partTblObjectInspectorConverter = ObjectInspectorConverters.getConverter(
       deserializer.getObjectInspector, soi)
 
     // Map each tuple to a row object
     iterator.map { value =>
-      val raw = convertdeserializer match {
-        case Some(convert) =>          
-          if (deserializer.getObjectInspector.equals(convert.getObjectInspector)) {
-            deserializer.deserialize(value)
-          }
-          // If partition schema does not match table schema, update the row to match
-          else {
-            partTblObjectInspectorConverter.convert(deserializer.deserialize(value))
-          }
-        case None =>
-          deserializer.deserialize(value)
-      }
+      val raw = partTblObjectInspectorConverter.convert(deserializer.deserialize(value))
       var i = 0
       while (i < fieldRefs.length) {
         val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))

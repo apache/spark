@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive
 
+import java.util
 import java.util.{ArrayList => JArrayList}
 import java.util.Properties
 import java.rmi.server.UID

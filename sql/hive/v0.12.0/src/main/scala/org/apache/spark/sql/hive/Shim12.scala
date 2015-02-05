@@ -243,8 +243,11 @@ private[hive] object HiveShim {
   }
 
   // make getConvertedOI compatible between 0.12.0 and 0.13.1
-  def getConvertedOI(inputOI: ObjectInspector, outputOI: ObjectInspector): ObjectInspector = {
-    ObjectInspectorConverters.getConvertedOI(inputOI, outputOI, new java.lang.Boolean(true))
+  def getConvertedOI(inputOI: ObjectInspector,
+                     outputOI: ObjectInspector,
+                     equalsCheck: java.lang.Boolean =
+                     new java.lang.Boolean(true)): ObjectInspector = {
+    ObjectInspectorConverters.getConvertedOI(inputOI, outputOI, equalsCheck)
   }
 
   def prepareWritable(w: Writable): Writable = {
