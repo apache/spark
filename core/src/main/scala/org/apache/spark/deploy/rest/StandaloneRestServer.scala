@@ -146,7 +146,10 @@ private[spark] abstract class StandaloneRestServlet extends HttpServlet with Log
     val clientSideJson = parse(requestJson)
     val serverSideJson = parse(requestMessage.toJson)
     val Diff(_, _, unknown) = clientSideJson.diff(serverSideJson)
-    unknown.asInstanceOf[JObject].obj.map { case (k, _) => k }.toArray
+    unknown match {
+      case j: JObject => j.obj.map { case (k, _) => k }.toArray
+      case _ => Array.empty[String] // No difference
+    }
   }
 
   /** Return a human readable String representation of the exception. */
@@ -334,43 +337,30 @@ private[spark] class SubmitRequestServlet(master: Master) extends StandaloneRest
    * cluster mode yet.
    */
   private def buildDriverDescription(request: CreateSubmissionRequest): DriverDescription = {
+    val sparkProperties = request.sparkProperties
+
     // Required fields, including the main class because python is not yet supported
-    val appName = request.appName
-    val appResource = request.appResource
-    val mainClass = request.mainClass
-    if (mainClass == null) {
-      throw new SubmitRestMissingFieldException("Main class must be set in submit request.")
+    val appResource = sparkProperties.get("spark.app.resource").getOrElse {
+      throw new SubmitRestMissingFieldException("Main application resource is missing.")
+    }
+    val mainClass = sparkProperties.get("spark.app.mainClass").getOrElse {
+      throw new SubmitRestMissingFieldException("Main class is missing.")
     }
 
     // Optional fields
-    val jars = Option(request.jars)
-    val files = Option(request.files)
-    val driverMemory = Option(request.driverMemory)
-    val driverCores = Option(request.driverCores)
-    val driverExtraJavaOptions = Option(request.driverExtraJavaOptions)
-    val driverExtraClassPath = Option(request.driverExtraClassPath)
-    val driverExtraLibraryPath = Option(request.driverExtraLibraryPath)
-    val superviseDriver = Option(request.superviseDriver)
-    val executorMemory = Option(request.executorMemory)
-    val totalExecutorCores = Option(request.totalExecutorCores)
+    val driverMemory = sparkProperties.get("spark.driver.memory")
+    val driverCores = sparkProperties.get("spark.driver.cores")
+    val driverExtraJavaOptions = sparkProperties.get("spark.driver.extraJavaOptions")
+    val driverExtraClassPath = sparkProperties.get("spark.driver.extraClassPath")
+    val driverExtraLibraryPath = sparkProperties.get("spark.driver.extraLibraryPath")
+    val superviseDriver = sparkProperties.get("spark.driver.supervise")
     val appArgs = request.appArgs
-    val sparkProperties = request.sparkProperties
     val environmentVariables = request.environmentVariables
 
-    // Translate all fields to the relevant Spark properties
+    // Construct driver description and submit it
     val conf = new SparkConf(false)
       .setAll(sparkProperties)
       .set("spark.master", master.masterUrl)
-      .set("spark.app.name", appName)
-    jars.foreach { j => conf.set("spark.jars", j) }
-    files.foreach { f => conf.set("spark.files", f) }
-    driverExtraJavaOptions.foreach { j => conf.set("spark.driver.extraJavaOptions", j) }
-    driverExtraClassPath.foreach { cp => conf.set("spark.driver.extraClassPath", cp) }
-    driverExtraLibraryPath.foreach { lp => conf.set("spark.driver.extraLibraryPath", lp) }
-    executorMemory.foreach { m => conf.set("spark.executor.memory", m) }
-    totalExecutorCores.foreach { c => conf.set("spark.cores.max", c) }
-
-    // Construct driver description and submit it
     val extraClassPath = driverExtraClassPath.toSeq.flatMap(_.split(File.pathSeparator))
     val extraLibraryPath = driverExtraLibraryPath.toSeq.flatMap(_.split(File.pathSeparator))
     val extraJavaOpts = driverExtraJavaOptions.map(Utils.splitCommandString).getOrElse(Seq.empty)

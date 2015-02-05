@@ -49,7 +49,7 @@ private[spark] class ClientArguments(args: Array[String]) {
 
   parse(args.toList)
 
-  def parse(args: List[String]): Unit = args match {
+  private def parse(args: List[String]): Unit = args match {
     case ("--cores" | "-c") :: IntParam(value) :: tail =>
       cores = value
       parse(tail)

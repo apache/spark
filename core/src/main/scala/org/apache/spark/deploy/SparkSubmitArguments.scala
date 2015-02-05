@@ -59,6 +59,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   val sparkProperties: HashMap[String, String] = new HashMap[String, String]()
 
   // Standalone cluster mode only
+  var useRest: Boolean = true
   var supervise: Boolean = false
   var driverCores: String = null
   var driverToKill: String = null

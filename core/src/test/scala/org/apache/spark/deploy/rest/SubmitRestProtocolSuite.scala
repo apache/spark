@@ -20,6 +20,8 @@ package org.apache.spark.deploy.rest
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.FunSuite
 
+import org.apache.spark.SparkConf
+
 /**
  * Tests for the REST application submission protocol.
  */
@@ -98,66 +100,56 @@ class SubmitRestProtocolSuite extends FunSuite {
     val message = new CreateSubmissionRequest
     intercept[SubmitRestProtocolException] { message.validate() }
     message.clientSparkVersion = "1.2.3"
-    message.appName = "SparkPie"
-    message.appResource = "honey-walnut-cherry.jar"
+    val conf = new SparkConf(false)
+    conf.set("spark.app.name", "SparkPie")
+    conf.set("spark.app.resource", "honey-walnut-cherry.jar")
+    message.sparkProperties = conf.getAll.toMap
     message.validate()
     // optional fields
-    message.mainClass = "org.apache.spark.examples.SparkPie"
-    message.jars = "mayonnaise.jar,ketchup.jar"
-    message.files = "fireball.png"
-    message.pyFiles = "do-not-eat-my.py"
-    message.driverMemory = "512m"
-    message.driverCores = "180"
-    message.driverExtraJavaOptions = " -Dslices=5 -Dcolor=mostly_red"
-    message.driverExtraClassPath = "food-coloring.jar"
-    message.driverExtraLibraryPath = "pickle.jar"
-    message.superviseDriver = "false"
-    message.executorMemory = "256m"
-    message.totalExecutorCores = "10000"
+    conf.set("spark.app.mainClass", "org.apache.spark.examples.SparkPie")
+    conf.set("spark.jars", "mayonnaise.jar,ketchup.jar")
+    conf.set("spark.files", "fireball.png")
+    conf.set("spark.driver.memory", "512m")
+    conf.set("spark.driver.cores", "180")
+    conf.set("spark.driver.extraJavaOptions", " -Dslices=5 -Dcolor=mostly_red")
+    conf.set("spark.driver.extraClassPath", "food-coloring.jar")
+    conf.set("spark.driver.extraLibraryPath", "pickle.jar")
+    conf.set("spark.driver.supervise", "false")
+    conf.set("spark.executor.memory", "256m")
+    conf.set("spark.cores.max", "10000")
+    message.sparkProperties = conf.getAll.toMap
+    message.appArgs = Array("two slices", "a hint of cinnamon")
+    message.environmentVariables = Map("PATH" -> "/dev/null")
     message.validate()
     // bad fields
-    message.driverCores = "one hundred feet"
+    var badConf = conf.clone().set("spark.driver.cores", "one hundred feet")
+    message.sparkProperties = badConf.getAll.toMap
     intercept[SubmitRestProtocolException] { message.validate() }
-    message.driverCores = "180"
-    message.superviseDriver = "nope, never"
+    badConf = conf.clone().set("spark.driver.supervise", "nope, never")
+    message.sparkProperties = badConf.getAll.toMap
     intercept[SubmitRestProtocolException] { message.validate() }
-    message.superviseDriver = "false"
-    message.totalExecutorCores = "two men"
+    badConf = conf.clone().set("spark.cores.max", "two men")
+    message.sparkProperties = badConf.getAll.toMap
     intercept[SubmitRestProtocolException] { message.validate() }
-    message.totalExecutorCores = "10000"
-    // special fields
-    message.addAppArg("two slices")
-    message.addAppArg("a hint of cinnamon")
-    message.setSparkProperty("spark.live.long", "true")
-    message.setSparkProperty("spark.shuffle.enabled", "false")
-    message.setEnvironmentVariable("PATH", "/dev/null")
-    message.setEnvironmentVariable("PYTHONPATH", "/dev/null")
-    assert(message.appArgs === Seq("two slices", "a hint of cinnamon"))
-    assert(message.sparkProperties.size === 2)
-    assert(message.sparkProperties("spark.live.long") === "true")
-    assert(message.sparkProperties("spark.shuffle.enabled") === "false")
-    assert(message.environmentVariables.size === 2)
-    assert(message.environmentVariables("PATH") === "/dev/null")
-    assert(message.environmentVariables("PYTHONPATH") === "/dev/null")
+    message.sparkProperties = conf.getAll.toMap
     // test JSON
     val json = message.toJson
     assertJsonEquals(json, submitDriverRequestJson)
     val newMessage = SubmitRestProtocolMessage.fromJson(json, classOf[CreateSubmissionRequest])
     assert(newMessage.clientSparkVersion === "1.2.3")
-    assert(newMessage.appName === "SparkPie")
-    assert(newMessage.appResource === "honey-walnut-cherry.jar")
-    assert(newMessage.mainClass === "org.apache.spark.examples.SparkPie")
-    assert(newMessage.jars === "mayonnaise.jar,ketchup.jar")
-    assert(newMessage.files === "fireball.png")
-    assert(newMessage.pyFiles === "do-not-eat-my.py")
-    assert(newMessage.driverMemory === "512m")
-    assert(newMessage.driverCores === "180")
-    assert(newMessage.driverExtraJavaOptions === " -Dslices=5 -Dcolor=mostly_red")
-    assert(newMessage.driverExtraClassPath === "food-coloring.jar")
-    assert(newMessage.driverExtraLibraryPath === "pickle.jar")
-    assert(newMessage.superviseDriver === "false")
-    assert(newMessage.executorMemory === "256m")
-    assert(newMessage.totalExecutorCores === "10000")
+    assert(newMessage.sparkProperties("spark.app.name") === "SparkPie")
+    assert(newMessage.sparkProperties("spark.app.resource") === "honey-walnut-cherry.jar")
+    assert(newMessage.sparkProperties("spark.app.mainClass") === "org.apache.spark.examples.SparkPie")
+    assert(newMessage.sparkProperties("spark.jars") === "mayonnaise.jar,ketchup.jar")
+    assert(newMessage.sparkProperties("spark.files") === "fireball.png")
+    assert(newMessage.sparkProperties("spark.driver.memory") === "512m")
+    assert(newMessage.sparkProperties("spark.driver.cores") === "180")
+    assert(newMessage.sparkProperties("spark.driver.extraJavaOptions") === " -Dslices=5 -Dcolor=mostly_red")
+    assert(newMessage.sparkProperties("spark.driver.extraClassPath") === "food-coloring.jar")
+    assert(newMessage.sparkProperties("spark.driver.extraLibraryPath") === "pickle.jar")
+    assert(newMessage.sparkProperties("spark.driver.supervise") === "false")
+    assert(newMessage.sparkProperties("spark.executor.memory") === "256m")
+    assert(newMessage.sparkProperties("spark.cores.max") === "10000")
     assert(newMessage.appArgs === message.appArgs)
     assert(newMessage.sparkProperties === message.sparkProperties)
     assert(newMessage.environmentVariables === message.environmentVariables)
@@ -268,24 +260,26 @@ class SubmitRestProtocolSuite extends FunSuite {
     """
       |{
       |  "action" : "CreateSubmissionRequest",
-      |  "appArgs" : ["two slices","a hint of cinnamon"],
-      |  "appName" : "SparkPie",
-      |  "appResource" : "honey-walnut-cherry.jar",
+      |  "appArgs" : [ "two slices", "a hint of cinnamon" ],
       |  "clientSparkVersion" : "1.2.3",
-      |  "driverCores" : "180",
-      |  "driverExtraClassPath" : "food-coloring.jar",
-      |  "driverExtraJavaOptions" : " -Dslices=5 -Dcolor=mostly_red",
-      |  "driverExtraLibraryPath" : "pickle.jar",
-      |  "driverMemory" : "512m",
-      |  "environmentVariables" : {"PATH":"/dev/null","PYTHONPATH":"/dev/null"},
-      |  "executorMemory" : "256m",
-      |  "files" : "fireball.png",
-      |  "jars" : "mayonnaise.jar,ketchup.jar",
-      |  "mainClass" : "org.apache.spark.examples.SparkPie",
-      |  "pyFiles" : "do-not-eat-my.py",
-      |  "sparkProperties" : {"spark.live.long":"true","spark.shuffle.enabled":"false"},
-      |  "superviseDriver" : "false",
-      |  "totalExecutorCores" : "10000"
+      |  "environmentVariables" : {
+      |    "PATH" : "/dev/null"
+      |  },
+      |  "sparkProperties" : {
+      |    "spark.driver.extraLibraryPath" : "pickle.jar",
+      |    "spark.jars" : "mayonnaise.jar,ketchup.jar",
+      |    "spark.driver.supervise" : "false",
+      |    "spark.app.name" : "SparkPie",
+      |    "spark.cores.max" : "10000",
+      |    "spark.driver.memory" : "512m",
+      |    "spark.files" : "fireball.png",
+      |    "spark.app.resource" : "honey-walnut-cherry.jar",
+      |    "spark.driver.cores" : "180",
+      |    "spark.driver.extraJavaOptions" : " -Dslices=5 -Dcolor=mostly_red",
+      |    "spark.executor.memory" : "256m",
+      |    "spark.driver.extraClassPath" : "food-coloring.jar",
+      |    "spark.app.mainClass" : "org.apache.spark.examples.SparkPie"
+      |  }
       |}
     """.stripMargin
 

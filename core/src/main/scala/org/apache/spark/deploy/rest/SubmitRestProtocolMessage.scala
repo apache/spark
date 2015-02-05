@@ -83,8 +83,7 @@ private[spark] abstract class SubmitRestProtocolMessage {
   /** Assert that the specified field is set in this message. */
   protected def assertFieldIsSet(value: String, name: String): Unit = {
     if (value == null) {
-      throw new SubmitRestMissingFieldException(
-        s"Field '$name' is missing in message $messageType.")
+      throw new SubmitRestMissingFieldException(s"'$name' is missing in message $messageType.")
     }
   }
 
@@ -93,7 +92,7 @@ private[spark] abstract class SubmitRestProtocolMessage {
     if (value != null) {
       Try(value.toBoolean).getOrElse {
         throw new SubmitRestProtocolException(
-          s"Field '$name' expected boolean value: actual was '$value'.")
+          s"'$name' expected boolean value: actual was '$value'.")
       }
     }
   }
@@ -103,7 +102,7 @@ private[spark] abstract class SubmitRestProtocolMessage {
     if (value != null) {
       Try(value.toInt).getOrElse {
         throw new SubmitRestProtocolException(
-          s"Field '$name' expected numeric value: actual was '$value'.")
+          s"'$name' expected numeric value: actual was '$value'.")
       }
     }
   }
@@ -116,7 +115,7 @@ private[spark] abstract class SubmitRestProtocolMessage {
     if (value != null) {
       Try(Utils.memoryStringToMb(value)).getOrElse {
         throw new SubmitRestProtocolException(
-          s"Field '$name' expected memory value: actual was '$value'.")
+          s"'$name' expected memory value: actual was '$value'.")
       }
     }
   }

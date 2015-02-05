@@ -17,11 +17,6 @@
 
 package org.apache.spark.deploy.rest
 
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
-
-import com.fasterxml.jackson.annotation.JsonProperty
-
 /**
  * An abstract request sent from the client in the REST application submission protocol.
  */
@@ -37,45 +32,31 @@ private[spark] abstract class SubmitRestProtocolRequest extends SubmitRestProtoc
  * A request to submit a driver in the REST application submission protocol.
  */
 private[spark] class CreateSubmissionRequest extends SubmitRestProtocolRequest {
-  var appName: String = null
-  var appResource: String = null
-  var mainClass: String = null
-  var jars: String = null
-  var files: String = null
-  var pyFiles: String = null
-  var driverMemory: String = null
-  var driverCores: String = null
-  var driverExtraJavaOptions: String = null
-  var driverExtraClassPath: String = null
-  var driverExtraLibraryPath: String = null
-  var superviseDriver: String = null
-  var executorMemory: String = null
-  var totalExecutorCores: String = null
-
-  // Special fields
-  @JsonProperty("appArgs")
-  private val _appArgs = new ArrayBuffer[String]
-  @JsonProperty("sparkProperties")
-  private val _sparkProperties = new mutable.HashMap[String, String]
-  @JsonProperty("environmentVariables")
-  private val _envVars = new mutable.HashMap[String, String]
-
-  def appArgs: Array[String] = _appArgs.toArray
-  def sparkProperties: Map[String, String] = _sparkProperties.toMap
-  def environmentVariables: Map[String, String] = _envVars.toMap
-
-  def addAppArg(s: String): this.type = { _appArgs += s; this }
-  def setSparkProperty(k: String, v: String): this.type = { _sparkProperties(k) = v; this }
-  def setEnvironmentVariable(k: String, v: String): this.type = { _envVars(k) = v; this }
+  var appArgs: Array[String] = null
+  var sparkProperties: Map[String, String] = null
+  var environmentVariables: Map[String, String] = null
 
   protected override def doValidate(): Unit = {
     super.doValidate()
-    assertFieldIsSet(appName, "appName")
-    assertFieldIsSet(appResource, "appResource")
-    assertFieldIsMemory(driverMemory, "driverMemory")
-    assertFieldIsNumeric(driverCores, "driverCores")
-    assertFieldIsBoolean(superviseDriver, "superviseDriver")
-    assertFieldIsMemory(executorMemory, "executorMemory")
-    assertFieldIsNumeric(totalExecutorCores, "totalExecutorCores")
+    assert(sparkProperties != null, "No Spark properties set!")
+    assertPropertyIsSet("spark.app.name")
+    assertPropertyIsSet("spark.app.resource")
+    assertPropertyIsBoolean("spark.driver.supervise")
+    assertPropertyIsNumeric("spark.driver.cores")
+    assertPropertyIsNumeric("spark.cores.max")
+    assertPropertyIsMemory("spark.driver.memory")
+    assertPropertyIsMemory("spark.executor.memory")
   }
+
+  private def assertPropertyIsSet(key: String): Unit =
+    assertFieldIsSet(sparkProperties.getOrElse(key, null), key)
+
+  private def assertPropertyIsBoolean(key: String): Unit =
+    assertFieldIsBoolean(sparkProperties.getOrElse(key, null), key)
+
+  private def assertPropertyIsNumeric(key: String): Unit =
+    assertFieldIsNumeric(sparkProperties.getOrElse(key, null), key)
+
+  private def assertPropertyIsMemory(key: String): Unit =
+    assertFieldIsMemory(sparkProperties.getOrElse(key, null), key)
 }
