@@ -46,13 +46,13 @@ else:
 
 from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
+from pyspark.rdd import RDD
 from pyspark.files import SparkFiles
 from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, PickleSerializer, \
-    CloudPickleSerializer, CompressedSerializer
+    CloudPickleSerializer, CompressedSerializer, UTF8Deserializer, NoOpSerializer
 from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, ExternalSorter
-from pyspark.sql import SQLContext, IntegerType, Row, ArrayType, StructType, StructField, \
-    UserDefinedType, DoubleType
 from pyspark import shuffle
+from pyspark.profiler import BasicProfiler
 
 _have_scipy = False
 _have_numpy = False
@@ -714,6 +714,32 @@ class RDDTests(ReusedPySparkTestCase):
         wr_s21 = rdd.sample(True, 0.4, 21).collect()
         self.assertNotEqual(set(wr_s11), set(wr_s21))
 
+    def test_null_in_rdd(self):
+        jrdd = self.sc._jvm.PythonUtils.generateRDDWithNull(self.sc._jsc)
+        rdd = RDD(jrdd, self.sc, UTF8Deserializer())
+        self.assertEqual([u"a", None, u"b"], rdd.collect())
+        rdd = RDD(jrdd, self.sc, NoOpSerializer())
+        self.assertEqual(["a", None, "b"], rdd.collect())
+
+    def test_multiple_python_java_RDD_conversions(self):
+        # Regression test for SPARK-5361
+        data = [
+            (u'1', {u'director': u'David Lean'}),
+            (u'2', {u'director': u'Andrew Dominik'})
+        ]
+        from pyspark.rdd import RDD
+        data_rdd = self.sc.parallelize(data)
+        data_java_rdd = data_rdd._to_java_object_rdd()
+        data_python_rdd = self.sc._jvm.SerDe.javaToPython(data_java_rdd)
+        converted_rdd = RDD(data_python_rdd, self.sc)
+        self.assertEqual(2, converted_rdd.count())
+
+        # conversion between python and java RDD threw exceptions
+        data_java_rdd = converted_rdd._to_java_object_rdd()
+        data_python_rdd = self.sc._jvm.SerDe.javaToPython(data_java_rdd)
+        converted_rdd = RDD(data_python_rdd, self.sc)
+        self.assertEqual(2, converted_rdd.count())
+
 
 class ProfilerTests(PySparkTestCase):
 
@@ -724,16 +750,12 @@ class ProfilerTests(PySparkTestCase):
         self.sc = SparkContext('local[4]', class_name, conf=conf)
 
     def test_profiler(self):
+        self.do_computation()
 
-        def heavy_foo(x):
-            for i in range(1 << 20):
-                x = 1
-        rdd = self.sc.parallelize(range(100))
-        rdd.foreach(heavy_foo)
-        profiles = self.sc._profile_stats
-        self.assertEqual(1, len(profiles))
-        id, acc, _ = profiles[0]
-        stats = acc.value
+        profilers = self.sc.profiler_collector.profilers
+        self.assertEqual(1, len(profilers))
+        id, profiler, _ = profilers[0]
+        stats = profiler.stats()
         self.assertTrue(stats is not None)
         width, stat_list = stats.get_print_list([])
         func_names = [func_name for fname, n, func_name in stat_list]
@@ -744,235 +766,30 @@ class ProfilerTests(PySparkTestCase):
         self.sc.dump_profiles(d)
         self.assertTrue("rdd_%d.pstats" % id in os.listdir(d))
 
+    def test_custom_profiler(self):
+        class TestCustomProfiler(BasicProfiler):
+            def show(self, id):
+                self.result = "Custom formatting"
 
-class ExamplePointUDT(UserDefinedType):
-    """
-    User-defined type (UDT) for ExamplePoint.
-    """
+        self.sc.profiler_collector.profiler_cls = TestCustomProfiler
 
-    @classmethod
-    def sqlType(self):
-        return ArrayType(DoubleType(), False)
+        self.do_computation()
 
-    @classmethod
-    def module(cls):
-        return 'pyspark.tests'
+        profilers = self.sc.profiler_collector.profilers
+        self.assertEqual(1, len(profilers))
+        _, profiler, _ = profilers[0]
+        self.assertTrue(isinstance(profiler, TestCustomProfiler))
 
-    @classmethod
-    def scalaUDT(cls):
-        return 'org.apache.spark.sql.test.ExamplePointUDT'
+        self.sc.show_profiles()
+        self.assertEqual("Custom formatting", profiler.result)
 
-    def serialize(self, obj):
-        return [obj.x, obj.y]
+    def do_computation(self):
+        def heavy_foo(x):
+            for i in range(1 << 20):
+                x = 1
 
-    def deserialize(self, datum):
-        return ExamplePoint(datum[0], datum[1])
-
-
-class ExamplePoint:
-    """
-    An example class to demonstrate UDT in Scala, Java, and Python.
-    """
-
-    __UDT__ = ExamplePointUDT()
-
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-
-    def __repr__(self):
-        return "ExamplePoint(%s,%s)" % (self.x, self.y)
-
-    def __str__(self):
-        return "(%s,%s)" % (self.x, self.y)
-
-    def __eq__(self, other):
-        return isinstance(other, ExamplePoint) and \
-            other.x == self.x and other.y == self.y
-
-
-class SQLTests(ReusedPySparkTestCase):
-
-    @classmethod
-    def setUpClass(cls):
-        ReusedPySparkTestCase.setUpClass()
-        cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
-        os.unlink(cls.tempdir.name)
-
-    @classmethod
-    def tearDownClass(cls):
-        ReusedPySparkTestCase.tearDownClass()
-        shutil.rmtree(cls.tempdir.name, ignore_errors=True)
-
-    def setUp(self):
-        self.sqlCtx = SQLContext(self.sc)
-
-    def test_udf(self):
-        self.sqlCtx.registerFunction("twoArgs", lambda x, y: len(x) + y, IntegerType())
-        [row] = self.sqlCtx.sql("SELECT twoArgs('test', 1)").collect()
-        self.assertEqual(row[0], 5)
-
-    def test_udf2(self):
-        self.sqlCtx.registerFunction("strlen", lambda string: len(string), IntegerType())
-        self.sqlCtx.inferSchema(self.sc.parallelize([Row(a="test")])).registerTempTable("test")
-        [res] = self.sqlCtx.sql("SELECT strlen(a) FROM test WHERE strlen(a) > 1").collect()
-        self.assertEqual(4, res[0])
-
-    def test_udf_with_array_type(self):
-        d = [Row(l=range(3), d={"key": range(5)})]
-        rdd = self.sc.parallelize(d)
-        srdd = self.sqlCtx.inferSchema(rdd).registerTempTable("test")
-        self.sqlCtx.registerFunction("copylist", lambda l: list(l), ArrayType(IntegerType()))
-        self.sqlCtx.registerFunction("maplen", lambda d: len(d), IntegerType())
-        [(l1, l2)] = self.sqlCtx.sql("select copylist(l), maplen(d) from test").collect()
-        self.assertEqual(range(3), l1)
-        self.assertEqual(1, l2)
-
-    def test_broadcast_in_udf(self):
-        bar = {"a": "aa", "b": "bb", "c": "abc"}
-        foo = self.sc.broadcast(bar)
-        self.sqlCtx.registerFunction("MYUDF", lambda x: foo.value[x] if x else '')
-        [res] = self.sqlCtx.sql("SELECT MYUDF('c')").collect()
-        self.assertEqual("abc", res[0])
-        [res] = self.sqlCtx.sql("SELECT MYUDF('')").collect()
-        self.assertEqual("", res[0])
-
-    def test_basic_functions(self):
-        rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
-        srdd = self.sqlCtx.jsonRDD(rdd)
-        srdd.count()
-        srdd.collect()
-        srdd.schemaString()
-        srdd.schema()
-
-        # cache and checkpoint
-        self.assertFalse(srdd.is_cached)
-        srdd.persist()
-        srdd.unpersist()
-        srdd.cache()
-        self.assertTrue(srdd.is_cached)
-        self.assertFalse(srdd.isCheckpointed())
-        self.assertEqual(None, srdd.getCheckpointFile())
-
-        srdd = srdd.coalesce(2, True)
-        srdd = srdd.repartition(3)
-        srdd = srdd.distinct()
-        srdd.intersection(srdd)
-        self.assertEqual(2, srdd.count())
-
-        srdd.registerTempTable("temp")
-        srdd = self.sqlCtx.sql("select foo from temp")
-        srdd.count()
-        srdd.collect()
-
-    def test_distinct(self):
-        rdd = self.sc.parallelize(['{"a": 1}', '{"b": 2}', '{"c": 3}']*10, 10)
-        srdd = self.sqlCtx.jsonRDD(rdd)
-        self.assertEquals(srdd.getNumPartitions(), 10)
-        self.assertEquals(srdd.distinct().count(), 3)
-        result = srdd.distinct(5)
-        self.assertEquals(result.getNumPartitions(), 5)
-        self.assertEquals(result.count(), 3)
-
-    def test_apply_schema_to_row(self):
-        srdd = self.sqlCtx.jsonRDD(self.sc.parallelize(["""{"a":2}"""]))
-        srdd2 = self.sqlCtx.applySchema(srdd.map(lambda x: x), srdd.schema())
-        self.assertEqual(srdd.collect(), srdd2.collect())
-
-        rdd = self.sc.parallelize(range(10)).map(lambda x: Row(a=x))
-        srdd3 = self.sqlCtx.applySchema(rdd, srdd.schema())
-        self.assertEqual(10, srdd3.count())
-
-    def test_serialize_nested_array_and_map(self):
-        d = [Row(l=[Row(a=1, b='s')], d={"key": Row(c=1.0, d="2")})]
-        rdd = self.sc.parallelize(d)
-        srdd = self.sqlCtx.inferSchema(rdd)
-        row = srdd.first()
-        self.assertEqual(1, len(row.l))
-        self.assertEqual(1, row.l[0].a)
-        self.assertEqual("2", row.d["key"].d)
-
-        l = srdd.map(lambda x: x.l).first()
-        self.assertEqual(1, len(l))
-        self.assertEqual('s', l[0].b)
-
-        d = srdd.map(lambda x: x.d).first()
-        self.assertEqual(1, len(d))
-        self.assertEqual(1.0, d["key"].c)
-
-        row = srdd.map(lambda x: x.d["key"]).first()
-        self.assertEqual(1.0, row.c)
-        self.assertEqual("2", row.d)
-
-    def test_infer_schema(self):
-        d = [Row(l=[], d={}),
-             Row(l=[Row(a=1, b='s')], d={"key": Row(c=1.0, d="2")}, s="")]
-        rdd = self.sc.parallelize(d)
-        srdd = self.sqlCtx.inferSchema(rdd)
-        self.assertEqual([], srdd.map(lambda r: r.l).first())
-        self.assertEqual([None, ""], srdd.map(lambda r: r.s).collect())
-        srdd.registerTempTable("test")
-        result = self.sqlCtx.sql("SELECT l[0].a from test where d['key'].d = '2'")
-        self.assertEqual(1, result.first()[0])
-
-        srdd2 = self.sqlCtx.inferSchema(rdd, 1.0)
-        self.assertEqual(srdd.schema(), srdd2.schema())
-        self.assertEqual({}, srdd2.map(lambda r: r.d).first())
-        self.assertEqual([None, ""], srdd2.map(lambda r: r.s).collect())
-        srdd2.registerTempTable("test2")
-        result = self.sqlCtx.sql("SELECT l[0].a from test2 where d['key'].d = '2'")
-        self.assertEqual(1, result.first()[0])
-
-    def test_struct_in_map(self):
-        d = [Row(m={Row(i=1): Row(s="")})]
-        rdd = self.sc.parallelize(d)
-        srdd = self.sqlCtx.inferSchema(rdd)
-        k, v = srdd.first().m.items()[0]
-        self.assertEqual(1, k.i)
-        self.assertEqual("", v.s)
-
-    def test_convert_row_to_dict(self):
-        row = Row(l=[Row(a=1, b='s')], d={"key": Row(c=1.0, d="2")})
-        self.assertEqual(1, row.asDict()['l'][0].a)
-        rdd = self.sc.parallelize([row])
-        srdd = self.sqlCtx.inferSchema(rdd)
-        srdd.registerTempTable("test")
-        row = self.sqlCtx.sql("select l, d from test").first()
-        self.assertEqual(1, row.asDict()["l"][0].a)
-        self.assertEqual(1.0, row.asDict()['d']['key'].c)
-
-    def test_infer_schema_with_udt(self):
-        from pyspark.tests import ExamplePoint, ExamplePointUDT
-        row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
-        rdd = self.sc.parallelize([row])
-        srdd = self.sqlCtx.inferSchema(rdd)
-        schema = srdd.schema()
-        field = [f for f in schema.fields if f.name == "point"][0]
-        self.assertEqual(type(field.dataType), ExamplePointUDT)
-        srdd.registerTempTable("labeled_point")
-        point = self.sqlCtx.sql("SELECT point FROM labeled_point").first().point
-        self.assertEqual(point, ExamplePoint(1.0, 2.0))
-
-    def test_apply_schema_with_udt(self):
-        from pyspark.tests import ExamplePoint, ExamplePointUDT
-        row = (1.0, ExamplePoint(1.0, 2.0))
-        rdd = self.sc.parallelize([row])
-        schema = StructType([StructField("label", DoubleType(), False),
-                             StructField("point", ExamplePointUDT(), False)])
-        srdd = self.sqlCtx.applySchema(rdd, schema)
-        point = srdd.first().point
-        self.assertEquals(point, ExamplePoint(1.0, 2.0))
-
-    def test_parquet_with_udt(self):
-        from pyspark.tests import ExamplePoint
-        row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
-        rdd = self.sc.parallelize([row])
-        srdd0 = self.sqlCtx.inferSchema(rdd)
-        output_dir = os.path.join(self.tempdir.name, "labeled_point")
-        srdd0.saveAsParquetFile(output_dir)
-        srdd1 = self.sqlCtx.parquetFile(output_dir)
-        point = srdd1.first().point
-        self.assertEquals(point, ExamplePoint(1.0, 2.0))
+        rdd = self.sc.parallelize(range(100))
+        rdd.foreach(heavy_foo)
 
 
 class InputFormatTests(ReusedPySparkTestCase):

@@ -20,8 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.util.Metadata
+import org.apache.spark.sql.types._
 
 object NamedExpression {
   private val curId = new java.util.concurrent.atomic.AtomicLong()
@@ -76,7 +75,10 @@ abstract class Attribute extends NamedExpression {
 /**
  * Used to assign a new name to a computation.
  * For example the SQL expression "1 + 1 AS a" could be represented as follows:
- *  Alias(Add(Literal(1), Literal(1), "a")()
+ *  Alias(Add(Literal(1), Literal(1)), "a")()
+ *
+ * Note that exprId and qualifiers are in a separate parameter list because
+ * we only pattern match on child and name.
  *
  * @param child the computation being performed
  * @param name the name to be associated with the result of computing [[child]].

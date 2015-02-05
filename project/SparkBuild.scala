@@ -44,8 +44,9 @@ object BuildCommons {
     sparkKinesisAsl) = Seq("yarn", "yarn-stable", "java8-tests", "ganglia-lgpl",
     "kinesis-asl").map(ProjectRef(buildLocation, _))
 
-  val assemblyProjects@Seq(assembly, examples, networkYarn) =
-    Seq("assembly", "examples", "network-yarn").map(ProjectRef(buildLocation, _))
+  val assemblyProjects@Seq(assembly, examples, networkYarn, streamingKafkaAssembly) =
+    Seq("assembly", "examples", "network-yarn", "streaming-kafka-assembly")
+      .map(ProjectRef(buildLocation, _))
 
   val tools = ProjectRef(buildLocation, "tools")
   // Root project.
@@ -113,17 +114,6 @@ object SparkBuild extends PomBuild {
   }
 
   override val userPropertiesMap = System.getProperties.toMap
-
-  // Handle case where hadoop.version is set via profile.
-  // Needed only because we read back this property in sbt
-  // when we create the assembly jar.
-  val pom = loadEffectivePom(new File("pom.xml"),
-    profiles = profiles,
-    userProps = userPropertiesMap)
-  if (System.getProperty("hadoop.version") == null) {
-    System.setProperty("hadoop.version",
-      pom.getProperties.get("hadoop.version").asInstanceOf[String])
-  }
 
   lazy val MavenCompile = config("m2r") extend(Compile)
   lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
@@ -254,10 +244,11 @@ object SQL {
         |import org.apache.spark.sql.catalyst.expressions._
         |import org.apache.spark.sql.catalyst.plans.logical._
         |import org.apache.spark.sql.catalyst.rules._
-        |import org.apache.spark.sql.catalyst.types._
         |import org.apache.spark.sql.catalyst.util._
+        |import org.apache.spark.sql.Dsl._
         |import org.apache.spark.sql.execution
         |import org.apache.spark.sql.test.TestSQLContext._
+        |import org.apache.spark.sql.types._
         |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin,
     cleanupCommands in console := "sparkContext.stop()"
   )
@@ -284,11 +275,11 @@ object Hive {
         |import org.apache.spark.sql.catalyst.expressions._
         |import org.apache.spark.sql.catalyst.plans.logical._
         |import org.apache.spark.sql.catalyst.rules._
-        |import org.apache.spark.sql.catalyst.types._
         |import org.apache.spark.sql.catalyst.util._
         |import org.apache.spark.sql.execution
         |import org.apache.spark.sql.hive._
         |import org.apache.spark.sql.hive.test.TestHive._
+        |import org.apache.spark.sql.types._
         |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin,
     cleanupCommands in console := "sparkContext.stop()",
     // Some of our log4j jars make it impossible to submit jobs from this JVM to Hive Map/Reduce
@@ -303,14 +294,20 @@ object Assembly {
   import sbtassembly.Plugin._
   import AssemblyKeys._
 
+  val hadoopVersion = taskKey[String]("The version of hadoop that spark is compiled against.")
+
   lazy val settings = assemblySettings ++ Seq(
     test in assembly := {},
-    jarName in assembly <<= (version, moduleName) map { (v, mName) =>
-      if (mName.contains("network-yarn")) {
-        // This must match the same name used in maven (see network/yarn/pom.xml)
-        "spark-" + v + "-yarn-shuffle.jar"
+    hadoopVersion := {
+      sys.props.get("hadoop.version")
+        .getOrElse(SbtPomKeys.effectivePom.value.getProperties.get("hadoop.version").asInstanceOf[String])
+    },
+    jarName in assembly <<= (version, moduleName, hadoopVersion) map { (v, mName, hv) =>
+      if (mName.contains("streaming-kafka-assembly")) {
+        // This must match the same name used in maven (see external/kafka-assembly/pom.xml)
+        s"${mName}-${v}.jar"
       } else {
-        mName + "-" + v + "-hadoop" + System.getProperty("hadoop.version") + ".jar"
+        s"${mName}-${v}-hadoop${hv}.jar"
       }
     },
     mergeStrategy in assembly := {
@@ -323,7 +320,6 @@ object Assembly {
       case _                                                   => MergeStrategy.first
     }
   )
-
 }
 
 object Unidoc {

@@ -142,18 +142,18 @@ class ExecutorRunnable(
     }
 
     javaOpts += "-Djava.io.tmpdir=" +
-      new Path(Environment.PWD.$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR)
+      new Path(
+        YarnSparkHadoopUtil.expandEnvironment(Environment.PWD),
+        YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR
+      )
 
     // Certain configs need to be passed here because they are needed before the Executor
     // registers with the Scheduler and transfers the spark configs. Since the Executor backend
     // uses Akka to connect to the scheduler, the akka settings are needed as well as the
     // authentication settings.
-    sparkConf.getAll.
-      filter { case (k, v) => k.startsWith("spark.auth") || k.startsWith("spark.akka") }.
-      foreach { case (k, v) => javaOpts += YarnSparkHadoopUtil.escapeForShell(s"-D$k=$v") }
-
-    sparkConf.getAkkaConf.
-      foreach { case (k, v) => javaOpts += YarnSparkHadoopUtil.escapeForShell(s"-D$k=$v") }
+    sparkConf.getAll
+      .filter { case (k, v) => SparkConf.isExecutorStartupConf(k) }
+      .foreach { case (k, v) => javaOpts += YarnSparkHadoopUtil.escapeForShell(s"-D$k=$v") }
 
     // Commenting it out for now - so that people can refer to the properties if required. Remove
     // it once cpuset version is pushed out.
@@ -184,7 +184,8 @@ class ExecutorRunnable(
     // For log4j configuration to reference
     javaOpts += ("-Dspark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR)
 
-    val commands = prefixEnv ++ Seq(Environment.JAVA_HOME.$() + "/bin/java",
+    val commands = prefixEnv ++ Seq(
+      YarnSparkHadoopUtil.expandEnvironment(Environment.JAVA_HOME) + "/bin/java",
       "-server",
       // Kill if OOM is raised - leverage yarn's failure handling to cause rescheduling.
       // Not killing the task leaves various aspects of the executor and (to some extent) the jvm in
@@ -256,7 +257,7 @@ class ExecutorRunnable(
   private def prepareEnvironment: HashMap[String, String] = {
     val env = new HashMap[String, String]()
     val extraCp = sparkConf.getOption("spark.executor.extraClassPath")
-    ClientBase.populateClasspath(null, yarnConf, sparkConf, env, extraCp)
+    Client.populateClasspath(null, yarnConf, sparkConf, env, extraCp)
 
     sparkConf.getExecutorEnv.foreach { case (key, value) =>
       // This assumes each executor environment variable set here is a path
