@@ -53,7 +53,6 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
     features.map(x => predict(x))
   }
 
-
   /**
    * Predict values for the given data set using the model trained.
    *
