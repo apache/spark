@@ -17,13 +17,16 @@
 
 package org.apache.spark.mllib.classification
 
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.mllib.classification.impl.GLMClassificationModel
 import org.apache.spark.mllib.linalg.BLAS.dot
 import org.apache.spark.mllib.linalg.{DenseVector, Vector}
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.util.{DataValidators, MLUtils}
+import org.apache.spark.mllib.util.{DataValidators, Saveable, Loader}
 import org.apache.spark.rdd.RDD
+
 
 /**
  * Classification model trained using Multinomial/Binary Logistic Regression.
@@ -42,7 +45,22 @@ class LogisticRegressionModel (
     override val intercept: Double,
     val numFeatures: Int,
     val numClasses: Int)
-  extends GeneralizedLinearModel(weights, intercept) with ClassificationModel with Serializable {
+  extends GeneralizedLinearModel(weights, intercept) with ClassificationModel with Serializable
+  with Saveable {
+
+  if (numClasses == 2) {
+    require(weights.size == numFeatures,
+      s"LogisticRegressionModel with numClasses = 2 was given non-matching values:" +
+      s" numFeatures = $numFeatures, but weights.size = ${weights.size}")
+  } else {
+    val weightsSizeWithoutIntercept = (numClasses - 1) * numFeatures
+    val weightsSizeWithIntercept = (numClasses - 1) * (numFeatures + 1)
+    require(weights.size == weightsSizeWithoutIntercept || weights.size == weightsSizeWithIntercept,
+      s"LogisticRegressionModel.load with numClasses = $numClasses and numFeatures = $numFeatures" +
+      s" expected weights of length $weightsSizeWithoutIntercept (without intercept)" +
+      s" or $weightsSizeWithIntercept (with intercept)," +
+      s" but was given weights of length ${weights.size}")
+  }
 
   def this(weights: Vector, intercept: Double) = this(weights, intercept, weights.size, 2)
 
@@ -62,6 +80,13 @@ class LogisticRegressionModel (
 
   /**
    * :: Experimental ::
+   * Returns the threshold (if any) used for converting raw prediction scores into 0/1 predictions.
+   */
+  @Experimental
+  def getThreshold: Option[Double] = threshold
+
+  /**
+   * :: Experimental ::
    * Clears the threshold so that `predict` will output raw prediction scores.
    */
   @Experimental
@@ -70,7 +95,9 @@ class LogisticRegressionModel (
     this
   }
 
-  override protected def predictPoint(dataMatrix: Vector, weightMatrix: Vector,
+  override protected def predictPoint(
+      dataMatrix: Vector,
+      weightMatrix: Vector,
       intercept: Double) = {
     require(dataMatrix.size == numFeatures)
 
@@ -124,6 +151,40 @@ class LogisticRegressionModel (
         i += 1
       }
       bestClass.toDouble
+    }
+  }
+
+  override def save(sc: SparkContext, path: String): Unit = {
+    GLMClassificationModel.SaveLoadV1_0.save(sc, path, this.getClass.getName,
+      numFeatures, numClasses, weights, intercept, threshold)
+  }
+
+  override protected def formatVersion: String = "1.0"
+}
+
+object LogisticRegressionModel extends Loader[LogisticRegressionModel] {
+
+  override def load(sc: SparkContext, path: String): LogisticRegressionModel = {
+    val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)
+    // Hard-code class name string in case it changes in the future
+    val classNameV1_0 = "org.apache.spark.mllib.classification.LogisticRegressionModel"
+    (loadedClassName, version) match {
+      case (className, "1.0") if className == classNameV1_0 =>
+        val (numFeatures, numClasses) =
+          ClassificationModel.getNumFeaturesClasses(metadata, classNameV1_0, path)
+        val data = GLMClassificationModel.SaveLoadV1_0.loadData(sc, path, classNameV1_0)
+        // numFeatures, numClasses, weights are checked in model initialization
+        val model =
+          new LogisticRegressionModel(data.weights, data.intercept, numFeatures, numClasses)
+        data.threshold match {
+          case Some(t) => model.setThreshold(t)
+          case None => model.clearThreshold()
+        }
+        model
+      case _ => throw new Exception(
+        s"LogisticRegressionModel.load did not recognize model with (className, format version):" +
+        s"($loadedClassName, $version).  Supported:\n" +
+        s"  ($classNameV1_0, 1.0)")
     }
   }
 }
