@@ -32,7 +32,7 @@ private[spark] object MesosSchedulerBackendUtil extends Logging {
    * which is [host-dir:][container-dir][:rw|ro]
    */
   def parseVolumesSpec(volumes: String): List[Volume] = {
-    volumes.split(",").map(_.split(":")).map({ spec: Array[String] =>
+    volumes.split(",").map(_.split(":")).map { spec: Array[String] =>
         val vol: Volume.Builder = Volume
           .newBuilder()
           .setMode(Volume.Mode.RW)
@@ -59,9 +59,8 @@ private[spark] object MesosSchedulerBackendUtil extends Logging {
             None
           }
       }
-    })
-    .filter { _.isDefined }
-    .map { _.head.build() }
+    }
+    .flatMap { _.map(_.build) }
     .toList
   }
 
@@ -76,7 +75,7 @@ private[spark] object MesosSchedulerBackendUtil extends Logging {
    * and leaves open the chance for mesos to begin to accept an 'ip' field
    */
   def parsePortMappingsSpec(portmaps: String): List[DockerInfo.PortMapping] = {
-    portmaps.split(",").map(_.split(":")).map({ spec: Array[String] =>
+    portmaps.split(",").map(_.split(":")).map { spec: Array[String] =>
       val portmap: DockerInfo.PortMapping.Builder = DockerInfo.PortMapping
         .newBuilder()
         .setProtocol("tcp")
@@ -93,9 +92,8 @@ private[spark] object MesosSchedulerBackendUtil extends Logging {
           None
         }
       }
-    })
-    .filter { _.isDefined }
-    .map { _.head.build() }
+    }
+    .flatMap { _.map(_.build) }
     .toList
   }
 
