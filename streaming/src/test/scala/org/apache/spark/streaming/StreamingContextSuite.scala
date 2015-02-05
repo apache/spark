@@ -434,6 +434,7 @@ package object testPackage extends Assertions {
         assert(rddGenerated && foreachCallSiteCorrect, "Call site in foreachRDD was not correct")
       }
     } finally {
+      ssc.awaitTermination(500)
       ssc.stop(stopSparkContext = true, stopGracefully = true)
     }
   }
