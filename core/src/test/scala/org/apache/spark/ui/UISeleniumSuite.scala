@@ -34,8 +34,19 @@ import org.apache.spark.shuffle.FetchFailedException
 /**
  * Selenium tests for the Spark Web UI.
  */
-class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
-  implicit val webDriver: WebDriver = new HtmlUnitDriver
+class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with BeforeAndAfterAll {
+
+  implicit var webDriver: WebDriver = _
+
+  override def beforeAll(): Unit = {
+    webDriver = new HtmlUnitDriver
+  }
+
+  override def afterAll(): Unit = {
+    if (webDriver != null) {
+      webDriver.quit()
+    }
+  }
 
   /**
    * Create a test SparkContext with the SparkUI enabled.
