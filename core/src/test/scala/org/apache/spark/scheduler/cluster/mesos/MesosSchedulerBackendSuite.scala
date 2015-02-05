@@ -86,6 +86,7 @@ class MesosSchedulerBackendSuite extends FunSuite with LocalSparkContext with Mo
     EasyMock.expect(sc.getSparkHome()).andReturn(Option("/path")).anyTimes()
     EasyMock.expect(sc.executorEnvs).andReturn(new mutable.HashMap).anyTimes()
     EasyMock.expect(sc.conf).andReturn(conf).anyTimes()
+    EasyMock.expect(sc.listenerBus).andReturn(listenerBus)
     EasyMock.replay(sc)
 
     val backend = new MesosSchedulerBackend(taskScheduler, sc, "master")
