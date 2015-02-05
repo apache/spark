@@ -203,11 +203,4 @@ object TestData {
         :: ComplexData(Map(2 -> "2"), TestData(2, "2"), Seq(2), false)
         :: Nil).toDataFrame
   complexData.registerTempTable("complexData")
-  
-  case class Itinerary(date: Date, country: String)
-  val itinerary =
-    TestSQLContext.sparkContext.parallelize(
-      Itinerary(Date.valueOf("2015-01-01"), "US") ::
-      Itinerary(Date.valueOf("2015-01-23"), "CHINA") :: Nil)
-  itinerary.registerTempTable("itinerary")
 }
