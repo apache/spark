@@ -21,7 +21,6 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types._
-import java.sql.Date
 
 abstract class Expression extends TreeNode[Expression] {
   self: Product =>
@@ -66,36 +65,6 @@ abstract class Expression extends TreeNode[Expression] {
    * and false if any still contains any unresolved placeholders.
    */
   def childrenResolved = !children.exists(!_.resolved)
-
-  /**
-   * Evaluation helper function for DateType left children expression.
-   * Either one of the expressions result is null, the evaluation result should be null.
-   */
-  protected final def dt(i: Row, e1: Expression, e2: Expression, symbol: String): Any  = {
-    val evalE1 = e1.eval(i)
-    if(evalE1 == null) {
-      null
-    }
-    else {
-      val evalE2 = e2.eval(i)
-      if(evalE2 == null) {
-        null
-      }
-      else {
-        val currentDate = evalE1.asInstanceOf[Date]
-        var milSec: Long = 0
-        evalE2 match {
-          case n: Integer => milSec = evalE2.asInstanceOf[Integer].toLong
-          case l: Long => milSec = evalE2.asInstanceOf[Long]
-        }
-        symbol match {
-          case "+" => new Date(currentDate.getTime + milSec)
-          case "-" => new Date(currentDate.getTime - milSec)
-          case other =>  sys.error(s"Type $other does not support date operations")
-        }
-      }
-    }
-  }
 
   /**
    * A set of helper functions that return the correct descendant of `scala.math.Numeric[T]` type
