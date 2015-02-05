@@ -182,7 +182,8 @@ private[sql] class DataFrameImpl protected[sql](
   override def selectExpr(exprs: String*): DataFrame = {
     select(exprs.map { expr =>
       Column(new SqlParser().parseExpression(expr))
-    } :_*)
+    }: _*)
+  }
 
   override def addColumn(colName: String, col: Column): DataFrame = {
     select(Column("*"), col.as(colName))
