@@ -327,8 +327,7 @@ class SubmitRestProtocolSuite extends FunSuite {
       |{
       |  "action" : "ErrorResponse",
       |  "message" : "Field not found in submit request: X",
-      |  "serverSparkVersion" : "1.2.3",
-      |  "success": "false"
+      |  "serverSparkVersion" : "1.2.3"
       |}
     """.stripMargin
 

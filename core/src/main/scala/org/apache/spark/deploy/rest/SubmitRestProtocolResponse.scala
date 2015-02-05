@@ -26,7 +26,6 @@ private[spark] abstract class SubmitRestProtocolResponse extends SubmitRestProto
   protected override def doValidate(): Unit = {
     super.doValidate()
     assertFieldIsSet(serverSparkVersion, "serverSparkVersion")
-    assertFieldIsSet(success, "success")
     assertFieldIsBoolean(success, "success")
   }
 }
@@ -36,6 +35,10 @@ private[spark] abstract class SubmitRestProtocolResponse extends SubmitRestProto
  */
 private[spark] class CreateSubmissionResponse extends SubmitRestProtocolResponse {
   var submissionId: String = null
+  protected override def doValidate(): Unit = {
+    super.doValidate()
+    assertFieldIsSet(success, "success")
+  }
 }
 
 /**
@@ -46,6 +49,7 @@ private[spark] class KillSubmissionResponse extends SubmitRestProtocolResponse {
   protected override def doValidate(): Unit = {
     super.doValidate()
     assertFieldIsSet(submissionId, "submissionId")
+    assertFieldIsSet(success, "success")
   }
 }
 
@@ -61,6 +65,7 @@ private[spark] class SubmissionStatusResponse extends SubmitRestProtocolResponse
   protected override def doValidate(): Unit = {
     super.doValidate()
     assertFieldIsSet(submissionId, "submissionId")
+    assertFieldIsSet(success, "success")
   }
 }
 
@@ -68,13 +73,9 @@ private[spark] class SubmissionStatusResponse extends SubmitRestProtocolResponse
  * An error response message used in the REST application submission protocol.
  */
 private[spark] class ErrorResponse extends SubmitRestProtocolResponse {
-
-  // request was unsuccessful
-  success = "false"
-
+  var protocolVersion: String = null
   protected override def doValidate(): Unit = {
     super.doValidate()
     assertFieldIsSet(message, "message")
-    assert(!success.toBoolean, s"The 'success' field must be false in $messageType.")
   }
 }

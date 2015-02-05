@@ -375,9 +375,9 @@ private[spark] class ErrorServlet extends StandaloneRestServlet {
   protected override def service(
       request: HttpServletRequest,
       response: HttpServletResponse): Unit = {
-    response.setStatus(HttpServletResponse.SC_BAD_REQUEST)
     val path = request.getPathInfo
     val parts = path.stripPrefix("/").split("/").toSeq
+    var versionMismatch = false
     var msg =
       parts match {
         case Nil =>
@@ -391,8 +391,7 @@ private[spark] class ErrorServlet extends StandaloneRestServlet {
           "Missing an action: please specify one of /create, /kill, or /status."
         case unknownVersion :: _ =>
           // http://host:port/unknown-version/*
-          // Use a special response code in case the client wants to retry with a different version
-          response.setStatus(StandaloneRestServer.SC_UNKNOWN_PROTOCOL_VERSION)
+          versionMismatch = true
           s"Unknown protocol version '$unknownVersion'."
         case _ =>
           // never reached
@@ -400,6 +399,14 @@ private[spark] class ErrorServlet extends StandaloneRestServlet {
       }
     msg += s" Please submit requests through http://[host]:[port]/$expectedVersion/submissions/..."
     val error = handleError(msg)
+    // If there is a version mismatch, include the highest protocol version that
+    // this server supports in case the client wants to retry with our version
+    if (versionMismatch) {
+      error.protocolVersion = expectedVersion
+      response.setStatus(StandaloneRestServer.SC_UNKNOWN_PROTOCOL_VERSION)
+    } else {
+      response.setStatus(HttpServletResponse.SC_BAD_REQUEST)
+    }
     sendResponse(error, response)
   }
 }
