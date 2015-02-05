@@ -673,7 +673,7 @@ private[spark] object JsonProtocol {
     metrics.incLocalBlocksFetched((json \ "Local Blocks Fetched").extract[Int])
     metrics.incFetchWaitTime((json \ "Fetch Wait Time").extract[Long])
     metrics.incRemoteBytesRead((json \ "Remote Bytes Read").extract[Long])
-    metrics.incRecordsRead((json \ "Records Read").extractOpt[Long].getOrElse(-1))
+    metrics.incRecordsRead((json \ "Records Read").extractOpt[Long].getOrElse(0))
     metrics
   }
 
@@ -681,7 +681,7 @@ private[spark] object JsonProtocol {
     val metrics = new ShuffleWriteMetrics
     metrics.incShuffleBytesWritten((json \ "Shuffle Bytes Written").extract[Long])
     metrics.incShuffleWriteTime((json \ "Shuffle Write Time").extract[Long])
-    metrics.setRecordsWritten((json \ "Shuffle Records Written").extractOpt[Long].getOrElse(-1))
+    metrics.setRecordsWritten((json \ "Shuffle Records Written").extractOpt[Long].getOrElse(0))
     metrics
   }
 
@@ -689,7 +689,7 @@ private[spark] object JsonProtocol {
     val metrics = new InputMetrics(
       DataReadMethod.withName((json \ "Data Read Method").extract[String]))
     metrics.incBytesRead((json \ "Bytes Read").extract[Long])
-    metrics.incRecordsRead((json \ "Records Read").extractOpt[Long].getOrElse(-1))
+    metrics.incRecordsRead((json \ "Records Read").extractOpt[Long].getOrElse(0))
     metrics
   }
 
@@ -697,7 +697,7 @@ private[spark] object JsonProtocol {
     val metrics = new OutputMetrics(
       DataWriteMethod.withName((json \ "Data Write Method").extract[String]))
     metrics.setBytesWritten((json \ "Bytes Written").extract[Long])
-    metrics.setRecordsWritten((json \ "Records Written").extractOpt[Long].getOrElse(-1))
+    metrics.setRecordsWritten((json \ "Records Written").extractOpt[Long].getOrElse(0))
     metrics
   }
 

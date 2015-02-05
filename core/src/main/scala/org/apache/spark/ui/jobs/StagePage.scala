@@ -56,11 +56,6 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val numCompleted = tasks.count(_.taskInfo.finished)
       val accumulables = listener.stageIdToData((stageId, stageAttemptId)).accumulables
       val hasAccumulators = accumulables.size > 0
-      val hasInput = stageData.inputBytes > 0
-      val hasOutput = stageData.outputBytes > 0
-      val hasShuffleRead = stageData.shuffleReadBytes > 0
-      val hasShuffleWrite = stageData.shuffleWriteBytes > 0
-      val hasBytesSpilled = stageData.memoryBytesSpilled > 0 && stageData.diskBytesSpilled > 0
 
       val summary =
         <div>
@@ -69,33 +64,33 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
               <strong>Total task time across all tasks: </strong>
               {UIUtils.formatDuration(stageData.executorRunTime)}
             </li>
-            {if (hasInput) {
+            {if (stageData.hasInput) {
               <li>
                 <strong>Input Size / Records: </strong>
                 {s"${Utils.bytesToString(stageData.inputBytes)} / ${stageData.inputRecords}"}
               </li>
             }}
-            {if (hasOutput) {
+            {if (stageData.hasOutput) {
               <li>
                 <strong>Output: </strong>
                 {s"${Utils.bytesToString(stageData.outputBytes)} / ${stageData.outputRecords}"}
               </li>
             }}
-            {if (hasShuffleRead) {
+            {if (stageData.hasShuffleRead) {
               <li>
                 <strong>Shuffle read: </strong>
                 {s"${Utils.bytesToString(stageData.shuffleReadBytes)} / " +
                  s"${stageData.shuffleReadRecords}"}
               </li>
             }}
-            {if (hasShuffleWrite) {
+            {if (stageData.hasShuffleWrite) {
               <li>
                 <strong>Shuffle write: </strong>
                  {s"${Utils.bytesToString(stageData.shuffleWriteBytes)} / " +
                  s"${stageData.shuffleWriteRecords}"}
               </li>
             }}
-            {if (hasBytesSpilled) {
+            {if (stageData.hasBytesSpilled) {
               <li>
                 <strong>Shuffle spill (memory): </strong>
                 {Utils.bytesToString(stageData.memoryBytesSpilled)}
@@ -134,7 +129,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
                   <span class="additional-metric-title">Task Deserialization Time</span>
                 </span>
               </li>
-              {if (hasShuffleRead) {
+              {if (stageData.hasShuffleRead) {
                 <li>
                   <span data-toggle="tooltip"
                         title={ToolTips.SHUFFLE_READ_BLOCKED_TIME} data-placement="right">
@@ -176,26 +171,32 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           ("Result Serialization Time", TaskDetailsClassNames.RESULT_SERIALIZATION_TIME),
           ("Getting Result Time", TaskDetailsClassNames.GETTING_RESULT_TIME)) ++
         {if (hasAccumulators) Seq(("Accumulators", "")) else Nil} ++
-        {if (hasInput) Seq(("Input Size / Records", "")) else Nil} ++
-        {if (hasOutput) Seq(("Output Size / Records", "")) else Nil} ++
-        {if (hasShuffleRead) {
+        {if (stageData.hasInput) Seq(("Input Size / Records", "")) else Nil} ++
+        {if (stageData.hasOutput) Seq(("Output Size / Records", "")) else Nil} ++
+        {if (stageData.hasShuffleRead) {
           Seq(("Shuffle Read Blocked Time", TaskDetailsClassNames.SHUFFLE_READ_BLOCKED_TIME),
             ("Shuffle Read Size / Records", ""))
-        }  else {
+        } else {
           Nil
         }} ++
-        {if (hasShuffleWrite) Seq(("Write Time", ""), ("Shuffle Write Size / Records", ""))
-          else Nil} ++
-        {if (hasBytesSpilled) Seq(("Shuffle Spill (Memory)", ""), ("Shuffle Spill (Disk)", ""))
-          else Nil} ++
+        {if (stageData.hasShuffleWrite) {
+          Seq(("Write Time", ""), ("Shuffle Write Size / Records", ""))
+        } else {
+          Nil
+        }} ++
+        {if (stageData.hasBytesSpilled) {
+          Seq(("Shuffle Spill (Memory)", ""), ("Shuffle Spill (Disk)", ""))
+        } else {
+          Nil
+        }} ++
         Seq(("Errors", ""))
 
       val unzipped = taskHeadersAndCssClasses.unzip
 
       val taskTable = UIUtils.listingTable(
         unzipped._1,
-        taskRow(hasAccumulators, hasInput, hasOutput, hasShuffleRead, hasShuffleWrite,
-          hasBytesSpilled),
+        taskRow(hasAccumulators, stageData.hasInput, stageData.hasOutput,
+          stageData.hasShuffleRead, stageData.hasShuffleWrite, stageData.hasBytesSpilled),
         tasks,
         headerClasses = unzipped._2)
       // Excludes tasks which failed and have incomplete metrics
@@ -206,11 +207,11 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           None
         }
         else {
-          def getDistributionQuantities(data: Seq[Double]): IndexedSeq[Double] =
+          def getDistributionQuantiles(data: Seq[Double]): IndexedSeq[Double] =
             Distribution(data).get.getQuantiles()
 
           def getFormattedTimeQuantiles(times: Seq[Double]): Seq[Node] = {
-            getDistributionQuantities(times).map { millis =>
+            getDistributionQuantiles(times).map { millis =>
               <td>{UIUtils.formatDuration(millis.toLong)}</td>
             }
           }
@@ -279,11 +280,11 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             getFormattedTimeQuantiles(schedulerDelays)
 
           def getFormattedSizeQuantiles(data: Seq[Double]) =
-            getDistributionQuantities(data).map(d => <td>{Utils.bytesToString(d.toLong)}</td>)
+            getDistributionQuantiles(data).map(d => <td>{Utils.bytesToString(d.toLong)}</td>)
 
           def getFormattedSizeQuantilesWithRecords(data: Seq[Double], records: Seq[Double]) = {
-            val recordDist = getDistributionQuantities(records).iterator
-            getDistributionQuantities(data).map(d =>
+            val recordDist = getDistributionQuantiles(records).iterator
+            getDistributionQuantiles(data).map(d =>
               <td>{s"${Utils.bytesToString(d.toLong)} / ${recordDist.next().toLong}"}</td>
             )
           }
@@ -361,9 +362,9 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
               {serializationQuantiles}
             </tr>,
             <tr class={TaskDetailsClassNames.GETTING_RESULT_TIME}>{gettingResultQuantiles}</tr>,
-            if (hasInput) <tr>{inputQuantiles}</tr> else Nil,
-            if (hasOutput) <tr>{outputQuantiles}</tr> else Nil,
-            if (hasShuffleRead) {
+            if (stageData.hasInput) <tr>{inputQuantiles}</tr> else Nil,
+            if (stageData.hasOutput) <tr>{outputQuantiles}</tr> else Nil,
+            if (stageData.hasShuffleRead) {
               <tr class={TaskDetailsClassNames.SHUFFLE_READ_BLOCKED_TIME}>
                 {shuffleReadBlockedQuantiles}
               </tr>
@@ -371,9 +372,9 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             } else {
               Nil
             },
-            if (hasShuffleWrite) <tr>{shuffleWriteQuantiles}</tr> else Nil,
-            if (hasBytesSpilled) <tr>{memoryBytesSpilledQuantiles}</tr> else Nil,
-            if (hasBytesSpilled) <tr>{diskBytesSpilledQuantiles}</tr> else Nil)
+            if (stageData.hasShuffleWrite) <tr>{shuffleWriteQuantiles}</tr> else Nil,
+            if (stageData.hasBytesSpilled) <tr>{memoryBytesSpilledQuantiles}</tr> else Nil,
+            if (stageData.hasBytesSpilled) <tr>{diskBytesSpilledQuantiles}</tr> else Nil)
 
           val quantileHeaders = Seq("Metric", "Min", "25th percentile",
             "Median", "75th percentile", "Max")

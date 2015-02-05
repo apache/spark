@@ -242,7 +242,10 @@ object DataWriteMethod extends Enumeration with Serializable {
  */
 @DeveloperApi
 case class InputMetrics(readMethod: DataReadMethod.Value) {
- 
+
+  /**
+   * This is volatile so that it is visible to the updater thread.
+   */
   @volatile @transient var bytesReadCallback: Option[() => Long] = None
 
   /**

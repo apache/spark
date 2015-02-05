@@ -243,7 +243,11 @@ class InputOutputMetricsSuite extends FunSuite with SharedSparkContext
 
     sc.listenerBus.waitUntilEmpty(500)
     assert(inputRead == numRecords)
-    assert(outputWritten == numBuckets)
+
+    // Only supported on newer Hadoop
+    if (SparkHadoopUtil.get.getFSBytesWrittenOnThreadCallback().isDefined) {
+      assert(outputWritten == numBuckets)
+    }
     assert(shuffleRead == shuffleWritten)
   }
 
@@ -321,24 +325,30 @@ class InputOutputMetricsSuite extends FunSuite with SharedSparkContext
   }
 
   test("output metrics on records written") {
-    val file = new File(tmpDir, getClass.getSimpleName)
-    val filePath = "file://" + file.getAbsolutePath
+    // Only supported on newer Hadoop
+    if (SparkHadoopUtil.get.getFSBytesWrittenOnThreadCallback().isDefined) {
+      val file = new File(tmpDir, getClass.getSimpleName)
+      val filePath = "file://" + file.getAbsolutePath
 
-    val records = runAndReturnRecordsWritten {
-      sc.parallelize(1 to numRecords).saveAsTextFile(filePath)
+      val records = runAndReturnRecordsWritten {
+        sc.parallelize(1 to numRecords).saveAsTextFile(filePath)
+      }
+      assert(records == numRecords)
     }
-    assert(records == numRecords)
   }
 
   test("output metrics on records written - new Hadoop API") {
-    val file = new File(tmpDir, getClass.getSimpleName)
-    val filePath = "file://" + file.getAbsolutePath
+    // Only supported on newer Hadoop
+    if (SparkHadoopUtil.get.getFSBytesWrittenOnThreadCallback().isDefined) {
+      val file = new File(tmpDir, getClass.getSimpleName)
+      val filePath = "file://" + file.getAbsolutePath
 
-    val records = runAndReturnRecordsWritten {
-      sc.parallelize(1 to numRecords).map(key => (key.toString, key.toString))
-        .saveAsNewAPIHadoopFile[NewTextOutputFormat[String, String]](filePath)
+      val records = runAndReturnRecordsWritten {
+        sc.parallelize(1 to numRecords).map(key => (key.toString, key.toString))
+          .saveAsNewAPIHadoopFile[NewTextOutputFormat[String, String]](filePath)
+      }
+      assert(records == numRecords)
     }
-    assert(records == numRecords)
   }
 
   test("output metrics when writing text file") {

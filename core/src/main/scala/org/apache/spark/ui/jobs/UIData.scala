@@ -93,6 +93,12 @@ private[jobs] object UIData {
     var accumulables = new HashMap[Long, AccumulableInfo]
     var taskData = new HashMap[Long, TaskUIData]
     var executorSummary = new HashMap[String, ExecutorSummary]
+
+    def hasInput = inputBytes > 0
+    def hasOutput = outputBytes > 0
+    def hasShuffleRead = shuffleReadBytes > 0
+    def hasShuffleWrite = shuffleWriteBytes > 0
+    def hasBytesSpilled = memoryBytesSpilled > 0 && diskBytesSpilled > 0
   }
 
   /**

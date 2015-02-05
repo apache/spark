@@ -115,8 +115,10 @@ private[spark] class DiskBlockObjectWriter(
   private var finalPosition: Long = -1
   private var reportedPosition = initialPosition
 
-  /** Calling channel.position() to update the write metrics can be a little bit expensive, so we
-    * only call it every N writes */
+  /**
+   * Keep track of number of records written and also use this to periodically
+   * output bytes written since the latter is expensive to do for each record.
+   */
   private var numRecordsWritten = 0
 
   override def open(): BlockObjectWriter = {

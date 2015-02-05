@@ -197,8 +197,8 @@ class JsonProtocolSuite extends FunSuite {
     val oldJson = newJson.removeField { case (field, _) => field == "Records Read" }
                          .removeField { case (field, _) => field == "Records Written" }
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
-    assert(newMetrics.inputMetrics.get.recordsRead == -1)
-    assert(newMetrics.outputMetrics.get.recordsWritten == -1)
+    assert(newMetrics.inputMetrics.get.recordsRead == 0)
+    assert(newMetrics.outputMetrics.get.recordsWritten == 0)
   }
 
   test("Shuffle Read/Write records backwards compatibility") {
@@ -211,8 +211,8 @@ class JsonProtocolSuite extends FunSuite {
     val oldJson = newJson.removeField { case (field, _) => field == "Records Read" }
                          .removeField { case (field, _) => field == "Shuffle Records Written" }
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
-    assert(newMetrics.shuffleReadMetrics.get.recordsRead == -1)
-    assert(newMetrics.shuffleWriteMetrics.get.recordsWritten == -1)
+    assert(newMetrics.shuffleReadMetrics.get.recordsRead == 0)
+    assert(newMetrics.shuffleWriteMetrics.get.recordsWritten == 0)
   }
 
   test("OutputMetrics backward compatibility") {
