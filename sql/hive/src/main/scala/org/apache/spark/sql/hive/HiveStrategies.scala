@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.sources.DescribeCommand
 import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive.execution._
@@ -240,8 +241,11 @@ private[hive] trait HiveStrategies {
           case t: MetastoreRelation =>
             ExecutedCommand(
               DescribeHiveTableCommand(t, describe.output, describe.isExtended)) :: Nil
+
           case o: LogicalPlan =>
-            ExecutedCommand(RunnableDescribeCommand(planLater(o), describe.output)) :: Nil
+            val resultPlan = context.executePlan(o).executedPlan
+            ExecutedCommand(RunnableDescribeCommand(
+              resultPlan, describe.output, describe.isExtended)) :: Nil
         }
 
       case _ => Nil

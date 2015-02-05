@@ -23,6 +23,8 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -50,7 +52,6 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
     }
   }
 
-
   // Keyword is a convention with AbstractSparkSQLParser, which will scan all of the `Keyword`
   // properties via reflection the class in runtime for constructing the SqlLexical object
   protected val CREATE = Keyword("CREATE")
@@ -61,6 +62,8 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
   protected val EXISTS = Keyword("EXISTS")
   protected val USING = Keyword("USING")
   protected val OPTIONS = Keyword("OPTIONS")
+  protected val DESCRIBE = Keyword("DESCRIBE")
+  protected val EXTENDED = Keyword("EXTENDED")
   protected val AS = Keyword("AS")
   protected val COMMENT = Keyword("COMMENT")
 
@@ -82,7 +85,7 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
   protected val MAP = Keyword("MAP")
   protected val STRUCT = Keyword("STRUCT")
 
-  protected lazy val ddl: Parser[LogicalPlan] = createTable
+  protected lazy val ddl: Parser[LogicalPlan] = createTable | describeTable
 
   protected def start: Parser[LogicalPlan] = ddl
 
@@ -135,6 +138,22 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
   )
 
   protected lazy val tableCols: Parser[Seq[StructField]] =  "(" ~> repsep(column, ",") <~ ")"
+
+  /*
+   * describe [extended] table avroTable
+   * This will display all columns of table `avroTable` includes column_name,column_type,nullable
+   */
+  protected lazy val describeTable: Parser[LogicalPlan] =
+    (DESCRIBE ~> opt(EXTENDED)) ~ (ident <~ ".").? ~ ident  ^^ {
+      case e ~ db ~ tbl  =>
+        val tblIdentifier = db match {
+          case Some(dbName) =>
+            Seq(dbName, tbl)
+          case None =>
+            Seq(tbl)
+        }
+        DescribeCommand(UnresolvedRelation(tblIdentifier, None), e.isDefined)
+   }
 
   protected lazy val options: Parser[Map[String, String]] =
     "(" ~> repsep(pair, ",") <~ ")" ^^ { case s: Seq[(String, String)] => s.toMap }
@@ -273,6 +292,22 @@ object ResolvedDataSource {
 }
 
 private[sql] case class ResolvedDataSource(provider: Class[_], relation: BaseRelation)
+
+/**
+ * Returned for the "DESCRIBE [EXTENDED] [dbName.]tableName" command.
+ * @param table The table to be described.
+ * @param isExtended True if "DESCRIBE EXTENDED" is used. Otherwise, false.
+ *                   It is effective only when the table is a Hive table.
+ */
+private[sql] case class DescribeCommand(
+    table: LogicalPlan,
+    isExtended: Boolean) extends Command {
+  override def output = Seq(
+    // Column names are based on Hive.
+    AttributeReference("col_name", StringType, nullable = false)(),
+    AttributeReference("data_type", StringType, nullable = false)(),
+    AttributeReference("comment", StringType, nullable = false)())
+}
 
 private[sql] case class CreateTableUsing(
     tableName: String,
