@@ -385,7 +385,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   @Experimental
   def jsonRDD(json: JavaRDD[String], samplingRatio: Double): DataFrame = {
-    jsonRDD(json.rdd, samplingRatio);
+    jsonRDD(json.rdd, samplingRatio, false);
   }
 
   @Experimental
