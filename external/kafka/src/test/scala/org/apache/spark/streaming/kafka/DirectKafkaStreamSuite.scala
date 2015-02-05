@@ -34,7 +34,7 @@ import org.apache.spark.streaming.dstream.{DStream, InputDStream}
 import org.apache.spark.util.Utils
 
 class DirectKafkaStreamSuite extends KafkaStreamSuiteBase
-with BeforeAndAfter with BeforeAndAfterAll with Eventually {
+  with BeforeAndAfter with BeforeAndAfterAll with Eventually {
   val sparkConf = new SparkConf()
     .setMaster("local[4]")
     .setAppName(this.getClass.getSimpleName)

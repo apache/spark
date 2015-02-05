@@ -50,7 +50,7 @@ final class OffsetRange private(
   }
 
   override def toString(): String = {
-    s"OffsetRange(topic='$topic', partition=$partition, range: [$fromOffset -> $untilOffset]"
+    s"OffsetRange(topic: '$topic', partition: $partition, range: [$fromOffset -> $untilOffset]"
   }
 
   /** this is to avoid ClassNotFoundException during checkpoint restore */
