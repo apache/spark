@@ -99,7 +99,11 @@ private[parquet] class RowReadSupport extends ReadSupport[Row] with Logging {
     val requestedAttributes = RowReadSupport.getRequestedSchema(configuration)
 
     if (requestedAttributes != null) {
-      parquetSchema = ParquetTypesConverter.convertFromAttributes(requestedAttributes)
+      // If the parquet file is thrift derived, there is a good chance that
+      // it will have the thrift class in metadata.
+      val isThriftDerived = keyValueMetaData.keySet().contains("thrift.class")
+      parquetSchema = ParquetTypesConverter
+        .convertFromAttributes(requestedAttributes, isThriftDerived)
       metadata.put(
         RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
         ParquetTypesConverter.convertToString(requestedAttributes))
