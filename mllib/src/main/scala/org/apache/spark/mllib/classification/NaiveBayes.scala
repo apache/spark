@@ -92,7 +92,7 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
 
     def save(sc: SparkContext, path: String, data: Data): Unit = {
       val sqlContext = new SQLContext(sc)
-      import sqlContext._
+      import sqlContext.implicits._
 
       // Create JSON metadata.
       val metadataRDD =

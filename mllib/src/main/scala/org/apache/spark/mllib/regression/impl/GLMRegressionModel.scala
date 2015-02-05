@@ -45,7 +45,7 @@ private[regression] object GLMRegressionModel {
         weights: Vector,
         intercept: Double): Unit = {
       val sqlContext = new SQLContext(sc)
-      import sqlContext._
+      import sqlContext.implicits._
 
       // Create JSON metadata.
       val metadataRDD =
