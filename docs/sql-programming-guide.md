@@ -1,6 +1,7 @@
 ---
 layout: global
-title: Spark SQL Programming Guide
+displayTitle: Spark SQL Programming Guide
+title: Spark SQL
 ---
 
 * This will become a table of contents (this text will be scraped).
