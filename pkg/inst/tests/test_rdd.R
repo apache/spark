@@ -258,6 +258,11 @@ test_that("sortBy() on RDDs", {
   sortedRdd <- sortBy(rdd, function(x) { x }, ascending = FALSE)
   actual <- collect(sortedRdd)
   expect_equal(actual, as.list(sort(nums, decreasing = TRUE)))
+
+  rdd2 <- parallelize(sc, sort(nums, decreasing = TRUE), 2L)
+  sortedRdd2 <- sortBy(rdd2, function(x) { x })
+  actual <- collect(sortedRdd2)
+  expect_equal(actual, as.list(nums))
 })
 
 test_that("keys() on RDDs", {
@@ -386,4 +391,10 @@ test_that("sortByKey() on pairwise RDDs", {
   actual <- collect(sortedRdd)
   numPairs <- lapply(nums, function(x) { list (x, x) })
   expect_equal(actual, sortKeyValueList(numPairs, decreasing = TRUE))
+
+  rdd2 <- parallelize(sc, sort(nums, decreasing = TRUE), 2L)
+  numPairsRdd2 <- map(rdd2, function(x) { list (x, x) })
+  sortedRdd2 <- sortByKey(numPairsRdd2)
+  actual <- collect(sortedRdd2)
+  expect_equal(actual, numPairs)
 })
