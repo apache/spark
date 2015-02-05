@@ -28,6 +28,8 @@ class InMemoryColumnarQuerySuite extends QueryTest {
   // Make sure the tables are loaded.
   TestData
 
+  import org.apache.spark.sql.test.TestSQLContext.implicits._
+
   test("simple columnar query") {
     val plan = executePlan(testData.logicalPlan).executedPlan
     val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None)

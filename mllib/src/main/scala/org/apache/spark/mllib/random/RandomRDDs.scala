@@ -29,13 +29,13 @@ import org.apache.spark.util.Utils
 
 /**
  * :: Experimental ::
- * Generator methods for creating RDDs comprised of i.i.d. samples from some distribution.
+ * Generator methods for creating RDDs comprised of `i.i.d.` samples from some distribution.
  */
 @Experimental
 object RandomRDDs {
 
   /**
-   * Generates an RDD comprised of i.i.d. samples from the uniform distribution `U(0.0, 1.0)`.
+   * Generates an RDD comprised of `i.i.d.` samples from the uniform distribution `U(0.0, 1.0)`.
    *
    * To transform the distribution in the generated RDD from `U(0.0, 1.0)` to `U(a, b)`, use
    * `RandomRDDs.uniformRDD(sc, n, p, seed).map(v => a + (b - a) * v)`.
@@ -44,7 +44,7 @@ object RandomRDDs {
    * @param size Size of the RDD.
    * @param numPartitions Number of partitions in the RDD (default: `sc.defaultParallelism`).
    * @param seed Random seed (default: a random long integer).
-   * @return RDD[Double] comprised of i.i.d. samples ~ `U(0.0, 1.0)`.
+   * @return RDD[Double] comprised of `i.i.d.` samples ~ `U(0.0, 1.0)`.
    */
   def uniformRDD(
       sc: SparkContext,
@@ -81,7 +81,7 @@ object RandomRDDs {
   }
 
   /**
-   * Generates an RDD comprised of i.i.d. samples from the standard normal distribution.
+   * Generates an RDD comprised of `i.i.d.` samples from the standard normal distribution.
    *
    * To transform the distribution in the generated RDD from standard normal to some other normal
    * `N(mean, sigma^2^)`, use `RandomRDDs.normalRDD(sc, n, p, seed).map(v => mean + sigma * v)`.
@@ -90,7 +90,7 @@ object RandomRDDs {
    * @param size Size of the RDD.
    * @param numPartitions Number of partitions in the RDD (default: `sc.defaultParallelism`).
    * @param seed Random seed (default: a random long integer).
-   * @return RDD[Double] comprised of i.i.d. samples ~ N(0.0, 1.0).
+   * @return RDD[Double] comprised of `i.i.d.` samples ~ N(0.0, 1.0).
    */
   def normalRDD(
       sc: SparkContext,
@@ -127,14 +127,15 @@ object RandomRDDs {
   }
 
   /**
-   * Generates an RDD comprised of i.i.d. samples from the Poisson distribution with the input mean.
+   * Generates an RDD comprised of `i.i.d.` samples from the Poisson distribution with the input
+   * mean.
    *
    * @param sc SparkContext used to create the RDD.
    * @param mean Mean, or lambda, for the Poisson distribution.
    * @param size Size of the RDD.
    * @param numPartitions Number of partitions in the RDD (default: `sc.defaultParallelism`).
    * @param seed Random seed (default: a random long integer).
-   * @return RDD[Double] comprised of i.i.d. samples ~ Pois(mean).
+   * @return RDD[Double] comprised of `i.i.d.` samples ~ Pois(mean).
    */
   def poissonRDD(
       sc: SparkContext,
@@ -177,7 +178,7 @@ object RandomRDDs {
   }
 
   /**
-   * Generates an RDD comprised of i.i.d. samples from the exponential distribution with
+   * Generates an RDD comprised of `i.i.d.` samples from the exponential distribution with
    * the input mean.
    *
    * @param sc SparkContext used to create the RDD.
@@ -185,7 +186,7 @@ object RandomRDDs {
    * @param size Size of the RDD.
    * @param numPartitions Number of partitions in the RDD (default: `sc.defaultParallelism`).
    * @param seed Random seed (default: a random long integer).
-   * @return RDD[Double] comprised of i.i.d. samples ~ Pois(mean).
+   * @return RDD[Double] comprised of `i.i.d.` samples ~ Pois(mean).
    */
   def exponentialRDD(
       sc: SparkContext,
@@ -228,7 +229,7 @@ object RandomRDDs {
   }
 
   /**
-   * Generates an RDD comprised of i.i.d. samples from the gamma distribution with the input
+   * Generates an RDD comprised of `i.i.d.` samples from the gamma distribution with the input
    *  shape and scale.
    *
    * @param sc SparkContext used to create the RDD.
@@ -237,7 +238,7 @@ object RandomRDDs {
    * @param size Size of the RDD.
    * @param numPartitions Number of partitions in the RDD (default: `sc.defaultParallelism`).
    * @param seed Random seed (default: a random long integer).
-   * @return RDD[Double] comprised of i.i.d. samples ~ Pois(mean).
+   * @return RDD[Double] comprised of `i.i.d.` samples ~ Pois(mean).
    */
   def gammaRDD(
       sc: SparkContext,
@@ -287,7 +288,7 @@ object RandomRDDs {
   }
 
   /**
-   * Generates an RDD comprised of i.i.d. samples from the log normal distribution with the input
+   * Generates an RDD comprised of `i.i.d.` samples from the log normal distribution with the input
    *  mean and standard deviation
    *
    * @param sc SparkContext used to create the RDD.
@@ -296,7 +297,7 @@ object RandomRDDs {
    * @param size Size of the RDD.
    * @param numPartitions Number of partitions in the RDD (default: `sc.defaultParallelism`).
    * @param seed Random seed (default: a random long integer).
-   * @return RDD[Double] comprised of i.i.d. samples ~ Pois(mean).
+   * @return RDD[Double] comprised of `i.i.d.` samples ~ Pois(mean).
    */
   def logNormalRDD(
       sc: SparkContext,
@@ -348,14 +349,14 @@ object RandomRDDs {
 
   /**
    * :: DeveloperApi ::
-   * Generates an RDD comprised of i.i.d. samples produced by the input RandomDataGenerator.
+   * Generates an RDD comprised of `i.i.d.` samples produced by the input RandomDataGenerator.
    *
    * @param sc SparkContext used to create the RDD.
    * @param generator RandomDataGenerator used to populate the RDD.
    * @param size Size of the RDD.
    * @param numPartitions Number of partitions in the RDD (default: `sc.defaultParallelism`).
    * @param seed Random seed (default: a random long integer).
-   * @return RDD[Double] comprised of i.i.d. samples produced by generator.
+   * @return RDD[Double] comprised of `i.i.d.` samples produced by generator.
    */
   @DeveloperApi
   def randomRDD[T: ClassTag](
@@ -370,7 +371,7 @@ object RandomRDDs {
   // TODO Generate RDD[Vector] from multivariate distributions.
 
   /**
-   * Generates an RDD[Vector] with vectors containing i.i.d. samples drawn from the
+   * Generates an RDD[Vector] with vectors containing `i.i.d.` samples drawn from the
    * uniform distribution on `U(0.0, 1.0)`.
    *
    * @param sc SparkContext used to create the RDD.
@@ -424,7 +425,7 @@ object RandomRDDs {
   }
 
   /**
-   * Generates an RDD[Vector] with vectors containing i.i.d. samples drawn from the
+   * Generates an RDD[Vector] with vectors containing `i.i.d.` samples drawn from the
    * standard normal distribution.
    *
    * @param sc SparkContext used to create the RDD.
@@ -432,7 +433,7 @@ object RandomRDDs {
    * @param numCols Number of elements in each Vector.
    * @param numPartitions Number of partitions in the RDD (default: `sc.defaultParallelism`).
    * @param seed Random seed (default: a random long integer).
-   * @return RDD[Vector] with vectors containing i.i.d. samples ~ `N(0.0, 1.0)`.
+   * @return RDD[Vector] with vectors containing `i.i.d.` samples ~ `N(0.0, 1.0)`.
    */
   def normalVectorRDD(
       sc: SparkContext,
@@ -478,7 +479,7 @@ object RandomRDDs {
   }
 
   /**
-   * Generates an RDD[Vector] with vectors containing i.i.d. samples drawn from a
+   * Generates an RDD[Vector] with vectors containing `i.i.d.` samples drawn from a
    * log normal distribution.
    *
    * @param sc SparkContext used to create the RDD.
@@ -488,7 +489,7 @@ object RandomRDDs {
    * @param numCols Number of elements in each Vector.
    * @param numPartitions Number of partitions in the RDD (default: `sc.defaultParallelism`).
    * @param seed Random seed (default: a random long integer).
-   * @return RDD[Vector] with vectors containing i.i.d. samples.
+   * @return RDD[Vector] with vectors containing `i.i.d.` samples.
    */
   def logNormalVectorRDD(
       sc: SparkContext,
@@ -544,7 +545,7 @@ object RandomRDDs {
   }
 
   /**
-   * Generates an RDD[Vector] with vectors containing i.i.d. samples drawn from the
+   * Generates an RDD[Vector] with vectors containing `i.i.d.` samples drawn from the
    * Poisson distribution with the input mean.
    *
    * @param sc SparkContext used to create the RDD.
@@ -553,7 +554,7 @@ object RandomRDDs {
    * @param numCols Number of elements in each Vector.
    * @param numPartitions Number of partitions in the RDD (default: `sc.defaultParallelism`)
    * @param seed Random seed (default: a random long integer).
-   * @return RDD[Vector] with vectors containing i.i.d. samples ~ Pois(mean).
+   * @return RDD[Vector] with vectors containing `i.i.d.` samples ~ Pois(mean).
    */
   def poissonVectorRDD(
       sc: SparkContext,
@@ -603,7 +604,7 @@ object RandomRDDs {
   }
 
   /**
-   * Generates an RDD[Vector] with vectors containing i.i.d. samples drawn from the
+   * Generates an RDD[Vector] with vectors containing `i.i.d.` samples drawn from the
    * exponential distribution with the input mean.
    *
    * @param sc SparkContext used to create the RDD.
@@ -612,7 +613,7 @@ object RandomRDDs {
    * @param numCols Number of elements in each Vector.
    * @param numPartitions Number of partitions in the RDD (default: `sc.defaultParallelism`)
    * @param seed Random seed (default: a random long integer).
-   * @return RDD[Vector] with vectors containing i.i.d. samples ~ Exp(mean).
+   * @return RDD[Vector] with vectors containing `i.i.d.` samples ~ Exp(mean).
    */
   def exponentialVectorRDD(
       sc: SparkContext,
@@ -665,7 +666,7 @@ object RandomRDDs {
 
 
   /**
-   * Generates an RDD[Vector] with vectors containing i.i.d. samples drawn from the
+   * Generates an RDD[Vector] with vectors containing `i.i.d.` samples drawn from the
    * gamma distribution with the input shape and scale.
    *
    * @param sc SparkContext used to create the RDD.
@@ -675,7 +676,7 @@ object RandomRDDs {
    * @param numCols Number of elements in each Vector.
    * @param numPartitions Number of partitions in the RDD (default: `sc.defaultParallelism`)
    * @param seed Random seed (default: a random long integer).
-   * @return RDD[Vector] with vectors containing i.i.d. samples ~ Exp(mean).
+   * @return RDD[Vector] with vectors containing `i.i.d.` samples ~ Exp(mean).
    */
   def gammaVectorRDD(
       sc: SparkContext,
@@ -731,7 +732,7 @@ object RandomRDDs {
 
   /**
    * :: DeveloperApi ::
-   * Generates an RDD[Vector] with vectors containing i.i.d. samples produced by the
+   * Generates an RDD[Vector] with vectors containing `i.i.d.` samples produced by the
    * input RandomDataGenerator.
    *
    * @param sc SparkContext used to create the RDD.
@@ -740,7 +741,7 @@ object RandomRDDs {
    * @param numCols Number of elements in each Vector.
    * @param numPartitions Number of partitions in the RDD (default: `sc.defaultParallelism`).
    * @param seed Random seed (default: a random long integer).
-   * @return RDD[Vector] with vectors containing i.i.d. samples produced by generator.
+   * @return RDD[Vector] with vectors containing `i.i.d.` samples produced by generator.
    */
   @DeveloperApi
   def randomVectorRDD(sc: SparkContext,

@@ -149,6 +149,8 @@ abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll 
   var partitionedTableDir: File = null
   var partitionedTableDirWithKey: File = null
 
+  import org.apache.spark.sql.hive.test.TestHive.implicits._
+
   override def beforeAll(): Unit = {
     partitionedTableDir = File.createTempFile("parquettests", "sparksql")
     partitionedTableDir.delete()

@@ -122,20 +122,20 @@ class ALSModel private[ml] (
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
-    import dataset.sqlContext.createDataFrame
+    import dataset.sqlContext.implicits._
     val map = this.paramMap ++ paramMap
     val users = userFactors.toDataFrame("id", "features")
     val items = itemFactors.toDataFrame("id", "features")
 
     // Register a UDF for DataFrame, and then
     // create a new column named map(predictionCol) by running the predict UDF.
-    val predict = udf((userFeatures: Seq[Float], itemFeatures: Seq[Float]) => {
+    val predict = udf { (userFeatures: Seq[Float], itemFeatures: Seq[Float]) =>
       if (userFeatures != null && itemFeatures != null) {
         blas.sdot(k, userFeatures.toArray, 1, itemFeatures.toArray, 1)
       } else {
         Float.NaN
       }
-    } : Float)
+    }
     dataset
       .join(users, dataset(map(userCol)) === users("id"), "left")
       .join(items, dataset(map(itemCol)) === items("id"), "left")
