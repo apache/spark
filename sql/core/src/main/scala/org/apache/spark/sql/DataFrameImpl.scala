@@ -311,16 +311,16 @@ private[sql] class DataFrameImpl protected[sql](
 
   override def saveAsTable(
       tableName: String,
-      dataSourceName: String,
-      options: (String, String)*): Unit = {
-    saveAsTable(tableName, dataSourceName, Map.empty[String, String])
+      options: java.util.Map[String, String]): Unit = {
+    val dataSourceName = sqlContext.conf.defaultDataSourceName
+    saveAsTable(tableName, dataSourceName, options)
   }
 
   override def saveAsTable(
       tableName: String,
-      options: java.util.Map[String, String]): Unit = {
-    val dataSourceName = sqlContext.conf.defaultDataSourceName
-    saveAsTable(tableName, dataSourceName, options)
+      dataSourceName: String,
+      options: (String, String)*): Unit = {
+    saveAsTable(tableName, dataSourceName, Map.empty[String, String])
   }
 
   override def saveAsTable(
@@ -358,6 +358,13 @@ private[sql] class DataFrameImpl protected[sql](
     }
 
     save(dataSourceName, "path" -> path, options:_*)
+  }
+
+  override def save(
+      path: String,
+      dataSourceName: String,
+      options: java.util.Map[String, String]): Unit = {
+    save(path, dataSourceName, options.toSeq:_*)
   }
 
   override def save(

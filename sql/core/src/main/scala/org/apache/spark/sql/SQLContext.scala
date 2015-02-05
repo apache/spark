@@ -422,6 +422,19 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /**
    * :: Experimental ::
+   * Loads a dataset from the given path as a DataFrame based on a given data source and
+   * a set of options.
+   */
+  @Experimental
+  def load(
+      path: String,
+      dataSourceName: String,
+      options: java.util.Map[String, String]): DataFrame = {
+    load(path, dataSourceName, options.toSeq:_*)
+  }
+
+  /**
+   * :: Experimental ::
    * Loads a dataset based on a given data source and a set of options.
    */
   @Experimental
@@ -453,6 +466,52 @@ class SQLContext(@transient val sparkContext: SparkContext)
       options: Map[String, String]): DataFrame = {
     val resolved = ResolvedDataSource(this, None, dataSourceName, options)
     DataFrame(this, LogicalRelation(resolved.relation))
+  }
+
+  @Experimental
+  def createDataSource(tableName: String, options: (String, String)*): Unit = {
+    val dataSourceName = conf.defaultDataSourceName
+    createDataSource(tableName, dataSourceName, options.toMap)
+  }
+
+  @Experimental
+  def createDataSource(
+      tableName: String,
+      options: java.util.Map[String, String]): Unit = {
+    val dataSourceName = conf.defaultDataSourceName
+    createDataSource(tableName, dataSourceName, options.toMap)
+  }
+
+  @Experimental
+  def createDataSource(
+      tableName: String,
+      dataSourceName: String,
+      options: (String, String)*): Unit = {
+    createDataSource(tableName, dataSourceName, options.toMap)
+  }
+
+  @Experimental
+  def createDataSource(
+      tableName: String,
+      dataSourceName: String,
+      options: java.util.Map[String, String]): Unit = {
+    createDataSource(tableName, dataSourceName, options.toMap)
+  }
+
+  @Experimental
+  def createDataSource(
+      tableName: String,
+      dataSourceName: String,
+      options: Map[String, String]): Unit = {
+    val cmd =
+      CreateTableUsing(
+        tableName,
+        userSpecifiedSchema = None,
+        dataSourceName,
+        temporary = false,
+        options,
+        allowExisting = false)
+    executePlan(cmd).toRdd
   }
 
   /**
