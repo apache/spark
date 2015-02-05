@@ -45,6 +45,9 @@ import scala.reflect.api.{Mirror, TypeCreator, Universe => ApiUniverse}
 import org.apache.spark.Logging
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.Dsl._
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 /** The Scala interactive shell.  It provides a read-eval-print loop
@@ -130,6 +133,7 @@ class SparkILoop(
   // NOTE: Must be public for visibility
   @DeveloperApi
   var sparkContext: SparkContext = _
+  var sqlContext: SQLContext = _
 
   override def echoCommandMessage(msg: String) {
     intp.reporter printMessage msg
@@ -1014,6 +1018,13 @@ class SparkILoop(
     sparkContext = new SparkContext(conf)
     logInfo("Created spark context..")
     sparkContext
+  }
+
+  @DeveloperApi
+  def createSQLContext(): SQLContext = {
+    sqlContext = new SQLContext(sparkContext)
+    logInfo("Created sql context..")
+    sqlContext
   }
 
   private def getMaster(): String = {

@@ -66,8 +66,18 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter)
            println("Spark context available as sc.")
            _sc
          }
-               """)
+        """)
+      command( """
+         @transient val sqlContext = {
+           val _sqlContext = org.apache.spark.repl.Main.createSQLContext()
+           println("SQLContext available as sqlContext.")
+           _sqlContext
+         }
+        """)
       command("import org.apache.spark.SparkContext._")
+      command("import sqlContext._")
+      command("import org.apache.spark.sql.Dsl._")
+      command("import org.apache.spark.sql.types._")
     }
   }
 
