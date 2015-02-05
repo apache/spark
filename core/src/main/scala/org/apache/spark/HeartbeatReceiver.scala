@@ -17,16 +17,20 @@
 
 package org.apache.spark
 
-import akka.actor.Actor
+import scala.concurrent.duration._
+import scala.collection.mutable
+
+import akka.actor.{Actor, Cancellable}
+
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.scheduler.TaskScheduler
+import org.apache.spark.scheduler.{SlaveLost, TaskScheduler}
 import org.apache.spark.util.ActorLogReceive
-import org.apache.spark.scheduler.ExecutorLossReason
 
 /**
  * A heartbeat from executors to the driver. This is a shared message used by several internal
- * components to convey liveness or execution information for in-progress tasks.
+ * components to convey liveness or execution information for in-progress tasks. It will also 
+ * expiry the hosts that have no heartbeat for more than spark.executor.heartbeat.timeoutMs.
  */
 private[spark] case class Heartbeat(
     executorId: String,
@@ -45,12 +49,18 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
 
   val executorLastSeen = new mutable.HashMap[String, Long]
   
-  import context.dispatcher
-  var  timeoutCheckingTask = context.system.scheduler.schedule(0.seconds,
-      10.milliseconds, self, ExpireDeadHosts)
-      
-  val slaveTimeout = sc.conf.getLong("spark.storage.blockManagerSlaveTimeoutMs",
-    math.max(sc.conf.getInt("spark.executor.heartbeatInterval", 10000) * 3, 120000))
+  val slaveTimeout = conf.getLong("spark.executor.heartbeat.timeoutMs", 120 * 1000)
+  
+  val checkTimeoutInterval = conf.getLong("spark.executor.heartbeat.timeoutIntervalMs", 60000)
+  
+  var timeoutCheckingTask: Cancellable = null
+  
+  override def preStart() {
+    import context.dispatcher
+    timeoutCheckingTask = context.system.scheduler.schedule(0.seconds,
+        checkTimeoutInterval.milliseconds, self, ExpireDeadHosts)
+    super.preStart
+  }
   
   override def receiveWithLogging = {
     case Heartbeat(executorId, taskMetrics, blockManagerId) =>
@@ -73,16 +83,19 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
     val minSeenTime = now - slaveTimeout
     for ((executorId, lastSeenMs) <- executorLastSeen) {
       if (lastSeenMs < minSeenTime) {
-        val msg = "Removing Executor " + executorId + " with no recent heart beats: "
-            +(now - lastSeenMs) + "ms exceeds " + slaveTimeout + "ms"
-        logWarning(msg)
-        if (scheduler.isInstanceOf[org.apache.spark.scheduler.TaskSchedulerImpl]) {
-          scheduler.asInstanceOf[org.apache.spark.scheduler.TaskSchedulerImpl]
-              .executorLost(executorId, new ExecutorLossReason(""))
-        }
+        logWarning("Removing Executor " + executorId + " with no recent heartbeats: "
+            +(now - lastSeenMs) + "ms exceeds " + slaveTimeout + "ms")
+        scheduler.executorLost(executorId, SlaveLost)
         sc.killExecutor(executorId)
         executorLastSeen.remove(executorId)
       }
     }
+  }
+  
+  override def postStop() {
+    if (timeoutCheckingTask != null) {
+      timeoutCheckingTask.cancel()
+    }
+    super.postStop
   }
 }
