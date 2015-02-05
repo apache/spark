@@ -19,7 +19,7 @@ from py4j.java_collections import MapConverter
 from py4j.java_gateway import java_import, Py4JError
 
 from pyspark.storagelevel import StorageLevel
-from pyspark.serializers import PairDeserializer, NoOpSerializer
+from pyspark.serializers import UTF8Deserializer
 from pyspark.streaming import DStream
 
 __all__ = ['MQTTUtils']
@@ -28,7 +28,7 @@ __all__ = ['MQTTUtils']
 class MQTTUtils(object):
 
     @staticmethod
-    def createStream(ssc, brokerUrl, topic
+    def createStream(ssc, brokerUrl, topic,
                      storageLevel=StorageLevel.MEMORY_AND_DISK_SER_2):
         """
         Create an input stream that pulls messages from a Mqtt Broker.
@@ -52,6 +52,4 @@ class MQTTUtils(object):
                 print " $ bin/spark-submit --driver-class-path external/mqtt-assembly/target/" + \
                       "scala-*/spark-streaming-mqtt-assembly-*.jar"
             raise e
-        ser = PairDeserializer(NoOpSerializer(), NoOpSerializer())
-        stream = DStream(jstream, ssc, ser)
-        return stream
+        return DStream(jstream, ssc, UTF8Deserializer())

@@ -44,11 +44,10 @@ if __name__ == "__main__":
     sc = SparkContext(appName="PythonStreamingMQTTWordCount")
     ssc = StreamingContext(sc, 1)
 
-    broker_url = sys.argv[1]
+    brokerUrl = sys.argv[1]
     topic = sys.argv[2]
 
-    data = MQTTUtils.createStream(ssc, topic, broker_url)
-    lines = data.map(lambda x: x[1])
+    lines = MQTTUtils.createStream(ssc, brokerUrl, topic)
     counts = lines.flatMap(lambda line: line.split(" ")) \
         .map(lambda word: (word, 1)) \
         .reduceByKey(lambda a, b: a+b)
