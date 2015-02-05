@@ -336,6 +336,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
     jsonRDD(json, samplingRatio, caseInsensitivity)
   }
 
+  @Experimental
+  def jsonFile(path: String, samplingRatio: Double): DataFrame = {
+    jsonFile(path, samplingRatio, caseInsensitivity = false)
+  }
+
   /**
    * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
    * [[DataFrame]].
@@ -384,8 +389,13 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   @Experimental
+  def jsonRDD(json: RDD[String], samplingRatio: Double): DataFrame = {
+    jsonRDD(json, samplingRatio, caseInsensitivity = false)
+  }
+
+  @Experimental
   def jsonRDD(json: JavaRDD[String], samplingRatio: Double): DataFrame = {
-    jsonRDD(json.rdd, samplingRatio, false);
+    jsonRDD(json.rdd, samplingRatio, caseInsensitivity = false)
   }
 
   @Experimental
