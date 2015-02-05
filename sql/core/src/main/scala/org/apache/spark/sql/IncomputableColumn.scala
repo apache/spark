@@ -82,6 +82,8 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
 
   override def selectExpr(exprs: String*): DataFrame = err()
 
+  override def addColumn(colName: String, col: Column): DataFrame = err()
+
   override def filter(condition: Column): DataFrame = err()
 
   override def filter(conditionExpr: String): DataFrame = err()
@@ -105,8 +107,6 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
   override def sample(withReplacement: Boolean, fraction: Double, seed: Long): DataFrame = err()
 
   /////////////////////////////////////////////////////////////////////////////
-
-  override def addColumn(colName: String, col: Column): DataFrame = err()
 
   override def head(n: Int): Array[Row] = err()
 
@@ -133,6 +133,8 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
   override def count(): Long = err()
 
   override def repartition(numPartitions: Int): DataFrame = err()
+
+  override def distinct: DataFrame = err()
 
   override def persist(): this.type = err()
 

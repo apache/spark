@@ -490,6 +490,9 @@ trait DataFrame extends RDDApi[Row] {
    */
   override def repartition(numPartitions: Int): DataFrame
 
+  /** Returns a new [[DataFrame]] that contains only the unique rows from this [[DataFrame]]. */
+  override def distinct: DataFrame
+
   override def persist(): this.type
 
   override def persist(newLevel: StorageLevel): this.type
