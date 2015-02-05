@@ -49,16 +49,16 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
 
   val executorLastSeen = new mutable.HashMap[String, Long]
   
-  val slaveTimeout = conf.getLong("spark.executor.heartbeat.timeoutMs", 120 * 1000)
+  val slaveTimeout = sc.conf.getLong("spark.executor.heartbeat.timeoutMs", 120 * 1000)
   
-  val checkTimeoutInterval = conf.getLong("spark.executor.heartbeat.timeoutIntervalMs", 60000)
+  val checkTimeoutInterval = sc.conf.getLong("spark.executor.heartbeat.timeoutIntervalMs", 60000)
   
   var timeoutCheckingTask: Cancellable = null
   
   override def preStart() {
     import context.dispatcher
     timeoutCheckingTask = context.system.scheduler.schedule(0.seconds,
-        checkTimeoutInterval.milliseconds, self, ExpireDeadHosts)
+      checkTimeoutInterval.milliseconds, self, ExpireDeadHosts)
     super.preStart
   }
   
