@@ -45,6 +45,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.parquet.ParquetTypesConverter._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType, _}
+import org.apache.spark.sql.types.StructType._
 import org.apache.spark.sql.{DataFrame, Row, SQLConf, SQLContext}
 import org.apache.spark.{Partition => SparkPartition, TaskContext, SerializableWritable, Logging, SparkException}
 
@@ -173,7 +174,7 @@ case class ParquetRelation2
         val statuses = paths.distinct.map(p => fs.getFileStatus(fs.makeQualified(new Path(p))))
         // Support either reading a collection of raw Parquet part-files, or a collection of folders
         // containing Parquet files (e.g. partitioned Parquet table).
-        assert(statuses.forall(_.isFile) || statuses.forall(_.isDir))
+        assert(statuses.forall(!_.isDir) || statuses.forall(_.isDir))
         statuses.toArray
       }
 
@@ -252,11 +253,18 @@ case class ParquetRelation2
       // we can't trust the summary files if users require a merged schema, and must touch all part-
       // files to do the merge.
         if (shouldMergeSchemas) {
-          dataStatuses.toSeq
+          // Also includes summary files, 'cause there might be empty partition directories.
+          (metadataStatuses ++ commonMetadataStatuses ++ dataStatuses).toSeq
         } else {
+          // Tries any "_common_metadata" first. Parquet files written by old versions or Parquet
+          // don't have this.
           commonMetadataStatuses.headOption
+            // Falls back to "_metadata"
             .orElse(metadataStatuses.headOption)
-            // Summary file(s) not found, falls back to the first part-file.
+            // Summary file(s) not found, the Parquet file is either corrupted, or different part-
+            // files contain conflicting user defined metadata (two or more values are associated
+            // with a same key in different files).  In either case, we fall back to any of the
+            // first part-file, and just assume all schemas are consistent.
             .orElse(dataStatuses.headOption)
             .toSeq
         }
@@ -507,13 +515,16 @@ case class ParquetRelation2
 
 object ParquetRelation2 {
   // Whether we should merge schemas collected from all Parquet part-files.
-  val MERGE_SCHEMA = "parquet.mergeSchema"
+  val MERGE_SCHEMA = "mergeSchema"
 
   // Hive Metastore schema, passed in when the Parquet relation is converted from Metastore
-  val METASTORE_SCHEMA = "parquet.metastoreSchema"
+  val METASTORE_SCHEMA = "metastoreSchema"
 
   // Default partition name to use when the partition column value is null or empty string
   val DEFAULT_PARTITION_NAME = "partition.defaultName"
+
+  // When true, the Parquet data source caches Parquet metadata for performance
+  val CACHE_METADATA = "cacheMetadata"
 
   private[parquet] def readSchema(footers: Seq[Footer], sqlContext: SQLContext): StructType = {
     footers.map { footer =>
@@ -535,7 +546,7 @@ object ParquetRelation2 {
             sqlContext.conf.isParquetINT96AsTimestamp))
       }
     }.reduce { (left, right) =>
-      try mergeCatalystSchemas(left, right) catch { case e: Throwable =>
+      try left.merge(right) catch { case e: Throwable =>
         throw new SparkException(s"Failed to merge incompatible schemas $left and $right", e)
       }
     }
@@ -637,14 +648,15 @@ object ParquetRelation2 {
       path: Path,
       defaultPartitionName: String): PartitionValues = {
     val columns = ArrayBuffer.empty[(String, Literal)]
-    var finished = path.isRoot
+    // Old Hadoop versions don't have `Path.isRoot`
+    var finished = path.getParent == null
     var chopped = path
 
     while (!finished) {
       val maybeColumn = parsePartitionColumn(chopped.getName, defaultPartitionName)
       maybeColumn.foreach(columns += _)
       chopped = chopped.getParent
-      finished = maybeColumn.isEmpty || chopped.isRoot
+      finished = maybeColumn.isEmpty || chopped.getParent == null
     }
 
     val (columnNames, values) = columns.reverse.unzip

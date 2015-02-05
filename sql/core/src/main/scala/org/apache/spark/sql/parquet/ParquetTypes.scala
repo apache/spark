@@ -284,7 +284,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
       ctype: DataType,
       name: String,
       nullable: Boolean = true,
-      inArray: Boolean = false, 
+      inArray: Boolean = false,
       toThriftSchemaNames: Boolean = false): ParquetType = {
     val repetition =
       if (inArray) {
@@ -339,7 +339,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
         }
         case StructType(structFields) => {
           val fields = structFields.map {
-            field => fromDataType(field.dataType, field.name, field.nullable, 
+            field => fromDataType(field.dataType, field.name, field.nullable,
                                   inArray = false, toThriftSchemaNames)
           }
           new ParquetGroupType(repetition, name, fields.toSeq)
@@ -522,58 +522,4 @@ private[parquet] object ParquetTypesConverter extends Logging {
       attributes
     }
   }
-
-  def mergeCatalystSchemas(left: StructType, right: StructType): StructType =
-    mergeCatalystDataTypes(left, right).asInstanceOf[StructType]
-
-  def mergeCatalystDataTypes(left: DataType, right: DataType): DataType =
-    (left, right) match {
-      case (ArrayType(leftElementType, leftContainsNull),
-            ArrayType(rightElementType, rightContainsNull)) =>
-        ArrayType(
-          mergeCatalystDataTypes(leftElementType, rightElementType),
-          leftContainsNull || rightContainsNull)
-
-      case (MapType(leftKeyType, leftValueType, leftContainsNull),
-            MapType(rightKeyType, rightValueType, rightContainsNull)) =>
-        MapType(
-          mergeCatalystDataTypes(leftKeyType, rightKeyType),
-          mergeCatalystDataTypes(leftValueType, rightValueType),
-          leftContainsNull || rightContainsNull)
-
-      case (StructType(leftFields), StructType(rightFields)) =>
-        val newFields = ArrayBuffer.empty[StructField]
-
-        leftFields.foreach {
-          case leftField @ StructField(leftName, leftType, leftNullable, _) =>
-            rightFields
-              .find(_.name == leftName)
-              .map { case rightField @ StructField(_, rightType, rightNullable, _) =>
-                leftField.copy(
-                  dataType = mergeCatalystDataTypes(leftType, rightType),
-                  nullable = leftNullable || rightNullable)
-              }
-              .orElse(Some(leftField))
-              .foreach(newFields += _)
-        }
-
-        rightFields
-          .filterNot(f => leftFields.map(_.name).contains(f.name))
-          .foreach(newFields += _)
-
-        StructType(newFields)
-
-      case (DecimalType.Fixed(leftPrecision, leftScale),
-            DecimalType.Fixed(rightPrecision, rightScale)) =>
-        DecimalType(leftPrecision.max(rightPrecision), leftScale.max(rightScale))
-
-      case (leftUdt: UserDefinedType[_], rightUdt: UserDefinedType[_])
-        if leftUdt.userClass == rightUdt.userClass => leftUdt
-
-      case (leftType, rightType) if leftType == rightType =>
-        leftType
-
-      case _ =>
-        throw new SparkException(s"Failed to merge incompatible data types $left and $right")
-    }
 }
