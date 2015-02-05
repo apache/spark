@@ -201,13 +201,13 @@ private[sql] class DataFrameImpl protected[sql](
     filter(condition)
   }
 
-  override def groupBy(cols: Column*): GroupedDataFrame = {
-    new GroupedDataFrame(this, cols.map(_.expr))
+  override def groupBy(cols: Column*): GroupedData = {
+    new GroupedData(this, cols.map(_.expr))
   }
 
-  override def groupBy(col1: String, cols: String*): GroupedDataFrame = {
+  override def groupBy(col1: String, cols: String*): GroupedData = {
     val colNames: Seq[String] = col1 +: cols
-    new GroupedDataFrame(this, colNames.map(colName => resolve(colName)))
+    new GroupedData(this, colNames.map(colName => resolve(colName)))
   }
 
   override def limit(n: Int): DataFrame = {
