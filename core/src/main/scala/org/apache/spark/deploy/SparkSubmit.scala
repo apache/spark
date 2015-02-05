@@ -106,12 +106,7 @@ object SparkSubmit {
    * Standalone cluster mode only.
    */
   private def kill(args: SparkSubmitArguments): Unit = {
-    val client = new StandaloneRestClient
-    val response = client.killSubmission(args.master, args.driverToKill)
-    response match {
-      case k: KillSubmissionResponse => handleRestResponse(k)
-      case r => handleUnexpectedRestResponse(r)
-    }
+    new StandaloneRestClient().killSubmission(args.master, args.driverToKill)
   }
 
   /**
@@ -119,12 +114,7 @@ object SparkSubmit {
    * Standalone cluster mode only.
    */
   private def requestStatus(args: SparkSubmitArguments): Unit = {
-    val client = new StandaloneRestClient
-    val response = client.requestSubmissionStatus(args.master, args.driverToRequestStatusFor)
-    response match {
-      case s: SubmissionStatusResponse => handleRestResponse(s)
-      case r => handleUnexpectedRestResponse(r)
-    }
+    new StandaloneRestClient().requestSubmissionStatus(args.master, args.driverToRequestStatusFor)
   }
 
   /**
@@ -150,8 +140,8 @@ object SparkSubmit {
       } catch {
         // Fail over to use the legacy submission gateway
         case e: SubmitRestConnectionException =>
-          printStream.println(s"Master endpoint ${args.master} was not a " +
-            s"REST server. Falling back to legacy submission gateway instead.")
+          printWarning(s"Master endpoint ${args.master} was not a REST server. " +
+            "Falling back to legacy submission gateway instead.")
           args.useRest = false
           submit(args)
       }
@@ -538,17 +528,6 @@ object SparkSubmit {
       case _ =>
         printWarning(s"Skip remote jar $uri.")
     }
-  }
-
-  /** Log the response sent by the server in the REST application submission protocol. */
-  private def handleRestResponse(response: SubmitRestProtocolResponse): Unit = {
-    printStream.println(s"Server responded with ${response.messageType}:\n${response.toJson}")
-  }
-
-  /** Log an appropriate error if the response sent by the server is not of the expected type. */
-  private def handleUnexpectedRestResponse(unexpected: SubmitRestProtocolResponse): Unit = {
-    printStream.println(
-      s"Error: Server responded with message of unexpected type ${unexpected.messageType}.")
   }
 
   /**

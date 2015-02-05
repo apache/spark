@@ -65,8 +65,11 @@ private[spark] class StandaloneRestClient extends Logging {
     val request = constructSubmitRequest(appArgs, sparkProperties, environmentVariables)
     val response = postJson(url, request.toJson)
     response match {
-      case s: CreateSubmissionResponse => reportSubmissionStatus(master, s)
-      case _ => // unexpected type, let upstream caller handle it
+      case s: CreateSubmissionResponse =>
+        reportSubmissionStatus(master, s)
+        handleRestResponse(s)
+      case unexpected =>
+        handleUnexpectedRestResponse(unexpected)
     }
     response
   }
@@ -75,14 +78,27 @@ private[spark] class StandaloneRestClient extends Logging {
   def killSubmission(master: String, submissionId: String): SubmitRestProtocolResponse = {
     logInfo(s"Submitting a request to kill submission $submissionId in $master.")
     validateMaster(master)
-    post(getKillUrl(master, submissionId))
+    val response = post(getKillUrl(master, submissionId))
+    response match {
+      case k: KillSubmissionResponse => handleRestResponse(k)
+      case unexpected => handleUnexpectedRestResponse(unexpected)
+    }
+    response
   }
 
   /** Request the status of a submission from the server. */
-  def requestSubmissionStatus(master: String, submissionId: String): SubmitRestProtocolResponse = {
+  def requestSubmissionStatus(
+      master: String,
+      submissionId: String,
+      quiet: Boolean = false): SubmitRestProtocolResponse = {
     logInfo(s"Submitting a request for the status of submission $submissionId in $master.")
     validateMaster(master)
-    get(getStatusUrl(master, submissionId))
+    val response = get(getStatusUrl(master, submissionId))
+    response match {
+      case s: SubmissionStatusResponse => if (!quiet) { handleRestResponse(s) }
+      case unexpected => handleUnexpectedRestResponse(unexpected)
+    }
+    response
   }
 
   /** Send a GET request to the specified URL. */
@@ -224,7 +240,7 @@ private[spark] class StandaloneRestClient extends Logging {
    */
   private def pollSubmissionStatus(master: String, submissionId: String): Unit = {
     (1 to REPORT_DRIVER_STATUS_MAX_TRIES).foreach { _ =>
-      val response = requestSubmissionStatus(master, submissionId)
+      val response = requestSubmissionStatus(master, submissionId, quiet = true)
       val statusResponse = response match {
         case s: SubmissionStatusResponse => s
         case _ => return // unexpected type, let upstream caller handle it
@@ -253,6 +269,16 @@ private[spark] class StandaloneRestClient extends Logging {
     }
     logError(s"Error: Master did not recognize driver $submissionId.")
   }
+
+  /** Log the response sent by the server in the REST application submission protocol. */
+  private def handleRestResponse(response: SubmitRestProtocolResponse): Unit = {
+    logInfo(s"Server responded with ${response.messageType}:\n${response.toJson}")
+  }
+
+  /** Log an appropriate error if the response sent by the server is not of the expected type. */
+  private def handleUnexpectedRestResponse(unexpected: SubmitRestProtocolResponse): Unit = {
+    logError(s"Error: Server responded with message of unexpected type ${unexpected.messageType}.")
+  }
 }
 
 private[spark] object StandaloneRestClient {
@@ -266,12 +292,11 @@ private[spark] object StandaloneRestClient {
    */
   def main(args: Array[String]): Unit = {
     val client = new StandaloneRestClient
-    val appArgs = args.slice(1, args.size)
     val master = sys.props.get("spark.master").getOrElse {
       throw new IllegalArgumentException("'spark.master' must be set.")
     }
     val sparkProperties = new SparkConf().getAll.toMap
     val environmentVariables = sys.env.filter { case (k, _) => k.startsWith("SPARK_") }
-    client.createSubmission(master, appArgs, sparkProperties, environmentVariables)
+    client.createSubmission(master, args, sparkProperties, environmentVariables)
   }
 }
