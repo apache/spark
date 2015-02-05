@@ -98,37 +98,13 @@ abstract class BinaryArithmetic extends BinaryExpression {
 case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
   def symbol = "+"
 
-  override def dataType = left.dataType
-
-  override lazy val resolved =
-    left.resolved && right.resolved &&
-    (left.dataType == right.dataType || left.dataType == DateType) &&
-    !DecimalType.isFixed(left.dataType)
-
-  override def eval(input: Row): Any = {
-    dataType match {
-      case _ if dataType == DateType => dt(input, left, right, symbol)
-      case _ => n2(input, left, right, _.plus(_, _))
-    } 
-  }
+  override def eval(input: Row): Any = n2(input, left, right, _.plus(_, _))
 }
 
 case class Subtract(left: Expression, right: Expression) extends BinaryArithmetic {
   def symbol = "-"
 
-  override def dataType = left.dataType
-
-  override lazy val resolved =
-    left.resolved && right.resolved &&
-    (left.dataType == right.dataType || left.dataType == DateType) &&
-    !DecimalType.isFixed(left.dataType)
-
-  override def eval(input: Row): Any = {
-    dataType match {
-      case _ if dataType == DateType => dt(input, left, right, symbol)
-      case _ => n2(input, left, right, _.minus(_, _))
-    } 
-  }
+  override def eval(input: Row): Any = n2(input, left, right, _.minus(_, _))
 }
 
 case class Multiply(left: Expression, right: Expression) extends BinaryArithmetic {
