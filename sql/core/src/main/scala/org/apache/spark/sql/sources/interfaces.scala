@@ -168,7 +168,8 @@ trait CatalystScan extends BaseRelation {
  * 1. It assumes that the data (Rows in the DataFrame) provided to the insert method
  * exactly matches the ordinal of fields in the schema of the BaseRelation.
  * 2. It assumes that the schema of this relation will not be changed.
- * Even if the insert method updates the schema, the new schema cannot be used.
+ * Even if the insert method updates the schema (e.g. a relation of JSON or Parquet data may have a
+ * schema update after an insert operation), the new schema will not be used.
  * 3. It assumes that fields of the data provided in the insert method are nullable.
  * If a data source needs to check the actual nullability of a field, it needs to do it in the
  * insert method.
