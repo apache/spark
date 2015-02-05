@@ -337,17 +337,15 @@ private[spark] class SubmitRequestServlet(master: Master) extends StandaloneRest
    * cluster mode yet.
    */
   private def buildDriverDescription(request: CreateSubmissionRequest): DriverDescription = {
-    val sparkProperties = request.sparkProperties
 
     // Required fields, including the main class because python is not yet supported
-    val appResource = sparkProperties.get("spark.app.resource").getOrElse {
-      throw new SubmitRestMissingFieldException("Main application resource is missing.")
-    }
-    val mainClass = sparkProperties.get("spark.app.mainClass").getOrElse {
+    val appResource = request.appResource
+    val mainClass = Option(request.mainClass).getOrElse {
       throw new SubmitRestMissingFieldException("Main class is missing.")
     }
 
     // Optional fields
+    val sparkProperties = request.sparkProperties
     val driverMemory = sparkProperties.get("spark.driver.memory")
     val driverCores = sparkProperties.get("spark.driver.cores")
     val driverExtraJavaOptions = sparkProperties.get("spark.driver.extraJavaOptions")

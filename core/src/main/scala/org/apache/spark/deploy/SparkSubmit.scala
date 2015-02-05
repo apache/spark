@@ -304,8 +304,6 @@ object SparkSubmit {
       OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, sysProp = "spark.jars.ivy"),
       OptionAssigner(args.driverMemory, STANDALONE, CLUSTER, sysProp = "spark.driver.memory"),
       OptionAssigner(args.driverCores, STANDALONE, CLUSTER, sysProp = "spark.driver.cores"),
-      OptionAssigner(args.primaryResource, STANDALONE, CLUSTER, sysProp = "spark.app.resource"),
-      OptionAssigner(args.mainClass, STANDALONE, CLUSTER, sysProp = "spark.app.mainClass"),
       OptionAssigner(args.supervise.toString, STANDALONE, CLUSTER,
         sysProp = "spark.driver.supervise"),
 
@@ -375,6 +373,7 @@ object SparkSubmit {
     if (args.isStandaloneCluster) {
       if (args.useRest) {
         childMainClass = "org.apache.spark.deploy.rest.StandaloneRestClient"
+        childArgs += (args.primaryResource, args.mainClass)
       } else {
         // In legacy standalone cluster mode, use Client as a wrapper around the user class
         childMainClass = "org.apache.spark.deploy.Client"
@@ -773,7 +772,7 @@ private[spark] object SparkSubmitUtils {
  * Provides an indirection layer for passing arguments as system properties or flags to
  * the user's driver program or to downstream launcher tools.
  */
-private[spark] case class OptionAssigner(
+private case class OptionAssigner(
     value: String,
     clusterManager: Int,
     deployMode: Int,

@@ -32,6 +32,8 @@ private[spark] abstract class SubmitRestProtocolRequest extends SubmitRestProtoc
  * A request to submit a driver in the REST application submission protocol.
  */
 private[spark] class CreateSubmissionRequest extends SubmitRestProtocolRequest {
+  var appResource: String = null
+  var mainClass: String = null
   var appArgs: Array[String] = null
   var sparkProperties: Map[String, String] = null
   var environmentVariables: Map[String, String] = null
@@ -39,8 +41,8 @@ private[spark] class CreateSubmissionRequest extends SubmitRestProtocolRequest {
   protected override def doValidate(): Unit = {
     super.doValidate()
     assert(sparkProperties != null, "No Spark properties set!")
+    assertFieldIsSet(appResource, "appResource")
     assertPropertyIsSet("spark.app.name")
-    assertPropertyIsSet("spark.app.resource")
     assertPropertyIsBoolean("spark.driver.supervise")
     assertPropertyIsNumeric("spark.driver.cores")
     assertPropertyIsNumeric("spark.cores.max")

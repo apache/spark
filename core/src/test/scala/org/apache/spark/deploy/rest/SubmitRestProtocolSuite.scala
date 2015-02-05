@@ -100,13 +100,13 @@ class SubmitRestProtocolSuite extends FunSuite {
     val message = new CreateSubmissionRequest
     intercept[SubmitRestProtocolException] { message.validate() }
     message.clientSparkVersion = "1.2.3"
+    message.appResource = "honey-walnut-cherry.jar"
+    message.mainClass = "org.apache.spark.examples.SparkPie"
     val conf = new SparkConf(false)
     conf.set("spark.app.name", "SparkPie")
-    conf.set("spark.app.resource", "honey-walnut-cherry.jar")
     message.sparkProperties = conf.getAll.toMap
     message.validate()
     // optional fields
-    conf.set("spark.app.mainClass", "org.apache.spark.examples.SparkPie")
     conf.set("spark.jars", "mayonnaise.jar,ketchup.jar")
     conf.set("spark.files", "fireball.png")
     conf.set("spark.driver.memory", "512m")
@@ -137,9 +137,9 @@ class SubmitRestProtocolSuite extends FunSuite {
     assertJsonEquals(json, submitDriverRequestJson)
     val newMessage = SubmitRestProtocolMessage.fromJson(json, classOf[CreateSubmissionRequest])
     assert(newMessage.clientSparkVersion === "1.2.3")
+    assert(newMessage.appResource === "honey-walnut-cherry.jar")
+    assert(newMessage.mainClass === "org.apache.spark.examples.SparkPie")
     assert(newMessage.sparkProperties("spark.app.name") === "SparkPie")
-    assert(newMessage.sparkProperties("spark.app.resource") === "honey-walnut-cherry.jar")
-    assert(newMessage.sparkProperties("spark.app.mainClass") === "org.apache.spark.examples.SparkPie")
     assert(newMessage.sparkProperties("spark.jars") === "mayonnaise.jar,ketchup.jar")
     assert(newMessage.sparkProperties("spark.files") === "fireball.png")
     assert(newMessage.sparkProperties("spark.driver.memory") === "512m")
@@ -261,10 +261,12 @@ class SubmitRestProtocolSuite extends FunSuite {
       |{
       |  "action" : "CreateSubmissionRequest",
       |  "appArgs" : [ "two slices", "a hint of cinnamon" ],
+      |  "appResource" : "honey-walnut-cherry.jar",
       |  "clientSparkVersion" : "1.2.3",
       |  "environmentVariables" : {
       |    "PATH" : "/dev/null"
       |  },
+      |  "mainClass" : "org.apache.spark.examples.SparkPie",
       |  "sparkProperties" : {
       |    "spark.driver.extraLibraryPath" : "pickle.jar",
       |    "spark.jars" : "mayonnaise.jar,ketchup.jar",
@@ -273,12 +275,10 @@ class SubmitRestProtocolSuite extends FunSuite {
       |    "spark.cores.max" : "10000",
       |    "spark.driver.memory" : "512m",
       |    "spark.files" : "fireball.png",
-      |    "spark.app.resource" : "honey-walnut-cherry.jar",
       |    "spark.driver.cores" : "180",
       |    "spark.driver.extraJavaOptions" : " -Dslices=5 -Dcolor=mostly_red",
       |    "spark.executor.memory" : "256m",
-      |    "spark.driver.extraClassPath" : "food-coloring.jar",
-      |    "spark.app.mainClass" : "org.apache.spark.examples.SparkPie"
+      |    "spark.driver.extraClassPath" : "food-coloring.jar"
       |  }
       |}
     """.stripMargin

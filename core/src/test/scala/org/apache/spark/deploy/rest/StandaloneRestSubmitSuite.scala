@@ -128,8 +128,9 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterAll with Bef
       mainJar) ++ appArgs
     val args = new SparkSubmitArguments(commandLineArgs)
     val (_, _, sparkProperties, _) = SparkSubmit.prepareSubmitEnvironment(args)
-    val response = client.createSubmission(
-      args.master, appArgs.toArray, sparkProperties.toMap, Map.empty)
+    val request = client.constructSubmitRequest(
+      mainJar, mainClass, appArgs.toArray, sparkProperties.toMap, Map.empty)
+    val response = client.createSubmission(masterRestUrl, request)
     val submitResponse = getSubmitResponse(response)
     val submissionId = submitResponse.submissionId
     assert(submissionId != null, "Application submission was unsuccessful!")

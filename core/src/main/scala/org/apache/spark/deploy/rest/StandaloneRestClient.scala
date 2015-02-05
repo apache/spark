@@ -56,13 +56,10 @@ private[spark] class StandaloneRestClient extends Logging {
    */
   def createSubmission(
       master: String,
-      appArgs: Array[String],
-      sparkProperties: Map[String, String],
-      environmentVariables: Map[String, String]): SubmitRestProtocolResponse = {
+      request: CreateSubmissionRequest): SubmitRestProtocolResponse = {
     logInfo(s"Submitting a request to launch a driver in $master.")
     validateMaster(master)
     val url = getSubmitUrl(master)
-    val request = constructSubmitRequest(appArgs, sparkProperties, environmentVariables)
     val response = postJson(url, request.toJson)
     response match {
       case s: CreateSubmissionResponse =>
@@ -202,11 +199,15 @@ private[spark] class StandaloneRestClient extends Logging {
 
   /** Construct a message that captures the specified parameters for submitting an application. */
   def constructSubmitRequest(
+      appResource: String,
+      mainClass: String,
       appArgs: Array[String],
       sparkProperties: Map[String, String],
       environmentVariables: Map[String, String]): CreateSubmissionRequest = {
     val message = new CreateSubmissionRequest
     message.clientSparkVersion = sparkVersion
+    message.appResource = appResource
+    message.mainClass = mainClass
     message.appArgs = appArgs
     message.sparkProperties = sparkProperties
     message.environmentVariables = environmentVariables
@@ -286,17 +287,23 @@ private[spark] object StandaloneRestClient {
   val REPORT_DRIVER_STATUS_MAX_TRIES = 10
   val PROTOCOL_VERSION = "v1"
 
-  /**
-   * Submit an application, assuming parameters are specified through system properties.
-   * Usage: StandaloneRestClient [app args*]
-   */
+  /** Submit an application, assuming parameters are specified through system properties. */
   def main(args: Array[String]): Unit = {
+    if (args.size < 2) {
+      sys.error("Usage: StandaloneRestClient [app resource] [main class] [app args*]")
+      sys.exit(1)
+    }
+    val appResource = args(0)
+    val mainClass = args(1)
+    val appArgs = args.slice(2, args.size)
     val client = new StandaloneRestClient
     val master = sys.props.get("spark.master").getOrElse {
       throw new IllegalArgumentException("'spark.master' must be set.")
     }
     val sparkProperties = new SparkConf().getAll.toMap
     val environmentVariables = sys.env.filter { case (k, _) => k.startsWith("SPARK_") }
-    client.createSubmission(master, args, sparkProperties, environmentVariables)
+    val submitRequest = client.constructSubmitRequest(
+      appResource, mainClass, appArgs, sparkProperties, environmentVariables)
+    client.createSubmission(master, submitRequest)
   }
 }
