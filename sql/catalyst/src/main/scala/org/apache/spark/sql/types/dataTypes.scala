@@ -36,6 +36,8 @@ import org.apache.spark.util.Utils
 
 
 object DataType {
+  private val curId = new java.util.concurrent.atomic.AtomicLong()
+  def newTypeId = curId.getAndIncrement()
   def fromJson(json: String): DataType = parseDataType(parse(json))
 
   private object JSortedObject {
@@ -214,6 +216,8 @@ abstract class DataType {
     case e: Expression if e.dataType == this => true
     case _ => false
   }
+
+  var id = DataType.newTypeId
 
   /** The default size of a value of this data type. */
   def defaultSize: Int
@@ -725,7 +729,8 @@ case class StructField(
     ("name" -> name) ~
       ("type" -> dataType.jsonValue) ~
       ("nullable" -> nullable) ~
-      ("metadata" -> metadata.jsonValue)
+      ("metadata" -> metadata.jsonValue) ~
+      ("id" -> dataType.id)
   }
 }
 
@@ -912,7 +917,8 @@ case class MapType(
     ("type" -> typeName) ~
       ("keyType" -> keyType.jsonValue) ~
       ("valueType" -> valueType.jsonValue) ~
-      ("valueContainsNull" -> valueContainsNull)
+      ("valueContainsNull" -> valueContainsNull) ~
+      ("id" -> id)
 
   /**
    * The default size of a value of the MapType is
@@ -961,7 +967,8 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
     ("type" -> "udt") ~
       ("class" -> this.getClass.getName) ~
       ("pyClass" -> pyUDT) ~
-      ("sqlType" -> sqlType.jsonValue)
+      ("sqlType" -> sqlType.jsonValue) ~
+      ("id" -> id)
   }
 
   /**
