@@ -78,7 +78,7 @@ private[spark] class ExecutorAllocationManager(
 
   // How long there must be backlogged tasks for before an addition is triggered
   private val schedulerBacklogTimeout = conf.getLong(
-    "spark.dynamicAllocation.schedulerBacklogTimeout", 60)
+    "spark.dynamicAllocation.schedulerBacklogTimeout", 5)
 
   // Same as above, but used only after `schedulerBacklogTimeout` is exceeded
   private val sustainedSchedulerBacklogTimeout = conf.getLong(
