@@ -54,6 +54,7 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
   // Keyword is a convention with AbstractSparkSQLParser, which will scan all of the `Keyword`
   // properties via reflection the class in runtime for constructing the SqlLexical object
   protected val CREATE = Keyword("CREATE")
+  protected val DROP = Keyword("DROP")
   protected val TEMPORARY = Keyword("TEMPORARY")
   protected val TABLE = Keyword("TABLE")
   protected val IF = Keyword("IF")
@@ -82,9 +83,15 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
   protected val MAP = Keyword("MAP")
   protected val STRUCT = Keyword("STRUCT")
 
-  protected lazy val ddl: Parser[LogicalPlan] = createTable
+  protected lazy val ddl: Parser[LogicalPlan] = createTable | dropTable
 
   protected def start: Parser[LogicalPlan] = ddl
+
+  protected lazy val dropTable: Parser[LogicalPlan] =
+    (DROP ~> TEMPORARY.? <~ TABLE) ~ (IF ~ EXISTS).? ~ ident ^^ {
+      case temp ~ exists ~ tableName =>
+        DropTable(tableName, exists.nonEmpty, temp.nonEmpty)
+    }
 
   /**
    * `CREATE [TEMPORARY] TABLE avroTable [IF NOT EXISTS]
@@ -327,6 +334,33 @@ private [sql] case class CreateTempTableUsingAsSelect(
     Seq.empty
   }
 }
+
+private[sql] case class DropTable(
+    tableName: String,
+    isExists: Boolean,
+    temporary: Boolean) extends Command
+
+private[sql] case class DropTempTable(
+    tableIdent: Seq[String],
+    isExists: Boolean,
+    temporary: Boolean) extends RunnableCommand {
+
+  def run(sqlContext: SQLContext) = {
+    val tableExists = sqlContext.catalog.tableExists(tableIdent)
+    val tableName = tableIdent.head
+    if (isExists) {
+      if (tableExists) sqlContext.dropTempTable(tableName)
+      else logWarning(s"Unknown table '$tableName'")
+    }
+    // no `IF EXISTS` keyword, will thorw an exception
+    else {
+      if (tableExists) sqlContext.dropTempTable(tableName)
+      else sys.error(s"Unknown table '$tableName'")
+    }
+    Seq.empty
+  }
+}
+
 
 /**
  * Builds a map in which keys are case insensitive

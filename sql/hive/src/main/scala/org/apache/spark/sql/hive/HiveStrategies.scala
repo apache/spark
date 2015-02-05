@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeComman
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.sources.{CreateTableUsingAsLogicalPlan, CreateTableUsingAsSelect, CreateTableUsing}
+import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StringType
 
 
@@ -243,6 +243,10 @@ private[hive] trait HiveStrategies {
           case o: LogicalPlan =>
             ExecutedCommand(RunnableDescribeCommand(planLater(o), describe.output)) :: Nil
         }
+
+      case drop: DropTable =>
+        // TODO: hive0.14 support drop temp table
+        ExecutedCommand(DropHiveTable(drop.tableName, drop.isExists, drop.temporary)) :: Nil
 
       case _ => Nil
     }

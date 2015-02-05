@@ -337,6 +337,11 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case c: CreateTableUsingAsLogicalPlan if c.temporary && c.allowExisting =>
         sys.error("allowExisting should be set to false when creating a temporary table.")
 
+      case DropTable(tableName, isExists, isTemporary) =>
+        if (!isTemporary) {
+          sys.error(s"Table dropped with SQLContext must be TEMPORARY.")
+        }
+        ExecutedCommand(DropTempTable(Seq(tableName), isExists, isTemporary)) :: Nil
       case _ => Nil
     }
   }

@@ -48,11 +48,13 @@ case class AnalyzeTable(tableName: String) extends RunnableCommand {
  * Drops a table from the metastore and removes it if it is cached.
  */
 @DeveloperApi
-case class DropTable(
+case class DropHiveTable(
     tableName: String,
-    ifExists: Boolean) extends RunnableCommand {
+    ifExists: Boolean,
+    temporary: Boolean) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext) = {
+    // TODO: support drop temporary table in Hive0.14
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     val ifExistsClause = if (ifExists) "IF EXISTS " else ""
     try {
