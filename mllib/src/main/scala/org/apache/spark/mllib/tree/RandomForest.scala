@@ -17,9 +17,10 @@
 
 package org.apache.spark.mllib.tree
 
+import java.io.IOException
+
 import scala.collection.mutable
 import scala.collection.JavaConverters._
-import scala.util.{Failure, Try}
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
@@ -245,9 +246,11 @@ private class RandomForest (
 
     // Delete any remaining checkpoints used for node Id cache.
     if (nodeIdCache.nonEmpty) {
-      Try(nodeIdCache.get.deleteAllCheckpoints()) match {
-        case Failure(e) => logWarning(s"delete all chackpoints failed. Error reason: ${e.getMessage}")
-        case _ =>
+      try {
+        nodeIdCache.get.deleteAllCheckpoints()
+      } catch {
+        case e:IOException =>
+          logWarning(s"delete all chackpoints failed. Error reason: ${e.getMessage}")
       }
     }
 
