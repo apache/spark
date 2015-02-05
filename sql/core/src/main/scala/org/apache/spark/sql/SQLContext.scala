@@ -163,10 +163,13 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /** Removes the specified table from the in-memory cache. */
   def uncacheTable(tableName: String): Unit = cacheManager.uncacheTable(tableName)
 
+  // scalastyle:off
+  // Disable style checker so "implicits" object can start with lowercase i
   /**
    * Implicit methods available in Scala for converting common Scala objects into [[DataFrame]]s.
    */
   object implicits {
+    // scalastyle:on
     /**
      * Creates a DataFrame from an RDD of case classes.
      *
