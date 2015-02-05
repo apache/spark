@@ -25,10 +25,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
 /**
- * :: Experimental ::
  * A more compact class to represent a rating than Tuple3[Int, Int, Double].
  */
-@Experimental
 case class Rating(user: Int, product: Int, rating: Double)
 
 /**
@@ -135,10 +133,8 @@ class ALS private (
   }
 
   /**
-   * :: Experimental ::
    * Sets the constant used in computing confidence in implicit ALS. Default: 1.0.
    */
-  @Experimental
   def setAlpha(alpha: Double): this.type = {
     this.alpha = alpha
     this

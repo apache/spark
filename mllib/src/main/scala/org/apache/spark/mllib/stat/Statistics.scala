@@ -26,36 +26,32 @@ import org.apache.spark.mllib.stat.test.{ChiSqTest, ChiSqTestResult}
 import org.apache.spark.rdd.RDD
 
 /**
+ * :: Experimental ::
  * API for statistical functions in MLlib.
  */
 @Experimental
 object Statistics {
 
   /**
-   * :: Experimental ::
    * Computes column-wise summary statistics for the input RDD[Vector].
    *
    * @param X an RDD[Vector] for which column-wise summary statistics are to be computed.
    * @return [[MultivariateStatisticalSummary]] object containing column-wise summary statistics.
    */
-  @Experimental
   def colStats(X: RDD[Vector]): MultivariateStatisticalSummary = {
     new RowMatrix(X).computeColumnSummaryStatistics()
   }
 
   /**
-   * :: Experimental ::
    * Compute the Pearson correlation matrix for the input RDD of Vectors.
    * Columns with 0 covariance produce NaN entries in the correlation matrix.
    *
    * @param X an RDD[Vector] for which the correlation matrix is to be computed.
    * @return Pearson correlation matrix comparing columns in X.
    */
-  @Experimental
   def corr(X: RDD[Vector]): Matrix = Correlations.corrMatrix(X)
 
   /**
-   * :: Experimental ::
    * Compute the correlation matrix for the input RDD of Vectors using the specified method.
    * Methods currently supported: `pearson` (default), `spearman`.
    *
@@ -69,11 +65,9 @@ object Statistics {
    *               Supported: `pearson` (default), `spearman`
    * @return Correlation matrix comparing columns in X.
    */
-  @Experimental
   def corr(X: RDD[Vector], method: String): Matrix = Correlations.corrMatrix(X, method)
 
   /**
-   * :: Experimental ::
    * Compute the Pearson correlation for the input RDDs.
    * Returns NaN if either vector has 0 variance.
    *
@@ -84,11 +78,9 @@ object Statistics {
    * @param y RDD[Double] of the same cardinality as x.
    * @return A Double containing the Pearson correlation between the two input RDD[Double]s
    */
-  @Experimental
   def corr(x: RDD[Double], y: RDD[Double]): Double = Correlations.corr(x, y)
 
   /**
-   * :: Experimental ::
    * Compute the correlation for the input RDDs using the specified method.
    * Methods currently supported: `pearson` (default), `spearman`.
    *
@@ -99,14 +91,12 @@ object Statistics {
    * @param y RDD[Double] of the same cardinality as x.
    * @param method String specifying the method to use for computing correlation.
    *               Supported: `pearson` (default), `spearman`
-   *@return A Double containing the correlation between the two input RDD[Double]s using the
+   * @return A Double containing the correlation between the two input RDD[Double]s using the
    *         specified method.
    */
-  @Experimental
   def corr(x: RDD[Double], y: RDD[Double], method: String): Double = Correlations.corr(x, y, method)
 
   /**
-   * :: Experimental ::
    * Conduct Pearson's chi-squared goodness of fit test of the observed data against the
    * expected distribution.
    *
@@ -120,13 +110,11 @@ object Statistics {
    * @return ChiSquaredTest object containing the test statistic, degrees of freedom, p-value,
    *         the method used, and the null hypothesis.
    */
-  @Experimental
   def chiSqTest(observed: Vector, expected: Vector): ChiSqTestResult = {
     ChiSqTest.chiSquared(observed, expected)
   }
 
   /**
-   * :: Experimental ::
    * Conduct Pearson's chi-squared goodness of fit test of the observed data against the uniform
    * distribution, with each category having an expected frequency of `1 / observed.size`.
    *
@@ -136,11 +124,9 @@ object Statistics {
    * @return ChiSquaredTest object containing the test statistic, degrees of freedom, p-value,
    *         the method used, and the null hypothesis.
    */
-  @Experimental
   def chiSqTest(observed: Vector): ChiSqTestResult = ChiSqTest.chiSquared(observed)
 
   /**
-   * :: Experimental ::
    * Conduct Pearson's independence test on the input contingency matrix, which cannot contain
    * negative entries or columns or rows that sum up to 0.
    *
@@ -148,11 +134,9 @@ object Statistics {
    * @return ChiSquaredTest object containing the test statistic, degrees of freedom, p-value,
    *         the method used, and the null hypothesis.
    */
-  @Experimental
   def chiSqTest(observed: Matrix): ChiSqTestResult = ChiSqTest.chiSquaredMatrix(observed)
 
   /**
-   * :: Experimental ::
    * Conduct Pearson's independence test for every feature against the label across the input RDD.
    * For each feature, the (feature, label) pairs are converted into a contingency matrix for which
    * the chi-squared statistic is computed. All label and feature values must be categorical.
@@ -162,7 +146,6 @@ object Statistics {
    * @return an array containing the ChiSquaredTestResult for every feature against the label.
    *         The order of the elements in the returned array reflects the order of input features.
    */
-  @Experimental
   def chiSqTest(data: RDD[LabeledPoint]): Array[ChiSqTestResult] = {
     ChiSqTest.chiSquaredFeatures(data)
   }

@@ -62,6 +62,9 @@ class LogisticRegressionModel (
       s" but was given weights of length ${weights.size}")
   }
 
+  /**
+   * Constructs a [[LogisticRegressionModel]] with weights and intercept for binary classification.
+   */
   def this(weights: Vector, intercept: Double) = this(weights, intercept, weights.size, 2)
 
   private var threshold: Option[Double] = Some(0.5)
