@@ -57,6 +57,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   var isPython: Boolean = false
   var pyFiles: String = null
   val sparkProperties: HashMap[String, String] = new HashMap[String, String]()
+  var proxyUser: String = null
 
   /** Default properties present in the currently defined defaults file. */
   lazy val defaultSparkProperties: HashMap[String, String] = {
@@ -339,6 +340,10 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         }
         parse(tail)
 
+      case ("--proxy-user") :: value :: tail =>
+        proxyUser = value
+        parse(tail)
+
       case ("--help" | "-h") :: tail =>
         printUsageAndExit(0)
 
@@ -406,6 +411,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         |                              classpath.
         |
         |  --executor-memory MEM       Memory per executor (e.g. 1000M, 2G) (Default: 1G).
+        |
+        |  --proxy-user                User to impersonate when submitting the application.
         |
         |  --help, -h                  Show this help message and exit
         |  --verbose, -v               Print additional debug output

@@ -20,11 +20,12 @@ package org.apache.spark.deploy
 import java.io.{File, PrintStream}
 import java.lang.reflect.{Modifier, InvocationTargetException}
 import java.net.URL
+import java.security.PrivilegedExceptionAction
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
 import org.apache.hadoop.fs.Path
-
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.ivy.Ivy
 import org.apache.ivy.core.LogOptions
 import org.apache.ivy.core.module.descriptor.{DefaultExcludeRule, DefaultDependencyDescriptor, DefaultModuleDescriptor}
@@ -85,7 +86,7 @@ object SparkSubmit {
       printStream.println(appArgs)
     }
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
-    launch(childArgs, classpath, sysProps, mainClass, appArgs.verbose)
+    launch(childArgs, classpath, sysProps, mainClass, appArgs)
   }
 
   /**
@@ -380,8 +381,8 @@ object SparkSubmit {
       childClasspath: ArrayBuffer[String],
       sysProps: Map[String, String],
       childMainClass: String,
-      verbose: Boolean = false) {
-    if (verbose) {
+      appArgs: SparkSubmitArguments) {
+    if (appArgs.verbose) {
       printStream.println(s"Main class:\n$childMainClass")
       printStream.println(s"Arguments:\n${childArgs.mkString("\n")}")
       printStream.println(s"System properties:\n${sysProps.mkString("\n")}")
@@ -424,8 +425,17 @@ object SparkSubmit {
     if (!Modifier.isStatic(mainMethod.getModifiers)) {
       throw new IllegalStateException("The main method in the given main class must be static")
     }
+
     try {
-      mainMethod.invoke(null, childArgs.toArray)
+      if (appArgs.proxyUser != null) {
+        val proxyUser = UserGroupInformation.createProxyUser(appArgs.proxyUser,
+          UserGroupInformation.getCurrentUser())
+        proxyUser.doAs(new PrivilegedExceptionAction[Unit]() {
+          override def run(): Unit = mainMethod.invoke(null, childArgs.toArray)
+        })
+      } else {
+        mainMethod.invoke(null, childArgs.toArray)
+      }
     } catch {
       case e: InvocationTargetException => e.getCause match {
         case cause: Throwable => throw cause
