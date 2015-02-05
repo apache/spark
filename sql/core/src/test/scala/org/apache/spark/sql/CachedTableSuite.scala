@@ -17,6 +17,12 @@
 
 package org.apache.spark.sql
 
+import scala.concurrent.duration._
+import scala.language.implicitConversions
+import scala.language.postfixOps
+
+import org.scalatest.concurrent.Eventually._
+
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.columnar._
 import org.apache.spark.sql.Dsl._
@@ -191,7 +197,10 @@ class CachedTableSuite extends QueryTest {
 
     sql("UNCACHE TABLE testData")
     assert(!isCached("testData"), "Table 'testData' should not be cached")
-    assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+
+    eventually(timeout(10 seconds)) {
+      assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+    }
   }
 
   test("CACHE TABLE tableName AS SELECT * FROM anotherTable") {
@@ -204,7 +213,9 @@ class CachedTableSuite extends QueryTest {
       "Eagerly cached in-memory table should have already been materialized")
 
     uncacheTable("testCacheTable")
-    assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+    eventually(timeout(10 seconds)) {
+      assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+    }
   }
 
   test("CACHE TABLE tableName AS SELECT ...") {
@@ -217,7 +228,9 @@ class CachedTableSuite extends QueryTest {
       "Eagerly cached in-memory table should have already been materialized")
 
     uncacheTable("testCacheTable")
-    assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+    eventually(timeout(10 seconds)) {
+      assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+    }
   }
 
   test("CACHE LAZY TABLE tableName") {
@@ -235,7 +248,9 @@ class CachedTableSuite extends QueryTest {
       "Lazily cached in-memory table should have been materialized")
 
     uncacheTable("testData")
-    assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+    eventually(timeout(10 seconds)) {
+      assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+    }
   }
 
   test("InMemoryRelation statistics") {
