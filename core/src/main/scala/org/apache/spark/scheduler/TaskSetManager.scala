@@ -597,9 +597,7 @@ private[spark] class TaskSetManager(
     removeRunningTask(tid)
     info.markFailed()
     val index = info.index
-    if (copiesRunning(index) >= 1) {
-      copiesRunning(index) -= 1
-    }
+    copiesRunning(index) -= 1
     var taskMetrics : TaskMetrics = null
 
     val failureReason = s"Lost task ${info.id} in stage ${taskSet.id} (TID $tid, ${info.host}): " +
