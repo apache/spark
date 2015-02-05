@@ -41,7 +41,8 @@ private[sql] object JsonRDD extends Logging {
       schema: StructType,
       columnNameOfCorruptRecords: String,
       caseInsensitive: Boolean = false): RDD[Row] = {
-    parseJson(json, columnNameOfCorruptRecords, caseInsensitive).map(parsed => asRow(parsed, schema))
+    parseJson(json, columnNameOfCorruptRecords, caseInsensitive)
+      .map(parsed => asRow(parsed, schema))
   }
 
   private[sql] def inferSchema(
@@ -52,7 +53,9 @@ private[sql] object JsonRDD extends Logging {
     require(samplingRatio > 0, s"samplingRatio ($samplingRatio) should be greater than 0")
     val schemaData = if (samplingRatio > 0.99) json else json.sample(false, samplingRatio, 1)
     val allKeys =
-      parseJson(schemaData, columnNameOfCorruptRecords, caseInsensitive).map(allKeysWithValueTypes).reduce(_ ++ _)
+      parseJson(schemaData, columnNameOfCorruptRecords, caseInsensitive)
+        .map(allKeysWithValueTypes)
+        .reduce(_ ++ _)
     createSchema(allKeys)
   }
 
