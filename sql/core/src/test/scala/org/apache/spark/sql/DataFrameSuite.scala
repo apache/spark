@@ -21,7 +21,8 @@ import org.apache.spark.sql.Dsl._
 import org.apache.spark.sql.types._
 
 /* Implicits */
-import org.apache.spark.sql.test.TestSQLContext.{createDataFrame, logicalPlanToSparkQuery}
+import org.apache.spark.sql.test.TestSQLContext.logicalPlanToSparkQuery
+import org.apache.spark.sql.test.TestSQLContext.implicits._
 
 import scala.language.postfixOps
 
