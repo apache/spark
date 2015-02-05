@@ -227,8 +227,9 @@ abstract class DataType {
   def json: String = compact(render(jsonValue))
 
   def prettyJson: String = pretty(render(jsonValue))
-}
 
+  def simpleString: String = typeName
+}
 
 /**
  * :: DeveloperApi ::
@@ -241,7 +242,6 @@ abstract class DataType {
 case object NullType extends DataType {
   override def defaultSize: Int = 1
 }
-
 
 protected[sql] object NativeType {
   val all = Seq(
@@ -448,6 +448,8 @@ case object LongType extends IntegralType {
    * The default size of a value of the LongType is 8 bytes.
    */
   override def defaultSize: Int = 8
+
+  override def simpleString = "bigint"
 }
 
 
@@ -470,6 +472,8 @@ case object IntegerType extends IntegralType {
    * The default size of a value of the IntegerType is 4 bytes.
    */
   override def defaultSize: Int = 4
+
+  override def simpleString = "int"
 }
 
 
@@ -492,6 +496,8 @@ case object ShortType extends IntegralType {
    * The default size of a value of the ShortType is 2 bytes.
    */
   override def defaultSize: Int = 2
+
+  override def simpleString = "smallint"
 }
 
 
@@ -514,6 +520,8 @@ case object ByteType extends IntegralType {
    * The default size of a value of the ByteType is 1 byte.
    */
   override def defaultSize: Int = 1
+
+  override def simpleString = "tinyint"
 }
 
 
@@ -573,6 +581,11 @@ case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalT
    * The default size of a value of the DecimalType is 4096 bytes.
    */
   override def defaultSize: Int = 4096
+
+  override def simpleString = precisionInfo match {
+    case Some(PrecisionInfo(precision, scale)) => s"decimal($precision,$scale)"
+    case None => "decimal(10,0)"
+  }
 }
 
 
@@ -695,6 +708,8 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
    * (We assume that there are 100 elements).
    */
   override def defaultSize: Int = 100 * elementType.defaultSize
+
+  override def simpleString = s"array<${elementType.simpleString}>"
 }
 
 
@@ -870,6 +885,11 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * The default size of a value of the StructType is the total default sizes of all field types.
    */
   override def defaultSize: Int = fields.map(_.dataType.defaultSize).sum
+
+  override def simpleString = {
+    val fieldTypes = fields.map(field => s"${field.name}:${field.dataType.simpleString}")
+    s"struct<${fieldTypes.mkString(",")}>"
+  }
 }
 
 
@@ -920,6 +940,8 @@ case class MapType(
    * (We assume that there are 100 elements).
    */
   override def defaultSize: Int = 100 * (keyType.defaultSize + valueType.defaultSize)
+
+  override def simpleString = s"map<${keyType.simpleString},${valueType.simpleString}>"
 }
 
 
