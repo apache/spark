@@ -631,6 +631,43 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
+   * Builds a DataFrame from an RDD based on column names.
+   * Assumes RDD is contains iterables of equal length.
+   */
+  def applyNames(nameString : String, plainRdd : RDD[_]) : DataFrame = {
+    // assume a space separated string to begin with
+    val names = nameString.split(" ").toSeq
+    val sampleRow = plainRdd.first()
+
+    def columnType(col: Any) : DataType = {
+      var t:DataType = col match {
+        case _: Int => IntegerType
+        case _: java.lang.Integer => IntegerType
+        case _: String => StringType
+        case _: java.lang.String => StringType
+        case _: Double => DoubleType
+        case _: java.lang.Float => FloatType
+        case _: Float => FloatType
+        case _: Byte => ByteType
+        case _: java.lang.Byte => ByteType
+        case _: Boolean => BooleanType
+        case _: java.lang.Boolean => BooleanType
+        case _: java.math.BigDecimal => DecimalType()
+        case _: java.sql.Date => DateType
+        case _: java.sql.Timestamp => TimestampType
+        case _: Any => NullType
+      }
+      return t
+    }
+
+    val colTypes = sampleRow.asInstanceOf[Seq[_]].map(columnType)
+    val colFields = names zip colTypes
+    val schema = StructType(colFields.map{ r => new StructField(r._1,r._2, true)} )
+    val rowRdd : RDD[Row] = plainRdd.map { r  => Row.fromSeq(r.asInstanceOf[Seq[Any]]) }
+    applySchema(rowRdd, schema)
+  }
+
+  /**
    * Returns a Catalyst Schema for the given java bean class.
    */
   protected def getSchema(beanClass: Class[_]): Seq[AttributeReference] = {
