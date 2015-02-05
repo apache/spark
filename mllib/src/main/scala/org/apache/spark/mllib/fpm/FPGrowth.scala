@@ -25,16 +25,20 @@ import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import org.apache.spark.{HashPartitioner, Logging, Partitioner, SparkException}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD}
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
 /**
+ * :: Experimental ::
+ *
  * Model trained by [[FPGrowth]], which holds frequent itemsets.
  * @param freqItemsets frequent itemset, which is an RDD of (itemset, frequency) pairs
  * @tparam Item item type
  */
+@Experimental
 class FPGrowthModel[Item: ClassTag](
     val freqItemsets: RDD[(Array[Item], Long)]) extends Serializable {
 
@@ -45,28 +49,35 @@ class FPGrowthModel[Item: ClassTag](
 }
 
 /**
- * This class implements Parallel FP-growth algorithm to do frequent pattern matching on input data.
- * Parallel FPGrowth (PFP) partitions computation in such a way that each machine executes an
- * independent group of mining tasks. More detail of this algorithm can be found at
- * [[http://dx.doi.org/10.1145/1454008.1454027, PFP]], and the original FP-growth paper can be
- * found at [[http://dx.doi.org/10.1145/335191.335372, FP-growth]]
+ * :: Experimental ::
+ *
+ * A parallel FP-growth algorithm to mine frequent itemsets. The algorithm is described in
+ * [[http://dx.doi.org/10.1145/1454008.1454027 Li et al., PFP: Parallel FP-Growth for Query
+ *  Recommendation]]. PFP distributes computation in such a way that each worker executes an
+ * independent group of mining tasks. The FP-Growth algorithm is described in
+ * [[http://dx.doi.org/10.1145/335191.335372 Han et al., Mining frequent patterns without candidate
+ *  generation]].
  *
  * @param minSupport the minimal support level of the frequent pattern, any pattern appears
  *                   more than (minSupport * size-of-the-dataset) times will be output
  * @param numPartitions number of partitions used by parallel FP-growth
+ *
+ * @see [[http://en.wikipedia.org/wiki/Association_rule_learning Association rule learning
+ *       (Wikipedia)]]
  */
+@Experimental
 class FPGrowth private (
     private var minSupport: Double,
     private var numPartitions: Int) extends Logging with Serializable {
 
   /**
-   * Constructs a FPGrowth instance with default parameters:
-   * {minSupport: 0.3, numPartitions: auto}
+   * Constructs a default instance with default parameters {minSupport: `0.3`, numPartitions: same
+   * as the input data}.
    */
   def this() = this(0.3, -1)
 
   /**
-   * Sets the minimal support level (default: 0.3).
+   * Sets the minimal support level (default: `0.3`).
    */
   def setMinSupport(minSupport: Double): this.type = {
     this.minSupport = minSupport
