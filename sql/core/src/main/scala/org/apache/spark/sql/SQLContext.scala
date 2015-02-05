@@ -126,7 +126,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   val experimental: ExperimentalMethods = new ExperimentalMethods(this)
 
-  /** Returns a dataframe with no rows or columns. */
+  /** Returns a [[DataFrame]] with no rows or columns. */
   val emptyDataFrame = DataFrame(this, NoRelation)
 
   /**
