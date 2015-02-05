@@ -23,7 +23,7 @@ public classes of Spark SQL:
     - L{DataFrame}
       A Resilient Distributed Dataset (RDD) with Schema information for the data contained. In
       addition to normal RDD operations, DataFrames also support SQL.
-    - L{GroupedDataFrame}
+    - L{GroupedData}
     - L{Column}
       Column is a DataFrame with a single column.
     - L{Row}
@@ -62,7 +62,7 @@ __all__ = [
     "StringType", "BinaryType", "BooleanType", "DateType", "TimestampType", "DecimalType",
     "DoubleType", "FloatType", "ByteType", "IntegerType", "LongType",
     "ShortType", "ArrayType", "MapType", "StructField", "StructType",
-    "SQLContext", "HiveContext", "DataFrame", "GroupedDataFrame", "Column", "Row", "Dsl",
+    "SQLContext", "HiveContext", "DataFrame", "GroupedData", "Column", "Row", "Dsl",
     "SchemaRDD"]
 
 
@@ -2231,7 +2231,7 @@ class DataFrame(object):
 
     def groupBy(self, *cols):
         """ Group the :class:`DataFrame` using the specified columns,
-        so we can run aggregation on them. See :class:`GroupedDataFrame`
+        so we can run aggregation on them. See :class:`GroupedData`
         for all the available aggregate functions.
 
         >>> df.groupBy().avg().collect()
@@ -2244,7 +2244,7 @@ class DataFrame(object):
         jcols = ListConverter().convert([_to_java_column(c) for c in cols],
                                         self._sc._gateway._gateway_client)
         jdf = self._jdf.groupBy(self.sql_ctx._sc._jvm.PythonUtils.toSeq(jcols))
-        return GroupedDataFrame(jdf, self.sql_ctx)
+        return GroupedData(jdf, self.sql_ctx)
 
     def agg(self, *exprs):
         """ Aggregate on the entire :class:`DataFrame` without groups
@@ -2308,7 +2308,7 @@ def dfapi(f):
     return _api
 
 
-class GroupedDataFrame(object):
+class GroupedData(object):
 
     """
     A set of methods for aggregations on a :class:`DataFrame`,
@@ -2637,6 +2637,9 @@ class Dsl(object):
 
         >>> from pyspark.sql import Dsl
         >>> df.agg(Dsl.countDistinct(df.age, df.name).alias('c')).collect()
+        [Row(c=2)]
+
+        >>> df.agg(Dsl.countDistinct("age", "name").alias('c')).collect()
         [Row(c=2)]
         """
         sc = SparkContext._active_spark_context
