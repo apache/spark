@@ -472,6 +472,9 @@ class Airflow(BaseView):
     @expose('/dag_stats')
     def dag_stats(self):
         states = [State.SUCCESS, State.RUNNING, State.FAILED]
+        task_ids = []
+        for dag in dagbag.dags.values():
+            task_ids += dag.task_ids
         data = {}
         TI = models.TaskInstance
         session = Session()
@@ -479,7 +482,7 @@ class Airflow(BaseView):
             TI.dag_id,
             TI.state,
             sqla.func.count(TI.task_id)
-        ).group_by(TI.dag_id, TI.state)
+        ).filter(TI.task_id.in_(task_ids)).group_by(TI.dag_id, TI.state)
         for dag_id, state, count in qry:
             if dag_id not in data:
                 data[dag_id] = {}
@@ -505,7 +508,6 @@ class Airflow(BaseView):
         return Response(
             response=json.dumps(payload, indent=4),
             status=200, mimetype="application/json")
-
 
     @expose('/code')
     def code(self):
@@ -603,14 +605,13 @@ class Airflow(BaseView):
             content = getattr(task, template_field)
             if template_field in special_attrs:
                 html_dict[template_field] = highlight(
-                        content,
-                        special_attrs[template_field](),  # Lexer call
-                        HtmlFormatter(noclasses=True)
+                    content,
+                    special_attrs[template_field](),  # Lexer call
+                    HtmlFormatter(noclasses=True)
                 )
             else:
                 html_dict[template_field] = (
                     "<pre><code>" + content + "</pre></code>")
-
 
         return self.render(
             'airflow/dag_code.html',
@@ -1065,7 +1066,7 @@ def log_link(v, c, m, p):
         execution_date=m.execution_date.isoformat())
     return Markup(
         '<a href="{url}">'
-            '<span class="glyphicon glyphicon-book" aria-hidden="true">'
+        '    <span class="glyphicon glyphicon-book" aria-hidden="true">'
         '</span></a>').format(**locals())
 
 
@@ -1152,12 +1153,14 @@ class UserModelView(LoginMixin, ModelView):
 mv = UserModelView(models.User, Session, name="Users", category="Admin")
 admin.add_view(mv)
 
+
 class DagModelView(ModelView):
     column_list = ('dag_id', 'is_paused')
     column_editable_list = ('is_paused',)
 mv = DagModelView(
     models.DAG, Session, name="Pause DAGs", category="Admin")
 admin.add_view(mv)
+
 
 class ReloadTaskView(BaseView):
     @expose('/')

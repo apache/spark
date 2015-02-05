@@ -1156,7 +1156,8 @@ class DAG(Base):
 
             env = jinja2.Environment(
                 loader=jinja2.FileSystemLoader(searchpath),
-                extensions=["jinja2.ext.do"])
+                extensions=["jinja2.ext.do"],
+                cache_size=0)
             if self.user_defined_macros:
                 env.globals.update(self.user_defined_macros)
 
