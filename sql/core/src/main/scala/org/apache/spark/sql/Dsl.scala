@@ -94,37 +94,74 @@ object Dsl {
   /** Aggregate function: returns the sum of all values in the expression. */
   def sum(e: Column): Column = Sum(e.expr)
 
+  /** Aggregate function: returns the sum of all values in the given column. */
+  def sum(columnName: String): Column = sum(Column(columnName))
+
   /** Aggregate function: returns the sum of distinct values in the expression. */
   def sumDistinct(e: Column): Column = SumDistinct(e.expr)
 
+  /** Aggregate function: returns the sum of distinct values in the expression. */
+  def sumDistinct(columnName: String): Column = sumDistinct(Column(columnName))
+
   /** Aggregate function: returns the number of items in a group. */
   def count(e: Column): Column = Count(e.expr)
+
+  /** Aggregate function: returns the number of items in a group. */
+  def count(columnName: String): Column = count(Column(columnName))
 
   /** Aggregate function: returns the number of distinct items in a group. */
   @scala.annotation.varargs
   def countDistinct(expr: Column, exprs: Column*): Column =
     CountDistinct((expr +: exprs).map(_.expr))
 
+  /** Aggregate function: returns the number of distinct items in a group. */
+  @scala.annotation.varargs
+  def countDistinct(columnName: String, columnNames: String*): Column =
+    countDistinct(Column(columnName), columnNames.map(Column.apply) :_*)
+
   /** Aggregate function: returns the approximate number of distinct items in a group. */
   def approxCountDistinct(e: Column): Column = ApproxCountDistinct(e.expr)
 
   /** Aggregate function: returns the approximate number of distinct items in a group. */
+  def approxCountDistinct(columnName: String): Column = approxCountDistinct(column(columnName))
+
+  /** Aggregate function: returns the approximate number of distinct items in a group. */
   def approxCountDistinct(e: Column, rsd: Double): Column = ApproxCountDistinct(e.expr, rsd)
+
+  /** Aggregate function: returns the approximate number of distinct items in a group. */
+  def approxCountDistinct(columnName: String, rsd: Double): Column = {
+    approxCountDistinct(Column(columnName), rsd)
+  }
 
   /** Aggregate function: returns the average of the values in a group. */
   def avg(e: Column): Column = Average(e.expr)
 
+  /** Aggregate function: returns the average of the values in a group. */
+  def avg(columnName: String): Column = avg(Column(columnName))
+
   /** Aggregate function: returns the first value in a group. */
   def first(e: Column): Column = First(e.expr)
+
+  /** Aggregate function: returns the first value of a column in a group. */
+  def first(columnName: String): Column = first(Column(columnName))
 
   /** Aggregate function: returns the last value in a group. */
   def last(e: Column): Column = Last(e.expr)
 
+  /** Aggregate function: returns the last value of the column in a group. */
+  def last(columnName: String): Column = last(Column(columnName))
+
   /** Aggregate function: returns the minimum value of the expression in a group. */
   def min(e: Column): Column = Min(e.expr)
 
+  /** Aggregate function: returns the minimum value of the column in a group. */
+  def min(columnName: String): Column = min(Column(columnName))
+
   /** Aggregate function: returns the maximum value of the expression in a group. */
   def max(e: Column): Column = Max(e.expr)
+
+  /** Aggregate function: returns the maximum value of the column in a group. */
+  def max(columnName: String): Column = max(Column(columnName))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////
