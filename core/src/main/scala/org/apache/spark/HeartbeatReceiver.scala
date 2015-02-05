@@ -85,7 +85,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
       if (lastSeenMs < minSeenTime) {
         logWarning("Removing Executor " + executorId + " with no recent heartbeats: "
           + (now - lastSeenMs) + " ms exceeds " + slaveTimeout + "ms")
-        scheduler.executorLost(executorId, SlaveLost)
+        scheduler.executorLost(executorId, SlaveLost())
         sc.killExecutor(executorId)
         executorLastSeen.remove(executorId)
       }
