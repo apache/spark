@@ -129,13 +129,13 @@ class ALSModel private[ml] (
 
     // Register a UDF for DataFrame, and then
     // create a new column named map(predictionCol) by running the predict UDF.
-    val predict = udf((userFeatures: Seq[Float], itemFeatures: Seq[Float]) => {
+    val predict = udf { (userFeatures: Seq[Float], itemFeatures: Seq[Float]) =>
       if (userFeatures != null && itemFeatures != null) {
         blas.sdot(k, userFeatures.toArray, 1, itemFeatures.toArray, 1)
       } else {
         Float.NaN
       }
-    } : Float)
+    }
     dataset
       .join(users, dataset(map(userCol)) === users("id"), "left")
       .join(items, dataset(map(itemCol)) === items("id"), "left")
