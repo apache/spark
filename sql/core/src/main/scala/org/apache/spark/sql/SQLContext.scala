@@ -394,27 +394,65 @@ class SQLContext(@transient val sparkContext: SparkContext)
     jsonRDD(json.rdd, samplingRatio);
   }
 
+  /**
+   * :: Experimental ::
+   * Loads a dataset from the given path as a DataFrame.
+   * It will use the default data source configured in spark.sql.source.default.
+   */
   @Experimental
   def load(path: String): DataFrame = {
     val dataSourceName = conf.defaultDataSourceName
-    load(dataSourceName, ("path", path))
+    load(path, dataSourceName)
   }
 
+  /**
+   * :: Experimental ::
+   * Loads a dataset from the given path as a DataFrame based on a given data source and
+   * a set of options.
+   */
+  @Experimental
+  def load(path: String, dataSourceName: String, options: (String, String)*): DataFrame = {
+    val opts = new CaseInsensitiveMap(options.toMap)
+    if (opts.contains("path")) {
+      sys.error(s"path already specified as $path. Please do not add path in options.")
+    }
+
+    load(dataSourceName, ("path", path), options:_*)
+  }
+
+  /**
+   * :: Experimental ::
+   * Loads a dataset based on a given data source and a set of options.
+   */
   @Experimental
   def load(
       dataSourceName: String,
       option: (String, String),
       options: (String, String)*): DataFrame = {
-    val resolved = ResolvedDataSource(this, None, dataSourceName, (option +: options).toMap)
-    DataFrame(this, LogicalRelation(resolved.relation))
+    load(dataSourceName, (option +: options).toMap)
   }
 
+  /**
+   * :: Experimental ::
+   * Loads a dataset based on a given data source and a set of options.
+   */
   @Experimental
   def load(
       dataSourceName: String,
       options: java.util.Map[String, String]): DataFrame = {
-    val opts = options.toSeq
-    load(dataSourceName, opts.head, opts.tail:_*)
+    load(dataSourceName, options.toMap)
+  }
+
+  /**
+   * :: Experimental ::
+   * Loads a dataset based on a given data source and a set of options.
+   */
+  @Experimental
+  def load(
+      dataSourceName: String,
+      options: Map[String, String]): DataFrame = {
+    val resolved = ResolvedDataSource(this, None, dataSourceName, options)
+    DataFrame(this, LogicalRelation(resolved.relation))
   }
 
   /**
