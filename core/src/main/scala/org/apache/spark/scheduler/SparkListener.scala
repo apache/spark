@@ -25,6 +25,7 @@ import scala.collection.mutable
 import org.apache.spark.{Logging, TaskEndReason}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{Distribution, Utils}
 
@@ -56,11 +57,23 @@ case class SparkListenerTaskEnd(
   extends SparkListenerEvent
 
 @DeveloperApi
-case class SparkListenerJobStart(jobId: Int, stageIds: Seq[Int], properties: Properties = null)
-  extends SparkListenerEvent
+case class SparkListenerJobStart(
+    jobId: Int,
+    time: Long,
+    stageInfos: Seq[StageInfo],
+    properties: Properties = null)
+  extends SparkListenerEvent {
+  // Note: this is here for backwards-compatibility with older versions of this event which
+  // only stored stageIds and not StageInfos:
+  val stageIds: Seq[Int] = stageInfos.map(_.stageId)
+}
 
 @DeveloperApi
-case class SparkListenerJobEnd(jobId: Int, jobResult: JobResult) extends SparkListenerEvent
+case class SparkListenerJobEnd(
+    jobId: Int,
+    time: Long,
+    jobResult: JobResult)
+  extends SparkListenerEvent
 
 @DeveloperApi
 case class SparkListenerEnvironmentUpdate(environmentDetails: Map[String, Seq[(String, String)]])
@@ -76,6 +89,14 @@ case class SparkListenerBlockManagerRemoved(time: Long, blockManagerId: BlockMan
 
 @DeveloperApi
 case class SparkListenerUnpersistRDD(rddId: Int) extends SparkListenerEvent
+
+@DeveloperApi
+case class SparkListenerExecutorAdded(time: Long, executorId: String, executorInfo: ExecutorInfo)
+  extends SparkListenerEvent
+
+@DeveloperApi
+case class SparkListenerExecutorRemoved(time: Long, executorId: String, reason: String)
+  extends SparkListenerEvent
 
 /**
  * Periodic updates from executors.
@@ -95,14 +116,12 @@ case class SparkListenerApplicationStart(appName: String, appId: Option[String],
 @DeveloperApi
 case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
 
-/** An event used in the listener to shutdown the listener daemon thread. */
-private[spark] case object SparkListenerShutdown extends SparkListenerEvent
-
 
 /**
  * :: DeveloperApi ::
  * Interface for listening to events from the Spark scheduler. Note that this is an internal
- * interface which might change in different Spark releases.
+ * interface which might change in different Spark releases. Java clients should extend
+ * {@link JavaSparkListener}
  */
 @DeveloperApi
 trait SparkListener {
@@ -176,6 +195,16 @@ trait SparkListener {
    * Called when the driver receives task metrics from an executor in a heartbeat.
    */
   def onExecutorMetricsUpdate(executorMetricsUpdate: SparkListenerExecutorMetricsUpdate) { }
+
+  /**
+   * Called when the driver registers a new executor.
+   */
+  def onExecutorAdded(executorAdded: SparkListenerExecutorAdded) { }
+
+  /**
+   * Called when the driver removes an executor.
+   */
+  def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved) { }
 }
 
 /**

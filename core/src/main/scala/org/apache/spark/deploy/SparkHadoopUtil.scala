@@ -17,15 +17,20 @@
 
 package org.apache.spark.deploy
 
+import java.lang.reflect.Method
 import java.security.PrivilegedExceptionAction
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.FileSystem.Statistics
 import org.apache.hadoop.mapred.JobConf
+import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{Logging, SparkContext, SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.util.Utils
 
 import scala.collection.JavaConversions._
 
@@ -121,6 +126,71 @@ class SparkHadoopUtil extends Logging {
     UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
   }
 
+  /**
+   * Returns a function that can be called to find Hadoop FileSystem bytes read. If
+   * getFSBytesReadOnThreadCallback is called from thread r at time t, the returned callback will
+   * return the bytes read on r since t.  Reflection is required because thread-level FileSystem
+   * statistics are only available as of Hadoop 2.5 (see HADOOP-10688).
+   * Returns None if the required method can't be found.
+   */
+  private[spark] def getFSBytesReadOnThreadCallback(): Option[() => Long] = {
+    try {
+      val threadStats = getFileSystemThreadStatistics()
+      val getBytesReadMethod = getFileSystemThreadStatisticsMethod("getBytesRead")
+      val f = () => threadStats.map(getBytesReadMethod.invoke(_).asInstanceOf[Long]).sum
+      val baselineBytesRead = f()
+      Some(() => f() - baselineBytesRead)
+    } catch {
+      case e @ (_: NoSuchMethodException | _: ClassNotFoundException) => {
+        logDebug("Couldn't find method for retrieving thread-level FileSystem input data", e)
+        None
+      }
+    }
+  }
+
+  /**
+   * Returns a function that can be called to find Hadoop FileSystem bytes written. If
+   * getFSBytesWrittenOnThreadCallback is called from thread r at time t, the returned callback will
+   * return the bytes written on r since t.  Reflection is required because thread-level FileSystem
+   * statistics are only available as of Hadoop 2.5 (see HADOOP-10688).
+   * Returns None if the required method can't be found.
+   */
+  private[spark] def getFSBytesWrittenOnThreadCallback(): Option[() => Long] = {
+    try {
+      val threadStats = getFileSystemThreadStatistics()
+      val getBytesWrittenMethod = getFileSystemThreadStatisticsMethod("getBytesWritten")
+      val f = () => threadStats.map(getBytesWrittenMethod.invoke(_).asInstanceOf[Long]).sum
+      val baselineBytesWritten = f()
+      Some(() => f() - baselineBytesWritten)
+    } catch {
+      case e @ (_: NoSuchMethodException | _: ClassNotFoundException) => {
+        logDebug("Couldn't find method for retrieving thread-level FileSystem output data", e)
+        None
+      }
+    }
+  }
+
+  private def getFileSystemThreadStatistics(): Seq[AnyRef] = {
+    val stats = FileSystem.getAllStatistics()
+    stats.map(Utils.invoke(classOf[Statistics], _, "getThreadStatistics"))
+  }
+
+  private def getFileSystemThreadStatisticsMethod(methodName: String): Method = {
+    val statisticsDataClass =
+      Class.forName("org.apache.hadoop.fs.FileSystem$Statistics$StatisticsData")
+    statisticsDataClass.getDeclaredMethod(methodName)
+  }
+
+  /**
+   * Using reflection to get the Configuration from JobContext/TaskAttemptContext. If we directly
+   * call `JobContext/TaskAttemptContext.getConfiguration`, it will generate different byte codes
+   * for Hadoop 1.+ and Hadoop 2.+ because JobContext/TaskAttemptContext is class in Hadoop 1.+
+   * while it's interface in Hadoop 2.+.
+   */
+  def getConfigurationFromJobContext(context: JobContext): Configuration = {
+    val method = context.getClass.getMethod("getConfiguration")
+    method.invoke(context).asInstanceOf[Configuration]
+  }
 }
 
 object SparkHadoopUtil {

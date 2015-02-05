@@ -18,12 +18,12 @@
 package org.apache.spark.util
 
 import java.io._
+import java.lang.management.ManagementFactory
 import java.net._
 import java.nio.ByteBuffer
 import java.util.{Properties, Locale, Random, UUID}
 import java.util.concurrent.{ThreadFactory, ConcurrentHashMap, Executors, ThreadPoolExecutor}
-
-import org.eclipse.jetty.util.MultiException
+import javax.net.ssl.HttpsURLConnection
 
 import scala.collection.JavaConversions._
 import scala.collection.Map
@@ -33,17 +33,18 @@ import scala.reflect.ClassTag
 import scala.util.Try
 import scala.util.control.{ControlThrowable, NonFatal}
 
-import com.google.common.io.Files
+import com.google.common.io.{ByteStreams, Files}
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.log4j.PropertyConfigurator
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
+import org.apache.log4j.PropertyConfigurator
+import org.eclipse.jetty.util.MultiException
 import org.json4s._
-import tachyon.client.{TachyonFile,TachyonFS}
+import tachyon.client.{TachyonFS, TachyonFile}
 
 import org.apache.spark._
-import org.apache.spark.executor.ExecutorUncaughtExceptionHandler
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
 /** CallSite represents a place in user code. It can have a short and a long form. */
@@ -59,6 +60,8 @@ private[spark] object CallSite {
  */
 private[spark] object Utils extends Logging {
   val random = new Random()
+
+  private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
 
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
@@ -246,10 +249,28 @@ private[spark] object Utils extends Logging {
     retval
   }
 
-  /** Create a temporary directory inside the given parent directory */
-  def createTempDir(root: String = System.getProperty("java.io.tmpdir")): File = {
+  /**
+   * JDK equivalent of `chmod 700 file`.
+   *
+   * @param file the file whose permissions will be modified
+   * @return true if the permissions were successfully changed, false otherwise.
+   */
+  def chmod700(file: File): Boolean = {
+    file.setReadable(false, false) &&
+    file.setReadable(true, true) &&
+    file.setWritable(false, false) &&
+    file.setWritable(true, true) &&
+    file.setExecutable(false, false) &&
+    file.setExecutable(true, true)
+  }
+
+  /**
+   * Create a directory inside the given parent directory. The directory is guaranteed to be
+   * newly created, and is not marked for automatic deletion.
+   */
+  def createDirectory(root: String, namePrefix: String = "spark"): File = {
     var attempts = 0
-    val maxAttempts = 10
+    val maxAttempts = MAX_DIR_CREATION_ATTEMPTS
     var dir: File = null
     while (dir == null) {
       attempts += 1
@@ -258,13 +279,31 @@ private[spark] object Utils extends Logging {
           maxAttempts + " attempts!")
       }
       try {
-        dir = new File(root, "spark-" + UUID.randomUUID.toString)
+        dir = new File(root, namePrefix + "-" + UUID.randomUUID.toString)
         if (dir.exists() || !dir.mkdirs()) {
           dir = null
+        } else {
+          // Restrict file permissions via chmod if available.
+          // For Windows this step is ignored.
+          if (!isWindows && !chmod700(dir)) {
+            dir.delete()
+            dir = null
+          }
         }
-      } catch { case e: IOException => ; }
+      } catch { case e: SecurityException => dir = null; }
     }
 
+    dir
+  }
+
+  /**
+   * Create a temporary directory inside the given parent directory. The directory will be
+   * automatically deleted when the VM shuts down.
+   */
+  def createTempDir(
+      root: String = System.getProperty("java.io.tmpdir"),
+      namePrefix: String = "spark"): File = {
+    val dir = createDirectory(root, namePrefix)
     registerShutdownDeleteDir(dir)
     dir
   }
@@ -347,17 +386,179 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Download a file requested by the executor. Supports fetching the file in a variety of ways,
+   * Download a file to target directory. Supports fetching the file in a variety of ways,
+   * including HTTP, HDFS and files on a standard filesystem, based on the URL parameter.
+   *
+   * If `useCache` is true, first attempts to fetch the file to a local cache that's shared
+   * across executors running the same application. `useCache` is used mainly for
+   * the executors, and not in local mode.
+   *
+   * Throws SparkException if the target file already exists and has different contents than
+   * the requested file.
+   */
+  def fetchFile(
+      url: String,
+      targetDir: File,
+      conf: SparkConf,
+      securityMgr: SecurityManager,
+      hadoopConf: Configuration,
+      timestamp: Long,
+      useCache: Boolean) {
+    val fileName = url.split("/").last
+    val targetFile = new File(targetDir, fileName)
+    if (useCache) {
+      val cachedFileName = s"${url.hashCode}${timestamp}_cache"
+      val lockFileName = s"${url.hashCode}${timestamp}_lock"
+      val localDir = new File(getLocalDir(conf))
+      val lockFile = new File(localDir, lockFileName)
+      val raf = new RandomAccessFile(lockFile, "rw")
+      // Only one executor entry.
+      // The FileLock is only used to control synchronization for executors download file,
+      // it's always safe regardless of lock type (mandatory or advisory).
+      val lock = raf.getChannel().lock()
+      val cachedFile = new File(localDir, cachedFileName)
+      try {
+        if (!cachedFile.exists()) {
+          doFetchFile(url, localDir, cachedFileName, conf, securityMgr, hadoopConf)
+        }
+      } finally {
+        lock.release()
+      }
+      copyFile(
+        url,
+        cachedFile,
+        targetFile,
+        conf.getBoolean("spark.files.overwrite", false)
+      )
+    } else {
+      doFetchFile(url, targetDir, fileName, conf, securityMgr, hadoopConf)
+    }
+
+    // Decompress the file if it's a .tar or .tar.gz
+    if (fileName.endsWith(".tar.gz") || fileName.endsWith(".tgz")) {
+      logInfo("Untarring " + fileName)
+      executeAndGetOutput(Seq("tar", "-xzf", fileName), targetDir)
+    } else if (fileName.endsWith(".tar")) {
+      logInfo("Untarring " + fileName)
+      executeAndGetOutput(Seq("tar", "-xf", fileName), targetDir)
+    }
+    // Make the file executable - That's necessary for scripts
+    FileUtil.chmod(targetFile.getAbsolutePath, "a+x")
+  }
+
+  /**
+   * Download `in` to `tempFile`, then move it to `destFile`.
+   *
+   * If `destFile` already exists:
+   *   - no-op if its contents equal those of `sourceFile`,
+   *   - throw an exception if `fileOverwrite` is false,
+   *   - attempt to overwrite it otherwise.
+   *
+   * @param url URL that `sourceFile` originated from, for logging purposes.
+   * @param in InputStream to download.
+   * @param tempFile File path to download `in` to.
+   * @param destFile File path to move `tempFile` to.
+   * @param fileOverwrite Whether to delete/overwrite an existing `destFile` that does not match
+   *                      `sourceFile`
+   */
+  private def downloadFile(
+      url: String,
+      in: InputStream,
+      tempFile: File,
+      destFile: File,
+      fileOverwrite: Boolean): Unit = {
+
+    try {
+      val out = new FileOutputStream(tempFile)
+      Utils.copyStream(in, out, closeStreams = true)
+      copyFile(url, tempFile, destFile, fileOverwrite, removeSourceFile = true)
+    } finally {
+      // Catch-all for the couple of cases where for some reason we didn't move `tempFile` to
+      // `destFile`.
+      if (tempFile.exists()) {
+        tempFile.delete()
+      }
+    }
+  }
+
+  /**
+   * Copy `sourceFile` to `destFile`.
+   *
+   * If `destFile` already exists:
+   *   - no-op if its contents equal those of `sourceFile`,
+   *   - throw an exception if `fileOverwrite` is false,
+   *   - attempt to overwrite it otherwise.
+   *
+   * @param url URL that `sourceFile` originated from, for logging purposes.
+   * @param sourceFile File path to copy/move from.
+   * @param destFile File path to copy/move to.
+   * @param fileOverwrite Whether to delete/overwrite an existing `destFile` that does not match
+   *                      `sourceFile`
+   * @param removeSourceFile Whether to remove `sourceFile` after / as part of moving/copying it to
+   *                         `destFile`.
+   */
+  private def copyFile(
+      url: String,
+      sourceFile: File,
+      destFile: File,
+      fileOverwrite: Boolean,
+      removeSourceFile: Boolean = false): Unit = {
+
+    if (destFile.exists) {
+      if (!Files.equal(sourceFile, destFile)) {
+        if (fileOverwrite) {
+          logInfo(
+            s"File $destFile exists and does not match contents of $url, replacing it with $url"
+          )
+          if (!destFile.delete()) {
+            throw new SparkException(
+              "Failed to delete %s while attempting to overwrite it with %s".format(
+                destFile.getAbsolutePath,
+                sourceFile.getAbsolutePath
+              )
+            )
+          }
+        } else {
+          throw new SparkException(
+            s"File $destFile exists and does not match contents of $url")
+        }
+      } else {
+        // Do nothing if the file contents are the same, i.e. this file has been copied
+        // previously.
+        logInfo(
+          "%s has been previously copied to %s".format(
+            sourceFile.getAbsolutePath,
+            destFile.getAbsolutePath
+          )
+        )
+        return
+      }
+    }
+
+    // The file does not exist in the target directory. Copy or move it there.
+    if (removeSourceFile) {
+      Files.move(sourceFile, destFile)
+    } else {
+      logInfo(s"Copying ${sourceFile.getAbsolutePath} to ${destFile.getAbsolutePath}")
+      Files.copy(sourceFile, destFile)
+    }
+  }
+
+  /**
+   * Download a file to target directory. Supports fetching the file in a variety of ways,
    * including HTTP, HDFS and files on a standard filesystem, based on the URL parameter.
    *
    * Throws SparkException if the target file already exists and has different contents than
    * the requested file.
    */
-  def fetchFile(url: String, targetDir: File, conf: SparkConf, securityMgr: SecurityManager,
-    hadoopConf: Configuration) {
-    val filename = url.split("/").last
-    val tempDir = getLocalDir(conf)
-    val tempFile =  File.createTempFile("fetchFileTemp", null, new File(tempDir))
+  private def doFetchFile(
+      url: String,
+      targetDir: File,
+      filename: String,
+      conf: SparkConf,
+      securityMgr: SecurityManager,
+      hadoopConf: Configuration) {
+    val tempFile = File.createTempFile("fetchFileTemp", null, new File(targetDir.getAbsolutePath))
     val targetFile = new File(targetDir, filename)
     val uri = new URI(url)
     val fileOverwrite = conf.getBoolean("spark.files.overwrite", defaultValue = false)
@@ -375,84 +576,25 @@ private[spark] object Utils extends Logging {
           logDebug("fetchFile not using security")
           uc = new URL(url).openConnection()
         }
+        Utils.setupSecureURLConnection(uc, securityMgr)
 
         val timeout = conf.getInt("spark.files.fetchTimeout", 60) * 1000
         uc.setConnectTimeout(timeout)
         uc.setReadTimeout(timeout)
         uc.connect()
         val in = uc.getInputStream()
-        val out = new FileOutputStream(tempFile)
-        Utils.copyStream(in, out, closeStreams = true)
-        if (targetFile.exists && !Files.equal(tempFile, targetFile)) {
-          if (fileOverwrite) {
-            targetFile.delete()
-            logInfo(("File %s exists and does not match contents of %s, " +
-              "replacing it with %s").format(targetFile, url, url))
-          } else {
-            tempFile.delete()
-            throw new SparkException(
-              "File " + targetFile + " exists and does not match contents of" + " " + url)
-          }
-        }
-        Files.move(tempFile, targetFile)
+        downloadFile(url, in, tempFile, targetFile, fileOverwrite)
       case "file" =>
         // In the case of a local file, copy the local file to the target directory.
         // Note the difference between uri vs url.
         val sourceFile = if (uri.isAbsolute) new File(uri) else new File(url)
-        var shouldCopy = true
-        if (targetFile.exists) {
-          if (!Files.equal(sourceFile, targetFile)) {
-            if (fileOverwrite) {
-              targetFile.delete()
-              logInfo(("File %s exists and does not match contents of %s, " +
-                "replacing it with %s").format(targetFile, url, url))
-            } else {
-              throw new SparkException(
-                "File " + targetFile + " exists and does not match contents of" + " " + url)
-            }
-          } else {
-            // Do nothing if the file contents are the same, i.e. this file has been copied
-            // previously.
-            logInfo(sourceFile.getAbsolutePath + " has been previously copied to "
-              + targetFile.getAbsolutePath)
-            shouldCopy = false
-          }
-        }
-
-        if (shouldCopy) {
-          // The file does not exist in the target directory. Copy it there.
-          logInfo("Copying " + sourceFile.getAbsolutePath + " to " + targetFile.getAbsolutePath)
-          Files.copy(sourceFile, targetFile)
-        }
+        copyFile(url, sourceFile, targetFile, fileOverwrite)
       case _ =>
         // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
         val fs = getHadoopFileSystem(uri, hadoopConf)
         val in = fs.open(new Path(uri))
-        val out = new FileOutputStream(tempFile)
-        Utils.copyStream(in, out, closeStreams = true)
-        if (targetFile.exists && !Files.equal(tempFile, targetFile)) {
-          if (fileOverwrite) {
-            targetFile.delete()
-            logInfo(("File %s exists and does not match contents of %s, " +
-              "replacing it with %s").format(targetFile, url, url))
-          } else {
-            tempFile.delete()
-            throw new SparkException(
-              "File " + targetFile + " exists and does not match contents of" + " " + url)
-          }
-        }
-        Files.move(tempFile, targetFile)
+        downloadFile(url, in, tempFile, targetFile, fileOverwrite)
     }
-    // Decompress the file if it's a .tar or .tar.gz
-    if (filename.endsWith(".tar.gz") || filename.endsWith(".tgz")) {
-      logInfo("Untarring " + filename)
-      Utils.execute(Seq("tar", "-xzf", filename), targetDir)
-    } else if (filename.endsWith(".tar")) {
-      logInfo("Untarring " + filename)
-      Utils.execute(Seq("tar", "-xf", filename), targetDir)
-    }
-    // Make the file executable - That's necessary for scripts
-    FileUtil.chmod(targetFile.getAbsolutePath, "a+x")
   }
 
   /**
@@ -485,26 +627,35 @@ private[spark] object Utils extends Logging {
    * If no directories could be created, this will return an empty list.
    */
   private[spark] def getOrCreateLocalRootDirs(conf: SparkConf): Array[String] = {
-    val confValue = if (isRunningInYarnContainer(conf)) {
+    if (isRunningInYarnContainer(conf)) {
       // If we are in yarn mode, systems can have different disk layouts so we must set it
-      // to what Yarn on this system said was available.
-      getYarnLocalDirs(conf)
+      // to what Yarn on this system said was available. Note this assumes that Yarn has
+      // created the directories already, and that they are secured so that only the
+      // user has access to them.
+      getYarnLocalDirs(conf).split(",")
     } else {
-      Option(conf.getenv("SPARK_LOCAL_DIRS")).getOrElse(
-        conf.get("spark.local.dir", System.getProperty("java.io.tmpdir")))
-    }
-    val rootDirs = confValue.split(',')
-    logDebug(s"Getting/creating local root dirs at '$confValue'")
-
-    rootDirs.flatMap { rootDir =>
-      val localDir: File = new File(rootDir)
-      val foundLocalDir = localDir.exists || localDir.mkdirs()
-      if (!foundLocalDir) {
-        logError(s"Failed to create local root dir in $rootDir.  Ignoring this directory.")
-        None
-      } else {
-        Some(rootDir)
-      }
+      // In non-Yarn mode (or for the driver in yarn-client mode), we cannot trust the user
+      // configuration to point to a secure directory. So create a subdirectory with restricted
+      // permissions under each listed directory.
+      Option(conf.getenv("SPARK_LOCAL_DIRS"))
+        .getOrElse(conf.get("spark.local.dir", System.getProperty("java.io.tmpdir")))
+        .split(",")
+        .flatMap { root =>
+          try {
+            val rootDir = new File(root)
+            if (rootDir.exists || rootDir.mkdirs()) {
+              Some(createDirectory(root).getAbsolutePath())
+            } else {
+              logError(s"Failed to create dir in $root. Ignoring this directory.")
+              None
+            }
+          } catch {
+            case e: IOException =>
+            logError(s"Failed to create local root dir in $root. Ignoring this directory.")
+            None
+          }
+        }
+        .toArray
     }
   }
 
@@ -587,7 +738,7 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  private var customHostname: Option[String] = None
+  private var customHostname: Option[String] = sys.env.get("SPARK_LOCAL_HOSTNAME")
 
   /**
    * Allow setting a custom host name because when we run on Mesos we need to use the same
@@ -680,16 +831,21 @@ private[spark] object Utils extends Logging {
   }
 
   private def listFilesSafely(file: File): Seq[File] = {
-    val files = file.listFiles()
-    if (files == null) {
-      throw new IOException("Failed to list files for dir: " + file)
+    if (file.exists()) {
+      val files = file.listFiles()
+      if (files == null) {
+        throw new IOException("Failed to list files for dir: " + file)
+      }
+      files
+    } else {
+      List()
     }
-    files
   }
 
   /**
    * Delete a file or directory and its contents recursively.
    * Don't follow directories if they are symlinks.
+   * Throws an exception if deletion is unsuccessful.
    */
   def deleteRecursively(file: File) {
     if (file != null) {
@@ -837,25 +993,25 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Execute a command in the given working directory, throwing an exception if it completes
-   * with an exit code other than 0.
+   * Execute a command and return the process running the command.
    */
-  def execute(command: Seq[String], workingDir: File) {
-    val process = new ProcessBuilder(command: _*)
-        .directory(workingDir)
-        .redirectErrorStream(true)
-        .start()
-    new Thread("read stdout for " + command(0)) {
-      override def run() {
-        for (line <- Source.fromInputStream(process.getInputStream).getLines()) {
-          System.err.println(line)
-        }
-      }
-    }.start()
-    val exitCode = process.waitFor()
-    if (exitCode != 0) {
-      throw new SparkException("Process " + command + " exited with code " + exitCode)
+  def executeCommand(
+      command: Seq[String],
+      workingDir: File = new File("."),
+      extraEnvironment: Map[String, String] = Map.empty,
+      redirectStderr: Boolean = true): Process = {
+    val builder = new ProcessBuilder(command: _*).directory(workingDir)
+    val environment = builder.environment()
+    for ((key, value) <- extraEnvironment) {
+      environment.put(key, value)
     }
+    val process = builder.start()
+    if (redirectStderr) {
+      val threadName = "redirect stderr for command " + command(0)
+      def log(s: String): Unit = logInfo(s)
+      processStreamByLine(threadName, process.getErrorStream, log)
+    }
+    process
   }
 
   /**
@@ -864,30 +1020,13 @@ private[spark] object Utils extends Logging {
   def executeAndGetOutput(
       command: Seq[String],
       workingDir: File = new File("."),
-      extraEnvironment: Map[String, String] = Map.empty): String = {
-    val builder = new ProcessBuilder(command: _*)
-        .directory(workingDir)
-    val environment = builder.environment()
-    for ((key, value) <- extraEnvironment) {
-      environment.put(key, value)
-    }
-    val process = builder.start()
-    new Thread("read stderr for " + command(0)) {
-      override def run() {
-        for (line <- Source.fromInputStream(process.getErrorStream).getLines()) {
-          System.err.println(line)
-        }
-      }
-    }.start()
+      extraEnvironment: Map[String, String] = Map.empty,
+      redirectStderr: Boolean = true): String = {
+    val process = executeCommand(command, workingDir, extraEnvironment, redirectStderr)
     val output = new StringBuffer
-    val stdoutThread = new Thread("read stdout for " + command(0)) {
-      override def run() {
-        for (line <- Source.fromInputStream(process.getInputStream).getLines()) {
-          output.append(line)
-        }
-      }
-    }
-    stdoutThread.start()
+    val threadName = "read stdout for " + command(0)
+    def appendToOutput(s: String): Unit = output.append(s)
+    val stdoutThread = processStreamByLine(threadName, process.getInputStream, appendToOutput)
     val exitCode = process.waitFor()
     stdoutThread.join()   // Wait for it to finish reading output
     if (exitCode != 0) {
@@ -895,6 +1034,25 @@ private[spark] object Utils extends Logging {
       throw new SparkException(s"Process $command exited with code $exitCode")
     }
     output.toString
+  }
+
+  /**
+   * Return and start a daemon thread that processes the content of the input stream line by line.
+   */
+  def processStreamByLine(
+      threadName: String,
+      inputStream: InputStream,
+      processLine: String => Unit): Thread = {
+    val t = new Thread(threadName) {
+      override def run() {
+        for (line <- Source.fromInputStream(inputStream).getLines()) {
+          processLine(line)
+        }
+      }
+    }
+    t.setDaemon(true)
+    t.start()
+    t
   }
 
   /**
@@ -906,7 +1064,37 @@ private[spark] object Utils extends Logging {
       block
     } catch {
       case e: ControlThrowable => throw e
-      case t: Throwable => ExecutorUncaughtExceptionHandler.uncaughtException(t)
+      case t: Throwable => SparkUncaughtExceptionHandler.uncaughtException(t)
+    }
+  }
+
+  /**
+   * Execute a block of code that evaluates to Unit, re-throwing any non-fatal uncaught
+   * exceptions as IOException.  This is used when implementing Externalizable and Serializable's
+   * read and write methods, since Java's serializer will not report non-IOExceptions properly;
+   * see SPARK-4080 for more context.
+   */
+  def tryOrIOException(block: => Unit) {
+    try {
+      block
+    } catch {
+      case e: IOException => throw e
+      case NonFatal(t) => throw new IOException(t)
+    }
+  }
+
+  /**
+   * Execute a block of code that returns a value, re-throwing any non-fatal uncaught
+   * exceptions as IOException. This is used when implementing Externalizable and Serializable's
+   * read and write methods, since Java's serializer will not report non-IOExceptions properly;
+   * see SPARK-4080 for more context.
+   */
+  def tryOrIOException[T](block: => T): T = {
+    try {
+      block
+    } catch {
+      case e: IOException => throw e
+      case NonFatal(t) => throw new IOException(t)
     }
   }
 
@@ -914,7 +1102,8 @@ private[spark] object Utils extends Logging {
   private def coreExclusionFunction(className: String): Boolean = {
     // A regular expression to match classes of the "core" Spark API that we want to skip when
     // finding the call site of a method.
-    val SPARK_CORE_CLASS_REGEX = """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?\.[A-Z]""".r
+    val SPARK_CORE_CLASS_REGEX =
+      """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?(\.broadcast)?\.[A-Z]""".r
     val SCALA_CLASS_REGEX = """^scala""".r
     val isSparkCoreClass = SPARK_CORE_CLASS_REGEX.findFirstIn(className).isDefined
     val isScalaClass = SCALA_CLASS_REGEX.findFirstIn(className).isDefined
@@ -930,13 +1119,6 @@ private[spark] object Utils extends Logging {
    * @param skipClass Function that is used to exclude non-user-code classes.
    */
   def getCallSite(skipClass: String => Boolean = coreExclusionFunction): CallSite = {
-    val trace = Thread.currentThread.getStackTrace().filterNot { ste: StackTraceElement =>
-      // When running under some profilers, the current stack trace might contain some bogus
-      // frames. This is intended to ensure that we don't crash in these situations by
-      // ignoring any frames that we can't examine.
-      ste == null || ste.getMethodName == null || ste.getMethodName.contains("getStackTrace")
-    }
-
     // Keep crawling up the stack trace until we find the first function not inside of the spark
     // package. We track the last (shallowest) contiguous Spark method. This might be an RDD
     // transformation, a SparkContext function (such as parallelize), or anything else that leads
@@ -947,26 +1129,33 @@ private[spark] object Utils extends Logging {
     var insideSpark = true
     var callStack = new ArrayBuffer[String]() :+ "<unknown>"
 
-    for (el <- trace) {
-      if (insideSpark) {
-        if (skipClass(el.getClassName)) {
-          lastSparkMethod = if (el.getMethodName == "<init>") {
-            // Spark method is a constructor; get its class name
-            el.getClassName.substring(el.getClassName.lastIndexOf('.') + 1)
+    Thread.currentThread.getStackTrace().foreach { ste: StackTraceElement =>
+      // When running under some profilers, the current stack trace might contain some bogus
+      // frames. This is intended to ensure that we don't crash in these situations by
+      // ignoring any frames that we can't examine.
+      if (ste != null && ste.getMethodName != null
+        && !ste.getMethodName.contains("getStackTrace")) {
+        if (insideSpark) {
+          if (skipClass(ste.getClassName)) {
+            lastSparkMethod = if (ste.getMethodName == "<init>") {
+              // Spark method is a constructor; get its class name
+              ste.getClassName.substring(ste.getClassName.lastIndexOf('.') + 1)
+            } else {
+              ste.getMethodName
+            }
+            callStack(0) = ste.toString // Put last Spark method on top of the stack trace.
           } else {
-            el.getMethodName
+            firstUserLine = ste.getLineNumber
+            firstUserFile = ste.getFileName
+            callStack += ste.toString
+            insideSpark = false
           }
-          callStack(0) = el.toString // Put last Spark method on top of the stack trace.
         } else {
-          firstUserLine = el.getLineNumber
-          firstUserFile = el.getFileName
-          callStack += el.toString
-          insideSpark = false
+          callStack += ste.toString
         }
-      } else {
-        callStack += el.toString
       }
     }
+
     val callStackDepth = System.getProperty("spark.callstack.depth", "20").toInt
     CallSite(
       shortForm = s"$lastSparkMethod at $firstUserFile:$firstUserLine",
@@ -983,8 +1172,8 @@ private[spark] object Utils extends Logging {
     val stream = new FileInputStream(file)
 
     try {
-      stream.skip(effectiveStart)
-      stream.read(buff)
+      ByteStreams.skipFully(stream, effectiveStart)
+      ByteStreams.readFully(stream, buff)
     } finally {
       stream.close()
     }
@@ -1145,6 +1334,8 @@ private[spark] object Utils extends Logging {
   }
 
   // Handles idiosyncracies with hash (add more as required)
+  // This method should be kept in sync with
+  // org.apache.spark.network.util.JavaUtils#nonNegativeHash().
   def nonNegativeHash(obj: AnyRef): Int = {
 
     // Required ?
@@ -1158,9 +1349,14 @@ private[spark] object Utils extends Logging {
     hashAbs
   }
 
-  /** Returns a copy of the system properties that is thread-safe to iterator over. */
-  def getSystemProperties(): Map[String, String] = {
-    System.getProperties.clone().asInstanceOf[java.util.Properties].toMap[String, String]
+  /** Returns the system properties map that is thread-safe to iterator over. It gets the
+    * properties which have been set explicitly, as well as those for which only a default value
+    * has been defined. */
+  def getSystemProperties: Map[String, String] = {
+    val sysProps = for (key <- System.getProperties.stringPropertyNames()) yield
+      (key, System.getProperty(key))
+
+    sysProps.toMap
   }
 
   /**
@@ -1178,12 +1374,28 @@ private[spark] object Utils extends Logging {
   /**
    * Timing method based on iterations that permit JVM JIT optimization.
    * @param numIters number of iterations
-   * @param f function to be executed
+   * @param f function to be executed. If prepare is not None, the running time of each call to f
+   *          must be an order of magnitude longer than one millisecond for accurate timing.
+   * @param prepare function to be executed before each call to f. Its running time doesn't count.
+   * @return the total time across all iterations (not couting preparation time)
    */
-  def timeIt(numIters: Int)(f: => Unit): Long = {
-    val start = System.currentTimeMillis
-    times(numIters)(f)
-    System.currentTimeMillis - start
+  def timeIt(numIters: Int)(f: => Unit, prepare: Option[() => Unit] = None): Long = {
+    if (prepare.isEmpty) {
+      val start = System.currentTimeMillis
+      times(numIters)(f)
+      System.currentTimeMillis - start
+    } else {
+      var i = 0
+      var sum = 0L
+      while (i < numIters) {
+        prepare.get.apply()
+        val start = System.currentTimeMillis
+        f
+        sum += System.currentTimeMillis - start
+        i += 1
+      }
+      sum
+    }
   }
 
   /**
@@ -1271,6 +1483,11 @@ private[spark] object Utils extends Logging {
    * Whether the underlying operating system is Windows.
    */
   val isWindows = SystemUtils.IS_OS_WINDOWS
+
+  /**
+   * Whether the underlying operating system is Mac OS X.
+   */
+  val isMac = SystemUtils.IS_OS_MAC_OSX
 
   /**
    * Pattern for matching a Windows drive, which contains only a single alphabet character.
@@ -1479,19 +1696,31 @@ private[spark] object Utils extends Logging {
       .orNull
   }
 
-  /** Return a nice string representation of the exception, including the stack trace. */
-  def exceptionString(e: Exception): String = {
-    if (e == null) "" else exceptionString(getFormattedClassName(e), e.getMessage, e.getStackTrace)
+  /**
+   * Return a nice string representation of the exception. It will call "printStackTrace" to
+   * recursively generate the stack trace including the exception and its causes.
+   */
+  def exceptionString(e: Throwable): String = {
+    if (e == null) {
+      ""
+    } else {
+      // Use e.printStackTrace here because e.getStackTrace doesn't include the cause
+      val stringWriter = new StringWriter()
+      e.printStackTrace(new PrintWriter(stringWriter))
+      stringWriter.toString
+    }
   }
 
-  /** Return a nice string representation of the exception, including the stack trace. */
-  def exceptionString(
-      className: String,
-      description: String,
-      stackTrace: Array[StackTraceElement]): String = {
-    val desc = if (description == null) "" else description
-    val st = if (stackTrace == null) "" else stackTrace.map("        " + _).mkString("\n")
-    s"$className: $desc\n$st"
+  /** Return a thread dump of all threads' stacktraces.  Used to capture dumps for the web UI */
+  def getThreadDump(): Array[ThreadStackTrace] = {
+    // We need to filter out null values here because dumpAllThreads() may return null array
+    // elements for threads that are dead / don't exist.
+    val threadInfos = ManagementFactory.getThreadMXBean.dumpAllThreads(true, true).filter(_ != null)
+    threadInfos.sortBy(_.getThreadId).map { case threadInfo =>
+      val stackTrace = threadInfo.getStackTrace.map(_.toString).mkString("\n")
+      ThreadStackTrace(threadInfo.getThreadId, threadInfo.getThreadName,
+        threadInfo.getThreadState, stackTrace)
+    }
   }
 
   /**
@@ -1504,17 +1733,15 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Default maximum number of retries when binding to a port before giving up.
+   * Maximum number of retries when binding to a port before giving up.
    */
-  val portMaxRetries: Int = {
-    if (sys.props.contains("spark.testing")) {
+  def portMaxRetries(conf: SparkConf): Int = {
+    val maxRetries = conf.getOption("spark.port.maxRetries").map(_.toInt)
+    if (conf.contains("spark.testing")) {
       // Set a higher number of retries for tests...
-      sys.props.get("spark.port.maxRetries").map(_.toInt).getOrElse(100)
+      maxRetries.getOrElse(100)
     } else {
-      Option(SparkEnv.get)
-        .flatMap(_.conf.getOption("spark.port.maxRetries"))
-        .map(_.toInt)
-        .getOrElse(16)
+      maxRetries.getOrElse(16)
     }
   }
 
@@ -1523,17 +1750,18 @@ private[spark] object Utils extends Logging {
    * Each subsequent attempt uses 1 + the port used in the previous attempt (unless the port is 0).
    *
    * @param startPort The initial port to start the service on.
-   * @param maxRetries Maximum number of retries to attempt.
-   *                   A value of 3 means attempting ports n, n+1, n+2, and n+3, for example.
    * @param startService Function to start service on a given port.
    *                     This is expected to throw java.net.BindException on port collision.
+   * @param conf A SparkConf used to get the maximum number of retries when binding to a port.
+   * @param serviceName Name of the service.
    */
   def startServiceOnPort[T](
       startPort: Int,
       startService: Int => (T, Int),
-      serviceName: String = "",
-      maxRetries: Int = portMaxRetries): (T, Int) = {
+      conf: SparkConf,
+      serviceName: String = ""): (T, Int) = {
     val serviceString = if (serviceName.isEmpty) "" else s" '$serviceName'"
+    val maxRetries = portMaxRetries(conf)
     for (offset <- 0 to maxRetries) {
       // Do not increment port if startPort is 0, which is treated as a special port
       val tryPort = if (startPort == 0) {
@@ -1570,7 +1798,7 @@ private[spark] object Utils extends Logging {
   def isBindCollision(exception: Throwable): Boolean = {
     exception match {
       case e: BindException =>
-        if (e.getMessage != null && e.getMessage.contains("Address already in use")) {
+        if (e.getMessage != null) {
           return true
         }
         isBindCollision(e.getCause)
@@ -1594,24 +1822,140 @@ private[spark] object Utils extends Logging {
     PropertyConfigurator.configure(pro)
   }
 
+  /**
+   * If the given URL connection is HttpsURLConnection, it sets the SSL socket factory and
+   * the host verifier from the given security manager.
+   */
+  def setupSecureURLConnection(urlConnection: URLConnection, sm: SecurityManager): URLConnection = {
+    urlConnection match {
+      case https: HttpsURLConnection =>
+        sm.sslSocketFactory.foreach(https.setSSLSocketFactory)
+        sm.hostnameVerifier.foreach(https.setHostnameVerifier)
+        https
+      case connection => connection
+    }
+  }
+
+  def invoke(
+      clazz: Class[_],
+      obj: AnyRef,
+      methodName: String,
+      args: (Class[_], AnyRef)*): AnyRef = {
+    val (types, values) = args.unzip
+    val method = clazz.getDeclaredMethod(methodName, types: _*)
+    method.setAccessible(true)
+    method.invoke(obj, values.toSeq: _*)
+  }
+
+  // Limit of bytes for total size of results (default is 1GB)
+  def getMaxResultSize(conf: SparkConf): Long = {
+    memoryStringToMb(conf.get("spark.driver.maxResultSize", "1g")).toLong << 20
+  }
+
+  /**
+   * Return the current system LD_LIBRARY_PATH name
+   */
+  def libraryPathEnvName: String = {
+    if (isWindows) {
+      "PATH"
+    } else if (isMac) {
+      "DYLD_LIBRARY_PATH"
+    } else {
+      "LD_LIBRARY_PATH"
+    }
+  }
+
+  /**
+   * Return the prefix of a command that appends the given library paths to the
+   * system-specific library path environment variable. On Unix, for instance,
+   * this returns the string LD_LIBRARY_PATH="path1:path2:$LD_LIBRARY_PATH".
+   */
+  def libraryPathEnvPrefix(libraryPaths: Seq[String]): String = {
+    val libraryPathScriptVar = if (isWindows) {
+      s"%${libraryPathEnvName}%"
+    } else {
+      "$" + libraryPathEnvName
+    }
+    val libraryPath = (libraryPaths :+ libraryPathScriptVar).mkString("\"",
+      File.pathSeparator, "\"")
+    val ampersand = if (Utils.isWindows) {
+      " &"
+    } else {
+      ""
+    }
+    s"$libraryPathEnvName=$libraryPath$ampersand"
+  }
+
+  /**
+   * Return the value of a config either through the SparkConf or the Hadoop configuration
+   * if this is Yarn mode. In the latter case, this defaults to the value set through SparkConf
+   * if the key is not set in the Hadoop configuration.
+   */
+  def getSparkOrYarnConfig(conf: SparkConf, key: String, default: String): String = {
+    val sparkValue = conf.get(key, default)
+    if (SparkHadoopUtil.get.isYarnMode) {
+      SparkHadoopUtil.get.newConfiguration(conf).get(key, sparkValue)
+    } else {
+      sparkValue
+    }
+  }
+
+  /**
+   * Return a pair of host and port extracted from the `sparkUrl`.
+   *
+   * A spark url (`spark://host:port`) is a special URI that its scheme is `spark` and only contains
+   * host and port.
+   *
+   * @throws SparkException if `sparkUrl` is invalid.
+   */
+  def extractHostPortFromSparkUrl(sparkUrl: String): (String, Int) = {
+    try {
+      val uri = new java.net.URI(sparkUrl)
+      val host = uri.getHost
+      val port = uri.getPort
+      if (uri.getScheme != "spark" ||
+        host == null ||
+        port < 0 ||
+        (uri.getPath != null && !uri.getPath.isEmpty) || // uri.getPath returns "" instead of null
+        uri.getFragment != null ||
+        uri.getQuery != null ||
+        uri.getUserInfo != null) {
+        throw new SparkException("Invalid master URL: " + sparkUrl)
+      }
+      (host, port)
+    } catch {
+      case e: java.net.URISyntaxException =>
+        throw new SparkException("Invalid master URL: " + sparkUrl, e)
+    }
+  }
 }
 
 /**
  * A utility class to redirect the child process's stdout or stderr.
  */
-private[spark] class RedirectThread(in: InputStream, out: OutputStream, name: String)
+private[spark] class RedirectThread(
+    in: InputStream,
+    out: OutputStream,
+    name: String,
+    propagateEof: Boolean = false)
   extends Thread(name) {
 
   setDaemon(true)
   override def run() {
     scala.util.control.Exception.ignoring(classOf[IOException]) {
       // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
-      val buf = new Array[Byte](1024)
-      var len = in.read(buf)
-      while (len != -1) {
-        out.write(buf, 0, len)
-        out.flush()
-        len = in.read(buf)
+      try {
+        val buf = new Array[Byte](1024)
+        var len = in.read(buf)
+        while (len != -1) {
+          out.write(buf, 0, len)
+          out.flush()
+          len = in.read(buf)
+        }
+      } finally {
+        if (propagateEof) {
+          out.close()
+        }
       }
     }
   }

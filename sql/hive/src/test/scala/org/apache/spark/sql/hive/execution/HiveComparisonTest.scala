@@ -22,9 +22,10 @@ import java.io._
 import org.scalatest.{BeforeAndAfterAll, FunSuite, GivenWhenThen}
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.execution.{SetCommand, ExplainCommand}
+import org.apache.spark.sql.hive.DescribeCommand
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.{NativeCommand => LogicalNativeCommand}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.hive.test.TestHive
 
@@ -133,7 +134,7 @@ abstract class HiveComparisonTest
 
     def isSorted(plan: LogicalPlan): Boolean = plan match {
       case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
-      case PhysicalOperation(_, _, Sort(_, _)) => true
+      case PhysicalOperation(_, _, Sort(_, true, _)) => true
       case _ => plan.children.iterator.exists(isSorted)
     }
 
@@ -142,14 +143,25 @@ abstract class HiveComparisonTest
       // Hack: Hive simply prints the result of a SET command to screen,
       // and does not return it as a query answer.
       case _: SetCommand => Seq("0")
-      case _: LogicalNativeCommand => answer.filterNot(nonDeterministicLine).filterNot(_ == "")
+      case HiveNativeCommand(c) if c.toLowerCase.contains("desc") =>
+        answer
+          .filterNot(nonDeterministicLine)
+          .map(_.replaceAll("from deserializer", ""))
+          .map(_.replaceAll("None", ""))
+          .map(_.trim)
+          .filterNot(_ == "")
+      case _: HiveNativeCommand => answer.filterNot(nonDeterministicLine).filterNot(_ == "")
       case _: ExplainCommand => answer
       case _: DescribeCommand =>
         // Filter out non-deterministic lines and lines which do not have actual results but
         // can introduce problems because of the way Hive formats these lines.
         // Then, remove empty lines. Do not sort the results.
-        answer.filterNot(
-          r => nonDeterministicLine(r) || ignoredLine(r)).map(_.trim).filterNot(_ == "")
+        answer
+          .filterNot(r => nonDeterministicLine(r) || ignoredLine(r))
+          .map(_.replaceAll("from deserializer", ""))
+          .map(_.replaceAll("None", ""))
+          .map(_.trim)
+          .filterNot(_ == "")
       case plan => if (isSorted(plan)) answer else answer.sorted
     }
     orderedAnswer.map(cleanPaths)
@@ -164,6 +176,7 @@ abstract class HiveComparisonTest
     "last_modified_by",
     "last_modified_time",
     "Owner:",
+    "COLUMN_STATS_ACCURATE",
     // The following are hive specific schema parameters which we do not need to match exactly.
     "numFiles",
     "numRows",
@@ -237,6 +250,7 @@ abstract class HiveComparisonTest
           // the system to return the wrong answer.  Since we have no intention of mirroring their
           // previously broken behavior we simply filter out changes to this setting.
           .filterNot(_ contains "hive.outerjoin.supports.filters")
+          .filterNot(_ contains "hive.exec.post.hooks")
 
       if (allQueries != queryList)
         logWarning(s"Simplifications made on unsupported operations for test $testCaseName")
@@ -345,7 +359,7 @@ abstract class HiveComparisonTest
         (queryList, hiveResults, catalystResults).zipped.foreach {
           case (query, hive, (hiveQuery, catalyst)) =>
             // Check that the results match unless its an EXPLAIN query.
-            val preparedHive = prepareAnswer(hiveQuery,hive)
+            val preparedHive = prepareAnswer(hiveQuery, hive)
 
             if ((!hiveQuery.logical.isInstanceOf[ExplainCommand]) && preparedHive != catalyst) {
 

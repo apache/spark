@@ -41,13 +41,7 @@ class SystemClock() extends Clock {
       return currentTime
     }
 
-    val pollTime = {
-      if (waitTime / 10.0 > minPollTime) {
-        (waitTime / 10.0).toLong
-      } else {
-        minPollTime
-      }
-    }
+    val pollTime = math.max(waitTime / 10.0, minPollTime).toLong
 
     while (true) {
       currentTime = System.currentTimeMillis()
@@ -55,12 +49,7 @@ class SystemClock() extends Clock {
       if (waitTime <= 0) {
         return currentTime
       }
-      val sleepTime =
-        if (waitTime < pollTime) {
-          waitTime
-        } else {
-          pollTime
-        }
+      val sleepTime = math.min(waitTime, pollTime)
       Thread.sleep(sleepTime)
     }
     -1
@@ -70,9 +59,11 @@ class SystemClock() extends Clock {
 private[streaming]
 class ManualClock() extends Clock {
 
-  var time = 0L
+  private var time = 0L
 
-  def currentTime() = time
+  def currentTime() = this.synchronized {
+    time
+  }
 
   def setTime(timeToSet: Long) = {
     this.synchronized {

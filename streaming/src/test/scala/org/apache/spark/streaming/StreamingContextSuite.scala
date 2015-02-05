@@ -133,11 +133,16 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     ssc.stop()
   }
 
-  test("stop before start and start after stop") {
+  test("stop before start") {
     ssc = new StreamingContext(master, appName, batchDuration)
     addInputStream(ssc).register()
     ssc.stop()  // stop before start should not throw exception
-    ssc.start()
+  }
+
+  test("start after stop") {
+    // Regression test for SPARK-4301
+    ssc = new StreamingContext(master, appName, batchDuration)
+    addInputStream(ssc).register()
     ssc.stop()
     intercept[SparkException] {
       ssc.start() // start after stop should throw exception
@@ -155,6 +160,18 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     addInputStream(ssc).register()
     ssc.start()
     ssc.stop()
+  }
+
+  test("stop(stopSparkContext=true) after stop(stopSparkContext=false)") {
+    ssc = new StreamingContext(master, appName, batchDuration)
+    addInputStream(ssc).register()
+    ssc.stop(stopSparkContext = false)
+    assert(ssc.sc.makeRDD(1 to 100).collect().size === 100)
+    ssc.stop(stopSparkContext = true)
+    // Check that the SparkContext is actually stopped:
+    intercept[Exception] {
+      ssc.sc.makeRDD(1 to 100).collect()
+    }
   }
 
   test("stop gracefully") {
@@ -186,6 +203,32 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
       )
       Thread.sleep(100)
     }
+  }
+
+  test("stop slow receiver gracefully") {
+    val conf = new SparkConf().setMaster(master).setAppName(appName)
+    conf.set("spark.streaming.gracefulStopTimeout", "20000")
+    sc = new SparkContext(conf)
+    logInfo("==================================\n\n\n")
+    ssc = new StreamingContext(sc, Milliseconds(100))
+    var runningCount = 0
+    SlowTestReceiver.receivedAllRecords = false
+    //Create test receiver that sleeps in onStop()
+    val totalNumRecords = 15
+    val recordsPerSecond = 1
+    val input = ssc.receiverStream(new SlowTestReceiver(totalNumRecords, recordsPerSecond))
+    input.count().foreachRDD { rdd =>
+      val count = rdd.first()
+      runningCount += count.toInt
+      logInfo("Count = " + count + ", Running count = " + runningCount)
+    }
+    ssc.start()
+    ssc.awaitTermination(500)
+    ssc.stop(stopSparkContext = false, stopGracefully = true)
+    logInfo("Running count = " + runningCount)
+    assert(runningCount > 0)
+    assert(runningCount == totalNumRecords)
+    Thread.sleep(100)
   }
 
   test("awaitTermination") {
@@ -261,6 +304,30 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     assert(exception.getMessage.contains("transform"), "Expected exception not thrown")
   }
 
+  test("awaitTerminationOrTimeout") {
+    ssc = new StreamingContext(master, appName, batchDuration)
+    val inputStream = addInputStream(ssc)
+    inputStream.map(x => x).register()
+
+    ssc.start()
+
+    // test whether awaitTerminationOrTimeout() return false after give amount of time
+    failAfter(1000 millis) {
+      assert(ssc.awaitTerminationOrTimeout(500) === false)
+    }
+
+    // test whether awaitTerminationOrTimeout() return true if context is stopped
+    failAfter(10000 millis) { // 10 seconds because spark takes a long time to shutdown
+      new Thread() {
+        override def run() {
+          Thread.sleep(500)
+          ssc.stop()
+        }
+      }.start()
+      assert(ssc.awaitTerminationOrTimeout(10000) === true)
+    }
+  }
+
   test("DStream and generated RDD creation sites") {
     testPackage.test()
   }
@@ -302,6 +369,38 @@ object TestReceiver {
   val counter = new AtomicInteger(1)
 }
 
+/** Custom receiver for testing whether a slow receiver can be shutdown gracefully or not */
+class SlowTestReceiver(totalRecords: Int, recordsPerSecond: Int) extends Receiver[Int](StorageLevel.MEMORY_ONLY) with Logging {
+
+  var receivingThreadOption: Option[Thread] = None
+
+  def onStart() {
+    val thread = new Thread() {
+      override def run() {
+        logInfo("Receiving started")
+        for(i <- 1 to totalRecords) {
+          Thread.sleep(1000 / recordsPerSecond)
+          store(i)
+        }
+        SlowTestReceiver.receivedAllRecords = true
+        logInfo(s"Received all $totalRecords records")
+      }
+    }
+    receivingThreadOption = Some(thread)
+    thread.start()
+  }
+
+  def onStop() {
+    // Simulate slow receiver by waiting for all records to be produced
+    while(!SlowTestReceiver.receivedAllRecords) Thread.sleep(100)
+    // no cleanup to be done, the receiving thread should stop on it own
+  }
+}
+
+object SlowTestReceiver {
+  var receivedAllRecords = false
+}
+
 /** Streaming application for testing DStream and RDD creation sites */
 package object testPackage extends Assertions {
   def test() {
@@ -319,16 +418,20 @@ package object testPackage extends Assertions {
 
       // Verify creation site of generated RDDs
       var rddGenerated = false
-      var rddCreationSiteCorrect = true
+      var rddCreationSiteCorrect = false
+      var foreachCallSiteCorrect = false
 
       inputStream.foreachRDD { rdd =>
         rddCreationSiteCorrect = rdd.creationSite == creationSite
+        foreachCallSiteCorrect =
+          rdd.sparkContext.getCallSite().shortForm.contains("StreamingContextSuite")
         rddGenerated = true
       }
       ssc.start()
 
       eventually(timeout(10000 millis), interval(10 millis)) {
         assert(rddGenerated && rddCreationSiteCorrect, "RDD creation site was not correct")
+        assert(rddGenerated && foreachCallSiteCorrect, "Call site in foreachRDD was not correct")
       }
     } finally {
       ssc.stop()

@@ -380,6 +380,46 @@ for (ChiSqTestResult result : featureTestResults) {
 {% endhighlight %}
 </div>
 
+<div data-lang="python" markdown="1">
+[`Statistics`](api/python/index.html#pyspark.mllib.stat.Statistics$) provides methods to
+run Pearson's chi-squared tests. The following example demonstrates how to run and interpret
+hypothesis tests.
+
+{% highlight python %}
+from pyspark import SparkContext
+from pyspark.mllib.linalg import Vectors, Matrices
+from pyspark.mllib.regresssion import LabeledPoint
+from pyspark.mllib.stat import Statistics
+
+sc = SparkContext()
+
+vec = Vectors.dense(...) # a vector composed of the frequencies of events
+
+# compute the goodness of fit. If a second vector to test against is not supplied as a parameter,
+# the test runs against a uniform distribution.
+goodnessOfFitTestResult = Statistics.chiSqTest(vec)
+print goodnessOfFitTestResult # summary of the test including the p-value, degrees of freedom,
+                              # test statistic, the method used, and the null hypothesis.
+
+mat = Matrices.dense(...) # a contingency matrix
+
+# conduct Pearson's independence test on the input contingency matrix
+independenceTestResult = Statistics.chiSqTest(mat)
+print independenceTestResult  # summary of the test including the p-value, degrees of freedom...
+
+obs = sc.parallelize(...)  # LabeledPoint(feature, label) .
+
+# The contingency table is constructed from an RDD of LabeledPoint and used to conduct
+# the independence test. Returns an array containing the ChiSquaredTestResult for every feature
+# against the label.
+featureTestResults = Statistics.chiSqTest(obs)
+
+for i, result in enumerate(featureTestResults):
+    print "Column $d:" % (i + 1)
+    print result
+{% endhighlight %}
+</div>
+
 </div>
 
 ## Random data generation

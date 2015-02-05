@@ -1,6 +1,6 @@
 create table src_rc_merge_test(key int, value string) stored as rcfile;
 
-load data local inpath '../data/files/smbbucket_1.rc' into table src_rc_merge_test;
+load data local inpath '../../data/files/smbbucket_1.rc' into table src_rc_merge_test;
 
 set hive.exec.compress.output = true;
 

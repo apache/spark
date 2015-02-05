@@ -23,28 +23,27 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.catalyst.types.StructType
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.catalyst.trees
+
+/**
+ * Estimates of various statistics.  The default estimation logic simply lazily multiplies the
+ * corresponding statistic produced by the children.  To override this behavior, override
+ * `statistics` and assign it an overriden version of `Statistics`.
+ *
+ * '''NOTE''': concrete and/or overriden versions of statistics fields should pay attention to the
+ * performance of the implementations.  The reason is that estimations might get triggered in
+ * performance-critical processes, such as query plan planning.
+ *
+ * @param sizeInBytes Physical size in bytes. For leaf operators this defaults to 1, otherwise it
+ *                    defaults to the product of children's `sizeInBytes`.
+ */
+private[sql] case class Statistics(sizeInBytes: BigInt)
 
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   self: Product =>
 
-  /**
-   * Estimates of various statistics.  The default estimation logic simply lazily multiplies the
-   * corresponding statistic produced by the children.  To override this behavior, override
-   * `statistics` and assign it an overriden version of `Statistics`.
-   *
-   * '''NOTE''': concrete and/or overriden versions of statistics fields should pay attention to the
-   * performance of the implementations.  The reason is that estimations might get triggered in
-   * performance-critical processes, such as query plan planning.
-   *
-   * @param sizeInBytes Physical size in bytes. For leaf operators this defaults to 1, otherwise it
-   *                    defaults to the product of children's `sizeInBytes`.
-   */
-  case class Statistics(
-    sizeInBytes: BigInt
-  )
-  lazy val statistics: Statistics = {
+  def statistics: Statistics = {
     if (children.size == 0) {
       throw new UnsupportedOperationException(s"LeafNode $nodeName must implement statistics.")
     }
@@ -192,14 +191,13 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       case (Nil, _) => expression
       case (requestedField :: rest, StructType(fields)) =>
         val actualField = fields.filter(f => resolver(f.name, requestedField))
-        actualField match {
-          case Seq() =>
-            sys.error(
-              s"No such struct field $requestedField in ${fields.map(_.name).mkString(", ")}")
-          case Seq(singleMatch) =>
-            resolveNesting(rest, GetField(expression, singleMatch.name), resolver)
-          case multipleMatches =>
-            sys.error(s"Ambiguous reference to fields ${multipleMatches.mkString(", ")}")
+        if (actualField.length == 0) {
+          sys.error(
+            s"No such struct field $requestedField in ${fields.map(_.name).mkString(", ")}")
+        } else if (actualField.length == 1) {
+          resolveNesting(rest, GetField(expression, actualField(0).name), resolver)
+        } else {
+          sys.error(s"Ambiguous reference to fields ${actualField.mkString(", ")}")
         }
       case (_, dt) => sys.error(s"Can't access nested field in type $dt")
     }

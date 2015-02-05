@@ -95,8 +95,49 @@ tf.cache()
 val idf = new IDF(minDocFreq = 2).fit(tf)
 val tfidf: RDD[Vector] = idf.transform(tf)
 {% endhighlight %}
+</div>
+<div data-lang="python" markdown="1">
 
+TF and IDF are implemented in [HashingTF](api/python/pyspark.mllib.html#pyspark.mllib.feature.HashingTF)
+and [IDF](api/python/pyspark.mllib.html#pyspark.mllib.feature.IDF).
+`HashingTF` takes an RDD of list as the input.
+Each record could be an iterable of strings or other types.
 
+{% highlight python %}
+from pyspark import SparkContext
+from pyspark.mllib.feature import HashingTF
+
+sc = SparkContext()
+
+# Load documents (one per line).
+documents = sc.textFile("...").map(lambda line: line.split(" "))
+
+hashingTF = HashingTF()
+tf = hashingTF.transform(documents)
+{% endhighlight %}
+
+While applying `HashingTF` only needs a single pass to the data, applying `IDF` needs two passes: 
+first to compute the IDF vector and second to scale the term frequencies by IDF.
+
+{% highlight python %}
+from pyspark.mllib.feature import IDF
+
+# ... continue from the previous example
+tf.cache()
+idf = IDF().fit(tf)
+tfidf = idf.transform(tf)
+{% endhighlight %}
+
+MLLib's IDF implementation provides an option for ignoring terms which occur in less than a
+minimum number of documents.  In such cases, the IDF for these terms is set to 0.  This feature
+can be used by passing the `minDocFreq` value to the IDF constructor.
+
+{% highlight python %}
+# ... continue from the previous example
+tf.cache()
+idf = IDF(minDocFreq=2).fit(tf)
+tfidf = idf.transform(tf)
+{% endhighlight %}
 </div>
 </div>
 
@@ -162,6 +203,23 @@ for((synonym, cosineSimilarity) <- synonyms) {
 }
 {% endhighlight %}
 </div>
+<div data-lang="python">
+{% highlight python %}
+from pyspark import SparkContext
+from pyspark.mllib.feature import Word2Vec
+
+sc = SparkContext(appName='Word2Vec')
+inp = sc.textFile("text8_lines").map(lambda row: row.split(" "))
+
+word2vec = Word2Vec()
+model = word2vec.fit(inp)
+
+synonyms = model.findSynonyms('china', 40)
+
+for word, cosine_distance in synonyms:
+    print "{}: {}".format(word, cosine_distance)
+{% endhighlight %}
+</div>
 </div>
 
 ## StandardScaler
@@ -182,11 +240,11 @@ following parameters in the constructor:
 
 * `withMean` False by default. Centers the data with mean before scaling. It will build a dense
 output, so this does not work on sparse input and will raise an exception.
-* `withStd` True by default. Scales the data to unit variance.
+* `withStd` True by default. Scales the data to unit standard deviation.
 
 We provide a [`fit`](api/scala/index.html#org.apache.spark.mllib.feature.StandardScaler) method in
 `StandardScaler` which can take an input of `RDD[Vector]`, learn the summary statistics, and then
-return a model which can transform the input dataset into unit variance and/or zero mean features
+return a model which can transform the input dataset into unit standard deviation and/or zero mean features
 depending how we configure the `StandardScaler`.
 
 This model implements [`VectorTransformer`](api/scala/index.html#org.apache.spark.mllib.feature.VectorTransformer)
@@ -199,7 +257,7 @@ for that feature.
 ### Example
 
 The example below demonstrates how to load a dataset in libsvm format, and standardize the features
-so that the new features have unit variance and/or zero mean.
+so that the new features have unit standard deviation and/or zero mean.
 
 <div class="codetabs">
 <div data-lang="scala">
@@ -213,6 +271,8 @@ val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
 
 val scaler1 = new StandardScaler().fit(data.map(x => x.features))
 val scaler2 = new StandardScaler(withMean = true, withStd = true).fit(data.map(x => x.features))
+// scaler3 is an identical model to scaler2, and will produce identical transformations
+val scaler3 = new StandardScalerModel(scaler2.std, scaler2.mean)
 
 // data1 will be unit variance.
 val data1 = data.map(x => (x.label, scaler1.transform(x.features)))
@@ -221,6 +281,32 @@ val data1 = data.map(x => (x.label, scaler1.transform(x.features)))
 // exception on sparse vector.
 // data2 will be unit variance and zero mean.
 val data2 = data.map(x => (x.label, scaler2.transform(Vectors.dense(x.features.toArray))))
+{% endhighlight %}
+</div>
+
+<div data-lang="python">
+{% highlight python %}
+from pyspark.mllib.util import MLUtils
+from pyspark.mllib.linalg import Vectors
+from pyspark.mllib.feature import StandardScaler
+
+data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
+label = data.map(lambda x: x.label)
+features = data.map(lambda x: x.features)
+
+scaler1 = StandardScaler().fit(features)
+scaler2 = StandardScaler(withMean=True, withStd=True).fit(features)
+# scaler3 is an identical model to scaler2, and will produce identical transformations
+scaler3 = StandardScalerModel(scaler2.std, scaler2.mean)
+
+
+# data1 will be unit variance.
+data1 = label.zip(scaler1.transform(features))
+
+# Without converting the features into dense vectors, transformation with zero mean will raise
+# exception on sparse vector.
+# data2 will be unit variance and zero mean.
+data2 = label.zip(scaler1.transform(features.map(lambda x: Vectors.dense(x.toArray()))))
 {% endhighlight %}
 </div>
 </div>
@@ -265,6 +351,27 @@ val data1 = data.map(x => (x.label, normalizer1.transform(x.features)))
 
 // Each sample in data2 will be normalized using $L^\infty$ norm.
 val data2 = data.map(x => (x.label, normalizer2.transform(x.features)))
+{% endhighlight %}
+</div>
+
+<div data-lang="python">
+{% highlight python %}
+from pyspark.mllib.util import MLUtils
+from pyspark.mllib.linalg import Vectors
+from pyspark.mllib.feature import Normalizer
+
+data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
+labels = data.map(lambda x: x.label)
+features = data.map(lambda x: x.features)
+
+normalizer1 = Normalizer()
+normalizer2 = Normalizer(p=float("inf"))
+
+# Each sample in data1 will be normalized using $L^2$ norm.
+data1 = labels.zip(normalizer1.transform(features))
+
+# Each sample in data2 will be normalized using $L^\infty$ norm.
+data2 = labels.zip(normalizer2.transform(features))
 {% endhighlight %}
 </div>
 </div>

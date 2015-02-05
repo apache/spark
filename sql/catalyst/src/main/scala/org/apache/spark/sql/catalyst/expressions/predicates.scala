@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.collection.immutable.HashSet
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.types.BooleanType
+import org.apache.spark.sql.types.BooleanType
 
 object InterpretedPredicate {
   def apply(expression: Expression, inputSchema: Seq[Attribute]): (Row => Boolean) =
@@ -44,6 +43,14 @@ trait PredicateHelper {
     condition match {
       case And(cond1, cond2) =>
         splitConjunctivePredicates(cond1) ++ splitConjunctivePredicates(cond2)
+      case other => other :: Nil
+    }
+  }
+
+  protected def splitDisjunctivePredicates(condition: Expression): Seq[Expression] = {
+    condition match {
+      case Or(cond1, cond2) =>
+        splitDisjunctivePredicates(cond1) ++ splitDisjunctivePredicates(cond2)
       case other => other :: Nil
     }
   }
@@ -99,10 +106,10 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
  * Optimized version of In clause, when all filter values of In clause are
  * static.
  */
-case class InSet(value: Expression, hset: HashSet[Any], child: Seq[Expression]) 
+case class InSet(value: Expression, hset: Set[Any])
   extends Predicate {
 
-  def children = child
+  def children = value :: Nil
 
   def nullable = true // TODO: Figure out correct nullability semantics of IN.
   override def toString = s"$value INSET ${hset.mkString("(", ",", ")")}"

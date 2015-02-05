@@ -37,6 +37,12 @@ class NNLSSuite extends FunSuite {
     (ata, atb)
   }
 
+  /** Compute the objective value */
+  def computeObjectiveValue(ata: DoubleMatrix, atb: DoubleMatrix, x: DoubleMatrix): Double = {
+    val res = (x.transpose().mmul(ata).mmul(x)).mul(0.5).sub(atb.dot(x))
+    res.get(0)
+  }
+
   test("NNLS: exact solution cases") {
     val n = 20
     val rand = new Random(12346)
@@ -78,5 +84,29 @@ class NNLSSuite extends FunSuite {
       assert(x(i) ~== goodx(i) absTol 1E-3)
       assert(x(i) >= 0)
     }
+  }
+
+  test("NNLS: objective value test") {
+    val n = 5
+    val ata = new DoubleMatrix(5, 5
+      , 517399.13534, 242529.67289, -153644.98976, 130802.84503, -798452.29283
+      , 242529.67289, 126017.69765, -75944.21743, 81785.36128, -405290.60884
+      , -153644.98976, -75944.21743, 46986.44577, -45401.12659, 247059.51049
+      , 130802.84503, 81785.36128, -45401.12659, 67457.31310, -253747.03819
+      , -798452.29283, -405290.60884, 247059.51049, -253747.03819, 1310939.40814
+    )
+    val atb = new DoubleMatrix(5, 1,
+      -31755.05710, 13047.14813, -20191.24443, 25993.77580, 11963.55017)
+
+    /** reference solution obtained from matlab function quadprog */
+    val refx = new DoubleMatrix(Array(34.90751, 103.96254, 0.00000, 27.82094, 58.79627))
+    val refObj = computeObjectiveValue(ata, atb, refx)
+
+
+    val ws = NNLS.createWorkspace(n)
+    val x = new DoubleMatrix(NNLS.solve(ata, atb, ws))
+    val obj = computeObjectiveValue(ata, atb, x)
+
+    assert(obj < refObj + 1E-5)
   }
 }

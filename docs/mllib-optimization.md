@@ -138,6 +138,12 @@ vertical scalability issue (the number of training features) when computing the 
 explicitly in Newton's method. As a result, L-BFGS often achieves rapider convergence compared with 
 other first-order optimization. 
 
+### Choosing an Optimization Method
+
+[Linear methods](mllib-linear-methods.html) use optimization internally, and some linear methods in MLlib support both SGD and L-BFGS.
+Different optimization methods can have different convergence guarantees depending on the properties of the objective function, and we cannot cover the literature here.
+In general, when L-BFGS is available, we recommend using it instead of SGD since L-BFGS tends to converge faster (in fewer iterations).
+
 ## Implementation in MLlib
 
 ### Gradient descent and stochastic gradient descent
@@ -168,10 +174,7 @@ descent. All updaters in MLlib use a step size at the t-th step equal to
 * `regParam` is the regularization parameter when using L1 or L2 regularization.
 * `miniBatchFraction` is the fraction of the total data that is sampled in 
 each iteration, to compute the gradient direction.
-
-Available algorithms for gradient descent:
-
-* [GradientDescent](api/scala/index.html#org.apache.spark.mllib.optimization.GradientDescent)
+  * Sampling still requires a pass over the entire RDD, so decreasing `miniBatchFraction` may not speed up optimization much.  Users will see the greatest speedup when the gradient is expensive to compute, for only the chosen samples are used for computing the gradient.
 
 ### L-BFGS
 L-BFGS is currently only a low-level optimization primitive in `MLlib`. If you want to use L-BFGS in various 
@@ -359,13 +362,15 @@ public class LBFGSExample {
 {% endhighlight %}
 </div>
 </div>
-#### Developer's note
+
+## Developer's notes
+
 Since the Hessian is constructed approximately from previous gradient evaluations, 
 the objective function can not be changed during the optimization process. 
 As a result, Stochastic L-BFGS will not work naively by just using miniBatch; 
 therefore, we don't provide this until we have better understanding.
 
-* `Updater` is a class originally designed for gradient decent which computes 
+`Updater` is a class originally designed for gradient decent which computes 
 the actual gradient descent step. However, we're able to take the gradient and 
 loss of objective function of regularization for L-BFGS by ignoring the part of logic
 only for gradient decent such as adaptive step size stuff. We will refactorize

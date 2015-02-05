@@ -25,7 +25,7 @@ import org.apache.hadoop.mapreduce.Job
 import org.apache.spark.sql.test.TestSQLContext
 
 import parquet.example.data.{GroupWriter, Group}
-import parquet.example.data.simple.SimpleGroup
+import parquet.example.data.simple.{NanoTime, SimpleGroup}
 import parquet.hadoop.{ParquetReader, ParquetFileReader, ParquetWriter}
 import parquet.hadoop.api.WriteSupport
 import parquet.hadoop.api.WriteSupport.WriteContext
@@ -63,6 +63,7 @@ private[sql] object ParquetTestData {
       optional int64 mylong;
       optional float myfloat;
       optional double mydouble;
+      optional int96 mytimestamp;
       }"""
 
   // field names for test assertion error messages
@@ -72,7 +73,8 @@ private[sql] object ParquetTestData {
     "mystring:String",
     "mylong:Long",
     "myfloat:Float",
-    "mydouble:Double"
+    "mydouble:Double",
+    "mytimestamp:Timestamp"
   )
 
   val subTestSchema =
@@ -92,6 +94,13 @@ private[sql] object ParquetTestData {
       required int64 mylong;
       required float myfloat;
       required double mydouble;
+      optional boolean myoptboolean;
+      optional int32 myoptint;
+      optional binary myoptstring (UTF8);
+      optional int64 myoptlong;
+      optional float myoptfloat;
+      optional double myoptdouble;
+      optional int96 mytimestamp;
       }
     """
 
@@ -230,6 +239,7 @@ private[sql] object ParquetTestData {
       record.add(3, i.toLong << 33)
       record.add(4, 2.5F)
       record.add(5, 4.5D)
+      record.add(6, new NanoTime(1,2))
       writer.write(record)
     }
     writer.close()
@@ -255,6 +265,19 @@ private[sql] object ParquetTestData {
       record.add(3, i.toLong)
       record.add(4, i.toFloat + 0.5f)
       record.add(5, i.toDouble + 0.5d)
+      if (i % 2 == 0) {
+        if (i % 3 == 0) {
+          record.add(6, true)
+        } else {
+          record.add(6, false)
+        }
+        record.add(7, i)
+        record.add(8, i.toString)
+        record.add(9, i.toLong)
+        record.add(10, i.toFloat + 0.5f)
+        record.add(11, i.toDouble + 0.5d)
+      }
+ 
       writer.write(record)
     }
     writer.close()
@@ -403,5 +426,41 @@ private[sql] object ParquetTestData {
     val first = reader.read()
     assert(first != null)
   } */
+
+  // to test golb pattern (wild card pattern matching for parquetFile input
+  val testGlobDir = Utils.createTempDir()
+  val testGlobSubDir1 = Utils.createTempDir(testGlobDir.getPath)
+  val testGlobSubDir2 = Utils.createTempDir(testGlobDir.getPath)
+  val testGlobSubDir3 = Utils.createTempDir(testGlobDir.getPath)
+
+  def writeGlobFiles() = {
+    val subDirs = Array(testGlobSubDir1, testGlobSubDir2, testGlobSubDir3)
+
+    subDirs.foreach { dir =>
+      val path: Path = new Path(new Path(dir.toURI), new Path("part-r-0.parquet"))
+      val job = new Job()
+      val schema: MessageType = MessageTypeParser.parseMessageType(testSchema)
+      val writeSupport = new TestGroupWriteSupport(schema)
+      val writer = new ParquetWriter[Group](path, writeSupport)
+
+      for(i <- 0 until 15) {
+        val record = new SimpleGroup(schema)
+        if(i % 3 == 0) {
+          record.add(0, true)
+        } else {
+          record.add(0, false)
+        }
+        if(i % 5 == 0) {
+          record.add(1, 5)
+        }
+        record.add(2, "abc")
+        record.add(3, i.toLong << 33)
+        record.add(4, 2.5F)
+        record.add(5, 4.5D)
+        writer.write(record)
+      }
+      writer.close()
+    }
+  }
 }
 

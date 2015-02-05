@@ -18,7 +18,8 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.hive.test.TestHive.{sparkContext, sql}
+import org.apache.spark.sql.hive.test.TestHive.implicits._
 
 case class Nested(a: Int, B: Int)
 case class Data(a: Int, B: Int, n: Nested, nestedArray: Seq[Nested])
@@ -27,6 +28,17 @@ case class Data(a: Int, B: Int, n: Nested, nestedArray: Seq[Nested])
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
  */
 class HiveResolutionSuite extends HiveComparisonTest {
+
+  case class NestedData(a: Seq[NestedData2], B: NestedData2)
+  case class NestedData2(a: NestedData3, B: NestedData3)
+  case class NestedData3(a: Int, B: Int)
+
+  test("SPARK-3698: case insensitive test for nested data") {
+    sparkContext.makeRDD(Seq.empty[NestedData]).registerTempTable("nested")
+    // This should be successfully analyzed
+    sql("SELECT a[0].A.A from nested").queryExecution.analyzed
+  }
+
   createQueryTest("table.attr",
     "SELECT src.key FROM src ORDER BY key LIMIT 1")
 

@@ -17,11 +17,13 @@
 
 package org.apache.spark.streaming.scheduler
 
-import akka.actor.{ActorRef, ActorSystem, Props, Actor}
-import org.apache.spark.{SparkException, SparkEnv, Logging}
-import org.apache.spark.streaming.{Checkpoint, Time, CheckpointWriter}
-import org.apache.spark.streaming.util.{ManualClock, RecurringTimer, Clock}
 import scala.util.{Failure, Success, Try}
+
+import akka.actor.{ActorRef, Props, Actor}
+
+import org.apache.spark.{SparkEnv, Logging}
+import org.apache.spark.streaming.{Checkpoint, CheckpointWriter, Time}
+import org.apache.spark.streaming.util.{Clock, ManualClock, RecurringTimer}
 
 /** Event classes for JobGenerator */
 private[scheduler] sealed trait JobGeneratorEvent
@@ -112,7 +114,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       // Wait until all the received blocks in the network input tracker has
       // been consumed by network input DStreams, and jobs have been generated with them
       logInfo("Waiting for all received blocks to be consumed for job generation")
-      while(!hasTimedOut && jobScheduler.receiverTracker.hasMoreReceivedBlockIds) {
+      while(!hasTimedOut && jobScheduler.receiverTracker.hasUnallocatedBlocks) {
         Thread.sleep(pollTime)
       }
       logInfo("Waited for all received blocks to be consumed for job generation")
@@ -206,9 +208,13 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     val timesToReschedule = (pendingTimes ++ downTimes).distinct.sorted(Time.ordering)
     logInfo("Batches to reschedule (" + timesToReschedule.size + " batches): " +
       timesToReschedule.mkString(", "))
-    timesToReschedule.foreach(time =>
+    timesToReschedule.foreach { time =>
+      // Allocate the related blocks when recovering from failure, because some blocks that were
+      // added but not allocated, are dangling in the queue after recovering, we have to allocate
+      // those blocks to the next batch, which is the batch they were supposed to go.
+      jobScheduler.receiverTracker.allocateBlocksToBatch(time) // allocate received blocks to batch
       jobScheduler.submitJobSet(JobSet(time, graph.generateJobs(time)))
-    )
+    }
 
     // Restart the timer
     timer.start(restartTime.milliseconds)
@@ -217,14 +223,18 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
   /** Generate jobs and perform checkpoint for the given `time`.  */
   private def generateJobs(time: Time) {
-    Try(graph.generateJobs(time)) match {
+    // Set the SparkEnv in this thread, so that job generation code can access the environment
+    // Example: BlockRDDs are created in this thread, and it needs to access BlockManager
+    // Update: This is probably redundant after threadlocal stuff in SparkEnv has been removed.
+    SparkEnv.set(ssc.env)
+    Try {
+      jobScheduler.receiverTracker.allocateBlocksToBatch(time) // allocate received blocks to batch
+      graph.generateJobs(time) // generate jobs using allocated block
+    } match {
       case Success(jobs) =>
-        val receivedBlockInfo = graph.getReceiverInputStreams.map { stream =>
-          val streamId = stream.id
-          val receivedBlockInfo = stream.getReceivedBlockInfo(time)
-          (streamId, receivedBlockInfo)
-        }.toMap
-        jobScheduler.submitJobSet(JobSet(time, jobs, receivedBlockInfo))
+        val receivedBlockInfos =
+          jobScheduler.receiverTracker.getBlocksOfBatch(time).mapValues { _.toArray }
+        jobScheduler.submitJobSet(JobSet(time, jobs, receivedBlockInfos))
       case Failure(e) =>
         jobScheduler.reportError("Error generating jobs for time " + time, e)
     }
@@ -240,6 +250,11 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     if (shouldCheckpoint) {
       eventActor ! DoCheckpoint(time)
     } else {
+      // If checkpointing is not enabled, then delete metadata information about
+      // received blocks (block data not saved in any case). Otherwise, wait for
+      // checkpointing of this batch to complete.
+      val maxRememberDuration = graph.getMaxInputStreamRememberDuration()
+      jobScheduler.receiverTracker.cleanupOldBlocksAndBatches(time - maxRememberDuration)
       markBatchFullyProcessed(time)
     }
   }
@@ -247,6 +262,11 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   /** Clear DStream checkpoint data for the given `time`. */
   private def clearCheckpointData(time: Time) {
     ssc.graph.clearCheckpointData(time)
+
+    // All the checkpoint information about which batches have been processed, etc have
+    // been saved to checkpoints, so its safe to delete block metadata and data WAL files
+    val maxRememberDuration = graph.getMaxInputStreamRememberDuration()
+    jobScheduler.receiverTracker.cleanupOldBlocksAndBatches(time - maxRememberDuration)
     markBatchFullyProcessed(time)
   }
 

@@ -1,6 +1,6 @@
 CREATE TABLE dest1(key INT, value STRING) STORED AS TEXTFILE;
 
-ADD FILE ../data/scripts/input20_script;
+ADD FILE ../../data/scripts/input20_script.py;
 
 EXPLAIN
 FROM (
@@ -12,7 +12,7 @@ FROM (
 ) tmap
 INSERT OVERWRITE TABLE dest1
 REDUCE tmap.key, tmap.value
-USING 'input20_script'
+USING 'python input20_script.py'
 AS key, value;
 
 FROM (
@@ -24,7 +24,7 @@ FROM (
 ) tmap
 INSERT OVERWRITE TABLE dest1
 REDUCE tmap.key, tmap.value
-USING 'input20_script'
+USING 'python input20_script.py'
 AS key, value;
 
 SELECT * FROM dest1 SORT BY key, value;

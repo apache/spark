@@ -21,23 +21,28 @@ import java.io._
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkException, TestUtils}
-import org.apache.spark.deploy.SparkSubmit._
-import org.apache.spark.util.Utils
 import org.scalatest.FunSuite
 import org.scalatest.Matchers
+import org.scalatest.concurrent.Timeouts
+import org.scalatest.time.SpanSugar._
 
-class SparkSubmitSuite extends FunSuite with Matchers {
+import org.apache.spark._
+import org.apache.spark.deploy.SparkSubmit._
+import org.apache.spark.util.{ResetSystemProperties, Utils}
+
+// Note: this suite mixes in ResetSystemProperties because SparkSubmit.main() sets a bunch
+// of properties that neeed to be cleared after tests.
+class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties with Timeouts {
   def beforeAll() {
     System.setProperty("spark.testing", "true")
   }
 
-  val noOpOutputStream = new OutputStream {
+  private val noOpOutputStream = new OutputStream {
     def write(b: Int) = {}
   }
 
   /** Simple PrintStream that reads data into a buffer */
-  class BufferPrintStream extends PrintStream(noOpOutputStream) {
+  private class BufferPrintStream extends PrintStream(noOpOutputStream) {
     var lineBuffer = ArrayBuffer[String]()
     override def println(line: String) {
       lineBuffer += line
@@ -45,7 +50,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
   }
 
   /** Returns true if the script exits and the given search string is printed. */
-  def testPrematureExit(input: Array[String], searchString: String) = {
+  private def testPrematureExit(input: Array[String], searchString: String) = {
     val printStream = new BufferPrintStream()
     SparkSubmit.printStream = printStream
 
@@ -292,7 +297,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
     runSparkSubmit(args)
   }
 
-  test("spark submit includes jars passed in through --jar") {
+  test("includes jars passed in through --jars") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val jar1 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassA"))
     val jar2 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassB"))
@@ -302,8 +307,126 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       "--name", "testApp",
       "--master", "local-cluster[2,1,512]",
       "--jars", jarsString,
-      unusedJar.toString)
+      unusedJar.toString, "SparkSubmitClassA", "SparkSubmitClassB")
     runSparkSubmit(args)
+  }
+
+  test("includes jars passed in through --packages") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val packagesString = "com.databricks:spark-csv_2.10:0.1,com.databricks:spark-avro_2.10:0.1"
+    val args = Seq(
+      "--class", JarCreationTest.getClass.getName.stripSuffix("$"),
+      "--name", "testApp",
+      "--master", "local-cluster[2,1,512]",
+      "--packages", packagesString,
+      "--conf", "spark.ui.enabled=false",
+      unusedJar.toString,
+      "com.databricks.spark.csv.DefaultSource", "com.databricks.spark.avro.DefaultSource")
+    runSparkSubmit(args)
+  }
+
+  test("resolves command line argument paths correctly") {
+    val jars = "/jar1,/jar2"                 // --jars
+    val files = "hdfs:/file1,file2"          // --files
+    val archives = "file:/archive1,archive2" // --archives
+    val pyFiles = "py-file1,py-file2"        // --py-files
+
+    // Test jars and files
+    val clArgs = Seq(
+      "--master", "local",
+      "--class", "org.SomeClass",
+      "--jars", jars,
+      "--files", files,
+      "thejar.jar")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val sysProps = SparkSubmit.createLaunchEnv(appArgs)._3
+    appArgs.jars should be (Utils.resolveURIs(jars))
+    appArgs.files should be (Utils.resolveURIs(files))
+    sysProps("spark.jars") should be (Utils.resolveURIs(jars + ",thejar.jar"))
+    sysProps("spark.files") should be (Utils.resolveURIs(files))
+
+    // Test files and archives (Yarn)
+    val clArgs2 = Seq(
+      "--master", "yarn-client",
+      "--class", "org.SomeClass",
+      "--files", files,
+      "--archives", archives,
+      "thejar.jar"
+    )
+    val appArgs2 = new SparkSubmitArguments(clArgs2)
+    val sysProps2 = SparkSubmit.createLaunchEnv(appArgs2)._3
+    appArgs2.files should be (Utils.resolveURIs(files))
+    appArgs2.archives should be (Utils.resolveURIs(archives))
+    sysProps2("spark.yarn.dist.files") should be (Utils.resolveURIs(files))
+    sysProps2("spark.yarn.dist.archives") should be (Utils.resolveURIs(archives))
+
+    // Test python files
+    val clArgs3 = Seq(
+      "--master", "local",
+      "--py-files", pyFiles,
+      "mister.py"
+    )
+    val appArgs3 = new SparkSubmitArguments(clArgs3)
+    val sysProps3 = SparkSubmit.createLaunchEnv(appArgs3)._3
+    appArgs3.pyFiles should be (Utils.resolveURIs(pyFiles))
+    sysProps3("spark.submit.pyFiles") should be (
+      PythonRunner.formatPaths(Utils.resolveURIs(pyFiles)).mkString(","))
+  }
+
+  test("resolves config paths correctly") {
+    val jars = "/jar1,/jar2" // spark.jars
+    val files = "hdfs:/file1,file2" // spark.files / spark.yarn.dist.files
+    val archives = "file:/archive1,archive2" // spark.yarn.dist.archives
+    val pyFiles = "py-file1,py-file2" // spark.submit.pyFiles
+
+    // Test jars and files
+    val f1 = File.createTempFile("test-submit-jars-files", "")
+    val writer1 = new PrintWriter(f1)
+    writer1.println("spark.jars " + jars)
+    writer1.println("spark.files " + files)
+    writer1.close()
+    val clArgs = Seq(
+      "--master", "local",
+      "--class", "org.SomeClass",
+      "--properties-file", f1.getPath,
+      "thejar.jar"
+    )
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val sysProps = SparkSubmit.createLaunchEnv(appArgs)._3
+    sysProps("spark.jars") should be(Utils.resolveURIs(jars + ",thejar.jar"))
+    sysProps("spark.files") should be(Utils.resolveURIs(files))
+
+    // Test files and archives (Yarn)
+    val f2 = File.createTempFile("test-submit-files-archives", "")
+    val writer2 = new PrintWriter(f2)
+    writer2.println("spark.yarn.dist.files " + files)
+    writer2.println("spark.yarn.dist.archives " + archives)
+    writer2.close()
+    val clArgs2 = Seq(
+      "--master", "yarn-client",
+      "--class", "org.SomeClass",
+      "--properties-file", f2.getPath,
+      "thejar.jar"
+    )
+    val appArgs2 = new SparkSubmitArguments(clArgs2)
+    val sysProps2 = SparkSubmit.createLaunchEnv(appArgs2)._3
+    sysProps2("spark.yarn.dist.files") should be(Utils.resolveURIs(files))
+    sysProps2("spark.yarn.dist.archives") should be(Utils.resolveURIs(archives))
+
+    // Test python files
+    val f3 = File.createTempFile("test-submit-python-files", "")
+    val writer3 = new PrintWriter(f3)
+    writer3.println("spark.submit.pyFiles " + pyFiles)
+    writer3.close()
+    val clArgs3 = Seq(
+      "--master", "local",
+      "--properties-file", f3.getPath,
+      "mister.py"
+    )
+    val appArgs3 = new SparkSubmitArguments(clArgs3)
+    val sysProps3 = SparkSubmit.createLaunchEnv(appArgs3)._3
+    sysProps3("spark.submit.pyFiles") should be(
+      PythonRunner.formatPaths(Utils.resolveURIs(pyFiles)).mkString(","))
   }
 
   test("SPARK_CONF_DIR overrides spark-defaults.conf") {
@@ -322,15 +445,18 @@ class SparkSubmitSuite extends FunSuite with Matchers {
   }
 
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
-  def runSparkSubmit(args: Seq[String]): String = {
+  private def runSparkSubmit(args: Seq[String]): Unit = {
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
-    Utils.executeAndGetOutput(
+    val process = Utils.executeCommand(
       Seq("./bin/spark-submit") ++ args,
       new File(sparkHome),
       Map("SPARK_TESTING" -> "1", "SPARK_HOME" -> sparkHome))
+    failAfter(60 seconds) { process.waitFor() }
+    // Ensure we still kill the process in case it timed out
+    process.destroy()
   }
 
-  def forConfDir(defaults: Map[String, String]) (f: String => Unit) = {
+  private def forConfDir(defaults: Map[String, String]) (f: String => Unit) = {
     val tmpDir = Utils.createTempDir()
 
     val defaultsConf = new File(tmpDir.getAbsolutePath, "spark-defaults.conf")
@@ -347,24 +473,25 @@ class SparkSubmitSuite extends FunSuite with Matchers {
   }
 }
 
-object JarCreationTest {
+object JarCreationTest extends Logging {
   def main(args: Array[String]) {
     Utils.configTestLog4j("INFO")
     val conf = new SparkConf()
     val sc = new SparkContext(conf)
     val result = sc.makeRDD(1 to 100, 10).mapPartitions { x =>
-      var foundClasses = false
+      var exception: String = null
       try {
-        Class.forName("SparkSubmitClassA", true, Thread.currentThread().getContextClassLoader)
-        Class.forName("SparkSubmitClassA", true, Thread.currentThread().getContextClassLoader)
-        foundClasses = true
+        Class.forName(args(0), true, Thread.currentThread().getContextClassLoader)
+        Class.forName(args(1), true, Thread.currentThread().getContextClassLoader)
       } catch {
-        case _: Throwable => // catch all
+        case t: Throwable =>
+          exception = t + "\n" + t.getStackTraceString
+          exception = exception.replaceAll("\n", "\n\t")
       }
-      Seq(foundClasses).iterator
+      Option(exception).toSeq.iterator
     }.collect()
-    if (result.contains(false)) {
-      throw new Exception("Could not load user defined classes inside of executors")
+    if (result.nonEmpty) {
+      throw new Exception("Could not load user class from jar:\n" + result(0))
     }
   }
 }

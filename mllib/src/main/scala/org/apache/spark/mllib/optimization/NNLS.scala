@@ -19,13 +19,11 @@ package org.apache.spark.mllib.optimization
 
 import org.jblas.{DoubleMatrix, SimpleBlas}
 
-import org.apache.spark.annotation.DeveloperApi
-
 /**
  * Object used to solve nonnegative least squares problems using a modified
  * projected gradient method.
  */
-private[mllib] object NNLS {
+private[spark] object NNLS {
   class Workspace(val n: Int) {
     val scratch = new DoubleMatrix(n, 1)
     val grad = new DoubleMatrix(n, 1)
@@ -79,7 +77,7 @@ private[mllib] object NNLS {
     // stopping condition
     def stop(step: Double, ndir: Double, nx: Double): Boolean = {
         ((step.isNaN) // NaN
-      || (step < 1e-6) // too small or negative
+      || (step < 1e-7) // too small or negative
       || (step > 1e40) // too small; almost certainly numerical problems
       || (ndir < 1e-12 * nx) // gradient relatively too small
       || (ndir < 1e-32) // gradient absolutely too small; numerical issues may lurk
