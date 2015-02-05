@@ -20,19 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.types._
 
-case class UnaryPlus(child: Expression) extends UnaryExpression {
-  type EvaluatedType = Any
-
-  def dataType = child.dataType
-  override def foldable = child.foldable
-  def nullable = child.nullable
-  override def toString = s"+$child"
-
-  override def eval(input: Row): Any = {
-    n1(child, input, _.abs(_))
-  }
-}
-
 case class UnaryMinus(child: Expression) extends UnaryExpression {
   type EvaluatedType = Any
 
