@@ -75,7 +75,7 @@ private[sql] case class JSONRelation(
   // TODO: Support partitioned JSON relation.
   private def baseRDD = sqlContext.sparkContext.textFile(path)
 
-  val schema = userSpecifiedSchema.getOrElse(
+  override val schema = userSpecifiedSchema.getOrElse(
     JsonRDD.nullTypeToStringType(
       JsonRDD.inferSchema(
         baseRDD,
