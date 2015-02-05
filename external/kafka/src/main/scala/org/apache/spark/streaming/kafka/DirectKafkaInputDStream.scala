@@ -50,7 +50,6 @@ import org.apache.spark.streaming.dstream._
  * @param fromOffsets per-topic/partition Kafka offsets defining the (inclusive)
  *  starting point of the stream
  * @param messageHandler function for translating each message into the desired type
- * @param maxRetries maximum number of times in a row to retry getting leaders' offsets
  */
 private[streaming]
 class DirectKafkaInputDStream[

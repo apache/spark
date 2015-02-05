@@ -36,6 +36,23 @@ final class OffsetRange private(
     val untilOffset: Long) extends Serializable {
   import OffsetRange.OffsetRangeTuple
 
+  override def equals(obj: Any): Boolean = obj match {
+    case that: OffsetRange =>
+      this.topic == that.topic &&
+        this.partition == that.partition &&
+        this.fromOffset == that.fromOffset &&
+        this.untilOffset == that.untilOffset
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    toTuple.hashCode()
+  }
+
+  override def toString(): String = {
+    s"OffsetRange(topic='$topic', partition=$partition, range: [$fromOffset -> $untilOffset]"
+  }
+
   /** this is to avoid ClassNotFoundException during checkpoint restore */
   private[streaming]
   def toTuple: OffsetRangeTuple = (topic, partition, fromOffset, untilOffset)
