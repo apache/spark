@@ -19,8 +19,10 @@ package org.apache.spark.sql
 
 import org.scalatest.FunSuiteLike
 
-import org.apache.spark.sql.test._
 
+import org.apache.spark.sql.test._
+import org.apache.spark.sql.TestData._
+import org.apache.spark.sql.sources._
 /* Implicits */
 import TestSQLContext._
 
@@ -80,5 +82,52 @@ class SQLConfSuite extends QueryTest with FunSuiteLike {
     conf.clear()
     sql(s"set ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}=10")
     assert(getConf(SQLConf.SHUFFLE_PARTITIONS) == "10")
+  }
+
+  test("SPARK-2789 applyNames RDD to DataFrame") {
+    val rdd1 = unparsedStrings.map { r =>
+      val values = r.split(",").map(_.trim)
+      val v5 = try values(3).toInt catch {
+        case _: NumberFormatException => 0
+      }
+      Seq(values(0).toInt, values(1), values(2).toBoolean, v5)
+    }
+    val newContext = new SQLContext(TestSQLContext.sparkContext)
+    val applyNames1 = newContext.applyNames("a b c d", rdd1)
+    assert(applyNames1.isInstanceOf[DataFrame])
+    applyNames1.registerTempTable("applyNames1")
+    
+    checkAnswer(
+      newContext.sql("SELECT * FROM applyNames1"),
+      Row(1, "A1", true, 0) ::
+      Row(2, "B2", false, 0) ::
+      Row(3, "C3", true, 0) ::
+      Row(4, "D4", true, 2147483644) :: Nil)
+
+      val e = intercept[DDLException](newContext.applyNames("a in b d", rdd1))
+      assert(e.getMessage.startsWith("Reserved words not allowed"))
+
+      val rdd2 = unparsedStrings.map { r =>
+        val values = r.split(",").map(_.trim)
+        val v5 = try values(3).toInt catch {
+          case _: NumberFormatException => 0
+        }
+        Seq(values(0).toInt, values(1), values(2).toBoolean, Map("k" -> values(0).toInt), Map(values(1) -> values(0).toInt))
+      }
+
+      val applyNames2 = newContext.applyNames("a b c d e", rdd2)
+      assert(applyNames2.isInstanceOf[DataFrame])
+      applyNames2.registerTempTable("applyNames2")
+      checkAnswer(newContext.sql("SELECT d['k'] FROM applyNames2"),
+      Row(1) ::
+      Row(2) ::
+      Row(3) ::
+      Row(4) :: Nil)
+      checkAnswer(newContext.sql("SELECT e['A1'] FROM applyNames2"),
+      Row(1) ::
+      Row(null) ::
+      Row(null) ::
+      Row(null) :: Nil)
+
   }
 }

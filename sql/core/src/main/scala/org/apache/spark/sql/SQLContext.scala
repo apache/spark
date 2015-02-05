@@ -637,6 +637,20 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def applyNames(nameString : String, plainRdd : RDD[_]) : DataFrame = {
     // assume a space separated string to begin with
     val names = nameString.split(" ").toSeq
+
+    val reservedWords = Set("ABS","ALL","AND", "APPROXIMATE", "AS", "ASC", "AVG", "BETWEEN", "BY",
+      "CACHE", "CASE", "CAST", "COALESCE", "COUNT", "DATE", "DECIMAL", "DESC", "DISTINCT",
+      "DOUBLE", "ELSE", "END", "EXCEPT", "FALSE", "FIRST", "FROM", "FULL", "GROUP", "HAVING",
+      "IF", "IN", "INNER", "INSERT", "INTERSECT", "INTO", "IS", "JOIN", "LAST", "LEFT", "LIKE",
+      "LIMIT", "LOWER", "MAX", "MIN", "NOT", "NULL", "ON", "OR", "ORDER", "SORT", "OUTER",
+      "OVERWRITE", "REGEXP", "RIGHT", "RLIKE", "SELECT", "SEMI", "SQRT", "STRING", "SUBSTR",
+      "SUBSTRING", "SUM", "TABLE", "THEN", "TIMESTAMP", "TRUE", "UNION", "UPPER", "WHEN", "WHERE")
+
+    val reservedWordsOverlap = (names.toSet.map{x : String => x.toUpperCase} & reservedWords).size
+    if ( reservedWordsOverlap > 0 ){
+      throw new DDLException(s"Reserved words not allowed as column names")
+    }
+
     val sampleRow = plainRdd.first()
 
     def columnType(col: Any) : DataType = {
@@ -655,6 +669,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
         case _: java.math.BigDecimal => DecimalType()
         case _: java.sql.Date => DateType
         case _: java.sql.Timestamp => TimestampType
+        case col: Map[Any,Any] => {
+          var k = col.head._1
+          var v = col.head._2
+          MapType(columnType(k),columnType(v), true)
+        }
+        case null => NullType
         case _: Any => NullType
       }
       return t
