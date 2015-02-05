@@ -1060,14 +1060,4 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     rdd.registerTempTable("distinctData")
     checkAnswer(sql("SELECT COUNT(DISTINCT key,value) FROM distinctData"), Row(2))
   }
-  
-  test("SPARK-5129 Support 'date +/- XX DAYS' ") {
-    checkAnswer(
-      sql("SELECT date + 10 DAYS from itinerary"),
-      Seq(Date.valueOf("2015-01-11"), Date.valueOf("2015-02-02")).map(Seq(_)))
-
-    checkAnswer(
-      sql("SELECT date - 10 DAYS from itinerary"),
-      Seq(Date.valueOf("2014-12-22"), Date.valueOf("2015-01-13")).map(Seq(_)))
-  }
 }
