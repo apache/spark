@@ -1503,10 +1503,8 @@ class SQLContext(object):
 
         sampleRow = plainRdd.first()
         sampledTypes = map(_infer_type, sampleRow)
-        print sampledTypes
         fields= [StructField(k,v,True) for k, v in zip(fieldNames, sampledTypes)]
         sampledSchema = StructType(fields)
-        print sampledSchema
         return self.applySchema(plainRdd, sampledSchema)
 
 
