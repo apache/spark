@@ -153,7 +153,7 @@ def parse_args():
     parser.add_option(
         "--spark-ec2-branch",
         default=DEFAULT_SPARK_EC2_BRANCH,
-        help="Spark-ec2 branch to use (default: %default)")
+        help="spark-ec2 branch to use (default: %default)")
     parser.add_option(
         "--hadoop-major-version", default="1",
         help="Major version of Hadoop (default: %default)")
@@ -341,7 +341,7 @@ def get_spark_ami(opts):
             "Don't recognize %s, assuming type is pvm" % opts.instance_type
 
     # URL prefix from which to fetch AMI information
-    ami_prefix = "{r}/{b}/ami-list".format(r=opts.spark_ec2_git_repo.replace("github","raw.github"), b=opts.spark_ec2_branch)
+    ami_prefix = "{r}/{b}/ami-list".format(r=opts.spark_ec2_git_repo.replace("https://github.com","https://raw.github.com",1), b=opts.spark_ec2_branch)
 
     ami_path = "%s/%s/%s" % (ami_prefix, opts.region, instance_type)
     try:
@@ -661,7 +661,7 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
     # NOTE: We should clone the repository before running deploy_files to
     # prevent ec2-variables.sh from being overwritten
     repo_branch="{r} -b {b}".format(r=opts.spark_ec2_git_repo, b=opts.spark_ec2_branch)
-    print "Cloning spark-ec2 scripts from {rb} on master....".format(rb=repo_branch)
+    print "Cloning spark-ec2 scripts from {rb} on master...".format(rb=repo_branch)
     ssh(
         host=master,
         opts=opts,
