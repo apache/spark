@@ -130,7 +130,7 @@ class MatrixFactorizationModel(
     recommend(productFeatures.lookup(product).head, userFeatures, num)
       .map(t => Rating(t._1, product, t._2))
 
-  override val formatVersion: String = "1.0"
+  protected override val formatVersion: String = "1.0"
 
   override def save(sc: SparkContext, path: String): Unit = {
     MatrixFactorizationModel.SaveLoadV1_0.save(this, path)
@@ -148,7 +148,7 @@ class MatrixFactorizationModel(
   }
 }
 
-private object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
+object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
 
   import org.apache.spark.mllib.util.Loader._
 
@@ -159,17 +159,18 @@ private object MatrixFactorizationModel extends Loader[MatrixFactorizationModel]
       case (className, "1.0") if className == classNameV1_0 =>
         SaveLoadV1_0.load(sc, path)
       case _ =>
-        throw new IOException("" +
-          "MatrixFactorizationModel.load did not recognize model with" +
+        throw new IOException("MatrixFactorizationModel.load did not recognize model with" +
           s"(class: $loadedClassName, version: $formatVersion). Supported:\n" +
           s"  ($classNameV1_0, 1.0)")
     }
   }
 
-  private object SaveLoadV1_0 extends Loader[MatrixFactorizationModel] {
+  private[recommendation]
+  object SaveLoadV1_0 extends Loader[MatrixFactorizationModel] {
 
     private val thisFormatVersion = "1.0"
 
+    private[recommendation]
     val thisClassName = "org.apache.spark.mllib.recommendation.MatrixFactorizationModel"
 
     /**
