@@ -238,7 +238,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   private def compareAppInfo(
       i1: FsApplicationHistoryInfo,
       i2: FsApplicationHistoryInfo): Boolean = {
-    i1.endTime >= i2.endTime && i1.startTime >= i2.startTime
+    if (i1.endTime != i2.endTime) i1.endTime >= i2.endTime else i1.startTime >= i2.startTime
   }
 
   /**

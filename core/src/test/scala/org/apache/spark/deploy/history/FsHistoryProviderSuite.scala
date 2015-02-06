@@ -51,8 +51,8 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
     // Write a new-style application log.
     val logFile1 = new File(testDir, "new1")
     writeFile(logFile1, true, None,
-      SparkListenerApplicationStart("app1-1", None, 1L, "test"),
-      SparkListenerApplicationEnd(2L)
+      SparkListenerApplicationStart("app1-1", None, 2L, "test"),
+      SparkListenerApplicationEnd(3L)
       )
 
     // Write an unfinished app, new-style.
@@ -66,8 +66,8 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
     oldLog.mkdir()
     createEmptyFile(new File(oldLog, provider.SPARK_VERSION_PREFIX + "1.0"))
     writeFile(new File(oldLog, provider.LOG_PREFIX + "1"), false, None,
-      SparkListenerApplicationStart("app3", None, 2L, "test"),
-      SparkListenerApplicationEnd(3L)
+      SparkListenerApplicationStart("app3", None, 1L, "test"),
+      SparkListenerApplicationEnd(4L)
       )
     createEmptyFile(new File(oldLog, provider.APPLICATION_COMPLETE))
 
@@ -182,9 +182,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
   }
 
   test("SPARK-5582: empty log directory") {
-    val conf = new SparkConf()
-      .set("spark.history.fs.logDirectory", testDir.getAbsolutePath())
-    val provider = new FsHistoryProvider(conf)
+    val provider = new FsHistoryProvider(createTestConf())
 
     val logFile1 = new File(testDir, "app1" + EventLoggingListener.IN_PROGRESS)
     writeFile(logFile1, true, None,
