@@ -252,8 +252,6 @@ class LDA private (
         state.graphCheckpointer.deleteAllCheckpoints()
         new DistributedLDAModel(state, iterationTimes)
       case LDAMode.Online =>
-        //todo: delete the comment in next line
-        // I changed the return type to LDAModel, as DistributedLDAModel is based on Graph.
         val vocabSize = documents.first._2.size
         val onlineLDA = new LDA.OnlineLDAOptimizer(documents, k, vocabSize)
         var iter = 0
