@@ -151,7 +151,9 @@ class NewHadoopRDD[K, V](
           throw new java.util.NoSuchElementException("End of stream")
         }
         havePair = false
-
+        if (!finished) {
+          inputMetrics.incRecordsRead(1)
+        }
         (reader.getCurrentKey, reader.getCurrentValue)
       }
 
@@ -165,7 +167,7 @@ class NewHadoopRDD[K, V](
             // If we can't get the bytes read from the FS stats, fall back to the split size,
             // which may be inaccurate.
             try {
-              inputMetrics.addBytesRead(split.serializableHadoopSplit.value.getLength)
+              inputMetrics.incBytesRead(split.serializableHadoopSplit.value.getLength)
             } catch {
               case e: java.io.IOException =>
                 logWarning("Unable to get input size to set InputMetrics for task", e)
