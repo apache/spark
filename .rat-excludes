@@ -65,3 +65,6 @@ logs
 .*scalastyle-output.xml
 .*dependency-reduced-pom.xml
 known_translations
+json_expectation
+local-1422981759269/*
+local-1422981780767/*
