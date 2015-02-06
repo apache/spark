@@ -259,3 +259,32 @@ joinTaggedList <- function(tagged_list, cnull) {
   lists <- genCompactLists(tagged_list, cnull)
   mergeCompactLists(lists[[1]], lists[[2]])
 }
+
+# Utility function to reduce a key-value list with predicate
+# Used in *ByKey functions
+# param
+#   item key-val pair
+#   keys/vals env of key/value with hashes
+#   pred predicate function
+#   update_fn update or merge function for existing pair, similar with `mergeVal` @combineByKey
+#   create_fn create function for new pair, similar with `createCombiner` @combinebykey
+updateOrCreatePair <- function(item, keys, vals, pred, update_fn, create_fn) {
+  # assum hashval bind to `$hash`, key/val with index 1/2
+  hashVal <- item$hash
+  key <- item[[1]]
+  val <- item[[2]]
+  if (pred(item)) {
+    assign(hashVal, do.call(update_fn, list(get(hashVal, envir=vals), val)), envir=vals)
+  } else {
+    assign(hashVal, do.call(create_fn, list(val)), envir=vals)
+    assign(hashVal, key, envir=keys)
+  }
+}
+
+# Utility function to convert key&values envs into key-val list
+convertEnvsToList <- function(keys, vals) {
+  lapply(ls(keys),
+         function(name) {
+           list(keys[[name]], vals[[name]])
+         })
+}
