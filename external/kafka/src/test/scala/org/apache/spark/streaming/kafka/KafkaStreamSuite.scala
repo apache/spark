@@ -64,12 +64,12 @@ abstract class KafkaStreamSuiteBase extends FunSuite with Eventually with Loggin
   protected var zkClient: ZkClient = _
 
   def zkAddress: String = {
-    assert(zkReady, "Kafka not setup yet, cannot get zookeeper address")
+    assert(zkReady, "Zookeeper not setup yet or already torn down, cannot get zookeeper address")
     s"$zkHost:$zkPort"
   }
 
   def brokerAddress: String = {
-    assert(brokerReady, "Kafka not setup yet, cannot get broker address")
+    assert(brokerReady, "Kafka not setup yet or already torn down, cannot get broker address")
     s"$brokerHost:$brokerPort"
   }
 
@@ -104,13 +104,13 @@ abstract class KafkaStreamSuiteBase extends FunSuite with Eventually with Loggin
     }
 
     Thread.sleep(2000)
-    logInfo("==================== Kafka Ready ====================")
+    logInfo("==================== Kafka + Zookeeper Ready ====================")
     brokerReady = true
   }
 
   def tearDownKafka() {
     brokerReady = false
-    zkReady = true
+    zkReady = false
     if (producer != null) {
       producer.close()
       producer = null

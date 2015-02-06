@@ -199,7 +199,7 @@ object KafkaUtils {
    * @param offsetRanges Each OffsetRange in the batch corresponds to a
    *   range of offsets for a given Kafka topic/partition
    * @param leaders Kafka leaders for each offset range in batch
-   * @param messageHandler function for translating each message and metadata into the desired type
+   * @param messageHandler Function for translating each message and metadata into the desired type
    */
   @Experimental
   def createRDD[
@@ -264,7 +264,7 @@ object KafkaUtils {
    * @param offsetRanges Each OffsetRange in the batch corresponds to a
    *   range of offsets for a given Kafka topic/partition
    * @param leaders Kafka leaders for each offset range in batch
-   * @param messageHandler function for translating each message and metadata into the desired type
+   * @param messageHandler Function for translating each message and metadata into the desired type
    */
   @Experimental
   def createRDD[K, V, KD <: Decoder[K], VD <: Decoder[V], R](
@@ -298,6 +298,8 @@ object KafkaUtils {
    *  - Offsets: This does not use Zookeeper to store offsets. The consumed offsets are tracked
    *    by the stream itself. For interoperability with Kafka monitoring tools that depend on 
    *    Zookeeper, you have to update Kafka/Zookeeper yourself from the streaming application.
+   *    You can access the offsets used in each batch from the generated RDDs (see
+   *    [[org.apache.spark.streaming.kafka.HasOffsetRanges]]).
    *  - Failure Recovery: To recover from driver failures, you have to enable checkpointing
    *    in the [[StreamingContext]]. The information on consumed offset can be
    *    recovered from the checkpoint. See the programming guide for details (constraints, etc.).
@@ -314,7 +316,7 @@ object KafkaUtils {
    *    host1:port1,host2:port2 form.
    * @param fromOffsets Per-topic/partition Kafka offsets defining the (inclusive)
    *    starting point of the stream
-   * @param messageHandler Function for translating each raw message into the desired type
+   * @param messageHandler Function for translating each message and metadata into the desired type
    */
   @Experimental
   def createDirectStream[
@@ -342,6 +344,8 @@ object KafkaUtils {
    *  - Offsets: This does not use Zookeeper to store offsets. The consumed offsets are tracked
    *    by the stream itself. For interoperability with Kafka monitoring tools that depend on 
    *    Zookeeper, you have to update Kafka/Zookeeper yourself from the streaming application.
+   *    You can access the offsets used in each batch from the generated RDDs (see
+   *    [[org.apache.spark.streaming.kafka.HasOffsetRanges]]).
    *  - Failure Recovery: To recover from driver failures, you have to enable checkpointing
    *    in the [[StreamingContext]]. The information on consumed offset can be
    *    recovered from the checkpoint. See the programming guide for details (constraints, etc.).
@@ -403,6 +407,8 @@ object KafkaUtils {
    *  - Offsets: This does not use Zookeeper to store offsets. The consumed offsets are tracked
    *    by the stream itself. For interoperability with Kafka monitoring tools that depend on 
    *    Zookeeper, you have to update Kafka/Zookeeper yourself from the streaming application.
+   *    You can access the offsets used in each batch from the generated RDDs (see
+   *    [[org.apache.spark.streaming.kafka.HasOffsetRanges]]).
    *  - Failure Recovery: To recover from driver failures, you have to enable checkpointing
    *    in the [[StreamingContext]]. The information on consumed offset can be
    *    recovered from the checkpoint. See the programming guide for details (constraints, etc.).
@@ -424,7 +430,7 @@ object KafkaUtils {
    *   host1:port1,host2:port2 form.
    * @param fromOffsets Per-topic/partition Kafka offsets defining the (inclusive)
    *    starting point of the stream
-   * @param messageHandler Function for translating each raw message into the desired type
+   * @param messageHandler Function for translating each message and metadata into the desired type
    */
   @Experimental
   def createDirectStream[K, V, KD <: Decoder[K], VD <: Decoder[V], R](
@@ -461,6 +467,8 @@ object KafkaUtils {
    *  - Offsets: This does not use Zookeeper to store offsets. The consumed offsets are tracked
    *    by the stream itself. For interoperability with Kafka monitoring tools that depend on 
    *    Zookeeper, you have to update Kafka/Zookeeper yourself from the streaming application.
+   *    You can access the offsets used in each batch from the generated RDDs (see
+   *    [[org.apache.spark.streaming.kafka.HasOffsetRanges]]).
    *  - Failure Recovery: To recover from driver failures, you have to enable checkpointing
    *    in the [[StreamingContext]]. The information on consumed offset can be
    *    recovered from the checkpoint. See the programming guide for details (constraints, etc.).
