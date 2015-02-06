@@ -204,7 +204,6 @@ private class RandomForest (
       Some(NodeIdCache.init(
         data = baggedInput,
         numTrees = numTrees,
-        checkpointDir = strategy.checkpointDir,
         checkpointInterval = strategy.checkpointInterval,
         initVal = 1))
     } else {

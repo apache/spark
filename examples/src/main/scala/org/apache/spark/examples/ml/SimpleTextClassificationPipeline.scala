@@ -23,6 +23,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.sql.{Row, SQLContext}
 
 @BeanInfo
@@ -79,10 +80,10 @@ object SimpleTextClassificationPipeline {
 
     // Make predictions on test documents.
     model.transform(test)
-      .select("id", "text", "score", "prediction")
+      .select("id", "text", "probability", "prediction")
       .collect()
-      .foreach { case Row(id: Long, text: String, score: Double, prediction: Double) =>
-        println("(" + id + ", " + text + ") --> score=" + score + ", prediction=" + prediction)
+      .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
+        println("($id, $text) --> prob=$prob, prediction=$prediction")
       }
 
     sc.stop()

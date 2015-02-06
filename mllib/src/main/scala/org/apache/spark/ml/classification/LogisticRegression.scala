@@ -18,61 +18,32 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml._
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
-import org.apache.spark.mllib.linalg.{BLAS, Vector, VectorUDT}
-import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.sql._
+import org.apache.spark.mllib.linalg.{VectorUDT, BLAS, Vector, Vectors}
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.Dsl._
-import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
+import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.storage.StorageLevel
+
+
+/**
+ * Params for logistic regression.
+ */
+private[classification] trait LogisticRegressionParams extends ProbabilisticClassifierParams
+  with HasRegParam with HasMaxIter with HasThreshold
+
 
 /**
  * :: AlphaComponent ::
- * Params for logistic regression.
+ *
+ * Logistic regression.
+ * Currently, this class only supports binary classification.
  */
 @AlphaComponent
-private[classification] trait LogisticRegressionParams extends Params
-  with HasRegParam with HasMaxIter with HasLabelCol with HasThreshold with HasFeaturesCol
-  with HasScoreCol with HasPredictionCol {
-
-  /**
-   * Validates and transforms the input schema with the provided param map.
-   * @param schema input schema
-   * @param paramMap additional parameters
-   * @param fitting whether this is in fitting
-   * @return output schema
-   */
-  protected def validateAndTransformSchema(
-      schema: StructType,
-      paramMap: ParamMap,
-      fitting: Boolean): StructType = {
-    val map = this.paramMap ++ paramMap
-    val featuresType = schema(map(featuresCol)).dataType
-    // TODO: Support casting Array[Double] and Array[Float] to Vector.
-    require(featuresType.isInstanceOf[VectorUDT],
-      s"Features column ${map(featuresCol)} must be a vector column but got $featuresType.")
-    if (fitting) {
-      val labelType = schema(map(labelCol)).dataType
-      require(labelType == DoubleType,
-        s"Cannot convert label column ${map(labelCol)} of type $labelType to a double column.")
-    }
-    val fieldNames = schema.fieldNames
-    require(!fieldNames.contains(map(scoreCol)), s"Score column ${map(scoreCol)} already exists.")
-    require(!fieldNames.contains(map(predictionCol)),
-      s"Prediction column ${map(predictionCol)} already exists.")
-    val outputFields = schema.fields ++ Seq(
-      StructField(map(scoreCol), DoubleType, false),
-      StructField(map(predictionCol), DoubleType, false))
-    StructType(outputFields)
-  }
-}
-
-/**
- * Logistic regression.
- */
-class LogisticRegression extends Estimator[LogisticRegressionModel] with LogisticRegressionParams {
+class LogisticRegression
+  extends ProbabilisticClassifier[Vector, LogisticRegression, LogisticRegressionModel]
+  with LogisticRegressionParams {
 
   setRegParam(0.1)
   setMaxIter(100)
@@ -80,68 +51,151 @@ class LogisticRegression extends Estimator[LogisticRegressionModel] with Logisti
 
   def setRegParam(value: Double): this.type = set(regParam, value)
   def setMaxIter(value: Int): this.type = set(maxIter, value)
-  def setLabelCol(value: String): this.type = set(labelCol, value)
   def setThreshold(value: Double): this.type = set(threshold, value)
-  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
-  def setScoreCol(value: String): this.type = set(scoreCol, value)
-  def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
-  override def fit(dataset: DataFrame, paramMap: ParamMap): LogisticRegressionModel = {
-    transformSchema(dataset.schema, paramMap, logging = true)
-    val map = this.paramMap ++ paramMap
-    val instances = dataset.select(map(labelCol), map(featuresCol))
-      .map { case Row(label: Double, features: Vector) =>
-        LabeledPoint(label, features)
-      }.persist(StorageLevel.MEMORY_AND_DISK)
+  override protected def train(dataset: DataFrame, paramMap: ParamMap): LogisticRegressionModel = {
+    // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
+    val oldDataset = extractLabeledPoints(dataset, paramMap)
+    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
+    if (handlePersistence) {
+      oldDataset.persist(StorageLevel.MEMORY_AND_DISK)
+    }
+
+    // Train model
     val lr = new LogisticRegressionWithLBFGS
     lr.optimizer
-      .setRegParam(map(regParam))
-      .setNumIterations(map(maxIter))
-    val lrm = new LogisticRegressionModel(this, map, lr.run(instances).weights)
-    instances.unpersist()
-    // copy model params
-    Params.inheritValues(map, this, lrm)
-    lrm
-  }
+      .setRegParam(paramMap(regParam))
+      .setNumIterations(paramMap(maxIter))
+    val oldModel = lr.run(oldDataset)
+    val lrm = new LogisticRegressionModel(this, paramMap, oldModel.weights, oldModel.intercept)
 
-  private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    validateAndTransformSchema(schema, paramMap, fitting = true)
+    if (handlePersistence) {
+      oldDataset.unpersist()
+    }
+    lrm
   }
 }
 
+
 /**
  * :: AlphaComponent ::
+ *
  * Model produced by [[LogisticRegression]].
  */
 @AlphaComponent
 class LogisticRegressionModel private[ml] (
     override val parent: LogisticRegression,
     override val fittingParamMap: ParamMap,
-    weights: Vector)
-  extends Model[LogisticRegressionModel] with LogisticRegressionParams {
+    val weights: Vector,
+    val intercept: Double)
+  extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
+  with LogisticRegressionParams {
+
+  setThreshold(0.5)
 
   def setThreshold(value: Double): this.type = set(threshold, value)
-  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
-  def setScoreCol(value: String): this.type = set(scoreCol, value)
-  def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
-  private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    validateAndTransformSchema(schema, paramMap, fitting = false)
+  private val margin: Vector => Double = (features) => {
+    BLAS.dot(features, weights) + intercept
+  }
+
+  private val score: Vector => Double = (features) => {
+    val m = margin(features)
+    1.0 / (1.0 + math.exp(-m))
   }
 
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
+    // This is overridden (a) to be more efficient (avoiding re-computing values when creating
+    // multiple output columns) and (b) to handle threshold, which the abstractions do not use.
+    // TODO: We should abstract away the steps defined by UDFs below so that the abstractions
+    // can call whichever UDFs are needed to create the output columns.
+
+    // Check schema
     transformSchema(dataset.schema, paramMap, logging = true)
+
     val map = this.paramMap ++ paramMap
-    val scoreFunction = udf { v: Vector =>
-      val margin = BLAS.dot(v, weights)
-      1.0 / (1.0 + math.exp(-margin))
+
+    // Output selected columns only.
+    // This is a bit complicated since it tries to avoid repeated computation.
+    //   rawPrediction (-margin, margin)
+    //   probability (1.0-score, score)
+    //   prediction (max margin)
+    var tmpData = dataset
+    var numColsOutput = 0
+    if (map(rawPredictionCol) != "") {
+      val features2raw: Vector => Vector = (features) => predictRaw(features)
+      tmpData = tmpData.select($"*",
+        callUDF(features2raw, new VectorUDT, col(map(featuresCol))).as(map(rawPredictionCol)))
+      numColsOutput += 1
     }
-    val t = map(threshold)
-    val predictFunction = udf { score: Double =>
-      if (score > t) 1.0 else 0.0
+    if (map(probabilityCol) != "") {
+      if (map(rawPredictionCol) != "") {
+        val raw2prob: Vector => Vector = { (rawPreds: Vector) =>
+          val prob1 = 1.0 / (1.0 + math.exp(-rawPreds(1)))
+          Vectors.dense(1.0 - prob1, prob1)
+        }
+        tmpData = tmpData.select($"*",
+          callUDF(raw2prob, new VectorUDT, col(map(rawPredictionCol))).as(map(probabilityCol)))
+      } else {
+        val features2prob: Vector => Vector = (features: Vector) => predictProbabilities(features)
+        tmpData = tmpData.select($"*",
+          callUDF(features2prob, new VectorUDT, col(map(featuresCol))).as(map(probabilityCol)))
+      }
+      numColsOutput += 1
     }
-    dataset
-      .select($"*", scoreFunction(col(map(featuresCol))).as(map(scoreCol)))
-      .select($"*", predictFunction(col(map(scoreCol))).as(map(predictionCol)))
+    if (map(predictionCol) != "") {
+      val t = map(threshold)
+      if (map(probabilityCol) != "") {
+        val predict: Vector => Double = { probs: Vector =>
+          if (probs(1) > t) 1.0 else 0.0
+        }
+        tmpData = tmpData.select($"*",
+          callUDF(predict, DoubleType, col(map(probabilityCol))).as(map(predictionCol)))
+      } else if (map(rawPredictionCol) != "") {
+        val predict: Vector => Double = { rawPreds: Vector =>
+          val prob1 = 1.0 / (1.0 + math.exp(-rawPreds(1)))
+          if (prob1 > t) 1.0 else 0.0
+        }
+        tmpData = tmpData.select($"*",
+          callUDF(predict, DoubleType, col(map(rawPredictionCol))).as(map(predictionCol)))
+      } else {
+        val predict: Vector => Double = (features: Vector) => this.predict(features)
+        tmpData = tmpData.select($"*",
+          callUDF(predict, DoubleType, col(map(featuresCol))).as(map(predictionCol)))
+      }
+      numColsOutput += 1
+    }
+    if (numColsOutput == 0) {
+      this.logWarning(s"$uid: LogisticRegressionModel.transform() was called as NOOP" +
+        " since no output columns were set.")
+    }
+    tmpData
+  }
+
+  override val numClasses: Int = 2
+
+  /**
+   * Predict label for the given feature vector.
+   * The behavior of this can be adjusted using [[threshold]].
+   */
+  override protected def predict(features: Vector): Double = {
+    println(s"LR.predict with threshold: ${paramMap(threshold)}")
+    if (score(features) > paramMap(threshold)) 1 else 0
+  }
+
+  override protected def predictProbabilities(features: Vector): Vector = {
+    val s = score(features)
+    Vectors.dense(1.0 - s, s)
+  }
+
+  override protected def predictRaw(features: Vector): Vector = {
+    val m = margin(features)
+    Vectors.dense(0.0, m)
+  }
+
+  override protected def copy(): LogisticRegressionModel = {
+    val m = new LogisticRegressionModel(parent, fittingParamMap, weights, intercept)
+    Params.inheritValues(this.paramMap, this, m)
+    m
   }
 }

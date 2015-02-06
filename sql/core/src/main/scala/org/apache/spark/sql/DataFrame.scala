@@ -38,7 +38,8 @@ private[sql] object DataFrame {
 
 
 /**
- * A collection of rows that have the same columns.
+ * :: Experimental ::
+ * A distributed collection of data organized into named columns.
  *
  * A [[DataFrame]] is equivalent to a relational table in Spark SQL, and can be created using
  * various functions in [[SQLContext]].
@@ -74,6 +75,7 @@ private[sql] object DataFrame {
  * }}}
  */
 // TODO: Improve documentation.
+@Experimental
 trait DataFrame extends RDDApi[Row] {
 
   val sqlContext: SQLContext
@@ -426,6 +428,11 @@ trait DataFrame extends RDDApi[Row] {
    * Returns a new [[DataFrame]] by adding a column.
    */
   def addColumn(colName: String, col: Column): DataFrame
+
+  /**
+   * Returns a new [[DataFrame]] with a column renamed.
+   */
+  def renameColumn(existingName: String, newName: String): DataFrame
 
   /**
    * Returns the first `n` rows.

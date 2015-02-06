@@ -285,7 +285,7 @@ class Analyzer(catalog: Catalog,
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
-        q transformExpressions {
+        q transformExpressionsUp  {
           case u @ UnresolvedAttribute(name) if resolver(name, VirtualColumn.groupingIdName) &&
             q.isInstanceOf[GroupingAnalytics] =>
             // Resolve the virtual column GROUPING__ID for the operator GroupingAnalytics
@@ -295,15 +295,8 @@ class Analyzer(catalog: Catalog,
             val result = q.resolveChildren(name, resolver).getOrElse(u)
             logDebug(s"Resolving $u to $result")
             result
-
-          // Resolve field names using the resolver.
-          case f @ GetField(child, fieldName) if !f.resolved && child.resolved =>
-            child.dataType match {
-              case StructType(fields) =>
-                val resolvedFieldName = fields.map(_.name).find(resolver(_, fieldName))
-                resolvedFieldName.map(n => f.copy(fieldName = n)).getOrElse(f)
-              case _ => f
-            }
+          case UnresolvedGetField(child, fieldName) if child.resolved =>
+            resolveGetField(child, fieldName)
         }
     }
 
@@ -312,6 +305,27 @@ class Analyzer(catalog: Catalog,
      */
     protected def containsStar(exprs: Seq[Expression]): Boolean =
       exprs.exists(_.collect { case _: Star => true }.nonEmpty)
+
+    /**
+     * Returns the resolved `GetField`, and report error if no desired field or over one
+     * desired fields are found.
+     */
+    protected def resolveGetField(expr: Expression, fieldName: String): Expression = {
+      expr.dataType match {
+        case StructType(fields) =>
+          val actualField = fields.filter(f => resolver(f.name, fieldName))
+          if (actualField.length == 0) {
+            sys.error(
+              s"No such struct field $fieldName in ${fields.map(_.name).mkString(", ")}")
+          } else if (actualField.length == 1) {
+            val field = actualField(0)
+            GetField(expr, field, fields.indexOf(field))
+          } else {
+            sys.error(s"Ambiguous reference to fields ${actualField.mkString(", ")}")
+          }
+        case otherType => sys.error(s"GetField is not valid on fields of type $otherType")
+      }
+    }
   }
 
   /**
