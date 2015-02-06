@@ -1469,6 +1469,17 @@ class SQLContext(object):
         df = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), schema.json())
         return DataFrame(df, self)
 
+    def applyNames(self, nameString, plainRdd):
+        """
+        """
+        fieldNames = [f for f in re.split("( |\\\".*?\\\"|'.*?')", nameString) if f.strip()]
+        sampleRow = plainRdd.first()
+        sampledTypes = map(_infer_type, sampleRow)
+        fields= [StructField(k,v,True) for k, v in zip(fieldNames, sampledTypes)]
+        sampledSchema = StructType(fields)
+        return self.applySchema(plainRdd, sampledSchema)
+
+
     def registerRDDAsTable(self, rdd, tableName):
         """Registers the given RDD as a temporary table in the catalog.
 
