@@ -96,7 +96,7 @@ class SQLConfSuite extends QueryTest with FunSuiteLike {
     val applyNames1 = newContext.applyNames("a b c d", rdd1)
     assert(applyNames1.isInstanceOf[DataFrame])
     applyNames1.registerTempTable("applyNames1")
-    
+
     checkAnswer(
       newContext.sql("SELECT * FROM applyNames1"),
       Row(1, "A1", true, 0) ::
@@ -112,10 +112,10 @@ class SQLConfSuite extends QueryTest with FunSuiteLike {
         val v5 = try values(3).toInt catch {
           case _: NumberFormatException => 0
         }
-        Seq(values(0).toInt, values(1), values(2).toBoolean, Map("k" -> values(0).toInt), Map(values(1) -> values(0).toInt))
+        Seq(values(0).toInt, values(1), values(2).toBoolean, Map("k" -> values(0).toInt), Map(values(1) -> values(0).toInt), r.split(",").toList)
       }
 
-      val applyNames2 = newContext.applyNames("a b c d e", rdd2)
+      val applyNames2 = newContext.applyNames("a b c d e f", rdd2)
       assert(applyNames2.isInstanceOf[DataFrame])
       applyNames2.registerTempTable("applyNames2")
       checkAnswer(newContext.sql("SELECT d['k'] FROM applyNames2"),
@@ -128,6 +128,11 @@ class SQLConfSuite extends QueryTest with FunSuiteLike {
       Row(null) ::
       Row(null) ::
       Row(null) :: Nil)
+      checkAnswer(newContext.sql("SELECT f[0] FROM applyNames2"),
+      Row("1") ::
+      Row("2") ::
+      Row("3") ::
+      Row("4") :: Nil)
 
   }
 }

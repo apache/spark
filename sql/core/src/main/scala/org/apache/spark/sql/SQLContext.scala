@@ -636,7 +636,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   def applyNames(nameString : String, plainRdd : RDD[_]) : DataFrame = {
     // assume a space separated string to begin with
-    val names = nameString.split(" ").toSeq
+    val names = nameString.split(" ,(?=([^\"]*\"[^\"]*\")*[^\"]*$)").toSeq
 
     val reservedWords = Set("ABS","ALL","AND", "APPROXIMATE", "AS", "ASC", "AVG", "BETWEEN", "BY",
       "CACHE", "CASE", "CAST", "COALESCE", "COUNT", "DATE", "DECIMAL", "DESC", "DISTINCT",
@@ -674,6 +674,17 @@ class SQLContext(@transient val sparkContext: SparkContext)
           var v = col.head._2
           MapType(columnType(k),columnType(v), true)
         }
+
+        case col: Array[Any] => {
+          var e = col.head
+          ArrayType(columnType(e), true)
+        }
+
+        case col: List[Any] => {
+          var e = col.head
+          ArrayType(columnType(e), true)
+        }
+
         case null => NullType
         case _: Any => NullType
       }
