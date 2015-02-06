@@ -202,6 +202,9 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("having no references",
     "SELECT key FROM src GROUP BY key HAVING COUNT(*) > 1")
 
+  createQueryTest("no from clause",
+    "SELECT 1, +1, -1")
+
   createQueryTest("boolean = number",
     """
       |SELECT
