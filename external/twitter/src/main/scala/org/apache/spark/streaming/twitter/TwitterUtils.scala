@@ -43,6 +43,19 @@ object TwitterUtils {
     ): ReceiverInputDStream[Status] = {
     new TwitterInputDStream(ssc, twitterAuth, filters, storageLevel)
   }
+ 
+  /**
+   * Set location filter for a input stream.
+   * @param locations Set of longitude, latitude pairs to get only those tweets
+   *        that falling within the requested bounding boxes
+   * @param storageLevel Storage level to use for storing the received objects
+   */
+  def setLocations(
+      stream: ReceiverInputDStream[Status],
+      locations: Seq[(Double, Double)]
+    ): ReceiverInputDStream[Status] = {
+    stream.asInstanceOf[TwitterInputDStream].setLocations(locations)
+  }
 
   /**
    * Create a input stream that returns tweets received from Twitter using Twitter4J's default
@@ -127,5 +140,21 @@ object TwitterUtils {
       storageLevel: StorageLevel
     ): JavaReceiverInputDStream[Status] = {
     createStream(jssc.ssc, Some(twitterAuth), filters, storageLevel)
+  }
+ 
+  /**
+   * Set location filter for a input stream.
+   * @param locations Set of longitude, latitude pairs to get only those tweets
+   *        that falling within the requested bounding boxes
+   * @param storageLevel Storage level to use for storing the received objects
+   */
+  def setLocations(
+      jstream: JavaReceiverInputDStream[Status],
+      locations: Array[Array[Double]]
+    ): JavaReceiverInputDStream[Status] = {
+    val locationTuples = locations.collect{ case Array(x: Double, y: Double, _*) =>
+      (x, y)
+    }
+    jstream.receiverInputDStream.asInstanceOf[TwitterInputDStream].setLocations(locationTuples)
   }
 }
