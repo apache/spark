@@ -268,7 +268,7 @@ public class GaussianMixtureExample {
 
 <div data-lang="python" markdown="1">
 In the following example after loading and parsing data, we use a
-[GaussianMixture](api/python/pyspark.mllib.clustering.GaussianMixture-class.html) 
+[GaussianMixture](api/python/pyspark.mllib.html#pyspark.mllib.clustering.GaussianMixture)
 object to cluster the data into two clusters. The number of desired clusters is passed 
 to the algorithm. We then output the parameters of the mixture model.
 
