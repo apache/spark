@@ -213,14 +213,18 @@ private[yarn] class YarnAllocator(
         amClient.addContainerRequest(request)
         val nodes = request.getNodes
         val hostStr = if (nodes == null || nodes.isEmpty) "Any" else nodes.last
-        logInfo("Container request (host: %s, capability: %s)".format(hostStr, resource))
+        logInfo(s"Container request (host: $hostStr, capability: $resource)")
       }
     } else if (missing < 0) {
       val numToCancel = math.min(numPendingAllocate, -missing)
-      logInfo(s"Canceling requests for ${numToCancel} executor containers")
+      logInfo(s"Canceling requests for $numToCancel executor containers")
 
       val matchingRequests = amClient.getMatchingRequests(RM_REQUEST_PRIORITY, ANY_HOST, resource)
-      matchingRequests.head.take(numToCancel).foreach(amClient.removeContainerRequest(_))
+      if (!matchingRequests.isEmpty) {
+        matchingRequests.head.take(numToCancel).foreach(amClient.removeContainerRequest)
+      } else {
+        logWarning("Expected to find pending requests, but found none.")
+      }
     }
   }
 
