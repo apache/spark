@@ -74,7 +74,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
       expireDeadHosts()
   }
   
-  private def heartbeatReceived(executorId: String) = {
+  private def heartbeatReceived(executorId: String): Unit = {
     executorLastSeen(executorId) = System.currentTimeMillis()
   }
   
