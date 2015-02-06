@@ -17,7 +17,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.orm import relationship
 
-from airflow.executors import DEFAULT_EXECUTOR
+from airflow.executors import DEFAULT_EXECUTOR, LocalExecutor
 from airflow.configuration import conf
 from airflow import settings
 from airflow import utils
@@ -1326,14 +1326,19 @@ class DAG(Base):
 
     def run(
             self, start_date=None, end_date=None, mark_success=False,
-            include_adhoc=False):
+            include_adhoc=False, local=False):
         from airflow.jobs import BackfillJob
+        if local:
+            executor = LocalExecutor()
+        else:
+            executor = DEFAULT_EXECUTOR
         job = BackfillJob(
             self,
             start_date=start_date,
             end_date=end_date,
             mark_success=mark_success,
-            include_adhoc=include_adhoc)
+            include_adhoc=include_adhoc,
+            executor=executor)
         job.run()
 
 
