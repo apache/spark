@@ -420,7 +420,7 @@ private[clustering] object LDA {
   }
 
   // todo: add reference to paper and Hoffman
-  class OnlineLDAOptimizer(
+  private[clustering] class OnlineLDAOptimizer(
     val documents: RDD[(Long, Vector)],
     val k: Int,
     val vocabSize: Int) extends Serializable{
@@ -463,12 +463,12 @@ private[clustering] object LDA {
         case v => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
       }
 
-      var gammad = new Gamma(100, 1.0 / 100.0).samplesVector(k).t                         // 1 * K
-      var Elogthetad = vector_dirichlet_expectation(gammad.t).t // 1 * K
-      var expElogthetad = exp(Elogthetad.t).t                   // 1 * K
-      val expElogbetad = _expElogbeta(::, ids).toDenseMatrix    // K * ids
+      var gammad = new Gamma(100, 1.0 / 100.0).samplesVector(k).t // 1 * K
+      var Elogthetad = vector_dirichlet_expectation(gammad.t).t   // 1 * K
+      var expElogthetad = exp(Elogthetad.t).t                     // 1 * K
+      val expElogbetad = _expElogbeta(::, ids).toDenseMatrix      // K * ids
 
-      var phinorm = expElogthetad * expElogbetad + 1e-100       // 1 * ids
+      var phinorm = expElogthetad * expElogbetad + 1e-100         // 1 * ids
       var meanchange = 1D
       val ctsVector = new BDV[Double](cts).t    // 1 * ids
 
