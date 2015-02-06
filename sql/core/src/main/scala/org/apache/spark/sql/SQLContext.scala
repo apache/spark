@@ -630,12 +630,13 @@ class SQLContext(@transient val sparkContext: SparkContext)
     DataFrame(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
   }
 
+
   /**
    * Builds a DataFrame from an RDD based on column names.
-   * Assumes RDD is contains iterables of equal length.
+   * Assumes RDD contains iterables of equal length.
    */
   def applyNames(nameString : String, plainRdd : RDD[_]) : DataFrame = {
-    // assume a space separated string to begin with
+    // assume a space separated string
     val names = nameString.split(" ,(?=([^\"]*\"[^\"]*\")*[^\"]*$)").toSeq
 
     val reservedWords = Set("ABS","ALL","AND", "APPROXIMATE", "AS", "ASC", "AVG", "BETWEEN", "BY",
