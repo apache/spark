@@ -51,9 +51,11 @@ private[classification] trait ProbabilisticClassifierParams
  * @tparam FeaturesType  Type of input features.  E.g., [[Vector]]
  * @tparam Learner  Concrete Estimator type
  * @tparam M  Concrete Model type
+ *
+ * NOTE: This is currently private[spark] but will be made public later once it is stabilized.
  */
 @AlphaComponent
-abstract class ProbabilisticClassifier[
+private[spark] abstract class ProbabilisticClassifier[
     FeaturesType,
     Learner <: ProbabilisticClassifier[FeaturesType, Learner, M],
     M <: ProbabilisticClassificationModel[FeaturesType, M]]
@@ -71,9 +73,11 @@ abstract class ProbabilisticClassifier[
  *
  * @tparam FeaturesType  Type of input features.  E.g., [[Vector]]
  * @tparam M  Concrete Model type
+ *
+ * NOTE: This is currently private[spark] but will be made public later once it is stabilized.
  */
 @AlphaComponent
-abstract class ProbabilisticClassificationModel[
+private[spark] abstract class ProbabilisticClassificationModel[
     FeaturesType,
     M <: ProbabilisticClassificationModel[FeaturesType, M]]
   extends ClassificationModel[FeaturesType, M] with ProbabilisticClassifierParams {

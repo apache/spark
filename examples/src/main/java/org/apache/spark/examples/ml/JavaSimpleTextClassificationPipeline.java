@@ -88,5 +88,7 @@ public class JavaSimpleTextClassificationPipeline {
       System.out.println("(" + r.get(0) + ", " + r.get(1) + ") --> prob=" + r.get(2)
           + ", prediction=" + r.get(3));
     }
+
+    jsc.stop();
   }
 }

@@ -29,9 +29,11 @@ import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 /**
  * :: DeveloperApi ::
  * Params for classification.
+ *
+ * NOTE: This is currently private[spark] but will be made public later once it is stabilized.
  */
 @DeveloperApi
-trait ClassifierParams extends PredictorParams
+private[spark] trait ClassifierParams extends PredictorParams
   with HasRawPredictionCol {
 
   override protected def validateAndTransformSchema(
@@ -53,9 +55,11 @@ trait ClassifierParams extends PredictorParams
  * @tparam FeaturesType  Type of input features.  E.g., [[Vector]]
  * @tparam Learner  Concrete Estimator type
  * @tparam M  Concrete Model type
+ *
+ * NOTE: This is currently private[spark] but will be made public later once it is stabilized.
  */
 @AlphaComponent
-abstract class Classifier[
+private[spark] abstract class Classifier[
     FeaturesType,
     Learner <: Classifier[FeaturesType, Learner, M],
     M <: ClassificationModel[FeaturesType, M]]
@@ -75,8 +79,11 @@ abstract class Classifier[
  *
  * @tparam FeaturesType  Type of input features.  E.g., [[Vector]]
  * @tparam M  Concrete Model type
+ *
+ * NOTE: This is currently private[spark] but will be made public later once it is stabilized.
  */
 @AlphaComponent
+private[spark]
 abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[FeaturesType, M]]
   extends PredictionModel[FeaturesType, M] with ClassifierParams {
 
@@ -161,7 +168,7 @@ private[ml] object ClassificationModel {
    *             should already be done.
    * @return (number of columns added, transformed dataset)
    */
-  private[ml] def transformColumnsImpl[FeaturesType](
+  def transformColumnsImpl[FeaturesType](
       dataset: DataFrame,
       model: ClassificationModel[FeaturesType, _],
       map: ParamMap): (Int, DataFrame) = {

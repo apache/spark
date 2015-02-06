@@ -67,36 +67,46 @@ class Param[T] (
 // specialize primitive-typed params because Java doesn't recognize scala.Double, scala.Int, ...
 
 /** Specialized version of [[Param[Double]]] for Java. */
-class DoubleParam(parent: Params, name: String, doc: String, defaultValue: Option[Double] = None)
+class DoubleParam(parent: Params, name: String, doc: String, defaultValue: Option[Double])
   extends Param[Double](parent, name, doc, defaultValue) {
+
+  def this(parent: Params, name: String, doc: String) = this(parent, name, doc, None)
 
   override def w(value: Double): ParamPair[Double] = super.w(value)
 }
 
 /** Specialized version of [[Param[Int]]] for Java. */
-class IntParam(parent: Params, name: String, doc: String, defaultValue: Option[Int] = None)
+class IntParam(parent: Params, name: String, doc: String, defaultValue: Option[Int])
   extends Param[Int](parent, name, doc, defaultValue) {
+
+  def this(parent: Params, name: String, doc: String) = this(parent, name, doc, None)
 
   override def w(value: Int): ParamPair[Int] = super.w(value)
 }
 
 /** Specialized version of [[Param[Float]]] for Java. */
-class FloatParam(parent: Params, name: String, doc: String, defaultValue: Option[Float] = None)
+class FloatParam(parent: Params, name: String, doc: String, defaultValue: Option[Float])
   extends Param[Float](parent, name, doc, defaultValue) {
+
+  def this(parent: Params, name: String, doc: String) = this(parent, name, doc, None)
 
   override def w(value: Float): ParamPair[Float] = super.w(value)
 }
 
 /** Specialized version of [[Param[Long]]] for Java. */
-class LongParam(parent: Params, name: String, doc: String, defaultValue: Option[Long] = None)
+class LongParam(parent: Params, name: String, doc: String, defaultValue: Option[Long])
   extends Param[Long](parent, name, doc, defaultValue) {
+
+  def this(parent: Params, name: String, doc: String) = this(parent, name, doc, None)
 
   override def w(value: Long): ParamPair[Long] = super.w(value)
 }
 
 /** Specialized version of [[Param[Boolean]]] for Java. */
-class BooleanParam(parent: Params, name: String, doc: String, defaultValue: Option[Boolean] = None)
+class BooleanParam(parent: Params, name: String, doc: String, defaultValue: Option[Boolean])
   extends Param[Boolean](parent, name, doc, defaultValue) {
+
+  def this(parent: Params, name: String, doc: String) = this(parent, name, doc, None)
 
   override def w(value: Boolean): ParamPair[Boolean] = super.w(value)
 }

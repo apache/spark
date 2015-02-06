@@ -20,8 +20,10 @@ package org.apache.spark.ml.classification
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
-import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
+import org.apache.spark.mllib.linalg.{VectorUDT, BLAS, Vector, Vectors}
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.Dsl._
+import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.storage.StorageLevel
 
 
@@ -102,6 +104,74 @@ class LogisticRegressionModel private[ml] (
     1.0 / (1.0 + math.exp(-m))
   }
 
+  override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
+    // This is overridden (a) to be more efficient (avoiding re-computing values when creating
+    // multiple output columns) and (b) to handle threshold, which the abstractions do not use.
+    // TODO: We should abstract away the steps defined by UDFs below so that the abstractions
+    // can call whichever UDFs are needed to create the output columns.
+
+    // Check schema
+    transformSchema(dataset.schema, paramMap, logging = true)
+
+    val map = this.paramMap ++ paramMap
+
+    // Output selected columns only.
+    // This is a bit complicated since it tries to avoid repeated computation.
+    //   rawPrediction (-margin, margin)
+    //   probability (1.0-score, score)
+    //   prediction (max margin)
+    var tmpData = dataset
+    var numColsOutput = 0
+    if (map(rawPredictionCol) != "") {
+      val features2raw: Vector => Vector = (features) => predictRaw(features)
+      tmpData = tmpData.select($"*",
+        callUDF(features2raw, new VectorUDT, col(map(featuresCol))).as(map(rawPredictionCol)))
+      numColsOutput += 1
+    }
+    if (map(probabilityCol) != "") {
+      if (map(rawPredictionCol) != "") {
+        val raw2prob: Vector => Vector = { (rawPreds: Vector) =>
+          val prob1 = 1.0 / (1.0 + math.exp(-rawPreds(1)))
+          Vectors.dense(1.0 - prob1, prob1)
+        }
+        tmpData = tmpData.select($"*",
+          callUDF(raw2prob, new VectorUDT, col(map(rawPredictionCol))).as(map(probabilityCol)))
+      } else {
+        val features2prob: Vector => Vector = (features: Vector) => predictProbabilities(features)
+        tmpData = tmpData.select($"*",
+          callUDF(features2prob, new VectorUDT, col(map(featuresCol))).as(map(probabilityCol)))
+      }
+      numColsOutput += 1
+    }
+    if (map(predictionCol) != "") {
+      val t = map(threshold)
+      if (map(probabilityCol) != "") {
+        val predict: Vector => Double = { probs: Vector =>
+          if (probs(1) > t) 1.0 else 0.0
+        }
+        tmpData = tmpData.select($"*",
+          callUDF(predict, DoubleType, col(map(probabilityCol))).as(map(predictionCol)))
+      } else if (map(rawPredictionCol) != "") {
+        val predict: Vector => Double = { rawPreds: Vector =>
+          val prob1 = 1.0 / (1.0 + math.exp(-rawPreds(1)))
+          if (prob1 > t) 1.0 else 0.0
+        }
+        tmpData = tmpData.select($"*",
+          callUDF(predict, DoubleType, col(map(rawPredictionCol))).as(map(predictionCol)))
+      } else {
+        val predict: Vector => Double = (features: Vector) => this.predict(features)
+        tmpData = tmpData.select($"*",
+          callUDF(predict, DoubleType, col(map(featuresCol))).as(map(predictionCol)))
+      }
+      numColsOutput += 1
+    }
+    if (numColsOutput == 0) {
+      this.logWarning(s"$uid: LogisticRegressionModel.transform() was called as NOOP" +
+        " since no output columns were set.")
+    }
+    tmpData
+  }
+
   override val numClasses: Int = 2
 
   /**
@@ -109,6 +179,7 @@ class LogisticRegressionModel private[ml] (
    * The behavior of this can be adjusted using [[threshold]].
    */
   override protected def predict(features: Vector): Double = {
+    println(s"LR.predict with threshold: ${paramMap(threshold)}")
     if (score(features) > paramMap(threshold)) 1 else 0
   }
 

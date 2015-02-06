@@ -32,9 +32,11 @@ import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
  * :: DeveloperApi ::
  *
  * Trait for parameters for prediction (regression and classification).
+ *
+ * NOTE: This is currently private[spark] but will be made public later once it is stabilized.
  */
 @DeveloperApi
-trait PredictorParams extends Params
+private[spark] trait PredictorParams extends Params
   with HasLabelCol with HasFeaturesCol with HasPredictionCol {
 
   /**
@@ -73,6 +75,8 @@ trait PredictorParams extends Params
  *                  parameter to specify the concrete type.
  * @tparam M  Specialization of [[PredictionModel]].  If you subclass this type, use this type
  *            parameter to specify the concrete type for the corresponding model.
+ *
+ * NOTE: This is currently private[spark] but will be made public later once it is stabilized.
  */
 @AlphaComponent
 abstract class Predictor[
@@ -149,9 +153,11 @@ abstract class Predictor[
  *                       E.g., [[org.apache.spark.mllib.linalg.VectorUDT]] for vector features.
  * @tparam M  Specialization of [[PredictionModel]].  If you subclass this type, use this type
  *            parameter to specify the concrete type for the corresponding model.
+ *
+ * NOTE: This is currently private[spark] but will be made public later once it is stabilized.
  */
 @AlphaComponent
-abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, M]]
+private[spark] abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, M]]
   extends Model[M] with PredictorParams {
 
   def setFeaturesCol(value: String): M = set(featuresCol, value).asInstanceOf[M]
