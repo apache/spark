@@ -19,7 +19,12 @@ package org.apache.spark.ui.jobs
 
 import javax.servlet.http.HttpServletRequest
 
+import org.apache.spark.util.JsonProtocol
+
 import scala.xml.Node
+
+import org.json4s.JValue
+import org.json4s.JsonDSL._
 
 import org.apache.spark.scheduler.{Schedulable, StageInfo}
 import org.apache.spark.ui.{WebUIPage, UIUtils}
@@ -28,6 +33,34 @@ import org.apache.spark.ui.{WebUIPage, UIUtils}
 private[ui] class PoolPage(parent: StagesTab) extends WebUIPage("pool") {
   private val sc = parent.sc
   private val listener = parent.listener
+
+  override def renderJson(request: HttpServletRequest): JValue = {
+    listener.synchronized {
+      val poolName = request.getParameter("poolname")
+      val poolToActiveStages = listener.poolToActiveStages
+      val activeStages = poolToActiveStages.get(poolName) match {
+        case Some(s) => s.values.map {
+          case info: StageInfo =>
+            JsonProtocol.stageInfoToJson(info)
+        }
+        case None => Seq[JValue]()
+      }
+
+      val pools:Option[Schedulable] = sc.flatMap{_.getPoolForName(poolName)}
+
+      val poolListJson =
+        pools.map { schedulable =>
+          ("Pool Name" -> schedulable.name) ~
+          ("Minimum Share" -> schedulable.minShare) ~
+          ("Pool Weight" -> schedulable.weight) ~
+          ("Active Stages" -> activeStages) ~
+          ("Running Tasks" -> schedulable.runningTasks) ~
+          ("Scheduling Mode" -> schedulable.schedulingMode.toString)
+        }
+
+      poolListJson
+    }
+  }
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {

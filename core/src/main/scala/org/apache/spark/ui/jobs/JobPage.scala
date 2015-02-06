@@ -17,6 +17,10 @@
 
 package org.apache.spark.ui.jobs
 
+import org.apache.spark.util.JsonProtocol
+import org.json4s.{JNothing, JValue}
+import org.json4s.JsonDSL._
+
 import scala.collection.mutable
 import scala.xml.{NodeSeq, Node}
 

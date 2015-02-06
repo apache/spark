@@ -19,6 +19,9 @@ package org.apache.spark.deploy.history
 
 import javax.servlet.http.HttpServletRequest
 
+import org.json4s.JValue
+import org.json4s.JsonDSL._
+
 import scala.xml.Node
 
 import org.apache.spark.ui.{WebUIPage, UIUtils}
@@ -34,7 +37,7 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
     val requestedIncomplete =
       Option(request.getParameter("showIncomplete")).getOrElse("false").toBoolean
 
-    val allApps = parent.getApplicationList().filter(_.completed != requestedIncomplete)
+    val allApps = parent.getApplicationList(true).filter(_.completed != requestedIncomplete)
     val actualFirst = if (requestedFirst < allApps.size) requestedFirst else 0
     val apps = allApps.slice(actualFirst, Math.min(actualFirst + pageSize, allApps.size))
 
@@ -67,7 +70,7 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
 
               <h4>
                 Showing {actualFirst + 1}-{last + 1} of {allApps.size}
-                {if (requestedIncomplete) "(Incomplete applications)"}
+                ({if (requestedIncomplete) "Incomplete" else "Complete"}  applications)
                 <span style="float: right">
                   {
                     if (actualPage > 1) {
@@ -90,7 +93,7 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
               </h4> ++
               appTable
             } else {
-              <h4>No completed applications found!</h4> ++
+              <h4>No {if (requestedIncomplete) "running" else "completed"} applications found!</h4> ++
               <p>Did you specify the correct logging directory?
                 Please verify your setting of <span style="font-style:italic">
                 spark.history.fs.logDirectory</span> and whether you have the permissions to

@@ -17,6 +17,8 @@
 
 package org.apache.spark.ui
 
+import org.apache.spark.status.{JsonRequestHandler, UIRoot}
+import org.apache.spark.status.api.ApplicationInfo
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.StorageStatusListener
@@ -41,14 +43,17 @@ private[spark] class SparkUI private (
     var appName: String,
     val basePath: String)
   extends WebUI(securityManager, SparkUI.getUIPort(conf), conf, basePath, "SparkUI")
-  with Logging {
+  with Logging
+  with UIRoot {
 
   val killEnabled = sc.map(_.conf.getBoolean("spark.ui.killEnabled", true)).getOrElse(false)
+
+
+  val stagesTab = new StagesTab(this)
 
   /** Initialize all components of the server. */
   def initialize() {
     attachTab(new JobsTab(this))
-    val stagesTab = new StagesTab(this)
     attachTab(stagesTab)
     attachTab(new StorageTab(this))
     attachTab(new EnvironmentTab(this))
@@ -57,6 +62,11 @@ private[spark] class SparkUI private (
     attachHandler(createRedirectHandler("/", "/jobs", basePath = basePath))
     attachHandler(
       createRedirectHandler("/stages/stage/kill", "/stages", stagesTab.handleKillRequest))
+
+    val jsonHandler = new JsonRequestHandler(this, securityManager)
+    attachHandler(jsonHandler.jsonContextHandler)
+
+
   }
   initialize()
 
@@ -79,6 +89,22 @@ private[spark] class SparkUI private (
   private[spark] def appUIHostPort = publicHostName + ":" + boundPort
 
   private[spark] def appUIAddress = s"http://$appUIHostPort"
+
+  def getSparkUI(appId: String): Option[SparkUI] = {
+    if (appId == appName) Some(this) else None
+  }
+
+  def getApplicationInfoList: Seq[ApplicationInfo] = {
+    Seq(ApplicationInfo(
+      id = appName,
+      name = appName,
+      //TODO
+      startTime = -1,
+      endTime = -1,
+      sparkUser = "",
+      completed = false
+    ))
+  }
 }
 
 private[spark] abstract class SparkUITab(parent: SparkUI, prefix: String)

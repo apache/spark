@@ -122,7 +122,10 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     }
   }
 
-  override def getListing() = applications.values
+  override def getListing(refresh: Boolean) = {
+    if (refresh) checkForLogs()
+    applications.values
+  }
 
   override def getAppUI(appId: String): Option[SparkUI] = {
     try {

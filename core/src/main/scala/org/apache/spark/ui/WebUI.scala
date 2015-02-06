@@ -66,8 +66,6 @@ private[spark] abstract class WebUI(
     val pagePath = "/" + page.prefix
     attachHandler(createServletHandler(pagePath,
       (request: HttpServletRequest) => page.render(request), securityManager, basePath))
-    attachHandler(createServletHandler(pagePath.stripSuffix("/") + "/json",
-      (request: HttpServletRequest) => page.renderJson(request), securityManager, basePath))
   }
 
   /** Attach a handler to this UI. */
@@ -151,5 +149,6 @@ private[spark] abstract class WebUITab(parent: WebUI, val prefix: String) {
  */
 private[spark] abstract class WebUIPage(var prefix: String) {
   def render(request: HttpServletRequest): Seq[Node]
+  //TODO delete this once I implement the remaining pages at other endpoints for the json
   def renderJson(request: HttpServletRequest): JValue = JNothing
 }

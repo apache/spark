@@ -21,6 +21,9 @@ import java.util.NoSuchElementException
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import com.google.common.cache._
+import org.apache.spark.deploy.master.ui.MasterApplicationJsonRoute
+import org.apache.spark.status.api.ApplicationInfo
+import org.apache.spark.status.{UIRoot, JsonRequestHandler}
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
@@ -45,7 +48,7 @@ class HistoryServer(
     provider: ApplicationHistoryProvider,
     securityManager: SecurityManager,
     port: Int)
-  extends WebUI(securityManager, port, conf) with Logging {
+  extends WebUI(securityManager, port, conf) with Logging with UIRoot {
 
   // How many applications to retain
   private val retainedApplications = conf.getInt("spark.history.retainedApplications", 50)
@@ -71,6 +74,7 @@ class HistoryServer(
     protected override def doGet(req: HttpServletRequest, res: HttpServletResponse): Unit = {
       val parts = Option(req.getPathInfo()).getOrElse("").split("/")
       if (parts.length < 2) {
+        logError("bad path info!")
         res.sendError(HttpServletResponse.SC_BAD_REQUEST,
           s"Unexpected path info in request (URI = ${req.getRequestURI()}")
         return
@@ -98,6 +102,10 @@ class HistoryServer(
     }
   }
 
+  def getSparkUI(appKey: String): Option[SparkUI] = {
+    Option(appCache.get(appKey))
+  }
+
   initialize()
 
   /**
@@ -107,7 +115,13 @@ class HistoryServer(
    * this UI with the event logs in the provided base directory.
    */
   def initialize() {
+    //earlier handlers take precedence
     attachPage(new HistoryPage(this))
+
+    val jsonHandler = new JsonRequestHandler(this, securityManager)
+    attachHandler(jsonHandler.jsonContextHandler)
+
+
     attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
 
     val contextHandler = new ServletContextHandler
@@ -145,7 +159,11 @@ class HistoryServer(
    *
    * @return List of all known applications.
    */
-  def getApplicationList() = provider.getListing()
+  def getApplicationList(refresh: Boolean) = provider.getListing(refresh)
+
+  def getApplicationInfoList: Seq[ApplicationInfo] = {
+    getApplicationList(true).map{AllApplicationsJsonRoute.appHistoryInfoToPublicAppInfo}.toSeq
+  }
 
   /**
    * Returns the provider configuration to show in the listing page.

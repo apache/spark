@@ -22,6 +22,7 @@ import org.json4s.JsonDSL._
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
 import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo}
 import org.apache.spark.deploy.worker.ExecutorRunner
+import org.json4s._
 
 private[spark] object JsonProtocol {
  def writeWorkerInfo(obj: WorkerInfo) = {
@@ -98,4 +99,5 @@ private[spark] object JsonProtocol {
     ("executors" -> obj.executors.toList.map(writeExecutorRunner)) ~
     ("finishedexecutors" -> obj.finishedExecutors.toList.map(writeExecutorRunner))
   }
+
 }
