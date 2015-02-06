@@ -669,7 +669,8 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
         opts=opts,
         command="rm -rf spark-ec2"
         + " && "
-        + "git clone {r} -b {b}".format(r=opts.spark_ec2_git_repo, b=opts.spark_ec2_git_branch)
+        + "git clone {r} -b {b} spark-ec2".format(r=opts.spark_ec2_git_repo,
+                                                  b=opts.spark_ec2_git_branch)
     )
 
     print "Deploying files to master..."
@@ -1041,12 +1042,9 @@ def real_main():
         print >> stderr, "ebs-vol-num cannot be greater than 8"
         sys.exit(1)
 
-    # Limit naming to avoid breaking things, as we rely on the repo
-    # being spark-ec2 in a few places.
-    # Also note that e.g. */spark-ec2/ and */spark-ec2.git are not allowed, as
-    # they would break the ami_prefix
-    if not opts.spark_ec2_git_repo.endswith("/spark-ec2"):
-        print >> stderr, "spark-ec2-git-repo must end with /spark-ec2"
+    # Prevent breaking ami_prefix
+    if opts.spark_ec2_git_repo.endswith("/") or opts.spark_ec2_git_repo.endswith(".git"):
+        print >> stderr, "spark-ec2-git-repo must not have a training / or .git"
         sys.exit(1)
 
     try:
