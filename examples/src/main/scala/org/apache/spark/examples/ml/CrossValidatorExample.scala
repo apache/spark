@@ -23,6 +23,7 @@ import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
 import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
 import org.apache.spark.ml.tuning.{ParamGridBuilder, CrossValidator}
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.sql.{Row, SQLContext}
 
 /**
@@ -100,10 +101,10 @@ object CrossValidatorExample {
 
     // Make predictions on test documents. cvModel uses the best model found (lrModel).
     cvModel.transform(test)
-      .select("id", "text", "score", "prediction")
+      .select("id", "text", "probability", "prediction")
       .collect()
-      .foreach { case Row(id: Long, text: String, score: Double, prediction: Double) =>
-      println("(" + id + ", " + text + ") --> score=" + score + ", prediction=" + prediction)
+      .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
+      println(s"($id, $text) --> prob=$prob, prediction=$prediction")
     }
 
     sc.stop()

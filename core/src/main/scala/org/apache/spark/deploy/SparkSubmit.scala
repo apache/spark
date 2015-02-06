@@ -18,17 +18,16 @@
 package org.apache.spark.deploy
 
 import java.io.{File, PrintStream}
-import java.lang.reflect.{Modifier, InvocationTargetException}
+import java.lang.reflect.{InvocationTargetException, Modifier}
 import java.net.URL
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
 import org.apache.hadoop.fs.Path
-
 import org.apache.ivy.Ivy
 import org.apache.ivy.core.LogOptions
-import org.apache.ivy.core.module.descriptor.{DefaultExcludeRule, DefaultDependencyDescriptor, DefaultModuleDescriptor}
-import org.apache.ivy.core.module.id.{ModuleId, ArtifactId, ModuleRevisionId}
+import org.apache.ivy.core.module.descriptor._
+import org.apache.ivy.core.module.id.{ArtifactId, ModuleId, ModuleRevisionId}
 import org.apache.ivy.core.report.ResolveReport
 import org.apache.ivy.core.resolve.ResolveOptions
 import org.apache.ivy.core.retrieve.RetrieveOptions
@@ -37,7 +36,7 @@ import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.resolver.{ChainResolver, IBiblioResolver}
 
 import org.apache.spark.deploy.rest._
-import org.apache.spark.executor.ExecutorURLClassLoader
+import org.apache.spark.executor._
 import org.apache.spark.util.Utils
 
 /**
@@ -467,8 +466,14 @@ object SparkSubmit {
       printStream.println("\n")
     }
 
-    val loader = new ExecutorURLClassLoader(new Array[URL](0),
-      Thread.currentThread.getContextClassLoader)
+    val loader =
+      if (sysProps.getOrElse("spark.files.userClassPathFirst", "false").toBoolean) {
+        new ChildExecutorURLClassLoader(new Array[URL](0),
+          Thread.currentThread.getContextClassLoader)
+      } else {
+        new ExecutorURLClassLoader(new Array[URL](0),
+          Thread.currentThread.getContextClassLoader)
+      }
     Thread.currentThread.setContextClassLoader(loader)
 
     for (jar <- childClasspath) {
@@ -512,7 +517,7 @@ object SparkSubmit {
     }
   }
 
-  private def addJarToClasspath(localJar: String, loader: ExecutorURLClassLoader) {
+  private def addJarToClasspath(localJar: String, loader: MutableURLClassLoader) {
     val uri = Utils.resolveURI(localJar)
     uri.getScheme match {
       case "file" | "local" =>

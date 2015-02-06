@@ -383,7 +383,8 @@ private[spark] object JsonProtocol {
 
   def executorInfoToJson(executorInfo: ExecutorInfo): JValue = {
     ("Host" -> executorInfo.executorHost) ~
-    ("Total Cores" -> executorInfo.totalCores)
+    ("Total Cores" -> executorInfo.totalCores) ~
+    ("Log Urls" -> mapToJson(executorInfo.logUrlMap))
   }
 
   /** ------------------------------ *
@@ -792,7 +793,8 @@ private[spark] object JsonProtocol {
   def executorInfoFromJson(json: JValue): ExecutorInfo = {
     val executorHost = (json \ "Host").extract[String]
     val totalCores = (json \ "Total Cores").extract[Int]
-    new ExecutorInfo(executorHost, totalCores)
+    val logUrls = mapFromJson(json \ "Log Urls").toMap
+    new ExecutorInfo(executorHost, totalCores, logUrls)
   }
 
   /** -------------------------------- *

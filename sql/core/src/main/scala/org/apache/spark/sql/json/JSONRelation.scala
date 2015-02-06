@@ -72,7 +72,6 @@ private[sql] case class JSONRelation(
     userSpecifiedSchema: Option[StructType])(
     @transient val sqlContext: SQLContext)
   extends TableScan with InsertableRelation {
-
   // TODO: Support partitioned JSON relation.
   private def baseRDD = sqlContext.sparkContext.textFile(path)
 
@@ -99,10 +98,21 @@ private[sql] case class JSONRelation(
             s"Unable to clear output directory ${filesystemPath.toString} prior"
               + s" to INSERT OVERWRITE a JSON table:\n${e.toString}")
       }
+      // Write the data.
       data.toJSON.saveAsTextFile(path)
+      // Right now, we assume that the schema is not changed. We will not update the schema.
+      // schema = data.schema
     } else {
       // TODO: Support INSERT INTO
       sys.error("JSON table only support INSERT OVERWRITE for now.")
     }
+  }
+
+  override def hashCode(): Int = 41 * (41 + path.hashCode) + schema.hashCode()
+
+  override def equals(other: Any): Boolean = other match {
+    case that: JSONRelation =>
+      (this.path == that.path) && (this.schema == that.schema)
+    case _ => false
   }
 }
