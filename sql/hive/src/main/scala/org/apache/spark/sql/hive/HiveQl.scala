@@ -68,6 +68,7 @@ private[hive] object HiveQl {
     "TOK_SHOWLOCKS",
     "TOK_UNLOCKTABLE",
 
+    "TOK_SHOW_ROLES",
     "TOK_CREATEROLE",
     "TOK_DROPROLE",
     "TOK_GRANT",
