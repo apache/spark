@@ -569,6 +569,9 @@ def launch_cluster(conn, opts, cluster_name):
         master_nodes = master_res.instances
         print "Launched master in %s, regid = %s" % (zone, master_res.id)
 
+    # This wait time corresponds to SPARK-4983
+    print "Waiting for AWS to propagate instance metadata..."
+    time.sleep(5)
     # Give the instances descriptive names
     for master in master_nodes:
         master.add_tag(
