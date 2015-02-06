@@ -26,6 +26,8 @@ class PartitionBatchPruningSuite extends FunSuite with BeforeAndAfterAll with Be
   val originalColumnBatchSize = conf.columnBatchSize
   val originalInMemoryPartitionPruning = conf.inMemoryPartitionPruning
 
+  import org.apache.spark.sql.test.TestSQLContext.implicits._
+
   override protected def beforeAll(): Unit = {
     // Make a table with 5 partitions, 2 batches per partition, 10 elements per batch
     setConf(SQLConf.COLUMN_BATCH_SIZE, "10")
