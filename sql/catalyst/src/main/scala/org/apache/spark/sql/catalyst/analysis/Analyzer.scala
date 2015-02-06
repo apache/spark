@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.util.collection.OpenHashSet
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -31,11 +32,6 @@ import org.apache.spark.sql.types.IntegerType
  * references.
  */
 object SimpleAnalyzer extends Analyzer(EmptyCatalog, EmptyFunctionRegistry, true)
-
-/**
- * Thrown when a query fails to analyze, usually because the query itself is invalid.
- */
-class AnalysisException(message: String) extends Exception(message) with Serializable
 
 /**
  * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and
