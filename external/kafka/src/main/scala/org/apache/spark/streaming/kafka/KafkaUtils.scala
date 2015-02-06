@@ -171,7 +171,7 @@ object KafkaUtils {
     K: ClassTag,
     V: ClassTag,
     KD <: Decoder[K]: ClassTag,
-    VD <: Decoder[V]: ClassTag] (
+    VD <: Decoder[V]: ClassTag](
       sc: SparkContext,
       kafkaParams: Map[String, String],
       offsetRanges: Array[OffsetRange]
@@ -205,7 +205,7 @@ object KafkaUtils {
     V: ClassTag,
     KD <: Decoder[K]: ClassTag,
     VD <: Decoder[V]: ClassTag,
-    R: ClassTag] (
+    R: ClassTag](
       sc: SparkContext,
       kafkaParams: Map[String, String],
       offsetRanges: Array[OffsetRange],

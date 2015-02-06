@@ -27,7 +27,7 @@ import kafka.serializer.StringDecoder
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.scalatest.concurrent.{Eventually, Timeouts}
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkContext, SparkConf}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Milliseconds, StreamingContext, Time}
 import org.apache.spark.streaming.dstream.{DStream, InputDStream}
@@ -41,7 +41,7 @@ class DirectKafkaStreamSuite extends KafkaStreamSuiteBase
     .setMaster("local[4]")
     .setAppName(this.getClass.getSimpleName)
 
-
+  var sc: SparkContext = _
   var ssc: StreamingContext = _
   var testDir: File = _
 
@@ -56,18 +56,23 @@ class DirectKafkaStreamSuite extends KafkaStreamSuiteBase
   after {
     if (ssc != null) {
       ssc.stop()
+      sc = null
+    }
+    if (sc != null) {
+      sc.stop()
     }
     if (testDir != null) {
       Utils.deleteRecursively(testDir)
     }
   }
 
-  test("basic receiving with multiple topics and smallest starting offset") {
-    val topics = Set("topic1", "topic2", "topic3")
+
+  test("basic stream receiving with multiple topics and smallest starting offset") {
+    val topics = Set("basic1", "basic2", "basic3")
     val data = Map("a" -> 7, "b" -> 9)
     topics.foreach { t =>
       createTopic(t)
-      produceAndSendMessage(t, data)
+      sendMessages(t, data)
     }
     val kafkaParams = Map(
       "metadata.broker.list" -> s"$brokerAddress",
@@ -107,6 +112,7 @@ class DirectKafkaStreamSuite extends KafkaStreamSuiteBase
     }
     ssc.stop()
   }
+
   test("receiving from largest starting offset") {
     val topic = "largest"
     val topicPartition = TopicAndPartition(topic, 0)
@@ -122,7 +128,7 @@ class DirectKafkaStreamSuite extends KafkaStreamSuiteBase
     }
 
     // Send some initial messages before starting context
-    produceAndSendMessage(topic, data)
+    sendMessages(topic, data)
     eventually(timeout(10 seconds), interval(20 milliseconds)) {
       assert(getLatestOffset() > 3)
     }
@@ -144,7 +150,7 @@ class DirectKafkaStreamSuite extends KafkaStreamSuiteBase
     stream.map { _._2 }.foreachRDD { rdd => collectedData ++= rdd.collect() }
     ssc.start()
     val newData = Map("b" -> 10)
-    produceAndSendMessage(topic, newData)
+    sendMessages(topic, newData)
     eventually(timeout(10 seconds), interval(50 milliseconds)) {
       collectedData.contains("b")
     }
@@ -167,7 +173,7 @@ class DirectKafkaStreamSuite extends KafkaStreamSuiteBase
     }
 
     // Send some initial messages before starting context
-    produceAndSendMessage(topic, data)
+    sendMessages(topic, data)
     eventually(timeout(10 seconds), interval(20 milliseconds)) {
       assert(getLatestOffset() >= 10)
     }
@@ -190,7 +196,7 @@ class DirectKafkaStreamSuite extends KafkaStreamSuiteBase
     stream.foreachRDD { rdd => collectedData ++= rdd.collect() }
     ssc.start()
     val newData = Map("b" -> 10)
-    produceAndSendMessage(topic, newData)
+    sendMessages(topic, newData)
     eventually(timeout(10 seconds), interval(50 milliseconds)) {
       collectedData.contains("b")
     }
@@ -211,7 +217,7 @@ class DirectKafkaStreamSuite extends KafkaStreamSuiteBase
     // Send data to Kafka and wait for it to be received
     def sendDataAndWaitForReceive(data: Seq[Int]) {
       val strings = data.map { _.toString}
-      produceAndSendMessage(topic, strings.map { _ -> 1}.toMap)
+      sendMessages(topic, strings.map { _ -> 1}.toMap)
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
         assert(strings.forall { DirectKafkaStreamSuite.collectedData.contains })
       }

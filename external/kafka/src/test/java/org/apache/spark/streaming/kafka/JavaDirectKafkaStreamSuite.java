@@ -21,14 +21,11 @@ import java.io.Serializable;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Random;
-import java.util.List;
-import java.util.ArrayList;
+import java.util.Arrays;
 
 import org.apache.spark.SparkConf;
-import org.apache.spark.streaming.Duration;
-import scala.Predef;
+
 import scala.Tuple2;
-import scala.collection.JavaConverters;
 
 import junit.framework.Assert;
 
@@ -74,12 +71,12 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     String topic1 = "topic1";
     String topic2 = "topic2";
 
-    List<String> topic1data = createTopicAndSendData(topic1);
-    List<String> topic2data = createTopicAndSendData(topic2);
+    String[] topic1data = createTopicAndSendData(topic1);
+    String[] topic2data = createTopicAndSendData(topic2);
 
     HashSet<String> sent = new HashSet<String>();
-    sent.addAll(topic1data);
-    sent.addAll(topic2data);
+    sent.addAll(Arrays.asList(topic1data));
+    sent.addAll(Arrays.asList(topic2data));
 
     HashMap<String, String> kafkaParams = new HashMap<String, String>();
     kafkaParams.put("metadata.broker.list", suiteBase.brokerAddress());
@@ -122,7 +119,7 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
 
     final HashSet<String> result = new HashSet<String>();
     unifiedStream.foreachRDD(
-        new Function<JavaRDD<String>, Void> () {
+        new Function<JavaRDD<String>, Void>() {
           @Override
           public Void call(org.apache.spark.api.java.JavaRDD<String> rdd) throws Exception {
             result.addAll(rdd.collect());
@@ -153,19 +150,10 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     return topicMap;
   }
 
-  private  List<String> createTopicAndSendData(String topic) {
-    List<String> data = java.util.Arrays.asList(topic+"-1", topic+"-2", topic+"-3");
-    HashMap<String, Integer> sent = new HashMap<String, Integer>();
-    for(String i: data) {
-      sent.put(i, 1);
-    }
-
+  private  String[] createTopicAndSendData(String topic) {
+    String[] data = { topic + "-1", topic + "-2", topic + "-3"};
     suiteBase.createTopic(topic);
-
-    HashMap<String, Object> tmp = new HashMap<String, Object>(sent);
-    suiteBase.produceAndSendMessage(topic,
-        JavaConverters.mapAsScalaMapConverter(tmp).asScala().toMap(
-            Predef.<Tuple2<String, Object>>conforms()));
+    suiteBase.sendMessages(topic, data);
     return data;
   }
 }
