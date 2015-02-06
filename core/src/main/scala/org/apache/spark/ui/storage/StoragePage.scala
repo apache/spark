@@ -20,13 +20,9 @@ package org.apache.spark.ui.storage
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
-
-import org.json4s.JValue
-import org.json4s.JsonDSL._
-
 import org.apache.spark.storage.RDDInfo
 import org.apache.spark.ui.{WebUIPage, UIUtils}
-import org.apache.spark.util.{JsonProtocol, Utils}
+import org.apache.spark.util.Utils
 
 /** Page showing list of RDD's currently stored in the cluster */
 private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {

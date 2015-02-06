@@ -17,9 +17,6 @@
 
 package org.apache.spark.ui.jobs
 
-import org.json4s.{JInt, JNothing, JObject, JString, JValue}
-import org.json4s.JsonDSL._
-
 import scala.xml.{Node, NodeSeq}
 
 import javax.servlet.http.HttpServletRequest

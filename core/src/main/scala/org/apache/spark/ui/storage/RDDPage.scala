@@ -19,14 +19,9 @@ package org.apache.spark.ui.storage
 
 import javax.servlet.http.HttpServletRequest
 
-import org.apache.spark.status.api.{RDDPartitionInfo, RDDDataDistribution}
-
 import scala.xml.Node
 
-import org.json4s.{JNothing, JValue}
-import org.json4s.JsonDSL._
-
-import org.apache.spark.storage._
+import org.apache.spark.status.api.{RDDPartitionInfo, RDDDataDistribution}
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 

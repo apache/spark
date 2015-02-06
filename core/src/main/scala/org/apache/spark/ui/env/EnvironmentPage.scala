@@ -19,34 +19,12 @@ package org.apache.spark.ui.env
 
 import javax.servlet.http.HttpServletRequest
 
-import org.json4s.{JObject, JValue}
-import org.json4s.JsonDSL._
-
 import scala.xml.Node
 
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 private[ui] class EnvironmentPage(parent: EnvironmentTab) extends WebUIPage("") {
   private val listener = parent.listener
-
-  override def renderJson(request: HttpServletRequest): JValue = {
-    val jvmInfoJson =
-      ("Runtime Information" -> listener.jvmInformation.foldLeft(JObject())(_ ~ _))
-    val sparkPropertiesJson =
-      ("Spark Properties" -> listener.sparkProperties.foldLeft(JObject())(_ ~ _))
-    val systemPropertiesJson =
-      ("System Properties" -> listener.systemProperties.foldLeft(JObject())(_ ~ _))
-    val classPathEntriesJson =
-      ("Classpath Entries" -> listener.classpathEntries.foldLeft(JObject())(_ ~ _))
-
-    val environmentJson =
-      jvmInfoJson ~
-      sparkPropertiesJson ~
-      systemPropertiesJson ~
-      classPathEntriesJson
-
-    environmentJson
-  }
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val runtimeInformationTable = UIUtils.listingTable(

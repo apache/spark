@@ -19,7 +19,6 @@ package org.apache.spark.util
 
 import java.util.{Properties, UUID}
 
-import org.apache.spark.deploy.history.ApplicationHistoryInfo
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 
 import scala.collection.JavaConverters._

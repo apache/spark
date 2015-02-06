@@ -24,9 +24,6 @@ import org.apache.spark.status.api.ExecutorSummary
 
 import scala.xml.Node
 
-import org.json4s.JValue
-import org.json4s.JsonDSL._
-
 import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
@@ -159,6 +156,7 @@ private[ui] class ExecutorsPage(
 }
 
 private[spark] object ExecutorsPage {
+  /** Represent an executor's info as a map given a storage status index */
   def getExecInfo(listener: ExecutorsListener, statusId: Int): ExecutorSummary = {
     val status = listener.storageStatusList(statusId)
     val execId = status.blockManagerId.executorId

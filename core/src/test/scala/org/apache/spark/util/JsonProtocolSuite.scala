@@ -280,10 +280,6 @@ class JsonProtocolSuite extends FunSuite {
     assertEquals(expectedJobEnd, JsonProtocol.jobEndFromJson(oldEndEvent))
   }
 
-  test("new UI json methods") {
-    pending
-  }
-
   /** -------------------------- *
    | Helper test running methods |
    * --------------------------- */

@@ -19,9 +19,6 @@ package org.apache.spark.deploy.history
 
 import javax.servlet.http.HttpServletRequest
 
-import org.json4s.JValue
-import org.json4s.JsonDSL._
-
 import scala.xml.Node
 
 import org.apache.spark.ui.{WebUIPage, UIUtils}

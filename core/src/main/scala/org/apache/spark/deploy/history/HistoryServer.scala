@@ -115,7 +115,6 @@ class HistoryServer(
    * this UI with the event logs in the provided base directory.
    */
   def initialize() {
-    //earlier handlers take precedence
     attachPage(new HistoryPage(this))
 
     val jsonHandler = new JsonRequestHandler(this, securityManager)
