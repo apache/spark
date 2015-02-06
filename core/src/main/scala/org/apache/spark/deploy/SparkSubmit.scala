@@ -20,7 +20,6 @@ package org.apache.spark.deploy
 import java.io.{File, PrintStream}
 import java.lang.reflect.{Modifier, InvocationTargetException}
 import java.net.URL
-
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
 import org.apache.hadoop.fs.Path
@@ -36,7 +35,6 @@ import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.resolver.{ChainResolver, IBiblioResolver}
 
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
-import org.apache.spark.util.Utils
 
 /**
  * Main gateway of launching a Spark application.

@@ -16,9 +16,12 @@ often used for exploratory analysis and/or as a component of a hierarchical
 supervised learning pipeline (in which distinct classifiers or regression
 models are trained for each cluster). 
 
-MLlib supports
-[k-means](http://en.wikipedia.org/wiki/K-means_clustering) clustering, one of
-the most commonly used clustering algorithms that clusters the data points into
+MLlib supports the following models:
+
+### k-means
+
+[k-means](http://en.wikipedia.org/wiki/K-means_clustering) is one of the
+most commonly used clustering algorithms that clusters the data points into a
 predefined number of clusters. The MLlib implementation includes a parallelized
 variant of the [k-means++](http://en.wikipedia.org/wiki/K-means%2B%2B) method
 called [kmeans||](http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf).
@@ -33,6 +36,20 @@ guaranteed to find a globally optimal solution, and when run multiple times on
 a given dataset, the algorithm returns the best clustering result).
 * *initializationSteps* determines the number of steps in the k-means\|\| algorithm.
 * *epsilon* determines the distance threshold within which we consider k-means to have converged. 
+
+### Gaussian mixture
+
+A [Gaussian Mixture Model](http://en.wikipedia.org/wiki/Mixture_model#Multivariate_Gaussian_mixture_model)
+represents a composite distribution whereby points are drawn from one of *k* Gaussian sub-distributions, 
+each with its own probability.  The MLlib implementation uses the
+[expectation-maximization](http://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm)
+ algorithm to induce the maximum-likelihood model given a set of samples.  The implementation
+has the following parameters:
+
+* *k* is the number of desired clusters.
+* *convergenceTol* is the maximum change in log-likelihood at which we consider convergence achieved.
+* *maxIterations* is the maximum number of iterations to perform without reaching convergence.
+* *initialModel* is an optional starting point from which to start the EM algorithm. If this parameter is omitted, a random starting point will be constructed from the data.
 
 ### Power Iteration Clustering
 
@@ -55,6 +72,8 @@ Example outputs for a dataset inspired by the paper - but with five clusters ins
 </p>
 
 ### Examples
+
+#### k-means
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -163,6 +182,112 @@ def error(point):
 
 WSSSE = parsedData.map(lambda point: error(point)).reduce(lambda x, y: x + y)
 print("Within Set Sum of Squared Error = " + str(WSSSE))
+{% endhighlight %}
+</div>
+
+</div>
+
+#### GaussianMixture
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+In the following example after loading and parsing data, we use a
+[GaussianMixture](api/scala/index.html#org.apache.spark.mllib.clustering.GaussianMixture) 
+object to cluster the data into two clusters. The number of desired clusters is passed 
+to the algorithm. We then output the parameters of the mixture model.
+
+{% highlight scala %}
+import org.apache.spark.mllib.clustering.GaussianMixture
+import org.apache.spark.mllib.linalg.Vectors
+
+// Load and parse the data
+val data = sc.textFile("data/mllib/gmm_data.txt")
+val parsedData = data.map(s => Vectors.dense(s.trim.split(' ').map(_.toDouble))).cache()
+
+// Cluster the data into two classes using GaussianMixture
+val gmm = new GaussianMixture().setK(2).run(parsedData)
+
+// output parameters of max-likelihood model
+for (i <- 0 until gmm.k) {
+  println("weight=%f\nmu=%s\nsigma=\n%s\n" format 
+    (gmm.weights(i), gmm.gaussians(i).mu, gmm.gaussians(i).sigma))
+}
+
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+All of MLlib's methods use Java-friendly types, so you can import and call them there the same
+way you do in Scala. The only caveat is that the methods take Scala RDD objects, while the
+Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a Scala one by
+calling `.rdd()` on your `JavaRDD` object. A self-contained application example
+that is equivalent to the provided example in Scala is given below:
+
+{% highlight java %}
+import org.apache.spark.api.java.*;
+import org.apache.spark.api.java.function.Function;
+import org.apache.spark.mllib.clustering.GaussianMixture;
+import org.apache.spark.mllib.clustering.GaussianMixtureModel;
+import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.SparkConf;
+
+public class GaussianMixtureExample {
+  public static void main(String[] args) {
+    SparkConf conf = new SparkConf().setAppName("GaussianMixture Example");
+    JavaSparkContext sc = new JavaSparkContext(conf);
+
+    // Load and parse data
+    String path = "data/mllib/gmm_data.txt";
+    JavaRDD<String> data = sc.textFile(path);
+    JavaRDD<Vector> parsedData = data.map(
+      new Function<String, Vector>() {
+        public Vector call(String s) {
+          String[] sarray = s.trim().split(" ");
+          double[] values = new double[sarray.length];
+          for (int i = 0; i < sarray.length; i++)
+            values[i] = Double.parseDouble(sarray[i]);
+          return Vectors.dense(values);
+        }
+      }
+    );
+    parsedData.cache();
+
+    // Cluster the data into two classes using GaussianMixture
+    GaussianMixtureModel gmm = new GaussianMixture().setK(2).run(parsedData.rdd());
+
+    // Output the parameters of the mixture model
+    for(int j=0; j<gmm.k(); j++) {
+        System.out.println("weight=%f\nmu=%s\nsigma=\n%s\n",
+            gmm.weights()[j], gmm.gaussians()[j].mu(), gmm.gaussians()[j].sigma());
+    }
+  }
+}
+{% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+In the following example after loading and parsing data, we use a
+[GaussianMixture](api/python/pyspark.mllib.html#pyspark.mllib.clustering.GaussianMixture)
+object to cluster the data into two clusters. The number of desired clusters is passed 
+to the algorithm. We then output the parameters of the mixture model.
+
+{% highlight python %}
+from pyspark.mllib.clustering import GaussianMixture
+from numpy import array
+
+# Load and parse the data
+data = sc.textFile("data/mllib/gmm_data.txt")
+parsedData = data.map(lambda line: array([float(x) for x in line.strip().split(' ')]))
+
+# Build the model (cluster the data)
+gmm = GaussianMixture.train(parsedData, 2)
+
+# output parameters of model
+for i in range(2):
+    print ("weight = ", gmm.weights[i], "mu = ", gmm.gaussians[i].mu,
+        "sigma = ", gmm.gaussians[i].sigma.toArray())
+
 {% endhighlight %}
 </div>
 

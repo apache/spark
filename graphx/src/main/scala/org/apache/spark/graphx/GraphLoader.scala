@@ -77,7 +77,7 @@ object GraphLoader extends Logging {
         if (!line.isEmpty && line(0) != '#') {
           val lineArray = line.split("\\s+")
           if (lineArray.length < 2) {
-            logWarning("Invalid line: " + line)
+            throw new IllegalArgumentException("Invalid line: " + line)
           }
           val srcId = lineArray(0).toLong
           val dstId = lineArray(1).toLong

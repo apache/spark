@@ -1,6 +1,7 @@
 ---
 layout: global
-title: Spark Configuration
+displayTitle: Spark Configuration
+title: Configuration
 ---
 * This will become a table of contents (this text will be scraped).
 {:toc}
@@ -188,6 +189,17 @@ of the most common options to set are:
   <td>false</td>
   <td>
     Logs the effective SparkConf as INFO when a SparkContext is started.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.extraListeners</code></td>
+  <td>(none)</td>
+  <td>
+    A comma-separated list of classes that implement <code>SparkListener</code>; when initializing
+    SparkContext, instances of these classes will be created and registered with Spark's listener
+    bus.  If a class has a single-argument constructor that accepts a SparkConf, that constructor
+    will be called; otherwise, a zero-argument constructor will be called. If no valid constructor
+    can be found, the SparkContext creation will fail with an exception.
   </td>
 </tr>
 </table>
@@ -1128,7 +1140,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.dynamicAllocation.schedulerBacklogTimeout</code></td>
-  <td>60</td>
+  <td>5</td>
   <td>
     If dynamic allocation is enabled and there have been pending tasks backlogged for more than
     this duration (in seconds), new executors will be requested. For more detail, see this

@@ -1,6 +1,8 @@
 ---
 layout: global
-title: GraphX Programming Guide
+displayTitle: GraphX Programming Guide
+title: GraphX
+description: GraphX graph processing library guide for Spark SPARK_VERSION_SHORT
 ---
 
 * This will become a table of contents (this text will be scraped).

@@ -43,6 +43,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   private val originalTimeZone = TimeZone.getDefault
   private val originalLocale = Locale.getDefault
 
+  import org.apache.spark.sql.hive.test.TestHive.implicits._
+
   override def beforeAll() {
     TestHive.cacheTables = true
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
@@ -620,6 +622,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   test("SPARK-5367: resolve star expression in udf") {
     assert(sql("select concat(*) from src limit 5").collect().size == 5)
     assert(sql("select array(*) from src limit 5").collect().size == 5)
+    assert(sql("select concat(key, *) from src limit 5").collect().size == 5)
+    assert(sql("select array(key, *) from src limit 5").collect().size == 5)
   }
 
   test("Query Hive native command execution result") {
@@ -737,8 +741,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
     assertResult(
       Array(
-        Row("a", "IntegerType", null),
-        Row("b", "StringType", null))
+        Row("a", "int", ""),
+        Row("b", "string", ""))
     ) {
       sql("DESCRIBE test_describe_commands2")
         .select('col_name, 'data_type, 'comment)
