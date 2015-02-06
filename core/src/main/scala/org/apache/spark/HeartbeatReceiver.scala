@@ -93,6 +93,6 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
     if (timeoutCheckingTask != null) {
       timeoutCheckingTask.cancel()
     }
-    super.postStop
+    super.postStop()
   }
 }
