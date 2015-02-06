@@ -53,7 +53,9 @@ private[sql] class DataFrameImpl protected[sql](
   def this(sqlContext: SQLContext, logicalPlan: LogicalPlan) = {
     this(sqlContext, {
       val qe = sqlContext.executePlan(logicalPlan)
-      qe.analyzed  // This should force analysis and throw errors if there are any
+      if (sqlContext.conf.dataFrameEagerAnalysis) {
+        qe.analyzed  // This should force analysis and throw errors if there are any
+      }
       qe
     })
   }

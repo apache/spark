@@ -52,6 +52,9 @@ private[spark] object SQLConf {
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = "spark.sql.default.datasource"
 
+  // Whether to perform eager analysis on a DataFrame.
+  val DATAFRAME_EAGER_ANALYSIS = "spark.sql.dataframe.eagerAnalysis"
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -172,6 +175,9 @@ private[sql] class SQLConf extends Serializable {
 
   private[spark] def defaultDataSourceName: String =
     getConf(DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.parquet")
+
+  private[spark] def dataFrameEagerAnalysis: Boolean =
+    getConf(DATAFRAME_EAGER_ANALYSIS, "true").toBoolean
 
   /** ********************** SQLConf functionality methods ************ */
 
