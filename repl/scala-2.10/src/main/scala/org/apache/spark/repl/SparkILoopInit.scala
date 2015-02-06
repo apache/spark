@@ -136,6 +136,7 @@ private[repl] trait SparkILoopInit {
         """)
       command("import org.apache.spark.SparkContext._")
       command("import sqlContext.implicits._")
+      command("import sqlContext.sql")
       command("import org.apache.spark.sql.Dsl._")
     }
   }
