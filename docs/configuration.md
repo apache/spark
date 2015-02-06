@@ -1,6 +1,7 @@
 ---
 layout: global
-title: Spark Configuration
+displayTitle: Spark Configuration
+title: Configuration
 ---
 * This will become a table of contents (this text will be scraped).
 {:toc}

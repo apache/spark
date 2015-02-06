@@ -134,7 +134,7 @@ object LDAExample {
       .setTopicConcentration(params.topicConcentration)
       .setCheckpointInterval(params.checkpointInterval)
     if (params.checkpointDir.nonEmpty) {
-      lda.setCheckpointDir(params.checkpointDir.get)
+      sc.setCheckpointDir(params.checkpointDir.get)
     }
     val startTime = System.nanoTime()
     val ldaModel = lda.run(corpus)

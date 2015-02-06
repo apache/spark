@@ -17,18 +17,23 @@
 
 package org.apache.spark.sql
 
+import scala.language.postfixOps
+
 import org.apache.spark.sql.Dsl._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.test.TestSQLContext.logicalPlanToSparkQuery
+import org.apache.spark.sql.test.TestSQLContext.implicits._
 
-/* Implicits */
-import org.apache.spark.sql.test.TestSQLContext.{createDataFrame, logicalPlanToSparkQuery}
-
-import scala.language.postfixOps
 
 class DataFrameSuite extends QueryTest {
   import org.apache.spark.sql.TestData._
 
   test("analysis error should be eagerly reported") {
+    val oldSetting = TestSQLContext.conf.dataFrameEagerAnalysis
+    // Eager analysis.
+    TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, "true")
+
     intercept[Exception] { testData.select('nonExistentName) }
     intercept[Exception] {
       testData.groupBy('key).agg(Map("nonExistentName" -> "sum"))
@@ -39,6 +44,13 @@ class DataFrameSuite extends QueryTest {
     intercept[Exception] {
       testData.groupBy($"abcd").agg(Map("key" -> "sum"))
     }
+
+    // No more eager analysis once the flag is turned off
+    TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, "false")
+    testData.select('nonExistentName)
+
+    // Set the flag back to original value before this test.
+    TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, oldSetting.toString)
   }
 
   test("table scan") {
@@ -299,6 +311,27 @@ class DataFrameSuite extends QueryTest {
       testData.select($"*", foo('key, 'value)).limit(3),
       Row(1, "1", "11") :: Row(2, "2", "22") :: Row(3, "3", "33") :: Nil
     )
+  }
+
+  test("addColumn") {
+    val df = testData.toDataFrame.addColumn("newCol", col("key") + 1)
+    checkAnswer(
+      df,
+      testData.collect().map { case Row(key: Int, value: String) =>
+        Row(key, value, key + 1)
+      }.toSeq)
+    assert(df.schema.map(_.name).toSeq === Seq("key", "value", "newCol"))
+  }
+
+  test("renameColumn") {
+    val df = testData.toDataFrame.addColumn("newCol", col("key") + 1)
+      .renameColumn("value", "valueRenamed")
+    checkAnswer(
+      df,
+      testData.collect().map { case Row(key: Int, value: String) =>
+        Row(key, value, key + 1)
+      }.toSeq)
+    assert(df.schema.map(_.name).toSeq === Seq("key", "valueRenamed", "newCol"))
   }
 
   test("apply on query results (SPARK-5462)") {

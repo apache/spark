@@ -18,12 +18,12 @@
 package org.apache.spark.sql.sources
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, Strategy}
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, AttributeSet, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, InsertIntoTable => LogicalInsertIntoTable}
-import org.apache.spark.sql.execution
+import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.{Row, Strategy, execution}
 
 /**
  * A Strategy for planning scans over data sources defined using the sources API.
@@ -54,7 +54,7 @@ private[sql] object DataSourceStrategy extends Strategy {
     case l @ LogicalRelation(t: TableScan) =>
       execution.PhysicalRDD(l.output, t.buildScan()) :: Nil
 
-    case i @ LogicalInsertIntoTable(
+    case i @ logical.InsertIntoTable(
       l @ LogicalRelation(t: InsertableRelation), partition, query, overwrite) =>
       if (partition.nonEmpty) {
         sys.error(s"Insert into a partition is not allowed because $l is not partitioned.")

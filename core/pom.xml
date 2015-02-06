@@ -132,6 +132,13 @@
       <artifactId>jetty-servlet</artifactId>
       <scope>compile</scope>
     </dependency>
+    <!-- Because we mark jetty as provided and shade it, its dependency
+         orbit is ignored, so we explicitly list it here (see SPARK-5557).-->
+    <dependency>
+      <groupId>org.eclipse.jetty.orbit</groupId>
+      <artifactId>javax.servlet</artifactId>
+      <version>${orbit.version}</version>
+    </dependency>
 
     <dependency>
       <groupId>org.apache.commons</groupId>
