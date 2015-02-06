@@ -114,7 +114,10 @@ trait DataFrame extends RDDApi[Row] {
   /** Prints the schema to the console in a nice tree format. */
   def printSchema(): Unit
 
-  /** Returns true if the [[DataFrame]] is created from a small, local dataset. */
+  /**
+   * Returns true if the `collect` and `take` methods can be run locally
+   * (without any Spark executors).
+   */
   def isLocal: Boolean
 
   /**
