@@ -47,7 +47,9 @@ case class ListStringCaseClass(l: Seq[String])
  * A test suite for Hive custom UDFs.
  */
 class HiveUdfSuite extends QueryTest {
-  import TestHive._
+
+  import TestHive.{udf, sql}
+  import TestHive.implicits._
 
   test("spark sql udf test that returns a struct") {
     udf.register("getStruct", (_: Int) => Fields(1, 2, 3, 4, 5))

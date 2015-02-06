@@ -21,7 +21,7 @@ import java.lang.reflect.Method
 import java.security.PrivilegedExceptionAction
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.fs.FileSystem.Statistics
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
@@ -141,7 +141,7 @@ class SparkHadoopUtil extends Logging {
       val baselineBytesRead = f()
       Some(() => f() - baselineBytesRead)
     } catch {
-      case e: NoSuchMethodException => {
+      case e @ (_: NoSuchMethodException | _: ClassNotFoundException) => {
         logDebug("Couldn't find method for retrieving thread-level FileSystem input data", e)
         None
       }
@@ -163,7 +163,7 @@ class SparkHadoopUtil extends Logging {
       val baselineBytesWritten = f()
       Some(() => f() - baselineBytesWritten)
     } catch {
-      case e: NoSuchMethodException => {
+      case e @ (_: NoSuchMethodException | _: ClassNotFoundException) => {
         logDebug("Couldn't find method for retrieving thread-level FileSystem output data", e)
         None
       }
@@ -190,6 +190,21 @@ class SparkHadoopUtil extends Logging {
   def getConfigurationFromJobContext(context: JobContext): Configuration = {
     val method = context.getClass.getMethod("getConfiguration")
     method.invoke(context).asInstanceOf[Configuration]
+  }
+
+  /**
+   * Get [[FileStatus]] objects for all leaf children (files) under the given base path. If the
+   * given path points to a file, return a single-element collection containing [[FileStatus]] of
+   * that file.
+   */
+  def listLeafStatuses(fs: FileSystem, basePath: Path): Seq[FileStatus] = {
+    def recurse(path: Path) = {
+      val (directories, leaves) = fs.listStatus(path).partition(_.isDir)
+      leaves ++ directories.flatMap(f => listLeafStatuses(fs, f.getPath))
+    }
+
+    val baseStatus = fs.getFileStatus(basePath)
+    if (baseStatus.isDir) recurse(basePath) else Array(baseStatus)
   }
 }
 

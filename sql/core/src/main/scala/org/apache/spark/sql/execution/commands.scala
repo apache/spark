@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Row, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import scala.collection.mutable.ArrayBuffer
 
 /**
  * A logical command that is executed for its side-effects.  `RunnableCommand`s are
@@ -57,6 +58,8 @@ case class ExecutedCommand(cmd: RunnableCommand) extends SparkPlan {
   override def children = Nil
 
   override def executeCollect(): Array[Row] = sideEffectResult.toArray
+
+  override def executeTake(limit: Int): Array[Row] = sideEffectResult.take(limit).toArray
 
   override def execute(): RDD[Row] = sqlContext.sparkContext.parallelize(sideEffectResult, 1)
 }
@@ -138,7 +141,7 @@ case class CacheTableCommand(
 
   override def run(sqlContext: SQLContext) = {
     plan.foreach { logicalPlan =>
-      sqlContext.registerRDDAsTable(new DataFrame(sqlContext, logicalPlan), tableName)
+      sqlContext.registerRDDAsTable(DataFrame(sqlContext, logicalPlan), tableName)
     }
     sqlContext.cacheTable(tableName)
 
@@ -174,9 +177,14 @@ case class UncacheTableCommand(tableName: String) extends RunnableCommand {
 @DeveloperApi
 case class DescribeCommand(
     child: SparkPlan,
-    override val output: Seq[Attribute]) extends RunnableCommand {
+    override val output: Seq[Attribute],
+    isExtended: Boolean) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext) = {
-    child.output.map(field => Row(field.name, field.dataType.toString, null))
+    child.schema.fields.map { field =>
+      val cmtKey = "comment"
+      val comment = if (field.metadata.contains(cmtKey)) field.metadata.getString(cmtKey) else ""
+      Row(field.name, field.dataType.simpleString, comment)
+    }
   }
 }

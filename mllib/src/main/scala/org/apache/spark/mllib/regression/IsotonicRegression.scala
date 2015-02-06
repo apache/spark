@@ -23,10 +23,13 @@ import java.util.Arrays.binarySearch
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.{JavaDoubleRDD, JavaRDD}
 import org.apache.spark.rdd.RDD
 
 /**
+ * :: Experimental ::
+ *
  * Regression model for isotonic regression.
  *
  * @param boundaries Array of boundaries for which predictions are known.
@@ -35,6 +38,7 @@ import org.apache.spark.rdd.RDD
  *                    Results of isotonic regression and therefore monotone.
  * @param isotonic indicates whether this is isotonic or antitonic.
  */
+@Experimental
 class IsotonicRegressionModel (
     val boundaries: Array[Double],
     val predictions: Array[Double],
@@ -75,7 +79,7 @@ class IsotonicRegressionModel (
    * @return Predicted labels.
    */
   def predict(testData: JavaDoubleRDD): JavaDoubleRDD = {
-    JavaDoubleRDD.fromRDD(predict(testData.rdd.asInstanceOf[RDD[Double]]))
+    JavaDoubleRDD.fromRDD(predict(testData.rdd.retag.asInstanceOf[RDD[Double]]))
   }
 
   /**
@@ -123,6 +127,8 @@ class IsotonicRegressionModel (
 }
 
 /**
+ * :: Experimental ::
+ *
  * Isotonic regression.
  * Currently implemented using parallelized pool adjacent violators algorithm.
  * Only univariate (single feature) algorithm supported.
@@ -130,14 +136,17 @@ class IsotonicRegressionModel (
  * Sequential PAV implementation based on:
  * Tibshirani, Ryan J., Holger Hoefling, and Robert Tibshirani.
  *   "Nearly-isotonic regression." Technometrics 53.1 (2011): 54-61.
- *   Available from http://www.stat.cmu.edu/~ryantibs/papers/neariso.pdf
+ *   Available from [[http://www.stat.cmu.edu/~ryantibs/papers/neariso.pdf]]
  *
  * Sequential PAV parallelization based on:
  * Kearsley, Anthony J., Richard A. Tapia, and Michael W. Trosset.
  *   "An approach to parallelizing isotonic regression."
  *   Applied Mathematics and Parallel Computing. Physica-Verlag HD, 1996. 141-147.
- *   Available from http://softlib.rice.edu/pub/CRPC-TRs/reports/CRPC-TR96640.pdf
+ *   Available from [[http://softlib.rice.edu/pub/CRPC-TRs/reports/CRPC-TR96640.pdf]]
+ *
+ * @see [[http://en.wikipedia.org/wiki/Isotonic_regression Isotonic regression (Wikipedia)]]
  */
+@Experimental
 class IsotonicRegression private (private var isotonic: Boolean) extends Serializable {
 
   /**
@@ -194,7 +203,7 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
    * @return Isotonic regression model.
    */
   def run(input: JavaRDD[(JDouble, JDouble, JDouble)]): IsotonicRegressionModel = {
-    run(input.rdd.asInstanceOf[RDD[(Double, Double, Double)]])
+    run(input.rdd.retag.asInstanceOf[RDD[(Double, Double, Double)]])
   }
 
   /**

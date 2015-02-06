@@ -64,7 +64,8 @@ case class ComplexData(
     arrayFieldContainsNull: Seq[java.lang.Integer],
     mapField: Map[Int, Long],
     mapFieldValueContainsNull: Map[Int, java.lang.Long],
-    structField: PrimitiveData)
+    structField: PrimitiveData,
+    nestedArrayField: Array[Array[Int]])
 
 case class GenericData[A](
     genericField: A)
@@ -158,7 +159,10 @@ class ScalaReflectionSuite extends FunSuite {
             StructField("shortField", ShortType, nullable = false),
             StructField("byteField", ByteType, nullable = false),
             StructField("booleanField", BooleanType, nullable = false))),
-          nullable = true))),
+          nullable = true),
+        StructField(
+          "nestedArrayField",
+          ArrayType(ArrayType(IntegerType, containsNull = false), containsNull = true)))),
       nullable = true))
   }
 

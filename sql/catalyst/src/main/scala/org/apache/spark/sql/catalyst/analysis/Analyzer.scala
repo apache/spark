@@ -69,8 +69,9 @@ class Analyzer(catalog: Catalog,
       typeCoercionRules ++
       extendedRules : _*),
     Batch("Check Analysis", Once,
-      CheckResolution,
-      CheckAggregation),
+      CheckResolution ::
+      CheckAggregation ::
+      Nil: _*),
     Batch("AnalysisOperators", fixedPoint,
       EliminateAnalysisOperators)
   )
@@ -256,6 +257,12 @@ class Analyzer(catalog: Catalog,
                 case o => o :: Nil
               }
               Alias(child = f.copy(children = expandedArgs), name)() :: Nil
+            case Alias(c @ CreateArray(args), name) if containsStar(args) =>
+              val expandedArgs = args.flatMap {
+                case s: Star => s.expand(child.output, resolver)
+                case o => o :: Nil
+              }
+              Alias(c.copy(children = expandedArgs), name)() :: Nil
             case o => o :: Nil
           },
           child)
