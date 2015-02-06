@@ -17,6 +17,10 @@
 
 package org.apache.spark.deploy.rest
 
+import scala.util.Try
+
+import org.apache.spark.util.Utils
+
 /**
  * An abstract request sent from the client in the REST application submission protocol.
  */
@@ -54,11 +58,21 @@ private[spark] class CreateSubmissionRequest extends SubmitRestProtocolRequest {
     assertFieldIsSet(sparkProperties.getOrElse(key, null), key)
 
   private def assertPropertyIsBoolean(key: String): Unit =
-    assertFieldIsBoolean(sparkProperties.getOrElse(key, null), key)
+    assertProperty[Boolean](key, "boolean", _.toBoolean)
 
   private def assertPropertyIsNumeric(key: String): Unit =
-    assertFieldIsNumeric(sparkProperties.getOrElse(key, null), key)
+    assertProperty[Int](key, "numeric", _.toInt)
 
   private def assertPropertyIsMemory(key: String): Unit =
-    assertFieldIsMemory(sparkProperties.getOrElse(key, null), key)
+    assertProperty[Int](key, "memory", Utils.memoryStringToMb)
+
+  /** Assert that a Spark property can be converted to a certain type. */
+  private def assertProperty[T](key: String, valueType: String, convert: (String => T)): Unit = {
+    sparkProperties.get(key).foreach { value =>
+      Try(convert(value)).getOrElse {
+        throw new SubmitRestProtocolException(
+          s"Property '$key' expected $valueType value: actual was '$value'.")
+      }
+    }
+  }
 }

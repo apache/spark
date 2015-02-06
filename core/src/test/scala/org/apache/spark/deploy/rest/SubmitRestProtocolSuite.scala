@@ -17,6 +17,9 @@
 
 package org.apache.spark.deploy.rest
 
+import java.lang.Boolean
+import java.lang.Integer
+
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.FunSuite
 
@@ -34,9 +37,9 @@ class SubmitRestProtocolSuite extends FunSuite {
     intercept[SubmitRestProtocolException] { request.validate() } // missing name and age
     request.name = "something"
     intercept[SubmitRestProtocolException] { request.validate() } // missing only age
-    request.age = "2"
+    request.age = 2
     intercept[SubmitRestProtocolException] { request.validate() } // age too low
-    request.age = "10"
+    request.age = 10
     request.validate() // everything is set properly
     request.clientSparkVersion = null
     intercept[SubmitRestProtocolException] { request.validate() } // missing only Spark version
@@ -47,38 +50,20 @@ class SubmitRestProtocolSuite extends FunSuite {
     intercept[SubmitRestProtocolException] { request.validate() } // still missing name
   }
 
-  test("validate with illegal argument") {
-    val request = new DummyRequest
-    request.clientSparkVersion = "1.2.3"
-    request.name = "abc"
-    request.age = "not-a-number"
-    intercept[SubmitRestProtocolException] { request.validate() }
-    request.age = "true"
-    intercept[SubmitRestProtocolException] { request.validate() }
-    request.age = "150"
-    request.validate()
-    request.active = "not-a-boolean"
-    intercept[SubmitRestProtocolException] { request.validate() }
-    request.active = "150"
-    intercept[SubmitRestProtocolException] { request.validate() }
-    request.active = "true"
-    request.validate()
-  }
-
   test("request to and from JSON") {
     val request = new DummyRequest
     intercept[SubmitRestProtocolException] { request.toJson } // implicit validation
     request.clientSparkVersion = "1.2.3"
-    request.active = "true"
-    request.age = "25"
+    request.active = true
+    request.age = 25
     request.name = "jung"
     val json = request.toJson
     assertJsonEquals(json, dummyRequestJson)
     val newRequest = SubmitRestProtocolMessage.fromJson(json, classOf[DummyRequest])
     assert(newRequest.clientSparkVersion === "1.2.3")
     assert(newRequest.clientSparkVersion === "1.2.3")
-    assert(newRequest.active === "true")
-    assert(newRequest.age === "25")
+    assert(newRequest.active)
+    assert(newRequest.age === 25)
     assert(newRequest.name === "jung")
     assert(newRequest.message === null)
   }
@@ -86,13 +71,13 @@ class SubmitRestProtocolSuite extends FunSuite {
   test("response to and from JSON") {
     val response = new DummyResponse
     response.serverSparkVersion = "3.3.4"
-    response.success = "true"
+    response.success = true
     val json = response.toJson
     assertJsonEquals(json, dummyResponseJson)
     val newResponse = SubmitRestProtocolMessage.fromJson(json, classOf[DummyResponse])
     assert(newResponse.serverSparkVersion === "3.3.4")
     assert(newResponse.serverSparkVersion === "3.3.4")
-    assert(newResponse.success === "true")
+    assert(newResponse.success)
     assert(newResponse.message === null)
   }
 
@@ -160,19 +145,15 @@ class SubmitRestProtocolSuite extends FunSuite {
     intercept[SubmitRestProtocolException] { message.validate() }
     message.serverSparkVersion = "1.2.3"
     message.submissionId = "driver_123"
-    message.success = "true"
+    message.success = true
     message.validate()
-    // bad fields
-    message.success = "maybe not"
-    intercept[SubmitRestProtocolException] { message.validate() }
-    message.success = "true"
     // test JSON
     val json = message.toJson
     assertJsonEquals(json, submitDriverResponseJson)
     val newMessage = SubmitRestProtocolMessage.fromJson(json, classOf[CreateSubmissionResponse])
     assert(newMessage.serverSparkVersion === "1.2.3")
     assert(newMessage.submissionId === "driver_123")
-    assert(newMessage.success === "true")
+    assert(newMessage.success)
   }
 
   test("KillSubmissionResponse") {
@@ -180,19 +161,15 @@ class SubmitRestProtocolSuite extends FunSuite {
     intercept[SubmitRestProtocolException] { message.validate() }
     message.serverSparkVersion = "1.2.3"
     message.submissionId = "driver_123"
-    message.success = "true"
+    message.success = true
     message.validate()
-    // bad fields
-    message.success = "maybe not"
-    intercept[SubmitRestProtocolException] { message.validate() }
-    message.success = "true"
     // test JSON
     val json = message.toJson
     assertJsonEquals(json, killDriverResponseJson)
     val newMessage = SubmitRestProtocolMessage.fromJson(json, classOf[KillSubmissionResponse])
     assert(newMessage.serverSparkVersion === "1.2.3")
     assert(newMessage.submissionId === "driver_123")
-    assert(newMessage.success === "true")
+    assert(newMessage.success)
   }
 
   test("SubmissionStatusResponse") {
@@ -200,16 +177,12 @@ class SubmitRestProtocolSuite extends FunSuite {
     intercept[SubmitRestProtocolException] { message.validate() }
     message.serverSparkVersion = "1.2.3"
     message.submissionId = "driver_123"
-    message.success = "true"
+    message.success = true
     message.validate()
     // optional fields
     message.driverState = "RUNNING"
     message.workerId = "worker_123"
     message.workerHostPort = "1.2.3.4:7780"
-    // bad fields
-    message.success = "maybe"
-    intercept[SubmitRestProtocolException] { message.validate() }
-    message.success = "true"
     // test JSON
     val json = message.toJson
     assertJsonEquals(json, driverStatusResponseJson)
@@ -217,7 +190,7 @@ class SubmitRestProtocolSuite extends FunSuite {
     assert(newMessage.serverSparkVersion === "1.2.3")
     assert(newMessage.submissionId === "driver_123")
     assert(newMessage.driverState === "RUNNING")
-    assert(newMessage.success === "true")
+    assert(newMessage.success)
     assert(newMessage.workerId === "worker_123")
     assert(newMessage.workerHostPort === "1.2.3.4:7780")
   }
@@ -240,8 +213,8 @@ class SubmitRestProtocolSuite extends FunSuite {
     """
       |{
       |  "action" : "DummyRequest",
-      |  "active" : "true",
-      |  "age" : "25",
+      |  "active" : true,
+      |  "age" : 25,
       |  "clientSparkVersion" : "1.2.3",
       |  "name" : "jung"
       |}
@@ -252,7 +225,7 @@ class SubmitRestProtocolSuite extends FunSuite {
       |{
       |  "action" : "DummyResponse",
       |  "serverSparkVersion" : "3.3.4",
-      |  "success": "true"
+      |  "success": true
       |}
     """.stripMargin
 
@@ -289,7 +262,7 @@ class SubmitRestProtocolSuite extends FunSuite {
       |  "action" : "CreateSubmissionResponse",
       |  "serverSparkVersion" : "1.2.3",
       |  "submissionId" : "driver_123",
-      |  "success" : "true"
+      |  "success" : true
       |}
     """.stripMargin
 
@@ -299,7 +272,7 @@ class SubmitRestProtocolSuite extends FunSuite {
       |  "action" : "KillSubmissionResponse",
       |  "serverSparkVersion" : "1.2.3",
       |  "submissionId" : "driver_123",
-      |  "success" : "true"
+      |  "success" : true
       |}
     """.stripMargin
 
@@ -310,7 +283,7 @@ class SubmitRestProtocolSuite extends FunSuite {
       |  "driverState" : "RUNNING",
       |  "serverSparkVersion" : "1.2.3",
       |  "submissionId" : "driver_123",
-      |  "success" : "true",
+      |  "success" : true,
       |  "workerHostPort" : "1.2.3.4:7780",
       |  "workerId" : "worker_123"
       |}
@@ -339,15 +312,13 @@ class SubmitRestProtocolSuite extends FunSuite {
 
 private class DummyResponse extends SubmitRestProtocolResponse
 private class DummyRequest extends SubmitRestProtocolRequest {
-  var active: String = null
-  var age: String = null
+  var active: Boolean = null
+  var age: Integer = null
   var name: String = null
   protected override def doValidate(): Unit = {
     super.doValidate()
     assertFieldIsSet(name, "name")
     assertFieldIsSet(age, "age")
-    assertFieldIsBoolean(active, "active")
-    assertFieldIsNumeric(age, "age")
-    assert(age.toInt > 5, "Not old enough!")
+    assert(age > 5, "Not old enough!")
   }
 }

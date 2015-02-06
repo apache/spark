@@ -218,8 +218,7 @@ private[spark] class StandaloneRestClient extends Logging {
   private def reportSubmissionStatus(
       master: String,
       submitResponse: CreateSubmissionResponse): Unit = {
-    val submitSuccess = submitResponse.success.toBoolean
-    if (submitSuccess) {
+    if (submitResponse.success) {
       val submissionId = submitResponse.submissionId
       if (submissionId != null) {
         logInfo(s"Submission successfully created as $submissionId. Polling submission state...")
@@ -245,8 +244,7 @@ private[spark] class StandaloneRestClient extends Logging {
         case s: SubmissionStatusResponse => s
         case _ => return // unexpected type, let upstream caller handle it
       }
-      val statusSuccess = statusResponse.success.toBoolean
-      if (statusSuccess) {
+      if (statusResponse.success) {
         val driverState = Option(statusResponse.driverState)
         val workerId = Option(statusResponse.workerId)
         val workerHostPort = Option(statusResponse.workerHostPort)

@@ -81,42 +81,9 @@ private[spark] abstract class SubmitRestProtocolMessage {
   }
 
   /** Assert that the specified field is set in this message. */
-  protected def assertFieldIsSet(value: String, name: String): Unit = {
+  protected def assertFieldIsSet[T](value: T, name: String): Unit = {
     if (value == null) {
       throw new SubmitRestMissingFieldException(s"'$name' is missing in message $messageType.")
-    }
-  }
-
-  /** Assert that the value of the specified field is a boolean. */
-  protected def assertFieldIsBoolean(value: String, name: String): Unit = {
-    if (value != null) {
-      Try(value.toBoolean).getOrElse {
-        throw new SubmitRestProtocolException(
-          s"'$name' expected boolean value: actual was '$value'.")
-      }
-    }
-  }
-
-  /** Assert that the value of the specified field is a numeric. */
-  protected def assertFieldIsNumeric(value: String, name: String): Unit = {
-    if (value != null) {
-      Try(value.toInt).getOrElse {
-        throw new SubmitRestProtocolException(
-          s"'$name' expected numeric value: actual was '$value'.")
-      }
-    }
-  }
-
-  /**
-   * Assert that the value of the specified field is a memory string.
-   * Examples of valid memory strings include 3g, 512m, 128k, 4096.
-   */
-  protected def assertFieldIsMemory(value: String, name: String): Unit = {
-    if (value != null) {
-      Try(Utils.memoryStringToMb(value)).getOrElse {
-        throw new SubmitRestProtocolException(
-          s"'$name' expected memory value: actual was '$value'.")
-      }
     }
   }
 

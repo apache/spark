@@ -238,7 +238,7 @@ private class KillRequestServlet(masterActor: ActorRef, conf: SparkConf)
     k.serverSparkVersion = sparkVersion
     k.message = response.message
     k.submissionId = submissionId
-    k.success = response.success.toString
+    k.success = response.success
     k
   }
 }
@@ -275,7 +275,7 @@ private class StatusRequestServlet(masterActor: ActorRef, conf: SparkConf)
     val d = new SubmissionStatusResponse
     d.serverSparkVersion = sparkVersion
     d.submissionId = submissionId
-    d.success = response.found.toString
+    d.success = response.found
     d.driverState = response.state.map(_.toString).orNull
     d.workerId = response.workerId.orNull
     d.workerHostPort = response.workerHostPort.orNull
@@ -339,7 +339,7 @@ private class SubmitRequestServlet(
         val submitResponse = new CreateSubmissionResponse
         submitResponse.serverSparkVersion = sparkVersion
         submitResponse.message = response.message
-        submitResponse.success = response.success.toString
+        submitResponse.success = response.success
         submitResponse.submissionId = response.driverId.orNull
         val unknownFields = findUnknownFields(requestMessageJson, requestMessage)
         if (unknownFields.nonEmpty) {

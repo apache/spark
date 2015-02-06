@@ -62,7 +62,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterAll with Bef
     val response = client.killSubmission(masterRestUrl, "submission-that-does-not-exist")
     val killResponse = getKillResponse(response)
     val killSuccess = killResponse.success
-    assert(killSuccess === "false")
+    assert(!killSuccess)
   }
 
   test("kill running submission") {
@@ -78,8 +78,8 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterAll with Bef
     val statusResponse = getStatusResponse(response2)
     val statusSuccess = statusResponse.success
     val driverState = statusResponse.driverState
-    assert(killSuccess === "true")
-    assert(statusSuccess === "true")
+    assert(killSuccess)
+    assert(statusSuccess)
     assert(driverState === DriverState.KILLED.toString)
     // we should not see the expected results because we killed the submission
     intercept[TestFailedException] { validateResult(resultsFile, numbers, size) }
@@ -89,7 +89,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterAll with Bef
     val response = client.requestSubmissionStatus(masterRestUrl, "submission-that-does-not-exist")
     val statusResponse = getStatusResponse(response)
     val statusSuccess = statusResponse.success
-    assert(statusSuccess === "false")
+    assert(!statusSuccess)
   }
 
   /**
