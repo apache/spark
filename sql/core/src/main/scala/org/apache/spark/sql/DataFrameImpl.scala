@@ -94,20 +94,10 @@ private[sql] class DataFrameImpl protected[sql](
         "Old column names: " + schema.fields.map(_.name).mkString(", ") + "\n" +
         "New column names: " + colNames.mkString(", "))
 
-    logicalPlan match {
-      case LocalRelation(outputAttributes, data) =>
-        // If the current logical plan is a local relation, just create a new local relation
-        // with the new names. This is a hack to support local execution for local relations.
-        LocalRelation(
-          outputAttributes.zip(colNames).map { case (attr, colName) => attr.withName(colName) },
-          data)
-      case _ =>
-        // For any other plans, apply a projection with new names.
-        val newCols = schema.fieldNames.zip(colNames).map { case (oldName, newName) =>
-          apply(oldName).as(newName)
-        }
-        select(newCols :_*)
+    val newCols = schema.fieldNames.zip(colNames).map { case (oldName, newName) =>
+      apply(oldName).as(newName)
     }
+    select(newCols :_*)
   }
 
   override def schema: StructType = queryExecution.analyzed.schema

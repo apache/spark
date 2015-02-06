@@ -50,7 +50,9 @@ object DefaultOptimizer extends Optimizer {
       CombineFilters,
       PushPredicateThroughProject,
       PushPredicateThroughJoin,
-      ColumnPruning) :: Nil
+      ColumnPruning) ::
+    Batch("LocalRelation", FixedPoint(100),
+      ConvertToLocalRelation) :: Nil
 }
 
 /**
@@ -608,5 +610,19 @@ object DecimalAggregates extends Rule[LogicalPlan] {
       Cast(
         Divide(Average(UnscaledValue(e)), Literal(math.pow(10.0, scale), DoubleType)),
         DecimalType(prec + 4, scale + 4))
+  }
+}
+
+/**
+ * Converts local operations (i.e. ones that don't require data exchange) on LocalRelation to
+ * another LocalRelation.
+ *
+ * This is relatively simple as it currently handles only a single case: Project.
+ */
+object ConvertToLocalRelation extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case Project(projectList, LocalRelation(output, data)) =>
+      val projection = new InterpretedProjection(projectList, output)
+      LocalRelation(projectList.map(_.toAttribute), data.map(projection))
   }
 }
