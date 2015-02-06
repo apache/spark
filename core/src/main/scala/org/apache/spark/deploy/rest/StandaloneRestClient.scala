@@ -31,7 +31,9 @@ import org.apache.spark.{Logging, SparkConf, SPARK_VERSION => sparkVersion}
  * This client is intended to communicate with the [[StandaloneRestServer]] and is
  * currently used for cluster mode only.
  *
- * The specific request sent to the server depends on the action as follows:
+ * In protocol version v1, the REST URL takes the form http://[host:port]/v1/submissions/[action],
+ * where [action] can be one of create, kill, or status. Each type of request is represented in
+ * an HTTP message sent to the following prefixes:
  *   (1) submit - POST to /submissions/create
  *   (2) kill - POST /submissions/kill/[submissionId]
  *   (3) status - GET /submissions/status/[submissionId]
@@ -39,11 +41,14 @@ import org.apache.spark.{Logging, SparkConf, SPARK_VERSION => sparkVersion}
  * In the case of (1), parameters are posted in the HTTP body in the form of JSON fields.
  * Otherwise, the URL fully specifies the intended action of the client.
  *
- * Additionally, the base URL includes the version of the protocol. For instance:
- * http://1.2.3.4:6066/v1/submissions/create. Since the protocol is expected to be stable
- * across Spark versions, existing fields cannot be added or removed. In the rare event that
- * forward or backward compatibility is broken, Spark must introduce a new protocol version
- * (e.g. v2). The client and the server must communicate on the same version of the protocol.
+ * Since the protocol is expected to be stable across Spark versions, existing fields cannot be
+ * added or removed, though new optional fields can be added. In the rare event that forward or
+ * backward compatibility is broken, Spark must introduce a new protocol version (e.g. v2).
+ *
+ * The client and the server must communicate using the same version of the protocol. If there
+ * is a mismatch, the server will respond with the highest protocol version it supports. A future
+ * implementation of this client can use that information to retry using the version specified
+ * by the server.
  */
 private[spark] class StandaloneRestClient extends Logging {
   import StandaloneRestClient._
