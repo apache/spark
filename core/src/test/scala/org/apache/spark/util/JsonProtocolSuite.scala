@@ -76,8 +76,9 @@ class JsonProtocolSuite extends FunSuite {
     val unpersistRdd = SparkListenerUnpersistRDD(12345)
     val applicationStart = SparkListenerApplicationStart("The winner of all", None, 42L, "Garfield")
     val applicationEnd = SparkListenerApplicationEnd(42L)
+    val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
     val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
-      new ExecutorInfo("Hostee.awesome.com", 11))
+      new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap))
     val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
 
     testEvent(stageSubmitted, stageSubmittedJsonString)
@@ -100,13 +101,14 @@ class JsonProtocolSuite extends FunSuite {
   }
 
   test("Dependent Classes") {
+    val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
     testRDDInfo(makeRddInfo(2, 3, 4, 5L, 6L))
     testStageInfo(makeStageInfo(10, 20, 30, 40L, 50L))
     testTaskInfo(makeTaskInfo(999L, 888, 55, 777L, false))
     testTaskMetrics(makeTaskMetrics(
       33333L, 44444L, 55555L, 66666L, 7, 8, hasHadoopInput = false, hasOutput = false))
     testBlockManagerId(BlockManagerId("Hong", "Kong", 500))
-    testExecutorInfo(new ExecutorInfo("host", 43))
+    testExecutorInfo(new ExecutorInfo("host", 43, logUrlMap))
 
     // StorageLevel
     testStorageLevel(StorageLevel.NONE)
@@ -1463,7 +1465,11 @@ class JsonProtocolSuite extends FunSuite {
       |  "Executor ID": "exec1",
       |  "Executor Info": {
       |    "Host": "Hostee.awesome.com",
-      |    "Total Cores": 11
+      |    "Total Cores": 11,
+      |    "Log Urls" : {
+      |      "stderr" : "mystderr",
+      |      "stdout" : "mystdout"
+      |    }
       |  }
       |}
     """
