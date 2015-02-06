@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.recommendation
 
+import java.io.IOException
 import java.lang.{Integer => JavaInteger}
 
 import org.apache.hadoop.fs.Path
@@ -24,7 +25,6 @@ import org.jblas.DoubleMatrix
 
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD}
-import org.apache.spark.mllib.recommendation.MatrixFactorizationModel.SaveLoadV1_0
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
@@ -130,9 +130,10 @@ class MatrixFactorizationModel(
     recommend(productFeatures.lookup(product).head, userFeatures, num)
       .map(t => Rating(t._1, product, t._2))
 
+  override val formatVersion: String = "1.0"
 
   override def save(sc: SparkContext, path: String): Unit = {
-    SaveLoadV1_0.save(this, path)
+    MatrixFactorizationModel.SaveLoadV1_0.save(this, path)
   }
 
   private def recommend(
@@ -151,12 +152,30 @@ private object MatrixFactorizationModel extends Loader[MatrixFactorizationModel]
 
   import org.apache.spark.mllib.util.Loader._
 
-  private object SaveLoadV1_0  {
+  override def load(sc: SparkContext, path: String): MatrixFactorizationModel = {
+    val (loadedClassName, formatVersion, metadata) = loadMetadata(sc, path)
+    val classNameV1_0 = SaveLoadV1_0.thisClassName
+    (loadedClassName, formatVersion) match {
+      case (className, "1.0") if className == classNameV1_0 =>
+        SaveLoadV1_0.load(sc, path)
+      case _ =>
+        throw new IOException("" +
+          "MatrixFactorizationModel.load did not recognize model with" +
+          s"(class: $loadedClassName, version: $formatVersion). Supported:\n" +
+          s"  ($classNameV1_0, 1.0)")
+    }
+  }
+
+  private object SaveLoadV1_0 extends Loader[MatrixFactorizationModel] {
 
     private val thisFormatVersion = "1.0"
 
-    private val thisClassName = "org.apache.spark.mllib.recommendation.MatrixFactorizationModel"
+    val thisClassName = "org.apache.spark.mllib.recommendation.MatrixFactorizationModel"
 
+    /**
+     * Saves a [[MatrixFactorizationModel]], where user features are saved under `data/users` and
+     * product features are saved under `data/products`.
+     */
     def save(model: MatrixFactorizationModel, path: String): Unit = {
       val sc = model.userFeatures.sparkContext
       val sqlContext = new SQLContext(sc)
@@ -173,9 +192,7 @@ private object MatrixFactorizationModel extends Loader[MatrixFactorizationModel]
       val (className, formatVersion, metadata) = loadMetadata(sc, path)
       assert(className == thisClassName)
       assert(formatVersion == thisFormatVersion)
-      val rank = metadata.select("rank").map { case Row(r: Int) =>
-        r
-      }.first()
+      val rank = metadata.select("rank").first().getInt(0)
       val userFeatures = sqlContext.parquetFile(userPath(path))
         .map { case Row(id: Int, features: Seq[Double]) =>
           (id, features.toArray)
@@ -184,7 +201,7 @@ private object MatrixFactorizationModel extends Loader[MatrixFactorizationModel]
         .map { case Row(id: Int, features: Seq[Double]) =>
         (id, features.toArray)
       }
-      new MatrixFactorizationModel(r, userFeatures, productFeatures)
+      new MatrixFactorizationModel(rank, userFeatures, productFeatures)
     }
 
     private def userPath(path: String): String = {
