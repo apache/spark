@@ -23,7 +23,6 @@ import java.util.List;
 import scala.Tuple2;
 
 import com.google.common.collect.Lists;
-import static org.apache.spark.streaming.JavaTestUtils.*;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -35,6 +34,7 @@ import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
+import static org.apache.spark.streaming.JavaTestUtils.*;
 
 public class JavaStreamingLinearRegressionSuite implements Serializable {
 
