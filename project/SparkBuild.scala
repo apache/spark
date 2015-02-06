@@ -374,7 +374,10 @@ object Unidoc {
       ),
       "-group", "Spark SQL", packageList("sql.api.java", "sql.api.java.types", "sql.hive.api.java"),
       "-noqualifier", "java.lang"
-    )
+    ),
+
+    // Group similar methods together based on the @group annotation.
+    scalacOptions in (ScalaUnidoc, unidoc) ++= Seq("-groups")
   )
 }
 
