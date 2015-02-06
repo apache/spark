@@ -25,6 +25,8 @@ filtering, dimensionality reduction, as well as underlying optimization primitiv
   * alternating least squares (ALS)
 * [Clustering](mllib-clustering.html)
   * k-means
+  * Gaussian mixture
+  * power iteration
 * [Dimensionality reduction](mllib-dimensionality-reduction.html)
   * singular value decomposition (SVD)
   * principal component analysis (PCA)
