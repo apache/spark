@@ -102,6 +102,7 @@ private[hive] object HiveQl {
     "TOK_CREATEINDEX",
     "TOK_DROPDATABASE",
     "TOK_DROPINDEX",
+    "TOK_DROPTABLE_PROPERTIES",
     "TOK_MSCK",
 
     "TOK_ALTERVIEW_ADDPARTS",
@@ -110,6 +111,7 @@ private[hive] object HiveQl {
     "TOK_ALTERVIEW_PROPERTIES",
     "TOK_ALTERVIEW_RENAME",
     "TOK_CREATEVIEW",
+    "TOK_DROPVIEW_PROPERTIES",
     "TOK_DROPVIEW",
 
     "TOK_EXPORT",
