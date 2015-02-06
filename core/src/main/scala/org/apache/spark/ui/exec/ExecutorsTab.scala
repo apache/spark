@@ -48,7 +48,9 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener) extends Sp
   val executorToTasksFailed = HashMap[String, Int]()
   val executorToDuration = HashMap[String, Long]()
   val executorToInputBytes = HashMap[String, Long]()
+  val executorToInputRecords = HashMap[String, Long]()
   val executorToOutputBytes = HashMap[String, Long]()
+  val executorToOutputRecords = HashMap[String, Long]()
   val executorToShuffleRead = HashMap[String, Long]()
   val executorToShuffleWrite = HashMap[String, Long]()
   val executorToLogUrls = HashMap[String, Map[String, String]]()
@@ -84,10 +86,14 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener) extends Sp
         metrics.inputMetrics.foreach { inputMetrics =>
           executorToInputBytes(eid) =
             executorToInputBytes.getOrElse(eid, 0L) + inputMetrics.bytesRead
+          executorToInputRecords(eid) =
+            executorToInputRecords.getOrElse(eid, 0L) + inputMetrics.recordsRead
         }
         metrics.outputMetrics.foreach { outputMetrics =>
           executorToOutputBytes(eid) =
             executorToOutputBytes.getOrElse(eid, 0L) + outputMetrics.bytesWritten
+          executorToOutputRecords(eid) =
+            executorToOutputRecords.getOrElse(eid, 0L) + outputMetrics.recordsWritten
         }
         metrics.shuffleReadMetrics.foreach { shuffleRead =>
           executorToShuffleRead(eid) =
