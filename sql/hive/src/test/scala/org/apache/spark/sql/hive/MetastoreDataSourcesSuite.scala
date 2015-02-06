@@ -36,6 +36,9 @@ import org.apache.spark.sql.hive.test.TestHive._
  * Tests for persisting tables created though the data sources API into the metastore.
  */
 class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
+
+  import org.apache.spark.sql.hive.test.TestHive.implicits._
+
   override def afterEach(): Unit = {
     reset()
     if (ctasPath.exists()) Utils.deleteRecursively(ctasPath)

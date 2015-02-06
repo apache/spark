@@ -58,6 +58,8 @@ case class ExecutedCommand(cmd: RunnableCommand) extends SparkPlan {
 
   override def executeCollect(): Array[Row] = sideEffectResult.toArray
 
+  override def executeTake(limit: Int): Array[Row] = sideEffectResult.take(limit).toArray
+
   override def execute(): RDD[Row] = sqlContext.sparkContext.parallelize(sideEffectResult, 1)
 }
 

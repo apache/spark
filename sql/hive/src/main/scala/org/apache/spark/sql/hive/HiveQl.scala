@@ -1103,6 +1103,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       Cast(nodeToExpr(arg), DateType)
 
     /* Arithmetic */
+    case Token("+", child :: Nil) => Add(Literal(0), nodeToExpr(child))
     case Token("-", child :: Nil) => UnaryMinus(nodeToExpr(child))
     case Token("~", child :: Nil) => BitwiseNot(nodeToExpr(child))
     case Token("+", left :: right:: Nil) => Add(nodeToExpr(left), nodeToExpr(right))
