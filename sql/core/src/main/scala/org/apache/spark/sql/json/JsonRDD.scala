@@ -39,18 +39,23 @@ private[sql] object JsonRDD extends Logging {
   private[sql] def jsonStringToRow(
       json: RDD[String],
       schema: StructType,
-      columnNameOfCorruptRecords: String): RDD[Row] = {
-    parseJson(json, columnNameOfCorruptRecords).map(parsed => asRow(parsed, schema))
+      columnNameOfCorruptRecords: String,
+      caseInsensitive: Boolean = false): RDD[Row] = {
+    parseJson(json, columnNameOfCorruptRecords, caseInsensitive)
+      .map(parsed => asRow(parsed, schema))
   }
 
   private[sql] def inferSchema(
       json: RDD[String],
       samplingRatio: Double = 1.0,
-      columnNameOfCorruptRecords: String): StructType = {
+      columnNameOfCorruptRecords: String,
+      caseInsensitive: Boolean = false): StructType = {
     require(samplingRatio > 0, s"samplingRatio ($samplingRatio) should be greater than 0")
     val schemaData = if (samplingRatio > 0.99) json else json.sample(false, samplingRatio, 1)
     val allKeys =
-      parseJson(schemaData, columnNameOfCorruptRecords).map(allKeysWithValueTypes).reduce(_ ++ _)
+      parseJson(schemaData, columnNameOfCorruptRecords, caseInsensitive)
+        .map(allKeysWithValueTypes)
+        .reduce(_ ++ _)
     createSchema(allKeys)
   }
 
@@ -284,7 +289,8 @@ private[sql] object JsonRDD extends Logging {
 
   private def parseJson(
       json: RDD[String],
-      columnNameOfCorruptRecords: String): RDD[Map[String, Any]] = {
+      columnNameOfCorruptRecords: String,
+      caseInsensitive: Boolean): RDD[Map[String, Any]] = {
     // According to [Jackson-72: https://jira.codehaus.org/browse/JACKSON-72],
     // ObjectMapper will not return BigDecimal when
     // "DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS" is disabled
@@ -305,7 +311,15 @@ private[sql] object JsonRDD extends Logging {
             case list: java.util.List[_] => scalafy(list).asInstanceOf[Seq[Map[String, Any]]]
           }
 
-          parsed
+          if (caseInsensitive) {
+            parsed.map { m =>
+              m.map { kv =>
+                (kv._1.toLowerCase, kv._2)
+              }
+            }
+          } else {
+            parsed
+          }
         } catch {
           case e: JsonProcessingException => Map(columnNameOfCorruptRecords -> record) :: Nil
         }

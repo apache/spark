@@ -318,7 +318,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group userf
    */
-  def jsonFile(path: String): DataFrame = jsonFile(path, 1.0)
+  def jsonFile(path: String): DataFrame = jsonFile(path, 1.0, false)
 
   /**
    * :: Experimental ::
@@ -337,9 +337,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * :: Experimental ::
    */
   @Experimental
-  def jsonFile(path: String, samplingRatio: Double): DataFrame = {
+  def jsonFile(path: String, samplingRatio: Double, caseInsensitivity: Boolean): DataFrame = {
     val json = sparkContext.textFile(path)
-    jsonRDD(json, samplingRatio)
+    jsonRDD(json, samplingRatio, caseInsensitivity)
+  }
+
+  @Experimental
+  def jsonFile(path: String, samplingRatio: Double): DataFrame = {
+    jsonFile(path, samplingRatio, caseInsensitivity = false)
   }
 
   /**
@@ -349,7 +354,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group userf
    */
-  def jsonRDD(json: RDD[String]): DataFrame = jsonRDD(json, 1.0)
+  def jsonRDD(json: RDD[String]): DataFrame = jsonRDD(json, 1.0, false)
 
   def jsonRDD(json: JavaRDD[String]): DataFrame = jsonRDD(json.rdd, 1.0)
 
@@ -380,18 +385,23 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * :: Experimental ::
    */
   @Experimental
-  def jsonRDD(json: RDD[String], samplingRatio: Double): DataFrame = {
+  def jsonRDD(json: RDD[String], samplingRatio: Double, caseInsensitivity: Boolean): DataFrame = {
     val columnNameOfCorruptJsonRecord = conf.columnNameOfCorruptRecord
     val appliedSchema =
       JsonRDD.nullTypeToStringType(
-        JsonRDD.inferSchema(json, samplingRatio, columnNameOfCorruptJsonRecord))
+        JsonRDD.inferSchema(json, samplingRatio, columnNameOfCorruptJsonRecord, caseInsensitivity))
     val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
     applySchema(rowRDD, appliedSchema)
   }
 
   @Experimental
+  def jsonRDD(json: RDD[String], samplingRatio: Double): DataFrame = {
+    jsonRDD(json, samplingRatio, caseInsensitivity = false)
+  }
+
+  @Experimental
   def jsonRDD(json: JavaRDD[String], samplingRatio: Double): DataFrame = {
-    jsonRDD(json.rdd, samplingRatio);
+    jsonRDD(json.rdd, samplingRatio, caseInsensitivity = false)
   }
 
   @Experimental
