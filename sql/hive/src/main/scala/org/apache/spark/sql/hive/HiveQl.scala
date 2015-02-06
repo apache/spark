@@ -556,9 +556,14 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case Token("TOK_TRUNCATETABLE",
           Token("TOK_TABLE_PARTITION",table)::Nil) =>  NativePlaceholder
 
-    case Token("TOK_QUERY",
-           Token("TOK_FROM", fromClause :: Nil) ::
-           insertClauses) =>
+    case Token("TOK_QUERY", queryArgs)
+        if Seq("TOK_FROM", "TOK_INSERT").contains(queryArgs.head.getText) =>
+
+      val (fromClause: Option[ASTNode], insertClauses) = queryArgs match {
+        case Token("TOK_FROM", args: Seq[ASTNode]) :: insertClauses =>
+          (Some(args.head), insertClauses)
+        case Token("TOK_INSERT", _) :: Nil => (None, queryArgs)
+      }
 
       // Return one query for each insert clause.
       val queries = insertClauses.map { case Token("TOK_INSERT", singleInsert) =>
@@ -599,8 +604,12 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
               "TOK_LATERAL_VIEW"),
             singleInsert)
         }
-
-        val relations = nodeToRelation(fromClause)
+ 
+        val relations = fromClause match {
+          case Some(f) => nodeToRelation(f)
+          case None => NoRelation
+        }
+ 
         val withWhere = whereClause.map { whereNode =>
           val Seq(whereExpr) = whereNode.getChildren.toSeq
           Filter(nodeToExpr(whereExpr), relations)
