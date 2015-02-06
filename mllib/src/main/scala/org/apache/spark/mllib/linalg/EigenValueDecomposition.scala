@@ -66,6 +66,9 @@ private[mllib] object EigenValueDecomposition {
     // ncv must be smaller than n
     val ncv = math.min(2 * k, n)
 
+    require(ncv * n.toLong < Integer.MAX_VALUE, "Product of 2*k*n must be smaller than " +
+      s"Integer.MAX_VALUE. Found required eigenvalues k = $k and matrix dimension n = $n")
+
     // "I" for standard eigenvalue problem, "G" for generalized eigenvalue problem
     val bmat = "I"
     // "LM" : compute the NEV largest (in magnitude) eigenvalues
