@@ -97,11 +97,16 @@ sparkR.init <- function(
   if (yarn_conf_dir != "") {
     cp <- paste(cp, yarn_conf_dir, sep = ":")
   }
-  launchBackend(classPath = cp,
-                mainClass = "edu.berkeley.cs.amplab.sparkr.SparkRBackend",
-                args = as.character(sparkRBackendPort),
-                javaOpts = paste("-Xmx", sparkMem, sep = ""))
-  Sys.sleep(2) # Wait for backend to come up
+  sparkRExistingPort <- Sys.getenv("SPARKR_BACKEND_PORT", "")
+  if (sparkRExistingPort != "") {
+    sparkRBackendPort <- sparkRExistingPort
+  } else {
+    launchBackend(classPath = cp,
+                  mainClass = "edu.berkeley.cs.amplab.sparkr.SparkRBackend",
+                  args = as.character(sparkRBackendPort),
+                  javaOpts = paste("-Xmx", sparkMem, sep = ""))
+    Sys.sleep(2) # Wait for backend to come up
+  }
   .sparkREnv$sparkRBackendPort <- sparkRBackendPort
   connectBackend("localhost", sparkRBackendPort) # Connect to it
 
