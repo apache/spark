@@ -68,18 +68,14 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
     case Heartbeat(executorId, taskMetrics, blockManagerId) =>
       val response = HeartbeatResponse(
         !scheduler.executorHeartbeatReceived(executorId, taskMetrics, blockManagerId))
-      heartbeatReceived(executorId)
+      executorLastSeen(executorId) = System.currentTimeMillis()
       sender ! response
     case ExpireDeadHosts =>
       expireDeadHosts()
   }
-  
-  private def heartbeatReceived(executorId: String): Unit = {
-    executorLastSeen(executorId) = System.currentTimeMillis()
-  }
-  
+
   private def expireDeadHosts(): Unit = {
-    logTrace("Checking for hosts with no recent heart beats in HeartbeatReceiver.")
+    logTrace("Checking for hosts with no recent heartbeats in HeartbeatReceiver.")
     val now = System.currentTimeMillis()
     val minSeenTime = now - executorTimeout
     for ((executorId, lastSeenMs) <- executorLastSeen) {
