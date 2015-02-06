@@ -151,9 +151,9 @@ def parse_args():
         default=DEFAULT_SPARK_EC2_GITHUB_REPO,
         help="Github repo from which to checkout spark-ec2 (default: %default)")
     parser.add_option(
-        "--spark-ec2-branch",
+        "--spark-ec2-git-branch",
         default=DEFAULT_SPARK_EC2_BRANCH,
-        help="spark-ec2 branch to use (default: %default)")
+        help="Github repo branch of spark-ec2 to use (default: %default)")
     parser.add_option(
         "--hadoop-major-version", default="1",
         help="Major version of Hadoop (default: %default)")
@@ -341,7 +341,9 @@ def get_spark_ami(opts):
             "Don't recognize %s, assuming type is pvm" % opts.instance_type
 
     # URL prefix from which to fetch AMI information
-    ami_prefix = "{r}/{b}/ami-list".format(r=opts.spark_ec2_git_repo.replace("https://github.com","https://raw.github.com",1), b=opts.spark_ec2_branch)
+    ami_prefix = "{r}/{b}/ami-list".format(
+        r=opts.spark_ec2_git_repo.replace("https://github.com", "https://raw.github.com", 1),
+        b=opts.spark_ec2_git_branch)
 
     ami_path = "%s/%s/%s" % (ami_prefix, opts.region, instance_type)
     try:
@@ -660,14 +662,14 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
 
     # NOTE: We should clone the repository before running deploy_files to
     # prevent ec2-variables.sh from being overwritten
-    repo_branch="{r} -b {b}".format(r=opts.spark_ec2_git_repo, b=opts.spark_ec2_branch)
-    print "Cloning spark-ec2 scripts from {rb} on master...".format(rb=repo_branch)
+    print "Cloning spark-ec2 scripts from {r}/tree/{b}...".format(
+        r=opts.spark_ec2_git_repo, b=opts.spark_ec2_git_branch)
     ssh(
         host=master,
         opts=opts,
         command="rm -rf spark-ec2"
         + " && "
-        + "git clone {rb}".format(rb=repo_branch)
+        + "git clone {r} -b {b}".format(r=opts.spark_ec2_git_repo, b=opts.spark_ec2_git_branch)
     )
 
     print "Deploying files to master..."
@@ -1037,6 +1039,14 @@ def real_main():
 
     if opts.ebs_vol_num > 8:
         print >> stderr, "ebs-vol-num cannot be greater than 8"
+        sys.exit(1)
+
+    # Limit naming to avoid breaking things, as we rely on the repo
+    # being spark-ec2 in a few places.
+    # Also note that e.g. */spark-ec2/ and */spark-ec2.git are not allowed, as
+    # they would break the ami_prefix
+    if not opts.spark_ec2_git_repo.endswith("/spark-ec2"):
+        print >> stderr, "spark-ec2-git-repo must end with /spark-ec2"
         sys.exit(1)
 
     try:
