@@ -23,14 +23,10 @@ import org.scalatest.BeforeAndAfter
 import kafka.common.TopicAndPartition
 
 class KafkaClusterSuite extends KafkaStreamSuiteBase with BeforeAndAfter {
-  val brokerHost = "localhost"
 
-  val kafkaParams = Map("metadata.broker.list" -> s"$brokerHost:$brokerPort")
-
+  val kafkaParams = Map("metadata.broker.list" -> s"$brokerAddress")
   val kc = new KafkaCluster(kafkaParams)
-
   val topic = "kcsuitetopic" + Random.nextInt(10000)
-
   val topicAndPartition = TopicAndPartition(topic, 0)
 
   before {

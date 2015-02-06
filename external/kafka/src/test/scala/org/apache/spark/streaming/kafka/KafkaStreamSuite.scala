@@ -48,15 +48,18 @@ import org.apache.spark.util.Utils
  */
 abstract class KafkaStreamSuiteBase extends FunSuite with Eventually with Logging {
 
+  val zkHost = "localhost"
+  var zkPort: Int = 0
   var zkAddress: String = _
   var zkClient: ZkClient = _
 
-  private val zkHost = "localhost"
+  val brokerHost = "localhost"
+  var brokerPort = 9092
+  var brokerAddress: String = _
+
   private val zkConnectionTimeout = 6000
   private val zkSessionTimeout = 6000
   private var zookeeper: EmbeddedZookeeper = _
-  private var zkPort: Int = 0
-  protected var brokerPort = 9092
   private var brokerConf: KafkaConfig = _
   private var server: KafkaServer = _
   private var producer: Producer[String, String] = _
@@ -67,6 +70,7 @@ abstract class KafkaStreamSuiteBase extends FunSuite with Eventually with Loggin
     // Get the actual zookeeper binding port
     zkPort = zookeeper.actualPort
     zkAddress = s"$zkHost:$zkPort"
+
     logInfo("==================== 0 ====================")
 
     zkClient = new ZkClient(zkAddress, zkSessionTimeout, zkConnectionTimeout,
@@ -94,6 +98,7 @@ abstract class KafkaStreamSuiteBase extends FunSuite with Eventually with Loggin
     }
 
     Thread.sleep(2000)
+    brokerAddress = s"$brokerHost:$brokerPort"
     logInfo("==================== 4 ====================")
   }
 

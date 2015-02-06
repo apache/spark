@@ -32,6 +32,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Milliseconds, StreamingContext, Time}
 import org.apache.spark.streaming.dstream.{DStream, InputDStream}
 import org.apache.spark.util.Utils
+import kafka.common.TopicAndPartition
+import kafka.message.MessageAndMetadata
 
 class DirectKafkaStreamSuite extends KafkaStreamSuiteBase
   with BeforeAndAfter with BeforeAndAfterAll with Eventually {
@@ -39,12 +41,6 @@ class DirectKafkaStreamSuite extends KafkaStreamSuiteBase
     .setMaster("local[4]")
     .setAppName(this.getClass.getSimpleName)
 
-  val brokerHost = "localhost"
-
-  val kafkaParams = Map(
-    "metadata.broker.list" -> s"$brokerHost:$brokerPort",
-    "auto.offset.reset" -> "smallest"
-  )
 
   var ssc: StreamingContext = _
   var testDir: File = _
@@ -66,13 +62,18 @@ class DirectKafkaStreamSuite extends KafkaStreamSuiteBase
     }
   }
 
-  test("basic receiving with multiple topics") {
-    val topics = Set("newA", "newB")
+  test("basic receiving with multiple topics and smallest starting offset") {
+    val topics = Set("topic1", "topic2", "topic3")
     val data = Map("a" -> 7, "b" -> 9)
     topics.foreach { t =>
       createTopic(t)
       produceAndSendMessage(t, data)
     }
+    val kafkaParams = Map(
+      "metadata.broker.list" -> s"$brokerAddress",
+      "auto.offset.reset" -> "smallest"
+    )
+
     ssc = new StreamingContext(sparkConf, Milliseconds(200))
     val stream = withClue("Error creating direct stream") {
       KafkaUtils.createDirectStream[String, String, StringDecoder, StringDecoder](
@@ -106,12 +107,106 @@ class DirectKafkaStreamSuite extends KafkaStreamSuiteBase
     }
     ssc.stop()
   }
+  test("receiving from largest starting offset") {
+    val topic = "largest"
+    val topicPartition = TopicAndPartition(topic, 0)
+    val data = Map("a" -> 10)
+    createTopic(topic)
+    val kafkaParams = Map(
+      "metadata.broker.list" -> s"$brokerAddress",
+      "auto.offset.reset" -> "largest"
+    )
+    val kc = new KafkaCluster(kafkaParams)
+    def getLatestOffset(): Long = {
+      kc.getLatestLeaderOffsets(Set(topicPartition)).right.get(topicPartition).offset
+    }
+
+    // Send some initial messages before starting context
+    produceAndSendMessage(topic, data)
+    eventually(timeout(10 seconds), interval(20 milliseconds)) {
+      assert(getLatestOffset() > 3)
+    }
+    val offsetBeforeStart = getLatestOffset()
+
+    // Setup context and kafka stream with largest offset
+    ssc = new StreamingContext(sparkConf, Milliseconds(200))
+    val stream = withClue("Error creating direct stream") {
+      KafkaUtils.createDirectStream[String, String, StringDecoder, StringDecoder](
+        ssc, kafkaParams, Set(topic))
+    }
+    assert(
+      stream.asInstanceOf[DirectKafkaInputDStream[_, _, _, _, _]]
+        .fromOffsets(topicPartition) >= offsetBeforeStart,
+      "Start offset not from latest"
+    )
+
+    val collectedData = new mutable.ArrayBuffer[String]()
+    stream.map { _._2 }.foreachRDD { rdd => collectedData ++= rdd.collect() }
+    ssc.start()
+    val newData = Map("b" -> 10)
+    produceAndSendMessage(topic, newData)
+    eventually(timeout(10 seconds), interval(50 milliseconds)) {
+      collectedData.contains("b")
+    }
+    assert(!collectedData.contains("a"))
+  }
+
+
+  test("creating stream by offset") {
+    val topic = "offset"
+    val topicPartition = TopicAndPartition(topic, 0)
+    val data = Map("a" -> 10)
+    createTopic(topic)
+    val kafkaParams = Map(
+      "metadata.broker.list" -> s"$brokerAddress",
+      "auto.offset.reset" -> "largest"
+    )
+    val kc = new KafkaCluster(kafkaParams)
+    def getLatestOffset(): Long = {
+      kc.getLatestLeaderOffsets(Set(topicPartition)).right.get(topicPartition).offset
+    }
+
+    // Send some initial messages before starting context
+    produceAndSendMessage(topic, data)
+    eventually(timeout(10 seconds), interval(20 milliseconds)) {
+      assert(getLatestOffset() >= 10)
+    }
+    val offsetBeforeStart = getLatestOffset()
+
+    // Setup context and kafka stream with largest offset
+    ssc = new StreamingContext(sparkConf, Milliseconds(200))
+    val stream = withClue("Error creating direct stream") {
+      KafkaUtils.createDirectStream[String, String, StringDecoder, StringDecoder, String](
+        ssc, kafkaParams, Map(topicPartition -> 11L),
+        (m: MessageAndMetadata[String, String]) => m.message())
+    }
+    assert(
+      stream.asInstanceOf[DirectKafkaInputDStream[_, _, _, _, _]]
+        .fromOffsets(topicPartition) >= offsetBeforeStart,
+      "Start offset not from latest"
+    )
+
+    val collectedData = new mutable.ArrayBuffer[String]()
+    stream.foreachRDD { rdd => collectedData ++= rdd.collect() }
+    ssc.start()
+    val newData = Map("b" -> 10)
+    produceAndSendMessage(topic, newData)
+    eventually(timeout(10 seconds), interval(50 milliseconds)) {
+      collectedData.contains("b")
+    }
+    assert(!collectedData.contains("a"))
+  }
 
   // Test to verify the offset ranges can be recovered from the checkpoints
   test("offset recovery") {
     val topic = "recovery"
     createTopic(topic)
     testDir = Utils.createTempDir()
+
+    val kafkaParams = Map(
+      "metadata.broker.list" -> s"$brokerAddress",
+      "auto.offset.reset" -> "smallest"
+    )
 
     // Send data to Kafka and wait for it to be received
     def sendDataAndWaitForReceive(data: Seq[Int]) {

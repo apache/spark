@@ -55,8 +55,8 @@ private[streaming]
 class DirectKafkaInputDStream[
   K: ClassTag,
   V: ClassTag,
-  U <: Decoder[_]: ClassTag,
-  T <: Decoder[_]: ClassTag,
+  U <: Decoder[K]: ClassTag,
+  T <: Decoder[V]: ClassTag,
   R: ClassTag](
     @transient ssc_ : StreamingContext,
     val kafkaParams: Map[String, String],
