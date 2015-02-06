@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.ExplainCommand
+import org.apache.spark.sql.sources.DescribeCommand
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, AnalyzeTable, HiveScriptIOSchema}
 import org.apache.spark.sql.types._
 
@@ -46,22 +47,6 @@ import scala.collection.JavaConversions._
  * cmd string.
  */
 private[hive] case object NativePlaceholder extends Command
-
-/**
- * Returned for the "DESCRIBE [EXTENDED] [dbName.]tableName" command.
- * @param table The table to be described.
- * @param isExtended True if "DESCRIBE EXTENDED" is used. Otherwise, false.
- *                   It is effective only when the table is a Hive table.
- */
-case class DescribeCommand(
-    table: LogicalPlan,
-    isExtended: Boolean) extends Command {
-  override def output = Seq(
-    // Column names are based on Hive.
-    AttributeReference("col_name", StringType, nullable = false)(),
-    AttributeReference("data_type", StringType, nullable = false)(),
-    AttributeReference("comment", StringType, nullable = false)())
-}
 
 /** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
 private[hive] object HiveQl {

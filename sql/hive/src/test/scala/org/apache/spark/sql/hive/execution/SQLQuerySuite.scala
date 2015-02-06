@@ -17,13 +17,10 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.QueryTest
-
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.hive.HiveShim
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
-import org.apache.spark.sql.hive.HiveShim
+import org.apache.spark.sql.{QueryTest, Row, SQLConf}
 
 case class Nested1(f1: Nested2)
 case class Nested2(f2: Nested3)
@@ -109,28 +106,34 @@ class SQLQuerySuite extends QueryTest {
     )
 
     if (HiveShim.version =="0.13.1") {
-      sql(
-        """CREATE TABLE ctas5
-          | STORED AS parquet AS
-          |   SELECT key, value
-          |   FROM src
-          |   ORDER BY key, value""".stripMargin).collect
+      val origUseParquetDataSource = conf.parquetUseDataSourceApi
+      try {
+        setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "false")
+        sql(
+          """CREATE TABLE ctas5
+            | STORED AS parquet AS
+            |   SELECT key, value
+            |   FROM src
+            |   ORDER BY key, value""".stripMargin).collect()
 
-      checkExistence(sql("DESC EXTENDED ctas5"), true,
-        "name:key", "type:string", "name:value", "ctas5",
-        "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
-        "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
-        "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
-        "MANAGED_TABLE"
-      )
+        checkExistence(sql("DESC EXTENDED ctas5"), true,
+          "name:key", "type:string", "name:value", "ctas5",
+          "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
+          "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
+          "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
+          "MANAGED_TABLE"
+        )
 
-      val default = getConf("spark.sql.hive.convertMetastoreParquet", "true")
-      // use the Hive SerDe for parquet tables
-      sql("set spark.sql.hive.convertMetastoreParquet = false")
-      checkAnswer(
-        sql("SELECT key, value FROM ctas5 ORDER BY key, value"),
-        sql("SELECT key, value FROM src ORDER BY key, value").collect().toSeq)
-      sql(s"set spark.sql.hive.convertMetastoreParquet = $default")
+        val default = getConf("spark.sql.hive.convertMetastoreParquet", "true")
+        // use the Hive SerDe for parquet tables
+        sql("set spark.sql.hive.convertMetastoreParquet = false")
+        checkAnswer(
+          sql("SELECT key, value FROM ctas5 ORDER BY key, value"),
+          sql("SELECT key, value FROM src ORDER BY key, value").collect().toSeq)
+        sql(s"set spark.sql.hive.convertMetastoreParquet = $default")
+      } finally {
+        setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, origUseParquetDataSource.toString)
+      }
     }
   }
 

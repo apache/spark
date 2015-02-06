@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.util.TimeZone
-
 import org.apache.spark.sql.test.TestSQLContext
 import org.scalatest.BeforeAndAfterAll
 
@@ -36,16 +34,6 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   TestData
 
   import org.apache.spark.sql.test.TestSQLContext.implicits._
-
-  var origZone: TimeZone = _
-  override protected def beforeAll() {
-    origZone = TimeZone.getDefault
-    TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
-  }
-
-  override protected def afterAll() {
-    TimeZone.setDefault(origZone)
-  }
 
   test("SPARK-4625 support SORT BY in SimpleSQLParser & DSL") {
     checkAnswer(

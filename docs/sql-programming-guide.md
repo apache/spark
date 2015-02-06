@@ -1,6 +1,7 @@
 ---
 layout: global
-title: Spark SQL Programming Guide
+displayTitle: Spark SQL Programming Guide
+title: Spark SQL
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -1107,7 +1108,7 @@ in Hive deployments.
   have the same input format.
 * Non-equi outer join: For the uncommon use case of using outer joins with non-equi join conditions
   (e.g. condition "`key < 10`"), Spark SQL will output wrong result for the `NULL` tuple.
-* `UNION` type and `DATE` type
+* `UNION` type
 * Unique join
 * Single query multi insert
 * Column statistics collecting: Spark SQL does not piggyback scans to collect column statistics at

@@ -17,17 +17,17 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{SQLContext, Strategy, execution}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
+import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand}
 import org.apache.spark.sql.parquet._
+import org.apache.spark.sql.sources.{CreateTableUsing, CreateTempTableUsing, DescribeCommand => LogicalDescribeCommand, _}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.sources._
-
+import org.apache.spark.sql.{SQLContext, Strategy, execution}
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SQLContext#SparkPlanner =>
@@ -336,6 +336,16 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
       case c: CreateTableUsingAsLogicalPlan if c.temporary && c.allowExisting =>
         sys.error("allowExisting should be set to false when creating a temporary table.")
+
+      case LogicalDescribeCommand(table, isExtended) =>
+        val resultPlan = self.sqlContext.executePlan(table).executedPlan
+        ExecutedCommand(
+          RunnableDescribeCommand(resultPlan, resultPlan.output, isExtended)) :: Nil
+
+      case LogicalDescribeCommand(table, isExtended) =>
+        val resultPlan = self.sqlContext.executePlan(table).executedPlan
+        ExecutedCommand(
+          RunnableDescribeCommand(resultPlan, resultPlan.output, isExtended)) :: Nil
 
       case _ => Nil
     }
