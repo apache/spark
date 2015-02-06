@@ -116,7 +116,7 @@ class MyJavaLogisticRegression
    */
   IntParam maxIter = new IntParam(this, "maxIter", "max number of iterations");
 
-  int getMaxIter() { return (int)get(maxIter); }
+  int getMaxIter() { return (Integer) get(maxIter); }
 
   public MyJavaLogisticRegression() {
     setMaxIter(100);
@@ -124,7 +124,7 @@ class MyJavaLogisticRegression
 
   // The parameter setter is in this class since it should return type MyJavaLogisticRegression.
   MyJavaLogisticRegression setMaxIter(int value) {
-    return (MyJavaLogisticRegression)set(maxIter, value);
+    return (MyJavaLogisticRegression) set(maxIter, value);
   }
 
   // This method is used by fit().
