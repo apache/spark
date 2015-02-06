@@ -1291,7 +1291,6 @@ private[spark] object Utils extends Logging {
     if (inWord || inDoubleQuote || inSingleQuote) {
       endWord()
     }
-    println("+++ split command to " + buf)
     buf
   }
 
