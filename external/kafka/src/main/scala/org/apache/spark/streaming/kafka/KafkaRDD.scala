@@ -36,14 +36,12 @@ import kafka.utils.VerifiableProperties
  * Starting and ending offsets are specified in advance,
  * so that you can control exactly-once semantics.
  * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
- * configuration parameters</a>.
- *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
- *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
- * @param batch Each KafkaRDDPartition in the batch corresponds to a
- *   range of offsets for a given Kafka topic/partition
+ * configuration parameters</a>. Requires "metadata.broker.list" or "bootstrap.servers" to be set
+ * with Kafka broker(s) specified in host1:port1,host2:port2 form.
+ * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
  * @param messageHandler function for translating each message into the desired type
  */
-private[spark]
+private[kafka]
 class KafkaRDD[
   K: ClassTag,
   V: ClassTag,
@@ -183,7 +181,7 @@ class KafkaRDD[
   }
 }
 
-private[spark]
+private[kafka]
 object KafkaRDD {
   import KafkaCluster.LeaderOffset
 

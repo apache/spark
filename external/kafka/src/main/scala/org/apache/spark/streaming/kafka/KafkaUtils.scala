@@ -155,14 +155,13 @@ object KafkaUtils {
   }
 
   /**
-   * Create a RDD from the
-   * Starting and ending offsets are specified in advance,
-   * so that you can control exactly-once semantics.
+   * Create a RDD from Kafka using offset ranges for each topic and partition.
+   *
    * @param sc SparkContext object
    * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
-   * configuration parameters</a>.
-   *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
-   *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
+   *    configuration parameters</a>. Requires "metadata.broker.list" or "bootstrap.servers"
+   *    to be set with Kafka broker(s) (NOT zookeeper servers) specified in
+   *    host1:port1,host2:port2 form.
    * @param offsetRanges Each OffsetRange in the batch corresponds to a
    *   range of offsets for a given Kafka topic/partition
    */
@@ -186,18 +185,21 @@ object KafkaUtils {
     new KafkaRDD[K, V, KD, VD, (K, V)](sc, kafkaParams, offsetRanges, leaders, messageHandler)
   }
 
-  /** A batch-oriented interface for consuming from Kafka.
-   * Starting and ending offsets are specified in advance,
-   * so that you can control exactly-once semantics.
+  /**
+   * :: Experimental ::
+   * Create a RDD from Kafka using offset ranges for each topic and partition. This allows you
+   * specify the Kafka leader to connect to (to optimize fetching) and access the message as well
+   * as the metadata.
+   *
    * @param sc SparkContext object
    * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
-   * configuration parameters</a>.
-   *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
-   *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
+   *    configuration parameters</a>. Requires "metadata.broker.list" or "bootstrap.servers"
+   *    to be set with Kafka broker(s) (NOT zookeeper servers) specified in
+   *    host1:port1,host2:port2 form.
    * @param offsetRanges Each OffsetRange in the batch corresponds to a
    *   range of offsets for a given Kafka topic/partition
    * @param leaders Kafka leaders for each offset range in batch
-   * @param messageHandler function for translating each message into the desired type
+   * @param messageHandler function for translating each message and metadata into the desired type
    */
   @Experimental
   def createRDD[
@@ -219,6 +221,51 @@ object KafkaUtils {
   }
 
 
+  /**
+   * Create a RDD from Kafka using offset ranges for each topic and partition.
+   *
+   * @param jsc JavaSparkContext object
+   * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+   *    configuration parameters</a>. Requires "metadata.broker.list" or "bootstrap.servers"
+   *    to be set with Kafka broker(s) (NOT zookeeper servers) specified in
+   *    host1:port1,host2:port2 form.
+   * @param offsetRanges Each OffsetRange in the batch corresponds to a
+   *   range of offsets for a given Kafka topic/partition
+   */
+  @Experimental
+  def createRDD[K, V, KD <: Decoder[K], VD <: Decoder[V]](
+      jsc: JavaSparkContext,
+      keyClass: Class[K],
+      valueClass: Class[V],
+      keyDecoderClass: Class[KD],
+      valueDecoderClass: Class[VD],
+      kafkaParams: JMap[String, String],
+      offsetRanges: Array[OffsetRange]
+    ): JavaPairRDD[K, V] = {
+    implicit val keyCmt: ClassTag[K] = ClassTag(keyClass)
+    implicit val valueCmt: ClassTag[V] = ClassTag(valueClass)
+    implicit val keyDecoderCmt: ClassTag[KD] = ClassTag(keyDecoderClass)
+    implicit val valueDecoderCmt: ClassTag[VD] = ClassTag(valueDecoderClass)
+    new JavaPairRDD(createRDD[K, V, KD, VD](
+      jsc.sc, Map(kafkaParams.toSeq: _*), offsetRanges))
+  }
+
+  /**
+   * :: Experimental ::
+   * Create a RDD from Kafka using offset ranges for each topic and partition. This allows you
+   * specify the Kafka leader to connect to (to optimize fetching) and access the message as well
+   * as the metadata.
+   *
+   * @param jsc JavaSparkContext object
+   * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+   *    configuration parameters</a>. Requires "metadata.broker.list" or "bootstrap.servers"
+   *    to be set with Kafka broker(s) (NOT zookeeper servers) specified in
+   *    host1:port1,host2:port2 form.
+   * @param offsetRanges Each OffsetRange in the batch corresponds to a
+   *   range of offsets for a given Kafka topic/partition
+   * @param leaders Kafka leaders for each offset range in batch
+   * @param messageHandler function for translating each message and metadata into the desired type
+   */
   @Experimental
   def createRDD[K, V, KD <: Decoder[K], VD <: Decoder[V], R](
       jsc: JavaSparkContext,
@@ -241,25 +288,6 @@ object KafkaUtils {
       jsc.sc, Map(kafkaParams.toSeq: _*), offsetRanges, leaders, messageHandler.call _)
   }
 
-  @Experimental
-  def createRDD[K, V, KD <: Decoder[K], VD <: Decoder[V]](
-      jsc: JavaSparkContext,
-      keyClass: Class[K],
-      valueClass: Class[V],
-      keyDecoderClass: Class[KD],
-      valueDecoderClass: Class[VD],
-      kafkaParams: JMap[String, String],
-      offsetRanges: Array[OffsetRange]
-    ): JavaPairRDD[K, V] = {
-    implicit val keyCmt: ClassTag[K] = ClassTag(keyClass)
-    implicit val valueCmt: ClassTag[V] = ClassTag(valueClass)
-    implicit val keyDecoderCmt: ClassTag[KD] = ClassTag(keyDecoderClass)
-    implicit val valueDecoderCmt: ClassTag[VD] = ClassTag(valueDecoderClass)
-    new JavaPairRDD(createRDD[K, V, KD, VD](
-      jsc.sc, Map(kafkaParams.toSeq: _*), offsetRanges))
-  }
-
-
   /**
    * :: Experimental ::
    * Create an input stream that pulls messages from a Kafka Broker. This stream can guarantee
@@ -270,7 +298,7 @@ object KafkaUtils {
    *  - Offsets: This does not use Zookeeper to store offsets. The consumed offsets are tracked
    *    by the stream itself. For interoperability with Kafka monitoring tools that depend on 
    *    Zookeeper, you have to update Kafka/Zookeeper yourself from the streaming application.
-*  - Failure Recovery: To recover from driver failures, you have to enable checkpointing
+   *  - Failure Recovery: To recover from driver failures, you have to enable checkpointing
    *    in the [[StreamingContext]]. The information on consumed offset can be
    *    recovered from the checkpoint. See the programming guide for details (constraints, etc.).
    *  - End-to-end semantics: This stream ensures that every records is effectively received and
@@ -375,7 +403,7 @@ object KafkaUtils {
    *  - Offsets: This does not use Zookeeper to store offsets. The consumed offsets are tracked
    *    by the stream itself. For interoperability with Kafka monitoring tools that depend on 
    *    Zookeeper, you have to update Kafka/Zookeeper yourself from the streaming application.
-*  - Failure Recovery: To recover from driver failures, you have to enable checkpointing
+   *  - Failure Recovery: To recover from driver failures, you have to enable checkpointing
    *    in the [[StreamingContext]]. The information on consumed offset can be
    *    recovered from the checkpoint. See the programming guide for details (constraints, etc.).
    *  - End-to-end semantics: This stream ensures that every records is effectively received and
@@ -433,7 +461,7 @@ object KafkaUtils {
    *  - Offsets: This does not use Zookeeper to store offsets. The consumed offsets are tracked
    *    by the stream itself. For interoperability with Kafka monitoring tools that depend on 
    *    Zookeeper, you have to update Kafka/Zookeeper yourself from the streaming application.
-*  - Failure Recovery: To recover from driver failures, you have to enable checkpointing
+   *  - Failure Recovery: To recover from driver failures, you have to enable checkpointing
    *    in the [[StreamingContext]]. The information on consumed offset can be
    *    recovered from the checkpoint. See the programming guide for details (constraints, etc.).
    *  - End-to-end semantics: This stream ensures that every records is effectively received and
