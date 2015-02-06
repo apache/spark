@@ -288,7 +288,12 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   // the bound port to the cluster manager properly
   ui.foreach(_.bind())
 
-  /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
+  /**
+   * A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse.
+   *
+   * '''Note:''' As it will be reused in all Hadoop RDDs, it's better not to modify it unless you
+   * plan to set some global configurations for all Hadoop RDDs.
+   */
   val hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(conf)
 
   // Add each JAR given through the constructor
@@ -694,7 +699,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * necessary info (e.g. file name for a filesystem-based dataset, table name for HyperTable),
    * using the older MapReduce API (`org.apache.hadoop.mapred`).
    *
-   * @param conf JobConf for setting up the dataset
+   * @param conf JobConf for setting up the dataset. Note: This will be put into a Broadcast.
+   *             Therefore if you plan to reuse this conf to create multiple RDDs, you need to make
+   *             sure you won't modify the conf. A safe approach is always creating a new conf for
+   *             a new RDD.
    * @param inputFormatClass Class of the InputFormat
    * @param keyClass Class of the keys
    * @param valueClass Class of the values
@@ -829,6 +837,14 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
    * and extra configuration options to pass to the input format.
+   *
+   * @param conf Configuration for setting up the dataset. Note: This will be put into a Broadcast.
+   *             Therefore if you plan to reuse this conf to create multiple RDDs, you need to make
+   *             sure you won't modify the conf. A safe approach is always creating a new conf for
+   *             a new RDD.
+   * @param fClass Class of the InputFormat
+   * @param kClass Class of the keys
+   * @param vClass Class of the values
    *
    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle

@@ -57,7 +57,6 @@ class SqlParser extends AbstractSparkSQLParser {
   protected val AVG = Keyword("AVG")
   protected val BETWEEN = Keyword("BETWEEN")
   protected val BY = Keyword("BY")
-  protected val CACHE = Keyword("CACHE")
   protected val CASE = Keyword("CASE")
   protected val CAST = Keyword("CAST")
   protected val COALESCE = Keyword("COALESCE")

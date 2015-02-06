@@ -145,7 +145,7 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
     // Verify that running a task reduces the cap
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(1, 3)))
     sc.listenerBus.postToAll(SparkListenerExecutorAdded(
-      0L, "executor-1", new ExecutorInfo("host1", 1)))
+      0L, "executor-1", new ExecutorInfo("host1", 1, Map.empty)))
     sc.listenerBus.postToAll(SparkListenerTaskStart(1, 0, createTaskInfo(0, 0, "executor-1")))
     assert(numExecutorsPending(manager) === 4)
     assert(addExecutors(manager) === 1)
@@ -579,13 +579,13 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
 
     // New executors have registered
     sc.listenerBus.postToAll(SparkListenerExecutorAdded(
-      0L, "executor-1", new ExecutorInfo("host1", 1)))
+      0L, "executor-1", new ExecutorInfo("host1", 1, Map.empty)))
     assert(executorIds(manager).size === 1)
     assert(executorIds(manager).contains("executor-1"))
     assert(removeTimes(manager).size === 1)
     assert(removeTimes(manager).contains("executor-1"))
     sc.listenerBus.postToAll(SparkListenerExecutorAdded(
-      0L, "executor-2", new ExecutorInfo("host2", 1)))
+      0L, "executor-2", new ExecutorInfo("host2", 1, Map.empty)))
     assert(executorIds(manager).size === 2)
     assert(executorIds(manager).contains("executor-2"))
     assert(removeTimes(manager).size === 2)
@@ -612,7 +612,7 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
 
     sc.listenerBus.postToAll(SparkListenerTaskStart(0, 0, createTaskInfo(0, 0, "executor-1")))
     sc.listenerBus.postToAll(SparkListenerExecutorAdded(
-      0L, "executor-1", new ExecutorInfo("host1", 1)))
+      0L, "executor-1", new ExecutorInfo("host1", 1, Map.empty)))
     assert(executorIds(manager).size === 1)
     assert(executorIds(manager).contains("executor-1"))
     assert(removeTimes(manager).size === 0)
@@ -624,7 +624,7 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
     assert(executorIds(manager).isEmpty)
     assert(removeTimes(manager).isEmpty)
     sc.listenerBus.postToAll(SparkListenerExecutorAdded(
-      0L, "executor-1", new ExecutorInfo("host1", 1)))
+      0L, "executor-1", new ExecutorInfo("host1", 1, Map.empty)))
     sc.listenerBus.postToAll(SparkListenerTaskStart(0, 0, createTaskInfo(0, 0, "executor-1")))
 
     assert(executorIds(manager).size === 1)
@@ -632,7 +632,7 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
     assert(removeTimes(manager).size === 0)
 
     sc.listenerBus.postToAll(SparkListenerExecutorAdded(
-      0L, "executor-2", new ExecutorInfo("host1", 1)))
+      0L, "executor-2", new ExecutorInfo("host1", 1, Map.empty)))
     assert(executorIds(manager).size === 2)
     assert(executorIds(manager).contains("executor-2"))
     assert(removeTimes(manager).size === 1)
