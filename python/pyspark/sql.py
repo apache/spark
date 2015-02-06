@@ -1470,6 +1470,9 @@ class SQLContext(object):
         df = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), schema.json())
         return DataFrame(df, self)
 
+    def getReservedWords(self):
+        return self._ssql_ctx.getReservedWords()
+
     def applyNames(self, nameString, plainRdd):
         """
         Builds a DataFrame from an RDD based on column names.
@@ -1490,13 +1493,7 @@ class SQLContext(object):
         [Row(b=u' A1', c1=u' A1'), Row(b=u' B2', c1=u' B2'), Row(b=u' C3', c1=u' C3'), Row(b=u' D4', c1=u' D4')]
         """
         fieldNames = [f for f in re.split("( |\\\".*?\\\"|'.*?')", nameString) if f.strip()]
-        reservedWords = set(map(string.lower,["ABS","ALL","AND", "APPROXIMATE", "AS", "ASC", "AVG", "BETWEEN", "BY", \
-          "CACHE", "CASE", "CAST", "COALESCE", "COUNT", "DATE", "DECIMAL", "DESC", "DISTINCT", \
-          "DOUBLE", "ELSE", "END", "EXCEPT", "FALSE", "FIRST", "FROM", "FULL", "GROUP", "HAVING", \
-          "IF", "IN", "INNER", "INSERT", "INTERSECT", "INTO", "IS", "JOIN", "LAST", "LEFT", "LIKE", \
-          "LIMIT", "LOWER", "MAX", "MIN", "NOT", "NULL", "ON", "OR", "ORDER", "SORT", "OUTER", \
-          "OVERWRITE", "REGEXP", "RIGHT", "RLIKE", "SELECT", "SEMI", "SQRT", "STRING", "SUBSTR", \
-          "SUBSTRING", "SUM", "TABLE", "THEN", "TIMESTAMP", "TRUE", "UNION", "UPPER", "WHEN", "WHERE"]))
+        reservedWords = set(map(string.lower,self._ssql_ctx.getReservedWords()))
 
         if len(reservedWords.intersection(map(string.lower, fieldNames))) > 0:
             raise ValueError("Reserved words not allowed as column names")
@@ -1519,7 +1516,7 @@ class SQLContext(object):
         """
         if (rdd.__class__ is DataFrame):
             df = rdd._jdf
-            self._ssql_ctx.registerRDDAsTable(df, tableName)
+            self.ssql_ctx.registerRDDAsTable(df, tableName)
         else:
             raise ValueError("Can only register DataFrame as table")
 

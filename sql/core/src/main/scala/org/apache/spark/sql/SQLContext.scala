@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.beans.Introspector
 import java.util.Properties
+import java.util.Arrays
 
 import scala.collection.immutable
 import scala.collection.JavaConversions._
@@ -595,6 +596,17 @@ class SQLContext(@transient val sparkContext: SparkContext)
     applySchemaToPythonRDD(rdd, schema)
   }
 
+  protected[sql] def getReservedWords() : java.util.List[String] = {
+    var rwords = Arrays.asList("ABS","ALL","AND", "APPROXIMATE", "AS", "ASC", "AVG", "BETWEEN", "BY",
+      "CACHE", "CASE", "CAST", "COALESCE", "COUNT", "DATE", "DECIMAL", "DESC", "DISTINCT",
+      "DOUBLE", "ELSE", "END", "EXCEPT", "FALSE", "FIRST", "FROM", "FULL", "GROUP", "HAVING",
+      "IF", "IN", "INNER", "INSERT", "INTERSECT", "INTO", "IS", "JOIN", "LAST", "LEFT", "LIKE",
+      "LIMIT", "LOWER", "MAX", "MIN", "NOT", "NULL", "ON", "OR", "ORDER", "SORT", "OUTER",
+      "OVERWRITE", "REGEXP", "RIGHT", "RLIKE", "SELECT", "SEMI", "SQRT", "STRING", "SUBSTR",
+      "SUBSTRING", "SUM", "TABLE", "THEN", "TIMESTAMP", "TRUE", "UNION", "UPPER", "WHEN", "WHERE")
+    rwords
+  }
+
   /**
    * Apply a schema defined by the schema to an RDD. It is only used by PySpark.
    */
@@ -637,17 +649,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   def applyNames(nameString : String, plainRdd : RDD[_]) : DataFrame = {
     // assume a space separated string
-    val names = nameString.split(" ,(?=([^\"]*\"[^\"]*\")*[^\"]*$)").toSeq
+    val names = nameString.split(" (?=([^\"]*\"[^\"]*\")*[^\"]*$)").toSeq
 
-    val reservedWords = Set("ABS","ALL","AND", "APPROXIMATE", "AS", "ASC", "AVG", "BETWEEN", "BY",
-      "CACHE", "CASE", "CAST", "COALESCE", "COUNT", "DATE", "DECIMAL", "DESC", "DISTINCT",
-      "DOUBLE", "ELSE", "END", "EXCEPT", "FALSE", "FIRST", "FROM", "FULL", "GROUP", "HAVING",
-      "IF", "IN", "INNER", "INSERT", "INTERSECT", "INTO", "IS", "JOIN", "LAST", "LEFT", "LIKE",
-      "LIMIT", "LOWER", "MAX", "MIN", "NOT", "NULL", "ON", "OR", "ORDER", "SORT", "OUTER",
-      "OVERWRITE", "REGEXP", "RIGHT", "RLIKE", "SELECT", "SEMI", "SQRT", "STRING", "SUBSTR",
-      "SUBSTRING", "SUM", "TABLE", "THEN", "TIMESTAMP", "TRUE", "UNION", "UPPER", "WHEN", "WHERE")
+    val reservedWords : Seq[String] = getReservedWords
 
-    val reservedWordsOverlap = (names.toSet.map{x : String => x.toUpperCase} & reservedWords).size
+    val reservedWordsOverlap = (names.toSet.map{x : String => x.toUpperCase} & reservedWords.toSet).size
     if ( reservedWordsOverlap > 0 ){
       throw new DDLException(s"Reserved words not allowed as column names")
     }
