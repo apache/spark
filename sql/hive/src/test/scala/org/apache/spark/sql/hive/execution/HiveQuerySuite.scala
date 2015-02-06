@@ -27,6 +27,8 @@ import scala.util.Try
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.{SparkFiles, SparkException}
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
+import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.Dsl._
@@ -59,10 +61,16 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     Locale.setDefault(originalLocale)
   }
 
-  test("SPARK-4908: concurent hive native commands") {
+  test("SPARK-4908: concurrent hive native commands") {
     (1 to 100).par.map { _ =>
       sql("USE default")
       sql("SHOW TABLES")
+    }
+  }
+
+  test("SPARK-5649: added a rule to check datatypes cast") {
+    intercept[TreeNodeException[Cast]] {
+      sql("select cast(key as binary) from src").collect()
     }
   }
 
