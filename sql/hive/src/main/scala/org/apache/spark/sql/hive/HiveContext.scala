@@ -424,6 +424,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   /** Extends QueryExecution with hive specific features. */
   protected[sql] class QueryExecution(logicalPlan: LogicalPlan)
     extends super.QueryExecution(logicalPlan) {
+    // Set the current SessionState to our own SessionState. So, we will make sure
+    // this state can be always picked up.
+    SessionState.start(sessionState)
 
     /**
      * Returns the result as a hive compatible sequence of strings.  For native commands, the
