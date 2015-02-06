@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.StructType
 
 
 private[sql] class DefaultSource
-  extends RelationProvider with SchemaRelationProvider with CreateableRelationProvider {
+  extends RelationProvider with SchemaRelationProvider with CreatableRelationProvider {
 
   /** Returns a new base relation with the parameters. */
   override def createRelation(

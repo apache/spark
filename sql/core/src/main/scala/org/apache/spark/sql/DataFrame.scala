@@ -290,7 +290,7 @@ trait DataFrame extends RDDApi[Row] {
 
   /**
    * Groups the [[DataFrame]] using the specified columns, so we can run aggregation on them.
-   * See [[GroupedDataFrame]] for all the available aggregate functions.
+   * See [[GroupedData]] for all the available aggregate functions.
    *
    * {{{
    *   // Compute the average for all numeric columns grouped by department.
@@ -304,11 +304,11 @@ trait DataFrame extends RDDApi[Row] {
    * }}}
    */
   @scala.annotation.varargs
-  def groupBy(cols: Column*): GroupedDataFrame
+  def groupBy(cols: Column*): GroupedData
 
   /**
    * Groups the [[DataFrame]] using the specified columns, so we can run aggregation on them.
-   * See [[GroupedDataFrame]] for all the available aggregate functions.
+   * See [[GroupedData]] for all the available aggregate functions.
    *
    * This is a variant of groupBy that can only group by existing columns using column names
    * (i.e. cannot construct expressions).
@@ -325,7 +325,7 @@ trait DataFrame extends RDDApi[Row] {
    * }}}
    */
   @scala.annotation.varargs
-  def groupBy(col1: String, cols: String*): GroupedDataFrame
+  def groupBy(col1: String, cols: String*): GroupedData
 
   /**
    * (Scala-specific) Compute aggregates by specifying a map from column name to

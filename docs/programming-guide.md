@@ -1,6 +1,7 @@
 ---
 layout: global
 title: Spark Programming Guide
+description: Spark SPARK_VERSION_SHORT programming guide in Java, Scala and Python
 ---
 
 * This will become a table of contents (this text will be scraped).

@@ -43,10 +43,10 @@ object CrossValidatorExample {
     val conf = new SparkConf().setAppName("CrossValidatorExample")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
-    import sqlContext._
+    import sqlContext.implicits._
 
     // Prepare training documents, which are labeled.
-    val training = sparkContext.parallelize(Seq(
+    val training = sc.parallelize(Seq(
       LabeledDocument(0L, "a b c d e spark", 1.0),
       LabeledDocument(1L, "b d", 0.0),
       LabeledDocument(2L, "spark f g h", 1.0),
@@ -92,7 +92,7 @@ object CrossValidatorExample {
     val cvModel = crossval.fit(training)
 
     // Prepare test documents, which are unlabeled.
-    val test = sparkContext.parallelize(Seq(
+    val test = sc.parallelize(Seq(
       Document(4L, "spark i j k"),
       Document(5L, "l m n"),
       Document(6L, "mapreduce spark"),

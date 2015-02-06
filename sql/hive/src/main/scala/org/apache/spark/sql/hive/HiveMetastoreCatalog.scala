@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.parquet.ParquetRelation2
 import org.apache.spark.sql.sources.{DDLParser, LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -140,7 +141,8 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
   }
 
   def hiveDefaultTableFilePath(tableName: String): String = {
-    hiveWarehouse.getTablePath(client.getDatabaseCurrent, tableName).toString
+    val currentDatabase = client.getDatabase(hive.sessionState.getCurrentDatabase())
+    hiveWarehouse.getTablePath(currentDatabase, tableName).toString
   }
 
   def tableExists(tableIdentifier: Seq[String]): Boolean = {
@@ -174,10 +176,25 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
           Nil
         }
 
-      // Since HiveQL is case insensitive for table names we make them all lowercase.
-      MetastoreRelation(
+      val relation = MetastoreRelation(
         databaseName, tblName, alias)(
           table.getTTable, partitions.map(part => part.getTPartition))(hive)
+
+      if (hive.convertMetastoreParquet &&
+          hive.conf.parquetUseDataSourceApi &&
+          relation.tableDesc.getSerdeClassName.toLowerCase.contains("parquet")) {
+        val metastoreSchema = StructType.fromAttributes(relation.output)
+        val paths = if (relation.hiveQlTable.isPartitioned) {
+          relation.hiveQlPartitions.map(p => p.getLocation)
+        } else {
+          Seq(relation.hiveQlTable.getDataLocation.toString)
+        }
+
+        LogicalRelation(ParquetRelation2(
+          paths, Map(ParquetRelation2.METASTORE_SCHEMA -> metastoreSchema.json))(hive))
+      } else {
+        relation
+      }
     }
   }
 

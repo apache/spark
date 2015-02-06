@@ -78,7 +78,7 @@ trait SchemaRelationProvider {
 }
 
 @DeveloperApi
-trait CreateableRelationProvider {
+trait CreatableRelationProvider {
   def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String],

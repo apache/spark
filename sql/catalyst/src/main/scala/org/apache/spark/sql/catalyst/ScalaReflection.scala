@@ -211,7 +211,7 @@ trait ScalaReflection {
      */
     def asRelation: LocalRelation = {
       val output = attributesFor[A]
-      LocalRelation(output, data)
+      LocalRelation.fromProduct(output, data)
     }
   }
 }

@@ -19,12 +19,15 @@ package org.apache.spark.mllib.clustering
 
 import breeze.linalg.{DenseVector => BreezeVector}
 
-import org.apache.spark.rdd.RDD
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.rdd.RDD
 
 /**
+ * :: Experimental ::
+ *
  * Multivariate Gaussian Mixture Model (GMM) consisting of k Gaussians, where points 
  * are drawn from each Gaussian i=1..k with probability w(i); mu(i) and sigma(i) are 
  * the respective mean and covariance for each Gaussian distribution i=1..k. 
@@ -35,6 +38,7 @@ import org.apache.spark.mllib.util.MLUtils
  * @param sigma Covariance maxtrix for each Gaussian in the mixture, where sigma(i) is the
  *              covariance matrix for Gaussian i
  */
+@Experimental
 class GaussianMixtureModel(
   val weights: Array[Double], 
   val gaussians: Array[MultivariateGaussian]) extends Serializable {

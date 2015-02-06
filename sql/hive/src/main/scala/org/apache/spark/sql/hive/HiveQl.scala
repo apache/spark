@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.ExplainCommand
+import org.apache.spark.sql.sources.DescribeCommand
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, AnalyzeTable, HiveScriptIOSchema}
 import org.apache.spark.sql.types._
 
@@ -46,22 +47,6 @@ import scala.collection.JavaConversions._
  * cmd string.
  */
 private[hive] case object NativePlaceholder extends Command
-
-/**
- * Returned for the "DESCRIBE [EXTENDED] [dbName.]tableName" command.
- * @param table The table to be described.
- * @param isExtended True if "DESCRIBE EXTENDED" is used. Otherwise, false.
- *                   It is effective only when the table is a Hive table.
- */
-case class DescribeCommand(
-    table: LogicalPlan,
-    isExtended: Boolean) extends Command {
-  override def output = Seq(
-    // Column names are based on Hive.
-    AttributeReference("col_name", StringType, nullable = false)(),
-    AttributeReference("data_type", StringType, nullable = false)(),
-    AttributeReference("comment", StringType, nullable = false)())
-}
 
 /** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
 private[hive] object HiveQl {
@@ -554,6 +539,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             "TOK_TBLTEXTFILE", // Stored as TextFile
             "TOK_TBLRCFILE", // Stored as RCFile
             "TOK_TBLORCFILE", // Stored as ORC File
+            "TOK_TBLPARQUETFILE", // Stored as PARQUET
             "TOK_TABLEFILEFORMAT", // User-provided InputFormat and OutputFormat
             "TOK_STORAGEHANDLER", // Storage handler
             "TOK_TABLELOCATION",
@@ -1102,6 +1088,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       Cast(nodeToExpr(arg), DateType)
 
     /* Arithmetic */
+    case Token("+", child :: Nil) => Add(Literal(0), nodeToExpr(child))
     case Token("-", child :: Nil) => UnaryMinus(nodeToExpr(child))
     case Token("~", child :: Nil) => BitwiseNot(nodeToExpr(child))
     case Token("+", left :: right:: Nil) => Add(nodeToExpr(left), nodeToExpr(right))
