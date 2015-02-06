@@ -1022,8 +1022,18 @@ class SparkILoop(
 
   @DeveloperApi
   def createSQLContext(): SQLContext = {
-    sqlContext = new SQLContext(sparkContext)
-    logInfo("Created sql context..")
+    val name = "org.apache.spark.sql.hive.HiveContext"
+    val loader = Utils.getContextOrSparkClassLoader
+    try {
+      sqlContext = loader.loadClass(name).getConstructor(classOf[SparkContext])
+        .newInstance(sparkContext).asInstanceOf[SQLContext] 
+      logInfo("Created sql context (with Hive support)..")
+    }
+    catch {
+      case cnf: java.lang.ClassNotFoundException =>
+        sqlContext = new SQLContext(sparkContext)
+        logInfo("Created sql context..")
+    }
     sqlContext
   }
 
