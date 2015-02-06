@@ -212,7 +212,7 @@ class JsonProtocolSuite extends FunSuite {
                          .removeField { case (field, _) => field == "Shuffle Records Written" }
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
     assert(newMetrics.shuffleReadMetrics.get.recordsRead == 0)
-    assert(newMetrics.shuffleWriteMetrics.get.recordsWritten == 0)
+    assert(newMetrics.shuffleWriteMetrics.get.shuffleRecordsWritten == 0)
   }
 
   test("OutputMetrics backward compatibility") {
@@ -704,7 +704,7 @@ class JsonProtocolSuite extends FunSuite {
       val sw = new ShuffleWriteMetrics
       sw.incShuffleBytesWritten(a + b + c)
       sw.incShuffleWriteTime(b + c + d)
-      sw.setRecordsWritten(if (hasRecords) (a + b + c) / 100 else -1)
+      sw.setShuffleRecordsWritten(if (hasRecords) (a + b + c) / 100 else -1)
       t.shuffleWriteMetrics = Some(sw)
     }
     // Make at most 6 blocks

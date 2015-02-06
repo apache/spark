@@ -763,7 +763,7 @@ private[spark] class ExternalSorter[K, V, C](
       if (curWriteMetrics != null) {
         m.incShuffleBytesWritten(curWriteMetrics.shuffleBytesWritten)
         m.incShuffleWriteTime(curWriteMetrics.shuffleWriteTime)
-        m.incRecordsWritten(curWriteMetrics.recordsWritten)
+        m.incShuffleRecordsWritten(curWriteMetrics.shuffleRecordsWritten)
       }
     }
 

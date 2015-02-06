@@ -380,9 +380,9 @@ class ShuffleWriteMetrics extends Serializable {
   /**
    * Total number of records written to the shuffle by this task
    */
-  @volatile private var _recordsWritten: Long = _
-  def recordsWritten = _recordsWritten
-  private[spark] def incRecordsWritten(value: Long) = _recordsWritten += value
-  private[spark] def decRecordsWritten(value: Long) = _recordsWritten -= value
-  private[spark] def setRecordsWritten(value: Long) = _recordsWritten = value
+  @volatile private var _shuffleRecordsWritten: Long = _
+  def shuffleRecordsWritten = _shuffleRecordsWritten
+  private[spark] def incShuffleRecordsWritten(value: Long) = _shuffleRecordsWritten += value
+  private[spark] def decShuffleRecordsWritten(value: Long) = _shuffleRecordsWritten -= value
+  private[spark] def setShuffleRecordsWritten(value: Long) = _shuffleRecordsWritten = value
 }

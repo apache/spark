@@ -230,7 +230,7 @@ class InputOutputMetricsSuite extends FunSuite with SharedSparkContext
         metrics.inputMetrics.foreach(inputRead += _.recordsRead)
         metrics.outputMetrics.foreach(outputWritten += _.recordsWritten)
         metrics.shuffleReadMetrics.foreach(shuffleRead += _.recordsRead)
-        metrics.shuffleWriteMetrics.foreach(shuffleWritten += _.recordsWritten)
+        metrics.shuffleWriteMetrics.foreach(shuffleWritten += _.shuffleRecordsWritten)
       }
     })
 
@@ -306,7 +306,7 @@ class InputOutputMetricsSuite extends FunSuite with SharedSparkContext
   }
 
   private def runAndReturnShuffleRecordsWritten(job: => Unit): Long = {
-    runAndReturnMetrics(job, _.taskMetrics.shuffleWriteMetrics.map(_.recordsWritten))
+    runAndReturnMetrics(job, _.taskMetrics.shuffleWriteMetrics.map(_.shuffleRecordsWritten))
   }
 
   private def runAndReturnMetrics(job: => Unit,

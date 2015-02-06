@@ -333,7 +333,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           }
 
           val shuffleWriteRecords = validTasks.map { case TaskUIData(_, metrics, _) =>
-            metrics.get.shuffleWriteMetrics.map(_.recordsWritten).getOrElse(0L).toDouble
+            metrics.get.shuffleWriteMetrics.map(_.shuffleRecordsWritten).getOrElse(0L).toDouble
           }
 
           val shuffleWriteQuantiles = <td>Shuffle Write Size / Records</td> +:
@@ -457,7 +457,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val shuffleWriteSortable = maybeShuffleWrite.map(_.shuffleBytesWritten.toString).getOrElse("")
       val shuffleWriteReadable = maybeShuffleWrite
         .map(m => s"${Utils.bytesToString(m.shuffleBytesWritten)}").getOrElse("")
-      val shuffleWriteRecords = maybeShuffleWrite.map(_.recordsWritten.toString).getOrElse("")
+      val shuffleWriteRecords = maybeShuffleWrite
+        .map(_.shuffleRecordsWritten.toString).getOrElse("")
 
       val maybeWriteTime = metrics.flatMap(_.shuffleWriteMetrics).map(_.shuffleWriteTime)
       val writeTimeSortable = maybeWriteTime.map(_.toString).getOrElse("")

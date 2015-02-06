@@ -300,7 +300,7 @@ private[spark] object JsonProtocol {
   def shuffleWriteMetricsToJson(shuffleWriteMetrics: ShuffleWriteMetrics): JValue = {
     ("Shuffle Bytes Written" -> shuffleWriteMetrics.shuffleBytesWritten) ~
     ("Shuffle Write Time" -> shuffleWriteMetrics.shuffleWriteTime) ~
-    ("Shuffle Records Written" -> shuffleWriteMetrics.recordsWritten)
+    ("Shuffle Records Written" -> shuffleWriteMetrics.shuffleRecordsWritten)
   }
 
   def inputMetricsToJson(inputMetrics: InputMetrics): JValue = {
@@ -681,7 +681,8 @@ private[spark] object JsonProtocol {
     val metrics = new ShuffleWriteMetrics
     metrics.incShuffleBytesWritten((json \ "Shuffle Bytes Written").extract[Long])
     metrics.incShuffleWriteTime((json \ "Shuffle Write Time").extract[Long])
-    metrics.setRecordsWritten((json \ "Shuffle Records Written").extractOpt[Long].getOrElse(0))
+    metrics.setShuffleRecordsWritten((json \ "Shuffle Records Written")
+      .extractOpt[Long].getOrElse(0))
     metrics
   }
 
