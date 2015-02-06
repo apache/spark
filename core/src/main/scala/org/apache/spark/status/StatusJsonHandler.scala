@@ -17,7 +17,7 @@
 
 package org.apache.spark.status
 
-import javax.servlet.http.HttpServletRequest
+import javax.servlet.http.{HttpServletResponse, HttpServlet, HttpServletRequest}
 
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.databind.{SerializationFeature, ObjectMapper}
@@ -31,8 +31,7 @@ import org.eclipse.jetty.servlet.{ServletHolder, ServletContextHandler}
 import scala.util.matching.Regex
 
 import org.apache.spark.{Logging, SecurityManager}
-import org.apache.spark.deploy.history.{OneApplicationJsonRoute, HistoryServer, AllApplicationsJsonRoute}
-import org.apache.spark.ui.JettyUtils._
+import org.apache.spark.deploy.history.{OneApplicationJsonRoute, AllApplicationsJsonRoute}
 
 
 /**
@@ -60,9 +59,9 @@ private[spark] class JsonRequestHandler(uiRoot: UIRoot, securityManager: Securit
     s"/applications/$noSlash+/jobs/?".r -> new AllJobsJsonRoute(this),
     s"/applications/$noSlash+/executors/?".r -> new ExecutorsJsonRoute(this),
     s"/applications/$noSlash+/stages/?".r -> new AllStagesJsonRoute(this),
-    s"/applications/$noSlash+/stages/\\d+/?".r -> new OneStageJsonRoute(this),
+    s"/applications/$noSlash+/stages/$noSlash+/?".r -> new OneStageJsonRoute(this),
     s"/applications/$noSlash+/storage/rdd/?".r -> new AllRDDJsonRoute(this),
-    s"/applications/$noSlash+/storage/rdd/\\d+/?".r -> new RDDJsonRoute(this)
+    s"/applications/$noSlash+/storage/rdd/$noSlash+/?".r -> new RDDJsonRoute(this)
   )
 
   private val jsonMapper = {
@@ -76,17 +75,36 @@ private[spark] class JsonRequestHandler(uiRoot: UIRoot, securityManager: Securit
   val jsonContextHandler = {
 
     //TODO throw out all the JettyUtils stuff, so I can set the response status code, etc.
-    val params = new ServletParams(
-    {
-      (request: HttpServletRequest) =>
-        route(request).map{jsonRoute =>
-          logInfo("handling route: " + request.getPathInfo)
-          val responseObj = jsonRoute.renderJson(request)
-          jsonMapper.writeValueAsString(responseObj)
-        }.getOrElse(throw new IllegalArgumentException("unmatched route"))
-    }, "text/json")
+    val servlet = new HttpServlet {
+      override def doGet(request: HttpServletRequest, response: HttpServletResponse) {
+        if (securityManager.checkUIViewPermissions(request.getRemoteUser)) {
+          response.setContentType("text/json;charset=utf-8")
+          route(request) match {
+            case Some(jsonRoute) =>
+              response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
+              try {
+                val responseObj = jsonRoute.renderJson(request)
+                val result = jsonMapper.writeValueAsString(responseObj)
+                response.setStatus(HttpServletResponse.SC_OK)
+                response.getWriter.println(result)
+              } catch {
+                case iae: IllegalArgumentException =>
+                  response.setStatus(HttpServletResponse.SC_BAD_REQUEST)
+                  response.getOutputStream.print(iae.getMessage())
+              }
+            case None =>
+              println("no match for path: " + request.getPathInfo)
+              response.setStatus(HttpServletResponse.SC_NOT_FOUND)
+          }
+        } else {
+          response.setStatus(HttpServletResponse.SC_UNAUTHORIZED)
+          response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
+          response.sendError(HttpServletResponse.SC_UNAUTHORIZED,
+            "User is not authorized to access this page.")
+        }
+      }
+    }
     val path = "/json/v1"
-    val servlet = createServlet(params, securityManager)
     val contextHandler = new ServletContextHandler
     val holder = new ServletHolder(servlet)
     contextHandler.setContextPath(path)
@@ -148,4 +166,3 @@ object RouteUtils {
     }
   }
 }
-

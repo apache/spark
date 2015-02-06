@@ -16,8 +16,9 @@
  */
 package org.apache.spark.deploy.history
 
-import java.io.{FileInputStream, FileWriter, File}
-import java.net.URL
+import java.io.{IOException, FileInputStream, FileWriter, File}
+import java.net.{HttpURLConnection, URL}
+import javax.servlet.http.HttpServletResponse
 
 import org.apache.commons.io.{FileUtils, IOUtils}
 
@@ -72,7 +73,11 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers {
   // resource folder
   cases.foreach{case(name, path) =>
       test(name){
-        val json = getUrl(path)
+        val (code, jsonOpt, errOpt) = getContentAndCode(path)
+        code should be (HttpServletResponse.SC_OK)
+        jsonOpt should be ('defined)
+        errOpt should be (None)
+        val json = jsonOpt.get
         val exp = IOUtils.toString(new FileInputStream(new File(expRoot, path + "/json_expectation")))
         json should be (exp)
       }
@@ -83,7 +88,42 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers {
   }
 
   test("response codes on bad paths") {
-    pending
+    val badAppId = getContentAndCode("applications/foobar")
+    badAppId._1 should be (HttpServletResponse.SC_BAD_REQUEST)
+    badAppId._3 should be (Some("unknown app: foobar"))
+
+    val badStageId = getContentAndCode("applications/local-1422981780767/stages/12345")
+    badStageId._1 should be (HttpServletResponse.SC_BAD_REQUEST)
+    badStageId._3 should be (Some("unknown stage: 12345"))
+
+    val badStageId2 = getContentAndCode("applications/local-1422981780767/stages/flimflam")
+    badStageId2._1 should be (HttpServletResponse.SC_BAD_REQUEST)
+    badStageId2._3 should be (Some("no valid stageId in path"))
+
+
+    getContentAndCode("foobar")._1 should be (HttpServletResponse.SC_NOT_FOUND)
+
+  }
+
+  def getContentAndCode(path: String): (Int, Option[String], Option[String]) = {
+    val url = new URL(s"http://localhost:$port/json/v1/$path")
+    val connection = url.openConnection().asInstanceOf[HttpURLConnection]
+    connection.setRequestMethod("GET")
+    connection.connect()
+    val code = connection.getResponseCode()
+    val inString = try {
+      val in = Option(connection.getInputStream())
+      in.map{IOUtils.toString}
+    } catch {
+      case io: IOException => None
+    }
+    val errString = try {
+      val err = Option(connection.getErrorStream())
+      err.map{IOUtils.toString}
+    } catch {
+      case io: IOException => None
+    }
+    (code, inString, errString)
   }
 
 

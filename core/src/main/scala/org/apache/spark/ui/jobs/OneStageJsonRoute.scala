@@ -45,7 +45,7 @@ class OneStageJsonRoute(parent: JsonRequestHandler) extends StatusJsonRoute[Stag
               }
               AllStagesJsonRoute.stageUiToStageData(status, stageInfo, stageUiData, includeDetails = true)
             case None =>
-              throw new IllegalArgumentException("no stage found with id:" + stageId)
+              throw new IllegalArgumentException("unknown stage: " + stageId)
           }
 
         case None =>
