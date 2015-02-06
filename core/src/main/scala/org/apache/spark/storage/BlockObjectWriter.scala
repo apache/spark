@@ -29,7 +29,8 @@ import org.apache.spark.executor.ShuffleWriteMetrics
  * appending data to an existing block, and can guarantee atomicity in the case of faults
  * as it allows the caller to revert partial writes.
  *
- * This interface does not support concurrent writes.
+ * This interface does not support concurrent writes. Also, once the writer has
+ * been opened, it cannot be reopened again.
  */
 private[spark] abstract class BlockObjectWriter(val blockId: BlockId) {
 
@@ -95,6 +96,7 @@ private[spark] class DiskBlockObjectWriter(
   private var ts: TimeTrackingOutputStream = null
   private var objOut: SerializationStream = null
   private var initialized = false
+  private var hasBeenClosed = false
 
   /**
    * Cursors used to represent positions in the file.
@@ -122,6 +124,9 @@ private[spark] class DiskBlockObjectWriter(
   private var numRecordsWritten = 0
 
   override def open(): BlockObjectWriter = {
+    if (hasBeenClosed) {
+      throw new IllegalStateException("Writer already closed. Cannot be reopened.")
+    }
     fos = new FileOutputStream(file, true)
     ts = new TimeTrackingOutputStream(fos)
     channel = fos.getChannel()
@@ -147,6 +152,7 @@ private[spark] class DiskBlockObjectWriter(
       ts = null
       objOut = null
       initialized = false
+      hasBeenClosed = true
     }
   }
 
