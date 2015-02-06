@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.sources.ResolvedDataSource
+import org.apache.spark.sql.sources.{SaveModes, ResolvedDataSource}
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -105,7 +105,8 @@ case class CreateMetastoreDataSource(
     userSpecifiedSchema: Option[StructType],
     provider: String,
     options: Map[String, String],
-    allowExisting: Boolean) extends RunnableCommand {
+    allowExisting: Boolean,
+    managedIfNoPath: Boolean) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
@@ -120,7 +121,7 @@ case class CreateMetastoreDataSource(
 
     var isExternal = true
     val optionsWithPath =
-      if (!options.contains("path")) {
+      if (!options.contains("path") && managedIfNoPath) {
         isExternal = false
         options + ("path" -> hiveContext.catalog.hiveDefaultTableFilePath(tableName))
       } else {
@@ -167,7 +168,7 @@ case class CreateMetastoreDataSourceAsSelect(
       }
 
     // Create the relation based on the data of df.
-    ResolvedDataSource(sqlContext, provider, optionsWithPath, df)
+    ResolvedDataSource(sqlContext, provider, SaveModes.ErrorIfExists, optionsWithPath, df)
 
     hiveContext.catalog.createDataSourceTable(
       tableName,

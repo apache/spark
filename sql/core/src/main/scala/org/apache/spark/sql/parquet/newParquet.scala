@@ -80,9 +80,25 @@ class DefaultSource
 
   override def createRelation(
       sqlContext: SQLContext,
+      mode: SaveMode,
       parameters: Map[String, String],
       data: DataFrame): BaseRelation = {
     val path = checkPath(parameters)
+    val filesystemPath = new Path(path)
+    val fs = filesystemPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+    mode match {
+      case Append =>
+        sys.error(s"Append mode is not supported by ${this.getClass.getCanonicalName}")
+      case Overwrite =>
+        if (fs.exists(filesystemPath)) {
+          fs.delete(filesystemPath, true)
+        }
+      case ErrorIfExists =>
+        if (fs.exists(filesystemPath)) {
+          sys.error(s"path $path already exists.")
+        }
+    }
+
     ParquetRelation.createEmpty(
       path,
       data.schema.toAttributes,

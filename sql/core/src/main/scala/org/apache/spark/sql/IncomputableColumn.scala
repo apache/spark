@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.sources.SaveMode
+
 import scala.reflect.ClassTag
 
 import org.apache.spark.api.java.JavaRDD
@@ -148,27 +150,46 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
 
   override def saveAsTable(tableName: String): Unit = err()
 
+  override def saveAsTable(tableName: String, appendIfExists: Boolean): Unit = err()
+
   override def saveAsTable(
       tableName: String,
-      dataSourceName: String,
-      option: (String, String),
-      options: (String, String)*): Unit = err()
+      dataSourceName: String): Unit = err()
 
   override def saveAsTable(
       tableName: String,
       dataSourceName: String,
+      appendIfExists: Boolean): Unit = err()
+
+  override def saveAsTable(
+      tableName: String,
+      dataSourceName: String,
+      appendIfExists: Boolean,
       options: java.util.Map[String, String]): Unit = err()
+
+  override def saveAsTable(
+      tableName: String,
+      dataSourceName: String,
+      appendIfExists: Boolean,
+      options: Map[String, String]): Unit = err()
 
   override def save(path: String): Unit = err()
 
-  override def save(
-      dataSourceName: String,
-      option: (String, String),
-      options: (String, String)*): Unit = err()
+  override def save(path: String, mode: SaveMode): Unit = err()
+
+  override def save(path: String, dataSourceName: String): Unit = err()
+
+  override def save(path: String, dataSourceName: String, mode: SaveMode): Unit = err()
 
   override def save(
       dataSourceName: String,
+      mode: SaveMode,
       options: java.util.Map[String, String]): Unit = err()
+
+  override def save(
+      dataSourceName: String,
+      mode: SaveMode,
+      options: Map[String, String]): Unit = err()
 
   override def insertInto(tableName: String, overwrite: Boolean): Unit = err()
 

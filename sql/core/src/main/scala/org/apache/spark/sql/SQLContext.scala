@@ -397,7 +397,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /**
    * :: Experimental ::
    * Loads a dataset from the given path as a DataFrame.
-   * It will use the default data source configured in spark.sql.source.default.
+   * It will use the default data source configured in spark.sql.sources.default.
    */
   @Experimental
   def load(path: String): DataFrame = {
@@ -407,42 +407,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /**
    * :: Experimental ::
-   * Loads a dataset from the given path as a DataFrame based on a given data source and
-   * a set of options.
-   */
-  @Experimental
-  def load(path: String, dataSourceName: String, options: (String, String)*): DataFrame = {
-    val opts = new CaseInsensitiveMap(options.toMap)
-    if (opts.contains("path")) {
-      sys.error(s"path already specified as $path. Please do not add path in options.")
-    }
-
-    load(dataSourceName, ("path", path), options:_*)
-  }
-
-  /**
-   * :: Experimental ::
-   * Loads a dataset from the given path as a DataFrame based on a given data source and
-   * a set of options.
+   * Loads a dataset from the given path as a DataFrame based on a given data source.
+   * It will use the default data source configured in spark.sql.sources.default.
    */
   @Experimental
   def load(
       path: String,
-      dataSourceName: String,
-      options: java.util.Map[String, String]): DataFrame = {
-    load(path, dataSourceName, options.toSeq:_*)
-  }
-
-  /**
-   * :: Experimental ::
-   * Loads a dataset based on a given data source and a set of options.
-   */
-  @Experimental
-  def load(
-      dataSourceName: String,
-      option: (String, String),
-      options: (String, String)*): DataFrame = {
-    load(dataSourceName, (option +: options).toMap)
+      dataSourceName: String): DataFrame = {
+    load(dataSourceName, Map("path" -> path))
   }
 
   /**
@@ -468,41 +440,78 @@ class SQLContext(@transient val sparkContext: SparkContext)
     DataFrame(this, LogicalRelation(resolved.relation))
   }
 
+  /**
+   * :: Experimental ::
+   * Loads a dataset based on a given data source, a schema and a set of options.
+   */
   @Experimental
-  def createDataSource(tableName: String, options: (String, String)*): Unit = {
+  def load(
+      dataSourceName: String,
+      schema: StructType,
+      options: java.util.Map[String, String]): DataFrame = {
+    load(dataSourceName, schema, options.toMap)
+  }
+
+  /**
+   * :: Experimental ::
+   * Loads a dataset based on a given data source, a schema and a set of options.
+   */
+  @Experimental
+  def load(
+      dataSourceName: String,
+      schema: StructType,
+      options: Map[String, String]): DataFrame = {
+    val resolved = ResolvedDataSource(this, Some(schema), dataSourceName, options)
+    DataFrame(this, LogicalRelation(resolved.relation))
+  }
+
+  /**
+   * :: Experimental ::
+   * Creates an external table from the given path and returns the corresponding DataFrame.
+   * It will use the default data source configured in spark.sql.sources.default.
+   */
+  @Experimental
+  def createExternalTable(tableName: String, path: String): DataFrame = {
     val dataSourceName = conf.defaultDataSourceName
-    createDataSource(tableName, dataSourceName, options.toMap)
+    createExternalTable(tableName, path, dataSourceName)
   }
 
+  /**
+   * :: Experimental ::
+   * Creates an external table from the given path based on a data source
+   * and returns the corresponding DataFrame.
+   */
   @Experimental
-  def createDataSource(
+  def createExternalTable(
       tableName: String,
-      options: java.util.Map[String, String]): Unit = {
-    val dataSourceName = conf.defaultDataSourceName
-    createDataSource(tableName, dataSourceName, options.toMap)
+      path: String,
+      dataSourceName: String): DataFrame = {
+    createExternalTable(tableName, dataSourceName, Map("path" -> path))
   }
 
+  /**
+   * :: Experimental ::
+   * Creates an external table from the given path based on a data source and a set of options.
+   * Then, returns the corresponding DataFrame.
+   */
   @Experimental
-  def createDataSource(
-      tableName: String,
-      dataSourceName: String,
-      options: (String, String)*): Unit = {
-    createDataSource(tableName, dataSourceName, options.toMap)
-  }
-
-  @Experimental
-  def createDataSource(
-      tableName: String,
-      dataSourceName: String,
-      options: java.util.Map[String, String]): Unit = {
-    createDataSource(tableName, dataSourceName, options.toMap)
-  }
-
-  @Experimental
-  def createDataSource(
+  def createExternalTable(
       tableName: String,
       dataSourceName: String,
-      options: Map[String, String]): Unit = {
+      options: java.util.Map[String, String]): DataFrame = {
+    createExternalTable(tableName, dataSourceName, options.toMap)
+  }
+
+  /**
+   * :: Experimental ::
+   * Creates an external table from the given path based on a data source and a set of options.
+   * Then, returns the corresponding DataFrame.
+   */
+  @Experimental
+  def createExternalTable(
+      tableName: String,
+      dataSourceName: String,
+      options: Map[String, String]): DataFrame = {
     val cmd =
       CreateTableUsing(
         tableName,
@@ -510,8 +519,48 @@ class SQLContext(@transient val sparkContext: SparkContext)
         dataSourceName,
         temporary = false,
         options,
-        allowExisting = false)
+        allowExisting = false,
+        managedIfNoPath = false)
     executePlan(cmd).toRdd
+    table(tableName)
+  }
+
+  /**
+   * :: Experimental ::
+   * Create an external table from the given path based on a data source, a schema and
+   * a set of options. Then, returns the corresponding DataFrame.
+   */
+  @Experimental
+  def createExternalTable(
+      tableName: String,
+      dataSourceName: String,
+      schema: StructType,
+      options: java.util.Map[String, String]): DataFrame = {
+    createExternalTable(tableName, dataSourceName, schema, options.toMap)
+  }
+
+  /**
+   * :: Experimental ::
+   * Create an external table from the given path based on a data source, a schema and
+   * a set of options. Then, returns the corresponding DataFrame.
+   */
+  @Experimental
+  def createExternalTable(
+      tableName: String,
+      dataSourceName: String,
+      schema: StructType,
+      options: Map[String, String]): DataFrame = {
+    val cmd =
+      CreateTableUsing(
+        tableName,
+        userSpecifiedSchema = Some(schema),
+        dataSourceName,
+        temporary = false,
+        options,
+        allowExisting = false,
+        managedIfNoPath = false)
+    executePlan(cmd).toRdd
+    table(tableName)
   }
 
   /**

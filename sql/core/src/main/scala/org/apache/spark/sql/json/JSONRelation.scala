@@ -20,14 +20,17 @@ package org.apache.spark.sql.json
 import java.io.IOException
 
 import org.apache.hadoop.fs.Path
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 
 
 private[sql] class DefaultSource
   extends RelationProvider with SchemaRelationProvider with CreatableRelationProvider {
+
+  private def checkPath(parameters: Map[String, String]): String = {
+    parameters.getOrElse("path", sys.error("'path' must be specified for json data."))
+  }
 
   /** Returns a new base relation with the parameters. */
   override def createRelation(
@@ -52,14 +55,25 @@ private[sql] class DefaultSource
 
   override def createRelation(
       sqlContext: SQLContext,
+      mode: SaveMode,
       parameters: Map[String, String],
       data: DataFrame): BaseRelation = {
-    val path = parameters.getOrElse("path", sys.error("Option 'path' not specified"))
+    val path = checkPath(parameters)
     val filesystemPath = new Path(path)
     val fs = filesystemPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
-    if (fs.exists(filesystemPath)) {
-      sys.error(s"path $path already exists.")
+    mode match {
+      case Append =>
+        sys.error(s"Append mode is not supported by ${this.getClass.getCanonicalName}")
+      case Overwrite =>
+        if (fs.exists(filesystemPath)) {
+          fs.delete(filesystemPath, true)
+        }
+      case ErrorIfExists =>
+        if (fs.exists(filesystemPath)) {
+          sys.error(s"path $path already exists.")
+        }
     }
+
     data.toJSON.saveAsTextFile(path)
 
     createRelation(sqlContext, parameters, data.schema)

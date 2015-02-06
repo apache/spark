@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.sources.SaveMode
+
 import scala.reflect.ClassTag
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
@@ -532,38 +534,8 @@ trait DataFrame extends RDDApi[Row] {
 
   /**
    * :: Experimental ::
-   * Creates a table from the the contents of this DataFrame with a set of options.
-   * It will use the default data source
-   * configured in spark.sql.source.default. This will fail if the table already exists.
-   *
-   * Note that this currently only works with DataFrames that are created from a HiveContext as
-   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
-   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
-   * be the target of an `insertInto`.
-   */
-  @Experimental
-  def saveAsTable(tableName: String, options: (String, String)*): Unit
-
-  /**
-   * :: Experimental ::
-   * Creates a table from the the contents of this DataFrame based on a set of options.
-   * It will use the default data source configured in `spark.sql.source.default`.
-   * This will fail if the table already exists.
-   *
-   * Note that this currently only works with DataFrames that are created from a HiveContext as
-   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
-   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
-   * be the target of an insertInto`.
-   */
-  @Experimental
-  def saveAsTable(
-      tableName: String,
-      options: java.util.Map[String, String]): Unit
-
-  /**
-   * :: Experimental ::
-   * Creates a table at the given path from the the contents of this DataFrame
-   * based on a given data source and a set of options.
+   * Creates a table from the the contents of this DataFrame.
+   * It will use the default data source configured in spark.sql.sources.default.
    * This will fail if the table already exists.
    *
    * Note that this currently only works with DataFrames that are created from a HiveContext as
@@ -572,10 +544,23 @@ trait DataFrame extends RDDApi[Row] {
    * be the target of an `insertInto`.
    */
   @Experimental
-  def saveAsTable(
-      tableName: String,
-      dataSourceName: String,
-      options: (String, String)*): Unit
+  def saveAsTable(tableName: String): Unit
+
+  /**
+   * :: Experimental ::
+   * Creates a table from the the contents of this DataFrame.
+   * It will use the default data source configured in spark.sql.sources.default.
+   * If appendIfExists is true and the table already exists,
+   * it will append contents of this DataFrame to the table.
+   * If appendIfExists is false and the table already exists, this will fail.
+   *
+   * Note that this currently only works with DataFrames that are created from a HiveContext as
+   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
+   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
+   * be the target of an `insertInto`.
+   */
+  @Experimental
+  def saveAsTable(tableName: String, appendIfExists: Boolean): Unit
 
   /**
    * :: Experimental ::
@@ -591,13 +576,56 @@ trait DataFrame extends RDDApi[Row] {
   @Experimental
   def saveAsTable(
       tableName: String,
+      dataSourceName: String): Unit
+
+  /**
+   * :: Experimental ::
+   * Creates a table at the given path from the the contents of this DataFrame
+   * based on a given data source and a set of options.
+   * If appendIfExists is true and the table already exists,
+   * it will append contents of this DataFrame to the table.
+   * If appendIfExists is false and the table already exists, this will fail.
+   *
+   * Note that this currently only works with DataFrames that are created from a HiveContext as
+   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
+   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
+   * be the target of an `insertInto`.
+   */
+  @Experimental
+  def saveAsTable(
+      tableName: String,
       dataSourceName: String,
+      appendIfExists: Boolean): Unit
+
+  /**
+   * :: Experimental ::
+   * Creates a table at the given path from the the contents of this DataFrame
+   * based on a given data source and a set of options.
+   * If appendIfExists is true and the table already exists,
+   * it will append contents of this DataFrame to the table.
+   * If appendIfExists is false and the table already exists,
+   * This will fail.
+   *
+   * Note that this currently only works with DataFrames that are created from a HiveContext as
+   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
+   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
+   * be the target of an `insertInto`.
+   */
+  @Experimental
+  def saveAsTable(
+      tableName: String,
+      dataSourceName: String,
+      appendIfExists: Boolean,
       options: java.util.Map[String, String]): Unit
 
   /**
    * :: Experimental ::
    * Creates a table from the the contents of this DataFrame based on a given data source
-   * and a set of options. This will fail if the table already exists.
+   * and a set of options.
+   * If appendIfExists is true and the table already exists,
+   * it will append contents of this DataFrame to the table.
+   * If appendIfExists is false and the table already exists,
+   * This will fail.
    *
    * Note that this currently only works with DataFrames that are created from a HiveContext as
    * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
@@ -608,33 +636,47 @@ trait DataFrame extends RDDApi[Row] {
   def saveAsTable(
       tableName: String,
       dataSourceName: String,
+      appendIfExists: Boolean,
       options: Map[String, String]): Unit
 
   /**
    * :: Experimental ::
    * Saves the contents of this DataFrame to the given path.
-   * It will use the default data source configured in spark.sql.source.default.
+   * It will use the default data source configured in spark.sql.sources.default.
    */
   @Experimental
   def save(path: String): Unit
 
   /**
    * :: Experimental ::
-   * Saves the contents of this DataFrame to the given path based on the given data source
-   * and a set of options.
+   * Saves the contents of this DataFrame to the given path.
+   * It will use the default data source configured in spark.sql.sources.default.
    */
   @Experimental
-  def save(path: String, dataSourceName: String, options: (String, String)*): Unit
+  def save(path: String, mode: SaveMode): Unit
 
   /**
    * :: Experimental ::
-   * Saves the contents of this DataFrame to the given path based on the given data source
-   * and a set of options.
+   * Saves the contents of this DataFrame to the given path based on the given data source.
+   */
+  @Experimental
+  def save(path: String, dataSourceName: String): Unit
+
+  /**
+   * :: Experimental ::
+   * Saves the contents of this DataFrame to the given path based on the given data source.
+   */
+  @Experimental
+  def save(path: String, dataSourceName: String, mode: SaveMode): Unit
+
+  /**
+   * :: Experimental ::
+   * Saves the contents of this DataFrame based on the given data source and a set of options.
    */
   @Experimental
   def save(
-      path: String,
       dataSourceName: String,
+      mode: SaveMode,
       options: java.util.Map[String, String]): Unit
 
   /**
@@ -644,25 +686,7 @@ trait DataFrame extends RDDApi[Row] {
   @Experimental
   def save(
       dataSourceName: String,
-      option: (String, String),
-      options: (String, String)*): Unit
-
-  /**
-   * :: Experimental ::
-   * Saves the contents of this DataFrame based on the given data source and a set of options.
-   */
-  @Experimental
-  def save(
-      dataSourceName: String,
-      options: java.util.Map[String, String]): Unit
-
-  /**
-   * :: Experimental ::
-   * Saves the contents of this DataFrame based on the given data source and a set of options.
-   */
-  @Experimental
-  def save(
-      dataSourceName: String,
+      mode: SaveMode,
       options: Map[String, String]): Unit
 
   /**
