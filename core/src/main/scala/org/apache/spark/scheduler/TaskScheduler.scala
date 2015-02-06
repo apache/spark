@@ -77,5 +77,5 @@ private[spark] trait TaskScheduler {
   /**
    * Process a lost executor in taskScheduler
    */
-  def executorLost(executorId: String, reason: ExecutorLossReason)
+  def executorLost(executorId: String, reason: ExecutorLossReason): Unit
 }
