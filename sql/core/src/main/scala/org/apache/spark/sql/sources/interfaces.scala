@@ -88,8 +88,8 @@ trait CreatableRelationProvider {
     * contents of the DataFrame are expected to be appended to existing data.
     * Overwrite mode means that when saving a DataFrame to a data source, if data already exists,
     * existing data is expected to be overwritten by the contents of the DataFrame.
-    * ErrorIfExists mode means that when saving a DataFrame to a data source, if data already exists,
-    * an exception is expected to be thrown.
+    * ErrorIfExists mode means that when saving a DataFrame to a data source,
+    * if data already exists, an exception is expected to be thrown.
     *
     * For Java users, mode can be inspected through equality check (e.g. mode == SaveModes.Append).
     *
