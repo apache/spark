@@ -201,6 +201,18 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
   }
 
   test("handles standalone cluster mode") {
+    testStandaloneCluster(useRest = true)
+  }
+
+  test("handles legacy standalone cluster mode") {
+    testStandaloneCluster(useRest = false)
+  }
+
+  /**
+   * Test whether the launch environment is correctly set up in standalone cluster mode.
+   * @param useRest whether to use the REST submission gateway introduced in Spark 1.3
+   */
+  private def testStandaloneCluster(useRest: Boolean): Unit = {
     val clArgs = Seq(
       "--deploy-mode", "cluster",
       "--master", "spark://h:p",
@@ -212,17 +224,26 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       "thejar.jar",
       "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
+    appArgs.useRest = useRest
     val (childArgs, classpath, sysProps, mainClass) = prepareSubmitEnvironment(appArgs)
     val childArgsStr = childArgs.mkString(" ")
-    childArgsStr should startWith ("--memory 4g --cores 5 --supervise")
-    childArgsStr should include regex ("launch spark://h:p .*thejar.jar org.SomeClass arg1 arg2")
-    mainClass should be ("org.apache.spark.deploy.Client")
-    classpath should have size (0)
-    sysProps should have size (5)
+    if (useRest) {
+      childArgsStr should endWith ("thejar.jar org.SomeClass arg1 arg2")
+      mainClass should be ("org.apache.spark.deploy.rest.StandaloneRestClient")
+    } else {
+      childArgsStr should startWith ("--supervise --memory 4g --cores 5")
+      childArgsStr should include regex "launch spark://h:p .*thejar.jar org.SomeClass arg1 arg2"
+      mainClass should be ("org.apache.spark.deploy.Client")
+    }
+    classpath should have size 0
+    sysProps should have size 8
     sysProps.keys should contain ("SPARK_SUBMIT")
     sysProps.keys should contain ("spark.master")
     sysProps.keys should contain ("spark.app.name")
     sysProps.keys should contain ("spark.jars")
+    sysProps.keys should contain ("spark.driver.memory")
+    sysProps.keys should contain ("spark.driver.cores")
+    sysProps.keys should contain ("spark.driver.supervise")
     sysProps.keys should contain ("spark.shuffle.spill")
     sysProps("spark.shuffle.spill") should be ("false")
   }
