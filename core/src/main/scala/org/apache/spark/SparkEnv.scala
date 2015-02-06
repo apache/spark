@@ -93,6 +93,14 @@ class SparkEnv (
     // actorSystem.awaitTermination()
 
     // Note that blockTransferService is stopped by BlockManager since it is started by it.
+    
+    // If we only stop sc, but sparksubmit still run as a services we need to delete the tmp dir
+    // if not, it will create too many tmp dir
+    try {
+      Utils.deleteRecursively(new File(sparkFilesDir))
+    } catch {
+      case e: Exception => logError(s"Exception while deleting Spark temp dir: $sparkFilesDir", e)
+    }
   }
 
   private[spark]
