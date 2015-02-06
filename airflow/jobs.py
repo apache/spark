@@ -1,4 +1,3 @@
-import copy
 from datetime import datetime
 import getpass
 import logging
@@ -12,7 +11,7 @@ from sqlalchemy import (
 from sqlalchemy import func
 from sqlalchemy.orm.session import make_transient
 
-from airflow.executors import DEFAULT_EXECUTOR
+from airflow import executors
 from airflow.configuration import conf
 from airflow import models
 from airflow import settings
@@ -53,7 +52,7 @@ class BaseJob(Base):
 
     def __init__(
             self,
-            executor=DEFAULT_EXECUTOR,
+            executor=executors.DEFAULT_EXECUTOR,
             heartrate=conf.getint('misc', 'JOB_HEARTBEAT_SEC'),
             *args, **kwargs):
         self.hostname = socket.gethostname()
@@ -290,13 +289,18 @@ class BackfillJob(BaseJob):
         start_date = self.bf_start_date
         end_date = self.bf_end_date
 
-        session = settings.Session()
-        pickle = models.DagPickle(self.dag)
-        session.add(pickle)
-        session.commit()
+        # picklin'
+        pickle_id = None
+        if self.executor not in (
+                executors.LocalExecutor, executors.SequentialExecutor):
+            session = settings.Session()
+            pickle = models.DagPickle(self.dag)
+            session.add(pickle)
+            session.commit()
+            pickle_id = pickle.id
+
         executor = self.executor
         executor.start()
-        pickle_id = pickle.id
 
         # Build a list of all intances to run
         tasks_to_run = {}

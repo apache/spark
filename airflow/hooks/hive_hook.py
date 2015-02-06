@@ -20,7 +20,8 @@ class HiveHook(BaseHook):
     Interact with Hive. This class is both a wrapper around the Hive Thrift
     client and the Hive CLI.
     '''
-    def __init__(self,
+    def __init__(
+            self,
             hive_conn_id=conf.get('hooks', 'HIVE_DEFAULT_CONN_ID')):
         session = settings.Session()
         db = session.query(
@@ -116,10 +117,10 @@ class HiveHook(BaseHook):
         f.write(hql)
         f.flush()
         sp = subprocess.Popen(
-                "hive -f {f.name} {self.hive_cli_params}".format(**locals()),
-                shell=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT)
+            "hive -f {f.name} {self.hive_cli_params}".format(**locals()),
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT)
         all_err = ''
         self.sp = sp
         for line in iter(sp.stdout.readline, ''):
@@ -135,7 +136,6 @@ class HiveHook(BaseHook):
         table = self.hive.get_table(dbname=db, tbl_name=table_name)
         self.hive._oprot.trans.close()
         return table
-
 
     def get_partitions(self, schema, table_name):
         '''
@@ -168,7 +168,6 @@ class HiveHook(BaseHook):
 
     def kill(self):
         if hasattr(self, 'sp'):
-            print(self.sp.poll())
             if self.sp.poll() is None:
                 print("Killing the Hive job")
                 self.sp.kill()

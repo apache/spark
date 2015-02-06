@@ -44,6 +44,10 @@ def backfill(args):
     if args.end_date:
         args.end_date = dateutil.parser.parse(args.end_date)
 
+    # If only one date is passed, using same as start and end
+    args.end_date = args.end_date or args.start_date
+    args.start_date = args.start_date or args.end_date
+
     if args.task_regex:
         dag = dag.sub_dag(
             task_regex=args.task_regex,
@@ -52,7 +56,8 @@ def backfill(args):
         start_date=args.start_date,
         end_date=args.end_date,
         mark_success=args.mark_success,
-        include_adhoc=args.include_adhoc)
+        include_adhoc=args.include_adhoc,
+        local=args.local)
 
 
 def run(args):
@@ -330,6 +335,9 @@ def get_parser():
         "-e", "--end_date", help="Overide end_date YYYY-MM-DD")
     parser_backfill.add_argument(
         "-m", "--mark_success",
+        help=mark_success_help, action="store_true")
+    parser_backfill.add_argument(
+        "-l", "--local",
         help=mark_success_help, action="store_true")
     parser_backfill.add_argument(
         "-a", "--include_adhoc",

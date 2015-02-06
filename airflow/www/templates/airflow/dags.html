@@ -14,7 +14,7 @@
             <th>DAG</th>
             <th>Filepath</th>
             <th>Owner</th>
-            <th>Task by State</th>
+            <th>Instances States</th>
             <th class="text-center">Links</th>
         </tr>
         {% for dag in dags %}
@@ -74,7 +74,7 @@
   <script src="{{ url_for('static', filename='d3.v3.min.js') }}"></script>
   <script>
       diameter = 25;
-      circle_margin = 8;
+      circle_margin = 4;
       stroke_width = 2;
       stroke_width_hover = 6;
       d3.json("{{ url_for('airflow.dag_stats') }}", function(error, json) {
@@ -89,7 +89,7 @@
               .enter()
               .append('g')
               .attr('transform', function(d, i) {
-                x = (i + 1) * (diameter + circle_margin);
+                x = (i * (diameter + circle_margin)) + (diameter/2 + circle_margin);
                 y = (diameter/2) + stroke_width_hover;
                 return 'translate(' + x + ',' + y + ')';
               });
