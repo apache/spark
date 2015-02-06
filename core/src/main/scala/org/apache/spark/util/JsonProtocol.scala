@@ -294,7 +294,7 @@ private[spark] object JsonProtocol {
     ("Local Blocks Fetched" -> shuffleReadMetrics.localBlocksFetched) ~
     ("Fetch Wait Time" -> shuffleReadMetrics.fetchWaitTime) ~
     ("Remote Bytes Read" -> shuffleReadMetrics.remoteBytesRead) ~
-    ("Records Read" -> shuffleReadMetrics.recordsRead)
+    ("Total Records Read" -> shuffleReadMetrics.recordsRead)
   }
 
   def shuffleWriteMetricsToJson(shuffleWriteMetrics: ShuffleWriteMetrics): JValue = {
@@ -673,7 +673,7 @@ private[spark] object JsonProtocol {
     metrics.incLocalBlocksFetched((json \ "Local Blocks Fetched").extract[Int])
     metrics.incFetchWaitTime((json \ "Fetch Wait Time").extract[Long])
     metrics.incRemoteBytesRead((json \ "Remote Bytes Read").extract[Long])
-    metrics.incRecordsRead((json \ "Records Read").extractOpt[Long].getOrElse(0))
+    metrics.incRecordsRead((json \ "Total Records Read").extractOpt[Long].getOrElse(0))
     metrics
   }
 

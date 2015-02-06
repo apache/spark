@@ -208,7 +208,7 @@ class JsonProtocolSuite extends FunSuite {
     assert(metrics.shuffleReadMetrics.nonEmpty)
     assert(metrics.shuffleWriteMetrics.nonEmpty)
     val newJson = JsonProtocol.taskMetricsToJson(metrics)
-    val oldJson = newJson.removeField { case (field, _) => field == "Records Read" }
+    val oldJson = newJson.removeField { case (field, _) => field == "Total Records Read" }
                          .removeField { case (field, _) => field == "Shuffle Records Written" }
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
     assert(newMetrics.shuffleReadMetrics.get.recordsRead == 0)
@@ -939,7 +939,7 @@ class JsonProtocolSuite extends FunSuite {
       |      "Local Blocks Fetched": 700,
       |      "Fetch Wait Time": 900,
       |      "Remote Bytes Read": 1000,
-      |      "Records Read" : 10
+      |      "Total Records Read" : 10
       |    },
       |    "Shuffle Write Metrics": {
       |      "Shuffle Bytes Written": 1200,
