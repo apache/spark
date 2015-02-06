@@ -192,7 +192,7 @@ print("Within Set Sum of Squared Error = " + str(WSSSE))
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 In the following example after loading and parsing data, we use a
-[`GaussianMixture`](api/scala/index.html#org.apache.spark.mllib.clustering.GaussianMixture) 
+[GaussianMixture](api/scala/index.html#org.apache.spark.mllib.clustering.GaussianMixture) 
 object to cluster the data into two clusters. The number of desired clusters is passed 
 to the algorithm. We then output the parameters of the mixture model.
 
@@ -268,7 +268,7 @@ public class GaussianMixtureExample {
 
 <div data-lang="python" markdown="1">
 In the following example after loading and parsing data, we use a
-[`GaussianMixture`](api/scala/index.html#org.apache.spark.mllib.clustering.GaussianMixture) 
+[GaussianMixture](api/python/pyspark.mllib.clustering.GaussianMixture-class.html) 
 object to cluster the data into two clusters. The number of desired clusters is passed 
 to the algorithm. We then output the parameters of the mixture model.
 
@@ -281,7 +281,7 @@ data = sc.textFile("data/mllib/gmm_data.txt")
 parsedData = data.map(lambda line: array([float(x) for x in line.strip().split(' ')]))
 
 # Build the model (cluster the data)
-gmm = new GaussianMixture.train(parsedData, 2)
+gmm = GaussianMixture.train(parsedData, 2)
 
 # output parameters of model
 for i in range(2):
