@@ -676,7 +676,7 @@ def setup_spark_cluster(master, opts):
         print "Ganglia started at http://%s:5080/ganglia" % master
 
 
-def is_ssh_available(host, opts, print_ssh_output=False):
+def is_ssh_available(host, opts, print_ssh_output=True):
     """
     Check if SSH is available on a host.
     """
@@ -704,12 +704,12 @@ def is_ssh_available(host, opts, print_ssh_output=False):
     return s.returncode == 0
 
 
-def is_cluster_ssh_available(cluster_instances, opts, print_ssh_output=False):
+def is_cluster_ssh_available(cluster_instances, opts):
     """
     Check if SSH is available on all the instances in a cluster.
     """
     for i in cluster_instances:
-        if not is_ssh_available(host=i.ip_address, opts=opts, print_ssh_output=print_ssh_output):
+        if not is_ssh_available(host=i.ip_address, opts=opts):
             return False
     else:
         return True
@@ -745,7 +745,7 @@ def wait_for_cluster_state(conn, opts, cluster_instances, cluster_state):
             if all(i.state == 'running' for i in cluster_instances) and \
                all(s.system_status.status == 'ok' for s in statuses) and \
                all(s.instance_status.status == 'ok' for s in statuses) and \
-               is_cluster_ssh_available(cluster_instances, opts, print_ssh_output=True):
+               is_cluster_ssh_available(cluster_instances, opts):
                 break
         else:
             if all(i.state == cluster_state for i in cluster_instances):
