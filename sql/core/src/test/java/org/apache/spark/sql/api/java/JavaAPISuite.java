@@ -19,6 +19,7 @@ package org.apache.spark.sql.api.java;
 
 import java.io.Serializable;
 
+import org.apache.spark.sql.test.TestSQLContext$;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -37,14 +38,12 @@ public class JavaAPISuite implements Serializable {
 
   @Before
   public void setUp() {
-    sc = new JavaSparkContext("local", "JavaAPISuite");
-    sqlContext = new SQLContext(sc);
+    sqlContext = TestSQLContext$.MODULE$;
+    sc = new JavaSparkContext(sqlContext.sparkContext());
   }
 
   @After
   public void tearDown() {
-    sc.stop();
-    sc = null;
   }
 
   @SuppressWarnings("unchecked")

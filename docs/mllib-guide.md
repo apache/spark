@@ -1,6 +1,8 @@
 ---
 layout: global
-title: Machine Learning Library (MLlib) Programming Guide
+title: MLlib
+displayTitle: Machine Learning Library (MLlib) Guide
+description: MLlib machine learning library overview for Spark SPARK_VERSION_SHORT
 ---
 
 MLlib is Spark's scalable machine learning library consisting of common learning algorithms and utilities,
@@ -23,6 +25,8 @@ filtering, dimensionality reduction, as well as underlying optimization primitiv
   * alternating least squares (ALS)
 * [Clustering](mllib-clustering.html)
   * k-means
+  * Gaussian mixture
+  * power iteration
 * [Dimensionality reduction](mllib-dimensionality-reduction.html)
   * singular value decomposition (SVD)
   * principal component analysis (PCA)

@@ -22,8 +22,10 @@ import scala.collection.mutable
 
 import java.lang.reflect.Modifier
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
 import org.apache.spark.ml.Identifiable
+import org.apache.spark.sql.types.{DataType, StructField, StructType}
+
 
 /**
  * :: AlphaComponent ::
@@ -65,36 +67,46 @@ class Param[T] (
 // specialize primitive-typed params because Java doesn't recognize scala.Double, scala.Int, ...
 
 /** Specialized version of [[Param[Double]]] for Java. */
-class DoubleParam(parent: Params, name: String, doc: String, defaultValue: Option[Double] = None)
+class DoubleParam(parent: Params, name: String, doc: String, defaultValue: Option[Double])
   extends Param[Double](parent, name, doc, defaultValue) {
+
+  def this(parent: Params, name: String, doc: String) = this(parent, name, doc, None)
 
   override def w(value: Double): ParamPair[Double] = super.w(value)
 }
 
 /** Specialized version of [[Param[Int]]] for Java. */
-class IntParam(parent: Params, name: String, doc: String, defaultValue: Option[Int] = None)
+class IntParam(parent: Params, name: String, doc: String, defaultValue: Option[Int])
   extends Param[Int](parent, name, doc, defaultValue) {
+
+  def this(parent: Params, name: String, doc: String) = this(parent, name, doc, None)
 
   override def w(value: Int): ParamPair[Int] = super.w(value)
 }
 
 /** Specialized version of [[Param[Float]]] for Java. */
-class FloatParam(parent: Params, name: String, doc: String, defaultValue: Option[Float] = None)
+class FloatParam(parent: Params, name: String, doc: String, defaultValue: Option[Float])
   extends Param[Float](parent, name, doc, defaultValue) {
+
+  def this(parent: Params, name: String, doc: String) = this(parent, name, doc, None)
 
   override def w(value: Float): ParamPair[Float] = super.w(value)
 }
 
 /** Specialized version of [[Param[Long]]] for Java. */
-class LongParam(parent: Params, name: String, doc: String, defaultValue: Option[Long] = None)
+class LongParam(parent: Params, name: String, doc: String, defaultValue: Option[Long])
   extends Param[Long](parent, name, doc, defaultValue) {
+
+  def this(parent: Params, name: String, doc: String) = this(parent, name, doc, None)
 
   override def w(value: Long): ParamPair[Long] = super.w(value)
 }
 
 /** Specialized version of [[Param[Boolean]]] for Java. */
-class BooleanParam(parent: Params, name: String, doc: String, defaultValue: Option[Boolean] = None)
+class BooleanParam(parent: Params, name: String, doc: String, defaultValue: Option[Boolean])
   extends Param[Boolean](parent, name, doc, defaultValue) {
+
+  def this(parent: Params, name: String, doc: String) = this(parent, name, doc, None)
 
   override def w(value: Boolean): ParamPair[Boolean] = super.w(value)
 }
@@ -158,7 +170,7 @@ trait Params extends Identifiable with Serializable {
   /**
    * Sets a parameter in the embedded param map.
    */
-  private[ml] def set[T](param: Param[T], value: T): this.type = {
+  protected def set[T](param: Param[T], value: T): this.type = {
     require(param.parent.eq(this))
     paramMap.put(param.asInstanceOf[Param[Any]], value)
     this
@@ -174,7 +186,7 @@ trait Params extends Identifiable with Serializable {
   /**
    * Gets the value of a parameter in the embedded param map.
    */
-  private[ml] def get[T](param: Param[T]): T = {
+  protected def get[T](param: Param[T]): T = {
     require(param.parent.eq(this))
     paramMap(param)
   }
@@ -183,9 +195,40 @@ trait Params extends Identifiable with Serializable {
    * Internal param map.
    */
   protected val paramMap: ParamMap = ParamMap.empty
+
+  /**
+   * Check whether the given schema contains an input column.
+   * @param colName  Parameter name for the input column.
+   * @param dataType  SQL DataType of the input column.
+   */
+  protected def checkInputColumn(schema: StructType, colName: String, dataType: DataType): Unit = {
+    val actualDataType = schema(colName).dataType
+    require(actualDataType.equals(dataType),
+      s"Input column $colName must be of type $dataType" +
+        s" but was actually $actualDataType.  Column param description: ${getParam(colName)}")
+  }
+
+  protected def addOutputColumn(
+      schema: StructType,
+      colName: String,
+      dataType: DataType): StructType = {
+    if (colName.length == 0) return schema
+    val fieldNames = schema.fieldNames
+    require(!fieldNames.contains(colName), s"Prediction column $colName already exists.")
+    val outputFields = schema.fields ++ Seq(StructField(colName, dataType, nullable = false))
+    StructType(outputFields)
+  }
 }
 
-private[ml] object Params {
+/**
+ * :: DeveloperApi ::
+ *
+ * Helper functionality for developers.
+ *
+ * NOTE: This is currently private[spark] but will be made public later once it is stabilized.
+ */
+@DeveloperApi
+private[spark] object Params {
 
   /**
    * Copies parameter values from the parent estimator to the child model it produced.
@@ -279,7 +322,7 @@ class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any]) exten
   def copy: ParamMap = new ParamMap(map.clone())
 
   override def toString: String = {
-    map.map { case (param, value) =>
+    map.toSeq.sortBy(_._1.name).map { case (param, value) =>
       s"\t${param.parent.uid}-${param.name}: $value"
     }.mkString("{\n", ",\n", "\n}")
   }
@@ -310,6 +353,11 @@ class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any]) exten
       ParamPair(param, value)
     }
   }
+
+  /**
+   * Number of param pairs in this set.
+   */
+  def size: Int = map.size
 }
 
 object ParamMap {

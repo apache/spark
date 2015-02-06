@@ -371,7 +371,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
       AkkaUtils.address(AkkaUtils.protocol(slaveSystem), "spark", "localhost", boundPort, "MapOutputTracker"))
     val timeout = AkkaUtils.lookupTimeout(conf)
     intercept[TimeoutException] {
-      slaveTracker.trackerActor = Await.result(selection.resolveOne(timeout), timeout)
+      slaveTracker.trackerActor = Await.result(selection.resolveOne(timeout * 2), timeout)
     }
 
     actorSystem.shutdown()

@@ -53,7 +53,9 @@ private[sql] class DataFrameImpl protected[sql](
   def this(sqlContext: SQLContext, logicalPlan: LogicalPlan) = {
     this(sqlContext, {
       val qe = sqlContext.executePlan(logicalPlan)
-      qe.analyzed  // This should force analysis and throw errors if there are any
+      if (sqlContext.conf.dataFrameEagerAnalysis) {
+        qe.analyzed  // This should force analysis and throw errors if there are any
+      }
       qe
     })
   }
@@ -201,13 +203,13 @@ private[sql] class DataFrameImpl protected[sql](
     filter(condition)
   }
 
-  override def groupBy(cols: Column*): GroupedDataFrame = {
-    new GroupedDataFrame(this, cols.map(_.expr))
+  override def groupBy(cols: Column*): GroupedData = {
+    new GroupedData(this, cols.map(_.expr))
   }
 
-  override def groupBy(col1: String, cols: String*): GroupedDataFrame = {
+  override def groupBy(col1: String, cols: String*): GroupedData = {
     val colNames: Seq[String] = col1 +: cols
-    new GroupedDataFrame(this, colNames.map(colName => resolve(colName)))
+    new GroupedData(this, colNames.map(colName => resolve(colName)))
   }
 
   override def limit(n: Int): DataFrame = {
@@ -234,6 +236,14 @@ private[sql] class DataFrameImpl protected[sql](
 
   override def addColumn(colName: String, col: Column): DataFrame = {
     select(Column("*"), col.as(colName))
+  }
+
+  override def renameColumn(existingName: String, newName: String): DataFrame = {
+    val colNames = schema.map { field =>
+      val name = field.name
+      if (name == existingName) Column(name).as(newName) else Column(name)
+    }
+    select(colNames :_*)
   }
 
   override def head(n: Int): Array[Row] = limit(n).collect()
@@ -295,7 +305,11 @@ private[sql] class DataFrameImpl protected[sql](
   }
 
   override def saveAsParquetFile(path: String): Unit = {
-    sqlContext.executePlan(WriteToFile(path, logicalPlan)).toRdd
+    if (sqlContext.conf.parquetUseDataSourceApi) {
+      save("org.apache.spark.sql.parquet", "path" -> path)
+    } else {
+      sqlContext.executePlan(WriteToFile(path, logicalPlan)).toRdd
+    }
   }
 
   override def saveAsTable(tableName: String): Unit = {

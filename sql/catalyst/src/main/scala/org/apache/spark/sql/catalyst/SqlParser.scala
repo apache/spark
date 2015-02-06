@@ -57,7 +57,6 @@ class SqlParser extends AbstractSparkSQLParser {
   protected val AVG = Keyword("AVG")
   protected val BETWEEN = Keyword("BETWEEN")
   protected val BY = Keyword("BY")
-  protected val CACHE = Keyword("CACHE")
   protected val CASE = Keyword("CASE")
   protected val CAST = Keyword("CAST")
   protected val COALESCE = Keyword("COALESCE")
@@ -373,7 +372,7 @@ class SqlParser extends AbstractSparkSQLParser {
     | expression ~ ("[" ~> expression <~ "]") ^^
       { case base ~ ordinal => GetItem(base, ordinal) }
     | (expression <~ ".") ~ ident ^^
-      { case base ~ fieldName => GetField(base, fieldName) }
+      { case base ~ fieldName => UnresolvedGetField(base, fieldName) }
     | cast
     | "(" ~> expression <~ ")"
     | function
