@@ -49,7 +49,7 @@ private[classification] trait ProbabilisticClassifierParams
  * Single-label binary or multiclass classifier which can output class conditional probabilities.
  *
  * @tparam FeaturesType  Type of input features.  E.g., [[Vector]]
- * @tparam Learner  Concrete Estimator type
+ * @tparam E  Concrete Estimator type
  * @tparam M  Concrete Model type
  *
  * NOTE: This is currently private[spark] but will be made public later once it is stabilized.
@@ -57,11 +57,11 @@ private[classification] trait ProbabilisticClassifierParams
 @AlphaComponent
 private[spark] abstract class ProbabilisticClassifier[
     FeaturesType,
-    Learner <: ProbabilisticClassifier[FeaturesType, Learner, M],
+    E <: ProbabilisticClassifier[FeaturesType, E, M],
     M <: ProbabilisticClassificationModel[FeaturesType, M]]
-  extends Classifier[FeaturesType, Learner, M] with ProbabilisticClassifierParams {
+  extends Classifier[FeaturesType, E, M] with ProbabilisticClassifierParams {
 
-  def setProbabilityCol(value: String): Learner = set(probabilityCol, value).asInstanceOf[Learner]
+  def setProbabilityCol(value: String): E = set(probabilityCol, value).asInstanceOf[E]
 }
 
 

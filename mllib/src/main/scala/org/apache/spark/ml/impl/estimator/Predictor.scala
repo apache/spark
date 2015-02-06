@@ -79,7 +79,7 @@ private[spark] trait PredictorParams extends Params
  * NOTE: This is currently private[spark] but will be made public later once it is stabilized.
  */
 @AlphaComponent
-abstract class Predictor[
+private[spark] abstract class Predictor[
     FeaturesType,
     Learner <: Predictor[FeaturesType, Learner, M],
     M <: PredictionModel[FeaturesType, M]]

@@ -94,6 +94,9 @@ private trait MyLogisticRegressionParams extends ClassifierParams {
    *   - val myParamName: ParamType
    *   - def getMyParamName
    *   - def setMyParamName
+   * Here, we have a trait to be mixed in with the Estimator and Model (MyLogisticRegression
+   * and MyLogisticRegressionModel).  We place the setter (setMaxIter) method in the Estimator
+   * class since the maxIter parameter is only used during training (not in the Model).
    */
   val maxIter: IntParam = new IntParam(this, "maxIter", "max number of iterations")
   def getMaxIter: Int = get(maxIter)

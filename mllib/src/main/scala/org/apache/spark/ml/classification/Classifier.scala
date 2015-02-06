@@ -53,7 +53,7 @@ private[spark] trait ClassifierParams extends PredictorParams
  * Classes are indexed {0, 1, ..., numClasses - 1}.
  *
  * @tparam FeaturesType  Type of input features.  E.g., [[Vector]]
- * @tparam Learner  Concrete Estimator type
+ * @tparam E  Concrete Estimator type
  * @tparam M  Concrete Model type
  *
  * NOTE: This is currently private[spark] but will be made public later once it is stabilized.
@@ -61,13 +61,13 @@ private[spark] trait ClassifierParams extends PredictorParams
 @AlphaComponent
 private[spark] abstract class Classifier[
     FeaturesType,
-    Learner <: Classifier[FeaturesType, Learner, M],
+    E <: Classifier[FeaturesType, E, M],
     M <: ClassificationModel[FeaturesType, M]]
-  extends Predictor[FeaturesType, Learner, M]
+  extends Predictor[FeaturesType, E, M]
   with ClassifierParams {
 
-  def setRawPredictionCol(value: String): Learner =
-    set(rawPredictionCol, value).asInstanceOf[Learner]
+  def setRawPredictionCol(value: String): E =
+    set(rawPredictionCol, value).asInstanceOf[E]
 
   // TODO: defaultEvaluator (follow-up PR)
 }

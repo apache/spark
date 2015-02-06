@@ -224,9 +224,11 @@ trait Params extends Identifiable with Serializable {
  * :: DeveloperApi ::
  *
  * Helper functionality for developers.
+ *
+ * NOTE: This is currently private[spark] but will be made public later once it is stabilized.
  */
 @DeveloperApi
-object Params {
+private[spark] object Params {
 
   /**
    * Copies parameter values from the parent estimator to the child model it produced.

@@ -115,9 +115,11 @@ sealed trait Vector extends Serializable {
  *
  * User-defined type for [[Vector]] which allows easy interaction with SQL
  * via [[org.apache.spark.sql.DataFrame]].
+ *
+ * NOTE: This is currently private[spark] but will be made public later once it is stabilized.
  */
 @DeveloperApi
-class VectorUDT extends UserDefinedType[Vector] {
+private[spark] class VectorUDT extends UserDefinedType[Vector] {
 
   override def sqlType: StructType = {
     // type: 0 = sparse, 1 = dense
