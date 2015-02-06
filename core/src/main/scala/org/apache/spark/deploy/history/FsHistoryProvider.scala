@@ -173,9 +173,10 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       val logInfos = statusList
         .filter { entry =>
           try {
-            val modTime = getModificationTime(entry)
-            newLastModifiedTime = math.max(newLastModifiedTime, modTime)
-            modTime >= lastModifiedTime
+            getModificationTime(entry).map { time =>
+              newLastModifiedTime = math.max(newLastModifiedTime, time)
+              time >= lastModifiedTime
+            }.getOrElse(false)
           } catch {
             case e: AccessControlException =>
               // Do not use "logInfo" since these messages can get pretty noisy if printed on
@@ -251,7 +252,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         appListener.appName.getOrElse(NOT_STARTED),
         appListener.startTime.getOrElse(-1L),
         appListener.endTime.getOrElse(-1L),
-        getModificationTime(eventLog),
+        getModificationTime(eventLog).get,
         appListener.sparkUser.getOrElse(NOT_STARTED),
         isApplicationCompleted(eventLog))
     } finally {
@@ -310,11 +311,16 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
    */
   private def isLegacyLogDirectory(entry: FileStatus): Boolean = entry.isDir()
 
-  private def getModificationTime(fsEntry: FileStatus): Long = {
-    if (fsEntry.isDir) {
-      fs.listStatus(fsEntry.getPath).map(_.getModificationTime()).max
+  /**
+   * Returns the modification time of the given event log. If the status points at an empty
+   * directory, `None` is returned, indicating that there isn't an event log at that location.
+   */
+  private def getModificationTime(fsEntry: FileStatus): Option[Long] = {
+    if (isLegacyLogDirectory(fsEntry)) {
+      val statusList = fs.listStatus(fsEntry.getPath)
+      if (!statusList.isEmpty) Some(statusList.map(_.getModificationTime()).max) else None
     } else {
-      fsEntry.getModificationTime()
+      Some(fsEntry.getModificationTime())
     }
   }
 
