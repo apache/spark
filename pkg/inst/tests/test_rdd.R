@@ -86,7 +86,10 @@ test_that("several transformations on RDD (a benchmark on PipelinedRDD)", {
                 part <- as.list(unlist(part) * split + i)
               })
   rdd2 <- lapply(rdd2, function(x) x + x)
-  collect(rdd2)
+  actual <- collect(rdd2)
+  expected <- 
+  expect_equal(actual, list(24, 24, 24, 24, 24,
+                            168, 170, 172, 174, 176))
 })
 
 test_that("PipelinedRDD support actions: cache(), persist(), unpersist(), checkpoint()", {
