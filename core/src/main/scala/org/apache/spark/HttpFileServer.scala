@@ -51,8 +51,8 @@ private[spark] class HttpFileServer(
   def stop() {
     httpServer.stop()
     
-    // If we only stop sc, but sparksubmit still run as a services we need to delete the tmp dir
-    // if not, it will create too many tmp dir
+    // If we only stop sc, but the driver process still run as a services then we need to delete 
+    // the tmp dir, if not, it will create too many tmp dirs
     try {
       Utils.deleteRecursively(baseDir)
     } catch {
