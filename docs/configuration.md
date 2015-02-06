@@ -1,6 +1,7 @@
 ---
 layout: global
-title: Spark Configuration
+displayTitle: Spark Configuration
+title: Configuration
 ---
 * This will become a table of contents (this text will be scraped).
 {:toc}
@@ -190,6 +191,17 @@ of the most common options to set are:
     Logs the effective SparkConf as INFO when a SparkContext is started.
   </td>
 </tr>
+<tr>
+  <td><code>spark.extraListeners</code></td>
+  <td>(none)</td>
+  <td>
+    A comma-separated list of classes that implement <code>SparkListener</code>; when initializing
+    SparkContext, instances of these classes will be created and registered with Spark's listener
+    bus.  If a class has a single-argument constructor that accepts a SparkConf, that constructor
+    will be called; otherwise, a zero-argument constructor will be called. If no valid constructor
+    can be found, the SparkContext creation will fail with an exception.
+  </td>
+</tr>
 </table>
 
 Apart from these, the following properties are also available, and may be useful in some situations:
@@ -197,6 +209,27 @@ Apart from these, the following properties are also available, and may be useful
 #### Runtime Environment
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.driver.extraJavaOptions</code></td>
+  <td>(none)</td>
+  <td>
+    A string of extra JVM options to pass to the driver. For instance, GC settings or other logging.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.driver.extraClassPath</code></td>
+  <td>(none)</td>
+  <td>
+    Extra classpath entries to append to the classpath of the driver.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.driver.extraLibraryPath</code></td>
+  <td>(none)</td>
+  <td>
+    Set a special library path to use when launching the driver JVM.
+  </td>
+</tr>
 <tr>
   <td><code>spark.executor.extraJavaOptions</code></td>
   <td>(none)</td>
@@ -290,6 +323,9 @@ Apart from these, the following properties are also available, and may be useful
     or it will be displayed before the driver exiting. It also can be dumped into disk by
     `sc.dump_profiles(path)`. If some of the profile results had been displayed maually,
     they will not be displayed automatically before driver exiting.
+
+    By default the `pyspark.profiler.BasicProfiler` will be used, but this can be overridden by
+    passing a profiler class in as a parameter to the `SparkContext` constructor.
   </td>
 </tr>
 <tr>
@@ -1074,29 +1110,37 @@ Apart from these, the following properties are also available, and may be useful
     available on YARN mode. For more detail, see the description
     <a href="job-scheduling.html#dynamic-resource-allocation">here</a>.
     <br><br>
-    This requires the following configurations to be set:
+    This requires <code>spark.shuffle.service.enabled</code> to be set.
+    The following configurations are also relevant:
     <code>spark.dynamicAllocation.minExecutors</code>,
     <code>spark.dynamicAllocation.maxExecutors</code>, and
-    <code>spark.shuffle.service.enabled</code>
+    <code>spark.dynamicAllocation.initialExecutors</code>
   </td>
 </tr>
 <tr>
   <td><code>spark.dynamicAllocation.minExecutors</code></td>
-  <td>(none)</td>
+  <td>0</td>
   <td>
-    Lower bound for the number of executors if dynamic allocation is enabled (required).
+    Lower bound for the number of executors if dynamic allocation is enabled.
   </td>
 </tr>
 <tr>
   <td><code>spark.dynamicAllocation.maxExecutors</code></td>
-  <td>(none)</td>
+  <td>Integer.MAX_VALUE</td>
   <td>
-    Upper bound for the number of executors if dynamic allocation is enabled (required).
+    Upper bound for the number of executors if dynamic allocation is enabled.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.maxExecutors</code></td>
+  <td><code>spark.dynamicAllocation.minExecutors</code></td>
+  <td>
+    Initial number of executors to run if dynamic allocation is enabled.
   </td>
 </tr>
 <tr>
   <td><code>spark.dynamicAllocation.schedulerBacklogTimeout</code></td>
-  <td>60</td>
+  <td>5</td>
   <td>
     If dynamic allocation is enabled and there have been pending tasks backlogged for more than
     this duration (in seconds), new executors will be requested. For more detail, see this
@@ -1209,6 +1253,86 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 </table>
+
+#### Encryption
+
+<table class="table">
+    <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+    <tr>
+        <td><code>spark.ssl.enabled</code></td>
+        <td>false</td>
+        <td>
+            <p>Whether to enable SSL connections on all supported protocols.</p>
+
+            <p>All the SSL settings like <code>spark.ssl.xxx</code> where <code>xxx</code> is a
+            particular configuration property, denote the global configuration for all the supported
+            protocols. In order to override the global configuration for the particular protocol,
+            the properties must be overwritten in the protocol-specific namespace.</p>
+
+            <p>Use <code>spark.ssl.YYY.XXX</code> settings to overwrite the global configuration for
+            particular protocol denoted by <code>YYY</code>. Currently <code>YYY</code> can be
+            either <code>akka</code> for Akka based connections or <code>fs</code> for broadcast and
+            file server.</p>
+        </td>
+    </tr>
+    <tr>
+        <td><code>spark.ssl.keyStore</code></td>
+        <td>None</td>
+        <td>
+            A path to a key-store file. The path can be absolute or relative to the directory where
+            the component is started in.
+        </td>
+    </tr>
+    <tr>
+        <td><code>spark.ssl.keyStorePassword</code></td>
+        <td>None</td>
+        <td>
+            A password to the key-store.
+        </td>
+    </tr>
+    <tr>
+        <td><code>spark.ssl.keyPassword</code></td>
+        <td>None</td>
+        <td>
+            A password to the private key in key-store.
+        </td>
+    </tr>
+    <tr>
+        <td><code>spark.ssl.trustStore</code></td>
+        <td>None</td>
+        <td>
+            A path to a trust-store file. The path can be absolute or relative to the directory
+            where the component is started in.
+        </td>
+    </tr>
+    <tr>
+        <td><code>spark.ssl.trustStorePassword</code></td>
+        <td>None</td>
+        <td>
+            A password to the trust-store.
+        </td>
+    </tr>
+    <tr>
+        <td><code>spark.ssl.protocol</code></td>
+        <td>None</td>
+        <td>
+            A protocol name. The protocol must be supported by JVM. The reference list of protocols
+            one can find on <a href="https://blogs.oracle.com/java-platform-group/entry/diagnosing_tls_ssl_and_https">this</a>
+            page.
+        </td>
+    </tr>
+    <tr>
+        <td><code>spark.ssl.enabledAlgorithms</code></td>
+        <td>Empty</td>
+        <td>
+            A comma separated list of ciphers. The specified ciphers must be supported by JVM.
+            The reference list of protocols one can find on
+            <a href="https://blogs.oracle.com/java-platform-group/entry/diagnosing_tls_ssl_and_https">this</a>
+            page.
+        </td>
+    </tr>
+</table>
+
 
 #### Spark Streaming
 <table class="table">

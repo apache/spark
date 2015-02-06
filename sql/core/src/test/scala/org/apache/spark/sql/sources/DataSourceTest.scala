@@ -28,7 +28,11 @@ abstract class DataSourceTest extends QueryTest with BeforeAndAfter {
   implicit val caseInsensisitiveContext = new SQLContext(TestSQLContext.sparkContext) {
     @transient
     override protected[sql] lazy val analyzer: Analyzer =
-      new Analyzer(catalog, functionRegistry, caseSensitive = false)
+      new Analyzer(catalog, functionRegistry, caseSensitive = false) {
+        override val extendedRules =
+          PreInsertCastAndRename ::
+          Nil
+      }
   }
 }
 

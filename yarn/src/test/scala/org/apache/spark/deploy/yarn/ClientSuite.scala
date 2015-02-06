@@ -87,7 +87,7 @@ class ClientSuite extends FunSuite with Matchers {
 
     Client.populateClasspath(args, conf, sparkConf, env)
 
-    val cp = env("CLASSPATH").split(File.pathSeparator)
+    val cp = env("CLASSPATH").split(":|;|<CPS>")
     s"$SPARK,$USER,$ADDED".split(",").foreach({ entry =>
       val uri = new URI(entry)
       if (Client.LOCAL_SCHEME.equals(uri.getScheme())) {
@@ -96,9 +96,17 @@ class ClientSuite extends FunSuite with Matchers {
         cp should not contain (uri.getPath())
       }
     })
-    cp should contain (Environment.PWD.$())
-    cp should contain (Environment.PWD.$() + Path.SEPARATOR + Client.HADOOP_CONF_DIR)
-    cp should contain (s"${Environment.PWD.$()}${File.separator}*")
+    val pwdVar =
+      if (classOf[Environment].getMethods().exists(_.getName == "$$")) {
+        "{{PWD}}"
+      } else if (Utils.isWindows) {
+        "%PWD%"
+      } else {
+        Environment.PWD.$()
+      }
+    cp should contain(pwdVar)
+    cp should contain(s"$pwdVar${File.separator}*")
+    cp should contain (s"$pwdVar${Path.SEPARATOR}${Client.HADOOP_CONF_DIR}")
     cp should not contain (Client.SPARK_JAR)
     cp should not contain (Client.APP_JAR)
   }
@@ -222,7 +230,7 @@ class ClientSuite extends FunSuite with Matchers {
 
   def newEnv = MutableHashMap[String, String]()
 
-  def classpath(env: MutableHashMap[String, String]) = env(Environment.CLASSPATH.name).split(":|;")
+  def classpath(env: MutableHashMap[String, String]) = env(Environment.CLASSPATH.name).split(":|;|<CPS>")
 
   def flatten(a: Option[Seq[String]], b: Option[Seq[String]]) = (a ++ b).flatten.toArray
 

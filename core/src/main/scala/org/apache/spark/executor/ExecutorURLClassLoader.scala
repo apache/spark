@@ -39,7 +39,17 @@ private[spark] class ChildExecutorURLClassLoader(urls: Array[URL], parent: Class
       super.addURL(url)
     }
     override def findClass(name: String): Class[_] = {
-      super.findClass(name)
+      val loaded = super.findLoadedClass(name)
+      if (loaded != null) {
+        return loaded
+      }
+      try {
+        super.findClass(name)
+      } catch {
+        case e: ClassNotFoundException => {
+          parentClassLoader.loadClass(name)
+        }
+      }
     }
   }
 

@@ -51,7 +51,9 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
   test("union project *") {
     val plan = (1 to 100)
       .map(_ => testRelation)
-      .fold[LogicalPlan](testRelation)((a,b) => a.select(Star(None)).select('a).unionAll(b.select(Star(None))))
+      .fold[LogicalPlan](testRelation) { (a, b) =>
+        a.select(UnresolvedStar(None)).select('a).unionAll(b.select(UnresolvedStar(None)))
+      }
 
     assert(caseInsensitiveAnalyze(plan).resolved)
   }

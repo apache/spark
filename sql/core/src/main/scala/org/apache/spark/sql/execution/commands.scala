@@ -20,11 +20,12 @@ package org.apache.spark.sql.execution
 import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{SchemaRDD, SQLConf, SQLContext}
+import org.apache.spark.sql.{DataFrame, SQLConf, SQLContext}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Row, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import scala.collection.mutable.ArrayBuffer
 
 /**
  * A logical command that is executed for its side-effects.  `RunnableCommand`s are
@@ -57,6 +58,8 @@ case class ExecutedCommand(cmd: RunnableCommand) extends SparkPlan {
   override def children = Nil
 
   override def executeCollect(): Array[Row] = sideEffectResult.toArray
+
+  override def executeTake(limit: Int): Array[Row] = sideEffectResult.take(limit).toArray
 
   override def execute(): RDD[Row] = sqlContext.sparkContext.parallelize(sideEffectResult, 1)
 }
@@ -137,7 +140,9 @@ case class CacheTableCommand(
     isLazy: Boolean) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext) = {
-    plan.foreach(p => new SchemaRDD(sqlContext, p).registerTempTable(tableName))
+    plan.foreach { logicalPlan =>
+      sqlContext.registerRDDAsTable(DataFrame(sqlContext, logicalPlan), tableName)
+    }
     sqlContext.cacheTable(tableName)
 
     if (!isLazy) {
@@ -159,7 +164,7 @@ case class CacheTableCommand(
 case class UncacheTableCommand(tableName: String) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext) = {
-    sqlContext.table(tableName).unpersist()
+    sqlContext.table(tableName).unpersist(blocking = false)
     Seq.empty[Row]
   }
 
@@ -172,9 +177,14 @@ case class UncacheTableCommand(tableName: String) extends RunnableCommand {
 @DeveloperApi
 case class DescribeCommand(
     child: SparkPlan,
-    override val output: Seq[Attribute]) extends RunnableCommand {
+    override val output: Seq[Attribute],
+    isExtended: Boolean) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext) = {
-    child.output.map(field => Row(field.name, field.dataType.toString, null))
+    child.schema.fields.map { field =>
+      val cmtKey = "comment"
+      val comment = if (field.metadata.contains(cmtKey)) field.metadata.getString(cmtKey) else ""
+      Row(field.name, field.dataType.simpleString, comment)
+    }
   }
 }

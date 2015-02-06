@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.scalatest.{FunSuite, PrivateMethodTester}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
-import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.scheduler.cluster.ExecutorInfo
 
 /**
  * Test add and remove behavior of ExecutorAllocationManager.
@@ -32,24 +32,23 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
   import ExecutorAllocationManagerSuite._
 
   test("verify min/max executors") {
-    // No min or max
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName("test-executor-allocation-manager")
       .set("spark.dynamicAllocation.enabled", "true")
       .set("spark.dynamicAllocation.testing", "true")
-    intercept[SparkException] { new SparkContext(conf) }
-    SparkEnv.get.stop() // cleanup the created environment
-    SparkContext.clearActiveContext()
+    val sc0 = new SparkContext(conf)
+    assert(sc0.executorAllocationManager.isDefined)
+    sc0.stop()
 
-    // Only min
-    val conf1 = conf.clone().set("spark.dynamicAllocation.minExecutors", "1")
+    // Min < 0
+    val conf1 = conf.clone().set("spark.dynamicAllocation.minExecutors", "-1")
     intercept[SparkException] { new SparkContext(conf1) }
     SparkEnv.get.stop()
     SparkContext.clearActiveContext()
 
-    // Only max
-    val conf2 = conf.clone().set("spark.dynamicAllocation.maxExecutors", "2")
+    // Max < 0
+    val conf2 = conf.clone().set("spark.dynamicAllocation.maxExecutors", "-1")
     intercept[SparkException] { new SparkContext(conf2) }
     SparkEnv.get.stop()
     SparkContext.clearActiveContext()
@@ -145,8 +144,8 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
 
     // Verify that running a task reduces the cap
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(1, 3)))
-    sc.listenerBus.postToAll(SparkListenerBlockManagerAdded(
-      0L, BlockManagerId("executor-1", "host1", 1), 100L))
+    sc.listenerBus.postToAll(SparkListenerExecutorAdded(
+      0L, "executor-1", new ExecutorInfo("host1", 1, Map.empty)))
     sc.listenerBus.postToAll(SparkListenerTaskStart(1, 0, createTaskInfo(0, 0, "executor-1")))
     assert(numExecutorsPending(manager) === 4)
     assert(addExecutors(manager) === 1)
@@ -579,30 +578,28 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
     assert(removeTimes(manager).isEmpty)
 
     // New executors have registered
-    sc.listenerBus.postToAll(SparkListenerBlockManagerAdded(
-      0L, BlockManagerId("executor-1", "host1", 1), 100L))
+    sc.listenerBus.postToAll(SparkListenerExecutorAdded(
+      0L, "executor-1", new ExecutorInfo("host1", 1, Map.empty)))
     assert(executorIds(manager).size === 1)
     assert(executorIds(manager).contains("executor-1"))
     assert(removeTimes(manager).size === 1)
     assert(removeTimes(manager).contains("executor-1"))
-    sc.listenerBus.postToAll(SparkListenerBlockManagerAdded(
-      0L, BlockManagerId("executor-2", "host2", 1), 100L))
+    sc.listenerBus.postToAll(SparkListenerExecutorAdded(
+      0L, "executor-2", new ExecutorInfo("host2", 1, Map.empty)))
     assert(executorIds(manager).size === 2)
     assert(executorIds(manager).contains("executor-2"))
     assert(removeTimes(manager).size === 2)
     assert(removeTimes(manager).contains("executor-2"))
 
     // Existing executors have disconnected
-    sc.listenerBus.postToAll(SparkListenerBlockManagerRemoved(
-      0L, BlockManagerId("executor-1", "host1", 1)))
+    sc.listenerBus.postToAll(SparkListenerExecutorRemoved(0L, "executor-1", ""))
     assert(executorIds(manager).size === 1)
     assert(!executorIds(manager).contains("executor-1"))
     assert(removeTimes(manager).size === 1)
     assert(!removeTimes(manager).contains("executor-1"))
 
     // Unknown executor has disconnected
-    sc.listenerBus.postToAll(SparkListenerBlockManagerRemoved(
-      0L, BlockManagerId("executor-3", "host3", 1)))
+    sc.listenerBus.postToAll(SparkListenerExecutorRemoved(0L, "executor-3", ""))
     assert(executorIds(manager).size === 1)
     assert(removeTimes(manager).size === 1)
   }
@@ -614,8 +611,8 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
     assert(removeTimes(manager).isEmpty)
 
     sc.listenerBus.postToAll(SparkListenerTaskStart(0, 0, createTaskInfo(0, 0, "executor-1")))
-    sc.listenerBus.postToAll(SparkListenerBlockManagerAdded(
-      0L, BlockManagerId("executor-1", "host1", 1), 100L))
+    sc.listenerBus.postToAll(SparkListenerExecutorAdded(
+      0L, "executor-1", new ExecutorInfo("host1", 1, Map.empty)))
     assert(executorIds(manager).size === 1)
     assert(executorIds(manager).contains("executor-1"))
     assert(removeTimes(manager).size === 0)
@@ -626,16 +623,16 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
     val manager = sc.executorAllocationManager.get
     assert(executorIds(manager).isEmpty)
     assert(removeTimes(manager).isEmpty)
-    sc.listenerBus.postToAll(SparkListenerBlockManagerAdded(
-      0L, BlockManagerId("executor-1", "host1", 1), 100L))
+    sc.listenerBus.postToAll(SparkListenerExecutorAdded(
+      0L, "executor-1", new ExecutorInfo("host1", 1, Map.empty)))
     sc.listenerBus.postToAll(SparkListenerTaskStart(0, 0, createTaskInfo(0, 0, "executor-1")))
 
     assert(executorIds(manager).size === 1)
     assert(executorIds(manager).contains("executor-1"))
     assert(removeTimes(manager).size === 0)
 
-    sc.listenerBus.postToAll(SparkListenerBlockManagerAdded(
-      0L, BlockManagerId("executor-2", "host1", 1), 100L))
+    sc.listenerBus.postToAll(SparkListenerExecutorAdded(
+      0L, "executor-2", new ExecutorInfo("host1", 1, Map.empty)))
     assert(executorIds(manager).size === 2)
     assert(executorIds(manager).contains("executor-2"))
     assert(removeTimes(manager).size === 1)

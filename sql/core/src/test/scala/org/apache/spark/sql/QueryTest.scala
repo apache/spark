@@ -17,21 +17,28 @@
 
 package org.apache.spark.sql
 
+import java.util.{Locale, TimeZone}
+
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.columnar.InMemoryRelation
 
 class QueryTest extends PlanTest {
 
+  // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
+  TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+  // Add Locale setting
+  Locale.setDefault(Locale.US)
+
   /**
    * Runs the plan and makes sure the answer contains all of the keywords, or the
    * none of keywords are listed in the answer
-   * @param rdd the [[SchemaRDD]] to be executed
+   * @param rdd the [[DataFrame]] to be executed
    * @param exists true for make sure the keywords are listed in the output, otherwise
    *               to make sure none of the keyword are not listed in the output
    * @param keywords keyword in string array
    */
-  def checkExistence(rdd: SchemaRDD, exists: Boolean, keywords: String*) {
+  def checkExistence(rdd: DataFrame, exists: Boolean, keywords: String*) {
     val outputs = rdd.collect().map(_.mkString).mkString
     for (key <- keywords) {
       if (exists) {
@@ -44,10 +51,10 @@ class QueryTest extends PlanTest {
 
   /**
    * Runs the plan and makes sure the answer matches the expected result.
-   * @param rdd the [[SchemaRDD]] to be executed
+   * @param rdd the [[DataFrame]] to be executed
    * @param expectedAnswer the expected result, can either be an Any, Seq[Product], or Seq[ Seq[Any] ].
    */
-  protected def checkAnswer(rdd: SchemaRDD, expectedAnswer: Seq[Row]): Unit = {
+  protected def checkAnswer(rdd: DataFrame, expectedAnswer: Seq[Row]): Unit = {
     val isSorted = rdd.logicalPlan.collect { case s: logical.Sort => s }.nonEmpty
     def prepareAnswer(answer: Seq[Row]): Seq[Row] = {
       // Converts data to types that we can do equality comparison using Scala collections.
@@ -91,7 +98,7 @@ class QueryTest extends PlanTest {
     }
   }
 
-  protected def checkAnswer(rdd: SchemaRDD, expectedAnswer: Row): Unit = {
+  protected def checkAnswer(rdd: DataFrame, expectedAnswer: Row): Unit = {
     checkAnswer(rdd, Seq(expectedAnswer))
   }
 
@@ -101,8 +108,10 @@ class QueryTest extends PlanTest {
     }
   }
 
-  /** Asserts that a given SchemaRDD will be executed using the given number of cached results. */
-  def assertCached(query: SchemaRDD, numCachedTables: Int = 1): Unit = {
+  /**
+   * Asserts that a given [[DataFrame]] will be executed using the given number of cached results.
+   */
+  def assertCached(query: DataFrame, numCachedTables: Int = 1): Unit = {
     val planWithCaching = query.queryExecution.withCachedData
     val cachedData = planWithCaching collect {
       case cached: InMemoryRelation => cached

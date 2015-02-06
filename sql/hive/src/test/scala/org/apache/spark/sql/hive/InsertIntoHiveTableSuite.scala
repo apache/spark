@@ -30,6 +30,8 @@ import org.apache.spark.sql.hive.test.TestHive._
 case class TestData(key: Int, value: String)
 
 class InsertIntoHiveTableSuite extends QueryTest {
+  import org.apache.spark.sql.hive.test.TestHive.implicits._
+
   val testData = TestHive.sparkContext.parallelize(
     (1 to 100).map(i => TestData(i, i.toString)))
   testData.registerTempTable("testData")
@@ -52,7 +54,7 @@ class InsertIntoHiveTableSuite extends QueryTest {
     // Make sure the table has been updated.
     checkAnswer(
       sql("SELECT * FROM createAndInsertTest"),
-      testData.toSchemaRDD.collect().toSeq ++ testData.toSchemaRDD.collect().toSeq
+      testData.toDataFrame.collect().toSeq ++ testData.toDataFrame.collect().toSeq
     )
 
     // Now overwrite.
@@ -82,8 +84,8 @@ class InsertIntoHiveTableSuite extends QueryTest {
     val schema = StructType(StructField("m", MapType(StringType, StringType), true) :: Nil)
     val rowRDD = TestHive.sparkContext.parallelize(
       (1 to 100).map(i => Row(scala.collection.mutable.HashMap(s"key$i" -> s"value$i"))))
-    val schemaRDD = applySchema(rowRDD, schema)
-    schemaRDD.registerTempTable("tableWithMapValue")
+    val df = applySchema(rowRDD, schema)
+    df.registerTempTable("tableWithMapValue")
     sql("CREATE TABLE hiveTableWithMapValue(m MAP <STRING, STRING>)")
     sql("INSERT OVERWRITE TABLE hiveTableWithMapValue SELECT m FROM tableWithMapValue")
 
@@ -127,8 +129,8 @@ class InsertIntoHiveTableSuite extends QueryTest {
     val schema = StructType(Seq(
       StructField("a", ArrayType(StringType, containsNull = false))))
     val rowRDD = TestHive.sparkContext.parallelize((1 to 100).map(i => Row(Seq(s"value$i"))))
-    val schemaRDD = applySchema(rowRDD, schema)
-    schemaRDD.registerTempTable("tableWithArrayValue")
+    val df = applySchema(rowRDD, schema)
+    df.registerTempTable("tableWithArrayValue")
     sql("CREATE TABLE hiveTableWithArrayValue(a Array <STRING>)")
     sql("INSERT OVERWRITE TABLE hiveTableWithArrayValue SELECT a FROM tableWithArrayValue")
 
@@ -144,8 +146,8 @@ class InsertIntoHiveTableSuite extends QueryTest {
       StructField("m", MapType(StringType, StringType, valueContainsNull = false))))
     val rowRDD = TestHive.sparkContext.parallelize(
       (1 to 100).map(i => Row(Map(s"key$i" -> s"value$i"))))
-    val schemaRDD = applySchema(rowRDD, schema)
-    schemaRDD.registerTempTable("tableWithMapValue")
+    val df = applySchema(rowRDD, schema)
+    df.registerTempTable("tableWithMapValue")
     sql("CREATE TABLE hiveTableWithMapValue(m Map <STRING, STRING>)")
     sql("INSERT OVERWRITE TABLE hiveTableWithMapValue SELECT m FROM tableWithMapValue")
 
@@ -161,8 +163,8 @@ class InsertIntoHiveTableSuite extends QueryTest {
       StructField("s", StructType(Seq(StructField("f", StringType, nullable = false))))))
     val rowRDD = TestHive.sparkContext.parallelize(
       (1 to 100).map(i => Row(Row(s"value$i"))))
-    val schemaRDD = applySchema(rowRDD, schema)
-    schemaRDD.registerTempTable("tableWithStructValue")
+    val df = applySchema(rowRDD, schema)
+    df.registerTempTable("tableWithStructValue")
     sql("CREATE TABLE hiveTableWithStructValue(s Struct <f: STRING>)")
     sql("INSERT OVERWRITE TABLE hiveTableWithStructValue SELECT s FROM tableWithStructValue")
 

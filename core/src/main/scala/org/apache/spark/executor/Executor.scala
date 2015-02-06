@@ -41,11 +41,14 @@ import org.apache.spark.util.{SparkUncaughtExceptionHandler, AkkaUtils, Utils}
  */
 private[spark] class Executor(
     executorId: String,
-    slaveHostname: String,
+    executorHostname: String,
     env: SparkEnv,
     isLocal: Boolean = false)
   extends Logging
 {
+
+  logInfo(s"Starting executor ID $executorId on host $executorHostname")
+
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
   // Each map holds the master's timestamp for the version of that file or JAR we got.
   private val currentFiles: HashMap[String, Long] = new HashMap[String, Long]()
@@ -58,12 +61,12 @@ private[spark] class Executor(
   @volatile private var isStopped = false
 
   // No ip or host:port - just hostname
-  Utils.checkHost(slaveHostname, "Expected executed slave to be a hostname")
+  Utils.checkHost(executorHostname, "Expected executed slave to be a hostname")
   // must not have port specified.
-  assert (0 == Utils.parseHostPort(slaveHostname)._2)
+  assert (0 == Utils.parseHostPort(executorHostname)._2)
 
   // Make sure the local hostname we report matches the cluster scheduler's name for this host
-  Utils.setCustomHostname(slaveHostname)
+  Utils.setCustomHostname(executorHostname)
 
   if (!isLocal) {
     // Setup an uncaught exception handler for non-local mode.
@@ -72,8 +75,10 @@ private[spark] class Executor(
     Thread.setDefaultUncaughtExceptionHandler(SparkUncaughtExceptionHandler)
   }
 
+  // Start worker thread pool
+  val threadPool = Utils.newDaemonCachedThreadPool("Executor task launch worker")
+
   val executorSource = new ExecutorSource(this, executorId)
-  conf.set("spark.executor.id", executorId)
 
   if (!isLocal) {
     env.metricsSystem.registerSource(executorSource)
@@ -98,9 +103,6 @@ private[spark] class Executor(
 
   // Limit of bytes for total size of results (default is 1GB)
   private val maxResultSize = Utils.getMaxResultSize(conf)
-
-  // Start worker thread pool
-  val threadPool = Utils.newDaemonCachedThreadPool("Executor task launch worker")
 
   // Maintains the list of running tasks.
   private val runningTasks = new ConcurrentHashMap[Long, TaskRunner]

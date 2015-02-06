@@ -49,6 +49,7 @@ import org.apache.spark.scheduler._
  *   spark.dynamicAllocation.enabled - Whether this feature is enabled
  *   spark.dynamicAllocation.minExecutors - Lower bound on the number of executors
  *   spark.dynamicAllocation.maxExecutors - Upper bound on the number of executors
+ *   spark.dynamicAllocation.initialExecutors - Number of executors to start with
  *
  *   spark.dynamicAllocation.schedulerBacklogTimeout (M) -
  *     If there are backlogged tasks for this duration, add new executors
@@ -70,19 +71,20 @@ private[spark] class ExecutorAllocationManager(
 
   import ExecutorAllocationManager._
 
-  // Lower and upper bounds on the number of executors. These are required.
-  private val minNumExecutors = conf.getInt("spark.dynamicAllocation.minExecutors", -1)
-  private val maxNumExecutors = conf.getInt("spark.dynamicAllocation.maxExecutors", -1)
+  // Lower and upper bounds on the number of executors.
+  private val minNumExecutors = conf.getInt("spark.dynamicAllocation.minExecutors", 0)
+  private val maxNumExecutors = conf.getInt("spark.dynamicAllocation.maxExecutors",
+    Integer.MAX_VALUE)
 
-  // How long there must be backlogged tasks for before an addition is triggered
+  // How long there must be backlogged tasks for before an addition is triggered (seconds)
   private val schedulerBacklogTimeout = conf.getLong(
-    "spark.dynamicAllocation.schedulerBacklogTimeout", 60)
+    "spark.dynamicAllocation.schedulerBacklogTimeout", 5)
 
   // Same as above, but used only after `schedulerBacklogTimeout` is exceeded
   private val sustainedSchedulerBacklogTimeout = conf.getLong(
     "spark.dynamicAllocation.sustainedSchedulerBacklogTimeout", schedulerBacklogTimeout)
 
-  // How long an executor must be idle for before it is removed
+  // How long an executor must be idle for before it is removed (seconds)
   private val executorIdleTimeout = conf.getLong(
     "spark.dynamicAllocation.executorIdleTimeout", 600)
 
@@ -132,10 +134,10 @@ private[spark] class ExecutorAllocationManager(
    */
   private def validateSettings(): Unit = {
     if (minNumExecutors < 0 || maxNumExecutors < 0) {
-      throw new SparkException("spark.dynamicAllocation.{min/max}Executors must be set!")
+      throw new SparkException("spark.dynamicAllocation.{min/max}Executors must be positive!")
     }
-    if (minNumExecutors == 0 || maxNumExecutors == 0) {
-      throw new SparkException("spark.dynamicAllocation.{min/max}Executors cannot be 0!")
+    if (maxNumExecutors == 0) {
+      throw new SparkException("spark.dynamicAllocation.maxExecutors cannot be 0!")
     }
     if (minNumExecutors > maxNumExecutors) {
       throw new SparkException(s"spark.dynamicAllocation.minExecutors ($minNumExecutors) must " +
@@ -158,7 +160,7 @@ private[spark] class ExecutorAllocationManager(
         "shuffle service. You may enable this through spark.shuffle.service.enabled.")
     }
     if (tasksPerExecutor == 0) {
-      throw new SparkException("spark.executor.cores must not be less than spark.task.cpus.cores")
+      throw new SparkException("spark.executor.cores must not be less than spark.task.cpus.")
     }
   }
 
@@ -484,8 +486,8 @@ private[spark] class ExecutorAllocationManager(
       }
     }
 
-    override def onBlockManagerAdded(blockManagerAdded: SparkListenerBlockManagerAdded): Unit = {
-      val executorId = blockManagerAdded.blockManagerId.executorId
+    override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = {
+      val executorId = executorAdded.executorId
       if (executorId != SparkContext.DRIVER_IDENTIFIER) {
         // This guards against the race condition in which the `SparkListenerTaskStart`
         // event is posted before the `SparkListenerBlockManagerAdded` event, which is
@@ -496,9 +498,8 @@ private[spark] class ExecutorAllocationManager(
       }
     }
 
-    override def onBlockManagerRemoved(
-        blockManagerRemoved: SparkListenerBlockManagerRemoved): Unit = {
-      allocationManager.onExecutorRemoved(blockManagerRemoved.blockManagerId.executorId)
+    override def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved): Unit = {
+      allocationManager.onExecutorRemoved(executorRemoved.executorId)
     }
 
     /**

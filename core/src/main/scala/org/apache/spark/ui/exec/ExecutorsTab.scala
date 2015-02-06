@@ -51,8 +51,14 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener) extends Sp
   val executorToOutputBytes = HashMap[String, Long]()
   val executorToShuffleRead = HashMap[String, Long]()
   val executorToShuffleWrite = HashMap[String, Long]()
+  val executorToLogUrls = HashMap[String, Map[String, String]]()
 
   def storageStatusList = storageStatusListener.storageStatusList
+
+  override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded) = synchronized {
+    val eid = executorAdded.executorId
+    executorToLogUrls(eid) = executorAdded.executorInfo.logUrlMap
+  }
 
   override def onTaskStart(taskStart: SparkListenerTaskStart) = synchronized {
     val eid = taskStart.taskInfo.executorId

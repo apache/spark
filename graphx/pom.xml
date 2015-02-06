@@ -41,6 +41,10 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.jblas</groupId>
       <artifactId>jblas</artifactId>
       <version>${jblas.version}</version>

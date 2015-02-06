@@ -39,6 +39,9 @@ from datetime import datetime
 from optparse import OptionParser
 from sys import stderr
 
+SPARK_EC2_VERSION = "1.2.0"
+SPARK_EC2_DIR = os.path.dirname(os.path.realpath(__file__))
+
 VALID_SPARK_VERSIONS = set([
     "0.7.3",
     "0.8.0",
@@ -54,9 +57,8 @@ VALID_SPARK_VERSIONS = set([
     "1.2.0",
 ])
 
-DEFAULT_SPARK_VERSION = "1.2.0"
+DEFAULT_SPARK_VERSION = SPARK_EC2_VERSION
 DEFAULT_SPARK_GITHUB_REPO = "https://github.com/apache/spark"
-SPARK_EC2_DIR = os.path.dirname(os.path.realpath(__file__))
 MESOS_SPARK_EC2_BRANCH = "branch-1.3"
 
 # A URL prefix from which to fetch AMI information
@@ -103,12 +105,10 @@ class UsageError(Exception):
 # Configure and parse our command-line arguments
 def parse_args():
     parser = OptionParser(
-        usage="spark-ec2 [options] <action> <cluster_name>"
-        + "\n\n<action> can be: launch, destroy, login, stop, start, get-master, reboot-slaves",
-        add_help_option=False)
-    parser.add_option(
-        "-h", "--help", action="help",
-        help="Show this help message and exit")
+        prog="spark-ec2",
+        version="%prog {v}".format(v=SPARK_EC2_VERSION),
+        usage="%prog [options] <action> <cluster_name>\n\n"
+        + "<action> can be: launch, destroy, login, stop, start, get-master, reboot-slaves")
     parser.add_option(
         "-s", "--slaves", type="int", default=1,
         help="Number of slaves to launch (default: %default)")

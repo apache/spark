@@ -20,15 +20,19 @@ public classes of Spark SQL:
 
     - L{SQLContext}
       Main entry point for SQL functionality.
-    - L{SchemaRDD}
+    - L{DataFrame}
       A Resilient Distributed Dataset (RDD) with Schema information for the data contained. In
-      addition to normal RDD operations, SchemaRDDs also support SQL.
+      addition to normal RDD operations, DataFrames also support SQL.
+    - L{GroupedData}
+    - L{Column}
+      Column is a DataFrame with a single column.
     - L{Row}
       A Row of data returned by a Spark SQL query.
     - L{HiveContext}
       Main entry point for accessing data stored in Apache Hive..
 """
 
+import sys
 import itertools
 import decimal
 import datetime
@@ -36,6 +40,9 @@ import keyword
 import warnings
 import json
 import re
+import random
+import os
+from tempfile import NamedTemporaryFile
 from array import array
 from operator import itemgetter
 from itertools import imap
@@ -43,7 +50,8 @@ from itertools import imap
 from py4j.protocol import Py4JError
 from py4j.java_collections import ListConverter, MapConverter
 
-from pyspark.rdd import RDD
+from pyspark.context import SparkContext
+from pyspark.rdd import RDD, _prepare_for_python_RDD
 from pyspark.serializers import BatchedSerializer, AutoBatchedSerializer, PickleSerializer, \
     CloudPickleSerializer, UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
@@ -54,7 +62,8 @@ __all__ = [
     "StringType", "BinaryType", "BooleanType", "DateType", "TimestampType", "DecimalType",
     "DoubleType", "FloatType", "ByteType", "IntegerType", "LongType",
     "ShortType", "ArrayType", "MapType", "StructField", "StructType",
-    "SQLContext", "HiveContext", "SchemaRDD", "Row"]
+    "SQLContext", "HiveContext", "DataFrame", "GroupedData", "Column", "Row", "Dsl",
+    "SchemaRDD"]
 
 
 class DataType(object):
@@ -922,7 +931,7 @@ def _parse_schema_abstract(s):
 
 def _infer_schema_type(obj, dataType):
     """
-    Fill the dataType with types infered from obj
+    Fill the dataType with types inferred from obj
 
     >>> schema = _parse_schema_abstract("a b c d")
     >>> row = (1, 1.0, "str", datetime.date(2014, 10, 10))
@@ -1171,7 +1180,7 @@ def _create_cls(dataType):
 
     class Row(tuple):
 
-        """ Row in SchemaRDD """
+        """ Row in DataFrame """
         __DATATYPE__ = dataType
         __FIELDS__ = tuple(f.name for f in dataType.fields)
         __slots__ = ()
@@ -1198,7 +1207,7 @@ class SQLContext(object):
 
     """Main entry point for Spark SQL functionality.
 
-    A SQLContext can be used create L{SchemaRDD}, register L{SchemaRDD} as
+    A SQLContext can be used create L{DataFrame}, register L{DataFrame} as
     tables, execute SQL over tables, cache tables, and read parquet files.
     """
 
@@ -1209,8 +1218,8 @@ class SQLContext(object):
         :param sqlContext: An optional JVM Scala SQLContext. If set, we do not instatiate a new
         SQLContext in the JVM, instead we make all calls to this object.
 
-        >>> srdd = sqlCtx.inferSchema(rdd)
-        >>> sqlCtx.inferSchema(srdd) # doctest: +IGNORE_EXCEPTION_DETAIL
+        >>> df = sqlCtx.inferSchema(rdd)
+        >>> sqlCtx.inferSchema(df) # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
             ...
         TypeError:...
@@ -1225,12 +1234,12 @@ class SQLContext(object):
         >>> allTypes = sc.parallelize([Row(i=1, s="string", d=1.0, l=1L,
         ...     b=True, list=[1, 2, 3], dict={"s": 0}, row=Row(a=1),
         ...     time=datetime(2014, 8, 1, 14, 1, 5))])
-        >>> srdd = sqlCtx.inferSchema(allTypes)
-        >>> srdd.registerTempTable("allTypes")
+        >>> df = sqlCtx.inferSchema(allTypes)
+        >>> df.registerTempTable("allTypes")
         >>> sqlCtx.sql('select i+1, d+1, not b, list[1], dict["s"], time, row.a '
         ...            'from allTypes where b and i > 0').collect()
         [Row(c0=2, c1=2.0, c2=False, c3=2, c4=0...8, 1, 14, 1, 5), a=1)]
-        >>> srdd.map(lambda x: (x.i, x.s, x.d, x.l, x.b, x.time,
+        >>> df.map(lambda x: (x.i, x.s, x.d, x.l, x.b, x.time,
         ...                     x.row.a, x.list)).collect()
         [(1, u'string', 1.0, 1, True, ...(2014, 8, 1, 14, 1, 5), 1, [1, 2, 3])]
         """
@@ -1265,28 +1274,15 @@ class SQLContext(object):
         [Row(c0=4)]
         """
         func = lambda _, it: imap(lambda x: f(*x), it)
-        command = (func, None,
-                   AutoBatchedSerializer(PickleSerializer()),
-                   AutoBatchedSerializer(PickleSerializer()))
-        ser = CloudPickleSerializer()
-        pickled_command = ser.dumps(command)
-        if len(pickled_command) > (1 << 20):  # 1M
-            broadcast = self._sc.broadcast(pickled_command)
-            pickled_command = ser.dumps(broadcast)
-        broadcast_vars = ListConverter().convert(
-            [x._jbroadcast for x in self._sc._pickled_broadcast_vars],
-            self._sc._gateway._gateway_client)
-        self._sc._pickled_broadcast_vars.clear()
-        env = MapConverter().convert(self._sc.environment,
-                                     self._sc._gateway._gateway_client)
-        includes = ListConverter().convert(self._sc._python_includes,
-                                           self._sc._gateway._gateway_client)
+        ser = AutoBatchedSerializer(PickleSerializer())
+        command = (func, None, ser, ser)
+        pickled_cmd, bvars, env, includes = _prepare_for_python_RDD(self._sc, command, self)
         self._ssql_ctx.udf().registerPython(name,
-                                            bytearray(pickled_command),
+                                            bytearray(pickled_cmd),
                                             env,
                                             includes,
                                             self._sc.pythonExec,
-                                            broadcast_vars,
+                                            bvars,
                                             self._sc._javaAccumulator,
                                             returnType.json())
 
@@ -1309,23 +1305,23 @@ class SQLContext(object):
         ...     [Row(field1=1, field2="row1"),
         ...      Row(field1=2, field2="row2"),
         ...      Row(field1=3, field2="row3")])
-        >>> srdd = sqlCtx.inferSchema(rdd)
-        >>> srdd.collect()[0]
+        >>> df = sqlCtx.inferSchema(rdd)
+        >>> df.collect()[0]
         Row(field1=1, field2=u'row1')
 
         >>> NestedRow = Row("f1", "f2")
         >>> nestedRdd1 = sc.parallelize([
         ...     NestedRow(array('i', [1, 2]), {"row1": 1.0}),
         ...     NestedRow(array('i', [2, 3]), {"row2": 2.0})])
-        >>> srdd = sqlCtx.inferSchema(nestedRdd1)
-        >>> srdd.collect()
+        >>> df = sqlCtx.inferSchema(nestedRdd1)
+        >>> df.collect()
         [Row(f1=[1, 2], f2={u'row1': 1.0}), ..., f2={u'row2': 2.0})]
 
         >>> nestedRdd2 = sc.parallelize([
         ...     NestedRow([[1, 2], [2, 3]], [1, 2]),
         ...     NestedRow([[2, 3], [3, 4]], [2, 3])])
-        >>> srdd = sqlCtx.inferSchema(nestedRdd2)
-        >>> srdd.collect()
+        >>> df = sqlCtx.inferSchema(nestedRdd2)
+        >>> df.collect()
         [Row(f1=[[1, 2], [2, 3]], f2=[1, 2]), ..., f2=[2, 3])]
 
         >>> from collections import namedtuple
@@ -1334,13 +1330,13 @@ class SQLContext(object):
         ...     [CustomRow(field1=1, field2="row1"),
         ...      CustomRow(field1=2, field2="row2"),
         ...      CustomRow(field1=3, field2="row3")])
-        >>> srdd = sqlCtx.inferSchema(rdd)
-        >>> srdd.collect()[0]
+        >>> df = sqlCtx.inferSchema(rdd)
+        >>> df.collect()[0]
         Row(field1=1, field2=u'row1')
         """
 
-        if isinstance(rdd, SchemaRDD):
-            raise TypeError("Cannot apply schema to SchemaRDD")
+        if isinstance(rdd, DataFrame):
+            raise TypeError("Cannot apply schema to DataFrame")
 
         first = rdd.first()
         if not first:
@@ -1384,10 +1380,10 @@ class SQLContext(object):
         >>> rdd2 = sc.parallelize([(1, "row1"), (2, "row2"), (3, "row3")])
         >>> schema = StructType([StructField("field1", IntegerType(), False),
         ...     StructField("field2", StringType(), False)])
-        >>> srdd = sqlCtx.applySchema(rdd2, schema)
-        >>> sqlCtx.registerRDDAsTable(srdd, "table1")
-        >>> srdd2 = sqlCtx.sql("SELECT * from table1")
-        >>> srdd2.collect()
+        >>> df = sqlCtx.applySchema(rdd2, schema)
+        >>> sqlCtx.registerRDDAsTable(df, "table1")
+        >>> df2 = sqlCtx.sql("SELECT * from table1")
+        >>> df2.collect()
         [Row(field1=1, field2=u'row1'),..., Row(field1=3, field2=u'row3')]
 
         >>> from datetime import date, datetime
@@ -1410,15 +1406,15 @@ class SQLContext(object):
         ...         StructType([StructField("b", ShortType(), False)]), False),
         ...     StructField("list", ArrayType(ByteType(), False), False),
         ...     StructField("null", DoubleType(), True)])
-        >>> srdd = sqlCtx.applySchema(rdd, schema)
-        >>> results = srdd.map(
+        >>> df = sqlCtx.applySchema(rdd, schema)
+        >>> results = df.map(
         ...     lambda x: (x.byte1, x.byte2, x.short1, x.short2, x.int, x.float, x.date,
         ...         x.time, x.map["a"], x.struct.b, x.list, x.null))
         >>> results.collect()[0] # doctest: +NORMALIZE_WHITESPACE
         (127, -128, -32768, 32767, 2147483647, 1.0, datetime.date(2010, 1, 1),
              datetime.datetime(2010, 1, 1, 1, 1, 1), 1, 2, [1, 2, 3], None)
 
-        >>> srdd.registerTempTable("table2")
+        >>> df.registerTempTable("table2")
         >>> sqlCtx.sql(
         ...   "SELECT byte1 - 1 AS byte1, byte2 + 1 AS byte2, " +
         ...     "short1 + 1 AS short1, short2 - 1 AS short2, int - 1 AS int, " +
@@ -1431,13 +1427,13 @@ class SQLContext(object):
         >>> abstract = "byte short float time map{} struct(b) list[]"
         >>> schema = _parse_schema_abstract(abstract)
         >>> typedSchema = _infer_schema_type(rdd.first(), schema)
-        >>> srdd = sqlCtx.applySchema(rdd, typedSchema)
-        >>> srdd.collect()
+        >>> df = sqlCtx.applySchema(rdd, typedSchema)
+        >>> df.collect()
         [Row(byte=127, short=-32768, float=1.0, time=..., list=[1, 2, 3])]
         """
 
-        if isinstance(rdd, SchemaRDD):
-            raise TypeError("Cannot apply schema to SchemaRDD")
+        if isinstance(rdd, DataFrame):
+            raise TypeError("Cannot apply schema to DataFrame")
 
         if not isinstance(schema, StructType):
             raise TypeError("schema should be StructType")
@@ -1457,8 +1453,8 @@ class SQLContext(object):
         rdd = rdd.map(converter)
 
         jrdd = self._jvm.SerDeUtil.toJavaArray(rdd._to_java_object_rdd())
-        srdd = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), schema.json())
-        return SchemaRDD(srdd, self)
+        df = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), schema.json())
+        return DataFrame(df, self)
 
     def registerRDDAsTable(self, rdd, tableName):
         """Registers the given RDD as a temporary table in the catalog.
@@ -1466,34 +1462,39 @@ class SQLContext(object):
         Temporary tables exist only during the lifetime of this instance of
         SQLContext.
 
-        >>> srdd = sqlCtx.inferSchema(rdd)
-        >>> sqlCtx.registerRDDAsTable(srdd, "table1")
+        >>> df = sqlCtx.inferSchema(rdd)
+        >>> sqlCtx.registerRDDAsTable(df, "table1")
         """
-        if (rdd.__class__ is SchemaRDD):
-            srdd = rdd._jschema_rdd.baseSchemaRDD()
-            self._ssql_ctx.registerRDDAsTable(srdd, tableName)
+        if (rdd.__class__ is DataFrame):
+            df = rdd._jdf
+            self._ssql_ctx.registerRDDAsTable(df, tableName)
         else:
-            raise ValueError("Can only register SchemaRDD as table")
+            raise ValueError("Can only register DataFrame as table")
 
-    def parquetFile(self, path):
-        """Loads a Parquet file, returning the result as a L{SchemaRDD}.
+    def parquetFile(self, *paths):
+        """Loads a Parquet file, returning the result as a L{DataFrame}.
 
         >>> import tempfile, shutil
         >>> parquetFile = tempfile.mkdtemp()
         >>> shutil.rmtree(parquetFile)
-        >>> srdd = sqlCtx.inferSchema(rdd)
-        >>> srdd.saveAsParquetFile(parquetFile)
-        >>> srdd2 = sqlCtx.parquetFile(parquetFile)
-        >>> sorted(srdd.collect()) == sorted(srdd2.collect())
+        >>> df = sqlCtx.inferSchema(rdd)
+        >>> df.saveAsParquetFile(parquetFile)
+        >>> df2 = sqlCtx.parquetFile(parquetFile)
+        >>> sorted(df.collect()) == sorted(df2.collect())
         True
         """
-        jschema_rdd = self._ssql_ctx.parquetFile(path)
-        return SchemaRDD(jschema_rdd, self)
+        gateway = self._sc._gateway
+        jpath = paths[0]
+        jpaths = gateway.new_array(gateway.jvm.java.lang.String, len(paths) - 1)
+        for i in range(1, len(paths)):
+            jpaths[i] = paths[i]
+        jdf = self._ssql_ctx.parquetFile(jpath, jpaths)
+        return DataFrame(jdf, self)
 
     def jsonFile(self, path, schema=None, samplingRatio=1.0):
         """
         Loads a text file storing one JSON object per line as a
-        L{SchemaRDD}.
+        L{DataFrame}.
 
         If the schema is provided, applies the given schema to this
         JSON dataset.
@@ -1508,23 +1509,23 @@ class SQLContext(object):
         >>> for json in jsonStrings:
         ...   print>>ofn, json
         >>> ofn.close()
-        >>> srdd1 = sqlCtx.jsonFile(jsonFile)
-        >>> sqlCtx.registerRDDAsTable(srdd1, "table1")
-        >>> srdd2 = sqlCtx.sql(
+        >>> df1 = sqlCtx.jsonFile(jsonFile)
+        >>> sqlCtx.registerRDDAsTable(df1, "table1")
+        >>> df2 = sqlCtx.sql(
         ...   "SELECT field1 AS f1, field2 as f2, field3 as f3, "
         ...   "field6 as f4 from table1")
-        >>> for r in srdd2.collect():
+        >>> for r in df2.collect():
         ...     print r
         Row(f1=1, f2=u'row1', f3=Row(field4=11, field5=None), f4=None)
         Row(f1=2, f2=None, f3=Row(field4=22,..., f4=[Row(field7=u'row2')])
         Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)
 
-        >>> srdd3 = sqlCtx.jsonFile(jsonFile, srdd1.schema())
-        >>> sqlCtx.registerRDDAsTable(srdd3, "table2")
-        >>> srdd4 = sqlCtx.sql(
+        >>> df3 = sqlCtx.jsonFile(jsonFile, df1.schema())
+        >>> sqlCtx.registerRDDAsTable(df3, "table2")
+        >>> df4 = sqlCtx.sql(
         ...   "SELECT field1 AS f1, field2 as f2, field3 as f3, "
         ...   "field6 as f4 from table2")
-        >>> for r in srdd4.collect():
+        >>> for r in df4.collect():
         ...    print r
         Row(f1=1, f2=u'row1', f3=Row(field4=11, field5=None), f4=None)
         Row(f1=2, f2=None, f3=Row(field4=22,..., f4=[Row(field7=u'row2')])
@@ -1536,23 +1537,23 @@ class SQLContext(object):
         ...         StructType([
         ...             StructField("field5",
         ...                 ArrayType(IntegerType(), False), True)]), False)])
-        >>> srdd5 = sqlCtx.jsonFile(jsonFile, schema)
-        >>> sqlCtx.registerRDDAsTable(srdd5, "table3")
-        >>> srdd6 = sqlCtx.sql(
+        >>> df5 = sqlCtx.jsonFile(jsonFile, schema)
+        >>> sqlCtx.registerRDDAsTable(df5, "table3")
+        >>> df6 = sqlCtx.sql(
         ...   "SELECT field2 AS f1, field3.field5 as f2, "
         ...   "field3.field5[0] as f3 from table3")
-        >>> srdd6.collect()
+        >>> df6.collect()
         [Row(f1=u'row1', f2=None, f3=None)...Row(f1=u'row3', f2=[], f3=None)]
         """
         if schema is None:
-            srdd = self._ssql_ctx.jsonFile(path, samplingRatio)
+            df = self._ssql_ctx.jsonFile(path, samplingRatio)
         else:
             scala_datatype = self._ssql_ctx.parseDataType(schema.json())
-            srdd = self._ssql_ctx.jsonFile(path, scala_datatype)
-        return SchemaRDD(srdd, self)
+            df = self._ssql_ctx.jsonFile(path, scala_datatype)
+        return DataFrame(df, self)
 
     def jsonRDD(self, rdd, schema=None, samplingRatio=1.0):
-        """Loads an RDD storing one JSON object per string as a L{SchemaRDD}.
+        """Loads an RDD storing one JSON object per string as a L{DataFrame}.
 
         If the schema is provided, applies the given schema to this
         JSON dataset.
@@ -1560,23 +1561,23 @@ class SQLContext(object):
         Otherwise, it samples the dataset with ratio `samplingRatio` to
         determine the schema.
 
-        >>> srdd1 = sqlCtx.jsonRDD(json)
-        >>> sqlCtx.registerRDDAsTable(srdd1, "table1")
-        >>> srdd2 = sqlCtx.sql(
+        >>> df1 = sqlCtx.jsonRDD(json)
+        >>> sqlCtx.registerRDDAsTable(df1, "table1")
+        >>> df2 = sqlCtx.sql(
         ...   "SELECT field1 AS f1, field2 as f2, field3 as f3, "
         ...   "field6 as f4 from table1")
-        >>> for r in srdd2.collect():
+        >>> for r in df2.collect():
         ...     print r
         Row(f1=1, f2=u'row1', f3=Row(field4=11, field5=None), f4=None)
         Row(f1=2, f2=None, f3=Row(field4=22..., f4=[Row(field7=u'row2')])
         Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)
 
-        >>> srdd3 = sqlCtx.jsonRDD(json, srdd1.schema())
-        >>> sqlCtx.registerRDDAsTable(srdd3, "table2")
-        >>> srdd4 = sqlCtx.sql(
+        >>> df3 = sqlCtx.jsonRDD(json, df1.schema())
+        >>> sqlCtx.registerRDDAsTable(df3, "table2")
+        >>> df4 = sqlCtx.sql(
         ...   "SELECT field1 AS f1, field2 as f2, field3 as f3, "
         ...   "field6 as f4 from table2")
-        >>> for r in srdd4.collect():
+        >>> for r in df4.collect():
         ...     print r
         Row(f1=1, f2=u'row1', f3=Row(field4=11, field5=None), f4=None)
         Row(f1=2, f2=None, f3=Row(field4=22..., f4=[Row(field7=u'row2')])
@@ -1588,12 +1589,12 @@ class SQLContext(object):
         ...         StructType([
         ...             StructField("field5",
         ...                 ArrayType(IntegerType(), False), True)]), False)])
-        >>> srdd5 = sqlCtx.jsonRDD(json, schema)
-        >>> sqlCtx.registerRDDAsTable(srdd5, "table3")
-        >>> srdd6 = sqlCtx.sql(
+        >>> df5 = sqlCtx.jsonRDD(json, schema)
+        >>> sqlCtx.registerRDDAsTable(df5, "table3")
+        >>> df6 = sqlCtx.sql(
         ...   "SELECT field2 AS f1, field3.field5 as f2, "
         ...   "field3.field5[0] as f3 from table3")
-        >>> srdd6.collect()
+        >>> df6.collect()
         [Row(f1=u'row1', f2=None,...Row(f1=u'row3', f2=[], f3=None)]
 
         >>> sqlCtx.jsonRDD(sc.parallelize(['{}',
@@ -1615,33 +1616,33 @@ class SQLContext(object):
         keyed._bypass_serializer = True
         jrdd = keyed._jrdd.map(self._jvm.BytesToString())
         if schema is None:
-            srdd = self._ssql_ctx.jsonRDD(jrdd.rdd(), samplingRatio)
+            df = self._ssql_ctx.jsonRDD(jrdd.rdd(), samplingRatio)
         else:
             scala_datatype = self._ssql_ctx.parseDataType(schema.json())
-            srdd = self._ssql_ctx.jsonRDD(jrdd.rdd(), scala_datatype)
-        return SchemaRDD(srdd, self)
+            df = self._ssql_ctx.jsonRDD(jrdd.rdd(), scala_datatype)
+        return DataFrame(df, self)
 
     def sql(self, sqlQuery):
-        """Return a L{SchemaRDD} representing the result of the given query.
+        """Return a L{DataFrame} representing the result of the given query.
 
-        >>> srdd = sqlCtx.inferSchema(rdd)
-        >>> sqlCtx.registerRDDAsTable(srdd, "table1")
-        >>> srdd2 = sqlCtx.sql("SELECT field1 AS f1, field2 as f2 from table1")
-        >>> srdd2.collect()
+        >>> df = sqlCtx.inferSchema(rdd)
+        >>> sqlCtx.registerRDDAsTable(df, "table1")
+        >>> df2 = sqlCtx.sql("SELECT field1 AS f1, field2 as f2 from table1")
+        >>> df2.collect()
         [Row(f1=1, f2=u'row1'), Row(f1=2, f2=u'row2'), Row(f1=3, f2=u'row3')]
         """
-        return SchemaRDD(self._ssql_ctx.sql(sqlQuery), self)
+        return DataFrame(self._ssql_ctx.sql(sqlQuery), self)
 
     def table(self, tableName):
-        """Returns the specified table as a L{SchemaRDD}.
+        """Returns the specified table as a L{DataFrame}.
 
-        >>> srdd = sqlCtx.inferSchema(rdd)
-        >>> sqlCtx.registerRDDAsTable(srdd, "table1")
-        >>> srdd2 = sqlCtx.table("table1")
-        >>> sorted(srdd.collect()) == sorted(srdd2.collect())
+        >>> df = sqlCtx.inferSchema(rdd)
+        >>> sqlCtx.registerRDDAsTable(df, "table1")
+        >>> df2 = sqlCtx.table("table1")
+        >>> sorted(df.collect()) == sorted(df2.collect())
         True
         """
-        return SchemaRDD(self._ssql_ctx.table(tableName), self)
+        return DataFrame(self._ssql_ctx.table(tableName), self)
 
     def cacheTable(self, tableName):
         """Caches the specified table in-memory."""
@@ -1687,17 +1688,6 @@ class HiveContext(SQLContext):
         return self._jvm.HiveContext(self._jsc.sc())
 
 
-class LocalHiveContext(HiveContext):
-
-    def __init__(self, sparkContext, sqlContext=None):
-        HiveContext.__init__(self, sparkContext, sqlContext)
-        warnings.warn("LocalHiveContext is deprecated. "
-                      "Use HiveContext instead.", DeprecationWarning)
-
-    def _get_hive_ctx(self):
-        return self._jvm.LocalHiveContext(self._jsc.sc())
-
-
 def _create_row(fields, values):
     row = Row(*values)
     row.__FIELDS__ = fields
@@ -1707,7 +1697,7 @@ def _create_row(fields, values):
 class Row(tuple):
 
     """
-    A row in L{SchemaRDD}. The fields in it can be accessed like attributes.
+    A row in L{DataFrame}. The fields in it can be accessed like attributes.
 
     Row can be used to create a row object by using named arguments,
     the fields will be sorted by names.
@@ -1785,125 +1775,107 @@ class Row(tuple):
             return "<Row(%s)>" % ", ".join(self)
 
 
-def inherit_doc(cls):
-    for name, func in vars(cls).items():
-        # only inherit docstring for public functions
-        if name.startswith("_"):
-            continue
-        if not func.__doc__:
-            for parent in cls.__bases__:
-                parent_func = getattr(parent, name, None)
-                if parent_func and getattr(parent_func, "__doc__", None):
-                    func.__doc__ = parent_func.__doc__
-                    break
-    return cls
+class DataFrame(object):
+
+    """A collection of rows that have the same columns.
+
+    A :class:`DataFrame` is equivalent to a relational table in Spark SQL,
+    and can be created using various functions in :class:`SQLContext`::
+
+        people = sqlContext.parquetFile("...")
+
+    Once created, it can be manipulated using the various domain-specific-language
+    (DSL) functions defined in: :class:`DataFrame`, :class:`Column`.
+
+    To select a column from the data frame, use the apply method::
+
+        ageCol = people.age
+
+    Note that the :class:`Column` type can also be manipulated
+    through its various functions::
+
+        # The following creates a new column that increases everybody's age by 10.
+        people.age + 10
 
 
-@inherit_doc
-class SchemaRDD(RDD):
+    A more concrete example::
 
-    """An RDD of L{Row} objects that has an associated schema.
+        # To create DataFrame using SQLContext
+        people = sqlContext.parquetFile("...")
+        department = sqlContext.parquetFile("...")
 
-    The underlying JVM object is a SchemaRDD, not a PythonRDD, so we can
-    utilize the relational query api exposed by Spark SQL.
-
-    For normal L{pyspark.rdd.RDD} operations (map, count, etc.) the
-    L{SchemaRDD} is not operated on directly, as it's underlying
-    implementation is an RDD composed of Java objects. Instead it is
-    converted to a PythonRDD in the JVM, on which Python operations can
-    be done.
-
-    This class receives raw tuples from Java but assigns a class to it in
-    all its data-collection methods (mapPartitionsWithIndex, collect, take,
-    etc) so that PySpark sees them as Row objects with named fields.
+        people.filter(people.age > 30).join(department, people.deptId == department.id)) \
+          .groupBy(department.name, "gender").agg({"salary": "avg", "age": "max"})
     """
 
-    def __init__(self, jschema_rdd, sql_ctx):
+    def __init__(self, jdf, sql_ctx):
+        self._jdf = jdf
         self.sql_ctx = sql_ctx
-        self._sc = sql_ctx._sc
-        clsName = jschema_rdd.getClass().getName()
-        assert clsName.endswith("SchemaRDD"), "jschema_rdd must be SchemaRDD"
-        self._jschema_rdd = jschema_rdd
-        self._id = None
+        self._sc = sql_ctx and sql_ctx._sc
         self.is_cached = False
-        self.is_checkpointed = False
-        self.ctx = self.sql_ctx._sc
-        # the _jrdd is created by javaToPython(), serialized by pickle
-        self._jrdd_deserializer = AutoBatchedSerializer(PickleSerializer())
 
     @property
-    def _jrdd(self):
-        """Lazy evaluation of PythonRDD object.
-
-        Only done when a user calls methods defined by the
-        L{pyspark.rdd.RDD} super class (map, filter, etc.).
+    def rdd(self):
         """
-        if not hasattr(self, '_lazy_jrdd'):
-            self._lazy_jrdd = self._jschema_rdd.baseSchemaRDD().javaToPython()
-        return self._lazy_jrdd
-
-    def id(self):
-        if self._id is None:
-            self._id = self._jrdd.id()
-        return self._id
-
-    def limit(self, num):
-        """Limit the result count to the number specified.
-
-        >>> srdd = sqlCtx.inferSchema(rdd)
-        >>> srdd.limit(2).collect()
-        [Row(field1=1, field2=u'row1'), Row(field1=2, field2=u'row2')]
-        >>> srdd.limit(0).collect()
-        []
+        Return the content of the :class:`DataFrame` as an :class:`RDD`
+        of :class:`Row` s.
         """
-        rdd = self._jschema_rdd.baseSchemaRDD().limit(num)
-        return SchemaRDD(rdd, self.sql_ctx)
+        if not hasattr(self, '_lazy_rdd'):
+            jrdd = self._jdf.javaToPython()
+            rdd = RDD(jrdd, self.sql_ctx._sc, BatchedSerializer(PickleSerializer()))
+            schema = self.schema()
+
+            def applySchema(it):
+                cls = _create_cls(schema)
+                return itertools.imap(cls, it)
+
+            self._lazy_rdd = rdd.mapPartitions(applySchema)
+
+        return self._lazy_rdd
 
     def toJSON(self, use_unicode=False):
-        """Convert a SchemaRDD into a MappedRDD of JSON documents; one document per row.
+        """Convert a DataFrame into a MappedRDD of JSON documents; one document per row.
 
-        >>> srdd1 = sqlCtx.jsonRDD(json)
-        >>> sqlCtx.registerRDDAsTable(srdd1, "table1")
-        >>> srdd2 = sqlCtx.sql( "SELECT * from table1")
-        >>> srdd2.toJSON().take(1)[0] == '{"field1":1,"field2":"row1","field3":{"field4":11}}'
+        >>> df1 = sqlCtx.jsonRDD(json)
+        >>> sqlCtx.registerRDDAsTable(df1, "table1")
+        >>> df2 = sqlCtx.sql( "SELECT * from table1")
+        >>> df2.toJSON().take(1)[0] == '{"field1":1,"field2":"row1","field3":{"field4":11}}'
         True
-        >>> srdd3 = sqlCtx.sql( "SELECT field3.field4 from table1")
-        >>> srdd3.toJSON().collect() == ['{"field4":11}', '{"field4":22}', '{"field4":33}']
+        >>> df3 = sqlCtx.sql( "SELECT field3.field4 from table1")
+        >>> df3.toJSON().collect() == ['{"field4":11}', '{"field4":22}', '{"field4":33}']
         True
         """
-        rdd = self._jschema_rdd.baseSchemaRDD().toJSON()
+        rdd = self._jdf.toJSON()
         return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
 
     def saveAsParquetFile(self, path):
         """Save the contents as a Parquet file, preserving the schema.
 
         Files that are written out using this method can be read back in as
-        a SchemaRDD using the L{SQLContext.parquetFile} method.
+        a DataFrame using the L{SQLContext.parquetFile} method.
 
         >>> import tempfile, shutil
         >>> parquetFile = tempfile.mkdtemp()
         >>> shutil.rmtree(parquetFile)
-        >>> srdd = sqlCtx.inferSchema(rdd)
-        >>> srdd.saveAsParquetFile(parquetFile)
-        >>> srdd2 = sqlCtx.parquetFile(parquetFile)
-        >>> sorted(srdd2.collect()) == sorted(srdd.collect())
+        >>> df.saveAsParquetFile(parquetFile)
+        >>> df2 = sqlCtx.parquetFile(parquetFile)
+        >>> sorted(df2.collect()) == sorted(df.collect())
         True
         """
-        self._jschema_rdd.saveAsParquetFile(path)
+        self._jdf.saveAsParquetFile(path)
 
     def registerTempTable(self, name):
         """Registers this RDD as a temporary table using the given name.
 
         The lifetime of this temporary table is tied to the L{SQLContext}
-        that was used to create this SchemaRDD.
+        that was used to create this DataFrame.
 
-        >>> srdd = sqlCtx.inferSchema(rdd)
-        >>> srdd.registerTempTable("test")
-        >>> srdd2 = sqlCtx.sql("select * from test")
-        >>> sorted(srdd.collect()) == sorted(srdd2.collect())
+        >>> df.registerTempTable("people")
+        >>> df2 = sqlCtx.sql("select * from people")
+        >>> sorted(df.collect()) == sorted(df2.collect())
         True
         """
-        self._jschema_rdd.registerTempTable(name)
+        self._jdf.registerTempTable(name)
 
     def registerAsTable(self, name):
         """DEPRECATED: use registerTempTable() instead"""
@@ -1911,62 +1883,79 @@ class SchemaRDD(RDD):
         self.registerTempTable(name)
 
     def insertInto(self, tableName, overwrite=False):
-        """Inserts the contents of this SchemaRDD into the specified table.
+        """Inserts the contents of this DataFrame into the specified table.
 
         Optionally overwriting any existing data.
         """
-        self._jschema_rdd.insertInto(tableName, overwrite)
+        self._jdf.insertInto(tableName, overwrite)
 
     def saveAsTable(self, tableName):
-        """Creates a new table with the contents of this SchemaRDD."""
-        self._jschema_rdd.saveAsTable(tableName)
+        """Creates a new table with the contents of this DataFrame."""
+        self._jdf.saveAsTable(tableName)
 
     def schema(self):
-        """Returns the schema of this SchemaRDD (represented by
-        a L{StructType})."""
-        return _parse_datatype_json_string(self._jschema_rdd.baseSchemaRDD().schema().json())
+        """Returns the schema of this DataFrame (represented by
+        a L{StructType}).
 
-    def schemaString(self):
-        """Returns the output schema in the tree format."""
-        return self._jschema_rdd.schemaString()
+        >>> df.schema()
+        StructType(List(StructField(age,IntegerType,true),StructField(name,StringType,true)))
+        """
+        return _parse_datatype_json_string(self._jdf.schema().json())
 
     def printSchema(self):
-        """Prints out the schema in the tree format."""
-        print self.schemaString()
+        """Prints out the schema in the tree format.
+
+        >>> df.printSchema()
+        root
+         |-- age: integer (nullable = true)
+         |-- name: string (nullable = true)
+        <BLANKLINE>
+        """
+        print (self._jdf.schema().treeString())
 
     def count(self):
         """Return the number of elements in this RDD.
 
         Unlike the base RDD implementation of count, this implementation
-        leverages the query optimizer to compute the count on the SchemaRDD,
+        leverages the query optimizer to compute the count on the DataFrame,
         which supports features such as filter pushdown.
 
-        >>> srdd = sqlCtx.inferSchema(rdd)
-        >>> srdd.count()
-        3L
-        >>> srdd.count() == srdd.map(lambda x: x).count()
-        True
+        >>> df.count()
+        2L
         """
-        return self._jschema_rdd.count()
+        return self._jdf.count()
 
     def collect(self):
-        """Return a list that contains all of the rows in this RDD.
+        """Return a list that contains all of the rows.
 
         Each object in the list is a Row, the fields can be accessed as
         attributes.
 
-        Unlike the base RDD implementation of collect, this implementation
-        leverages the query optimizer to perform a collect on the SchemaRDD,
-        which supports features such as filter pushdown.
-
-        >>> srdd = sqlCtx.inferSchema(rdd)
-        >>> srdd.collect()
-        [Row(field1=1, field2=u'row1'), ..., Row(field1=3, field2=u'row3')]
+        >>> df.collect()
+        [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
-        with SCCallSiteSync(self.context) as css:
-            bytesInJava = self._jschema_rdd.baseSchemaRDD().collectToPython().iterator()
+        with SCCallSiteSync(self._sc) as css:
+            bytesInJava = self._jdf.javaToPython().collect().iterator()
+        tempFile = NamedTemporaryFile(delete=False, dir=self._sc._temp_dir)
+        tempFile.close()
+        self._sc._writeToFile(bytesInJava, tempFile.name)
+        # Read the data into Python and deserialize it:
+        with open(tempFile.name, 'rb') as tempFile:
+            rs = list(BatchedSerializer(PickleSerializer()).load_stream(tempFile))
+        os.unlink(tempFile.name)
         cls = _create_cls(self.schema())
-        return map(cls, self._collect_iterator_through_file(bytesInJava))
+        return [cls(r) for r in rs]
+
+    def limit(self, num):
+        """Limit the result count to the number specified.
+
+        >>> df.limit(1).collect()
+        [Row(age=2, name=u'Alice')]
+        >>> df.limit(0).collect()
+        []
+        """
+        jdf = self._jdf.limit(num)
+        return DataFrame(jdf, self.sql_ctx)
 
     def take(self, num):
         """Take the first num rows of the RDD.
@@ -1974,130 +1963,710 @@ class SchemaRDD(RDD):
         Each object in the list is a Row, the fields can be accessed as
         attributes.
 
-        Unlike the base RDD implementation of take, this implementation
-        leverages the query optimizer to perform a collect on a SchemaRDD,
-        which supports features such as filter pushdown.
-
-        >>> srdd = sqlCtx.inferSchema(rdd)
-        >>> srdd.take(2)
-        [Row(field1=1, field2=u'row1'), Row(field1=2, field2=u'row2')]
+        >>> df.take(2)
+        [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
         return self.limit(num).collect()
 
-    # Convert each object in the RDD to a Row with the right class
-    # for this SchemaRDD, so that fields can be accessed as attributes.
-    def mapPartitionsWithIndex(self, f, preservesPartitioning=False):
+    def map(self, f):
+        """ Return a new RDD by applying a function to each Row, it's a
+        shorthand for df.rdd.map()
+
+        >>> df.map(lambda p: p.name).collect()
+        [u'Alice', u'Bob']
         """
-        Return a new RDD by applying a function to each partition of this RDD,
-        while tracking the index of the original partition.
+        return self.rdd.map(f)
+
+    def mapPartitions(self, f, preservesPartitioning=False):
+        """
+        Return a new RDD by applying a function to each partition.
 
         >>> rdd = sc.parallelize([1, 2, 3, 4], 4)
-        >>> def f(splitIndex, iterator): yield splitIndex
-        >>> rdd.mapPartitionsWithIndex(f).sum()
-        6
+        >>> def f(iterator): yield 1
+        >>> rdd.mapPartitions(f).sum()
+        4
         """
-        rdd = RDD(self._jrdd, self._sc, self._jrdd_deserializer)
+        return self.rdd.mapPartitions(f, preservesPartitioning)
 
-        schema = self.schema()
-
-        def applySchema(_, it):
-            cls = _create_cls(schema)
-            return itertools.imap(cls, it)
-
-        objrdd = rdd.mapPartitionsWithIndex(applySchema, preservesPartitioning)
-        return objrdd.mapPartitionsWithIndex(f, preservesPartitioning)
-
-    # We override the default cache/persist/checkpoint behavior
-    # as we want to cache the underlying SchemaRDD object in the JVM,
-    # not the PythonRDD checkpointed by the super class
     def cache(self):
+        """ Persist with the default storage level (C{MEMORY_ONLY_SER}).
+        """
         self.is_cached = True
-        self._jschema_rdd.cache()
+        self._jdf.cache()
         return self
 
     def persist(self, storageLevel=StorageLevel.MEMORY_ONLY_SER):
+        """ Set the storage level to persist its values across operations
+        after the first time it is computed. This can only be used to assign
+        a new storage level if the RDD does not have a storage level set yet.
+        If no storage level is specified defaults to (C{MEMORY_ONLY_SER}).
+        """
         self.is_cached = True
-        javaStorageLevel = self.ctx._getJavaStorageLevel(storageLevel)
-        self._jschema_rdd.persist(javaStorageLevel)
+        javaStorageLevel = self._sc._getJavaStorageLevel(storageLevel)
+        self._jdf.persist(javaStorageLevel)
         return self
 
     def unpersist(self, blocking=True):
+        """ Mark it as non-persistent, and remove all blocks for it from
+        memory and disk.
+        """
         self.is_cached = False
-        self._jschema_rdd.unpersist(blocking)
+        self._jdf.unpersist(blocking)
         return self
 
-    def checkpoint(self):
-        self.is_checkpointed = True
-        self._jschema_rdd.checkpoint()
-
-    def isCheckpointed(self):
-        return self._jschema_rdd.isCheckpointed()
-
-    def getCheckpointFile(self):
-        checkpointFile = self._jschema_rdd.getCheckpointFile()
-        if checkpointFile.isDefined():
-            return checkpointFile.get()
-
-    def coalesce(self, numPartitions, shuffle=False):
-        rdd = self._jschema_rdd.coalesce(numPartitions, shuffle, None)
-        return SchemaRDD(rdd, self.sql_ctx)
-
-    def distinct(self, numPartitions=None):
-        if numPartitions is None:
-            rdd = self._jschema_rdd.distinct()
-        else:
-            rdd = self._jschema_rdd.distinct(numPartitions, None)
-        return SchemaRDD(rdd, self.sql_ctx)
-
-    def intersection(self, other):
-        if (other.__class__ is SchemaRDD):
-            rdd = self._jschema_rdd.intersection(other._jschema_rdd)
-            return SchemaRDD(rdd, self.sql_ctx)
-        else:
-            raise ValueError("Can only intersect with another SchemaRDD")
+    # def coalesce(self, numPartitions, shuffle=False):
+    #     rdd = self._jdf.coalesce(numPartitions, shuffle, None)
+    #     return DataFrame(rdd, self.sql_ctx)
 
     def repartition(self, numPartitions):
-        rdd = self._jschema_rdd.repartition(numPartitions, None)
-        return SchemaRDD(rdd, self.sql_ctx)
-
-    def subtract(self, other, numPartitions=None):
-        if (other.__class__ is SchemaRDD):
-            if numPartitions is None:
-                rdd = self._jschema_rdd.subtract(other._jschema_rdd)
-            else:
-                rdd = self._jschema_rdd.subtract(other._jschema_rdd,
-                                                 numPartitions)
-            return SchemaRDD(rdd, self.sql_ctx)
-        else:
-            raise ValueError("Can only subtract another SchemaRDD")
+        """ Return a new :class:`DataFrame` that has exactly `numPartitions`
+        partitions.
+        """
+        rdd = self._jdf.repartition(numPartitions, None)
+        return DataFrame(rdd, self.sql_ctx)
 
     def sample(self, withReplacement, fraction, seed=None):
         """
-        Return a sampled subset of this SchemaRDD.
+        Return a sampled subset of this DataFrame.
 
-        >>> srdd = sqlCtx.inferSchema(rdd)
-        >>> srdd.sample(False, 0.5, 97).count()
+        >>> df = sqlCtx.inferSchema(rdd)
+        >>> df.sample(False, 0.5, 97).count()
         2L
         """
         assert fraction >= 0.0, "Negative fraction value: %s" % fraction
         seed = seed if seed is not None else random.randint(0, sys.maxint)
-        rdd = self._jschema_rdd.sample(withReplacement, fraction, long(seed))
-        return SchemaRDD(rdd, self.sql_ctx)
+        rdd = self._jdf.sample(withReplacement, fraction, long(seed))
+        return DataFrame(rdd, self.sql_ctx)
 
-    def takeSample(self, withReplacement, num, seed=None):
-        """Return a fixed-size sampled subset of this SchemaRDD.
+    # def takeSample(self, withReplacement, num, seed=None):
+    #     """Return a fixed-size sampled subset of this DataFrame.
+    #
+    #     >>> df = sqlCtx.inferSchema(rdd)
+    #     >>> df.takeSample(False, 2, 97)
+    #     [Row(field1=3, field2=u'row3'), Row(field1=1, field2=u'row1')]
+    #     """
+    #     seed = seed if seed is not None else random.randint(0, sys.maxint)
+    #     with SCCallSiteSync(self.context) as css:
+    #         bytesInJava = self._jdf \
+    #             .takeSampleToPython(withReplacement, num, long(seed)) \
+    #             .iterator()
+    #     cls = _create_cls(self.schema())
+    #     return map(cls, self._collect_iterator_through_file(bytesInJava))
 
-        >>> srdd = sqlCtx.inferSchema(rdd)
-        >>> srdd.takeSample(False, 2, 97)
-        [Row(field1=3, field2=u'row3'), Row(field1=1, field2=u'row1')]
+    @property
+    def dtypes(self):
+        """Return all column names and their data types as a list.
+
+        >>> df.dtypes
+        [('age', 'integer'), ('name', 'string')]
         """
-        seed = seed if seed is not None else random.randint(0, sys.maxint)
-        with SCCallSiteSync(self.context) as css:
-            bytesInJava = self._jschema_rdd.baseSchemaRDD() \
-                .takeSampleToPython(withReplacement, num, long(seed)) \
-                .iterator()
-        cls = _create_cls(self.schema())
-        return map(cls, self._collect_iterator_through_file(bytesInJava))
+        return [(str(f.name), f.dataType.jsonValue()) for f in self.schema().fields]
+
+    @property
+    def columns(self):
+        """ Return all column names as a list.
+
+        >>> df.columns
+        [u'age', u'name']
+        """
+        return [f.name for f in self.schema().fields]
+
+    def join(self, other, joinExprs=None, joinType=None):
+        """
+        Join with another DataFrame, using the given join expression.
+        The following performs a full outer join between `df1` and `df2`::
+
+        :param other: Right side of the join
+        :param joinExprs: Join expression
+        :param joinType: One of `inner`, `outer`, `left_outer`, `right_outer`, `semijoin`.
+
+        >>> df.join(df2, df.name == df2.name, 'outer').select(df.name, df2.height).collect()
+        [Row(name=None, height=80), Row(name=u'Bob', height=85), Row(name=u'Alice', height=None)]
+        """
+
+        if joinExprs is None:
+            jdf = self._jdf.join(other._jdf)
+        else:
+            assert isinstance(joinExprs, Column), "joinExprs should be Column"
+            if joinType is None:
+                jdf = self._jdf.join(other._jdf, joinExprs._jc)
+            else:
+                assert isinstance(joinType, basestring), "joinType should be basestring"
+                jdf = self._jdf.join(other._jdf, joinExprs._jc, joinType)
+        return DataFrame(jdf, self.sql_ctx)
+
+    def sort(self, *cols):
+        """ Return a new :class:`DataFrame` sorted by the specified column.
+
+        :param cols: The columns or expressions used for sorting
+
+        >>> df.sort(df.age.desc()).collect()
+        [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
+        >>> df.sortBy(df.age.desc()).collect()
+        [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
+        """
+        if not cols:
+            raise ValueError("should sort by at least one column")
+        jcols = ListConverter().convert([_to_java_column(c) for c in cols],
+                                        self._sc._gateway._gateway_client)
+        jdf = self._jdf.sort(self._sc._jvm.PythonUtils.toSeq(jcols))
+        return DataFrame(jdf, self.sql_ctx)
+
+    sortBy = sort
+
+    def head(self, n=None):
+        """ Return the first `n` rows or the first row if n is None.
+
+        >>> df.head()
+        Row(age=2, name=u'Alice')
+        >>> df.head(1)
+        [Row(age=2, name=u'Alice')]
+        """
+        if n is None:
+            rs = self.head(1)
+            return rs[0] if rs else None
+        return self.take(n)
+
+    def first(self):
+        """ Return the first row.
+
+        >>> df.first()
+        Row(age=2, name=u'Alice')
+        """
+        return self.head()
+
+    def __getitem__(self, item):
+        """ Return the column by given name
+
+        >>> df['age'].collect()
+        [Row(age=2), Row(age=5)]
+        >>> df[ ["name", "age"]].collect()
+        [Row(name=u'Alice', age=2), Row(name=u'Bob', age=5)]
+        >>> df[ df.age > 3 ].collect()
+        [Row(age=5, name=u'Bob')]
+        """
+        if isinstance(item, basestring):
+            jc = self._jdf.apply(item)
+            return Column(jc, self.sql_ctx)
+        elif isinstance(item, Column):
+            return self.filter(item)
+        elif isinstance(item, list):
+            return self.select(*item)
+        else:
+            raise IndexError("unexpected index: %s" % item)
+
+    def __getattr__(self, name):
+        """ Return the column by given name
+
+        >>> df.age.collect()
+        [Row(age=2), Row(age=5)]
+        """
+        if name.startswith("__"):
+            raise AttributeError(name)
+        jc = self._jdf.apply(name)
+        return Column(jc, self.sql_ctx)
+
+    def select(self, *cols):
+        """ Selecting a set of expressions.
+
+        >>> df.select().collect()
+        [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
+        >>> df.select('*').collect()
+        [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
+        >>> df.select('name', 'age').collect()
+        [Row(name=u'Alice', age=2), Row(name=u'Bob', age=5)]
+        >>> df.select(df.name, (df.age + 10).alias('age')).collect()
+        [Row(name=u'Alice', age=12), Row(name=u'Bob', age=15)]
+        """
+        if not cols:
+            cols = ["*"]
+        jcols = ListConverter().convert([_to_java_column(c) for c in cols],
+                                        self._sc._gateway._gateway_client)
+        jdf = self._jdf.select(self.sql_ctx._sc._jvm.PythonUtils.toSeq(jcols))
+        return DataFrame(jdf, self.sql_ctx)
+
+    def selectExpr(self, *expr):
+        """
+        Selects a set of SQL expressions. This is a variant of
+        `select` that accepts SQL expressions.
+
+        >>> df.selectExpr("age * 2", "abs(age)").collect()
+        [Row(('age * 2)=4, Abs('age)=2), Row(('age * 2)=10, Abs('age)=5)]
+        """
+        jexpr = ListConverter().convert(expr, self._sc._gateway._gateway_client)
+        jdf = self._jdf.selectExpr(self._sc._jvm.PythonUtils.toSeq(jexpr))
+        return DataFrame(jdf, self.sql_ctx)
+
+    def filter(self, condition):
+        """ Filtering rows using the given condition, which could be
+        Column expression or string of SQL expression.
+
+        where() is an alias for filter().
+
+        >>> df.filter(df.age > 3).collect()
+        [Row(age=5, name=u'Bob')]
+        >>> df.where(df.age == 2).collect()
+        [Row(age=2, name=u'Alice')]
+
+        >>> df.filter("age > 3").collect()
+        [Row(age=5, name=u'Bob')]
+        >>> df.where("age = 2").collect()
+        [Row(age=2, name=u'Alice')]
+        """
+        if isinstance(condition, basestring):
+            jdf = self._jdf.filter(condition)
+        elif isinstance(condition, Column):
+            jdf = self._jdf.filter(condition._jc)
+        else:
+            raise TypeError("condition should be string or Column")
+        return DataFrame(jdf, self.sql_ctx)
+
+    where = filter
+
+    def groupBy(self, *cols):
+        """ Group the :class:`DataFrame` using the specified columns,
+        so we can run aggregation on them. See :class:`GroupedData`
+        for all the available aggregate functions.
+
+        >>> df.groupBy().avg().collect()
+        [Row(AVG(age#0)=3.5)]
+        >>> df.groupBy('name').agg({'age': 'mean'}).collect()
+        [Row(name=u'Bob', AVG(age#0)=5.0), Row(name=u'Alice', AVG(age#0)=2.0)]
+        >>> df.groupBy(df.name).avg().collect()
+        [Row(name=u'Bob', AVG(age#0)=5.0), Row(name=u'Alice', AVG(age#0)=2.0)]
+        """
+        jcols = ListConverter().convert([_to_java_column(c) for c in cols],
+                                        self._sc._gateway._gateway_client)
+        jdf = self._jdf.groupBy(self.sql_ctx._sc._jvm.PythonUtils.toSeq(jcols))
+        return GroupedData(jdf, self.sql_ctx)
+
+    def agg(self, *exprs):
+        """ Aggregate on the entire :class:`DataFrame` without groups
+        (shorthand for df.groupBy.agg()).
+
+        >>> df.agg({"age": "max"}).collect()
+        [Row(MAX(age#0)=5)]
+        >>> from pyspark.sql import Dsl
+        >>> df.agg(Dsl.min(df.age)).collect()
+        [Row(MIN(age#0)=2)]
+        """
+        return self.groupBy().agg(*exprs)
+
+    def unionAll(self, other):
+        """ Return a new DataFrame containing union of rows in this
+        frame and another frame.
+
+        This is equivalent to `UNION ALL` in SQL.
+        """
+        return DataFrame(self._jdf.unionAll(other._jdf), self.sql_ctx)
+
+    def intersect(self, other):
+        """ Return a new :class:`DataFrame` containing rows only in
+        both this frame and another frame.
+
+        This is equivalent to `INTERSECT` in SQL.
+        """
+        return DataFrame(self._jdf.intersect(other._jdf), self.sql_ctx)
+
+    def subtract(self, other):
+        """ Return a new :class:`DataFrame` containing rows in this frame
+        but not in another frame.
+
+        This is equivalent to `EXCEPT` in SQL.
+        """
+        return DataFrame(getattr(self._jdf, "except")(other._jdf), self.sql_ctx)
+
+    def addColumn(self, colName, col):
+        """ Return a new :class:`DataFrame` by adding a column.
+
+        >>> df.addColumn('age2', df.age + 2).collect()
+        [Row(age=2, name=u'Alice', age2=4), Row(age=5, name=u'Bob', age2=7)]
+        """
+        return self.select('*', col.alias(colName))
+
+
+# Having SchemaRDD for backward compatibility (for docs)
+class SchemaRDD(DataFrame):
+    """
+    SchemaRDD is deprecated, please use DataFrame
+    """
+
+
+def dfapi(f):
+    def _api(self):
+        name = f.__name__
+        jdf = getattr(self._jdf, name)()
+        return DataFrame(jdf, self.sql_ctx)
+    _api.__name__ = f.__name__
+    _api.__doc__ = f.__doc__
+    return _api
+
+
+class GroupedData(object):
+
+    """
+    A set of methods for aggregations on a :class:`DataFrame`,
+    created by DataFrame.groupBy().
+    """
+
+    def __init__(self, jdf, sql_ctx):
+        self._jdf = jdf
+        self.sql_ctx = sql_ctx
+
+    def agg(self, *exprs):
+        """ Compute aggregates by specifying a map from column name
+        to aggregate methods.
+
+        The available aggregate methods are `avg`, `max`, `min`,
+        `sum`, `count`.
+
+        :param exprs: list or aggregate columns or a map from column
+                      name to aggregate methods.
+
+        >>> gdf = df.groupBy(df.name)
+        >>> gdf.agg({"age": "max"}).collect()
+        [Row(name=u'Bob', MAX(age#0)=5), Row(name=u'Alice', MAX(age#0)=2)]
+        >>> from pyspark.sql import Dsl
+        >>> gdf.agg(Dsl.min(df.age)).collect()
+        [Row(MIN(age#0)=5), Row(MIN(age#0)=2)]
+        """
+        assert exprs, "exprs should not be empty"
+        if len(exprs) == 1 and isinstance(exprs[0], dict):
+            jmap = MapConverter().convert(exprs[0],
+                                          self.sql_ctx._sc._gateway._gateway_client)
+            jdf = self._jdf.agg(jmap)
+        else:
+            # Columns
+            assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
+            jcols = ListConverter().convert([c._jc for c in exprs[1:]],
+                                            self.sql_ctx._sc._gateway._gateway_client)
+            jdf = self._jdf.agg(exprs[0]._jc, self.sql_ctx._sc._jvm.PythonUtils.toSeq(jcols))
+        return DataFrame(jdf, self.sql_ctx)
+
+    @dfapi
+    def count(self):
+        """ Count the number of rows for each group.
+
+        >>> df.groupBy(df.age).count().collect()
+        [Row(age=2, count=1), Row(age=5, count=1)]
+        """
+
+    @dfapi
+    def mean(self):
+        """Compute the average value for each numeric columns
+        for each group. This is an alias for `avg`."""
+
+    @dfapi
+    def avg(self):
+        """Compute the average value for each numeric columns
+        for each group."""
+
+    @dfapi
+    def max(self):
+        """Compute the max value for each numeric columns for
+        each group. """
+
+    @dfapi
+    def min(self):
+        """Compute the min value for each numeric column for
+        each group."""
+
+    @dfapi
+    def sum(self):
+        """Compute the sum for each numeric columns for each
+        group."""
+
+
+def _create_column_from_literal(literal):
+    sc = SparkContext._active_spark_context
+    return sc._jvm.Dsl.lit(literal)
+
+
+def _create_column_from_name(name):
+    sc = SparkContext._active_spark_context
+    return sc._jvm.Dsl.col(name)
+
+
+def _to_java_column(col):
+    if isinstance(col, Column):
+        jcol = col._jc
+    else:
+        jcol = _create_column_from_name(col)
+    return jcol
+
+
+def _unary_op(name, doc="unary operator"):
+    """ Create a method for given unary operator """
+    def _(self):
+        jc = getattr(self._jc, name)()
+        return Column(jc, self.sql_ctx)
+    _.__doc__ = doc
+    return _
+
+
+def _dsl_op(name, doc=''):
+    def _(self):
+        jc = getattr(self._sc._jvm.Dsl, name)(self._jc)
+        return Column(jc, self.sql_ctx)
+    _.__doc__ = doc
+    return _
+
+
+def _bin_op(name, doc="binary operator"):
+    """ Create a method for given binary operator
+    """
+    def _(self, other):
+        jc = other._jc if isinstance(other, Column) else other
+        njc = getattr(self._jc, name)(jc)
+        return Column(njc, self.sql_ctx)
+    _.__doc__ = doc
+    return _
+
+
+def _reverse_op(name, doc="binary operator"):
+    """ Create a method for binary operator (this object is on right side)
+    """
+    def _(self, other):
+        jother = _create_column_from_literal(other)
+        jc = getattr(jother, name)(self._jc)
+        return Column(jc, self.sql_ctx)
+    _.__doc__ = doc
+    return _
+
+
+class Column(DataFrame):
+
+    """
+    A column in a DataFrame.
+
+    `Column` instances can be created by::
+
+        # 1. Select a column out of a DataFrame
+        df.colName
+        df["colName"]
+
+        # 2. Create from an expression
+        df.colName + 1
+        1 / df.colName
+    """
+
+    def __init__(self, jc, sql_ctx=None):
+        self._jc = jc
+        super(Column, self).__init__(jc, sql_ctx)
+
+    # arithmetic operators
+    __neg__ = _dsl_op("negate")
+    __add__ = _bin_op("plus")
+    __sub__ = _bin_op("minus")
+    __mul__ = _bin_op("multiply")
+    __div__ = _bin_op("divide")
+    __mod__ = _bin_op("mod")
+    __radd__ = _bin_op("plus")
+    __rsub__ = _reverse_op("minus")
+    __rmul__ = _bin_op("multiply")
+    __rdiv__ = _reverse_op("divide")
+    __rmod__ = _reverse_op("mod")
+
+    # logistic operators
+    __eq__ = _bin_op("equalTo")
+    __ne__ = _bin_op("notEqual")
+    __lt__ = _bin_op("lt")
+    __le__ = _bin_op("leq")
+    __ge__ = _bin_op("geq")
+    __gt__ = _bin_op("gt")
+
+    # `and`, `or`, `not` cannot be overloaded in Python,
+    # so use bitwise operators as boolean operators
+    __and__ = _bin_op('and')
+    __or__ = _bin_op('or')
+    __invert__ = _dsl_op('not')
+    __rand__ = _bin_op("and")
+    __ror__ = _bin_op("or")
+
+    # container operators
+    __contains__ = _bin_op("contains")
+    __getitem__ = _bin_op("getItem")
+    getField = _bin_op("getField", "An expression that gets a field by name in a StructField.")
+
+    # string methods
+    rlike = _bin_op("rlike")
+    like = _bin_op("like")
+    startswith = _bin_op("startsWith")
+    endswith = _bin_op("endsWith")
+
+    def substr(self, startPos, length):
+        """
+        Return a Column which is a substring of the column
+
+        :param startPos: start position (int or Column)
+        :param length:  length of the substring (int or Column)
+
+        >>> df.name.substr(1, 3).collect()
+        [Row(col=u'Ali'), Row(col=u'Bob')]
+        """
+        if type(startPos) != type(length):
+            raise TypeError("Can not mix the type")
+        if isinstance(startPos, (int, long)):
+            jc = self._jc.substr(startPos, length)
+        elif isinstance(startPos, Column):
+            jc = self._jc.substr(startPos._jc, length._jc)
+        else:
+            raise TypeError("Unexpected type: %s" % type(startPos))
+        return Column(jc, self.sql_ctx)
+
+    __getslice__ = substr
+
+    # order
+    asc = _unary_op("asc")
+    desc = _unary_op("desc")
+
+    isNull = _unary_op("isNull", "True if the current expression is null.")
+    isNotNull = _unary_op("isNotNull", "True if the current expression is not null.")
+
+    def alias(self, alias):
+        """Return a alias for this column
+
+        >>> df.age.alias("age2").collect()
+        [Row(age2=2), Row(age2=5)]
+        """
+        return Column(getattr(self._jc, "as")(alias), self.sql_ctx)
+
+    def cast(self, dataType):
+        """ Convert the column into type `dataType`
+
+        >>> df.select(df.age.cast("string").alias('ages')).collect()
+        [Row(ages=u'2'), Row(ages=u'5')]
+        >>> df.select(df.age.cast(StringType()).alias('ages')).collect()
+        [Row(ages=u'2'), Row(ages=u'5')]
+        """
+        if self.sql_ctx is None:
+            sc = SparkContext._active_spark_context
+            ssql_ctx = sc._jvm.SQLContext(sc._jsc.sc())
+        else:
+            ssql_ctx = self.sql_ctx._ssql_ctx
+        if isinstance(dataType, basestring):
+            jc = self._jc.cast(dataType)
+        elif isinstance(dataType, DataType):
+            jdt = ssql_ctx.parseDataType(dataType.json())
+            jc = self._jc.cast(jdt)
+        return Column(jc, self.sql_ctx)
+
+
+def _aggregate_func(name, doc=""):
+    """ Create a function for aggregator by name"""
+    def _(col):
+        sc = SparkContext._active_spark_context
+        jc = getattr(sc._jvm.Dsl, name)(_to_java_column(col))
+        return Column(jc)
+    _.__name__ = name
+    _.__doc__ = doc
+    return staticmethod(_)
+
+
+class UserDefinedFunction(object):
+    def __init__(self, func, returnType):
+        self.func = func
+        self.returnType = returnType
+        self._broadcast = None
+        self._judf = self._create_judf()
+
+    def _create_judf(self):
+        f = self.func  # put it in closure `func`
+        func = lambda _, it: imap(lambda x: f(*x), it)
+        ser = AutoBatchedSerializer(PickleSerializer())
+        command = (func, None, ser, ser)
+        sc = SparkContext._active_spark_context
+        pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command, self)
+        ssql_ctx = sc._jvm.SQLContext(sc._jsc.sc())
+        jdt = ssql_ctx.parseDataType(self.returnType.json())
+        judf = sc._jvm.UserDefinedPythonFunction(f.__name__, bytearray(pickled_command), env,
+                                                 includes, sc.pythonExec, broadcast_vars,
+                                                 sc._javaAccumulator, jdt)
+        return judf
+
+    def __del__(self):
+        if self._broadcast is not None:
+            self._broadcast.unpersist()
+            self._broadcast = None
+
+    def __call__(self, *cols):
+        sc = SparkContext._active_spark_context
+        jcols = ListConverter().convert([_to_java_column(c) for c in cols],
+                                        sc._gateway._gateway_client)
+        jc = self._judf.apply(sc._jvm.PythonUtils.toSeq(jcols))
+        return Column(jc)
+
+
+class Dsl(object):
+    """
+    A collections of builtin aggregators
+    """
+    DSLS = {
+        'lit': 'Creates a :class:`Column` of literal value.',
+        'col': 'Returns a :class:`Column` based on the given column name.',
+        'column': 'Returns a :class:`Column` based on the given column name.',
+        'upper': 'Converts a string expression to upper case.',
+        'lower': 'Converts a string expression to upper case.',
+        'sqrt': 'Computes the square root of the specified float value.',
+        'abs': 'Computes the absolutle value.',
+
+        'max': 'Aggregate function: returns the maximum value of the expression in a group.',
+        'min': 'Aggregate function: returns the minimum value of the expression in a group.',
+        'first': 'Aggregate function: returns the first value in a group.',
+        'last': 'Aggregate function: returns the last value in a group.',
+        'count': 'Aggregate function: returns the number of items in a group.',
+        'sum': 'Aggregate function: returns the sum of all values in the expression.',
+        'avg': 'Aggregate function: returns the average of the values in a group.',
+        'mean': 'Aggregate function: returns the average of the values in a group.',
+        'sumDistinct': 'Aggregate function: returns the sum of distinct values in the expression.',
+    }
+
+    for _name, _doc in DSLS.items():
+        locals()[_name] = _aggregate_func(_name, _doc)
+    del _name, _doc
+
+    @staticmethod
+    def countDistinct(col, *cols):
+        """ Return a new Column for distinct count of (col, *cols)
+
+        >>> from pyspark.sql import Dsl
+        >>> df.agg(Dsl.countDistinct(df.age, df.name).alias('c')).collect()
+        [Row(c=2)]
+
+        >>> df.agg(Dsl.countDistinct("age", "name").alias('c')).collect()
+        [Row(c=2)]
+        """
+        sc = SparkContext._active_spark_context
+        jcols = ListConverter().convert([_to_java_column(c) for c in cols],
+                                        sc._gateway._gateway_client)
+        jc = sc._jvm.Dsl.countDistinct(_to_java_column(col),
+                                       sc._jvm.PythonUtils.toSeq(jcols))
+        return Column(jc)
+
+    @staticmethod
+    def approxCountDistinct(col, rsd=None):
+        """ Return a new Column for approxiate distinct count of (col, *cols)
+
+        >>> from pyspark.sql import Dsl
+        >>> df.agg(Dsl.approxCountDistinct(df.age).alias('c')).collect()
+        [Row(c=2)]
+        """
+        sc = SparkContext._active_spark_context
+        if rsd is None:
+            jc = sc._jvm.Dsl.approxCountDistinct(_to_java_column(col))
+        else:
+            jc = sc._jvm.Dsl.approxCountDistinct(_to_java_column(col), rsd)
+        return Column(jc)
+
+    @staticmethod
+    def udf(f, returnType=StringType()):
+        """Create a user defined function (UDF)
+
+        >>> slen = Dsl.udf(lambda s: len(s), IntegerType())
+        >>> df.select(slen(df.name).alias('slen')).collect()
+        [Row(slen=5), Row(slen=3)]
+        """
+        return UserDefinedFunction(f, returnType)
 
 
 def _test():
@@ -2106,16 +2675,20 @@ def _test():
     # let doctest run in pyspark.sql, so DataTypes can be picklable
     import pyspark.sql
     from pyspark.sql import Row, SQLContext
-    from pyspark.tests import ExamplePoint, ExamplePointUDT
+    from pyspark.sql_tests import ExamplePoint, ExamplePointUDT
     globs = pyspark.sql.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
-    globs['sqlCtx'] = SQLContext(sc)
+    globs['sqlCtx'] = sqlCtx = SQLContext(sc)
     globs['rdd'] = sc.parallelize(
         [Row(field1=1, field2="row1"),
          Row(field1=2, field2="row2"),
          Row(field1=3, field2="row3")]
     )
+    rdd2 = sc.parallelize([Row(name='Alice', age=2), Row(name='Bob', age=5)])
+    rdd3 = sc.parallelize([Row(name='Tom', height=80), Row(name='Bob', height=85)])
+    globs['df'] = sqlCtx.inferSchema(rdd2)
+    globs['df2'] = sqlCtx.inferSchema(rdd3)
     globs['ExamplePoint'] = ExamplePoint
     globs['ExamplePointUDT'] = ExamplePointUDT
     jsonStrings = [

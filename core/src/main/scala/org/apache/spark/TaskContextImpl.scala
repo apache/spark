@@ -33,7 +33,7 @@ private[spark] class TaskContextImpl(
   with Logging {
 
   // For backwards-compatibility; this method is now deprecated as of 1.3.0.
-  override def attemptId: Long = taskAttemptId
+  override def attemptId(): Long = taskAttemptId
 
   // List of callback functions to execute when the task completes.
   @transient private val onCompleteCallbacks = new ArrayBuffer[TaskCompletionListener]
@@ -87,10 +87,10 @@ private[spark] class TaskContextImpl(
     interrupted = true
   }
 
-  override def isCompleted: Boolean = completed
+  override def isCompleted(): Boolean = completed
 
-  override def isRunningLocally: Boolean = runningLocally
+  override def isRunningLocally(): Boolean = runningLocally
 
-  override def isInterrupted: Boolean = interrupted
+  override def isInterrupted(): Boolean = interrupted
 }
 

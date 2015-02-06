@@ -1,6 +1,7 @@
 ---
 layout: global
 title: Spark Programming Guide
+description: Spark SPARK_VERSION_SHORT programming guide in Java, Scala and Python
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -886,7 +887,7 @@ for details.
   <td> <b>groupByKey</b>([<i>numTasks</i>]) </td>
   <td> When called on a dataset of (K, V) pairs, returns a dataset of (K, Iterable&lt;V&gt;) pairs. <br />
     <b>Note:</b> If you are grouping in order to perform an aggregation (such as a sum or
-      average) over each key, using <code>reduceByKey</code> or <code>combineByKey</code> will yield much better 
+      average) over each key, using <code>reduceByKey</code> or <code>aggregateByKey</code> will yield much better 
       performance.
     <br />
     <b>Note:</b> By default, the level of parallelism in the output depends on the number of partitions of the parent RDD.
