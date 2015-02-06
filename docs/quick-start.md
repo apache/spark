@@ -1,6 +1,7 @@
 ---
 layout: global
 title: Quick Start
+description: Quick start tutorial for Spark SPARK_VERSION_SHORT
 ---
 
 * This will become a table of contents (this text will be scraped).

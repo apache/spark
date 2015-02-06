@@ -17,11 +17,18 @@
 
 package org.apache.spark.sql
 
+import java.util.{Locale, TimeZone}
+
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.columnar.InMemoryRelation
 
 class QueryTest extends PlanTest {
+
+  // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
+  TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+  // Add Locale setting
+  Locale.setDefault(Locale.US)
 
   /**
    * Runs the plan and makes sure the answer contains all of the keywords, or the

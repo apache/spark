@@ -90,9 +90,9 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
 
   override def apply(condition: Column): DataFrame = err()
 
-  override def groupBy(cols: Column*): GroupedDataFrame = err()
+  override def groupBy(cols: Column*): GroupedData = err()
 
-  override def groupBy(col1: String, cols: String*): GroupedDataFrame = err()
+  override def groupBy(col1: String, cols: String*): GroupedData = err()
 
   override def limit(n: Int): DataFrame = err()
 

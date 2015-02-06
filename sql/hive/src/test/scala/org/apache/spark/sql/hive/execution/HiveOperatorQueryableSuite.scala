@@ -32,9 +32,9 @@ class HiveOperatorQueryableSuite extends QueryTest {
     checkAnswer(
       sql("desc mydesc"),
       Seq(
-        Row("col_name", "StringType", null),
-        Row("data_type", "StringType", null),
-        Row("comment", "StringType", null)))
+        Row("col_name", "string", "name of the column"),
+        Row("data_type", "string", "data type of the column"),
+        Row("comment", "string", "comment of the column")))
 
     checkAnswer(
       sql("select * from mydesc"),

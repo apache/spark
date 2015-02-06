@@ -28,53 +28,55 @@ class HiveParquetSuite extends QueryTest with ParquetTest {
 
   import sqlContext._
 
-  test("Case insensitive attribute names") {
-    withParquetTable((1 to 4).map(i => Cases(i.toString, i.toString)), "cases") {
-      val expected = (1 to 4).map(i => Row(i.toString))
-      checkAnswer(sql("SELECT upper FROM cases"), expected)
-      checkAnswer(sql("SELECT LOWER FROM cases"), expected)
-    }
-  }
-
-  test("SELECT on Parquet table") {
-    val data = (1 to 4).map(i => (i, s"val_$i"))
-    withParquetTable(data, "t") {
-      checkAnswer(sql("SELECT * FROM t"), data.map(Row.fromTuple))
-    }
-  }
-
-  test("Simple column projection + filter on Parquet table") {
-    withParquetTable((1 to 4).map(i => (i % 2 == 0, i, s"val_$i")), "t") {
-      checkAnswer(
-        sql("SELECT `_1`, `_3` FROM t WHERE `_1` = true"),
-        Seq(Row(true, "val_2"), Row(true, "val_4")))
-    }
-  }
-
-  test("Converting Hive to Parquet Table via saveAsParquetFile") {
-    withTempPath { dir =>
-      sql("SELECT * FROM src").saveAsParquetFile(dir.getCanonicalPath)
-      parquetFile(dir.getCanonicalPath).registerTempTable("p")
-      withTempTable("p") {
-        checkAnswer(
-          sql("SELECT * FROM src ORDER BY key"),
-          sql("SELECT * from p ORDER BY key").collect().toSeq)
+  def run(prefix: String): Unit = {
+    test(s"$prefix: Case insensitive attribute names") {
+      withParquetTable((1 to 4).map(i => Cases(i.toString, i.toString)), "cases") {
+        val expected = (1 to 4).map(i => Row(i.toString))
+        checkAnswer(sql("SELECT upper FROM cases"), expected)
+        checkAnswer(sql("SELECT LOWER FROM cases"), expected)
       }
     }
-  }
 
+    test(s"$prefix: SELECT on Parquet table") {
+      val data = (1 to 4).map(i => (i, s"val_$i"))
+      withParquetTable(data, "t") {
+        checkAnswer(sql("SELECT * FROM t"), data.map(Row.fromTuple))
+      }
+    }
 
-  test("INSERT OVERWRITE TABLE Parquet table") {
-    withParquetTable((1 to 4).map(i => (i, s"val_$i")), "t") {
-      withTempPath { file =>
-        sql("SELECT * FROM t LIMIT 1").saveAsParquetFile(file.getCanonicalPath)
-        parquetFile(file.getCanonicalPath).registerTempTable("p")
+    test(s"$prefix: Simple column projection + filter on Parquet table") {
+      withParquetTable((1 to 4).map(i => (i % 2 == 0, i, s"val_$i")), "t") {
+        checkAnswer(
+          sql("SELECT `_1`, `_3` FROM t WHERE `_1` = true"),
+          Seq(Row(true, "val_2"), Row(true, "val_4")))
+      }
+    }
+
+    test(s"$prefix: Converting Hive to Parquet Table via saveAsParquetFile") {
+      withTempPath { dir =>
+        sql("SELECT * FROM src").saveAsParquetFile(dir.getCanonicalPath)
+        parquetFile(dir.getCanonicalPath).registerTempTable("p")
         withTempTable("p") {
-          // let's do three overwrites for good measure
-          sql("INSERT OVERWRITE TABLE p SELECT * FROM t")
-          sql("INSERT OVERWRITE TABLE p SELECT * FROM t")
-          sql("INSERT OVERWRITE TABLE p SELECT * FROM t")
-          checkAnswer(sql("SELECT * FROM p"), sql("SELECT * FROM t").collect().toSeq)
+          checkAnswer(
+            sql("SELECT * FROM src ORDER BY key"),
+            sql("SELECT * from p ORDER BY key").collect().toSeq)
+        }
+      }
+    }
+
+    // TODO Re-enable this after data source insertion API is merged
+    ignore(s"$prefix: INSERT OVERWRITE TABLE Parquet table") {
+      withParquetTable((1 to 10).map(i => (i, s"val_$i")), "t") {
+        withTempPath { file =>
+          sql("SELECT * FROM t LIMIT 1").saveAsParquetFile(file.getCanonicalPath)
+          parquetFile(file.getCanonicalPath).registerTempTable("p")
+          withTempTable("p") {
+            // let's do three overwrites for good measure
+            sql("INSERT OVERWRITE TABLE p SELECT * FROM t")
+            sql("INSERT OVERWRITE TABLE p SELECT * FROM t")
+            sql("INSERT OVERWRITE TABLE p SELECT * FROM t")
+            checkAnswer(sql("SELECT * FROM p"), sql("SELECT * FROM t").collect().toSeq)
+          }
         }
       }
     }

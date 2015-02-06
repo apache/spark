@@ -99,7 +99,11 @@ private[parquet] class RowReadSupport extends ReadSupport[Row] with Logging {
     val requestedAttributes = RowReadSupport.getRequestedSchema(configuration)
 
     if (requestedAttributes != null) {
-      parquetSchema = ParquetTypesConverter.convertFromAttributes(requestedAttributes)
+      // If the parquet file is thrift derived, there is a good chance that
+      // it will have the thrift class in metadata.
+      val isThriftDerived = keyValueMetaData.keySet().contains("thrift.class")
+      parquetSchema = ParquetTypesConverter
+        .convertFromAttributes(requestedAttributes, isThriftDerived)
       metadata.put(
         RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
         ParquetTypesConverter.convertToString(requestedAttributes))
@@ -155,7 +159,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
     val attributesSize = attributes.size
     if (attributesSize > record.size) {
       throw new IndexOutOfBoundsException(
-        s"Trying to write more fields than contained in row (${attributesSize}>${record.size})")
+        s"Trying to write more fields than contained in row ($attributesSize > ${record.size})")
     }
 
     var index = 0
@@ -321,7 +325,7 @@ private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
     val attributesSize = attributes.size
     if (attributesSize > record.size) {
       throw new IndexOutOfBoundsException(
-        s"Trying to write more fields than contained in row (${attributesSize}>${record.size})")
+        s"Trying to write more fields than contained in row ($attributesSize > ${record.size})")
     }
 
     var index = 0
@@ -344,10 +348,7 @@ private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
       index: Int): Unit = {
     ctype match {
       case StringType => writer.addBinary(
-        Binary.fromByteArray(
-          record(index).asInstanceOf[String].getBytes("utf-8")
-        )
-      )
+        Binary.fromByteArray(record(index).asInstanceOf[String].getBytes("utf-8")))
       case BinaryType => writer.addBinary(
         Binary.fromByteArray(record(index).asInstanceOf[Array[Byte]]))
       case IntegerType => writer.addInteger(record.getInt(index))
