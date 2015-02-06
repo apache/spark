@@ -890,7 +890,8 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
         template_vars["aws_access_key_id"] = ""
         template_vars["aws_secret_access_key"] = ""
 
-    # Note: It may be nicer to reverse logic and list supported substitutable types instead, but this is playing it safe.
+    # Note: It may be nicer to reverse logic and list supported substitutable
+    # types instead, but this is playing it safe.
     non_substitutable = [".rpm", ".deb", ".7z", ".gz", ".tar", ".tgz", ".bz2", ".jar"]
 
     # Create a temp directory in which we will place all the files to be
@@ -906,9 +907,10 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
                 if filename[0] not in '#.~' and filename[-1] != '~':
                     dest_file = os.path.join(dest_dir, filename)
                     local_file = tmp_dir + dest_file
-                    if reduce(lambda x,y: x or y, map(lambda x: filename.endswith(x),non_substitutable)):
+                    if reduce(lambda x, y: x or y,
+                              map(lambda x: filename.endswith(x), non_substitutable)):
                         # Just copy the file
-                        shutil.copyfile(os.path.join(path, filename),local_file)
+                        shutil.copyfile(os.path.join(path, filename), local_file)
                     else:
                         # Copy with substitution
                         with open(os.path.join(path, filename)) as src:
