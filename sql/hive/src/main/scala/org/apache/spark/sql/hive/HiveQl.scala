@@ -497,15 +497,14 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                 // TODO: Actually, a user may mean tableName.columnName. Need to resolve this issue.
                 val tableIdent = extractTableIdent(nameParts.head)
                 DescribeCommand(
-                  UnresolvedRelation(tableIdent, None), extended.isDefined)
+                  UnresolvedRelation(tableIdent, None), isExtended = extended.isDefined)
               case Token(".", dbName :: tableName :: colName :: Nil) =>
                 // It is describing a column with the format like "describe db.table column".
                 NativePlaceholder
               case tableName =>
                 // It is describing a table with the format like "describe table".
                 DescribeCommand(
-                  UnresolvedRelation(Seq(tableName.getText), None),
-                  extended.isDefined)
+                  UnresolvedRelation(Seq(tableName.getText), None), isExtended = extended.isDefined)
             }
           }
           // All other cases.
