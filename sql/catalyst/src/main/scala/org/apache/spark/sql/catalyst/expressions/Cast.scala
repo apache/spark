@@ -21,8 +21,8 @@ import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
 
 /** Cast the child expression to the target data type. */
 case class Cast(child: Expression, dataType: DataType) extends UnaryExpression with Logging {
@@ -99,7 +99,8 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
                   toField.nullable)
           }
 
-      case _ => false
+      case (from, to) => throw new TreeNodeException(this, s"can not cast from $from to $to!")
+
     }
   }
 
