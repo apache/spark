@@ -22,6 +22,7 @@ import java.net.{HttpURLConnection, SocketException, URL}
 
 import scala.io.Source
 
+import com.fasterxml.jackson.databind.JsonMappingException
 import com.google.common.base.Charsets
 
 import org.apache.spark.{Logging, SparkConf, SPARK_VERSION => sparkVersion}
@@ -54,7 +55,7 @@ private[spark] class StandaloneRestClient extends Logging {
   import StandaloneRestClient._
 
   /**
-   * Submit an application specified by the provided arguments.
+   * Submit an application specified by the parameters in the provided request.
    *
    * If the submission was successful, poll the status of the submission and report
    * it to the user. Otherwise, report the error message provided by the server.
@@ -62,7 +63,7 @@ private[spark] class StandaloneRestClient extends Logging {
   def createSubmission(
       master: String,
       request: CreateSubmissionRequest): SubmitRestProtocolResponse = {
-    logInfo(s"Submitting a request to launch a driver in $master.")
+    logInfo(s"Submitting a request to launch an application in $master.")
     validateMaster(master)
     val url = getSubmitUrl(master)
     val response = postJson(url, request.toJson)
@@ -103,6 +104,24 @@ private[spark] class StandaloneRestClient extends Logging {
     response
   }
 
+  /** Construct a message that captures the specified parameters for submitting an application. */
+  def constructSubmitRequest(
+      appResource: String,
+      mainClass: String,
+      appArgs: Array[String],
+      sparkProperties: Map[String, String],
+      environmentVariables: Map[String, String]): CreateSubmissionRequest = {
+    val message = new CreateSubmissionRequest
+    message.clientSparkVersion = sparkVersion
+    message.appResource = appResource
+    message.mainClass = mainClass
+    message.appArgs = appArgs
+    message.sparkProperties = sparkProperties
+    message.environmentVariables = environmentVariables
+    message.validate()
+    message
+  }
+
   /** Send a GET request to the specified URL. */
   private def get(url: URL): SubmitRestProtocolResponse = {
     logDebug(s"Sending GET request to server at $url.")
@@ -134,40 +153,33 @@ private[spark] class StandaloneRestClient extends Logging {
   }
 
   /**
-   * Read the response from the given connection.
-   *
-   * The response is expected to represent a [[SubmitRestProtocolResponse]] in the form of JSON.
-   * Additionally, this validates the response to ensure that it is properly constructed.
-   * If the response represents an error, report the message from the server.
+   * Read the response from the server and return it as a validated [[SubmitRestProtocolResponse]].
+   * If the response represents an error, report the embedded message to the user.
    */
   private def readResponse(connection: HttpURLConnection): SubmitRestProtocolResponse = {
     try {
       val responseJson = Source.fromInputStream(connection.getInputStream).mkString
       logDebug(s"Response from the server:\n$responseJson")
       val response = SubmitRestProtocolMessage.fromJson(responseJson)
-      // The response should have already been validated on the server.
-      // In case this is not true, validate it ourselves to avoid potential NPEs.
-      try {
-        response.validate()
-      } catch {
-        case e: SubmitRestProtocolException =>
-          throw new SubmitRestProtocolException("Malformed response received from server", e)
-      }
-      // If the response is an error, log the message
-      // Otherwise, simply return the response
+      response.validate()
       response match {
+        // If the response is an error, log the message
         case error: ErrorResponse =>
           logError(s"Server responded with error:\n${error.message}")
           error
+        // Otherwise, simply return the response
         case response: SubmitRestProtocolResponse => response
         case unexpected =>
           throw new SubmitRestProtocolException(
             s"Message received from server was not a response:\n${unexpected.toJson}")
       }
     } catch {
-      case e @ (_: FileNotFoundException | _: SocketException) =>
+      case unreachable @ (_: FileNotFoundException | _: SocketException) =>
         throw new SubmitRestConnectionException(
-          s"Unable to connect to server ${connection.getURL}", e)
+          s"Unable to connect to server ${connection.getURL}", unreachable)
+      case malformed @ (_: SubmitRestProtocolException | _: JsonMappingException) =>
+        throw new SubmitRestProtocolException(
+          "Malformed response received from server", malformed)
     }
   }
 
@@ -200,24 +212,6 @@ private[spark] class StandaloneRestClient extends Logging {
     if (!master.startsWith("spark://")) {
       throw new IllegalArgumentException("This REST client is only supported in standalone mode.")
     }
-  }
-
-  /** Construct a message that captures the specified parameters for submitting an application. */
-  def constructSubmitRequest(
-      appResource: String,
-      mainClass: String,
-      appArgs: Array[String],
-      sparkProperties: Map[String, String],
-      environmentVariables: Map[String, String]): CreateSubmissionRequest = {
-    val message = new CreateSubmissionRequest
-    message.clientSparkVersion = sparkVersion
-    message.appResource = appResource
-    message.mainClass = mainClass
-    message.appArgs = appArgs
-    message.sparkProperties = sparkProperties
-    message.environmentVariables = environmentVariables
-    message.validate()
-    message
   }
 
   /** Report the status of a newly created submission. */
@@ -292,7 +286,7 @@ private[spark] object StandaloneRestClient {
   val REPORT_DRIVER_STATUS_MAX_TRIES = 10
   val PROTOCOL_VERSION = "v1"
 
-  /** Submit an application, assuming parameters are specified through system properties. */
+  /** Submit an application, assuming Spark parameters are specified through system properties. */
   def main(args: Array[String]): Unit = {
     if (args.size < 2) {
       sys.error("Usage: StandaloneRestClient [app resource] [main class] [app args*]")
@@ -301,12 +295,13 @@ private[spark] object StandaloneRestClient {
     val appResource = args(0)
     val mainClass = args(1)
     val appArgs = args.slice(2, args.size)
-    val client = new StandaloneRestClient
-    val master = sys.props.get("spark.master").getOrElse {
+    val conf = new SparkConf
+    val master = conf.getOption("spark.master").getOrElse {
       throw new IllegalArgumentException("'spark.master' must be set.")
     }
-    val sparkProperties = new SparkConf().getAll.toMap
+    val sparkProperties = conf.getAll.toMap
     val environmentVariables = sys.env.filter { case (k, _) => k.startsWith("SPARK_") }
+    val client = new StandaloneRestClient
     val submitRequest = client.constructSubmitRequest(
       appResource, mainClass, appArgs, sparkProperties, environmentVariables)
     client.createSubmission(master, submitRequest)

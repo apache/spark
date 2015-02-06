@@ -74,6 +74,8 @@ private[spark] class SubmissionStatusResponse extends SubmitRestProtocolResponse
  * An error response message used in the REST application submission protocol.
  */
 private[spark] class ErrorResponse extends SubmitRestProtocolResponse {
+  // The highest protocol version that the server knows about
+  // This is set when the client specifies an unknown version
   var protocolVersion: String = null
   protected override def doValidate(): Unit = {
     super.doValidate()

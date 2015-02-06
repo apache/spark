@@ -58,14 +58,14 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterAll with Bef
     validateResult(resultsFile, numbers, size)
   }
 
-  test("kill empty driver") {
-    val response = client.killSubmission(masterRestUrl, "driver-that-does-not-exist")
+  test("kill empty submission") {
+    val response = client.killSubmission(masterRestUrl, "submission-that-does-not-exist")
     val killResponse = getKillResponse(response)
     val killSuccess = killResponse.success
     assert(killSuccess === "false")
   }
 
-  test("kill running driver") {
+  test("kill running submission") {
     val resultsFile = File.createTempFile("test-kill", ".txt")
     val numbers = Seq(1, 2, 3)
     val size = 500
@@ -81,12 +81,12 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterAll with Bef
     assert(killSuccess === "true")
     assert(statusSuccess === "true")
     assert(driverState === DriverState.KILLED.toString)
-    // we should not see the expected results because we killed the driver
+    // we should not see the expected results because we killed the submission
     intercept[TestFailedException] { validateResult(resultsFile, numbers, size) }
   }
 
-  test("request status for empty driver") {
-    val response = client.requestSubmissionStatus(masterRestUrl, "driver-that-does-not-exist")
+  test("request status for empty submission") {
+    val response = client.requestSubmissionStatus(masterRestUrl, "submission-that-does-not-exist")
     val statusResponse = getStatusResponse(response)
     val statusSuccess = statusResponse.success
     assert(statusSuccess === "false")
@@ -117,7 +117,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterAll with Bef
     masterRestUrl
   }
 
-  /** Submit the [[StandaloneRestApp]] and return the corresponding driver ID. */
+  /** Submit the [[StandaloneRestApp]] and return the corresponding submission ID. */
   private def submitApplication(resultsFile: File, numbers: Seq[Int], size: Int): String = {
     val appArgs = Seq(resultsFile.getAbsolutePath) ++ numbers.map(_.toString) ++ Seq(size.toString)
     val commandLineArgs = Array(
@@ -137,7 +137,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterAll with Bef
     submissionId
   }
 
-  /** Wait until the given driver has finished running up to the specified timeout. */
+  /** Wait until the given submission has finished running up to the specified timeout. */
   private def waitUntilFinished(submissionId: String, maxSeconds: Int = 30): Unit = {
     var finished = false
     val expireTime = System.currentTimeMillis + maxSeconds * 1000
@@ -154,7 +154,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterAll with Bef
     }
   }
 
-  /** Return the response as a submit driver response, or fail with error otherwise. */
+  /** Return the response as a submit response, or fail with error otherwise. */
   private def getSubmitResponse(response: SubmitRestProtocolResponse): CreateSubmissionResponse = {
     response match {
       case s: CreateSubmissionResponse => s
@@ -163,7 +163,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterAll with Bef
     }
   }
 
-  /** Return the response as a kill driver response, or fail with error otherwise. */
+  /** Return the response as a kill response, or fail with error otherwise. */
   private def getKillResponse(response: SubmitRestProtocolResponse): KillSubmissionResponse = {
     response match {
       case k: KillSubmissionResponse => k
@@ -172,7 +172,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterAll with Bef
     }
   }
 
-  /** Return the response as a driver status response, or fail with error otherwise. */
+  /** Return the response as a status response, or fail with error otherwise. */
   private def getStatusResponse(response: SubmitRestProtocolResponse): SubmissionStatusResponse = {
     response match {
       case s: SubmissionStatusResponse => s
@@ -197,7 +197,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterAll with Bef
 }
 
 private object StandaloneRestSubmitSuite {
-  private val pathPrefix = "org/apache/spark/deploy/rest"
+  private val pathPrefix = this.getClass.getPackage.getName.replaceAll("\\.", "/")
 
   /**
    * Create a jar that contains all the class files needed for running the [[StandaloneRestApp]].

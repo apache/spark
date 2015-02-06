@@ -101,20 +101,19 @@ object SparkSubmit {
     }
   }
 
-  /**
-   * Kill an existing driver using the REST application submission protocol.
-   * Standalone cluster mode only.
-   */
+  /** Kill an existing submission using the REST protocol. Standalone cluster mode only. */
   private def kill(args: SparkSubmitArguments): Unit = {
-    new StandaloneRestClient().killSubmission(args.master, args.driverToKill)
+    new StandaloneRestClient()
+      .killSubmission(args.master, args.submissionToKill)
   }
 
   /**
-   * Request the status of an existing driver using the REST application submission protocol.
+   * Request the status of an existing submission using the REST protocol.
    * Standalone cluster mode only.
    */
   private def requestStatus(args: SparkSubmitArguments): Unit = {
-    new StandaloneRestClient().requestSubmissionStatus(args.master, args.driverToRequestStatusFor)
+    new StandaloneRestClient()
+      .requestSubmissionStatus(args.master, args.submissionToRequestStatusFor)
   }
 
   /**
@@ -300,6 +299,7 @@ object SparkSubmit {
         sysProp = "spark.driver.extraLibraryPath"),
 
       // Standalone cluster only
+      // Do not set CL arguments here because there are multiple possibilities for the main class
       OptionAssigner(args.jars, STANDALONE, CLUSTER, sysProp = "spark.jars"),
       OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, sysProp = "spark.jars.ivy"),
       OptionAssigner(args.driverMemory, STANDALONE, CLUSTER, sysProp = "spark.driver.memory"),
@@ -368,8 +368,7 @@ object SparkSubmit {
     }
 
     // In standalone cluster mode, use the REST client to submit the application (Spark 1.3+).
-    // All parameters except application arguments are expected to be passed to the main class
-    // through system properties.
+    // All Spark parameters are expected to be passed to the client through system properties.
     if (args.isStandaloneCluster) {
       if (args.useRest) {
         childMainClass = "org.apache.spark.deploy.rest.StandaloneRestClient"
@@ -383,7 +382,6 @@ object SparkSubmit {
         childArgs += "launch"
         childArgs += (args.master, args.primaryResource, args.mainClass)
       }
-      // Whether or not we use REST, pass application arguments through the command line
       if (args.childArgs != null) {
         childArgs ++= args.childArgs
       }

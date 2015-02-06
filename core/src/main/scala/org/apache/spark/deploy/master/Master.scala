@@ -127,7 +127,7 @@ private[spark] class Master(
   private val restServer =
     if (restServerEnabled) {
       val port = conf.getInt("spark.master.rest.port", 6066)
-      Some(new StandaloneRestServer(this, host, port))
+      Some(new StandaloneRestServer(host, port, self, masterUrl, conf))
     } else {
       None
     }

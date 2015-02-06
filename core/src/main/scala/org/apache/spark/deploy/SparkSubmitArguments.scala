@@ -62,8 +62,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   var useRest: Boolean = true
   var supervise: Boolean = false
   var driverCores: String = null
-  var driverToKill: String = null
-  var driverToRequestStatusFor: String = null
+  var submissionToKill: String = null
+  var submissionToRequestStatusFor: String = null
 
   /** Default properties present in the currently defined defaults file. */
   lazy val defaultSparkProperties: HashMap[String, String] = {
@@ -220,21 +220,21 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   }
 
   private def validateKillArguments(): Unit = {
-    if (!isStandaloneCluster) {
-      SparkSubmit.printErrorAndExit("Killing drivers is only supported in standalone cluster mode")
+    if (!master.startsWith("spark://")) {
+      SparkSubmit.printErrorAndExit("Killing submissions is only supported in standalone mode!")
     }
-    if (driverToKill == null) {
-      SparkSubmit.printErrorAndExit("Please specify a driver to kill")
+    if (submissionToKill == null) {
+      SparkSubmit.printErrorAndExit("Please specify a submission to kill.")
     }
   }
 
   private def validateStatusRequestArguments(): Unit = {
-    if (!isStandaloneCluster) {
+    if (!master.startsWith("spark://")) {
       SparkSubmit.printErrorAndExit(
-        "Requesting driver statuses is only supported in standalone cluster mode")
+        "Requesting submission statuses is only supported in standalone mode!")
     }
-    if (driverToRequestStatusFor == null) {
-      SparkSubmit.printErrorAndExit("Please specify a driver to request status for")
+    if (submissionToRequestStatusFor == null) {
+      SparkSubmit.printErrorAndExit("Please specify a submission to request status for.")
     }
   }
 
@@ -351,7 +351,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         parse(tail)
 
       case ("--kill") :: value :: tail =>
-        driverToKill = value
+        submissionToKill = value
         if (action != null) {
           SparkSubmit.printErrorAndExit(s"Action cannot be both $action and $KILL.")
         }
@@ -359,7 +359,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         parse(tail)
 
       case ("--status") :: value :: tail =>
-        driverToRequestStatusFor = value
+        submissionToRequestStatusFor = value
         if (action != null) {
           SparkSubmit.printErrorAndExit(s"Action cannot be both $action and $REQUEST_STATUS.")
         }
@@ -439,6 +439,9 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
     }
     outStream.println(
       """Usage: spark-submit [options] <app jar | python file> [app arguments]
+        |Usage: spark-submit --kill [submission ID] --master [spark://...]
+        |Usage: spark-submit --status [submission ID] --master [spark://...]
+        |
         |Options:
         |  --master MASTER_URL         spark://host:port, mesos://host:port, yarn, or local.
         |  --deploy-mode DEPLOY_MODE   Whether to launch the driver program locally ("client") or

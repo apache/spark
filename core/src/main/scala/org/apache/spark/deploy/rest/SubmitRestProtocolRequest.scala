@@ -29,7 +29,7 @@ private[spark] abstract class SubmitRestProtocolRequest extends SubmitRestProtoc
 }
 
 /**
- * A request to submit a driver in the REST application submission protocol.
+ * A request to launch a new application in the REST application submission protocol.
  */
 private[spark] class CreateSubmissionRequest extends SubmitRestProtocolRequest {
   var appResource: String = null

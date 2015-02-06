@@ -163,7 +163,7 @@ private[spark] object SubmitRestProtocolMessage {
     val className = parseAction(json)
     val clazz = Class.forName(packagePrefix + "." + className)
       .asSubclass[SubmitRestProtocolMessage](classOf[SubmitRestProtocolMessage])
-    mapper.readValue(json, clazz)
+    fromJson(json, clazz)
   }
 
   /**

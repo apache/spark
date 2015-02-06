@@ -390,10 +390,6 @@ private[spark] object JsonProtocol {
    * Util JSON serialization methods |
    * ------------------------------- */
 
-  def arrayToJson(a: Array[String]): JValue = {
-    JArray(a.toList.map(JString))
-  }
-
   def mapToJson(m: Map[String, String]): JValue = {
     val jsonFields = m.map { case (k, v) => JField(k, JString(v)) }
     JObject(jsonFields.toList)
@@ -802,11 +798,6 @@ private[spark] object JsonProtocol {
   /** -------------------------------- *
    * Util JSON deserialization methods |
    * --------------------------------- */
-
-  def arrayFromJson(json: JValue): Array[String] = {
-    val values = json.asInstanceOf[JArray].arr
-    values.toArray.map(_.asInstanceOf[JString].s)
-  }
 
   def mapFromJson(json: JValue): Map[String, String] = {
     val jsonFields = json.asInstanceOf[JObject].obj
