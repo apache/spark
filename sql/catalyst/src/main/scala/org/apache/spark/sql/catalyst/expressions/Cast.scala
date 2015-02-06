@@ -99,8 +99,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
                   toField.nullable)
           }
 
-      case (from, to) => throw new TreeNodeException(this, s"can not cast from $from to $to!")
-
+      case _ => false
     }
   }
 
