@@ -238,6 +238,14 @@ private[sql] class DataFrameImpl protected[sql](
     select(Column("*"), col.as(colName))
   }
 
+  override def renameColumn(existingName: String, newName: String): DataFrame = {
+    val colNames = schema.map { field =>
+      val name = field.name
+      if (name == existingName) Column(name).as(newName) else Column(name)
+    }
+    select(colNames :_*)
+  }
+
   override def head(n: Int): Array[Row] = limit(n).collect()
 
   override def head(): Row = head(1).head
