@@ -201,6 +201,22 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  // Is the path already registered to be deleted via a shutdown hook ?
+    def hasShutdownDeleteDir(file: File): Boolean = {
+      val absolutePath = file.getAbsolutePath()
+      shutdownDeletePaths.synchronized {
+        shutdownDeletePaths.contains(absolutePath)
+      }
+    }
+
+  // Is the path already registered to be deleted via a shutdown hook ?
+  def hasShutdownDeleteTachyonDir(file: TachyonFile): Boolean = {
+    val absolutePath = file.getPath()
+    shutdownDeleteTachyonPaths.synchronized {
+      shutdownDeleteTachyonPaths.contains(absolutePath)
+    }
+  }
+
   // Note: if file is child of some registered path, while not equal to it, then return true;
   // else false. This is to ensure that two shutdown hooks do not try to delete each others
   // paths - resulting in IOException and incomplete cleanup.
