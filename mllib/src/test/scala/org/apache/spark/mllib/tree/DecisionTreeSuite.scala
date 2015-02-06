@@ -1030,7 +1030,10 @@ object DecisionTreeSuite {
     node
   }
 
-  private def createModel(algo: Algo): DecisionTreeModel = {
+  /**
+   * Create a tree model.  This is deterministic and contains a variety of node and feature types.
+   */
+  private[tree] def createModel(algo: Algo): DecisionTreeModel = {
     val topNode = createInternalNode(id = 1, Continuous)
     val (node2, node3) = (createLeafNode(id = 2), createInternalNode(id = 3, Categorical))
     val (node6, node7) = (createLeafNode(id = 6), createLeafNode(id = 7))
@@ -1050,7 +1053,7 @@ object DecisionTreeSuite {
    *       make mistakes such as creating loops of Nodes.
    * If the trees are not equal, this prints the two trees and throws an exception.
    */
-  private def checkEqual(a: DecisionTreeModel, b: DecisionTreeModel): Unit = {
+  private[tree] def checkEqual(a: DecisionTreeModel, b: DecisionTreeModel): Unit = {
     assert(a.algo == b.algo)
     if (a.algo != b.algo || !isEqual(a.topNode, b.topNode)) {
       throw new Exception("checkEqual failed since the two trees were not identical.\n" +

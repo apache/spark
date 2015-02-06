@@ -150,19 +150,20 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] {
     }
   }
 
-  private object SaveLoadV1_0 {
+  private[tree] object SaveLoadV1_0 {
 
     def thisFormatVersion = "1.0"
 
+    // Hard-code class name string in case it changes in the future
     def thisClassName = "org.apache.spark.mllib.tree.DecisionTreeModel"
 
-    private case class PredictData(predict: Double, prob: Double)
+    case class PredictData(predict: Double, prob: Double)
 
-    private object PredictData {
+    object PredictData {
       def apply(p: Predict): PredictData = PredictData(p.predict, p.prob)
     }
 
-    private case class InformationGainStatsData(
+    case class InformationGainStatsData(
         gain: Double,
         impurity: Double,
         leftImpurity: Double,
@@ -170,27 +171,27 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] {
         leftPredict: PredictData,
         rightPredict: PredictData)
 
-    private object InformationGainStatsData {
+    object InformationGainStatsData {
       def apply(i: InformationGainStats): InformationGainStatsData = {
         InformationGainStatsData(i.gain, i.impurity, i.leftImpurity, i.rightImpurity,
           PredictData(i.leftPredict), PredictData(i.rightPredict))
       }
     }
 
-    private case class SplitData(
+    case class SplitData(
         feature: Int,
         threshold: Double,
         featureType: Int,
         categories: Seq[Double]) // TODO: Change to List once SPARK-3365 is fixed
 
-    private object SplitData {
+    object SplitData {
       def apply(s: Split): SplitData = {
         SplitData(s.feature, s.threshold, s.featureType.id, s.categories)
       }
     }
 
     /** Model data for model import/export */
-    private case class NodeData(
+    case class NodeData(
         id: Int,
         predict: PredictData,
         impurity: Double,
@@ -200,7 +201,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] {
         rightNodeId: Option[Int],
         stats: Option[InformationGainStatsData])
 
-    private object NodeData {
+    object NodeData {
       def apply(n: Node): NodeData = {
         NodeData(n.id, PredictData(n.predict), n.impurity, n.isLeaf, n.split.map(SplitData.apply),
           n.leftNode.map(_.id), n.rightNode.map(_.id), n.stats.map(InformationGainStatsData.apply))
@@ -212,16 +213,22 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] {
       import sqlContext.implicits._
 
       // Create JSON metadata.
-      val metadataRDD =
-        sc.parallelize(Seq((thisClassName, thisFormatVersion, model.algo.toString, model.numNodes)))
-          .toDataFrame("class", "version", "algo", "numNodes")
-      metadataRDD.toJSON.repartition(1).saveAsTextFile(Loader.metadataPath(path))
+      val metadataRDD = sc.parallelize(Seq((thisClassName, thisFormatVersion, model.algo.toString,
+        model.numNodes)), 1)
+        .toDataFrame("class", "version", "algo", "numNodes")
+      metadataRDD.toJSON.saveAsTextFile(Loader.metadataPath(path))
 
       // Create Parquet data.
       val nodeIterator = new DecisionTreeModel.NodeIterator(model)
-      val dataRDD: DataFrame = sc.parallelize(nodeIterator.toSeq).map(NodeData.apply)
+      val dataRDD: DataFrame = sc.parallelize(nodeIterator.toSeq).map(NodeData.apply).toDataFrame
       dataRDD.saveAsParquetFile(Loader.dataPath(path))
     }
+
+    /**
+     * Node with its child IDs.  This class is used for loading data and constructing a tree.
+     * The child IDs are relevant iff Node.isLeaf == false.
+     */
+    case class NodeWithKids(node: Node, leftChildId: Int, rightChildId: Int)
 
     def load(sc: SparkContext, path: String, algo: String, numNodes: Int): DecisionTreeModel = {
       val datapath = Loader.dataPath(path)
@@ -230,9 +237,22 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] {
       val dataRDD = sqlContext.parquetFile(datapath)
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
       Loader.checkSchema[NodeData](dataRDD.schema)
-      // TODO: Extract save/load for 1 tree so that it can be reused for ensembles?
+      val nodesRDD: RDD[NodeWithKids] = readNodes(dataRDD)
+      // Collect tree nodes, and build them into a tree.
+      val tree = constructTree(nodesRDD.collect(), algo, datapath)
+      assert(tree.numNodes == numNodes,
+        s"Unable to load DecisionTreeModel data from: $datapath." +
+        s"  Expected $numNodes nodes but found ${tree.numNodes}")
+      tree
+    }
+
+    /**
+     * Read nodes from the loaded data, and return each node with its child IDs.
+     * NOTE: The caller should check the schema.
+     */
+    def readNodes(data: DataFrame): RDD[NodeWithKids] = {
       val splitsRDD: RDD[Option[Split]] =
-        dataRDD.select("split.feature", "split.threshold", "split.featureType", "split.categories")
+        data.select("split.feature", "split.threshold", "split.featureType", "split.categories")
           .map { row: Row =>
           if (row.isNullAt(0)) {
             None
@@ -246,7 +266,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] {
           }
         }
       val lrChildNodesRDD: RDD[Option[(Int, Int)]] =
-        dataRDD.select("leftNodeId", "rightNodeId").map { row: Row =>
+        data.select("leftNodeId", "rightNodeId").map { row: Row =>
           if (row.isNullAt(0)) {
             None
           } else {
@@ -256,7 +276,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] {
             }
           }
         }
-      val gainStatsRDD: RDD[Option[InformationGainStats]] = dataRDD.select(
+      val gainStatsRDD: RDD[Option[InformationGainStats]] = data.select(
         "stats.gain", "stats.impurity", "stats.leftImpurity", "stats.rightImpurity",
         "stats.leftPredict.predict", "stats.leftPredict.prob",
         "stats.rightPredict.predict", "stats.rightPredict.prob").map { row: Row =>
@@ -265,8 +285,8 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] {
         } else {
           row match {
             case Row(gain: Double, impurity: Double, leftImpurity: Double, rightImpurity: Double,
-                leftPredictPredict: Double, leftPredictProb: Double,
-                rightPredictPredict: Double, rightPredictProb: Double) =>
+            leftPredictPredict: Double, leftPredictProb: Double,
+            rightPredictPredict: Double, rightPredictProb: Double) =>
               Some(new InformationGainStats(gain, impurity, leftImpurity, rightImpurity,
                 new Predict(leftPredictPredict, leftPredictProb),
                 new Predict(rightPredictPredict, rightPredictProb)))
@@ -275,55 +295,60 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] {
       }
       // nodesRDD stores (Node, leftChildId, rightChildId) where the child ids are only relevant if
       //   Node.isLeaf == false
-      val nodesRDD: RDD[(Node, Int, Int)] =
-        dataRDD.select("id", "predict.predict", "predict.prob", "impurity", "isLeaf").rdd
-          .zip(splitsRDD).zip(lrChildNodesRDD).zip(gainStatsRDD).map {
-          case (((Row(id: Int, predictPredict: Double, predictProb: Double,
-              impurity: Double, isLeaf: Boolean),
-              split: Option[Split]), lrChildNodes: Option[(Int, Int)]),
-              gainStats: Option[InformationGainStats]) =>
-            val (leftChildId, rightChildId) = lrChildNodes.getOrElse((-1, -1))
-            (new Node(id, new Predict(predictPredict, predictProb), impurity, isLeaf,
-              split, None, None, gainStats),
-              leftChildId, rightChildId)
-        }
-      // Collect tree nodes, and build them into a tree.
+      data.select("id", "predict.predict", "predict.prob", "impurity", "isLeaf").rdd
+        .zip(splitsRDD).zip(lrChildNodesRDD).zip(gainStatsRDD).map {
+        case (((Row(id: Int, predictPredict: Double, predictProb: Double,
+        impurity: Double, isLeaf: Boolean),
+        split: Option[Split]), lrChildNodes: Option[(Int, Int)]),
+        gainStats: Option[InformationGainStats]) =>
+          val (leftChildId, rightChildId) = lrChildNodes.getOrElse((-1, -1))
+          NodeWithKids(new Node(id, new Predict(predictPredict, predictProb), impurity, isLeaf,
+            split, None, None, gainStats),
+            leftChildId, rightChildId)
+      }
+    }
+
+    /**
+     * Given a list of nodes from a tree, construct the tree.
+     * @param nodes Array of all nodes in a tree.
+     * @param algo  Algorithm tree is for.
+     * @param datapath  Used for printing debugging messages if an error occurs.
+     */
+    def constructTree(
+        nodes: Iterable[NodeWithKids],
+        algo: String,
+        datapath: String): DecisionTreeModel = {
       //  nodesMap: node id -> (node, leftChild, rightChild)
-      val nodesMap: Map[Int, (Node, Int, Int)] = nodesRDD.collect().map(n => n._1.id -> n).toMap
+      val nodesMap: Map[Int, NodeWithKids] = nodes.map(n => n.node.id -> n).toMap
       assert(nodesMap.contains(1),
         s"DecisionTree missing root node (id = 1) after loading from: $datapath")
       val topNode = nodesMap(1)
-      linkSubtree(topNode._1, topNode._2, topNode._3, nodesMap)
-      assert(nodesMap.size == numNodes,
-        s"Unable to load DecisionTreeModel data from: $datapath." +
-        s"  Expected $numNodes nodes but found ${nodesMap.size}")
-      new DecisionTreeModel(topNode._1, Algo.fromString(algo))
+      linkSubtree(topNode, nodesMap)
+      new DecisionTreeModel(topNode.node, Algo.fromString(algo))
     }
-  }
 
-  /**
-   * Link the given node to its children (if any), and recurse down the subtree.
-   * @param node  Node to link.  Node.leftNode and Node.rightNode will be set if there are children.
-   * @param leftChildId  Id of left child.  Ignored if node is a leaf.
-   * @param rightChildId  Id of right child.  Ignored if node is a leaf.
-   * @param nodesMap  Map storing all nodes as a map: node id -> (Node, leftChildId, rightChildId).
-   */
-  private def linkSubtree(
-      node: Node,
-      leftChildId: Int,
-      rightChildId: Int,
-      nodesMap: Map[Int, (Node, Int, Int)]): Unit = {
-    if (node.isLeaf) return
-    assert(nodesMap.contains(leftChildId),
-      s"DecisionTreeModel.load could not find child (id=$leftChildId) of node ${node.id}.")
-    assert(nodesMap.contains(rightChildId),
-      s"DecisionTreeModel.load could not find child (id=$rightChildId) of node ${node.id}.")
-    val leftChild = nodesMap(leftChildId)
-    val rightChild = nodesMap(rightChildId)
-    node.leftNode = Some(leftChild._1)
-    node.rightNode = Some(rightChild._1)
-    linkSubtree(leftChild._1, leftChild._2, leftChild._3, nodesMap)
-    linkSubtree(rightChild._1, rightChild._2, rightChild._3, nodesMap)
+    /**
+     * Link the given node to its children (if any), and recurse down the subtree.
+     * @param nodeWithKids  Node to link
+     * @param nodesMap  Map storing all nodes as a map: node id -> (Node, leftChildId, rightChildId)
+     */
+    private def linkSubtree(
+        nodeWithKids: NodeWithKids,
+        nodesMap: Map[Int, NodeWithKids]): Unit = {
+      val (node, leftChildId, rightChildId) =
+        (nodeWithKids.node, nodeWithKids.leftChildId, nodeWithKids.rightChildId)
+      if (node.isLeaf) return
+      assert(nodesMap.contains(leftChildId),
+        s"DecisionTreeModel.load could not find child (id=$leftChildId) of node ${node.id}.")
+      assert(nodesMap.contains(rightChildId),
+        s"DecisionTreeModel.load could not find child (id=$rightChildId) of node ${node.id}.")
+      val leftChild = nodesMap(leftChildId)
+      val rightChild = nodesMap(rightChildId)
+      node.leftNode = Some(leftChild.node)
+      node.rightNode = Some(rightChild.node)
+      linkSubtree(leftChild, nodesMap)
+      linkSubtree(rightChild, nodesMap)
+    }
   }
 
   override def load(sc: SparkContext, path: String): DecisionTreeModel = {
