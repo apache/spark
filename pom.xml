@@ -135,6 +135,7 @@
     <parquet.version>1.6.0rc3</parquet.version>
     <jblas.version>1.2.3</jblas.version>
     <jetty.version>8.1.14.v20131031</jetty.version>
+    <orbit.version>3.0.0.v201112011016</orbit.version>
     <chill.version>0.5.0</chill.version>
     <kryo.version>2.24.0</kryo.version>
     <ivy.version>2.4.0</ivy.version>
