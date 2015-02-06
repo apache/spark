@@ -50,6 +50,15 @@ private[spark] class HttpFileServer(
 
   def stop() {
     httpServer.stop()
+    
+    // If we only stop sc, but sparksubmit still run as a services we need to delete the tmp dir
+    // if not, it will create too many tmp dir
+    try {
+      Utils.deleteRecursively(baseDir)
+    } catch {
+      case e: Exception =>
+        logError("Exception while deleting Spark temp dir: " + baseDir.getAbsolutePath, e)
+    }
   }
 
   def addFile(file: File) : String = {
