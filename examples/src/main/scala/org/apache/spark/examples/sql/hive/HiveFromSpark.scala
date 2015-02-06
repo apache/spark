@@ -43,7 +43,8 @@ object HiveFromSpark {
     // HiveContext. When not configured by the hive-site.xml, the context automatically
     // creates metastore_db and warehouse in the current directory.
     val hiveContext = new HiveContext(sc)
-    import hiveContext._
+    import hiveContext.implicits._
+    import hiveContext.sql
 
     sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
     sql(s"LOAD DATA LOCAL INPATH '${kv1File.getAbsolutePath}' INTO TABLE src")

@@ -244,8 +244,7 @@ object Vectors {
   }
 
   /**
-   * Parses a string resulted from `Vector#toString` into
-   * an [[org.apache.spark.mllib.linalg.Vector]].
+   * Parses a string resulted from [[Vector.toString]] into a [[Vector]].
    */
   def parse(s: String): Vector = {
     parseNumeric(NumericParser.parse(s))
@@ -483,6 +482,7 @@ class DenseVector(val values: Array[Double]) extends Vector {
 }
 
 object DenseVector {
+  /** Extracts the value array from a dense vector. */
   def unapply(dv: DenseVector): Option[Array[Double]] = Some(dv.values)
 }
 

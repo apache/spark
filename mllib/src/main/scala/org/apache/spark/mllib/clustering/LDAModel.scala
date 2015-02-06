@@ -335,7 +335,7 @@ class DistributedLDAModel private (
 
   /**
    * For each document in the training set, return the distribution over topics for that document
-   * (i.e., "theta_doc").
+   * ("theta_doc").
    *
    * @return  RDD of (document ID, topic distribution) pairs
    */

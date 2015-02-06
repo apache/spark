@@ -17,31 +17,34 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.types.{StructType, StructField}
+import org.apache.spark.sql.types.{DataTypeConversions, StructType, StructField}
 
 object LocalRelation {
   def apply(output: Attribute*): LocalRelation = new LocalRelation(output)
 
-  def apply(output1: StructField, output: StructField*): LocalRelation = new LocalRelation(
-    StructType(output1 +: output).toAttributes
-  )
+  def apply(output1: StructField, output: StructField*): LocalRelation = {
+    new LocalRelation(StructType(output1 +: output).toAttributes)
+  }
+
+  def fromProduct(output: Seq[Attribute], data: Seq[Product]): LocalRelation = {
+    val schema = StructType.fromAttributes(output)
+    LocalRelation(output, data.map(row => DataTypeConversions.productToRow(row, schema)))
+  }
 }
 
-case class LocalRelation(output: Seq[Attribute], data: Seq[Product] = Nil)
+case class LocalRelation(output: Seq[Attribute], data: Seq[Row] = Nil)
   extends LeafNode with analysis.MultiInstanceRelation {
-
-  // TODO: Validate schema compliance.
-  def loadData(newData: Seq[Product]) = new LocalRelation(output, data ++ newData)
 
   /**
    * Returns an identical copy of this relation with new exprIds for all attributes.  Different
    * attributes are required when a relation is going to be included multiple times in the same
    * query.
    */
-  override final def newInstance: this.type = {
-    LocalRelation(output.map(_.newInstance), data).asInstanceOf[this.type]
+  override final def newInstance(): this.type = {
+    LocalRelation(output.map(_.newInstance()), data).asInstanceOf[this.type]
   }
 
   override protected def stringArgs = Iterator(output)
