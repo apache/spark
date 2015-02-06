@@ -1162,9 +1162,9 @@ private[spark] object Utils extends Logging {
     // finding the call site of a method.
     val SPARK_CORE_CLASS_REGEX =
       """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?(\.broadcast)?\.[A-Z]""".r
-    val SCALA_CLASS_REGEX = """^scala""".r
+    val SCALA_CORE_CLASS_PREFIX = "scala"
     val isSparkCoreClass = SPARK_CORE_CLASS_REGEX.findFirstIn(className).isDefined
-    val isScalaClass = SCALA_CLASS_REGEX.findFirstIn(className).isDefined
+    val isScalaClass = className.startsWith(SCALA_CORE_CLASS_PREFIX)
     // If the class is a Spark internal class or a Scala class, then exclude.
     isSparkCoreClass || isScalaClass
   }
