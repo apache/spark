@@ -22,16 +22,18 @@ import java.util.Properties
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConversions._
+import scala.collection.mutable
 
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.ByteStreams
 import com.google.common.io.Files
-import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
-
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.MiniYARNCluster
+import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
 
 import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException, TestUtils}
+import org.apache.spark.scheduler.cluster.ExecutorInfo
+import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorAdded}
 import org.apache.spark.util.Utils
 
 /**
@@ -261,7 +263,18 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
 
 }
 
+private class SaveExecutorInfo extends SparkListener {
+  val addedExecutorInfos = mutable.Map[String, ExecutorInfo]()
+
+  override def onExecutorAdded(executor : SparkListenerExecutorAdded) {
+    addedExecutorInfos(executor.executorId) = executor.executorInfo
+  }
+}
+
 private object YarnClusterDriver extends Logging with Matchers {
+
+  val WAIT_TIMEOUT_MILLIS = 10000
+  var listener: SaveExecutorInfo = null
 
   def main(args: Array[String]) = {
     if (args.length != 1) {
@@ -274,17 +287,25 @@ private object YarnClusterDriver extends Logging with Matchers {
       System.exit(1)
     }
 
+    listener = new SaveExecutorInfo
     val sc = new SparkContext(new SparkConf()
       .setAppName("yarn \"test app\" 'with quotes' and \\back\\slashes and $dollarSigns"))
+    sc.addSparkListener(listener)
     val status = new File(args(0))
     var result = "failure"
     try {
       val data = sc.parallelize(1 to 4, 4).collect().toSet
+      assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
       data should be (Set(1, 2, 3, 4))
       result = "success"
     } finally {
       sc.stop()
       Files.write(result, status, UTF_8)
+    }
+
+    // verify log urls are present
+    listener.addedExecutorInfos.values.foreach { info =>
+      assert(info.logUrlMap.nonEmpty)
     }
   }
 

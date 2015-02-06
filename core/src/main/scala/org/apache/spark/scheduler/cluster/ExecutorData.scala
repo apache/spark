@@ -33,5 +33,6 @@ private[cluster] class ExecutorData(
    val executorAddress: Address,
    override val executorHost: String,
    var freeCores: Int,
-   override val totalCores: Int
-) extends ExecutorInfo(executorHost, totalCores)
+   override val totalCores: Int,
+   override val logUrlMap: Map[String, String]
+) extends ExecutorInfo(executorHost, totalCores, logUrlMap)
