@@ -601,9 +601,18 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         }
 
         val relations = nodeToRelation(fromClause)
-        val withWhere = whereClause.map { whereNode =>
+
+        val withWhere: LogicalPlan = whereClause.map { whereNode =>
           val Seq(whereExpr) = whereNode.getChildren.toSeq
-          Filter(nodeToExpr(whereExpr), relations)
+          whereExpr match {
+            case Token("TOK_SUBQUERY_EXPR",
+            Token("TOK_SUBQUERY_OP", _) :: query :: value)  =>
+              val Some(squery) :: _ :: extended :: Nil =
+                getClauses(Seq("TOK_QUERY", "FORMATTED", "EXTENDED"), Seq(query))
+              val subqueryPlan = nodeToPlan(squery)
+              DynamicFilter(InSubquery(nodeToExpr(value.head)), relations, subqueryPlan)
+            case other => Filter(nodeToExpr(whereExpr), relations)
+          }
         }.getOrElse(relations)
 
         val select =

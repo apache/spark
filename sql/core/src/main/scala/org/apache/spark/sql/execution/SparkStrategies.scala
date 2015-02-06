@@ -278,6 +278,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Project(projectList, planLater(child)) :: Nil
       case logical.Filter(condition, child) =>
         execution.Filter(condition, planLater(child)) :: Nil
+      case logical.DynamicFilter(condition, child, subQuery) =>
+        execution.DynamicFilter(condition, planLater(child), planLater(subQuery)) :: Nil
       case logical.Expand(projections, output, child) =>
         execution.Expand(projections, output, planLater(child)) :: Nil
       case logical.Aggregate(group, agg, child) =>

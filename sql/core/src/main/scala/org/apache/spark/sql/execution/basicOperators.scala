@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.immutable.HashSet
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkEnv, HashPartitioner, SparkConf}
@@ -59,6 +60,48 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
     iter.filter(conditionEvaluator)
   }
 }
+
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
+case class DynamicFilter(condition: Expression, left: SparkPlan, right: SparkPlan)
+  extends BinaryNode {
+  override def output = left.output
+
+  def execute() = {
+    val modCod: Expression = condition match {
+      case InSubquery(value) =>
+
+        val iterList = right.execute().mapPartitions { iter =>
+          val hashSet = new scala.collection.mutable.HashSet[Row]()
+
+          var currentRow: Row = null
+          while (iter.hasNext) {
+            currentRow = iter.next()
+            if (!hashSet.contains(currentRow)) {
+              hashSet.add(currentRow.copy())
+            }
+          }
+
+          hashSet.iterator
+        }
+
+        // Taking only the first element for now
+        val values = iterList.collect().map(s => s.apply(0))
+
+        val hSet: HashSet[Any] = HashSet() ++ values
+        InSet(value, hSet)
+
+    }
+
+    lazy val conditionEvaluator = newPredicate(modCod, left.output)
+    left.execute().mapPartitions { iter =>
+      iter.filter(conditionEvaluator)
+    }
+  }
+}
+
 
 /**
  * :: DeveloperApi ::
@@ -269,3 +312,4 @@ case class OutputFaker(output: Seq[Attribute], child: SparkPlan) extends SparkPl
   def children = child :: Nil
   def execute() = child.execute()
 }
+
