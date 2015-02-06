@@ -56,7 +56,7 @@ class ExecutorRunnable(
   var rpc: YarnRPC = YarnRPC.create(conf)
   var nmClient: NMClient = _
   val yarnConf: YarnConfiguration = new YarnConfiguration(conf)
-  lazy val env = prepareEnvironment
+  lazy val env = prepareEnvironment(container)
   
   def run = {
     logInfo("Starting Executor Container")
@@ -254,7 +254,7 @@ class ExecutorRunnable(
     localResources
   }
 
-  private def prepareEnvironment: HashMap[String, String] = {
+  private def prepareEnvironment(container: Container): HashMap[String, String] = {
     val env = new HashMap[String, String]()
     val extraCp = sparkConf.getOption("spark.executor.extraClassPath")
     Client.populateClasspath(null, yarnConf, sparkConf, env, extraCp)
@@ -268,6 +268,14 @@ class ExecutorRunnable(
     // Keep this for backwards compatibility but users should move to the config
     sys.env.get("SPARK_YARN_USER_ENV").foreach { userEnvs =>
       YarnSparkHadoopUtil.setEnvFromInputString(env, userEnvs)
+    }
+
+    // Add log urls
+    sys.env.get("SPARK_USER").foreach { user =>
+      val baseUrl = "http://%s/node/containerlogs/%s/%s"
+        .format(container.getNodeHttpAddress, ConverterUtils.toString(container.getId), user)
+      env("SPARK_LOG_URL_STDERR") = s"$baseUrl/stderr?start=0"
+      env("SPARK_LOG_URL_STDOUT") = s"$baseUrl/stdout?start=0"
     }
 
     System.getenv().filterKeys(_.startsWith("SPARK")).foreach { case (k, v) => env(k) = v }
