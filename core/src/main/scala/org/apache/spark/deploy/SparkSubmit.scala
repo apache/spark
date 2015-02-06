@@ -36,9 +36,10 @@ import org.apache.ivy.core.retrieve.RetrieveOptions
 import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.resolver.{ChainResolver, IBiblioResolver}
-
 import org.apache.spark.executor.ExecutorURLClassLoader
 import org.apache.spark.util.Utils
+import org.apache.spark.executor.ChildExecutorURLClassLoader
+import org.apache.spark.executor.MutableURLClassLoader
 
 /**
  * Main gateway of launching a Spark application.
@@ -390,8 +391,14 @@ object SparkSubmit {
       printStream.println("\n")
     }
 
-    val loader = new ExecutorURLClassLoader(new Array[URL](0),
-      Thread.currentThread.getContextClassLoader)
+    val loader =
+      if (sysProps.getOrElse("spark.files.userClassPathFirst", "false").toBoolean) {
+        new ChildExecutorURLClassLoader(new Array[URL](0),
+          Thread.currentThread.getContextClassLoader)
+      } else {
+        new ExecutorURLClassLoader(new Array[URL](0),
+          Thread.currentThread.getContextClassLoader)
+      }
     Thread.currentThread.setContextClassLoader(loader)
 
     for (jar <- childClasspath) {
@@ -444,7 +451,7 @@ object SparkSubmit {
     }
   }
 
-  private def addJarToClasspath(localJar: String, loader: ExecutorURLClassLoader) {
+  private def addJarToClasspath(localJar: String, loader: MutableURLClassLoader) {
     val uri = Utils.resolveURI(localJar)
     uri.getScheme match {
       case "file" | "local" =>

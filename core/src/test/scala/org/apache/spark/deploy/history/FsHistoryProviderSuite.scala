@@ -190,6 +190,24 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
     appListAfterRename.head.logPath should not endWith(EventLoggingListener.IN_PROGRESS)
   }
 
+  test("SPARK-5582: empty log directory") {
+    val conf = new SparkConf()
+      .set("spark.history.fs.logDirectory", testDir.getAbsolutePath())
+    val provider = new FsHistoryProvider(conf)
+
+    val logFile1 = new File(testDir, "app1" + EventLoggingListener.IN_PROGRESS)
+    writeFile(logFile1, true, None,
+      SparkListenerApplicationStart("app1", Some("app1"), 1L, "test"),
+      SparkListenerApplicationEnd(2L))
+
+    val oldLog = new File(testDir, "old1")
+    oldLog.mkdir()
+
+    provider.checkForLogs()
+    val appListAfterRename = provider.getListing()
+    appListAfterRename.size should be (1)
+  }
+
   private def writeFile(file: File, isNewFormat: Boolean, codec: Option[CompressionCodec],
     events: SparkListenerEvent*) = {
     val out =

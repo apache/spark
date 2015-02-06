@@ -29,11 +29,11 @@ import org.apache.spark.sql.types.{DataType, StringType, ArrayType}
 @AlphaComponent
 class Tokenizer extends UnaryTransformer[String, Seq[String], Tokenizer] {
 
-  protected override def createTransformFunc(paramMap: ParamMap): String => Seq[String] = {
+  override protected def createTransformFunc(paramMap: ParamMap): String => Seq[String] = {
     _.toLowerCase.split("\\s")
   }
 
-  protected override def validateInputType(inputType: DataType): Unit = {
+  override protected def validateInputType(inputType: DataType): Unit = {
     require(inputType == StringType, s"Input type must be string type but got $inputType.")
   }
 
