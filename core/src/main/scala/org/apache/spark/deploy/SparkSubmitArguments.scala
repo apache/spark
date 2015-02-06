@@ -59,11 +59,11 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   val sparkProperties: HashMap[String, String] = new HashMap[String, String]()
 
   // Standalone cluster mode only
-  var useRest: Boolean = true
   var supervise: Boolean = false
   var driverCores: String = null
   var submissionToKill: String = null
   var submissionToRequestStatusFor: String = null
+  var useRest: Boolean = true // used internally
 
   /** Default properties present in the currently defined defaults file. */
   lazy val defaultSparkProperties: HashMap[String, String] = {

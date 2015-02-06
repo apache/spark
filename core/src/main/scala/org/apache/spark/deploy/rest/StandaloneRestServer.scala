@@ -439,7 +439,7 @@ private class ErrorServlet extends StandaloneRestServlet {
     // If there is a version mismatch, include the highest protocol version that
     // this server supports in case the client wants to retry with our version
     if (versionMismatch) {
-      error.protocolVersion = serverVersion
+      error.highestProtocolVersion = serverVersion
       response.setStatus(StandaloneRestServer.SC_UNKNOWN_PROTOCOL_VERSION)
     } else {
       response.setStatus(HttpServletResponse.SC_BAD_REQUEST)

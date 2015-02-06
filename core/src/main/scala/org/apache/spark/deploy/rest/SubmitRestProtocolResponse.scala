@@ -76,7 +76,7 @@ private[spark] class SubmissionStatusResponse extends SubmitRestProtocolResponse
 private[spark] class ErrorResponse extends SubmitRestProtocolResponse {
   // The highest protocol version that the server knows about
   // This is set when the client specifies an unknown version
-  var protocolVersion: String = null
+  var highestProtocolVersion: String = null
   protected override def doValidate(): Unit = {
     super.doValidate()
     assertFieldIsSet(message, "message")
