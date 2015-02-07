@@ -94,7 +94,7 @@ case class ParquetTableScan(
             case g: GetItem =>
               ids += g.child.dataType.id
               child = g.child
-            //filters
+            // filters
             case bc: BinaryComparison =>
               getDataTypeIdOfAttribute(bc.left)
               getDataTypeIdOfAttribute(bc.right)
@@ -169,11 +169,11 @@ case class ParquetTableScan(
       var unbindAttributes = ParquetTypesConverter.convertFromString(resultSchema)
 
       var bindAttributes = unbindAttributes.map(ua => {
-        var attribute = relation.output.find(o => o.name == ua.name).get
-        if (attribute.isInstanceOf[AttributeReference]) {
-          AttributeReference(attribute.name, ua.dataType, ua.nullable)(attribute.exprId, ua.qualifiers)
+        var attr = relation.output.find(o => o.name == ua.name).get
+        if (attr.isInstanceOf[AttributeReference]) {
+          AttributeReference(ua.name, ua.dataType, ua.nullable)(attr.exprId, ua.qualifiers)
         } else {
-          attribute
+          attr
         }
       })
       bindAttributes
