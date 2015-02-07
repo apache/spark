@@ -20,9 +20,16 @@ TODO
 
 #### Macros
 * Previous execution timestamp
+* Previous ds
 * ...
 
+#### Frontend
+* Graph view: color coding by operator + legend
+
 #### Backend
+* Callbacks
+* Set default args at the DAG level?
+* Prevent timezone chagne on import
 * Add decorator to timeout imports on master process [lib](https://github.com/pnpnpn/timeout-decorator)
 * Mysql port should carry through (using default now)
 * Make authentication universal

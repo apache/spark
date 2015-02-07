@@ -188,7 +188,7 @@ class Airflow(BaseView):
         session.close()
         return self.render(
             'airflow/query.html', form=form,
-            title="Query",
+            title="Ad Hoc Query",
             results=results or '',
             has_data=has_data)
 
@@ -462,7 +462,7 @@ class Airflow(BaseView):
         response = self.render(
             'airflow/highchart.html',
             chart=chart,
-            title="Chart",
+            title="Airflow - Chart",
             sql=sql,
             label=chart.label)
         session.commit()
@@ -529,7 +529,7 @@ class Airflow(BaseView):
     @login_required
     def conf(self):
         from airflow import configuration
-        title = "Application Configuration"
+        title = "Airflow Configuration"
         subtitle = configuration.AIRFLOW_CONFIG
         f = open(configuration.AIRFLOW_CONFIG, 'r')
 
