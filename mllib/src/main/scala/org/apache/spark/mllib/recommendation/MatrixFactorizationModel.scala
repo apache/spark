@@ -166,7 +166,7 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
   }
 
   private[recommendation]
-  object SaveLoadV1_0 extends Loader[MatrixFactorizationModel] {
+  object SaveLoadV1_0 {
 
     private val thisFormatVersion = "1.0"
 
@@ -188,7 +188,7 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       model.productFeatures.toDataFrame("id", "features").saveAsParquetFile(productPath(path))
     }
 
-    override def load(sc: SparkContext, path: String): MatrixFactorizationModel = {
+    def load(sc: SparkContext, path: String): MatrixFactorizationModel = {
       val sqlContext = new SQLContext(sc)
       val (className, formatVersion, metadata) = loadMetadata(sc, path)
       assert(className == thisClassName)
