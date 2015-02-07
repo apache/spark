@@ -18,10 +18,12 @@
 package org.apache.spark.mllib.stat
 
 import org.scalatest.FunSuite
-import org.apache.spark.mllib.util.LocalSparkContext
+
 import org.apache.commons.math3.distribution.NormalDistribution
 
-class KernelDensitySuite extends FunSuite with LocalSparkContext {
+import org.apache.spark.mllib.util.LocalClusterSparkContext
+
+class KernelDensitySuite extends FunSuite with LocalClusterSparkContext {
   test("kernel density single sample") {
     val rdd = sc.parallelize(Array(5.0))
     val evaluationPoints = Array(5.0, 6.0)
