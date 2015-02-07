@@ -335,7 +335,6 @@ object DecisionTree extends Serializable with Logging {
   private def mixedBinSeqOp(
       agg: DTStatsAggregator,
       treePoint: TreePoint,
-      bins: Array[Array[Bin]],
       splits: Array[Array[Split]],
       unorderedFeatures: Set[Int],
       instanceWeight: Double,
@@ -508,7 +507,7 @@ object DecisionTree extends Serializable with Logging {
         if (metadata.unorderedFeatures.isEmpty) {
           orderedBinSeqOp(agg(aggNodeIndex), baggedPoint.datum, instanceWeight, featuresForNode)
         } else {
-          mixedBinSeqOp(agg(aggNodeIndex), baggedPoint.datum, bins, splits,
+          mixedBinSeqOp(agg(aggNodeIndex), baggedPoint.datum, splits,
             metadata.unorderedFeatures, instanceWeight, featuresForNode)
         }
       }
@@ -1026,8 +1025,9 @@ object DecisionTree extends Serializable with Logging {
             // Categorical feature
             val featureArity = metadata.featureArity(featureIndex)
             if (metadata.isUnordered(featureIndex)) {
+              // Unordered features
+              // 2^(maxFeatureValue - 1) - 1 combinations
               splits(featureIndex) = new Array[Split](numSplits)
-              bins(featureIndex) = new Array[Bin](numBins)
               var splitIndex = 0
               while (splitIndex < numSplits) {
                 val categories: List[Double] =
@@ -1042,11 +1042,11 @@ object DecisionTree extends Serializable with Logging {
               //   beforehand.  Splits are constructed as needed during training.
               splits(featureIndex) = new Array[Split](0)
             }
-          // For ordered features, bins correspond to feature values.
-          // For unordered categorical features, there is no need to construct the bins.
-          // since there is a one-to-one correspondence between the splits and the bins.
-          bins(featureIndex) = new Array[Bin](0)
-          }
+            // For ordered features, bins correspond to feature values.
+            // For unordered categorical features, there is no need to construct the bins.
+            // since there is a one-to-one correspondence between the splits and the bins.
+            bins(featureIndex) = new Array[Bin](0)
+            }
           featureIndex += 1
         }
         (splits, bins)
