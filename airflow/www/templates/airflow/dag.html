@@ -9,13 +9,13 @@
 {% block body %}
   <h2>DAG: {{ dag.dag_id }}</h2>
   <ul class="nav nav-pills">
+    <li><a href="{{ url_for("airflow.graph", dag_id=dag.dag_id) }}">
+        <span class="glyphicon glyphicon-certificate" aria-hidden="true"></span>
+      Graph View</a></li>
     <li><a href="{{ url_for("airflow.tree", dag_id=dag.dag_id, num_runs=25) }}">
         <span class="glyphicon glyphicon-tree-deciduous" aria-hidden="true"></span>
       Tree View
     </a></li>
-    <li><a href="{{ url_for("airflow.graph", dag_id=dag.dag_id) }}">
-        <span class="glyphicon glyphicon-certificate" aria-hidden="true"></span>
-      Graph View</a></li>
     <li><a href="{{ url_for("airflow.duration", dag_id=dag.dag_id, days=30) }}">
         <span class="glyphicon glyphicon-stats" aria-hidden="true"></span>
         Task Duration

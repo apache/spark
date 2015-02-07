@@ -21,6 +21,7 @@ class PrestoCheckOperator(BaseOperator):
     }
     template_fields = ('sql',)
     template_ext = ('.hql', '.sql',)
+    ui_color = '#fff7e6'
 
     @apply_defaults
     def __init__(
@@ -75,6 +76,7 @@ class PrestoValueCheckOperator(BaseOperator):
     }
     template_fields = ('sql',)
     template_ext = ('.hql', '.sql',)
+    ui_color = '#fff7e6'
 
     @apply_defaults
     def __init__(
@@ -138,6 +140,7 @@ class PrestoIntervalCheckOperator(BaseOperator):
     }
     template_fields = ('sql1', 'sql2')
     template_ext = ('.hql', '.sql',)
+    ui_color = '#fff7e6'
 
     @apply_defaults
     def __init__(
