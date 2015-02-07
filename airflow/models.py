@@ -151,8 +151,6 @@ class DagBag(object):
         return dag_ids
 
 
-
-
 class User(Base):
     """
     Eventually should be used for security purposes
@@ -646,6 +644,7 @@ class TaskInstance(Base):
         jinja_context = {
             'dag': task.dag,
             'ds': ds,
+            'END_DATE': ds,
             'ds_nodash': ds_nodash,
             'end_date': ds,
             'execution_date': self.execution_date,
@@ -664,11 +663,13 @@ class TaskInstance(Base):
                     self.task.dag.user_defined_macros)
 
         for attr in task.__class__.template_fields:
-            template = self.task.get_template(attr)
-            setattr(
-                task, attr,
-                template.render(**jinja_context)
-            )
+            result = getattr(task, attr)
+            try:
+                template = self.task.get_template(attr)
+                result = template.render(**jinja_context)
+            except Exception as e:
+                logging.exception(e)
+            setattr(task, attr, result)
 
     def email_alert(self, exception, is_retry=False):
         task = self.task
@@ -877,7 +878,10 @@ class BaseOperator(Base):
             content = getattr(self, attr)
             if any([content.endswith(ext) for ext in self.template_ext]):
                 env = self.dag.get_template_env()
-                setattr(self, attr, env.loader.get_source(env, content)[0])
+                try:
+                    setattr(self, attr, env.loader.get_source(env, content)[0])
+                except Exception as e:
+                    logging.exception(e)
         self.prepare_template()
 
     @property

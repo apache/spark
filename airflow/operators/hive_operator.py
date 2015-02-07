@@ -18,6 +18,9 @@ class HiveOperator(BaseOperator):
     :param hiveconf_jinja_translate: when True, hiveconf-type templating
         ${var} gets translated into jina-type templating {{ var }}
     :type hiveconf_jinja_translate: boolean
+    :param script_begin_tag: If defined, the operator will get rid of the
+        part of the script before the first occurence of `script_begin_tag`
+    :type script_begin_tag: str
     """
 
     __mapper_args__ = {
@@ -31,6 +34,7 @@ class HiveOperator(BaseOperator):
             self, hql,
             hive_conn_id=conf.get('hooks', 'HIVE_DEFAULT_CONN_ID'),
             hiveconf_jinja_translate=False,
+            script_begin_tag=None,
             *args, **kwargs):
 
         super(HiveOperator, self).__init__(*args, **kwargs)
@@ -38,11 +42,14 @@ class HiveOperator(BaseOperator):
         self.hive_conn_id = hive_conn_id
         self.hook = HiveHook(hive_conn_id=hive_conn_id)
         self.hql = hql
+        self.script_begin_tag = script_begin_tag
 
     def prepare_template(self):
-        if False and self.hiveconf_jinja_translate:
+        if self.hiveconf_jinja_translate:
             self.hql = re.sub(
                 "(\$\{([ a-zA-Z0-9_]*)\})", "{{ \g<2> }}", self.hql)
+        if self.script_begin_tag and self.script_begin_tag in self.hql:
+            self.hql = "\n".join(self.hql.split(self.script_begin_tag)[1:])
 
     def execute(self, execution_date):
         logging.info('Executing: ' + self.hql)
