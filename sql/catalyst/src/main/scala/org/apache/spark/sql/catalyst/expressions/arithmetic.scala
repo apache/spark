@@ -28,8 +28,14 @@ case class UnaryMinus(child: Expression) extends UnaryExpression {
   def nullable = child.nullable
   override def toString = s"-$child"
 
+  lazy val numeric = dataType match {
+    case n: NumericType => n.numeric.asInstanceOf[Numeric[Any]]
+    case other => sys.error(s"Type $other does not support numeric operations")
+  }
+
   override def eval(input: Row): Any = {
-    n1(child, input, _.negate(_))
+    val evalE = child.eval(input)
+    numeric.negate(evalE)
   }
 }
 
@@ -98,19 +104,34 @@ abstract class BinaryArithmetic extends BinaryExpression {
 case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
   def symbol = "+"
 
-  override def eval(input: Row): Any = n2(input, left, right, _.plus(_, _))
+  lazy val numeric = dataType match {
+    case n: NumericType => n.numeric.asInstanceOf[Numeric[Any]]
+    case other => sys.error(s"Type $other does not support numeric operations")
+  }
+
+  override def evalInternal(evalE1: EvaluatedType, evalE2: EvaluatedType): Any = numeric.plus(evalE1, evalE2)
 }
 
 case class Subtract(left: Expression, right: Expression) extends BinaryArithmetic {
   def symbol = "-"
 
-  override def eval(input: Row): Any = n2(input, left, right, _.minus(_, _))
+  lazy val numeric = dataType match {
+    case n: NumericType => n.numeric.asInstanceOf[Numeric[Any]]
+    case other => sys.error(s"Type $other does not support numeric operations")
+  }
+
+  override def evalInternal(evalE1: EvaluatedType, evalE2: EvaluatedType): Any = numeric.minus(evalE1, evalE2)
 }
 
 case class Multiply(left: Expression, right: Expression) extends BinaryArithmetic {
   def symbol = "*"
 
-  override def eval(input: Row): Any = n2(input, left, right, _.times(_, _))
+  lazy val numeric = dataType match {
+    case n: NumericType => n.numeric.asInstanceOf[Numeric[Any]]
+    case other => sys.error(s"Type $other does not support numeric operations")
+  }
+
+  override def evalInternal(evalE1: EvaluatedType, evalE2: EvaluatedType): Any = numeric.times(evalE1, evalE2)
 }
 
 case class Divide(left: Expression, right: Expression) extends BinaryArithmetic {
@@ -118,16 +139,25 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
 
   override def nullable = true
 
+  lazy val div: (Any, Any) => Any = dataType match {
+    case ft: FractionalType => ft.fractional.asInstanceOf[Fractional[Any]].div
+    case it: IntegralType => it.integral.asInstanceOf[Integral[Any]].quot
+    case other => sys.error(s"Type $other does not support numeric operations")
+  }
+  
   override def eval(input: Row): Any = {
     val evalE2 = right.eval(input)
-    dataType match {
-      case _ if evalE2 == null => null
-      case _ if evalE2 == 0 => null
-      case ft: FractionalType => f1(input, left, _.div(_, evalE2.asInstanceOf[ft.JvmType]))
-      case it: IntegralType => i1(input, left, _.quot(_, evalE2.asInstanceOf[it.JvmType]))
+    if (evalE2 == null || evalE2 == 0) {
+      null
+    } else {
+      val evalE1 = left.eval(input)
+      if (evalE1 == null) {
+        null
+      } else {
+        div(evalE1, evalE2)
+      }
     }
   }
-
 }
 
 case class Remainder(left: Expression, right: Expression) extends BinaryArithmetic {
@@ -135,12 +165,23 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
 
   override def nullable = true
 
+  lazy val integral = dataType match {
+    case i: IntegralType => i.integral.asInstanceOf[Integral[Any]]
+    case i: FractionalType => i.asIntegral.asInstanceOf[Integral[Any]]
+    case other => sys.error(s"Type $other does not support numeric operations")
+  }
+
   override def eval(input: Row): Any = {
     val evalE2 = right.eval(input)
-    dataType match {
-      case _ if evalE2 == null => null
-      case _ if evalE2 == 0 => null
-      case nt: NumericType => i1(input, left, _.rem(_, evalE2.asInstanceOf[nt.JvmType]))
+    if (evalE2 == null || evalE2 == 0) {
+      null
+    } else {
+      val evalE1 = left.eval(input)
+      if (evalE1 == null) {
+        null
+      } else {
+        integral.rem(evalE1, evalE2)
+      }
     }
   }
 }
@@ -207,8 +248,8 @@ case class BitwiseNot(child: Expression) extends UnaryExpression {
       null
     } else {
       dataType match {
-        case ByteType => (~evalE.asInstanceOf[Byte]).toByte
-        case ShortType => (~evalE.asInstanceOf[Short]).toShort
+        case ByteType => ~evalE.asInstanceOf[Byte]
+        case ShortType => ~evalE.asInstanceOf[Short]
         case IntegerType => ~evalE.asInstanceOf[Int]
         case LongType => ~evalE.asInstanceOf[Long]
         case other => sys.error(s"Unsupported bitwise ~ operation on $other")
@@ -259,5 +300,13 @@ case class Abs(child: Expression) extends UnaryExpression  {
   def nullable = child.nullable
   override def toString = s"Abs($child)"
 
-  override def eval(input: Row): Any = n1(child, input, _.abs(_))
+  lazy val numeric = dataType match {
+    case n: NumericType => n.numeric.asInstanceOf[Numeric[Any]]
+    case other => sys.error(s"Type $other does not support numeric operations")
+  }
+
+  override def eval(input: Row): Any = {
+    val evalE = child.eval(input)
+    numeric.abs(evalE)
+  }
 }
