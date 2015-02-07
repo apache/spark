@@ -17,6 +17,9 @@
 
 package org.apache.spark.rdd
 
+import java.io.File
+
+import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.util.Progressable
@@ -28,7 +31,7 @@ import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.mapreduce.{JobContext => NewJobContext, OutputCommitter => NewOutputCommitter,
 OutputFormat => NewOutputFormat, RecordWriter => NewRecordWriter,
 TaskAttemptContext => NewTaskAttempContext}
-import org.apache.spark.{Partitioner, SharedSparkContext}
+import org.apache.spark.{SparkException, HashPartitioner, Partitioner, SharedSparkContext}
 import org.apache.spark.util.Utils
 
 import org.scalatest.FunSuite
@@ -549,6 +552,57 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
     assert(shuffled.partitioner === Some(p))
     assert(shuffled.lookup(1) === Seq(2))
     intercept[IllegalArgumentException] {shuffled.lookup(-1)}
+  }
+
+  test("assumePartitioned") {
+    val rdd: RDD[(Int, String)] = sc.parallelize(1 to 100, 10).groupBy{x => x % 10}.
+      mapPartitions({itr => itr.map{case(k,v) => k -> v.mkString(",")}}, true)
+    val path = "tmp_txt_file"
+    val f = new File(path)
+    if (f.exists) FileUtils.deleteDirectory(f)
+    rdd.saveAsSequenceFile(path)
+    val reloaded = sc.sequenceFile[Int, String](path)
+    val assumedPartitioned = reloaded.assumePartitionedBy(rdd.partitioner.get)
+    assumedPartitioned.collect()
+
+    val j1: RDD[(Int, (Iterable[String], Iterable[String]))] = rdd.cogroup(assumedPartitioned)
+    assert(j1.getNarrowAncestors.contains(rdd))
+    assert(j1.getNarrowAncestors.contains(assumedPartitioned))
+
+    j1.foreach{case(group, (left, right)) =>
+        //check that we've got the same groups in both RDDs
+        val leftSet = left.toSet
+        val rightSet = right.toSet
+        if (leftSet != rightSet) throw new RuntimeException("left not equal to right")
+        //and check that the groups are correct
+        leftSet.foreach{str => str.split(",").foreach{
+          x => if (x.toInt % 10 != group) throw new RuntimeException(s"bad grouping")
+        }}
+    }
+
+
+    // this is just to make sure the test is actually useful, and would catch a mistake if it was *not*
+    // a narrow dependency
+    val j2 = rdd.cogroup(reloaded)
+    assert(!j2.getNarrowAncestors.contains(reloaded))
+  }
+
+  test("assumePartitioned -- verify works") {
+    val rdd = sc.parallelize(1 to 100, 10).groupBy(identity)
+    //catch wrong number of partitions immediately
+    val exc1 = intercept[SparkException]{rdd.assumePartitionedBy(new HashPartitioner(5))}
+    assert(exc1.getMessage() == ("Assumed Partitioner org.apache.spark.HashPartitioner@5 expects 5 partitions, but" +
+      " there are 10 partitions.  If you are assuming a partitioner on a HadoopRDD, you might need to disable input" +
+      " splits with a custom input format"))
+
+    //also catch wrong partitioner (w/ right number of partitions) during action
+    val assumedPartitioned = rdd.assumePartitionedBy(new Partitioner {
+      override def numPartitions: Int = 10
+      override def getPartition(key: Any): Int = 3
+    })
+    val exc2 = intercept[SparkException] {assumedPartitioned.collect()}
+    assert(exc2.getMessage().contains(" was not in the assumed partition.  If you are assuming a" +
+      " partitioner on a HadoopRDD, you might need to disable input splits with a custom input format"))
   }
 
   private object StratifiedAuxiliary {
