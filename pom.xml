@@ -1479,31 +1479,6 @@
     </profile>
 
     <profile>
-      <id>java8-tests</id>
-      <build>
-        <plugins>
-          <!-- Needed for publishing test jars as it is needed by java8-tests -->
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-jar-plugin</artifactId>
-            <executions>
-              <execution>
-                <goals>
-                  <goal>test-jar</goal>
-                </goals>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
-
-      <modules>
-        <module>extras/java8-tests</module>
-      </modules>
-
-    </profile>
-
-    <profile>
       <id>doclint-java8-disable</id>
       <activation>
         <jdk>[1.8,)</jdk>
