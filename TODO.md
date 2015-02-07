@@ -10,7 +10,7 @@ TODO
 * `airflow task_state dag_id task_id YYYY-MM-DD`
 
 #### More Operators!
-* Sandbox BashOperator
+* Sandbox the BashOperator
 * S3Sensor
 * BaseDataTransferOperator
 * File2MySqlOperator
@@ -24,7 +24,7 @@ TODO
 * ...
 
 #### Frontend
-* Graph view: color coding by operator + legend
+*
 
 #### Backend
 * Callbacks

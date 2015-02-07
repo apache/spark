@@ -52,7 +52,7 @@ class HiveOperator(BaseOperator):
         if self.script_begin_tag and self.script_begin_tag in self.hql:
             self.hql = "\n".join(self.hql.split(self.script_begin_tag)[1:])
 
-    def execute(self, execution_date):
+    def execute(self, context):
         logging.info('Executing: ' + self.hql)
         self.hook.run_cli(hql=self.hql)
 

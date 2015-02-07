@@ -41,7 +41,7 @@ class Hive2SambaOperator(BaseOperator):
         self.hook = HiveHook(hive_dbid=hive_dbid)
         self.hql = hql.strip().rstrip(';')
 
-    def execute(self, execution_date):
+    def execute(self, context):
         tmpfile = tempfile.NamedTemporaryFile()
         hql = """\
         INSERT OVERWRITE LOCAL DIRECTORY '{tmpfile.name}'

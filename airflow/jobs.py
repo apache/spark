@@ -286,14 +286,15 @@ class BackfillJob(BaseJob):
         """
         Runs a dag for a specified date range.
         """
+        session = settings.Session()
+
         start_date = self.bf_start_date
         end_date = self.bf_end_date
 
         # picklin'
         pickle_id = None
-        if self.executor not in (
+        if self.executor.__class__ not in (
                 executors.LocalExecutor, executors.SequentialExecutor):
-            session = settings.Session()
             pickle = models.DagPickle(self.dag)
             session.add(pickle)
             session.commit()
