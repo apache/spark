@@ -203,16 +203,14 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
 case class LessThan(left: Expression, right: Expression) extends BinaryComparison {
   def symbol = "<"
 
-  override def dataType = {
+  lazy val ordering = {
     if (left.dataType != right.dataType) {
       throw new TreeNodeException(this,  s"Types do not match ${left.dataType} != ${right.dataType}")
     }
-    super.dataType
-  }
-
-  lazy val ordering = dataType match {
-    case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
-    case other => sys.error(s"Type $other does not support ordered operations")
+    left.dataType match {
+      case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
+      case other => sys.error(s"Type $other does not support ordered operations")
+    }
   }
 
   override def eval(input: Row): Any = {
@@ -233,16 +231,14 @@ case class LessThan(left: Expression, right: Expression) extends BinaryCompariso
 case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
   def symbol = "<="
 
-  override def dataType = {
+  lazy val ordering = {
     if (left.dataType != right.dataType) {
       throw new TreeNodeException(this,  s"Types do not match ${left.dataType} != ${right.dataType}")
     }
-    super.dataType
-  }
-
-  lazy val ordering = dataType match {
-    case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
-    case other => sys.error(s"Type $other does not support ordered operations")
+    left.dataType match {
+      case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
+      case other => sys.error(s"Type $other does not support ordered operations")
+    }
   }
 
   override def eval(input: Row): Any = {
@@ -263,16 +259,14 @@ case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryCo
 case class GreaterThan(left: Expression, right: Expression) extends BinaryComparison {
   def symbol = ">"
 
-  override def dataType = {
+  lazy val ordering = {
     if (left.dataType != right.dataType) {
       throw new TreeNodeException(this,  s"Types do not match ${left.dataType} != ${right.dataType}")
     }
-    super.dataType
-  }
-
-  lazy val ordering = dataType match {
-    case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
-    case other => sys.error(s"Type $other does not support ordered operations")
+    left.dataType match {
+      case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
+      case other => sys.error(s"Type $other does not support ordered operations")
+    }
   }
 
   override def eval(input: Row): Any = {
@@ -293,16 +287,14 @@ case class GreaterThan(left: Expression, right: Expression) extends BinaryCompar
 case class GreaterThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
   def symbol = ">="
 
-  override def dataType = {
+  lazy val ordering = {
     if (left.dataType != right.dataType) {
       throw new TreeNodeException(this,  s"Types do not match ${left.dataType} != ${right.dataType}")
     }
-    super.dataType
-  }
-
-  lazy val ordering = dataType match {
-    case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
-    case other => sys.error(s"Type $other does not support ordered operations")
+    left.dataType match {
+      case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
+      case other => sys.error(s"Type $other does not support ordered operations")
+    }
   }
 
   override def eval(input: Row): Any = {
