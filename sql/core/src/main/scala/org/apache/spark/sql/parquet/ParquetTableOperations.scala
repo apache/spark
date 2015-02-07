@@ -143,9 +143,10 @@ case class ParquetTableScan(
       var result = schema
       var wantToRemove = true
       result = result remove {
-        case JObject(x) =>
-          if (x.size == 0)
+        case JObject(x) => {
+          if (x.size == 0) {
             false
+          }
           else {
             wantToRemove = false
             for (field <- x if !wantToRemove) {
@@ -159,6 +160,7 @@ case class ParquetTableScan(
             }
             wantToRemove
           }
+        }
         case _ => false
       }
       result = result removeField {
@@ -170,10 +172,12 @@ case class ParquetTableScan(
 
       var bindAttributes = unbindAttributes.map(ua => {
         var attr = relation.output.find(o => o.name == ua.name).get
-        if (attr.isInstanceOf[AttributeReference])
+        if (attr.isInstanceOf[AttributeReference]) {
           AttributeReference(ua.name, ua.dataType, ua.nullable)(attr.exprId, ua.qualifiers)
-        else
+        }
+        else {
           attr
+        }
       })
       bindAttributes
     } catch {
