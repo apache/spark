@@ -26,7 +26,6 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map, Stack}
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import akka.pattern.ask
@@ -477,18 +476,17 @@ class DAGScheduler(
 
     val jobId = nextJobId.getAndIncrement()
     if (partitions.size == 0) {
-      return new JobWaiter[U](this, jobId, 0, resultHandler)
+      new JobWaiter(this, jobId, 0, resultHandler)
+    } else {
+      val func2 = func.asInstanceOf[(TaskContext, Iterator[Any]) => Any]
+      val waiter = new JobWaiter(this, jobId, partitions.size, resultHandler)
+      eventProcessLoop.post(JobSubmitted(
+        jobId, rdd, func2, partitions.toArray, allowLocal, callSite, waiter, properties))
+      waiter
     }
-
-    assert(partitions.size > 0)
-    val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
-    val waiter = new JobWaiter(this, jobId, partitions.size, resultHandler)
-    eventProcessLoop.post(JobSubmitted(
-      jobId, rdd, func2, partitions.toArray, allowLocal, callSite, waiter, properties))
-    waiter
   }
 
-  def runJob[T, U: ClassTag](
+  def runJob[T, U](
       rdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int],
@@ -521,7 +519,7 @@ class DAGScheduler(
     : PartialResult[R] =
   {
     val listener = new ApproximateActionListener(rdd, func, evaluator, timeout)
-    val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
+    val func2 = func.asInstanceOf[(TaskContext, Iterator[Any]) => Any]
     val partitions = (0 until rdd.partitions.size).toArray
     val jobId = nextJobId.getAndIncrement()
     eventProcessLoop.post(JobSubmitted(
@@ -708,7 +706,7 @@ class DAGScheduler(
 
   private[scheduler] def handleJobSubmitted(jobId: Int,
       finalRDD: RDD[_],
-      func: (TaskContext, Iterator[_]) => _,
+      func: (TaskContext, Iterator[Any]) => Any,
       partitions: Array[Int],
       allowLocal: Boolean,
       callSite: CallSite,
