@@ -18,13 +18,12 @@ list(K, V) or c(K, V).}
 \item{combineFunc}{The associative reduce function to use.}
 }
 \value{
-An list where each element is list(K, V') where V' is the merged
-        value
+A list of elements of type list(K, V') where V' is the merged value for each key
 }
 \description{
 This function operates on RDDs where every element is of the form list(K, V) or c(K, V).
 and merges the values for each key using an associative reduce function, but return the
-results immediately to master as R list.
+results immediately to the driver as an R list.
 }
 \examples{
 \dontrun{
@@ -32,7 +31,7 @@ sc <- sparkR.init()
 pairs <- list(list(1, 2), list(1.1, 3), list(1, 4))
 rdd <- parallelize(sc, pairs)
 reduced <- reduceByKeyLocally(rdd, "+")
-reduced[[1]] # Should be a list(1, 6)
+reduced # list(list(1, 6), list(1.1, 3))
 }
 }
 \seealso{

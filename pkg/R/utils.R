@@ -263,20 +263,20 @@ joinTaggedList <- function(tagged_list, cnull) {
 # Utility function to reduce a key-value list with predicate
 # Used in *ByKey functions
 # param
-#   item key-val pair
+#   pair key-value pair
 #   keys/vals env of key/value with hashes
-#   pred predicate function
-#   update_fn update or merge function for existing pair, similar with `mergeVal` @combineByKey
-#   create_fn create function for new pair, similar with `createCombiner` @combinebykey
-updateOrCreatePair <- function(item, keys, vals, pred, update_fn, create_fn) {
-  # assum hashval bind to `$hash`, key/val with index 1/2
-  hashVal <- item$hash
-  key <- item[[1]]
-  val <- item[[2]]
-  if (pred(item)) {
-    assign(hashVal, do.call(update_fn, list(get(hashVal, envir=vals), val)), envir=vals)
+#   updateOrCreatePred predicate function
+#   updateFn update or merge function for existing pair, similar with `mergeVal` @combineByKey
+#   createFn create function for new pair, similar with `createCombiner` @combinebykey
+updateOrCreatePair <- function(pair, keys, vals, updateOrCreatePred, updateFn, createFn) {
+  # assume hashVal bind to `$hash`, key/val with index 1/2
+  hashVal <- pair$hash
+  key <- pair[[1]]
+  val <- pair[[2]]
+  if (updateOrCreatePred(pair)) {
+    assign(hashVal, do.call(updateFn, list(get(hashVal, envir = vals), val)), envir = vals)
   } else {
-    assign(hashVal, do.call(create_fn, list(val)), envir=vals)
+    assign(hashVal, do.call(createFn, list(val)), envir = vals)
     assign(hashVal, key, envir=keys)
   }
 }

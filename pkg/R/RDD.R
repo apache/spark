@@ -1388,9 +1388,22 @@ setMethod("groupByKey",
                      function(item) {
                        item$hash <- as.character(hashCode(item[[1]]))
                        updateOrCreatePair(item, keys, vals, pred,
-                                          function(vs, v) c(vs, list(v)),
-                                          function(x) list(x))
+                                          function(acc, x) {
+                                            addItemToAccumulator(acc, x)
+                                            acc
+                                          },
+                                          function(x) {
+                                            acc <- initAccumulator()
+                                            addItemToAccumulator(acc, x)
+                                            acc
+                                          })
                      })
+              # extract out data field
+              vals <- eapply(vals,
+                             function(x) {
+                               length(x$data) <- x$counter
+                               x$data
+                             })
               # Every key in the environment contains a list
               # Convert that to list(K, Seq[V])
               convertEnvsToList(keys, vals)
@@ -1438,7 +1451,7 @@ setMethod("reduceByKey",
               lapply(part,
                      function(item) {
                        item$hash <- as.character(hashCode(item[[1]]))
-                       updateOrCreatePair(item, keys, vals, pred, combineFunc, function(x) x)
+                       updateOrCreatePair(item, keys, vals, pred, combineFunc, identity)
                      })
               convertEnvsToList(keys, vals)
             }
@@ -1451,13 +1464,12 @@ setMethod("reduceByKey",
 #'
 #' This function operates on RDDs where every element is of the form list(K, V) or c(K, V).
 #' and merges the values for each key using an associative reduce function, but return the
-#' results immediately to master as R list.
+#' results immediately to the driver as an R list.
 #'
 #' @param rdd The RDD to reduce by key. Should be an RDD where each element is
 #'             list(K, V) or c(K, V).
 #' @param combineFunc The associative reduce function to use.
-#' @return An list where each element is list(K, V') where V' is the merged
-#'         value
+#' @return A list of elements of type list(K, V') where V' is the merged value for each key
 #' @rdname reduceByKeyLocally
 #' @seealso reduceByKey
 #' @export
@@ -1467,7 +1479,7 @@ setMethod("reduceByKey",
 #' pairs <- list(list(1, 2), list(1.1, 3), list(1, 4))
 #' rdd <- parallelize(sc, pairs)
 #' reduced <- reduceByKeyLocally(rdd, "+")
-#' reduced[[1]] # Should be a list(1, 6)
+#' reduced # list(list(1, 6), list(1.1, 3))
 #'}
 setGeneric("reduceByKeyLocally",
            function(rdd, combineFunc) {
@@ -1486,7 +1498,7 @@ setMethod("reduceByKeyLocally",
               lapply(part,
                      function(item) {
                        item$hash <- as.character(hashCode(item[[1]]))
-                       updateOrCreatePair(item, keys, vals, pred, combineFunc, function(x) x)
+                       updateOrCreatePair(item, keys, vals, pred, combineFunc, identity)
                      })
               list(list(keys, vals)) # return hash to avoid re-compute in merge
             }
@@ -1498,7 +1510,7 @@ setMethod("reduceByKeyLocally",
                      function(name) {
                        item <- list(x[[1]][[name]], x[[2]][[name]])
                        item$hash <- name
-                       updateOrCreatePair(item, accum[[1]], accum[[2]], pred, combineFunc, function(x) x)
+                       updateOrCreatePair(item, accum[[1]], accum[[2]], pred, combineFunc, identity)
                      })
               accum
             }
@@ -1573,8 +1585,7 @@ setMethod("combineByKey",
               lapply(part,
                      function(item) {
                        item$hash <- as.character(item[[1]])
-                       updateOrCreatePair(item, keys, combiners, pred, mergeCombiners,
-                                          function(x) x)
+                       updateOrCreatePair(item, keys, combiners, pred, mergeCombiners, identity)
                      })
               convertEnvsToList(keys, combiners)
             }
