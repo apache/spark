@@ -555,29 +555,32 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
     intercept[IllegalArgumentException] {shuffled.lookup(-1)}
   }
 
-  test("assumePartitioned") {
+  test("assumePartitioned", ActiveTag) {
     val nGroups = 20
     val nParts = 10
-    val rdd: RDD[(Int, Int)] = sc.parallelize(1 to 100, nParts).groupBy{x => x % nGroups}.
-      mapPartitions({itr =>
-        itr.flatMap{case(k,vals) =>
-          vals.map{v => k -> v}
-        }
-    },
-    true)
+    val rdd: RDD[(Int, Int)] = sc.parallelize(1 to 100, nParts).map{x => (x % nGroups) -> x}.
+      partitionBy(new HashPartitioner(nParts))
     val tempDir = Utils.createTempDir()
     val f = new File(tempDir, "assumedPartitionedSeqFile")
     val path = f.getAbsolutePath
     rdd.saveAsSequenceFile(path)
 
     // this is basically sc.sequenceFile[Int,Int], but with input splits turned off
-    val reloaded: RDD[(Int,Int)] = sc.hadoopFile(
+    val r1: RDD[(IntWritable,IntWritable)] = sc.hadoopFile(
       path,
       classOf[NoSplitSequenceFileInputFormat[IntWritable,IntWritable]],
       classOf[IntWritable],
       classOf[IntWritable],
       nParts
-    ).map{case(k,v) => k.get() -> v.get()}
+    )
+    println("hadoop rdd partitions:")
+    r1.partitions.zipWithIndex.foreach{case(part, idx) =>
+        val hp = part.asInstanceOf[HadoopPartition]
+        println(s"hp.split: ${hp.inputSplit}; idx: $idx; hp.idx: ${hp.index}")
+    }
+
+    val reloaded = r1.map{case(k,v) => k.get() -> v.get()}
+
 
     val assumedPartitioned = reloaded.assumePartitionedBy(rdd.partitioner.get)
     assumedPartitioned.count()  //need an action to run the verify step
