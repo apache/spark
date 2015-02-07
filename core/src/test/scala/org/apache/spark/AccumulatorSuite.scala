@@ -22,6 +22,8 @@ import scala.collection.mutable
 import org.scalatest.FunSuite
 import org.scalatest.Matchers
 
+import scala.ref.WeakReference
+
 
 class AccumulatorSuite extends FunSuite with Matchers with LocalSparkContext {
 
@@ -135,29 +137,26 @@ class AccumulatorSuite extends FunSuite with Matchers with LocalSparkContext {
       resetSparkContext()
     }
   }
-
+  
   def makeAcc() : Long = {
-    sc = new SparkContext("local", "test")
-    val maxI = 10000000
-    val acc: Accumulable[mutable.Set[Any], Any] = sc.accumulable(new mutable.HashSet[Any]())
-    val groupedInts = (1 to (maxI/20)).map {x => (20 * (x - 1) to 20 * x).toSet}
-    val accId = acc.id
-    println("Accumulator ID = " + accId)
-    // Ensure the accumulator is present
-    assert(Accumulators.originals.get(accId).isDefined)
-    accId
+    
   }
   
   test ("garbage collection") {
     // Create an accumulator and let it go out of scope to test that it's properly garbage collected
-    val maxI = 1000
-    val accId = makeAcc()
-    Thread.sleep(1000)
+    sc = new SparkContext("local", "test")
+    var acc: Accumulable[mutable.Set[Any], Any] = sc.accumulable(new mutable.HashSet[Any]())
+    val accId = acc.id
+    val ref = WeakReference(acc)
+
+    // Ensure the accumulator is present
+    assert(ref.get.isDefined)
+
+    // Remove the explicit reference to it and allow weak reference to get garbage collected
+    acc = null
     System.gc()
-    System.gc()
-    System.gc()
-    
-    assert(Accumulators.originals.get(accId).isEmpty)
+    assert(ref.get.isEmpty)
+    assert(Accumulators.originals.get(accId).isDefined)
   }
 
 }

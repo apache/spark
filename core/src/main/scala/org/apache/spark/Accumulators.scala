@@ -318,7 +318,7 @@ private[spark] object Accumulators {
       // is valid. 
       ret(id) = accum.get match {
         case Some(values) => values.localValue
-        case None => None // TODO Is this the right thing to return here?
+        case None => None
       }
     }
     return ret
