@@ -280,7 +280,8 @@ private[hive] object HadoopTableReader extends HiveInspectors {
       tableDeser: Deserializer): Iterator[Row] = {
 
     val soi = HiveShim.getConvertedOI(
-      rawDeser.getObjectInspector, tableDeser.getObjectInspector).asInstanceOf[StructObjectInspector]
+      rawDeser.getObjectInspector,
+      tableDeser.getObjectInspector).asInstanceOf[StructObjectInspector]
 
     val inputFields = soi.getAllStructFieldRefs
 
@@ -288,8 +289,10 @@ private[hive] object HadoopTableReader extends HiveInspectors {
       (inputFields.get(ordinal), ordinal)
     }.unzip
 
-    // Builds specific unwrappers ahead of time according to object inspector types to avoid pattern
-    // matching and branching costs per row.
+    /**
+     * Builds specific unwrappers ahead of time according to object inspector
+     * types to avoid pattern matching and branching costs per row.
+     */
     val unwrappers: Seq[(Any, MutableRow, Int) => Unit] = fieldRefs.map {
       _.getFieldObjectInspector match {
         case oi: BooleanObjectInspector =>
