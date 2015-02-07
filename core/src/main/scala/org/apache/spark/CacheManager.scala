@@ -47,10 +47,15 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
         val inputMetrics = blockResult.inputMetrics
         val existingMetrics = context.taskMetrics
           .getInputMetricsForReadMethod(inputMetrics.readMethod)
-        existingMetrics.addBytesRead(inputMetrics.bytesRead)
+        existingMetrics.incBytesRead(inputMetrics.bytesRead)
 
-        new InterruptibleIterator(context, blockResult.data.asInstanceOf[Iterator[T]])
-
+        val iter = blockResult.data.asInstanceOf[Iterator[T]]
+        new InterruptibleIterator[T](context, iter) {
+          override def next(): T = {
+            existingMetrics.incRecordsRead(1)
+            delegate.next()
+          }
+        }
       case None =>
         // Acquire a lock for loading this partition
         // If another thread already holds the lock, wait for it to finish return its results

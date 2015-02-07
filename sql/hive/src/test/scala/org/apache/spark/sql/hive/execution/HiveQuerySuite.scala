@@ -59,7 +59,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     Locale.setDefault(originalLocale)
   }
 
-  test("SPARK-4908: concurent hive native commands") {
+  test("SPARK-4908: concurrent hive native commands") {
     (1 to 100).par.map { _ =>
       sql("USE default")
       sql("SHOW TABLES")
@@ -201,6 +201,9 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   createQueryTest("having no references",
     "SELECT key FROM src GROUP BY key HAVING COUNT(*) > 1")
+
+  createQueryTest("no from clause",
+    "SELECT 1, +1, -1")
 
   createQueryTest("boolean = number",
     """
