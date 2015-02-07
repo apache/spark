@@ -481,7 +481,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         |
         |  --executor-memory MEM       Memory per executor (e.g. 1000M, 2G) (Default: 1G).
         |
-        |  --proxy-user                User to impersonate when submitting the application.
+        |  --proxy-user NAME           User to impersonate when submitting the application.
         |
         |  --help, -h                  Show this help message and exit
         |  --verbose, -v               Print additional debug output
