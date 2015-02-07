@@ -163,7 +163,7 @@ class DenseMatrix(
 
   private[mllib] def apply(i: Int): Double = values(i)
 
-  def apply(i: Int, j: Int): Double = values(index(i, j))
+  override def apply(i: Int, j: Int): Double = values(index(i, j))
 
   private[mllib] def index(i: Int, j: Int): Int = {
     if (!isTransposed) i + numRows * j else j + numCols * i
@@ -398,7 +398,7 @@ class SparseMatrix(
      }
   }
 
-  def apply(i: Int, j: Int): Double = {
+  override def apply(i: Int, j: Int): Double = {
     val ind = index(i, j)
     if (ind < 0) 0.0 else values(ind)
   }
