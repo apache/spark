@@ -555,7 +555,7 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
     intercept[IllegalArgumentException] {shuffled.lookup(-1)}
   }
 
-  test("assumePartitioned", ActiveTag) {
+  test("assumePartitioned") {
     val nGroups = 20
     val nParts = 10
     val rdd: RDD[(Int, Int)] = sc.parallelize(1 to 100, nParts).map{x => (x % nGroups) -> x}.
