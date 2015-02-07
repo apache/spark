@@ -94,12 +94,20 @@ class SparkEnv (
 
     // Note that blockTransferService is stopped by BlockManager since it is started by it.
     
-    // If we only stop sc, but the driver process still run as a services then we need to delete 
-    // the tmp dir, if not, it will create too many tmp dirs
-    try {
-      Utils.deleteRecursively(new File(sparkFilesDir))
-    } catch {
-      case e: Exception => logError(s"Exception while deleting Spark temp dir: $sparkFilesDir", e)
+    /**
+     * If we only stop sc, but the driver process still run as a services then we need to delete
+     * the tmp dir, if not, it will create too many tmp dirs.
+     *
+     * We only need to delete the tmp dir create by driver, so we need to check the sparkFilesDir,
+     * because sparkFilesDir is point to the current working dir in executor.
+     */
+    if("." != sparkFilesDir){
+      try {
+        Utils.deleteRecursively(new File(sparkFilesDir))
+      } catch {
+        case e: Exception =>
+          logWarning(s"Exception while deleting Spark temp dir: $sparkFilesDir", e)
+      }
     }
   }
 
