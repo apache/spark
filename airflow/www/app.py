@@ -1149,7 +1149,7 @@ admin.add_view(mv)
 
 
 class UserModelView(LoginMixin, ModelView):
-    pass
+    column_default_sort = 'username'
 mv = UserModelView(models.User, Session, name="Users", category="Admin")
 admin.add_view(mv)
 
