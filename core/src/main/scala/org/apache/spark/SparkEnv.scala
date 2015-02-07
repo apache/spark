@@ -101,7 +101,7 @@ class SparkEnv (
      * We only need to delete the tmp dir create by driver, so we need to check the sparkFilesDir,
      * because sparkFilesDir is point to the current working dir in executor.
      */
-    if("." != sparkFilesDir){
+    if ("." != sparkFilesDir) {
       try {
         Utils.deleteRecursively(new File(sparkFilesDir))
       } catch {
