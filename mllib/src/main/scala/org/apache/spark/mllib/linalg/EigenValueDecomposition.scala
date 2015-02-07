@@ -79,10 +79,11 @@ private[mllib] object EigenValueDecomposition {
     // Mode 1: A*x = lambda*x, A symmetric
     iparam(6) = 1
 
-    require(ncv * n.toLong <= Integer.MAX_VALUE, "Product of 2*k*n must be smaller than " +
-      s"Integer.MAX_VALUE. Found required eigenvalues k = $k and matrix dimension n = $n")
-    require(ncv * (ncv.toLong + 8) <= Integer.MAX_VALUE, "Product of ncv * (ncv + 8) must be smaller than " +
-      s"Integer.MAX_VALUE. The value of ncv is computed by: math.min(2 * k, n). Found ncv = $ncv and k = $k.")
+    require(n * ncv.toLong <= Integer.MAX_VALUE, "Large n and/or k will exceed " +
+      s"max array size. Found required eigenvalues k = $k and matrix dimension n = $n")
+    require(ncv * (ncv.toLong + 8) <= Integer.MAX_VALUE, "Large k will exceed " +
+      s"max array size. Found k=$k.")
+    
     var ido = new intW(0)
     var info = new intW(0)
     var resid = new Array[Double](n)
