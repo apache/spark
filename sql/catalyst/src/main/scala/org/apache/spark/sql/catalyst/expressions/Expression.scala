@@ -96,11 +96,6 @@ abstract class Expression extends TreeNode[Expression] {
       e1: Expression,
       e2: Expression,
       f: ((Numeric[Any], Any, Any) => Any)): Any  = {
-
-    if (e1.dataType != e2.dataType) {
-      throw new TreeNodeException(this,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
-    }
-
     val evalE1 = e1.eval(i)
     if(evalE1 == null) {
       null
