@@ -17,6 +17,8 @@
 
 package org.apache.spark.examples.mllib
 
+import scala.language.reflectiveCalls
+
 import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -270,17 +272,18 @@ object DecisionTreeRunner {
       case Variance => impurity.Variance
     }
 
+    params.checkpointDir.foreach(sc.setCheckpointDir)
+
     val strategy
       = new Strategy(
           algo = params.algo,
           impurity = impurityCalculator,
           maxDepth = params.maxDepth,
           maxBins = params.maxBins,
-          numClassesForClassification = numClasses,
+          numClasses = numClasses,
           minInstancesPerNode = params.minInstancesPerNode,
           minInfoGain = params.minInfoGain,
           useNodeIdCache = params.useNodeIdCache,
-          checkpointDir = params.checkpointDir,
           checkpointInterval = params.checkpointInterval)
     if (params.numTrees == 1) {
       val startTime = System.nanoTime()

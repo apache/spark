@@ -100,7 +100,7 @@ class GradientBoostedTreesSuite extends FunSuite with MLlibTestSparkContext {
         val rdd = sc.parallelize(GradientBoostedTreesSuite.data, 2)
 
         val treeStrategy = new Strategy(algo = Classification, impurity = Variance, maxDepth = 2,
-          numClassesForClassification = 2, categoricalFeaturesInfo = Map.empty,
+          numClasses = 2, categoricalFeaturesInfo = Map.empty,
           subsamplingRate = subsamplingRate)
         val boostingStrategy =
           new BoostingStrategy(treeStrategy, LogLoss, numIterations, learningRate)
@@ -128,6 +128,11 @@ class GradientBoostedTreesSuite extends FunSuite with MLlibTestSparkContext {
     }
   }
 
+  test("SPARK-5496: BoostingStrategy.defaultParams should recognize Classification") {
+    for (algo <- Seq("classification", "Classification", "regression", "Regression")) {
+      BoostingStrategy.defaultParams(algo)
+    }
+  }
 }
 
 object GradientBoostedTreesSuite {

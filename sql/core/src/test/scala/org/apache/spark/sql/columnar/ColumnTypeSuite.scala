@@ -18,15 +18,15 @@
 package org.apache.spark.sql.columnar
 
 import java.nio.ByteBuffer
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 
 import org.scalatest.FunSuite
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
-import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.execution.SparkSqlSerializer
+import org.apache.spark.sql.types._
 
 class ColumnTypeSuite extends FunSuite with Logging {
   val DEFAULT_BUFFER_SIZE = 512
@@ -34,7 +34,7 @@ class ColumnTypeSuite extends FunSuite with Logging {
   test("defaultSize") {
     val checks = Map(
       INT -> 4, SHORT -> 2, LONG -> 8, BYTE -> 1, DOUBLE -> 8, FLOAT -> 4, BOOLEAN -> 1,
-      STRING -> 8, DATE -> 8, TIMESTAMP -> 12, BINARY -> 16, GENERIC -> 16)
+      STRING -> 8, DATE -> 4, TIMESTAMP -> 12, BINARY -> 16, GENERIC -> 16)
 
     checks.foreach { case (columnType, expectedSize) =>
       assertResult(expectedSize, s"Wrong defaultSize for $columnType") {
@@ -64,7 +64,7 @@ class ColumnTypeSuite extends FunSuite with Logging {
     checkActualSize(FLOAT,     Float.MaxValue,    4)
     checkActualSize(BOOLEAN,   true,              1)
     checkActualSize(STRING,    "hello",           4 + "hello".getBytes("utf-8").length)
-    checkActualSize(DATE,      new Date(0L),      8)
+    checkActualSize(DATE,      0,                 4)
     checkActualSize(TIMESTAMP, new Timestamp(0L), 12)
 
     val binary = Array.fill[Byte](4)(0: Byte)

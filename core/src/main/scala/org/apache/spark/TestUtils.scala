@@ -43,11 +43,20 @@ private[spark] object TestUtils {
    * Note: if this is used during class loader tests, class names should be unique
    * in order to avoid interference between tests.
    */
-  def createJarWithClasses(classNames: Seq[String], value: String = ""): URL = {
+  def createJarWithClasses(
+      classNames: Seq[String],
+      toStringValue: String = "",
+      classNamesWithBase: Seq[(String, String)] = Seq(),
+      classpathUrls: Seq[URL] = Seq()): URL = {
     val tempDir = Utils.createTempDir()
-    val files = for (name <- classNames) yield createCompiledClass(name, tempDir, value)
+    val files1 = for (name <- classNames) yield {
+      createCompiledClass(name, tempDir, toStringValue, classpathUrls = classpathUrls) 
+    }
+    val files2 = for ((childName, baseName) <- classNamesWithBase) yield {
+      createCompiledClass(childName, tempDir, toStringValue, baseName, classpathUrls)
+    }
     val jarFile = new File(tempDir, "testJar-%s.jar".format(System.currentTimeMillis()))
-    createJar(files, jarFile)
+    createJar(files1 ++ files2, jarFile)
   }
 
 
@@ -85,15 +94,26 @@ private[spark] object TestUtils {
   }
 
   /** Creates a compiled class with the given name. Class file will be placed in destDir. */
-  def createCompiledClass(className: String, destDir: File, value: String = ""): File = {
+  def createCompiledClass(
+      className: String,
+      destDir: File,
+      toStringValue: String = "",
+      baseClass: String = null,
+      classpathUrls: Seq[URL] = Seq()): File = {
     val compiler = ToolProvider.getSystemJavaCompiler
+    val extendsText = Option(baseClass).map { c => s" extends ${c}" }.getOrElse("")
     val sourceFile = new JavaSourceFromString(className,
-      "public class " + className + " implements java.io.Serializable {" +
-      "  @Override public String toString() { return \"" + value + "\"; }}")
+      "public class " + className + extendsText + " implements java.io.Serializable {" +
+      "  @Override public String toString() { return \"" + toStringValue + "\"; }}")
 
     // Calling this outputs a class file in pwd. It's easier to just rename the file than
     // build a custom FileManager that controls the output location.
-    compiler.getTask(null, null, null, null, null, Seq(sourceFile)).call()
+    val options = if (classpathUrls.nonEmpty) {
+      Seq("-classpath", classpathUrls.map { _.getFile }.mkString(File.pathSeparator))
+    } else {
+      Seq()
+    }
+    compiler.getTask(null, null, null, options, null, Seq(sourceFile)).call()
 
     val fileName = className + ".class"
     val result = new File(fileName)

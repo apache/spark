@@ -17,8 +17,6 @@
 
 package org.apache.spark.mllib.feature
 
-import breeze.linalg.{norm => brzNorm}
-
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 
@@ -47,15 +45,15 @@ class Normalizer(p: Double) extends VectorTransformer {
    * @return normalized vector. If the norm of the input is zero, it will return the input vector.
    */
   override def transform(vector: Vector): Vector = {
-    val norm = brzNorm(vector.toBreeze, p)
+    val norm = Vectors.norm(vector, p)
 
     if (norm != 0.0) {
       // For dense vector, we've to allocate new memory for new output vector.
       // However, for sparse vector, the `index` array will not be changed,
       // so we can re-use it to save memory.
       vector match {
-        case dv: DenseVector =>
-          val values = dv.values.clone()
+        case DenseVector(vs) =>
+          val values = vs.clone()
           val size = values.size
           var i = 0
           while (i < size) {
@@ -63,15 +61,15 @@ class Normalizer(p: Double) extends VectorTransformer {
             i += 1
           }
           Vectors.dense(values)
-        case sv: SparseVector =>
-          val values = sv.values.clone()
+        case SparseVector(size, ids, vs) =>
+          val values = vs.clone()
           val nnz = values.size
           var i = 0
           while (i < nnz) {
             values(i) /= norm
             i += 1
           }
-          Vectors.sparse(sv.size, sv.indices, values)
+          Vectors.sparse(size, ids, values)
         case v => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
       }
     } else {

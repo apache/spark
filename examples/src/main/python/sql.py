@@ -30,18 +30,18 @@ if __name__ == "__main__":
     some_rdd = sc.parallelize([Row(name="John", age=19),
                               Row(name="Smith", age=23),
                               Row(name="Sarah", age=18)])
-    # Infer schema from the first row, create a SchemaRDD and print the schema
-    some_schemardd = sqlContext.inferSchema(some_rdd)
-    some_schemardd.printSchema()
+    # Infer schema from the first row, create a DataFrame and print the schema
+    some_df = sqlContext.inferSchema(some_rdd)
+    some_df.printSchema()
 
     # Another RDD is created from a list of tuples
     another_rdd = sc.parallelize([("John", 19), ("Smith", 23), ("Sarah", 18)])
     # Schema with two fields - person_name and person_age
     schema = StructType([StructField("person_name", StringType(), False),
                         StructField("person_age", IntegerType(), False)])
-    # Create a SchemaRDD by applying the schema to the RDD and print the schema
-    another_schemardd = sqlContext.applySchema(another_rdd, schema)
-    another_schemardd.printSchema()
+    # Create a DataFrame by applying the schema to the RDD and print the schema
+    another_df = sqlContext.applySchema(another_rdd, schema)
+    another_df.printSchema()
     # root
     #  |-- age: integer (nullable = true)
     #  |-- name: string (nullable = true)
@@ -49,7 +49,7 @@ if __name__ == "__main__":
     # A JSON dataset is pointed to by path.
     # The path can be either a single text file or a directory storing text files.
     path = os.path.join(os.environ['SPARK_HOME'], "examples/src/main/resources/people.json")
-    # Create a SchemaRDD from the file(s) pointed to by path
+    # Create a DataFrame from the file(s) pointed to by path
     people = sqlContext.jsonFile(path)
     # root
     #  |-- person_name: string (nullable = false)
@@ -61,7 +61,7 @@ if __name__ == "__main__":
     #  |-- age: IntegerType
     #  |-- name: StringType
 
-    # Register this SchemaRDD as a table.
+    # Register this DataFrame as a table.
     people.registerAsTable("people")
 
     # SQL statements can be run by using the sql methods provided by sqlContext

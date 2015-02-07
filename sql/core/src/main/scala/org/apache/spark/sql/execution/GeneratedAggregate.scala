@@ -18,11 +18,10 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.trees._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 
 case class AggregateEvaluation(
     schema: Seq[Attribute],
