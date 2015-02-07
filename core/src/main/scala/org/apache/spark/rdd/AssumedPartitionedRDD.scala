@@ -20,25 +20,30 @@ import org.apache.spark.{SparkException, TaskContext, Partition, Partitioner}
 
 import scala.reflect.ClassTag
 
-private[spark] class AssumedPartitionedRDD[K: ClassTag, V: ClassTag](parent: RDD[(K,V)], part: Partitioner, val verify: Boolean)
-  extends RDD[(K,V)](parent) {
+private[spark] class AssumedPartitionedRDD[K: ClassTag, V: ClassTag](
+    parent: RDD[(K,V)],
+    part: Partitioner,
+    val verify: Boolean
+  ) extends RDD[(K,V)](parent) {
 
   override val partitioner = Some(part)
 
   override def getPartitions: Array[Partition] = firstParent[(K,V)].partitions
 
   if(verify && getPartitions.size != part.numPartitions) {
-    throw new SparkException(s"Assumed Partitioner $part expects ${part.numPartitions} partitions, but there are " +
-      s"${getPartitions.size} partitions.  If you are assuming a partitioner on a HadoopRDD, you might need to disable" +
-      s" input splits with a custom input format")
+    throw new SparkException(s"Assumed Partitioner $part expects ${part.numPartitions} " +
+      s"partitions, but there are ${getPartitions.size} partitions.  If you are assuming a" +
+      s" partitioner on a HadoopRDD, you might need to disable input splits with a custom input" +
+      s" format")
   }
 
   override def compute(split: Partition, context: TaskContext) = {
     if (verify) {
       firstParent[(K,V)].iterator(split, context).map{ case(k,v) =>
         if (partitioner.get.getPartition(k) != split.index) {
-          throw new SparkException(s"key $k in split ${split.index} was not in the assumed partition.  If you are " +
-            "assuming a partitioner on a HadoopRDD, you might need to disable input splits with a custom input format")
+          throw new SparkException(s"key $k in split ${split.index} was not in the assumed " +
+            s"partition.  If you are assuming a partitioner on a HadoopRDD, you might need to " +
+            s"disable input splits with a custom input format")
         }
         (k,v)
       }
