@@ -26,7 +26,7 @@ class BashOperator(BaseOperator):
         super(BashOperator, self).__init__(*args, **kwargs)
         self.bash_command = bash_command
 
-    def execute(self, execution_date):
+    def execute(self, context):
 
         bash_command = self.bash_command
 

@@ -35,5 +35,5 @@ class EmailOperator(BaseOperator):
         self.subject = subject
         self.html_content = html_content
 
-    def execute(self, execution_date):
+    def execute(self, context):
         send_email(self.to, self.subject, self.html_content)

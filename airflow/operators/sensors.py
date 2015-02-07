@@ -49,7 +49,7 @@ class BaseSensorOperator(BaseOperator):
         '''
         raise Exception('Override me.')
 
-    def execute(self, execution_date):
+    def execute(self, context):
         started_at = datetime.now()
         while not self.poke():
             sleep(self.poke_interval)

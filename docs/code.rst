@@ -14,6 +14,7 @@ BaseOperator documentation for more details.
         HiveOperator, 
         MySqlOperator, 
         BashOperator, 
+        PythonOperator, 
         ExternalTaskSensor, 
         SqlSensor, 
         HivePartitionSensor, 

@@ -34,7 +34,7 @@ class PrestoCheckOperator(BaseOperator):
         self.hook = PrestoHook(presto_conn_id=presto_conn_id)
         self.sql = sql
 
-    def execute(self, execution_date=None):
+    def execute(self, context=None):
         logging.info('Executing SQL check: ' + self.sql)
         records = self.hook.get_first(hql=self.sql)
         logging.info("Record: " + str(records))
@@ -93,7 +93,7 @@ class PrestoValueCheckOperator(BaseOperator):
         self.is_numeric_value_check = isinstance(self.pass_value, float)
         self.has_tolerance = self.tol is not None
 
-    def execute(self, execution_date=None):
+    def execute(self, context=None):
         logging.info('Executing SQL check: ' + self.sql)
         records = self.hook.get_first(hql=self.sql)
         if not records:
@@ -162,7 +162,7 @@ class PrestoIntervalCheckOperator(BaseOperator):
         self.sql1 = sqlt + "'{{ ds }}'"
         self.sql2 = sqlt + "'{{ macros.ds_add(ds, "+str(self.days_back)+") }}'"
 
-    def execute(self, execution_date=None):
+    def execute(self, context=None):
         logging.info('Executing SQL check: ' + self.sql2)
         row2 = self.hook.get_first(hql=self.sql2)
         logging.info('Executing SQL check: ' + self.sql1)

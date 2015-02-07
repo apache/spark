@@ -19,5 +19,5 @@ class DummyOperator(BaseOperator):
     def __init__(self, *args, **kwargs):
         super(DummyOperator, self).__init__(*args, **kwargs)
 
-    def execute(self, execution_date):
+    def execute(self, context):
         pass

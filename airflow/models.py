@@ -586,7 +586,7 @@ class TaskInstance(Base):
                     signal.signal(signal.SIGTERM, signal_handler)
 
                     self.render_templates()
-                    task_copy.execute(self.execution_date)
+                    task_copy.execute(context=self.get_template_context())
             except (Exception, StandardError, KeyboardInterrupt) as e:
                 self.record_failure(e, test_mode)
                 raise e
@@ -631,7 +631,7 @@ class TaskInstance(Base):
         session.commit()
         logging.error(str(error))
 
-    def render_templates(self):
+    def get_template_context(self):
         task = self.task
         from airflow import macros
         tables = None
@@ -642,7 +642,7 @@ class TaskInstance(Base):
         ti_key_str = "{task.dag_id}__{task.task_id}__{ds_nodash}"
         ti_key_str = ti_key_str.format(**locals())
 
-        jinja_context = {
+        return {
             'dag': task.dag,
             'ds': ds,
             'END_DATE': ds,
@@ -658,6 +658,11 @@ class TaskInstance(Base):
             'ti': self,
             'task_instance_key_str': ti_key_str
         }
+
+
+    def render_templates(self):
+        task = self.task
+        jinja_context = self.get_template_context()
         if hasattr(self, 'task') and hasattr(self.task, 'dag'):
             if self.task.dag.user_defined_macros:
                 jinja_context.update(
@@ -844,6 +849,15 @@ class BaseOperator(Base):
             return self.dag.schedule_interval
         else:
             return self._schedule_interval
+
+    def execute(self, context):
+        '''
+        This is the main method to derive when creating an operator.
+        Context is the same dictionary used as when rendering jinja templates.
+
+        Refer to get_template_context for more context.
+        '''
+        raise NotImplemented()
 
     def on_kill(self):
         '''

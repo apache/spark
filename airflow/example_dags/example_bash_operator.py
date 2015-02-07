@@ -7,7 +7,7 @@ args = {
     'start_date': datetime(2015, 1, 1),
 }
 
-dag = DAG(dag_id='example1')
+dag = DAG(dag_id='example_bash_operator')
 
 cmd = 'ls -l'
 run_this_last = DummyOperator(
