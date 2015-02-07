@@ -65,8 +65,7 @@ instead.
 
 To learn more about the benefits and background of system optimised
 natives, you may wish to watch Sam Halliday's ScalaX talk on
-[High Performance Linear Algebra in Scala](https://skillsmatter.com/skillscasts/5849-high-performance-linear-algebra-in-scala)
-([follow along with high-res slides](http://fommil.github.io/scalax14/#/)).
+[High Performance Linear Algebra in Scala](http://fommil.github.io/scalax14/#/)).
 
 Due to licensing issues with runtime proprietary binaries, we do not
 include `netlib-java`'s native proxies by default. To configure
