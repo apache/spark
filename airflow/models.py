@@ -577,8 +577,9 @@ class TaskInstance(Base):
 
                     task_copy = copy.copy(task)
                     self.task = task_copy
-                    # Setting kill signal handler
+
                     def signal_handler(signum, frame):
+                        '''Setting kill signal handler'''
                         logging.error("Killing subprocess")
                         task_copy.on_kill()
                         raise Exception("Task received SIGTERM signal")
@@ -770,6 +771,8 @@ class BaseOperator(Base):
     template_fields = []
     # Defines wich files extensions to look for in the templated fields
     template_ext = []
+    # Defines the color in the UI
+    ui_color = '#fff'
 
     __tablename__ = "task"
 

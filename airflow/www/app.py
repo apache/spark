@@ -858,7 +858,10 @@ class Airflow(BaseView):
         for task in dag.tasks:
             nodes.append({
                 'id': task.task_id,
-                'value': {'label': task.task_id}
+                'value': {
+                    'label': task.task_id,
+                    'style': "fill:{0};".format(task.ui_color),
+                }
             })
 
         def get_upstream(task):
@@ -1081,7 +1084,7 @@ def task_link(v, c, m, p):
 
 def dag_link(v, c, m, p):
     url = url_for(
-        'airflow.tree',
+        'airflow.graph',
         dag_id=m.dag_id)
     return Markup(
         '<a href="{url}">{m.dag_id}</a>'.format(**locals()))

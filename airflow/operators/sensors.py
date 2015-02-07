@@ -27,6 +27,7 @@ class BaseSensorOperator(BaseOperator):
     :param timeout: Time, in seconds before the task times out and fails.
     :type timeout: int
     '''
+    ui_color = '#e6f1f2'
 
     @apply_defaults
     def __init__(
@@ -83,7 +84,7 @@ class SqlSensor(BaseSensorOperator):
         self.conn_id = conn_id
 
         session = settings.Session()
-        db = session.query(DB).filter(DB.conn_id==conn_id).all()
+        db = session.query(DB).filter(DB.conn_id == conn_id).all()
         if not db:
             raise Exception("conn_id doesn't exist in the repository")
         self.hook = db[0].get_hook()
@@ -205,7 +206,7 @@ class HdfsSensor(BaseSensorOperator):
         super(HdfsSensor, self).__init__(*args, **kwargs)
         self.filepath = filepath
         session = settings.Session()
-        db = session.query(DB).filter(DB.conn_id==hdfs_conn_id).first()
+        db = session.query(DB).filter(DB.conn_id == hdfs_conn_id).first()
         if not db:
             raise Exception("conn_id doesn't exist in the repository")
         self.host = db.host

@@ -21,6 +21,7 @@ class MySqlOperator(BaseOperator):
     }
     template_fields = ('sql',)
     template_ext = ('.sql',)
+    ui_color = '#ededed'
 
     @apply_defaults
     def __init__(self, sql, mysql_conn_id, *args, **kwargs):

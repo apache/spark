@@ -6,6 +6,7 @@ from airflow.utils import apply_defaults
 class EmailOperator(BaseOperator):
 
     template_fields = ('subject', 'html_content')
+    ui_color = '#e6faf9'
 
     __mapper_args__ = {
         'polymorphic_identity': 'EmailOperator'
