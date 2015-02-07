@@ -187,7 +187,7 @@ class InsertIntoHiveTableSuite extends QueryTest {
     sql(s"CREATE TABLE table_with_partition(key int,value string) PARTITIONED by (ds string) location '${tmpDir.toURI.toString}' ")
     sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='1') SELECT key,value FROM testData")
 
-    //test schema is the same
+    // test schema the same between partition and table
     sql("ALTER TABLE table_with_partition CHANGE COLUMN key key BIGINT")
     checkAnswer(sql("select key,value from table_with_partition where ds='1' "),
       testData.toSchemaRDD.collect.toSeq
