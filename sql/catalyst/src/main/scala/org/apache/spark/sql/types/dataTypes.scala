@@ -47,8 +47,17 @@ object DataType {
     }
   }
 
+  private def removeId(json: JValue): JValue = {
+    var result: JValue = json
+    result = result removeField {
+      case JField("id", _) => true
+      case _ => false
+    }
+    result
+  }
+
   // NOTE: Map fields must be sorted in alphabetical order to keep consistent with the Python side.
-  private def parseDataType(json: JValue): DataType = json match {
+  private def parseDataType(json: JValue): DataType = removeId(json) match {
     case JString(name) =>
       PrimitiveType.nameToType(name)
 

@@ -143,7 +143,7 @@ case class ParquetTableScan(
       var result = schema
       var wantToRemove = true
       result = result remove {
-        case JObject(x) => {
+        case JObject(x) =>
           if (x.size == 0) {
             false
           }
@@ -160,7 +160,6 @@ case class ParquetTableScan(
             }
             wantToRemove
           }
-        }
         case _ => false
       }
       result = result removeField {
