@@ -47,7 +47,8 @@ private[mllib] object PMMLModelExportFactory {
         case logisticRegression: LogisticRegressionModel => 
           new LogisticRegressionPMMLModelExport(logisticRegression, "logistic regression")
         case _ => 
-          throw new IllegalArgumentException("PMML Export not supported for model: " + model.getClass)
+          throw new IllegalArgumentException("PMML Export not supported for model: " 
+              + model.getClass)
      }
   }
   
