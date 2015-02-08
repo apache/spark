@@ -31,7 +31,8 @@ class GaussianMixtureSuite extends FunSuite with MLlibTestSparkContext {
       Vectors.dense(5.0, 10.0),
       Vectors.dense(4.0, 11.0)
     ))
-    
+
+    val sparseData = data.map(point => Vectors.sparse(2, Array(0, 1), point.toArray))
     // expectations
     val Ew = 1.0
     val Emu = Vectors.dense(5.0, 10.0)
@@ -40,10 +41,15 @@ class GaussianMixtureSuite extends FunSuite with MLlibTestSparkContext {
     val seeds = Array(314589, 29032897, 50181, 494821, 4660)
     seeds.foreach { seed =>
       val gmm = new GaussianMixture().setK(1).setSeed(seed).run(data)
+      val sparseGMM = new GaussianMixture().setK(1).setSeed(seed).run(sparseData)
       assert(gmm.weights(0) ~== Ew absTol 1E-5)
       assert(gmm.gaussians(0).mu ~== Emu absTol 1E-5)
       assert(gmm.gaussians(0).sigma ~== Esigma absTol 1E-5)
+      assert(sparseGMM.weights(0) ~== Ew absTol 1E-5)
+      assert(sparseGMM.gaussians(0).mu ~== Emu absTol 1E-5)
+      assert(sparseGMM.gaussians(0).sigma ~== Esigma absTol 1E-5)
     }
+
   }
   
   test("two clusters") {
@@ -54,7 +60,8 @@ class GaussianMixtureSuite extends FunSuite with MLlibTestSparkContext {
       Vectors.dense( 5.7048), Vectors.dense( 4.6567), Vectors.dense( 5.5026),
       Vectors.dense( 4.5605), Vectors.dense( 5.2043), Vectors.dense( 6.2734)
     ))
-  
+
+    val sparseData = data.map(point => Vectors.sparse(1, Array(0), point.toArray))
     // we set an initial gaussian to induce expected results
     val initialGmm = new GaussianMixtureModel(
       Array(0.5, 0.5),
@@ -72,12 +79,23 @@ class GaussianMixtureSuite extends FunSuite with MLlibTestSparkContext {
       .setK(2)
       .setInitialModel(initialGmm)
       .run(data)
-      
+
+    val sparseGMM = new GaussianMixture()
+      .setK(2)
+      .setInitialModel(initialGmm)
+      .run(data)
+
     assert(gmm.weights(0) ~== Ew(0) absTol 1E-3)
     assert(gmm.weights(1) ~== Ew(1) absTol 1E-3)
     assert(gmm.gaussians(0).mu ~== Emu(0) absTol 1E-3)
     assert(gmm.gaussians(1).mu ~== Emu(1) absTol 1E-3)
     assert(gmm.gaussians(0).sigma ~== Esigma(0) absTol 1E-3)
     assert(gmm.gaussians(1).sigma ~== Esigma(1) absTol 1E-3)
+    assert(sparseGMM.weights(0) ~== Ew(0) absTol 1E-3)
+    assert(sparseGMM.weights(1) ~== Ew(1) absTol 1E-3)
+    assert(sparseGMM.gaussians(0).mu ~== Emu(0) absTol 1E-3)
+    assert(sparseGMM.gaussians(1).mu ~== Emu(1) absTol 1E-3)
+    assert(sparseGMM.gaussians(0).sigma ~== Esigma(0) absTol 1E-3)
+    assert(sparseGMM.gaussians(1).sigma ~== Esigma(1) absTol 1E-3)
   }
 }

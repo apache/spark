@@ -255,6 +255,20 @@ private[spark] object BLAS extends Serializable with Logging {
     }    
   }
 
+  // Workaround for SparseVectors.
+  def syr(alpha: Double, x: SparseVector, A: DenseMatrix) {
+    val mA = A.numRows
+    val nA = A.numCols
+    require(mA == nA, s"A is not a symmetric matrix. A: $mA x $nA")
+    require(mA == x.size, s"The size of x doesn't match the rank of A. A: $mA x $nA, x: ${x.size}")
+
+    val zipIndVal = (x.indices zip x.values)
+    zipIndVal map {
+      case(ind1, val1) => zipIndVal map {
+        case(ind2, val2) => A.values(ind1 * nA + ind2) += alpha * val1 * val2}
+    }
+  }
+
   /**
    * C := alpha * A * B + beta * C
    * @param alpha a scalar to scale the multiplication A * B.
