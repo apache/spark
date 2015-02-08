@@ -138,10 +138,6 @@ class AccumulatorSuite extends FunSuite with Matchers with LocalSparkContext {
     }
   }
   
-  def makeAcc() : Long = {
-    
-  }
-  
   test ("garbage collection") {
     // Create an accumulator and let it go out of scope to test that it's properly garbage collected
     sc = new SparkContext("local", "test")
