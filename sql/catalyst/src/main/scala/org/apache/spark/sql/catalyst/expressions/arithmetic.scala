@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.types._
 
 case class UnaryMinus(child: Expression) extends UnaryExpression {
@@ -47,18 +48,19 @@ case class Sqrt(child: Expression) extends UnaryExpression {
   def nullable = true
   override def toString = s"SQRT($child)"
 
+  lazy val numeric = child.dataType match {
+    case n: NumericType => n.numeric.asInstanceOf[Numeric[Any]]
+    case other => sys.error(s"Type $other does not support non-negative numeric operations")
+  }
+
   override def eval(input: Row): Any = {
     val evalE = child.eval(input)
     if (evalE == null) {
       null
     } else {
-      child.dataType match {
-        case n: NumericType =>
-          val value = n.numeric.toDouble(evalE.asInstanceOf[n.JvmType])
-          if (value < 0) null
-          else math.sqrt(value)
-        case other => sys.error(s"Type $other does not support non-negative numeric operations")
-      }
+      val value = numeric.toDouble(evalE)
+      if (value < 0) null
+      else math.sqrt(value)
     }
   }
 }
@@ -269,6 +271,16 @@ case class MaxOf(left: Expression, right: Expression) extends Expression {
 
   override def dataType = left.dataType
 
+  lazy val ordering = {
+    if (left.dataType != right.dataType) {
+      throw new TreeNodeException(this,  s"Types do not match ${left.dataType} != ${right.dataType}")
+    }
+    left.dataType match {
+      case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
+      case other => sys.error(s"Type $other does not support ordered operations")
+    }
+  }
+
   override def eval(input: Row): Any = {
     val leftEval = left.eval(input)
     val rightEval = right.eval(input)
@@ -277,8 +289,7 @@ case class MaxOf(left: Expression, right: Expression) extends Expression {
     } else if (rightEval == null) {
       leftEval
     } else {
-      val numeric = left.dataType.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
-      if (numeric.compare(leftEval, rightEval) < 0) {
+      if (ordering.compare(leftEval, rightEval) < 0) {
         rightEval
       } else {
         leftEval
