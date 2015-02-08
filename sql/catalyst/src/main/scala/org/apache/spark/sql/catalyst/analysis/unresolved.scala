@@ -177,3 +177,15 @@ case class ResolvedStar(expressions: Seq[NamedExpression]) extends Star {
   override def expand(input: Seq[Attribute], resolver: Resolver): Seq[NamedExpression] = expressions
   override def toString = expressions.mkString("ResolvedStar(", ", ", ")")
 }
+
+case class UnresolvedGetField(child: Expression, fieldName: String) extends UnaryExpression {
+  override def dataType = throw new UnresolvedException(this, "dataType")
+  override def foldable = throw new UnresolvedException(this, "foldable")
+  override def nullable = throw new UnresolvedException(this, "nullable")
+  override lazy val resolved = false
+
+  override def eval(input: Row = null): EvaluatedType =
+    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
+
+  override def toString = s"$child.$fieldName"
+}

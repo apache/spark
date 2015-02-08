@@ -23,7 +23,8 @@ import java.io.File
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{SQLConf, QueryTest}
+import org.apache.spark.sql.execution.PhysicalRDD
 import org.apache.spark.sql.hive.execution.HiveTableScan
 import org.apache.spark.sql.hive.test.TestHive._
 
@@ -79,7 +80,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
        STORED AS
        INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
        OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-      location '${new File(partitionedTableDir, "p=1").getCanonicalPath}'
+      location '${new File(normalTableDir, "normal").getCanonicalPath}'
     """)
 
     (1 to 10).foreach { p =>
@@ -97,7 +98,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
     setConf("spark.sql.hive.convertMetastoreParquet", "false")
   }
 
-  test("conversion is working") {
+  test(s"conversion is working") {
     assert(
       sql("SELECT * FROM normal_parquet").queryExecution.executedPlan.collect {
         case _: HiveTableScan => true
@@ -105,6 +106,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
     assert(
       sql("SELECT * FROM normal_parquet").queryExecution.executedPlan.collect {
         case _: ParquetTableScan => true
+        case _: PhysicalRDD => true
       }.nonEmpty)
   }
 }
@@ -147,6 +149,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
  */
 abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll {
   var partitionedTableDir: File = null
+  var normalTableDir: File = null
   var partitionedTableDirWithKey: File = null
 
   import org.apache.spark.sql.hive.test.TestHive.implicits._
@@ -156,12 +159,21 @@ abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll 
     partitionedTableDir.delete()
     partitionedTableDir.mkdir()
 
+    normalTableDir = File.createTempFile("parquettests", "sparksql")
+    normalTableDir.delete()
+    normalTableDir.mkdir()
+
     (1 to 10).foreach { p =>
       val partDir = new File(partitionedTableDir, s"p=$p")
       sparkContext.makeRDD(1 to 10)
         .map(i => ParquetData(i, s"part-$p"))
         .saveAsParquetFile(partDir.getCanonicalPath)
     }
+
+    sparkContext
+      .makeRDD(1 to 10)
+      .map(i => ParquetData(i, s"part-1"))
+      .saveAsParquetFile(new File(normalTableDir, "normal").getCanonicalPath)
 
     partitionedTableDirWithKey = File.createTempFile("parquettests", "sparksql")
     partitionedTableDirWithKey.delete()
@@ -175,99 +187,107 @@ abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll 
     }
   }
 
-  Seq("partitioned_parquet", "partitioned_parquet_with_key").foreach { table =>
-    test(s"ordering of the partitioning columns $table") {
-      checkAnswer(
-        sql(s"SELECT p, stringField FROM $table WHERE p = 1"),
-        Seq.fill(10)(Row(1, "part-1"))
-      )
+  def run(prefix: String): Unit = {
+    Seq("partitioned_parquet", "partitioned_parquet_with_key").foreach { table =>
+      test(s"$prefix: ordering of the partitioning columns $table") {
+        checkAnswer(
+          sql(s"SELECT p, stringField FROM $table WHERE p = 1"),
+          Seq.fill(10)(Row(1, "part-1"))
+        )
 
-      checkAnswer(
-        sql(s"SELECT stringField, p FROM $table WHERE p = 1"),
-        Seq.fill(10)(Row("part-1", 1))
-      )
+        checkAnswer(
+          sql(s"SELECT stringField, p FROM $table WHERE p = 1"),
+          Seq.fill(10)(Row("part-1", 1))
+        )
+      }
+
+      test(s"$prefix: project the partitioning column $table") {
+        checkAnswer(
+          sql(s"SELECT p, count(*) FROM $table group by p"),
+          Row(1, 10) ::
+            Row(2, 10) ::
+            Row(3, 10) ::
+            Row(4, 10) ::
+            Row(5, 10) ::
+            Row(6, 10) ::
+            Row(7, 10) ::
+            Row(8, 10) ::
+            Row(9, 10) ::
+            Row(10, 10) :: Nil
+        )
+      }
+
+      test(s"$prefix: project partitioning and non-partitioning columns $table") {
+        checkAnswer(
+          sql(s"SELECT stringField, p, count(intField) FROM $table GROUP BY p, stringField"),
+          Row("part-1", 1, 10) ::
+            Row("part-2", 2, 10) ::
+            Row("part-3", 3, 10) ::
+            Row("part-4", 4, 10) ::
+            Row("part-5", 5, 10) ::
+            Row("part-6", 6, 10) ::
+            Row("part-7", 7, 10) ::
+            Row("part-8", 8, 10) ::
+            Row("part-9", 9, 10) ::
+            Row("part-10", 10, 10) :: Nil
+        )
+      }
+
+      test(s"$prefix: simple count $table") {
+        checkAnswer(
+          sql(s"SELECT COUNT(*) FROM $table"),
+          Row(100))
+      }
+
+      test(s"$prefix: pruned count $table") {
+        checkAnswer(
+          sql(s"SELECT COUNT(*) FROM $table WHERE p = 1"),
+          Row(10))
+      }
+
+      test(s"$prefix: non-existent partition $table") {
+        checkAnswer(
+          sql(s"SELECT COUNT(*) FROM $table WHERE p = 1000"),
+          Row(0))
+      }
+
+      test(s"$prefix: multi-partition pruned count $table") {
+        checkAnswer(
+          sql(s"SELECT COUNT(*) FROM $table WHERE p IN (1,2,3)"),
+          Row(30))
+      }
+
+      test(s"$prefix: non-partition predicates $table") {
+        checkAnswer(
+          sql(s"SELECT COUNT(*) FROM $table WHERE intField IN (1,2,3)"),
+          Row(30))
+      }
+
+      test(s"$prefix: sum $table") {
+        checkAnswer(
+          sql(s"SELECT SUM(intField) FROM $table WHERE intField IN (1,2,3) AND p = 1"),
+          Row(1 + 2 + 3))
+      }
+
+      test(s"$prefix: hive udfs $table") {
+        checkAnswer(
+          sql(s"SELECT concat(stringField, stringField) FROM $table"),
+          sql(s"SELECT stringField FROM $table").map {
+            case Row(s: String) => Row(s + s)
+          }.collect().toSeq)
+      }
     }
 
-    test(s"project the partitioning column $table") {
+    test(s"$prefix: $prefix: non-part select(*)") {
       checkAnswer(
-        sql(s"SELECT p, count(*) FROM $table group by p"),
-        Row(1, 10) ::
-          Row(2, 10) ::
-          Row(3, 10) ::
-          Row(4, 10) ::
-          Row(5, 10) ::
-          Row(6, 10) ::
-          Row(7, 10) ::
-          Row(8, 10) ::
-          Row(9, 10) ::
-          Row(10, 10) :: Nil
-      )
-    }
-
-    test(s"project partitioning and non-partitioning columns $table") {
-      checkAnswer(
-        sql(s"SELECT stringField, p, count(intField) FROM $table GROUP BY p, stringField"),
-        Row("part-1", 1, 10) ::
-          Row("part-2", 2, 10) ::
-          Row("part-3", 3, 10) ::
-          Row("part-4", 4, 10) ::
-          Row("part-5", 5, 10) ::
-          Row("part-6", 6, 10) ::
-          Row("part-7", 7, 10) ::
-          Row("part-8", 8, 10) ::
-          Row("part-9", 9, 10) ::
-          Row("part-10", 10, 10) :: Nil
-      )
-    }
-
-    test(s"simple count $table") {
-      checkAnswer(
-        sql(s"SELECT COUNT(*) FROM $table"),
-        Row(100))
-    }
-
-    test(s"pruned count $table") {
-      checkAnswer(
-        sql(s"SELECT COUNT(*) FROM $table WHERE p = 1"),
+        sql("SELECT COUNT(*) FROM normal_parquet"),
         Row(10))
     }
-
-    test(s"non-existant partition $table") {
-      checkAnswer(
-        sql(s"SELECT COUNT(*) FROM $table WHERE p = 1000"),
-        Row(0))
-    }
-
-    test(s"multi-partition pruned count $table") {
-      checkAnswer(
-        sql(s"SELECT COUNT(*) FROM $table WHERE p IN (1,2,3)"),
-        Row(30))
-    }
-
-    test(s"non-partition predicates $table") {
-      checkAnswer(
-        sql(s"SELECT COUNT(*) FROM $table WHERE intField IN (1,2,3)"),
-        Row(30))
-    }
-
-    test(s"sum $table") {
-      checkAnswer(
-        sql(s"SELECT SUM(intField) FROM $table WHERE intField IN (1,2,3) AND p = 1"),
-        Row(1 + 2 + 3))
-    }
-
-    test(s"hive udfs $table") {
-      checkAnswer(
-        sql(s"SELECT concat(stringField, stringField) FROM $table"),
-        sql(s"SELECT stringField FROM $table").map {
-          case Row(s: String) => Row(s + s)
-        }.collect().toSeq)
-    }
   }
 
-  test("non-part select(*)") {
-    checkAnswer(
-      sql("SELECT COUNT(*) FROM normal_parquet"),
-      Row(10))
-  }
+  setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "false")
+  run("Parquet data source enabled")
+
+  setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
+  run("Parquet data source disabled")
 }

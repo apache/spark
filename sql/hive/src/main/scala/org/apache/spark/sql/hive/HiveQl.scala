@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.ExplainCommand
+import org.apache.spark.sql.sources.DescribeCommand
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, AnalyzeTable, HiveScriptIOSchema}
 import org.apache.spark.sql.types._
 
@@ -46,22 +47,6 @@ import scala.collection.JavaConversions._
  * cmd string.
  */
 private[hive] case object NativePlaceholder extends Command
-
-/**
- * Returned for the "DESCRIBE [EXTENDED] [dbName.]tableName" command.
- * @param table The table to be described.
- * @param isExtended True if "DESCRIBE EXTENDED" is used. Otherwise, false.
- *                   It is effective only when the table is a Hive table.
- */
-case class DescribeCommand(
-    table: LogicalPlan,
-    isExtended: Boolean) extends Command {
-  override def output = Seq(
-    // Column names are based on Hive.
-    AttributeReference("col_name", StringType, nullable = false)(),
-    AttributeReference("data_type", StringType, nullable = false)(),
-    AttributeReference("comment", StringType, nullable = false)())
-}
 
 /** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
 private[hive] object HiveQl {
@@ -83,6 +68,7 @@ private[hive] object HiveQl {
     "TOK_SHOWLOCKS",
     "TOK_UNLOCKTABLE",
 
+    "TOK_SHOW_ROLES",
     "TOK_CREATEROLE",
     "TOK_DROPROLE",
     "TOK_GRANT",
@@ -511,15 +497,14 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                 // TODO: Actually, a user may mean tableName.columnName. Need to resolve this issue.
                 val tableIdent = extractTableIdent(nameParts.head)
                 DescribeCommand(
-                  UnresolvedRelation(tableIdent, None), extended.isDefined)
+                  UnresolvedRelation(tableIdent, None), isExtended = extended.isDefined)
               case Token(".", dbName :: tableName :: colName :: Nil) =>
                 // It is describing a column with the format like "describe db.table column".
                 NativePlaceholder
               case tableName =>
                 // It is describing a table with the format like "describe table".
                 DescribeCommand(
-                  UnresolvedRelation(Seq(tableName.getText), None),
-                  extended.isDefined)
+                  UnresolvedRelation(Seq(tableName.getText), None), isExtended = extended.isDefined)
             }
           }
           // All other cases.
@@ -571,9 +556,14 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case Token("TOK_TRUNCATETABLE",
           Token("TOK_TABLE_PARTITION",table)::Nil) =>  NativePlaceholder
 
-    case Token("TOK_QUERY",
-           Token("TOK_FROM", fromClause :: Nil) ::
-           insertClauses) =>
+    case Token("TOK_QUERY", queryArgs)
+        if Seq("TOK_FROM", "TOK_INSERT").contains(queryArgs.head.getText) =>
+
+      val (fromClause: Option[ASTNode], insertClauses) = queryArgs match {
+        case Token("TOK_FROM", args: Seq[ASTNode]) :: insertClauses =>
+          (Some(args.head), insertClauses)
+        case Token("TOK_INSERT", _) :: Nil => (None, queryArgs)
+      }
 
       // Return one query for each insert clause.
       val queries = insertClauses.map { case Token("TOK_INSERT", singleInsert) =>
@@ -614,8 +604,12 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
               "TOK_LATERAL_VIEW"),
             singleInsert)
         }
-
-        val relations = nodeToRelation(fromClause)
+ 
+        val relations = fromClause match {
+          case Some(f) => nodeToRelation(f)
+          case None => NoRelation
+        }
+ 
         val withWhere = whereClause.map { whereNode =>
           val Seq(whereExpr) = whereNode.getChildren.toSeq
           Filter(nodeToExpr(whereExpr), relations)
@@ -1044,7 +1038,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       nodeToExpr(qualifier) match {
         case UnresolvedAttribute(qualifierName) =>
           UnresolvedAttribute(qualifierName + "." + cleanIdentifier(attr))
-        case other => GetField(other, attr)
+        case other => UnresolvedGetField(other, attr)
       }
 
     /* Stars (*) */

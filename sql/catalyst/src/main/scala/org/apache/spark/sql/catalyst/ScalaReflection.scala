@@ -103,10 +103,11 @@ trait ScalaReflection {
   }
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
-  def schemaFor[T: TypeTag]: Schema = schemaFor(typeOf[T])
+  def schemaFor[T: TypeTag]: Schema =
+    ScalaReflectionLock.synchronized { schemaFor(typeOf[T]) }
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
-  def schemaFor(tpe: `Type`): Schema = {
+  def schemaFor(tpe: `Type`): Schema = ScalaReflectionLock.synchronized {
     val className: String = tpe.erasure.typeSymbol.asClass.fullName
     tpe match {
       case t if Utils.classIsLoadable(className) &&

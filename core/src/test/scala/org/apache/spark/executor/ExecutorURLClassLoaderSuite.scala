@@ -26,10 +26,14 @@ import org.apache.spark.util.Utils
 
 class ExecutorURLClassLoaderSuite extends FunSuite {
 
-  val childClassNames = List("FakeClass1", "FakeClass2")
-  val parentClassNames = List("FakeClass1", "FakeClass2", "FakeClass3")
-  val urls = List(TestUtils.createJarWithClasses(childClassNames, "1")).toArray
-  val urls2 = List(TestUtils.createJarWithClasses(parentClassNames, "2")).toArray
+  val urls2 = List(TestUtils.createJarWithClasses(
+      classNames = Seq("FakeClass1", "FakeClass2", "FakeClass3"),
+      toStringValue = "2")).toArray
+  val urls = List(TestUtils.createJarWithClasses(
+      classNames = Seq("FakeClass1"),
+      classNamesWithBase = Seq(("FakeClass2", "FakeClass3")), // FakeClass3 is in parent
+      toStringValue = "1",
+      classpathUrls = urls2)).toArray
 
   test("child first") {
     val parentLoader = new URLClassLoader(urls2, null)
@@ -37,6 +41,8 @@ class ExecutorURLClassLoaderSuite extends FunSuite {
     val fakeClass = classLoader.loadClass("FakeClass2").newInstance()
     val fakeClassVersion = fakeClass.toString
     assert(fakeClassVersion === "1")
+    val fakeClass2 = classLoader.loadClass("FakeClass2").newInstance()
+    assert(fakeClass.getClass === fakeClass2.getClass)
   }
 
   test("parent first") {
@@ -45,6 +51,8 @@ class ExecutorURLClassLoaderSuite extends FunSuite {
     val fakeClass = classLoader.loadClass("FakeClass1").newInstance()
     val fakeClassVersion = fakeClass.toString
     assert(fakeClassVersion === "2")
+    val fakeClass2 = classLoader.loadClass("FakeClass1").newInstance()
+    assert(fakeClass.getClass === fakeClass2.getClass)
   }
 
   test("child first can fall back") {

@@ -38,7 +38,7 @@ class PeriodicGraphCheckpointerSuite extends FunSuite with MLlibTestSparkContext
     var graphsToCheck = Seq.empty[GraphToCheck]
 
     val graph1 = createGraph(sc)
-    val checkpointer = new PeriodicGraphCheckpointer(graph1, None, 10)
+    val checkpointer = new PeriodicGraphCheckpointer(graph1, 10)
     graphsToCheck = graphsToCheck :+ GraphToCheck(graph1, 1)
     checkPersistence(graphsToCheck, 1)
 
@@ -57,9 +57,9 @@ class PeriodicGraphCheckpointerSuite extends FunSuite with MLlibTestSparkContext
     val path = tempDir.toURI.toString
     val checkpointInterval = 2
     var graphsToCheck = Seq.empty[GraphToCheck]
-
+    sc.setCheckpointDir(path)
     val graph1 = createGraph(sc)
-    val checkpointer = new PeriodicGraphCheckpointer(graph1, Some(path), checkpointInterval)
+    val checkpointer = new PeriodicGraphCheckpointer(graph1, checkpointInterval)
     graph1.edges.count()
     graph1.vertices.count()
     graphsToCheck = graphsToCheck :+ GraphToCheck(graph1, 1)

@@ -108,6 +108,8 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
 
   override def addColumn(colName: String, col: Column): DataFrame = err()
 
+  override def renameColumn(existingName: String, newName: String): DataFrame = err()
+
   override def head(n: Int): Array[Row] = err()
 
   override def head(): Row = err()

@@ -34,14 +34,14 @@ install_app() {
   local binary="${_DIR}/$3"
 
   # setup `curl` and `wget` silent options if we're running on Jenkins
-  local curl_opts=""
+  local curl_opts="-L"
   local wget_opts=""
   if [ -n "$AMPLAB_JENKINS" ]; then
-    curl_opts="-s"
-    wget_opts="--quiet"
+    curl_opts="-s ${curl_opts}"
+    wget_opts="--quiet ${wget_opts}"
   else
-    curl_opts="--progress-bar"
-    wget_opts="--progress=bar:force"
+    curl_opts="--progress-bar ${curl_opts}"
+    wget_opts="--progress=bar:force ${wget_opts}"
   fi
 
   if [ -z "$3" -o ! -f "$binary" ]; then
