@@ -15,28 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.master
+package org.apache.spark.deploy.rest
 
-sealed trait MasterMessages extends Serializable
+/**
+ * An exception thrown in the REST application submission protocol.
+ */
+private[spark] class SubmitRestProtocolException(message: String, cause: Throwable = null)
+  extends Exception(message, cause)
 
-/** Contains messages seen only by the Master and its associated entities. */
-private[master] object MasterMessages {
+/**
+ * An exception thrown if a field is missing from a [[SubmitRestProtocolMessage]].
+ */
+private[spark] class SubmitRestMissingFieldException(message: String)
+  extends SubmitRestProtocolException(message)
 
-  // LeaderElectionAgent to Master
-
-  case object ElectedLeader
-
-  case object RevokedLeadership
-
-  // Actor System to Master
-
-  case object CheckForWorkerTimeOut
-
-  case class BeginRecovery(storedApps: Seq[ApplicationInfo], storedWorkers: Seq[WorkerInfo])
-
-  case object CompleteRecovery
-
-  case object BoundPortsRequest
-
-  case class BoundPortsResponse(actorPort: Int, webUIPort: Int, restPort: Option[Int])
-}
+/**
+ * An exception thrown if the REST client cannot reach the REST server.
+ */
+private[spark] class SubmitRestConnectionException(message: String, cause: Throwable)
+  extends SubmitRestProtocolException(message, cause)
