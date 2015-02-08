@@ -566,20 +566,13 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
     rdd.saveAsSequenceFile(path)
 
     // this is basically sc.sequenceFile[Int,Int], but with input splits turned off
-    val r1: RDD[(IntWritable,IntWritable)] = sc.hadoopFile(
+    val reloaded: RDD[(Int,Int)] = sc.hadoopFile(
       path,
       classOf[NoSplitSequenceFileInputFormat[IntWritable,IntWritable]],
       classOf[IntWritable],
       classOf[IntWritable],
       nParts
-    )
-    println("hadoop rdd partitions:")
-    r1.partitions.zipWithIndex.foreach{case(part, idx) =>
-        val hp = part.asInstanceOf[HadoopPartition]
-        println(s"hp.split: ${hp.inputSplit}; idx: $idx; hp.idx: ${hp.index}")
-    }
-
-    val reloaded = r1.map{case(k,v) => k.get() -> v.get()}
+    ).map{case(k,v) => k.get() -> v.get()}
 
 
     val assumedPartitioned = reloaded.assumePartitionedBy(rdd.partitioner.get)
