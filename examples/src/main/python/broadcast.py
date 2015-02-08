@@ -43,15 +43,18 @@ if __name__ == "__main__":
     barr1 = sc.broadcast(range(num))
     for i in range(3):
         start = time.time()
-        # variable barr1 cached on each machine rather than shipping a copy of it with tasks threes times
-        broadcast_reuslt = sc.parallelize(range(10), slices).map(lambda x: len(barr1.value)).collect()
+        # variable barr1 cached on each machine rather than shipping a copy of
+        # it with tasks threes times
+        broadcast_result = sc.parallelize(range(10), slices)
+        broadcast_result.map(lambda x: len(barr1.value)).collect()
         end = time.time()
         print "Using broadcast: Iteration %s cost time %s" % (i, end-start)
     # it will cost time
     for i in range(3):
         start = time.time()
         nobroadcast = range(num)
-        nobroadcast_reuslt = sc.parallelize(range(10), slices).map(lambda x: len(nobroadcast)).collect()
+        nobroadcast_result = sc.parallelize(range(10), slices)
+        nobroadcast_result.map(lambda x: len(barr1.value)).collect()
         end = time.time()
         print "Don't use broadcast: Iteration %s cost time %s" % (i, end-start)
     sc.stop()

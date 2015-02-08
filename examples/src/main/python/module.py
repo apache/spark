@@ -27,7 +27,8 @@ if __name__ == "__main__":
     Usage:module.py
 bin/spark-submit examples/src/main/python/module.py
     use   --py-files  to  replace addPyFile()
-bin/spark-submit examples/src/main/python/module.py --py-files  examples/src/main/python/mylib.zip
+bin/spark-submit examples/src/main/python/module.py --py-files
+    examples/src/main/python/mylib.zip
     """
 
     tmpdir = os.path.split(sys.argv[0])[0]
