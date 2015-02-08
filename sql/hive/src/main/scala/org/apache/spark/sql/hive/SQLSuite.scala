@@ -33,6 +33,15 @@ object SQLSuite {
       case "drop" => drop()
       case "show" => show()
       case "test" => test()
+      case "benchmark" =>
+        hiveContext.cacheTable("lineitem")
+        hiveRun("Qcount")
+        val range = Range(0, 3)
+        range.foreach { _ => hiveRun("Qplus")}
+        range.foreach { _ => hiveRun("Qminus")}
+        range.foreach { _ => hiveRun("Qtimes")}
+        range.foreach { _ => hiveRun("Qdiv")}
+        range.foreach { _ => hiveRun("Qrem")}
       case queryName =>
         hiveRun(s"Q$queryName")
     }
@@ -2082,6 +2091,10 @@ object SQLSuite {
     "Qminus" -> arithmeticTemplate.replace('+', '-'),
     "Qtimes" -> arithmeticTemplate.replace('+', '*'),
     "Qdiv" -> arithmeticTemplate.replace('+', '/'),
-    "Qrem" -> arithmeticTemplate.replace('+', '%')
+    "Qrem" -> arithmeticTemplate.replace('+', '%'),
+    "Qcount" -> """
+                  |SELECT count(*)
+                  |FROM lineitem
+                """.stripMargin
   )
 }
