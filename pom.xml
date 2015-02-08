@@ -154,6 +154,7 @@
     <jline.groupid>org.scala-lang</jline.groupid>
     <jodd.version>3.6.3</jodd.version>
     <codehaus.jackson.version>1.8.8</codehaus.jackson.version>
+    <fasterxml.jackson.version>2.4.4</fasterxml.jackson.version>
     <snappy.version>1.1.1.6</snappy.version>
 
     <!--
@@ -578,6 +579,16 @@
         <version>${codahale.metrics.version}</version>
       </dependency>
       <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-databind</artifactId>
+        <version>${fasterxml.jackson.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.fasterxml.jackson.module</groupId>
+        <artifactId>jackson-module-scala_2.10</artifactId>
+        <version>${fasterxml.jackson.version}</version>
+      </dependency>
+      <dependency>
         <groupId>org.scala-lang</groupId>
         <artifactId>scala-compiler</artifactId>
         <version>${scala.version}</version>
@@ -927,6 +938,16 @@
         <artifactId>jackson-mapper-asl</artifactId>
         <version>${codehaus.jackson.version}</version>
         <scope>${hadoop.deps.scope}</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.codehaus.jackson</groupId>
+        <artifactId>jackson-xc</artifactId>
+        <version>${codehaus.jackson.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.codehaus.jackson</groupId>
+        <artifactId>jackson-jaxrs</artifactId>
+        <version>${codehaus.jackson.version}</version>
       </dependency>
       <dependency>
         <groupId>${hive.group}</groupId>
@@ -1538,6 +1559,7 @@
         <protobuf.version>2.5.0</protobuf.version>
         <hbase.version>0.98.7-hadoop2</hbase.version>
         <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
+        <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
       </properties>
     </profile>
 
@@ -1546,10 +1568,11 @@
       <properties>
         <hadoop.version>2.3.0</hadoop.version>
         <protobuf.version>2.5.0</protobuf.version>
-        <jets3t.version>0.9.0</jets3t.version>
+        <jets3t.version>0.9.2</jets3t.version>
         <hbase.version>0.98.7-hadoop2</hbase.version>
         <commons.math3.version>3.1.1</commons.math3.version>
         <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
+        <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
       </properties>
     </profile>
 
@@ -1558,10 +1581,11 @@
       <properties>
         <hadoop.version>2.4.0</hadoop.version>
         <protobuf.version>2.5.0</protobuf.version>
-        <jets3t.version>0.9.0</jets3t.version>
+        <jets3t.version>0.9.2</jets3t.version>
         <hbase.version>0.98.7-hadoop2</hbase.version>
         <commons.math3.version>3.1.1</commons.math3.version>
         <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
+        <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
       </properties>
     </profile>
 

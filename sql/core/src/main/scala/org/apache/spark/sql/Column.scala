@@ -23,6 +23,7 @@ import scala.language.implicitConversions
 import org.apache.spark.sql.Dsl.lit
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Subquery, Project, LogicalPlan}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedGetField
 import org.apache.spark.sql.types._
 
 
@@ -505,7 +506,7 @@ trait Column extends DataFrame {
   /**
    * An expression that gets a field by name in a [[StructField]].
    */
-  def getField(fieldName: String): Column = exprToColumn(GetField(expr, fieldName))
+  def getField(fieldName: String): Column = exprToColumn(UnresolvedGetField(expr, fieldName))
 
   /**
    * An expression that returns a substring.

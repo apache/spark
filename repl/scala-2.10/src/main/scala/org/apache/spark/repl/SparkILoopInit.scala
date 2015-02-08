@@ -127,7 +127,17 @@ private[repl] trait SparkILoopInit {
            _sc
          }
         """)
+      command("""
+         @transient val sqlContext = {
+           val _sqlContext = org.apache.spark.repl.Main.interp.createSQLContext()
+           println("SQL context available as sqlContext.")
+           _sqlContext
+         }
+        """)
       command("import org.apache.spark.SparkContext._")
+      command("import sqlContext.implicits._")
+      command("import sqlContext.sql")
+      command("import org.apache.spark.sql.Dsl._")
     }
   }
 

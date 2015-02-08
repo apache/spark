@@ -313,6 +313,27 @@ class DataFrameSuite extends QueryTest {
     )
   }
 
+  test("addColumn") {
+    val df = testData.toDataFrame.addColumn("newCol", col("key") + 1)
+    checkAnswer(
+      df,
+      testData.collect().map { case Row(key: Int, value: String) =>
+        Row(key, value, key + 1)
+      }.toSeq)
+    assert(df.schema.map(_.name).toSeq === Seq("key", "value", "newCol"))
+  }
+
+  test("renameColumn") {
+    val df = testData.toDataFrame.addColumn("newCol", col("key") + 1)
+      .renameColumn("value", "valueRenamed")
+    checkAnswer(
+      df,
+      testData.collect().map { case Row(key: Int, value: String) =>
+        Row(key, value, key + 1)
+      }.toSeq)
+    assert(df.schema.map(_.name).toSeq === Seq("key", "valueRenamed", "newCol"))
+  }
+
   test("apply on query results (SPARK-5462)") {
     val df = testData.sqlContext.sql("select key from testData")
     checkAnswer(df("key"), testData.select('key).collect().toSeq)

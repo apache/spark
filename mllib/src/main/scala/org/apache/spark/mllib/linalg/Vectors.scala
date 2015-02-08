@@ -26,6 +26,7 @@ import scala.collection.JavaConverters._
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
 
 import org.apache.spark.SparkException
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.util.NumericParser
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
@@ -110,9 +111,14 @@ sealed trait Vector extends Serializable {
 }
 
 /**
+ * :: DeveloperApi ::
+ *
  * User-defined type for [[Vector]] which allows easy interaction with SQL
  * via [[org.apache.spark.sql.DataFrame]].
+ *
+ * NOTE: This is currently private[spark] but will be made public later once it is stabilized.
  */
+@DeveloperApi
 private[spark] class VectorUDT extends UserDefinedType[Vector] {
 
   override def sqlType: StructType = {
@@ -169,6 +175,13 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
   override def pyUDT: String = "pyspark.mllib.linalg.VectorUDT"
 
   override def userClass: Class[Vector] = classOf[Vector]
+
+  override def equals(o: Any): Boolean = {
+    o match {
+      case v: VectorUDT => true
+      case _ => false
+    }
+  }
 }
 
 /**
