@@ -1383,20 +1383,21 @@ setMethod("groupByKey",
               vals <- new.env()
               keys <- new.env()
               pred <- function(item) exists(item$hash, keys)
+              appendList <- function(acc, x) {
+                addItemToAccumulator(acc, x)
+                acc
+              }
+              makeList <- function(x) {
+                acc <- initAccumulator()
+                addItemToAccumulator(acc, x)
+                acc
+              }
               # Each item in the partition is list of (K, V)
               lapply(part,
                      function(item) {
                        item$hash <- as.character(hashCode(item[[1]]))
                        updateOrCreatePair(item, keys, vals, pred,
-                                          function(acc, x) {
-                                            addItemToAccumulator(acc, x)
-                                            acc
-                                          },
-                                          function(x) {
-                                            acc <- initAccumulator()
-                                            addItemToAccumulator(acc, x)
-                                            acc
-                                          })
+                                          appendList, makeList)
                      })
               # extract out data field
               vals <- eapply(vals,
