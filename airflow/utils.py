@@ -11,6 +11,7 @@ from sqlalchemy import event
 from sqlalchemy.pool import Pool
 
 from airflow.configuration import conf
+from airflow import settings
 
 
 class State(object):
@@ -57,7 +58,45 @@ def pessimistic_connection_handling():
             raise exc.DisconnectionError()
         cursor.close()
 
+def resetdb():
+    '''
+    Clear out the database
+    '''
+    from airflow import models
 
+    logging.info("Dropping tables that exist")
+    models.Base.metadata.drop_all(settings.engine)
+
+    logging.info("Creating all tables")
+    models.Base.metadata.create_all(settings.engine)
+
+    # Creating the local_mysql DB connection
+    session = settings.Session()
+    session.query(models.Connection).delete()
+    session.add(
+        models.Connection(
+            conn_id='local_mysql', conn_type='mysql',
+            host='localhost', login='airflow', password='airflow',
+            schema='airflow'))
+    session.commit()
+    session.add(
+        models.Connection(
+            conn_id='mysql_default', conn_type='mysql',
+            host='localhost', login='airflow', password='airflow',
+            schema='airflow'))
+    session.commit()
+    session.add(
+        models.Connection(
+            conn_id='presto_default', conn_type='presto',
+            host='localhost',
+            schema='hive', port=10001))
+    session.commit()
+    session.add(
+        models.Connection(
+            conn_id='hive_default', conn_type='hive',
+            host='localhost',
+            schema='default', port=10000))
+    session.commit()
 
 def validate_key(k, max_length=250):
     if type(k) is not str:

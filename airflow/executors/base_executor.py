@@ -9,7 +9,7 @@ class BaseExecutor(object):
         self.commands = {}
         self.event_buffer = {}
 
-    def start(self):
+    def start(self):  # pragma: no cover
         """
         Executors may need to get things started. For example LocalExecutor
         starts N workers.
@@ -36,17 +36,16 @@ class BaseExecutor(object):
         self.event_buffer = {}
         return d
 
-    def execute_async(self, key, command):
+    def execute_async(self, key, command):  # pragma: no cover
         """
         This method will execute the command asynchronously.
         """
         raise NotImplementedError()
 
-    def end(self):
+    def end(self):  # pragma: no cover
         """
         This method is called when the caller is done submitting job and is
         wants to wait synchronously for the job submitted previously to be
         all done.
         """
         raise NotImplementedError()
-

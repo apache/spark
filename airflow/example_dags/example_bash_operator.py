@@ -20,11 +20,11 @@ run_this = BashOperator(
     default_args=args)
 dag.add_task(run_this)
 run_this.set_downstream(run_this_last)
-for i in range(9):
+for i in range(5):
     i = str(i)
     task = BashOperator(
         task_id='runme_'+i,
-        bash_command='echo "{{ task_instance_key_str }}" && sleep 5',
+        bash_command='echo "{{ task_instance_key_str }}" && sleep ' + str(i),
         default_args=args)
     task.set_downstream(run_this)
     dag.add_task(task)
