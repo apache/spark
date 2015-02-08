@@ -77,7 +77,7 @@ object LassoModel extends Loader[LassoModel] {
  * its corresponding right hand side label y.
  * See also the documentation for the precise formulation.
  */
-class LassoWithSGD private (
+class LassoWithSGD private[mllib] (
     private var stepSize: Double,
     private var numIterations: Int,
     private var regParam: Double,
@@ -98,7 +98,7 @@ class LassoWithSGD private (
    */
   def this() = this(1.0, 100, 0.01, 1.0)
 
-  override protected def createModel(weights: Vector, intercept: Double) = {
+  override protected[mllib] def createModel(weights: Vector, intercept: Double) = {
     new LassoModel(weights, intercept)
   }
 }

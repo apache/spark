@@ -78,7 +78,7 @@ object RidgeRegressionModel extends Loader[RidgeRegressionModel] {
  * its corresponding right hand side label y.
  * See also the documentation for the precise formulation.
  */
-class RidgeRegressionWithSGD private (
+class RidgeRegressionWithSGD private[mllib] (
     private var stepSize: Double,
     private var numIterations: Int,
     private var regParam: Double,
@@ -100,7 +100,7 @@ class RidgeRegressionWithSGD private (
    */
   def this() = this(1.0, 100, 0.01, 1.0)
 
-  override protected def createModel(weights: Vector, intercept: Double) = {
+  override protected[mllib] def createModel(weights: Vector, intercept: Double) = {
     new RidgeRegressionModel(weights, intercept)
   }
 }

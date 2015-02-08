@@ -123,7 +123,7 @@ object SVMModel extends Loader[SVMModel] {
  * regularization is used, which can be changed via [[SVMWithSGD.optimizer]].
  * NOTE: Labels used in SVM should be {0, 1}.
  */
-class SVMWithSGD private (
+class SVMWithSGD private[mllib] (
     private var stepSize: Double,
     private var numIterations: Int,
     private var regParam: Double,
@@ -145,7 +145,7 @@ class SVMWithSGD private (
    */
   def this() = this(1.0, 100, 0.01, 1.0)
 
-  override protected def createModel(weights: Vector, intercept: Double) = {
+  override protected[mllib] def createModel(weights: Vector, intercept: Double) = {
     new SVMModel(weights, intercept)
   }
 }

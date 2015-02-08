@@ -593,6 +593,12 @@ the model will update. Anytime a text file is placed in `/testing/data/dir` you 
 As you feed more data to the training directory, the predictions 
 will get better!
 
+[`StreamingRidgeRegressionWithSGD`](api/scala/index.html#org.apache.spark.mllib.regression.StreamingRidgeRegressionWithSGD),
+[`StreamingLassoWithSGD`](api/scala/index.html#org.apache.spark.mllib.regression.StreamingLassoWithSGD)
+[`StreamingLogisticRegressionWithSGD`](api/scala/index.html#org.apache.spark.mllib.classification.StreamingLogisticRegressionWithSGD)
+and [`StreamingSVMWithSGD`](api/scala/index.html#org.apache.spark.mllib.classification.StreamingSVMWithSGD)
+can be used in a similar fashion as `StreamingLinearRegressionWithSGD`.
+
 </div>
 
 </div>
