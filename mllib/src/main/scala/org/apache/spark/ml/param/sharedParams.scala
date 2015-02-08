@@ -17,6 +17,12 @@
 
 package org.apache.spark.ml.param
 
+/* NOTE TO DEVELOPERS:
+ * If you mix these parameter traits into your algorithm, please add a setter method as well
+ * so that users may use a builder pattern:
+ *  val myLearner = new MyLearner().setParam1(x).setParam2(y)...
+ */
+
 private[ml] trait HasRegParam extends Params {
   /** param for regularization parameter */
   val regParam: DoubleParam = new DoubleParam(this, "regParam", "regularization parameter")
@@ -42,17 +48,27 @@ private[ml] trait HasLabelCol extends Params {
   def getLabelCol: String = get(labelCol)
 }
 
-private[ml] trait HasScoreCol extends Params {
-  /** param for score column name */
-  val scoreCol: Param[String] = new Param(this, "scoreCol", "score column name", Some("score"))
-  def getScoreCol: String = get(scoreCol)
-}
-
 private[ml] trait HasPredictionCol extends Params {
   /** param for prediction column name */
   val predictionCol: Param[String] =
     new Param(this, "predictionCol", "prediction column name", Some("prediction"))
   def getPredictionCol: String = get(predictionCol)
+}
+
+private[ml] trait HasRawPredictionCol extends Params {
+  /** param for raw prediction column name */
+  val rawPredictionCol: Param[String] =
+    new Param(this, "rawPredictionCol", "raw prediction (a.k.a. confidence) column name",
+      Some("rawPrediction"))
+  def getRawPredictionCol: String = get(rawPredictionCol)
+}
+
+private[ml] trait HasProbabilityCol extends Params {
+  /** param for predicted class conditional probabilities column name */
+  val probabilityCol: Param[String] =
+    new Param(this, "probabilityCol", "column name for predicted class conditional probabilities",
+      Some("probability"))
+  def getProbabilityCol: String = get(probabilityCol)
 }
 
 private[ml] trait HasThreshold extends Params {

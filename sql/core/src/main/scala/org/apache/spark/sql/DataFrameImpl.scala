@@ -27,7 +27,7 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.{SqlParser, ScalaReflection}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedStar, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
@@ -36,7 +36,6 @@ import org.apache.spark.sql.execution.{LogicalRDD, EvaluatePython}
 import org.apache.spark.sql.json.JsonRDD
 import org.apache.spark.sql.sources.{ResolvedDataSource, CreateTableUsingAsLogicalPlan}
 import org.apache.spark.sql.types.{NumericType, StructType}
-import org.apache.spark.util.Utils
 
 
 /**
@@ -54,7 +53,9 @@ private[sql] class DataFrameImpl protected[sql](
   def this(sqlContext: SQLContext, logicalPlan: LogicalPlan) = {
     this(sqlContext, {
       val qe = sqlContext.executePlan(logicalPlan)
-      qe.analyzed  // This should force analysis and throw errors if there are any
+      if (sqlContext.conf.dataFrameEagerAnalysis) {
+        qe.analyzed  // This should force analysis and throw errors if there are any
+      }
       qe
     })
   }
@@ -125,11 +126,11 @@ private[sql] class DataFrameImpl protected[sql](
   }
 
   override def sort(sortCol: String, sortCols: String*): DataFrame = {
-    orderBy(apply(sortCol), sortCols.map(apply) :_*)
+    sort((sortCol +: sortCols).map(apply) :_*)
   }
 
-  override def sort(sortExpr: Column, sortExprs: Column*): DataFrame = {
-    val sortOrder: Seq[SortOrder] = (sortExpr +: sortExprs).map { col =>
+  override def sort(sortExprs: Column*): DataFrame = {
+    val sortOrder: Seq[SortOrder] = sortExprs.map { col =>
       col.expr match {
         case expr: SortOrder =>
           expr
@@ -144,11 +145,11 @@ private[sql] class DataFrameImpl protected[sql](
     sort(sortCol, sortCols :_*)
   }
 
-  override def orderBy(sortExpr: Column, sortExprs: Column*): DataFrame = {
-    sort(sortExpr, sortExprs :_*)
+  override def orderBy(sortExprs: Column*): DataFrame = {
+    sort(sortExprs :_*)
   }
 
-  override def apply(colName: String): Column = colName match {
+  override def col(colName: String): Column = colName match {
     case "*" =>
       Column(ResolvedStar(schema.fieldNames.map(resolve)))
     case _ =>
@@ -180,8 +181,18 @@ private[sql] class DataFrameImpl protected[sql](
     select((col +: cols).map(Column(_)) :_*)
   }
 
+  override def selectExpr(exprs: String*): DataFrame = {
+    select(exprs.map { expr =>
+      Column(new SqlParser().parseExpression(expr))
+    } :_*)
+  }
+
   override def filter(condition: Column): DataFrame = {
     Filter(condition.expr, logicalPlan)
+  }
+
+  override def filter(conditionExpr: String): DataFrame = {
+    filter(Column(new SqlParser().parseExpression(conditionExpr)))
   }
 
   override def where(condition: Column): DataFrame = {
@@ -192,25 +203,13 @@ private[sql] class DataFrameImpl protected[sql](
     filter(condition)
   }
 
-  override def groupBy(cols: Column*): GroupedDataFrame = {
-    new GroupedDataFrame(this, cols.map(_.expr))
+  override def groupBy(cols: Column*): GroupedData = {
+    new GroupedData(this, cols.map(_.expr))
   }
 
-  override def groupBy(col1: String, cols: String*): GroupedDataFrame = {
+  override def groupBy(col1: String, cols: String*): GroupedData = {
     val colNames: Seq[String] = col1 +: cols
-    new GroupedDataFrame(this, colNames.map(colName => resolve(colName)))
-  }
-
-  override def agg(exprs: Map[String, String]): DataFrame = {
-    groupBy().agg(exprs)
-  }
-
-  override def agg(exprs: java.util.Map[String, String]): DataFrame = {
-    agg(exprs.toMap)
-  }
-
-  override def agg(expr: Column, exprs: Column*): DataFrame = {
-    groupBy().agg(expr, exprs :_*)
+    new GroupedData(this, colNames.map(colName => resolve(colName)))
   }
 
   override def limit(n: Int): DataFrame = {
@@ -233,14 +232,18 @@ private[sql] class DataFrameImpl protected[sql](
     Sample(fraction, withReplacement, seed, logicalPlan)
   }
 
-  override def sample(withReplacement: Boolean, fraction: Double): DataFrame = {
-    sample(withReplacement, fraction, Utils.random.nextLong)
-  }
-
   /////////////////////////////////////////////////////////////////////////////
 
   override def addColumn(colName: String, col: Column): DataFrame = {
     select(Column("*"), col.as(colName))
+  }
+
+  override def renameColumn(existingName: String, newName: String): DataFrame = {
+    val colNames = schema.map { field =>
+      val name = field.name
+      if (name == existingName) Column(name).as(newName) else Column(name)
+    }
+    select(colNames :_*)
   }
 
   override def head(n: Int): Array[Row] = limit(n).collect()
@@ -302,7 +305,11 @@ private[sql] class DataFrameImpl protected[sql](
   }
 
   override def saveAsParquetFile(path: String): Unit = {
-    sqlContext.executePlan(WriteToFile(path, logicalPlan)).toRdd
+    if (sqlContext.conf.parquetUseDataSourceApi) {
+      save("org.apache.spark.sql.parquet", "path" -> path)
+    } else {
+      sqlContext.executePlan(WriteToFile(path, logicalPlan)).toRdd
+    }
   }
 
   override def saveAsTable(tableName: String): Unit = {
@@ -346,7 +353,7 @@ private[sql] class DataFrameImpl protected[sql](
 
   override def save(path: String): Unit = {
     val dataSourceName = sqlContext.conf.defaultDataSourceName
-    save(dataSourceName, ("path" -> path))
+    save(dataSourceName, "path" -> path)
   }
 
   override def save(

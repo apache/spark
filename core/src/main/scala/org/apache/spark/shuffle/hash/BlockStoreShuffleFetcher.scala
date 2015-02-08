@@ -86,6 +86,12 @@ private[hash] object BlockStoreShuffleFetcher extends Logging {
       context.taskMetrics.updateShuffleReadMetrics()
     })
 
-    new InterruptibleIterator[T](context, completionIter)
+    new InterruptibleIterator[T](context, completionIter) {
+      val readMetrics = context.taskMetrics.createShuffleReadMetricsForDependency()
+      override def next(): T = {
+        readMetrics.incRecordsRead(1)
+        delegate.next()
+      }
+    }
   }
 }

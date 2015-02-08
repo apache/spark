@@ -88,6 +88,7 @@ trait ParquetTest {
   protected def withParquetFile[T <: Product: ClassTag: TypeTag]
       (data: Seq[T])
       (f: String => Unit): Unit = {
+    import sqlContext.implicits._
     withTempPath { file =>
       sparkContext.parallelize(data).saveAsParquetFile(file.getCanonicalPath)
       f(file.getCanonicalPath)

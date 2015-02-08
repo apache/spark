@@ -285,7 +285,7 @@ class ListTests(PySparkTestCase):
         self.assertTrue(dt_model.predict(features[3]) > 0)
 
         rf_model = RandomForest.trainRegressor(
-            rdd, categoricalFeaturesInfo=categoricalFeaturesInfo, numTrees=100)
+            rdd, categoricalFeaturesInfo=categoricalFeaturesInfo, numTrees=100, seed=1)
         self.assertTrue(rf_model.predict(features[0]) <= 0)
         self.assertTrue(rf_model.predict(features[1]) > 0)
         self.assertTrue(rf_model.predict(features[2]) <= 0)
