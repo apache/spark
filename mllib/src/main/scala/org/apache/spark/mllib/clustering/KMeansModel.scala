@@ -21,11 +21,12 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.pmml.PMMLExportable
 
 /**
  * A clustering model for K-means. Each point belongs to the cluster with the closest center.
  */
-class KMeansModel (val clusterCenters: Array[Vector]) extends Serializable {
+class KMeansModel (val clusterCenters: Array[Vector]) extends Serializable with PMMLExportable {
 
   /** Total number of clusters. */
   def k: Int = clusterCenters.length
