@@ -19,7 +19,11 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
+import org.scalatest.BeforeAndAfter
+
 import com.google.common.io.Files
+
+import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.{QueryTest, _}
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.types._
@@ -29,12 +33,19 @@ import org.apache.spark.sql.hive.test.TestHive._
 
 case class TestData(key: Int, value: String)
 
-class InsertIntoHiveTableSuite extends QueryTest {
+class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter {
   import org.apache.spark.sql.hive.test.TestHive.implicits._
 
   val testData = TestHive.sparkContext.parallelize(
     (1 to 100).map(i => TestData(i, i.toString)))
-  testData.registerTempTable("testData")
+
+  before {
+    // Since every we are doing tests for DDL statements,
+    // it is better to reset before every test.
+    TestHive.reset()
+    // Register the testData, which will be used in every test.
+    testData.registerTempTable("testData")
+  }
 
   test("insertInto() HiveTable") {
     sql("CREATE TABLE createAndInsertTest (key int, value string)")
@@ -70,9 +81,11 @@ class InsertIntoHiveTableSuite extends QueryTest {
   test("Double create fails when allowExisting = false") {
     sql("CREATE TABLE doubleCreateAndInsertTest (key int, value string)")
 
-    intercept[org.apache.hadoop.hive.ql.metadata.HiveException] {
+    val message = intercept[QueryExecutionException] {
       sql("CREATE TABLE doubleCreateAndInsertTest (key int, value string)")
-    }
+    }.getMessage
+
+    println("message!!!!" + message)
   }
 
   test("Double create does not fail when allowExisting = true") {
