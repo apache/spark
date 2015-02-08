@@ -1015,7 +1015,7 @@ def real_main():
         file_mode = os.stat(opts.identity_file).st_mode
         if not (file_mode & S_IRUSR) or not oct(file_mode)[-2:] == '00':
             print >> stderr, "ERROR: The identity file must be accessible only by you."
-            print >> stderr, 'You can fix this with: chmod 400 {f}'.format(f=opts.identity_file)
+            print >> stderr, 'You can fix this with: chmod 400 "{f}"'.format(f=opts.identity_file)
             sys.exit(1)
 
     if opts.ebs_vol_num > 8:
