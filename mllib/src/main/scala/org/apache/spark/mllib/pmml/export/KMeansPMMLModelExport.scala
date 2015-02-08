@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.export.pmml
+package org.apache.spark.mllib.pmml.export
 
 import org.dmg.pmml.Array.Type
 import org.dmg.pmml.Cluster
@@ -35,7 +35,6 @@ import org.dmg.pmml.MiningFunctionType
 import org.dmg.pmml.MiningSchema
 import org.dmg.pmml.OpType
 import org.dmg.pmml.SquaredEuclidean
-
 import org.apache.spark.mllib.clustering.KMeansModel
 
 /**

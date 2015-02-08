@@ -15,14 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.export.pmml
+package org.apache.spark.mllib.pmml.export
 
 import org.dmg.pmml.ClusteringModel
 import org.scalatest.FunSuite
-
 import org.apache.spark.mllib.clustering.KMeansModel
-import org.apache.spark.mllib.export.ModelExportFactory
-import org.apache.spark.mllib.export.ModelExportType
 import org.apache.spark.mllib.linalg.Vectors
 
 class KMeansPMMLModelExportSuite extends FunSuite{
@@ -38,7 +35,7 @@ class KMeansPMMLModelExportSuite extends FunSuite{
     val kmeansModel = new KMeansModel(clusterCenters);
     
     //act by exporting the model to the PMML format
-    val modelExport = ModelExportFactory.createModelExport(kmeansModel, ModelExportType.PMML)
+    val modelExport = PMMLModelExportFactory.createPMMLModelExport(kmeansModel)
     
     //assert that the PMML format is as expected
     assert(modelExport.isInstanceOf[PMMLModelExport])
@@ -51,8 +48,9 @@ class KMeansPMMLModelExportSuite extends FunSuite{
     assert(pmml.getModels().get(0).asInstanceOf[ClusteringModel].getNumberOfClusters() === clusterCenters.size)
     
     //manual checking
-    //ModelExporter.toPMML(kmeansModel,new StreamResult(System.out))
-    //ModelExporter.toPMML(kmeansModel,"/tmp/kmeans.xml")
+    //kmeansModel.toPMML("/tmp/kmeans.xml")
+    //kmeansModel.toPMML(System.out)
+    //System.out.println(kmeansModel.toPMML())
    
    }
   

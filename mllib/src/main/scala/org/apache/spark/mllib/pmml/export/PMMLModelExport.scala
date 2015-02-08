@@ -15,21 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.export.pmml
+package org.apache.spark.mllib.pmml.export
 
 import java.text.SimpleDateFormat
 import java.util.Date
-
 import scala.beans.BeanProperty
-
 import org.dmg.pmml.Application
 import org.dmg.pmml.Header
 import org.dmg.pmml.PMML
 import org.dmg.pmml.Timestamp
 
-import org.apache.spark.mllib.export.ModelExport
-
-private[mllib] trait PMMLModelExport extends ModelExport{
+private[mllib] trait PMMLModelExport {
   
   /**
    * Holder of the exported model in PMML format

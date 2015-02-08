@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.export.pmml
+package org.apache.spark.mllib.pmml.export
 
 import org.dmg.pmml.DataDictionary
 import org.dmg.pmml.DataField
@@ -29,8 +29,8 @@ import org.dmg.pmml.NumericPredictor
 import org.dmg.pmml.OpType
 import org.dmg.pmml.RegressionModel
 import org.dmg.pmml.RegressionTable
-import org.apache.spark.mllib.classification.LogisticRegressionModel
 import org.dmg.pmml.RegressionNormalizationMethodType
+import org.apache.spark.mllib.classification.LogisticRegressionModel
 
 /**
  * PMML Model Export for LogisticRegressionModel class

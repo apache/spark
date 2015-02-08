@@ -15,30 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.export
+package org.apache.spark.mllib.pmml.export
 
 import org.apache.spark.mllib.classification.LogisticRegressionModel
 import org.apache.spark.mllib.classification.SVMModel
 import org.apache.spark.mllib.clustering.KMeansModel
-import org.apache.spark.mllib.export.ModelExportType.ModelExportType
-import org.apache.spark.mllib.export.ModelExportType.PMML
-import org.apache.spark.mllib.export.pmml.GeneralizedLinearPMMLModelExport
-import org.apache.spark.mllib.export.pmml.KMeansPMMLModelExport
-import org.apache.spark.mllib.export.pmml.LogisticRegressionPMMLModelExport
 import org.apache.spark.mllib.regression.LassoModel
 import org.apache.spark.mllib.regression.LinearRegressionModel
 import org.apache.spark.mllib.regression.RidgeRegressionModel
 
-private[mllib] object ModelExportFactory {
+private[mllib] object PMMLModelExportFactory {
   
   /**
-   * Factory object to help creating the necessary ModelExport implementation 
-   * taking as input the ModelExportType (for example PMML) 
-   * and the machine learning model (for example KMeansModel).
+   * Factory object to help creating the necessary PMMLModelExport implementation 
+   * taking as input the machine learning model (for example KMeansModel).
    */
-  def createModelExport(model: Any, exportType: ModelExportType): ModelExport = {
-    return exportType match{
-      case PMML => model match{
+  def createPMMLModelExport(model: Any): PMMLModelExport = {
+    return model match{
         case kmeans: KMeansModel => 
           new KMeansPMMLModelExport(kmeans)
         case linearRegression: LinearRegressionModel => 
@@ -54,10 +47,8 @@ private[mllib] object ModelExportFactory {
         case logisticRegression: LogisticRegressionModel => 
           new LogisticRegressionPMMLModelExport(logisticRegression, "logistic regression")
         case _ => 
-          throw new IllegalArgumentException("Export not supported for model: " + model.getClass)
-      }
-      case _ => throw new IllegalArgumentException("Export type not supported:" + exportType)
-      }
+          throw new IllegalArgumentException("PMML Export not supported for model: " + model.getClass)
+     }
   }
   
 }

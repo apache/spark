@@ -15,10 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.export
+package org.apache.spark.mllib.pmml.export
 
 import org.scalatest.FunSuite
-
 import org.apache.spark.mllib.classification.LogisticRegressionModel
 import org.apache.spark.mllib.classification.SVMModel
 import org.apache.spark.mllib.clustering.KMeansModel
@@ -27,13 +26,10 @@ import org.apache.spark.mllib.regression.LassoModel
 import org.apache.spark.mllib.regression.LinearRegressionModel
 import org.apache.spark.mllib.regression.RidgeRegressionModel
 import org.apache.spark.mllib.util.LinearDataGenerator
-import org.apache.spark.mllib.export.pmml.GeneralizedLinearPMMLModelExport
-import org.apache.spark.mllib.export.pmml.KMeansPMMLModelExport
-import org.apache.spark.mllib.export.pmml.LogisticRegressionPMMLModelExport
 
-class ModelExportFactorySuite extends FunSuite{
+class PMMLModelExportFactorySuite extends FunSuite{
 
-   test("ModelExportFactory create KMeansPMMLModelExport when passing a KMeansModel") {
+   test("PMMLModelExportFactory create KMeansPMMLModelExport when passing a KMeansModel") {
     
     //arrange
     val clusterCenters = Array(
@@ -44,14 +40,14 @@ class ModelExportFactorySuite extends FunSuite{
     val kmeansModel = new KMeansModel(clusterCenters);
     
     //act
-    val modelExport = ModelExportFactory.createModelExport(kmeansModel, ModelExportType.PMML)
+    val modelExport = PMMLModelExportFactory.createPMMLModelExport(kmeansModel)
          
     //assert
     assert(modelExport.isInstanceOf[KMeansPMMLModelExport])
    
    }
    
-   test("ModelExportFactory create GeneralizedLinearPMMLModelExport when passing a "
+   test("PMMLModelExportFactory create GeneralizedLinearPMMLModelExport when passing a "
        +"LinearRegressionModel, RidgeRegressionModel, LassoModel or SVMModel") {
     
     //arrange
@@ -63,28 +59,28 @@ class ModelExportFactorySuite extends FunSuite{
     val svmModel = new SVMModel(linearInput(0).features, linearInput(0).label)
     
     //act
-    val linearModelExport = ModelExportFactory.createModelExport(linearRegressionModel, ModelExportType.PMML)         
+    val linearModelExport = PMMLModelExportFactory.createPMMLModelExport(linearRegressionModel)         
     //assert
     assert(linearModelExport.isInstanceOf[GeneralizedLinearPMMLModelExport])
 
     //act
-    val ridgeModelExport = ModelExportFactory.createModelExport(ridgeRegressionModel, ModelExportType.PMML)         
+    val ridgeModelExport = PMMLModelExportFactory.createPMMLModelExport(ridgeRegressionModel)         
     //assert
     assert(ridgeModelExport.isInstanceOf[GeneralizedLinearPMMLModelExport])
     
     //act
-    val lassoModelExport = ModelExportFactory.createModelExport(lassoModel, ModelExportType.PMML)         
+    val lassoModelExport = PMMLModelExportFactory.createPMMLModelExport(lassoModel)         
     //assert
     assert(lassoModelExport.isInstanceOf[GeneralizedLinearPMMLModelExport])
     
     //act
-    val svmModelExport = ModelExportFactory.createModelExport(svmModel, ModelExportType.PMML)         
+    val svmModelExport = PMMLModelExportFactory.createPMMLModelExport(svmModel)         
     //assert
     assert(svmModelExport.isInstanceOf[GeneralizedLinearPMMLModelExport])
     
    }
    
-   test("ModelExportFactory create LogisticRegressionPMMLModelExport when passing a LogisticRegressionModel") {
+   test("PMMLModelExportFactory create LogisticRegressionPMMLModelExport when passing a LogisticRegressionModel") {
     
     //arrange
     val linearInput = LinearDataGenerator.generateLinearInput(
@@ -92,13 +88,13 @@ class ModelExportFactorySuite extends FunSuite{
     val logisticRegressionModel = new LogisticRegressionModel(linearInput(0).features, linearInput(0).label);
 
     //act
-    val logisticRegressionModelExport = ModelExportFactory.createModelExport(logisticRegressionModel, ModelExportType.PMML)         
+    val logisticRegressionModelExport = PMMLModelExportFactory.createPMMLModelExport(logisticRegressionModel)         
     //assert
     assert(logisticRegressionModelExport.isInstanceOf[LogisticRegressionPMMLModelExport])
    
    }
    
-   test("ModelExportFactory throw IllegalArgumentException when passing an unsupported model") {
+   test("PMMLModelExportFactory throw IllegalArgumentException when passing an unsupported model") {
     
     //arrange
     val invalidModel = new Object;
@@ -106,7 +102,7 @@ class ModelExportFactorySuite extends FunSuite{
     //assert
     intercept[IllegalArgumentException] {
         //act
-    	ModelExportFactory.createModelExport(invalidModel, ModelExportType.PMML)
+    	PMMLModelExportFactory.createPMMLModelExport(invalidModel)
     }
    
    }

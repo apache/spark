@@ -15,14 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.export.pmml
+package org.apache.spark.mllib.pmml.export
 
 import org.dmg.pmml.RegressionModel
 import org.scalatest.FunSuite
-
 import org.apache.spark.mllib.classification.LogisticRegressionModel
-import org.apache.spark.mllib.export.ModelExportFactory
-import org.apache.spark.mllib.export.ModelExportType
 import org.apache.spark.mllib.util.LinearDataGenerator
 
 class LogisticRegressionPMMLModelExportSuite extends FunSuite{
@@ -35,7 +32,7 @@ class LogisticRegressionPMMLModelExportSuite extends FunSuite{
     val logisticRegressionModel = new LogisticRegressionModel(linearInput(0).features, linearInput(0).label);
     
     //act by exporting the model to the PMML format
-    val logisticModelExport = ModelExportFactory.createModelExport(logisticRegressionModel, ModelExportType.PMML)         
+    val logisticModelExport = PMMLModelExportFactory.createPMMLModelExport(logisticRegressionModel)         
     //assert that the PMML format is as expected
     assert(logisticModelExport.isInstanceOf[PMMLModelExport])
     var pmml = logisticModelExport.asInstanceOf[PMMLModelExport].getPmml()
@@ -55,7 +52,7 @@ class LogisticRegressionPMMLModelExportSuite extends FunSuite{
      .getRegressionTables().get(1).getNumericPredictors().size() === 0)
    
     //manual checking
-    //ModelExporter.toPMML(logisticRegressionModel,"/tmp/logisticregression.xml")
+    //logisticRegressionModel.toPMML("/tmp/logisticregression.xml")
     
    }
   
