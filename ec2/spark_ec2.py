@@ -1052,9 +1052,9 @@ def real_main():
         # Since we try instance types even if we can't resolve them, we check if they resolve first
         # and, if they do, see if they resolve to the same virtualization type.
         if opts.instance_type in EC2_INSTANCE_TYPES and \
-        opts.master_instance_type in EC2_INSTANCE_TYPES:
+           opts.master_instance_type in EC2_INSTANCE_TYPES:
             if EC2_INSTANCE_TYPES[opts.instance_type] != \
-            EC2_INSTANCE_TYPES[opts.master_instance_type]:
+               EC2_INSTANCE_TYPES[opts.master_instance_type]:
                 print >> stderr, \
                     "Error: spark-ec2 currently does not support having a master and slaves with " + \
                     "different AMI virtualization types."
