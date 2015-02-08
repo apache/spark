@@ -594,7 +594,8 @@ def launch_cluster(conn, opts, cluster_name):
 
 
 def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
-    print "Searching for existing cluster " + cluster_name + "..."
+    print "Searching for existing cluster " + cluster_name + " in region " \
+        + opts.region + "..."
     reservations = conn.get_all_reservations()
     master_nodes = []
     slave_nodes = []
@@ -607,14 +608,17 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
             elif (cluster_name + "-slaves") in group_names:
                 slave_nodes.append(inst)
     if any((master_nodes, slave_nodes)):
-        print "Found %d master(s), %d slaves" % (len(master_nodes), len(slave_nodes))
+        print "Found %d master(s), %d slaves" % (len(master_nodes), len(slave_nodes)) \
+            + " in region " + opts.region
     if master_nodes != [] or not die_on_error:
         return (master_nodes, slave_nodes)
     else:
         if master_nodes == [] and slave_nodes != []:
-            print >> sys.stderr, "ERROR: Could not find master in group " + cluster_name + "-master"
+            print >> sys.stderr, "ERROR: Could not find master in group " + cluster_name \
+                + "-master" + " in region " + opts.region
         else:
-            print >> sys.stderr, "ERROR: Could not find any existing cluster"
+            print >> sys.stderr, "ERROR: Could not find any existing cluster" \
+                + " in region " + opts.region
         sys.exit(1)
 
 
