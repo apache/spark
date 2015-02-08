@@ -29,7 +29,8 @@ import org.apache.spark.executor.ShuffleWriteMetrics
  * appending data to an existing block, and can guarantee atomicity in the case of faults
  * as it allows the caller to revert partial writes.
  *
- * This interface does not support concurrent writes.
+ * This interface does not support concurrent writes. Also, once the writer has
+ * been opened, it cannot be reopened again.
  */
 private[spark] abstract class BlockObjectWriter(val blockId: BlockId) {
 
@@ -95,6 +96,7 @@ private[spark] class DiskBlockObjectWriter(
   private var ts: TimeTrackingOutputStream = null
   private var objOut: SerializationStream = null
   private var initialized = false
+  private var hasBeenClosed = false
 
   /**
    * Cursors used to represent positions in the file.
@@ -115,11 +117,16 @@ private[spark] class DiskBlockObjectWriter(
   private var finalPosition: Long = -1
   private var reportedPosition = initialPosition
 
-  /** Calling channel.position() to update the write metrics can be a little bit expensive, so we
-    * only call it every N writes */
-  private var writesSinceMetricsUpdate = 0
+  /**
+   * Keep track of number of records written and also use this to periodically
+   * output bytes written since the latter is expensive to do for each record.
+   */
+  private var numRecordsWritten = 0
 
   override def open(): BlockObjectWriter = {
+    if (hasBeenClosed) {
+      throw new IllegalStateException("Writer already closed. Cannot be reopened.")
+    }
     fos = new FileOutputStream(file, true)
     ts = new TimeTrackingOutputStream(fos)
     channel = fos.getChannel()
@@ -145,6 +152,7 @@ private[spark] class DiskBlockObjectWriter(
       ts = null
       objOut = null
       initialized = false
+      hasBeenClosed = true
     }
   }
 
@@ -160,14 +168,15 @@ private[spark] class DiskBlockObjectWriter(
     }
     finalPosition = file.length()
     // In certain compression codecs, more bytes are written after close() is called
-    writeMetrics.shuffleBytesWritten += (finalPosition - reportedPosition)
+    writeMetrics.incShuffleBytesWritten(finalPosition - reportedPosition)
   }
 
   // Discard current writes. We do this by flushing the outstanding writes and then
   // truncating the file to its initial position.
   override def revertPartialWritesAndClose() {
     try {
-      writeMetrics.shuffleBytesWritten -= (reportedPosition - initialPosition)
+      writeMetrics.decShuffleBytesWritten(reportedPosition - initialPosition)
+      writeMetrics.decShuffleRecordsWritten(numRecordsWritten)
 
       if (initialized) {
         objOut.flush()
@@ -193,12 +202,11 @@ private[spark] class DiskBlockObjectWriter(
     }
 
     objOut.writeObject(value)
+    numRecordsWritten += 1
+    writeMetrics.incShuffleRecordsWritten(1)
 
-    if (writesSinceMetricsUpdate == 32) {
-      writesSinceMetricsUpdate = 0
+    if (numRecordsWritten % 32 == 0) {
       updateBytesWritten()
-    } else {
-      writesSinceMetricsUpdate += 1
     }
   }
 
@@ -212,14 +220,14 @@ private[spark] class DiskBlockObjectWriter(
    */
   private def updateBytesWritten() {
     val pos = channel.position()
-    writeMetrics.shuffleBytesWritten += (pos - reportedPosition)
+    writeMetrics.incShuffleBytesWritten(pos - reportedPosition)
     reportedPosition = pos
   }
 
   private def callWithTiming(f: => Unit) = {
     val start = System.nanoTime()
     f
-    writeMetrics.shuffleWriteTime += (System.nanoTime() - start)
+    writeMetrics.incShuffleWriteTime(System.nanoTime() - start)
   }
 
   // For testing

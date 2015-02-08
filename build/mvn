@@ -1,0 +1,149 @@
+#!/usr/bin/env bash
+
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+# Determine the current working directory
+_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# Preserve the calling directory
+_CALLING_DIR="$(pwd)"
+
+# Installs any application tarball given a URL, the expected tarball name,
+# and, optionally, a checkable binary path to determine if the binary has
+# already been installed
+## Arg1 - URL
+## Arg2 - Tarball Name
+## Arg3 - Checkable Binary
+install_app() {
+  local remote_tarball="$1/$2"
+  local local_tarball="${_DIR}/$2"
+  local binary="${_DIR}/$3"
+
+  # setup `curl` and `wget` silent options if we're running on Jenkins
+  local curl_opts="-L"
+  local wget_opts=""
+  if [ -n "$AMPLAB_JENKINS" ]; then
+    curl_opts="-s ${curl_opts}"
+    wget_opts="--quiet ${wget_opts}"
+  else
+    curl_opts="--progress-bar ${curl_opts}"
+    wget_opts="--progress=bar:force ${wget_opts}"
+  fi
+
+  if [ -z "$3" -o ! -f "$binary" ]; then
+    # check if we already have the tarball
+    # check if we have curl installed
+    # download application
+    [ ! -f "${local_tarball}" ] && [ $(command -v curl) ] && \
+      echo "exec: curl ${curl_opts} ${remote_tarball}" && \
+      curl ${curl_opts} "${remote_tarball}" > "${local_tarball}"
+    # if the file still doesn't exist, lets try `wget` and cross our fingers
+    [ ! -f "${local_tarball}" ] && [ $(command -v wget) ] && \
+      echo "exec: wget ${wget_opts} ${remote_tarball}" && \
+      wget ${wget_opts} -O "${local_tarball}" "${remote_tarball}"
+    # if both were unsuccessful, exit
+    [ ! -f "${local_tarball}" ] && \
+      echo -n "ERROR: Cannot download $2 with cURL or wget; " && \
+      echo "please install manually and try again." && \
+      exit 2
+    cd "${_DIR}" && tar -xzf "$2"
+    rm -rf "$local_tarball"
+  fi
+}
+
+# Install maven under the build/ folder
+install_mvn() {
+  install_app \
+    "http://archive.apache.org/dist/maven/maven-3/3.2.5/binaries" \
+    "apache-maven-3.2.5-bin.tar.gz" \
+    "apache-maven-3.2.5/bin/mvn"
+  MVN_BIN="${_DIR}/apache-maven-3.2.5/bin/mvn"
+}
+
+# Install zinc under the build/ folder
+install_zinc() {
+  local zinc_path="zinc-0.3.5.3/bin/zinc"
+  [ ! -f "${zinc_path}" ] && ZINC_INSTALL_FLAG=1
+  install_app \
+    "http://downloads.typesafe.com/zinc/0.3.5.3" \
+    "zinc-0.3.5.3.tgz" \
+    "${zinc_path}"
+  ZINC_BIN="${_DIR}/${zinc_path}"
+}
+
+# Determine the Scala version from the root pom.xml file, set the Scala URL,
+# and, with that, download the specific version of Scala necessary under
+# the build/ folder
+install_scala() {
+  # determine the Scala version used in Spark
+  local scala_version=`grep "scala.version" "${_DIR}/../pom.xml" | \
+                       head -1 | cut -f2 -d'>' | cut -f1 -d'<'`
+  local scala_bin="${_DIR}/scala-${scala_version}/bin/scala"
+
+  install_app \
+    "http://downloads.typesafe.com/scala/${scala_version}" \
+    "scala-${scala_version}.tgz" \
+    "scala-${scala_version}/bin/scala"
+
+  SCALA_COMPILER="$(cd "$(dirname ${scala_bin})/../lib" && pwd)/scala-compiler.jar"
+  SCALA_LIBRARY="$(cd "$(dirname ${scala_bin})/../lib" && pwd)/scala-library.jar"
+}
+
+# Determines if a given application is already installed. If not, will attempt
+# to install
+## Arg1 - application name
+## Arg2 - Alternate path to local install under build/ dir
+check_and_install_app() {
+  # create the local environment variable in uppercase
+  local app_bin="`echo $1 | awk '{print toupper(\$0)}'`_BIN"
+  # some black magic to set the generated app variable (i.e. MVN_BIN) into the
+  # environment
+  eval "${app_bin}=`which $1 2>/dev/null`"
+
+  if [ -z "`which $1 2>/dev/null`" ]; then
+    install_$1
+  fi
+}
+
+# Setup healthy defaults for the Zinc port if none were provided from
+# the environment
+ZINC_PORT=${ZINC_PORT:-"3030"}
+
+# Check and install all applications necessary to build Spark
+check_and_install_app "mvn"
+
+# Install the proper version of Scala and Zinc for the build
+install_zinc
+install_scala
+
+# Reset the current working directory
+cd "${_CALLING_DIR}"
+
+# Now that zinc is ensured to be installed, check its status and, if its
+# not running or just installed, start it
+if [ -n "${ZINC_INSTALL_FLAG}" -o -z "`${ZINC_BIN} -status`" ]; then
+  ${ZINC_BIN} -shutdown
+  ${ZINC_BIN} -start -port ${ZINC_PORT} \
+    -scala-compiler "${SCALA_COMPILER}" \
+    -scala-library "${SCALA_LIBRARY}" &>/dev/null
+fi
+
+# Set any `mvn` options if not already present
+export MAVEN_OPTS=${MAVEN_OPTS:-"-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"}
+
+# Last, call the `mvn` command as usual
+${MVN_BIN} "$@"

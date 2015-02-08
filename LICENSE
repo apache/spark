@@ -646,7 +646,8 @@ THE SOFTWARE.
 
 ========================================================================
 For Scala Interpreter classes (all .scala files in repl/src/main/scala
-except for Main.Scala, SparkHelper.scala and ExecutorClassLoader.scala):
+except for Main.Scala, SparkHelper.scala and ExecutorClassLoader.scala),
+and for SerializableMapWrapper in JavaUtils.scala:
 ========================================================================
 
 Copyright (c) 2002-2013 EPFL

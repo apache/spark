@@ -1,6 +1,7 @@
 ---
 layout: global
 title: Monitoring and Instrumentation
+description: Monitoring, metrics, and instrumentation guide for Spark SPARK_VERSION_SHORT
 ---
 
 There are several ways to monitor Spark applications: web UIs, metrics, and external instrumentation.

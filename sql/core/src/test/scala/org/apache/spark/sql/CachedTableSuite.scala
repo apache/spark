@@ -17,8 +17,15 @@
 
 package org.apache.spark.sql
 
+import scala.concurrent.duration._
+import scala.language.implicitConversions
+import scala.language.postfixOps
+
+import org.scalatest.concurrent.Eventually._
+
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.columnar._
+import org.apache.spark.sql.Dsl._
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.storage.{StorageLevel, RDDBlockId}
 
@@ -26,6 +33,8 @@ case class BigData(s: String)
 
 class CachedTableSuite extends QueryTest {
   TestData // Load test tables.
+
+  import org.apache.spark.sql.test.TestSQLContext.implicits._
 
   def rddIdOf(tableName: String): Int = {
     val executedPlan = table(tableName).queryExecution.executedPlan
@@ -47,6 +56,20 @@ class CachedTableSuite extends QueryTest {
     cacheTable("tempTable")
     assertCached(sql("SELECT COUNT(*) FROM tempTable"))
     uncacheTable("tempTable")
+  }
+
+  test("unpersist an uncached table will not raise exception") {
+    assert(None == cacheManager.lookupCachedData(testData))
+    testData.unpersist(true)
+    assert(None == cacheManager.lookupCachedData(testData))
+    testData.unpersist(false)
+    assert(None == cacheManager.lookupCachedData(testData))
+    testData.persist()
+    assert(None != cacheManager.lookupCachedData(testData))
+    testData.unpersist(true)
+    assert(None == cacheManager.lookupCachedData(testData))
+    testData.unpersist(false)
+    assert(None == cacheManager.lookupCachedData(testData))
   }
 
   test("cache table as select") {
@@ -176,7 +199,10 @@ class CachedTableSuite extends QueryTest {
 
     sql("UNCACHE TABLE testData")
     assert(!isCached("testData"), "Table 'testData' should not be cached")
-    assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+
+    eventually(timeout(10 seconds)) {
+      assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+    }
   }
 
   test("CACHE TABLE tableName AS SELECT * FROM anotherTable") {
@@ -189,7 +215,9 @@ class CachedTableSuite extends QueryTest {
       "Eagerly cached in-memory table should have already been materialized")
 
     uncacheTable("testCacheTable")
-    assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+    eventually(timeout(10 seconds)) {
+      assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+    }
   }
 
   test("CACHE TABLE tableName AS SELECT ...") {
@@ -202,7 +230,9 @@ class CachedTableSuite extends QueryTest {
       "Eagerly cached in-memory table should have already been materialized")
 
     uncacheTable("testCacheTable")
-    assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+    eventually(timeout(10 seconds)) {
+      assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+    }
   }
 
   test("CACHE LAZY TABLE tableName") {
@@ -220,7 +250,9 @@ class CachedTableSuite extends QueryTest {
       "Lazily cached in-memory table should have been materialized")
 
     uncacheTable("testData")
-    assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+    eventually(timeout(10 seconds)) {
+      assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+    }
   }
 
   test("InMemoryRelation statistics") {
