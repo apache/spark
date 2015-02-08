@@ -424,6 +424,11 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   /** Extends QueryExecution with hive specific features. */
   protected[sql] class QueryExecution(logicalPlan: LogicalPlan)
     extends super.QueryExecution(logicalPlan) {
+    // Like what we do in runHive, makes sure the session represented by the
+    // `sessionState` field is activated.
+    if (SessionState.get() != sessionState) {
+      SessionState.start(sessionState)
+    }
 
     /**
      * Returns the result as a hive compatible sequence of strings.  For native commands, the
