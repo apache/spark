@@ -20,22 +20,19 @@ import os
 from pyspark import SparkContext
 from mylib import myfunc
 
-# this is exmaple for using ourself module file
+# this is exmaple for using our module file
 if __name__ == "__main__":
 
     """
-        Usage:module.py
-          bin/spark-submit examples/src/main/python/module.py
-        use   --py-files  to  replace addPyFile()
-          bin/spark-submit  examples/src/main/python/module.py  --py-files  examples/src/main/python/mylib.zip
+    Usage:module.py
+bin/spark-submit examples/src/main/python/module.py
+    use   --py-files  to  replace addPyFile()
+bin/spark-submit examples/src/main/python/module.py --py-files  examples/src/main/python/mylib.zip
     """
 
     tmpdir = os.path.split(sys.argv[0])[0]
     sc = SparkContext(appName="PythonModule")
     path = os.path.join(tmpdir, "mylib.zip")
     sc.addPyFile(path)
-	print "use mylib.myfunc at mylib.zip to process"
-    print sc.parallelize([1, 2, 3]) \
-			.map(myfunc)            \
-			.collect()
-		
+    print "use mylib.myfunc at mllib.zip to process"
+    print sc.parallelize([1, 2, 3]).map(myfunc).collect()
