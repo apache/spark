@@ -111,7 +111,19 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
     case other => sys.error(s"Type $other does not support numeric operations")
   }
 
-  override def evalInternal(evalE1: EvaluatedType, evalE2: EvaluatedType): Any = numeric.plus(evalE1, evalE2)
+  override def eval(input: Row): Any = {
+    val evalE1 = left.eval(input)
+    if(evalE1 == null) {
+      null
+    } else {
+      val evalE2 = right.eval(input)
+      if (evalE2 == null) {
+        null
+      } else {
+        numeric.plus(evalE1, evalE2)
+      }
+    }
+  }
 }
 
 case class Subtract(left: Expression, right: Expression) extends BinaryArithmetic {
@@ -122,7 +134,19 @@ case class Subtract(left: Expression, right: Expression) extends BinaryArithmeti
     case other => sys.error(s"Type $other does not support numeric operations")
   }
 
-  override def evalInternal(evalE1: EvaluatedType, evalE2: EvaluatedType): Any = numeric.minus(evalE1, evalE2)
+  override def eval(input: Row): Any = {
+    val evalE1 = left.eval(input)
+    if(evalE1 == null) {
+      null
+    } else {
+      val evalE2 = right.eval(input)
+      if (evalE2 == null) {
+        null
+      } else {
+        numeric.minus(evalE1, evalE2)
+      }
+    }
+  }
 }
 
 case class Multiply(left: Expression, right: Expression) extends BinaryArithmetic {
@@ -133,7 +157,19 @@ case class Multiply(left: Expression, right: Expression) extends BinaryArithmeti
     case other => sys.error(s"Type $other does not support numeric operations")
   }
 
-  override def evalInternal(evalE1: EvaluatedType, evalE2: EvaluatedType): Any = numeric.times(evalE1, evalE2)
+  override def eval(input: Row): Any = {
+    val evalE1 = left.eval(input)
+    if(evalE1 == null) {
+      null
+    } else {
+      val evalE2 = right.eval(input)
+      if (evalE2 == null) {
+        null
+      } else {
+        numeric.times(evalE1, evalE2)
+      }
+    }
+  }
 }
 
 case class Divide(left: Expression, right: Expression) extends BinaryArithmetic {
