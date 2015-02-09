@@ -318,15 +318,17 @@ class Analyzer(catalog: Catalog,
         case StructType(fields) =>
           val actualField = fields.filter(f => resolver(f.name, fieldName))
           if (actualField.length == 0) {
-            sys.error(
+            throw new AnalysisException(
               s"No such struct field $fieldName in ${fields.map(_.name).mkString(", ")}")
           } else if (actualField.length == 1) {
             val field = actualField(0)
             GetField(expr, field, fields.indexOf(field))
           } else {
-            sys.error(s"Ambiguous reference to fields ${actualField.mkString(", ")}")
+            throw new AnalysisException(
+              s"Ambiguous reference to fields ${actualField.mkString(", ")}")
           }
-        case otherType => sys.error(s"GetField is not valid on fields of type $otherType")
+        case otherType =>
+          throw new AnalysisException(s"GetField is not valid on columns of type $otherType")
       }
     }
   }
