@@ -342,11 +342,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         ExecutedCommand(
           RunnableDescribeCommand(resultPlan, resultPlan.output, isExtended)) :: Nil
 
-      case LogicalDescribeCommand(table, isExtended) =>
-        val resultPlan = self.sqlContext.executePlan(table).executedPlan
-        ExecutedCommand(
-          RunnableDescribeCommand(resultPlan, resultPlan.output, isExtended)) :: Nil
-
       case _ => Nil
     }
   }
