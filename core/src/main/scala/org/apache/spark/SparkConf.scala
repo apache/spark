@@ -18,7 +18,6 @@
 package org.apache.spark
 
 import scala.collection.JavaConverters._
-import scala.collection.concurrent.TrieMap
 import scala.collection.mutable.{HashMap, LinkedHashSet}
 import org.apache.spark.serializer.KryoSerializer
 
@@ -47,7 +46,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   /** Create a SparkConf that loads defaults from system properties and the classpath */
   def this() = this(true)
 
-  private[spark] val settings = new TrieMap[String, String]()
+  private[spark] val settings = new HashMap[String, String]()
 
   if (loadDefaults) {
     // Load any spark.* system properties
@@ -178,7 +177,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   }
 
   /** Get all parameters as a list of pairs */
-  def getAll: Array[(String, String)] = settings.toArray
+  def getAll: Array[(String, String)] = settings.clone().toArray
 
   /** Get a parameter as an integer, falling back to a default if not set */
   def getInt(key: String, defaultValue: Int): Int = {
@@ -371,9 +370,7 @@ private[spark] object SparkConf {
   }
 
   /**
-   * Return true if the given config matches either `spark.*.port` or `spark.port.*`.
+   * Return whether the given config is a Spark port config.
    */
-  def isSparkPortConf(name: String): Boolean = {
-    (name.startsWith("spark.") && name.endsWith(".port")) || name.startsWith("spark.port.")
-  }
+  def isSparkPortConf(name: String): Boolean = name.startsWith("spark.") && name.endsWith(".port")
 }

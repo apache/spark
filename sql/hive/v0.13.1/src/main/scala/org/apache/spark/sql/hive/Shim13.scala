@@ -20,12 +20,8 @@ package org.apache.spark.sql.hive
 import java.util.{ArrayList => JArrayList}
 import java.util.Properties
 
-import scala.collection.JavaConversions._
-import scala.language.implicitConversions
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.mapred.InputFormat
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.common.`type`.{HiveDecimal}
@@ -40,9 +36,12 @@ import org.apache.hadoop.hive.serde2.objectinspector.{PrimitiveObjectInspector, 
 import org.apache.hadoop.hive.serde2.{Deserializer, ColumnProjectionUtils}
 import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.{io => hadoopIo}
-
 import org.apache.spark.Logging
-import org.apache.spark.sql.types.{Decimal, DecimalType}
+import org.apache.spark.sql.catalyst.types.DecimalType
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
+
+import scala.collection.JavaConversions._
+import scala.language.implicitConversions
 
 
 /**
@@ -53,7 +52,7 @@ import org.apache.spark.sql.types.{Decimal, DecimalType}
  *
  * @param functionClassName UDF class name
  */
-case class HiveFunctionWrapper(var functionClassName: String) extends java.io.Externalizable {
+class HiveFunctionWrapper(var functionClassName: String) extends java.io.Externalizable {
   // for Serialization
   def this() = this(null)
 
@@ -164,122 +163,90 @@ private[hive] object HiveShim {
     new TableDesc(inputFormatClass, outputFormatClass, properties)
   }
 
-
   def getStringWritableConstantObjectInspector(value: Any): ObjectInspector =
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-      TypeInfoFactory.stringTypeInfo, getStringWritable(value))
+      TypeInfoFactory.stringTypeInfo,
+      if (value == null) null else new hadoopIo.Text(value.asInstanceOf[String]))
 
   def getIntWritableConstantObjectInspector(value: Any): ObjectInspector =
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-      TypeInfoFactory.intTypeInfo, getIntWritable(value))
+      TypeInfoFactory.intTypeInfo,
+      if (value == null) null else new hadoopIo.IntWritable(value.asInstanceOf[Int]))
 
   def getDoubleWritableConstantObjectInspector(value: Any): ObjectInspector =
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-      TypeInfoFactory.doubleTypeInfo, getDoubleWritable(value))
+      TypeInfoFactory.doubleTypeInfo, if (value == null) {
+        null
+      } else {
+        new hiveIo.DoubleWritable(value.asInstanceOf[Double])
+      })
 
   def getBooleanWritableConstantObjectInspector(value: Any): ObjectInspector =
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-      TypeInfoFactory.booleanTypeInfo, getBooleanWritable(value))
+      TypeInfoFactory.booleanTypeInfo, if (value == null) {
+        null
+      } else {
+        new hadoopIo.BooleanWritable(value.asInstanceOf[Boolean])
+      })
 
   def getLongWritableConstantObjectInspector(value: Any): ObjectInspector =
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-      TypeInfoFactory.longTypeInfo, getLongWritable(value))
+      TypeInfoFactory.longTypeInfo,
+      if (value == null) null else new hadoopIo.LongWritable(value.asInstanceOf[Long]))
 
   def getFloatWritableConstantObjectInspector(value: Any): ObjectInspector =
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-      TypeInfoFactory.floatTypeInfo, getFloatWritable(value))
+      TypeInfoFactory.floatTypeInfo, if (value == null) {
+        null
+      } else {
+        new hadoopIo.FloatWritable(value.asInstanceOf[Float])
+      })
 
   def getShortWritableConstantObjectInspector(value: Any): ObjectInspector =
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-      TypeInfoFactory.shortTypeInfo, getShortWritable(value))
+      TypeInfoFactory.shortTypeInfo,
+      if (value == null) null else new hiveIo.ShortWritable(value.asInstanceOf[Short]))
 
   def getByteWritableConstantObjectInspector(value: Any): ObjectInspector =
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-      TypeInfoFactory.byteTypeInfo, getByteWritable(value))
+      TypeInfoFactory.byteTypeInfo,
+      if (value == null) null else new hiveIo.ByteWritable(value.asInstanceOf[Byte]))
 
   def getBinaryWritableConstantObjectInspector(value: Any): ObjectInspector =
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-      TypeInfoFactory.binaryTypeInfo, getBinaryWritable(value))
+      TypeInfoFactory.binaryTypeInfo, if (value == null) {
+        null
+      } else {
+        new hadoopIo.BytesWritable(value.asInstanceOf[Array[Byte]])
+      })
 
   def getDateWritableConstantObjectInspector(value: Any): ObjectInspector =
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-      TypeInfoFactory.dateTypeInfo, getDateWritable(value))
+      TypeInfoFactory.dateTypeInfo,
+      if (value == null) null else new hiveIo.DateWritable(value.asInstanceOf[java.sql.Date]))
 
   def getTimestampWritableConstantObjectInspector(value: Any): ObjectInspector =
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-      TypeInfoFactory.timestampTypeInfo, getTimestampWritable(value))
+      TypeInfoFactory.timestampTypeInfo, if (value == null) {
+        null
+      } else {
+        new hiveIo.TimestampWritable(value.asInstanceOf[java.sql.Timestamp])
+      })
 
   def getDecimalWritableConstantObjectInspector(value: Any): ObjectInspector =
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-      TypeInfoFactory.decimalTypeInfo, getDecimalWritable(value))
+      TypeInfoFactory.decimalTypeInfo,
+      if (value == null) {
+        null
+      } else {
+        // TODO precise, scale?
+        new hiveIo.HiveDecimalWritable(
+          HiveShim.createDecimal(value.asInstanceOf[Decimal].toBigDecimal.underlying()))
+      })
 
   def getPrimitiveNullWritableConstantObjectInspector: ObjectInspector =
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
       TypeInfoFactory.voidTypeInfo, null)
-
-  def getStringWritable(value: Any): hadoopIo.Text =
-    if (value == null) null else new hadoopIo.Text(value.asInstanceOf[String])
-
-  def getIntWritable(value: Any): hadoopIo.IntWritable =
-    if (value == null) null else new hadoopIo.IntWritable(value.asInstanceOf[Int])
-
-  def getDoubleWritable(value: Any): hiveIo.DoubleWritable =
-    if (value == null) {
-      null
-    } else {
-      new hiveIo.DoubleWritable(value.asInstanceOf[Double])
-    }
-
-  def getBooleanWritable(value: Any): hadoopIo.BooleanWritable =
-    if (value == null) {
-      null
-    } else {
-      new hadoopIo.BooleanWritable(value.asInstanceOf[Boolean])
-    }
-
-  def getLongWritable(value: Any): hadoopIo.LongWritable =
-    if (value == null) null else new hadoopIo.LongWritable(value.asInstanceOf[Long])
-
-  def getFloatWritable(value: Any): hadoopIo.FloatWritable =
-    if (value == null) {
-      null
-    } else {
-      new hadoopIo.FloatWritable(value.asInstanceOf[Float])
-    }
-
-  def getShortWritable(value: Any): hiveIo.ShortWritable =
-    if (value == null) null else new hiveIo.ShortWritable(value.asInstanceOf[Short])
-
-  def getByteWritable(value: Any): hiveIo.ByteWritable =
-    if (value == null) null else new hiveIo.ByteWritable(value.asInstanceOf[Byte])
-
-  def getBinaryWritable(value: Any): hadoopIo.BytesWritable =
-    if (value == null) {
-      null
-    } else {
-      new hadoopIo.BytesWritable(value.asInstanceOf[Array[Byte]])
-    }
-
-  def getDateWritable(value: Any): hiveIo.DateWritable =
-    if (value == null) null else new hiveIo.DateWritable(value.asInstanceOf[java.sql.Date])
-
-  def getTimestampWritable(value: Any): hiveIo.TimestampWritable =
-    if (value == null) {
-      null
-    } else {
-      new hiveIo.TimestampWritable(value.asInstanceOf[java.sql.Timestamp])
-    }
-
-  def getDecimalWritable(value: Any): hiveIo.HiveDecimalWritable =
-    if (value == null) {
-      null
-    } else {
-      // TODO precise, scale?
-      new hiveIo.HiveDecimalWritable(
-        HiveShim.createDecimal(value.asInstanceOf[Decimal].toJavaBigDecimal))
-    }
-
-  def getPrimitiveNullWritable: NullWritable = NullWritable.get()
 
   def createDriverResultsArray = new JArrayList[Object]
 
@@ -388,12 +355,7 @@ private[hive] object HiveShim {
   }
 
   def toCatalystDecimal(hdoi: HiveDecimalObjectInspector, data: Any): Decimal = {
-    if (hdoi.preferWritable()) {
-      Decimal(hdoi.getPrimitiveWritableObject(data).getHiveDecimal().bigDecimalValue,
-        hdoi.precision(), hdoi.scale())
-    } else {
-      Decimal(hdoi.getPrimitiveJavaObject(data).bigDecimalValue(), hdoi.precision(), hdoi.scale())
-    }
+    Decimal(hdoi.getPrimitiveJavaObject(data).bigDecimalValue(), hdoi.precision(), hdoi.scale())
   }
 }
 

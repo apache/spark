@@ -36,7 +36,8 @@ private[thriftserver] class SparkSQLOperationManager(hiveContext: HiveContext)
   val handleToOperation = ReflectionUtils
     .getSuperField[JMap[OperationHandle, Operation]](this, "handleToOperation")
 
-  val sessionToActivePool = Map[SessionHandle, String]()
+  // TODO: Currenlty this will grow infinitely, even as sessions expire
+  val sessionToActivePool = Map[HiveSession, String]()
 
   override def newExecuteStatementOperation(
       parentSession: HiveSession,

@@ -20,8 +20,6 @@ package org.apache.spark.sql.catalyst.util
 import org.json4s.jackson.JsonMethods.parse
 import org.scalatest.FunSuite
 
-import org.apache.spark.sql.types.{MetadataBuilder, Metadata}
-
 class MetadataSuite extends FunSuite {
 
   val baseMetadata = new MetadataBuilder()

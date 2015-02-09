@@ -76,36 +76,22 @@ private[spark] class MetricsSystem private (
   private val sources = new mutable.ArrayBuffer[Source]
   private val registry = new MetricRegistry()
 
-  private var running: Boolean = false
-
   // Treat MetricsServlet as a special sink as it should be exposed to add handlers to web ui
   private var metricsServlet: Option[MetricsServlet] = None
 
-  /**
-   * Get any UI handlers used by this metrics system; can only be called after start().
-   */
-  def getServletHandlers = {
-    require(running, "Can only call getServletHandlers on a running MetricsSystem")
-    metricsServlet.map(_.getHandlers).getOrElse(Array())
-  }
+  /** Get any UI handlers used by this metrics system. */
+  def getServletHandlers = metricsServlet.map(_.getHandlers).getOrElse(Array())
 
   metricsConfig.initialize()
 
   def start() {
-    require(!running, "Attempting to start a MetricsSystem that is already running")
-    running = true
     registerSources()
     registerSinks()
     sinks.foreach(_.start)
   }
 
   def stop() {
-    if (running) {
-      sinks.foreach(_.stop)
-    } else {
-      logWarning("Stopping a MetricsSystem that is not running")
-    }
-    running = false
+    sinks.foreach(_.stop)
   }
 
   def report() {
@@ -121,7 +107,7 @@ private[spark] class MetricsSystem private (
    * @return An unique metric name for each combination of
    *         application, executor/driver and metric source.
    */
-  private[spark] def buildRegistryName(source: Source): String = {
+  def buildRegistryName(source: Source): String = {
     val appId = conf.getOption("spark.app.id")
     val executorId = conf.getOption("spark.executor.id")
     val defaultName = MetricRegistry.name(source.sourceName)
@@ -158,7 +144,7 @@ private[spark] class MetricsSystem private (
     })
   }
 
-  private def registerSources() {
+  def registerSources() {
     val instConfig = metricsConfig.getInstance(instance)
     val sourceConfigs = metricsConfig.subProperties(instConfig, MetricsSystem.SOURCE_REGEX)
 
@@ -174,7 +160,7 @@ private[spark] class MetricsSystem private (
     }
   }
 
-  private def registerSinks() {
+  def registerSinks() {
     val instConfig = metricsConfig.getInstance(instance)
     val sinkConfigs = metricsConfig.subProperties(instConfig, MetricsSystem.SINK_REGEX)
 

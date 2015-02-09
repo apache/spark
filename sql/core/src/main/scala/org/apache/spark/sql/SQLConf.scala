@@ -38,7 +38,6 @@ private[spark] object SQLConf {
   val PARQUET_FILTER_PUSHDOWN_ENABLED = "spark.sql.parquet.filterPushdown"
 
   val COLUMN_NAME_OF_CORRUPT_RECORD = "spark.sql.columnNameOfCorruptRecord"
-  val BROADCAST_TIMEOUT = "spark.sql.broadcastTimeout"
 
   // Options that control which operators can be chosen by the query planner.  These should be
   // considered hints and may be ignored by future versions of Spark SQL.
@@ -53,15 +52,15 @@ private[spark] object SQLConf {
 }
 
 /**
- * A class that enables the setting and getting of mutable config parameters/hints.
+ * A trait that enables the setting and getting of mutable config parameters/hints.
  *
  * In the presence of a SQLContext, these can be set and queried by passing SET commands
- * into Spark SQL's query functions (i.e. sql()). Otherwise, users of this class can
- * modify the hints by programmatically calling the setters and getters of this class.
+ * into Spark SQL's query functions (i.e. sql()). Otherwise, users of this trait can
+ * modify the hints by programmatically calling the setters and getters of this trait.
  *
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
  */
-private[sql] class SQLConf extends Serializable {
+private[sql] trait SQLConf {
   import SQLConf._
 
   /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
@@ -149,12 +148,6 @@ private[sql] class SQLConf extends Serializable {
   private[spark] def columnNameOfCorruptRecord: String =
     getConf(COLUMN_NAME_OF_CORRUPT_RECORD, "_corrupt_record")
 
-  /**
-   * Timeout in seconds for the broadcast wait time in hash join
-   */
-  private[spark] def broadcastTimeout: Int =
-    getConf(BROADCAST_TIMEOUT, (5 * 60).toString).toInt
-
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */
@@ -187,10 +180,6 @@ private[sql] class SQLConf extends Serializable {
    * This creates a new copy of the config properties in the form of a Map.
    */
   def getAllConfs: immutable.Map[String, String] = settings.synchronized { settings.toMap }
-
-  private[spark] def unsetConf(key: String) {
-    settings -= key
-  }
 
   private[spark] def clear() {
     settings.clear()

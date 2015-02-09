@@ -55,11 +55,10 @@ object TestData {
       TestData2(2, 1) ::
       TestData2(2, 2) ::
       TestData2(3, 1) ::
-      TestData2(3, 2) :: Nil, 2).toSchemaRDD
+      TestData2(3, 2) :: Nil).toSchemaRDD
   testData2.registerTempTable("testData2")
 
   case class DecimalData(a: BigDecimal, b: BigDecimal)
-
   val decimalData =
     TestSQLContext.sparkContext.parallelize(
       DecimalData(1, 1) ::

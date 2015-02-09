@@ -41,7 +41,7 @@ class LinearBinaryClassificationModel(LinearModel):
 
     def setThreshold(self, value):
         """
-        .. note:: Experimental
+        :: Experimental ::
 
         Sets the threshold that separates positive predictions from negative
         predictions. An example with prediction score greater than or equal
@@ -51,7 +51,7 @@ class LinearBinaryClassificationModel(LinearModel):
 
     def clearThreshold(self):
         """
-        .. note:: Experimental
+        :: Experimental ::
 
         Clears the threshold so that `predict` will output raw prediction scores.
         """

@@ -17,10 +17,7 @@
 
 package org.apache.spark.streaming.receiver
 
-import org.apache.spark.streaming.Time
-
-/** Messages sent to the Receiver. */
-private[streaming] sealed trait ReceiverMessage extends Serializable
+/** Messages sent to the NetworkReceiver. */
+private[streaming] sealed trait ReceiverMessage
 private[streaming] object StopReceiver extends ReceiverMessage
-private[streaming] case class CleanupOldBlocks(threshTime: Time) extends ReceiverMessage
 

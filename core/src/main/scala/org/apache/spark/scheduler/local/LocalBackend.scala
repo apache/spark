@@ -41,18 +41,17 @@ private case class StopExecutor()
  * and the TaskSchedulerImpl.
  */
 private[spark] class LocalActor(
-    scheduler: TaskSchedulerImpl,
-    executorBackend: LocalBackend,
-    private val totalCores: Int)
-  extends Actor with ActorLogReceive with Logging {
+  scheduler: TaskSchedulerImpl,
+  executorBackend: LocalBackend,
+  private val totalCores: Int) extends Actor with ActorLogReceive with Logging {
 
   private var freeCores = totalCores
 
   private val localExecutorId = SparkContext.DRIVER_IDENTIFIER
   private val localExecutorHostname = "localhost"
 
-  private val executor = new Executor(
-    localExecutorId, localExecutorHostname, SparkEnv.get, isLocal = true)
+  val executor = new Executor(
+    localExecutorId, localExecutorHostname, scheduler.conf.getAll, totalCores, isLocal = true)
 
   override def receiveWithLogging = {
     case ReviveOffers =>
@@ -76,8 +75,7 @@ private[spark] class LocalActor(
     val offers = Seq(new WorkerOffer(localExecutorId, localExecutorHostname, freeCores))
     for (task <- scheduler.resourceOffers(offers).flatten) {
       freeCores -= scheduler.CPUS_PER_TASK
-      executor.launchTask(executorBackend, taskId = task.taskId, attemptNumber = task.attemptNumber,
-        task.name, task.serializedTask)
+      executor.launchTask(executorBackend, task.taskId, task.name, task.serializedTask)
     }
   }
 }

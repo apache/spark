@@ -22,7 +22,6 @@ import java.io.File
 import com.google.common.io.Files
 import org.apache.spark.sql.{QueryTest, _}
 import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.types._
 
 /* Implicits */
 import org.apache.spark.sql.hive.test.TestHive._
@@ -43,7 +42,7 @@ class InsertIntoHiveTableSuite extends QueryTest {
     // Make sure the table has also been updated.
     checkAnswer(
       sql("SELECT * FROM createAndInsertTest"),
-      testData.collect().toSeq.map(Row.fromTuple)
+      testData.collect().toSeq
     )
 
     // Add more data.
@@ -52,7 +51,7 @@ class InsertIntoHiveTableSuite extends QueryTest {
     // Make sure the table has been updated.
     checkAnswer(
       sql("SELECT * FROM createAndInsertTest"),
-      testData.toSchemaRDD.collect().toSeq ++ testData.toSchemaRDD.collect().toSeq
+      testData.collect().toSeq ++ testData.collect().toSeq
     )
 
     // Now overwrite.
@@ -61,7 +60,7 @@ class InsertIntoHiveTableSuite extends QueryTest {
     // Make sure the registered table has also been updated.
     checkAnswer(
       sql("SELECT * FROM createAndInsertTest"),
-      testData.collect().toSeq.map(Row.fromTuple)
+      testData.collect().toSeq
     )
   }
 

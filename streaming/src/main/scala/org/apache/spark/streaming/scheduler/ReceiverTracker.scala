@@ -24,8 +24,9 @@ import scala.language.existentials
 import akka.actor._
 
 import org.apache.spark.{Logging, SerializableWritable, SparkEnv, SparkException}
+import org.apache.spark.SparkContext._
 import org.apache.spark.streaming.{StreamingContext, Time}
-import org.apache.spark.streaming.receiver.{CleanupOldBlocks, Receiver, ReceiverSupervisorImpl, StopReceiver}
+import org.apache.spark.streaming.receiver.{Receiver, ReceiverSupervisorImpl, StopReceiver}
 
 /**
  * Messages used by the NetworkReceiver and the ReceiverTracker to communicate
@@ -118,20 +119,9 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     }
   }
 
-  /**
-   * Clean up the data and metadata of blocks and batches that are strictly
-   * older than the threshold time. Note that this does not
-   */
-  def cleanupOldBlocksAndBatches(cleanupThreshTime: Time) {
-    // Clean up old block and batch metadata
-    receivedBlockTracker.cleanupOldBatches(cleanupThreshTime, waitForCompletion = false)
-
-    // Signal the receivers to delete old block data
-    if (ssc.conf.getBoolean("spark.streaming.receiver.writeAheadLog.enable", false)) {
-      logInfo(s"Cleanup old received batch data: $cleanupThreshTime")
-      receiverInfo.values.flatMap { info => Option(info.actor) }
-        .foreach { _ ! CleanupOldBlocks(cleanupThreshTime) }
-    }
+    /** Clean up metadata older than the given threshold time */
+  def cleanupOldMetadata(cleanupThreshTime: Time) {
+    receivedBlockTracker.cleanupOldBatches(cleanupThreshTime)
   }
 
   /** Register a receiver */
@@ -160,8 +150,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         logWarning("No prior receiver info")
         ReceiverInfo(streamId, "", null, false, "", lastErrorMessage = message, lastError = error)
     }
-    receiverInfo -= streamId
-    listenerBus.post(StreamingListenerReceiverStopped(newReceiverInfo))
+    receiverInfo(streamId) = newReceiverInfo
+    listenerBus.post(StreamingListenerReceiverStopped(receiverInfo(streamId)))
     val messageWithError = if (error != null && !error.isEmpty) {
       s"$message - $error"
     } else {

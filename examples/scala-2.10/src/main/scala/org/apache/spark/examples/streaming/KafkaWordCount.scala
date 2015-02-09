@@ -22,6 +22,7 @@ import java.util.Properties
 import kafka.producer._
 
 import org.apache.spark.streaming._
+import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.kafka._
 import org.apache.spark.SparkConf
 
@@ -76,7 +77,7 @@ object KafkaWordCountProducer {
 
     val Array(brokers, topic, messagesPerSec, wordsPerMessage) = args
 
-    // Zookeeper connection properties
+    // Zookeper connection properties
     val props = new Properties()
     props.put("metadata.broker.list", brokers)
     props.put("serializer.class", "kafka.serializer.StringEncoder")

@@ -20,9 +20,11 @@ package org.apache.spark.sql.catalyst
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.util.Utils
+import org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute, AttributeReference, Row}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
 
 
 /**
@@ -66,7 +68,6 @@ trait ScalaReflection {
           convertToCatalyst(elem, field.dataType)
         }.toArray)
     case (d: BigDecimal, _) => Decimal(d)
-    case (d: java.math.BigDecimal, _) => Decimal(d)
     case (other, _) => other
   }
 
@@ -79,14 +80,13 @@ trait ScalaReflection {
       convertToScala(k, mapType.keyType) -> convertToScala(v, mapType.valueType)
     }
     case (r: Row, s: StructType) => convertRowToScala(r, s)
-    case (d: Decimal, _: DecimalType) => d.toJavaBigDecimal
+    case (d: Decimal, _: DecimalType) => d.toBigDecimal
     case (other, _) => other
   }
 
   def convertRowToScala(r: Row, schema: StructType): Row = {
-    // TODO: This is very slow!!!
     new GenericRow(
-      r.toSeq.zip(schema.fields.map(_.dataType))
+      r.zip(schema.fields.map(_.dataType))
         .map(r_dt => convertToScala(r_dt._1, r_dt._2)).toArray)
   }
 
@@ -118,19 +118,7 @@ trait ScalaReflection {
       case t if t <:< typeOf[Product] =>
         val formalTypeArgs = t.typeSymbol.asClass.typeParams
         val TypeRef(_, _, actualTypeArgs) = t
-        val constructorSymbol = t.member(nme.CONSTRUCTOR)
-        val params = if (constructorSymbol.isMethod) {
-          constructorSymbol.asMethod.paramss
-        } else {
-          // Find the primary constructor, and use its parameter ordering.
-          val primaryConstructorSymbol: Option[Symbol] = constructorSymbol.asTerm.alternatives.find(
-            s => s.isMethod && s.asMethod.isPrimaryConstructor)
-          if (primaryConstructorSymbol.isEmpty) {
-            sys.error("Internal SQL error: Product object did not have a primary constructor.")
-          } else {
-            primaryConstructorSymbol.get.asMethod.paramss
-          }
-        }
+        val params = t.member(nme.CONSTRUCTOR).asMethod.paramss
         Schema(StructType(
           params.head.map { p =>
             val Schema(dataType, nullable) =
@@ -154,7 +142,6 @@ trait ScalaReflection {
       case t if t <:< typeOf[Timestamp] => Schema(TimestampType, nullable = true)
       case t if t <:< typeOf[Date] => Schema(DateType, nullable = true)
       case t if t <:< typeOf[BigDecimal] => Schema(DecimalType.Unlimited, nullable = true)
-      case t if t <:< typeOf[java.math.BigDecimal] => Schema(DecimalType.Unlimited, nullable = true)
       case t if t <:< typeOf[Decimal] => Schema(DecimalType.Unlimited, nullable = true)
       case t if t <:< typeOf[java.lang.Integer] => Schema(IntegerType, nullable = true)
       case t if t <:< typeOf[java.lang.Long] => Schema(LongType, nullable = true)
@@ -185,7 +172,7 @@ trait ScalaReflection {
     case obj: FloatType.JvmType => FloatType
     case obj: DoubleType.JvmType => DoubleType
     case obj: DateType.JvmType => DateType
-    case obj: java.math.BigDecimal => DecimalType.Unlimited
+    case obj: BigDecimal => DecimalType.Unlimited
     case obj: Decimal => DecimalType.Unlimited
     case obj: TimestampType.JvmType => TimestampType
     case null => NullType

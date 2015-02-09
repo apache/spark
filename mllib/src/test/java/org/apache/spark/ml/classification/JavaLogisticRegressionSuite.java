@@ -26,20 +26,21 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.sql.SchemaRDD;
-import org.apache.spark.sql.SQLContext;
-import static org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInputAsList;
+import org.apache.spark.sql.api.java.JavaSQLContext;
+import org.apache.spark.sql.api.java.JavaSchemaRDD;
+import static org.apache.spark.mllib.classification.LogisticRegressionSuite
+  .generateLogisticInputAsList;
 
 public class JavaLogisticRegressionSuite implements Serializable {
 
   private transient JavaSparkContext jsc;
-  private transient SQLContext jsql;
-  private transient SchemaRDD dataset;
+  private transient JavaSQLContext jsql;
+  private transient JavaSchemaRDD dataset;
 
   @Before
   public void setUp() {
     jsc = new JavaSparkContext("local", "JavaLogisticRegressionSuite");
-    jsql = new SQLContext(jsc);
+    jsql = new JavaSQLContext(jsc);
     List<LabeledPoint> points = generateLogisticInputAsList(1.0, 1.0, 100, 42);
     dataset = jsql.applySchema(jsc.parallelize(points, 2), LabeledPoint.class);
   }
@@ -55,8 +56,8 @@ public class JavaLogisticRegressionSuite implements Serializable {
     LogisticRegression lr = new LogisticRegression();
     LogisticRegressionModel model = lr.fit(dataset);
     model.transform(dataset).registerTempTable("prediction");
-    SchemaRDD predictions = jsql.sql("SELECT label, score, prediction FROM prediction");
-    predictions.collectAsList();
+    JavaSchemaRDD predictions = jsql.sql("SELECT label, score, prediction FROM prediction");
+    predictions.collect();
   }
 
   @Test
@@ -67,8 +68,8 @@ public class JavaLogisticRegressionSuite implements Serializable {
     LogisticRegressionModel model = lr.fit(dataset);
     model.transform(dataset, model.threshold().w(0.8)) // overwrite threshold
       .registerTempTable("prediction");
-    SchemaRDD predictions = jsql.sql("SELECT label, score, prediction FROM prediction");
-    predictions.collectAsList();
+    JavaSchemaRDD predictions = jsql.sql("SELECT label, score, prediction FROM prediction");
+    predictions.collect();
   }
 
   @Test

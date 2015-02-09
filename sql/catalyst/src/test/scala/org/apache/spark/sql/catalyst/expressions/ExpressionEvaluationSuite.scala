@@ -21,13 +21,16 @@ import java.sql.{Date, Timestamp}
 
 import scala.collection.immutable.HashSet
 
-import org.scalactic.TripleEqualsSupport.Spread
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
 import org.scalatest.FunSuite
 import org.scalatest.Matchers._
+import org.scalactic.TripleEqualsSupport.Spread
 
+import org.apache.spark.sql.catalyst.types._
+
+
+/* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.types._
-
 
 class ExpressionEvaluationSuite extends FunSuite {
 
@@ -174,21 +177,6 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Divide(Literal(null, DoubleType), Literal(0.0)), null)
     checkEvaluation(Divide(Literal(null, IntegerType), Literal(1)), null)
     checkEvaluation(Divide(Literal(null, IntegerType), Literal(null, IntegerType)), null)
-  }
-
-  test("Remainder") {
-    checkEvaluation(Remainder(Literal(2), Literal(1)), 0)
-    checkEvaluation(Remainder(Literal(1.0), Literal(2.0)), 1.0)
-    checkEvaluation(Remainder(Literal(1), Literal(2)), 1)
-    checkEvaluation(Remainder(Literal(1), Literal(0)), null)
-    checkEvaluation(Remainder(Literal(1.0), Literal(0.0)), null)
-    checkEvaluation(Remainder(Literal(0.0), Literal(0.0)), null)
-    checkEvaluation(Remainder(Literal(0), Literal(null, IntegerType)), null)
-    checkEvaluation(Remainder(Literal(1), Literal(null, IntegerType)), null)
-    checkEvaluation(Remainder(Literal(null, IntegerType), Literal(0)), null)
-    checkEvaluation(Remainder(Literal(null, DoubleType), Literal(0.0)), null)
-    checkEvaluation(Remainder(Literal(null, IntegerType), Literal(1)), null)
-    checkEvaluation(Remainder(Literal(null, IntegerType), Literal(null, IntegerType)), null)
   }
 
   test("INSET") {
@@ -499,242 +487,6 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Cast(Literal(1.0f / 0.0f), TimestampType), null)
   }
 
-  test("array casting") {
-    val array = Literal(Seq("123", "abc", "", null), ArrayType(StringType, containsNull = true))
-    val array_notNull = Literal(Seq("123", "abc", ""), ArrayType(StringType, containsNull = false))
-
-    {
-      val cast = Cast(array, ArrayType(IntegerType, containsNull = true))
-      assert(cast.resolved === true)
-      checkEvaluation(cast, Seq(123, null, null, null))
-    }
-    {
-      val cast = Cast(array, ArrayType(IntegerType, containsNull = false))
-      assert(cast.resolved === false)
-    }
-    {
-      val cast = Cast(array, ArrayType(BooleanType, containsNull = true))
-      assert(cast.resolved === true)
-      checkEvaluation(cast, Seq(true, true, false, null))
-    }
-    {
-      val cast = Cast(array, ArrayType(BooleanType, containsNull = false))
-      assert(cast.resolved === false)
-    }
-
-    {
-      val cast = Cast(array_notNull, ArrayType(IntegerType, containsNull = true))
-      assert(cast.resolved === true)
-      checkEvaluation(cast, Seq(123, null, null))
-    }
-    {
-      val cast = Cast(array_notNull, ArrayType(IntegerType, containsNull = false))
-      assert(cast.resolved === false)
-    }
-    {
-      val cast = Cast(array_notNull, ArrayType(BooleanType, containsNull = true))
-      assert(cast.resolved === true)
-      checkEvaluation(cast, Seq(true, true, false))
-    }
-    {
-      val cast = Cast(array_notNull, ArrayType(BooleanType, containsNull = false))
-      assert(cast.resolved === true)
-      checkEvaluation(cast, Seq(true, true, false))
-    }
-
-    {
-      val cast = Cast(array, IntegerType)
-      assert(cast.resolved === false)
-    }
-  }
-
-  test("map casting") {
-    val map = Literal(
-      Map("a" -> "123", "b" -> "abc", "c" -> "", "d" -> null),
-      MapType(StringType, StringType, valueContainsNull = true))
-    val map_notNull = Literal(
-      Map("a" -> "123", "b" -> "abc", "c" -> ""),
-      MapType(StringType, StringType, valueContainsNull = false))
-
-    {
-      val cast = Cast(map, MapType(StringType, IntegerType, valueContainsNull = true))
-      assert(cast.resolved === true)
-      checkEvaluation(cast, Map("a" -> 123, "b" -> null, "c" -> null, "d" -> null))
-    }
-    {
-      val cast = Cast(map, MapType(StringType, IntegerType, valueContainsNull = false))
-      assert(cast.resolved === false)
-    }
-    {
-      val cast = Cast(map, MapType(StringType, BooleanType, valueContainsNull = true))
-      assert(cast.resolved === true)
-      checkEvaluation(cast, Map("a" -> true, "b" -> true, "c" -> false, "d" -> null))
-    }
-    {
-      val cast = Cast(map, MapType(StringType, BooleanType, valueContainsNull = false))
-      assert(cast.resolved === false)
-    }
-    {
-      val cast = Cast(map, MapType(IntegerType, StringType, valueContainsNull = true))
-      assert(cast.resolved === false)
-    }
-
-    {
-      val cast = Cast(map_notNull, MapType(StringType, IntegerType, valueContainsNull = true))
-      assert(cast.resolved === true)
-      checkEvaluation(cast, Map("a" -> 123, "b" -> null, "c" -> null))
-    }
-    {
-      val cast = Cast(map_notNull, MapType(StringType, IntegerType, valueContainsNull = false))
-      assert(cast.resolved === false)
-    }
-    {
-      val cast = Cast(map_notNull, MapType(StringType, BooleanType, valueContainsNull = true))
-      assert(cast.resolved === true)
-      checkEvaluation(cast, Map("a" -> true, "b" -> true, "c" -> false))
-    }
-    {
-      val cast = Cast(map_notNull, MapType(StringType, BooleanType, valueContainsNull = false))
-      assert(cast.resolved === true)
-      checkEvaluation(cast, Map("a" -> true, "b" -> true, "c" -> false))
-    }
-    {
-      val cast = Cast(map_notNull, MapType(IntegerType, StringType, valueContainsNull = true))
-      assert(cast.resolved === false)
-    }
-
-    {
-      val cast = Cast(map, IntegerType)
-      assert(cast.resolved === false)
-    }
-  }
-
-  test("struct casting") {
-    val struct = Literal(
-      Row("123", "abc", "", null),
-      StructType(Seq(
-        StructField("a", StringType, nullable = true),
-        StructField("b", StringType, nullable = true),
-        StructField("c", StringType, nullable = true),
-        StructField("d", StringType, nullable = true))))
-    val struct_notNull = Literal(
-      Row("123", "abc", ""),
-      StructType(Seq(
-        StructField("a", StringType, nullable = false),
-        StructField("b", StringType, nullable = false),
-        StructField("c", StringType, nullable = false))))
-
-    {
-      val cast = Cast(struct, StructType(Seq(
-        StructField("a", IntegerType, nullable = true),
-        StructField("b", IntegerType, nullable = true),
-        StructField("c", IntegerType, nullable = true),
-        StructField("d", IntegerType, nullable = true))))
-      assert(cast.resolved === true)
-      checkEvaluation(cast, Row(123, null, null, null))
-    }
-    {
-      val cast = Cast(struct, StructType(Seq(
-        StructField("a", IntegerType, nullable = true),
-        StructField("b", IntegerType, nullable = true),
-        StructField("c", IntegerType, nullable = false),
-        StructField("d", IntegerType, nullable = true))))
-      assert(cast.resolved === false)
-    }
-    {
-      val cast = Cast(struct, StructType(Seq(
-        StructField("a", BooleanType, nullable = true),
-        StructField("b", BooleanType, nullable = true),
-        StructField("c", BooleanType, nullable = true),
-        StructField("d", BooleanType, nullable = true))))
-      assert(cast.resolved === true)
-      checkEvaluation(cast, Row(true, true, false, null))
-    }
-    {
-      val cast = Cast(struct, StructType(Seq(
-        StructField("a", BooleanType, nullable = true),
-        StructField("b", BooleanType, nullable = true),
-        StructField("c", BooleanType, nullable = false),
-        StructField("d", BooleanType, nullable = true))))
-      assert(cast.resolved === false)
-    }
-
-    {
-      val cast = Cast(struct_notNull, StructType(Seq(
-        StructField("a", IntegerType, nullable = true),
-        StructField("b", IntegerType, nullable = true),
-        StructField("c", IntegerType, nullable = true))))
-      assert(cast.resolved === true)
-      checkEvaluation(cast, Row(123, null, null))
-    }
-    {
-      val cast = Cast(struct_notNull, StructType(Seq(
-        StructField("a", IntegerType, nullable = true),
-        StructField("b", IntegerType, nullable = true),
-        StructField("c", IntegerType, nullable = false))))
-      assert(cast.resolved === false)
-    }
-    {
-      val cast = Cast(struct_notNull, StructType(Seq(
-        StructField("a", BooleanType, nullable = true),
-        StructField("b", BooleanType, nullable = true),
-        StructField("c", BooleanType, nullable = true))))
-      assert(cast.resolved === true)
-      checkEvaluation(cast, Row(true, true, false))
-    }
-    {
-      val cast = Cast(struct_notNull, StructType(Seq(
-        StructField("a", BooleanType, nullable = true),
-        StructField("b", BooleanType, nullable = true),
-        StructField("c", BooleanType, nullable = false))))
-      assert(cast.resolved === true)
-      checkEvaluation(cast, Row(true, true, false))
-    }
-
-    {
-      val cast = Cast(struct, StructType(Seq(
-        StructField("a", StringType, nullable = true),
-        StructField("b", StringType, nullable = true),
-        StructField("c", StringType, nullable = true))))
-      assert(cast.resolved === false)
-    }
-    {
-      val cast = Cast(struct, IntegerType)
-      assert(cast.resolved === false)
-    }
-  }
-
-  test("complex casting") {
-    val complex = Literal(
-      Row(
-        Seq("123", "abc", ""),
-        Map("a" -> "123", "b" -> "abc", "c" -> ""),
-        Row(0)),
-      StructType(Seq(
-        StructField("a",
-          ArrayType(StringType, containsNull = false), nullable = true),
-        StructField("m",
-          MapType(StringType, StringType, valueContainsNull = false), nullable = true),
-        StructField("s",
-          StructType(Seq(
-            StructField("i", IntegerType, nullable = true)))))))
-
-    val cast = Cast(complex, StructType(Seq(
-      StructField("a",
-        ArrayType(IntegerType, containsNull = true), nullable = true),
-      StructField("m",
-        MapType(StringType, BooleanType, valueContainsNull = false), nullable = true),
-      StructField("s",
-        StructType(Seq(
-          StructField("l", LongType, nullable = true)))))))
-
-    assert(cast.resolved === true)
-    checkEvaluation(cast, Row(
-      Seq(123, null, null),
-      Map("a" -> true, "b" -> true, "c" -> false),
-      Row(0L)))
-  }
-
   test("null checking") {
     val row = new GenericRow(Array[Any]("^Ba*n", null, true, null))
     val c1 = 'a.string.at(0)
@@ -1034,8 +786,6 @@ class ExpressionEvaluationSuite extends FunSuite {
     }
 
     checkEvaluation(Sqrt(Literal(null, DoubleType)), null, new GenericRow(Array[Any](null)))
-    checkEvaluation(Sqrt(-1), null, EmptyRow)
-    checkEvaluation(Sqrt(-1.5), null, EmptyRow)
   }
 
   test("Bitwise operations") {

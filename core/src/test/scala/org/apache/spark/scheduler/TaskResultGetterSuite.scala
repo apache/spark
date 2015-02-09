@@ -19,14 +19,9 @@ package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
 
-import scala.concurrent.duration._
-import scala.language.postfixOps
-import scala.util.control.NonFatal
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
-import org.scalatest.concurrent.Eventually._
-
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkEnv}
+import org.apache.spark.{LocalSparkContext, SparkContext, SparkEnv}
 import org.apache.spark.storage.TaskResultBlockId
 
 /**
@@ -39,8 +34,6 @@ class ResultDeletingTaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedule
   extends TaskResultGetter(sparkEnv, scheduler) {
   var removedResult = false
 
-  @volatile var removeBlockSuccessfully = false
-
   override def enqueueSuccessfulTask(
     taskSetManager: TaskSetManager, tid: Long, serializedData: ByteBuffer) {
     if (!removedResult) {
@@ -49,15 +42,6 @@ class ResultDeletingTaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedule
       serializer.get().deserialize[TaskResult[_]](serializedData) match {
         case IndirectTaskResult(blockId, size) =>
           sparkEnv.blockManager.master.removeBlock(blockId)
-          // removeBlock is asynchronous. Need to wait it's removed successfully
-          try {
-            eventually(timeout(3 seconds), interval(200 milliseconds)) {
-              assert(!sparkEnv.blockManager.master.contains(blockId))
-            }
-            removeBlockSuccessfully = true
-          } catch {
-            case NonFatal(e) => removeBlockSuccessfully = false
-          }
         case directResult: DirectTaskResult[_] =>
           taskSetManager.abort("Internal error: expect only indirect results")
       }
@@ -71,20 +55,27 @@ class ResultDeletingTaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedule
 /**
  * Tests related to handling task results (both direct and indirect).
  */
-class TaskResultGetterSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
+class TaskResultGetterSuite extends FunSuite with BeforeAndAfter with BeforeAndAfterAll
+  with LocalSparkContext {
 
-  // Set the Akka frame size to be as small as possible (it must be an integer, so 1 is as small
-  // as we can make it) so the tests don't take too long.
-  def conf: SparkConf = new SparkConf().set("spark.akka.frameSize", "1")
+  override def beforeAll {
+    // Set the Akka frame size to be as small as possible (it must be an integer, so 1 is as small
+    // as we can make it) so the tests don't take too long.
+    System.setProperty("spark.akka.frameSize", "1")
+  }
+
+  override def afterAll {
+    System.clearProperty("spark.akka.frameSize")
+  }
 
   test("handling results smaller than Akka frame size") {
-    sc = new SparkContext("local", "test", conf)
+    sc = new SparkContext("local", "test")
     val result = sc.parallelize(Seq(1), 1).map(x => 2 * x).reduce((x, y) => x)
     assert(result === 2)
   }
 
   test("handling results larger than Akka frame size") {
-    sc = new SparkContext("local", "test", conf)
+    sc = new SparkContext("local", "test")
     val akkaFrameSize =
       sc.env.actorSystem.settings.config.getBytes("akka.remote.netty.tcp.maximum-frame-size").toInt
     val result = sc.parallelize(Seq(1), 1).map(x => 1.to(akkaFrameSize).toArray).reduce((x, y) => x)
@@ -98,7 +89,7 @@ class TaskResultGetterSuite extends FunSuite with BeforeAndAfter with LocalSpark
   test("task retried if result missing from block manager") {
     // Set the maximum number of task failures to > 0, so that the task set isn't aborted
     // after the result is missing.
-    sc = new SparkContext("local[1,2]", "test", conf)
+    sc = new SparkContext("local[1,2]", "test")
     // If this test hangs, it's probably because no resource offers were made after the task
     // failed.
     val scheduler: TaskSchedulerImpl = sc.taskScheduler match {
@@ -108,12 +99,10 @@ class TaskResultGetterSuite extends FunSuite with BeforeAndAfter with LocalSpark
         assert(false, "Expect local cluster to use TaskSchedulerImpl")
         throw new ClassCastException
     }
-    val resultGetter = new ResultDeletingTaskResultGetter(sc.env, scheduler)
-    scheduler.taskResultGetter = resultGetter
+    scheduler.taskResultGetter = new ResultDeletingTaskResultGetter(sc.env, scheduler)
     val akkaFrameSize =
       sc.env.actorSystem.settings.config.getBytes("akka.remote.netty.tcp.maximum-frame-size").toInt
     val result = sc.parallelize(Seq(1), 1).map(x => 1.to(akkaFrameSize).toArray).reduce((x, y) => x)
-    assert(resultGetter.removeBlockSuccessfully)
     assert(result === 1.to(akkaFrameSize).toArray)
 
     // Make sure two tasks were run (one failed one, and a second retried one).

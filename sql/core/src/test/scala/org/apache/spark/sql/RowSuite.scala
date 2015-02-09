@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, SpecificMutableRow}
-import org.apache.spark.sql.types._
 
 class RowSuite extends FunSuite {
 

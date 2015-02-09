@@ -20,7 +20,6 @@ package org.apache.spark.mllib.optimization
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.{axpy, dot, scal}
-import org.apache.spark.mllib.util.MLUtils
 
 /**
  * :: DeveloperApi ::
@@ -67,10 +66,9 @@ class LogisticGradient extends Gradient {
     scal(gradientMultiplier, gradient)
     val loss =
       if (label > 0) {
-        // The following is equivalent to log(1 + exp(margin)) but more numerically stable.
-        MLUtils.log1pExp(margin)
+        math.log1p(math.exp(margin)) // log1p is log(1+p) but more accurate for small p
       } else {
-        MLUtils.log1pExp(margin) - margin
+        math.log1p(math.exp(margin)) - margin
       }
 
     (gradient, loss)
@@ -85,10 +83,9 @@ class LogisticGradient extends Gradient {
     val gradientMultiplier = (1.0 / (1.0 + math.exp(margin))) - label
     axpy(gradientMultiplier, data, cumGradient)
     if (label > 0) {
-      // The following is equivalent to log(1 + exp(margin)) but more numerically stable.
-      MLUtils.log1pExp(margin)
+      math.log1p(math.exp(margin))
     } else {
-      MLUtils.log1pExp(margin) - margin
+      math.log1p(math.exp(margin)) - margin
     }
   }
 }
@@ -97,16 +94,16 @@ class LogisticGradient extends Gradient {
  * :: DeveloperApi ::
  * Compute gradient and loss for a Least-squared loss function, as used in linear regression.
  * This is correct for the averaged least squares loss function (mean squared error)
- *              L = 1/2n ||A weights-y||^2
+ *              L = 1/n ||A weights-y||^2
  * See also the documentation for the precise formulation.
  */
 @DeveloperApi
 class LeastSquaresGradient extends Gradient {
   override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
     val diff = dot(data, weights) - label
-    val loss = diff * diff / 2.0
+    val loss = diff * diff
     val gradient = data.copy
-    scal(diff, gradient)
+    scal(2.0 * diff, gradient)
     (gradient, loss)
   }
 
@@ -116,8 +113,8 @@ class LeastSquaresGradient extends Gradient {
       weights: Vector,
       cumGradient: Vector): Double = {
     val diff = dot(data, weights) - label
-    axpy(diff, data, cumGradient)
-    diff * diff / 2.0
+    axpy(2.0 * diff, data, cumGradient)
+    diff * diff
   }
 }
 

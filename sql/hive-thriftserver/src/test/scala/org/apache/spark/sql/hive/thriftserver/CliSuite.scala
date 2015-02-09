@@ -48,7 +48,6 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
          |  --master local
          |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$jdbcUrl
          |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
-         |  --driver-class-path ${sys.props("java.class.path")}
        """.stripMargin.split("\\s+").toSeq ++ extraArgs
     }
 
@@ -71,7 +70,7 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
     }
 
     // Searching expected output line from both stdout and stderr of the CLI process
-    val process = (Process(command, None) #< queryStream).run(
+    val process = (Process(command) #< queryStream).run(
       ProcessLogger(captureOutput("stdout"), captureOutput("stderr")))
 
     try {

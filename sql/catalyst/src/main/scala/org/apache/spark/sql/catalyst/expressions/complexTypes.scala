@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.Map
 
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.types._
 
 /**
  * Returns the item at `ordinal` in the Array `child` or the Key `ordinal` in Map `child`.
@@ -92,13 +92,7 @@ case class GetField(child: Expression, fieldName: String) extends UnaryExpressio
 
   lazy val ordinal = structType.fields.indexOf(field)
 
-  override lazy val resolved = childrenResolved && fieldResolved
-
-  /** Returns true only if the fieldName is found in the child struct. */
-  private def fieldResolved = child.dataType match {
-    case StructType(fields) => fields.map(_.name).contains(fieldName)
-    case _ => false
-  }
+  override lazy val resolved = childrenResolved && child.dataType.isInstanceOf[StructType]
 
   override def eval(input: Row): Any = {
     val baseValue = child.eval(input).asInstanceOf[Row]
@@ -113,9 +107,7 @@ case class GetField(child: Expression, fieldName: String) extends UnaryExpressio
  */
 case class CreateArray(children: Seq[Expression]) extends Expression {
   override type EvaluatedType = Any
-  
-  override def foldable = !children.exists(!_.foldable)
-  
+
   lazy val childTypes = children.map(_.dataType).distinct
 
   override lazy val resolved =

@@ -18,11 +18,11 @@
 package org.apache.spark
 
 /**
- * An identifier for a partition in an RDD.
+ * A partition of an RDD.
  */
 trait Partition extends Serializable {
   /**
-   * Get the partition's index within its parent RDD
+   * Get the split's index within its parent RDD
    */
   def index: Int
 

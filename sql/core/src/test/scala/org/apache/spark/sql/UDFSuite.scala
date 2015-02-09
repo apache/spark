@@ -27,22 +27,18 @@ case class FunctionResult(f1: String, f2: String)
 class UDFSuite extends QueryTest {
 
   test("Simple UDF") {
-    udf.register("strLenScala", (_: String).length)
+    registerFunction("strLenScala", (_: String).length)
     assert(sql("SELECT strLenScala('test')").first().getInt(0) === 4)
   }
 
-  test("ZeroArgument UDF") {
-    udf.register("random0", () => { Math.random()})
-    assert(sql("SELECT random0()").first().getDouble(0) >= 0.0)
-  }
-
   test("TwoArgument UDF") {
-    udf.register("strLenScala", (_: String).length + (_:Int))
+    registerFunction("strLenScala", (_: String).length + (_:Int))
     assert(sql("SELECT strLenScala('test', 1)").first().getInt(0) === 5)
   }
 
+
   test("struct UDF") {
-    udf.register("returnStruct", (f1: String, f2: String) => FunctionResult(f1, f2))
+    registerFunction("returnStruct", (f1: String, f2: String) => FunctionResult(f1, f2))
 
     val result=
       sql("SELECT returnStruct('test', 'test2') as ret")

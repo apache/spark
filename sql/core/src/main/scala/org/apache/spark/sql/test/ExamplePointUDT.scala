@@ -20,7 +20,9 @@ package org.apache.spark.sql.test
 import java.util
 
 import scala.collection.JavaConverters._
-import org.apache.spark.sql.types._
+
+import org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType
+import org.apache.spark.sql.catalyst.types._
 
 /**
  * An example class to demonstrate UDT in Scala, Java, and Python.

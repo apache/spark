@@ -27,13 +27,10 @@ import org.apache.spark.scheduler.local.LocalBackend
 class SparkContextSchedulerCreationSuite
   extends FunSuite with LocalSparkContext with PrivateMethodTester with Logging {
 
-  def createTaskScheduler(master: String): TaskSchedulerImpl =
-    createTaskScheduler(master, new SparkConf())
-
-  def createTaskScheduler(master: String, conf: SparkConf): TaskSchedulerImpl = {
+  def createTaskScheduler(master: String): TaskSchedulerImpl = {
     // Create local SparkContext to setup a SparkEnv. We don't actually want to start() the
     // real schedulers, so we don't want to create a full SparkContext with the desired scheduler.
-    sc = new SparkContext("local", "test", conf)
+    sc = new SparkContext("local", "test")
     val createTaskSchedulerMethod =
       PrivateMethod[Tuple2[SchedulerBackend, TaskScheduler]]('createTaskScheduler)
     val (_, sched) = SparkContext invokePrivate createTaskSchedulerMethod(sc, master)
@@ -105,12 +102,18 @@ class SparkContextSchedulerCreationSuite
   }
 
   test("local-default-parallelism") {
-    val conf = new SparkConf().set("spark.default.parallelism", "16")
-    val sched = createTaskScheduler("local", conf)
+    val defaultParallelism = System.getProperty("spark.default.parallelism")
+    System.setProperty("spark.default.parallelism", "16")
+    val sched = createTaskScheduler("local")
 
     sched.backend match {
       case s: LocalBackend => assert(s.defaultParallelism() === 16)
       case _ => fail()
+    }
+
+    Option(defaultParallelism) match {
+      case Some(v) => System.setProperty("spark.default.parallelism", v)
+      case _ => System.clearProperty("spark.default.parallelism")
     }
   }
 
@@ -152,10 +155,9 @@ class SparkContextSchedulerCreationSuite
     testYarn("yarn-client", "org.apache.spark.scheduler.cluster.YarnClientClusterScheduler")
   }
 
-  def testMesos(master: String, expectedClass: Class[_], coarse: Boolean) {
-    val conf = new SparkConf().set("spark.mesos.coarse", coarse.toString)
+  def testMesos(master: String, expectedClass: Class[_]) {
     try {
-      val sched = createTaskScheduler(master, conf)
+      val sched = createTaskScheduler(master)
       assert(sched.backend.getClass === expectedClass)
     } catch {
       case e: UnsatisfiedLinkError =>
@@ -166,14 +168,17 @@ class SparkContextSchedulerCreationSuite
   }
 
   test("mesos fine-grained") {
-    testMesos("mesos://localhost:1234", classOf[MesosSchedulerBackend], coarse = false)
+    System.setProperty("spark.mesos.coarse", "false")
+    testMesos("mesos://localhost:1234", classOf[MesosSchedulerBackend])
   }
 
   test("mesos coarse-grained") {
-    testMesos("mesos://localhost:1234", classOf[CoarseMesosSchedulerBackend], coarse = true)
+    System.setProperty("spark.mesos.coarse", "true")
+    testMesos("mesos://localhost:1234", classOf[CoarseMesosSchedulerBackend])
   }
 
   test("mesos with zookeeper") {
-    testMesos("zk://localhost:1234,localhost:2345", classOf[MesosSchedulerBackend], coarse = false)
+    System.setProperty("spark.mesos.coarse", "false")
+    testMesos("zk://localhost:1234,localhost:2345", classOf[MesosSchedulerBackend])
   }
 }

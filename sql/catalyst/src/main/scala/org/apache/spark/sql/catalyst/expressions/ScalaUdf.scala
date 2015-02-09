@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.catalyst.types.DataType
+import org.apache.spark.util.ClosureCleaner
 
 /**
  * User-defined function.

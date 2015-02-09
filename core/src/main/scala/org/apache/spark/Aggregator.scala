@@ -34,9 +34,7 @@ case class Aggregator[K, V, C] (
     mergeValue: (C, V) => C,
     mergeCombiners: (C, C) => C) {
 
-  // When spilling is enabled sorting will happen externally, but not necessarily with an 
-  // ExternalSorter. 
-  private val isSpillEnabled = SparkEnv.get.conf.getBoolean("spark.shuffle.spill", true)
+  private val externalSorting = SparkEnv.get.conf.getBoolean("spark.shuffle.spill", true)
 
   @deprecated("use combineValuesByKey with TaskContext argument", "0.9.0")
   def combineValuesByKey(iter: Iterator[_ <: Product2[K, V]]): Iterator[(K, C)] =
@@ -44,7 +42,7 @@ case class Aggregator[K, V, C] (
 
   def combineValuesByKey(iter: Iterator[_ <: Product2[K, V]],
                          context: TaskContext): Iterator[(K, C)] = {
-    if (!isSpillEnabled) {
+    if (!externalSorting) {
       val combiners = new AppendOnlyMap[K,C]
       var kv: Product2[K, V] = null
       val update = (hadValue: Boolean, oldValue: C) => {
@@ -61,8 +59,8 @@ case class Aggregator[K, V, C] (
       // Update task metrics if context is not null
       // TODO: Make context non optional in a future release
       Option(context).foreach { c =>
-        c.taskMetrics.incMemoryBytesSpilled(combiners.memoryBytesSpilled)
-        c.taskMetrics.incDiskBytesSpilled(combiners.diskBytesSpilled)
+        c.taskMetrics.memoryBytesSpilled += combiners.memoryBytesSpilled
+        c.taskMetrics.diskBytesSpilled += combiners.diskBytesSpilled
       }
       combiners.iterator
     }
@@ -73,9 +71,9 @@ case class Aggregator[K, V, C] (
     combineCombinersByKey(iter, null)
 
   def combineCombinersByKey(iter: Iterator[_ <: Product2[K, C]], context: TaskContext)
-    : Iterator[(K, C)] =
+      : Iterator[(K, C)] =
   {
-    if (!isSpillEnabled) {
+    if (!externalSorting) {
       val combiners = new AppendOnlyMap[K,C]
       var kc: Product2[K, C] = null
       val update = (hadValue: Boolean, oldValue: C) => {
@@ -95,8 +93,8 @@ case class Aggregator[K, V, C] (
       // Update task metrics if context is not null
       // TODO: Make context non-optional in a future release
       Option(context).foreach { c =>
-        c.taskMetrics.incMemoryBytesSpilled(combiners.memoryBytesSpilled)
-        c.taskMetrics.incDiskBytesSpilled(combiners.diskBytesSpilled)
+        c.taskMetrics.memoryBytesSpilled += combiners.memoryBytesSpilled
+        c.taskMetrics.diskBytesSpilled += combiners.diskBytesSpilled
       }
       combiners.iterator
     }

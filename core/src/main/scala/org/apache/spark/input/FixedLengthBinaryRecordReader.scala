@@ -24,7 +24,6 @@ import org.apache.hadoop.io.compress.CompressionCodecFactory
 import org.apache.hadoop.io.{BytesWritable, LongWritable}
 import org.apache.hadoop.mapreduce.{InputSplit, RecordReader, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
-import org.apache.spark.deploy.SparkHadoopUtil
 
 /**
  * FixedLengthBinaryRecordReader is returned by FixedLengthBinaryInputFormat.
@@ -83,7 +82,7 @@ private[spark] class FixedLengthBinaryRecordReader
     // the actual file we will be reading from
     val file = fileSplit.getPath
     // job configuration
-    val job = SparkHadoopUtil.get.getConfigurationFromJobContext(context)
+    val job = context.getConfiguration
     // check compression
     val codec = new CompressionCodecFactory(job).getCodec(file)
     if (codec != null) {

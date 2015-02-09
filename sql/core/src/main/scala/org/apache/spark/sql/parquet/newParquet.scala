@@ -18,12 +18,11 @@ package org.apache.spark.sql.parquet
 
 import java.util.{List => JList}
 
-import scala.collection.JavaConversions._
-
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce.{JobContext, InputSplit, Job}
+import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
 
 import parquet.hadoop.ParquetInputFormat
 import parquet.hadoop.util.ContextUtil
@@ -31,11 +30,13 @@ import parquet.hadoop.util.ContextUtil
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.{Partition => SparkPartition, Logging}
 import org.apache.spark.rdd.{NewHadoopPartition, RDD}
+
 import org.apache.spark.sql.{SQLConf, Row, SQLContext}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.types.{StringType, IntegerType, StructField, StructType}
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
+import scala.collection.JavaConversions._
 
 /**
  * Allows creation of parquet based tables using the syntax
@@ -136,7 +137,7 @@ case class ParquetRelation2(path: String)(@transient val sqlContext: SQLContext)
     ParquetTypesConverter.readSchemaFromFile(
       partitions.head.files.head.getPath,
       Some(sparkContext.hadoopConfiguration),
-      sqlContext.conf.isParquetBinaryAsString))
+      sqlContext.isParquetBinaryAsString))
 
   val dataIncludesKey =
     partitionKeys.headOption.map(dataSchema.fieldNames.contains(_)).getOrElse(true)
@@ -197,7 +198,7 @@ case class ParquetRelation2(path: String)(@transient val sqlContext: SQLContext)
     predicates
       .reduceOption(And)
       .flatMap(ParquetFilters.createFilter)
-      .filter(_ => sqlContext.conf.parquetFilterPushDown)
+      .filter(_ => sqlContext.parquetFilterPushDown)
       .foreach(ParquetInputFormat.setFilterPredicate(jobConf, _))
 
     def percentRead = selectedPartitions.size.toDouble / partitions.size.toDouble * 100

@@ -12,7 +12,7 @@ import scala.tools.nsc.interpreter._
 
 import scala.collection.{ mutable, immutable }
 
-private[repl] trait SparkImports {
+trait SparkImports {
   self: SparkIMain =>
 
   import global._

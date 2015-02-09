@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.types._
 
 case class UnaryMinus(child: Expression) extends UnaryExpression {
   type EvaluatedType = Any
@@ -38,22 +38,11 @@ case class Sqrt(child: Expression) extends UnaryExpression {
 
   def dataType = DoubleType
   override def foldable = child.foldable
-  def nullable = true
+  def nullable = child.nullable
   override def toString = s"SQRT($child)"
 
   override def eval(input: Row): Any = {
-    val evalE = child.eval(input)
-    if (evalE == null) {
-      null
-    } else {
-      child.dataType match {
-        case n: NumericType =>
-          val value = n.numeric.toDouble(evalE.asInstanceOf[n.JvmType])
-          if (value < 0) null
-          else math.sqrt(value)
-        case other => sys.error(s"Type $other does not support non-negative numeric operations")
-      }
-    }
+    n1(child, input, (na,a) => math.sqrt(na.toDouble(a)))
   }
 }
 
@@ -133,16 +122,9 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
 case class Remainder(left: Expression, right: Expression) extends BinaryArithmetic {
   def symbol = "%"
 
-  override def nullable = true
+  override def nullable = left.nullable || right.nullable || dataType.isInstanceOf[DecimalType]
 
-  override def eval(input: Row): Any = {
-    val evalE2 = right.eval(input)
-    dataType match {
-      case _ if evalE2 == null => null
-      case _ if evalE2 == 0 => null
-      case nt: NumericType => i1(input, left, _.rem(_, evalE2.asInstanceOf[nt.JvmType]))
-    }
-  }
+  override def eval(input: Row): Any = i2(input, left, right, _.rem(_, _))
 }
 
 /**

@@ -80,7 +80,7 @@ class FlumeStreamSuite extends FunSuite with BeforeAndAfter with Matchers with L
       val socket = new ServerSocket(trialPort)
       socket.close()
       (null, trialPort)
-    }, conf)._2
+    })._2
   }
 
   /** Setup and start the streaming context */

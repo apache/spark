@@ -15,7 +15,7 @@ import scala.tools.nsc.ast.parser.Tokens.EOF
 
 import org.apache.spark.Logging
 
-private[repl] trait SparkExprTyper extends Logging {
+trait SparkExprTyper extends Logging {
   val repl: SparkIMain
 
   import repl._
