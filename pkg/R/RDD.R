@@ -1255,22 +1255,18 @@ setMethod("flatMapValues",
 #' rdd <- parallelize(sc, list(3, 2, 1))
 #' collect(sortBy(rdd, function(x) { x })) # list (1, 2, 3)
 #'}
-setGeneric("sortBy", function(rdd, func, ascending, numPartitions) { standardGeneric("sortBy") })
+setGeneric("sortBy", function(rdd,
+                              func,
+                              ascending = TRUE,
+                              numPartitions = 1L) {
+                       standardGeneric("sortBy")
+                     })
 
-setClassUnion("missingOrLogical", c("missing", "logical"))
 #' @rdname sortBy
 #' @aliases sortBy,RDD,RDD-method
 setMethod("sortBy",
-          signature(rdd = "RDD", func = "function", 
-                    ascending = "missingOrLogical", numPartitions = "missingOrInteger"),
-          function(rdd, func, ascending, numPartitions) {
-            if (missing(ascending)) {
-              ascending = TRUE
-            }
-            if (missing(numPartitions)) {
-              numPartitions = SparkR::numPartitions(rdd)
-            }
-            
+          signature(rdd = "RDD", func = "function"),
+          function(rdd, func, ascending = TRUE, numPartitions = SparkR::numPartitions(rdd)) {          
             values(sortByKey(keyBy(rdd, func), ascending, numPartitions))
           })
 
@@ -1844,20 +1840,17 @@ setMethod("cogroup",
 #' rdd <- parallelize(sc, list(list(3, 1), list(2, 2), list(1, 3)))
 #' collect(sortByKey(rdd)) # list (list(1, 3), list(2, 2), list(3, 1))
 #'}
-setGeneric("sortByKey", function(rdd, ascending, numPartitions) { standardGeneric("sortByKey") })
+setGeneric("sortByKey", function(rdd,
+                                 ascending = TRUE,
+                                 numPartitions = 1L) {
+                          standardGeneric("sortByKey")
+                        })
 
 #' @rdname sortByKey
 #' @aliases sortByKey,RDD,RDD-method
 setMethod("sortByKey",
-          signature(rdd = "RDD", ascending = "missingOrLogical", numPartitions = "missingOrInteger"),
-          function(rdd, ascending, numPartitions) {
-            if (missing(ascending)) {
-              ascending = TRUE
-            }
-            if (missing(numPartitions)) {
-              numPartitions = SparkR::numPartitions(rdd)
-            }
-
+          signature(rdd = "RDD"),
+          function(rdd, ascending = TRUE, numPartitions = SparkR::numPartitions(rdd)) {
             rangeBounds <- list()
             
             if (numPartitions > 1) {
