@@ -20,6 +20,7 @@ package org.apache.spark.scheduler.local
 import java.nio.ByteBuffer
 
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 import akka.actor.{Actor, ActorRef, Props}
 
