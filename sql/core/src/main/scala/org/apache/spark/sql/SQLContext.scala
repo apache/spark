@@ -401,7 +401,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /**
    * :: Experimental ::
    * Returns the dataset stored at path as a DataFrame,
-   * using the default data source configured in spark.sql.sources.default.
+   * using the default data source configured by spark.sql.sources.default.
    */
   @Experimental
   def load(path: String): DataFrame = {
@@ -476,7 +476,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /**
    * :: Experimental ::
    * Creates an external table from the given path and returns the corresponding DataFrame.
-   * It will use the default data source configured in spark.sql.sources.default.
+   * It will use the default data source configured by spark.sql.sources.default.
    */
   @Experimental
   def createExternalTable(tableName: String, path: String): DataFrame = {

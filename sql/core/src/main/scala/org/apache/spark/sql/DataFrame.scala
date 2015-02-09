@@ -559,7 +559,7 @@ trait DataFrame extends RDDApi[Row] {
   /**
    * :: Experimental ::
    * Creates a table from the the contents of this DataFrame.
-   * It will use the default data source configured in spark.sql.sources.default.
+   * It will use the default data source configured by spark.sql.sources.default.
    * This will fail if the table already exists.
    *
    * Note that this currently only works with DataFrames that are created from a HiveContext as
@@ -573,7 +573,7 @@ trait DataFrame extends RDDApi[Row] {
   /**
    * :: Experimental ::
    * Creates a table from the the contents of this DataFrame.
-   * It will use the default data source configured in spark.sql.sources.default.
+   * It will use the default data source configured by spark.sql.sources.default.
    * If appendIfExists is true and the table already exists,
    * it will append contents of this DataFrame to the table.
    * If appendIfExists is false and the table already exists, this will fail.
@@ -667,7 +667,7 @@ trait DataFrame extends RDDApi[Row] {
   /**
    * :: Experimental ::
    * Saves the contents of this DataFrame to the given path.
-   * It will use the default data source configured in spark.sql.sources.default.
+   * It will use the default data source configured by spark.sql.sources.default.
    */
   @Experimental
   def save(path: String): Unit
@@ -675,7 +675,7 @@ trait DataFrame extends RDDApi[Row] {
   /**
    * :: Experimental ::
    * Saves the contents of this DataFrame to the given path.
-   * It will use the default data source configured in spark.sql.sources.default.
+   * It will use the default data source configured by spark.sql.sources.default.
    */
   @Experimental
   def save(path: String, mode: SaveMode): Unit
