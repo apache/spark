@@ -304,9 +304,9 @@ case class BitwiseNot(child: Expression) extends UnaryExpression {
 
   lazy val not: (Any) => Any = dataType match {
     case ByteType =>
-      ((evalE: Byte) => ~evalE).asInstanceOf[(Any) => Any]
+      ((evalE: Byte) => (~evalE).toByte).asInstanceOf[(Any) => Any]
     case ShortType =>
-      ((evalE: Short) => ~evalE).asInstanceOf[(Any) => Any]
+      ((evalE: Short) => (~evalE).toShort).asInstanceOf[(Any) => Any]
     case IntegerType =>
       ((evalE: Int) => ~evalE).asInstanceOf[(Any) => Any]
     case LongType =>
