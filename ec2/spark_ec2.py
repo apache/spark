@@ -21,6 +21,7 @@
 
 from __future__ import with_statement
 
+import hashlib
 import logging
 import os
 import pipes
@@ -29,6 +30,7 @@ import shutil
 import string
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
 import urllib2
@@ -36,16 +38,62 @@ import warnings
 from datetime import datetime
 from optparse import OptionParser
 from sys import stderr
+
+VALID_SPARK_VERSIONS = set([
+    "0.7.3",
+    "0.8.0",
+    "0.8.1",
+    "0.9.0",
+    "0.9.1",
+    "0.9.2",
+    "1.0.0",
+    "1.0.1",
+    "1.0.2",
+    "1.1.0",
+    "1.1.1",
+    "1.2.0",
+])
+
+DEFAULT_SPARK_VERSION = "1.2.0"
+DEFAULT_SPARK_GITHUB_REPO = "https://github.com/apache/spark"
+SPARK_EC2_DIR = os.path.dirname(os.path.realpath(__file__))
+MESOS_SPARK_EC2_BRANCH = "branch-1.3"
+
+# A URL prefix from which to fetch AMI information
+AMI_PREFIX = "https://raw.github.com/mesos/spark-ec2/{b}/ami-list".format(b=MESOS_SPARK_EC2_BRANCH)
+
+
+def setup_boto():
+    # Download Boto if it's not already present in the SPARK_EC2_DIR/lib folder:
+    version = "boto-2.34.0"
+    md5 = "5556223d2d0cc4d06dd4829e671dcecd"
+    url = "https://pypi.python.org/packages/source/b/boto/%s.tar.gz" % version
+    lib_dir = os.path.join(SPARK_EC2_DIR, "lib")
+    if not os.path.exists(lib_dir):
+        os.mkdir(lib_dir)
+    boto_lib_dir = os.path.join(lib_dir, version)
+    if not os.path.isdir(boto_lib_dir):
+        tgz_file_path = os.path.join(lib_dir, "%s.tar.gz" % version)
+        print "Downloading Boto from PyPi"
+        download_stream = urllib2.urlopen(url)
+        with open(tgz_file_path, "wb") as tgz_file:
+            tgz_file.write(download_stream.read())
+        with open(tgz_file_path) as tar:
+            if hashlib.md5(tar.read()).hexdigest() != md5:
+                print >> stderr, "ERROR: Got wrong md5sum for Boto"
+                sys.exit(1)
+        tar = tarfile.open(tgz_file_path)
+        tar.extractall(path=lib_dir)
+        tar.close()
+        os.remove(tgz_file_path)
+        print "Finished downloading Boto"
+    sys.path.insert(0, boto_lib_dir)
+
+
+setup_boto()
 import boto
 from boto.ec2.blockdevicemapping import BlockDeviceMapping, BlockDeviceType, EBSBlockDeviceType
 from boto import ec2
-
-DEFAULT_SPARK_VERSION = "1.1.0"
-SPARK_EC2_DIR = os.path.dirname(os.path.realpath(__file__))
-
-MESOS_SPARK_EC2_BRANCH = "v4"
-# A URL prefix from which to fetch AMI information
-AMI_PREFIX = "https://raw.github.com/mesos/spark-ec2/{b}/ami-list".format(b=MESOS_SPARK_EC2_BRANCH)
 
 
 class UsageError(Exception):
@@ -94,8 +142,8 @@ def parse_args():
         help="Version of Spark to use: 'X.Y.Z' or a specific git hash (default: %default)")
     parser.add_option(
         "--spark-git-repo",
-        default="https://github.com/apache/spark",
-        help="Github repo from which to checkout supplied commit hash")
+        default=DEFAULT_SPARK_GITHUB_REPO,
+        help="Github repo from which to checkout supplied commit hash (default: %default)")
     parser.add_option(
         "--hadoop-major-version", default="1",
         help="Major version of Hadoop (default: %default)")
@@ -120,6 +168,10 @@ def parse_args():
              "Only possible on EBS-backed AMIs. " +
              "EBS volumes are only attached if --ebs-vol-size > 0." +
              "Only support up to 8 EBS volumes.")
+    parser.add_option("--placement-group", type="string", default=None,
+                      help="Which placement group to try and launch " +
+                      "instances into. Assumes placement group is already " +
+                      "created.")
     parser.add_option(
         "--swap", metavar="SWAP", type="int", default=1024,
         help="Swap space to set up per node, in MB (default: %default)")
@@ -162,6 +214,10 @@ def parse_args():
     parser.add_option(
         "--copy-aws-credentials", action="store_true", default=False,
         help="Add AWS credentials to hadoop configuration to allow Spark to access S3")
+    parser.add_option(
+        "--subnet-id", default=None, help="VPC subnet to launch instances in")
+    parser.add_option(
+        "--vpc-id", default=None, help="VPC to launch instances in")
 
     (opts, args) = parser.parse_args()
     if len(args) != 2:
@@ -186,14 +242,34 @@ def parse_args():
 
 
 # Get the EC2 security group of the given name, creating it if it doesn't exist
-def get_or_make_group(conn, name):
+def get_or_make_group(conn, name, vpc_id):
     groups = conn.get_all_security_groups()
     group = [g for g in groups if g.name == name]
     if len(group) > 0:
         return group[0]
     else:
         print "Creating security group " + name
-        return conn.create_security_group(name, "Spark EC2 group")
+        return conn.create_security_group(name, "Spark EC2 group", vpc_id)
+
+
+def get_validate_spark_version(version, repo):
+    if "." in version:
+        version = version.replace("v", "")
+        if version not in VALID_SPARK_VERSIONS:
+            print >> stderr, "Don't know about Spark version: {v}".format(v=version)
+            sys.exit(1)
+        return version
+    else:
+        github_commit_url = "{repo}/commit/{commit_hash}".format(repo=repo, commit_hash=version)
+        request = urllib2.Request(github_commit_url)
+        request.get_method = lambda: 'HEAD'
+        try:
+            response = urllib2.urlopen(request)
+        except urllib2.HTTPError, e:
+            print >> stderr, "Couldn't validate Spark commit: {url}".format(url=github_commit_url)
+            print >> stderr, "Received HTTP response code of {code}.".format(code=e.code)
+            sys.exit(1)
+        return version
 
 
 # Check whether a given EC2 instance object is in a state we consider active,
@@ -201,26 +277,6 @@ def get_or_make_group(conn, name):
 # active since we can restart stopped clusters.
 def is_active(instance):
     return (instance.state in ['pending', 'running', 'stopping', 'stopped'])
-
-
-# Return correct versions of Spark and Shark, given the supplied Spark version
-def get_spark_shark_version(opts):
-    spark_shark_map = {
-        "0.7.3": "0.7.1",
-        "0.8.0": "0.8.0",
-        "0.8.1": "0.8.1",
-        "0.9.0": "0.9.0",
-        "0.9.1": "0.9.1",
-        "1.0.0": "1.0.0",
-        "1.0.1": "1.0.1",
-        "1.0.2": "1.0.2",
-        "1.1.0": "1.1.0",
-    }
-    version = opts.spark_version.replace("v", "")
-    if version not in spark_shark_map:
-        print >> stderr, "Don't know about Spark version: %s" % version
-        sys.exit(1)
-    return (version, spark_shark_map[version])
 
 
 # Attempt to resolve an appropriate AMI given the architecture and region of the request.
@@ -303,12 +359,26 @@ def launch_cluster(conn, opts, cluster_name):
             user_data_content = user_data_file.read()
 
     print "Setting up security groups..."
-    master_group = get_or_make_group(conn, cluster_name + "-master")
-    slave_group = get_or_make_group(conn, cluster_name + "-slaves")
+    master_group = get_or_make_group(conn, cluster_name + "-master", opts.vpc_id)
+    slave_group = get_or_make_group(conn, cluster_name + "-slaves", opts.vpc_id)
     authorized_address = opts.authorized_address
     if master_group.rules == []:  # Group was just now created
-        master_group.authorize(src_group=master_group)
-        master_group.authorize(src_group=slave_group)
+        if opts.vpc_id is None:
+            master_group.authorize(src_group=master_group)
+            master_group.authorize(src_group=slave_group)
+        else:
+            master_group.authorize(ip_protocol='icmp', from_port=-1, to_port=-1,
+                                   src_group=master_group)
+            master_group.authorize(ip_protocol='tcp', from_port=0, to_port=65535,
+                                   src_group=master_group)
+            master_group.authorize(ip_protocol='udp', from_port=0, to_port=65535,
+                                   src_group=master_group)
+            master_group.authorize(ip_protocol='icmp', from_port=-1, to_port=-1,
+                                   src_group=slave_group)
+            master_group.authorize(ip_protocol='tcp', from_port=0, to_port=65535,
+                                   src_group=slave_group)
+            master_group.authorize(ip_protocol='udp', from_port=0, to_port=65535,
+                                   src_group=slave_group)
         master_group.authorize('tcp', 22, 22, authorized_address)
         master_group.authorize('tcp', 8080, 8081, authorized_address)
         master_group.authorize('tcp', 18080, 18080, authorized_address)
@@ -320,8 +390,22 @@ def launch_cluster(conn, opts, cluster_name):
         if opts.ganglia:
             master_group.authorize('tcp', 5080, 5080, authorized_address)
     if slave_group.rules == []:  # Group was just now created
-        slave_group.authorize(src_group=master_group)
-        slave_group.authorize(src_group=slave_group)
+        if opts.vpc_id is None:
+            slave_group.authorize(src_group=master_group)
+            slave_group.authorize(src_group=slave_group)
+        else:
+            slave_group.authorize(ip_protocol='icmp', from_port=-1, to_port=-1,
+                                  src_group=master_group)
+            slave_group.authorize(ip_protocol='tcp', from_port=0, to_port=65535,
+                                  src_group=master_group)
+            slave_group.authorize(ip_protocol='udp', from_port=0, to_port=65535,
+                                  src_group=master_group)
+            slave_group.authorize(ip_protocol='icmp', from_port=-1, to_port=-1,
+                                  src_group=slave_group)
+            slave_group.authorize(ip_protocol='tcp', from_port=0, to_port=65535,
+                                  src_group=slave_group)
+            slave_group.authorize(ip_protocol='udp', from_port=0, to_port=65535,
+                                  src_group=slave_group)
         slave_group.authorize('tcp', 22, 22, authorized_address)
         slave_group.authorize('tcp', 8080, 8081, authorized_address)
         slave_group.authorize('tcp', 50060, 50060, authorized_address)
@@ -341,11 +425,12 @@ def launch_cluster(conn, opts, cluster_name):
     if opts.ami is None:
         opts.ami = get_spark_ami(opts)
 
-    additional_groups = []
+    # we use group ids to work around https://github.com/boto/boto/issues/350
+    additional_group_ids = []
     if opts.additional_security_group:
-        additional_groups = [sg
-                             for sg in conn.get_all_security_groups()
-                             if opts.additional_security_group in (sg.name, sg.id)]
+        additional_group_ids = [sg.id
+                                for sg in conn.get_all_security_groups()
+                                if opts.additional_security_group in (sg.name, sg.id)]
     print "Launching instances..."
 
     try:
@@ -392,9 +477,11 @@ def launch_cluster(conn, opts, cluster_name):
                 placement=zone,
                 count=num_slaves_this_zone,
                 key_name=opts.key_pair,
-                security_groups=[slave_group] + additional_groups,
+                security_group_ids=[slave_group.id] + additional_group_ids,
                 instance_type=opts.instance_type,
                 block_device_map=block_map,
+                subnet_id=opts.subnet_id,
+                placement_group=opts.placement_group,
                 user_data=user_data_content)
             my_req_ids += [req.id for req in slave_reqs]
             i += 1
@@ -413,7 +500,7 @@ def launch_cluster(conn, opts, cluster_name):
                         active_instance_ids.append(id_to_req[i].instance_id)
                 if len(active_instance_ids) == opts.slaves:
                     print "All %d slaves granted" % opts.slaves
-                    reservations = conn.get_all_instances(active_instance_ids)
+                    reservations = conn.get_all_reservations(active_instance_ids)
                     slave_nodes = []
                     for r in reservations:
                         slave_nodes += r.instances
@@ -441,12 +528,14 @@ def launch_cluster(conn, opts, cluster_name):
             num_slaves_this_zone = get_partition(opts.slaves, num_zones, i)
             if num_slaves_this_zone > 0:
                 slave_res = image.run(key_name=opts.key_pair,
-                                      security_groups=[slave_group] + additional_groups,
+                                      security_group_ids=[slave_group.id] + additional_group_ids,
                                       instance_type=opts.instance_type,
                                       placement=zone,
                                       min_count=num_slaves_this_zone,
                                       max_count=num_slaves_this_zone,
                                       block_device_map=block_map,
+                                      subnet_id=opts.subnet_id,
+                                      placement_group=opts.placement_group,
                                       user_data=user_data_content)
                 slave_nodes += slave_res.instances
                 print "Launched %d slaves in %s, regid = %s" % (num_slaves_this_zone,
@@ -467,13 +556,16 @@ def launch_cluster(conn, opts, cluster_name):
         if opts.zone == 'all':
             opts.zone = random.choice(conn.get_all_zones()).name
         master_res = image.run(key_name=opts.key_pair,
-                               security_groups=[master_group] + additional_groups,
+                               security_group_ids=[master_group.id] + additional_group_ids,
                                instance_type=master_type,
                                placement=opts.zone,
                                min_count=1,
                                max_count=1,
                                block_device_map=block_map,
+                               subnet_id=opts.subnet_id,
+                               placement_group=opts.placement_group,
                                user_data=user_data_content)
+
         master_nodes = master_res.instances
         print "Launched master in %s, regid = %s" % (zone, master_res.id)
 
@@ -497,7 +589,7 @@ def launch_cluster(conn, opts, cluster_name):
 
 def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
     print "Searching for existing cluster " + cluster_name + "..."
-    reservations = conn.get_all_instances()
+    reservations = conn.get_all_reservations()
     master_nodes = []
     slave_nodes = []
     for res in reservations:
@@ -540,7 +632,7 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
             print slave.public_dns_name
             ssh_write(slave.public_dns_name, opts, ['tar', 'x'], dot_ssh_tar)
 
-    modules = ['spark', 'shark', 'ephemeral-hdfs', 'persistent-hdfs',
+    modules = ['spark', 'ephemeral-hdfs', 'persistent-hdfs',
                'mapreduce', 'spark-standalone', 'tachyon']
 
     if opts.hadoop_major_version == "1":
@@ -572,12 +664,6 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
     print "Running setup on master..."
     setup_spark_cluster(master, opts)
     print "Done!"
-
-
-def setup_standalone_cluster(master, slave_nodes, opts):
-    slave_ips = '\n'.join([i.public_dns_name for i in slave_nodes])
-    ssh(master, opts, "echo \"%s\" > spark/conf/slaves" % (slave_ips))
-    ssh(master, opts, "/root/spark/sbin/start-all.sh")
 
 
 def setup_spark_cluster(master, opts):
@@ -633,9 +719,7 @@ def wait_for_cluster_state(conn, opts, cluster_instances, cluster_state):
     sys.stdout.flush()
 
     start_time = datetime.now()
-
     num_attempts = 0
-    conn = ec2.connect_to_region(opts.region)
 
     while True:
         time.sleep(5 * num_attempts)  # seconds
@@ -742,13 +826,11 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
     cluster_url = "%s:7077" % active_master
 
     if "." in opts.spark_version:
-        # Pre-built spark & shark deploy
-        (spark_v, shark_v) = get_spark_shark_version(opts)
+        # Pre-built Spark deploy
+        spark_v = get_validate_spark_version(opts.spark_version, opts.spark_git_repo)
     else:
         # Spark-only custom deploy
         spark_v = "%s|%s" % (opts.spark_git_repo, opts.spark_version)
-        shark_v = ""
-        modules = filter(lambda x: x != "shark", modules)
 
     template_vars = {
         "master_list": '\n'.join([i.public_dns_name for i in master_nodes]),
@@ -761,7 +843,6 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
         "swap": str(opts.swap),
         "modules": '\n'.join(modules),
         "spark_version": spark_v,
-        "shark_version": shark_v,
         "hadoop_major_version": opts.hadoop_major_version,
         "spark_worker_instances": "%d" % opts.worker_instances,
         "spark_master_opts": opts.master_opts
@@ -910,6 +991,8 @@ def real_main():
     (opts, action, cluster_name) = parse_args()
 
     # Input parameter validation
+    get_validate_spark_version(opts.spark_version, opts.spark_git_repo)
+
     if opts.wait is not None:
         # NOTE: DeprecationWarnings are silent in 2.7+ by default.
         #       To show them, run Python with the -Wdefault switch.

@@ -21,8 +21,9 @@ import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.param.{Params, Param, ParamMap}
-import org.apache.spark.sql.{SchemaRDD, StructType}
+import org.apache.spark.ml.param.{Param, ParamMap}
+import org.apache.spark.sql.SchemaRDD
+import org.apache.spark.sql.types.StructType
 
 /**
  * :: AlphaComponent ::

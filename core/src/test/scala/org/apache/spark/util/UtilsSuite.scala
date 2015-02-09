@@ -31,7 +31,7 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.SparkConf
 
-class UtilsSuite extends FunSuite {
+class UtilsSuite extends FunSuite with ResetSystemProperties {
 
   test("bytesToString") {
     assert(Utils.bytesToString(10) === "10.0 B")

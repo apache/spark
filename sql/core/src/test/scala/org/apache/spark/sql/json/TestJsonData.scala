@@ -43,6 +43,13 @@ object TestJsonData {
       """{"num_num_1":21474836570, "num_num_2":1.1, "num_num_3": 21474836470,
           "num_bool":null, "num_str":92233720368547758070, "str_bool":null}""" :: Nil)
 
+  val jsonNullStruct =
+    TestSQLContext.sparkContext.parallelize(
+      """{"nullstr":"","ip":"27.31.100.29","headers":{"Host":"1.abc.com","Charset":"UTF-8"}}""" ::
+        """{"nullstr":"","ip":"27.31.100.29","headers":{}}""" ::
+        """{"nullstr":"","ip":"27.31.100.29","headers":""}""" ::
+        """{"nullstr":null,"ip":"27.31.100.29","headers":null}""" :: Nil)
+
   val complexFieldValueTypeConflict =
     TestSQLContext.sparkContext.parallelize(
       """{"num_struct":11, "str_array":[1, 2, 3],

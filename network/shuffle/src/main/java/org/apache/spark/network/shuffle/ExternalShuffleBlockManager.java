@@ -37,6 +37,7 @@ import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.util.JavaUtils;
+import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
 
 /**
@@ -49,7 +50,7 @@ import org.apache.spark.network.util.TransportConf;
  * the Executor's memory, unlike the IndexShuffleBlockManager.
  */
 public class ExternalShuffleBlockManager {
-  private final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockManager.class);
+  private static final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockManager.class);
 
   // Map containing all registered executors' metadata.
   private final ConcurrentMap<AppExecId, ExecutorShuffleInfo> executors;
@@ -60,8 +61,9 @@ public class ExternalShuffleBlockManager {
   private final TransportConf conf;
 
   public ExternalShuffleBlockManager(TransportConf conf) {
-    // TODO: Give this thread a name.
-    this(conf, Executors.newSingleThreadExecutor());
+    this(conf, Executors.newSingleThreadExecutor(
+        // Add `spark` prefix because it will run in NM in Yarn mode.
+        NettyUtils.createThreadFactory("spark-shuffle-directory-cleaner")));
   }
 
   // Allows tests to have more control over when directories are cleaned up.
