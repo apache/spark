@@ -234,19 +234,15 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
 case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithmetic {
   def symbol = "&"
 
-  lazy val and: (EvaluatedType, EvaluatedType) => Any = dataType match {
+  lazy val and: (Any, Any) => Any = dataType match {
     case ByteType =>
-      (evalE1: EvaluatedType, evalE2: EvaluatedType) =>
-        (evalE1.asInstanceOf[Byte] & evalE2.asInstanceOf[Byte]).toByte
+      ((evalE1: Byte, evalE2: Byte) => (evalE1 & evalE2).toByte).asInstanceOf[(Any, Any) => Any]
     case ShortType =>
-      (evalE1: EvaluatedType, evalE2: EvaluatedType) =>
-        (evalE1.asInstanceOf[Short] & evalE2.asInstanceOf[Short]).toShort
+      ((evalE1: Short, evalE2: Short) => (evalE1 & evalE2).toShort).asInstanceOf[(Any, Any) => Any]
     case IntegerType =>
-      (evalE1: EvaluatedType, evalE2: EvaluatedType) =>
-        evalE1.asInstanceOf[Int] & evalE2.asInstanceOf[Int]
+      ((evalE1: Int, evalE2: Int) => evalE1 & evalE2).asInstanceOf[(Any, Any) => Any]
     case LongType =>
-      (evalE1: EvaluatedType, evalE2: EvaluatedType) =>
-        evalE1.asInstanceOf[Long] & evalE2.asInstanceOf[Long]
+      ((evalE1: Long, evalE2: Long) => evalE1 & evalE2).asInstanceOf[(Any, Any) => Any]
     case other => sys.error(s"Unsupported bitwise & operation on $other")
   }
 
