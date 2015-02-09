@@ -37,14 +37,14 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorAdded}
 import org.apache.spark.util.Utils
 
 /**
- * Integration tests for Yarn; these tests use a mini Yarn cluster to run Spark-on-Yarn
+ * Integration tests for YARN; these tests use a mini Yarn cluster to run Spark-on-YARN
  * applications, and require the Spark assembly to be built before they can be successfully
  * run.
  */
 class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers with Logging {
 
-  // log4j configuration for the Yarn containers, so that their output is collected
-  // by Yarn instead of trying to overwrite unit-tests.log.
+  // log4j configuration for the YARN containers, so that their output is collected
+  // by YARN instead of trying to overwrite unit-tests.log.
   private val LOG4J_CONF = """
     |log4j.rootCategory=DEBUG, console
     |log4j.appender.console=org.apache.log4j.ConsoleAppender
@@ -164,14 +164,14 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     testUseClassPathFirst(false)
   }
 
-  private def testBasicYarnApp(clientMode: Boolean) = {
+  private def testBasicYarnApp(clientMode: Boolean): Unit = {
     var result = File.createTempFile("result", null, tempDir)
     runSpark(clientMode, mainClassName(YarnClusterDriver.getClass),
       appArgs = Seq(result.getAbsolutePath()))
     checkResult(result)
   }
 
-  private def testUseClassPathFirst(clientMode: Boolean) = {
+  private def testUseClassPathFirst(clientMode: Boolean): Unit = {
     // Create a jar file that contains a different version of "test.resource".
     val jarFile = TestUtils.createJarWithFiles(Map("test.resource" -> "OVERRIDDEN"), tempDir)
     val driverResult = File.createTempFile("driver", null, tempDir)
@@ -192,7 +192,7 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
       appArgs: Seq[String] = Nil,
       sparkArgs: Seq[String] = Nil,
       extraJars: Seq[String] = Nil,
-      extraConf: Map[String, String] = Map()) = {
+      extraConf: Map[String, String] = Map()): Unit = {
     val master = if (clientMode) "yarn-client" else "yarn-cluster"
     val props = new Properties()
 
@@ -276,7 +276,7 @@ private object YarnClusterDriver extends Logging with Matchers {
   val WAIT_TIMEOUT_MILLIS = 10000
   var listener: SaveExecutorInfo = null
 
-  def main(args: Array[String]) = {
+  def main(args: Array[String]): Unit = {
     if (args.length != 1) {
       System.err.println(
         s"""
@@ -313,7 +313,7 @@ private object YarnClusterDriver extends Logging with Matchers {
 
 private object YarnClasspathTest {
 
-  def main(args: Array[String]) = {
+  def main(args: Array[String]): Unit = {
     if (args.length != 2) {
       System.err.println(
         s"""
@@ -333,7 +333,7 @@ private object YarnClasspathTest {
     }
   }
 
-  private def readResource(resultPath: String) = {
+  private def readResource(resultPath: String): Unit = {
     var result = "failure"
     try {
       val ccl = Thread.currentThread().getContextClassLoader()

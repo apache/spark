@@ -73,8 +73,7 @@ private[spark] class MesosExecutorBackend
     executor = new Executor(
       executorId,
       slaveInfo.getHostname,
-      env,
-      Nil)
+      env)
   }
 
   override def launchTask(d: ExecutorDriver, taskInfo: TaskInfo) {

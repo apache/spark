@@ -454,12 +454,12 @@ private[spark] class ApplicationMaster(
     logInfo("Starting the user application in a separate Thread")
     System.setProperty("spark.executor.instances", args.numExecutors.toString)
 
-    val classpath = Client.getUserClasspath(null, sparkConf)
+    val classpath = Client.getUserClasspath(sparkConf)
     val urls = classpath.map { entry =>
       new URL("file:" + new File(entry.getPath()).getAbsolutePath())
     }
     val userClassLoader =
-      if (Client.isUserClassPathFirst(sparkConf, true)) {
+      if (Client.isUserClassPathFirst(sparkConf, isDriver = true)) {
         new ChildFirstURLClassLoader(urls, Utils.getContextOrSparkClassLoader)
       } else {
         new MutableURLClassLoader(urls, Utils.getContextOrSparkClassLoader)

@@ -239,7 +239,7 @@ private[spark] class Client(
      * Each resource is represented by a 3-tuple of:
      *   (1) destination resource name,
      *   (2) local path to the resource,
-     *   (3) Spark property key to set if the scheme is not local, and
+     *   (3) Spark property key to set if the scheme is not local
      */
     List(
       (SPARK_JAR, sparkJar(sparkConf), CONF_SPARK_JAR),
@@ -317,9 +317,9 @@ private[spark] class Client(
     // Propagate SPARK_HOME to the containers. This is needed for pyspark to
     // work, since the executor's PYTHONPATH is built based on the location
     // of SPARK_HOME.
-    sparkConf.getOption("spark.home").orElse(sys.env.get("SPARK_HOME")).foreach { path =>
-      env("SPARK_HOME") = path
-    }
+    sparkConf.getOption("spark.home")
+      .orElse(sys.env.get("SPARK_HOME"))
+      .foreach { path => env("SPARK_HOME") = path }
 
     // Set the environment variables to be passed on to the executors.
     distCacheMgr.setDistFilesEnv(env)
@@ -786,9 +786,9 @@ object Client extends Logging {
   /**
    * Populate the classpath entry in the given environment map.
    *
-   * User jars are generally not added to the JVM's classpath; those are handled by the AM and
-   * executor backend. When the deprecated `spark.yarn.user.classpath.first` is used, user jars are
-   * included in the system classpath, though. The extra class path and other uploaded files are
+   * User jars are generally not added to the JVM's system classpath; those are handled by the AM
+   * and executor backend. When the deprecated `spark.yarn.user.classpath.first` is used, user jars
+   * are included in the system classpath, though. The extra class path and other uploaded files are
    * always made available through the system class path.
    *
    * @param args Client arguments (when starting the AM) or null (when starting executors).
@@ -804,7 +804,13 @@ object Client extends Logging {
       YarnSparkHadoopUtil.expandEnvironment(Environment.PWD), env
     )
     if (sparkConf.getBoolean("spark.yarn.user.classpath.first", false)) {
-      getUserClasspath(args, sparkConf).foreach { x =>
+      val userClassPath =
+        if (args != null) {
+          getUserClasspath(Option(args.userJar), Option(args.addJars))
+        } else {
+          getUserClasspath(sparkConf)
+        }
+      userClassPath.foreach { x =>
         addFileToClasspath(x, null, env)
       }
     }
@@ -815,24 +821,18 @@ object Client extends Logging {
   /**
    * Returns a list of URIs representing the user classpath.
    *
-   * @param args Client arguments (or null to load list of files from configuration object).
    * @param conf Spark configuration.
    */
-  def getUserClasspath(
-      args: ClientArguments,
-      conf: SparkConf): Array[URI] = {
-    // If `args` is not null, we are launching an AM container.
-    // Otherwise, we are launching executor containers.
-    val (mainJar, secondaryJars) =
-      if (args != null) {
-        (args.userJar, args.addJars)
-      } else {
-        (conf.get(CONF_SPARK_USER_JAR, null),
-          conf.get(CONF_SPARK_YARN_SECONDARY_JARS, null))
-      }
+  def getUserClasspath(conf: SparkConf): Array[URI] = {
+    getUserClasspath(conf.getOption(CONF_SPARK_USER_JAR),
+      conf.getOption(CONF_SPARK_YARN_SECONDARY_JARS))
+  }
 
-    val mainUri = Option(mainJar).orElse(Some(APP_JAR)).map(new URI(_))
-    val secondaryUris = Option(secondaryJars).map(_.split(",")).toSeq.flatten.map(new URI(_))
+  private def getUserClasspath(
+      mainJar: Option[String],
+      secondaryJars: Option[String]): Array[URI] = {
+    val mainUri = mainJar.orElse(Some(APP_JAR)).map(new URI(_))
+    val secondaryUris = secondaryJars.map(_.split(",")).toSeq.flatten.map(new URI(_))
     (mainUri ++ secondaryUris).toArray
   }
 
@@ -967,7 +967,7 @@ object Client extends Logging {
   /**
    * Joins all the path components using Path.SEPARATOR.
    */
-  def buildPath(components: String*) = {
+  def buildPath(components: String*): String = {
     components.mkString(Path.SEPARATOR)
   }
 

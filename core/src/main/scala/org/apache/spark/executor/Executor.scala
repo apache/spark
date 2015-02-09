@@ -301,9 +301,9 @@ private[spark] class Executor(
 
     // For each of the jars in the jarSet, add them to the class loader.
     // We assume each of the files has already been fetched.
-    val urls = (userClassPath ++ currentJars.keySet.map { uri =>
+    val urls = userClassPath.toArray ++ currentJars.keySet.map { uri =>
       new File(uri.split("/").last).toURI.toURL
-    }).toArray
+    }
     if (conf.getBoolean("spark.executor.userClassPathFirst", false)) {
       new ChildFirstURLClassLoader(urls, currentLoader)
     } else {
@@ -355,7 +355,10 @@ private[spark] class Executor(
       }
       for ((name, timestamp) <- newJars) {
         val localName = name.split("/").last
-        if (currentJars.get(name).orElse(currentJars.get(localName)).getOrElse(-1L) < timestamp) {
+        val currentTimeStamp = currentJars.get(name)
+          .orElse(currentJars.get(localName))
+          .getOrElse(-1L)
+        if (currentTimeStamp < timestamp) {
           logInfo("Fetching " + name + " with timestamp " + timestamp)
           // Fetch file with useCache mode, close cache for local mode.
           Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf,

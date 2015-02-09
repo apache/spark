@@ -231,6 +231,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.driver.userClassPathFirst</code></td>
+  <td>false</td>
+  <td>
+    (Experimental) Whether to give user-added jars precedence over Spark's own jars when loading
+    classes in the the driver. This feature can be used to mitigate conflicts between Spark's
+    dependencies and user dependencies. It is currently an experimental feature.
+  </td>
+</tr>
+<tr>
   <td><code>spark.executor.extraJavaOptions</code></td>
   <td>(none)</td>
   <td>
@@ -297,13 +306,11 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.driver.userClassPathFirst, spark.executor.userClassPathFirst</code></td>
+  <td><code>spark.executor.userClassPathFirst</code></td>
   <td>false</td>
   <td>
-    (Experimental) Whether to give user-added jars precedence over Spark's own jars when
-    loading classes in the driver or in the executors. This feature can be used to mitigate
-    conflicts between Spark's dependencies and user dependencies. It is currently an experimental
-    feature.
+    (Experimental) Same functionality as <code>spark.driver.userClassPathFirst</code>, but
+    applied to executor instances.
   </td>
 </tr>
 <tr>

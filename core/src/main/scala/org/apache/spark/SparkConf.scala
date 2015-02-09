@@ -68,7 +68,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     if (value == null) {
       throw new NullPointerException("null value for " + key)
     }
-    settings.put(getConfKey(key, true), value)
+    settings.put(translateConfKey(key, warn = true), value)
     this
   }
 
@@ -140,7 +140,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
   /** Set a parameter if it isn't already configured */
   def setIfMissing(key: String, value: String): SparkConf = {
-    settings.putIfAbsent(getConfKey(key, true), value)
+    settings.putIfAbsent(translateConfKey(key, warn = true), value)
     this
   }
 
@@ -176,7 +176,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
   /** Get a parameter as an Option */
   def getOption(key: String): Option[String] = {
-    Option(settings.get(getConfKey(key)))
+    Option(settings.get(translateConfKey(key)))
   }
 
   /** Get all parameters as a list of pairs */
@@ -229,7 +229,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   def getAppId: String = get("spark.app.id")
 
   /** Does the configuration contain a given parameter? */
-  def contains(key: String): Boolean = settings.containsKey(getConfKey(key))
+  def contains(key: String): Boolean = settings.containsKey(translateConfKey(key))
 
   /** Copy this object */
   override def clone: SparkConf = {
@@ -357,7 +357,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
 private[spark] object SparkConf extends Logging {
 
-  private val deprecatedConfigs = {
+  private val deprecatedConfigs: Map[String, DeprecatedConfig] = {
     val configs = Seq(
       DeprecatedConfig("spark.files.userClassPathFirst", "spark.executor.userClassPathFirst",
         "1.3"),
@@ -394,23 +394,21 @@ private[spark] object SparkConf extends Logging {
   }
 
   /**
-   * Returns the configuration key to use for the given user-provided key, translating
-   * deprecated keys.
+   * Translate the configuration key if it is deprecated and has a replacement, otherwise just
+   * returns the provided key.
    *
    * @param userKey Configuration key from the user / caller.
-   * @param warn Whether to print a warning if the key is depreated. Warnings will be printed
+   * @param warn Whether to print a warning if the key is deprecated. Warnings will be printed
    *             only once for each key.
    */
-  def getConfKey(userKey: String, warn: Boolean = false): String = {
-    val deprecatedKey = deprecatedConfigs.getOrElse(userKey, null)
-    if (deprecatedKey != null) {
-      if (warn) {
-        deprecatedKey.warn()
-      }
-      if (deprecatedKey.newName != null) deprecatedKey.newName else userKey
-    } else {
-      userKey
-    }
+  def translateConfKey(userKey: String, warn: Boolean = false): String = {
+    deprecatedConfigs.get(userKey)
+      .map { deprecatedKey =>
+        if (warn) {
+          deprecatedKey.warn()
+        }
+        deprecatedKey.newName.getOrElse(userKey)
+      }.getOrElse(userKey)
   }
 
   /**
@@ -425,17 +423,18 @@ private[spark] object SparkConf extends Logging {
    */
   private case class DeprecatedConfig(
       oldName: String,
-      newName: String,
+      _newName: String,
       version: String,
       deprecationMessage: String = null) {
 
     private val warned = new AtomicBoolean(false)
+    val newName = Option(_newName)
 
     if (newName == null && (deprecationMessage == null || deprecationMessage.isEmpty())) {
       throw new IllegalArgumentException("Need new config name or deprecation message.")
     }
 
-    def warn() = {
+    def warn(): Unit = {
       if (warned.compareAndSet(false, true)) {
         if (newName != null) {
           val message = Option(deprecationMessage).getOrElse(
