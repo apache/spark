@@ -799,6 +799,7 @@ object Client extends Logging {
       sparkConf: SparkConf,
       env: HashMap[String, String],
       extraClassPath: Option[String] = None): Unit = {
+    extraClassPath.foreach(println)
     extraClassPath.foreach(addClasspathEntry(_, env))
     addClasspathEntry(
       YarnSparkHadoopUtil.expandEnvironment(Environment.PWD), env
@@ -816,6 +817,7 @@ object Client extends Logging {
     }
     addFileToClasspath(new URI(sparkJar(sparkConf)), SPARK_JAR, env)
     populateHadoopClasspath(conf, env)
+    sys.env.get(ENV_DIST_CLASSPATH).foreach(addClasspathEntry(_, env))
   }
 
   /**

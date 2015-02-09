@@ -173,12 +173,14 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
 
   private def testUseClassPathFirst(clientMode: Boolean): Unit = {
     // Create a jar file that contains a different version of "test.resource".
-    val jarFile = TestUtils.createJarWithFiles(Map("test.resource" -> "OVERRIDDEN"), tempDir)
+    val originalJar = TestUtils.createJarWithFiles(Map("test.resource" -> "ORIGINAL"), tempDir)
+    val userJar = TestUtils.createJarWithFiles(Map("test.resource" -> "OVERRIDDEN"), tempDir)
     val driverResult = File.createTempFile("driver", null, tempDir)
     val executorResult = File.createTempFile("executor", null, tempDir)
     runSpark(clientMode, mainClassName(YarnClasspathTest.getClass),
       appArgs = Seq(driverResult.getAbsolutePath(), executorResult.getAbsolutePath()),
-      extraJars = Seq("local:" + jarFile.getPath()),
+      extraClassPath = Seq(originalJar.getPath()),
+      extraJars = Seq("local:" + userJar.getPath()),
       extraConf = Map(
         "spark.driver.userClassPathFirst" -> "true",
         "spark.executor.userClassPathFirst" -> "true"))
@@ -191,6 +193,7 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
       klass: String,
       appArgs: Seq[String] = Nil,
       sparkArgs: Seq[String] = Nil,
+      extraClassPath: Seq[String] = Nil,
       extraJars: Seq[String] = Nil,
       extraConf: Map[String, String] = Map()): Unit = {
     val master = if (clientMode) "yarn-client" else "yarn-cluster"
@@ -198,8 +201,11 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
 
     props.setProperty("spark.yarn.jar", "local:" + fakeSparkJar.getAbsolutePath())
 
-    val childClasspath = logConfDir.getAbsolutePath() + File.pathSeparator +
-      sys.props("java.class.path")
+    val childClasspath = logConfDir.getAbsolutePath() +
+      File.pathSeparator +
+      sys.props("java.class.path") +
+      File.pathSeparator +
+      extraClassPath.mkString(File.pathSeparator)
     props.setProperty("spark.driver.extraClassPath", childClasspath)
     props.setProperty("spark.executor.extraClassPath", childClasspath)
 
