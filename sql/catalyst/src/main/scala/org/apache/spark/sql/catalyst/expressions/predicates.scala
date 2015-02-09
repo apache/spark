@@ -205,7 +205,8 @@ case class LessThan(left: Expression, right: Expression) extends BinaryCompariso
 
   lazy val ordering = {
     if (left.dataType != right.dataType) {
-      throw new TreeNodeException(this,  s"Types do not match ${left.dataType} != ${right.dataType}")
+      throw new TreeNodeException(this,
+        s"Types do not match ${left.dataType} != ${right.dataType}")
     }
     left.dataType match {
       case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
@@ -233,7 +234,8 @@ case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryCo
 
   lazy val ordering = {
     if (left.dataType != right.dataType) {
-      throw new TreeNodeException(this,  s"Types do not match ${left.dataType} != ${right.dataType}")
+      throw new TreeNodeException(this,
+        s"Types do not match ${left.dataType} != ${right.dataType}")
     }
     left.dataType match {
       case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
@@ -261,7 +263,8 @@ case class GreaterThan(left: Expression, right: Expression) extends BinaryCompar
 
   lazy val ordering = {
     if (left.dataType != right.dataType) {
-      throw new TreeNodeException(this,  s"Types do not match ${left.dataType} != ${right.dataType}")
+      throw new TreeNodeException(this,
+        s"Types do not match ${left.dataType} != ${right.dataType}")
     }
     left.dataType match {
       case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
@@ -289,7 +292,8 @@ case class GreaterThanOrEqual(left: Expression, right: Expression) extends Binar
 
   lazy val ordering = {
     if (left.dataType != right.dataType) {
-      throw new TreeNodeException(this,  s"Types do not match ${left.dataType} != ${right.dataType}")
+      throw new TreeNodeException(this,
+        s"Types do not match ${left.dataType} != ${right.dataType}")
     }
     left.dataType match {
       case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
