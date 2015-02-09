@@ -14,20 +14,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.ui.jobs
+package org.apache.spark.status.api.v1
 
-import javax.servlet.http.HttpServletRequest
+import javax.ws.rs._
+import javax.ws.rs.core.MediaType
 
 import org.apache.spark.JobExecutionStatus
-import org.apache.spark.executor.{InputMetrics => InternalInputMetrics, OutputMetrics => InternalOutputMetrics, ShuffleReadMetrics => InternalShuffleReadMetrics, ShuffleWriteMetrics => InternalShuffleWriteMetrics, TaskMetrics => InternalTaskMetrics}
-import org.apache.spark.status.api._
-import org.apache.spark.status.{RouteUtils, JsonRequestHandler, StatusJsonRoute}
+import org.apache.spark.ui.jobs.JobProgressListener
 import org.apache.spark.ui.jobs.UIData.JobUIData
 
-class AllJobsJsonRoute(parent: JsonRequestHandler) extends StatusJsonRoute[Seq[JobData]] {
+@Produces(Array(MediaType.APPLICATION_JSON))
+class AllJobsResource(uiRoot: UIRoot) {
 
-  override def renderJson(request: HttpServletRequest): Seq[JobData] = {
-    parent.withSparkUI(request){case(ui, request) =>
+  @GET
+  def jobsList(
+    @PathParam("appId") appId: String,
+    @QueryParam("status") statuses: java.util.List[JobExecutionStatus]
+  ): Seq[JobData] = {
+    uiRoot.withSparkUI(appId){ui =>
       val statusToJobs = ui.jobProgressListener.synchronized{
         Seq(
           JobExecutionStatus.RUNNING -> ui.jobProgressListener.activeJobs.values.toSeq,
@@ -35,18 +39,26 @@ class AllJobsJsonRoute(parent: JsonRequestHandler) extends StatusJsonRoute[Seq[J
           JobExecutionStatus.FAILED -> ui.jobProgressListener.failedJobs.reverse.toSeq
         )
       }
-      val statusSet = RouteUtils.extractParamSet(request, "status", JobExecutionStatus.values())
+      val adjStatuses: java.util.List[JobExecutionStatus] = {
+        if (statuses.isEmpty) {
+          java.util.Arrays.asList(JobExecutionStatus.values(): _*)
+        }
+        else {
+          statuses
+        }
+      }
       for {
         (status, jobs) <- statusToJobs
-        job <- jobs if statusSet.contains(status)
+        job <- jobs if adjStatuses.contains(status)
       } yield {
-        AllJobsJsonRoute.convertJobData(job, ui.jobProgressListener, false)
+        AllJobsResource.convertJobData(job, ui.jobProgressListener, false)
       }
     }
   }
+
 }
 
-private[jobs] object AllJobsJsonRoute {
+object AllJobsResource {
   def convertJobData(
     job: JobUIData,
     listener: JobProgressListener,

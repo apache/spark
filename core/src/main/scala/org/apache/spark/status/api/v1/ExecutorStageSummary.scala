@@ -14,13 +14,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.status.api.v1
 
-package org.apache.spark.status.api
-
-case class ApplicationInfo(
-  id: String,
-  name: String,
-  startTime: Long,
-  endTime: Long,
-  sparkUser: String,
-  completed: Boolean = false)
+case class ExecutorStageSummary(
+  taskTime : Long,
+  failedTasks : Int,
+  succeededTasks : Int,
+  inputBytes : Long,
+  outputBytes : Long,
+  shuffleRead : Long,
+  shuffleWrite : Long,
+  memoryBytesSpilled : Long,
+  diskBytesSpilled : Long
+)

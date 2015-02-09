@@ -14,24 +14,44 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.history
+package org.apache.spark.status.api.v1
 
-import javax.servlet.http.HttpServletRequest
+import javax.ws.rs.core.MediaType
+import javax.ws.rs.{DefaultValue, QueryParam, Produces, GET}
 
-import org.apache.spark.status.{UIRoot, StatusJsonRoute}
-import org.apache.spark.status.api.ApplicationInfo
+import org.apache.spark.deploy.history.ApplicationHistoryInfo
 import org.apache.spark.deploy.master.{ApplicationInfo => InternalApplicationInfo}
+import org.apache.spark.status.api.ApplicationStatus
 
-class AllApplicationsJsonRoute(val uiRoot: UIRoot) extends StatusJsonRoute[Seq[ApplicationInfo]] {
+@Produces(Array(MediaType.APPLICATION_JSON))
+class ApplicationListResource(uiRoot: UIRoot) {
 
-  override def renderJson(request: HttpServletRequest): Seq[ApplicationInfo] = {
-    //TODO filter on some query params, eg. completed, minStartTime, etc
-    uiRoot.getApplicationInfoList
+  @GET
+  def appList(
+    @QueryParam("status") status: java.util.List[ApplicationStatus],
+    @DefaultValue("2010-01-01") @QueryParam("minDate") minDate: SimpleDateParam,
+    @DefaultValue("3000-01-01") @QueryParam("maxDate") maxDate: SimpleDateParam
+  ): Seq[ApplicationInfo] = {
+    val allApps = uiRoot.getApplicationInfoList
+    val adjStatus = {
+      if (status.isEmpty) {
+        java.util.Arrays.asList(ApplicationStatus.values(): _*)
+      } else {
+        status
+      }
+    }
+    val includeCompleted = adjStatus.contains(ApplicationStatus.COMPLETED)
+    val includeRunning = adjStatus.contains(ApplicationStatus.RUNNING)
+    allApps.filter{app =>
+      val statusOk = (app.completed && includeCompleted) ||
+        (!app.completed && includeRunning)
+      val dateOk = app.startTime >= minDate.timestamp && app.startTime <= maxDate.timestamp
+      statusOk && dateOk
+    }
   }
-
 }
 
-object AllApplicationsJsonRoute {
+object ApplicationsListResource {
   def appHistoryInfoToPublicAppInfo(app: ApplicationHistoryInfo): ApplicationInfo = {
     ApplicationInfo(
       id = app.id,
@@ -53,4 +73,5 @@ object AllApplicationsJsonRoute {
       completed = completed
     )
   }
+
 }

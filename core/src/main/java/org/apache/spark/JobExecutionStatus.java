@@ -17,9 +17,31 @@
 
 package org.apache.spark;
 
+import com.google.common.base.Joiner;
+
+import java.util.Arrays;
+
 public enum JobExecutionStatus {
   RUNNING,
   SUCCEEDED,
   FAILED,
-  UNKNOWN
+  UNKNOWN;
+
+
+  private static String VALID_VALUES = Joiner.on(", ").join(
+          Arrays.asList(JobExecutionStatus.values()));
+
+  public static JobExecutionStatus fromString(String str) {
+    if (str == null) {
+      return null;
+    }
+    try {
+      JobExecutionStatus res = valueOf(str.toUpperCase());
+      return res;
+    } catch (IllegalArgumentException iae) {
+      throw new IllegalArgumentException(
+              String.format("Illegal type='%s'. Supported type values: %s",
+                      str, VALID_VALUES));
+    }
+  }
 }

@@ -20,7 +20,7 @@ package org.apache.spark.ui.exec
 import java.net.URLEncoder
 import javax.servlet.http.HttpServletRequest
 
-import org.apache.spark.status.api.ExecutorSummary
+import org.apache.spark.status.api.v1.ExecutorSummary
 
 import scala.xml.Node
 

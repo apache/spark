@@ -14,33 +14,35 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.ui.storage
+package org.apache.spark.status.api.v1
 
-import javax.servlet.http.HttpServletRequest
+import javax.ws.rs.{PathParam, GET, Produces}
+import javax.ws.rs.core.MediaType
 
-import org.apache.spark.status.api._
-import org.apache.spark.status.{JsonRequestHandler, StatusJsonRoute}
-import org.apache.spark.storage.{StorageStatus, RDDInfo, StorageUtils}
+import org.apache.spark.storage.{StorageUtils, StorageStatus, RDDInfo}
+import org.apache.spark.ui.storage.StorageListener
 
-class RDDJsonRoute(parent: JsonRequestHandler) extends StatusJsonRoute[RDDStorageInfo] {
+@Produces(Array(MediaType.APPLICATION_JSON))
+class AllRDDResource(uiRoot: UIRoot) {
 
-  override def renderJson(route: HttpServletRequest): RDDStorageInfo = {
-    parent.withSparkUI(route){case(ui, route) =>
-      val rddIdOpt = JsonRequestHandler.extractRDDId(route.getPathInfo)
-      rddIdOpt match {
-        case Some(rddId) =>
-          RDDJsonRoute.getRDDStorageInfo(rddId, ui.storageListener, true).getOrElse{
-            throw new IllegalArgumentException("no rdd found w/ id " + rddId)
-          }
-        case None =>
-          throw new IllegalArgumentException("no valid rdd id in path")
+  @GET
+  def jobsList(
+    @PathParam("appId") appId: String
+  ): Seq[RDDStorageInfo] = {
+    uiRoot.withSparkUI(appId) { ui =>
+      //should all access on storageListener also be synchronized?
+      val storageStatusList = ui.storageListener.storageStatusList
+      val rddInfos = ui.storageListener.rddInfoList
+      rddInfos.map{rddInfo =>
+        AllRDDResource.getRDDStorageInfo(rddInfo.id, rddInfo, storageStatusList, includeDetails = false)
       }
 
     }
   }
+
 }
 
-object RDDJsonRoute {
+object AllRDDResource {
 
   def getRDDStorageInfo(rddId: Int, listener: StorageListener, includeDetails: Boolean): Option[RDDStorageInfo] = {
     val storageStatusList = listener.storageStatusList

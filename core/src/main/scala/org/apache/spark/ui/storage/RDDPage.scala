@@ -19,9 +19,10 @@ package org.apache.spark.ui.storage
 
 import javax.servlet.http.HttpServletRequest
 
+import org.apache.spark.status.api.v1.{RDDPartitionInfo, RDDDataDistribution, AllRDDResource}
+
 import scala.xml.Node
 
-import org.apache.spark.status.api.{RDDPartitionInfo, RDDDataDistribution}
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
@@ -31,7 +32,7 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val rddId = request.getParameter("id").toInt
-    val rddStorageInfo = RDDJsonRoute.getRDDStorageInfo(rddId, listener, includeDetails = true).getOrElse {
+    val rddStorageInfo = AllRDDResource.getRDDStorageInfo(rddId, listener, includeDetails = true).getOrElse {
       // Rather than crashing, render an "RDD Not Found" page
       return UIUtils.headerSparkPage("RDD Not Found", Seq[Node](), parent)
     }

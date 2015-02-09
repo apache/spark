@@ -18,10 +18,8 @@
 package org.apache.spark.deploy.master.ui
 
 import org.apache.spark.Logging
-import org.apache.spark.deploy.history.AllApplicationsJsonRoute
 import org.apache.spark.deploy.master.Master
-import org.apache.spark.status.{JsonRequestHandler, UIRoot}
-import org.apache.spark.status.api.ApplicationInfo
+import org.apache.spark.status.api.v1.{ApplicationsListResource, ApplicationInfo, JsonRootResource, UIRoot}
 import org.apache.spark.ui.{SparkUI, WebUI}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.AkkaUtils
@@ -47,8 +45,7 @@ class MasterWebUI(val master: Master, requestedPort: Int)
     attachPage(masterPage)
     attachHandler(createStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR, "/static"))
 
-    val jsonHandler = new JsonRequestHandler(this, master.securityMgr)
-    attachHandler(jsonHandler.jsonContextHandler)
+    attachHandler(JsonRootResource.getJsonServlet(this))
   }
 
   /** Attach a reconstructed UI to this Master UI. Only valid after bind(). */
@@ -67,8 +64,8 @@ class MasterWebUI(val master: Master, requestedPort: Int)
     val state = masterPage.getMasterState
     val activeApps = state.activeApps.sortBy(_.startTime).reverse
     val completedApps = state.completedApps.sortBy(_.endTime).reverse
-    activeApps.map{AllApplicationsJsonRoute.convertApplicationInfo(_, false)} ++
-      completedApps.map{AllApplicationsJsonRoute.convertApplicationInfo(_, true)}
+    activeApps.map{ApplicationsListResource.convertApplicationInfo(_, false)} ++
+      completedApps.map{ApplicationsListResource.convertApplicationInfo(_, true)}
   }
 
   def getSparkUI(appId: String): Option[SparkUI] = {

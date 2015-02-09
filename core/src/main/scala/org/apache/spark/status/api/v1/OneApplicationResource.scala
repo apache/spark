@@ -14,18 +14,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.status.api.v1
 
-package org.apache.spark.status.api
+import javax.ws.rs.core.MediaType
+import javax.ws.rs.{Produces, PathParam, GET}
 
-case class TaskData(
-  taskId: Long,
-  index: Int,
-  attempt: Int,
-  launchTime: Long,
-  executorId: String,
-  host: String,
-  taskLocality: String,
-  speculative: Boolean,
-  errorMessage: Option[String] = None,
-  taskMetrics: Option[TaskMetrics] = None
-)
+@Produces(Array(MediaType.APPLICATION_JSON))
+class OneApplicationResource(uiRoot: UIRoot) {
+
+  @GET
+  def getApp(@PathParam("appId") appId: String): ApplicationInfo = {
+    val apps = uiRoot.getApplicationInfoList.find{_.id == appId}
+    apps.getOrElse(throw new NotFoundException("unknown app: " + appId))
+  }
+
+}

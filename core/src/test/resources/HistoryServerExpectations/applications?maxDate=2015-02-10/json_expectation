@@ -1,11 +1,4 @@
 [ {
-  "id" : "local-1425081759269",
-  "name" : "Spark shell",
-  "startTime" : 1425081758277,
-  "endTime" : 1425081766912,
-  "sparkUser" : "irashid",
-  "completed" : true
-}, {
   "id" : "local-1422981780767",
   "name" : "Spark shell",
   "startTime" : 1422981779720,

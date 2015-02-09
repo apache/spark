@@ -24,7 +24,7 @@ import org.apache.spark.util.collection.OpenHashSet
 
 import scala.collection.mutable.HashMap
 
-private[jobs] object UIData {
+object UIData {
 
   class ExecutorSummary {
     var taskTime : Long = 0

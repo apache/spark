@@ -14,43 +14,39 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.status.api
 
-case class TaskMetrics(
-  executorDeserializeTime: Long,
+package org.apache.spark.status.api.v1
+
+import org.apache.spark.status.api.StageStatus
+
+import scala.collection.Map
+
+case class StageData(
+  status: StageStatus,
+  stageId: Int,
+  numActiveTasks: Int ,
+  numCompleteTasks: Int,
+  numFailedTasks: Int,
+
   executorRunTime: Long,
-  resultSize: Long,
-  jvmGcTime: Long,
-  resultSerializationTime: Long,
+
+  inputBytes: Long,
+  inputRecords: Long,
+  outputBytes: Long,
+  outputRecords: Long,
+  shuffleReadBytes: Long,
+  shuffleReadRecords: Long,
+  shuffleWriteBytes: Long,
+  shuffleWriteRecords: Long,
   memoryBytesSpilled: Long,
   diskBytesSpilled: Long,
-  inputMetrics: Option[InputMetrics],
-  outputMetrics: Option[OutputMetrics],
-  shuffleReadMetrics: Option[ShuffleReadMetrics],
-  shuffleWriteMetrics: Option[ShuffleWriteMetrics]
+
+  name: String,
+  details: String,
+  schedulingPool: String,
+
+  //TODO what to do about accumulables?
+  tasks: Option[Map[Long, TaskData]],
+  executorSummary:Option[Map[String,ExecutorStageSummary]]
 )
 
-case class InputMetrics(
-  bytesRead: Long,
-  recordsRead: Long
-)
-
-case class OutputMetrics(
-  bytesWritten: Long,
-  recordsWritten: Long
-)
-
-case class ShuffleReadMetrics(
-  remoteBlocksFetched: Int,
-  localBlocksFetched: Int,
-  fetchWaitTime: Long,
-  remoteBytesRead: Long,
-  totalBlocksFetched: Int,
-  recordsRead: Long
-)
-
-case class ShuffleWriteMetrics(
-  bytesWritten: Long,
-  writeTime: Long,
-  recordsWritten: Long
-)

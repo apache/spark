@@ -21,9 +21,7 @@ import java.util.NoSuchElementException
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import com.google.common.cache._
-import org.apache.spark.deploy.master.ui.MasterApplicationJsonRoute
-import org.apache.spark.status.api.ApplicationInfo
-import org.apache.spark.status.{UIRoot, JsonRequestHandler}
+import org.apache.spark.status.api.v1.{ApplicationsListResource, ApplicationInfo, JsonRootResource, UIRoot}
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
@@ -117,9 +115,8 @@ class HistoryServer(
   def initialize() {
     attachPage(new HistoryPage(this))
 
-    val jsonHandler = new JsonRequestHandler(this, securityManager)
-    attachHandler(jsonHandler.jsonContextHandler)
 
+    attachHandler(JsonRootResource.getJsonServlet(this))
 
     attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
 
@@ -161,7 +158,7 @@ class HistoryServer(
   def getApplicationList(refresh: Boolean) = provider.getListing(refresh)
 
   def getApplicationInfoList: Seq[ApplicationInfo] = {
-    getApplicationList(true).map{AllApplicationsJsonRoute.appHistoryInfoToPublicAppInfo}.toSeq
+    getApplicationList(true).map{ApplicationsListResource.appHistoryInfoToPublicAppInfo}.toSeq
   }
 
   /**

@@ -17,8 +17,8 @@
 
 package org.apache.spark.ui
 
-import org.apache.spark.status.{JsonRequestHandler, UIRoot}
-import org.apache.spark.status.api.ApplicationInfo
+import org.apache.spark.status.api.v1.{ApplicationInfo, JsonRootResource}
+import org.apache.spark.status.api.v1.UIRoot
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.StorageStatusListener
@@ -63,10 +63,7 @@ private[spark] class SparkUI private (
     attachHandler(
       createRedirectHandler("/stages/stage/kill", "/stages", stagesTab.handleKillRequest))
 
-    val jsonHandler = new JsonRequestHandler(this, securityManager)
-    attachHandler(jsonHandler.jsonContextHandler)
-
-
+    attachHandler(JsonRootResource.getJsonServlet(this))
   }
   initialize()
 

@@ -14,34 +14,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.status.api
+package org.apache.spark.status.api.v1
 
+import org.apache.spark.JobExecutionStatus
 
-//Q: should Tachyon size go in here as well?  currently the UI only shows it on the overall storage page ... does
-// anybody pay attention to it?
-case class RDDStorageInfo(
-  id: Int,
+case class JobData(
+  jobId: Int,
   name: String,
-  numPartitions: Int,
-  numCachedPartitions: Int,
-  storageLevel: String,
-  memoryUsed: Long,
-  diskUsed: Long,
-  dataDistribution: Option[Seq[RDDDataDistribution]],
-  partitions: Option[Seq[RDDPartitionInfo]]
-)
-
-case class RDDDataDistribution(
-  address: String,
-  memoryUsed: Long,
-  memoryRemaining: Long,
-  diskUsed: Long
-)
-
-case class RDDPartitionInfo(
-  blockName: String,
-  storageLevel: String,
-  memoryUsed: Long,
-  diskUsed: Long,
-  executors: Seq[String]
+  description: Option[String],
+  submissionTime: Option[Long],
+  completionTime: Option[Long],
+  stageIds: Seq[Int],
+  jobGroup: Option[String],
+  status: JobExecutionStatus,
+  numTasks: Int,
+  numActiveTasks: Int,
+  numCompletedTasks: Int,
+  numSkippedTasks: Int,
+  numFailedTasks: Int,
+  numActiveStages: Int,
+  numCompletedStages: Int,
+  numSkippedStages: Int,
+  numFailedStages: Int
 )

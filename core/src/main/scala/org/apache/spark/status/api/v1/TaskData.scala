@@ -15,38 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.status.api
+package org.apache.spark.status.api.v1
 
-import scala.collection.Map
-
-import org.apache.spark.scheduler.AccumulableInfo
-
-case class StageData(
-  status: StageStatus,
-  stageId: Int,
-  numActiveTasks: Int ,
-  numCompleteTasks: Int,
-  numFailedTasks: Int,
-
-  executorRunTime: Long,
-
-  inputBytes: Long,
-  inputRecords: Long,
-  outputBytes: Long,
-  outputRecords: Long,
-  shuffleReadBytes: Long,
-  shuffleReadRecords: Long,
-  shuffleWriteBytes: Long,
-  shuffleWriteRecords: Long,
-  memoryBytesSpilled: Long,
-  diskBytesSpilled: Long,
-
-  name: String,
-  details: String,
-  schedulingPool: String,
-
-  //TODO what to do about accumulables?
-  tasks: Option[Map[Long, TaskData]],
-  executorSummary:Option[Map[String,ExecutorStageSummary]]
+case class TaskData(
+  taskId: Long,
+  index: Int,
+  attempt: Int,
+  launchTime: Long,
+  executorId: String,
+  host: String,
+  taskLocality: String,
+  speculative: Boolean,
+  errorMessage: Option[String] = None,
+  taskMetrics: Option[TaskMetrics] = None
 )
-

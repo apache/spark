@@ -14,21 +14,29 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.ui.exec
+package org.apache.spark.status.api.v1
 
-import javax.servlet.http.HttpServletRequest
+import javax.ws.rs.Produces
+import javax.ws.rs.core.MediaType
+import javax.ws.rs.ext.{ContextResolver, Provider}
 
-import org.apache.spark.status.api.ExecutorSummary
-import org.apache.spark.status.{StatusJsonRoute, JsonRequestHandler}
+import com.fasterxml.jackson.annotation.JsonInclude
+import com.fasterxml.jackson.databind.{SerializationFeature, ObjectMapper}
 
-class ExecutorsJsonRoute(parent: JsonRequestHandler) extends StatusJsonRoute[Seq[ExecutorSummary]] {
-  def renderJson(request: HttpServletRequest): Seq[ExecutorSummary] = {
-    parent.withSparkUI(request){ case(ui, request) =>
-      val listener = ui.executorsListener
-      val storageStatusList = listener.storageStatusList
-      (0 until storageStatusList.size).map{ statusId =>
-        ExecutorsPage.getExecInfo(listener, statusId)
-      }
+@Provider
+@Produces(Array(MediaType.APPLICATION_JSON))
+class CustomObjectMapper extends ContextResolver[ObjectMapper]{
+  val mapper = new ObjectMapper() {
+    override def writeValueAsString(t: Any): String = {
+      super.writeValueAsString(t)
     }
   }
+  mapper.registerModule(com.fasterxml.jackson.module.scala.DefaultScalaModule)
+  mapper.enable(SerializationFeature.INDENT_OUTPUT)
+  mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL)
+
+  override def getContext(tpe: Class[_]): ObjectMapper = {
+    mapper
+  }
+
 }

@@ -14,23 +14,34 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.ui.storage
+package org.apache.spark.status.api.v1
 
-import javax.servlet.http.HttpServletRequest
+import java.text.SimpleDateFormat
+import javax.ws.rs.WebApplicationException
+import javax.ws.rs.core.Response
+import javax.ws.rs.core.Response.Status
 
-import org.apache.spark.status.api._
-import org.apache.spark.status.{JsonRequestHandler, StatusJsonRoute}
+import scala.util.Try
 
-class AllRDDJsonRoute(parent: JsonRequestHandler) extends StatusJsonRoute[Seq[RDDStorageInfo]] {
-
-  override def renderJson(route: HttpServletRequest): Seq[RDDStorageInfo] = {
-    parent.withSparkUI(route) { case (ui, route) =>
-      //should all access on storageListener also be synchronized?
-      val storageStatusList = ui.storageListener.storageStatusList
-      val rddInfos = ui.storageListener.rddInfoList
-      rddInfos.map{rddInfo =>
-        RDDJsonRoute.getRDDStorageInfo(rddInfo.id, rddInfo, storageStatusList, includeDetails = false)
-      }
+private[api] class SimpleDateParam(val originalValue: String) {
+  val timestamp: Long = {
+    SimpleDateParam.formats.collectFirst{
+      case fmt if Try{fmt.parse(originalValue)}.isSuccess =>
+        fmt.parse(originalValue).getTime()
+    }.getOrElse{
+      throw new WebApplicationException(
+        Response
+          .status(Status.BAD_REQUEST)
+          .entity("Couldn't parse date: " + originalValue)
+          .build()
+      )
     }
   }
+}
+
+private[api] object SimpleDateParam {
+  val formats = Seq(
+    "yyyy-MM-dd'T'HH:mm:ssz",
+    "yyyy-MM-dd"
+  ).map{new SimpleDateFormat(_)}
 }

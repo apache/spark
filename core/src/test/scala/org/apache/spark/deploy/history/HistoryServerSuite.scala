@@ -42,6 +42,7 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers {
     val securityManager = new SecurityManager(conf)
 
     server = new HistoryServer(conf, provider, securityManager, port)
+    server.initialize()
     server.bind()
   }
   def stop(): Unit = {
@@ -58,8 +59,15 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers {
 
   val cases = Seq(
     "application list json" -> "applications",
+    "completed app list json" -> "applications?status=completed",
+    "running app list json" -> "applications?status=running",
+    "minDate app list json" -> "applications?minDate=2015-02-10",
+    "maxDate app list json" -> "applications?maxDate=2015-02-10",
+    "maxDate2 app list json" -> "applications?maxDate=2015-02-03T10:42:40CST",
     "one app json" -> "applications/local-1422981780767",
     "job list json" -> "applications/local-1422981780767/jobs",
+    "succeeded job list json" -> "applications/local-1422981780767/jobs?status=succeeded",
+    "succeeded&failed job list json" -> "applications/local-1422981780767/jobs?status=succeeded&status=failed",
     "executor list json" -> "applications/local-1422981780767/executors",
     "stage list json" -> "applications/local-1422981780767/stages",
     "complete stage list json" -> "applications/local-1422981780767/stages?status=complete",
@@ -87,18 +95,22 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers {
     pending
   }
 
+  test("security") {
+    pending
+  }
+
   test("response codes on bad paths") {
     val badAppId = getContentAndCode("applications/foobar")
-    badAppId._1 should be (HttpServletResponse.SC_BAD_REQUEST)
+    badAppId._1 should be (HttpServletResponse.SC_NOT_FOUND)
     badAppId._3 should be (Some("unknown app: foobar"))
 
     val badStageId = getContentAndCode("applications/local-1422981780767/stages/12345")
-    badStageId._1 should be (HttpServletResponse.SC_BAD_REQUEST)
+    badStageId._1 should be (HttpServletResponse.SC_NOT_FOUND)
     badStageId._3 should be (Some("unknown stage: 12345"))
 
     val badStageId2 = getContentAndCode("applications/local-1422981780767/stages/flimflam")
-    badStageId2._1 should be (HttpServletResponse.SC_BAD_REQUEST)
-    badStageId2._3 should be (Some("no valid stageId in path"))
+    badStageId2._1 should be (HttpServletResponse.SC_NOT_FOUND)
+    //will take some mucking w/ jersey to get a better error msg here ...
 
 
     getContentAndCode("foobar")._1 should be (HttpServletResponse.SC_NOT_FOUND)
@@ -128,14 +140,10 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers {
 
 
   def getUrl(path: String): String = {
-    val u = new URL(s"http://localhost:$port/json/v1/$path")
-    val in = u.openStream()
-    try {
-      val json = IOUtils.toString(in)
-      json
-    } finally {
-      in.close()
-    }
+    val (code, resultOpt, error) = getContentAndCode(path)
+    if (code == 200)
+      resultOpt.get
+    else throw new RuntimeException("got code: " + code + " when getting " + path + " w/ error: " + error)
   }
 
   def generateExpectation(path: String): Unit = {
@@ -154,8 +162,6 @@ object HistoryServerSuite {
     /* generate the "expected" results for the characterization tests.  Just blindly assume the current behavior
      * is correct, and write out the returned json to the test/resource files
      */
-
-    //TODO this should probably also run jobs to create the logs, so its totally self-contained
 
     val suite = new HistoryServerSuite
     FileUtils.deleteDirectory(suite.expRoot)

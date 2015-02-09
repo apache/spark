@@ -14,21 +14,31 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.history
 
-import javax.servlet.http.HttpServletRequest
+package org.apache.spark.status.api;
 
-import org.apache.spark.status.{UIRoot, JsonRequestHandler, StatusJsonRoute}
-import org.apache.spark.status.api.ApplicationInfo
+import com.google.common.base.Joiner;
 
-class OneApplicationJsonRoute(val uiRoot: UIRoot) extends StatusJsonRoute[ApplicationInfo] {
-  override def renderJson(request: HttpServletRequest): ApplicationInfo = {
-    val appIdOpt = JsonRequestHandler.extractAppId(request.getPathInfo)
-    appIdOpt.map{ appId =>
-      val apps = uiRoot.getApplicationInfoList.find{_.id == appId}
-      apps.getOrElse(throw new IllegalArgumentException("unknown app: " + appId))
-    }.getOrElse{
-      throw new IllegalArgumentException("no application id specified")
+import java.util.Arrays;
+
+public enum ApplicationStatus {
+    COMPLETED,
+    RUNNING;
+
+    private static String VALID_VALUES = Joiner.on(", ").join(
+            Arrays.asList(values()));
+
+    public static ApplicationStatus fromString(String str) {
+        if (str == null) {
+            return null;
+        }
+        for (ApplicationStatus status: values()) {
+            if (status.name().equalsIgnoreCase(str))
+                return status;
+        }
+        throw new IllegalArgumentException(
+                String.format("Illegal type='%s'. Supported type values: %s",
+                        str, VALID_VALUES));
     }
-  }
+
 }

@@ -14,16 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.status
 
-import org.scalatest.{Matchers, FunSuite}
+package org.apache.spark.status.api.v1
 
-class StatusPatternsSuite extends FunSuite with Matchers {
-  test("appId extraction") {
-    JsonRequestHandler.extractAppId("foobar") should be (None)
-    JsonRequestHandler.extractAppId("/applications") should be (None)
-    JsonRequestHandler.extractAppId("/applicationsoogabooga") should be (None)
-    JsonRequestHandler.extractAppId("/applications/oogabooga") should be (Some("oogabooga"))
-    JsonRequestHandler.extractAppId("/applications/ooga/booga") should be (Some("ooga"))
-  }
-}
+case class ApplicationInfo(
+  id: String,
+  name: String,
+  startTime: Long,
+  endTime: Long,
+  sparkUser: String,
+  completed: Boolean = false)

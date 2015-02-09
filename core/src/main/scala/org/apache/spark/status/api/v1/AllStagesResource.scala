@@ -14,44 +14,55 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.ui.jobs
+package org.apache.spark.status.api.v1
 
-import javax.servlet.http.HttpServletRequest
+import javax.ws.rs.{QueryParam, PathParam, GET, Produces}
+import javax.ws.rs.core.MediaType
 
 import org.apache.spark.executor.{
-  TaskMetrics => InternalTaskMetrics,
-  InputMetrics => InternalInputMetrics,
-  OutputMetrics => InternalOutputMetrics,
-  ShuffleReadMetrics => InternalShuffleReadMetrics,
-  ShuffleWriteMetrics => InternalShuffleWriteMetrics
+TaskMetrics => InternalTaskMetrics,
+InputMetrics => InternalInputMetrics,
+OutputMetrics => InternalOutputMetrics,
+ShuffleReadMetrics => InternalShuffleReadMetrics,
+ShuffleWriteMetrics => InternalShuffleWriteMetrics
 }
 import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.status.api._
-import org.apache.spark.status.{RouteUtils, JsonRequestHandler, StatusJsonRoute}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.jobs.UIData.{TaskUIData, StageUIData}
 
-class AllStagesJsonRoute(parent: JsonRequestHandler) extends StatusJsonRoute[Seq[StageData]] {
+@Produces(Array(MediaType.APPLICATION_JSON))
+class AllStagesResource(uiRoot: UIRoot) {
 
-  override def renderJson(request: HttpServletRequest): Seq[StageData] = {
-    parent.withSparkUI(request){case(ui, request) =>
+  @GET
+  def stageList(
+    @PathParam("appId") appId: String,
+    @QueryParam("status") statuses: java.util.List[StageStatus]
+  ): Seq[StageData] = {
+    uiRoot.withSparkUI(appId) { ui =>
       val listener = ui.stagesTab.listener
-      val stageAndStatus = AllStagesJsonRoute.stagesAndStatus(ui)
-      val statusSet = RouteUtils.extractParamSet(request, "status", StageStatus.values())
+      val stageAndStatus = AllStagesResource.stagesAndStatus(ui)
+      val adjStatuses = {
+        if (statuses.isEmpty()) {
+          java.util.Arrays.asList(StageStatus.values(): _*)
+        } else {
+          statuses
+        }
+      }
       for {
         (status, stageList) <- stageAndStatus
-        stageInfo: StageInfo <- stageList if statusSet.contains(status)
-        stageUiData: StageUIData <- listener.synchronized{
+        stageInfo: StageInfo <- stageList if adjStatuses.contains(status)
+        stageUiData: StageUIData <- listener.synchronized {
           listener.stageIdToData.get((stageInfo.stageId, stageInfo.attemptId))
         }
       } yield {
-        AllStagesJsonRoute.stageUiToStageData(status, stageInfo, stageUiData, includeDetails = false)
+        AllStagesResource.stageUiToStageData(status, stageInfo, stageUiData, includeDetails = false)
       }
     }
   }
 }
 
-private[jobs] object AllStagesJsonRoute {
+object AllStagesResource {
   def stageUiToStageData(
     status: StageStatus,
     stageInfo: StageInfo,
@@ -66,17 +77,17 @@ private[jobs] object AllStagesJsonRoute {
     }
     val executorSummary = if(includeDetails) {
       Some(stageUiData.executorSummary.map{case(k,summary) => k ->
-          ExecutorStageSummary(
-            taskTime = summary.taskTime,
-            failedTasks = summary.failedTasks,
-            succeededTasks = summary.succeededTasks,
-            inputBytes = summary.inputBytes,
-            outputBytes = summary.outputBytes,
-            shuffleRead = summary.shuffleRead,
-            shuffleWrite = summary.shuffleWrite,
-            memoryBytesSpilled = summary.memoryBytesSpilled,
-            diskBytesSpilled = summary.diskBytesSpilled
-          )
+        ExecutorStageSummary(
+          taskTime = summary.taskTime,
+          failedTasks = summary.failedTasks,
+          succeededTasks = summary.succeededTasks,
+          inputBytes = summary.inputBytes,
+          outputBytes = summary.outputBytes,
+          shuffleRead = summary.shuffleRead,
+          shuffleWrite = summary.shuffleWrite,
+          memoryBytesSpilled = summary.memoryBytesSpilled,
+          diskBytesSpilled = summary.diskBytesSpilled
+        )
       })
     } else {
       None

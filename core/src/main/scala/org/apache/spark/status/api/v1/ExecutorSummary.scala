@@ -14,16 +14,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.status.api
+package org.apache.spark.status.api.v1
 
-case class ExecutorStageSummary(
-  taskTime : Long,
-  failedTasks : Int,
-  succeededTasks : Int,
-  inputBytes : Long,
-  outputBytes : Long,
-  shuffleRead : Long,
-  shuffleWrite : Long,
-  memoryBytesSpilled : Long,
-  diskBytesSpilled : Long
+case class ExecutorSummary(
+  id: String,
+  hostPort: String,
+  rddBlocks: Int,
+  memoryUsed: Long,
+  diskUsed: Long,
+  activeTasks: Int,
+  failedTasks: Int,
+  completedTasks: Int,
+  totalTasks: Int,
+  totalDuration: Long,
+  totalInputBytes: Long,
+  totalShuffleRead: Long,
+  totalShuffleWrite: Long,
+  maxMemory: Long,
+  executorLogs: Map[String, String]
 )

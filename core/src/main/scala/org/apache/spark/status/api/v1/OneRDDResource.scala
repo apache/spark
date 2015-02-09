@@ -14,22 +14,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.status.api
+package org.apache.spark.status.api.v1
 
-case class ExecutorSummary(
-  id: String,
-  hostPort: String,
-  rddBlocks: Int,
-  memoryUsed: Long,
-  diskUsed: Long,
-  activeTasks: Int,
-  failedTasks: Int,
-  completedTasks: Int,
-  totalTasks: Int,
-  totalDuration: Long,
-  totalInputBytes: Long,
-  totalShuffleRead: Long,
-  totalShuffleWrite: Long,
-  maxMemory: Long,
-  executorLogs: Map[String, String]
-)
+import javax.ws.rs.{PathParam, GET, Produces}
+import javax.ws.rs.core.MediaType
+
+@Produces(Array(MediaType.APPLICATION_JSON))
+class OneRDDResource(uiRoot: UIRoot) {
+
+    @GET
+    def rddData(
+      @PathParam("appId") appId: String,
+      @PathParam("rddId") rddId: Int
+    ): RDDStorageInfo  = {
+      uiRoot.withSparkUI(appId) { ui =>
+        AllRDDResource.getRDDStorageInfo(rddId, ui.storageListener, true).getOrElse{
+          throw new IllegalArgumentException("no rdd found w/ id " + rddId)
+        }
+      }
+    }
+
+}

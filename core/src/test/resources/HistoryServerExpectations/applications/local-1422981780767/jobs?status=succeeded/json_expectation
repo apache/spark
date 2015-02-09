@@ -26,18 +26,4 @@
   "numCompletedStages" : 1,
   "numSkippedStages" : 0,
   "numFailedStages" : 0
-}, {
-  "jobId" : 1,
-  "name" : "count at <console>:20",
-  "stageIds" : [ 1, 2 ],
-  "status" : "FAILED",
-  "numTasks" : 16,
-  "numActiveTasks" : 0,
-  "numCompletedTasks" : 15,
-  "numSkippedTasks" : 15,
-  "numFailedTasks" : 1,
-  "numActiveStages" : 0,
-  "numCompletedStages" : 1,
-  "numSkippedStages" : 0,
-  "numFailedStages" : 1
 } ]
