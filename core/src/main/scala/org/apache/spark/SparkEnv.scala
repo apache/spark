@@ -98,7 +98,7 @@ class SparkEnv (
     // the tmp dir, if not, it will create too many tmp dirs.
     // We only need to delete the tmp dir create by driver, because sparkFilesDir is point to the
     // current working dir in executor which we do not need to delete.
-    if (SparkContext.DRIVER_IDENTIFIER == executorId) {
+    if (sparkFilesDir != ".") {
       try {
         Utils.deleteRecursively(new File(sparkFilesDir))
       } catch {
@@ -351,6 +351,8 @@ object SparkEnv extends Logging {
     // Set the sparkFiles directory, used when downloading dependencies.  In local mode,
     // this is a temporary directory; in distributed mode, this is the executor's current working
     // directory.
+    // As we use this value to decide whether if we need to delete the tmp file in stop(), so if you
+    // want to change this code please be careful.
     val sparkFilesDir: String = if (isDriver) {
       Utils.createTempDir(Utils.getLocalDir(conf), "userFiles").getAbsolutePath
     } else {
