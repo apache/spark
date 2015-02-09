@@ -12,6 +12,7 @@ base_log_folder = {AIRFLOW_HOME}/logs
 base_url = http://localhost:8080
 executor = SequentialExecutor
 sql_alchemy_conn = sqlite:///{AIRFLOW_HOME}/airflow.db
+unit_test_mode = False
 
 [server]
 web_server_host = 0.0.0.0
@@ -50,6 +51,7 @@ base_log_folder = {AIRFLOW_HOME}/logs
 base_url = http://localhost:8080
 executor = SequentialExecutor
 sql_alchemy_conn = sqlite:///{AIRFLOW_HOME}/tests.db
+unit_test_mode = True
 
 [server]
 web_server_host = 0.0.0.0
@@ -79,13 +81,15 @@ job_heartbeat_sec = 1
 id_len = 250
 """
 
+
 def mkdir_p(path):
     try:
         os.makedirs(path)
-    except OSError as exc: # Python >2.5
+    except OSError as exc:  # Python >2.5
         if exc.errno == errno.EEXIST and os.path.isdir(path):
             pass
-        else: raise
+        else:
+            raise Exception('Had trouble creating a directory')
 
 '''
 Setting AIRFLOW_HOME and AIRFLOW_CONFIG from environment variables, using
@@ -124,6 +128,7 @@ if not os.path.isfile(TEST_CONFIG_FILE):
     f.close()
 
 logging.info("Reading the config from " + AIRFLOW_CONFIG)
+
 
 def test_mode():
     conf = ConfigParser()

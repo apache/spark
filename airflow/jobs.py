@@ -161,9 +161,11 @@ class MasterJob(BaseJob):
             self,
             dag_id=None,
             subdir=None,
+            test_mode=False,
             *args, **kwargs):
         self.dag_id = dag_id
         self.subdir = subdir
+        self.test_mode = test_mode
         super(MasterJob, self).__init__(*args, **kwargs)
 
     def _execute(self):
@@ -188,7 +190,10 @@ class MasterJob(BaseJob):
         dagbag = models.DagBag(self.subdir)
         executor = dagbag.executor
         executor.start()
-        while True:
+        i = 0
+        while (not self.test_mode) or i < 1:
+            print(i)
+            i += 1
             self.heartbeat()
             dagbag.collect_dags(only_if_updated=True)
             dags = [dagbag.dags[dag_id]] if dag_id else dagbag.dags.values()

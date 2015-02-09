@@ -9,17 +9,23 @@ NUM_EXAMPLE_DAGS = 3
 DEV_NULL = '/dev/null'
 LOCAL_EXECUTOR = executors.LocalExecutor()
 DEFAULT_DATE = datetime(2015, 1, 1)
+configuration.test_mode()
 
 
 class CoreTest(unittest.TestCase):
 
     def setUp(self):
         configuration.test_mode()
+        print("INITDB")
         utils.initdb()
         self.dagbag = models.DagBag(
             dag_folder=DEV_NULL, include_examples=True)
+        utils.initdb()
         self.dag_bash = self.dagbag.dags['example_bash_operator']
         self.runme_0 = self.dag_bash.get_task('runme_0')
+
+    def test_confirm_unittest_mod(self):
+        assert configuration.conf.get('core', 'unit_test_mode')
 
     def test_import_examples(self):
         self.assertEqual(len(self.dagbag.dags), NUM_EXAMPLE_DAGS)
@@ -32,7 +38,7 @@ class CoreTest(unittest.TestCase):
         job.run()
 
     def test_master_job(self):
-        job = jobs.MaterJob(dag_id='example_bash_operator')
+        job = jobs.MasterJob(dag_id='example_bash_operator', test_mode=True)
         job.run()
 
     def test_local_backfill_job(self):
@@ -57,6 +63,7 @@ class WebUiTests(unittest.TestCase):
 
     def setUp(self):
         configuration.test_mode()
+        utils.initdb()
         app.config['TESTING'] = True
         self.app = app.test_client()
 
@@ -69,9 +76,10 @@ class WebUiTests(unittest.TestCase):
         response = self.app.get('/admin/airflow/query')
         assert "Ad Hoc Query" in response.data
         response = self.app.get(
-            "/admin/airflow/query?conn_id=local_mysql&sql=SELECT+*+FROM+dag")
-        assert "example_bash_operator" in response.data
-
+            "/admin/airflow/query?"
+            "conn_id=presto_default&"
+            "sql=SELECT+COUNT%281%29+FROM+airflow.static_babynames")
+        assert "Ad Hoc Query" in response.data
 
     def test_health(self):
         response = self.app.get('/health')
