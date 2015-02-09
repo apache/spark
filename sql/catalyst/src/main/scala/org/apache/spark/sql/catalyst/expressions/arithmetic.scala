@@ -88,23 +88,6 @@ abstract class BinaryArithmetic extends BinaryExpression {
     }
     left.dataType
   }
-
-  override def eval(input: Row): Any = {
-    val evalE1 = left.eval(input)
-    if(evalE1 == null) {
-      null
-    } else {
-      val evalE2 = right.eval(input)
-      if (evalE2 == null) {
-        null
-      } else {
-        evalInternal(evalE1, evalE2)
-      }
-    }
-  }
-
-  def evalInternal(evalE1: EvaluatedType, evalE2: EvaluatedType): Any =
-    sys.error(s"BinaryExpressions must either override eval or evalInternal")
 }
 
 case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
@@ -267,12 +250,30 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
 case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmetic {
   def symbol = "|"
 
-  override def evalInternal(evalE1: EvaluatedType, evalE2: EvaluatedType): Any = dataType match {
-    case ByteType => (evalE1.asInstanceOf[Byte] | evalE2.asInstanceOf[Byte]).toByte
-    case ShortType => (evalE1.asInstanceOf[Short] | evalE2.asInstanceOf[Short]).toShort
-    case IntegerType => evalE1.asInstanceOf[Int] | evalE2.asInstanceOf[Int]
-    case LongType => evalE1.asInstanceOf[Long] | evalE2.asInstanceOf[Long]
+  lazy val or: (Any, Any) => Any = dataType match {
+    case ByteType =>
+      ((evalE1: Byte, evalE2: Byte) => (evalE1 | evalE2).toByte).asInstanceOf[(Any, Any) => Any]
+    case ShortType =>
+      ((evalE1: Short, evalE2: Short) => (evalE1 | evalE2).toShort).asInstanceOf[(Any, Any) => Any]
+    case IntegerType =>
+      ((evalE1: Int, evalE2: Int) => evalE1 | evalE2).asInstanceOf[(Any, Any) => Any]
+    case LongType =>
+      ((evalE1: Long, evalE2: Long) => evalE1 | evalE2).asInstanceOf[(Any, Any) => Any]
     case other => sys.error(s"Unsupported bitwise | operation on $other")
+  }
+
+  override def eval(input: Row): Any = {
+    val evalE2 = right.eval(input)
+    if (evalE2 == null || evalE2 == 0) {
+      null
+    } else {
+      val evalE1 = left.eval(input)
+      if (evalE1 == null) {
+        null
+      } else {
+        or(evalE1, evalE2)
+      }
+    }
   }
 }
 
@@ -282,12 +283,30 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
 case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithmetic {
   def symbol = "^"
 
-  override def evalInternal(evalE1: EvaluatedType, evalE2: EvaluatedType): Any = dataType match {
-    case ByteType => (evalE1.asInstanceOf[Byte] ^ evalE2.asInstanceOf[Byte]).toByte
-    case ShortType => (evalE1.asInstanceOf[Short] ^ evalE2.asInstanceOf[Short]).toShort
-    case IntegerType => evalE1.asInstanceOf[Int] ^ evalE2.asInstanceOf[Int]
-    case LongType => evalE1.asInstanceOf[Long] ^ evalE2.asInstanceOf[Long]
+  lazy val xor: (Any, Any) => Any = dataType match {
+    case ByteType =>
+      ((evalE1: Byte, evalE2: Byte) => (evalE1 ^ evalE2).toByte).asInstanceOf[(Any, Any) => Any]
+    case ShortType =>
+      ((evalE1: Short, evalE2: Short) => (evalE1 ^ evalE2).toShort).asInstanceOf[(Any, Any) => Any]
+    case IntegerType =>
+      ((evalE1: Int, evalE2: Int) => evalE1 ^ evalE2).asInstanceOf[(Any, Any) => Any]
+    case LongType =>
+      ((evalE1: Long, evalE2: Long) => evalE1 ^ evalE2).asInstanceOf[(Any, Any) => Any]
     case other => sys.error(s"Unsupported bitwise ^ operation on $other")
+  }
+
+  override def eval(input: Row): Any = {
+    val evalE2 = right.eval(input)
+    if (evalE2 == null || evalE2 == 0) {
+      null
+    } else {
+      val evalE1 = left.eval(input)
+      if (evalE1 == null) {
+        null
+      } else {
+        xor(evalE1, evalE2)
+      }
+    }
   }
 }
 
@@ -302,18 +321,24 @@ case class BitwiseNot(child: Expression) extends UnaryExpression {
   def nullable = child.nullable
   override def toString = s"~$child"
 
+  lazy val not: (Any) => Any = dataType match {
+    case ByteType =>
+      ((evalE: Byte) => ~evalE).asInstanceOf[(Any) => Any]
+    case ShortType =>
+      ((evalE: Short) => ~evalE).asInstanceOf[(Any) => Any]
+    case IntegerType =>
+      ((evalE: Int) => ~evalE).asInstanceOf[(Any) => Any]
+    case LongType =>
+      ((evalE: Long) => ~evalE).asInstanceOf[(Any) => Any]
+    case other => sys.error(s"Unsupported bitwise ~ operation on $other")
+  }
+
   override def eval(input: Row): Any = {
     val evalE = child.eval(input)
     if (evalE == null) {
       null
     } else {
-      dataType match {
-        case ByteType => ~evalE.asInstanceOf[Byte]
-        case ShortType => ~evalE.asInstanceOf[Short]
-        case IntegerType => ~evalE.asInstanceOf[Int]
-        case LongType => ~evalE.asInstanceOf[Long]
-        case other => sys.error(s"Unsupported bitwise ~ operation on $other")
-      }
+      not(evalE)
     }
   }
 }
