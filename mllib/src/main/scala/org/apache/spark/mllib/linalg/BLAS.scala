@@ -235,12 +235,23 @@ private[spark] object BLAS extends Serializable with Logging {
    * @param x the vector x that contains the n elements.
    * @param A the symmetric matrix A. Size of n x n.
    */
-  def syr(alpha: Double, x: DenseVector, A: DenseMatrix) {
+
+  // Wrapper around the dense and sparse methods.
+  def syr(alpha: Double, x: Vector, A: DenseMatrix) {
     val mA = A.numRows
     val nA = A.numCols
-    require(mA == nA, s"A is not a square matrix. A: $mA x $nA")
+    require(mA == nA, s"A is not a square matrix (and hence is not symmetric). A: $mA x $nA")
     require(mA == x.size, s"The size of x doesn't match the rank of A. A: $mA x $nA, x: ${x.size}")
 
+    x match {
+      case dv: DenseVector => syr(alpha, dv, A, mA, nA)
+      case sv: SparseVector => syr(alpha, sv, A, nA)
+      case _ =>
+        throw new IllegalArgumentException(s"syr doesn't support vector type ${x.getClass}.")
+    }
+  }
+
+  private def syr(alpha: Double, x: DenseVector, A: DenseMatrix, mA: Int, nA: Int) {
     nativeBLAS.dsyr("U", x.size, alpha, x.values, 1, A.values, nA)
 
     // Fill lower triangular part of A
@@ -256,12 +267,7 @@ private[spark] object BLAS extends Serializable with Logging {
   }
 
   // Workaround for SparseVectors.
-  def syr(alpha: Double, x: SparseVector, A: DenseMatrix) {
-    val mA = A.numRows
-    val nA = A.numCols
-    require(mA == nA, s"A is not a square matrix. A: $mA x $nA")
-    require(mA == x.size, s"The size of x doesn't match the rank of A. A: $mA x $nA, x: ${x.size}")
-
+  private def syr(alpha: Double, x: SparseVector, A: DenseMatrix, nA: Int) {
     val zipIndVal = (x.indices zip x.values)
     zipIndVal map {
       case(ind1, val1) => zipIndVal map {

@@ -171,7 +171,7 @@ class GaussianMixture private (
       var i = 0
       while (i < k) {
         val mu = sums.means(i) / sums.weights(i)
-        BLAS.syr(-sums.weights(i), Vectors.fromBreeze(mu).asInstanceOf[DenseVector],
+        BLAS.syr(-sums.weights(i), Vectors.fromBreeze(mu),
           Matrices.fromBreeze(sums.sigmas(i)).asInstanceOf[DenseMatrix])
         weights(i) = sums.weights(i) / sumWeights
         gaussians(i) = new MultivariateGaussian(mu, sums.sigmas(i) / sums.weights(i))
@@ -224,22 +224,12 @@ private object ExpectationSum {
     val pSum = p.sum
     sums.logLikelihood += math.log(pSum)
     var i = 0
-    val isSparse = x match {
-      case _: BSV[Double] => true
-      case _: BDV[Double] => false
-    }
     while (i < sums.k) {
       p(i) /= pSum
       sums.weights(i) += p(i)
       sums.means(i) += x * p(i)
-      if (isSparse){
-        BLAS.syr(p(i), Vectors.fromBreeze(x).asInstanceOf[SparseVector],
-          Matrices.fromBreeze(sums.sigmas(i)).asInstanceOf[DenseMatrix])
-      }
-      else {
-        BLAS.syr(p(i), Vectors.fromBreeze(x).asInstanceOf[DenseVector],
-          Matrices.fromBreeze(sums.sigmas(i)).asInstanceOf[DenseMatrix])
-      }
+      BLAS.syr(p(i), Vectors.fromBreeze(x),
+        Matrices.fromBreeze(sums.sigmas(i)).asInstanceOf[DenseMatrix])
       i = i + 1
     }
     sums
