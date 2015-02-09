@@ -16,25 +16,27 @@
  */
 package org.apache.spark.sql.hive;
 
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.hive.test.TestHive$;
-import org.apache.spark.sql.sources.SaveModes;
-import org.apache.spark.sql.types.DataTypes;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
-import org.apache.spark.util.Utils;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.QueryTest$;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.hive.test.TestHive$;
+import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
+import org.apache.spark.util.Utils;
 
 public class JavaMetastoreDataSourcesSuite {
   private transient JavaSparkContext sc;
@@ -43,6 +45,13 @@ public class JavaMetastoreDataSourcesSuite {
   String originalDefaultSource;
   File path;
   DataFrame df;
+
+  private void checkAnswer(DataFrame actual, List<Row> expected) {
+    String errorMessage = QueryTest$.MODULE$.checkAnswer(actual, expected);
+    if (errorMessage != null) {
+      Assert.fail(errorMessage);
+    }
+  }
 
   @Before
   public void setUp() throws IOException {
@@ -70,9 +79,9 @@ public class JavaMetastoreDataSourcesSuite {
     Map<String, String> options = new HashMap<String, String>();
     df.saveAsTable("javaSavedTable", "org.apache.spark.sql.json", true, options);
 
-    Assert.assertEquals(
-      df.collectAsList(),
-      sqlContext.sql("SELECT * FROM javaSavedTable").collectAsList());
+    checkAnswer(
+      sqlContext.sql("SELECT * FROM javaSavedTable"),
+      df.collectAsList());
 
     sqlContext.sql("DROP TABLE javaSavedTable");
   }
@@ -83,17 +92,17 @@ public class JavaMetastoreDataSourcesSuite {
     options.put("path", path.toString());
     df.saveAsTable("javaSavedTable", "org.apache.spark.sql.json", true, options);
 
-    Assert.assertEquals(
-      df.collectAsList(),
-      sqlContext.sql("SELECT * FROM javaSavedTable").collectAsList());
+    checkAnswer(
+      sqlContext.sql("SELECT * FROM javaSavedTable"),
+      df.collectAsList());
 
     DataFrame loadedDF =
       sqlContext.createExternalTable("externalTable", "org.apache.spark.sql.json", options);
 
-    Assert.assertEquals(df.collectAsList(), loadedDF.collectAsList());
-    Assert.assertEquals(
-      df.collectAsList(),
-      sqlContext.sql("SELECT * FROM externalTable").collectAsList());
+    checkAnswer(loadedDF, df.collectAsList());
+    checkAnswer(
+      sqlContext.sql("SELECT * FROM externalTable"),
+      df.collectAsList());
 
     sqlContext.sql("DROP TABLE javaSavedTable");
     sqlContext.sql("DROP TABLE externalTable");
@@ -105,9 +114,9 @@ public class JavaMetastoreDataSourcesSuite {
     options.put("path", path.toString());
     df.saveAsTable("javaSavedTable", "org.apache.spark.sql.json", true, options);
 
-    Assert.assertEquals(
-      df.collectAsList(),
-      sqlContext.sql("SELECT * FROM javaSavedTable").collectAsList());
+    checkAnswer(
+      sqlContext.sql("SELECT * FROM javaSavedTable"),
+      df.collectAsList());
 
     List<StructField> fields = new ArrayList<>();
     fields.add(DataTypes.createStructField("b", DataTypes.StringType, true));
@@ -115,12 +124,12 @@ public class JavaMetastoreDataSourcesSuite {
     DataFrame loadedDF =
       sqlContext.createExternalTable("externalTable", "org.apache.spark.sql.json", schema, options);
 
-    Assert.assertEquals(
-      sqlContext.sql("SELECT b FROM javaSavedTable").collectAsList(),
-      loadedDF.collectAsList());
-    Assert.assertEquals(
-      sqlContext.sql("SELECT b FROM javaSavedTable").collectAsList(),
-      sqlContext.sql("SELECT * FROM externalTable").collectAsList());
+    checkAnswer(
+      loadedDF,
+      sqlContext.sql("SELECT b FROM javaSavedTable").collectAsList());
+    checkAnswer(
+      sqlContext.sql("SELECT * FROM externalTable"),
+      sqlContext.sql("SELECT b FROM javaSavedTable").collectAsList());
 
     sqlContext.sql("DROP TABLE javaSavedTable");
     sqlContext.sql("DROP TABLE externalTable");

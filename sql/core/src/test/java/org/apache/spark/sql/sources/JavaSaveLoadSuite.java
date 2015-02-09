@@ -18,24 +18,19 @@ package org.apache.spark.sql.sources;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.List;
-import java.util.ArrayList;
-import java.util.Map;
+import java.util.*;
 
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.types.DataType;
-import org.apache.spark.sql.types.DataTypes;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.test.TestSQLContext$;
+import org.apache.spark.sql.*;
+import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
 import org.apache.spark.util.Utils;
 
 public class JavaSaveLoadSuite {
@@ -46,6 +41,13 @@ public class JavaSaveLoadSuite {
   String originalDefaultSource;
   File path;
   DataFrame df;
+
+  private void checkAnswer(DataFrame actual, List<Row> expected) {
+    String errorMessage = QueryTest$.MODULE$.checkAnswer(actual, expected);
+    if (errorMessage != null) {
+      Assert.fail(errorMessage);
+    }
+  }
 
   @Before
   public void setUp() throws IOException {
@@ -94,7 +96,7 @@ public class JavaSaveLoadSuite {
 
     DataFrame loadedDF = sqlContext.load("org.apache.spark.sql.json", options);
 
-    Assert.assertEquals(df.collectAsList(), loadedDF.collectAsList());
+    checkAnswer(loadedDF, df.collectAsList());
   }
 
   @Test
@@ -108,8 +110,6 @@ public class JavaSaveLoadSuite {
     StructType schema = DataTypes.createStructType(fields);
     DataFrame loadedDF = sqlContext.load("org.apache.spark.sql.json", schema, options);
 
-    Assert.assertEquals(
-      sqlContext.sql("SELECT b FROM jsonTable").collectAsList(),
-      loadedDF.collectAsList());
+    checkAnswer(loadedDF, sqlContext.sql("SELECT b FROM jsonTable").collectAsList());
   }
 }
