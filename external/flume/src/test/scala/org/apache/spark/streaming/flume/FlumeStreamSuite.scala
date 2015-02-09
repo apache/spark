@@ -21,6 +21,8 @@ import java.net.{InetSocketAddress, ServerSocket}
 import java.nio.ByteBuffer
 import java.nio.charset.Charset
 
+import com.google.common.base.Charsets
+
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.concurrent.duration._
@@ -108,7 +110,7 @@ class FlumeStreamSuite extends FunSuite with BeforeAndAfter with Matchers with L
 
     val inputEvents = input.map { item =>
       val event = new AvroFlumeEvent
-      event.setBody(ByteBuffer.wrap(item.getBytes("UTF-8")))
+      event.setBody(ByteBuffer.wrap(item.getBytes(Charsets.UTF_8)))
       event.setHeaders(Map[CharSequence, CharSequence]("test" -> "header"))
       event
     }
@@ -144,7 +146,7 @@ class FlumeStreamSuite extends FunSuite with BeforeAndAfter with Matchers with L
         event =>
           event.getHeaders.get("test") should be("header")
       }
-      val output = outputEvents.map(event => new String(event.getBody.array(), "UTF-8"))
+      val output = outputEvents.map(event => new String(event.getBody.array(), Charsets.UTF_8))
       output should be (input)
     }
   }
