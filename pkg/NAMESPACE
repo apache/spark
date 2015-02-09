@@ -41,6 +41,7 @@ exportMethods(
               "persist",
               "reduce",
               "reduceByKey",
+              "reduceByKeyLocally",
               "rightOuterJoin",
               "sampleRDD",
               "saveAsTextFile",
