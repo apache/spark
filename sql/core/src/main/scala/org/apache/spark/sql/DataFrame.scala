@@ -27,6 +27,8 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
+import scala.util.control.NonFatal
+
 
 private[sql] object DataFrame {
   def apply(sqlContext: SQLContext, logicalPlan: LogicalPlan): DataFrame = {
@@ -91,6 +93,12 @@ trait DataFrame extends RDDApi[Row] {
    * Returns the object itself. Used to force an implicit conversion from RDD to DataFrame in Scala.
    */
   def toDataFrame: DataFrame = this
+
+  override def toString =
+     try schema.map(f => s"${f.name}: ${f.dataType.simpleString}").mkString("[", ", ", "]") catch {
+       case NonFatal(e) =>
+         s"Invalid tree; ${e.getMessage}:\n$queryExecution"
+     }
 
   /**
    * Returns a new [[DataFrame]] with columns renamed. This can be quite convenient in conversion
