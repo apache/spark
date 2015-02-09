@@ -1049,7 +1049,7 @@ def real_main():
             not opts.spark_ec2_git_repo.startswith("https://github.com") or \
             not opts.spark_ec2_git_repo.endswith("spark-ec2"):
         print >> stderr, "spark-ec2-git-repo must be a github repo and it must not have a " \
-                         "training / or .git. " \
+                         "trailing / or .git. " \
                          "Furthermore, we currently only support forks named spark-ec2."
         sys.exit(1)
 
