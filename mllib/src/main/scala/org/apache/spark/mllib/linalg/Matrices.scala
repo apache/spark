@@ -50,7 +50,7 @@ sealed trait Matrix extends Serializable {
   private[mllib] def toBreeze: BM[Double]
 
   /** Gets the (i, j)-th element. */
-  private[mllib] def apply(i: Int, j: Int): Double
+  def apply(i: Int, j: Int): Double
 
   /** Return the index for the (i, j)-th element in the backing array. */
   private[mllib] def index(i: Int, j: Int): Int
@@ -163,7 +163,7 @@ class DenseMatrix(
 
   private[mllib] def apply(i: Int): Double = values(i)
 
-  private[mllib] def apply(i: Int, j: Int): Double = values(index(i, j))
+  override def apply(i: Int, j: Int): Double = values(index(i, j))
 
   private[mllib] def index(i: Int, j: Int): Int = {
     if (!isTransposed) i + numRows * j else j + numCols * i
@@ -256,8 +256,11 @@ object DenseMatrix {
    * @param numCols number of columns of the matrix
    * @return `DenseMatrix` with size `numRows` x `numCols` and values of zeros
    */
-  def zeros(numRows: Int, numCols: Int): DenseMatrix =
+  def zeros(numRows: Int, numCols: Int): DenseMatrix = {
+    require(numRows.toLong * numCols <= Int.MaxValue,
+            s"$numRows x $numCols dense matrix is too large to allocate")
     new DenseMatrix(numRows, numCols, new Array[Double](numRows * numCols))
+  }
 
   /**
    * Generate a `DenseMatrix` consisting of ones.
@@ -265,8 +268,11 @@ object DenseMatrix {
    * @param numCols number of columns of the matrix
    * @return `DenseMatrix` with size `numRows` x `numCols` and values of ones
    */
-  def ones(numRows: Int, numCols: Int): DenseMatrix =
+  def ones(numRows: Int, numCols: Int): DenseMatrix = {
+    require(numRows.toLong * numCols <= Int.MaxValue,
+            s"$numRows x $numCols dense matrix is too large to allocate")
     new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(1.0))
+  }
 
   /**
    * Generate an Identity Matrix in `DenseMatrix` format.
@@ -291,6 +297,8 @@ object DenseMatrix {
    * @return `DenseMatrix` with size `numRows` x `numCols` and values in U(0, 1)
    */
   def rand(numRows: Int, numCols: Int, rng: Random): DenseMatrix = {
+    require(numRows.toLong * numCols <= Int.MaxValue,
+            s"$numRows x $numCols dense matrix is too large to allocate")
     new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rng.nextDouble()))
   }
 
@@ -302,6 +310,8 @@ object DenseMatrix {
    * @return `DenseMatrix` with size `numRows` x `numCols` and values in N(0, 1)
    */
   def randn(numRows: Int, numCols: Int, rng: Random): DenseMatrix = {
+    require(numRows.toLong * numCols <= Int.MaxValue,
+            s"$numRows x $numCols dense matrix is too large to allocate")
     new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rng.nextGaussian()))
   }
 
@@ -398,7 +408,7 @@ class SparseMatrix(
      }
   }
 
-  private[mllib] def apply(i: Int, j: Int): Double = {
+  override def apply(i: Int, j: Int): Double = {
     val ind = index(i, j)
     if (ind < 0) 0.0 else values(ind)
   }
