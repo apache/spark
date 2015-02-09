@@ -71,7 +71,7 @@ private[tree] class DecisionTreeMetadata(
    * For ordered features, there is 1 more bin than split.
    */
   def numSplits(featureIndex: Int): Int = if (isUnordered(featureIndex)) {
-    numBins(featureIndex) >> 1
+    Math.min(numBins(featureIndex) >> 1, (1 << featureArity(featureIndex)) - 2)
   } else {
     numBins(featureIndex) - 1
   }
