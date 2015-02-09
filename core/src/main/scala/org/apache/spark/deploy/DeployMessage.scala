@@ -88,8 +88,6 @@ private[deploy] object DeployMessages {
 
   case class KillDriver(driverId: String) extends DeployMessage
 
-  case class ApplicationFinished(id: String)
-
   // Worker internal
 
   case object WorkDirCleanup      // Sent to Worker actor periodically for cleaning up app folders
@@ -177,5 +175,4 @@ private[deploy] object DeployMessages {
   // Liveness checks in various places
 
   case object SendHeartbeat
-
 }

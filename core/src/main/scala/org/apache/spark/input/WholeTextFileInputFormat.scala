@@ -19,6 +19,7 @@ package org.apache.spark.input
 
 import scala.collection.JavaConversions._
 
+import org.apache.hadoop.conf.{Configuration, Configurable}
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.InputSplit
 import org.apache.hadoop.mapreduce.JobContext
@@ -37,13 +38,18 @@ private[spark] class WholeTextFileInputFormat
 
   override protected def isSplitable(context: JobContext, file: Path): Boolean = false
 
+  private var conf: Configuration = _
+  def setConf(c: Configuration) {
+    conf = c
+  }
+  def getConf: Configuration = conf
+
   override def createRecordReader(
       split: InputSplit,
       context: TaskAttemptContext): RecordReader[String, String] = {
 
-    val reader =
-      new ConfigurableCombineFileRecordReader(split, context, classOf[WholeTextFileRecordReader])
-    reader.setConf(getConf)
+    val reader = new WholeCombineFileRecordReader(split, context)
+    reader.setConf(conf)
     reader
   }
 

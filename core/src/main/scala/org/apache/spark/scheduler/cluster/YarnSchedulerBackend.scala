@@ -17,8 +17,6 @@
 
 package org.apache.spark.scheduler.cluster
 
-import scala.concurrent.{Future, ExecutionContext}
-
 import akka.actor.{Actor, ActorRef, Props}
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 
@@ -26,9 +24,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.ui.JettyUtils
-import org.apache.spark.util.{AkkaUtils, Utils}
-
-import scala.util.control.NonFatal
+import org.apache.spark.util.AkkaUtils
 
 /**
  * Abstract Yarn scheduler backend that contains common logic
@@ -101,9 +97,6 @@ private[spark] abstract class YarnSchedulerBackend(
   private class YarnSchedulerActor extends Actor {
     private var amActor: Option[ActorRef] = None
 
-    implicit val askAmActorExecutor = ExecutionContext.fromExecutor(
-      Utils.newDaemonCachedThreadPool("yarn-scheduler-ask-am-executor"))
-
     override def preStart(): Unit = {
       // Listen for disassociation events
       context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
@@ -117,12 +110,7 @@ private[spark] abstract class YarnSchedulerBackend(
       case r: RequestExecutors =>
         amActor match {
           case Some(actor) =>
-            val driverActor = sender
-            Future {
-              driverActor ! AkkaUtils.askWithReply[Boolean](r, actor, askTimeout)
-            } onFailure {
-              case NonFatal(e) => logError(s"Sending $r to AM was unsuccessful", e)
-            }
+            sender ! AkkaUtils.askWithReply[Boolean](r, actor, askTimeout)
           case None =>
             logWarning("Attempted to request executors before the AM has registered!")
             sender ! false
@@ -131,12 +119,7 @@ private[spark] abstract class YarnSchedulerBackend(
       case k: KillExecutors =>
         amActor match {
           case Some(actor) =>
-            val driverActor = sender
-            Future {
-              driverActor ! AkkaUtils.askWithReply[Boolean](k, actor, askTimeout)
-            } onFailure {
-              case NonFatal(e) => logError(s"Sending $k to AM was unsuccessful", e)
-            }
+            sender ! AkkaUtils.askWithReply[Boolean](k, actor, askTimeout)
           case None =>
             logWarning("Attempted to kill executors before the AM has registered!")
             sender ! false

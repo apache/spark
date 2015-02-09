@@ -26,18 +26,19 @@ import org.scalatest.Matchers
 
 import org.apache.spark.{LocalSparkContext, SparkContext}
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.util.ResetSystemProperties
 
-class SparkListenerSuite extends FunSuite  with LocalSparkContext with Matchers with BeforeAndAfter
-  with BeforeAndAfterAll with ResetSystemProperties {
+class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
+  with BeforeAndAfter with BeforeAndAfterAll {
 
   /** Length of time to wait while draining listener events. */
   val WAIT_TIMEOUT_MILLIS = 10000
 
-  val jobCompletionTime = 1421191296660L
-
   before {
     sc = new SparkContext("local", "SparkListenerSuite")
+  }
+
+  override def afterAll() {
+    System.clearProperty("spark.akka.frameSize")
   }
 
   test("basic creation and shutdown of LiveListenerBus") {
@@ -46,7 +47,7 @@ class SparkListenerSuite extends FunSuite  with LocalSparkContext with Matchers 
     bus.addListener(counter)
 
     // Listener bus hasn't started yet, so posting events should not increment counter
-    (1 to 5).foreach { _ => bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded)) }
+    (1 to 5).foreach { _ => bus.post(SparkListenerJobEnd(0, JobSucceeded)) }
     assert(counter.count === 0)
 
     // Starting listener bus should flush all buffered events
@@ -56,7 +57,7 @@ class SparkListenerSuite extends FunSuite  with LocalSparkContext with Matchers 
 
     // After listener bus has stopped, posting events should not increment counter
     bus.stop()
-    (1 to 5).foreach { _ => bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded)) }
+    (1 to 5).foreach { _ => bus.post(SparkListenerJobEnd(0, JobSucceeded)) }
     assert(counter.count === 5)
 
     // Listener bus must not be started twice
@@ -101,7 +102,7 @@ class SparkListenerSuite extends FunSuite  with LocalSparkContext with Matchers 
 
     bus.addListener(blockingListener)
     bus.start()
-    bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
+    bus.post(SparkListenerJobEnd(0, JobSucceeded))
 
     listenerStarted.acquire()
     // Listener should be blocked after start
@@ -347,7 +348,7 @@ class SparkListenerSuite extends FunSuite  with LocalSparkContext with Matchers 
     bus.start()
 
     // Post events to all listeners, and wait until the queue is drained
-    (1 to 5).foreach { _ => bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded)) }
+    (1 to 5).foreach { _ => bus.post(SparkListenerJobEnd(0, JobSucceeded)) }
     assert(bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
 
     // The exception should be caught, and the event should be propagated to other listeners

@@ -23,10 +23,10 @@ public class Statsd implements Closeable {
 
     private static final Pattern WHITESPACE = Pattern.compile("[\\s]+");
 
-    private static final String DRIVER = "<driver>";
+    private static final String DRIVER = "driver";
     private static final String EXECUTOR = "executor";
 
-    private static final String DRIVER_MATCH = ".<driver>.";
+    private static final String DRIVER_MATCH = ".driver.";
     private static final String EXECUTOR_MATCH = ".executor.";
 
     public static enum StatType { COUNTER, TIMER, GAUGE }

@@ -52,8 +52,8 @@ class Normalizer(p: Double) extends VectorTransformer {
       // However, for sparse vector, the `index` array will not be changed,
       // so we can re-use it to save memory.
       vector match {
-        case DenseVector(vs) =>
-          val values = vs.clone()
+        case dv: DenseVector =>
+          val values = dv.values.clone()
           val size = values.size
           var i = 0
           while (i < size) {
@@ -61,15 +61,15 @@ class Normalizer(p: Double) extends VectorTransformer {
             i += 1
           }
           Vectors.dense(values)
-        case SparseVector(size, ids, vs) =>
-          val values = vs.clone()
+        case sv: SparseVector =>
+          val values = sv.values.clone()
           val nnz = values.size
           var i = 0
           while (i < nnz) {
             values(i) /= norm
             i += 1
           }
-          Vectors.sparse(size, ids, values)
+          Vectors.sparse(sv.size, sv.indices, values)
         case v => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
       }
     } else {

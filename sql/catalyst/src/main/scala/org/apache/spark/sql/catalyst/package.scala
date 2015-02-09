@@ -27,6 +27,6 @@ package object catalyst {
    * scala.reflect.*.  Note that Scala Reflection API is made thread-safe in 2.11, but not yet for
    * 2.10.* builds.  See SI-6240 for more details.
    */
-  protected[sql] object ScalaReflectionLock
+  protected[catalyst] object ScalaReflectionLock
 
 }

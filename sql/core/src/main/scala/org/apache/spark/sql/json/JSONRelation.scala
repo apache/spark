@@ -19,49 +19,31 @@ package org.apache.spark.sql.json
 
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.StructType
 
-
-private[sql] class DefaultSource extends RelationProvider with SchemaRelationProvider {
-
-  /** Returns a new base relation with the parameters. */
+private[sql] class DefaultSource extends RelationProvider {
+  /** Returns a new base relation with the given parameters. */
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
     val fileName = parameters.getOrElse("path", sys.error("Option 'path' not specified"))
     val samplingRatio = parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
 
-    JSONRelation(fileName, samplingRatio, None)(sqlContext)
-  }
-
-  /** Returns a new base relation with the given schema and parameters. */
-  override def createRelation(
-      sqlContext: SQLContext,
-      parameters: Map[String, String],
-      schema: StructType): BaseRelation = {
-    val fileName = parameters.getOrElse("path", sys.error("Option 'path' not specified"))
-    val samplingRatio = parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
-
-    JSONRelation(fileName, samplingRatio, Some(schema))(sqlContext)
+    JSONRelation(fileName, samplingRatio)(sqlContext)
   }
 }
 
-private[sql] case class JSONRelation(
-    fileName: String,
-    samplingRatio: Double,
-    userSpecifiedSchema: Option[StructType])(
+private[sql] case class JSONRelation(fileName: String, samplingRatio: Double)(
     @transient val sqlContext: SQLContext)
   extends TableScan {
 
   private def baseRDD = sqlContext.sparkContext.textFile(fileName)
 
-  override val schema = userSpecifiedSchema.getOrElse(
-    JsonRDD.nullTypeToStringType(
-      JsonRDD.inferSchema(
-        baseRDD,
-        samplingRatio,
-        sqlContext.conf.columnNameOfCorruptRecord)))
+  override val schema =
+    JsonRDD.inferSchema(
+      baseRDD,
+      samplingRatio,
+      sqlContext.columnNameOfCorruptRecord)
 
   override def buildScan() =
-    JsonRDD.jsonStringToRow(baseRDD, schema, sqlContext.conf.columnNameOfCorruptRecord)
+    JsonRDD.jsonStringToRow(baseRDD, schema, sqlContext.columnNameOfCorruptRecord)
 }

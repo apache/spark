@@ -39,8 +39,7 @@ class InMemoryColumnarQuerySuite extends QueryTest {
     sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).registerTempTable("sizeTst")
     cacheTable("sizeTst")
     assert(
-      table("sizeTst").queryExecution.logical.statistics.sizeInBytes >
-        conf.autoBroadcastJoinThreshold)
+      table("sizeTst").queryExecution.logical.statistics.sizeInBytes > autoBroadcastJoinThreshold)
   }
 
   test("projection") {
@@ -49,7 +48,7 @@ class InMemoryColumnarQuerySuite extends QueryTest {
 
     checkAnswer(scan, testData.collect().map {
       case Row(key: Int, value: String) => value -> key
-    }.map(Row.fromTuple))
+    }.toSeq)
   }
 
   test("SPARK-1436 regression: in-memory columns must be able to be accessed multiple times") {
@@ -63,49 +62,49 @@ class InMemoryColumnarQuerySuite extends QueryTest {
   test("SPARK-1678 regression: compression must not lose repeated values") {
     checkAnswer(
       sql("SELECT * FROM repeatedData"),
-      repeatedData.collect().toSeq.map(Row.fromTuple))
+      repeatedData.collect().toSeq)
 
     cacheTable("repeatedData")
 
     checkAnswer(
       sql("SELECT * FROM repeatedData"),
-      repeatedData.collect().toSeq.map(Row.fromTuple))
+      repeatedData.collect().toSeq)
   }
 
   test("with null values") {
     checkAnswer(
       sql("SELECT * FROM nullableRepeatedData"),
-      nullableRepeatedData.collect().toSeq.map(Row.fromTuple))
+      nullableRepeatedData.collect().toSeq)
 
     cacheTable("nullableRepeatedData")
 
     checkAnswer(
       sql("SELECT * FROM nullableRepeatedData"),
-      nullableRepeatedData.collect().toSeq.map(Row.fromTuple))
+      nullableRepeatedData.collect().toSeq)
   }
 
   test("SPARK-2729 regression: timestamp data type") {
     checkAnswer(
       sql("SELECT time FROM timestamps"),
-      timestamps.collect().toSeq.map(Row.fromTuple))
+      timestamps.collect().toSeq)
 
     cacheTable("timestamps")
 
     checkAnswer(
       sql("SELECT time FROM timestamps"),
-      timestamps.collect().toSeq.map(Row.fromTuple))
+      timestamps.collect().toSeq)
   }
 
   test("SPARK-3320 regression: batched column buffer building should work with empty partitions") {
     checkAnswer(
       sql("SELECT * FROM withEmptyParts"),
-      withEmptyParts.collect().toSeq.map(Row.fromTuple))
+      withEmptyParts.collect().toSeq)
 
     cacheTable("withEmptyParts")
 
     checkAnswer(
       sql("SELECT * FROM withEmptyParts"),
-      withEmptyParts.collect().toSeq.map(Row.fromTuple))
+      withEmptyParts.collect().toSeq)
   }
 
   test("SPARK-4182 Caching complex types") {

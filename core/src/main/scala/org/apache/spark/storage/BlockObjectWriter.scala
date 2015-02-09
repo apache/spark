@@ -160,14 +160,14 @@ private[spark] class DiskBlockObjectWriter(
     }
     finalPosition = file.length()
     // In certain compression codecs, more bytes are written after close() is called
-    writeMetrics.incShuffleBytesWritten(finalPosition - reportedPosition)
+    writeMetrics.shuffleBytesWritten += (finalPosition - reportedPosition)
   }
 
   // Discard current writes. We do this by flushing the outstanding writes and then
   // truncating the file to its initial position.
   override def revertPartialWritesAndClose() {
     try {
-      writeMetrics.decShuffleBytesWritten(reportedPosition - initialPosition)
+      writeMetrics.shuffleBytesWritten -= (reportedPosition - initialPosition)
 
       if (initialized) {
         objOut.flush()
@@ -212,14 +212,14 @@ private[spark] class DiskBlockObjectWriter(
    */
   private def updateBytesWritten() {
     val pos = channel.position()
-    writeMetrics.incShuffleBytesWritten(pos - reportedPosition)
+    writeMetrics.shuffleBytesWritten += (pos - reportedPosition)
     reportedPosition = pos
   }
 
   private def callWithTiming(f: => Unit) = {
     val start = System.nanoTime()
     f
-    writeMetrics.incShuffleWriteTime(System.nanoTime() - start)
+    writeMetrics.shuffleWriteTime += (System.nanoTime() - start)
   }
 
   // For testing

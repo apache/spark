@@ -50,6 +50,7 @@ class WorkerWebUI(
     attachHandler(createStaticHandler(WorkerWebUI.STATIC_RESOURCE_BASE, "/static"))
     attachHandler(createServletHandler("/log",
       (request: HttpServletRequest) => logPage.renderLog(request), worker.securityMgr))
+    worker.metricsSystem.getServletHandlers.foreach(attachHandler)
   }
 }
 

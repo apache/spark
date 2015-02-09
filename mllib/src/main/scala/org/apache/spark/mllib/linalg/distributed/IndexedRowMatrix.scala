@@ -76,23 +76,6 @@ class IndexedRowMatrix(
   }
 
   /**
-   * Converts this matrix to a
-   * [[org.apache.spark.mllib.linalg.distributed.CoordinateMatrix]].
-   */
-  def toCoordinateMatrix(): CoordinateMatrix = {
-    val entries = rows.flatMap { row =>
-      val rowIndex = row.index
-      row.vector match {
-        case SparseVector(size, indices, values) =>
-          Iterator.tabulate(indices.size)(i => MatrixEntry(rowIndex, indices(i), values(i)))
-        case DenseVector(values) =>
-          Iterator.tabulate(values.size)(i => MatrixEntry(rowIndex, i, values(i)))
-      }
-    }
-    new CoordinateMatrix(entries, numRows(), numCols())
-  }
-
-  /**
    * Computes the singular value decomposition of this IndexedRowMatrix.
    * Denote this matrix by A (m x n), this will compute matrices U, S, V such that A = U * S * V'.
    *
@@ -119,9 +102,6 @@ class IndexedRowMatrix(
       k: Int,
       computeU: Boolean = false,
       rCond: Double = 1e-9): SingularValueDecomposition[IndexedRowMatrix, Matrix] = {
-
-    val n = numCols().toInt
-    require(k > 0 && k <= n, s"Requested k singular values but got k=$k and numCols=$n.")
     val indices = rows.map(_.index)
     val svd = toRowMatrix().computeSVD(k, computeU, rCond)
     val U = if (computeU) {
@@ -162,7 +142,7 @@ class IndexedRowMatrix(
     val mat = BDM.zeros[Double](m, n)
     rows.collect().foreach { case IndexedRow(rowIndex, vector) =>
       val i = rowIndex.toInt
-      vector.foreachActive { case (j, v) =>
+      vector.toBreeze.activeIterator.foreach { case (j, v) =>
         mat(i, j) = v
       }
     }

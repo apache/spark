@@ -19,20 +19,27 @@ package org.apache.spark
 
 import org.scalatest.FunSuite
 import org.apache.spark.serializer.{KryoRegistrator, KryoSerializer}
-import org.apache.spark.util.ResetSystemProperties
 import com.esotericsoftware.kryo.Kryo
 
-class SparkConfSuite extends FunSuite with LocalSparkContext with ResetSystemProperties {
+class SparkConfSuite extends FunSuite with LocalSparkContext {
   test("loading from system properties") {
-    System.setProperty("spark.test.testProperty", "2")
-    val conf = new SparkConf()
-    assert(conf.get("spark.test.testProperty") === "2")
+    try {
+      System.setProperty("spark.test.testProperty", "2")
+      val conf = new SparkConf()
+      assert(conf.get("spark.test.testProperty") === "2")
+    } finally {
+      System.clearProperty("spark.test.testProperty")
+    }
   }
 
   test("initializing without loading defaults") {
-    System.setProperty("spark.test.testProperty", "2")
-    val conf = new SparkConf(false)
-    assert(!conf.contains("spark.test.testProperty"))
+    try {
+      System.setProperty("spark.test.testProperty", "2")
+      val conf = new SparkConf(false)
+      assert(!conf.contains("spark.test.testProperty"))
+    } finally {
+      System.clearProperty("spark.test.testProperty")
+    }
   }
 
   test("named set methods") {
@@ -110,17 +117,23 @@ class SparkConfSuite extends FunSuite with LocalSparkContext with ResetSystemPro
 
   test("nested property names") {
     // This wasn't supported by some external conf parsing libraries
-    System.setProperty("spark.test.a", "a")
-    System.setProperty("spark.test.a.b", "a.b")
-    System.setProperty("spark.test.a.b.c", "a.b.c")
-    val conf = new SparkConf()
-    assert(conf.get("spark.test.a") === "a")
-    assert(conf.get("spark.test.a.b") === "a.b")
-    assert(conf.get("spark.test.a.b.c") === "a.b.c")
-    conf.set("spark.test.a.b", "A.B")
-    assert(conf.get("spark.test.a") === "a")
-    assert(conf.get("spark.test.a.b") === "A.B")
-    assert(conf.get("spark.test.a.b.c") === "a.b.c")
+    try {
+      System.setProperty("spark.test.a", "a")
+      System.setProperty("spark.test.a.b", "a.b")
+      System.setProperty("spark.test.a.b.c", "a.b.c")
+      val conf = new SparkConf()
+      assert(conf.get("spark.test.a") === "a")
+      assert(conf.get("spark.test.a.b") === "a.b")
+      assert(conf.get("spark.test.a.b.c") === "a.b.c")
+      conf.set("spark.test.a.b", "A.B")
+      assert(conf.get("spark.test.a") === "a")
+      assert(conf.get("spark.test.a.b") === "A.B")
+      assert(conf.get("spark.test.a.b.c") === "a.b.c")
+    } finally {
+      System.clearProperty("spark.test.a")
+      System.clearProperty("spark.test.a.b")
+      System.clearProperty("spark.test.a.b.c")
+    }
   }
 
   test("register kryo classes through registerKryoClasses") {

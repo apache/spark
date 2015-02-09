@@ -17,7 +17,7 @@
 
 package org.apache.spark.input
 
-import org.apache.hadoop.conf.{Configuration, Configurable => HConfigurable}
+import org.apache.hadoop.conf.{Configuration, Configurable}
 import com.google.common.io.{ByteStreams, Closeables}
 
 import org.apache.hadoop.io.Text
@@ -26,19 +26,6 @@ import org.apache.hadoop.mapreduce.InputSplit
 import org.apache.hadoop.mapreduce.lib.input.{CombineFileSplit, CombineFileRecordReader}
 import org.apache.hadoop.mapreduce.RecordReader
 import org.apache.hadoop.mapreduce.TaskAttemptContext
-import org.apache.spark.deploy.SparkHadoopUtil
-
-
-/**
- * A trait to implement [[org.apache.hadoop.conf.Configurable Configurable]] interface.
- */
-private[spark] trait Configurable extends HConfigurable {
-  private var conf: Configuration = _
-  def setConf(c: Configuration) {
-    conf = c
-  }
-  def getConf: Configuration = conf
-}
 
 /**
  * A [[org.apache.hadoop.mapreduce.RecordReader RecordReader]] for reading a single whole text file
@@ -51,9 +38,14 @@ private[spark] class WholeTextFileRecordReader(
     index: Integer)
   extends RecordReader[String, String] with Configurable {
 
+  private var conf: Configuration = _
+  def setConf(c: Configuration) {
+    conf = c
+  }
+  def getConf: Configuration = conf
+
   private[this] val path = split.getPath(index)
-  private[this] val fs = path.getFileSystem(
-    SparkHadoopUtil.get.getConfigurationFromJobContext(context))
+  private[this] val fs = path.getFileSystem(context.getConfiguration)
 
   // True means the current file has been processed, then skip it.
   private[this] var processed = false
@@ -95,24 +87,29 @@ private[spark] class WholeTextFileRecordReader(
 
 
 /**
- * A [[org.apache.hadoop.mapreduce.lib.input.CombineFileRecordReader CombineFileRecordReader]]
- * that can pass Hadoop Configuration to [[org.apache.hadoop.conf.Configurable Configurable]]
- * RecordReaders.
+ * A [[org.apache.hadoop.mapreduce.RecordReader RecordReader]] for reading a single whole text file
+ * out in a key-value pair, where the key is the file path and the value is the entire content of
+ * the file.
  */
-private[spark] class ConfigurableCombineFileRecordReader[K, V](
+private[spark] class WholeCombineFileRecordReader(
     split: InputSplit,
-    context: TaskAttemptContext,
-    recordReaderClass: Class[_ <: RecordReader[K, V] with HConfigurable])
-  extends CombineFileRecordReader[K, V](
+    context: TaskAttemptContext)
+  extends CombineFileRecordReader[String, String](
     split.asInstanceOf[CombineFileSplit],
     context,
-    recordReaderClass
+    classOf[WholeTextFileRecordReader]
   ) with Configurable {
+
+  private var conf: Configuration = _
+  def setConf(c: Configuration) {
+    conf = c
+  }
+  def getConf: Configuration = conf
 
   override def initNextRecordReader(): Boolean = {
     val r = super.initNextRecordReader()
     if (r) {
-      this.curReader.asInstanceOf[HConfigurable].setConf(getConf)
+      this.curReader.asInstanceOf[WholeTextFileRecordReader].setConf(conf)
     }
     r
   }

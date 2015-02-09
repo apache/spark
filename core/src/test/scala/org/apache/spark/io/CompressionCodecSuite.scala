@@ -85,10 +85,4 @@ class CompressionCodecSuite extends FunSuite {
     assert(codec.getClass === classOf[SnappyCompressionCodec])
     testCodec(codec)
   }
-
-  test("bad compression codec") {
-    intercept[IllegalArgumentException] {
-      CompressionCodec.createCodec(conf, "foobar")
-    }
-  }
 }

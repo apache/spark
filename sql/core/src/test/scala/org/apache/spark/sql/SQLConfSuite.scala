@@ -37,7 +37,7 @@ class SQLConfSuite extends QueryTest with FunSuiteLike {
   }
 
   test("programmatic ways of basic setting and getting") {
-    conf.clear()
+    clear()
     assert(getAllConfs.size === 0)
 
     setConf(testKey, testVal)
@@ -51,11 +51,11 @@ class SQLConfSuite extends QueryTest with FunSuiteLike {
     assert(TestSQLContext.getConf(testKey, testVal + "_") == testVal)
     assert(TestSQLContext.getAllConfs.contains(testKey))
 
-    conf.clear()
+    clear()
   }
 
   test("parse SQL set commands") {
-    conf.clear()
+    clear()
     sql(s"set $testKey=$testVal")
     assert(getConf(testKey, testVal + "_") == testVal)
     assert(TestSQLContext.getConf(testKey, testVal + "_") == testVal)
@@ -73,11 +73,11 @@ class SQLConfSuite extends QueryTest with FunSuiteLike {
     sql(s"set $key=")
     assert(getConf(key, "0") == "")
 
-    conf.clear()
+    clear()
   }
 
   test("deprecated property") {
-    conf.clear()
+    clear()
     sql(s"set ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}=10")
     assert(getConf(SQLConf.SHUFFLE_PARTITIONS) == "10")
   }

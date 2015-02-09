@@ -49,7 +49,6 @@ public class JavaTfIdfSuite implements Serializable {
   public void tfIdf() {
     // The tests are to check Java compatibility.
     HashingTF tf = new HashingTF();
-    @SuppressWarnings("unchecked")
     JavaRDD<ArrayList<String>> documents = sc.parallelize(Lists.newArrayList(
       Lists.newArrayList("this is a sentence".split(" ")),
       Lists.newArrayList("this is another sentence".split(" ")),
@@ -69,7 +68,6 @@ public class JavaTfIdfSuite implements Serializable {
   public void tfIdfMinimumDocumentFrequency() {
     // The tests are to check Java compatibility.
     HashingTF tf = new HashingTF();
-    @SuppressWarnings("unchecked")
     JavaRDD<ArrayList<String>> documents = sc.parallelize(Lists.newArrayList(
       Lists.newArrayList("this is a sentence".split(" ")),
       Lists.newArrayList("this is another sentence".split(" ")),

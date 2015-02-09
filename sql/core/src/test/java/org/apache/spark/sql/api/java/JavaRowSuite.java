@@ -29,9 +29,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-
 public class JavaRowSuite {
   private byte byteValue;
   private short shortValue;
@@ -64,7 +61,7 @@ public class JavaRowSuite {
 
   @Test
   public void constructSimpleRow() {
-    Row simpleRow = RowFactory.create(
+    Row simpleRow = Row.create(
       byteValue,                 // ByteType
       new Byte(byteValue),
       shortValue,                // ShortType
@@ -140,11 +137,10 @@ public class JavaRowSuite {
     simpleMap.put(stringValue + " (3)", longValue - 2);
 
     // Simple struct
-    Row simpleStruct = RowFactory.create(
+    Row simpleStruct = Row.create(
       doubleValue, stringValue, timestampValue, null);
 
     // Complex array
-    @SuppressWarnings("unchecked")
     List<Map<String, Long>> arrayOfMaps = Arrays.asList(simpleMap);
     List<Row> arrayOfRows = Arrays.asList(simpleStruct);
 
@@ -153,7 +149,7 @@ public class JavaRowSuite {
     complexMap.put(arrayOfRows, simpleStruct);
 
     // Complex struct
-    Row complexStruct = RowFactory.create(
+    Row complexStruct = Row.create(
       simpleStringArray,
       simpleMap,
       simpleStruct,
@@ -170,7 +166,7 @@ public class JavaRowSuite {
     Assert.assertEquals(null, complexStruct.get(6));
 
     // A very complex row
-    Row complexRow = RowFactory.create(arrayOfMaps, arrayOfRows, complexMap, complexStruct);
+    Row complexRow = Row.create(arrayOfMaps, arrayOfRows, complexMap, complexStruct);
     Assert.assertEquals(arrayOfMaps, complexRow.get(0));
     Assert.assertEquals(arrayOfRows, complexRow.get(1));
     Assert.assertEquals(complexMap, complexRow.get(2));

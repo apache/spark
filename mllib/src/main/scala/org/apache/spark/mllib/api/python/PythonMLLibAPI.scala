@@ -266,16 +266,12 @@ class PythonMLLibAPI extends Serializable {
       k: Int,
       maxIterations: Int,
       runs: Int,
-      initializationMode: String,
-      seed: java.lang.Long): KMeansModel = {
+      initializationMode: String): KMeansModel = {
     val kMeansAlg = new KMeans()
       .setK(k)
       .setMaxIterations(maxIterations)
       .setRuns(runs)
       .setInitializationMode(initializationMode)
-
-    if (seed != null) kMeansAlg.setSeed(seed)
-
     try {
       kMeansAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK))
     } finally {
@@ -629,21 +625,6 @@ class PythonMLLibAPI extends Serializable {
   }
 
   /**
-   * Java stub for Python mllib RandomRDDGenerators.logNormalRDD()
-   */
-  def logNormalRDD(jsc: JavaSparkContext,
-      mean: Double,
-      std: Double,
-      size: Long,
-      numPartitions: java.lang.Integer,
-      seed: java.lang.Long): JavaRDD[Double] = {
-    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
-    val s = getSeedOrDefault(seed)
-    RG.logNormalRDD(jsc.sc, mean, std, size, parts, s)
-  }
-
-
-  /**
    * Java stub for Python mllib RandomRDDGenerators.poissonRDD()
    */
   def poissonRDD(jsc: JavaSparkContext,
@@ -654,33 +635,6 @@ class PythonMLLibAPI extends Serializable {
     val parts = getNumPartitionsOrDefault(numPartitions, jsc)
     val s = getSeedOrDefault(seed)
     RG.poissonRDD(jsc.sc, mean, size, parts, s)
-  }
-
-  /**
-   * Java stub for Python mllib RandomRDDGenerators.exponentialRDD()
-   */
-  def exponentialRDD(jsc: JavaSparkContext,
-      mean: Double,
-      size: Long,
-      numPartitions: java.lang.Integer,
-      seed: java.lang.Long): JavaRDD[Double] = {
-    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
-    val s = getSeedOrDefault(seed)
-    RG.exponentialRDD(jsc.sc, mean, size, parts, s)
-  }
-
-  /**
-   * Java stub for Python mllib RandomRDDGenerators.gammaRDD()
-   */
-  def gammaRDD(jsc: JavaSparkContext,
-      shape: Double,
-      scale: Double,
-      size: Long,
-      numPartitions: java.lang.Integer,
-      seed: java.lang.Long): JavaRDD[Double] = {
-    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
-    val s = getSeedOrDefault(seed)
-    RG.gammaRDD(jsc.sc, shape, scale, size, parts, s)
   }
 
   /**
@@ -710,22 +664,6 @@ class PythonMLLibAPI extends Serializable {
   }
 
   /**
-   * Java stub for Python mllib RandomRDDGenerators.logNormalVectorRDD()
-   */
-  def logNormalVectorRDD(jsc: JavaSparkContext,
-      mean: Double,
-      std: Double,
-      numRows: Long,
-      numCols: Int,
-      numPartitions: java.lang.Integer,
-      seed: java.lang.Long): JavaRDD[Vector] = {
-    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
-    val s = getSeedOrDefault(seed)
-    RG.logNormalVectorRDD(jsc.sc, mean, std, numRows, numCols, parts, s)
-  }
-
-
-  /**
    * Java stub for Python mllib RandomRDDGenerators.poissonVectorRDD()
    */
   def poissonVectorRDD(jsc: JavaSparkContext,
@@ -738,36 +676,6 @@ class PythonMLLibAPI extends Serializable {
     val s = getSeedOrDefault(seed)
     RG.poissonVectorRDD(jsc.sc, mean, numRows, numCols, parts, s)
   }
-
-  /**
-   * Java stub for Python mllib RandomRDDGenerators.exponentialVectorRDD()
-   */
-  def exponentialVectorRDD(jsc: JavaSparkContext,
-      mean: Double,
-      numRows: Long,
-      numCols: Int,
-      numPartitions: java.lang.Integer,
-      seed: java.lang.Long): JavaRDD[Vector] = {
-    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
-    val s = getSeedOrDefault(seed)
-    RG.exponentialVectorRDD(jsc.sc, mean, numRows, numCols, parts, s)
-  }
-
-  /**
-   * Java stub for Python mllib RandomRDDGenerators.gammaVectorRDD()
-   */
-  def gammaVectorRDD(jsc: JavaSparkContext,
-      shape: Double,
-      scale: Double,
-      numRows: Long,
-      numCols: Int,
-      numPartitions: java.lang.Integer,
-      seed: java.lang.Long): JavaRDD[Vector] = {
-    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
-    val s = getSeedOrDefault(seed)
-    RG.gammaVectorRDD(jsc.sc, shape, scale, numRows, numCols, parts, s)
-  }
-
 
 }
 

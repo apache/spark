@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql.parquet
 
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
+
 import scala.collection.mutable.{Buffer, ArrayBuffer, HashMap}
 
 import parquet.io.api.{PrimitiveConverter, GroupConverter, Binary, Converter}
 import parquet.schema.MessageType
 
+import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.parquet.CatalystConverter.FieldType
-import org.apache.spark.sql.types._
 
 /**
  * Collection of converters of Parquet types (group and primitive types) that
@@ -66,7 +68,7 @@ private[sql] object CatalystConverter {
 
   // TODO: consider using Array[T] for arrays to avoid boxing of primitive types
   type ArrayScalaType[T] = Seq[T]
-  type StructScalaType[T] = Row
+  type StructScalaType[T] = Seq[T]
   type MapScalaType[K, V] = Map[K, V]
 
   protected[parquet] def createConverter(
@@ -89,8 +91,8 @@ private[sql] object CatalystConverter {
       case ArrayType(elementType: DataType, true) => {
         new CatalystArrayContainsNullConverter(elementType, fieldIndex, parent)
       }
-      case StructType(fields: Array[StructField]) => {
-        new CatalystStructConverter(fields, fieldIndex, parent)
+      case StructType(fields: Seq[StructField]) => {
+        new CatalystStructConverter(fields.toArray, fieldIndex, parent)
       }
       case MapType(keyType: DataType, valueType: DataType, valueContainsNull: Boolean) => {
         new CatalystMapConverter(
@@ -434,7 +436,7 @@ private[parquet] object CatalystArrayConverter {
  * A `parquet.io.api.GroupConverter` that converts a single-element groups that
  * match the characteristics of an array (see
  * [[org.apache.spark.sql.parquet.ParquetTypesConverter]]) into an
- * [[org.apache.spark.sql.types.ArrayType]].
+ * [[org.apache.spark.sql.catalyst.types.ArrayType]].
  *
  * @param elementType The type of the array elements (complex or primitive)
  * @param index The position of this (array) field inside its parent converter
@@ -498,7 +500,7 @@ private[parquet] class CatalystArrayConverter(
  * A `parquet.io.api.GroupConverter` that converts a single-element groups that
  * match the characteristics of an array (see
  * [[org.apache.spark.sql.parquet.ParquetTypesConverter]]) into an
- * [[org.apache.spark.sql.types.ArrayType]].
+ * [[org.apache.spark.sql.catalyst.types.ArrayType]].
  *
  * @param elementType The type of the array elements (native)
  * @param index The position of this (array) field inside its parent converter
@@ -619,7 +621,7 @@ private[parquet] class CatalystNativeArrayConverter(
  * A `parquet.io.api.GroupConverter` that converts a single-element groups that
  * match the characteristics of an array contains null (see
  * [[org.apache.spark.sql.parquet.ParquetTypesConverter]]) into an
- * [[org.apache.spark.sql.types.ArrayType]].
+ * [[org.apache.spark.sql.catalyst.types.ArrayType]].
  *
  * @param elementType The type of the array elements (complex or primitive)
  * @param index The position of this (array) field inside its parent converter
@@ -725,7 +727,7 @@ private[parquet] class CatalystStructConverter(
  * A `parquet.io.api.GroupConverter` that converts two-element groups that
  * match the characteristics of a map (see
  * [[org.apache.spark.sql.parquet.ParquetTypesConverter]]) into an
- * [[org.apache.spark.sql.types.MapType]].
+ * [[org.apache.spark.sql.catalyst.types.MapType]].
  *
  * @param schema
  * @param index

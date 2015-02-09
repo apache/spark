@@ -19,13 +19,11 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.types._
-
-import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.types._
 
 class AnalysisSuite extends FunSuite with BeforeAndAfter {
   val caseSensitiveCatalog = new SimpleCatalog(true)
@@ -44,16 +42,8 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
     AttributeReference("e", ShortType)())
 
   before {
-    caseSensitiveCatalog.registerTable(Seq("TaBlE"), testRelation)
-    caseInsensitiveCatalog.registerTable(Seq("TaBlE"), testRelation)
-  }
-
-  test("union project *") {
-    val plan = (1 to 100)
-      .map(_ => testRelation)
-      .fold[LogicalPlan](testRelation)((a,b) => a.select(Star(None)).select('a).unionAll(b.select(Star(None))))
-
-    assert(caseInsensitiveAnalyze(plan).resolved)
+    caseSensitiveCatalog.registerTable(None, "TaBlE", testRelation)
+    caseInsensitiveCatalog.registerTable(None, "TaBlE", testRelation)
   }
 
   test("analyze project") {
@@ -64,45 +54,45 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
     assert(
       caseSensitiveAnalyze(
         Project(Seq(UnresolvedAttribute("TbL.a")),
-          UnresolvedRelation(Seq("TaBlE"), Some("TbL")))) ===
+          UnresolvedRelation(None, "TaBlE", Some("TbL")))) ===
         Project(testRelation.output, testRelation))
 
     val e = intercept[TreeNodeException[_]] {
       caseSensitiveAnalyze(
         Project(Seq(UnresolvedAttribute("tBl.a")),
-          UnresolvedRelation(Seq("TaBlE"), Some("TbL"))))
+          UnresolvedRelation(None, "TaBlE", Some("TbL"))))
     }
     assert(e.getMessage().toLowerCase.contains("unresolved"))
 
     assert(
       caseInsensitiveAnalyze(
         Project(Seq(UnresolvedAttribute("TbL.a")),
-          UnresolvedRelation(Seq("TaBlE"), Some("TbL")))) ===
+          UnresolvedRelation(None, "TaBlE", Some("TbL")))) ===
         Project(testRelation.output, testRelation))
 
     assert(
       caseInsensitiveAnalyze(
         Project(Seq(UnresolvedAttribute("tBl.a")),
-          UnresolvedRelation(Seq("TaBlE"), Some("TbL")))) ===
+          UnresolvedRelation(None, "TaBlE", Some("TbL")))) ===
         Project(testRelation.output, testRelation))
   }
 
   test("resolve relations") {
     val e = intercept[RuntimeException] {
-      caseSensitiveAnalyze(UnresolvedRelation(Seq("tAbLe"), None))
+      caseSensitiveAnalyze(UnresolvedRelation(None, "tAbLe", None))
     }
     assert(e.getMessage == "Table Not Found: tAbLe")
 
     assert(
-      caseSensitiveAnalyze(UnresolvedRelation(Seq("TaBlE"), None)) ===
+      caseSensitiveAnalyze(UnresolvedRelation(None, "TaBlE", None)) ===
         testRelation)
 
     assert(
-      caseInsensitiveAnalyze(UnresolvedRelation(Seq("tAbLe"), None)) ===
+      caseInsensitiveAnalyze(UnresolvedRelation(None, "tAbLe", None)) ===
         testRelation)
 
     assert(
-      caseInsensitiveAnalyze(UnresolvedRelation(Seq("TaBlE"), None)) ===
+      caseInsensitiveAnalyze(UnresolvedRelation(None, "TaBlE", None)) ===
         testRelation)
   }
 

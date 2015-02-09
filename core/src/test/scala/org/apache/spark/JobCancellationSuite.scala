@@ -40,11 +40,12 @@ class JobCancellationSuite extends FunSuite with Matchers with BeforeAndAfter
   override def afterEach() {
     super.afterEach()
     resetSparkContext()
+    System.clearProperty("spark.scheduler.mode")
   }
 
   test("local mode, FIFO scheduler") {
-    val conf = new SparkConf().set("spark.scheduler.mode", "FIFO")
-    sc = new SparkContext("local[2]", "test", conf)
+    System.setProperty("spark.scheduler.mode", "FIFO")
+    sc = new SparkContext("local[2]", "test")
     testCount()
     testTake()
     // Make sure we can still launch tasks.
@@ -52,10 +53,10 @@ class JobCancellationSuite extends FunSuite with Matchers with BeforeAndAfter
   }
 
   test("local mode, fair scheduler") {
-    val conf = new SparkConf().set("spark.scheduler.mode", "FAIR")
+    System.setProperty("spark.scheduler.mode", "FAIR")
     val xmlPath = getClass.getClassLoader.getResource("fairscheduler.xml").getFile()
-    conf.set("spark.scheduler.allocation.file", xmlPath)
-    sc = new SparkContext("local[2]", "test", conf)
+    System.setProperty("spark.scheduler.allocation.file", xmlPath)
+    sc = new SparkContext("local[2]", "test")
     testCount()
     testTake()
     // Make sure we can still launch tasks.
@@ -63,8 +64,8 @@ class JobCancellationSuite extends FunSuite with Matchers with BeforeAndAfter
   }
 
   test("cluster mode, FIFO scheduler") {
-    val conf = new SparkConf().set("spark.scheduler.mode", "FIFO")
-    sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
+    System.setProperty("spark.scheduler.mode", "FIFO")
+    sc = new SparkContext("local-cluster[2,1,512]", "test")
     testCount()
     testTake()
     // Make sure we can still launch tasks.
@@ -72,10 +73,10 @@ class JobCancellationSuite extends FunSuite with Matchers with BeforeAndAfter
   }
 
   test("cluster mode, fair scheduler") {
-    val conf = new SparkConf().set("spark.scheduler.mode", "FAIR")
+    System.setProperty("spark.scheduler.mode", "FAIR")
     val xmlPath = getClass.getClassLoader.getResource("fairscheduler.xml").getFile()
-    conf.set("spark.scheduler.allocation.file", xmlPath)
-    sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
+    System.setProperty("spark.scheduler.allocation.file", xmlPath)
+    sc = new SparkContext("local-cluster[2,1,512]", "test")
     testCount()
     testTake()
     // Make sure we can still launch tasks.

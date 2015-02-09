@@ -17,18 +17,19 @@
 
 package org.apache.spark.sql.json
 
-import java.sql.{Date, Timestamp}
-
-import org.apache.spark.sql.TestData._
+import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.json.JsonRDD.{compatibleType, enforceCorrectType}
+import org.apache.spark.sql.json.JsonRDD.{enforceCorrectType, compatibleType}
+import org.apache.spark.sql.{Row, SQLConf, QueryTest}
+import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
-import org.apache.spark.sql.types._
-import org.apache.spark.sql.{QueryTest, Row, SQLConf}
+
+import java.sql.{Date, Timestamp}
 
 class JsonSuite extends QueryTest {
-  import org.apache.spark.sql.json.TestJsonData._
+  import TestJsonData._
   TestJsonData
 
   test("Type promotion") {
@@ -192,25 +193,6 @@ class JsonSuite extends QueryTest {
       StringType)
   }
 
-  test("Complex field and type inferring with null in sampling") {
-    val jsonSchemaRDD = jsonRDD(jsonNullStruct)
-    val expectedSchema = StructType(
-      StructField("headers", StructType(
-        StructField("Charset", StringType, true) ::
-          StructField("Host", StringType, true) :: Nil)
-        , true) ::
-        StructField("ip", StringType, true) ::
-        StructField("nullstr", StringType, true):: Nil)
-
-    assert(expectedSchema === jsonSchemaRDD.schema)
-    jsonSchemaRDD.registerTempTable("jsonTable")
-
-    checkAnswer(
-      sql("select nullstr, headers.Host from jsonTable"),
-      Seq(Row("", "1.abc.com"), Row("", null), Row("", null), Row(null, null))
-    )
-  }
-
   test("Primitive field and type inferring") {
     val jsonSchemaRDD = jsonRDD(primitiveFieldAndType)
 
@@ -229,13 +211,13 @@ class JsonSuite extends QueryTest {
 
     checkAnswer(
       sql("select * from jsonTable"),
-      Row(new java.math.BigDecimal("92233720368547758070"),
-        true,
-        1.7976931348623157E308,
-        10,
-        21474836470L,
-        null,
-        "this is a simple string.")
+      (BigDecimal("92233720368547758070"),
+      true,
+      1.7976931348623157E308,
+      10,
+      21474836470L,
+      null,
+      "this is a simple string.") :: Nil
     )
   }
 
@@ -271,70 +253,68 @@ class JsonSuite extends QueryTest {
     // Access elements of a primitive array.
     checkAnswer(
       sql("select arrayOfString[0], arrayOfString[1], arrayOfString[2] from jsonTable"),
-      Row("str1", "str2", null)
+      ("str1", "str2", null) :: Nil
     )
 
     // Access an array of null values.
     checkAnswer(
       sql("select arrayOfNull from jsonTable"),
-      Row(Seq(null, null, null, null))
+      Seq(Seq(null, null, null, null)) :: Nil
     )
 
     // Access elements of a BigInteger array (we use DecimalType internally).
     checkAnswer(
       sql("select arrayOfBigInteger[0], arrayOfBigInteger[1], arrayOfBigInteger[2] from jsonTable"),
-      Row(new java.math.BigDecimal("922337203685477580700"),
-        new java.math.BigDecimal("-922337203685477580800"), null)
+      (BigDecimal("922337203685477580700"), BigDecimal("-922337203685477580800"), null) :: Nil
     )
 
     // Access elements of an array of arrays.
     checkAnswer(
       sql("select arrayOfArray1[0], arrayOfArray1[1] from jsonTable"),
-      Row(Seq("1", "2", "3"), Seq("str1", "str2"))
+      (Seq("1", "2", "3"), Seq("str1", "str2")) :: Nil
     )
 
     // Access elements of an array of arrays.
     checkAnswer(
       sql("select arrayOfArray2[0], arrayOfArray2[1] from jsonTable"),
-      Row(Seq(1.0, 2.0, 3.0), Seq(1.1, 2.1, 3.1))
+      (Seq(1.0, 2.0, 3.0), Seq(1.1, 2.1, 3.1)) :: Nil
     )
 
     // Access elements of an array inside a filed with the type of ArrayType(ArrayType).
     checkAnswer(
       sql("select arrayOfArray1[1][1], arrayOfArray2[1][1] from jsonTable"),
-      Row("str2", 2.1)
+      ("str2", 2.1) :: Nil
     )
 
     // Access elements of an array of structs.
     checkAnswer(
       sql("select arrayOfStruct[0], arrayOfStruct[1], arrayOfStruct[2], arrayOfStruct[3] " +
         "from jsonTable"),
-      Row(
-        Row(true, "str1", null),
-        Row(false, null, null),
-        Row(null, null, null),
-        null)
+      (true :: "str1" :: null :: Nil,
+      false :: null :: null :: Nil,
+      null :: null :: null :: Nil,
+      null) :: Nil
     )
 
     // Access a struct and fields inside of it.
     checkAnswer(
       sql("select struct, struct.field1, struct.field2 from jsonTable"),
       Row(
-        Row(true, new java.math.BigDecimal("92233720368547758070")),
+        Row(true, BigDecimal("92233720368547758070")),
         true,
-        new java.math.BigDecimal("92233720368547758070")) :: Nil
+        BigDecimal("92233720368547758070")) :: Nil
     )
 
     // Access an array field of a struct.
     checkAnswer(
       sql("select structWithArrayFields.field1, structWithArrayFields.field2 from jsonTable"),
-      Row(Seq(4, 5, 6), Seq("str1", "str2"))
+      (Seq(4, 5, 6), Seq("str1", "str2")) :: Nil
     )
 
     // Access elements of an array field of a struct.
     checkAnswer(
       sql("select structWithArrayFields.field1[1], structWithArrayFields.field2[3] from jsonTable"),
-      Row(5, null)
+      (5, null) :: Nil
     )
   }
 
@@ -345,14 +325,14 @@ class JsonSuite extends QueryTest {
     // Right now, "field1" and "field2" are treated as aliases. We should fix it.
     checkAnswer(
       sql("select arrayOfStruct[0].field1, arrayOfStruct[0].field2 from jsonTable"),
-      Row(true, "str1")
+      (true, "str1") :: Nil
     )
 
     // Right now, the analyzer cannot resolve arrayOfStruct.field1 and arrayOfStruct.field2.
     // Getting all values of a specific field from an array of structs.
     checkAnswer(
       sql("select arrayOfStruct.field1, arrayOfStruct.field2 from jsonTable"),
-      Row(Seq(true, false), Seq("str1", null))
+      (Seq(true, false), Seq("str1", null)) :: Nil
     )
   }
 
@@ -373,57 +353,57 @@ class JsonSuite extends QueryTest {
 
     checkAnswer(
       sql("select * from jsonTable"),
-      Row("true", 11L, null, 1.1, "13.1", "str1") ::
-        Row("12", null, new java.math.BigDecimal("21474836470.9"), null, null, "true") ::
-        Row("false", 21474836470L, new java.math.BigDecimal("92233720368547758070"), 100, "str1", "false") ::
-        Row(null, 21474836570L, new java.math.BigDecimal("1.1"), 21474836470L, "92233720368547758070", null) :: Nil
+      ("true", 11L, null, 1.1, "13.1", "str1") ::
+      ("12", null, BigDecimal("21474836470.9"), null, null, "true") ::
+      ("false", 21474836470L, BigDecimal("92233720368547758070"), 100, "str1", "false") ::
+      (null, 21474836570L, BigDecimal(1.1), 21474836470L, "92233720368547758070", null) :: Nil
     )
 
     // Number and Boolean conflict: resolve the type as number in this query.
     checkAnswer(
       sql("select num_bool - 10 from jsonTable where num_bool > 11"),
-      Row(2)
+      2
     )
 
     // Widening to LongType
     checkAnswer(
       sql("select num_num_1 - 100 from jsonTable where num_num_1 > 11"),
-      Row(21474836370L) :: Row(21474836470L) :: Nil
+      Seq(21474836370L) :: Seq(21474836470L) :: Nil
     )
 
     checkAnswer(
       sql("select num_num_1 - 100 from jsonTable where num_num_1 > 10"),
-      Row(-89) :: Row(21474836370L) :: Row(21474836470L) :: Nil
+      Seq(-89) :: Seq(21474836370L) :: Seq(21474836470L) :: Nil
     )
 
     // Widening to DecimalType
     checkAnswer(
       sql("select num_num_2 + 1.2 from jsonTable where num_num_2 > 1.1"),
-      Row(new java.math.BigDecimal("21474836472.1")) :: Row(new java.math.BigDecimal("92233720368547758071.2")) :: Nil
+      Seq(BigDecimal("21474836472.1")) :: Seq(BigDecimal("92233720368547758071.2")) :: Nil
     )
 
     // Widening to DoubleType
     checkAnswer(
       sql("select num_num_3 + 1.2 from jsonTable where num_num_3 > 1.1"),
-      Row(101.2) :: Row(21474836471.2) :: Nil
+      Seq(101.2) :: Seq(21474836471.2) :: Nil
     )
 
     // Number and String conflict: resolve the type as number in this query.
     checkAnswer(
       sql("select num_str + 1.2 from jsonTable where num_str > 14"),
-      Row(92233720368547758071.2)
+      92233720368547758071.2
     )
 
     // Number and String conflict: resolve the type as number in this query.
     checkAnswer(
       sql("select num_str + 1.2 from jsonTable where num_str > 92233720368547758060"),
-      Row(new java.math.BigDecimal("92233720368547758061.2").doubleValue)
+      BigDecimal("92233720368547758061.2").toDouble
     )
 
     // String and Boolean conflict: resolve the type as string.
     checkAnswer(
       sql("select * from jsonTable where str_bool = 'str1'"),
-      Row("true", 11L, null, 1.1, "13.1", "str1")
+      ("true", 11L, null, 1.1, "13.1", "str1") :: Nil
     )
   }
 
@@ -435,24 +415,24 @@ class JsonSuite extends QueryTest {
     // Number and Boolean conflict: resolve the type as boolean in this query.
     checkAnswer(
       sql("select num_bool from jsonTable where NOT num_bool"),
-      Row(false)
+      false
     )
 
     checkAnswer(
       sql("select str_bool from jsonTable where NOT str_bool"),
-      Row(false)
+      false
     )
 
     // Right now, the analyzer does not know that num_bool should be treated as a boolean.
     // Number and Boolean conflict: resolve the type as boolean in this query.
     checkAnswer(
       sql("select num_bool from jsonTable where num_bool"),
-      Row(true)
+      true
     )
 
     checkAnswer(
       sql("select str_bool from jsonTable where str_bool"),
-      Row(false)
+      false
     )
 
     // The plan of the following DSL is
@@ -465,7 +445,7 @@ class JsonSuite extends QueryTest {
       jsonSchemaRDD.
         where('num_str > BigDecimal("92233720368547758060")).
         select('num_str + 1.2 as Symbol("num")),
-      Row(new java.math.BigDecimal("92233720368547758061.2"))
+      BigDecimal("92233720368547758061.2")
     )
 
     // The following test will fail. The type of num_str is StringType.
@@ -476,7 +456,7 @@ class JsonSuite extends QueryTest {
     // Number and String conflict: resolve the type as number in this query.
     checkAnswer(
       sql("select num_str + 1.2 from jsonTable where num_str > 13"),
-      Row(14.3) :: Row(92233720368547758071.2) :: Nil
+      Seq(14.3) :: Seq(92233720368547758071.2) :: Nil
     )
   }
 
@@ -497,10 +477,10 @@ class JsonSuite extends QueryTest {
 
     checkAnswer(
       sql("select * from jsonTable"),
-      Row(Seq(), "11", "[1,2,3]", Row(null), "[]") ::
-        Row(null, """{"field":false}""", null, null, "{}") ::
-        Row(Seq(4, 5, 6), null, "str", Row(null), "[7,8,9]") ::
-        Row(Seq(7), "{}","[str1,str2,33]", Row("str"), """{"field":true}""") :: Nil
+      (Seq(), "11", "[1,2,3]", Seq(null), "[]") ::
+      (null, """{"field":false}""", null, null, "{}") ::
+      (Seq(4, 5, 6), null, "str", Seq(null), "[7,8,9]") ::
+      (Seq(7), "{}","[str1,str2,33]", Seq("str"), """{"field":true}""") :: Nil
     )
   }
 
@@ -519,16 +499,16 @@ class JsonSuite extends QueryTest {
 
     checkAnswer(
       sql("select * from jsonTable"),
-      Row(Seq("1", "1.1", "true", null, "[]", "{}", "[2,3,4]",
-        """{"field":"str"}"""), Seq(Row(214748364700L), Row(1)), null) ::
-      Row(null, null, Seq("""{"field":"str"}""", """{"field":1}""")) ::
-      Row(null, null, Seq("1", "2", "3")) :: Nil
+      Seq(Seq("1", "1.1", "true", null, "[]", "{}", "[2,3,4]",
+        """{"field":"str"}"""), Seq(Seq(214748364700L), Seq(1)), null) ::
+      Seq(null, null, Seq("""{"field":"str"}""", """{"field":1}""")) ::
+      Seq(null, null, Seq("1", "2", "3")) :: Nil
     )
 
     // Treat an element as a number.
     checkAnswer(
       sql("select array1[0] + 1 from jsonTable where array1 is not null"),
-      Row(2)
+      2
     )
   }
 
@@ -569,13 +549,13 @@ class JsonSuite extends QueryTest {
 
     checkAnswer(
       sql("select * from jsonTable"),
-      Row(new java.math.BigDecimal("92233720368547758070"),
+      (BigDecimal("92233720368547758070"),
       true,
       1.7976931348623157E308,
       10,
       21474836470L,
       null,
-      "this is a simple string.")
+      "this is a simple string.") :: Nil
     )
   }
 
@@ -595,13 +575,13 @@ class JsonSuite extends QueryTest {
 
     checkAnswer(
       sql("select * from jsonTableSQL"),
-      Row(new java.math.BigDecimal("92233720368547758070"),
+      (BigDecimal("92233720368547758070"),
         true,
         1.7976931348623157E308,
         10,
         21474836470L,
         null,
-        "this is a simple string.")
+        "this is a simple string.") :: Nil
     )
   }
 
@@ -627,13 +607,13 @@ class JsonSuite extends QueryTest {
 
     checkAnswer(
       sql("select * from jsonTable1"),
-      Row(new java.math.BigDecimal("92233720368547758070"),
+      (BigDecimal("92233720368547758070"),
       true,
       1.7976931348623157E308,
       10,
       21474836470L,
       null,
-      "this is a simple string.")
+      "this is a simple string.") :: Nil
     )
 
     val jsonSchemaRDD2 = jsonRDD(primitiveFieldAndType, schema)
@@ -644,13 +624,13 @@ class JsonSuite extends QueryTest {
 
     checkAnswer(
       sql("select * from jsonTable2"),
-      Row(new java.math.BigDecimal("92233720368547758070"),
+      (BigDecimal("92233720368547758070"),
       true,
       1.7976931348623157E308,
       10,
       21474836470L,
       null,
-      "this is a simple string.")
+      "this is a simple string.") :: Nil
     )
   }
 
@@ -660,7 +640,7 @@ class JsonSuite extends QueryTest {
 
     checkAnswer(
       sql("select arrayOfStruct[0].field1, arrayOfStruct[0].field2 from jsonTable"),
-      Row(true, "str1")
+      (true, "str1") :: Nil
     )
     checkAnswer(
       sql(
@@ -668,7 +648,7 @@ class JsonSuite extends QueryTest {
           |select complexArrayOfStruct[0].field1[1].inner2[0], complexArrayOfStruct[1].field2[0][1]
           |from jsonTable
         """.stripMargin),
-      Row("str2", 6)
+      ("str2", 6) :: Nil
     )
   }
 
@@ -682,7 +662,7 @@ class JsonSuite extends QueryTest {
           |select arrayOfArray1[0][0][0], arrayOfArray1[1][0][1], arrayOfArray1[1][1][0]
           |from jsonTable
         """.stripMargin),
-      Row(5, 7, 8)
+      (5, 7, 8) :: Nil
     )
     checkAnswer(
       sql(
@@ -691,7 +671,7 @@ class JsonSuite extends QueryTest {
           |arrayOfArray2[1][1][1].inner2[0], arrayOfArray2[2][0][0].inner3[0][0].inner4
           |from jsonTable
         """.stripMargin),
-      Row("str1", Nil, "str4", 2)
+      ("str1", Nil, "str4", 2) :: Nil
     )
   }
 
@@ -705,16 +685,16 @@ class JsonSuite extends QueryTest {
           |select a, b, c
           |from jsonTable
         """.stripMargin),
-      Row("str_a_1", null, null) ::
-        Row("str_a_2", null, null) ::
-        Row(null, "str_b_3", null) ::
-        Row("str_a_4", "str_b_4", "str_c_4") :: Nil
+      ("str_a_1", null, null) ::
+      ("str_a_2", null, null) ::
+      (null, "str_b_3", null) ::
+      ("str_a_4", "str_b_4", "str_c_4") :: Nil
     )
   }
 
   test("Corrupt records") {
     // Test if we can query corrupt records.
-    val oldColumnNameOfCorruptRecord = TestSQLContext.conf.columnNameOfCorruptRecord
+    val oldColumnNameOfCorruptRecord = TestSQLContext.columnNameOfCorruptRecord
     TestSQLContext.setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD, "_unparsed")
 
     val jsonSchemaRDD = jsonRDD(corruptRecords)
@@ -735,12 +715,12 @@ class JsonSuite extends QueryTest {
           |SELECT a, b, c, _unparsed
           |FROM jsonTable
         """.stripMargin),
-      Row(null, null, null, "{") ::
-        Row(null, null, null, "") ::
-        Row(null, null, null, """{"a":1, b:2}""") ::
-        Row(null, null, null, """{"a":{, b:3}""") ::
-        Row("str_a_4", "str_b_4", "str_c_4", null) ::
-        Row(null, null, null, "]") :: Nil
+      (null, null, null, "{") ::
+      (null, null, null, "") ::
+      (null, null, null, """{"a":1, b:2}""") ::
+      (null, null, null, """{"a":{, b:3}""") ::
+      ("str_a_4", "str_b_4", "str_c_4", null) ::
+      (null, null, null, "]") :: Nil
     )
 
     checkAnswer(
@@ -750,7 +730,7 @@ class JsonSuite extends QueryTest {
           |FROM jsonTable
           |WHERE _unparsed IS NULL
         """.stripMargin),
-      Row("str_a_4", "str_b_4", "str_c_4")
+      ("str_a_4", "str_b_4", "str_c_4") :: Nil
     )
 
     checkAnswer(
@@ -760,11 +740,11 @@ class JsonSuite extends QueryTest {
           |FROM jsonTable
           |WHERE _unparsed IS NOT NULL
         """.stripMargin),
-      Row("{") ::
-        Row("") ::
-        Row("""{"a":1, b:2}""") ::
-        Row("""{"a":{, b:3}""") ::
-        Row("]") :: Nil
+      Seq("{") ::
+      Seq("") ::
+      Seq("""{"a":1, b:2}""") ::
+      Seq("""{"a":{, b:3}""") ::
+      Seq("]") :: Nil
     )
 
     TestSQLContext.setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD, oldColumnNameOfCorruptRecord)
@@ -794,10 +774,10 @@ class JsonSuite extends QueryTest {
           |SELECT field1, field2, field3, field4
           |FROM jsonTable
         """.stripMargin),
-      Row(Seq(Seq(null), Seq(Seq(Seq("Test")))), null, null, null) ::
-        Row(null, Seq(null, Seq(Row(1))), null, null) ::
-        Row(null, null, Seq(Seq(null), Seq(Row("2"))), null) ::
-        Row(null, null, null, Seq(Seq(null, Seq(1, 2, 3)))) :: Nil
+      Seq(Seq(Seq(null), Seq(Seq(Seq("Test")))), null, null, null) ::
+      Seq(null, Seq(null, Seq(Seq(1))), null, null) ::
+      Seq(null, null, Seq(Seq(null), Seq(Seq("2"))), null) ::
+      Seq(null, null, null, Seq(Seq(null, Seq(1, 2, 3)))) :: Nil
     )
   }
 
@@ -852,12 +832,12 @@ class JsonSuite extends QueryTest {
     primTable.registerTempTable("primativeTable")
     checkAnswer(
         sql("select * from primativeTable"),
-      Row(new java.math.BigDecimal("92233720368547758070"),
+        (BigDecimal("92233720368547758070"),
         true,
         1.7976931348623157E308,
         10,
         21474836470L,
-        "this is a simple string.")
+        "this is a simple string.") :: Nil
       )
 
     val complexJsonSchemaRDD = jsonRDD(complexFieldAndType1)
@@ -866,59 +846,58 @@ class JsonSuite extends QueryTest {
     // Access elements of a primitive array.
     checkAnswer(
       sql("select arrayOfString[0], arrayOfString[1], arrayOfString[2] from complexTable"),
-      Row("str1", "str2", null)
+      ("str1", "str2", null) :: Nil
     )
 
     // Access an array of null values.
     checkAnswer(
       sql("select arrayOfNull from complexTable"),
-      Row(Seq(null, null, null, null))
+      Seq(Seq(null, null, null, null)) :: Nil
     )
 
     // Access elements of a BigInteger array (we use DecimalType internally).
     checkAnswer(
       sql("select arrayOfBigInteger[0], arrayOfBigInteger[1], arrayOfBigInteger[2] from complexTable"),
-      Row(new java.math.BigDecimal("922337203685477580700"),
-        new java.math.BigDecimal("-922337203685477580800"), null)
+      (BigDecimal("922337203685477580700"), BigDecimal("-922337203685477580800"), null) :: Nil
     )
 
     // Access elements of an array of arrays.
     checkAnswer(
       sql("select arrayOfArray1[0], arrayOfArray1[1] from complexTable"),
-      Row(Seq("1", "2", "3"), Seq("str1", "str2"))
+      (Seq("1", "2", "3"), Seq("str1", "str2")) :: Nil
     )
 
     // Access elements of an array of arrays.
     checkAnswer(
       sql("select arrayOfArray2[0], arrayOfArray2[1] from complexTable"),
-      Row(Seq(1.0, 2.0, 3.0), Seq(1.1, 2.1, 3.1))
+      (Seq(1.0, 2.0, 3.0), Seq(1.1, 2.1, 3.1)) :: Nil
     )
 
     // Access elements of an array inside a filed with the type of ArrayType(ArrayType).
     checkAnswer(
       sql("select arrayOfArray1[1][1], arrayOfArray2[1][1] from complexTable"),
-      Row("str2", 2.1)
+      ("str2", 2.1) :: Nil
     )
 
     // Access a struct and fields inside of it.
     checkAnswer(
       sql("select struct, struct.field1, struct.field2 from complexTable"),
       Row(
-        Row(true, new java.math.BigDecimal("92233720368547758070")),
+        Row(true, BigDecimal("92233720368547758070")),
         true,
-        new java.math.BigDecimal("92233720368547758070")) :: Nil
+        BigDecimal("92233720368547758070")) :: Nil
     )
 
     // Access an array field of a struct.
     checkAnswer(
       sql("select structWithArrayFields.field1, structWithArrayFields.field2 from complexTable"),
-      Row(Seq(4, 5, 6), Seq("str1", "str2"))
+      (Seq(4, 5, 6), Seq("str1", "str2")) :: Nil
     )
 
     // Access elements of an array field of a struct.
     checkAnswer(
       sql("select structWithArrayFields.field1[1], structWithArrayFields.field2[3] from complexTable"),
-      Row(5, null)
+      (5, null) :: Nil
     )
 
   }

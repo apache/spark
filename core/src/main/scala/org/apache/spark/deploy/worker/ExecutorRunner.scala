@@ -47,7 +47,6 @@ private[spark] class ExecutorRunner(
     val executorDir: File,
     val workerUrl: String,
     val conf: SparkConf,
-    val appLocalDirs: Seq[String],
     var state: ExecutorState.Value)
   extends Logging {
 
@@ -78,7 +77,7 @@ private[spark] class ExecutorRunner(
   /**
    * Kill executor process, wait for exit and notify worker to update resource status.
    *
-   * @param message the exception message which caused the executor's death
+   * @param message the exception message which caused the executor's death 
    */
   private def killProcess(message: Option[String]) {
     var exitCode: Option[Int] = None
@@ -130,7 +129,6 @@ private[spark] class ExecutorRunner(
       logInfo("Launch command: " + command.mkString("\"", "\" \"", "\""))
 
       builder.directory(executorDir)
-      builder.environment.put("SPARK_LOCAL_DIRS", appLocalDirs.mkString(","))
       // In case we are running this from within the Spark Shell, avoid creating a "scala"
       // parent process for the executor command
       builder.environment.put("SPARK_LAUNCH_WITH_SCALA", "0")

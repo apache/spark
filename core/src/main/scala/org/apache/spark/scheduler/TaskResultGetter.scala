@@ -19,7 +19,6 @@ package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
 
-import scala.language.existentials
 import scala.util.control.NonFatal
 
 import org.apache.spark._
@@ -77,7 +76,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
               (deserializedResult, size)
           }
 
-          result.metrics.setResultSize(size)
+          result.metrics.resultSize = size
           scheduler.handleSuccessfulTask(taskSetManager, tid, result)
         } catch {
           case cnf: ClassNotFoundException =>

@@ -39,7 +39,6 @@ import scala.util.control.ControlThrowable
 
 import org.apache.spark.{Logging, HttpServer, SecurityManager, SparkConf}
 import org.apache.spark.util.Utils
-import org.apache.spark.annotation.DeveloperApi
 
 // /** directory to save .class files to */
 // private class ReplVirtualDirectory(out: JPrintWriter) extends VirtualDirectory("((memory))", None) {
@@ -85,18 +84,17 @@ import org.apache.spark.annotation.DeveloperApi
    *  @author Moez A. Abdel-Gawad
    *  @author Lex Spoon
    */
-  @DeveloperApi
   class SparkIMain(
       initialSettings: Settings,
       val out: JPrintWriter,
       propagateExceptions: Boolean = false)
     extends SparkImports with Logging { imain =>
 
-    private val conf = new SparkConf()
+    val conf = new SparkConf()
 
-    private val SPARK_DEBUG_REPL: Boolean = (System.getenv("SPARK_DEBUG_REPL") == "1")
+    val SPARK_DEBUG_REPL: Boolean = (System.getenv("SPARK_DEBUG_REPL") == "1")
     /** Local directory to save .class files too */
-    private lazy val outputDir = {
+    lazy val outputDir = {
       val tmp = System.getProperty("java.io.tmpdir")
       val rootDir = conf.get("spark.repl.classdir",  tmp)
       Utils.createTempDir(rootDir)
@@ -105,20 +103,13 @@ import org.apache.spark.annotation.DeveloperApi
       echo("Output directory: " + outputDir)
     }
 
-    /**
-     * Returns the path to the output directory containing all generated
-     * class files that will be served by the REPL class server.
-     */
-    @DeveloperApi
-    lazy val getClassOutputDirectory = outputDir
-
-    private val virtualDirectory                              = new PlainFile(outputDir) // "directory" for classfiles
+    val virtualDirectory                              = new PlainFile(outputDir) // "directory" for classfiles
     /** Jetty server that will serve our classes to worker nodes */
-    private val classServerPort                               = conf.getInt("spark.replClassServer.port", 0)
-    private val classServer                                   = new HttpServer(conf, outputDir, new SecurityManager(conf), classServerPort, "HTTP class server")
+    val classServerPort                               = conf.getInt("spark.replClassServer.port", 0)
+    val classServer                                   = new HttpServer(outputDir, new SecurityManager(conf), classServerPort, "HTTP class server")
     private var currentSettings: Settings             = initialSettings
-    private var printResults                                  = true      // whether to print result lines
-    private var totalSilence                                  = false     // whether to print anything
+    var printResults                                  = true      // whether to print result lines
+    var totalSilence                                  = false     // whether to print anything
     private var _initializeComplete                   = false     // compiler is initialized
     private var _isInitialized: Future[Boolean]       = null      // set up initialization future
     private var bindExceptions                        = true      // whether to bind the lastException variable
@@ -131,14 +122,6 @@ import org.apache.spark.annotation.DeveloperApi
     if (SPARK_DEBUG_REPL) {
       echo("Class server started, URI = " + classServer.uri)
     }
-
-    /**
-     * URI of the class server used to feed REPL compiled classes.
-     *
-     * @return The string representing the class server uri
-     */
-    @DeveloperApi
-    def classServerUri = classServer.uri
 
     /** We're going to go to some trouble to initialize the compiler asynchronously.
      *  It's critical that nothing call into it until it's been initialized or we will
@@ -158,18 +141,17 @@ import org.apache.spark.annotation.DeveloperApi
       () => { counter += 1 ; counter }
     }
 
-    private def compilerClasspath: Seq[URL] = (
+    def compilerClasspath: Seq[URL] = (
       if (isInitializeComplete) global.classPath.asURLs
       else new PathResolver(settings).result.asURLs  // the compiler's classpath
       )
-    // NOTE: Exposed to repl package since accessed indirectly from SparkIMain
-    private[repl] def settings = currentSettings
-    private def mostRecentLine = prevRequestList match {
+    def settings = currentSettings
+    def mostRecentLine = prevRequestList match {
       case Nil      => ""
       case req :: _ => req.originalLine
     }
     // Run the code body with the given boolean settings flipped to true.
-    private def withoutWarnings[T](body: => T): T = beQuietDuring {
+    def withoutWarnings[T](body: => T): T = beQuietDuring {
       val saved = settings.nowarn.value
       if (!saved)
         settings.nowarn.value = true
@@ -182,28 +164,16 @@ import org.apache.spark.annotation.DeveloperApi
     def this(settings: Settings) = this(settings, new NewLinePrintWriter(new ConsoleWriter, true))
     def this() = this(new Settings())
 
-    private lazy val repllog: Logger = new Logger {
+    lazy val repllog: Logger = new Logger {
       val out: JPrintWriter = imain.out
       val isInfo: Boolean  = BooleanProp keyExists "scala.repl.info"
       val isDebug: Boolean = BooleanProp keyExists "scala.repl.debug"
       val isTrace: Boolean = BooleanProp keyExists "scala.repl.trace"
     }
-    private[repl] lazy val formatting: Formatting = new Formatting {
+    lazy val formatting: Formatting = new Formatting {
       val prompt = Properties.shellPromptString
     }
-
-    // NOTE: Exposed to repl package since used by SparkExprTyper and SparkILoop
-    private[repl] lazy val reporter: ConsoleReporter = new SparkIMain.ReplReporter(this)
-
-    /**
-     * Determines if errors were reported (typically during compilation).
-     *
-     * @note This is not for runtime errors
-     *
-     * @return True if had errors, otherwise false
-     */
-    @DeveloperApi
-    def isReportingErrors = reporter.hasErrors
+    lazy val reporter: ConsoleReporter = new SparkIMain.ReplReporter(this)
 
     import formatting._
     import reporter.{ printMessage, withoutTruncating }
@@ -223,8 +193,7 @@ import org.apache.spark.annotation.DeveloperApi
     private def tquoted(s: String) = "\"\"\"" + s + "\"\"\""
 
     // argument is a thunk to execute after init is done
-    // NOTE: Exposed to repl package since used by SparkILoop
-    private[repl] def initialize(postInitSignal: => Unit) {
+    def initialize(postInitSignal: => Unit) {
       synchronized {
         if (_isInitialized == null) {
           _isInitialized = io.spawn {
@@ -234,27 +203,15 @@ import org.apache.spark.annotation.DeveloperApi
         }
       }
     }
-
-    /**
-     * Initializes the underlying compiler/interpreter in a blocking fashion.
-     *
-     * @note Must be executed before using SparkIMain!
-     */
-    @DeveloperApi
     def initializeSynchronous(): Unit = {
       if (!isInitializeComplete) {
         _initialize()
         assert(global != null, global)
       }
     }
-    private def isInitializeComplete = _initializeComplete
+    def isInitializeComplete = _initializeComplete
 
     /** the public, go through the future compiler */
-
-    /**
-     * The underlying compiler used to generate ASTs and execute code.
-     */
-    @DeveloperApi
     lazy val global: Global = {
       if (isInitializeComplete) _compiler
       else {
@@ -269,13 +226,13 @@ import org.apache.spark.annotation.DeveloperApi
       }
     }
     @deprecated("Use `global` for access to the compiler instance.", "2.9.0")
-    private lazy val compiler: global.type = global
+    lazy val compiler: global.type = global
 
     import global._
     import definitions.{ScalaPackage, JavaLangPackage, termMember, typeMember}
     import rootMirror.{RootClass, getClassIfDefined, getModuleIfDefined, getRequiredModule, getRequiredClass}
 
-    private implicit class ReplTypeOps(tp: Type) {
+    implicit class ReplTypeOps(tp: Type) {
       def orElse(other: => Type): Type    = if (tp ne NoType) tp else other
       def andAlso(fn: Type => Type): Type = if (tp eq NoType) tp else fn(tp)
     }
@@ -283,8 +240,7 @@ import org.apache.spark.annotation.DeveloperApi
     // TODO: If we try to make naming a lazy val, we run into big time
     // scalac unhappiness with what look like cycles.  It has not been easy to
     // reduce, but name resolution clearly takes different paths.
-    // NOTE: Exposed to repl package since used by SparkExprTyper
-    private[repl] object naming extends {
+    object naming extends {
       val global: imain.global.type = imain.global
     } with Naming {
       // make sure we don't overwrite their unwisely named res3 etc.
@@ -298,43 +254,22 @@ import org.apache.spark.annotation.DeveloperApi
     }
     import naming._
 
-    // NOTE: Exposed to repl package since used by SparkILoop
-    private[repl] object deconstruct extends {
+    object deconstruct extends {
       val global: imain.global.type = imain.global
     } with StructuredTypeStrings
 
-    // NOTE: Exposed to repl package since used by SparkImports
-    private[repl] lazy val memberHandlers = new {
+    lazy val memberHandlers = new {
       val intp: imain.type = imain
     } with SparkMemberHandlers
     import memberHandlers._
 
-    /**
-     * Suppresses overwriting print results during the operation.
-     *
-     * @param body The block to execute
-     * @tparam T The return type of the block
-     *
-     * @return The result from executing the block
-     */
-    @DeveloperApi
+    /** Temporarily be quiet */
     def beQuietDuring[T](body: => T): T = {
       val saved = printResults
       printResults = false
       try body
       finally printResults = saved
     }
-
-    /**
-     * Completely masks all output during the operation (minus JVM standard
-     * out and error).
-     *
-     * @param operation The block to execute
-     * @tparam T The return type of the block
-     *
-     * @return The result from executing the block
-     */
-    @DeveloperApi
     def beSilentDuring[T](operation: => T): T = {
       val saved = totalSilence
       totalSilence = true
@@ -342,10 +277,10 @@ import org.apache.spark.annotation.DeveloperApi
       finally totalSilence = saved
     }
 
-    // NOTE: Exposed to repl package since used by SparkILoop
-    private[repl] def quietRun[T](code: String) = beQuietDuring(interpret(code))
+    def quietRun[T](code: String) = beQuietDuring(interpret(code))
 
-    private def logAndDiscard[T](label: String, alt: => T): PartialFunction[Throwable, T] = {
+
+     private def logAndDiscard[T](label: String, alt: => T): PartialFunction[Throwable, T] = {
       case t: ControlThrowable => throw t
       case t: Throwable        =>
         logDebug(label + ": " + unwrap(t))
@@ -363,44 +298,14 @@ import org.apache.spark.annotation.DeveloperApi
       finally bindExceptions = true
     }
 
-    /**
-     * Contains the code (in string form) representing a wrapper around all
-     * code executed by this instance.
-     *
-     * @return The wrapper code as a string
-     */
-    @DeveloperApi
     def executionWrapper = _executionWrapper
-
-    /**
-     * Sets the code to use as a wrapper around all code executed by this
-     * instance.
-     *
-     * @param code The wrapper code as a string
-     */
-    @DeveloperApi
     def setExecutionWrapper(code: String) = _executionWrapper = code
-
-    /**
-     * Clears the code used as a wrapper around all code executed by
-     * this instance.
-     */
-    @DeveloperApi
     def clearExecutionWrapper() = _executionWrapper = ""
 
     /** interpreter settings */
-    private lazy val isettings = new SparkISettings(this)
+    lazy val isettings = new SparkISettings(this)
 
-    /**
-     * Instantiates a new compiler used by SparkIMain. Overridable to provide
-     * own instance of a compiler.
-     *
-     * @param settings The settings to provide the compiler
-     * @param reporter The reporter to use for compiler output
-     *
-     * @return The compiler as a Global
-     */
-    @DeveloperApi
+    /** Instantiate a compiler.  Overridable. */
     protected def newCompiler(settings: Settings, reporter: Reporter): ReplGlobal = {
       settings.outputDirs setSingleOutput virtualDirectory
       settings.exposeEmptyPackage.value = true
@@ -415,14 +320,13 @@ import org.apache.spark.annotation.DeveloperApi
      * @note Currently only supports jars, not directories
      * @param urls The list of items to add to the compile and runtime classpaths
      */
-    @DeveloperApi
     def addUrlsToClassPath(urls: URL*): Unit = {
       new Run // Needed to force initialization of "something" to correctly load Scala classes from jars
       urls.foreach(_runtimeClassLoader.addNewUrl) // Add jars/classes to runtime for execution
       updateCompilerClassPath(urls: _*)           // Add jars/classes to compile time for compiling
     }
 
-    private def updateCompilerClassPath(urls: URL*): Unit = {
+    protected def updateCompilerClassPath(urls: URL*): Unit = {
       require(!global.forMSIL) // Only support JavaPlatform
 
       val platform = global.platform.asInstanceOf[JavaPlatform]
@@ -438,7 +342,7 @@ import org.apache.spark.annotation.DeveloperApi
       global.invalidateClassPathEntries(urls.map(_.getPath): _*)
     }
 
-    private def mergeUrlsIntoClassPath(platform: JavaPlatform, urls: URL*): MergedClassPath[AbstractFile] = {
+    protected def mergeUrlsIntoClassPath(platform: JavaPlatform, urls: URL*): MergedClassPath[AbstractFile] = {
       // Collect our new jars/directories and add them to the existing set of classpaths
       val allClassPaths = (
         platform.classPath.asInstanceOf[MergedClassPath[AbstractFile]].entries ++
@@ -461,13 +365,7 @@ import org.apache.spark.annotation.DeveloperApi
       new MergedClassPath(allClassPaths, platform.classPath.context)
     }
 
-    /**
-     * Represents the parent classloader used by this instance. Can be
-     * overridden to provide alternative classloader.
-     *
-     * @return The classloader used as the parent loader of this instance
-     */
-    @DeveloperApi
+    /** Parent classloader.  Overridable. */
     protected def parentClassLoader: ClassLoader =
       SparkHelper.explicitParentLoader(settings).getOrElse( this.getClass.getClassLoader() )
 
@@ -484,18 +382,16 @@ import org.apache.spark.annotation.DeveloperApi
     shadow the old ones, and old code objects refer to the old
     definitions.
     */
-    private def resetClassLoader() = {
+    def resetClassLoader() = {
       logDebug("Setting new classloader: was " + _classLoader)
       _classLoader = null
       ensureClassLoader()
     }
-    private final def ensureClassLoader() {
+    final def ensureClassLoader() {
       if (_classLoader == null)
         _classLoader = makeClassLoader()
     }
-
-    // NOTE: Exposed to repl package since used by SparkILoop
-    private[repl] def classLoader: AbstractFileClassLoader = {
+    def classLoader: AbstractFileClassLoader = {
       ensureClassLoader()
       _classLoader
     }
@@ -522,58 +418,27 @@ import org.apache.spark.annotation.DeveloperApi
           _runtimeClassLoader
       })
 
-    private def getInterpreterClassLoader() = classLoader
+    def getInterpreterClassLoader() = classLoader
 
     // Set the current Java "context" class loader to this interpreter's class loader
-    // NOTE: Exposed to repl package since used by SparkILoopInit
-    private[repl] def setContextClassLoader() = classLoader.setAsContext()
+    def setContextClassLoader() = classLoader.setAsContext()
 
-    /**
-     * Returns the real name of a class based on its repl-defined name.
-     *
-     * ==Example==
-     * Given a simple repl-defined name, returns the real name of
-     * the class representing it, e.g. for "Bippy" it may return
-     * {{{
-     *     $line19.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$Bippy
-     * }}}
-     *
-     * @param simpleName The repl-defined name whose real name to retrieve
-     *
-     * @return Some real name if the simple name exists, else None
+    /** Given a simple repl-defined name, returns the real name of
+     *  the class representing it, e.g. for "Bippy" it may return
+     *  {{{
+     *    $line19.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$Bippy
+     *  }}}
      */
-    @DeveloperApi
     def generatedName(simpleName: String): Option[String] = {
       if (simpleName endsWith nme.MODULE_SUFFIX_STRING) optFlatName(simpleName.init) map (_ + nme.MODULE_SUFFIX_STRING)
       else optFlatName(simpleName)
     }
+    def flatName(id: String)    = optFlatName(id) getOrElse id
+    def optFlatName(id: String) = requestForIdent(id) map (_ fullFlatName id)
 
-    // NOTE: Exposed to repl package since used by SparkILoop
-    private[repl] def flatName(id: String)    = optFlatName(id) getOrElse id
-    // NOTE: Exposed to repl package since used by SparkILoop
-    private[repl] def optFlatName(id: String) = requestForIdent(id) map (_ fullFlatName id)
-
-    /**
-     * Retrieves all simple names contained in the current instance.
-     *
-     * @return A list of sorted names
-     */
-    @DeveloperApi
     def allDefinedNames = definedNameMap.keys.toList.sorted
-
-    private def pathToType(id: String): String = pathToName(newTypeName(id))
-    // NOTE: Exposed to repl package since used by SparkILoop
-    private[repl] def pathToTerm(id: String): String = pathToName(newTermName(id))
-
-    /**
-     * Retrieves the full code path to access the specified simple name
-     * content.
-     *
-     * @param name The simple name of the target whose path to determine
-     *
-     * @return The full path used to access the specified target (name)
-     */
-    @DeveloperApi
+    def pathToType(id: String): String = pathToName(newTypeName(id))
+    def pathToTerm(id: String): String = pathToName(newTermName(id))
     def pathToName(name: Name): String = {
       if (definedNameMap contains name)
         definedNameMap(name) fullPath name
@@ -592,13 +457,13 @@ import org.apache.spark.annotation.DeveloperApi
     }
 
     /** Stubs for work in progress. */
-    private def handleTypeRedefinition(name: TypeName, old: Request, req: Request) = {
+    def handleTypeRedefinition(name: TypeName, old: Request, req: Request) = {
       for (t1 <- old.simpleNameOfType(name) ; t2 <- req.simpleNameOfType(name)) {
         logDebug("Redefining type '%s'\n  %s -> %s".format(name, t1, t2))
       }
     }
 
-    private def handleTermRedefinition(name: TermName, old: Request, req: Request) = {
+    def handleTermRedefinition(name: TermName, old: Request, req: Request) = {
       for (t1 <- old.compilerTypeOf get name ; t2 <- req.compilerTypeOf get name) {
     //    Printing the types here has a tendency to cause assertion errors, like
         //   assertion failed: fatal: <refinement> has owner value x, but a class owner is required
@@ -608,7 +473,7 @@ import org.apache.spark.annotation.DeveloperApi
       }
     }
 
-    private def recordRequest(req: Request) {
+    def recordRequest(req: Request) {
       if (req == null || referencedNameMap == null)
         return
 
@@ -639,12 +504,12 @@ import org.apache.spark.annotation.DeveloperApi
       }
     }
 
-    private def replwarn(msg: => String) {
+    def replwarn(msg: => String) {
       if (!settings.nowarnings.value)
         printMessage(msg)
     }
 
-    private def isParseable(line: String): Boolean = {
+    def isParseable(line: String): Boolean = {
       beSilentDuring {
         try parse(line) match {
           case Some(xs) => xs.nonEmpty  // parses as-is
@@ -657,32 +522,22 @@ import org.apache.spark.annotation.DeveloperApi
       }
     }
 
-    private def compileSourcesKeepingRun(sources: SourceFile*) = {
+    def compileSourcesKeepingRun(sources: SourceFile*) = {
       val run = new Run()
       reporter.reset()
       run compileSources sources.toList
       (!reporter.hasErrors, run)
     }
 
-    /**
-     * Compiles specified source files.
-     *
-     * @param sources The sequence of source files to compile
-     *
-     * @return True if successful, otherwise false
+    /** Compile an nsc SourceFile.  Returns true if there are
+     *  no compilation errors, or false otherwise.
      */
-    @DeveloperApi
     def compileSources(sources: SourceFile*): Boolean =
       compileSourcesKeepingRun(sources: _*)._1
 
-    /**
-     * Compiles a string of code.
-     *
-     * @param code The string of code to compile
-     *
-     * @return True if successful, otherwise false
+    /** Compile a string.  Returns true if there are no
+     *  compilation errors, or false otherwise.
      */
-    @DeveloperApi
     def compileString(code: String): Boolean =
       compileSources(new BatchSourceFile("<script>", code))
 
@@ -707,7 +562,7 @@ import org.apache.spark.annotation.DeveloperApi
 
   private def safePos(t: Tree, alt: Int): Int =
     try t.pos.startOrPoint
-    catch { case _: UnsupportedOperationException => alt }
+  catch { case _: UnsupportedOperationException => alt }
 
   // Given an expression like 10 * 10 * 10 we receive the parent tree positioned
   // at a '*'.  So look at each subtree and find the earliest of all positions.
@@ -798,43 +653,22 @@ import org.apache.spark.annotation.DeveloperApi
   }
 
   // normalize non-public types so we don't see protected aliases like Self
-  private def normalizeNonPublic(tp: Type) = tp match {
+  def normalizeNonPublic(tp: Type) = tp match {
     case TypeRef(_, sym, _) if sym.isAliasType && !sym.isPublic => tp.dealias
     case _                                                      => tp
   }
 
   /**
-   * Interpret one line of input. All feedback, including parse errors
-   * and evaluation results, are printed via the supplied compiler's
-   * reporter. Values defined are available for future interpreted strings.
+   *  Interpret one line of input. All feedback, including parse errors
+   *  and evaluation results, are printed via the supplied compiler's
+   *  reporter. Values defined are available for future interpreted strings.
    *
-   * @note This assigns variables with user name structure like "res0"
-   *
-   * @param line The line representing the code to interpret
-   *
-   * @return Whether the line was interpreted successfully, or failed due to
-   *         incomplete code, compilation error, or runtime error
+   *  The return value is whether the line was interpreter successfully,
+   *  e.g. that there were no parse errors.
    */
-  @DeveloperApi
   def interpret(line: String): IR.Result = interpret(line, false)
-
-  /**
-   * Interpret one line of input. All feedback, including parse errors
-   * and evaluation results, are printed via the supplied compiler's
-   * reporter. Values defined are available for future interpreted strings.
-   *
-   * @note This assigns variables with synthetic (generated) name structure
-   *       like "$ires0"
-   *
-   * @param line The line representing the code to interpret
-   *
-   * @return Whether the line was interpreted successfully, or failed due to
-   *         incomplete code, compilation error, or runtime error
-   */
-  @DeveloperApi
   def interpretSynthetic(line: String): IR.Result = interpret(line, true)
-
-  private def interpret(line: String, synthetic: Boolean): IR.Result = {
+  def interpret(line: String, synthetic: Boolean): IR.Result = {
     def loadAndRunReq(req: Request) = {
       classLoader.setAsContext()
       val (result, succeeded) = req.loadAndRun
@@ -872,20 +706,14 @@ import org.apache.spark.annotation.DeveloperApi
     }
   }
 
-  /**
-   * Bind a specified name to a specified value.  The name may
-   * later be used by expressions passed to interpret.
+  /** Bind a specified name to a specified value.  The name may
+   *  later be used by expressions passed to interpret.
    *
-   * @note This binds via compilation and interpretation
-   *
-   * @param name The variable name to bind
-   * @param boundType The type of the variable, as a string
-   * @param value The object value to bind to it
-   *
-   * @return An indication of whether the binding succeeded or failed
-   *         using interpreter results
+   *  @param name      the variable name to bind
+   *  @param boundType the type of the variable, as a string
+   *  @param value     the object value to bind to it
+   *  @return          an indication of whether the binding succeeded
    */
-  @DeveloperApi
   def bind(name: String, boundType: String, value: Any, modifiers: List[String] = Nil): IR.Result = {
     val bindRep = new ReadEvalPrint()
     val run = bindRep.compile("""
@@ -907,38 +735,15 @@ import org.apache.spark.annotation.DeveloperApi
       interpret(line)
     }
   }
-
-  /**
-   * Bind a specified name to a specified value directly.
-   *
-   * @note This updates internal bound names directly
-   *
-   * @param name The variable name to bind
-   * @param boundType The type of the variable, as a string
-   * @param value The object value to bind to it
-   *
-   * @return An indication of whether the binding succeeded or failed
-   *         using interpreter results
-   */
-  @DeveloperApi
   def directBind(name: String, boundType: String, value: Any): IR.Result = {
     val result = bind(name, boundType, value)
     if (result == IR.Success)
       directlyBoundNames += newTermName(name)
     result
   }
+  def directBind(p: NamedParam): IR.Result                                    = directBind(p.name, p.tpe, p.value)
+  def directBind[T: ru.TypeTag : ClassTag](name: String, value: T): IR.Result = directBind((name, value))
 
-  private def directBind(p: NamedParam): IR.Result                                    = directBind(p.name, p.tpe, p.value)
-  private def directBind[T: ru.TypeTag : ClassTag](name: String, value: T): IR.Result = directBind((name, value))
-
-  /**
-   * Overwrites previously-bound val with a new instance.
-   *
-   * @param p The named parameters used to provide the name, value, and type
-   *
-   * @return The results of rebinding the named val
-   */
-  @DeveloperApi
   def rebind(p: NamedParam): IR.Result = {
     val name     = p.name
     val oldType  = typeOfTerm(name) orElse { return IR.Error }
@@ -948,34 +753,19 @@ import org.apache.spark.annotation.DeveloperApi
     quietRun("val %s = %s".format(tempName, name))
     quietRun("val %s = %s.asInstanceOf[%s]".format(name, tempName, newType))
   }
-  private def quietImport(ids: String*): IR.Result = beQuietDuring(addImports(ids: _*))
-
-  /**
-   * Executes an import statement per "id" provided
-   *
-   * @example addImports("org.apache.spark.SparkContext")
-   *
-   * @param ids The series of "id" strings used for import statements
-   *
-   * @return The results of importing the series of "id" strings
-   */
-  @DeveloperApi
+  def quietImport(ids: String*): IR.Result = beQuietDuring(addImports(ids: _*))
   def addImports(ids: String*): IR.Result =
     if (ids.isEmpty) IR.Success
     else interpret("import " + ids.mkString(", "))
 
-  // NOTE: Exposed to repl package since used by SparkILoop
-  private[repl] def quietBind(p: NamedParam): IR.Result                               = beQuietDuring(bind(p))
-  private def bind(p: NamedParam): IR.Result                                    = bind(p.name, p.tpe, p.value)
-  private def bind[T: ru.TypeTag : ClassTag](name: String, value: T): IR.Result = bind((name, value))
-  private def bindSyntheticValue(x: Any): IR.Result                             = bindValue(freshInternalVarName(), x)
-  private def bindValue(x: Any): IR.Result                                      = bindValue(freshUserVarName(), x)
-  private def bindValue(name: String, x: Any): IR.Result                        = bind(name, TypeStrings.fromValue(x), x)
+  def quietBind(p: NamedParam): IR.Result                               = beQuietDuring(bind(p))
+  def bind(p: NamedParam): IR.Result                                    = bind(p.name, p.tpe, p.value)
+  def bind[T: ru.TypeTag : ClassTag](name: String, value: T): IR.Result = bind((name, value))
+  def bindSyntheticValue(x: Any): IR.Result                             = bindValue(freshInternalVarName(), x)
+  def bindValue(x: Any): IR.Result                                      = bindValue(freshUserVarName(), x)
+  def bindValue(name: String, x: Any): IR.Result                        = bind(name, TypeStrings.fromValue(x), x)
 
-  /**
-   * Reset this interpreter, forgetting all user-specified requests.
-   */
-  @DeveloperApi
+  /** Reset this interpreter, forgetting all user-specified requests. */
   def reset() {
     clearExecutionWrapper()
     resetClassLoader()
@@ -987,11 +777,9 @@ import org.apache.spark.annotation.DeveloperApi
     virtualDirectory.create()
   }
 
-  /**
-   * Stops the underlying REPL class server and flushes the reporter used
-   * for compiler output.
+  /** This instance is no longer needed, so release any resources
+   *  it is using.  The reporter's output gets flushed.
    */
-  @DeveloperApi
   def close() {
     reporter.flush()
     classServer.stop()
@@ -1000,7 +788,6 @@ import org.apache.spark.annotation.DeveloperApi
   /**
    * Captures the session names (which are set by system properties) once, instead of for each line.
    */
-  @DeveloperApi
   object FixedSessionNames {
     val lineName    = sessionNames.line
     val readName    = sessionNames.read
@@ -1342,13 +1129,10 @@ import org.apache.spark.annotation.DeveloperApi
     override def toString = "Request(line=%s, %s trees)".format(line, trees.size)
   }
 
-  /**
-   * Returns the name of the most recent interpreter result. Useful for
-   * for extracting information regarding the previous result.
-   *
-   * @return The simple name of the result (such as res0)
+  /** Returns the name of the most recent interpreter result.
+   *  Mostly this exists so you can conveniently invoke methods on
+   *  the previous result.
    */
-  @DeveloperApi
   def mostRecentVar: String =
     if (mostRecentlyHandledTree.isEmpty) ""
     else "" + (mostRecentlyHandledTree.get match {
@@ -1359,13 +1143,6 @@ import org.apache.spark.annotation.DeveloperApi
     })
 
   private var mostRecentWarnings: List[(global.Position, String)] = Nil
-
-  /**
-   * Returns a list of recent warnings from compiler execution.
-   *
-   * @return The list of tuples (compiler position, warning)
-   */
-  @DeveloperApi
   def lastWarnings = mostRecentWarnings
 
   def treesForRequestId(id: Int): List[Tree] =
@@ -1392,75 +1169,23 @@ import org.apache.spark.annotation.DeveloperApi
       req.handlers find (_.definedNames contains name)
     }
 
-  /**
-   * Retrieves the object representing the id (variable name, method name,
-   * class name, etc) provided.
-   *
-   * @param id The id (variable name, method name, class name, etc) whose
-   *           associated content to retrieve
-   *
-   * @return Some containing term name (id) representation if exists, else None
-   */
-  @DeveloperApi
   def valueOfTerm(id: String): Option[AnyRef] =
     requestForName(newTermName(id)) flatMap (_.getEval)
 
-  /**
-   * Retrieves the class representing the id (variable name, method name,
-   * class name, etc) provided.
-   *
-   * @param id The id (variable name, method name, class name, etc) whose
-   *           associated class to retrieve
-   *
-   * @return Some containing term name (id) class if exists, else None
-   */
-  @DeveloperApi
   def classOfTerm(id: String): Option[JClass] =
     valueOfTerm(id) map (_.getClass)
 
-  /**
-   * Retrieves the type representing the id (variable name, method name,
-   * class name, etc) provided.
-   *
-   * @param id The id (variable name, method name, class name, etc) whose
-   *           associated type to retrieve
-   *
-   * @return The Type information about the term name (id) provided
-   */
-  @DeveloperApi
   def typeOfTerm(id: String): Type = newTermName(id) match {
     case nme.ROOTPKG  => RootClass.tpe
     case name         => requestForName(name).fold(NoType: Type)(_ compilerTypeOf name)
   }
 
-  /**
-   * Retrieves the symbol representing the id (variable name, method name,
-   * class name, etc) provided.
-   *
-   * @param id The id (variable name, method name, class name, etc) whose
-   *           associated symbol to retrieve
-   *
-   * @return The Symbol information about the term name (id) provided
-   */
-  @DeveloperApi
+  def symbolOfType(id: String): Symbol =
+    requestForName(newTypeName(id)).fold(NoSymbol: Symbol)(_ definedTypeSymbol id)
+
   def symbolOfTerm(id: String): Symbol =
     requestForIdent(newTermName(id)).fold(NoSymbol: Symbol)(_ definedTermSymbol id)
 
-  // TODO: No use yet, but could be exposed as a DeveloperApi
-  private def symbolOfType(id: String): Symbol =
-    requestForName(newTypeName(id)).fold(NoSymbol: Symbol)(_ definedTypeSymbol id)
-
-  /**
-   * Retrieves the runtime class and type representing the id (variable name,
-   * method name, class name, etc) provided.
-   *
-   * @param id The id (variable name, method name, class name, etc) whose
-   *           associated runtime class and type to retrieve
-   *
-   * @return Some runtime class and Type information as a tuple for the
-   *         provided term name if it exists, else None
-   */
-  @DeveloperApi
   def runtimeClassAndTypeOfTerm(id: String): Option[(JClass, Type)] = {
     classOfTerm(id) flatMap { clazz =>
       new RichClass(clazz).supers find(c => !(new RichClass(c).isScalaAnonymous)) map { nonAnon =>
@@ -1469,16 +1194,6 @@ import org.apache.spark.annotation.DeveloperApi
     }
   }
 
-  /**
-   * Retrieves the runtime type representing the id (variable name,
-   * method name, class name, etc) provided.
-   *
-   * @param id The id (variable name, method name, class name, etc) whose
-   *           associated runtime type to retrieve
-   *
-   * @return The runtime Type information about the term name (id) provided
-   */
-  @DeveloperApi
   def runtimeTypeOfTerm(id: String): Type = {
     typeOfTerm(id) andAlso { tpe =>
       val clazz      = classOfTerm(id) getOrElse { return NoType }
@@ -1490,8 +1205,7 @@ import org.apache.spark.annotation.DeveloperApi
       else NoType
     }
   }
-
-  private def cleanMemberDecl(owner: Symbol, member: Name): Type = afterTyper {
+  def cleanMemberDecl(owner: Symbol, member: Name): Type = afterTyper {
     normalizeNonPublic {
       owner.info.nonPrivateDecl(member).tpe match {
         case NullaryMethodType(tp) => tp
@@ -1500,125 +1214,50 @@ import org.apache.spark.annotation.DeveloperApi
     }
   }
 
-  private object exprTyper extends {
+  object exprTyper extends {
     val repl: SparkIMain.this.type = imain
   } with SparkExprTyper { }
 
-  /**
-   * Constructs a list of abstract syntax trees representing the provided code.
-   *
-   * @param line The line of code to parse and construct into ASTs
-   *
-   * @return Some list of ASTs if the line is valid, else None
-   */
-  @DeveloperApi
   def parse(line: String): Option[List[Tree]] = exprTyper.parse(line)
 
-  /**
-   * Constructs a Symbol representing the final result of the expression
-   * provided or representing the definition provided.
-   *
-   * @param code The line of code
-   *
-   * @return The Symbol or NoSymbol (found under scala.reflect.internal)
-   */
-  @DeveloperApi
   def symbolOfLine(code: String): Symbol =
     exprTyper.symbolOfLine(code)
 
-  /**
-   * Constucts type information based on the provided expression's final
-   * result or the definition provided.
-   *
-   * @param expr The expression or definition
-   *
-   * @param silent Whether to output information while constructing the type
-   *
-   * @return The type information or an error
-   */
-  @DeveloperApi
   def typeOfExpression(expr: String, silent: Boolean = true): Type =
     exprTyper.typeOfExpression(expr, silent)
 
   protected def onlyTerms(xs: List[Name]) = xs collect { case x: TermName => x }
   protected def onlyTypes(xs: List[Name]) = xs collect { case x: TypeName => x }
 
-  /**
-   * Retrieves the defined, public names in the compiler.
-   *
-   * @return The list of matching "term" names
-   */
-  @DeveloperApi
   def definedTerms      = onlyTerms(allDefinedNames) filterNot isInternalTermName
-
-  /**
-   * Retrieves the defined type names in the compiler.
-   *
-   * @return The list of matching type names
-   */
-  @DeveloperApi
   def definedTypes      = onlyTypes(allDefinedNames)
-
-  /**
-   * Retrieves the defined symbols in the compiler.
-   *
-   * @return The set of matching Symbol instances
-   */
-  @DeveloperApi
   def definedSymbols    = prevRequestList.flatMap(_.definedSymbols.values).toSet[Symbol]
-
-  /**
-   * Retrieves the list of public symbols in the compiler.
-   *
-   * @return The list of public Symbol instances
-   */
-  @DeveloperApi
   def definedSymbolList = prevRequestList flatMap (_.definedSymbolList) filterNot (s => isInternalTermName(s.name))
 
   // Terms with user-given names (i.e. not res0 and not synthetic)
-
-  /**
-   * Retrieves defined, public names that are not res0 or the result of a direct bind.
-   *
-   * @return The list of matching "term" names
-   */
-  @DeveloperApi
-  def namedDefinedTerms = definedTerms filterNot (x => isUserVarName("" + x) || directlyBoundNames(x))
+    def namedDefinedTerms = definedTerms filterNot (x => isUserVarName("" + x) || directlyBoundNames(x))
 
   private def findName(name: Name) = definedSymbols find (_.name == name) getOrElse NoSymbol
 
   /** Translate a repl-defined identifier into a Symbol.
    */
-  private def apply(name: String): Symbol =
+  def apply(name: String): Symbol =
     types(name) orElse terms(name)
 
-  private def types(name: String): Symbol = {
+  def types(name: String): Symbol = {
     val tpname = newTypeName(name)
     findName(tpname) orElse getClassIfDefined(tpname)
   }
-  private def terms(name: String): Symbol = {
+  def terms(name: String): Symbol = {
     val termname = newTypeName(name)
     findName(termname) orElse getModuleIfDefined(termname)
   }
   // [Eugene to Paul] possibly you could make use of TypeTags here
-  private def types[T: ClassTag] : Symbol = types(classTag[T].runtimeClass.getName)
-  private def terms[T: ClassTag] : Symbol = terms(classTag[T].runtimeClass.getName)
-  private def apply[T: ClassTag] : Symbol = apply(classTag[T].runtimeClass.getName)
+  def types[T: ClassTag] : Symbol = types(classTag[T].runtimeClass.getName)
+  def terms[T: ClassTag] : Symbol = terms(classTag[T].runtimeClass.getName)
+  def apply[T: ClassTag] : Symbol = apply(classTag[T].runtimeClass.getName)
 
-  /**
-   * Retrieves the Symbols representing classes in the compiler.
-   *
-   * @return The list of matching ClassSymbol instances
-   */
-  @DeveloperApi
   def classSymbols  = allDefSymbols collect { case x: ClassSymbol => x }
-
-  /**
-   * Retrieves the Symbols representing methods in the compiler.
-   *
-   * @return The list of matching MethodSymbol instances
-   */
-  @DeveloperApi
   def methodSymbols = allDefSymbols collect { case x: MethodSymbol => x }
 
   /** the previous requests this interpreter has processed */
@@ -1628,41 +1267,32 @@ import org.apache.spark.annotation.DeveloperApi
   private val definedNameMap     = mutable.Map[Name, Request]()
   private val directlyBoundNames = mutable.Set[Name]()
 
-  private def allHandlers    = prevRequestList flatMap (_.handlers)
-  private def allDefHandlers = allHandlers collect { case x: MemberDefHandler => x }
-  private def allDefSymbols  = allDefHandlers map (_.symbol) filter (_ ne NoSymbol)
+  def allHandlers    = prevRequestList flatMap (_.handlers)
+  def allDefHandlers = allHandlers collect { case x: MemberDefHandler => x }
+  def allDefSymbols  = allDefHandlers map (_.symbol) filter (_ ne NoSymbol)
 
-  private def lastRequest         = if (prevRequests.isEmpty) null else prevRequests.last
-  // NOTE: Exposed to repl package since used by SparkImports
-  private[repl] def prevRequestList     = prevRequests.toList
-  private def allSeenTypes        = prevRequestList flatMap (_.typeOf.values.toList) distinct
-  private def allImplicits        = allHandlers filter (_.definesImplicit) flatMap (_.definedNames)
-  // NOTE: Exposed to repl package since used by SparkILoop and SparkImports
-  private[repl] def importHandlers      = allHandlers collect { case x: ImportHandler => x }
+  def lastRequest         = if (prevRequests.isEmpty) null else prevRequests.last
+  def prevRequestList     = prevRequests.toList
+  def allSeenTypes        = prevRequestList flatMap (_.typeOf.values.toList) distinct
+  def allImplicits        = allHandlers filter (_.definesImplicit) flatMap (_.definedNames)
+  def importHandlers      = allHandlers collect { case x: ImportHandler => x }
 
-  /**
-   * Retrieves a list of unique defined and imported names in the compiler.
-   *
-   * @return The list of "term" names
-   */
   def visibleTermNames: List[Name] = definedTerms ++ importedTerms distinct
 
   /** Another entry point for tab-completion, ids in scope */
-  // NOTE: Exposed to repl package since used by SparkJLineCompletion
-  private[repl] def unqualifiedIds = visibleTermNames map (_.toString) filterNot (_ contains "$") sorted
+  def unqualifiedIds = visibleTermNames map (_.toString) filterNot (_ contains "$") sorted
 
   /** Parse the ScalaSig to find type aliases */
-  private def aliasForType(path: String) = ByteCode.aliasForType(path)
+  def aliasForType(path: String) = ByteCode.aliasForType(path)
 
-  private def withoutUnwrapping(op: => Unit): Unit = {
+  def withoutUnwrapping(op: => Unit): Unit = {
     val saved = isettings.unwrapStrings
     isettings.unwrapStrings = false
     try op
     finally isettings.unwrapStrings = saved
   }
 
-  // NOTE: Exposed to repl package since used by SparkILoop
-  private[repl] def symbolDefString(sym: Symbol) = {
+  def symbolDefString(sym: Symbol) = {
     TypeStrings.quieter(
       afterTyper(sym.defString),
       sym.owner.name + ".this.",
@@ -1670,7 +1300,7 @@ import org.apache.spark.annotation.DeveloperApi
     )
   }
 
-  private def showCodeIfDebugging(code: String) {
+  def showCodeIfDebugging(code: String) {
     /** Secret bookcase entrance for repl debuggers: end the line
      *  with "// show" and see what's going on.
      */
@@ -1689,9 +1319,7 @@ import org.apache.spark.annotation.DeveloperApi
   }
 
   // debugging
-  // NOTE: Exposed to repl package since accessed indirectly from SparkIMain
-  //       and SparkJLineCompletion
-  private[repl] def debugging[T](msg: String)(res: T) = {
+  def debugging[T](msg: String)(res: T) = {
     logDebug(msg + " " + res)
     res
   }

@@ -17,6 +17,7 @@
 
 package org.apache.spark
 
+import org.scalatest.BeforeAndAfter
 import org.scalatest.FunSuite
 import org.scalatest.concurrent.Timeouts._
 import org.scalatest.Matchers
@@ -28,9 +29,15 @@ class NotSerializableClass
 class NotSerializableExn(val notSer: NotSerializableClass) extends Throwable() {}
 
 
-class DistributedSuite extends FunSuite with Matchers with LocalSparkContext {
+class DistributedSuite extends FunSuite with Matchers with BeforeAndAfter
+  with LocalSparkContext {
 
   val clusterUrl = "local-cluster[2,1,512]"
+
+  after {
+    System.clearProperty("spark.reducer.maxMbInFlight")
+    System.clearProperty("spark.storage.memoryFraction")
+  }
 
   test("task throws not serializable exception") {
     // Ensures that executors do not crash when an exn is not serializable. If executors crash,
@@ -77,14 +84,15 @@ class DistributedSuite extends FunSuite with Matchers with LocalSparkContext {
   }
 
   test("groupByKey where map output sizes exceed maxMbInFlight") {
-    val conf = new SparkConf().set("spark.reducer.maxMbInFlight", "1")
-    sc = new SparkContext(clusterUrl, "test", conf)
+    System.setProperty("spark.reducer.maxMbInFlight", "1")
+    sc = new SparkContext(clusterUrl, "test")
     // This data should be around 20 MB, so even with 4 mappers and 2 reducers, each map output
     // file should be about 2.5 MB
     val pairs = sc.parallelize(1 to 2000, 4).map(x => (x % 16, new Array[Byte](10000)))
     val groups = pairs.groupByKey(2).map(x => (x._1, x._2.size)).collect()
     assert(groups.length === 16)
     assert(groups.map(_._2).sum === 2000)
+    // Note that spark.reducer.maxMbInFlight will be cleared in the test suite's after{} block
   }
 
   test("accumulators") {
@@ -202,6 +210,7 @@ class DistributedSuite extends FunSuite with Matchers with LocalSparkContext {
   }
 
   test("compute without caching when no partitions fit in memory") {
+    System.setProperty("spark.storage.memoryFraction", "0.0001")
     sc = new SparkContext(clusterUrl, "test")
     // data will be 4 million * 4 bytes = 16 MB in size, but our memoryFraction set the cache
     // to only 50 KB (0.0001 of 512 MB), so no partitions should fit in memory
@@ -209,11 +218,12 @@ class DistributedSuite extends FunSuite with Matchers with LocalSparkContext {
     assert(data.count() === 4000000)
     assert(data.count() === 4000000)
     assert(data.count() === 4000000)
+    System.clearProperty("spark.storage.memoryFraction")
   }
 
   test("compute when only some partitions fit in memory") {
-    val conf = new SparkConf().set("spark.storage.memoryFraction", "0.01")
-    sc = new SparkContext(clusterUrl, "test", conf)
+    System.setProperty("spark.storage.memoryFraction", "0.01")
+    sc = new SparkContext(clusterUrl, "test")
     // data will be 4 million * 4 bytes = 16 MB in size, but our memoryFraction set the cache
     // to only 5 MB (0.01 of 512 MB), so not all of it will fit in memory; we use 20 partitions
     // to make sure that *some* of them do fit though
@@ -221,6 +231,7 @@ class DistributedSuite extends FunSuite with Matchers with LocalSparkContext {
     assert(data.count() === 4000000)
     assert(data.count() === 4000000)
     assert(data.count() === 4000000)
+    System.clearProperty("spark.storage.memoryFraction")
   }
 
   test("passing environment variables to cluster") {
