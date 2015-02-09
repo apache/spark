@@ -250,7 +250,19 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
     case other => sys.error(s"Unsupported bitwise & operation on $other")
   }
 
-  override def evalInternal(evalE1: EvaluatedType, evalE2: EvaluatedType): Any = and(evalE1, evalE2)
+  override def eval(input: Row): Any = {
+    val evalE2 = right.eval(input)
+    if (evalE2 == null || evalE2 == 0) {
+      null
+    } else {
+      val evalE1 = left.eval(input)
+      if (evalE1 == null) {
+        null
+      } else {
+        and(evalE1, evalE2)
+      }
+    }
+  }
 }
 
 /**
