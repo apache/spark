@@ -314,6 +314,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
    * Return whether the request is acknowledged.
    */
   final override def requestExecutors(numAdditionalExecutors: Int): Boolean = synchronized {
+    if (numAdditionalExecutors < 0) {
+      logError("Attempted to request a negative number of additional executor(s) " +
+        s"$numAdditionalExecutors from the cluster manager. Please specify a positive number!")
+      return false
+    }
     logInfo(s"Requesting $numAdditionalExecutors additional executor(s) from the cluster manager")
     logDebug(s"Number of pending executors is now $numPendingExecutors")
     numPendingExecutors += numAdditionalExecutors
