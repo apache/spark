@@ -137,7 +137,8 @@ private[hive] trait HiveStrategies {
               pruningCondition(inputData)
             }
 
-            val partitionLocations = partitions.map(_.getLocation)
+            val partitionLocations = partitions.map(part =>
+              part.getLocation() + "->" + part.getName())
 
             if (partitionLocations.isEmpty) {
               PhysicalRDD(plan.output, sparkContext.emptyRDD[Row]) :: Nil

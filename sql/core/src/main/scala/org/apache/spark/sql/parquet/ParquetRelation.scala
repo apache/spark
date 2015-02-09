@@ -65,7 +65,7 @@ private[sql] case class ParquetRelation(
   override val output =
     partitioningAttributes ++
     ParquetTypesConverter.readSchemaFromFile(
-      new Path(path.split(",").head),
+      new Path(path.split(",").head.split("->").head),
       conf,
       sqlContext.conf.isParquetBinaryAsString,
       sqlContext.conf.isParquetINT96AsTimestamp)

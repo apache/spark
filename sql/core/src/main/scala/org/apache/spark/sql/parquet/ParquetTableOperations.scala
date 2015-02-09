@@ -80,18 +80,33 @@ private[sql] case class ParquetTableScan(
   override def execute(): RDD[Row] = {
     import parquet.filter2.compat.FilterCompat.FilterPredicateCompat
 
+    var partMap = mutable.HashMap[String, String]()
     val sc = sqlContext.sparkContext
     val job = new Job(sc.hadoopConfiguration)
     ParquetInputFormat.setReadSupportClass(job, classOf[RowReadSupport])
 
     val conf: Configuration = ContextUtil.getConfiguration(job)
 
-    relation.path.split(",").foreach { curPath =>
-      val qualifiedPath = {
-        val path = new Path(curPath)
-        path.getFileSystem(conf).makeQualified(path)
+    if (requestedPartitionOrdinals.nonEmpty) {
+      relation.path.split(",").foreach { tcurPath =>
+        val p = tcurPath.split("->")
+        val curPath = p.apply(0)
+        val partition = p.apply(1)
+        val qualifiedPath = {
+          val path = new Path(curPath)
+          path.getFileSystem(conf).makeQualified(path)
+        }
+        partMap += curPath->partition;
+        NewFileInputFormat.addInputPath(job, qualifiedPath)
       }
-      NewFileInputFormat.addInputPath(job, qualifiedPath)
+    } else {
+      relation.path.split(",").foreach { curPath =>
+        val qualifiedPath = {
+          val path = new Path(curPath)
+          path.getFileSystem(conf).makeQualified(path)
+        }
+        NewFileInputFormat.addInputPath(job, qualifiedPath)
+      }
     }
 
     // Store both requested and original schema in `Configuration`
@@ -135,15 +150,18 @@ private[sql] case class ParquetTableScan(
 
       baseRDD.mapPartitionsWithInputSplit { case (split, iter) =>
         val partValue = "([^=]+)=([^=]+)".r
+        val iSplit = split.asInstanceOf[parquet.hadoop.ParquetInputSplit]
+          .getPath
+          .toString
         val partValues =
-          split.asInstanceOf[parquet.hadoop.ParquetInputSplit]
-            .getPath
-            .toString
-            .split("/")
-            .flatMap {
-              case partValue(key, value) => Some(key -> value)
-              case _ => None
-            }.toMap
+          partMap.get(
+            iSplit.splitAt(iSplit.lastIndexOf("/"))._1)
+              .get   
+              .split("/")
+              .flatMap {
+                case partValue(key, value) => Some(key -> value)
+                case _ => None
+              }.toMap
 
         // Convert the partitioning attributes into the correct types
         val partitionRowValues =
