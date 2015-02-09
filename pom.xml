@@ -975,6 +975,10 @@
             <groupId>com.esotericsoftware.kryo</groupId>
             <artifactId>kryo</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>org.apache.avro</groupId>
+            <artifactId>avro-mapred</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
