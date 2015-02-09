@@ -662,7 +662,7 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
 
     # NOTE: We should clone the repository before running deploy_files to
     # prevent ec2-variables.sh from being overwritten
-    print "Cloning spark-ec2 scripts from {r}/tree/{b}...".format(
+    print "Cloning spark-ec2 scripts from {r}/tree/{b} on master...".format(
         r=opts.spark_ec2_git_repo, b=opts.spark_ec2_git_branch)
     ssh(
         host=master,
@@ -1042,9 +1042,15 @@ def real_main():
         print >> stderr, "ebs-vol-num cannot be greater than 8"
         sys.exit(1)
 
-    # Prevent breaking ami_prefix
-    if opts.spark_ec2_git_repo.endswith("/") or opts.spark_ec2_git_repo.endswith(".git"):
-        print >> stderr, "spark-ec2-git-repo must not have a training / or .git"
+    # Prevent breaking ami_prefix (/, .git and startswith checks)
+    # Prevent forks with non spark-ec2 names for now.
+    if opts.spark_ec2_git_repo.endswith("/") or \
+            opts.spark_ec2_git_repo.endswith(".git") or \
+            not opts.spark_ec2_git_repo.startswith("https://github.com") or \
+            not opts.spark_ec2_git_repo.endswith("spark-ec2"):
+        print >> stderr, "spark-ec2-git-repo must be a github repo and it must not have a " \
+                         "training / or .git. " \
+                         "Furthermore, we currently only support forks named spark-ec2."
         sys.exit(1)
 
     try:
