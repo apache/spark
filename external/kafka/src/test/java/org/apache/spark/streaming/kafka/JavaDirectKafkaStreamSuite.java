@@ -146,7 +146,7 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
 
   private HashMap<TopicAndPartition, Long> topicOffsetToMap(String topic, Long offsetToStart) {
     HashMap<TopicAndPartition, Long> topicMap = new HashMap<TopicAndPartition, Long>();
-    topicMap.put(new TopicAndPartition(topic, scala.Int.box(0)), offsetToStart);
+    topicMap.put(new TopicAndPartition(topic, 0), offsetToStart);
     return topicMap;
   }
 
