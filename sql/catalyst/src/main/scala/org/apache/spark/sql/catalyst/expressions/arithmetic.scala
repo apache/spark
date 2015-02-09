@@ -36,7 +36,11 @@ case class UnaryMinus(child: Expression) extends UnaryExpression {
 
   override def eval(input: Row): Any = {
     val evalE = child.eval(input)
-    numeric.negate(evalE)
+    if (evalE == null) {
+      null
+    } else {
+      numeric.negate(evalE)
+    }
   }
 }
 
@@ -305,30 +309,35 @@ case class MaxOf(left: Expression, right: Expression) extends Expression {
 
   override def children = left :: right :: Nil
 
-  override def dataType = left.dataType
+  override lazy val resolved =
+    left.resolved && right.resolved &&
+    left.dataType == right.dataType
 
-  lazy val ordering = {
-    if (left.dataType != right.dataType) {
-      throw new TreeNodeException(this,  s"Types do not match ${left.dataType} != ${right.dataType}")
+  override def dataType = {
+    if (!resolved) {
+      throw new UnresolvedException(this,
+        s"datatype. Can not resolve due to differing types ${left.dataType}, ${right.dataType}")
     }
-    left.dataType match {
-      case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
-      case other => sys.error(s"Type $other does not support ordered operations")
-    }
+    left.dataType
+  }
+
+  lazy val ordering = left.dataType match {
+    case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
+    case other => sys.error(s"Type $other does not support ordered operations")
   }
 
   override def eval(input: Row): Any = {
-    val leftEval = left.eval(input)
-    val rightEval = right.eval(input)
-    if (leftEval == null) {
-      rightEval
-    } else if (rightEval == null) {
-      leftEval
+    val evalE1 = left.eval(input)
+    val evalE2 = right.eval(input)
+    if (evalE1 == null) {
+      evalE2
+    } else if (evalE2 == null) {
+      evalE1
     } else {
-      if (ordering.compare(leftEval, rightEval) < 0) {
-        rightEval
+      if (ordering.compare(evalE1, evalE2) < 0) {
+        evalE2
       } else {
-        leftEval
+        evalE1
       }
     }
   }
@@ -354,6 +363,10 @@ case class Abs(child: Expression) extends UnaryExpression  {
 
   override def eval(input: Row): Any = {
     val evalE = child.eval(input)
-    numeric.abs(evalE)
+    if (evalE == null) {
+      null
+    } else {
+      numeric.abs(evalE)
+    }
   }
 }
