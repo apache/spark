@@ -49,7 +49,8 @@ private[sql] case class ParquetRelation(
     path: String,
     @transient conf: Option[Configuration],
     @transient sqlContext: SQLContext,
-    partitioningAttributes: Seq[Attribute] = Nil)
+    partitioningAttributes: Seq[Attribute] = Nil,
+    partitionValues: String = "")
   extends LeafNode with MultiInstanceRelation {
 
   self: Product =>
@@ -65,7 +66,7 @@ private[sql] case class ParquetRelation(
   override val output =
     partitioningAttributes ++
     ParquetTypesConverter.readSchemaFromFile(
-      new Path(path.split(",").head.split("->").head),
+      new Path(path.split(",").head),
       conf,
       sqlContext.conf.isParquetBinaryAsString,
       sqlContext.conf.isParquetINT96AsTimestamp)

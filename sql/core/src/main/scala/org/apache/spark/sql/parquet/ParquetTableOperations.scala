@@ -88,10 +88,11 @@ private[sql] case class ParquetTableScan(
     val conf: Configuration = ContextUtil.getConfiguration(job)
 
     if (requestedPartitionOrdinals.nonEmpty) {
-      relation.path.split(",").foreach { tcurPath =>
-        val p = tcurPath.split("->")
-        val curPath = p.apply(0)
-        val partition = p.apply(1)
+      val partVals = relation.partitionValues.split(",")
+      var i = 0
+      relation.path.split(",").foreach { curPath =>
+        val partition = partVals.apply(i)
+        i += 1
         val qualifiedPath = {
           val path = new Path(curPath)
           path.getFileSystem(conf).makeQualified(path)
