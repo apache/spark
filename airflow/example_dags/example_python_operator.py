@@ -10,7 +10,7 @@ args = {
     'start_date': datetime(2015, 1, 1),
 }
 
-dag = DAG(dag_id='example_python_operator')
+dag = DAG(dag_id='example_python_operator', default_args=args)
 
 def my_sleeping_function(random_base):
     '''This is a function that will run whithin the DAG execution'''
@@ -25,8 +25,7 @@ run_this = PythonOperator(
     task_id='print_the_context',
     provide_context=True,
     python_callable=print_context,
-    default_args=args)
-dag.add_task(run_this)
+    dag=dag)
 
 for i in range(10):
     '''
@@ -37,7 +36,6 @@ for i in range(10):
         task_id='sleep_for_'+str(i),
         python_callable=my_sleeping_function,
         op_kwargs={'random_base': i},
-        default_args=args)
+        dag=dag)
 
     task.set_upstream(run_this)
-    dag.add_task(task)

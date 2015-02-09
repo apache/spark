@@ -176,20 +176,30 @@ def apply_defaults(func):
     '''
     @wraps(func)
     def wrapper(*args, **kwargs):
+        dag_args = {}
+        if 'dag' in kwargs and kwargs['dag']:
+            dag = kwargs['dag']
+            dag_args = dag.default_args or {}
+
+        default_args = {}
         if 'default_args' in kwargs:
             default_args = kwargs['default_args']
-            arg_spec = inspect.getargspec(func)
-            num_defaults = len(arg_spec.defaults) if arg_spec.defaults else 0
-            non_optional_args = arg_spec.args[:-num_defaults]
-            if 'self' in non_optional_args:
-                non_optional_args.remove('self')
-            for arg in func.__code__.co_varnames:
-                if arg in default_args and arg not in kwargs:
-                    kwargs[arg] = default_args[arg]
-            missing_args = list(set(non_optional_args) - set(kwargs))
-            if missing_args:
-                msg = "Argument {0} is required".format(missing_args)
-                raise Exception(msg)
+
+        dag_args.update(default_args)
+        default_args = dag_args
+        arg_spec = inspect.getargspec(func)
+        num_defaults = len(arg_spec.defaults) if arg_spec.defaults else 0
+        non_optional_args = arg_spec.args[:-num_defaults]
+        if 'self' in non_optional_args:
+            non_optional_args.remove('self')
+        for arg in func.__code__.co_varnames:
+            if arg in default_args and arg not in kwargs:
+                kwargs[arg] = default_args[arg]
+        missing_args = list(set(non_optional_args) - set(kwargs))
+        if missing_args:
+            msg = "Argument {0} is required".format(missing_args)
+            raise Exception(msg)
+
         result = func(*args, **kwargs)
         return result
     return wrapper
