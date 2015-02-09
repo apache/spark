@@ -36,7 +36,7 @@ private[streaming] abstract class ReceiverSupervisor(
     conf: SparkConf
   ) extends Logging {
 
-  /** Enumeration to identify current state of the StreamingContext */
+  /** Enumeration to identify current state of the Receiver */
   object ReceiverState extends Enumeration {
     type CheckpointState = Value
     val Initialized, Started, Stopped = Value
@@ -161,7 +161,7 @@ private[streaming] abstract class ReceiverSupervisor(
     }
   }
 
-  /** Check if receiver has been marked for stopping */
+  /** Check if receiver has been marked for starting */
   def isReceiverStarted() = {
     logDebug("state = " + receiverState)
     receiverState == Started

@@ -67,13 +67,39 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   )
   private val listenerBus = ssc.scheduler.listenerBus
 
+
+  /** Enumeration to identify current state of the ReceiverTracker */
+  object TrackerState extends Enumeration {
+    type CheckpointState = Value
+    val Initialized, Started, Stopping, Stopped = Value
+  }
+  import TrackerState._
+
+  /** State of the tracker */
+  @volatile private[streaming] var trackerState = Initialized
+
   // actor is created when generator starts.
   // This not being null means the tracker has been started and not stopped
   private var actor: ActorRef = null
 
+  /** Check if tracker has been marked for starting */
+  def isTrackerStarted() = {
+    trackerState == Started
+  }
+ 
+  /** Check if tracker has been marked for stopping */
+  def isTrackerStopping() = {
+    trackerState == Stopping
+  }
+ 
+  /** Check if tracker has been marked for stopped */
+  def isTrackerStopped() = {
+    trackerState == Stopped
+  }
+
   /** Start the actor and receiver execution thread. */
   def start() = synchronized {
-    if (actor != null) {
+    if (isTrackerStarted) {
       throw new SparkException("ReceiverTracker already started")
     }
 
@@ -82,12 +108,15 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         "ReceiverTracker")
       if (!skipReceiverLaunch) receiverExecutor.start()
       logInfo("ReceiverTracker started")
+      trackerState = Started
     }
   }
 
   /** Stop the receiver execution thread. */
   def stop(graceful: Boolean) = synchronized {
-    if (!receiverInputStreams.isEmpty && actor != null) {
+    if (isTrackerStarted) {
+      trackerState = Stopping
+
       // First, stop the receivers
       if (!skipReceiverLaunch) receiverExecutor.stop(graceful)
 
@@ -96,6 +125,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       actor = null
       receivedBlockTracker.stop()
       logInfo("ReceiverTracker stopped")
+      trackerState = Stopped
     }
   }
 
@@ -202,16 +232,21 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   /** Actor to receive messages from the receivers. */
   private class ReceiverTrackerActor extends Actor {
     def receive = {
-      case RegisterReceiver(streamId, typ, host, receiverActor) =>
-        registerReceiver(streamId, typ, host, receiverActor, sender)
-        sender ! true
-      case AddBlock(receivedBlockInfo) =>
-        sender ! addBlock(receivedBlockInfo)
-      case ReportError(streamId, message, error) =>
-        reportError(streamId, message, error)
-      case DeregisterReceiver(streamId, message, error) =>
-        deregisterReceiver(streamId, message, error)
-        sender ! true
+      // Actor stops to receive when tracker is stopping
+      if (!isTrackerStopping) {
+        case RegisterReceiver(streamId, typ, host, receiverActor) =>
+          registerReceiver(streamId, typ, host, receiverActor, sender)
+          sender ! true
+        case AddBlock(receivedBlockInfo) =>
+          sender ! addBlock(receivedBlockInfo)
+        case ReportError(streamId, message, error) =>
+          reportError(streamId, message, error)
+        case DeregisterReceiver(streamId, message, error) =>
+          deregisterReceiver(streamId, message, error)
+          sender ! true
+      } else {
+        case _ => sender ! false
+      }
     }
   }
 
@@ -219,6 +254,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   class ReceiverLauncher {
     @transient val env = ssc.env
     @volatile @transient private var running = false
+    @transient private val TIMEOUT = 10000
     @transient val thread  = new Thread() {
       override def run() {
         try {
@@ -244,10 +280,12 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
       if (graceful) {
         val pollTime = 100
+        var elapsedTime = 0
         def done = { receiverInfo.isEmpty && !running }
         logInfo("Waiting for receiver job to terminate gracefully")
-        while(!done) {
+        while(!done && elapsedTime < TIMEOUT) {
           Thread.sleep(pollTime)
+          elapsedTime += pollTime
         }
         logInfo("Waited for receiver job to terminate gracefully")
       }
