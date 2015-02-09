@@ -25,7 +25,6 @@ import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.{PlanUtils, TableDesc}
 import org.apache.hadoop.hive.serde2.Deserializer
-import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorConverters.IdentityConverter
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorConverters, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.io.Writable
@@ -279,14 +278,16 @@ private[hive] object HadoopTableReader extends HiveInspectors {
       mutableRow: MutableRow,
       tableDeser: Deserializer): Iterator[Row] = {
 
-    val soi = HiveShim.getConvertedOI(
-      rawDeser.getObjectInspector,
-      tableDeser.getObjectInspector).asInstanceOf[StructObjectInspector]
-
-    val inputFields = soi.getAllStructFieldRefs
+    val soi = if (rawDeser.getObjectInspector.equals(tableDeser.getObjectInspector)) {
+      rawDeser.getObjectInspector.asInstanceOf[StructObjectInspector]
+    } else {
+      HiveShim.getConvertedOI(
+        rawDeser.getObjectInspector,
+        tableDeser.getObjectInspector).asInstanceOf[StructObjectInspector]
+    }
 
     val (fieldRefs, fieldOrdinals) = nonPartitionKeyAttrs.map { case (attr, ordinal) =>
-      (inputFields.get(ordinal), ordinal)
+      soi.getStructFieldRef(attr.name) -> ordinal
     }.unzip
 
     /**
@@ -329,11 +330,7 @@ private[hive] object HadoopTableReader extends HiveInspectors {
       }
     }
 
-    val converter = if (rawDeser == tableDeser) {
-      new IdentityConverter
-    } else {
-      ObjectInspectorConverters.getConverter(rawDeser.getObjectInspector, soi)
-    }
+    val converter = ObjectInspectorConverters.getConverter(rawDeser.getObjectInspector, soi)
 
     // Map each tuple to a row object
     iterator.map { value =>
