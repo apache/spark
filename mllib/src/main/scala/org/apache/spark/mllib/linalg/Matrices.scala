@@ -50,7 +50,7 @@ sealed trait Matrix extends Serializable {
   private[mllib] def toBreeze: BM[Double]
 
   /** Gets the (i, j)-th element. */
-  private[mllib] def apply(i: Int, j: Int): Double
+  def apply(i: Int, j: Int): Double
 
   /** Return the index for the (i, j)-th element in the backing array. */
   private[mllib] def index(i: Int, j: Int): Int
@@ -163,7 +163,7 @@ class DenseMatrix(
 
   private[mllib] def apply(i: Int): Double = values(i)
 
-  private[mllib] def apply(i: Int, j: Int): Double = values(index(i, j))
+  override def apply(i: Int, j: Int): Double = values(index(i, j))
 
   private[mllib] def index(i: Int, j: Int): Int = {
     if (!isTransposed) i + numRows * j else j + numCols * i
@@ -398,7 +398,7 @@ class SparseMatrix(
      }
   }
 
-  private[mllib] def apply(i: Int, j: Int): Double = {
+  override def apply(i: Int, j: Int): Double = {
     val ind = index(i, j)
     if (ind < 0) 0.0 else values(ind)
   }
