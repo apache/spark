@@ -88,6 +88,23 @@ abstract class BinaryArithmetic extends BinaryExpression {
     }
     left.dataType
   }
+
+  override def eval(input: Row): Any = {
+    val evalE1 = left.eval(input)
+    if(evalE1 == null) {
+      null
+    } else {
+      val evalE2 = right.eval(input)
+      if (evalE2 == null) {
+        null
+      } else {
+        evalInternal(evalE1, evalE2)
+      }
+    }
+  }
+
+  def evalInternal(evalE1: EvaluatedType, evalE2: EvaluatedType): Any =
+    sys.error(s"BinaryExpressions must either override eval or evalInternal")
 }
 
 case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
@@ -229,19 +246,7 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
     case other => sys.error(s"Unsupported bitwise & operation on $other")
   }
 
-  override def eval(input: Row): Any = {
-    val evalE2 = right.eval(input)
-    if (evalE2 == null || evalE2 == 0) {
-      null
-    } else {
-      val evalE1 = left.eval(input)
-      if (evalE1 == null) {
-        null
-      } else {
-        and(evalE1, evalE2)
-      }
-    }
-  }
+  override def evalInternal(evalE1: EvaluatedType, evalE2: EvaluatedType): Any = and(evalE1, evalE2)
 }
 
 /**
@@ -262,19 +267,7 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
     case other => sys.error(s"Unsupported bitwise | operation on $other")
   }
 
-  override def eval(input: Row): Any = {
-    val evalE2 = right.eval(input)
-    if (evalE2 == null || evalE2 == 0) {
-      null
-    } else {
-      val evalE1 = left.eval(input)
-      if (evalE1 == null) {
-        null
-      } else {
-        or(evalE1, evalE2)
-      }
-    }
-  }
+  override def evalInternal(evalE1: EvaluatedType, evalE2: EvaluatedType): Any = or(evalE1, evalE2)
 }
 
 /**
@@ -295,19 +288,7 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
     case other => sys.error(s"Unsupported bitwise ^ operation on $other")
   }
 
-  override def eval(input: Row): Any = {
-    val evalE2 = right.eval(input)
-    if (evalE2 == null || evalE2 == 0) {
-      null
-    } else {
-      val evalE1 = left.eval(input)
-      if (evalE1 == null) {
-        null
-      } else {
-        xor(evalE1, evalE2)
-      }
-    }
-  }
+  override def evalInternal(evalE1: EvaluatedType, evalE2: EvaluatedType): Any = xor(evalE1, evalE2)
 }
 
 /**
