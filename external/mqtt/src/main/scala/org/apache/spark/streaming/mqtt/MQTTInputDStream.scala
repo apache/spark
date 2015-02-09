@@ -36,9 +36,9 @@ import org.eclipse.paho.client.mqttv3.MqttTopic
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 
 import org.apache.spark.Logging
-import org.apache.spark.streaming.dstream._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
+import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.Receiver
 
 /**
