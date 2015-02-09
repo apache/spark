@@ -174,9 +174,7 @@ case class BulkLoadIntoTableCommand(
     @transient val tmpPath = Util.getTempFilePath(
       hbContext.sparkContext.hadoopConfiguration, relation.tableName)
     @transient val job = new Job(hbContext.sparkContext.hadoopConfiguration)
-    job.setOutputKeyClass(classOf[ImmutableBytesWritable])
-    job.setOutputValueClass(classOf[KeyValue])
-    job.setOutputFormatClass(classOf[HFileOutputFormat2])
+    HFileOutputFormat2.configureIncrementalLoad(job, relation.htable)
     job.getConfiguration.set("mapreduce.output.fileoutputformat.outputdir", tmpPath)
 
     @transient val conf = job.getConfiguration
@@ -263,11 +261,11 @@ case class BulkLoadIntoTableCommand(
         val targetPath = committer.getCommittedTaskPath(hadoopContext)
         if (par) {
           val load = new LoadIncrementalHFiles(config)
-          val htable = relation.htable
           // there maybe no target path
           logInfo(s"written $recordsWritten records")
           if (recordsWritten > 0) {
-            load.doBulkLoad(targetPath, htable)
+            load.doBulkLoad(targetPath, relation.htable)
+            relation.closeHTable()
           }
         }
         1
@@ -286,6 +284,7 @@ case class BulkLoadIntoTableCommand(
       val load = new LoadIncrementalHFiles(conf)
       load.doBulkLoad(tablePath, relation.htable)
     }
+    relation.closeHTable()
     logDebug(s"finish BulkLoad on table ${relation.htable.getName}:" +
       s" ${System.currentTimeMillis()}")
     Seq.empty[Row]

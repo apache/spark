@@ -169,8 +169,10 @@ private[hbase] case class HBaseRelation(
   }
 
   def closeHTable() = {
-    htable_.close()
-    htable_ = null
+    if (htable_ != null) {
+      htable_.close()
+      htable_ = null
+    }
   }
 
   // corresponding logical relation

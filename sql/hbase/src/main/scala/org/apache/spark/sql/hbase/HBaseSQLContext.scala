@@ -38,10 +38,12 @@ class HBaseSQLContext(sc: SparkContext) extends SQLContext(sc) {
 
   HBaseConfiguration.merge(
     sc.hadoopConfiguration, HBaseConfiguration.create(sc.hadoopConfiguration))
+  sc.hadoopConfiguration.set(
+    "hbase.mapreduce.hfileoutputformat.datablock.encoding", "FAST_DIFF")
 
   @transient
   override protected[sql] lazy val catalog: HBaseCatalog =
-  new HBaseCatalog(this, sc.hadoopConfiguration) with OverrideCatalog
+    new HBaseCatalog(this, sc.hadoopConfiguration) with OverrideCatalog
 
   experimental.extraStrategies = Seq((new SparkPlanner with HBaseStrategies).HBaseDataSource)
 }
