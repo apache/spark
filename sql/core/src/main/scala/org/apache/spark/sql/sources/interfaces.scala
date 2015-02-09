@@ -91,8 +91,6 @@ trait CreatableRelationProvider {
     * ErrorIfExists mode means that when saving a DataFrame to a data source,
     * if data already exists, an exception is expected to be thrown.
     *
-    * For Java users, mode can be inspected through equality check (e.g. mode == SaveModes.Append).
-    *
     * @param sqlContext
     * @param mode
     * @param parameters

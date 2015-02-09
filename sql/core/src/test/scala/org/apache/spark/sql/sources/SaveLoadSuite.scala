@@ -83,7 +83,7 @@ class SaveLoadSuite extends DataSourceTest with BeforeAndAfterAll {
 
   test("save with data source and options, and load") {
     conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "not a source name")
-    df.save("org.apache.spark.sql.json", SaveModes.ErrorIfExists, Map("path" -> path.toString))
+    df.save("org.apache.spark.sql.json", SaveMode.ErrorIfExists, Map("path" -> path.toString))
     checkLoad
   }
 
@@ -103,16 +103,15 @@ class SaveLoadSuite extends DataSourceTest with BeforeAndAfterAll {
     df.save(path.toString, "org.apache.spark.sql.json")
     checkLoad
 
-    df.save("org.apache.spark.sql.json", SaveModes.Overwrite, Map("path" -> path.toString))
+    df.save("org.apache.spark.sql.json", SaveMode.Overwrite, Map("path" -> path.toString))
     checkLoad
 
     message = intercept[RuntimeException] {
-      df.save("org.apache.spark.sql.json", SaveModes.Append, Map("path" -> path.toString))
+      df.save("org.apache.spark.sql.json", SaveMode.Append, Map("path" -> path.toString))
     }.getMessage
 
     assert(
       message.contains("Append mode is not supported"),
       "We should complain that 'Append mode is not supported' for JSON source.")
-
   }
 }

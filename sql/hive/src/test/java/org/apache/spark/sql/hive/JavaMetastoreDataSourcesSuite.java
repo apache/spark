@@ -44,6 +44,7 @@ public class JavaMetastoreDataSourcesSuite {
 
   String originalDefaultSource;
   File path;
+  File hiveManagedPath;
   DataFrame df;
 
   private void checkAnswer(DataFrame actual, List<Row> expected) {
@@ -63,6 +64,10 @@ public class JavaMetastoreDataSourcesSuite {
       Utils.createTempDir(System.getProperty("java.io.tmpdir"), "datasource").getCanonicalFile();
     if (path.exists()) {
       path.delete();
+    }
+    hiveManagedPath = new File(sqlContext.catalog().hiveDefaultTableFilePath("javaSavedTable"));
+    if (hiveManagedPath.exists()) {
+      hiveManagedPath.delete();
     }
 
     List<String> jsonObjects = new ArrayList<String>(10);

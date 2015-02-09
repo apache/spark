@@ -308,7 +308,7 @@ private[sql] class DataFrameImpl protected[sql](
 
   override def saveAsParquetFile(path: String): Unit = {
     if (sqlContext.conf.parquetUseDataSourceApi) {
-      save("org.apache.spark.sql.parquet", SaveModes.ErrorIfExists, Map("path" -> path))
+      save("org.apache.spark.sql.parquet", SaveMode.ErrorIfExists, Map("path" -> path))
     } else {
       sqlContext.executePlan(WriteToFile(path, logicalPlan)).toRdd
     }
@@ -396,7 +396,7 @@ private[sql] class DataFrameImpl protected[sql](
   }
 
   override def save(path: String): Unit = {
-    save(path, SaveModes.ErrorIfExists)
+    save(path, SaveMode.ErrorIfExists)
   }
 
   override def save(path: String, mode: SaveMode): Unit = {
@@ -405,7 +405,7 @@ private[sql] class DataFrameImpl protected[sql](
   }
 
   override def save(path: String, dataSourceName: String): Unit = {
-    save(dataSourceName, SaveModes.ErrorIfExists, Map("path" -> path))
+    save(dataSourceName, SaveMode.ErrorIfExists, Map("path" -> path))
   }
 
   override def save(path: String, dataSourceName: String, mode: SaveMode): Unit = {

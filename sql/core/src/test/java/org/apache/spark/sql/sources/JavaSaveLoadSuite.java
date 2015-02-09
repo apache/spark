@@ -71,28 +71,10 @@ public class JavaSaveLoadSuite {
   }
 
   @Test
-  public void getSaveMode() {
-    SaveMode append = SaveModes.Append;
-    Assert.assertTrue(append == SaveModes.Append);
-    Assert.assertTrue(append != SaveModes.Overwrite);
-    Assert.assertTrue(append != SaveModes.ErrorIfExists);
-
-    SaveMode overwrite = SaveModes.Overwrite;
-    Assert.assertTrue(overwrite == SaveModes.Overwrite);
-    Assert.assertTrue(overwrite != SaveModes.Append);
-    Assert.assertTrue(overwrite != SaveModes.ErrorIfExists);
-
-    SaveMode errorIfExists = SaveModes.ErrorIfExists;
-    Assert.assertTrue(errorIfExists == SaveModes.ErrorIfExists);
-    Assert.assertTrue(errorIfExists != SaveModes.Append);
-    Assert.assertTrue(errorIfExists != SaveModes.Overwrite);
-  }
-
-  @Test
   public void saveAndLoad() {
     Map<String, String> options = new HashMap<String, String>();
     options.put("path", path.toString());
-    df.save("org.apache.spark.sql.json", SaveModes.ErrorIfExists, options);
+    df.save("org.apache.spark.sql.json", SaveMode.ErrorIfExists, options);
 
     DataFrame loadedDF = sqlContext.load("org.apache.spark.sql.json", options);
 
@@ -103,7 +85,7 @@ public class JavaSaveLoadSuite {
   public void saveAndLoadWithSchema() {
     Map<String, String> options = new HashMap<String, String>();
     options.put("path", path.toString());
-    df.save("org.apache.spark.sql.json", SaveModes.ErrorIfExists, options);
+    df.save("org.apache.spark.sql.json", SaveMode.ErrorIfExists, options);
 
     List<StructField> fields = new ArrayList<>();
     fields.add(DataTypes.createStructField("b", DataTypes.StringType, true));

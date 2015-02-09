@@ -87,13 +87,13 @@ class DefaultSource
     val filesystemPath = new Path(path)
     val fs = filesystemPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
     mode match {
-      case Append =>
+      case SaveMode.Append =>
         sys.error(s"Append mode is not supported by ${this.getClass.getCanonicalName}")
-      case Overwrite =>
+      case SaveMode.Overwrite =>
         if (fs.exists(filesystemPath)) {
           fs.delete(filesystemPath, true)
         }
-      case ErrorIfExists =>
+      case SaveMode.ErrorIfExists =>
         if (fs.exists(filesystemPath)) {
           sys.error(s"path $path already exists.")
         }

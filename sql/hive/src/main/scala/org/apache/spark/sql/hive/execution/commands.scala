@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.sources.{SaveModes, ResolvedDataSource}
+import org.apache.spark.sql.sources.{SaveMode, ResolvedDataSource}
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -168,7 +168,7 @@ case class CreateMetastoreDataSourceAsSelect(
       }
 
     // Create the relation based on the data of df.
-    ResolvedDataSource(sqlContext, provider, SaveModes.ErrorIfExists, optionsWithPath, df)
+    ResolvedDataSource(sqlContext, provider, SaveMode.ErrorIfExists, optionsWithPath, df)
 
     hiveContext.catalog.createDataSourceTable(
       tableName,

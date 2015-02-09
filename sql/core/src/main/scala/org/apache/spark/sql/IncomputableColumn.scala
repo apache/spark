@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.sources.SaveMode
-
 import scala.reflect.ClassTag
 
 import org.apache.spark.api.java.JavaRDD
@@ -27,8 +25,8 @@ import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedSt
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.sql.sources.SaveMode
 import org.apache.spark.sql.types.StructType
-
 
 private[sql] class IncomputableColumn(protected[sql] val expr: Expression) extends Column {
 
