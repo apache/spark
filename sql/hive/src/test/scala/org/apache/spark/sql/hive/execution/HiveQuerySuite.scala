@@ -541,8 +541,8 @@ class HiveQuerySuite extends HiveComparisonTest {
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
     assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
-    assertResult(Array(s"$testKey=$testVal", s"${testKey + testKey}=${testVal + testVal}")) {
-      sql(s"SET").collect().map(_.getString(0))
+    assertResult(Set(s"$testKey=$testVal", s"${testKey + testKey}=${testVal + testVal}")) {
+      sql(s"SET").collect().map(_.getString(0)).toSet
     }
     assertResult(Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
       collectResults(sql("SET -v"))
