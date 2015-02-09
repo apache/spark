@@ -49,8 +49,9 @@ private[spark] class AppClient(
 
   val masterAkkaUrls = masterUrls.map(Master.toAkkaUrl(_, AkkaUtils.protocol(actorSystem)))
 
-  val REGISTRATION_TIMEOUT = 20.seconds
-  val REGISTRATION_RETRIES = 3
+  val registerRetryInterval = conf.get("spark.driver.registering.retryIntervalMs", "20000")
+                                .toInt.milliseconds
+  val maxRegisterRetries = conf.get("spark.driver.registering.maxRetries", "3").toInt
 
   var masterAddress: Address = null
   var actor: ActorRef = null
@@ -89,12 +90,12 @@ private[spark] class AppClient(
       import context.dispatcher
       var retries = 0
       registrationRetryTimer = Some {
-        context.system.scheduler.schedule(REGISTRATION_TIMEOUT, REGISTRATION_TIMEOUT) {
+        context.system.scheduler.schedule(registerRetryInterval, registerRetryInterval) {
           Utils.tryOrExit {
             retries += 1
             if (registered) {
               registrationRetryTimer.foreach(_.cancel())
-            } else if (retries >= REGISTRATION_RETRIES) {
+            } else if (retries >= maxRegisterRetries) {
               markDead("All masters are unresponsive! Giving up.")
             } else {
               tryRegisterAllMasters()
