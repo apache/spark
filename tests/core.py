@@ -15,7 +15,7 @@ class CoreTest(unittest.TestCase):
 
     def setUp(self):
         configuration.test_mode()
-        utils.resetdb()
+        utils.initdb()
         self.dagbag = models.DagBag(
             dag_folder=DEV_NULL, include_examples=True)
         self.dag_bash = self.dagbag.dags['example_bash_operator']
@@ -29,6 +29,10 @@ class CoreTest(unittest.TestCase):
         ti = TI(
             task=self.runme_0, execution_date=DEFAULT_DATE)
         job = jobs.LocalTaskJob(task_instance=ti, force=True)
+        job.run()
+
+    def test_master_job(self):
+        job = jobs.MaterJob(dag_id='example_bash_operator')
         job.run()
 
     def test_local_backfill_job(self):

@@ -261,6 +261,12 @@ def worker(args):
 
 def initdb(args):
     print("DB: " + conf.get('core', 'SQL_ALCHEMY_CONN'))
+    utils.initdb()
+    print("Done.")
+
+
+def resetdb(args):
+    print("DB: " + conf.get('core', 'SQL_ALCHEMY_CONN'))
     if raw_input(
             "This will drop exisiting tables if they exist. "
             "Proceed? (y/n)").upper() == "Y":
@@ -415,9 +421,13 @@ def get_parser():
         default=conf.get('core', 'DAGS_FOLDER'))
     parser_master.set_defaults(func=master)
 
-    ht = "Initialize and reset the metadata database"
+    ht = "Initialize the metadata database"
     parser_initdb = subparsers.add_parser('initdb', help=ht)
     parser_initdb.set_defaults(func=initdb)
+
+    ht = "Burn down and rebuild the metadata database"
+    parser_resetdb = subparsers.add_parser('resetdb', help=ht)
+    parser_resetdb.set_defaults(func=resetdb)
 
     ht = "List the DAGs"
     parser_list_dags = subparsers.add_parser('list_dags', help=ht)

@@ -58,6 +58,44 @@ def pessimistic_connection_handling():
             raise exc.DisconnectionError()
         cursor.close()
 
+
+def initdb():
+    from airflow import models
+    logging.info("Creating all tables")
+    models.Base.metadata.create_all(settings.engine)
+
+    # Creating the local_mysql DB connection
+    C = models.Connection
+    session = settings.Session()
+
+    conn = session.query(C).filter(C.conn_id == 'local_mysql').first()
+    if not conn:
+        session.add(
+            models.Connection(
+                conn_id='local_mysql', conn_type='mysql',
+                host='localhost', login='airflow', password='airflow',
+                schema='airflow'))
+        session.commit()
+
+    conn = session.query(C).filter(C.conn_id == 'presto_default').first()
+    if not conn:
+        session.add(
+            models.Connection(
+                conn_id='presto_default', conn_type='presto',
+                host='localhost',
+                schema='hive', port=10001))
+        session.commit()
+
+    conn = session.query(C).filter(C.conn_id == 'hive_default').first()
+    if not conn:
+        session.add(
+            models.Connection(
+                conn_id='hive_default', conn_type='hive',
+                host='localhost',
+                schema='default', port=10000))
+        session.commit()
+
+
 def resetdb():
     '''
     Clear out the database
@@ -66,37 +104,8 @@ def resetdb():
 
     logging.info("Dropping tables that exist")
     models.Base.metadata.drop_all(settings.engine)
+    initdb()
 
-    logging.info("Creating all tables")
-    models.Base.metadata.create_all(settings.engine)
-
-    # Creating the local_mysql DB connection
-    session = settings.Session()
-    session.query(models.Connection).delete()
-    session.add(
-        models.Connection(
-            conn_id='local_mysql', conn_type='mysql',
-            host='localhost', login='airflow', password='airflow',
-            schema='airflow'))
-    session.commit()
-    session.add(
-        models.Connection(
-            conn_id='mysql_default', conn_type='mysql',
-            host='localhost', login='airflow', password='airflow',
-            schema='airflow'))
-    session.commit()
-    session.add(
-        models.Connection(
-            conn_id='presto_default', conn_type='presto',
-            host='localhost',
-            schema='hive', port=10001))
-    session.commit()
-    session.add(
-        models.Connection(
-            conn_id='hive_default', conn_type='hive',
-            host='localhost',
-            schema='default', port=10000))
-    session.commit()
 
 def validate_key(k, max_length=250):
     if type(k) is not str:
