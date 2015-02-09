@@ -851,6 +851,10 @@ class Airflow(BaseView):
         session = settings.Session()
         dag_id = request.args.get('dag_id')
         arrange = request.args.get('arrange', "LR")
+        if dag_id not in dagbag.dags:
+            flash('DAG "{0}" seems to be missing.'.format(dag_id), "error")
+            return redirect(url_for('index'))
+
         dag = dagbag.dags[dag_id]
 
         nodes = []

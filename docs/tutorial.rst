@@ -19,22 +19,12 @@ an Airflow DAG object. Let's start by importing the libraries we will need.
     # Operators, we need this to operate!
     from airflow.operators import BashOperator, MySqlOperator
 
-Instantiate a DAG
------------------
-
-We'll need a DAG object to nest our tasks into. Pass a string that defines
-the dag_id, which serves as a unique identifier for your DAG.
-
-.. code:: python
-
-    dag = DAG('tutorial')
-
 Default Arguments
 -----------------
-We're about to create some tasks, and we have the choice to explicitely pass
-a set of arguments to each task's constructor (which would become redundant), 
-or (better!) we can define a dictionary of default parameters that we can use 
-when creating tasks.
+We're about to create a DAG and some tasks, and we have the choice to 
+explicitely pass a set of arguments to each task's constructor 
+(which would become redundant), or (better!) we can define a dictionary 
+of default parameters that we can use when creating tasks.
 
 .. code:: python
 
@@ -50,29 +40,47 @@ when creating tasks.
     }
 
 For more information about the BaseOperator's parameters and what they do,
-refer to the :py:class:`airflow.models.BaseOperator` documentation.
+refer to the :py:class:``airflow.models.BaseOperator`` documentation.
+
+Also, note that you could easily define different sets of arguments that
+would serve different purposes. An example of that would be to have 
+different settings between a production and development environment.
+
+
+Instantiate a DAG
+-----------------
+
+We'll need a DAG object to nest our tasks into. Here we pass a string 
+that defines the dag_id, which serves as a unique identifier for your DAG.
+We also pass the default argument dictonary that we just define.
+
+.. code:: python
+
+    dag = DAG('tutorial', default_args=default_args)
 
 Tasks
 -----
-Tasks are generated when instantiating objects from operators.
+Tasks are generated when instantiating objects from operators. The first
+argument ``task_id`` acts as a unique identifier for the task.
 
 .. code:: python
 
     t1 = BashOperator(
         task_id='print_date', 
         bash_command='date', 
-        default_args=args)
+        dag=dag)
 
     t2 = BashOperator(
         task_id='sleep', 
         depends_on_past=False,
         bash_command='sleep 5', 
-        default_args=args)
+        dag=dag)
 
-Notice how the default arguments we defined in the previous step are passed
-to the operators constructor. This is simpler than passing every argument for
-every constructor call. Also, notice that in the second call we 
-override ``depends_on_past`` parameter with ``False``.
+Notice how we pass a mix of operator specific arguments (``bash_command``) and
+an argument common to all operators (``depends_on_past``) inherited 
+from BaseOperator to the operators constructor. This is simpler than 
+passing every argument for every constructor call. Also, notice that in 
+the second call we override ``depends_on_past`` parameter with ``False``.
 
 The precendence rules for operator is:
 
@@ -81,18 +89,6 @@ The precendence rules for operator is:
 * Use the operator's default, if any
 * If none of these are defined, Airflow raises an exception
 
-Adding the tasks to the DAG
----------------------------
-At this of the script, the tasks have been created but have no relationship 
-with the DAG we created earlier. Here's how you add them:
-
-.. code:: python
-
-    dag.add_task(t1)
-    dag.add_task(t2)
-
-    # this is equivalent to: 
-    # dag.add_tasks([t1, t2])
 
 Templating with Jinja
 ---------------------
@@ -123,7 +119,7 @@ curly brackets, and point to the most common template variable: ``{{ ds }}``.
         depends_on_past=False,
         bash_command=templated_command,
         params={'my_param': 'Paramater I passed in'},
-        default_args=args)
+        dag=dag)
 
 Notice that the ``templated_command`` contains code logic in ``{% %}`` blocks,
 references parameters like ``{{ ds }}``, calls a function as in
@@ -177,38 +173,43 @@ something like this:
 
 .. code:: python
     
+    """
+    Code that goes along with the Airflow located at:
+    http://airflow.readthedocs.org/en/latest/tutorial.html
+    """
     from airflow import DAG
-    from airflow.operators import BashOperator, MySqlOperator
+    from airflow.operators import BashOperator
     from datetime import datetime
 
-    dag = DAG('tutorial')
 
-    args = {
+    default_args = {
         'owner': 'airflow',
         'depends_on_past': True,
         'start_date': datetime(2015, 01, 23),
-        'email': ['airflow@airflow.com',],
-        'email_on_failure': True,
-        'email_on_retry': True,
+        'email': ['airflow@airflow.com'],
+        'email_on_failure': False,
+        'email_on_retry': False,
     }
+
+    dag = DAG('tutorial', default_args=default_args)
 
     t1 = BashOperator(
         task_id='print_date',
         bash_command='date',
-        default_args=args)
+        dag=dag)
 
     t2 = BashOperator(
         task_id='sleep',
         depends_on_past=False,
         bash_command='sleep 5',
-        default_args=args)
+        dag=dag)
 
     templated_command = """
-        {% for i in range(5) %}
-            echo "{{ ds }}"
-            echo "{{ macros.ds_add(ds, 7)}}"
-            echo "{{ params.my_param }}"
-        {% endfor %}
+    {% for i in range(5) %}
+        echo "{{ ds }}"
+        echo "{{ macros.ds_add(ds, 7)}}"
+        echo "{{ params.my_param }}"
+    {% endfor %}
     """
 
     t3 = BashOperator(
@@ -216,12 +217,10 @@ something like this:
         depends_on_past=False,
         bash_command=templated_command,
         params={'my_param': 'Paramater I passed in'},
-        default_args=args)
+        dag=dag)
 
     t2.set_upstream(t1)
     t3.set_upstream(t1)
-
-    dag.add_tasks([t1, t2, t3])  
 
 Testing
 --------

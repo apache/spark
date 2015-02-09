@@ -818,7 +818,6 @@ class BaseOperator(Base):
 
         utils.validate_key(task_id)
         self.dag_id = dag.dag_id if dag else 'adhoc_' + owner
-        self.dag = dag
         self.task_id = task_id
         self.owner = owner
         self.email = email
@@ -833,6 +832,9 @@ class BaseOperator(Base):
         self.retry_delay = retry_delay
         self.params = params or {}  # Available in templates!
         self.adhoc = adhoc
+        if dag:
+            dag.add_task(self)
+            self.dag = dag
 
         # Private attributes
         self._upstream_list = []
@@ -1085,6 +1087,13 @@ class DAG(Base):
     :type template_searchpath: string or list of stings
     :param user_defined_macros: a dictionary of macros that will be merged
     :type user_defined_macros: dict
+    :param default_args: A dictionary of default parameters to be used
+        as constructor keyword parameters when initialising operators.
+        Note that operators have the same hook, and precede those defined
+        here, meaning that if your dict contains `'depends_on_past': True`
+        here and `'depends_on_past': False` in te operator's call
+        `default_args`, the actual value will be `False`.
+    :type default_args: dict
     """
 
     __tablename__ = "dag"
@@ -1098,7 +1107,8 @@ class DAG(Base):
             start_date=None, end_date=None,
             full_filepath=None,
             template_searchpath=None,
-            user_defined_macros=None):
+            user_defined_macros=None,
+            default_args=None):
 
         utils.validate_key(dag_id)
         self.tasks = []
@@ -1111,6 +1121,7 @@ class DAG(Base):
             template_searchpath = [template_searchpath]
         self.template_searchpath = template_searchpath
         self.user_defined_macros = user_defined_macros
+        self.default_args = default_args or {}
 
     def __repr__(self):
         return "<DAG: {self.dag_id}>".format(self=self)
