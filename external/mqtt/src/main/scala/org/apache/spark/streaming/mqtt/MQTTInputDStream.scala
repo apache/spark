@@ -26,7 +26,13 @@ import scala.collection.Map
 import scala.collection.mutable.HashMap
 import scala.reflect.ClassTag
 
-import org.eclipse.paho.client.mqttv3._
+import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken
+import org.eclipse.paho.client.mqttv3.MqttCallback
+import org.eclipse.paho.client.mqttv3.MqttClient
+import org.eclipse.paho.client.mqttv3.MqttClientPersistence
+import org.eclipse.paho.client.mqttv3.MqttException
+import org.eclipse.paho.client.mqttv3.MqttMessage
+import org.eclipse.paho.client.mqttv3.MqttTopic
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 
 import org.apache.spark.Logging
