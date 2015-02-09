@@ -3,6 +3,8 @@
 docs/_*
 airflow.db
 build
+cover
+.coverage
 dist
 env
 initdb.py

@@ -261,47 +261,18 @@ def worker(args):
 
 def initdb(args):
     print("DB: " + conf.get('core', 'SQL_ALCHEMY_CONN'))
+    utils.initdb()
+    print("Done.")
+
+
+def resetdb(args):
+    print("DB: " + conf.get('core', 'SQL_ALCHEMY_CONN'))
     if raw_input(
             "This will drop exisiting tables if they exist. "
             "Proceed? (y/n)").upper() == "Y":
         logging.basicConfig(level=logging.DEBUG,
                             format=settings.SIMPLE_LOG_FORMAT)
-
-        from airflow import models
-
-        logging.info("Dropping tables that exist")
-        models.Base.metadata.drop_all(settings.engine)
-
-        logging.info("Creating all tables")
-        models.Base.metadata.create_all(settings.engine)
-
-        # Creating the local_mysql DB connection
-        session = settings.Session()
-        session.query(models.Connection).delete()
-        session.add(
-            models.Connection(
-                conn_id='local_mysql', conn_type='mysql',
-                host='localhost', login='airflow', password='airflow',
-                schema='airflow'))
-        session.commit()
-        session.add(
-            models.Connection(
-                conn_id='mysql_default', conn_type='mysql',
-                host='localhost', login='airflow', password='airflow',
-                schema='airflow'))
-        session.commit()
-        session.add(
-            models.Connection(
-                conn_id='presto_default', conn_type='presto',
-                host='localhost',
-                schema='hive', port=10001))
-        session.commit()
-        session.add(
-            models.Connection(
-                conn_id='hive_default', conn_type='hive',
-                host='localhost',
-                schema='default', port=10000))
-        session.commit()
+        utils.resetdb()
     else:
         print("Bail.")
 
@@ -450,9 +421,13 @@ def get_parser():
         default=conf.get('core', 'DAGS_FOLDER'))
     parser_master.set_defaults(func=master)
 
-    ht = "Initialize and reset the metadata database"
+    ht = "Initialize the metadata database"
     parser_initdb = subparsers.add_parser('initdb', help=ht)
     parser_initdb.set_defaults(func=initdb)
+
+    ht = "Burn down and rebuild the metadata database"
+    parser_resetdb = subparsers.add_parser('resetdb', help=ht)
+    parser_resetdb.set_defaults(func=resetdb)
 
     ht = "List the DAGs"
     parser_list_dags = subparsers.add_parser('list_dags', help=ht)

@@ -11,6 +11,7 @@ from sqlalchemy import event
 from sqlalchemy.pool import Pool
 
 from airflow.configuration import conf
+from airflow import settings
 
 
 class State(object):
@@ -57,6 +58,53 @@ def pessimistic_connection_handling():
             raise exc.DisconnectionError()
         cursor.close()
 
+
+def initdb():
+    from airflow import models
+    logging.info("Creating all tables")
+    models.Base.metadata.create_all(settings.engine)
+
+    # Creating the local_mysql DB connection
+    C = models.Connection
+    session = settings.Session()
+
+    conn = session.query(C).filter(C.conn_id == 'local_mysql').first()
+    if not conn:
+        session.add(
+            models.Connection(
+                conn_id='local_mysql', conn_type='mysql',
+                host='localhost', login='airflow', password='airflow',
+                schema='airflow'))
+        session.commit()
+
+    conn = session.query(C).filter(C.conn_id == 'presto_default').first()
+    if not conn:
+        session.add(
+            models.Connection(
+                conn_id='presto_default', conn_type='presto',
+                host='localhost',
+                schema='hive', port=10001))
+        session.commit()
+
+    conn = session.query(C).filter(C.conn_id == 'hive_default').first()
+    if not conn:
+        session.add(
+            models.Connection(
+                conn_id='hive_default', conn_type='hive',
+                host='localhost',
+                schema='default', port=10000))
+        session.commit()
+
+
+def resetdb():
+    '''
+    Clear out the database
+    '''
+    from airflow import models
+
+    logging.info("Dropping tables that exist")
+    models.Base.metadata.drop_all(settings.engine)
+    initdb()
 
 
 def validate_key(k, max_length=250):

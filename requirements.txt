@@ -1,5 +1,6 @@
 celery
 chartkick
+coverage
 dill
 flake8
 flask
