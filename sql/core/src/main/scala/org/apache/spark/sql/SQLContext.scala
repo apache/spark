@@ -400,8 +400,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /**
    * :: Experimental ::
-   * Loads a dataset from the given path as a DataFrame.
-   * It will use the default data source configured in spark.sql.sources.default.
+   * Returns the dataset stored at path as a DataFrame,
+   * using the default data source configured in spark.sql.sources.default.
    */
   @Experimental
   def load(path: String): DataFrame = {
@@ -411,7 +411,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /**
    * :: Experimental ::
-   * Loads a dataset from the given path as a DataFrame based on a given data source.
+   * Returns the dataset stored at path as a DataFrame,
+   * using the given data source.
    */
   @Experimental
   def load(
@@ -422,7 +423,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /**
    * :: Experimental ::
-   * Loads a dataset based on a given data source and a set of options.
+   * Returns the dataset specified by the given data source and a set of options as a DataFrame.
    */
   @Experimental
   def load(
@@ -434,7 +435,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /**
    * :: Experimental ::
    * (Scala-specific)
-   * Loads a dataset based on a given data source and a set of options.
+   * Returns the dataset specified by the given data source and a set of options as a DataFrame.
    */
   @Experimental
   def load(
@@ -446,7 +447,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /**
    * :: Experimental ::
-   * Loads a dataset based on a given data source, a schema and a set of options.
+   * Returns the dataset specified by the given data source and a set of options as a DataFrame,
+   * using the given schema as the schema of the DataFrame.
    */
   @Experimental
   def load(
@@ -459,7 +461,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /**
    * :: Experimental ::
    * (Scala-specific)
-   * Loads a dataset based on a given data source, a schema and a set of options.
+   * Returns the dataset specified by the given data source and a set of options as a DataFrame,
+   * using the given schema as the schema of the DataFrame.
    */
   @Experimental
   def load(
