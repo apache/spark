@@ -36,8 +36,14 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
-      val stageId = request.getParameter("id").toInt
-      val stageAttemptId = request.getParameter("attempt").toInt
+      val parameterId = request.getParameter("id")
+      require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
+
+      val parameterAttempt = request.getParameter("attempt")
+      require(parameterAttempt != null && parameterAttempt.nonEmpty, "Missing attempt parameter")
+
+      val stageId = parameterId.toInt
+      val stageAttemptId = parameterAttempt.toInt
       val stageDataOption = listener.stageIdToData.get((stageId, stageAttemptId))
 
       if (stageDataOption.isEmpty || stageDataOption.get.taskData.isEmpty) {
