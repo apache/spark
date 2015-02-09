@@ -17,11 +17,10 @@
 
 package org.apache.spark.graphx
 
-import org.apache.spark.SparkContext
-import org.apache.spark.graphx.Graph._
-import org.apache.spark.graphx.impl.EdgePartition
-import org.apache.spark.rdd._
 import org.scalatest.FunSuite
+
+import org.apache.spark.SparkContext
+import org.apache.spark.storage.StorageLevel
 
 class VertexRDDSuite extends FunSuite with LocalSparkContext {
 
@@ -107,6 +106,18 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
       val rdd = VertexRDD(verts, edges, 0, (a: Int, b: Int) => a + b)
       // test merge function
       assert(rdd.collect.toSet == Set((0L, 0), (1L, 3), (2L, 9)))
+    }
+  }
+
+  test("cache, getStorageLevel") {
+    // test to see if getStorageLevel returns correct value after caching
+    withSpark { sc =>
+      val verts = sc.parallelize(List((0L, 0), (1L, 1), (1L, 2), (2L, 3), (2L, 3), (2L, 3)))
+      val edges = EdgeRDD.fromEdges(sc.parallelize(List.empty[Edge[Int]]))
+      val rdd = VertexRDD(verts, edges, 0, (a: Int, b: Int) => a + b)
+      assert(rdd.getStorageLevel == StorageLevel.NONE)
+      rdd.cache()
+      assert(rdd.getStorageLevel == StorageLevel.MEMORY_ONLY)
     }
   }
 

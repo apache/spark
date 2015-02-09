@@ -54,12 +54,13 @@ object RDDConversions {
   }
 }
 
+/** Logical plan node for scanning data from an RDD. */
 case class LogicalRDD(output: Seq[Attribute], rdd: RDD[Row])(sqlContext: SQLContext)
   extends LogicalPlan with MultiInstanceRelation {
 
-  def children = Nil
+  override def children = Nil
 
-  def newInstance() =
+  override def newInstance() =
     LogicalRDD(output.map(_.newInstance()), rdd)(sqlContext).asInstanceOf[this.type]
 
   override def sameResult(plan: LogicalPlan) = plan match {
@@ -74,39 +75,28 @@ case class LogicalRDD(output: Seq[Attribute], rdd: RDD[Row])(sqlContext: SQLCont
   )
 }
 
+/** Physical plan node for scanning data from an RDD. */
 case class PhysicalRDD(output: Seq[Attribute], rdd: RDD[Row]) extends LeafNode {
   override def execute() = rdd
 }
 
-@deprecated("Use LogicalRDD", "1.2.0")
-case class ExistingRdd(output: Seq[Attribute], rdd: RDD[Row]) extends LeafNode {
-  override def execute() = rdd
-}
+/** Logical plan node for scanning data from a local collection. */
+case class LogicalLocalTable(output: Seq[Attribute], rows: Seq[Row])(sqlContext: SQLContext)
+   extends LogicalPlan with MultiInstanceRelation {
 
-@deprecated("Use LogicalRDD", "1.2.0")
-case class SparkLogicalPlan(alreadyPlanned: SparkPlan)(@transient sqlContext: SQLContext)
-  extends LogicalPlan with MultiInstanceRelation {
-
-  def output = alreadyPlanned.output
   override def children = Nil
 
-  override final def newInstance(): this.type = {
-    SparkLogicalPlan(
-      alreadyPlanned match {
-        case ExistingRdd(output, rdd) => ExistingRdd(output.map(_.newInstance()), rdd)
-        case _ => sys.error("Multiple instance of the same relation detected.")
-      })(sqlContext).asInstanceOf[this.type]
-  }
+  override def newInstance() =
+    LogicalLocalTable(output.map(_.newInstance()), rows)(sqlContext).asInstanceOf[this.type]
 
   override def sameResult(plan: LogicalPlan) = plan match {
-    case SparkLogicalPlan(ExistingRdd(_, rdd)) =>
-      rdd.id == alreadyPlanned.asInstanceOf[ExistingRdd].rdd.id
+    case LogicalRDD(_, otherRDD) => rows == rows
     case _ => false
   }
 
   @transient override lazy val statistics = Statistics(
-    // TODO: Instead of returning a default value here, find a way to return a meaningful size
-    // estimate for RDDs. See PR 1238 for more discussions.
-    sizeInBytes = BigInt(sqlContext.conf.defaultSizeInBytes)
+    // TODO: Improve the statistics estimation.
+    // This is made small enough so it can be broadcasted.
+    sizeInBytes = sqlContext.conf.autoBroadcastJoinThreshold - 1
   )
 }

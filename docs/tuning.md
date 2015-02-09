@@ -1,6 +1,8 @@
 ---
 layout: global
-title: Tuning Spark
+displayTitle: Tuning Spark
+title: Tuning
+description: Tuning and performance optimization guide for Spark SPARK_VERSION_SHORT
 ---
 
 * This will become a table of contents (this text will be scraped).

@@ -350,7 +350,7 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
       numItemBlocks: Int = 3,
       targetRMSE: Double = 0.05): Unit = {
     val sqlContext = this.sqlContext
-    import sqlContext.createDataFrame
+    import sqlContext.implicits._
     val als = new ALS()
       .setRank(rank)
       .setRegParam(regParam)
@@ -414,7 +414,7 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
     val (training, test) =
       genExplicitTestData(numUsers = 20, numItems = 40, rank = 2, noiseStd = 0.01)
     for ((numUserBlocks, numItemBlocks) <- Seq((1, 1), (1, 2), (2, 1), (2, 2))) {
-      testALS(training, test, maxIter = 4, rank = 2, regParam = 0.01, targetRMSE = 0.03,
+      testALS(training, test, maxIter = 4, rank = 3, regParam = 0.01, targetRMSE = 0.03,
         numUserBlocks = numUserBlocks, numItemBlocks = numItemBlocks)
     }
   }
@@ -443,5 +443,16 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
     val strRatings = ratings.map(r => Rating(r.user.toString, r.item.toString, r.rating))
     val (strUserFactors, _) = ALS.train(strRatings, rank = 2, maxIter = 4)
     assert(strUserFactors.first()._1.getClass === classOf[String])
+  }
+
+  test("nonnegative constraint") {
+    val (ratings, _) = genImplicitTestData(numUsers = 20, numItems = 40, rank = 2, noiseStd = 0.01)
+    val (userFactors, itemFactors) = ALS.train(ratings, rank = 2, maxIter = 4, nonnegative = true)
+    def isNonnegative(factors: RDD[(Int, Array[Float])]): Boolean = {
+      factors.values.map { _.forall(_ >= 0.0) }.reduce(_ && _)
+    }
+    assert(isNonnegative(userFactors))
+    assert(isNonnegative(itemFactors))
+    // TODO: Validate the solution.
   }
 }

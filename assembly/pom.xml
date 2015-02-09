@@ -39,7 +39,7 @@
     <deb.pkg.name>spark</deb.pkg.name>
     <deb.install.path>/usr/share/spark</deb.install.path>
     <deb.user>root</deb.user>
-    <deb.bin.filemode>744</deb.bin.filemode>
+    <deb.bin.filemode>755</deb.bin.filemode>
   </properties>
 
   <dependencies>
@@ -280,7 +280,7 @@
                         <user>${deb.user}</user>
                         <group>${deb.user}</group>
                         <prefix>${deb.install.path}/conf</prefix>
-                        <filemode>744</filemode>
+                        <filemode>${deb.bin.filemode}</filemode>
                       </mapper>
                     </data>
                     <data>
@@ -302,7 +302,7 @@
                         <user>${deb.user}</user>
                         <group>${deb.user}</group>
                         <prefix>${deb.install.path}/sbin</prefix>
-                        <filemode>744</filemode>
+                        <filemode>${deb.bin.filemode}</filemode>
                       </mapper>
                     </data>
                     <data>
@@ -313,7 +313,7 @@
                         <user>${deb.user}</user>
                         <group>${deb.user}</group>
                         <prefix>${deb.install.path}/python</prefix>
-                        <filemode>744</filemode>
+                        <filemode>${deb.bin.filemode}</filemode>
                       </mapper>
                     </data>
                   </dataSet>

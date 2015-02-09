@@ -30,6 +30,8 @@ import org.apache.spark.sql.hive.test.TestHive._
 case class TestData(key: Int, value: String)
 
 class InsertIntoHiveTableSuite extends QueryTest {
+  import org.apache.spark.sql.hive.test.TestHive.implicits._
+
   val testData = TestHive.sparkContext.parallelize(
     (1 to 100).map(i => TestData(i, i.toString)))
   testData.registerTempTable("testData")

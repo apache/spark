@@ -23,12 +23,18 @@ import java.util.{Map => JMap}
 import scala.reflect.ClassTag
 import scala.collection.JavaConversions._
 
+import kafka.common.TopicAndPartition
+import kafka.message.MessageAndMetadata
 import kafka.serializer.{Decoder, StringDecoder}
 
+
+import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.api.java.{JavaPairReceiverInputDStream, JavaStreamingContext}
-import org.apache.spark.streaming.dstream.ReceiverInputDStream
+import org.apache.spark.streaming.dstream.{InputDStream, ReceiverInputDStream}
 
 object KafkaUtils {
   /**
@@ -143,5 +149,175 @@ object KafkaUtils {
 
     createStream[K, V, U, T](
       jssc.ssc, kafkaParams.toMap, Map(topics.mapValues(_.intValue()).toSeq: _*), storageLevel)
+  }
+
+  /** A batch-oriented interface for consuming from Kafka.
+   * Starting and ending offsets are specified in advance,
+   * so that you can control exactly-once semantics.
+   * @param sc SparkContext object
+   * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+   * configuration parameters</a>.
+   *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
+   *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
+   * @param offsetRanges Each OffsetRange in the batch corresponds to a
+   *   range of offsets for a given Kafka topic/partition
+   */
+  @Experimental
+  def createRDD[
+    K: ClassTag,
+    V: ClassTag,
+    U <: Decoder[_]: ClassTag,
+    T <: Decoder[_]: ClassTag] (
+      sc: SparkContext,
+      kafkaParams: Map[String, String],
+      offsetRanges: Array[OffsetRange]
+  ): RDD[(K, V)] = {
+    val messageHandler = (mmd: MessageAndMetadata[K, V]) => (mmd.key, mmd.message)
+    val kc = new KafkaCluster(kafkaParams)
+    val topics = offsetRanges.map(o => TopicAndPartition(o.topic, o.partition)).toSet
+    val leaders = kc.findLeaders(topics).fold(
+      errs => throw new SparkException(errs.mkString("\n")),
+      ok => ok
+    )
+    new KafkaRDD[K, V, U, T, (K, V)](sc, kafkaParams, offsetRanges, leaders, messageHandler)
+  }
+
+  /** A batch-oriented interface for consuming from Kafka.
+   * Starting and ending offsets are specified in advance,
+   * so that you can control exactly-once semantics.
+   * @param sc SparkContext object
+   * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+   * configuration parameters</a>.
+   *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
+   *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
+   * @param offsetRanges Each OffsetRange in the batch corresponds to a
+   *   range of offsets for a given Kafka topic/partition
+   * @param leaders Kafka leaders for each offset range in batch
+   * @param messageHandler function for translating each message into the desired type
+   */
+  @Experimental
+  def createRDD[
+    K: ClassTag,
+    V: ClassTag,
+    U <: Decoder[_]: ClassTag,
+    T <: Decoder[_]: ClassTag,
+    R: ClassTag] (
+      sc: SparkContext,
+      kafkaParams: Map[String, String],
+      offsetRanges: Array[OffsetRange],
+      leaders: Array[Leader],
+      messageHandler: MessageAndMetadata[K, V] => R
+  ): RDD[R] = {
+
+    val leaderMap = leaders
+      .map(l => TopicAndPartition(l.topic, l.partition) -> (l.host, l.port))
+      .toMap
+    new KafkaRDD[K, V, U, T, R](sc, kafkaParams, offsetRanges, leaderMap, messageHandler)
+  }
+
+  /**
+   * This stream can guarantee that each message from Kafka is included in transformations
+   * (as opposed to output actions) exactly once, even in most failure situations.
+   *
+   * Points to note:
+   *
+   * Failure Recovery - You must checkpoint this stream, or save offsets yourself and provide them
+   * as the fromOffsets parameter on restart.
+   * Kafka must have sufficient log retention to obtain messages after failure.
+   *
+   * Getting offsets from the stream - see programming guide
+   *
+.  * Zookeeper - This does not use Zookeeper to store offsets.  For interop with Kafka monitors
+   * that depend on Zookeeper, you must store offsets in ZK yourself.
+   *
+   * End-to-end semantics - This does not guarantee that any output operation will push each record
+   * exactly once. To ensure end-to-end exactly-once semantics (that is, receiving exactly once and
+   * outputting exactly once), you have to either ensure that the output operation is
+   * idempotent, or transactionally store offsets with the output. See the programming guide for
+   * more details.
+   *
+   * @param ssc StreamingContext object
+   * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+   * configuration parameters</a>.
+   *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
+   *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
+   * @param messageHandler function for translating each message into the desired type
+   * @param fromOffsets per-topic/partition Kafka offsets defining the (inclusive)
+   *  starting point of the stream
+   */
+  @Experimental
+  def createDirectStream[
+    K: ClassTag,
+    V: ClassTag,
+    U <: Decoder[_]: ClassTag,
+    T <: Decoder[_]: ClassTag,
+    R: ClassTag] (
+      ssc: StreamingContext,
+      kafkaParams: Map[String, String],
+      fromOffsets: Map[TopicAndPartition, Long],
+      messageHandler: MessageAndMetadata[K, V] => R
+  ): InputDStream[R] = {
+    new DirectKafkaInputDStream[K, V, U, T, R](
+      ssc, kafkaParams, fromOffsets, messageHandler)
+  }
+
+  /**
+   * This stream can guarantee that each message from Kafka is included in transformations
+   * (as opposed to output actions) exactly once, even in most failure situations.
+   *
+   * Points to note:
+   *
+   * Failure Recovery - You must checkpoint this stream.
+   * Kafka must have sufficient log retention to obtain messages after failure.
+   *
+   * Getting offsets from the stream - see programming guide
+   *
+.  * Zookeeper - This does not use Zookeeper to store offsets.  For interop with Kafka monitors
+   * that depend on Zookeeper, you must store offsets in ZK yourself.
+   *
+   * End-to-end semantics - This does not guarantee that any output operation will push each record
+   * exactly once. To ensure end-to-end exactly-once semantics (that is, receiving exactly once and
+   * outputting exactly once), you have to ensure that the output operation is idempotent.
+   *
+   * @param ssc StreamingContext object
+   * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+   * configuration parameters</a>.
+   *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
+   *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
+   *   If starting without a checkpoint, "auto.offset.reset" may be set to "largest" or "smallest"
+   *   to determine where the stream starts (defaults to "largest")
+   * @param topics names of the topics to consume
+   */
+  @Experimental
+  def createDirectStream[
+    K: ClassTag,
+    V: ClassTag,
+    U <: Decoder[_]: ClassTag,
+    T <: Decoder[_]: ClassTag] (
+      ssc: StreamingContext,
+      kafkaParams: Map[String, String],
+      topics: Set[String]
+  ): InputDStream[(K, V)] = {
+    val messageHandler = (mmd: MessageAndMetadata[K, V]) => (mmd.key, mmd.message)
+    val kc = new KafkaCluster(kafkaParams)
+    val reset = kafkaParams.get("auto.offset.reset").map(_.toLowerCase)
+
+    (for {
+      topicPartitions <- kc.getPartitions(topics).right
+      leaderOffsets <- (if (reset == Some("smallest")) {
+        kc.getEarliestLeaderOffsets(topicPartitions)
+      } else {
+        kc.getLatestLeaderOffsets(topicPartitions)
+      }).right
+    } yield {
+      val fromOffsets = leaderOffsets.map { case (tp, lo) =>
+          (tp, lo.offset)
+      }
+      new DirectKafkaInputDStream[K, V, U, T, (K, V)](
+        ssc, kafkaParams, fromOffsets, messageHandler)
+    }).fold(
+      errs => throw new SparkException(errs.mkString("\n")),
+      ok => ok
+    )
   }
 }
