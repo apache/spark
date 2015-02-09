@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 
 object HiveTypeCoercion {
   // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
@@ -361,6 +361,22 @@ trait HiveTypeCoercion {
           DecimalType(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
         )
 
+      case LessThan(e1 @ DecimalType.Expression(p1, s1),
+          e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
+        LessThan(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
+
+      case LessThanOrEqual(e1 @ DecimalType.Expression(p1, s1),
+          e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
+        LessThanOrEqual(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
+
+      case GreaterThan(e1 @ DecimalType.Expression(p1, s1),
+          e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
+        GreaterThan(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
+
+      case GreaterThanOrEqual(e1 @ DecimalType.Expression(p1, s1),
+          e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
+        GreaterThanOrEqual(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
+
       // Promote integers inside a binary expression with fixed-precision decimals to decimals,
       // and fixed-precision decimals in an expression with floats / doubles to doubles
       case b: BinaryExpression if b.left.dataType != b.right.dataType =>
@@ -387,8 +403,8 @@ trait HiveTypeCoercion {
    * Changes Boolean values to Bytes so that expressions like true < false can be Evaluated.
    */
   object BooleanComparisons extends Rule[LogicalPlan] {
-    val trueValues = Seq(1, 1L, 1.toByte, 1.toShort, BigDecimal(1)).map(Literal(_))
-    val falseValues = Seq(0, 0L, 0.toByte, 0.toShort, BigDecimal(0)).map(Literal(_))
+    val trueValues = Seq(1, 1L, 1.toByte, 1.toShort, new java.math.BigDecimal(1)).map(Literal(_))
+    val falseValues = Seq(0, 0L, 0.toByte, 0.toShort, new java.math.BigDecimal(0)).map(Literal(_))
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes who's children have not been resolved yet.

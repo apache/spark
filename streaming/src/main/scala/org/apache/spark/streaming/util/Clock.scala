@@ -59,9 +59,11 @@ class SystemClock() extends Clock {
 private[streaming]
 class ManualClock() extends Clock {
 
-  var time = 0L
+  private var time = 0L
 
-  def currentTime() = time
+  def currentTime() = this.synchronized {
+    time
+  }
 
   def setTime(timeToSet: Long) = {
     this.synchronized {

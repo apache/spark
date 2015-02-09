@@ -26,7 +26,7 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.util.control.NonFatal
 
-import akka.actor.{Props, ActorSystem}
+import akka.actor.Props
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -42,10 +42,8 @@ import org.apache.spark.util.{SparkUncaughtExceptionHandler, AkkaUtils, Utils}
 private[spark] class Executor(
     executorId: String,
     slaveHostname: String,
-    properties: Seq[(String, String)],
-    numCores: Int,
-    isLocal: Boolean = false,
-    actorSystem: ActorSystem = null)
+    env: SparkEnv,
+    isLocal: Boolean = false)
   extends Logging
 {
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
@@ -54,6 +52,8 @@ private[spark] class Executor(
   private val currentJars: HashMap[String, Long] = new HashMap[String, Long]()
 
   private val EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new Array[Byte](0))
+
+  private val conf = env.conf
 
   @volatile private var isStopped = false
 
@@ -65,10 +65,6 @@ private[spark] class Executor(
   // Make sure the local hostname we report matches the cluster scheduler's name for this host
   Utils.setCustomHostname(slaveHostname)
 
-  // Set spark.* properties from executor arg
-  val conf = new SparkConf(true)
-  conf.setAll(properties)
-
   if (!isLocal) {
     // Setup an uncaught exception handler for non-local mode.
     // Make any thread terminations due to uncaught exceptions kill the entire
@@ -77,21 +73,11 @@ private[spark] class Executor(
   }
 
   val executorSource = new ExecutorSource(this, executorId)
-
-  // Initialize Spark environment (using system properties read above)
   conf.set("spark.executor.id", executorId)
-  private val env = {
-    if (!isLocal) {
-      val port = conf.getInt("spark.executor.port", 0)
-      val _env = SparkEnv.createExecutorEnv(
-        conf, executorId, slaveHostname, port, numCores, isLocal, actorSystem)
-      SparkEnv.set(_env)
-      _env.metricsSystem.registerSource(executorSource)
-      _env.blockManager.initialize(conf.getAppId)
-      _env
-    } else {
-      SparkEnv.get
-    }
+
+  if (!isLocal) {
+    env.metricsSystem.registerSource(executorSource)
+    env.blockManager.initialize(conf.getAppId)
   }
 
   // Create an actor for receiving RPCs from the driver
@@ -122,8 +108,13 @@ private[spark] class Executor(
   startDriverHeartbeater()
 
   def launchTask(
-      context: ExecutorBackend, taskId: Long, taskName: String, serializedTask: ByteBuffer) {
-    val tr = new TaskRunner(context, taskId, taskName, serializedTask)
+      context: ExecutorBackend,
+      taskId: Long,
+      attemptNumber: Int,
+      taskName: String,
+      serializedTask: ByteBuffer) {
+    val tr = new TaskRunner(context, taskId = taskId, attemptNumber = attemptNumber, taskName,
+      serializedTask)
     runningTasks.put(taskId, tr)
     threadPool.execute(tr)
   }
@@ -145,13 +136,20 @@ private[spark] class Executor(
     }
   }
 
+  private def gcTime = ManagementFactory.getGarbageCollectorMXBeans.map(_.getCollectionTime).sum
+
   class TaskRunner(
-      execBackend: ExecutorBackend, val taskId: Long, taskName: String, serializedTask: ByteBuffer)
+      execBackend: ExecutorBackend,
+      val taskId: Long,
+      val attemptNumber: Int,
+      taskName: String,
+      serializedTask: ByteBuffer)
     extends Runnable {
 
     @volatile private var killed = false
     @volatile var task: Task[Any] = _
     @volatile var attemptedTask: Option[Task[Any]] = None
+    @volatile var startGCTime: Long = _
 
     def kill(interruptThread: Boolean) {
       logInfo(s"Executor is trying to kill $taskName (TID $taskId)")
@@ -164,15 +162,13 @@ private[spark] class Executor(
     override def run() {
       val deserializeStartTime = System.currentTimeMillis()
       Thread.currentThread.setContextClassLoader(replClassLoader)
-      val ser = SparkEnv.get.closureSerializer.newInstance()
+      val ser = env.closureSerializer.newInstance()
       logInfo(s"Running $taskName (TID $taskId)")
       execBackend.statusUpdate(taskId, TaskState.RUNNING, EMPTY_BYTE_BUFFER)
       var taskStart: Long = 0
-      def gcTime = ManagementFactory.getGarbageCollectorMXBeans.map(_.getCollectionTime).sum
-      val startGCTime = gcTime
+      startGCTime = gcTime
 
       try {
-        Accumulators.clear()
         val (taskFiles, taskJars, taskBytes) = Task.deserializeWithDependencies(serializedTask)
         updateDependencies(taskFiles, taskJars)
         task = ser.deserialize[Task[Any]](taskBytes, Thread.currentThread.getContextClassLoader)
@@ -193,7 +189,7 @@ private[spark] class Executor(
 
         // Run the actual task and measure its runtime.
         taskStart = System.currentTimeMillis()
-        val value = task.run(taskId.toInt)
+        val value = task.run(taskAttemptId = taskId, attemptNumber = attemptNumber)
         val taskFinish = System.currentTimeMillis()
 
         // If the task has been killed, let's fail it.
@@ -201,16 +197,16 @@ private[spark] class Executor(
           throw new TaskKilledException
         }
 
-        val resultSer = SparkEnv.get.serializer.newInstance()
+        val resultSer = env.serializer.newInstance()
         val beforeSerialization = System.currentTimeMillis()
         val valueBytes = resultSer.serialize(value)
         val afterSerialization = System.currentTimeMillis()
 
         for (m <- task.metrics) {
-          m.executorDeserializeTime = taskStart - deserializeStartTime
-          m.executorRunTime = taskFinish - taskStart
-          m.jvmGCTime = gcTime - startGCTime
-          m.resultSerializationTime = afterSerialization - beforeSerialization
+          m.setExecutorDeserializeTime(taskStart - deserializeStartTime)
+          m.setExecutorRunTime(taskFinish - taskStart)
+          m.setJvmGCTime(gcTime - startGCTime)
+          m.setResultSerializationTime(afterSerialization - beforeSerialization)
         }
 
         val accumUpdates = Accumulators.values
@@ -261,8 +257,8 @@ private[spark] class Executor(
           val serviceTime = System.currentTimeMillis() - taskStart
           val metrics = attemptedTask.flatMap(t => t.metrics)
           for (m <- metrics) {
-            m.executorRunTime = serviceTime
-            m.jvmGCTime = gcTime - startGCTime
+            m.setExecutorRunTime(serviceTime)
+            m.setJvmGCTime(gcTime - startGCTime)
           }
           val reason = new ExceptionFailure(t, metrics)
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
@@ -278,6 +274,8 @@ private[spark] class Executor(
         env.shuffleMemoryManager.releaseMemoryForThisThread()
         // Release memory used by this thread for unrolling blocks
         env.blockManager.memoryStore.releaseUnrollMemoryForThisThread()
+        // Release memory used by this thread for accumulators
+        Accumulators.clear()
         runningTasks.remove(taskId)
       }
     }
@@ -375,10 +373,15 @@ private[spark] class Executor(
 
         while (!isStopped) {
           val tasksMetrics = new ArrayBuffer[(Long, TaskMetrics)]()
+          val curGCTime = gcTime
+
           for (taskRunner <- runningTasks.values()) {
-            if (!taskRunner.attemptedTask.isEmpty) {
+            if (taskRunner.attemptedTask.nonEmpty) {
               Option(taskRunner.task).flatMap(_.metrics).foreach { metrics =>
-                metrics.updateShuffleReadMetrics
+                metrics.updateShuffleReadMetrics()
+                metrics.updateInputMetrics()
+                metrics.setJvmGCTime(curGCTime - taskRunner.startGCTime)
+
                 if (isLocal) {
                   // JobProgressListener will hold an reference of it during
                   // onExecutorMetricsUpdate(), then JobProgressListener can not see

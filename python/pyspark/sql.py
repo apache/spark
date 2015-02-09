@@ -420,7 +420,7 @@ class StructType(DataType):
 
 class UserDefinedType(DataType):
     """
-    :: WARN: Spark Internal Use Only ::
+    .. note:: WARN: Spark Internal Use Only
     SQL User-Defined Type (UDT).
     """
 
@@ -788,8 +788,9 @@ def _create_converter(dataType):
         return lambda row: map(conv, row)
 
     elif isinstance(dataType, MapType):
-        conv = _create_converter(dataType.valueType)
-        return lambda row: dict((k, conv(v)) for k, v in row.iteritems())
+        kconv = _create_converter(dataType.keyType)
+        vconv = _create_converter(dataType.valueType)
+        return lambda row: dict((kconv(k), vconv(v)) for k, v in row.iteritems())
 
     elif isinstance(dataType, NullType):
         return lambda x: None
@@ -806,14 +807,14 @@ def _create_converter(dataType):
             return
 
         if isinstance(obj, tuple):
-            if hasattr(obj, "fields"):
-                d = dict(zip(obj.fields, obj))
-            if hasattr(obj, "__FIELDS__"):
+            if hasattr(obj, "_fields"):
+                d = dict(zip(obj._fields, obj))
+            elif hasattr(obj, "__FIELDS__"):
                 d = dict(zip(obj.__FIELDS__, obj))
             elif all(isinstance(x, tuple) and len(x) == 2 for x in obj):
                 d = dict(obj)
             else:
-                raise ValueError("unexpected tuple: %s" % obj)
+                raise ValueError("unexpected tuple: %s" % str(obj))
 
         elif isinstance(obj, dict):
             d = obj
@@ -944,7 +945,7 @@ def _infer_schema_type(obj, dataType):
 
     elif isinstance(dataType, MapType):
         k, v = obj.iteritems().next()
-        return MapType(_infer_type(k),
+        return MapType(_infer_schema_type(k, dataType.keyType),
                        _infer_schema_type(v, dataType.valueType))
 
     elif isinstance(dataType, StructType):
@@ -1085,7 +1086,7 @@ def _has_struct_or_date(dt):
     elif isinstance(dt, ArrayType):
         return _has_struct_or_date(dt.elementType)
     elif isinstance(dt, MapType):
-        return _has_struct_or_date(dt.valueType)
+        return _has_struct_or_date(dt.keyType) or _has_struct_or_date(dt.valueType)
     elif isinstance(dt, DateType):
         return True
     elif isinstance(dt, UserDefinedType):
@@ -1148,12 +1149,13 @@ def _create_cls(dataType):
         return List
 
     elif isinstance(dataType, MapType):
-        cls = _create_cls(dataType.valueType)
+        kcls = _create_cls(dataType.keyType)
+        vcls = _create_cls(dataType.valueType)
 
         def Dict(d):
             if d is None:
                 return
-            return dict((k, _create_object(cls, v)) for k, v in d.items())
+            return dict((_create_object(kcls, k), _create_object(vcls, v)) for k, v in d.items())
 
         return Dict
 
@@ -1164,7 +1166,8 @@ def _create_cls(dataType):
         return lambda datum: dataType.deserialize(datum)
 
     elif not isinstance(dataType, StructType):
-        raise Exception("unexpected data type: %s" % dataType)
+        # no wrapper for primitive types
+        return lambda x: x
 
     class Row(tuple):
 
@@ -1278,14 +1281,14 @@ class SQLContext(object):
                                      self._sc._gateway._gateway_client)
         includes = ListConverter().convert(self._sc._python_includes,
                                            self._sc._gateway._gateway_client)
-        self._ssql_ctx.registerPython(name,
-                                      bytearray(pickled_command),
-                                      env,
-                                      includes,
-                                      self._sc.pythonExec,
-                                      broadcast_vars,
-                                      self._sc._javaAccumulator,
-                                      returnType.json())
+        self._ssql_ctx.udf().registerPython(name,
+                                            bytearray(pickled_command),
+                                            env,
+                                            includes,
+                                            self._sc.pythonExec,
+                                            broadcast_vars,
+                                            self._sc._javaAccumulator,
+                                            returnType.json())
 
     def inferSchema(self, rdd, samplingRatio=None):
         """Infer and apply a schema to an RDD of L{Row}.
@@ -1324,6 +1327,16 @@ class SQLContext(object):
         >>> srdd = sqlCtx.inferSchema(nestedRdd2)
         >>> srdd.collect()
         [Row(f1=[[1, 2], [2, 3]], f2=[1, 2]), ..., f2=[2, 3])]
+
+        >>> from collections import namedtuple
+        >>> CustomRow = namedtuple('CustomRow', 'field1 field2')
+        >>> rdd = sc.parallelize(
+        ...     [CustomRow(field1=1, field2="row1"),
+        ...      CustomRow(field1=2, field2="row2"),
+        ...      CustomRow(field1=3, field2="row3")])
+        >>> srdd = sqlCtx.inferSchema(rdd)
+        >>> srdd.collect()[0]
+        Row(field1=1, field2=u'row1')
         """
 
         if isinstance(rdd, SchemaRDD):
@@ -1445,7 +1458,7 @@ class SQLContext(object):
 
         jrdd = self._jvm.SerDeUtil.toJavaArray(rdd._to_java_object_rdd())
         srdd = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), schema.json())
-        return SchemaRDD(srdd.toJavaSchemaRDD(), self)
+        return SchemaRDD(srdd, self)
 
     def registerRDDAsTable(self, rdd, tableName):
         """Registers the given RDD as a temporary table in the catalog.
@@ -1474,7 +1487,7 @@ class SQLContext(object):
         >>> sorted(srdd.collect()) == sorted(srdd2.collect())
         True
         """
-        jschema_rdd = self._ssql_ctx.parquetFile(path).toJavaSchemaRDD()
+        jschema_rdd = self._ssql_ctx.parquetFile(path)
         return SchemaRDD(jschema_rdd, self)
 
     def jsonFile(self, path, schema=None, samplingRatio=1.0):
@@ -1536,7 +1549,7 @@ class SQLContext(object):
         else:
             scala_datatype = self._ssql_ctx.parseDataType(schema.json())
             srdd = self._ssql_ctx.jsonFile(path, scala_datatype)
-        return SchemaRDD(srdd.toJavaSchemaRDD(), self)
+        return SchemaRDD(srdd, self)
 
     def jsonRDD(self, rdd, schema=None, samplingRatio=1.0):
         """Loads an RDD storing one JSON object per string as a L{SchemaRDD}.
@@ -1606,7 +1619,7 @@ class SQLContext(object):
         else:
             scala_datatype = self._ssql_ctx.parseDataType(schema.json())
             srdd = self._ssql_ctx.jsonRDD(jrdd.rdd(), scala_datatype)
-        return SchemaRDD(srdd.toJavaSchemaRDD(), self)
+        return SchemaRDD(srdd, self)
 
     def sql(self, sqlQuery):
         """Return a L{SchemaRDD} representing the result of the given query.
@@ -1617,7 +1630,7 @@ class SQLContext(object):
         >>> srdd2.collect()
         [Row(f1=1, f2=u'row1'), Row(f1=2, f2=u'row2'), Row(f1=3, f2=u'row3')]
         """
-        return SchemaRDD(self._ssql_ctx.sql(sqlQuery).toJavaSchemaRDD(), self)
+        return SchemaRDD(self._ssql_ctx.sql(sqlQuery), self)
 
     def table(self, tableName):
         """Returns the specified table as a L{SchemaRDD}.
@@ -1628,7 +1641,7 @@ class SQLContext(object):
         >>> sorted(srdd.collect()) == sorted(srdd2.collect())
         True
         """
-        return SchemaRDD(self._ssql_ctx.table(tableName).toJavaSchemaRDD(), self)
+        return SchemaRDD(self._ssql_ctx.table(tableName), self)
 
     def cacheTable(self, tableName):
         """Caches the specified table in-memory."""
@@ -1668,28 +1681,10 @@ class HiveContext(SQLContext):
         except Py4JError as e:
             raise Exception("You must build Spark with Hive. "
                             "Export 'SPARK_HIVE=true' and run "
-                            "sbt/sbt assembly", e)
+                            "build/sbt assembly", e)
 
     def _get_hive_ctx(self):
         return self._jvm.HiveContext(self._jsc.sc())
-
-    def hiveql(self, hqlQuery):
-        """
-        DEPRECATED: Use sql()
-        """
-        warnings.warn("hiveql() is deprecated as the sql function now parses using HiveQL by" +
-                      "default. The SQL dialect for parsing can be set using 'spark.sql.dialect'",
-                      DeprecationWarning)
-        return SchemaRDD(self._ssql_ctx.hiveql(hqlQuery).toJavaSchemaRDD(), self)
-
-    def hql(self, hqlQuery):
-        """
-        DEPRECATED: Use sql()
-        """
-        warnings.warn("hql() is deprecated as the sql function now parses using HiveQL by" +
-                      "default. The SQL dialect for parsing can be set using 'spark.sql.dialect'",
-                      DeprecationWarning)
-        return self.hiveql(hqlQuery)
 
 
 class LocalHiveContext(HiveContext):
@@ -1701,12 +1696,6 @@ class LocalHiveContext(HiveContext):
 
     def _get_hive_ctx(self):
         return self._jvm.LocalHiveContext(self._jsc.sc())
-
-
-class TestHiveContext(HiveContext):
-
-    def _get_hive_ctx(self):
-        return self._jvm.TestHiveContext(self._jsc.sc())
 
 
 def _create_row(fields, values):
@@ -1833,7 +1822,7 @@ class SchemaRDD(RDD):
         self.sql_ctx = sql_ctx
         self._sc = sql_ctx._sc
         clsName = jschema_rdd.getClass().getName()
-        assert clsName.endswith("JavaSchemaRDD"), "jschema_rdd must be JavaSchemaRDD"
+        assert clsName.endswith("SchemaRDD"), "jschema_rdd must be SchemaRDD"
         self._jschema_rdd = jschema_rdd
         self._id = None
         self.is_cached = False
@@ -1867,7 +1856,7 @@ class SchemaRDD(RDD):
         >>> srdd.limit(0).collect()
         []
         """
-        rdd = self._jschema_rdd.baseSchemaRDD().limit(num).toJavaSchemaRDD()
+        rdd = self._jschema_rdd.baseSchemaRDD().limit(num)
         return SchemaRDD(rdd, self.sql_ctx)
 
     def toJSON(self, use_unicode=False):
@@ -2046,18 +2035,18 @@ class SchemaRDD(RDD):
 
     def getCheckpointFile(self):
         checkpointFile = self._jschema_rdd.getCheckpointFile()
-        if checkpointFile.isPresent():
+        if checkpointFile.isDefined():
             return checkpointFile.get()
 
     def coalesce(self, numPartitions, shuffle=False):
-        rdd = self._jschema_rdd.coalesce(numPartitions, shuffle)
+        rdd = self._jschema_rdd.coalesce(numPartitions, shuffle, None)
         return SchemaRDD(rdd, self.sql_ctx)
 
     def distinct(self, numPartitions=None):
         if numPartitions is None:
             rdd = self._jschema_rdd.distinct()
         else:
-            rdd = self._jschema_rdd.distinct(numPartitions)
+            rdd = self._jschema_rdd.distinct(numPartitions, None)
         return SchemaRDD(rdd, self.sql_ctx)
 
     def intersection(self, other):
@@ -2068,7 +2057,7 @@ class SchemaRDD(RDD):
             raise ValueError("Can only intersect with another SchemaRDD")
 
     def repartition(self, numPartitions):
-        rdd = self._jschema_rdd.repartition(numPartitions)
+        rdd = self._jschema_rdd.repartition(numPartitions, None)
         return SchemaRDD(rdd, self.sql_ctx)
 
     def subtract(self, other, numPartitions=None):
@@ -2081,6 +2070,34 @@ class SchemaRDD(RDD):
             return SchemaRDD(rdd, self.sql_ctx)
         else:
             raise ValueError("Can only subtract another SchemaRDD")
+
+    def sample(self, withReplacement, fraction, seed=None):
+        """
+        Return a sampled subset of this SchemaRDD.
+
+        >>> srdd = sqlCtx.inferSchema(rdd)
+        >>> srdd.sample(False, 0.5, 97).count()
+        2L
+        """
+        assert fraction >= 0.0, "Negative fraction value: %s" % fraction
+        seed = seed if seed is not None else random.randint(0, sys.maxint)
+        rdd = self._jschema_rdd.sample(withReplacement, fraction, long(seed))
+        return SchemaRDD(rdd, self.sql_ctx)
+
+    def takeSample(self, withReplacement, num, seed=None):
+        """Return a fixed-size sampled subset of this SchemaRDD.
+
+        >>> srdd = sqlCtx.inferSchema(rdd)
+        >>> srdd.takeSample(False, 2, 97)
+        [Row(field1=3, field2=u'row3'), Row(field1=1, field2=u'row1')]
+        """
+        seed = seed if seed is not None else random.randint(0, sys.maxint)
+        with SCCallSiteSync(self.context) as css:
+            bytesInJava = self._jschema_rdd.baseSchemaRDD() \
+                .takeSampleToPython(withReplacement, num, long(seed)) \
+                .iterator()
+        cls = _create_cls(self.schema())
+        return map(cls, self._collect_iterator_through_file(bytesInJava))
 
 
 def _test():

@@ -53,6 +53,7 @@ private[hive] abstract class AbstractSparkSQLDriver(
   override def run(command: String): CommandProcessorResponse = {
     // TODO unify the error code
     try {
+      context.sparkContext.setJobDescription(command)
       val execution = context.executePlan(context.sql(command).logicalPlan)
       hiveResponse = execution.stringResult()
       tableSchema = getResultSetSchema(execution)
@@ -60,7 +61,7 @@ private[hive] abstract class AbstractSparkSQLDriver(
     } catch {
       case cause: Throwable =>
         logError(s"Failed in [$command]", cause)
-        new CommandProcessorResponse(0, ExceptionUtils.getFullStackTrace(cause), null)
+        new CommandProcessorResponse(1, ExceptionUtils.getFullStackTrace(cause), null)
     }
   }
 

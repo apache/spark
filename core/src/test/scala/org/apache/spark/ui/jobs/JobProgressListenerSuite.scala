@@ -28,6 +28,8 @@ import org.apache.spark.util.Utils
 
 class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matchers {
 
+  val jobSubmissionTime = 1421191042750L
+  val jobCompletionTime = 1421191296660L
 
   private def createStageStartEvent(stageId: Int) = {
     val stageInfo = new StageInfo(stageId, 0, stageId.toString, 0, null, "")
@@ -46,12 +48,12 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
     val stageInfos = stageIds.map { stageId =>
       new StageInfo(stageId, 0, stageId.toString, 0, null, "")
     }
-    SparkListenerJobStart(jobId, stageInfos)
+    SparkListenerJobStart(jobId, jobSubmissionTime, stageInfos)
   }
 
   private def createJobEndEvent(jobId: Int, failed: Boolean = false) = {
     val result = if (failed) JobFailed(new Exception("dummy failure")) else JobSucceeded
-    SparkListenerJobEnd(jobId, result)
+    SparkListenerJobEnd(jobId, jobCompletionTime, result)
   }
 
   private def runJob(listener: SparkListener, jobId: Int, shouldFail: Boolean = false) {
@@ -138,7 +140,7 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
     assert(listener.stageIdToData.size === 0)
 
     // finish this task, should get updated shuffleRead
-    shuffleReadMetrics.remoteBytesRead = 1000
+    shuffleReadMetrics.incRemoteBytesRead(1000)
     taskMetrics.setShuffleReadMetrics(Some(shuffleReadMetrics))
     var taskInfo = new TaskInfo(1234L, 0, 1, 0L, "exe-1", "host1", TaskLocality.NODE_LOCAL, false)
     taskInfo.finishTime = 1
@@ -224,18 +226,18 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
       val shuffleWriteMetrics = new ShuffleWriteMetrics()
       taskMetrics.setShuffleReadMetrics(Some(shuffleReadMetrics))
       taskMetrics.shuffleWriteMetrics = Some(shuffleWriteMetrics)
-      shuffleReadMetrics.remoteBytesRead = base + 1
-      shuffleReadMetrics.remoteBlocksFetched = base + 2
-      shuffleWriteMetrics.shuffleBytesWritten = base + 3
-      taskMetrics.executorRunTime = base + 4
-      taskMetrics.diskBytesSpilled = base + 5
-      taskMetrics.memoryBytesSpilled = base + 6
+      shuffleReadMetrics.incRemoteBytesRead(base + 1)
+      shuffleReadMetrics.incRemoteBlocksFetched(base + 2)
+      shuffleWriteMetrics.incShuffleBytesWritten(base + 3)
+      taskMetrics.setExecutorRunTime(base + 4)
+      taskMetrics.incDiskBytesSpilled(base + 5)
+      taskMetrics.incMemoryBytesSpilled(base + 6)
       val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
-      taskMetrics.inputMetrics = Some(inputMetrics)
-      inputMetrics.bytesRead = base + 7
+      taskMetrics.setInputMetrics(Some(inputMetrics))
+      inputMetrics.addBytesRead(base + 7)
       val outputMetrics = new OutputMetrics(DataWriteMethod.Hadoop)
       taskMetrics.outputMetrics = Some(outputMetrics)
-      outputMetrics.bytesWritten = base + 8
+      outputMetrics.setBytesWritten(base + 8)
       taskMetrics
     }
 

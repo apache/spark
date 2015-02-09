@@ -51,7 +51,7 @@ To register your own custom classes with Kryo, use the `registerKryoClasses` met
 
 {% highlight scala %}
 val conf = new SparkConf().setMaster(...).setAppName(...)
-conf.registerKryoClasses(Seq(classOf[MyClass1], classOf[MyClass2]))
+conf.registerKryoClasses(Array(classOf[MyClass1], classOf[MyClass2]))
 val sc = new SparkContext(conf)
 {% endhighlight %}
 
@@ -111,7 +111,7 @@ pointer-based data structures and wrapper objects. There are several ways to do 
 3. Consider using numeric IDs or enumeration objects instead of strings for keys.
 4. If you have less than 32 GB of RAM, set the JVM flag `-XX:+UseCompressedOops` to make pointers be
    four bytes instead of eight. You can add these options in
-   [`spark-env.sh`](configuration.html#environment-variables-in-spark-envsh).
+   [`spark-env.sh`](configuration.html#environment-variables).
 
 ## Serialized RDD Storage
 
@@ -154,7 +154,7 @@ By default, Spark uses 60% of the configured executor memory (`spark.executor.me
 cache RDDs. This means that 40% of memory is available for any objects created during task execution.
 
 In case your tasks slow down and you find that your JVM is garbage-collecting frequently or running out of
-memory, lowering this value will help reduce the memory consumption. To change this to say 50%, you can call
+memory, lowering this value will help reduce the memory consumption. To change this to, say, 50%, you can call
 `conf.set("spark.storage.memoryFraction", "0.5")` on your SparkConf. Combined with the use of serialized caching,
 using a smaller cache should be sufficient to mitigate most of the garbage collection problems.
 In case you are interested in further tuning the Java GC, continue reading below.
@@ -190,7 +190,7 @@ temporary objects created during task execution. Some steps which may be useful 
 
 * As an example, if your task is reading data from HDFS, the amount of memory used by the task can be estimated using
   the size of the data block read from HDFS. Note that the size of a decompressed block is often 2 or 3 times the
-  size of the block. So if we wish to have 3 or 4 tasks worth of working space, and the HDFS block size is 64 MB,
+  size of the block. So if we wish to have 3 or 4 tasks' worth of working space, and the HDFS block size is 64 MB,
   we can estimate size of Eden to be `4*3*64MB`.
 
 * Monitor how the frequency and time taken by garbage collection changes with the new settings.
@@ -219,7 +219,7 @@ working set of one of your tasks, such as one of the reduce tasks in `groupByKey
 Spark's shuffle operations (`sortByKey`, `groupByKey`, `reduceByKey`, `join`, etc) build a hash table
 within each task to perform the grouping, which can often be large. The simplest fix here is to
 *increase the level of parallelism*, so that each task's input set is smaller. Spark can efficiently
-support tasks as short as 200 ms, because it reuses one worker JVMs across all tasks and it has
+support tasks as short as 200 ms, because it reuses one executor JVM across many tasks and it has
 a low task launching cost, so you can safely increase the level of parallelism to more than the
 number of cores in your clusters.
 
@@ -232,6 +232,39 @@ inside of them (e.g. a static lookup table), consider turning it into a broadcas
 Spark prints the serialized size of each task on the master, so you can look at that to
 decide whether your tasks are too large; in general tasks larger than about 20 KB are probably
 worth optimizing.
+
+## Data Locality
+
+Data locality can have a major impact on the performance of Spark jobs.  If data and the code that
+operates on it are together than computation tends to be fast.  But if code and data are separated,
+one must move to the other.  Typically it is faster to ship serialized code from place to place than
+a chunk of data because code size is much smaller than data.  Spark builds its scheduling around
+this general principle of data locality.
+
+Data locality is how close data is to the code processing it.  There are several levels of
+locality based on the data's current location.  In order from closest to farthest:
+
+- `PROCESS_LOCAL` data is in the same JVM as the running code.  This is the best locality
+  possible
+- `NODE_LOCAL` data is on the same node.  Examples might be in HDFS on the same node, or in
+  another executor on the same node.  This is a little slower than `PROCESS_LOCAL` because the data
+  has to travel between processes
+- `NO_PREF` data is accessed equally quickly from anywhere and has no locality preference
+- `RACK_LOCAL` data is on the same rack of servers.  Data is on a different server on the same rack
+  so needs to be sent over the network, typically through a single switch
+- `ANY` data is elsewhere on the network and not in the same rack
+
+Spark prefers to schedule all tasks at the best locality level, but this is not always possible.  In
+situations where there is no unprocessed data on any idle executor, Spark switches to lower locality
+levels. There are two options: a) wait until a busy CPU frees up to start a task on data on the same
+server, or b) immediately start a new task in a farther away place that requires moving data there.
+
+What Spark typically does is wait a bit in the hopes that a busy CPU frees up.  Once that timeout
+expires, it starts moving the data from far away to the free CPU.  The wait timeout for fallback
+between each level can be configured individually or all together in one parameter; see the
+`spark.locality` parameters on the [configuration page](configuration.html#scheduling) for details.
+You should increase these settings if your tasks are long and see poor locality, but the default
+usually works well.
 
 # Summary
 
