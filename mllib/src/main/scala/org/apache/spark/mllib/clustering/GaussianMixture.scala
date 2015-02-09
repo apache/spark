@@ -19,12 +19,12 @@ package org.apache.spark.mllib.clustering
 
 import scala.collection.mutable.IndexedSeq
 
-import breeze.linalg.{DenseVector => BDV, Vector => BV, SparseVector => BSV,
-  DenseMatrix => BreezeMatrix, diag, Transpose}
+import breeze.linalg.{diag, DenseMatrix => BreezeMatrix, DenseVector => BDV, SparseVector => BSV,
+  Transpose, Vector => BV}
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.mllib.linalg.{Matrices, Vector, Vectors, DenseVector,
-  SparseVector, DenseMatrix, BLAS}
+import org.apache.spark.mllib.linalg.{BLAS, DenseVector, DenseMatrix, Matrices,
+  SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD

@@ -238,7 +238,7 @@ private[spark] object BLAS extends Serializable with Logging {
   def syr(alpha: Double, x: DenseVector, A: DenseMatrix) {
     val mA = A.numRows
     val nA = A.numCols
-    require(mA == nA, s"A is not a symmetric matrix. A: $mA x $nA")
+    require(mA == nA, s"A is not a square matrix. A: $mA x $nA")
     require(mA == x.size, s"The size of x doesn't match the rank of A. A: $mA x $nA, x: ${x.size}")
 
     nativeBLAS.dsyr("U", x.size, alpha, x.values, 1, A.values, nA)
@@ -259,7 +259,7 @@ private[spark] object BLAS extends Serializable with Logging {
   def syr(alpha: Double, x: SparseVector, A: DenseMatrix) {
     val mA = A.numRows
     val nA = A.numCols
-    require(mA == nA, s"A is not a symmetric matrix. A: $mA x $nA")
+    require(mA == nA, s"A is not a square matrix. A: $mA x $nA")
     require(mA == x.size, s"The size of x doesn't match the rank of A. A: $mA x $nA, x: ${x.size}")
 
     val zipIndVal = (x.indices zip x.values)
