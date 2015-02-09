@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedGetField, Resolver}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
@@ -29,11 +29,14 @@ import org.apache.spark.sql.catalyst.trees
 /**
  * Estimates of various statistics.  The default estimation logic simply lazily multiplies the
  * corresponding statistic produced by the children.  To override this behavior, override
- * `statistics` and assign it an overriden version of `Statistics`.
+ * `statistics` and assign it an overridden version of `Statistics`.
  *
- * '''NOTE''': concrete and/or overriden versions of statistics fields should pay attention to the
+ * '''NOTE''': concrete and/or overridden versions of statistics fields should pay attention to the
  * performance of the implementations.  The reason is that estimations might get triggered in
  * performance-critical processes, such as query plan planning.
+ *
+ * Note that we are using a BigInt here since it is easy to overflow a 64-bit integer in
+ * cardinality estimation (e.g. cartesian joins).
  *
  * @param sizeInBytes Physical size in bytes. For leaf operators this defaults to 1, otherwise it
  *                    defaults to the product of children's `sizeInBytes`.
@@ -160,11 +163,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
 
       // One match, but we also need to extract the requested nested field.
       case Seq((a, nestedFields)) =>
-        val aliased =
-          Alias(
-            resolveNesting(nestedFields, a, resolver),
-            nestedFields.last)() // Preserve the case of the user's field access.
-        Some(aliased)
+        Some(Alias(nestedFields.foldLeft(a: Expression)(UnresolvedGetField), nestedFields.last)())
 
       // No matches.
       case Seq() =>
@@ -175,31 +174,6 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       case ambiguousReferences =>
         throw new TreeNodeException(
           this, s"Ambiguous references to $name: ${ambiguousReferences.mkString(",")}")
-    }
-  }
-
-  /**
-   * Given a list of successive nested field accesses, and a based expression, attempt to resolve
-   * the actual field lookups on this expression.
-   */
-  private def resolveNesting(
-      nestedFields: List[String],
-      expression: Expression,
-      resolver: Resolver): Expression = {
-
-    (nestedFields, expression.dataType) match {
-      case (Nil, _) => expression
-      case (requestedField :: rest, StructType(fields)) =>
-        val actualField = fields.filter(f => resolver(f.name, requestedField))
-        if (actualField.length == 0) {
-          sys.error(
-            s"No such struct field $requestedField in ${fields.map(_.name).mkString(", ")}")
-        } else if (actualField.length == 1) {
-          resolveNesting(rest, GetField(expression, actualField(0).name), resolver)
-        } else {
-          sys.error(s"Ambiguous reference to fields ${actualField.mkString(", ")}")
-        }
-      case (_, dt) => sys.error(s"Can't access nested field in type $dt")
     }
   }
 }

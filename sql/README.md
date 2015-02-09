@@ -29,12 +29,19 @@ From here you can execute queries with HiveQl and manipulate DataFrame by using 
 catalyst$ build/sbt hive/console
 
 [info] Starting scala interpreter...
+import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.dsl._
+import org.apache.spark.sql.catalyst.errors._
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.Dsl._
+import org.apache.spark.sql.execution
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.parquet.ParquetTestData
-Welcome to Scala version 2.10.4 (Java HotSpot(TM) 64-Bit Server VM, Java 1.7.0_45).
 Type in expressions to have them evaluated.
 Type :help for more information.
 

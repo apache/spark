@@ -24,20 +24,26 @@ from __future__ import with_statement
 import hashlib
 import logging
 import os
+import os.path
 import pipes
 import random
 import shutil
 import string
+from stat import S_IRUSR
 import subprocess
 import sys
 import tarfile
 import tempfile
+import textwrap
 import time
 import urllib2
 import warnings
 from datetime import datetime
 from optparse import OptionParser
 from sys import stderr
+
+SPARK_EC2_VERSION = "1.2.0"
+SPARK_EC2_DIR = os.path.dirname(os.path.realpath(__file__))
 
 VALID_SPARK_VERSIONS = set([
     "0.7.3",
@@ -54,9 +60,8 @@ VALID_SPARK_VERSIONS = set([
     "1.2.0",
 ])
 
-DEFAULT_SPARK_VERSION = "1.2.0"
+DEFAULT_SPARK_VERSION = SPARK_EC2_VERSION
 DEFAULT_SPARK_GITHUB_REPO = "https://github.com/apache/spark"
-SPARK_EC2_DIR = os.path.dirname(os.path.realpath(__file__))
 MESOS_SPARK_EC2_BRANCH = "branch-1.3"
 
 # A URL prefix from which to fetch AMI information
@@ -103,12 +108,10 @@ class UsageError(Exception):
 # Configure and parse our command-line arguments
 def parse_args():
     parser = OptionParser(
-        usage="spark-ec2 [options] <action> <cluster_name>"
-        + "\n\n<action> can be: launch, destroy, login, stop, start, get-master, reboot-slaves",
-        add_help_option=False)
-    parser.add_option(
-        "-h", "--help", action="help",
-        help="Show this help message and exit")
+        prog="spark-ec2",
+        version="%prog {v}".format(v=SPARK_EC2_VERSION),
+        usage="%prog [options] <action> <cluster_name>\n\n"
+        + "<action> can be: launch, destroy, login, stop, start, get-master, reboot-slaves")
     parser.add_option(
         "-s", "--slaves", type="int", default=1,
         help="Number of slaves to launch (default: %default)")
@@ -349,6 +352,7 @@ def launch_cluster(conn, opts, cluster_name):
     if opts.identity_file is None:
         print >> stderr, "ERROR: Must provide an identity file (-i) for ssh connections."
         sys.exit(1)
+
     if opts.key_pair is None:
         print >> stderr, "ERROR: Must provide a key pair name (-k) to use on instances."
         sys.exit(1)
@@ -569,6 +573,9 @@ def launch_cluster(conn, opts, cluster_name):
         master_nodes = master_res.instances
         print "Launched master in %s, regid = %s" % (zone, master_res.id)
 
+    # This wait time corresponds to SPARK-4983
+    print "Waiting for AWS to propagate instance metadata..."
+    time.sleep(5)
     # Give the instances descriptive names
     for master in master_nodes:
         master.add_tag(
@@ -675,21 +682,32 @@ def setup_spark_cluster(master, opts):
         print "Ganglia started at http://%s:5080/ganglia" % master
 
 
-def is_ssh_available(host, opts):
+def is_ssh_available(host, opts, print_ssh_output=True):
     """
     Check if SSH is available on a host.
     """
-    try:
-        with open(os.devnull, 'w') as devnull:
-            ret = subprocess.check_call(
-                ssh_command(opts) + ['-t', '-t', '-o', 'ConnectTimeout=3',
-                                     '%s@%s' % (opts.user, host), stringify_command('true')],
-                stdout=devnull,
-                stderr=devnull
-            )
-        return ret == 0
-    except subprocess.CalledProcessError as e:
-        return False
+    s = subprocess.Popen(
+        ssh_command(opts) + ['-t', '-t', '-o', 'ConnectTimeout=3',
+                             '%s@%s' % (opts.user, host), stringify_command('true')],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT  # we pipe stderr through stdout to preserve output order
+    )
+    cmd_output = s.communicate()[0]  # [1] is stderr, which we redirected to stdout
+
+    if s.returncode != 0 and print_ssh_output:
+        # extra leading newline is for spacing in wait_for_cluster_state()
+        print textwrap.dedent("""\n
+            Warning: SSH connection error. (This could be temporary.)
+            Host: {h}
+            SSH return code: {r}
+            SSH output: {o}
+        """).format(
+            h=host,
+            r=s.returncode,
+            o=cmd_output.strip()
+        )
+
+    return s.returncode == 0
 
 
 def is_cluster_ssh_available(cluster_instances, opts):
@@ -896,6 +914,7 @@ def stringify_command(parts):
 
 def ssh_args(opts):
     parts = ['-o', 'StrictHostKeyChecking=no']
+    parts += ['-o', 'UserKnownHostsFile=/dev/null']
     if opts.identity_file is not None:
         parts += ['-i', opts.identity_file]
     return parts
@@ -1002,6 +1021,18 @@ def real_main():
             "spark-ec2 automatically waits as long as necessary for clusters to start up.",
             DeprecationWarning
         )
+
+    if opts.identity_file is not None:
+        if not os.path.exists(opts.identity_file):
+            print >> stderr,\
+                "ERROR: The identity file '{f}' doesn't exist.".format(f=opts.identity_file)
+            sys.exit(1)
+
+        file_mode = os.stat(opts.identity_file).st_mode
+        if not (file_mode & S_IRUSR) or not oct(file_mode)[-2:] == '00':
+            print >> stderr, "ERROR: The identity file must be accessible only by you."
+            print >> stderr, 'You can fix this with: chmod 400 "{f}"'.format(f=opts.identity_file)
+            sys.exit(1)
 
     if opts.ebs_vol_num > 8:
         print >> stderr, "ebs-vol-num cannot be greater than 8"

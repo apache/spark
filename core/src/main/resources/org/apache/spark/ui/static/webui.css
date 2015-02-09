@@ -103,6 +103,12 @@ span.expand-details {
   float: right;
 }
 
+span.rest-uri {
+  font-size: 10pt;
+  font-style: italic;
+  color: gray;
+}
+
 pre {
   font-size: 0.8em;
 }

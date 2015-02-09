@@ -96,7 +96,8 @@ private[sql] class DefaultSource extends RelationProvider {
 
     if (driver != null) Class.forName(driver)
 
-    if (   partitionColumn != null
+    if (
+      partitionColumn != null
         && (lowerBound == null || upperBound == null || numPartitions == null)) {
       sys.error("Partitioning incompletely specified")
     }
@@ -104,30 +105,34 @@ private[sql] class DefaultSource extends RelationProvider {
     val partitionInfo = if (partitionColumn == null) {
       null
     } else {
-      JDBCPartitioningInfo(partitionColumn,
-                           lowerBound.toLong, upperBound.toLong,
-                           numPartitions.toInt)
+      JDBCPartitioningInfo(
+        partitionColumn,
+        lowerBound.toLong,
+        upperBound.toLong,
+        numPartitions.toInt)
     }
     val parts = JDBCRelation.columnPartition(partitionInfo)
     JDBCRelation(url, table, parts)(sqlContext)
   }
 }
 
-private[sql] case class JDBCRelation(url: String,
-                                     table: String,
-                                     parts: Array[Partition])(
-    @transient val sqlContext: SQLContext)
-  extends PrunedFilteredScan {
+private[sql] case class JDBCRelation(
+    url: String,
+    table: String,
+    parts: Array[Partition])(@transient val sqlContext: SQLContext) extends PrunedFilteredScan {
 
   override val schema = JDBCRDD.resolveTable(url, table)
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]) = {
     val driver: String = DriverManager.getDriver(url).getClass.getCanonicalName
-    JDBCRDD.scanTable(sqlContext.sparkContext,
-                      schema,
-                      driver, url,
-                      table,
-                      requiredColumns, filters,
-                      parts)
+    JDBCRDD.scanTable(
+      sqlContext.sparkContext,
+      schema,
+      driver,
+      url,
+      table,
+      requiredColumns,
+      filters,
+      parts)
   }
 }

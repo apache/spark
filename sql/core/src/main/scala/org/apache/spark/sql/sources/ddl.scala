@@ -296,11 +296,14 @@ private[sql] case class ResolvedDataSource(provider: Class[_], relation: BaseRel
 private[sql] case class DescribeCommand(
     table: LogicalPlan,
     isExtended: Boolean) extends Command {
-  override def output = Seq(
+  override val output = Seq(
     // Column names are based on Hive.
-    AttributeReference("col_name", StringType, nullable = false)(),
-    AttributeReference("data_type", StringType, nullable = false)(),
-    AttributeReference("comment", StringType, nullable = false)())
+    AttributeReference("col_name", StringType, nullable = false, 
+      new MetadataBuilder().putString("comment", "name of the column").build())(),
+    AttributeReference("data_type", StringType, nullable = false, 
+      new MetadataBuilder().putString("comment", "data type of the column").build())(),
+    AttributeReference("comment", StringType, nullable = false, 
+      new MetadataBuilder().putString("comment", "comment of the column").build())())
 }
 
 private[sql] case class CreateTableUsing(
