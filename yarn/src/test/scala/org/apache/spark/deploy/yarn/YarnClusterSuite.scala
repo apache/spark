@@ -75,6 +75,8 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
   private var oldConf: Map[String, String] = _
 
   override def beforeAll() {
+    super.beforeAll()
+
     tempDir = Utils.createTempDir()
 
     val logConfDir = new File(tempDir, "log4j")
@@ -129,8 +131,8 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     sys.props += ("spark.executor.instances" -> "1")
     sys.props += ("spark.driver.extraClassPath" -> childClasspath)
     sys.props += ("spark.executor.extraClassPath" -> childClasspath)
-
-    super.beforeAll()
+    sys.props += ("spark.executor.extraJavaOptions" -> "-Dfoo=\"one two three\"")
+    sys.props += ("spark.driver.extraJavaOptions" -> "-Dfoo=\"one two three\"")
   }
 
   override def afterAll() {
