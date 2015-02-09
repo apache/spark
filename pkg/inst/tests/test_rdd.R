@@ -255,12 +255,12 @@ test_that("keyBy on RDDs", {
 })
 
 test_that("sortBy() on RDDs", {
-  sortedRdd <- sortBy(rdd, function(x) { x }, ascending = FALSE)
+  sortedRdd <- sortBy(rdd, function(x) { x * x }, ascending = FALSE)
   actual <- collect(sortedRdd)
   expect_equal(actual, as.list(sort(nums, decreasing = TRUE)))
 
   rdd2 <- parallelize(sc, sort(nums, decreasing = TRUE), 2L)
-  sortedRdd2 <- sortBy(rdd2, function(x) { x })
+  sortedRdd2 <- sortBy(rdd2, function(x) { x * x })
   actual <- collect(sortedRdd2)
   expect_equal(actual, as.list(nums))
 })
@@ -397,4 +397,39 @@ test_that("sortByKey() on pairwise RDDs", {
   sortedRdd2 <- sortByKey(numPairsRdd2)
   actual <- collect(sortedRdd2)
   expect_equal(actual, numPairs)
+
+  # sort by string keys
+  l <- list(list("a", 1), list("b", 2), list("1", 3), list("d", 4), list("2", 5))
+  rdd3 <- parallelize(sc, l, 2L)
+  sortedRdd3 <- sortByKey(rdd3)
+  actual <- collect(sortedRdd3)
+  expect_equal(actual, list(list("1", 3), list("2", 5), list("a", 1), list("b", 2), list("d", 4)))
+  
+  # test on the boundary cases
+  
+  # boundary case 1: the RDD to be sorted has only 1 partition
+  rdd4 <- parallelize(sc, l, 1L)
+  sortedRdd4 <- sortByKey(rdd4)
+  actual <- collect(sortedRdd4)
+  expect_equal(actual, list(list("1", 3), list("2", 5), list("a", 1), list("b", 2), list("d", 4)))
+
+  # boundary case 2: the sorted RDD has only 1 partition
+  rdd5 <- parallelize(sc, l, 2L)
+  sortedRdd5 <- sortByKey(rdd5, numPartitions = 1L)
+  actual <- collect(sortedRdd5)
+  expect_equal(actual, list(list("1", 3), list("2", 5), list("a", 1), list("b", 2), list("d", 4)))
+
+  # boundary case 3: the RDD to be sorted has only 1 element
+  l2 <- list(list("a", 1))
+  rdd6 <- parallelize(sc, l2, 2L)
+  sortedRdd6 <- sortByKey(rdd6)
+  actual <- collect(sortedRdd6)
+  expect_equal(actual, l2)
+
+  # boundary case 4: the RDD to be sorted has 0 element
+  l3 <- list()
+  rdd7 <- parallelize(sc, l3, 2L)
+  sortedRdd7 <- sortByKey(rdd7)
+  actual <- collect(sortedRdd7)
+  expect_equal(actual, l3)  
 })

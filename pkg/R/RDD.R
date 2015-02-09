@@ -1830,9 +1830,9 @@ setMethod("cogroup",
                                      group.func)
           })
 
-#' Sort an (k, v) pair RDD by k.
+#' Sort a (k, v) pair RDD by k.
 #'
-#' @param rdd An (k, v) pair RDD to be sorted.
+#' @param rdd A (k, v) pair RDD to be sorted.
 #' @param ascending A flag to indicate whether the sorting is ascending or descending.
 #' @param numPartitions Number of partitions to create.
 #' @return An RDD where all (k, v) pair elements are sorted.
@@ -1841,8 +1841,8 @@ setMethod("cogroup",
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
-#' rdd <- parallelize(sc, list(list(3, 3), list(2, 2), list(1, 1)))
-#' collect(sortByKey(rdd)) # list (list(1, 1), list(2, 2), list(3, 3))
+#' rdd <- parallelize(sc, list(list(3, 1), list(2, 2), list(1, 3)))
+#' collect(sortByKey(rdd)) # list (list(1, 3), list(2, 2), list(3, 1))
 #'}
 setGeneric("sortByKey", function(rdd, ascending, numPartitions) { standardGeneric("sortByKey") })
 
@@ -1868,7 +1868,7 @@ setMethod("sortByKey",
               
               samples <- collect(keys(sampleRDD(rdd, FALSE, fraction, 1L)))
               
-              # Note: the built-in R sort() function only atomic vectors
+              # Note: the built-in R sort() function only works on atomic vectors
               samples <- sort(unlist(samples, recursive = FALSE), decreasing = !ascending)
               
               if (length(samples) > 0) {
@@ -1883,7 +1883,7 @@ setMethod("sortByKey",
             rangePartitionFunc <- function(key) {
               partition <- 0
               
-              // TODO: Use binary search instead of linear search, similar with Spark
+              # TODO: Use binary search instead of linear search, similar with Spark
               while (partition < length(rangeBounds) && key > rangeBounds[[partition + 1]]) {
                 partition <- partition + 1
               }

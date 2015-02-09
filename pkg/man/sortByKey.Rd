@@ -4,7 +4,7 @@
 \alias{sortByKey}
 \alias{sortByKey,RDD,RDD-method}
 \alias{sortByKey,RDD,missingOrLogical,missingOrInteger-method}
-\title{Sort an (k, v) pair RDD by k.}
+\title{Sort a (k, v) pair RDD by k.}
 \usage{
 sortByKey(rdd, ascending, numPartitions)
 
@@ -12,7 +12,7 @@ sortByKey(rdd, ascending, numPartitions)
   numPartitions)
 }
 \arguments{
-\item{rdd}{An (k, v) pair RDD to be sorted.}
+\item{rdd}{A (k, v) pair RDD to be sorted.}
 
 \item{ascending}{A flag to indicate whether the sorting is ascending or descending.}
 
@@ -22,13 +22,13 @@ sortByKey(rdd, ascending, numPartitions)
 An RDD where all (k, v) pair elements are sorted.
 }
 \description{
-Sort an (k, v) pair RDD by k.
+Sort a (k, v) pair RDD by k.
 }
 \examples{
 \dontrun{
 sc <- sparkR.init()
-rdd <- parallelize(sc, list(list(3, 3), list(2, 2), list(1, 1)))
-collect(sortByKey(rdd)) # list (list(1, 1), list(2, 2), list(3, 3))
+rdd <- parallelize(sc, list(list(3, 1), list(2, 2), list(1, 3)))
+collect(sortByKey(rdd)) # list (list(1, 3), list(2, 2), list(3, 1))
 }
 }
 
