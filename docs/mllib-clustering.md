@@ -358,45 +358,59 @@ for (topic <- Range(0, 3)) {
 
 <div data-lang="java" markdown="1">
 {% highlight java %}
+import scala.Tuple2;
+
 import org.apache.spark.api.java.*;
 import org.apache.spark.api.java.function.Function;
+import org.apache.spark.mllib.clustering.DistributedLDAModel;
 import org.apache.spark.mllib.clustering.LDA;
-import org.apache.spark.mllib.clustering.LDAModel;
+import org.apache.spark.mllib.linalg.Matrix;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.SparkConf;
 
-public class LDAExample {
+public class JavaLDAExample {
   public static void main(String[] args) {
     SparkConf conf = new SparkConf().setAppName("LDA Example");
     JavaSparkContext sc = new JavaSparkContext(conf);
 
-    // Load and parse data
+    // Load and parse the data
     String path = "data/mllib/sample_lda_data.txt";
     JavaRDD<String> data = sc.textFile(path);
     JavaRDD<Vector> parsedData = data.map(
-      new Function<String, Vector>() {
-        public Vector call(String s) {
-          String[] sarray = s.trim().split(" ");
-          double[] values = new double[sarray.length];
-          for (int i = 0; i < sarray.length; i++)
-            values[i] = Double.parseDouble(sarray[i]);
-          return Vectors.dense(values);
+        new Function<String, Vector>() {
+          public Vector call(String s) {
+            String[] sarray = s.trim().split(" ");
+            double[] values = new double[sarray.length];
+            for (int i = 0; i < sarray.length; i++)
+              values[i] = Double.parseDouble(sarray[i]);
+            return Vectors.dense(values);
+          }
         }
-      }
     );
-    JavaPairRDD<Long, Vector> corpus = parsedData.zipWithIndex().map(
-      new Function<
-    )
-    parsedData.cache();
+    // Index documents with unique IDs
+    JavaPairRDD<Long, Vector> corpus = JavaPairRDD.fromJavaRDD(parsedData.zipWithIndex().map(
+        new Function<Tuple2<Vector, Long>, Tuple2<Long, Vector>>() {
+          public Tuple2<Long, Vector> call(Tuple2<Vector, Long> doc_id) {
+            return doc_id.swap();
+          }
+        }
+    ));
+    corpus.cache();
 
-    // Cluster the data into two classes using GaussianMixture
-    GaussianMixtureModel gmm = new GaussianMixture().setK(2).run(parsedData.rdd());
+    // Cluster the documents into three topics using LDA
+    DistributedLDAModel ldaModel = new LDA().setK(3).run(corpus);
 
-    // Output the parameters of the mixture model
-    for(int j=0; j<gmm.k(); j++) {
-        System.out.println("weight=%f\nmu=%s\nsigma=\n%s\n",
-            gmm.weights()[j], gmm.gaussians()[j].mu(), gmm.gaussians()[j].sigma());
+    // Output topics. Each is a distribution over words (matching word count vectors)
+    System.out.println("Learned topics (as distributions over vocab of " + ldaModel.vocabSize()
+        + " words):");
+    Matrix topics = ldaModel.topicsMatrix();
+    for (int topic = 0; topic < 3; topic++) {
+      System.out.print("Topic " + topic + ":");
+      for (int word = 0; word < ldaModel.vocabSize(); word++) {
+        System.out.print(" " + topics.apply(word, topic));
+      }
+      System.out.println();
     }
   }
 }
