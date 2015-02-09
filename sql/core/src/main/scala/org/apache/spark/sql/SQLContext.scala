@@ -412,7 +412,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /**
    * :: Experimental ::
    * Loads a dataset from the given path as a DataFrame based on a given data source.
-   * It will use the default data source configured in spark.sql.sources.default.
    */
   @Experimental
   def load(
@@ -434,6 +433,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /**
    * :: Experimental ::
+   * (Scala-specific)
    * Loads a dataset based on a given data source and a set of options.
    */
   @Experimental
@@ -458,6 +458,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /**
    * :: Experimental ::
+   * (Scala-specific)
    * Loads a dataset based on a given data source, a schema and a set of options.
    */
   @Experimental
@@ -508,6 +509,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /**
    * :: Experimental ::
+   * (Scala-specific)
    * Creates an external table from the given path based on a data source and a set of options.
    * Then, returns the corresponding DataFrame.
    */
@@ -545,6 +547,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /**
    * :: Experimental ::
+   * (Scala-specific)
    * Create an external table from the given path based on a data source, a schema and
    * a set of options. Then, returns the corresponding DataFrame.
    */

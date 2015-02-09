@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.sources.SaveMode
-
 import scala.reflect.ClassTag
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
@@ -26,9 +24,9 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.sources.SaveMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
-
 
 private[sql] object DataFrame {
   def apply(sqlContext: SQLContext, logicalPlan: LogicalPlan): DataFrame = {
@@ -627,6 +625,7 @@ trait DataFrame extends RDDApi[Row] {
 
   /**
    * :: Experimental ::
+   * (Scala-specific)
    * Creates a table from the the contents of this DataFrame based on a given data source
    * and a set of options.
    * If appendIfExists is true and the table already exists,
@@ -688,6 +687,7 @@ trait DataFrame extends RDDApi[Row] {
 
   /**
    * :: Experimental ::
+   * (Scala-specific)
    * Saves the contents of this DataFrame based on the given data source and a set of options.
    */
   @Experimental
