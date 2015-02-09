@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.parquet
 
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 import java.util.{TimeZone, Calendar}
 
 import scala.collection.mutable.{Buffer, ArrayBuffer, HashMap}
@@ -127,6 +127,12 @@ private[sql] object CatalystConverter {
             parent.updateByte(fieldIndex, value.asInstanceOf[ByteType.JvmType])
         }
       }
+      case DateType => {
+        new CatalystPrimitiveConverter(parent, fieldIndex) {
+          override def addInt(value: Int): Unit =
+            parent.updateDate(fieldIndex, value.asInstanceOf[DateType.JvmType])
+        }
+      }
       case d: DecimalType => {
         new CatalystPrimitiveConverter(parent, fieldIndex) {
           override def addBinary(value: Binary): Unit =
@@ -193,7 +199,7 @@ private[parquet] abstract class CatalystConverter extends GroupConverter {
     updateField(fieldIndex, value)
 
   protected[parquet] def updateDate(fieldIndex: Int, value: Int): Unit =
-    updateField(fieldIndex, new Date(value))
+    updateField(fieldIndex, value)
 
   protected[parquet] def updateLong(fieldIndex: Int, value: Long): Unit =
     updateField(fieldIndex, value)
@@ -392,7 +398,7 @@ private[parquet] class CatalystPrimitiveRowConverter(
     current.setInt(fieldIndex, value)
 
   override protected[parquet] def updateDate(fieldIndex: Int, value: Int): Unit =
-    current.update(fieldIndex, new Date(value))
+    current.update(fieldIndex, value)
 
   override protected[parquet] def updateLong(fieldIndex: Int, value: Long): Unit =
     current.setLong(fieldIndex, value)
