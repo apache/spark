@@ -90,23 +90,32 @@ private[graphx] abstract class VertexPartitionBaseOps
 
   /**
    * Hides vertices that are the same between this and other. For vertices that are different, keeps
-   * the values from `other`. The indices of `this` and `other` must be the same.
+   * the values from `other`.
    */
   def diff(other: Self[VD]): Self[VD] = {
-    if (self.index != other.index) {
-      logWarning("Diffing two VertexPartitions with different indexes is slow.")
-      diff(createUsingIndex(other.iterator))
-    } else {
-      val newMask = self.mask & other.mask
+//    if (self.index != other.index) {
+//      logWarning("Diffing two VertexPartitions with different indexes is slow.")
+//      diff(createUsingIndex(other.iterator))
+//    } else {
+//      val newMask = self.mask & other.mask
+/*      logInfo("NEWMASK START " + other.iterator.mkString + " AND " + 
+              self.iterator.mkString)
       var i = newMask.nextSetBit(0)
       while (i >= 0) {
         if (self.values(i) == other.values(i)) {
+          logInfo("BEFORE i: " + i + " newMask: " + newMask.iterator.mkString + 
+                  " sv " + self.values(i) + " ov " + other.values(i) + " om: " +
+                other.mask.iterator.mkString + " selfm: " + 
+                self.mask.iterator.mkString)
           newMask.unset(i)
         }
         i = newMask.nextSetBit(i + 1)
-      }
-      this.withValues(other.values).withMask(newMask)
-    }
+      }*/
+      this
+        .withIndex(other.index)
+        .withValues(other.values)
+        .withMask((self.mask & other.mask) ^ other.mask)
+//    }
   }
 
   /** Left outer join another VertexPartition. */
@@ -172,7 +181,7 @@ private[graphx] abstract class VertexPartitionBaseOps
     val newMask = new BitSet(self.capacity)
     val newValues = new Array[VD2](self.capacity)
     iter.foreach { pair =>
-      val pos = self.index.getPos(pair._1)
+      var pos = self.index.getPos(pair._1)
       if (pos >= 0) {
         newMask.set(pos)
         newValues(pos) = pair._2
