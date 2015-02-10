@@ -157,9 +157,9 @@ private[spark] class Client(
     val maxMem = newAppResponse.getMaximumResourceCapability().getMemory()
     logInfo("Verifying our application has not requested more than the maximum " +
       s"memory capability of the cluster ($maxMem MB per container)")
-    val executorMem = args.executorMemory + executorMemoryOverhead
+    val executorMem = args.executorMemoryMB + executorMemoryOverhead
     if (executorMem > maxMem) {
-      throw new IllegalArgumentException(s"Required executor memory (${args.executorMemory}" +
+      throw new IllegalArgumentException(s"Required executor memory (${args.executorMemoryMB}" +
         s"+$executorMemoryOverhead MB) is above the max threshold ($maxMem MB) of this cluster!")
     }
     val amMem = args.amMemory + amMemoryOverhead
@@ -503,7 +503,7 @@ private[spark] class Client(
     val amArgs =
       Seq(amClass) ++ userClass ++ userJar ++ primaryPyFile ++ pyFiles ++ userArgs ++
         Seq(
-          "--executor-memory", args.executorMemory.toString + "m",
+          "--executor-memory", args.executorMemoryMB.toString + "m",
           "--executor-cores", args.executorCores.toString,
           "--num-executors ", args.numExecutors.toString)
 

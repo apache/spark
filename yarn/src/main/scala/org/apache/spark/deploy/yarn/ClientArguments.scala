@@ -33,7 +33,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var pyFiles: String = null
   var primaryPyFile: String = null
   var userArgs: ArrayBuffer[String] = new ArrayBuffer[String]()
-  var executorMemory = 1024 // MB
+  var executorMemoryMB = 1024
   var executorCores = 1
   var numExecutors = DEFAULT_NUMBER_EXECUTORS
   var amQueue = sparkConf.get("spark.yarn.queue", "default")
@@ -63,7 +63,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
     math.max((MEMORY_OVERHEAD_FACTOR * amMemory).toInt, MEMORY_OVERHEAD_MIN))
 
   val executorMemoryOverhead = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
-    math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, MEMORY_OVERHEAD_MIN))
+    math.max((MEMORY_OVERHEAD_FACTOR * executorMemoryMB).toInt, MEMORY_OVERHEAD_MIN))
 
   /** Load any default arguments provided through environment variables and Spark properties. */
   private def loadEnvironmentArgs(): Unit = {
@@ -188,7 +188,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
           if (args(0) == "--worker-memory") {
             println("--worker-memory is deprecated. Use --executor-memory instead.")
           }
-          executorMemory = value
+          executorMemoryMB = value
           args = tail
 
         case ("--worker-cores" | "--executor-cores") :: IntParam(value) :: tail =>
