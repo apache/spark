@@ -32,8 +32,9 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan]
 
 object DefaultOptimizer extends Optimizer {
   val batches =
-    Batch("Combine Limits", FixedPoint(100),
-      CombineLimits) ::
+    Batch("Combines", FixedPoint(100),
+      CombineLimits,
+      CombineCasts) ::
     Batch("ConstantFolding", FixedPoint(100),
       NullPropagation,
       ConstantFolding,
@@ -598,6 +599,16 @@ object CombineLimits extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case ll @ Limit(le, nl @ Limit(ne, grandChild)) =>
       Limit(If(LessThan(ne, le), ne, le), grandChild)
+  }
+}
+
+/**
+ * Combines two adjacent [[Cast]] expressions into one
+ */
+object CombineCasts extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    case cc @ Cast(c2 @ Cast(c1, dataType1), dataType2) =>
+      Cast(c1, dataType2)
   }
 }
 
