@@ -132,7 +132,7 @@ def parse_args():
         help="Master instance type (leave empty for same as instance-type)")
     parser.add_option(
         "-r", "--region", default="us-east-1",
-        help="EC2 region zone to launch instances in")
+        help="EC2 region used to to launch instances in, or to find them in")
     parser.add_option(
         "-z", "--zone", default="",
         help="Availability zone to launch instances in, or 'all' to spread " +
@@ -608,8 +608,7 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
             elif (cluster_name + "-slaves") in group_names:
                 slave_nodes.append(inst)
     if any((master_nodes, slave_nodes)):
-        print "Found %d master(s), %d slaves" % (len(master_nodes), len(slave_nodes)) \
-            + " in region " + opts.region
+        print "Found %d master(s), %d slaves" % (len(master_nodes), len(slave_nodes)) 
     if master_nodes != [] or not die_on_error:
         return (master_nodes, slave_nodes)
     else:
