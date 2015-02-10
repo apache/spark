@@ -50,6 +50,7 @@ object DefaultOptimizer extends Optimizer {
       CombineFilters,
       PushPredicateThroughProject,
       PushPredicateThroughJoin,
+      PushPredicateThroughGenerate,
       ColumnPruning) ::
     Batch("LocalRelation", FixedPoint(100),
       ConvertToLocalRelation) :: Nil
@@ -452,6 +453,30 @@ object PushPredicateThroughProject extends Rule[LogicalPlan] {
     condition transform {
       case a: AttributeReference => sourceAliases.getOrElse(a, a)
     }
+  }
+}
+
+/**
+ * Push [[Filter]] operators through [[Generate]] operators. Parts of the predicate that reference
+ * attributes generated in [[Generate]] will remain above, and the rest should be pushed beneath.
+ */
+object PushPredicateThroughGenerate extends Rule[LogicalPlan] with PredicateHelper {
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case filter @ Filter(condition,
+    generate @ Generate(generator, join, outer, alias, grandChild)) =>
+      // Predicates that reference attributes produced by the `Generate` operator cannot
+      // be pushed below the operator.
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition {
+        conjunct => conjunct.references subsetOf grandChild.outputSet
+      }
+      if (pushDown.nonEmpty) {
+        val pushDownPredicate = pushDown.reduce(And)
+        val withPushdown = generate.copy(child = Filter(pushDownPredicate, grandChild))
+        stayUp.reduceOption(And).map(Filter(_, withPushdown)).getOrElse(withPushdown)
+      } else {
+        filter
+      }
   }
 }
 
