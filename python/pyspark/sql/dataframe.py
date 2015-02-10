@@ -447,7 +447,7 @@ class DataFrame(object):
         `select` that accepts SQL expressions.
 
         >>> df.selectExpr("age * 2", "abs(age)").collect()
-        [Row(('age * 2)=4, Abs('age)=2), Row(('age * 2)=10, Abs('age)=5)]
+        [Row((age * 2)=4, Abs(age)=2), Row((age * 2)=10, Abs(age)=5)]
         """
         jexpr = ListConverter().convert(expr, self._sc._gateway._gateway_client)
         jdf = self._jdf.selectExpr(self._sc._jvm.PythonUtils.toSeq(jexpr))

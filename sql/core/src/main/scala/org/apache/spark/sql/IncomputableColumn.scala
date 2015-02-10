@@ -40,6 +40,8 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
     throw new UnsupportedOperationException("Cannot run this method on an UncomputableColumn")
   }
 
+  override def toString = expr.prettyString
+
   override def isComputable: Boolean = false
 
   override val sqlContext: SQLContext = null
