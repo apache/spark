@@ -175,6 +175,33 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
     assert(numExecutorsPending(manager) === 9)
   }
 
+  test("cancel pending executors when no longer needed") {
+    sc = createSparkContext(1, 10)
+    val manager = sc.executorAllocationManager.get
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(2, 5)))
+
+    assert(numExecutorsPending(manager) === 0)
+    assert(numExecutorsToAdd(manager) === 1)
+    assert(addExecutors(manager) === 1)
+    assert(numExecutorsPending(manager) === 1)
+    assert(numExecutorsToAdd(manager) === 2)
+    assert(addExecutors(manager) === 2)
+    assert(numExecutorsPending(manager) === 3)
+
+    val task1Info = createTaskInfo(0, 0, "executor-1")
+    sc.listenerBus.postToAll(SparkListenerTaskStart(2, 0, task1Info))
+
+    assert(numExecutorsToAdd(manager) === 4)
+    assert(addExecutors(manager) === 2)
+
+    val task2Info = createTaskInfo(1, 0, "executor-1")
+    sc.listenerBus.postToAll(SparkListenerTaskStart(2, 0, task2Info))
+    sc.listenerBus.postToAll(SparkListenerTaskEnd(2, 0, null, null, task1Info, null))
+    sc.listenerBus.postToAll(SparkListenerTaskEnd(2, 0, null, null, task2Info, null))
+
+    assert(adjustRequestedExecutors(manager) === -1)
+  }
+
   test("remove executors") {
     sc = createSparkContext(5, 10)
     val manager = sc.executorAllocationManager.get
@@ -679,6 +706,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
 
   private val _numExecutorsToAdd = PrivateMethod[Int]('numExecutorsToAdd)
   private val _numExecutorsPending = PrivateMethod[Int]('numExecutorsPending)
+  private val _maxNumExecutorsNeeded = PrivateMethod[Int]('maxNumExecutorsNeeded)
   private val _executorsPendingToRemove =
     PrivateMethod[collection.Set[String]]('executorsPendingToRemove)
   private val _executorIds = PrivateMethod[collection.Set[String]]('executorIds)
@@ -686,6 +714,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private val _removeTimes = PrivateMethod[collection.Map[String, Long]]('removeTimes)
   private val _schedule = PrivateMethod[Unit]('schedule)
   private val _addExecutors = PrivateMethod[Int]('addExecutors)
+  private val _addOrCancelExecutorRequests = PrivateMethod[Int]('addOrCancelExecutorRequests)
   private val _removeExecutor = PrivateMethod[Boolean]('removeExecutor)
   private val _onExecutorAdded = PrivateMethod[Unit]('onExecutorAdded)
   private val _onExecutorRemoved = PrivateMethod[Unit]('onExecutorRemoved)
@@ -724,7 +753,12 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   }
 
   private def addExecutors(manager: ExecutorAllocationManager): Int = {
-    manager invokePrivate _addExecutors()
+    val maxNumExecutorsNeeded = manager invokePrivate _maxNumExecutorsNeeded()
+    manager invokePrivate _addExecutors(maxNumExecutorsNeeded)
+  }
+
+  private def adjustRequestedExecutors(manager: ExecutorAllocationManager): Int = {
+    manager invokePrivate _addOrCancelExecutorRequests(0L)
   }
 
   private def removeExecutor(manager: ExecutorAllocationManager, id: String): Boolean = {

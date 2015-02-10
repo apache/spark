@@ -311,7 +311,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
 
   /**
    * Request an additional number of executors from the cluster manager.
-   * Return whether the request is acknowledged.
+   * @return whether the request is acknowledged.
    */
   final override def requestExecutors(numAdditionalExecutors: Int): Boolean = synchronized {
     if (numAdditionalExecutors < 0) {
@@ -328,6 +328,22 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
   }
 
   /**
+   * Express a preference to the cluster manager for a given total number of executors. This can
+   * result in canceling pending requests or filing additional requests.
+   * @return whether the request is acknowledged.
+   */
+  final override def requestTotalExecutors(numExecutors: Int): Boolean = synchronized {
+    if (numAdditionalExecutors < 0) {
+      throw new IllegalArgumentException(
+        "Attempted to request a negative number of executor(s) " +
+          s"$numExecutors from the cluster manager. Please specify a positive number!")
+    }
+    numPendingExecutors =
+      math.max(numExecutors - numExistingExecutors + executorsPendingToRemove.size, 0)
+    doRequestTotalExecutors(numExecutors)
+  }
+
+  /**
    * Request executors from the cluster manager by specifying the total number desired,
    * including existing pending and running executors.
    *
@@ -337,7 +353,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
    * insufficient resources to satisfy the first request. We make the assumption here that the
    * cluster manager will eventually fulfill all requests when resources free up.
    *
-   * Return whether the request is acknowledged.
+   * @return whether the request is acknowledged.
    */
   protected def doRequestTotalExecutors(requestedTotal: Int): Boolean = false
 
