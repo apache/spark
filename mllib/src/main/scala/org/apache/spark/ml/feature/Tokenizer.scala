@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.UnaryTransformer
-import org.apache.spark.ml.param.{ParamMap,IntParam,BooleanParam}
+import org.apache.spark.ml.param.{ParamMap, IntParam, BooleanParam}
 import org.apache.spark.sql.types.{DataType, StringType, ArrayType}
 
 /**
@@ -48,7 +48,7 @@ class Tokenizer extends UnaryTransformer[String, Seq[String], Tokenizer] {
  * size for tokens as well as an array of stop words to remove from the results.
  */
 @AlphaComponent
-class RegexTokenizer extends UnaryTransformer[String, Seq[String], Tokenizer] {
+class RegexTokenizer extends UnaryTransformer[String, Seq[String], RegexTokenizer] {
 
   val lowercase = new BooleanParam(this, "numFeatures", "number of features", Some(true))
   def setLowercase(value: Boolean) = set(lowercase, value)
