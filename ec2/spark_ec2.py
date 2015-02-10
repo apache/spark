@@ -62,10 +62,10 @@ VALID_SPARK_VERSIONS = set([
 
 DEFAULT_SPARK_VERSION = SPARK_EC2_VERSION
 DEFAULT_SPARK_GITHUB_REPO = "https://github.com/apache/spark"
-MESOS_SPARK_EC2_BRANCH = "branch-1.3"
 
-# A URL prefix from which to fetch AMI information
-AMI_PREFIX = "https://raw.github.com/mesos/spark-ec2/{b}/ami-list".format(b=MESOS_SPARK_EC2_BRANCH)
+# Default location to get the spark-ec2 scripts (and ami-list) from
+DEFAULT_SPARK_EC2_GITHUB_REPO = "https://github.com/mesos/spark-ec2"
+DEFAULT_SPARK_EC2_BRANCH = "branch-1.3"
 
 
 def setup_boto():
@@ -147,6 +147,14 @@ def parse_args():
         "--spark-git-repo",
         default=DEFAULT_SPARK_GITHUB_REPO,
         help="Github repo from which to checkout supplied commit hash (default: %default)")
+    parser.add_option(
+        "--spark-ec2-git-repo",
+        default=DEFAULT_SPARK_EC2_GITHUB_REPO,
+        help="Github repo from which to checkout spark-ec2 (default: %default)")
+    parser.add_option(
+        "--spark-ec2-git-branch",
+        default=DEFAULT_SPARK_EC2_BRANCH,
+        help="Github repo branch of spark-ec2 to use (default: %default)")
     parser.add_option(
         "--hadoop-major-version", default="1",
         help="Major version of Hadoop (default: %default)")
@@ -333,7 +341,12 @@ def get_spark_ami(opts):
         print >> stderr,\
             "Don't recognize %s, assuming type is pvm" % opts.instance_type
 
-    ami_path = "%s/%s/%s" % (AMI_PREFIX, opts.region, instance_type)
+    # URL prefix from which to fetch AMI information
+    ami_prefix = "{r}/{b}/ami-list".format(
+        r=opts.spark_ec2_git_repo.replace("https://github.com", "https://raw.github.com", 1),
+        b=opts.spark_ec2_git_branch)
+
+    ami_path = "%s/%s/%s" % (ami_prefix, opts.region, instance_type)
     try:
         ami = urllib2.urlopen(ami_path).read().strip()
         print "Spark AMI: " + ami
@@ -650,12 +663,15 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
 
     # NOTE: We should clone the repository before running deploy_files to
     # prevent ec2-variables.sh from being overwritten
+    print "Cloning spark-ec2 scripts from {r}/tree/{b} on master...".format(
+        r=opts.spark_ec2_git_repo, b=opts.spark_ec2_git_branch)
     ssh(
         host=master,
         opts=opts,
         command="rm -rf spark-ec2"
         + " && "
-        + "git clone https://github.com/mesos/spark-ec2.git -b {b}".format(b=MESOS_SPARK_EC2_BRANCH)
+        + "git clone {r} -b {b} spark-ec2".format(r=opts.spark_ec2_git_repo,
+                                                  b=opts.spark_ec2_git_branch)
     )
 
     print "Deploying files to master..."
@@ -1036,6 +1052,17 @@ def real_main():
 
     if opts.ebs_vol_num > 8:
         print >> stderr, "ebs-vol-num cannot be greater than 8"
+        sys.exit(1)
+
+    # Prevent breaking ami_prefix (/, .git and startswith checks)
+    # Prevent forks with non spark-ec2 names for now.
+    if opts.spark_ec2_git_repo.endswith("/") or \
+            opts.spark_ec2_git_repo.endswith(".git") or \
+            not opts.spark_ec2_git_repo.startswith("https://github.com") or \
+            not opts.spark_ec2_git_repo.endswith("spark-ec2"):
+        print >> stderr, "spark-ec2-git-repo must be a github repo and it must not have a " \
+                         "trailing / or .git. " \
+                         "Furthermore, we currently only support forks named spark-ec2."
         sys.exit(1)
 
     try:

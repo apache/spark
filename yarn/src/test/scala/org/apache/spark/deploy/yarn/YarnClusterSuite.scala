@@ -80,6 +80,8 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
   private var logConfDir: File = _
 
   override def beforeAll() {
+    super.beforeAll()
+
     tempDir = Utils.createTempDir()
     logConfDir = new File(tempDir, "log4j")
     logConfDir.mkdir()
@@ -118,8 +120,6 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     logInfo(s"RM address in configuration is ${config.get(YarnConfiguration.RM_ADDRESS)}")
 
     fakeSparkJar = File.createTempFile("sparkJar", null, tempDir)
-
-    super.beforeAll()
   }
 
   override def afterAll() {
@@ -150,9 +150,17 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     Files.write(TEST_PYFILE, pyFile, UTF_8)
     var result = File.createTempFile("result", null, tempDir)
 
+    // The sbt assembly does not include pyspark / py4j python dependencies, so we need to
+    // propagate SPARK_HOME so that those are added to PYTHONPATH. See PythonUtils.scala.
+    val sparkHome = sys.props("spark.test.home")
+    val extraConf = Map(
+      "spark.executorEnv.SPARK_HOME" -> sparkHome,
+      "spark.yarn.appMasterEnv.SPARK_HOME" -> sparkHome)
+
     runSpark(false, primaryPyFile.getAbsolutePath(),
       sparkArgs = Seq("--py-files", pyFile.getAbsolutePath()),
-      appArgs = Seq(result.getAbsolutePath()))
+      appArgs = Seq(result.getAbsolutePath()),
+      extraConf = extraConf)
     checkResult(result)
   }
 
@@ -208,6 +216,10 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
       extraClassPath.mkString(File.pathSeparator)
     props.setProperty("spark.driver.extraClassPath", childClasspath)
     props.setProperty("spark.executor.extraClassPath", childClasspath)
+
+    // SPARK-4267: make sure java options are propagated correctly.
+    props.setProperty("spark.driver.extraJavaOptions", "-Dfoo=\"one two three\"")
+    props.setProperty("spark.executor.extraJavaOptions", "-Dfoo=\"one two three\"")
 
     yarnCluster.getConfig().foreach { e =>
       props.setProperty("spark.hadoop." + e.getKey(), e.getValue())
