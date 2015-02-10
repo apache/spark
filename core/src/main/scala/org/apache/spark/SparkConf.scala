@@ -204,6 +204,11 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     getOption(key).map(_.toBoolean).getOrElse(defaultValue)
   }
 
+  // Limit of bytes for total size of results (default is 1GB)
+  def getMaxResultSize: Long = {
+    Utils.memoryStringToMb(get("spark.driver.maxResultSize", "1g")).toLong << 20
+  }
+
   /** Get all executor environment variables set on this SparkConf */
   def getExecutorEnv: Seq[(String, String)] = {
     val prefix = "spark.executorEnv."

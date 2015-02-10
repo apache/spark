@@ -70,7 +70,7 @@ private[spark] class TaskSetManager(
   val SPECULATION_MULTIPLIER = conf.getDouble("spark.speculation.multiplier", 1.5)
 
   // Limit of bytes for total size of results (default is 1GB)
-  val maxResultSize = Utils.getMaxResultSize(conf)
+  val maxResultSize = conf.getMaxResultSize
 
   // Serializer for closures and tasks.
   val env = SparkEnv.get
