@@ -19,33 +19,29 @@ package org.apache.spark.streaming.kafka
 
 import scala.util.Random
 
-import org.scalatest.BeforeAndAfter
 import kafka.common.TopicAndPartition
+import org.scalatest.BeforeAndAfterAll
 
-class KafkaClusterSuite extends KafkaStreamSuiteBase with BeforeAndAfter {
-  val brokerHost = "localhost"
-
-  val kafkaParams = Map("metadata.broker.list" -> s"$brokerHost:$brokerPort")
-
-  val kc = new KafkaCluster(kafkaParams)
-
+class KafkaClusterSuite extends KafkaStreamSuiteBase with BeforeAndAfterAll {
   val topic = "kcsuitetopic" + Random.nextInt(10000)
-
   val topicAndPartition = TopicAndPartition(topic, 0)
+  var kc: KafkaCluster = null
 
-  before {
+  override def beforeAll() {
     setupKafka()
     createTopic(topic)
-    produceAndSendMessage(topic, Map("a" -> 1))
+    sendMessages(topic, Map("a" -> 1))
+    kc = new KafkaCluster(Map("metadata.broker.list" -> s"$brokerAddress"))
   }
 
-  after {
+  override def afterAll() {
     tearDownKafka()
   }
 
   test("metadata apis") {
-    val leader = kc.findLeaders(Set(topicAndPartition)).right.get
-    assert(leader(topicAndPartition) === (brokerHost, brokerPort), "didn't get leader")
+    val leader = kc.findLeaders(Set(topicAndPartition)).right.get(topicAndPartition)
+    val leaderAddress = s"${leader._1}:${leader._2}"
+    assert(leaderAddress === brokerAddress, "didn't get leader")
 
     val parts = kc.getPartitions(Set(topic)).right.get
     assert(parts(topicAndPartition), "didn't get partitions")

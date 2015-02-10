@@ -34,8 +34,10 @@ if sys.version_info[:2] <= (2, 6):
 else:
     import unittest
 
-from pyspark.sql import SQLContext, IntegerType, Row, ArrayType, StructType, StructField, \
-    UserDefinedType, DoubleType
+
+from pyspark.sql import SQLContext, Column
+from pyspark.sql.types import IntegerType, Row, ArrayType, StructType, StructField, \
+    UserDefinedType, DoubleType, LongType
 from pyspark.tests import ReusedPySparkTestCase
 
 
@@ -220,7 +222,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(1.0, row.asDict()['d']['key'].c)
 
     def test_infer_schema_with_udt(self):
-        from pyspark.sql_tests import ExamplePoint, ExamplePointUDT
+        from pyspark.sql.tests import ExamplePoint, ExamplePointUDT
         row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
         rdd = self.sc.parallelize([row])
         df = self.sqlCtx.inferSchema(rdd)
@@ -232,7 +234,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(point, ExamplePoint(1.0, 2.0))
 
     def test_apply_schema_with_udt(self):
-        from pyspark.sql_tests import ExamplePoint, ExamplePointUDT
+        from pyspark.sql.tests import ExamplePoint, ExamplePointUDT
         row = (1.0, ExamplePoint(1.0, 2.0))
         rdd = self.sc.parallelize([row])
         schema = StructType([StructField("label", DoubleType(), False),
@@ -242,7 +244,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEquals(point, ExamplePoint(1.0, 2.0))
 
     def test_parquet_with_udt(self):
-        from pyspark.sql_tests import ExamplePoint
+        from pyspark.sql.tests import ExamplePoint
         row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
         rdd = self.sc.parallelize([row])
         df0 = self.sqlCtx.inferSchema(rdd)
@@ -253,7 +255,6 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEquals(point, ExamplePoint(1.0, 2.0))
 
     def test_column_operators(self):
-        from pyspark.sql import Column, LongType
         ci = self.df.key
         cs = self.df.value
         c = ci == cs

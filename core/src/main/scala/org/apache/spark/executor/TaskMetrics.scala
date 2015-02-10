@@ -177,8 +177,8 @@ class TaskMetrics extends Serializable {
    * Once https://issues.apache.org/jira/browse/SPARK-5225 is addressed,
    * we can store all the different inputMetrics (one per readMethod).
    */
-  private[spark] def getInputMetricsForReadMethod(readMethod: DataReadMethod):
-    InputMetrics =synchronized {
+  private[spark] def getInputMetricsForReadMethod(
+      readMethod: DataReadMethod): InputMetrics = synchronized {
     _inputMetrics match {
       case None =>
         val metrics = new InputMetrics(readMethod)
@@ -195,15 +195,17 @@ class TaskMetrics extends Serializable {
    * Aggregates shuffle read metrics for all registered dependencies into shuffleReadMetrics.
    */
   private[spark] def updateShuffleReadMetrics(): Unit = synchronized {
-    val merged = new ShuffleReadMetrics()
-    for (depMetrics <- depsShuffleReadMetrics) {
-      merged.incFetchWaitTime(depMetrics.fetchWaitTime)
-      merged.incLocalBlocksFetched(depMetrics.localBlocksFetched)
-      merged.incRemoteBlocksFetched(depMetrics.remoteBlocksFetched)
-      merged.incRemoteBytesRead(depMetrics.remoteBytesRead)
-      merged.incRecordsRead(depMetrics.recordsRead)
+    if (!depsShuffleReadMetrics.isEmpty) {
+      val merged = new ShuffleReadMetrics()
+      for (depMetrics <- depsShuffleReadMetrics) {
+        merged.incFetchWaitTime(depMetrics.fetchWaitTime)
+        merged.incLocalBlocksFetched(depMetrics.localBlocksFetched)
+        merged.incRemoteBlocksFetched(depMetrics.remoteBlocksFetched)
+        merged.incRemoteBytesRead(depMetrics.remoteBytesRead)
+        merged.incRecordsRead(depMetrics.recordsRead)
+      }
+      _shuffleReadMetrics = Some(merged)
     }
-    _shuffleReadMetrics = Some(merged)
   }
 
   private[spark] def updateInputMetrics(): Unit = synchronized {
