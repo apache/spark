@@ -297,15 +297,15 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
     assert(removeExecutor(manager, "5"))
     assert(removeExecutor(manager, "6"))
     assert(executorIds(manager).size === 10)
-    assert(addExecutors(manager) === 0) // still at upper limit
+    assert(addExecutors(manager) === 1)
     onExecutorRemoved(manager, "3")
     onExecutorRemoved(manager, "4")
     assert(executorIds(manager).size === 8)
 
     // Add succeeds again, now that we are no longer at the upper limit
     // Number of executors added restarts at 1
-    assert(addExecutors(manager) === 1)
-    assert(addExecutors(manager) === 1) // upper limit reached again
+    assert(addExecutors(manager) === 2)
+    assert(addExecutors(manager) === 1) // upper limit reached
     assert(addExecutors(manager) === 0)
     assert(executorIds(manager).size === 8)
     onExecutorRemoved(manager, "5")
@@ -313,9 +313,7 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
     onExecutorAdded(manager, "13")
     onExecutorAdded(manager, "14")
     assert(executorIds(manager).size === 8)
-    assert(addExecutors(manager) === 1)
-    assert(addExecutors(manager) === 1) // upper limit reached again
-    assert(addExecutors(manager) === 0)
+    assert(addExecutors(manager) === 0) // still at upper limit
     onExecutorAdded(manager, "15")
     onExecutorAdded(manager, "16")
     assert(executorIds(manager).size === 10)
