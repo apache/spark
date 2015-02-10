@@ -342,21 +342,19 @@ class JsonSuite extends QueryTest {
     )
   }
 
-  ignore("Complex field and type inferring (Ignored)") {
+  test("GetField operation on complex data type") {
     val jsonDF = jsonRDD(complexFieldAndType1)
     jsonDF.registerTempTable("jsonTable")
 
-    // Right now, "field1" and "field2" are treated as aliases. We should fix it.
     checkAnswer(
       sql("select arrayOfStruct[0].field1, arrayOfStruct[0].field2 from jsonTable"),
       Row(true, "str1")
     )
 
-    // Right now, the analyzer cannot resolve arrayOfStruct.field1 and arrayOfStruct.field2.
     // Getting all values of a specific field from an array of structs.
     checkAnswer(
       sql("select arrayOfStruct.field1, arrayOfStruct.field2 from jsonTable"),
-      Row(Seq(true, false), Seq("str1", null))
+      Row(Seq(true, false, null), Seq("str1", null, null))
     )
   }
 

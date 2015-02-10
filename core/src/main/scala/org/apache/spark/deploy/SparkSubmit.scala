@@ -37,7 +37,7 @@ import org.apache.ivy.plugins.resolver.{ChainResolver, IBiblioResolver}
 
 import org.apache.spark.deploy.rest._
 import org.apache.spark.executor._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
 
 /**
  * Whether to submit, kill, or request the status of an application.
@@ -467,11 +467,11 @@ object SparkSubmit {
     }
 
     val loader =
-      if (sysProps.getOrElse("spark.files.userClassPathFirst", "false").toBoolean) {
-        new ChildExecutorURLClassLoader(new Array[URL](0),
+      if (sysProps.getOrElse("spark.driver.userClassPathFirst", "false").toBoolean) {
+        new ChildFirstURLClassLoader(new Array[URL](0),
           Thread.currentThread.getContextClassLoader)
       } else {
-        new ExecutorURLClassLoader(new Array[URL](0),
+        new MutableURLClassLoader(new Array[URL](0),
           Thread.currentThread.getContextClassLoader)
       }
     Thread.currentThread.setContextClassLoader(loader)

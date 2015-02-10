@@ -117,7 +117,7 @@ private[mllib] object EigenValueDecomposition {
       info.`val` match {
         case 1 => throw new IllegalStateException("ARPACK returns non-zero info = " + info.`val` +
             " Maximum number of iterations taken. (Refer ARPACK user guide for details)")
-        case 2 => throw new IllegalStateException("ARPACK returns non-zero info = " + info.`val` +
+        case 3 => throw new IllegalStateException("ARPACK returns non-zero info = " + info.`val` +
             " No shifts could be applied. Try to increase NCV. " +
             "(Refer ARPACK user guide for details)")
         case _ => throw new IllegalStateException("ARPACK returns non-zero info = " + info.`val` +
