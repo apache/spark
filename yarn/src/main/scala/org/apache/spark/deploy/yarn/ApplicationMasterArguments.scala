@@ -27,7 +27,7 @@ class ApplicationMasterArguments(val args: Array[String]) {
   var primaryPyFile: String = null
   var pyFiles: String = null
   var userArgs: Seq[String] = Seq[String]()
-  var executorMemory = 1024
+  var executorMemoryMB = 1024
   var executorCores = 1
   var numExecutors = DEFAULT_NUMBER_EXECUTORS
 
@@ -67,7 +67,7 @@ class ApplicationMasterArguments(val args: Array[String]) {
           args = tail
 
         case ("--worker-memory" | "--executor-memory") :: MemoryParam(value) :: tail =>
-          executorMemory = value
+          executorMemoryMB = value
           args = tail
 
         case ("--worker-cores" | "--executor-cores") :: IntParam(value) :: tail =>
