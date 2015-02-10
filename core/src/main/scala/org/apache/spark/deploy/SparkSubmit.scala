@@ -18,25 +18,35 @@
 package org.apache.spark.deploy
 
 import java.io.{File, PrintStream}
-import java.lang.reflect.{Modifier, InvocationTargetException}
+import java.lang.reflect.{InvocationTargetException, Modifier}
 import java.net.URL
+
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
 import org.apache.hadoop.fs.Path
 import org.apache.ivy.Ivy
 import org.apache.ivy.core.LogOptions
-import org.apache.ivy.core.module.descriptor.{DefaultExcludeRule, DefaultDependencyDescriptor, DefaultModuleDescriptor}
-import org.apache.ivy.core.module.id.{ModuleId, ArtifactId, ModuleRevisionId}
+import org.apache.ivy.core.module.descriptor._
+import org.apache.ivy.core.module.id.{ArtifactId, ModuleId, ModuleRevisionId}
 import org.apache.ivy.core.report.ResolveReport
-import org.apache.ivy.core.resolve.{IvyNode, ResolveOptions}
+import org.apache.ivy.core.resolve.ResolveOptions
 import org.apache.ivy.core.retrieve.RetrieveOptions
 import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.resolver.{ChainResolver, IBiblioResolver}
-import org.apache.spark.executor.ExecutorURLClassLoader
+
+import org.apache.spark.deploy.rest._
+import org.apache.spark.executor._
 import org.apache.spark.util.Utils
-import org.apache.spark.executor.ChildExecutorURLClassLoader
-import org.apache.spark.executor.MutableURLClassLoader
+
+/**
+ * Whether to submit, kill, or request the status of an application.
+ * The latter two operations are currently supported only for standalone cluster mode.
+ */
+private[spark] object SparkSubmitAction extends Enumeration {
+  type SparkSubmitAction = Value
+  val SUBMIT, KILL, REQUEST_STATUS = Value
+}
 
 /**
  * Main gateway of launching a Spark application.
@@ -83,21 +93,74 @@ object SparkSubmit {
     if (appArgs.verbose) {
       printStream.println(appArgs)
     }
-    val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
-    launch(childArgs, classpath, sysProps, mainClass, appArgs.verbose)
+    appArgs.action match {
+      case SparkSubmitAction.SUBMIT => submit(appArgs)
+      case SparkSubmitAction.KILL => kill(appArgs)
+      case SparkSubmitAction.REQUEST_STATUS => requestStatus(appArgs)
+    }
+  }
+
+  /** Kill an existing submission using the REST protocol. Standalone cluster mode only. */
+  private def kill(args: SparkSubmitArguments): Unit = {
+    new StandaloneRestClient()
+      .killSubmission(args.master, args.submissionToKill)
   }
 
   /**
-   * @return a tuple containing
-   *           (1) the arguments for the child process,
-   *           (2) a list of classpath entries for the child,
-   *           (3) a list of system properties and env vars, and
-   *           (4) the main class for the child
+   * Request the status of an existing submission using the REST protocol.
+   * Standalone cluster mode only.
    */
-  private[spark] def createLaunchEnv(args: SparkSubmitArguments)
-      : (ArrayBuffer[String], ArrayBuffer[String], Map[String, String], String) = {
+  private def requestStatus(args: SparkSubmitArguments): Unit = {
+    new StandaloneRestClient()
+      .requestSubmissionStatus(args.master, args.submissionToRequestStatusFor)
+  }
 
-    // Values to return
+  /**
+   * Submit the application using the provided parameters.
+   *
+   * This runs in two steps. First, we prepare the launch environment by setting up
+   * the appropriate classpath, system properties, and application arguments for
+   * running the child main class based on the cluster manager and the deploy mode.
+   * Second, we use this launch environment to invoke the main method of the child
+   * main class.
+   */
+  private[spark] def submit(args: SparkSubmitArguments): Unit = {
+    val (childArgs, childClasspath, sysProps, childMainClass) = prepareSubmitEnvironment(args)
+     // In standalone cluster mode, there are two submission gateways:
+     //   (1) The traditional Akka gateway using o.a.s.deploy.Client as a wrapper
+     //   (2) The new REST-based gateway introduced in Spark 1.3
+     // The latter is the default behavior as of Spark 1.3, but Spark submit will fail over
+     // to use the legacy gateway if the master endpoint turns out to be not a REST server.
+    if (args.isStandaloneCluster && args.useRest) {
+      try {
+        printStream.println("Running Spark using the REST application submission protocol.")
+        runMain(childArgs, childClasspath, sysProps, childMainClass)
+      } catch {
+        // Fail over to use the legacy submission gateway
+        case e: SubmitRestConnectionException =>
+          printWarning(s"Master endpoint ${args.master} was not a REST server. " +
+            "Falling back to legacy submission gateway instead.")
+          args.useRest = false
+          submit(args)
+      }
+    // In all other modes, just run the main class as prepared
+    } else {
+      runMain(childArgs, childClasspath, sysProps, childMainClass)
+    }
+  }
+
+  /**
+   * Prepare the environment for submitting an application.
+   * This returns a 4-tuple:
+   *   (1) the arguments for the child process,
+   *   (2) a list of classpath entries for the child,
+   *   (3) a map of system properties, and
+   *   (4) the main class for the child
+   * Exposed for testing.
+   */
+  private[spark] def prepareSubmitEnvironment(args: SparkSubmitArguments)
+      : (Seq[String], Seq[String], Map[String, String], String) = {
+    // Return values
     val childArgs = new ArrayBuffer[String]()
     val childClasspath = new ArrayBuffer[String]()
     val sysProps = new HashMap[String, String]()
@@ -235,10 +298,13 @@ object SparkSubmit {
         sysProp = "spark.driver.extraLibraryPath"),
 
       // Standalone cluster only
+      // Do not set CL arguments here because there are multiple possibilities for the main class
       OptionAssigner(args.jars, STANDALONE, CLUSTER, sysProp = "spark.jars"),
       OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, sysProp = "spark.jars.ivy"),
-      OptionAssigner(args.driverMemory, STANDALONE, CLUSTER, clOption = "--memory"),
-      OptionAssigner(args.driverCores, STANDALONE, CLUSTER, clOption = "--cores"),
+      OptionAssigner(args.driverMemory, STANDALONE, CLUSTER, sysProp = "spark.driver.memory"),
+      OptionAssigner(args.driverCores, STANDALONE, CLUSTER, sysProp = "spark.driver.cores"),
+      OptionAssigner(args.supervise.toString, STANDALONE, CLUSTER,
+        sysProp = "spark.driver.supervise"),
 
       // Yarn client only
       OptionAssigner(args.queue, YARN, CLIENT, sysProp = "spark.yarn.queue"),
@@ -279,7 +345,6 @@ object SparkSubmit {
       if (args.childArgs != null) { childArgs ++= args.childArgs }
     }
 
-
     // Map all arguments to command-line options or system properties for our chosen mode
     for (opt <- options) {
       if (opt.value != null &&
@@ -301,14 +366,21 @@ object SparkSubmit {
       sysProps.put("spark.jars", jars.mkString(","))
     }
 
-    // In standalone-cluster mode, use Client as a wrapper around the user class
-    if (clusterManager == STANDALONE && deployMode == CLUSTER) {
-      childMainClass = "org.apache.spark.deploy.Client"
-      if (args.supervise) {
-        childArgs += "--supervise"
+    // In standalone cluster mode, use the REST client to submit the application (Spark 1.3+).
+    // All Spark parameters are expected to be passed to the client through system properties.
+    if (args.isStandaloneCluster) {
+      if (args.useRest) {
+        childMainClass = "org.apache.spark.deploy.rest.StandaloneRestClient"
+        childArgs += (args.primaryResource, args.mainClass)
+      } else {
+        // In legacy standalone cluster mode, use Client as a wrapper around the user class
+        childMainClass = "org.apache.spark.deploy.Client"
+        if (args.supervise) { childArgs += "--supervise" }
+        Option(args.driverMemory).foreach { m => childArgs += ("--memory", m) }
+        Option(args.driverCores).foreach { c => childArgs += ("--cores", c) }
+        childArgs += "launch"
+        childArgs += (args.master, args.primaryResource, args.mainClass)
       }
-      childArgs += "launch"
-      childArgs += (args.master, args.primaryResource, args.mainClass)
       if (args.childArgs != null) {
         childArgs ++= args.childArgs
       }
@@ -345,7 +417,7 @@ object SparkSubmit {
 
     // Ignore invalid spark.driver.host in cluster modes.
     if (deployMode == CLUSTER) {
-      sysProps -= ("spark.driver.host")
+      sysProps -= "spark.driver.host"
     }
 
     // Resolve paths in certain spark properties
@@ -374,9 +446,15 @@ object SparkSubmit {
     (childArgs, childClasspath, sysProps, childMainClass)
   }
 
-  private def launch(
-      childArgs: ArrayBuffer[String],
-      childClasspath: ArrayBuffer[String],
+  /**
+   * Run the main method of the child class using the provided launch environment.
+   *
+   * Note that this main class will not be the one provided by the user if we're
+   * running cluster deploy mode or python applications.
+   */
+  private def runMain(
+      childArgs: Seq[String],
+      childClasspath: Seq[String],
       sysProps: Map[String, String],
       childMainClass: String,
       verbose: Boolean = false) {
@@ -697,7 +775,7 @@ private[spark] object SparkSubmitUtils {
  * Provides an indirection layer for passing arguments as system properties or flags to
  * the user's driver program or to downstream launcher tools.
  */
-private[spark] case class OptionAssigner(
+private case class OptionAssigner(
     value: String,
     clusterManager: Int,
     deployMode: Int,

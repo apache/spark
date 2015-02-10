@@ -102,7 +102,7 @@ trait DataFrame extends RDDApi[Row] {
    * }}}
    */
   @scala.annotation.varargs
-  def toDataFrame(colName: String, colNames: String*): DataFrame
+  def toDataFrame(colNames: String*): DataFrame
 
   /** Returns the schema of this [[DataFrame]]. */
   def schema: StructType
@@ -115,6 +115,25 @@ trait DataFrame extends RDDApi[Row] {
 
   /** Prints the schema to the console in a nice tree format. */
   def printSchema(): Unit
+
+  /**
+   * Returns true if the `collect` and `take` methods can be run locally
+   * (without any Spark executors).
+   */
+  def isLocal: Boolean
+
+  /**
+   * Displays the [[DataFrame]] in a tabular form. For example:
+   * {{{
+   *   year  month AVG('Adj Close) MAX('Adj Close)
+   *   1980  12    0.503218        0.595103
+   *   1981  01    0.523289        0.570307
+   *   1982  02    0.436504        0.475256
+   *   1983  03    0.410516        0.442194
+   *   1984  04    0.450090        0.483521
+   * }}}
+   */
+  def show(): Unit
 
   /**
    * Cartesian join with another [[DataFrame]].

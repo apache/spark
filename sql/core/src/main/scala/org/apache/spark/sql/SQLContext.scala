@@ -704,69 +704,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
     DataFrame(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
   }
 
-
-  /**
-   * Builds a DataFrame from an RDD based on column names.
-   * Assumes RDD contains iterables of equal length.
-   */
-  def applyNames(nameString : String, plainRdd : RDD[_]) : DataFrame = {
-    // assume a space separated string
-    val names = nameString.split(" (?=([^\"]*\"[^\"]*\")*[^\"]*$)").toSeq
-
-    val reservedWords : Seq[String] = getReservedWords
-
-    val reservedWordsOverlap = (names.toSet.map{x : String => x.toUpperCase} & reservedWords.toSet).size
-    if ( reservedWordsOverlap > 0 ){
-      throw new DDLException(s"Reserved words not allowed as column names")
-    }
-
-    val sampleRow = plainRdd.first()
-
-    def columnType(col: Any) : DataType = {
-      var t:DataType = col match {
-        case _: Int => IntegerType
-        case _: java.lang.Integer => IntegerType
-        case _: String => StringType
-        case _: java.lang.String => StringType
-        case _: Double => DoubleType
-        case _: java.lang.Float => FloatType
-        case _: Float => FloatType
-        case _: Byte => ByteType
-        case _: java.lang.Byte => ByteType
-        case _: Boolean => BooleanType
-        case _: java.lang.Boolean => BooleanType
-        case _: java.math.BigDecimal => DecimalType()
-        case _: java.sql.Date => DateType
-        case _: java.sql.Timestamp => TimestampType
-        case col: Map[Any,Any] => {
-          var k = col.head._1
-          var v = col.head._2
-          MapType(columnType(k),columnType(v), true)
-        }
-
-        case col: Array[Any] => {
-          var e = col.head
-          ArrayType(columnType(e), true)
-        }
-
-        case col: List[Any] => {
-          var e = col.head
-          ArrayType(columnType(e), true)
-        }
-
-        case null => NullType
-        case _: Any => NullType
-      }
-      return t
-    }
-
-    val colTypes = sampleRow.asInstanceOf[Seq[_]].map(columnType)
-    val colFields = names zip colTypes
-    val schema = StructType(colFields.map{ r => new StructField(r._1,r._2, true)} )
-    val rowRdd : RDD[Row] = plainRdd.map { r  => Row.fromSeq(r.asInstanceOf[Seq[Any]]) }
-    applySchema(rowRdd, schema)
-  }
-
   /**
    * Returns a Catalyst Schema for the given java bean class.
    */

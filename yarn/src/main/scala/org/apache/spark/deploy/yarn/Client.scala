@@ -435,10 +435,11 @@ private[spark] class Client(
 
     // Include driver-specific java options if we are launching a driver
     if (isClusterMode) {
-      sparkConf.getOption("spark.driver.extraJavaOptions")
+      val driverOpts = sparkConf.getOption("spark.driver.extraJavaOptions")
         .orElse(sys.env.get("SPARK_JAVA_OPTS"))
-        .map(Utils.splitCommandString).getOrElse(Seq.empty)
-        .foreach(opts => javaOpts += opts)
+      driverOpts.foreach { opts =>
+        javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
+      }
       val libraryPaths = Seq(sys.props.get("spark.driver.extraLibraryPath"),
         sys.props.get("spark.driver.libraryPath")).flatten
       if (libraryPaths.nonEmpty) {
@@ -460,7 +461,7 @@ private[spark] class Client(
           val msg = s"$amOptsKey is not allowed to alter memory settings (was '$opts')."
           throw new SparkException(msg)
         }
-        javaOpts ++= Utils.splitCommandString(opts)
+        javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
       }
     }
 
