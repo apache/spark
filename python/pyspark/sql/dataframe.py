@@ -20,6 +20,8 @@ import itertools
 import warnings
 import random
 import os
+import re
+import string
 from tempfile import NamedTemporaryFile
 from itertools import imap
 
@@ -32,7 +34,7 @@ from pyspark.serializers import BatchedSerializer, AutoBatchedSerializer, Pickle
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql.types import *
-from pyspark.sql.types import _create_cls, _parse_datatype_json_string
+from pyspark.sql.types import _create_cls, _parse_datatype_json_string, _infer_type
 
 
 __all__ = ["DataFrame", "GroupedData", "Column", "Dsl", "SchemaRDD"]
@@ -95,44 +97,6 @@ class DataFrame(object):
             self._lazy_rdd = rdd.mapPartitions(applySchema)
 
         return self._lazy_rdd
-
-    @classmethod
-    def toDataFrame(cls, plainRdd, names=None):
-        """
-        Builds a DataFrame from an RDD based on column names.
-
-        Assumes RDD contains iterables of equal length.
-        >>> unparsedStrings = sc.parallelize(["1, A1, true", "2, B2, false", "3, C3, true", "4, D4, false"])
-        >>> input = unparsedStrings.map(lambda x: x.split(",")).map(lambda x: [int(x[0]), x[1], bool(x[2])])
-        >>> df1 = sqlCtx.applyNames("a b c", input)
-        >>> df1.registerTempTable("df1")
-        >>> sqlCtx.sql("select a from df1").collect()
-        [Row(a=1), Row(a=2), Row(a=3), Row(a=4)]
-        >>> input2 = unparsedStrings.map(lambda x: x.split(",")).map(lambda x: [int(x[0]), x[1], bool(x[2]), {"k":int(x[0]), "v":2*int(x[0])}, x])
-        >>> df2 = sqlCtx.applyNames("a b c d e", input2)
-        >>> df2.registerTempTable("df2")
-        >>> sqlCtx.sql("select d['k']+d['v'] from df2").collect()
-        [Row(c0=3), Row(c0=6), Row(c0=9), Row(c0=12)]
-        >>> sqlCtx.sql("select b, e[1] from df2").collect()
-        [Row(b=u' A1', c1=u' A1'), Row(b=u' B2', c1=u' B2'), Row(b=u' C3', c1=u' C3'), Row(b=u' D4', c1=u' D4')]
-        """
-
-        sampleRow = plainRdd.first()
-        sampledTypes = map(_infer_type, sampleRow)
-
-        if names != None:
-            fieldNames = [f for f in re.split("( |\\\".*?\\\"|'.*?')", names) if f.strip()]
-        else:
-            fieldNames = ["_"+i for i in range(len(sampleRow))]
-
-        reservedWords = set(map(string.lower,self._ssql_ctx.getReservedWords()))
-
-        if len(reservedWords.intersection(map(string.lower, fieldNames))) > 0:
-            raise ValueError("Reserved words not allowed as column names")
-
-        fields= [StructField(k,v,True) for k, v in zip(fieldNames, sampledTypes)]
-        sampledSchema = StructType(fields)
-        return self.applySchema(plainRdd, sampledSchema)
 
     def toJSON(self, use_unicode=False):
         """Convert a DataFrame into a MappedRDD of JSON documents; one document per row.

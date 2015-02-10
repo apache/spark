@@ -17,6 +17,8 @@
 
 import warnings
 import json
+import re
+import string
 from array import array
 from itertools import imap
 
@@ -24,8 +26,8 @@ from py4j.protocol import Py4JError
 
 from pyspark.rdd import _prepare_for_python_RDD
 from pyspark.serializers import AutoBatchedSerializer, PickleSerializer
-from pyspark.sql.types import StringType, StructType, _verify_type, \
-    _infer_schema, _has_nulltype, _merge_type, _create_converter, _python_to_sql_converter
+from pyspark.sql.types import StringType, StructType, StructField, _verify_type, \
+    _infer_schema, _has_nulltype, _merge_type, _create_converter, _python_to_sql_converter, _infer_type
 from pyspark.sql.dataframe import DataFrame
 
 __all__ = ["SQLContext", "HiveContext"]
@@ -286,6 +288,43 @@ class SQLContext(object):
         jrdd = self._jvm.SerDeUtil.toJavaArray(rdd._to_java_object_rdd())
         df = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), schema.json())
         return DataFrame(df, self)
+
+    def toDataFrame(self, plainRdd, names=None):
+        """
+        Builds a DataFrame from an RDD based on column names.
+
+        Assumes RDD contains iterables of equal length.
+        >>> unparsedStrings = sc.parallelize(["1, A1, true", "2, B2, false", "3, C3, true", "4, D4, false"])
+        >>> input = unparsedStrings.map(lambda x: x.split(",")).map(lambda x: [int(x[0]), x[1], bool(x[2])])
+        >>> df1 = sqlCtx.toDataFrame(input, "a b c")
+        >>> df1.registerTempTable("df1")
+        >>> sqlCtx.sql("select a from df1").collect()
+        [Row(a=1), Row(a=2), Row(a=3), Row(a=4)]
+        >>> input2 = unparsedStrings.map(lambda x: x.split(",")).map(lambda x: [int(x[0]), x[1], bool(x[2]), {"k":int(x[0]), "v":2*int(x[0])}, x])
+        >>> df2 = DataFrame.toDataFrame(input2,"a b c d e")
+        >>> df2.registerTempTable("df2")
+        >>> sqlCtx.sql("select d['k']+d['v'] from df2").collect()
+        [Row(c0=3), Row(c0=6), Row(c0=9), Row(c0=12)]
+        >>> sqlCtx.sql("select b, e[1] from df2").collect()
+        [Row(b=u' A1', c1=u' A1'), Row(b=u' B2', c1=u' B2'), Row(b=u' C3', c1=u' C3'), Row(b=u' D4', c1=u' D4')]
+        """
+
+        sampleRow = plainRdd.first()
+        sampledTypes = map(_infer_type, sampleRow)
+
+        if names != None:
+            fieldNames = [f for f in re.split("( |\\\".*?\\\"|'.*?')", names) if f.strip()]
+        else:
+            fieldNames = ["_"+str(i) for i in range(1,len(sampleRow)+1)]
+
+        reservedWords = set(map(string.lower,self._ssql_ctx.getReservedWords()))
+
+        if len(reservedWords.intersection(map(string.lower, fieldNames))) > 0:
+            raise ValueError("Reserved words not allowed as column names")
+
+        fields= [StructField(k,v,True) for k, v in zip(fieldNames, sampledTypes)]
+        sampledSchema = StructType(fields)
+        return self.applySchema(plainRdd, sampledSchema)
 
     def registerRDDAsTable(self, rdd, tableName):
         """Registers the given RDD as a temporary table in the catalog.
