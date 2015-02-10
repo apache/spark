@@ -156,12 +156,12 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
 
   override def saveAsTable(
       tableName: String,
-      dataSourceName: String,
+      source: String,
       mode: SaveMode,
       options: Map[String, String]): Unit = err()
 
   override def save(
-      dataSourceName: String,
+      source: String,
       mode: SaveMode,
       options: Map[String, String]): Unit = err()
 

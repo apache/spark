@@ -352,13 +352,13 @@ private[sql] class DataFrameImpl protected[sql](
 
   override def saveAsTable(
       tableName: String,
-      dataSourceName: String,
+      source: String,
       mode: SaveMode,
       options: Map[String, String]): Unit = {
     val cmd =
       CreateTableUsingAsLogicalPlan(
         tableName,
-        dataSourceName,
+        source,
         temporary = false,
         mode,
         options,
@@ -368,10 +368,10 @@ private[sql] class DataFrameImpl protected[sql](
   }
 
   override def save(
-      dataSourceName: String,
+      source: String,
       mode: SaveMode,
       options: Map[String, String]): Unit = {
-    ResolvedDataSource(sqlContext, dataSourceName, mode, options, this)
+    ResolvedDataSource(sqlContext, source, mode, options, this)
   }
 
   override def insertInto(tableName: String, overwrite: Boolean): Unit = {

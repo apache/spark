@@ -617,8 +617,8 @@ trait DataFrame extends RDDApi[Row] {
   @Experimental
   def saveAsTable(
       tableName: String,
-      dataSourceName: String): Unit = {
-    saveAsTable(tableName, dataSourceName, SaveMode.ErrorIfExists)
+      source: String): Unit = {
+    saveAsTable(tableName, source, SaveMode.ErrorIfExists)
   }
 
   /**
@@ -634,9 +634,9 @@ trait DataFrame extends RDDApi[Row] {
   @Experimental
   def saveAsTable(
       tableName: String,
-      dataSourceName: String,
+      source: String,
       mode: SaveMode): Unit = {
-    saveAsTable(tableName, dataSourceName, mode, Map.empty[String, String])
+    saveAsTable(tableName, source, mode, Map.empty[String, String])
   }
 
   /**
@@ -652,10 +652,10 @@ trait DataFrame extends RDDApi[Row] {
   @Experimental
   def saveAsTable(
       tableName: String,
-      dataSourceName: String,
+      source: String,
       mode: SaveMode,
       options: java.util.Map[String, String]): Unit = {
-    saveAsTable(tableName, dataSourceName, mode, options.toMap)
+    saveAsTable(tableName, source, mode, options.toMap)
   }
 
   /**
@@ -672,7 +672,7 @@ trait DataFrame extends RDDApi[Row] {
   @Experimental
   def saveAsTable(
       tableName: String,
-      dataSourceName: String,
+      source: String,
       mode: SaveMode,
       options: Map[String, String]): Unit
 
@@ -704,8 +704,8 @@ trait DataFrame extends RDDApi[Row] {
    * using [[SaveMode.ErrorIfExists]] as the save mode.
    */
   @Experimental
-  def save(path: String, dataSourceName: String): Unit = {
-    save(dataSourceName, SaveMode.ErrorIfExists, Map("path" -> path))
+  def save(path: String, source: String): Unit = {
+    save(source, SaveMode.ErrorIfExists, Map("path" -> path))
   }
 
   /**
@@ -714,8 +714,8 @@ trait DataFrame extends RDDApi[Row] {
    * [[SaveMode]] specified by mode.
    */
   @Experimental
-  def save(path: String, dataSourceName: String, mode: SaveMode): Unit = {
-    save(dataSourceName, mode, Map("path" -> path))
+  def save(path: String, source: String, mode: SaveMode): Unit = {
+    save(source, mode, Map("path" -> path))
   }
 
   /**
@@ -725,10 +725,10 @@ trait DataFrame extends RDDApi[Row] {
    */
   @Experimental
   def save(
-      dataSourceName: String,
+      source: String,
       mode: SaveMode,
       options: java.util.Map[String, String]): Unit = {
-    save(dataSourceName, mode, options.toMap)
+    save(source, mode, options.toMap)
   }
 
   /**
@@ -739,7 +739,7 @@ trait DataFrame extends RDDApi[Row] {
    */
   @Experimental
   def save(
-      dataSourceName: String,
+      source: String,
       mode: SaveMode,
       options: Map[String, String]): Unit
 

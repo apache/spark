@@ -418,10 +418,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * using the given data source.
    */
   @Experimental
-  def load(
-      path: String,
-      dataSourceName: String): DataFrame = {
-    load(dataSourceName, Map("path" -> path))
+  def load(path: String, source: String): DataFrame = {
+    load(source, Map("path" -> path))
   }
 
   /**
@@ -429,10 +427,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Returns the dataset specified by the given data source and a set of options as a DataFrame.
    */
   @Experimental
-  def load(
-      dataSourceName: String,
-      options: java.util.Map[String, String]): DataFrame = {
-    load(dataSourceName, options.toMap)
+  def load(source: String, options: java.util.Map[String, String]): DataFrame = {
+    load(source, options.toMap)
   }
 
   /**
@@ -441,10 +437,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Returns the dataset specified by the given data source and a set of options as a DataFrame.
    */
   @Experimental
-  def load(
-      dataSourceName: String,
-      options: Map[String, String]): DataFrame = {
-    val resolved = ResolvedDataSource(this, None, dataSourceName, options)
+  def load(source: String, options: Map[String, String]): DataFrame = {
+    val resolved = ResolvedDataSource(this, None, source, options)
     DataFrame(this, LogicalRelation(resolved.relation))
   }
 
@@ -455,10 +449,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @Experimental
   def load(
-      dataSourceName: String,
+      source: String,
       schema: StructType,
       options: java.util.Map[String, String]): DataFrame = {
-    load(dataSourceName, schema, options.toMap)
+    load(source, schema, options.toMap)
   }
 
   /**
@@ -469,10 +463,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @Experimental
   def load(
-      dataSourceName: String,
+      source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame = {
-    val resolved = ResolvedDataSource(this, Some(schema), dataSourceName, options)
+    val resolved = ResolvedDataSource(this, Some(schema), source, options)
     DataFrame(this, LogicalRelation(resolved.relation))
   }
 
@@ -496,8 +490,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def createExternalTable(
       tableName: String,
       path: String,
-      dataSourceName: String): DataFrame = {
-    createExternalTable(tableName, dataSourceName, Map("path" -> path))
+      source: String): DataFrame = {
+    createExternalTable(tableName, source, Map("path" -> path))
   }
 
   /**
@@ -508,9 +502,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @Experimental
   def createExternalTable(
       tableName: String,
-      dataSourceName: String,
+      source: String,
       options: java.util.Map[String, String]): DataFrame = {
-    createExternalTable(tableName, dataSourceName, options.toMap)
+    createExternalTable(tableName, source, options.toMap)
   }
 
   /**
@@ -522,13 +516,13 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @Experimental
   def createExternalTable(
       tableName: String,
-      dataSourceName: String,
+      source: String,
       options: Map[String, String]): DataFrame = {
     val cmd =
       CreateTableUsing(
         tableName,
         userSpecifiedSchema = None,
-        dataSourceName,
+        source,
         temporary = false,
         options,
         allowExisting = false,
@@ -545,10 +539,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @Experimental
   def createExternalTable(
       tableName: String,
-      dataSourceName: String,
+      source: String,
       schema: StructType,
       options: java.util.Map[String, String]): DataFrame = {
-    createExternalTable(tableName, dataSourceName, schema, options.toMap)
+    createExternalTable(tableName, source, schema, options.toMap)
   }
 
   /**
@@ -560,14 +554,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @Experimental
   def createExternalTable(
       tableName: String,
-      dataSourceName: String,
+      source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame = {
     val cmd =
       CreateTableUsing(
         tableName,
         userSpecifiedSchema = Some(schema),
-        dataSourceName,
+        source,
         temporary = false,
         options,
         allowExisting = false,
