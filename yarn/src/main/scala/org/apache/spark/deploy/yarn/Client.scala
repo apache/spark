@@ -183,8 +183,7 @@ private[spark] class Client(
   private[yarn] def copyFileToRemote(
       destDir: Path,
       srcPath: Path,
-      replication: Short,
-      setPerms: Boolean = false): Path = {
+      replication: Short): Path = {
     val destFs = destDir.getFileSystem(hadoopConf)
     val srcFs = srcPath.getFileSystem(hadoopConf)
     var destPath = srcPath
@@ -193,9 +192,7 @@ private[spark] class Client(
       logInfo(s"Uploading resource $srcPath -> $destPath")
       FileUtil.copy(srcFs, srcPath, destFs, destPath, false, hadoopConf)
       destFs.setReplication(destPath, replication)
-      if (setPerms) {
-        destFs.setPermission(destPath, new FsPermission(APP_FILE_PERMISSION))
-      }
+      destFs.setPermission(destPath, new FsPermission(APP_FILE_PERMISSION))
     } else {
       logInfo(s"Source and destination file systems are the same. Not copying $srcPath")
     }
@@ -239,23 +236,22 @@ private[spark] class Client(
     /**
      * Copy the given main resource to the distributed cache if the scheme is not "local".
      * Otherwise, set the corresponding key in our SparkConf to handle it downstream.
-     * Each resource is represented by a 4-tuple of:
+     * Each resource is represented by a 3-tuple of:
      *   (1) destination resource name,
      *   (2) local path to the resource,
-     *   (3) Spark property key to set if the scheme is not local, and
-     *   (4) whether to set permissions for this resource
+     *   (3) Spark property key to set if the scheme is not local
      */
     List(
-      (SPARK_JAR, sparkJar(sparkConf), CONF_SPARK_JAR, false),
-      (APP_JAR, args.userJar, CONF_SPARK_USER_JAR, true),
-      ("log4j.properties", oldLog4jConf.orNull, null, false)
-    ).foreach { case (destName, _localPath, confKey, setPermissions) =>
+      (SPARK_JAR, sparkJar(sparkConf), CONF_SPARK_JAR),
+      (APP_JAR, args.userJar, CONF_SPARK_USER_JAR),
+      ("log4j.properties", oldLog4jConf.orNull, null)
+    ).foreach { case (destName, _localPath, confKey) =>
       val localPath: String = if (_localPath != null) _localPath.trim() else ""
       if (!localPath.isEmpty()) {
         val localURI = new URI(localPath)
         if (localURI.getScheme != LOCAL_SCHEME) {
           val src = getQualifiedLocalPath(localURI, hadoopConf)
-          val destPath = copyFileToRemote(dst, src, replication, setPermissions)
+          val destPath = copyFileToRemote(dst, src, replication)
           val destFs = FileSystem.get(destPath.toUri(), hadoopConf)
           distCacheMgr.addResource(destFs, hadoopConf, destPath,
             localResources, LocalResourceType.FILE, destName, statCache)
@@ -707,7 +703,7 @@ object Client extends Logging {
    * Return the path to the given application's staging directory.
    */
   private def getAppStagingDir(appId: ApplicationId): String = {
-    SPARK_STAGING + Path.SEPARATOR + appId.toString() + Path.SEPARATOR
+    buildPath(SPARK_STAGING, appId.toString())
   }
 
   /**
@@ -783,7 +779,13 @@ object Client extends Logging {
 
   /**
    * Populate the classpath entry in the given environment map.
-   * This includes the user jar, Spark jar, and any extra application jars.
+   *
+   * User jars are generally not added to the JVM's system classpath; those are handled by the AM
+   * and executor backend. When the deprecated `spark.yarn.user.classpath.first` is used, user jars
+   * are included in the system classpath, though. The extra class path and other uploaded files are
+   * always made available through the system class path.
+   *
+   * @param args Client arguments (when starting the AM) or null (when starting executors).
    */
   private[yarn] def populateClasspath(
       args: ClientArguments,
@@ -795,48 +797,38 @@ object Client extends Logging {
     addClasspathEntry(
       YarnSparkHadoopUtil.expandEnvironment(Environment.PWD), env
     )
-
-    // Normally the users app.jar is last in case conflicts with spark jars
     if (sparkConf.getBoolean("spark.yarn.user.classpath.first", false)) {
-      addUserClasspath(args, sparkConf, env)
-      addFileToClasspath(sparkJar(sparkConf), SPARK_JAR, env)
-      populateHadoopClasspath(conf, env)
-    } else {
-      addFileToClasspath(sparkJar(sparkConf), SPARK_JAR, env)
-      populateHadoopClasspath(conf, env)
-      addUserClasspath(args, sparkConf, env)
+      val userClassPath =
+        if (args != null) {
+          getUserClasspath(Option(args.userJar), Option(args.addJars))
+        } else {
+          getUserClasspath(sparkConf)
+        }
+      userClassPath.foreach { x =>
+        addFileToClasspath(x, null, env)
+      }
     }
-
-    // Append all jar files under the working directory to the classpath.
-    addClasspathEntry(
-      YarnSparkHadoopUtil.expandEnvironment(Environment.PWD) + Path.SEPARATOR + "*", env
-    )
+    addFileToClasspath(new URI(sparkJar(sparkConf)), SPARK_JAR, env)
+    populateHadoopClasspath(conf, env)
+    sys.env.get(ENV_DIST_CLASSPATH).foreach(addClasspathEntry(_, env))
   }
 
   /**
-   * Adds the user jars which have local: URIs (or alternate names, such as APP_JAR) explicitly
-   * to the classpath.
+   * Returns a list of URIs representing the user classpath.
+   *
+   * @param conf Spark configuration.
    */
-  private def addUserClasspath(
-      args: ClientArguments,
-      conf: SparkConf,
-      env: HashMap[String, String]): Unit = {
+  def getUserClasspath(conf: SparkConf): Array[URI] = {
+    getUserClasspath(conf.getOption(CONF_SPARK_USER_JAR),
+      conf.getOption(CONF_SPARK_YARN_SECONDARY_JARS))
+  }
 
-    // If `args` is not null, we are launching an AM container.
-    // Otherwise, we are launching executor containers.
-    val (mainJar, secondaryJars) =
-      if (args != null) {
-        (args.userJar, args.addJars)
-      } else {
-        (conf.get(CONF_SPARK_USER_JAR, null), conf.get(CONF_SPARK_YARN_SECONDARY_JARS, null))
-      }
-
-    addFileToClasspath(mainJar, APP_JAR, env)
-    if (secondaryJars != null) {
-      secondaryJars.split(",").filter(_.nonEmpty).foreach { jar =>
-        addFileToClasspath(jar, null, env)
-      }
-    }
+  private def getUserClasspath(
+      mainJar: Option[String],
+      secondaryJars: Option[String]): Array[URI] = {
+    val mainUri = mainJar.orElse(Some(APP_JAR)).map(new URI(_))
+    val secondaryUris = secondaryJars.map(_.split(",")).toSeq.flatten.map(new URI(_))
+    (mainUri ++ secondaryUris).toArray
   }
 
   /**
@@ -847,27 +839,19 @@ object Client extends Logging {
    *
    * If not a "local:" file and no alternate name, the environment is not modified.
    *
-   * @param path      Path to add to classpath (optional).
+   * @param uri       URI to add to classpath (optional).
    * @param fileName  Alternate name for the file (optional).
    * @param env       Map holding the environment variables.
    */
   private def addFileToClasspath(
-      path: String,
+      uri: URI,
       fileName: String,
       env: HashMap[String, String]): Unit = {
-    if (path != null) {
-      scala.util.control.Exception.ignoring(classOf[URISyntaxException]) {
-        val uri = new URI(path)
-        if (uri.getScheme == LOCAL_SCHEME) {
-          addClasspathEntry(uri.getPath, env)
-          return
-        }
-      }
-    }
-    if (fileName != null) {
-      addClasspathEntry(
-        YarnSparkHadoopUtil.expandEnvironment(Environment.PWD) + Path.SEPARATOR + fileName, env
-      )
+    if (uri != null && uri.getScheme == LOCAL_SCHEME) {
+      addClasspathEntry(uri.getPath, env)
+    } else if (fileName != null) {
+      addClasspathEntry(buildPath(
+        YarnSparkHadoopUtil.expandEnvironment(Environment.PWD), fileName), env)
     }
   }
 
@@ -961,6 +945,25 @@ object Client extends Logging {
         localURI
       }
     new Path(qualifiedURI)
+  }
+
+  /**
+   * Whether to consider jars provided by the user to have precedence over the Spark jars when
+   * loading user classes.
+   */
+  def isUserClassPathFirst(conf: SparkConf, isDriver: Boolean): Boolean = {
+    if (isDriver) {
+      conf.getBoolean("spark.driver.userClassPathFirst", false)
+    } else {
+      conf.getBoolean("spark.executor.userClassPathFirst", false)
+    }
+  }
+
+  /**
+   * Joins all the path components using Path.SEPARATOR.
+   */
+  def buildPath(components: String*): String = {
+    components.mkString(Path.SEPARATOR)
   }
 
 }

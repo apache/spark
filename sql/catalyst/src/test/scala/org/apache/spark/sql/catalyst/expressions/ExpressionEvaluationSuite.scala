@@ -851,7 +851,7 @@ class ExpressionEvaluationSuite extends FunSuite {
       expr.dataType match {
         case StructType(fields) =>
           val field = fields.find(_.name == fieldName).get
-          GetField(expr, field, fields.indexOf(field))
+          StructGetField(expr, field, fields.indexOf(field))
       }
     }
 
