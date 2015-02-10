@@ -113,9 +113,9 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
 </tr>
 <tr>
  <td><code>spark.yarn.executor.memoryOverhead</code></td>
-  <td>executorMemory * 0.07, with minimum of 384 </td>
+  <td>executorMemory * 0.07, with minimum of 384 megabytes </td>
   <td>
-    The amount of off heap memory (in megabytes) to be allocated per executor. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc. This tends to grow with the executor size (typically 6-10%).
+    The amount of off heap memory to be allocated per executor. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc. This tends to grow with the executor size (typically 6-10%), but is specified here as an absolute amount of memory, e.g. "1g" or "384m".
   </td>
 </tr>
 <tr>
