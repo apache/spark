@@ -6,6 +6,8 @@ import java.net.URI
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
 
+import org.apache.hadoop.fs.Path
+
 /**
  * Main class used to launch SparkR applications using spark-submit. It executes R as a
  * subprocess and then has it connect back to the JVM to access system properties etc.
@@ -19,9 +21,15 @@ object SparkRRunner {
     val sparkRBackendPort = sys.env.getOrElse("SPARKR_BACKEND_PORT", "12345").toInt
     val rCommand = "Rscript"
 
-    // val formattedPythonFile = formatPath(pythonFile)
-    // TODO: Normalize path ?
-    val rFileNormalized = rFile
+    // Check if the file path exists.
+    // If not, change directory to current working directory for YARN cluster mode
+    val rF = new File(rFile)
+    val rFileNormalized = if (!rF.exists()) {
+      new Path(rFile).getName
+    } else {
+      rFile
+    }
+
 
     // Launch a SparkR backend server for the R process to connect to; this will let it see our
     // Java system properties etc.
