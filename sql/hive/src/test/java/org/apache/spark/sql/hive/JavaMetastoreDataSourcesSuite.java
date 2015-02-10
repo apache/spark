@@ -23,6 +23,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.spark.sql.sources.SaveMode;
 import org.junit.After;
 import org.junit.Assert;
@@ -46,7 +48,8 @@ public class JavaMetastoreDataSourcesSuite {
 
   String originalDefaultSource;
   File path;
-  File hiveManagedPath;
+  Path hiveManagedPath;
+  FileSystem fs;
   DataFrame df;
 
   private void checkAnswer(DataFrame actual, List<Row> expected) {
@@ -67,9 +70,10 @@ public class JavaMetastoreDataSourcesSuite {
     if (path.exists()) {
       path.delete();
     }
-    hiveManagedPath = new File(sqlContext.catalog().hiveDefaultTableFilePath("javaSavedTable"));
-    if (hiveManagedPath.exists()) {
-      hiveManagedPath.delete();
+    hiveManagedPath = new Path(sqlContext.catalog().hiveDefaultTableFilePath("javaSavedTable"));
+    fs = hiveManagedPath.getFileSystem(sc.hadoopConfiguration());
+    if (fs.exists(hiveManagedPath)){
+      fs.delete(hiveManagedPath, true);
     }
 
     List<String> jsonObjects = new ArrayList<String>(10);
@@ -83,25 +87,9 @@ public class JavaMetastoreDataSourcesSuite {
 
   @After
   public void tearDown() throws IOException {
-    // Clean up tables and data.
+    // Clean up tables.
     sqlContext.sql("DROP TABLE IF EXISTS javaSavedTable");
     sqlContext.sql("DROP TABLE IF EXISTS externalTable");
-    if (path.exists()) {
-      path.delete();
-    }
-    if (hiveManagedPath.exists()) {
-      hiveManagedPath.delete();
-    }
-  }
-
-  @Test
-  public void saveTableAndQueryIt() {
-    Map<String, String> options = new HashMap<String, String>();
-    df.saveAsTable("javaSavedTable", "org.apache.spark.sql.json", SaveMode.Append, options);
-
-    checkAnswer(
-      sqlContext.sql("SELECT * FROM javaSavedTable"),
-      df.collectAsList());
   }
 
   @Test
@@ -145,5 +133,15 @@ public class JavaMetastoreDataSourcesSuite {
     checkAnswer(
       sqlContext.sql("SELECT * FROM externalTable"),
       sqlContext.sql("SELECT b FROM javaSavedTable").collectAsList());
+  }
+
+  @Test
+  public void saveTableAndQueryIt() {
+    Map<String, String> options = new HashMap<String, String>();
+    df.saveAsTable("javaSavedTable", "org.apache.spark.sql.json", SaveMode.Append, options);
+
+    checkAnswer(
+      sqlContext.sql("SELECT * FROM javaSavedTable"),
+      df.collectAsList());
   }
 }
