@@ -1025,9 +1025,8 @@ private[spark] object Utils extends Logging {
     (for {
       inputScale <- scaleCharToFactor.get(inputScaleChar)
       outputScale <- scaleCharToFactor.get(outputScaleChar)
-      scale = inputScale * num / outputScale
     } yield {
-      scale
+      inputScale * num / outputScale
     }).getOrElse(
         throw new IllegalArgumentException(
           "Invalid memory string or scale: %s, %s, %s".format(
