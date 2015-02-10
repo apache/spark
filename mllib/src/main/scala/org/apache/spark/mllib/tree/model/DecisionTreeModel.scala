@@ -131,10 +131,10 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] {
     }
 
     case class SplitData(
-      feature: Int,
-      threshold: Double,
-      featureType: Int,
-      categories: Seq[Double]) { // TODO: Change to List once SPARK-3365 is fixed
+        feature: Int,
+        threshold: Double,
+        featureType: Int,
+        categories: Seq[Double]) { // TODO: Change to List once SPARK-3365 is fixed
       def toSplit: Split = {
         new Split(feature, threshold, FeatureType(featureType), categories.toList)
       }
@@ -152,15 +152,15 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] {
 
     /** Model data for model import/export */
     case class NodeData(
-      treeId: Int,
-      nodeId: Int,
-      predict: PredictData,
-      impurity: Double,
-      isLeaf: Boolean,
-      split: Option[SplitData],
-      leftNodeId: Option[Int],
-      rightNodeId: Option[Int],
-      infoGain: Option[Double])
+        treeId: Int,
+        nodeId: Int,
+        predict: PredictData,
+        impurity: Double,
+        isLeaf: Boolean,
+        split: Option[SplitData],
+        leftNodeId: Option[Int],
+        rightNodeId: Option[Int],
+        infoGain: Option[Double])
 
     object NodeData {
       def apply(treeId: Int, n: Node): NodeData = {
@@ -174,8 +174,8 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] {
         val leftNodeId = if (r.isNullAt(6)) None else Some(r.getInt(6))
         val rightNodeId = if (r.isNullAt(7)) None else Some(r.getInt(7))
         val infoGain = if (r.isNullAt(8)) None else Some(r.getDouble(8))
-        NodeData(r.getInt(0), r.getInt(1), PredictData(r.getStruct(2)), r.getDouble(3), r.getBoolean(4),
-          split, leftNodeId, rightNodeId, infoGain)
+        NodeData(r.getInt(0), r.getInt(1), PredictData(r.getStruct(2)), r.getDouble(3),
+          r.getBoolean(4), split, leftNodeId, rightNodeId, infoGain)
       }
     }
 
@@ -210,9 +210,8 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] {
       assert(trees.size == 1,
         "Decision tree should contain exactly one tree but got ${trees.size} trees.")
       val model = new DecisionTreeModel(trees(0), Algo.fromString(algo))
-      assert(model.numNodes == numNodes,
-        s"Unable to load DecisionTreeModel data from: $datapath." +
-          s"  Expected $numNodes nodes but found ${model.numNodes}")
+      assert(model.numNodes == numNodes, s"Unable to load DecisionTreeModel data from: $datapath." +
+        s" Expected $numNodes nodes but found ${model.numNodes}")
       model
     }
 
