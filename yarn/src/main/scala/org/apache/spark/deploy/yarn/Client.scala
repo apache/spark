@@ -62,7 +62,7 @@ private[spark] class Client(
   private val yarnClient = YarnClient.createYarnClient
   private val yarnConf = new YarnConfiguration(hadoopConf)
   private val credentials = UserGroupInformation.getCurrentUser.getCredentials
-  private val amMemoryOverheadMB = args.amMemoryOverhead
+  private val amMemoryOverheadMB = args.amMemoryOverheadMB
   private val executorMemoryOverheadMB = args.executorMemoryOverhead
   private val distCacheMgr = new ClientDistributedCacheManager()
   private val isClusterMode = args.isClusterMode
