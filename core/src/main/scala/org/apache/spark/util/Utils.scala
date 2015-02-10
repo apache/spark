@@ -986,33 +986,66 @@ private[spark] object Utils extends Logging {
   private val MB = 1L << 20
   private val KB = 1L << 10
 
+  private val scaleCharToFactor: Map[Char, Long] = Map(
+    'b' -> 1L,
+    'k' -> KB,
+    'm' -> MB,
+    'g' -> GB,
+    't' -> TB
+  )
+
   /**
-   * Convert a Java memory parameter passed to -Xmx (such as 300m or 1g) to a number of megabytes.
+   * Convert a Java memory parameter passed to -Xmx (such as "300m" or "1g") to a number of
+   * megabytes (or other byte-scale denominations as specified by @outputScaleChar).
+   *
+   * For @defaultInputScaleChar and @outputScaleChar, valid values are: 'b' (bytes), 'k'
+   * (kilobytes), 'm' (megabytes), 'g' (gigabytes), and 't' (terabytes).
+   *
+   * @param str String to parse an amount of memory out of
+   * @param defaultInputScaleChar if no "scale" is provided on the end of @str (i.e. @str is a
+   *                              plain numeric value), assume this scale (default: 'b' for
+   *                              'bytes')
+   * @param outputScaleChar express the output in this scale, i.e. number of bytes, kilobytes,
+   *                        megabytes, or gigabytes.
    */
-  def memoryStringToMb(str: String): Int = memoryStringToMb(str, 'b')
-  def memoryStringToMb(str: String, defaultScale: Char): Int = {
+  def parseMemoryString(
+      str: String,
+      defaultInputScaleChar: Char = 'b',
+      outputScaleChar: Char = 'm'): Long = {
+
     val lower = str.toLowerCase
     val lastChar = lower(lower.length - 1)
-    val scale =
-      if (lastChar.isDigit)
-        defaultScale
-      else
-        lastChar
+    val (num, inputScaleChar) =
+      if (lastChar.isDigit) {
+        (lower.toLong, defaultInputScaleChar)
+      } else {
+        (lower.substring(0, lower.length - 1).toLong, lastChar)
+      }
 
-    if (scale == 'k') {
-      (lower.substring(0, lower.length-1).toLong / 1024).toInt
-    } else if (scale == 'm') {
-      lower.substring(0, lower.length-1).toInt
-    } else if (scale == 'g') {
-      lower.substring(0, lower.length-1).toInt * 1024
-    } else if (scale == 't') {
-      lower.substring(0, lower.length-1).toInt * 1024 * 1024
-    } else if (scale == 'b') {// no suffix, so it's just a number in bytes
-      (lower.toLong / 1024 / 1024).toInt
-    } else {
-      throw new IllegalArgumentException("Invalid memory string: %s".format(str))
-    }
+    (for {
+      inputScale <- scaleCharToFactor.get(inputScaleChar)
+      outputScale <- scaleCharToFactor.get(outputScaleChar)
+      scale = inputScale * num / outputScale
+    } yield {
+      scale
+    }).getOrElse(
+        throw new IllegalArgumentException(
+          "Invalid memory string or scale: %s, %s, %s".format(
+            str,
+            defaultInputScaleChar,
+            outputScaleChar
+          )
+        )
+      )
   }
+
+  /**
+   * Wrapper for @parseMemoryString taking default arguments and returning an int, which is safe
+   * since we are converting to a number of megabytes.
+   */
+  def memoryStringToMb(str: String): Int = memoryStringToMb(str, defaultInputScale = 'b')
+  def memoryStringToMb(str: String, defaultInputScale: Char = 'b'): Int =
+    parseMemoryString(str, defaultInputScale, 'm').toInt
 
   /**
    * Convert a quantity in bytes to a human-readable string such as "4.0 MB".
