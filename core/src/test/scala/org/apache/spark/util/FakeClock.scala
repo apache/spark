@@ -17,8 +17,7 @@
 
 package org.apache.spark.util
 
-class FakeClock extends Clock {
-  private var time = 0L
+class FakeClock(private var time: Long = 0L) extends Clock {
 
   def advance(millis: Long): Unit = time += millis
 
