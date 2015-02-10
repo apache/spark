@@ -333,7 +333,11 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         ReusedPySparkTestCase.setUpClass()
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
         os.unlink(cls.tempdir.name)
-        cls.sqlCtx = HiveContext(cls.sc)
+        print "type", type(cls.sc)
+        print "type", type(cls.sc._jsc)
+        _scala_HiveContext =\
+            cls.sc._jvm.org.apache.spark.sql.hive.test.TestHiveContext(cls.sc._jsc.sc())
+        cls.sqlCtx = HiveContext(cls.sc, _scala_HiveContext)
         cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
         rdd = cls.sc.parallelize(cls.testData)
         cls.df = cls.sqlCtx.inferSchema(rdd)
