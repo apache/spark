@@ -56,10 +56,8 @@ private[spark] class HttpFileServer(
     try {
       Utils.deleteRecursively(baseDir)
     } catch {
-      case e: Exception => {
-        val path = baseDir.getAbsolutePath
-        logWarning(s"Exception while deleting Spark temp dir: $path", e)
-      }
+      case e: Exception =>
+        logWarning(s"Exception while deleting Spark temp dir: ${baseDir.getAbsolutePath}", e)
     }
   }
 
