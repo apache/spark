@@ -46,11 +46,11 @@ SUBMIT_USAGE_FUNCTION=usage
 gatherSparkSubmitOpts "$@"
 
 # If a R file is provided, directly run spark-submit. 
-if [[ "$1" =~ \.R$ ]]; then
-  primary="$1"
+if [[ "${APPLICATION_OPTS[0]}" =~ \.R$ ]]; then
+  primary="${APPLICATION_OPTS[0]}"
   shift
-  gatherSparkSubmitOpts "$@"
-  exec "$FWDIR"/bin/spark-submit --class edu.berkeley.cs.amplab.sparkr.SparkRRunner --files "$primary" "${SUBMISSION_OPTS[@]}" "$SPARKR_JAR_FILE" "$primary" "${APPLICATION_OPTS[@]}"
+  # Set the main class to SparkRRunner and add the primary R file to --files to make sure its copied to the cluster
+  exec "$SPARK_HOME"/bin/spark-submit --class edu.berkeley.cs.amplab.sparkr.SparkRRunner --files "$primary" "${SUBMISSION_OPTS[@]}" "$SPARKR_JAR_FILE" "$primary" "${APPLICATION_OPTS[@]:1}"
 else
-  echo "sparkR-submit can only be used to run R programs. Please use sparkR to launch a shell"
+  echo "sparkR-submit can only be used to run R programs. Please use sparkR to launch a shell."
 fi
