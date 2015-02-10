@@ -9,6 +9,7 @@ set :shared_conf_path, "/u/apps/spark/shared/conf"
 set :spark_jar_path, "hdfs://hadoop-production/user/sparkles"
 set :gateway, nil
 set :keep_releases, 5
+set :branch, fetch(:branch, `git symbolic-ref --short HEAD`.gsub("\s",""))
 
 DATANODES = (2..47).map {|i| "dn%02d.chi.shopify.com" % i }
 OTHERNODES = ["hadoop-etl1.chi.shopify.com", "spark-etl1.chi.shopify.com", "reports-reportify-etl3.chi.shopify.com", "reports-reportify-skydb4.chi.shopify.com", "platfora2.chi.shopify.com"]
@@ -41,7 +42,17 @@ namespace :deploy do
   end
 
   task :upload_to_hdfs, :roles => :uploader, :on_no_matching_servers => :continue do
-    run "hdfs dfs -copyFromLocal -f #{release_path}/lib/spark-assembly-*.jar hdfs://hadoop-production/user/sparkles/spark-assembly-#{fetch(:sha)}.jar"
+    raw_binary_path = "./lib/spark-assembly-1.3.0-SNAPSHOT-hadoop2.0.0-cdh4.7.0.jar"
+    modified_binary_path = "./lib/spark-assembly-1.3.0-#{fetch(:sha)}-hadoop2.0.0-cdh4.7.0.jar"
+    if fetch(:branch) == "master"
+      run "hdfs dfs -copyFromLocal -f #{release_path}/lib/spark-assembly-*.jar hdfs://hadoop-production/user/sparkles/spark-assembly-#{fetch(:sha)}.jar"
+    else
+      unless File.exist?(binary_path)
+        system("./make-distribution.sh --name #{fetch(:sha)} --skip-java-test $(cat SHOPIFY_HADOOP_OPTIONS)")
+        system("mv #{raw_binary_path} #{modified_binary_path}")
+      end
+      system("hdfs dfs -copyFromLocal #{modified_binary_path} hdfs://nn01.chi.shopify.com/user/sparkles")
+    end
   end
 
   task :test_spark_jar, :roles => :uploader, :on_no_master_servers => :continue do
