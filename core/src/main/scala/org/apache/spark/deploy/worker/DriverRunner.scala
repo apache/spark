@@ -74,10 +74,15 @@ private[spark] class DriverRunner(
           val driverDir = createWorkingDirectory()
           val localJarFilename = downloadUserJar(driverDir)
 
-          // Make sure user application jar is on the classpath
+          def substituteVariables(argument: String): String = argument match {
+            case "{{WORKER_URL}}" => workerUrl
+            case "{{USER_JAR}}" => localJarFilename
+            case other => other
+          }
+
           // TODO: If we add ability to submit multiple jars they should also be added here
           val builder = CommandUtils.buildProcessBuilder(driverDesc.command, driverDesc.mem,
-            sparkHome.getAbsolutePath, substituteVariables, Seq(localJarFilename))
+            sparkHome.getAbsolutePath, substituteVariables)
           launchDriver(builder, driverDir, driverDesc.supervise)
         }
         catch {
@@ -109,12 +114,6 @@ private[spark] class DriverRunner(
       process.foreach(p => p.destroy())
       killed = true
     }
-  }
-
-  /** Replace variables in a command argument passed to us */
-  private def substituteVariables(argument: String): String = argument match {
-    case "{{WORKER_URL}}" => workerUrl
-    case other => other
   }
 
   /**

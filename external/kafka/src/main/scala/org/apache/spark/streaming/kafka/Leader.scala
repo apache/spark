@@ -19,17 +19,28 @@ package org.apache.spark.streaming.kafka
 
 import kafka.common.TopicAndPartition
 
-/** Host info for the leader of a Kafka TopicAndPartition */
+import org.apache.spark.annotation.Experimental
+
+/**
+ * :: Experimental ::
+ * Represent the host info for the leader of a Kafka partition.
+ */
+@Experimental
 final class Leader private(
-    /** kafka topic name */
+    /** Kafka topic name */
     val topic: String,
-    /** kafka partition id */
+    /** Kafka partition id */
     val partition: Int,
-    /** kafka hostname */
+    /** Leader's hostname */
     val host: String,
-    /** kafka host's port */
+    /** Leader's port */
     val port: Int) extends Serializable
 
+/**
+ * :: Experimental ::
+ * Companion object the provides methods to create instances of [[Leader]].
+ */
+@Experimental
 object Leader {
   def create(topic: String, partition: Int, host: String, port: Int): Leader =
     new Leader(topic, partition, host, port)

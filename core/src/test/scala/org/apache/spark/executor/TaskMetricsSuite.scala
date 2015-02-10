@@ -15,23 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util
+package org.apache.spark.executor
 
-/**
- * A class loader which makes some protected methods in ClassLoader accesible.
- */
-private[spark] class ParentClassLoader(parent: ClassLoader) extends ClassLoader(parent) {
+import org.scalatest.FunSuite
 
-  override def findClass(name: String) = {
-    super.findClass(name)
+class TaskMetricsSuite extends FunSuite {
+  test("[SPARK-5701] updateShuffleReadMetrics: ShuffleReadMetrics not added when no shuffle deps") {
+    val taskMetrics = new TaskMetrics()
+    taskMetrics.updateShuffleReadMetrics()
+    assert(taskMetrics.shuffleReadMetrics.isEmpty)
   }
-
-  override def loadClass(name: String): Class[_] = {
-    super.loadClass(name)
-  }
-
-  override def loadClass(name: String, resolve: Boolean): Class[_] = {
-    super.loadClass(name, resolve)
-  }
-
 }
