@@ -64,8 +64,10 @@ function run_core_tests() {
 
 function run_sql_tests() {
     echo "Run sql tests ..."
-    run_test "pyspark/sql.py"
-    run_test "pyspark/sql_tests.py"
+    run_test "pyspark/sql/types.py"
+    run_test "pyspark/sql/context.py"
+    run_test "pyspark/sql/dataframe.py"
+    run_test "pyspark/sql/tests.py"
 }
 
 function run_mllib_tests() {
