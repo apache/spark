@@ -184,7 +184,7 @@ class DataFrame(object):
         if source is None:
             source = self.sql_ctx.getConf("spark.sql.sources.default",
                                           "org.apache.spark.sql.parquet")
-        jmode = _java_save_mode(mode)
+        jmode = self._java_save_mode(mode)
         joptions = MapConverter().convert(options,
                                           self.sql_ctx._sc._gateway._gateway_client)
         self._jdf.saveAsTable(tableName, source, jmode, joptions)
@@ -210,7 +210,7 @@ class DataFrame(object):
         if source is None:
             source = self.sql_ctx.getConf("spark.sql.sources.default",
                                           "org.apache.spark.sql.parquet")
-        jmode = _java_save_mode(mode)
+        jmode = self._java_save_mode(mode)
         joptions = MapConverter().convert(options,
                                           self._sc._gateway._gateway_client)
         self._jdf.save(source, jmode, joptions)
