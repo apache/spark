@@ -333,6 +333,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
    * @return whether the request is acknowledged.
    */
   final override def requestTotalExecutors(numExecutors: Int): Boolean = synchronized {
+    if (numAdditionalExecutors < 0) {
+      throw new IllegalArgumentException(
+        "Attempted to request a negative number of executor(s) " +
+          s"$numExecutors from the cluster manager. Please specify a positive number!")
+    }
     numPendingExecutors =
       math.max(numExecutors - numExistingExecutors + executorsPendingToRemove.size, 0)
     doRequestTotalExecutors(numExecutors)
