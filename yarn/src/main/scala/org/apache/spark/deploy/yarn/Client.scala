@@ -62,7 +62,7 @@ private[spark] class Client(
   private val yarnClient = YarnClient.createYarnClient
   private val yarnConf = new YarnConfiguration(hadoopConf)
   private val credentials = UserGroupInformation.getCurrentUser.getCredentials
-  private val amMemoryOverhead = args.amMemoryOverhead // MB
+  private val amMemoryOverheadMB = args.amMemoryOverhead
   private val executorMemoryOverhead = args.executorMemoryOverhead // MB
   private val distCacheMgr = new ClientDistributedCacheManager()
   private val isClusterMode = args.isClusterMode
@@ -126,7 +126,7 @@ private[spark] class Client(
           "Cluster's default value will be used.")
     }
     val capability = Records.newRecord(classOf[Resource])
-    capability.setMemory(args.amMemoryMB + amMemoryOverhead)
+    capability.setMemory(args.amMemoryMB + amMemoryOverheadMB)
     capability.setVirtualCores(args.amCores)
     appContext.setResource(capability)
     appContext
@@ -162,14 +162,14 @@ private[spark] class Client(
       throw new IllegalArgumentException(s"Required executor memory (${args.executorMemoryMB}" +
         s"+$executorMemoryOverhead MB) is above the max threshold ($maxMem MB) of this cluster!")
     }
-    val amMem = args.amMemoryMB + amMemoryOverhead
+    val amMem = args.amMemoryMB + amMemoryOverheadMB
     if (amMem > maxMem) {
       throw new IllegalArgumentException(s"Required AM memory (${args.amMemoryMB}" +
-        s"+$amMemoryOverhead MB) is above the max threshold ($maxMem MB) of this cluster!")
+        s"+$amMemoryOverheadMB MB) is above the max threshold ($maxMem MB) of this cluster!")
     }
     logInfo("Will allocate AM container, with %d MB memory including %d MB overhead".format(
       amMem,
-      amMemoryOverhead))
+      amMemoryOverheadMB))
 
     // We could add checks to make sure the entire cluster has enough resources but that involves
     // getting all the node reports and computing ourselves.
