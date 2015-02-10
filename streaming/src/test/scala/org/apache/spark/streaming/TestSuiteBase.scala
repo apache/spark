@@ -31,10 +31,9 @@ import org.scalatest.concurrent.PatienceConfiguration
 
 import org.apache.spark.streaming.dstream.{DStream, InputDStream, ForEachDStream}
 import org.apache.spark.streaming.scheduler.{StreamingListenerBatchStarted, StreamingListenerBatchCompleted, StreamingListener}
-import org.apache.spark.streaming.util.ManualClock
 import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{FakeClock, Utils}
 
 /**
  * This is a input stream just for the testsuites. This is equivalent to a checkpointable,
@@ -189,10 +188,10 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
   def beforeFunction() {
     if (useManualClock) {
       logInfo("Using manual clock")
-      conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
+      conf.set("spark.streaming.clock", "org.apache.spark.util.FakeClock")
     } else {
       logInfo("Using real clock")
-      conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock")
+      conf.set("spark.streaming.clock", "org.apache.spark.util.SystemClock")
     }
   }
 
@@ -332,18 +331,18 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
       ssc.start()
 
       // Advance manual clock
-      val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-      logInfo("Manual clock before advancing = " + clock.currentTime())
+      val clock = ssc.scheduler.clock.asInstanceOf[FakeClock]
+      logInfo("Manual clock before advancing = " + clock.getTime())
       if (actuallyWait) {
         for (i <- 1 to numBatches) {
           logInfo("Actually waiting for " + batchDuration)
-          clock.addToTime(batchDuration.milliseconds)
+          clock.advance(batchDuration.milliseconds)
           Thread.sleep(batchDuration.milliseconds)
         }
       } else {
-        clock.addToTime(numBatches * batchDuration.milliseconds)
+        clock.advance(numBatches * batchDuration.milliseconds)
       }
-      logInfo("Manual clock after advancing = " + clock.currentTime())
+      logInfo("Manual clock after advancing = " + clock.getTime())
 
       // Wait until expected number of output items have been generated
       val startTime = System.currentTimeMillis()

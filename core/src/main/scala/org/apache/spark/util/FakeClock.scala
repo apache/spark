@@ -17,9 +17,33 @@
 
 package org.apache.spark.util
 
-class FakeClock(private var time: Long = 0L) extends Clock {
+class FakeClock(private var time: Long) extends Clock {
 
-  def advance(millis: Long): Unit = time += millis
+  def this() = this(0L)
 
-  def getTime(): Long = time
+  def getTime(): Long =
+    synchronized {
+      time
+    }
+
+  def setTime(timeToSet: Long) =
+    synchronized {
+      time = timeToSet
+      notifyAll()
+    }
+
+  def advance(timeToAdd: Long) =
+    this.synchronized {
+      time += timeToAdd
+      notifyAll()
+    }
+
+  def waitTillTime(targetTime: Long): Long =
+    synchronized {
+      while (time < targetTime) {
+        wait(100)
+      }
+      getTime()
+    }
+
 }

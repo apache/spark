@@ -34,9 +34,9 @@ import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.receiver.BlockManagerBasedStoreResult
 import org.apache.spark.streaming.scheduler._
-import org.apache.spark.streaming.util.{Clock, ManualClock, SystemClock, WriteAheadLogReader}
+import org.apache.spark.streaming.util.WriteAheadLogReader
 import org.apache.spark.streaming.util.WriteAheadLogSuite._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Clock, FakeClock, SystemClock, Utils}
 
 class ReceivedBlockTrackerSuite
   extends FunSuite with BeforeAndAfter with Matchers with Logging {
@@ -94,13 +94,13 @@ class ReceivedBlockTrackerSuite
   }
 
   test("block addition, block to batch allocation and cleanup with write ahead log") {
-    val manualClock = new ManualClock
+    val manualClock = new FakeClock()
     // Set the time increment level to twice the rotation interval so that every increment creates
     // a new log file
 
     def incrementTime() {
       val timeIncrementMillis = 2000L
-      manualClock.addToTime(timeIncrementMillis)
+      manualClock.advance(timeIncrementMillis)
     }
 
     // Generate and add blocks to the given tracker
@@ -138,13 +138,13 @@ class ReceivedBlockTrackerSuite
     tracker2.getUnallocatedBlocks(streamId).toList shouldEqual blockInfos1
 
     // Allocate blocks to batch and verify whether the unallocated blocks got allocated
-    val batchTime1 = manualClock.currentTime
+    val batchTime1 = manualClock.getTime()
     tracker2.allocateBlocksToBatch(batchTime1)
     tracker2.getBlocksOfBatchAndStream(batchTime1, streamId) shouldEqual blockInfos1
 
     // Add more blocks and allocate to another batch
     incrementTime()
-    val batchTime2 = manualClock.currentTime
+    val batchTime2 = manualClock.getTime()
     val blockInfos2 = addBlockInfos(tracker2)
     tracker2.allocateBlocksToBatch(batchTime2)
     tracker2.getBlocksOfBatchAndStream(batchTime2, streamId) shouldEqual blockInfos2
@@ -211,7 +211,7 @@ class ReceivedBlockTrackerSuite
    */
   def createTracker(
       setCheckpointDir: Boolean = true,
-      clock: Clock = new SystemClock): ReceivedBlockTracker = {
+      clock: Clock = new SystemClock()): ReceivedBlockTracker = {
     val cpDirOption = if (setCheckpointDir) Some(checkpointDirectory.toString) else None
     val tracker = new ReceivedBlockTracker(conf, hadoopConf, Seq(streamId), clock, cpDirOption)
     allReceivedBlockTrackers += tracker

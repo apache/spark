@@ -17,12 +17,8 @@
 
 package org.apache.spark.streaming
 
-import akka.actor.Actor
-import akka.actor.Props
-import akka.util.ByteString
-
 import java.io.{File, BufferedWriter, OutputStreamWriter}
-import java.net.{InetSocketAddress, SocketException, ServerSocket}
+import java.net.{SocketException, ServerSocket}
 import java.nio.charset.Charset
 import java.util.concurrent.{Executors, TimeUnit, ArrayBlockingQueue}
 import java.util.concurrent.atomic.AtomicInteger
@@ -36,9 +32,8 @@ import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.util.ManualClock
-import org.apache.spark.util.Utils
-import org.apache.spark.streaming.receiver.{ActorHelper, Receiver}
+import org.apache.spark.util.{FakeClock, Utils}
+import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.rdd.RDD
 import org.apache.hadoop.io.{Text, LongWritable}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
@@ -62,14 +57,14 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     ssc.start()
 
     // Feed data to the server to send to the network receiver
-    val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+    val clock = ssc.scheduler.clock.asInstanceOf[FakeClock]
     val input = Seq(1, 2, 3, 4, 5)
     val expectedOutput = input.map(_.toString)
     Thread.sleep(1000)
     for (i <- 0 until input.size) {
       testServer.send(input(i).toString + "\n")
       Thread.sleep(500)
-      clock.addToTime(batchDuration.milliseconds)
+      clock.advance(batchDuration.milliseconds)
     }
     Thread.sleep(1000)
     logInfo("Stopping server")
@@ -107,7 +102,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
       // Set up the streaming context and input streams
       withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
-        val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+        val clock = ssc.scheduler.clock.asInstanceOf[FakeClock]
         // This `setTime` call ensures that the clock is past the creation time of `existingFile`
         clock.setTime(existingFile.lastModified + batchDuration.milliseconds)
         val batchCounter = new BatchCounter(ssc)
@@ -120,19 +115,19 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
         // Advance the clock so that the files are created after StreamingContext starts, but
         // not enough to trigger a batch
-        clock.addToTime(batchDuration.milliseconds / 2)
+        clock.advance(batchDuration.milliseconds / 2)
 
         val input = Seq(1, 2, 3, 4, 5)
         input.foreach { i =>
           Thread.sleep(batchDuration.milliseconds)
           val file = new File(testDir, i.toString)
           Files.write(Array[Byte](i.toByte), file)
-          assert(file.setLastModified(clock.currentTime()))
-          assert(file.lastModified === clock.currentTime)
+          assert(file.setLastModified(clock.getTime()))
+          assert(file.lastModified === clock.getTime())
           logInfo("Created file " + file)
           // Advance the clock after creating the file to avoid a race when
           // setting its modification time
-          clock.addToTime(batchDuration.milliseconds)
+          clock.advance(batchDuration.milliseconds)
           eventually(eventuallyTimeout) {
             assert(batchCounter.getNumCompletedBatches === i)
           }
@@ -174,12 +169,12 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     ssc.start()
 
     // Let the data from the receiver be received
-    val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+    val clock = ssc.scheduler.clock.asInstanceOf[FakeClock]
     val startTime = System.currentTimeMillis()
     while((!MultiThreadTestReceiver.haveAllThreadsFinished || output.sum < numTotalRecords) &&
       System.currentTimeMillis() - startTime < 5000) {
       Thread.sleep(100)
-      clock.addToTime(batchDuration.milliseconds)
+      clock.advance(batchDuration.milliseconds)
     }
     Thread.sleep(1000)
     logInfo("Stopping context")
@@ -206,7 +201,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     ssc.start()
 
     // Setup data queued into the stream
-    val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+    val clock = ssc.scheduler.clock.asInstanceOf[FakeClock]
     val input = Seq("1", "2", "3", "4", "5")
     val expectedOutput = input.map(Seq(_))
     //Thread.sleep(1000)
@@ -214,7 +209,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     for (i <- 0 until input.size) {
       // Enqueue more than 1 item per tick but they should dequeue one at a time
       inputIterator.take(2).foreach(i => queue += ssc.sparkContext.makeRDD(Seq(i)))
-      clock.addToTime(batchDuration.milliseconds)
+      clock.advance(batchDuration.milliseconds)
     }
     Thread.sleep(1000)
     logInfo("Stopping context")
@@ -249,19 +244,19 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     ssc.start()
 
     // Setup data queued into the stream
-    val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+    val clock = ssc.scheduler.clock.asInstanceOf[FakeClock]
     val input = Seq("1", "2", "3", "4", "5")
     val expectedOutput = Seq(Seq("1", "2", "3"), Seq("4", "5"))
 
     // Enqueue the first 3 items (one by one), they should be merged in the next batch
     val inputIterator = input.toIterator
     inputIterator.take(3).foreach(i => queue += ssc.sparkContext.makeRDD(Seq(i)))
-    clock.addToTime(batchDuration.milliseconds)
+    clock.advance(batchDuration.milliseconds)
     Thread.sleep(1000)
 
     // Enqueue the remaining items (again one by one), merged in the final batch
     inputIterator.foreach(i => queue += ssc.sparkContext.makeRDD(Seq(i)))
-    clock.addToTime(batchDuration.milliseconds)
+    clock.advance(batchDuration.milliseconds)
     Thread.sleep(1000)
     logInfo("Stopping context")
     ssc.stop()
@@ -295,7 +290,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
       // Set up the streaming context and input streams
       withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
-        val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+        val clock = ssc.scheduler.clock.asInstanceOf[FakeClock]
         // This `setTime` call ensures that the clock is past the creation time of `existingFile`
         clock.setTime(existingFile.lastModified + batchDuration.milliseconds)
         val batchCounter = new BatchCounter(ssc)
@@ -308,19 +303,19 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
         // Advance the clock so that the files are created after StreamingContext starts, but
         // not enough to trigger a batch
-        clock.addToTime(batchDuration.milliseconds / 2)
+        clock.advance(batchDuration.milliseconds / 2)
 
         // Over time, create files in the directory
         val input = Seq(1, 2, 3, 4, 5)
         input.foreach { i =>
           val file = new File(testDir, i.toString)
           Files.write(i + "\n", file, Charset.forName("UTF-8"))
-          assert(file.setLastModified(clock.currentTime()))
-          assert(file.lastModified === clock.currentTime)
+          assert(file.setLastModified(clock.getTime()))
+          assert(file.lastModified === clock.getTime())
           logInfo("Created file " + file)
           // Advance the clock after creating the file to avoid a race when
           // setting its modification time
-          clock.addToTime(batchDuration.milliseconds)
+          clock.advance(batchDuration.milliseconds)
           eventually(eventuallyTimeout) {
             assert(batchCounter.getNumCompletedBatches === i)
           }

@@ -18,9 +18,7 @@ package org.apache.spark.streaming.kinesis
 
 import org.apache.spark.Logging
 import org.apache.spark.streaming.Duration
-import org.apache.spark.streaming.util.Clock
-import org.apache.spark.streaming.util.ManualClock
-import org.apache.spark.streaming.util.SystemClock
+import org.apache.spark.util.{Clock, FakeClock, SystemClock}
 
 /**
  * This is a helper class for managing checkpoint clocks.
@@ -34,8 +32,8 @@ private[kinesis] class KinesisCheckpointState(
   extends Logging {
   
   /* Initialize the checkpoint clock using the given currentClock + checkpointInterval millis */
-  val checkpointClock = new ManualClock()
-  checkpointClock.setTime(currentClock.currentTime() + checkpointInterval.milliseconds)
+  val checkpointClock = new FakeClock()
+  checkpointClock.setTime(currentClock.getTime() + checkpointInterval.milliseconds)
 
   /**
    * Check if it's time to checkpoint based on the current time and the derived time 
@@ -44,13 +42,13 @@ private[kinesis] class KinesisCheckpointState(
    * @return true if it's time to checkpoint
    */
   def shouldCheckpoint(): Boolean = {
-    new SystemClock().currentTime() > checkpointClock.currentTime()
+    new SystemClock().getTime() > checkpointClock.getTime()
   }
 
   /**
    * Advance the checkpoint clock by the checkpoint interval.
    */
   def advanceCheckpoint() = {
-    checkpointClock.addToTime(checkpointInterval.milliseconds)
+    checkpointClock.advance(checkpointInterval.milliseconds)
   }
 }

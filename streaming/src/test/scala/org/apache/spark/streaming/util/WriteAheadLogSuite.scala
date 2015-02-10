@@ -26,7 +26,7 @@ import scala.language.{implicitConversions, postfixOps}
 import WriteAheadLogSuite._
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{FakeClock, Utils}
 import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.concurrent.Eventually._
 
@@ -191,13 +191,13 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
 
   private def logCleanUpTest(waitForCompletion: Boolean): Unit = {
     // Write data with manager, recover with new manager and verify
-    val manualClock = new ManualClock
+    val manualClock = new FakeClock()
     val dataToWrite = generateRandomData()
     manager = writeDataUsingManager(testDir, dataToWrite, manualClock, stopManager = false)
     val logFiles = getLogFilesInDirectory(testDir)
     assert(logFiles.size > 1)
 
-    manager.cleanupOldLogs(manualClock.currentTime() / 2, waitForCompletion)
+    manager.cleanupOldLogs(manualClock.getTime() / 2, waitForCompletion)
 
     if (waitForCompletion) {
       assert(getLogFilesInDirectory(testDir).size < logFiles.size)
@@ -210,17 +210,17 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
 
   test("WriteAheadLogManager - handling file errors while reading rotating logs") {
     // Generate a set of log files
-    val manualClock = new ManualClock
+    val fakeClock = new FakeClock()
     val dataToWrite1 = generateRandomData()
-    writeDataUsingManager(testDir, dataToWrite1, manualClock)
+    writeDataUsingManager(testDir, dataToWrite1, fakeClock)
     val logFiles1 = getLogFilesInDirectory(testDir)
     assert(logFiles1.size > 1)
 
 
     // Recover old files and generate a second set of log files
     val dataToWrite2 = generateRandomData()
-    manualClock.addToTime(100000)
-    writeDataUsingManager(testDir, dataToWrite2, manualClock)
+    fakeClock.advance(100000)
+    writeDataUsingManager(testDir, dataToWrite2, fakeClock)
     val logFiles2 = getLogFilesInDirectory(testDir)
     assert(logFiles2.size > logFiles1.size)
 
@@ -276,15 +276,15 @@ object WriteAheadLogSuite {
   def writeDataUsingManager(
       logDirectory: String,
       data: Seq[String],
-      manualClock: ManualClock = new ManualClock,
+      fakeClock: FakeClock = new FakeClock(),
       stopManager: Boolean = true
     ): WriteAheadLogManager = {
-    if (manualClock.currentTime < 100000) manualClock.setTime(10000)
+    if (fakeClock.getTime() < 100000) fakeClock.setTime(10000)
     val manager = new WriteAheadLogManager(logDirectory, hadoopConf,
-      rollingIntervalSecs = 1, callerName = "WriteAheadLogSuite", clock = manualClock)
+      rollingIntervalSecs = 1, callerName = "WriteAheadLogSuite", clock = fakeClock)
     // Ensure that 500 does not get sorted after 2000, so put a high base value.
     data.foreach { item =>
-      manualClock.addToTime(500)
+      fakeClock.advance(500)
       manager.writeToLog(item)
     }
     if (stopManager) manager.stop()

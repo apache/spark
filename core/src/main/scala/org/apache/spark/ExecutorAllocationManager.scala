@@ -124,7 +124,7 @@ private[spark] class ExecutorAllocationManager(
   private val intervalMillis: Long = 100
 
   // Clock used to schedule when executors should be added and removed
-  private var clock: Clock = SystemClock
+  private var clock: Clock = new SystemClock()
 
   // Listener for Spark events that impact the allocation policy
   private val listener = new ExecutorAllocationListener
