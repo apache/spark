@@ -793,6 +793,7 @@ object Client extends Logging {
       sparkConf: SparkConf,
       env: HashMap[String, String],
       extraClassPath: Option[String] = None): Unit = {
+    extraClassPath.foreach(println)
     extraClassPath.foreach(addClasspathEntry(_, env))
     addClasspathEntry(
       YarnSparkHadoopUtil.expandEnvironment(Environment.PWD), env
