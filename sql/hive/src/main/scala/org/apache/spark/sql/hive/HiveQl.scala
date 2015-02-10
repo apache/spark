@@ -77,6 +77,7 @@ private[hive] object HiveQl {
     "TOK_REVOKE",
     "TOK_SHOW_GRANT",
     "TOK_SHOW_ROLE_GRANT",
+    "TOK_SHOW_SET_ROLE",
 
     "TOK_CREATEFUNCTION",
     "TOK_DROPFUNCTION",
