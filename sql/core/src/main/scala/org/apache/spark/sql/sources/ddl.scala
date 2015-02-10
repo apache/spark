@@ -118,11 +118,19 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
             throw new DDLException(
               "a CREATE TABLE AS SELECT statement does not allow column definitions.")
           }
+          // When IF NOT EXISTS clause appears in the query, the save mode will be ignore.
+          val mode = if (allowExisting.isDefined)
+            SaveMode.Ignore
+          else if (temp.isDefined)
+            SaveMode.Overwrite
+          else
+            SaveMode.ErrorIfExists
+
           CreateTableUsingAsSelect(tableName,
             provider,
             temp.isDefined,
+            mode,
             opts,
-            allowExisting.isDefined,
             query.get)
         } else {
           val userSpecifiedSchema = columns.flatMap(fields => Some(StructType(fields)))
@@ -332,16 +340,16 @@ private[sql] case class CreateTableUsingAsSelect(
     tableName: String,
     provider: String,
     temporary: Boolean,
+    mode: SaveMode,
     options: Map[String, String],
-    allowExisting: Boolean,
     query: String) extends Command
 
 private[sql] case class CreateTableUsingAsLogicalPlan(
     tableName: String,
     provider: String,
     temporary: Boolean,
+    mode: SaveMode,
     options: Map[String, String],
-    allowExisting: Boolean,
     query: LogicalPlan) extends Command
 
 private [sql] case class CreateTempTableUsing(
@@ -361,12 +369,13 @@ private [sql] case class CreateTempTableUsing(
 private [sql] case class CreateTempTableUsingAsSelect(
     tableName: String,
     provider: String,
+    mode: SaveMode,
     options: Map[String, String],
     query: LogicalPlan) extends RunnableCommand {
 
   def run(sqlContext: SQLContext) = {
     val df = DataFrame(sqlContext, query)
-    val resolved = ResolvedDataSource(sqlContext, provider, SaveMode.ErrorIfExists, options, df)
+    val resolved = ResolvedDataSource(sqlContext, provider, mode, options, df)
     sqlContext.registerRDDAsTable(
       DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
 

@@ -86,28 +86,39 @@ class DefaultSource
     val path = checkPath(parameters)
     val filesystemPath = new Path(path)
     val fs = filesystemPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
-    mode match {
-      case SaveMode.Append =>
-        sys.error(s"Append mode is not supported by ${this.getClass.getCanonicalName}")
-      case SaveMode.Overwrite =>
-        if (fs.exists(filesystemPath)) {
+    val doSave = if (fs.exists(filesystemPath)) {
+      mode match {
+        case SaveMode.Append =>
+          sys.error(s"Append mode is not supported by ${this.getClass.getCanonicalName}")
+        case SaveMode.Overwrite =>
           fs.delete(filesystemPath, true)
-        }
-      case SaveMode.ErrorIfExists =>
-        if (fs.exists(filesystemPath)) {
+          true
+        case SaveMode.ErrorIfExists =>
           sys.error(s"path $path already exists.")
-        }
+        case SaveMode.Ignore => false
+      }
+    } else {
+      true
     }
 
-    ParquetRelation.createEmpty(
-      path,
-      data.schema.toAttributes,
-      false,
-      sqlContext.sparkContext.hadoopConfiguration,
-      sqlContext)
+    val relation = if (doSave) {
+      // Only save data when the save mode is not ignore.
+      ParquetRelation.createEmpty(
+        path,
+        data.schema.toAttributes,
+        false,
+        sqlContext.sparkContext.hadoopConfiguration,
+        sqlContext)
 
-    val relation = createRelation(sqlContext, parameters, data.schema)
-    relation.asInstanceOf[ParquetRelation2].insert(data, true)
+      val createdRelation = createRelation(sqlContext, parameters, data.schema)
+      createdRelation.asInstanceOf[ParquetRelation2].insert(data, true)
+
+      createdRelation
+    } else {
+      // If the save mode is Ignore, we will just create the relation based on existing data.
+      createRelation(sqlContext, parameters)
+    }
+
     relation
   }
 }

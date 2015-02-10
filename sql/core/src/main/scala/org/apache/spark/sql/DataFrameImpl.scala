@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.plans.logical.Filter
-
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.collection.JavaConversions._
@@ -34,6 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.{EliminateAnalysisOperators, Resol
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, EvaluatePython}
 import org.apache.spark.sql.json.JsonRDD
 import org.apache.spark.sql.sources._
@@ -346,84 +345,56 @@ private[sql] class DataFrameImpl protected[sql](
   }
 
   override def saveAsTable(tableName: String): Unit = {
-    saveAsTable(tableName, false)
+    saveAsTable(tableName, SaveMode.ErrorIfExists)
   }
 
-  override def saveAsTable(tableName: String, appendIfExists: Boolean): Unit = {
-    if (sqlContext.catalog.tableExists(Seq(tableName)) && appendIfExists) {
-      // If table already exists and appendIfExists is true,
+  override def saveAsTable(tableName: String, mode: SaveMode): Unit = {
+    if (sqlContext.catalog.tableExists(Seq(tableName)) && mode == SaveMode.Append) {
+      // If table already exists and the save mode is Append,
       // we will just call insertInto to append the contents of this DataFrame.
       insertInto(tableName, overwrite = false)
     } else {
       val dataSourceName = sqlContext.conf.defaultDataSourceName
-      saveAsTable(tableName, dataSourceName, appendIfExists)
+      saveAsTable(tableName, dataSourceName, mode)
     }
   }
 
   override def saveAsTable(
       tableName: String,
       dataSourceName: String): Unit = {
-    saveAsTable(tableName, dataSourceName, false)
+    saveAsTable(tableName, dataSourceName, SaveMode.ErrorIfExists)
   }
 
   override def saveAsTable(
       tableName: String,
       dataSourceName: String,
-      appendIfExists: Boolean): Unit = {
-    saveAsTable(tableName, dataSourceName, appendIfExists, Map.empty[String, String])
+      mode: SaveMode): Unit = {
+    saveAsTable(tableName, dataSourceName, mode, Map.empty[String, String])
   }
 
   override def saveAsTable(
       tableName: String,
       dataSourceName: String,
-      appendIfExists: Boolean,
+      mode: SaveMode,
       options: java.util.Map[String, String]): Unit = {
-    saveAsTable(tableName, dataSourceName, appendIfExists, options.toMap)
+    saveAsTable(tableName, dataSourceName, mode, options.toMap)
   }
 
   override def saveAsTable(
       tableName: String,
       dataSourceName: String,
-      appendIfExists: Boolean,
+      mode: SaveMode,
       options: Map[String, String]): Unit = {
-    if (sqlContext.catalog.tableExists(Seq(tableName))) {
-      if (appendIfExists) {
-        val resolved = ResolvedDataSource(sqlContext, Some(schema), dataSourceName, options)
-        val logicalRelation = LogicalRelation(resolved.relation)
-        EliminateAnalysisOperators(sqlContext.table(tableName).logicalPlan) match {
-          case l @ LogicalRelation(i: InsertableRelation) =>
-            if (l.schema != schema) {
-              // TODO: compare the schema?
-              sys.error(s"Cannot append to table $tableName because the schema of this DataFrame " +
-                s"does not match the schema of table $tableName.")
-            } else if (l != logicalRelation) {
-              // TODO: be more specific?
-              sys.error(s"Cannot append to table $tableName because the provided dataSourceName" +
-                s"and options do not match those of table $tableName." +
-                s"You can use insertInto($tableName, false) to append this DataFrame to the " +
-                s"table $tableName and using it dataSourceName and options.")
-            }
-          case _ =>
-            sys.error(s"Table $tableName does not support append.")
-        }
+    val cmd =
+      CreateTableUsingAsLogicalPlan(
+        tableName,
+        dataSourceName,
+        temporary = false,
+        mode,
+        options,
+        logicalPlan)
 
-        insertInto(tableName, false)
-      } else {
-        sys.error(s"Table $tableName already exists. " +
-          s"If you want to append into it, please set appendIfExists to true.")
-      }
-    } else {
-      val cmd =
-        CreateTableUsingAsLogicalPlan(
-          tableName,
-          dataSourceName,
-          temporary = false,
-          options,
-          allowExisting = false,
-          logicalPlan)
-
-      sqlContext.executePlan(cmd).toRdd
-    }
+    sqlContext.executePlan(cmd).toRdd
   }
 
   override def save(path: String): Unit = {

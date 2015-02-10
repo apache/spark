@@ -23,6 +23,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.spark.sql.sources.SaveMode;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -82,7 +83,7 @@ public class JavaMetastoreDataSourcesSuite {
   @Test
   public void saveTableAndQueryIt() {
     Map<String, String> options = new HashMap<String, String>();
-    df.saveAsTable("javaSavedTable", "org.apache.spark.sql.json", true, options);
+    df.saveAsTable("javaSavedTable", "org.apache.spark.sql.json", SaveMode.Append, options);
 
     checkAnswer(
       sqlContext.sql("SELECT * FROM javaSavedTable"),
@@ -95,7 +96,7 @@ public class JavaMetastoreDataSourcesSuite {
   public void saveExternalTableAndQueryIt() {
     Map<String, String> options = new HashMap<String, String>();
     options.put("path", path.toString());
-    df.saveAsTable("javaSavedTable", "org.apache.spark.sql.json", true, options);
+    df.saveAsTable("javaSavedTable", "org.apache.spark.sql.json", SaveMode.Append, options);
 
     checkAnswer(
       sqlContext.sql("SELECT * FROM javaSavedTable"),
@@ -117,7 +118,7 @@ public class JavaMetastoreDataSourcesSuite {
   public void saveExternalTableWithSchemaAndQueryIt() {
     Map<String, String> options = new HashMap<String, String>();
     options.put("path", path.toString());
-    df.saveAsTable("javaSavedTable", "org.apache.spark.sql.json", true, options);
+    df.saveAsTable("javaSavedTable", "org.apache.spark.sql.json", SaveMode.Append, options);
 
     checkAnswer(
       sqlContext.sql("SELECT * FROM javaSavedTable"),

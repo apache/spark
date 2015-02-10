@@ -154,7 +154,7 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
 
   override def saveAsTable(tableName: String): Unit = err()
 
-  override def saveAsTable(tableName: String, appendIfExists: Boolean): Unit = err()
+  override def saveAsTable(tableName: String, mode: SaveMode): Unit = err()
 
   override def saveAsTable(
       tableName: String,
@@ -163,18 +163,18 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
   override def saveAsTable(
       tableName: String,
       dataSourceName: String,
-      appendIfExists: Boolean): Unit = err()
+      mode: SaveMode): Unit = err()
 
   override def saveAsTable(
       tableName: String,
       dataSourceName: String,
-      appendIfExists: Boolean,
+      mode: SaveMode,
       options: java.util.Map[String, String]): Unit = err()
 
   override def saveAsTable(
       tableName: String,
       dataSourceName: String,
-      appendIfExists: Boolean,
+      mode: SaveMode,
       options: Map[String, String]): Unit = err()
 
   override def save(path: String): Unit = err()

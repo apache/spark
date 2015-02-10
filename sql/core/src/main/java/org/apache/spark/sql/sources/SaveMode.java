@@ -21,18 +21,24 @@ package org.apache.spark.sql.sources;
  */
 public enum SaveMode {
   /**
-   * Append mode means that when saving a DataFrame to a data source, if data already exists,
+   * Append mode means that when saving a DataFrame to a data source, if data/table already exists,
    * contents of the DataFrame are expected to be appended to existing data.
    */
   Append,
   /**
-   * Overwrite mode means that when saving a DataFrame to a data source, if data already exists,
-   * existing data is expected to be overwritten by the contents of the DataFrame.
+   * Overwrite mode means that when saving a DataFrame to a data source,
+   * if data/table already exists, existing data is expected to be overwritten by the contents of
+   * the DataFrame.
    */
   Overwrite,
   /**
    * ErrorIfExists mode means that when saving a DataFrame to a data source, if data already exists,
    * an exception is expected to be thrown.
    */
-  ErrorIfExists
+  ErrorIfExists,
+  /**
+   * Ignore mode means that when saving a DataFrame to a data source, if data already exists,
+   * the save operation should stop and leave the existing data unchanged.
+   */
+  Ignore
 }

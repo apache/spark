@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
+import org.apache.spark.sql.sources.SaveMode
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.commons.io.FileUtils
@@ -352,9 +353,6 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
         |)
       """.stripMargin)
 
-    new Path("/Users/yhuai/Desktop/whatever")
-
-
     val expectedPath = catalog.hiveDefaultTableFilePath("ctasJsonTable")
     val filesystemPath = new Path(expectedPath)
     val fs = filesystemPath.getFileSystem(sparkContext.hadoopConfiguration)
@@ -422,8 +420,21 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
 
     // Right now, we cannot append to an existing JSON table.
     intercept[RuntimeException] {
-      df.saveAsTable("savedJsonTable", appendIfExists = true)
+      df.saveAsTable("savedJsonTable", SaveMode.Append)
     }
+
+    // We can overwrite it.
+    df.saveAsTable("savedJsonTable", SaveMode.Overwrite)
+    checkAnswer(
+      sql("SELECT * FROM savedJsonTable"),
+      df.collect())
+
+    // When the save mode is Ignore, we will do nothing when the table already exists.
+    df.select("b").saveAsTable("savedJsonTable", SaveMode.Ignore)
+    assert(df.schema === table("savedJsonTable").schema)
+    checkAnswer(
+      sql("SELECT * FROM savedJsonTable"),
+      df.collect())
 
     // Drop table will also delete the data.
     sql("DROP TABLE savedJsonTable")
@@ -436,7 +447,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     df.saveAsTable(
       "savedJsonTable",
       "org.apache.spark.sql.json",
-      appendIfExists = true,
+      SaveMode.Append,
       Map("path" -> tempPath.toString))
     checkAnswer(
       sql("SELECT * FROM savedJsonTable"),
@@ -461,7 +472,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     df.saveAsTable(
       "savedJsonTable",
       "org.apache.spark.sql.json",
-      appendIfExists = true,
+      SaveMode.Append,
       Map("path" -> tempPath.toString))
 
     conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.json")

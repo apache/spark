@@ -572,11 +572,8 @@ trait DataFrame extends RDDApi[Row] {
 
   /**
    * :: Experimental ::
-   * Creates a table from the the contents of this DataFrame.
-   * It will use the default data source configured by spark.sql.sources.default.
-   * If appendIfExists is true and the table already exists,
-   * it will append contents of this DataFrame to the table.
-   * If appendIfExists is false and the table already exists, this will fail.
+   * Creates a table from the the contents of this DataFrame, using the default data source
+   * configured by spark.sql.sources.default and [[SaveMode.ErrorIfExists]] as the save mode.
    *
    * Note that this currently only works with DataFrames that are created from a HiveContext as
    * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
@@ -584,13 +581,13 @@ trait DataFrame extends RDDApi[Row] {
    * be the target of an `insertInto`.
    */
   @Experimental
-  def saveAsTable(tableName: String, appendIfExists: Boolean): Unit
+  def saveAsTable(tableName: String, mode: SaveMode): Unit
 
   /**
    * :: Experimental ::
    * Creates a table at the given path from the the contents of this DataFrame
-   * based on a given data source and a set of options.
-   * This will fail if the table already exists.
+   * based on a given data source and a set of options,
+   * using [[SaveMode.ErrorIfExists]] as the save mode.
    *
    * Note that this currently only works with DataFrames that are created from a HiveContext as
    * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
@@ -605,10 +602,7 @@ trait DataFrame extends RDDApi[Row] {
   /**
    * :: Experimental ::
    * Creates a table at the given path from the the contents of this DataFrame
-   * based on a given data source and a set of options.
-   * If appendIfExists is true and the table already exists,
-   * it will append contents of this DataFrame to the table.
-   * If appendIfExists is false and the table already exists, this will fail.
+   * based on a given data source, [[SaveMode]] specified by mode, and a set of options.
    *
    * Note that this currently only works with DataFrames that are created from a HiveContext as
    * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
@@ -619,16 +613,12 @@ trait DataFrame extends RDDApi[Row] {
   def saveAsTable(
       tableName: String,
       dataSourceName: String,
-      appendIfExists: Boolean): Unit
+      mode: SaveMode): Unit
 
   /**
    * :: Experimental ::
    * Creates a table at the given path from the the contents of this DataFrame
-   * based on a given data source and a set of options.
-   * If appendIfExists is true and the table already exists,
-   * it will append contents of this DataFrame to the table.
-   * If appendIfExists is false and the table already exists,
-   * This will fail.
+   * based on a given data source, [[SaveMode]] specified by mode, and a set of options.
    *
    * Note that this currently only works with DataFrames that are created from a HiveContext as
    * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
@@ -639,18 +629,14 @@ trait DataFrame extends RDDApi[Row] {
   def saveAsTable(
       tableName: String,
       dataSourceName: String,
-      appendIfExists: Boolean,
+      mode: SaveMode,
       options: java.util.Map[String, String]): Unit
 
   /**
    * :: Experimental ::
    * (Scala-specific)
-   * Creates a table from the the contents of this DataFrame based on a given data source
-   * and a set of options.
-   * If appendIfExists is true and the table already exists,
-   * it will append contents of this DataFrame to the table.
-   * If appendIfExists is false and the table already exists,
-   * This will fail.
+   * Creates a table from the the contents of this DataFrame based on a given data source,
+   * [[SaveMode]] specified by mode, and a set of options.
    *
    * Note that this currently only works with DataFrames that are created from a HiveContext as
    * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
@@ -661,42 +647,46 @@ trait DataFrame extends RDDApi[Row] {
   def saveAsTable(
       tableName: String,
       dataSourceName: String,
-      appendIfExists: Boolean,
+      mode: SaveMode,
       options: Map[String, String]): Unit
 
   /**
    * :: Experimental ::
-   * Saves the contents of this DataFrame to the given path.
-   * It will use the default data source configured by spark.sql.sources.default.
+   * Saves the contents of this DataFrame to the given path,
+   * using the default data source configured by spark.sql.sources.default and
+   * [[SaveMode.ErrorIfExists]] as the save mode.
    */
   @Experimental
   def save(path: String): Unit
 
   /**
    * :: Experimental ::
-   * Saves the contents of this DataFrame to the given path.
-   * It will use the default data source configured by spark.sql.sources.default.
+   * Saves the contents of this DataFrame to the given path and [[SaveMode]] specified by mode,
+   * using the default data source configured by spark.sql.sources.default.
    */
   @Experimental
   def save(path: String, mode: SaveMode): Unit
 
   /**
    * :: Experimental ::
-   * Saves the contents of this DataFrame to the given path based on the given data source.
+   * Saves the contents of this DataFrame to the given path based on the given data source,
+   * using [[SaveMode.ErrorIfExists]] as the save mode.
    */
   @Experimental
   def save(path: String, dataSourceName: String): Unit
 
   /**
    * :: Experimental ::
-   * Saves the contents of this DataFrame to the given path based on the given data source.
+   * Saves the contents of this DataFrame to the given path based on the given data source and
+   * [[SaveMode]] specified by mode.
    */
   @Experimental
   def save(path: String, dataSourceName: String, mode: SaveMode): Unit
 
   /**
    * :: Experimental ::
-   * Saves the contents of this DataFrame based on the given data source and a set of options.
+   * Saves the contents of this DataFrame based on the given data source,
+   * [[SaveMode]] specified by mode, and a set of options.
    */
   @Experimental
   def save(
@@ -707,7 +697,8 @@ trait DataFrame extends RDDApi[Row] {
   /**
    * :: Experimental ::
    * (Scala-specific)
-   * Saves the contents of this DataFrame based on the given data source and a set of options.
+   * Saves the contents of this DataFrame based on the given data source,
+   * [[SaveMode]] specified by mode, and a set of options
    */
   @Experimental
   def save(

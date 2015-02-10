@@ -61,20 +61,24 @@ private[sql] class DefaultSource
     val path = checkPath(parameters)
     val filesystemPath = new Path(path)
     val fs = filesystemPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
-    mode match {
-      case SaveMode.Append =>
-        sys.error(s"Append mode is not supported by ${this.getClass.getCanonicalName}")
-      case SaveMode.Overwrite =>
-        if (fs.exists(filesystemPath)) {
+    val doSave = if (fs.exists(filesystemPath)) {
+      mode match {
+        case SaveMode.Append =>
+          sys.error(s"Append mode is not supported by ${this.getClass.getCanonicalName}")
+        case SaveMode.Overwrite =>
           fs.delete(filesystemPath, true)
-        }
-      case SaveMode.ErrorIfExists =>
-        if (fs.exists(filesystemPath)) {
+          true
+        case SaveMode.ErrorIfExists =>
           sys.error(s"path $path already exists.")
-        }
+        case SaveMode.Ignore => false
+      }
+    } else {
+      true
     }
-
-    data.toJSON.saveAsTextFile(path)
+    if (doSave) {
+      // Only save data when the save mode is not ignore.
+      data.toJSON.saveAsTextFile(path)
+    }
 
     createRelation(sqlContext, parameters, data.schema)
   }

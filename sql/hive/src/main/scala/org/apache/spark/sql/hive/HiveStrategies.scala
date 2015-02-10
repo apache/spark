@@ -222,15 +222,15 @@ private[hive] trait HiveStrategies {
           CreateMetastoreDataSource(
             tableName, userSpecifiedSchema, provider, opts, allowExisting, managedIfNoPath)) :: Nil
 
-      case CreateTableUsingAsSelect(tableName, provider, false, opts, allowExisting, query) =>
+      case CreateTableUsingAsSelect(tableName, provider, false, mode, opts, query) =>
         val logicalPlan = hiveContext.parseSql(query)
         val cmd =
-          CreateMetastoreDataSourceAsSelect(tableName, provider, opts, allowExisting, logicalPlan)
+          CreateMetastoreDataSourceAsSelect(tableName, provider, mode, opts, logicalPlan)
         ExecutedCommand(cmd) :: Nil
 
-      case CreateTableUsingAsLogicalPlan(tableName, provider, false, opts, allowExisting, query) =>
+      case CreateTableUsingAsLogicalPlan(tableName, provider, false, mode, opts, query) =>
         val cmd =
-          CreateMetastoreDataSourceAsSelect(tableName, provider, opts, allowExisting, query)
+          CreateMetastoreDataSourceAsSelect(tableName, provider, mode, opts, query)
         ExecutedCommand(cmd) :: Nil
 
       case _ => Nil
