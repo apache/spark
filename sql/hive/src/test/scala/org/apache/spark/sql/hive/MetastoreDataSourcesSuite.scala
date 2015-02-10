@@ -351,9 +351,6 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
         |)
       """.stripMargin)
 
-    new Path("/Users/yhuai/Desktop/whatever")
-
-
     val expectedPath = catalog.hiveDefaultTableFilePath("ctasJsonTable")
     val filesystemPath = new Path(expectedPath)
     val fs = filesystemPath.getFileSystem(sparkContext.hadoopConfiguration)
