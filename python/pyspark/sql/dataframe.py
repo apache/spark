@@ -149,14 +149,15 @@ class DataFrame(object):
     def _java_save_mode(self, mode):
         """Returns the Java save mode based on the Python save mode represented by a string.
         """
-        jmode = self._sc._jvm.org.apache.spark.sql.sources.SaveMode.ErrorIfExists
+        jSaveMode = self._sc._jvm.org.apache.spark.sql.sources.SaveMode
+        jmode = jSaveMode.ErrorIfExists
         mode = mode.lower()
         if mode == "append":
-            jmode = self._sc._jvm.org.apache.spark.sql.sources.SaveMode.Append
+            jmode = jSaveMode.Append
         elif mode == "overwrite":
-            jmode = self._sc._jvm.org.apache.spark.sql.sources.SaveMode.Overwrite
+            jmode = jSaveMode.Overwrite
         elif mode == "ignore":
-            jmode = self._sc._jvm.org.apache.spark.sql.sources.SaveMode.Ignore
+            jmode = jSaveMode.Ignore
         elif mode == "error":
             pass
         else:
@@ -165,7 +166,7 @@ class DataFrame(object):
         return jmode
 
     def saveAsTable(self, tableName, source=None, mode="append", **options):
-        """Saves the contents of the DataFrame to a data source in a table.
+        """Saves the contents of the DataFrame to a data source as a table.
 
         The data source is specified by the `source` and a set of `options`.
         If `source` is not specified, the default data source configured by
