@@ -11,6 +11,11 @@ logging.getLogger("pyhive").setLevel(logging.INFO)
 class PrestoHook(BaseHook):
     """
     Interact with Presto through PyHive!
+
+    >>> ph = PrestoHook()
+    >>> sql = "SELECT count(1) AS num FROM airflow.static_babynames"
+    >>> ph.get_records(sql)
+    [[340698]]
     """
     def __init__(self, host=None, db=None, port=None,
                  presto_conn_id=conf.get('hooks', 'PRESTO_DEFAULT_CONN_ID')):

@@ -70,6 +70,14 @@ class HiveHook(BaseHook):
         return self.hive
 
     def check_for_partition(self, schema, table, partition):
+        '''
+        Checks whether a partition exists
+
+        >>> hh = HiveHook()
+        >>> t = 'static_babynames_partitioned'
+        >>> hh.check_for_partition('airflow', t, "year='2008'")
+        True
+        '''
         self.hive._oprot.trans.open()
         partitions = self.hive.get_partitions_by_filter(
             schema, table, partition, 1)
@@ -82,6 +90,11 @@ class HiveHook(BaseHook):
     def get_records(self, hql, schema=None):
         '''
         Get a set of records from a Hive query.
+
+        >>> hh = HiveHook()
+        >>> sql = "SELECT count(1) AS num FROM airflow.static_babynames"
+        >>> hh.get_records(sql)
+        [['340698']]
         '''
         self.hive._oprot.trans.open()
         if schema:
@@ -92,6 +105,15 @@ class HiveHook(BaseHook):
         return [row.split("\t") for row in records]
 
     def get_pandas_df(self, hql, schema=None):
+        '''
+        Get a pandas dataframe from a Hive query
+
+        >>> hh = HiveHook()
+        >>> sql = "SELECT count(1) AS num FROM airflow.static_babynames"
+        >>> df = hh.get_pandas_df(sql)
+        >>> df.to_dict()
+        {0: {0: '340698'}}
+        '''
         import pandas as pd
         self.hive._oprot.trans.open()
         if schema:
@@ -110,6 +132,12 @@ class HiveHook(BaseHook):
         self.hive._oprot.trans.close()
 
     def run_cli(self, hql, schema=None):
+        '''
+        Run an hql statement using the hive cli
+
+        >>> hh = HiveHook()
+        >>> hh.run_cli("USE airflow;")
+        '''
         if schema:
             hql = "USE {schema};\n{hql}".format(**locals())
 
@@ -132,6 +160,16 @@ class HiveHook(BaseHook):
             raise Exception(all_err)
 
     def get_table(self, db, table_name):
+        '''
+        Get a metastore table object
+
+        >>> hh = HiveHook()
+        >>> t = hh.get_table(db='airflow', table_name='static_babynames')
+        >>> t.tableName
+        'static_babynames'
+        >>> [col.name for col in t.sd.cols]
+        ['state', 'year', 'name', 'gender', 'num']
+        '''
         self.hive._oprot.trans.open()
         table = self.hive.get_table(dbname=db, tbl_name=table_name)
         self.hive._oprot.trans.close()
@@ -142,6 +180,14 @@ class HiveHook(BaseHook):
         Returns a list of all partitions in a table. Works only
         for tables with less than 32767 (java short max val).
         For subpartitionned table, the number might easily exceed this.
+
+        >>> hh = HiveHook()
+        >>> t = 'static_babynames_partitioned'
+        >>> parts = hh.get_partitions(schema='airflow', table_name=t)
+        >>> len(parts)
+        49
+        >>> max(parts)
+        '2008'
         '''
         self.hive._oprot.trans.open()
         table = self.hive.get_table(dbname=schema, tbl_name=table_name)
@@ -163,6 +209,11 @@ class HiveHook(BaseHook):
         Returns the maximum value for all partitions in a table. Works only
         for tables that have a single partition key. For subpartitionned
         table, we recommend using signal tables.
+
+        >>> hh = HiveHook()
+        >>> t = 'static_babynames_partitioned'
+        >>> hh.max_partition(schema='airflow', table_name=t)
+        '2008'
         '''
         return max(self.get_partitions(schema, table_name))
 

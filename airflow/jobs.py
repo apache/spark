@@ -192,7 +192,6 @@ class MasterJob(BaseJob):
         executor.start()
         i = 0
         while (not self.test_mode) or i < 1:
-            print(i)
             i += 1
             self.heartbeat()
             dagbag.collect_dags(only_if_updated=True)

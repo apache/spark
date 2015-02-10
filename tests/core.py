@@ -16,7 +16,6 @@ class CoreTest(unittest.TestCase):
 
     def setUp(self):
         configuration.test_mode()
-        print("INITDB")
         utils.initdb()
         self.dagbag = models.DagBag(
             dag_folder=DEV_NULL, include_examples=True)
@@ -105,6 +104,14 @@ class WebUiTests(unittest.TestCase):
         response = self.app.get(
             '/admin/airflow/code?dag_id=example_bash_operator')
         assert "DAG: example_bash_operator" in response.data
+
+    def test_charts(self):
+        response = self.app.get(
+            '/admin/airflow/chart?chart_id=1&iteration_no=1')
+        assert "Most Popular" in response.data
+        response = self.app.get(
+            '/admin/airflow/chart_data?chart_id=1&iteration_no=1')
+        assert "Michael" in response.data
 
     def tearDown(self):
         pass

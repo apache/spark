@@ -50,7 +50,7 @@ dags_folder = {AIRFLOW_HOME}/dags
 base_log_folder = {AIRFLOW_HOME}/logs
 base_url = http://localhost:8080
 executor = SequentialExecutor
-sql_alchemy_conn = sqlite:///{AIRFLOW_HOME}/tests.db
+sql_alchemy_conn = sqlite:///{AIRFLOW_HOME}/unittests.db
 unit_test_mode = True
 
 [server]
@@ -108,7 +108,6 @@ if 'AIRFLOW_CONFIG' not in os.environ:
 else:
     AIRFLOW_CONFIG = os.environ['AIRFLOW_CONFIG']
 
-conf = ConfigParser()
 if not os.path.isfile(AIRFLOW_CONFIG):
     '''
     These configuration are used to generate a default configuration when
@@ -135,4 +134,5 @@ def test_mode():
     conf.read(TEST_CONFIG)
     print("Using configuration located at: " + TEST_CONFIG)
 
+conf = ConfigParser()
 conf.read(AIRFLOW_CONFIG)
