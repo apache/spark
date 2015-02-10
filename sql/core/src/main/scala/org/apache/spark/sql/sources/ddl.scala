@@ -119,12 +119,13 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
               "a CREATE TABLE AS SELECT statement does not allow column definitions.")
           }
           // When IF NOT EXISTS clause appears in the query, the save mode will be ignore.
-          val mode = if (allowExisting.isDefined)
+          val mode = if (allowExisting.isDefined) {
             SaveMode.Ignore
-          else if (temp.isDefined)
+          } else if (temp.isDefined) {
             SaveMode.Overwrite
-          else
+          } else {
             SaveMode.ErrorIfExists
+          }
 
           CreateTableUsingAsSelect(tableName,
             provider,
