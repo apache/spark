@@ -268,7 +268,7 @@ private[spark] object Utils extends Logging {
    * Create a directory inside the given parent directory. The directory is guaranteed to be
    * newly created, and is not marked for automatic deletion.
    */
-  def createDirectory(root: String, namePrefix: String = "spark"): File = {
+  def createDirectory(root: String, namePrefix: String = "spark", conf: SparkConf = null): File = {
     var attempts = 0
     val maxAttempts = MAX_DIR_CREATION_ATTEMPTS
     var dir: File = null
@@ -285,7 +285,7 @@ private[spark] object Utils extends Logging {
         } else {
           // Restrict file permissions via chmod if available.
           // For Windows this step is ignored.
-          if (!isWindows && !chmod700(dir)) {
+          if (!isWindows && (conf==null || !isRunningInYarnContainer(conf)) && !chmod700(dir)) {
             dir.delete()
             dir = null
           }
@@ -702,7 +702,7 @@ private[spark] object Utils extends Logging {
           try {
             val rootDir = new File(root)
             if (rootDir.exists || rootDir.mkdirs()) {
-              Some(createDirectory(root).getAbsolutePath())
+              Some(createDirectory(root, conf=conf).getAbsolutePath())
             } else {
               logError(s"Failed to create dir in $root. Ignoring this directory.")
               None
