@@ -1622,6 +1622,48 @@ class SQLContext(object):
             df = self._ssql_ctx.jsonRDD(jrdd.rdd(), scala_datatype)
         return DataFrame(df, self)
 
+    def load(self, path=None, dataSourceName=None, schema=None, **options):
+        """Returns the dataset specified by the data source and a set of options
+        as a DataFrame. An optional schema can be applied as the schema of returned
+        DataFrame. If dataSourceName is not provided, the default data source configured
+        by spark.sql.sources.default will be used.
+        """
+        if path is not None:
+            options["path"] = path
+        if dataSourceName is None:
+            dataSourceName = self._ssql_ctx.getConf("spark.sql.sources.default",
+                                                    "org.apache.spark.sql.parquet")
+        joptions = MapConverter().convert(options,
+                                          self._sc._gateway._gateway_client)
+        if schema is None:
+            df = self._ssql_ctx.load(dataSourceName, joptions)
+        else:
+            scala_datatype = self._ssql_ctx.parseDataType(schema.json())
+            df = self._ssql_ctx.load(dataSourceName, scala_datatype, joptions)
+        return DataFrame(df, self)
+
+    def createExternalTable(self, tableName, path=None, dataSourceName=None,
+                            schema=None, **options):
+        """Creates an external table based on the given data source and a set of options and
+        returns the corresponding DataFrame.
+        If dataSourceName is not provided, the default data source configured
+        by spark.sql.sources.default will be used.
+        """
+        if path is not None:
+            options["path"] = path
+        if dataSourceName is None:
+            dataSourceName = self._ssql_ctx.getConf("spark.sql.sources.default",
+                                                    "org.apache.spark.sql.parquet")
+        joptions = MapConverter().convert(options,
+                                          self._sc._gateway._gateway_client)
+        if schema is None:
+            df = self._ssql_ctx.createExternalTable(tableName, dataSourceName, joptions)
+        else:
+            scala_datatype = self._ssql_ctx.parseDataType(schema.json())
+            df = self._ssql_ctx.createExternalTable(tableName, dataSourceName, scala_datatype,
+                                                    joptions)
+        return DataFrame(df, self)
+
     def sql(self, sqlQuery):
         """Return a L{DataFrame} representing the result of the given query.
 
@@ -1889,9 +1931,57 @@ class DataFrame(object):
         """
         self._jdf.insertInto(tableName, overwrite)
 
-    def saveAsTable(self, tableName):
-        """Creates a new table with the contents of this DataFrame."""
-        self._jdf.saveAsTable(tableName)
+    def saveAsTable(self, tableName, dataSourceName=None, mode="append", **options):
+        """Creates a new table with the contents of this DataFrame based on the given data source
+        and a set of options. If a data source is not provided, the default data source configured
+        by spark.sql.sources.default will be used.
+        """
+        if dataSourceName is None:
+            dataSourceName = self.sql_ctx._ssql_ctx.getConf("spark.sql.sources.default",
+                                                            "org.apache.spark.sql.parquet")
+        jmode = self._sc._jvm.org.apache.spark.sql.sources.SaveMode.ErrorIfExists
+        mode = mode.lower()
+        if mode == "append":
+            jmode = self._sc._jvm.org.apache.spark.sql.sources.SaveMode.Append
+        elif mode == "overwrite":
+            jmode = self._sc._jvm.org.apache.spark.sql.sources.SaveMode.Overwrite
+        elif mode == "ignore":
+            jmode = self._sc._jvm.org.apache.spark.sql.sources.SaveMode.Ignore
+        elif mode == "error":
+            pass
+        else:
+            raise ValueError(
+                "Only 'append', 'overwrite', 'ignore', and 'error' are acceptable save mode.")
+        joptions = MapConverter().convert(options,
+                                          self.sql_ctx._sc._gateway._gateway_client)
+        self._jdf.saveAsTable(tableName, dataSourceName, jmode, joptions)
+
+    def save(self, path=None, dataSourceName=None, mode="append", **options):
+        """Saves the contents of the DataFrame to a data source based on the given data source,
+        the given save mode, and a set of options. If a data source is not provided,
+        the default data source configured by spark.sql.sources.default will be used.
+        """
+        if path is not None:
+            options["path"] = path
+        if dataSourceName is None:
+            dataSourceName = self.sql_ctx._ssql_ctx.getConf("spark.sql.sources.default",
+                                                            "org.apache.spark.sql.parquet")
+        jmode = self._sc._jvm.org.apache.spark.sql.sources.SaveMode.ErrorIfExists
+        mode = mode.lower()
+        if mode == "append":
+            jmode = self._sc._jvm.org.apache.spark.sql.sources.SaveMode.Append
+        elif mode == "overwrite":
+            jmode = self._sc._jvm.org.apache.spark.sql.sources.SaveMode.Overwrite
+        elif mode == "ignore":
+            jmode = self._sc._jvm.org.apache.spark.sql.sources.SaveMode.Ignore
+        elif mode == "error":
+            pass
+        else:
+            raise ValueError(
+                "Only 'append', 'overwrite', 'ignore', and 'error' are acceptable save mode.")
+        joptions = MapConverter().convert(options,
+                                          self._sc._gateway._gateway_client)
+        self._jdf.save(dataSourceName, jmode, joptions)
 
     def schema(self):
         """Returns the schema of this DataFrame (represented by
