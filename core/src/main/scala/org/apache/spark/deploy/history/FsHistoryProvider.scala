@@ -28,6 +28,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Utils
+import scala.util.control.Breaks._
 
 /**
  * A class that provides application history from event logs stored in the file system.
@@ -166,21 +167,66 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
             newLastModifiedTime = math.max(newLastModifiedTime, modTime)
             modTime > lastModifiedTime
           } else {
-            false
+            val appLogStatus = fs.listStatus(new Path(dir.getPath().toUri()))
+            val appAttemptsDirs = if (appLogStatus != null) appLogStatus.filter(_.isDir).toSeq 
+                                  else Seq[FileStatus]()
+            var isValidApplicationLogToUpdate = false
+            breakable {
+                for (appAttemptDir <- appAttemptsDirs){
+                    // There are multiple attempts inside this application logs
+                    if (fs.isFile(new Path(appAttemptDir.getPath(),
+                                           EventLoggingListener.APPLICATION_COMPLETE))) {
+                      val modTime = getModificationTime(dir)
+                      newLastModifiedTime = math.max(newLastModifiedTime, modTime)
+                      isValidApplicationLogToUpdate = modTime > lastModifiedTime
+                      break
+                    }
+                }
+            }
+            isValidApplicationLogToUpdate
           }
-        }
-        .flatMap { dir =>
-          try {
-            val (replayBus, appListener) = createReplayBus(dir)
-            replayBus.replay()
-            Some(new FsApplicationHistoryInfo(
-              dir.getPath().getName(),
-              appListener.appId.getOrElse(dir.getPath().getName()),
-              appListener.appName.getOrElse(NOT_STARTED),
-              appListener.startTime.getOrElse(-1L),
-              appListener.endTime.getOrElse(-1L),
-              getModificationTime(dir),
-              appListener.sparkUser.getOrElse(NOT_STARTED)))
+         }
+         .flatMap { dir =>
+           val appAttemptsApplicationHistoryInfo = 
+             new scala.collection.mutable.ArrayBuffer[FsApplicationHistoryInfo]()
+           try {
+            if (!fs.isFile(new Path(dir.getPath(), EventLoggingListener.APPLICATION_COMPLETE))) {
+              // There are multiple attempts inside this application logs
+              val appLogStatus = fs.listStatus(new Path(dir.getPath().toUri()))
+              val appAttemptSubDirs:Seq[FileStatus] = 
+                if (appLogStatus != null) appLogStatus.filter(_.isDir).toSeq else Seq[FileStatus]()
+               
+              for (appAttemptDir <- appAttemptSubDirs){
+               // There are multiple attempts inside this application logs
+                 if (fs.isFile(new Path(appAttemptDir.getPath(), 
+                                     EventLoggingListener.APPLICATION_COMPLETE))) {
+                   val (replayBus, appListener) = createReplayBus(appAttemptDir)
+                   replayBus.replay() 
+                   appAttemptsApplicationHistoryInfo += new FsApplicationHistoryInfo( 
+                        dir.getPath().getName() + "/" + appAttemptDir.getPath().getName(),
+                        //appListener.appId.getOrElse(appAttemptDir.getPath().getName()),
+                        dir.getPath().getName() + "_attemptid_" + appAttemptDir.getPath().getName(),
+                        appListener.appName.getOrElse(NOT_STARTED),
+                        appListener.startTime.getOrElse(-1L),
+                        appListener.endTime.getOrElse(-1L),
+                        getModificationTime(dir),
+                        appListener.sparkUser.getOrElse(NOT_STARTED)) 
+                }
+              }
+              
+            } else {
+              val (replayBus, appListener) = createReplayBus(dir)
+              replayBus.replay()
+              appAttemptsApplicationHistoryInfo += new FsApplicationHistoryInfo(
+                     dir.getPath().getName(),
+                     appListener.appId.getOrElse(dir.getPath().getName()),
+                     appListener.appName.getOrElse(NOT_STARTED),
+                     appListener.startTime.getOrElse(-1L),
+                     appListener.endTime.getOrElse(-1L),
+                     getModificationTime(dir),
+                     appListener.sparkUser.getOrElse(NOT_STARTED))
+           }
+           appAttemptsApplicationHistoryInfo.toSeq
           } catch {
             case e: Exception =>
               logInfo(s"Failed to load application log data from $dir.", e)

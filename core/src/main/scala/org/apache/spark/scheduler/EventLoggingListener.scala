@@ -205,7 +205,7 @@ private[spark] object EventLoggingListener extends Logging {
    if (appAttemptId.equals("")) { 
       Utils.resolveURI(logBaseDir) + "/" + name.stripSuffix("/")
    } else {
-      Utils.resolveURI(logBaseDir) + "/" + appAttemptId + "/" + name.stripSuffix("/")
+      Utils.resolveURI(logBaseDir) + "/" + name.stripSuffix("/") + "/" + appAttemptId
    }
   }
 
