@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.spark.sql.sources.SaveMode;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -80,6 +81,19 @@ public class JavaMetastoreDataSourcesSuite {
     df.registerTempTable("jsonTable");
   }
 
+  @After
+  public void tearDown() throws IOException {
+    // Clean up tables and data.
+    sqlContext.sql("DROP TABLE IF EXISTS javaSavedTable");
+    sqlContext.sql("DROP TABLE IF EXISTS externalTable");
+    if (path.exists()) {
+      path.delete();
+    }
+    if (hiveManagedPath.exists()) {
+      hiveManagedPath.delete();
+    }
+  }
+
   @Test
   public void saveTableAndQueryIt() {
     Map<String, String> options = new HashMap<String, String>();
@@ -88,8 +102,6 @@ public class JavaMetastoreDataSourcesSuite {
     checkAnswer(
       sqlContext.sql("SELECT * FROM javaSavedTable"),
       df.collectAsList());
-
-    sqlContext.sql("DROP TABLE javaSavedTable");
   }
 
   @Test
@@ -109,9 +121,6 @@ public class JavaMetastoreDataSourcesSuite {
     checkAnswer(
       sqlContext.sql("SELECT * FROM externalTable"),
       df.collectAsList());
-
-    sqlContext.sql("DROP TABLE javaSavedTable");
-    sqlContext.sql("DROP TABLE externalTable");
   }
 
   @Test
@@ -136,8 +145,5 @@ public class JavaMetastoreDataSourcesSuite {
     checkAnswer(
       sqlContext.sql("SELECT * FROM externalTable"),
       sqlContext.sql("SELECT b FROM javaSavedTable").collectAsList());
-
-    sqlContext.sql("DROP TABLE javaSavedTable");
-    sqlContext.sql("DROP TABLE externalTable");
   }
 }
