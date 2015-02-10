@@ -42,16 +42,16 @@ private[spark] class MasterArguments(args: Array[String], conf: SparkConf) {
   private def loadEnvironmentArguments(): Unit = {
     host = Option(host)
       .orElse(conf.getOption("spark.master.host"))
-      .orElse(sys.env.get("SPARK_MASTER_HOST"))
+      .orElse(Option(conf.getenv("SPARK_MASTER_HOST")))
       .getOrElse(Utils.localHostName())
     if (port < 0) {
       port = conf.getOption("spark.master.port").map(_.toInt)
-        .orElse(sys.env.get("SPARK_MASTER_PORT").map(_.toInt))
+        .orElse(Option(conf.getenv("SPARK_MASTER_PORT").map(_.toInt)))
         .getOrElse(7077)
     }
     if (webUiPort < 0) {
       webUiPort = conf.getOption("spark.master.ui.port").map(_.toInt)
-        .orElse(sys.env.get("SPARK_MASTER_WEBUI_PORT").map(_.toInt))
+        .orElse(Option(conf.getenv("SPARK_MASTER_WEBUI_PORT").map(_.toInt)))
         .getOrElse(8080)
     }
   }
