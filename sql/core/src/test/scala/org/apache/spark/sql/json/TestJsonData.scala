@@ -18,6 +18,7 @@
 package org.apache.spark.sql.json
 
 import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.types._
 
 object TestJsonData {
 
@@ -76,9 +77,29 @@ object TestJsonData {
       """{"d":{"field":true}}""" ::
       """{"e":"str"}""" :: Nil)
 
-  val complexFieldAndType1 =
-    TestSQLContext.sparkContext.parallelize(
-      """{"struct":{"field1": true, "field2": 92233720368547758070},
+  val complexFieldAndType1Schema = StructType(
+      StructField("arrayOfArray1", ArrayType(ArrayType(StringType, false), false), true) ::
+      StructField("arrayOfArray2", ArrayType(ArrayType(DoubleType, false), false), true) ::
+      StructField("arrayOfBigInteger", ArrayType(DecimalType.Unlimited, false), true) ::
+      StructField("arrayOfBoolean", ArrayType(BooleanType, false), true) ::
+      StructField("arrayOfDouble", ArrayType(DoubleType, false), true) ::
+      StructField("arrayOfInteger", ArrayType(IntegerType, false), true) ::
+      StructField("arrayOfLong", ArrayType(LongType, false), true) ::
+      StructField("arrayOfNull", ArrayType(StringType, true), true) ::
+      StructField("arrayOfString", ArrayType(StringType, false), true) ::
+      StructField("arrayOfStruct", ArrayType(
+        StructType(
+          StructField("field1", BooleanType, true) ::
+          StructField("field2", StringType, true) ::
+          StructField("field3", StringType, true) :: Nil), false), true) ::
+      StructField("struct", StructType(
+        StructField("field1", BooleanType, true) ::
+        StructField("field2", DecimalType.Unlimited, true) :: Nil), true) ::
+      StructField("structWithArrayFields", StructType(
+        StructField("field1", ArrayType(IntegerType, false), true) ::
+        StructField("field2", ArrayType(StringType, false), true) :: Nil), true) :: Nil)
+
+  val complexFieldAndType1Data = """{"struct":{"field1": true, "field2": 92233720368547758070},
           "structWithArrayFields":{"field1":[4, 5, 6], "field2":["str1", "str2"]},
           "arrayOfString":["str1", "str2"],
           "arrayOfInteger":[1, 2147483647, -2147483648],
@@ -90,7 +111,10 @@ object TestJsonData {
           "arrayOfStruct":[{"field1": true, "field2": "str1"}, {"field1": false}, {"field3": null}],
           "arrayOfArray1":[[1, 2, 3], ["str1", "str2"]],
           "arrayOfArray2":[[1, 2, 3], [1.1, 2.1, 3.1]]
-         }"""  :: Nil)
+         }"""
+
+  val complexFieldAndType1 =
+    TestSQLContext.sparkContext.parallelize(complexFieldAndType1Data :: Nil)
 
   val complexFieldAndType2 =
     TestSQLContext.sparkContext.parallelize(
