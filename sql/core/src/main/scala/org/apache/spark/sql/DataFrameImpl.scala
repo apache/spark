@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{LogicalRDD, EvaluatePython}
 import org.apache.spark.sql.json.JsonRDD
-import org.apache.spark.sql.sources.{ResolvedDataSource, CreateTableUsingAsLogicalPlan}
+import org.apache.spark.sql.sources.{ResolvedDataSource, CreateTableUsingAsLogicalPlan, DDLException}
 import org.apache.spark.sql.types.{NumericType, StructType}
 
 
@@ -95,6 +95,13 @@ private[sql] class DataFrameImpl protected[sql](
       "The number of columns doesn't match.\n" +
         "Old column names: " + schema.fields.map(_.name).mkString(", ") + "\n" +
         "New column names: " + colNames.mkString(", "))
+
+    val reservedWords : Seq[String] = sqlContext.getReservedWords
+
+    val reservedWordsOverlap = (colNames.toSet.map{x : String => x.toUpperCase} & reservedWords.toSet).size
+    if ( reservedWordsOverlap > 0 ){
+      throw new DDLException(s"Reserved words not allowed as column names")
+    }
 
     val newCols = schema.fieldNames.zip(colNames).map { case (oldName, newName) =>
       apply(oldName).as(newName)

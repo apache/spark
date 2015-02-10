@@ -21,6 +21,7 @@ import scala.language.postfixOps
 
 import org.apache.spark.sql.Dsl._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.sources.DDLException
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.logicalPlanToSparkQuery
 import org.apache.spark.sql.test.TestSQLContext.implicits._
@@ -337,6 +338,11 @@ class DataFrameSuite extends QueryTest {
   test("apply on query results (SPARK-5462)") {
     val df = testData.sqlContext.sql("select key from testData")
     checkAnswer(df("key"), testData.select('key).collect().toSeq)
+  }
+
+  test ("disallow reserved words as column names") {
+    val e = intercept[DDLException](largeAndSmallInts.toDataFrame("in", "of"))
+      assert(e.getMessage.startsWith("Reserved words not allowed"))
   }
 
 }

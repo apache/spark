@@ -289,7 +289,7 @@ class SQLContext(object):
         df = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), schema.json())
         return DataFrame(df, self)
 
-    def toDataFrame(self, plainRdd, names=None):
+    def toDataFrame(self, plainRdd, *names):
         """
         Builds a DataFrame from an RDD based on column names.
 
@@ -312,8 +312,8 @@ class SQLContext(object):
         sampleRow = plainRdd.first()
         sampledTypes = map(_infer_type, sampleRow)
 
-        if names != None:
-            fieldNames = [f for f in re.split("( |\\\".*?\\\"|'.*?')", names) if f.strip()]
+        if len(names) > 0:
+            fieldNames = [f for f in names if f.strip()]
         else:
             fieldNames = ["_"+str(i) for i in range(1,len(sampleRow)+1)]
 
