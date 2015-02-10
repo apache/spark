@@ -518,6 +518,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "inputddl2",
     "inputddl3",
     "inputddl4",
+    "inputddl5",
     "inputddl6",
     "inputddl7",
     "inputddl8",
