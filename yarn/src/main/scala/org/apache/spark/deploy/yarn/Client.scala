@@ -63,7 +63,7 @@ private[spark] class Client(
   private val yarnConf = new YarnConfiguration(hadoopConf)
   private val credentials = UserGroupInformation.getCurrentUser.getCredentials
   private val amMemoryOverheadMB = args.amMemoryOverhead
-  private val executorMemoryOverhead = args.executorMemoryOverhead // MB
+  private val executorMemoryOverheadMB = args.executorMemoryOverhead
   private val distCacheMgr = new ClientDistributedCacheManager()
   private val isClusterMode = args.isClusterMode
 
@@ -157,10 +157,10 @@ private[spark] class Client(
     val maxMem = newAppResponse.getMaximumResourceCapability().getMemory()
     logInfo("Verifying our application has not requested more than the maximum " +
       s"memory capability of the cluster ($maxMem MB per container)")
-    val executorMem = args.executorMemoryMB + executorMemoryOverhead
+    val executorMem = args.executorMemoryMB + executorMemoryOverheadMB
     if (executorMem > maxMem) {
       throw new IllegalArgumentException(s"Required executor memory (${args.executorMemoryMB}" +
-        s"+$executorMemoryOverhead MB) is above the max threshold ($maxMem MB) of this cluster!")
+        s"+$executorMemoryOverheadMB MB) is above the max threshold ($maxMem MB) of this cluster!")
     }
     val amMem = args.amMemoryMB + amMemoryOverheadMB
     if (amMem > maxMem) {
