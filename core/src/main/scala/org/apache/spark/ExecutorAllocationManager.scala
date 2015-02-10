@@ -290,8 +290,7 @@ private[spark] class ExecutorAllocationManager(
       return 0
     }
 
-    val actualMaxNumExecutors = math.min(maxNumExecutors - executorsPendingToRemove.size,
-      maxNumExecutorsNeeded)
+    val actualMaxNumExecutors = math.min(maxNumExecutors, maxNumExecutorsNeeded)
     val newTotalExecutors = math.min(currentTarget + numExecutorsToAdd, actualMaxNumExecutors)
     val addRequestAcknowledged = testing || client.requestTotalExecutors(newTotalExecutors)
     if (addRequestAcknowledged) {

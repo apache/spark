@@ -18,31 +18,33 @@
 package org.apache.spark
 
 /**
- * A client that communicates with the cluster manager to request or kill executors.
+ * A client that communicates with the cluster manager to request or kill executors. Currently
+ * its methods are only supported in YARN mode.
  */
 private[spark] trait ExecutorAllocationClient {
 
   /**
    * Express a preference to the cluster manager for a given total number of executors. This can
    * result in canceling pending requests or filing additional requests.
+   * @return whether the request is received.
    */
   private[spark] def requestTotalExecutors(numExecutors: Int): Boolean
 
   /**
    * Request an additional number of executors from the cluster manager.
-   * This is currently only supported in YARN mode. Return whether the request is received.
+   * @return whether the request is received.
    */
   def requestExecutors(numExecutors: Int): Boolean
 
   /**
    * Request that the cluster manager kill the specified executors.
-   * Return whether the request is acknowledged by the cluster manager.
+   * @return whether the request is acknowledged by the cluster manager.
    */
   def killExecutors(executorIds: Seq[String]): Boolean
 
   /**
    * Request that the cluster manager kill the specified executor.
-   * Return whether the request is acknowledged by the cluster manager.
+   * @return whether the request is acknowledged by the cluster manager.
    */
   def killExecutor(executorId: String): Boolean = killExecutors(Seq(executorId))
 }

@@ -1104,12 +1104,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * :: DeveloperApi ::
    * Express a preference to the cluster manager for a given total number of executors. This can
    * result in canceling pending requests or filing additional requests.
-   * This is currently only supported in Yarn mode. Return whether the request is received.
+   * This is currently only supported in YARN mode.
+   * @return whether the request is received.
    */
-  @DeveloperApi
   override private[spark] def requestTotalExecutors(numExecutors: Int): Boolean = {
     assert(master.contains("yarn") || dynamicAllocationTesting,
       "Requesting executors is currently only supported in YARN mode")
@@ -1125,7 +1124,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * :: DeveloperApi ::
    * Request an additional number of executors from the cluster manager.
-   * This is currently only supported in Yarn mode. Return whether the request is received.
+   * This is currently only supported in YARN mode.
+   * @return whether the request is received.
    */
   @DeveloperApi
   override def requestExecutors(numAdditionalExecutors: Int): Boolean = {
@@ -1143,7 +1143,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * :: DeveloperApi ::
    * Request that the cluster manager kill the specified executors.
-   * This is currently only supported in Yarn mode. Return whether the request is received.
+   * This is currently only supported in YARN mode.
+   * @return whether the request is received.
    */
   @DeveloperApi
   override def killExecutors(executorIds: Seq[String]): Boolean = {
@@ -1161,7 +1162,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * :: DeveloperApi ::
    * Request that cluster manager the kill the specified executor.
-   * This is currently only supported in Yarn mode. Return whether the request is received.
+   * This is currently only supported in YARN mode.
+   * @return whether the request is received.
    */
   @DeveloperApi
   override def killExecutor(executorId: String): Boolean = super.killExecutor(executorId)
