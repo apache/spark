@@ -196,7 +196,9 @@ private[sql] class DataFrameImpl protected[sql](
     }.toSeq :_*)
   }
 
-  override def as(name: String): DataFrame = Subquery(name, logicalPlan)
+  override def as(alias: String): DataFrame = Subquery(alias, logicalPlan)
+
+  override def as(alias: Symbol): DataFrame = Subquery(alias.name, logicalPlan)
 
   override def select(cols: Column*): DataFrame = {
     val exprs = cols.zipWithIndex.map {
@@ -215,7 +217,19 @@ private[sql] class DataFrameImpl protected[sql](
   override def selectExpr(exprs: String*): DataFrame = {
     select(exprs.map { expr =>
       Column(new SqlParser().parseExpression(expr))
-    } :_*)
+    }: _*)
+  }
+
+  override def addColumn(colName: String, col: Column): DataFrame = {
+    select(Column("*"), col.as(colName))
+  }
+
+  override def renameColumn(existingName: String, newName: String): DataFrame = {
+    val colNames = schema.map { field =>
+      val name = field.name
+      if (name == existingName) Column(name).as(newName) else Column(name)
+    }
+    select(colNames :_*)
   }
 
   override def filter(condition: Column): DataFrame = {
@@ -264,18 +278,8 @@ private[sql] class DataFrameImpl protected[sql](
   }
 
   /////////////////////////////////////////////////////////////////////////////
-
-  override def addColumn(colName: String, col: Column): DataFrame = {
-    select(Column("*"), col.as(colName))
-  }
-
-  override def renameColumn(existingName: String, newName: String): DataFrame = {
-    val colNames = schema.map { field =>
-      val name = field.name
-      if (name == existingName) Column(name).as(newName) else Column(name)
-    }
-    select(colNames :_*)
-  }
+  // RDD API
+  /////////////////////////////////////////////////////////////////////////////
 
   override def head(n: Int): Array[Row] = limit(n).collect()
 
@@ -306,6 +310,8 @@ private[sql] class DataFrameImpl protected[sql](
   override def repartition(numPartitions: Int): DataFrame = {
     sqlContext.applySchema(rdd.repartition(numPartitions), schema)
   }
+
+  override def distinct: DataFrame = Distinct(logicalPlan)
 
   override def persist(): this.type = {
     sqlContext.cacheManager.cacheQuery(this)
