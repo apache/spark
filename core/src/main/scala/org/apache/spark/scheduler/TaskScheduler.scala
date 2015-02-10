@@ -67,6 +67,9 @@ private[spark] trait TaskScheduler {
   def executorHeartbeatReceived(execId: String, taskMetrics: Array[(Long, TaskMetrics)],
     blockManagerId: BlockManagerId): Boolean
 
+  // Responds to an executor being lost.
+  def executorLost(executorId: String, reason: ExecutorLossReason)
+
   /**
    * Get an application ID associated with the job.
    *

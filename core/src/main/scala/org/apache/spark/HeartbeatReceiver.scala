@@ -17,10 +17,14 @@
 
 package org.apache.spark
 
-import akka.actor.Actor
+import scala.concurrent.duration._
+import scala.collection.mutable
+
+import akka.actor.{Actor, Cancellable}
+
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.scheduler.TaskScheduler
+import org.apache.spark.scheduler.{SlaveLost, TaskScheduler}
 import org.apache.spark.util.ActorLogReceive
 
 /**
@@ -32,18 +36,64 @@ private[spark] case class Heartbeat(
     taskMetrics: Array[(Long, TaskMetrics)], // taskId -> TaskMetrics
     blockManagerId: BlockManagerId)
 
+private[spark] case object ExpireDeadHosts
+
 private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
 
 /**
  * Lives in the driver to receive heartbeats from executors..
  */
-private[spark] class HeartbeatReceiver(scheduler: TaskScheduler)
+private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskScheduler)
   extends Actor with ActorLogReceive with Logging {
+
+  val executorLastSeen = new mutable.HashMap[String, Long]
+
+  val slaveTimeout = sc.conf.getLong("spark.storage.blockManagerSlaveTimeoutMs",
+    math.max(sc.conf.getInt("spark.executor.heartbeatInterval", 10000) * 3, 120000))
+
+  val checkTimeoutInterval = sc.conf.getLong("spark.storage.blockManagerTimeoutIntervalMs", 60000)
+
+  var timeoutCheckingTask: Cancellable = null
+
+  override def preStart() {
+    import context.dispatcher
+    timeoutCheckingTask = context.system.scheduler.schedule(0.seconds,
+      checkTimeoutInterval.milliseconds, self, ExpireDeadHosts)
+    super.preStart()
+  }
 
   override def receiveWithLogging = {
     case Heartbeat(executorId, taskMetrics, blockManagerId) =>
+      heartbeatReceived(executorId)
       val response = HeartbeatResponse(
         !scheduler.executorHeartbeatReceived(executorId, taskMetrics, blockManagerId))
       sender ! response
+    case ExpireDeadHosts =>
+      expireDeadHosts()
+  }
+
+  private def heartbeatReceived(executorId: String) = {
+    executorLastSeen(executorId) = System.currentTimeMillis()
+  }
+
+  private def expireDeadHosts() {
+    logTrace("Checking for hosts with no recent heart beats in HeartbeatReceiver.")
+    val now = System.currentTimeMillis()
+    val minSeenTime = now - slaveTimeout
+    for ((executorId, lastSeenMs) <- executorLastSeen) {
+      if (lastSeenMs < minSeenTime) {
+        logWarning("Removing Executor " + executorId + " with no recent heart beats: "
+          + (now - lastSeenMs) + " ms exceeds " + slaveTimeout + "ms")
+        scheduler.executorLost(executorId, SlaveLost())
+        sc.killExecutor(executorId)
+        executorLastSeen.remove(executorId)
+      }
+    }
+  }
+
+  override def postStop() {
+    if (timeoutCheckingTask != null) {
+      timeoutCheckingTask.cancel()
+    }
   }
 }
