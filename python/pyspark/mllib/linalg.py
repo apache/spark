@@ -29,7 +29,7 @@ import copy_reg
 
 import numpy as np
 
-from pyspark.sql import UserDefinedType, StructField, StructType, ArrayType, DoubleType, \
+from pyspark.sql.types import UserDefinedType, StructField, StructType, ArrayType, DoubleType, \
     IntegerType, ByteType
 
 

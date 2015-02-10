@@ -90,14 +90,13 @@ private[sql] class DataFrameImpl protected[sql](
     }
   }
 
-  override def toDataFrame(colName: String, colNames: String*): DataFrame = {
-    val newNames = colName +: colNames
-    require(schema.size == newNames.size,
+  override def toDataFrame(colNames: String*): DataFrame = {
+    require(schema.size == colNames.size,
       "The number of columns doesn't match.\n" +
         "Old column names: " + schema.fields.map(_.name).mkString(", ") + "\n" +
-        "New column names: " + newNames.mkString(", "))
+        "New column names: " + colNames.mkString(", "))
 
-    val newCols = schema.fieldNames.zip(newNames).map { case (oldName, newName) =>
+    val newCols = schema.fieldNames.zip(colNames).map { case (oldName, newName) =>
       apply(oldName).as(newName)
     }
     select(newCols :_*)
@@ -112,6 +111,38 @@ private[sql] class DataFrameImpl protected[sql](
   override def columns: Array[String] = schema.fields.map(_.name)
 
   override def printSchema(): Unit = println(schema.treeString)
+
+  override def isLocal: Boolean = {
+    logicalPlan.isInstanceOf[LocalRelation]
+  }
+
+  override def show(): Unit = {
+    val data = take(20)
+    val numCols = schema.fieldNames.length
+
+    // For cells that are beyond 20 characters, replace it with the first 17 and "..."
+    val rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: data.map { row =>
+      row.toSeq.map { cell =>
+        val str = if (cell == null) "null" else cell.toString
+        if (str.length > 20) str.substring(0, 17) + "..." else str
+      } : Seq[String]
+    }
+
+    // Compute the width of each column
+    val colWidths = Array.fill(numCols)(0)
+    for (row <- rows) {
+      for ((cell, i) <- row.zipWithIndex)  {
+        colWidths(i) = math.max(colWidths(i), cell.length)
+      }
+    }
+
+    // Pad the cells and print them
+    println(rows.map { row =>
+      row.zipWithIndex.map { case (cell, i) =>
+        String.format(s"%-${colWidths(i)}s", cell)
+      }.mkString(" ")
+    }.mkString("\n"))
+  }
 
   override def join(right: DataFrame): DataFrame = {
     Join(logicalPlan, right.logicalPlan, joinType = Inner, None)
@@ -165,7 +196,9 @@ private[sql] class DataFrameImpl protected[sql](
     }.toSeq :_*)
   }
 
-  override def as(name: String): DataFrame = Subquery(name, logicalPlan)
+  override def as(alias: String): DataFrame = Subquery(alias, logicalPlan)
+
+  override def as(alias: Symbol): DataFrame = Subquery(alias.name, logicalPlan)
 
   override def select(cols: Column*): DataFrame = {
     val exprs = cols.zipWithIndex.map {
@@ -184,7 +217,19 @@ private[sql] class DataFrameImpl protected[sql](
   override def selectExpr(exprs: String*): DataFrame = {
     select(exprs.map { expr =>
       Column(new SqlParser().parseExpression(expr))
-    } :_*)
+    }: _*)
+  }
+
+  override def addColumn(colName: String, col: Column): DataFrame = {
+    select(Column("*"), col.as(colName))
+  }
+
+  override def renameColumn(existingName: String, newName: String): DataFrame = {
+    val colNames = schema.map { field =>
+      val name = field.name
+      if (name == existingName) Column(name).as(newName) else Column(name)
+    }
+    select(colNames :_*)
   }
 
   override def filter(condition: Column): DataFrame = {
@@ -233,18 +278,8 @@ private[sql] class DataFrameImpl protected[sql](
   }
 
   /////////////////////////////////////////////////////////////////////////////
-
-  override def addColumn(colName: String, col: Column): DataFrame = {
-    select(Column("*"), col.as(colName))
-  }
-
-  override def renameColumn(existingName: String, newName: String): DataFrame = {
-    val colNames = schema.map { field =>
-      val name = field.name
-      if (name == existingName) Column(name).as(newName) else Column(name)
-    }
-    select(colNames :_*)
-  }
+  // RDD API
+  /////////////////////////////////////////////////////////////////////////////
 
   override def head(n: Int): Array[Row] = limit(n).collect()
 
@@ -275,6 +310,8 @@ private[sql] class DataFrameImpl protected[sql](
   override def repartition(numPartitions: Int): DataFrame = {
     sqlContext.applySchema(rdd.repartition(numPartitions), schema)
   }
+
+  override def distinct: DataFrame = Distinct(logicalPlan)
 
   override def persist(): this.type = {
     sqlContext.cacheManager.cacheQuery(this)
