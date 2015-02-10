@@ -204,7 +204,6 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
                    replayBus.replay() 
                    appAttemptsApplicationHistoryInfo += new FsApplicationHistoryInfo( 
                         dir.getPath().getName() + "/" + appAttemptDir.getPath().getName(),
-                        //appListener.appId.getOrElse(appAttemptDir.getPath().getName()),
                         dir.getPath().getName() + "_attemptid_" + appAttemptDir.getPath().getName(),
                         appListener.appName.getOrElse(NOT_STARTED),
                         appListener.startTime.getOrElse(-1L),
