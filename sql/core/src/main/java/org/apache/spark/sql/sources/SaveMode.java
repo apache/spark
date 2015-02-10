@@ -38,7 +38,8 @@ public enum SaveMode {
   ErrorIfExists,
   /**
    * Ignore mode means that when saving a DataFrame to a data source, if data already exists,
-   * the save operation should stop and leave the existing data unchanged.
+   * the save operation is expected to not save the contents of the DataFrame and to not
+   * change the existing data.
    */
   Ignore
 }

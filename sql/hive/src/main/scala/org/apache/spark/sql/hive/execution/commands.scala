@@ -197,7 +197,7 @@ case class CreateMetastoreDataSourceAsSelect(
                   s"Cannot append to table $tableName because the resolved relation does not " +
                   s"match the existing relation of $tableName. " +
                   s"You can use insertInto($tableName, false) to append this DataFrame to the " +
-                  s"table $tableName and using its dataSourceName and options."
+                  s"table $tableName and using its data source and options."
                 val errorMessage =
                   s"""
                 |$errorDescription

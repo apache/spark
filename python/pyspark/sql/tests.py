@@ -301,14 +301,14 @@ class SQLTests(ReusedPySparkTestCase):
         actual = self.sqlCtx.load(tmpPath, "org.apache.spark.sql.json")
         self.assertTrue(sorted(df.collect()) == sorted(actual.collect()))
 
-        df.save(dataSourceName="org.apache.spark.sql.json", mode="overwrite", path=tmpPath,
+        df.save(source="org.apache.spark.sql.json", mode="overwrite", path=tmpPath,
                 noUse="this options will not be used in save.")
-        actual = self.sqlCtx.load(dataSourceName="org.apache.spark.sql.json", path=tmpPath,
+        actual = self.sqlCtx.load(source="org.apache.spark.sql.json", path=tmpPath,
                                   noUse="this options will not be used in load.")
         self.assertTrue(sorted(df.collect()) == sorted(actual.collect()))
 
-        defaultDataSourceName = self.sqlCtx._ssql_ctx.getConf("spark.sql.sources.default",
-                                                              "org.apache.spark.sql.parquet")
+        defaultDataSourceName = self.sqlCtx.getConf("spark.sql.sources.default",
+                                                    "org.apache.spark.sql.parquet")
         self.sqlCtx.sql("SET spark.sql.sources.default=org.apache.spark.sql.json")
         actual = self.sqlCtx.load(path=tmpPath)
         self.assertTrue(sorted(df.collect()) == sorted(actual.collect()))
@@ -362,7 +362,7 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         df.saveAsTable("savedJsonTable", "org.apache.spark.sql.json", "overwrite", path=tmpPath)
         schema = StructType([StructField("value", StringType(), True)])
         actual = self.sqlCtx.createExternalTable("externalJsonTable",
-                                                 dataSourceName="org.apache.spark.sql.json",
+                                                 source="org.apache.spark.sql.json",
                                                  schema=schema, path=tmpPath,
                                                  noUse="this options will not be used")
         self.assertTrue(
@@ -375,8 +375,8 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         self.sqlCtx.sql("DROP TABLE savedJsonTable")
         self.sqlCtx.sql("DROP TABLE externalJsonTable")
 
-        defaultDataSourceName = self.sqlCtx._ssql_ctx.getConf("spark.sql.sources.default",
-                                                              "org.apache.spark.sql.parquet")
+        defaultDataSourceName = self.sqlCtx.getConf("spark.sql.sources.default",
+                                                    "org.apache.spark.sql.parquet")
         self.sqlCtx.sql("SET spark.sql.sources.default=org.apache.spark.sql.json")
         df.saveAsTable("savedJsonTable", path=tmpPath, mode="overwrite")
         actual = self.sqlCtx.createExternalTable("externalJsonTable", path=tmpPath)
