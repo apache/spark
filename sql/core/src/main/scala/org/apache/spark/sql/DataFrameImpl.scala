@@ -350,42 +350,6 @@ private[sql] class DataFrameImpl protected[sql](
     }
   }
 
-  override def saveAsTable(tableName: String): Unit = {
-    saveAsTable(tableName, SaveMode.ErrorIfExists)
-  }
-
-  override def saveAsTable(tableName: String, mode: SaveMode): Unit = {
-    if (sqlContext.catalog.tableExists(Seq(tableName)) && mode == SaveMode.Append) {
-      // If table already exists and the save mode is Append,
-      // we will just call insertInto to append the contents of this DataFrame.
-      insertInto(tableName, overwrite = false)
-    } else {
-      val dataSourceName = sqlContext.conf.defaultDataSourceName
-      saveAsTable(tableName, dataSourceName, mode)
-    }
-  }
-
-  override def saveAsTable(
-      tableName: String,
-      dataSourceName: String): Unit = {
-    saveAsTable(tableName, dataSourceName, SaveMode.ErrorIfExists)
-  }
-
-  override def saveAsTable(
-      tableName: String,
-      dataSourceName: String,
-      mode: SaveMode): Unit = {
-    saveAsTable(tableName, dataSourceName, mode, Map.empty[String, String])
-  }
-
-  override def saveAsTable(
-      tableName: String,
-      dataSourceName: String,
-      mode: SaveMode,
-      options: java.util.Map[String, String]): Unit = {
-    saveAsTable(tableName, dataSourceName, mode, options.toMap)
-  }
-
   override def saveAsTable(
       tableName: String,
       dataSourceName: String,
@@ -401,30 +365,6 @@ private[sql] class DataFrameImpl protected[sql](
         logicalPlan)
 
     sqlContext.executePlan(cmd).toRdd
-  }
-
-  override def save(path: String): Unit = {
-    save(path, SaveMode.ErrorIfExists)
-  }
-
-  override def save(path: String, mode: SaveMode): Unit = {
-    val dataSourceName = sqlContext.conf.defaultDataSourceName
-    save(path, dataSourceName, mode)
-  }
-
-  override def save(path: String, dataSourceName: String): Unit = {
-    save(dataSourceName, SaveMode.ErrorIfExists, Map("path" -> path))
-  }
-
-  override def save(path: String, dataSourceName: String, mode: SaveMode): Unit = {
-    save(dataSourceName, mode, Map("path" -> path))
-  }
-
-  override def save(
-      dataSourceName: String,
-      mode: SaveMode,
-      options: java.util.Map[String, String]): Unit = {
-    save(dataSourceName, mode, options.toMap)
   }
 
   override def save(

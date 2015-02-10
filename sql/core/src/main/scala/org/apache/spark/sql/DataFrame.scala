@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
@@ -576,7 +577,9 @@ trait DataFrame extends RDDApi[Row] {
    * be the target of an `insertInto`.
    */
   @Experimental
-  def saveAsTable(tableName: String): Unit
+  def saveAsTable(tableName: String): Unit = {
+    saveAsTable(tableName, SaveMode.ErrorIfExists)
+  }
 
   /**
    * :: Experimental ::
@@ -589,7 +592,16 @@ trait DataFrame extends RDDApi[Row] {
    * be the target of an `insertInto`.
    */
   @Experimental
-  def saveAsTable(tableName: String, mode: SaveMode): Unit
+  def saveAsTable(tableName: String, mode: SaveMode): Unit = {
+    if (sqlContext.catalog.tableExists(Seq(tableName)) && mode == SaveMode.Append) {
+      // If table already exists and the save mode is Append,
+      // we will just call insertInto to append the contents of this DataFrame.
+      insertInto(tableName, overwrite = false)
+    } else {
+      val dataSourceName = sqlContext.conf.defaultDataSourceName
+      saveAsTable(tableName, dataSourceName, mode)
+    }
+  }
 
   /**
    * :: Experimental ::
@@ -605,7 +617,9 @@ trait DataFrame extends RDDApi[Row] {
   @Experimental
   def saveAsTable(
       tableName: String,
-      dataSourceName: String): Unit
+      dataSourceName: String): Unit = {
+    saveAsTable(tableName, dataSourceName, SaveMode.ErrorIfExists)
+  }
 
   /**
    * :: Experimental ::
@@ -621,7 +635,9 @@ trait DataFrame extends RDDApi[Row] {
   def saveAsTable(
       tableName: String,
       dataSourceName: String,
-      mode: SaveMode): Unit
+      mode: SaveMode): Unit = {
+    saveAsTable(tableName, dataSourceName, mode, Map.empty[String, String])
+  }
 
   /**
    * :: Experimental ::
@@ -638,7 +654,9 @@ trait DataFrame extends RDDApi[Row] {
       tableName: String,
       dataSourceName: String,
       mode: SaveMode,
-      options: java.util.Map[String, String]): Unit
+      options: java.util.Map[String, String]): Unit = {
+    saveAsTable(tableName, dataSourceName, mode, options.toMap)
+  }
 
   /**
    * :: Experimental ::
@@ -665,7 +683,9 @@ trait DataFrame extends RDDApi[Row] {
    * [[SaveMode.ErrorIfExists]] as the save mode.
    */
   @Experimental
-  def save(path: String): Unit
+  def save(path: String): Unit = {
+    save(path, SaveMode.ErrorIfExists)
+  }
 
   /**
    * :: Experimental ::
@@ -673,7 +693,10 @@ trait DataFrame extends RDDApi[Row] {
    * using the default data source configured by spark.sql.sources.default.
    */
   @Experimental
-  def save(path: String, mode: SaveMode): Unit
+  def save(path: String, mode: SaveMode): Unit = {
+    val dataSourceName = sqlContext.conf.defaultDataSourceName
+    save(path, dataSourceName, mode)
+  }
 
   /**
    * :: Experimental ::
@@ -681,7 +704,9 @@ trait DataFrame extends RDDApi[Row] {
    * using [[SaveMode.ErrorIfExists]] as the save mode.
    */
   @Experimental
-  def save(path: String, dataSourceName: String): Unit
+  def save(path: String, dataSourceName: String): Unit = {
+    save(dataSourceName, SaveMode.ErrorIfExists, Map("path" -> path))
+  }
 
   /**
    * :: Experimental ::
@@ -689,7 +714,9 @@ trait DataFrame extends RDDApi[Row] {
    * [[SaveMode]] specified by mode.
    */
   @Experimental
-  def save(path: String, dataSourceName: String, mode: SaveMode): Unit
+  def save(path: String, dataSourceName: String, mode: SaveMode): Unit = {
+    save(dataSourceName, mode, Map("path" -> path))
+  }
 
   /**
    * :: Experimental ::
@@ -700,7 +727,9 @@ trait DataFrame extends RDDApi[Row] {
   def save(
       dataSourceName: String,
       mode: SaveMode,
-      options: java.util.Map[String, String]): Unit
+      options: java.util.Map[String, String]): Unit = {
+    save(dataSourceName, mode, options.toMap)
+  }
 
   /**
    * :: Experimental ::

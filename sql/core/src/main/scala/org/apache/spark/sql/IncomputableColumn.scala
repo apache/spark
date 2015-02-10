@@ -154,43 +154,11 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
 
   override def saveAsParquetFile(path: String): Unit = err()
 
-  override def saveAsTable(tableName: String): Unit = err()
-
-  override def saveAsTable(tableName: String, mode: SaveMode): Unit = err()
-
-  override def saveAsTable(
-      tableName: String,
-      dataSourceName: String): Unit = err()
-
-  override def saveAsTable(
-      tableName: String,
-      dataSourceName: String,
-      mode: SaveMode): Unit = err()
-
-  override def saveAsTable(
-      tableName: String,
-      dataSourceName: String,
-      mode: SaveMode,
-      options: java.util.Map[String, String]): Unit = err()
-
   override def saveAsTable(
       tableName: String,
       dataSourceName: String,
       mode: SaveMode,
       options: Map[String, String]): Unit = err()
-
-  override def save(path: String): Unit = err()
-
-  override def save(path: String, mode: SaveMode): Unit = err()
-
-  override def save(path: String, dataSourceName: String): Unit = err()
-
-  override def save(path: String, dataSourceName: String, mode: SaveMode): Unit = err()
-
-  override def save(
-      dataSourceName: String,
-      mode: SaveMode,
-      options: java.util.Map[String, String]): Unit = err()
 
   override def save(
       dataSourceName: String,
