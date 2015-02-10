@@ -27,8 +27,14 @@ import org.apache.spark.util.AkkaUtils
  * Web UI server for the standalone master.
  */
 private[spark]
-class MasterWebUI(val master: Master, requestedPort: Int)
-  extends WebUI(master.securityMgr, requestedPort, master.conf, name = "MasterUI") with Logging {
+class MasterWebUI(val master: Master, hostName: String, requestedPort: Int)
+  extends WebUI(
+      master.securityMgr,
+      hostName,
+      requestedPort,
+      master.conf,
+      name = "MasterUI")
+  with Logging {
 
   val masterActorRef = master.self
   val timeout = AkkaUtils.askTimeout(master.conf)

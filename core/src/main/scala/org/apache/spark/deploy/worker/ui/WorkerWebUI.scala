@@ -34,8 +34,9 @@ private[spark]
 class WorkerWebUI(
     val worker: Worker,
     val workDir: File,
+    hostName: String,
     requestedPort: Int)
-  extends WebUI(worker.securityMgr, requestedPort, worker.conf, name = "WorkerUI")
+  extends WebUI(worker.securityMgr, hostName, requestedPort, worker.conf, name = "WorkerUI")
   with Logging {
 
   val timeout = AkkaUtils.askTimeout(worker.conf)
