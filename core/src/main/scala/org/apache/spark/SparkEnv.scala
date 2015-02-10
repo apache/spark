@@ -76,7 +76,7 @@ class SparkEnv (
   // (e.g., HadoopFileRDD uses this to cache JobConfs and InputFormats).
   private[spark] val hadoopJobMetadata = new MapMaker().softValues().makeMap[String, Any]()
 
-  private var tmpFilesDir: Option[String] = None
+  private var driverTmpDirToDelete: Option[String] = None
 
   private[spark] def stop() {
     isStopped = true
@@ -100,7 +100,7 @@ class SparkEnv (
     // the tmp dir, if not, it will create too many tmp dirs.
     // We only need to delete the tmp dir create by driver, because sparkFilesDir is point to the
     // current working dir in executor which we do not need to delete.
-    tmpFilesDir match {
+    driverTmpDirToDelete match {
       case Some(path) => {
         try {
           Utils.deleteRecursively(new File(path))
@@ -386,9 +386,11 @@ object SparkEnv extends Logging {
       shuffleMemoryManager,
       conf)
       
-    // Add a reference to tmp dir created by driver
+    // Add a reference to tmp dir created by driver, we will delete this tmp dir when stop() is
+    // called, and we only need to do it for driver. Because driver may run as a service, and if we
+    // don't delete this tmp dir when sc is stopped, then will create too many tmp dirs.
     if (isDriver) {
-      envInstance.tmpFilesDir = Some(sparkFilesDir)
+      envInstance.driverTmpDirToDelete = Some(sparkFilesDir)
     }
 
     envInstance
