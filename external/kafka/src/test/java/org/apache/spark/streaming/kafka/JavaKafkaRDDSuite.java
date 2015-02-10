@@ -80,7 +80,8 @@ public class JavaKafkaRDDSuite implements Serializable {
 
     HashMap<TopicAndPartition, Broker> emptyLeaders = new HashMap();
     HashMap<TopicAndPartition, Broker> leaders = new HashMap();
-    Broker broker = Broker.create(suiteBase.brokerHost(), suiteBase.brokerPort());
+    String[] hostAndPort = suiteBase.brokerAddress().split(":");
+    Broker broker = Broker.create(hostAndPort[0], Integer.parseInt(hostAndPort[1]));
     leaders.put(new TopicAndPartition(topic1, 0), broker);
     leaders.put(new TopicAndPartition(topic2, 0), broker);
 

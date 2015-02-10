@@ -53,8 +53,8 @@ abstract class KafkaStreamSuiteBase extends FunSuite with Eventually with Loggin
   private val zkConnectionTimeout = 6000
   private val zkSessionTimeout = 6000
   private var zookeeper: EmbeddedZookeeper = _
-  protected val brokerHost = "localhost"
-  protected var brokerPort = 9092
+  private val brokerHost = "localhost"
+  private var brokerPort = 9092
   private var brokerConf: KafkaConfig = _
   private var server: KafkaServer = _
   private var producer: Producer[String, String] = _

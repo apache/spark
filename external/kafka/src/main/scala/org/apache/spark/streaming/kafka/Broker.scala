@@ -30,7 +30,6 @@ final class Broker private(
     val host: String,
     /** Broker's port */
     val port: Int) extends Serializable {
-
   override def equals(obj: Any): Boolean = obj match {
     case that: Broker =>
       this.host == that.host &&
@@ -45,7 +44,6 @@ final class Broker private(
   override def toString(): String = {
     s"Broker($host, $port)"
   }
-
 }
 
 /**
