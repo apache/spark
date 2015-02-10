@@ -1038,8 +1038,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   def supportKillExecutor(): Boolean = {
     if(master.contains("yarn") || dynamicAllocationTesting) {
       true
+    } else {
+      false
     }
-    false
   }
 
   /**
