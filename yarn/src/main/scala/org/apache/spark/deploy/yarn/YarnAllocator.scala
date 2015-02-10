@@ -91,12 +91,12 @@ private[yarn] class YarnAllocator(
   // Executor memory in MB.
   protected val executorMemoryMB = args.executorMemoryMB
   // Additional memory overhead.
-  protected val memoryOverhead: Int = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
+  protected val memoryOverheadMB: Int = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
     math.max((MEMORY_OVERHEAD_FACTOR * executorMemoryMB).toInt, MEMORY_OVERHEAD_MIN_MB))
   // Number of cores per executor.
   protected val executorCores = args.executorCores
   // Resource capability requested for each executors
-  private val resource = Resource.newInstance(executorMemoryMB + memoryOverhead, executorCores)
+  private val resource = Resource.newInstance(executorMemoryMB + memoryOverheadMB, executorCores)
 
   private val launcherPool = new ThreadPoolExecutor(
     // max pool size of Integer.MAX_VALUE is ignored because we use an unbounded queue
@@ -206,7 +206,7 @@ private[yarn] class YarnAllocator(
 
     if (missing > 0) {
       logInfo(s"Will request $missing executor containers, each with ${resource.getVirtualCores} " +
-        s"cores and ${resource.getMemory} MB memory including $memoryOverhead MB overhead")
+        s"cores and ${resource.getMemory} MB memory including $memoryOverheadMB MB overhead")
 
       for (i <- 0 until missing) {
         val request = new ContainerRequest(resource, null, null, RM_REQUEST_PRIORITY)
