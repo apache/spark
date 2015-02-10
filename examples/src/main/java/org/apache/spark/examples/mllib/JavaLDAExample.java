@@ -71,5 +71,6 @@ public class JavaLDAExample {
       }
       System.out.println();
     }
+    sc.stop();
   }
 }
