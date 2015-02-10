@@ -278,6 +278,30 @@ test_that("sortBy() on RDDs", {
   expect_equal(actual, as.list(nums))
 })
 
+test_that("takeOrdered() on RDDs", {
+  l <- list(10, 1, 2, 9, 3, 4, 5, 6, 7)
+  rdd <- parallelize(sc, l)
+  actual <- takeOrdered(rdd, 6L)
+  expect_equal(actual, as.list(sort(unlist(l)))[1:6])
+
+  l <- list("e", "d", "c", "d", "a")
+  rdd <- parallelize(sc, l)
+  actual <- takeOrdered(rdd, 3L)
+  expect_equal(actual, as.list(sort(unlist(l)))[1:3])
+})
+
+test_that("top() on RDDs", {
+  l <- list(10, 1, 2, 9, 3, 4, 5, 6, 7)
+  rdd <- parallelize(sc, l)
+  actual <- top(rdd, 6L)
+  expect_equal(actual, as.list(sort(unlist(l), decreasing = TRUE))[1:6])
+  
+  l <- list("e", "d", "c", "d", "a")
+  rdd <- parallelize(sc, l)
+  actual <- top(rdd, 3L)
+  expect_equal(actual, as.list(sort(unlist(l), decreasing = TRUE))[1:3])
+})
+
 test_that("keys() on RDDs", {
   keys <- keys(intRdd)
   actual <- collect(keys)
