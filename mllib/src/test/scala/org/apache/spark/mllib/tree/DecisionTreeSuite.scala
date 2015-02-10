@@ -26,7 +26,7 @@ import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.FeatureType._
-import org.apache.spark.mllib.tree.configuration.{FeatureType, QuantileStrategy, Strategy}
+import org.apache.spark.mllib.tree.configuration.{QuantileStrategy, Strategy}
 import org.apache.spark.mllib.tree.impl.{BaggedPoint, DecisionTreeMetadata, TreePoint}
 import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Variance}
 import org.apache.spark.mllib.tree.model._
@@ -860,10 +860,9 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
     assert(topNode.rightNode.get.impurity === 0.0)
   }
 
-  test("NodeIterator") {
+  test("Node.subtreeIterator") {
     val model = DecisionTreeSuite.createModel(Classification)
-    val iterator = new DecisionTreeModel.NodeIterator(model)
-    val nodeIds = iterator.map(_.id).toArray.sorted
+    val nodeIds = model.topNode.subtreeIterator.map(_.id).toArray.sorted
     assert(nodeIds === DecisionTreeSuite.createdModelNodeIds)
   }
 
@@ -873,7 +872,6 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
 
     Array(Classification, Regression).foreach { algo =>
       val model = DecisionTreeSuite.createModel(algo)
-
       // Save model, load it back, and compare.
       try {
         model.save(sc, path)
@@ -886,7 +884,7 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
   }
 }
 
-object DecisionTreeSuite {
+object DecisionTreeSuite extends FunSuite {
 
   def validateClassifier(
       model: DecisionTreeModel,
@@ -1025,6 +1023,7 @@ object DecisionTreeSuite {
         node.split = Some(new Split(feature = 1, threshold = 0.0, Categorical,
           categories = List(0.0, 1.0)))
     }
+    // TODO: The information gain stats should be consistent with the same info stored in children.
     node.stats = Some(new InformationGainStats(gain = 0.1, impurity = 0.2,
       leftImpurity = 0.3, rightImpurity = 0.4, new Predict(1.0, 0.4), new Predict(0.0, 0.6)))
     node
@@ -1054,11 +1053,14 @@ object DecisionTreeSuite {
    * If the trees are not equal, this prints the two trees and throws an exception.
    */
   private[tree] def checkEqual(a: DecisionTreeModel, b: DecisionTreeModel): Unit = {
-    assert(a.algo == b.algo)
-    if (a.algo != b.algo || !isEqual(a.topNode, b.topNode)) {
-      throw new Exception("checkEqual failed since the two trees were not identical.\n" +
-        "TREE A:\n" + a.toDebugString + "\n" +
-        "TREE B:\n" + b.toDebugString + "\n")
+    try {
+      assert(a.algo === b.algo)
+      checkEqual(a.topNode, b.topNode)
+    } catch {
+      case ex: Exception =>
+        throw new AssertionError("checkEqual failed since the two trees were not identical.\n" +
+          "TREE A:\n" + a.toDebugString + "\n" +
+          "TREE B:\n" + b.toDebugString + "\n", ex)
     }
   }
 
@@ -1067,21 +1069,30 @@ object DecisionTreeSuite {
    * Note: I hesitate to override Node.equals since it could cause problems if users
    *       make mistakes such as creating loops of Nodes.
    */
-  private def isEqual(a: Node, b: Node): Boolean = {
-    if (a.id != b.id || a.predict != b.predict || a.impurity != b.impurity || a.isLeaf != b.isLeaf
-      || a.split != b.split || a.stats != b.stats) {
-      return false
+  private def checkEqual(a: Node, b: Node): Unit = {
+    assert(a.id === b.id)
+    assert(a.predict === b.predict)
+    assert(a.impurity === b.impurity)
+    assert(a.isLeaf === b.isLeaf)
+    assert(a.split === b.split)
+    (a.stats, b.stats) match {
+      // TODO: Check other fields besides the infomation gain.
+      case (Some(aStats), Some(bStats)) => assert(aStats.gain === bStats.gain)
+      case (None, None) =>
+      case _ => throw new AssertionError(
+          s"Only one instance has stats defined. (a.stats: ${a.stats}, b.stats: ${b.stats})")
     }
     (a.leftNode, b.leftNode) match {
-      case (None, None) => true
-      case (Some(aNode: Node), Some(bNode: Node)) => isEqual(aNode, bNode)
-      case (_, _) => false
+      case (Some(aNode), Some(bNode)) => checkEqual(aNode, bNode)
+      case (None, None) =>
+      case _ => throw new AssertionError("Only one instance has leftNode defined. " +
+        s"(a.leftNode: ${a.leftNode}, b.leftNode: ${b.leftNode})")
     }
     (a.rightNode, b.rightNode) match {
-      case (None, None) => true
-      case (Some(aNode: Node), Some(bNode: Node)) => isEqual(aNode, bNode)
-      case (_, _) => false
+      case (Some(aNode: Node), Some(bNode: Node)) => checkEqual(aNode, bNode)
+      case (None, None) =>
+      case _ => throw new AssertionError("Only one instance has rightNode defined. " +
+        s"(a.rightNode: ${a.rightNode}, b.rightNode: ${b.rightNode})")
     }
   }
-
 }

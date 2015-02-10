@@ -30,7 +30,7 @@ import org.apache.spark.mllib.tree.configuration.Algo
 import org.apache.spark.mllib.tree.configuration.EnsembleCombiningStrategy._
 import org.apache.spark.mllib.util.{Saveable, Loader}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, SQLContext}
 
 
 /**
@@ -66,7 +66,7 @@ object RandomForestModel extends Loader[RandomForestModel] {
         val metadata = TreeEnsembleModel.SaveLoadV1_0.readMetadata(metadataRDD, path)
         assert(metadata.treeWeights.forall(_ == 1.0))
         val trees =
-          TreeEnsembleModel.SaveLoadV1_0.loadTrees(sc, path, classNameV1_0, metadata.treeAlgo)
+          TreeEnsembleModel.SaveLoadV1_0.loadTrees(sc, path, metadata.treeAlgo)
         new RandomForestModel(Algo.fromString(metadata.algo), trees)
       case _ => throw new Exception(s"RandomForestModel.load did not recognize model" +
         s" with (className, format version): ($loadedClassName, $version).  Supported:\n" +
@@ -117,7 +117,7 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
         val metadata = TreeEnsembleModel.SaveLoadV1_0.readMetadata(metadataRDD, path)
         assert(metadata.combiningStrategy == Sum.toString)
         val trees =
-          TreeEnsembleModel.SaveLoadV1_0.loadTrees(sc, path, classNameV1_0, metadata.treeAlgo)
+          TreeEnsembleModel.SaveLoadV1_0.loadTrees(sc, path, metadata.treeAlgo)
         new GradientBoostedTreesModel(Algo.fromString(metadata.algo), trees, metadata.treeWeights)
       case _ => throw new Exception(s"GradientBoostedTreesModel.load did not recognize model" +
         s" with (className, format version): ($loadedClassName, $version).  Supported:\n" +
@@ -252,7 +252,7 @@ private[tree] object TreeEnsembleModel {
 
   object SaveLoadV1_0 {
 
-    import DecisionTreeModel.SaveLoadV1_0.{InformationGainStatsData, PredictData, SplitData}
+    import DecisionTreeModel.SaveLoadV1_0.{NodeData, constructTrees}
 
     def thisFormatVersion = "1.0"
 
@@ -269,24 +269,7 @@ private[tree] object TreeEnsembleModel {
      *  case class EnsembleNodeData(treeId: Int, node: NodeData),
      *  where NodeData is from DecisionTreeModel.
      */
-    case class NodeData(
-        treeId: Int,
-        id: Int,
-        predict: PredictData,
-        impurity: Double,
-        isLeaf: Boolean,
-        split: Option[SplitData],
-        leftNodeId: Option[Int],
-        rightNodeId: Option[Int],
-        stats: Option[InformationGainStatsData])
-
-    object NodeData {
-      def apply(treeId: Int, n: Node): NodeData = {
-        NodeData(treeId,
-          n.id, PredictData(n.predict), n.impurity, n.isLeaf, n.split.map(SplitData.apply),
-          n.leftNode.map(_.id), n.rightNode.map(_.id), n.stats.map(InformationGainStatsData.apply))
-      }
-    }
+    case class EnsembleNodeData(treeId: Int, node: NodeData)
 
     def save(sc: SparkContext, path: String, model: TreeEnsembleModel, className: String): Unit = {
       val sqlContext = new SQLContext(sc)
@@ -301,8 +284,7 @@ private[tree] object TreeEnsembleModel {
 
       // Create Parquet data.
       val dataRDD = sc.parallelize(model.trees.zipWithIndex).flatMap { case (tree, treeId) =>
-        val nodeIterator = new DecisionTreeModel.NodeIterator(tree)
-        nodeIterator.toSeq.map(node => NodeData(treeId, node))
+        tree.topNode.subtreeIterator.toSeq.map(node => NodeData(treeId, node))
       }.toDataFrame
       dataRDD.saveAsParquetFile(Loader.dataPath(path))
     }
@@ -330,29 +312,20 @@ private[tree] object TreeEnsembleModel {
 
     /**
      * Load trees for an ensemble, and return them in order.
-     * @param className  Class name of the tree ensemble.
-     * @param treeAlgo  Algorithm for individual trees (which may differ from the ensemble's
-     *                  algorithm).
+     * @param path path to load the model from
+     * @param treeAlgo Algorithm for individual trees (which may differ from the ensemble's
+     *                 algorithm).
      */
     def loadTrees(
         sc: SparkContext,
         path: String,
-        className: String,
         treeAlgo: String): Array[DecisionTreeModel] = {
       val datapath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)
-      val dataRDD = sqlContext.parquetFile(datapath)
-      val nodesRDD = DecisionTreeModel.SaveLoadV1_0.readNodes(dataRDD)
-      val treeIdRDD = dataRDD.select("treeId").map { case Row(treeId: Int) => treeId }
-      val trees: RDD[(Int, DecisionTreeModel)] = treeIdRDD.zip(nodesRDD).groupBy(_._1).map {
-        case (treeId, treeId_nodes) =>
-          val tree =
-            DecisionTreeModel.SaveLoadV1_0.constructTree(treeId_nodes.map(_._2), treeAlgo, datapath)
-          (treeId, tree)
-      }
-      trees.collect().sortBy(_._1).map(_._2)
+      val nodes = sqlContext.parquetFile(datapath).map(NodeData.apply)
+      val trees = constructTrees(nodes)
+      trees.map(new DecisionTreeModel(_, Algo.fromString(treeAlgo)))
     }
-
   }
 
 }
