@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.io.File
 import java.net.URI
 import java.nio.ByteBuffer
 
@@ -57,7 +58,7 @@ class ExecutorRunnable(
   var nmClient: NMClient = _
   val yarnConf: YarnConfiguration = new YarnConfiguration(conf)
   lazy val env = prepareEnvironment(container)
-  
+
   def run = {
     logInfo("Starting Executor Container")
     nmClient = NMClient.createNMClient()
@@ -128,14 +129,15 @@ class ExecutorRunnable(
 
     // Set the JVM memory
     val executorMemoryString = executorMemory + "m"
-    javaOpts += "-Xms" + executorMemoryString + " -Xmx" + executorMemoryString + " "
+    javaOpts += "-Xms" + executorMemoryString
+    javaOpts += "-Xmx" + executorMemoryString
 
     // Set extra Java options for the executor, if defined
     sys.props.get("spark.executor.extraJavaOptions").foreach { opts =>
-      javaOpts += opts
+      javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
     }
     sys.env.get("SPARK_JAVA_OPTS").foreach { opts =>
-      javaOpts += opts
+      javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
     }
     sys.props.get("spark.executor.extraLibraryPath").foreach { p =>
       prefixEnv = Some(Utils.libraryPathEnvPrefix(Seq(p)))
@@ -173,16 +175,26 @@ class ExecutorRunnable(
           // The options are based on
           // http://www.oracle.com/technetwork/java/gc-tuning-5-138395.html#0.0.0.%20When%20to%20Use
           // %20the%20Concurrent%20Low%20Pause%20Collector|outline
-          javaOpts += " -XX:+UseConcMarkSweepGC "
-          javaOpts += " -XX:+CMSIncrementalMode "
-          javaOpts += " -XX:+CMSIncrementalPacing "
-          javaOpts += " -XX:CMSIncrementalDutyCycleMin=0 "
-          javaOpts += " -XX:CMSIncrementalDutyCycle=10 "
+          javaOpts += "-XX:+UseConcMarkSweepGC"
+          javaOpts += "-XX:+CMSIncrementalMode"
+          javaOpts += "-XX:+CMSIncrementalPacing"
+          javaOpts += "-XX:CMSIncrementalDutyCycleMin=0"
+          javaOpts += "-XX:CMSIncrementalDutyCycle=10"
         }
     */
 
     // For log4j configuration to reference
     javaOpts += ("-Dspark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR)
+
+    val userClassPath = Client.getUserClasspath(sparkConf).flatMap { uri =>
+      val absPath =
+        if (new File(uri.getPath()).isAbsolute()) {
+          uri.getPath()
+        } else {
+          Client.buildPath(Environment.PWD.$(), uri.getPath())
+        }
+      Seq("--user-class-path", "file:" + absPath)
+    }.toSeq
 
     val commands = prefixEnv ++ Seq(
       YarnSparkHadoopUtil.expandEnvironment(Environment.JAVA_HOME) + "/bin/java",
@@ -195,11 +207,13 @@ class ExecutorRunnable(
       "-XX:OnOutOfMemoryError='kill %p'") ++
       javaOpts ++
       Seq("org.apache.spark.executor.CoarseGrainedExecutorBackend",
-        masterAddress.toString,
-        slaveId.toString,
-        hostname.toString,
-        executorCores.toString,
-        appId,
+        "--driver-url", masterAddress.toString,
+        "--executor-id", slaveId.toString,
+        "--hostname", hostname.toString,
+        "--cores", executorCores.toString,
+        "--app-id", appId) ++
+      userClassPath ++
+      Seq(
         "1>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout",
         "2>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr")
 

@@ -40,6 +40,8 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
     throw new UnsupportedOperationException("Cannot run this method on an UncomputableColumn")
   }
 
+  override def toString = expr.prettyString
+
   override def isComputable: Boolean = false
 
   override val sqlContext: SQLContext = null
@@ -48,7 +50,7 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
 
   protected[sql] override def logicalPlan: LogicalPlan = err()
 
-  override def toDataFrame(colName: String, colNames: String*): DataFrame = err()
+  override def toDataFrame(colNames: String*): DataFrame = err()
 
   override def schema: StructType = err()
 
@@ -57,6 +59,10 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
   override def columns: Array[String] = err()
 
   override def printSchema(): Unit = err()
+
+  override def show(): Unit = err()
+
+  override def isLocal: Boolean = false
 
   override def join(right: DataFrame): DataFrame = err()
 
@@ -82,6 +88,10 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
 
   override def selectExpr(exprs: String*): DataFrame = err()
 
+  override def addColumn(colName: String, col: Column): DataFrame = err()
+
+  override def renameColumn(existingName: String, newName: String): DataFrame = err()
+
   override def filter(condition: Column): DataFrame = err()
 
   override def filter(conditionExpr: String): DataFrame = err()
@@ -105,10 +115,6 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
   override def sample(withReplacement: Boolean, fraction: Double, seed: Long): DataFrame = err()
 
   /////////////////////////////////////////////////////////////////////////////
-
-  override def addColumn(colName: String, col: Column): DataFrame = err()
-
-  override def renameColumn(existingName: String, newName: String): DataFrame = err()
 
   override def head(n: Int): Array[Row] = err()
 
@@ -135,6 +141,8 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
   override def count(): Long = err()
 
   override def repartition(numPartitions: Int): DataFrame = err()
+
+  override def distinct: DataFrame = err()
 
   override def persist(): this.type = err()
 
