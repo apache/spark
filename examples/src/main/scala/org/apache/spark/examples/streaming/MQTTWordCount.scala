@@ -65,7 +65,9 @@ object MQTTPublisher {
     } catch {
       case e: MqttException => println("Exception Caught: " + e)
     } finally {
-      client.disconnect()
+      if (client != null) {
+        client.disconnect()
+      }
     }
   }
 }
