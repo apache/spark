@@ -92,7 +92,7 @@ private[yarn] class YarnAllocator(
   protected val executorMemory = args.executorMemory
   // Additional memory overhead.
   protected val memoryOverhead: Int = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
-    math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, MEMORY_OVERHEAD_MIN))
+    math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, MEMORY_OVERHEAD_MIN_MB))
   // Number of cores per executor.
   protected val executorCores = args.executorCores
   // Resource capability requested for each executors
