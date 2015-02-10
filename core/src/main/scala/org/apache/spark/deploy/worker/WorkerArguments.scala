@@ -52,20 +52,20 @@ private[spark] class WorkerArguments(args: Array[String], conf: SparkConf) {
       .getOrElse(Utils.localHostName())
     if (port < 0) {
       port = conf.getOption("spark.worker.port").map(_.toInt)
-        .orElse(Option(conf.getenv("SPARK_WORKER_PORT").map(_.toInt)))
+        .orElse(Option(conf.getenv("SPARK_WORKER_PORT")).map(_.toInt))
         .getOrElse(0)
     }
     if (webUiPort < 0) {
       webUiPort = conf.getOption("spark.worker.ui.port").map(_.toInt)
-        .orElse(Option(conf.getenv("SPARK_WORKER_WEBUI_PORT").map(_.toInt)))
+        .orElse(Option(conf.getenv("SPARK_WORKER_WEBUI_PORT")).map(_.toInt))
         .getOrElse(8081)
     }
     if (cores < 0) {
-      cores = Option(conf.getenv("SPARK_WORKER_CORES").map(_.toInt))
+      cores = Option(conf.getenv("SPARK_WORKER_CORES")).map(_.toInt)
         .getOrElse(inferDefaultCores())
     }
     if (memory < 0) {
-      memory = Option(conf.getenv("SPARK_WORKER_MEMORY").map(Utils.memoryStringToMb(_)))
+      memory = Option(conf.getenv("SPARK_WORKER_MEMORY")).map(Utils.memoryStringToMb(_))
       .getOrElse(inferDefaultMemory())
     }
     workDir = Option(workDir)
