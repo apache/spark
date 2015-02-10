@@ -152,6 +152,7 @@ case class ParquetRelation2
       paths.toSet == relation.paths.toSet &&
         maybeMetastoreSchema == relation.maybeMetastoreSchema &&
         (shouldMergeSchemas == relation.shouldMergeSchemas || schema == relation.schema)
+    case _ => false
   }
 
   private[sql] def sparkContext = sqlContext.sparkContext
