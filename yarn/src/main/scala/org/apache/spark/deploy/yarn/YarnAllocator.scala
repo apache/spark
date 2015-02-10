@@ -89,14 +89,14 @@ private[yarn] class YarnAllocator(
   private val executorIdToContainer = new HashMap[String, Container]
 
   // Executor memory in MB.
-  protected val executorMemory = args.executorMemoryMB
+  protected val executorMemoryMB = args.executorMemoryMB
   // Additional memory overhead.
   protected val memoryOverhead: Int = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
-    math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, MEMORY_OVERHEAD_MIN_MB))
+    math.max((MEMORY_OVERHEAD_FACTOR * executorMemoryMB).toInt, MEMORY_OVERHEAD_MIN_MB))
   // Number of cores per executor.
   protected val executorCores = args.executorCores
   // Resource capability requested for each executors
-  private val resource = Resource.newInstance(executorMemory + memoryOverhead, executorCores)
+  private val resource = Resource.newInstance(executorMemoryMB + memoryOverhead, executorCores)
 
   private val launcherPool = new ThreadPoolExecutor(
     // max pool size of Integer.MAX_VALUE is ignored because we use an unbounded queue
@@ -333,7 +333,7 @@ private[yarn] class YarnAllocator(
         driverUrl,
         executorId,
         executorHostname,
-        executorMemory,
+        executorMemoryMB,
         executorCores,
         appAttemptId.getApplicationId.toString,
         securityMgr)
