@@ -74,7 +74,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
 
         val driverDescription = new DriverDescription(
           driverArgs.jarUrl,
-          driverArgs.memory,
+          driverArgs.memoryMB,
           driverArgs.cores,
           driverArgs.supervise,
           command)

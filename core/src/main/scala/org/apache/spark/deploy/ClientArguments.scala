@@ -39,7 +39,7 @@ private[spark] class ClientArguments(args: Array[String]) {
   var jarUrl: String = ""
   var mainClass: String = ""
   var supervise: Boolean = DEFAULT_SUPERVISE
-  var memory: Int = DEFAULT_MEMORY_MB
+  var memoryMB: Int = DEFAULT_MEMORY_MB
   var cores: Int = DEFAULT_CORES
   private var _driverOptions = ListBuffer[String]()
   def driverOptions = _driverOptions.toSeq
@@ -55,7 +55,7 @@ private[spark] class ClientArguments(args: Array[String]) {
       parse(tail)
 
     case ("--memory" | "-m") :: MemoryParam(value) :: tail =>
-      memory = value
+      memoryMB = value
       parse(tail)
 
     case ("--supervise" | "-s") :: tail =>
