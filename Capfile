@@ -42,13 +42,15 @@ namespace :deploy do
   end
 
   task :upload_to_hdfs, :roles => :uploader, :on_no_matching_servers => :continue do
+    # turns out that fetch(:sha), when combined with packserv, will show only the latest sha on packserv
+    local_sha = `git rev-parse HEAD`.rstrip
     raw_binary_path = "./lib/spark-assembly-1.3.0-SNAPSHOT-hadoop2.0.0-cdh4.7.0.jar"
-    modified_binary_path = "./lib/spark-assembly-1.3.0-#{fetch(:sha)}-hadoop2.0.0-cdh4.7.0.jar"
+    modified_binary_path = "./lib/spark-assembly-#{local_sha}.jar"
     if fetch(:branch) == "master"
       run "hdfs dfs -copyFromLocal -f #{release_path}/lib/spark-assembly-*.jar hdfs://hadoop-production/user/sparkles/spark-assembly-#{fetch(:sha)}.jar"
     else
-      unless File.exist?(binary_path)
-        system("./make-distribution.sh --name #{fetch(:sha)} --skip-java-test $(cat SHOPIFY_HADOOP_OPTIONS)")
+      unless File.exist?(modified_binary_path)
+        system("./make-distribution.sh --skip-java-test $(cat SHOPIFY_HADOOP_OPTIONS)")
         system("mv #{raw_binary_path} #{modified_binary_path}")
       end
       system("hdfs dfs -copyFromLocal #{modified_binary_path} hdfs://nn01.chi.shopify.com/user/sparkles")
