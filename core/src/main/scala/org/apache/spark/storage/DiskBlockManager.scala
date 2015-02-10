@@ -123,7 +123,7 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
   private def createLocalDirs(conf: SparkConf): Array[File] = {
     Utils.getOrCreateLocalRootDirs(conf).flatMap { rootDir =>
       try {
-        val localDir = Utils.createDirectory(rootDir, "blockmgr")
+        val localDir = Utils.createDirectory(rootDir, "blockmgr", conf)
         logInfo(s"Created local directory at $localDir")
         Some(localDir)
       } catch {
