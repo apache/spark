@@ -189,7 +189,6 @@ final class ShuffleBlockFetcherIterator(
         // Filter out zero-sized blocks
         localBlocks ++= blockInfos.filter(_._2 != 0).map(_._1)
         numBlocksToFetch += localBlocks.size
-        shuffleMetrics.incLocalBytesRead(blockInfos.map(_._2).sum)
       } else {
         val iterator = blockInfos.iterator
         var curRequestSize = 0L
@@ -236,6 +235,7 @@ final class ShuffleBlockFetcherIterator(
       try {
         val buf = blockManager.getBlockData(blockId)
         shuffleMetrics.incLocalBlocksFetched(1)
+        shuffleMetrics.incLocalBytesRead(buf.size())
         buf.retain()
         results.put(new SuccessFetchResult(blockId, 0, buf))
       } catch {

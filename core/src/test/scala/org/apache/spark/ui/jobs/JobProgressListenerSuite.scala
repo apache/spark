@@ -227,7 +227,7 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
       taskMetrics.setShuffleReadMetrics(Some(shuffleReadMetrics))
       taskMetrics.shuffleWriteMetrics = Some(shuffleWriteMetrics)
       shuffleReadMetrics.incRemoteBytesRead(base + 1)
-      shuffleReadMetrics.incLocalBytesRead(5)
+      shuffleReadMetrics.incLocalBytesRead(base + 9)
       shuffleReadMetrics.incRemoteBlocksFetched(base + 2)
       shuffleWriteMetrics.incShuffleBytesWritten(base + 3)
       taskMetrics.setExecutorRunTime(base + 4)
@@ -261,8 +261,8 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
 
     var stage0Data = listener.stageIdToData.get((0, 0)).get
     var stage1Data = listener.stageIdToData.get((1, 0)).get
-    assert(stage0Data.shuffleReadTotalBytes == 107)
-    assert(stage1Data.shuffleReadTotalBytes == 206)
+    assert(stage0Data.shuffleReadTotalBytes == 220)
+    assert(stage1Data.shuffleReadTotalBytes == 410)
     assert(stage0Data.shuffleWriteBytes == 106)
     assert(stage1Data.shuffleWriteBytes == 203)
     assert(stage0Data.executorRunTime == 108)
@@ -291,8 +291,11 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
 
     stage0Data = listener.stageIdToData.get((0, 0)).get
     stage1Data = listener.stageIdToData.get((1, 0)).get
-    assert(stage0Data.shuffleReadTotalBytes == 407)
-    assert(stage1Data.shuffleReadTotalBytes == 607)
+    // Task 1235 contributed (100+1)+(100+9) = 210 shuffle bytes, and task 1234 contributed
+    // (300+1)+(300+9) = 610 total shuffle bytes, so the total for the stage is 820.
+    assert(stage0Data.shuffleReadTotalBytes == 820)
+    // Task 1236 contributed 410 shuffle bytes, and task 1237 contributed 810 shuffle bytes.
+    assert(stage1Data.shuffleReadTotalBytes == 1220)
     assert(stage0Data.shuffleWriteBytes == 406)
     assert(stage1Data.shuffleWriteBytes == 606)
     assert(stage0Data.executorRunTime == 408)
