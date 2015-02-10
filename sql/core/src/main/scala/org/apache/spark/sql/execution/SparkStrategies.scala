@@ -333,6 +333,11 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case c: CreateTableUsingAsLogicalPlan if !c.temporary =>
         sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
 
+      case LogicalDescribeCommand(table, isExtended) =>
+        val resultPlan = self.sqlContext.executePlan(table).executedPlan
+        ExecutedCommand(
+          RunnableDescribeCommand(resultPlan, resultPlan.output, isExtended)) :: Nil
+
       case _ => Nil
     }
   }
