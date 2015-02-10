@@ -18,7 +18,7 @@
 package org.apache.spark.deploy
 
 import java.io.{File, PrintStream}
-import java.lang.reflect.{InvocationTargetException, Modifier}
+import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowableException}
 import java.net.URL
 import java.security.PrivilegedExceptionAction
 
@@ -81,7 +81,7 @@ object SparkSubmit {
   private val CLASS_NOT_FOUND_EXIT_STATUS = 101
 
   // Exposed for testing
-  private[spark] var exitFn: () => Unit = () => System.exit(-1)
+  private[spark] var exitFn: () => Unit = () => System.exit(1)
   private[spark] var printStream: PrintStream = System.err
   private[spark] def printWarning(str: String) = printStream.println("Warning: " + str)
   private[spark] def printErrorAndExit(str: String) = {
@@ -128,6 +128,34 @@ object SparkSubmit {
    */
   private[spark] def submit(args: SparkSubmitArguments): Unit = {
     val (childArgs, childClasspath, sysProps, childMainClass) = prepareSubmitEnvironment(args)
+
+    def doRunMain(): Unit = {
+      if (args.proxyUser != null) {
+        val proxyUser = UserGroupInformation.createProxyUser(args.proxyUser,
+          UserGroupInformation.getCurrentUser())
+        try {
+          proxyUser.doAs(new PrivilegedExceptionAction[Unit]() {
+            override def run(): Unit = {
+              runMain(childArgs, childClasspath, sysProps, childMainClass, args.verbose)
+            }
+          })
+        } catch {
+          case e: Exception =>
+            // Hadoop's AuthorizationException suppresses the exception's stack trace, which
+            // confuses the JVM when propagating it. Instead, detect exceptions with empty
+            // stack traces here, and treat them differently.
+            if (e.getStackTrace().length == 0) {
+              printStream.println(s"ERROR: ${e.getClass().getName()}: ${e.getMessage()}")
+              exitFn()
+            } else {
+              throw e
+            }
+        }
+      } else {
+        runMain(childArgs, childClasspath, sysProps, childMainClass, args.verbose)
+      }
+    }
+
      // In standalone cluster mode, there are two submission gateways:
      //   (1) The traditional Akka gateway using o.a.s.deploy.Client as a wrapper
      //   (2) The new REST-based gateway introduced in Spark 1.3
@@ -136,7 +164,7 @@ object SparkSubmit {
     if (args.isStandaloneCluster && args.useRest) {
       try {
         printStream.println("Running Spark using the REST application submission protocol.")
-        runMain(childArgs, childClasspath, sysProps, childMainClass, args)
+        doRunMain()
       } catch {
         // Fail over to use the legacy submission gateway
         case e: SubmitRestConnectionException =>
@@ -147,7 +175,7 @@ object SparkSubmit {
       }
     // In all other modes, just run the main class as prepared
     } else {
-      runMain(childArgs, childClasspath, sysProps, childMainClass, args)
+      doRunMain()
     }
   }
 
@@ -454,13 +482,14 @@ object SparkSubmit {
    * Note that this main class will not be the one provided by the user if we're
    * running cluster deploy mode or python applications.
    */
+  @throws[Exception]
   private def runMain(
       childArgs: Seq[String],
       childClasspath: Seq[String],
       sysProps: Map[String, String],
       childMainClass: String,
-      appArgs: SparkSubmitArguments) {
-    if (appArgs.verbose) {
+      verbose: Boolean): Unit = {
+    if (verbose) {
       printStream.println(s"Main class:\n$childMainClass")
       printStream.println(s"Arguments:\n${childArgs.mkString("\n")}")
       printStream.println(s"System properties:\n${sysProps.mkString("\n")}")
@@ -510,21 +539,20 @@ object SparkSubmit {
       throw new IllegalStateException("The main method in the given main class must be static")
     }
 
+    def findCause(t: Throwable): Throwable = t match {
+      case e: UndeclaredThrowableException =>
+        if (e.getCause() != null) findCause(e.getCause()) else e
+      case e: InvocationTargetException =>
+        if (e.getCause() != null) findCause(e.getCause()) else e
+      case e: Throwable =>
+        e
+    }
+
     try {
-      if (appArgs.proxyUser != null) {
-        val proxyUser = UserGroupInformation.createProxyUser(appArgs.proxyUser,
-          UserGroupInformation.getCurrentUser())
-        proxyUser.doAs(new PrivilegedExceptionAction[Unit]() {
-          override def run(): Unit = mainMethod.invoke(null, childArgs.toArray)
-        })
-      } else {
-        mainMethod.invoke(null, childArgs.toArray)
-      }
+      mainMethod.invoke(null, childArgs.toArray)
     } catch {
-      case e: InvocationTargetException => e.getCause match {
-        case cause: Throwable => throw cause
-        case null => throw e
-      }
+      case t: Throwable =>
+        throw findCause(t)
     }
   }
 
