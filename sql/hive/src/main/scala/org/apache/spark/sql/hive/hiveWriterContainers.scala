@@ -30,6 +30,7 @@ import org.apache.hadoop.hive.ql.io.{HiveFileFormatUtils, HiveOutputFormat}
 import org.apache.hadoop.hive.ql.plan.{PlanUtils, TableDesc}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred._
+import org.apache.hadoop.hive.common.FileUtils
 
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.sql.Row
@@ -212,9 +213,14 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
       .zip(row.toSeq.takeRight(dynamicPartColNames.length))
       .map { case (col, rawVal) =>
         val string = if (rawVal == null) null else String.valueOf(rawVal)
-        s"/$col=${if (string == null || string.isEmpty) defaultPartName else string}"
-      }
-      .mkString
+        val colString = 
+          if (string == null || string.isEmpty) {
+            defaultPartName
+          } else {
+            FileUtils.escapePathName(string)
+          }
+        s"/$col=$colString"
+      }.mkString
 
     def newWriter = {
       val newFileSinkDesc = new FileSinkDesc(
