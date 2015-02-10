@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive
 
 import java.sql.Date
-import org.apache.commons.codec.binary.Hex
 
 import scala.collection.mutable.ArrayBuffer
 
