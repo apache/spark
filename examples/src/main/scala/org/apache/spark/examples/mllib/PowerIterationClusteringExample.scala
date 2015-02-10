@@ -18,53 +18,44 @@
 package org.apache.spark.examples.mllib
 
 import org.apache.log4j.{Level, Logger}
-import org.apache.spark.mllib.clustering.KMeans
+import org.apache.spark.mllib.clustering.PowerIterationClustering
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkConf, SparkContext}
 import scopt.OptionParser
 
 /**
- * An example k-means app. Run with
+ * An example Power Iteration Clustering app. Run with
  * {{{
- * ./bin/run-example org.apache.spark.examples.mllib.DenseKMeans [options] <input>
+ * ./bin/run-example org.apache.spark.examples.mllib.PowerIterationClusteringExample
+ *      [options] <input>
  * }}}
  * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  */
 object PowerIterationClusteringExample {
 
-  object InitializationMode extends Enumeration {
-    type InitializationMode = Value
-    val Random, Parallel = Value
-  }
-
-  import org.apache.spark.examples.mllib.PowerIterationClusteringExample.InitializationMode._
-
   case class Params(
-      input: String = null,
-      k: Int = -1,
-      numIterations: Int = 10,
-      initializationMode: InitializationMode = Parallel) extends AbstractParams[Params]
+                     input: String = null,
+                     k: Int = 3,
+                     numPoints: Int = 30,
+                     numIterations: Int = 10,
+                     outerRadius: Double = 3.0
+                     ) extends AbstractParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()
 
-    val parser = new OptionParser[Params]("DenseKMeans") {
-      head("DenseKMeans: an example k-means app for dense data.")
+    val parser = new OptionParser[Params]("PIC Circles") {
+      head("PowerIterationClusteringExample: an example PIC app using concentric circles.")
       opt[Int]('k', "k")
-        .required()
-        .text(s"number of clusters, required")
+        .text(s"number of circles (/clusters), default: ${defaultParams.k}")
         .action((x, c) => c.copy(k = x))
+      opt[Int]('n', "n")
+        .text(s"number of points, default: ${defaultParams.numPoints}")
+        .action((x, c) => c.copy(numPoints = x))
       opt[Int]("numIterations")
-        .text(s"number of iterations, default; ${defaultParams.numIterations}")
+        .text(s"number of iterations, default: ${defaultParams.numIterations}")
         .action((x, c) => c.copy(numIterations = x))
-      opt[String]("initMode")
-        .text(s"initialization mode (${InitializationMode.values.mkString(",")}), " +
-        s"default: ${defaultParams.initializationMode}")
-        .action((x, c) => c.copy(initializationMode = InitializationMode.withName(x)))
-      arg[String]("<input>")
-        .text("input paths to examples")
-        .required()
-        .action((x, c) => c.copy(input = x))
     }
 
     parser.parse(args, defaultParams).map { params =>
@@ -74,8 +65,78 @@ object PowerIterationClusteringExample {
     }
   }
 
+  def generateCircle(n: Int, r: Double): Array[(Double, Double)] = {
+    val pi2 = 2 * math.Pi
+    (0.0 until pi2 by pi2 / n).map { x =>
+      (r * math.cos(x), r * math.sin(x))
+    }.toArray
+  }
+
+  def generateCirclesRdd(sc: SparkContext, nCircles: Int = 3, nTotalPoints: Int = 30,
+                         outerRadius: Double):
+  RDD[(Long, Long, Double)] = {
+    // The circles are generated as follows:
+    // The Radii are equal to the largestRadius/(C - circleIndex)
+    //   where  C=Number of circles
+    //      and the circleIndex is 0 for the innermost and (nCircles-1) for the outermost circle
+    // The number of points in each circle (and thus in each final cluster) is:
+    //     x, 2x, .., nCircles*x
+    //     Where x is found from  x = N * C(C+1)/2
+    //  The # points in the LAST circle is adjusted downwards so that the total sum is equal
+    //  to the nTotalPoints
+
+    val smallestRad = math.ceil(nTotalPoints / (nCircles * (nCircles + 1) / 2.0))
+    var groupSizes = (1 to nCircles).map(gs => (gs * smallestRad).toInt)
+    groupSizes.zipWithIndex.map { case (gs, ix) =>
+      ix match {
+        case _ if ix == groupSizes.length => gs - (groupSizes.sum - nTotalPoints)
+        case _ => gs
+      }
+    }
+
+    val radii = for (cx <- 0 until nCircles) yield {
+      cx match {
+        case 0 => 0.1 * outerRadius / nCircles
+        case _ if cx == nCircles - 1 => outerRadius
+        case _ => outerRadius * cx / (nCircles - 1)
+      }
+    }
+    var ix = 0
+    val points = for (cx <- 0 until nCircles;
+                      px <- 0 until groupSizes(cx)) yield {
+      val theta = 2.0 * math.Pi * px / groupSizes(cx)
+      val out = (ix, (radii(cx) * math.cos(theta), radii(cx) * math.sin(theta)))
+      ix += 1
+      out
+    }
+    val rdd = sc.parallelize(points)
+    val distancesRdd = rdd.cartesian(rdd).flatMap { case ((i0, (x0, y0)), (i1, (x1, y1))) =>
+      if (i0 < i1) {
+        val sim = Some((i0.toLong, i1.toLong, similarity((x0, y0), (x1, y1))))
+        sim
+      } else {
+        None
+      }
+    }
+    val coll = distancesRdd.collect
+    distancesRdd
+  }
+
+  def gaussianSimilarity(p1: (Double, Double), p2: (Double, Double), sigma: Double) = {
+    val sim = (1.0 /
+      (math.sqrt(2.0 * math.Pi) * sigma)) * math.exp((-1.0 / (2.0 * math.pow(sigma, 2.0))
+      * (math.pow(p1._1 - p2._1, 2) + math.pow(p1._2 - p2._2, 2))))
+    sim
+  }
+
+  private[mllib] def similarity(p1: (Double, Double), p2: (Double, Double)) = {
+    gaussianSimilarity(p1, p2, 1.0)
+  }
+
   def run(params: Params) {
-    val conf = new SparkConf().setAppName(s"DenseKMeans with $params")
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName(s"PowerIterationClustering with $params")
     val sc = new SparkContext(conf)
 
     Logger.getRootLogger.setLevel(Level.WARN)
@@ -84,24 +145,16 @@ object PowerIterationClusteringExample {
       Vectors.dense(line.split(' ').map(_.toDouble))
     }.cache()
 
-    val numExamples = examples.count()
-
-    println(s"numExamples = $numExamples.")
-
-    val initMode = params.initializationMode match {
-      case Random => KMeans.RANDOM
-      case Parallel => KMeans.K_MEANS_PARALLEL
-    }
-
-    val model = new KMeans()
-      .setInitializationMode(initMode)
+    val circlesRdd = generateCirclesRdd(sc, params.k, params.numPoints, params.outerRadius)
+    val model = new PowerIterationClustering()
       .setK(params.k)
       .setMaxIterations(params.numIterations)
-      .run(examples)
+      .run(circlesRdd)
 
-    val cost = model.computeCost(examples)
-
-    println(s"Total cost = $cost.")
+    val clusters = model.assignments.collect.groupBy(_._2).mapValues(_.map(_._1))
+    println(s"Cluster assignments: "
+      + s"${clusters.map { case (k, v) => s"$k -> ${v.sorted.mkString("[", ",", "]")}"}
+      .mkString(",")}")
 
     sc.stop()
   }
