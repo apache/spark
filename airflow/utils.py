@@ -7,7 +7,7 @@ import logging
 import re
 import smtplib
 
-from sqlalchemy import event
+from sqlalchemy import event, exc
 from sqlalchemy.pool import Pool
 
 from airflow.configuration import conf
@@ -83,7 +83,7 @@ def initdb():
             models.Connection(
                 conn_id='presto_default', conn_type='presto',
                 host='localhost',
-                schema='hive', port=10001))
+                schema='hive', port=3400))
         session.commit()
 
     conn = session.query(C).filter(C.conn_id == 'hive_default').first()
@@ -206,17 +206,17 @@ def apply_defaults(func):
 
 
 def ask_yesno(question):
-    yes = set(['yes','y',])
-    no = set(['no','n'])
+    yes = set(['yes', 'y'])
+    no = set(['no', 'n'])
 
     done = False
     print(question)
     while not done:
         choice = raw_input().lower()
         if choice in yes:
-           return True
+            return True
         elif choice in no:
-           return False
+            return False
         else:
             print("Please respond by yes or no.")
 
@@ -249,5 +249,3 @@ def send_email(to, subject, html_content):
     logging.info("Sent an altert email to " + str(to))
     s.sendmail(SMTP_MAIL_FROM, to, msg.as_string())
     s.quit()
-
-
