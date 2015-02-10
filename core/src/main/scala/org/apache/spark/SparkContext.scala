@@ -379,7 +379,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private val dynamicAllocationTesting = conf.getBoolean("spark.dynamicAllocation.testing", false)
   private[spark] val executorAllocationManager: Option[ExecutorAllocationManager] =
     if (dynamicAllocationEnabled) {
-      assert(master.contains("yarn") || dynamicAllocationTesting,
+      assert(supportKillExecutor(),
         "Dynamic allocation of executors is currently only supported in YARN mode")
       Some(new ExecutorAllocationManager(this, listenerBus, conf))
     } else {
@@ -1034,6 +1034,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     logInfo("Added file " + path + " at " + key + " with timestamp " + addedFiles(key))
     postEnvironmentUpdate()
   }
+  
+  def supportKillExecutor(): Boolean = {
+    if(master.contains("yarn") || dynamicAllocationTesting) {
+      true
+    }
+    false
+  }
 
   /**
    * :: DeveloperApi ::
@@ -1051,8 +1058,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   @DeveloperApi
   override def requestExecutors(numAdditionalExecutors: Int): Boolean = {
-    assert(master.contains("yarn") || dynamicAllocationTesting,
-      "Requesting executors is currently only supported in YARN mode")
+    assert(supportKillExecutor(), "Requesting executors is currently only supported in YARN mode")
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
         b.requestExecutors(numAdditionalExecutors)
@@ -1069,17 +1075,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   @DeveloperApi
   override def killExecutors(executorIds: Seq[String]): Boolean = {
-    if (master.contains("yarn") || dynamicAllocationTesting) {
-      schedulerBackend match {
-        case b: CoarseGrainedSchedulerBackend =>
-          b.killExecutors(executorIds)
-        case _ =>
-          logWarning("Killing executors is only supported in coarse-grained mode")
-          false
-      }
-    } else {
-      logWarning("Killing executors is currently only supported in YARN mode")
-      false
+    assert(supportKillExecutor(), "Killing executors is currently only supported in YARN mode")
+    schedulerBackend match {
+      case b: CoarseGrainedSchedulerBackend =>
+        b.killExecutors(executorIds)
+      case _ =>
+        logWarning("Killing executors is only supported in coarse-grained mode")
+        false
     }
   }
 
