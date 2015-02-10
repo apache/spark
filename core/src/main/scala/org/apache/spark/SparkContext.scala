@@ -1069,14 +1069,17 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   @DeveloperApi
   override def killExecutors(executorIds: Seq[String]): Boolean = {
-    assert(master.contains("yarn") || dynamicAllocationTesting,
-      "Killing executors is currently only supported in YARN mode")
-    schedulerBackend match {
-      case b: CoarseGrainedSchedulerBackend =>
-        b.killExecutors(executorIds)
-      case _ =>
-        logWarning("Killing executors is only supported in coarse-grained mode")
-        false
+    if (master.contains("yarn") || dynamicAllocationTesting) {
+      schedulerBackend match {
+        case b: CoarseGrainedSchedulerBackend =>
+          b.killExecutors(executorIds)
+        case _ =>
+          logWarning("Killing executors is only supported in coarse-grained mode")
+          false
+      }
+    } else {
+      logWarning("Killing executors is currently only supported in YARN mode")
+      false
     }
   }
 

@@ -61,7 +61,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
     import context.dispatcher
     timeoutCheckingTask = context.system.scheduler.schedule(0.seconds,
       checkTimeoutInterval.milliseconds, self, ExpireDeadHosts)
-    super.preStart
+    super.preStart()
   }
   
   override def receiveWithLogging = {
@@ -80,8 +80,8 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
     val minSeenTime = now - executorTimeout
     for ((executorId, lastSeenMs) <- executorLastSeen) {
       if (lastSeenMs < minSeenTime) {
-        logWarning("Removing Executor " + executorId + " with no recent heartbeats: "
-          + (now - lastSeenMs) + " ms exceeds " + executorTimeout + "ms")
+        logWarning(s"Removing executor $executorId with no recent heartbeats: " +
+          s"${now - lastSeenMs} ms exceeds timeout $executorTimeout ms")
         scheduler.executorLost(executorId, SlaveLost())
         sc.killExecutor(executorId)
         executorLastSeen.remove(executorId)
