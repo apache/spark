@@ -142,8 +142,8 @@ object SparkSubmit {
         } catch {
           case e: Exception =>
             // Hadoop's AuthorizationException suppresses the exception's stack trace, which
-            // confuses the JVM when propagating it. Instead, detect exceptions with empty
-            // stack traces here, and treat them differently.
+            // makes the message printed to the output by the JVM not very helpful. Instead,
+            // detect exceptions with empty stack traces here, and treat them differently.
             if (e.getStackTrace().length == 0) {
               printStream.println(s"ERROR: ${e.getClass().getName()}: ${e.getMessage()}")
               exitFn()
