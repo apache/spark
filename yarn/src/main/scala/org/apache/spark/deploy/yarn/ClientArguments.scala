@@ -43,7 +43,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var priority = 0
   def isClusterMode: Boolean = userClass != null
 
-  private var driverMemory: Int = 512 // MB
+  private var driverMemoryMB: Int = 512
   private var driverCores: Int = 1
   private val driverMemOverheadKey = "spark.yarn.driver.memoryOverhead"
   private val amMemKey = "spark.yarn.am.memory"
@@ -116,7 +116,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
           println(s"$key is set but does not apply in cluster mode.")
         }
       }
-      amMemoryMB = driverMemory
+      amMemoryMB = driverMemoryMB
       amCores = driverCores
     } else {
       for (key <- Seq(driverMemOverheadKey, driverCoresKey)) {
@@ -165,7 +165,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
           if (args(0) == "--master-memory") {
             println("--master-memory is deprecated. Use --driver-memory instead.")
           }
-          driverMemory = value
+          driverMemoryMB = value
           args = tail
 
         case ("--driver-cores") :: IntParam(value) :: tail =>
