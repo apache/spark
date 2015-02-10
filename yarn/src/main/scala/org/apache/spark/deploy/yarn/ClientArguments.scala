@@ -37,7 +37,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var executorCores = 1
   var numExecutors = DEFAULT_NUMBER_EXECUTORS
   var amQueue = sparkConf.get("spark.yarn.queue", "default")
-  var amMemory: Int = 512 // MB
+  var amMemoryMB: Int = 512
   var amCores: Int = 1
   var appName: String = "Spark"
   var priority = 0
@@ -60,7 +60,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   // Additional memory to allocate to containers
   val amMemoryOverheadConf = if (isClusterMode) driverMemOverheadKey else amMemOverheadKey
   val amMemoryOverhead = sparkConf.getInt(amMemoryOverheadConf,
-    math.max((MEMORY_OVERHEAD_FACTOR * amMemory).toInt, MEMORY_OVERHEAD_MIN))
+    math.max((MEMORY_OVERHEAD_FACTOR * amMemoryMB).toInt, MEMORY_OVERHEAD_MIN))
 
   val executorMemoryOverhead = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
     math.max((MEMORY_OVERHEAD_FACTOR * executorMemoryMB).toInt, MEMORY_OVERHEAD_MIN))
@@ -116,7 +116,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
           println(s"$key is set but does not apply in cluster mode.")
         }
       }
-      amMemory = driverMemory
+      amMemoryMB = driverMemory
       amCores = driverCores
     } else {
       for (key <- Seq(driverMemOverheadKey, driverCoresKey)) {
@@ -126,7 +126,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
       }
       sparkConf.getOption(amMemKey)
         .map(Utils.memoryStringToMb)
-        .foreach { mem => amMemory = mem }
+        .foreach { mem => amMemoryMB = mem }
       sparkConf.getOption(amCoresKey)
         .map(_.toInt)
         .foreach { cores => amCores = cores }

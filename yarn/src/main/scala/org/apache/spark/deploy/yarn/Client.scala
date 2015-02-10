@@ -126,7 +126,7 @@ private[spark] class Client(
           "Cluster's default value will be used.")
     }
     val capability = Records.newRecord(classOf[Resource])
-    capability.setMemory(args.amMemory + amMemoryOverhead)
+    capability.setMemory(args.amMemoryMB + amMemoryOverhead)
     capability.setVirtualCores(args.amCores)
     appContext.setResource(capability)
     appContext
@@ -162,9 +162,9 @@ private[spark] class Client(
       throw new IllegalArgumentException(s"Required executor memory (${args.executorMemoryMB}" +
         s"+$executorMemoryOverhead MB) is above the max threshold ($maxMem MB) of this cluster!")
     }
-    val amMem = args.amMemory + amMemoryOverhead
+    val amMem = args.amMemoryMB + amMemoryOverhead
     if (amMem > maxMem) {
-      throw new IllegalArgumentException(s"Required AM memory (${args.amMemory}" +
+      throw new IllegalArgumentException(s"Required AM memory (${args.amMemoryMB}" +
         s"+$amMemoryOverhead MB) is above the max threshold ($maxMem MB) of this cluster!")
     }
     logInfo("Will allocate AM container, with %d MB memory including %d MB overhead".format(
@@ -394,7 +394,7 @@ private[spark] class Client(
     var prefixEnv: Option[String] = None
 
     // Add Xmx for AM memory
-    javaOpts += "-Xmx" + args.amMemory + "m"
+    javaOpts += "-Xmx" + args.amMemoryMB + "m"
 
     val tmpDir = new Path(
       YarnSparkHadoopUtil.expandEnvironment(Environment.PWD),
