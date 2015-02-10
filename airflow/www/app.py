@@ -1146,6 +1146,7 @@ class ConnectionModelView(LoginMixin, ModelView):
             ('mysql', 'MySQL',),
             ('oracle', 'Oracle',),
             ('presto', 'Presto',),
+            ('s3','S3',),
             ('samba', 'Samba',),
         ]
     }
