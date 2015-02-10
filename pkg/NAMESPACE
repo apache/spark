@@ -46,6 +46,8 @@ exportMethods(
               "sampleRDD",
               "saveAsTextFile",
               "saveAsObjectFile",
+              "sortBy",
+              "sortByKey",
               "take",
               "takeSample",
               "unionRDD",

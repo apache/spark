@@ -197,9 +197,9 @@ initAccumulator <- function() {
 
 # Utility function to sort a list of key value pairs
 # Used in unit tests
-sortKeyValueList <- function(kv_list) {
+sortKeyValueList <- function(kv_list, decreasing = FALSE) {
   keys <- sapply(kv_list, function(x) x[[1]])
-  kv_list[order(keys)]
+  kv_list[order(keys, decreasing = decreasing)]
 }
 
 # Utility function to generate compact R lists from grouped rdd
