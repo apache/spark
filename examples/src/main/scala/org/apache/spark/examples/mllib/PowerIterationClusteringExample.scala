@@ -141,13 +141,10 @@ object PowerIterationClusteringExample {
   }
 
   /**
-   * Gaussian Similarity:
-   * http://www.stat.wisc.edu/~mchung/teaching/MIA/reading/diffusion.gaussian.kernel.pdf
+   * Gaussian Similarity:  http://en.wikipedia.org/wiki/Radial_basis_function_kernel
    */
   def gaussianSimilarity(p1: (Double, Double), p2: (Double, Double), sigma: Double) = {
-    (1.0 /
-      (math.sqrt(2.0 * math.Pi) * sigma)) * math.exp((-1.0 / (2.0 * math.pow(sigma, 2.0))
-      * (math.pow(p1._1 - p2._1, 2) + math.pow(p1._2 - p2._2, 2))))
+      math.exp((p1._1 - p2._1)*(p1._1 - p2._1) + (p1._2 - p2._2)*(p1._2 - p2._2))
   }
 
   private[mllib] def similarity(p1: (Double, Double), p2: (Double, Double)) = {
@@ -169,10 +166,10 @@ object PowerIterationClusteringExample {
       .run(circlesRdd)
 
     val clusters = model.assignments.collect.groupBy(_._2).mapValues(_.map(_._1))
-    println(s"Cluster assignments: "
-      + s"${clusters.toList.sortBy{ case (k,v) => v.length}
-      .map { case (k, v) => s"$k -> ${v.sorted.mkString("[", ",", "]")}"}
-      .mkString(",")}")
+    val assignments =clusters.toList.sortBy{ case (k,v) => v.length}
+    val assignmentsStr = assignments
+      .map { case (k, v) => s"$k -> ${v.sorted.mkString("[", ",", "]")}"}.mkString(",")
+    println(s"Cluster assignments: $assignmentsStr")
 
     sc.stop()
   }
