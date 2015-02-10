@@ -128,6 +128,29 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   def resolve(name: String, resolver: Resolver): Option[NamedExpression] =
     resolve(name, output, resolver)
 
+  def resolveAsTableColumn(
+      nameParts: Array[String],
+      resolver: Resolver,
+      attribute: Attribute): List[(Attribute, List[String])] = {
+    if (attribute.qualifiers.find(resolver(_, nameParts.head)).nonEmpty && nameParts.size > 1) {
+      val remainingParts = nameParts.drop(1)
+      resolveAsColumn(remainingParts, resolver, attribute)
+    } else {
+      Nil
+    }
+  }
+
+  def resolveAsColumn(
+      nameParts: Array[String],
+      resolver: Resolver,
+      attribute: Attribute): List[(Attribute, List[String])] = {
+    if (resolver(attribute.name, nameParts.head)) {
+      (attribute.withName(nameParts.head), nameParts.tail.toList) :: Nil
+    } else {
+      Nil
+    }
+  }
+
   /** Performs attribute resolution given a name and a sequence of possible attributes. */
   protected def resolve(
       name: String,
@@ -136,24 +159,15 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
 
     val parts = name.split("\\.")
 
-    // Collect all attributes that are output by this nodes children where either the first part
-    // matches the name or where the first part matches the scope and the second part matches the
-    // name.  Return these matches along with any remaining parts, which represent dotted access to
-    // struct fields.
-    val options = input.flatMap { option =>
-      // If the first part of the desired name matches a qualifier for this possible match, drop it.
-      val remainingParts =
-        if (option.qualifiers.find(resolver(_, parts.head)).nonEmpty && parts.size > 1) {
-          parts.drop(1)
-        } else {
-          parts
-        }
+    // We will try to resolve this name as `table.column` pattern first.
+    var options = input.flatMap { option =>
+      resolveAsTableColumn(parts, resolver, option)
+    }
 
-      if (resolver(option.name, remainingParts.head)) {
-        // Preserve the case of the user's attribute reference.
-        (option.withName(remainingParts.head), remainingParts.tail.toList) :: Nil
-      } else {
-        Nil
+    // If none of attributes match `table.column` pattern, we try to resolve it as a column.
+    if(options.isEmpty) {
+      options = input.flatMap { option =>
+        resolveAsColumn(parts, resolver, option)
       }
     }
 
