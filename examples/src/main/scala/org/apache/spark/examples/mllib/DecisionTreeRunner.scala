@@ -272,6 +272,8 @@ object DecisionTreeRunner {
       case Variance => impurity.Variance
     }
 
+    params.checkpointDir.foreach(sc.setCheckpointDir)
+
     val strategy
       = new Strategy(
           algo = params.algo,
@@ -282,7 +284,6 @@ object DecisionTreeRunner {
           minInstancesPerNode = params.minInstancesPerNode,
           minInfoGain = params.minInfoGain,
           useNodeIdCache = params.useNodeIdCache,
-          checkpointDir = params.checkpointDir,
           checkpointInterval = params.checkpointInterval)
     if (params.numTrees == 1) {
       val startTime = System.nanoTime()

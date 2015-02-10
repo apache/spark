@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.util.{List => JList}
-
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.collection.JavaConversions._
@@ -29,29 +27,35 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.{SqlParser, ScalaReflection}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedStar, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{LogicalRDD, EvaluatePython}
 import org.apache.spark.sql.json.JsonRDD
+import org.apache.spark.sql.sources.{ResolvedDataSource, CreateTableUsingAsLogicalPlan}
 import org.apache.spark.sql.types.{NumericType, StructType}
-import org.apache.spark.util.Utils
 
 
 /**
- * See [[DataFrame]] for documentation.
+ * Internal implementation of [[DataFrame]]. Users of the API should use [[DataFrame]] directly.
  */
 private[sql] class DataFrameImpl protected[sql](
     override val sqlContext: SQLContext,
     val queryExecution: SQLContext#QueryExecution)
   extends DataFrame {
 
+  /**
+   * A constructor that automatically analyzes the logical plan. This reports error eagerly
+   * as the [[DataFrame]] is constructed.
+   */
   def this(sqlContext: SQLContext, logicalPlan: LogicalPlan) = {
     this(sqlContext, {
       val qe = sqlContext.executePlan(logicalPlan)
-      qe.analyzed  // This should force analysis and throw errors if there are any
+      if (sqlContext.conf.dataFrameEagerAnalysis) {
+        qe.analyzed  // This should force analysis and throw errors if there are any
+      }
       qe
     })
   }
@@ -86,14 +90,13 @@ private[sql] class DataFrameImpl protected[sql](
     }
   }
 
-  override def toDataFrame(colName: String, colNames: String*): DataFrame = {
-    val newNames = colName +: colNames
-    require(schema.size == newNames.size,
+  override def toDataFrame(colNames: String*): DataFrame = {
+    require(schema.size == colNames.size,
       "The number of columns doesn't match.\n" +
         "Old column names: " + schema.fields.map(_.name).mkString(", ") + "\n" +
-        "New column names: " + newNames.mkString(", "))
+        "New column names: " + colNames.mkString(", "))
 
-    val newCols = schema.fieldNames.zip(newNames).map { case (oldName, newName) =>
+    val newCols = schema.fieldNames.zip(colNames).map { case (oldName, newName) =>
       apply(oldName).as(newName)
     }
     select(newCols :_*)
@@ -109,6 +112,38 @@ private[sql] class DataFrameImpl protected[sql](
 
   override def printSchema(): Unit = println(schema.treeString)
 
+  override def isLocal: Boolean = {
+    logicalPlan.isInstanceOf[LocalRelation]
+  }
+
+  override def show(): Unit = {
+    val data = take(20)
+    val numCols = schema.fieldNames.length
+
+    // For cells that are beyond 20 characters, replace it with the first 17 and "..."
+    val rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: data.map { row =>
+      row.toSeq.map { cell =>
+        val str = if (cell == null) "null" else cell.toString
+        if (str.length > 20) str.substring(0, 17) + "..." else str
+      } : Seq[String]
+    }
+
+    // Compute the width of each column
+    val colWidths = Array.fill(numCols)(0)
+    for (row <- rows) {
+      for ((cell, i) <- row.zipWithIndex)  {
+        colWidths(i) = math.max(colWidths(i), cell.length)
+      }
+    }
+
+    // Pad the cells and print them
+    println(rows.map { row =>
+      row.zipWithIndex.map { case (cell, i) =>
+        String.format(s"%-${colWidths(i)}s", cell)
+      }.mkString(" ")
+    }.mkString("\n"))
+  }
+
   override def join(right: DataFrame): DataFrame = {
     Join(logicalPlan, right.logicalPlan, joinType = Inner, None)
   }
@@ -122,11 +157,11 @@ private[sql] class DataFrameImpl protected[sql](
   }
 
   override def sort(sortCol: String, sortCols: String*): DataFrame = {
-    orderBy(apply(sortCol), sortCols.map(apply) :_*)
+    sort((sortCol +: sortCols).map(apply) :_*)
   }
 
-  override def sort(sortExpr: Column, sortExprs: Column*): DataFrame = {
-    val sortOrder: Seq[SortOrder] = (sortExpr +: sortExprs).map { col =>
+  override def sort(sortExprs: Column*): DataFrame = {
+    val sortOrder: Seq[SortOrder] = sortExprs.map { col =>
       col.expr match {
         case expr: SortOrder =>
           expr
@@ -141,11 +176,11 @@ private[sql] class DataFrameImpl protected[sql](
     sort(sortCol, sortCols :_*)
   }
 
-  override def orderBy(sortExpr: Column, sortExprs: Column*): DataFrame = {
-    sort(sortExpr, sortExprs :_*)
+  override def orderBy(sortExprs: Column*): DataFrame = {
+    sort(sortExprs :_*)
   }
 
-  override def apply(colName: String): Column = colName match {
+  override def col(colName: String): Column = colName match {
     case "*" =>
       Column(ResolvedStar(schema.fieldNames.map(resolve)))
     case _ =>
@@ -177,8 +212,18 @@ private[sql] class DataFrameImpl protected[sql](
     select((col +: cols).map(Column(_)) :_*)
   }
 
+  override def selectExpr(exprs: String*): DataFrame = {
+    select(exprs.map { expr =>
+      Column(new SqlParser().parseExpression(expr))
+    } :_*)
+  }
+
   override def filter(condition: Column): DataFrame = {
     Filter(condition.expr, logicalPlan)
+  }
+
+  override def filter(conditionExpr: String): DataFrame = {
+    filter(Column(new SqlParser().parseExpression(conditionExpr)))
   }
 
   override def where(condition: Column): DataFrame = {
@@ -189,25 +234,13 @@ private[sql] class DataFrameImpl protected[sql](
     filter(condition)
   }
 
-  override def groupBy(cols: Column*): GroupedDataFrame = {
-    new GroupedDataFrame(this, cols.map(_.expr))
+  override def groupBy(cols: Column*): GroupedData = {
+    new GroupedData(this, cols.map(_.expr))
   }
 
-  override def groupBy(col1: String, cols: String*): GroupedDataFrame = {
+  override def groupBy(col1: String, cols: String*): GroupedData = {
     val colNames: Seq[String] = col1 +: cols
-    new GroupedDataFrame(this, colNames.map(colName => resolve(colName)))
-  }
-
-  override def agg(exprs: Map[String, String]): DataFrame = {
-    groupBy().agg(exprs)
-  }
-
-  override def agg(exprs: java.util.Map[String, String]): DataFrame = {
-    agg(exprs.toMap)
-  }
-
-  override def agg(expr: Column, exprs: Column*): DataFrame = {
-    groupBy().agg(expr, exprs :_*)
+    new GroupedData(this, colNames.map(colName => resolve(colName)))
   }
 
   override def limit(n: Int): DataFrame = {
@@ -230,14 +263,18 @@ private[sql] class DataFrameImpl protected[sql](
     Sample(fraction, withReplacement, seed, logicalPlan)
   }
 
-  override def sample(withReplacement: Boolean, fraction: Double): DataFrame = {
-    sample(withReplacement, fraction, Utils.random.nextLong)
-  }
-
   /////////////////////////////////////////////////////////////////////////////
 
   override def addColumn(colName: String, col: Column): DataFrame = {
     select(Column("*"), col.as(colName))
+  }
+
+  override def renameColumn(existingName: String, newName: String): DataFrame = {
+    val colNames = schema.map { field =>
+      val name = field.name
+      if (name == existingName) Column(name).as(newName) else Column(name)
+    }
+    select(colNames :_*)
   }
 
   override def head(n: Int): Array[Row] = limit(n).collect()
@@ -299,12 +336,69 @@ private[sql] class DataFrameImpl protected[sql](
   }
 
   override def saveAsParquetFile(path: String): Unit = {
-    sqlContext.executePlan(WriteToFile(path, logicalPlan)).toRdd
+    if (sqlContext.conf.parquetUseDataSourceApi) {
+      save("org.apache.spark.sql.parquet", "path" -> path)
+    } else {
+      sqlContext.executePlan(WriteToFile(path, logicalPlan)).toRdd
+    }
   }
 
   override def saveAsTable(tableName: String): Unit = {
-    sqlContext.executePlan(
-      CreateTableAsSelect(None, tableName, logicalPlan, allowExisting = false)).toRdd
+    val dataSourceName = sqlContext.conf.defaultDataSourceName
+    val cmd =
+      CreateTableUsingAsLogicalPlan(
+        tableName,
+        dataSourceName,
+        temporary = false,
+        Map.empty,
+        allowExisting = false,
+        logicalPlan)
+
+    sqlContext.executePlan(cmd).toRdd
+  }
+
+  override def saveAsTable(
+      tableName: String,
+      dataSourceName: String,
+      option: (String, String),
+      options: (String, String)*): Unit = {
+    val cmd =
+      CreateTableUsingAsLogicalPlan(
+        tableName,
+        dataSourceName,
+        temporary = false,
+        (option +: options).toMap,
+        allowExisting = false,
+        logicalPlan)
+
+    sqlContext.executePlan(cmd).toRdd
+  }
+
+  override def saveAsTable(
+      tableName: String,
+      dataSourceName: String,
+      options: java.util.Map[String, String]): Unit = {
+    val opts = options.toSeq
+    saveAsTable(tableName, dataSourceName, opts.head, opts.tail:_*)
+  }
+
+  override def save(path: String): Unit = {
+    val dataSourceName = sqlContext.conf.defaultDataSourceName
+    save(dataSourceName, "path" -> path)
+  }
+
+  override def save(
+      dataSourceName: String,
+      option: (String, String),
+      options: (String, String)*): Unit = {
+    ResolvedDataSource(sqlContext, dataSourceName, (option +: options).toMap, this)
+  }
+
+  override def save(
+      dataSourceName: String,
+      options: java.util.Map[String, String]): Unit = {
+    val opts = options.toSeq
+    save(dataSourceName, opts.head, opts.tail:_*)
   }
 
   override def insertInto(tableName: String, overwrite: Boolean): Unit = {

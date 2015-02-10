@@ -75,6 +75,9 @@ private[spark] class Executor(
     Thread.setDefaultUncaughtExceptionHandler(SparkUncaughtExceptionHandler)
   }
 
+  // Start worker thread pool
+  val threadPool = Utils.newDaemonCachedThreadPool("Executor task launch worker")
+
   val executorSource = new ExecutorSource(this, executorId)
 
   if (!isLocal) {
@@ -100,9 +103,6 @@ private[spark] class Executor(
 
   // Limit of bytes for total size of results (default is 1GB)
   private val maxResultSize = Utils.getMaxResultSize(conf)
-
-  // Start worker thread pool
-  val threadPool = Utils.newDaemonCachedThreadPool("Executor task launch worker")
 
   // Maintains the list of running tasks.
   private val runningTasks = new ConcurrentHashMap[Long, TaskRunner]

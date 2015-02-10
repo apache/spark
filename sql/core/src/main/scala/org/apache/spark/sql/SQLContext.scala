@@ -20,26 +20,27 @@ package org.apache.spark.sql
 import java.beans.Introspector
 import java.util.Properties
 
+import scala.collection.JavaConversions._
 import scala.collection.immutable
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.{SparkContext, Partition}
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
-import org.apache.spark.api.java.{JavaSparkContext, JavaRDD}
+import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.json._
 import org.apache.spark.sql.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
-import org.apache.spark.sql.sources.{LogicalRelation, BaseRelation, DDLParser, DataSourceStrategy}
+import org.apache.spark.sql.json._
+import org.apache.spark.sql.sources.{BaseRelation, DDLParser, DataSourceStrategy, LogicalRelation, _}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
+import org.apache.spark.{Partition, SparkContext}
 
 /**
  * :: AlphaComponent ::
@@ -86,11 +87,15 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] lazy val catalog: Catalog = new SimpleCatalog(true)
 
   @transient
-  protected[sql] lazy val functionRegistry: FunctionRegistry = new SimpleFunctionRegistry
+  protected[sql] lazy val functionRegistry: FunctionRegistry = new SimpleFunctionRegistry(true)
 
   @transient
   protected[sql] lazy val analyzer: Analyzer =
-    new Analyzer(catalog, functionRegistry, caseSensitive = true)
+    new Analyzer(catalog, functionRegistry, caseSensitive = true) {
+      override val extendedRules =
+        sources.PreInsertCastAndRename ::
+        Nil
+    }
 
   @transient
   protected[sql] lazy val optimizer: Optimizer = DefaultOptimizer
@@ -162,17 +167,52 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /** Removes the specified table from the in-memory cache. */
   def uncacheTable(tableName: String): Unit = cacheManager.uncacheTable(tableName)
 
+  // scalastyle:off
+  // Disable style checker so "implicits" object can start with lowercase i
+  /**
+   * (Scala-specific)
+   * Implicit methods available in Scala for converting common Scala objects into [[DataFrame]]s.
+   */
+  object implicits {
+    // scalastyle:on
+    /**
+     * Creates a DataFrame from an RDD of case classes.
+     *
+     * @group userf
+     */
+    implicit def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
+      self.createDataFrame(rdd)
+    }
+
+    /**
+     * Creates a DataFrame from a local Seq of Product.
+     */
+    implicit def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
+      self.createDataFrame(data)
+    }
+  }
+
   /**
    * Creates a DataFrame from an RDD of case classes.
    *
    * @group userf
    */
-  implicit def createDataFrame[A <: Product: TypeTag](rdd: RDD[A]): DataFrame = {
+  def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
     SparkPlan.currentContext.set(self)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
     val rowRDD = RDDConversions.productToRowRdd(rdd, schema)
-    DataFrame(this, LogicalRDD(attributeSeq, rowRDD)(self))
+    DataFrame(self, LogicalRDD(attributeSeq, rowRDD)(self))
+  }
+
+  /**
+   * Creates a DataFrame from a local Seq of Product.
+   */
+  def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
+    SparkPlan.currentContext.set(self)
+    val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
+    val attributeSeq = schema.toAttributes
+    DataFrame(self, LocalRelation.fromProduct(attributeSeq, data))
   }
 
   /**
@@ -220,6 +260,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
     DataFrame(this, logicalPlan)
   }
 
+  @DeveloperApi
+  def applySchema(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
+    applySchema(rowRDD.rdd, schema);
+  }
+
   /**
    * Applies a schema to an RDD of Java Beans.
    *
@@ -262,8 +307,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group userf
    */
-  def parquetFile(path: String): DataFrame =
-    DataFrame(this, parquet.ParquetRelation(path, Some(sparkContext.hadoopConfiguration), this))
+  @scala.annotation.varargs
+  def parquetFile(path: String, paths: String*): DataFrame =
+    if (conf.parquetUseDataSourceApi) {
+      baseRelationToDataFrame(parquet.ParquetRelation2(path +: paths, Map.empty)(this))
+    } else {
+      DataFrame(this, parquet.ParquetRelation(
+        paths.mkString(","), Some(sparkContext.hadoopConfiguration), this))
+    }
 
   /**
    * Loads a JSON file (one object per line), returning the result as a [[DataFrame]].
@@ -304,6 +355,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   def jsonRDD(json: RDD[String]): DataFrame = jsonRDD(json, 1.0)
 
+  def jsonRDD(json: JavaRDD[String]): DataFrame = jsonRDD(json.rdd, 1.0)
+
   /**
    * :: Experimental ::
    * Loads an RDD[String] storing JSON objects (one object per record) and applies the given schema,
@@ -322,6 +375,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
     applySchema(rowRDD, appliedSchema)
   }
 
+  @Experimental
+  def jsonRDD(json: JavaRDD[String], schema: StructType): DataFrame = {
+    jsonRDD(json.rdd, schema)
+  }
+
   /**
    * :: Experimental ::
    */
@@ -333,6 +391,34 @@ class SQLContext(@transient val sparkContext: SparkContext)
         JsonRDD.inferSchema(json, samplingRatio, columnNameOfCorruptJsonRecord))
     val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
     applySchema(rowRDD, appliedSchema)
+  }
+
+  @Experimental
+  def jsonRDD(json: JavaRDD[String], samplingRatio: Double): DataFrame = {
+    jsonRDD(json.rdd, samplingRatio);
+  }
+
+  @Experimental
+  def load(path: String): DataFrame = {
+    val dataSourceName = conf.defaultDataSourceName
+    load(dataSourceName, ("path", path))
+  }
+
+  @Experimental
+  def load(
+      dataSourceName: String,
+      option: (String, String),
+      options: (String, String)*): DataFrame = {
+    val resolved = ResolvedDataSource(this, None, dataSourceName, (option +: options).toMap)
+    DataFrame(this, LogicalRelation(resolved.relation))
+  }
+
+  @Experimental
+  def load(
+      dataSourceName: String,
+      options: java.util.Map[String, String]): DataFrame = {
+    val opts = options.toSeq
+    load(dataSourceName, opts.head, opts.tail:_*)
   }
 
   /**

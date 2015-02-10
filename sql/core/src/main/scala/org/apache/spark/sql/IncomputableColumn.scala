@@ -48,7 +48,7 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
 
   protected[sql] override def logicalPlan: LogicalPlan = err()
 
-  override def toDataFrame(colName: String, colNames: String*): DataFrame = err()
+  override def toDataFrame(colNames: String*): DataFrame = err()
 
   override def schema: StructType = err()
 
@@ -58,6 +58,10 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
 
   override def printSchema(): Unit = err()
 
+  override def show(): Unit = err()
+
+  override def isLocal: Boolean = false
+
   override def join(right: DataFrame): DataFrame = err()
 
   override def join(right: DataFrame, joinExprs: Column): DataFrame = err()
@@ -66,13 +70,13 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
 
   override def sort(sortCol: String, sortCols: String*): DataFrame = err()
 
-  override def sort(sortExpr: Column, sortExprs: Column*): DataFrame = err()
+  override def sort(sortExprs: Column*): DataFrame = err()
 
   override def orderBy(sortCol: String, sortCols: String*): DataFrame = err()
 
-  override def orderBy(sortExpr: Column, sortExprs: Column*): DataFrame = err()
+  override def orderBy(sortExprs: Column*): DataFrame = err()
 
-  override def apply(colName: String): Column = err()
+  override def col(colName: String): Column = err()
 
   override def apply(projection: Product): DataFrame = err()
 
@@ -80,21 +84,19 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
 
   override def select(col: String, cols: String*): DataFrame = err()
 
+  override def selectExpr(exprs: String*): DataFrame = err()
+
   override def filter(condition: Column): DataFrame = err()
+
+  override def filter(conditionExpr: String): DataFrame = err()
 
   override def where(condition: Column): DataFrame = err()
 
   override def apply(condition: Column): DataFrame = err()
 
-  override def groupBy(cols: Column*): GroupedDataFrame = err()
+  override def groupBy(cols: Column*): GroupedData = err()
 
-  override def groupBy(col1: String, cols: String*): GroupedDataFrame = err()
-
-  override def agg(exprs: Map[String, String]): DataFrame = err()
-
-  override def agg(exprs: java.util.Map[String, String]): DataFrame = err()
-
-  override def agg(expr: Column, exprs: Column*): DataFrame = err()
+  override def groupBy(col1: String, cols: String*): GroupedData = err()
 
   override def limit(n: Int): DataFrame = err()
 
@@ -106,11 +108,11 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
 
   override def sample(withReplacement: Boolean, fraction: Double, seed: Long): DataFrame = err()
 
-  override def sample(withReplacement: Boolean, fraction: Double): DataFrame = err()
-
   /////////////////////////////////////////////////////////////////////////////
 
   override def addColumn(colName: String, col: Column): DataFrame = err()
+
+  override def renameColumn(existingName: String, newName: String): DataFrame = err()
 
   override def head(n: Int): Array[Row] = err()
 
@@ -151,6 +153,28 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
   override def saveAsParquetFile(path: String): Unit = err()
 
   override def saveAsTable(tableName: String): Unit = err()
+
+  override def saveAsTable(
+      tableName: String,
+      dataSourceName: String,
+      option: (String, String),
+      options: (String, String)*): Unit = err()
+
+  override def saveAsTable(
+      tableName: String,
+      dataSourceName: String,
+      options: java.util.Map[String, String]): Unit = err()
+
+  override def save(path: String): Unit = err()
+
+  override def save(
+      dataSourceName: String,
+      option: (String, String),
+      options: (String, String)*): Unit = err()
+
+  override def save(
+      dataSourceName: String,
+      options: java.util.Map[String, String]): Unit = err()
 
   override def insertInto(tableName: String, overwrite: Boolean): Unit = err()
 
