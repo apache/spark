@@ -29,8 +29,10 @@ import org.apache.spark.mllib.tree.configuration.FeatureType._
 import org.apache.spark.mllib.tree.configuration.{QuantileStrategy, Strategy}
 import org.apache.spark.mllib.tree.impl.{BaggedPoint, DecisionTreeMetadata, TreePoint}
 import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Variance}
-import org.apache.spark.mllib.tree.model.{InformationGainStats, DecisionTreeModel, Node}
+import org.apache.spark.mllib.tree.model._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.util.Utils
+
 
 class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
 
@@ -857,9 +859,32 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
     assert(topNode.leftNode.get.impurity === 0.0)
     assert(topNode.rightNode.get.impurity === 0.0)
   }
+
+  test("Node.subtreeIterator") {
+    val model = DecisionTreeSuite.createModel(Classification)
+    val nodeIds = model.topNode.subtreeIterator.map(_.id).toArray.sorted
+    assert(nodeIds === DecisionTreeSuite.createdModelNodeIds)
+  }
+
+  test("model save/load") {
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+
+    Array(Classification, Regression).foreach { algo =>
+      val model = DecisionTreeSuite.createModel(algo)
+      // Save model, load it back, and compare.
+      try {
+        model.save(sc, path)
+        val sameModel = DecisionTreeModel.load(sc, path)
+        DecisionTreeSuite.checkEqual(model, sameModel)
+      } finally {
+        Utils.deleteRecursively(tempDir)
+      }
+    }
+  }
 }
 
-object DecisionTreeSuite {
+object DecisionTreeSuite extends FunSuite {
 
   def validateClassifier(
       model: DecisionTreeModel,
@@ -979,4 +1004,95 @@ object DecisionTreeSuite {
     arr
   }
 
+  /** Create a leaf node with the given node ID */
+  private def createLeafNode(id: Int): Node = {
+    Node(nodeIndex = id, new Predict(0.0, 1.0), impurity = 0.5, isLeaf = true)
+  }
+
+  /**
+   * Create an internal node with the given node ID and feature type.
+   * Note: This does NOT set the child nodes.
+   */
+  private def createInternalNode(id: Int, featureType: FeatureType): Node = {
+    val node = Node(nodeIndex = id, new Predict(0.0, 1.0), impurity = 0.5, isLeaf = false)
+    featureType match {
+      case Continuous =>
+        node.split = Some(new Split(feature = 0, threshold = 0.5, Continuous,
+          categories = List.empty[Double]))
+      case Categorical =>
+        node.split = Some(new Split(feature = 1, threshold = 0.0, Categorical,
+          categories = List(0.0, 1.0)))
+    }
+    // TODO: The information gain stats should be consistent with the same info stored in children.
+    node.stats = Some(new InformationGainStats(gain = 0.1, impurity = 0.2,
+      leftImpurity = 0.3, rightImpurity = 0.4, new Predict(1.0, 0.4), new Predict(0.0, 0.6)))
+    node
+  }
+
+  /**
+   * Create a tree model.  This is deterministic and contains a variety of node and feature types.
+   */
+  private[tree] def createModel(algo: Algo): DecisionTreeModel = {
+    val topNode = createInternalNode(id = 1, Continuous)
+    val (node2, node3) = (createLeafNode(id = 2), createInternalNode(id = 3, Categorical))
+    val (node6, node7) = (createLeafNode(id = 6), createLeafNode(id = 7))
+    topNode.leftNode = Some(node2)
+    topNode.rightNode = Some(node3)
+    node3.leftNode = Some(node6)
+    node3.rightNode = Some(node7)
+    new DecisionTreeModel(topNode, algo)
+  }
+
+  /** Sorted Node IDs matching the model returned by [[createModel()]] */
+  private val createdModelNodeIds = Array(1, 2, 3, 6, 7)
+
+  /**
+   * Check if the two trees are exactly the same.
+   * Note: I hesitate to override Node.equals since it could cause problems if users
+   *       make mistakes such as creating loops of Nodes.
+   * If the trees are not equal, this prints the two trees and throws an exception.
+   */
+  private[tree] def checkEqual(a: DecisionTreeModel, b: DecisionTreeModel): Unit = {
+    try {
+      assert(a.algo === b.algo)
+      checkEqual(a.topNode, b.topNode)
+    } catch {
+      case ex: Exception =>
+        throw new AssertionError("checkEqual failed since the two trees were not identical.\n" +
+          "TREE A:\n" + a.toDebugString + "\n" +
+          "TREE B:\n" + b.toDebugString + "\n", ex)
+    }
+  }
+
+  /**
+   * Return true iff the two nodes and their descendents are exactly the same.
+   * Note: I hesitate to override Node.equals since it could cause problems if users
+   *       make mistakes such as creating loops of Nodes.
+   */
+  private def checkEqual(a: Node, b: Node): Unit = {
+    assert(a.id === b.id)
+    assert(a.predict === b.predict)
+    assert(a.impurity === b.impurity)
+    assert(a.isLeaf === b.isLeaf)
+    assert(a.split === b.split)
+    (a.stats, b.stats) match {
+      // TODO: Check other fields besides the infomation gain.
+      case (Some(aStats), Some(bStats)) => assert(aStats.gain === bStats.gain)
+      case (None, None) =>
+      case _ => throw new AssertionError(
+          s"Only one instance has stats defined. (a.stats: ${a.stats}, b.stats: ${b.stats})")
+    }
+    (a.leftNode, b.leftNode) match {
+      case (Some(aNode), Some(bNode)) => checkEqual(aNode, bNode)
+      case (None, None) =>
+      case _ => throw new AssertionError("Only one instance has leftNode defined. " +
+        s"(a.leftNode: ${a.leftNode}, b.leftNode: ${b.leftNode})")
+    }
+    (a.rightNode, b.rightNode) match {
+      case (Some(aNode: Node), Some(bNode: Node)) => checkEqual(aNode, bNode)
+      case (None, None) =>
+      case _ => throw new AssertionError("Only one instance has rightNode defined. " +
+        s"(a.rightNode: ${a.rightNode}, b.rightNode: ${b.rightNode})")
+    }
+  }
 }
