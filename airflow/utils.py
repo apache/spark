@@ -1,3 +1,4 @@
+from copy import copy
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -179,7 +180,7 @@ def apply_defaults(func):
         dag_args = {}
         if 'dag' in kwargs and kwargs['dag']:
             dag = kwargs['dag']
-            dag_args = dag.default_args or {}
+            dag_args = copy(dag.default_args) or {}
 
         default_args = {}
         if 'default_args' in kwargs:
