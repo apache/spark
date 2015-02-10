@@ -167,18 +167,19 @@ class DataFrame(object):
     def saveAsTable(self, tableName, source=None, mode="append", **options):
         """Saves the contents of the DataFrame to a data source in a table.
 
-        The data source is specified by the ``source`` and a set of ``options``.
-        If ``source`` is not specified, the default data source configured by
+        The data source is specified by the `source` and a set of `options`.
+        If `source` is not specified, the default data source configured by
         spark.sql.sources.default will be used.
 
         Additionally, mode is used to specify the behavior of the saveAsTable operation when
         table already exists in the data source. There are four modes:
+
         * append: Contents of this DataFrame are expected to be appended to existing table.
-        * overwrite: Data in the existing table is expected to be overwritten by the contents of
-        this DataFrame.
+        * overwrite: Data in the existing table is expected to be overwritten by the contents of \
+            this DataFrame.
         * error: An exception is expected to be thrown.
-        * ignore: The save operation is expected to not save the contents of the DataFrame and
-        to not change the existing table.
+        * ignore: The save operation is expected to not save the contents of the DataFrame and \
+            to not change the existing table.
         """
         if source is None:
             source = self.sql_ctx.getConf("spark.sql.sources.default",
@@ -191,17 +192,18 @@ class DataFrame(object):
     def save(self, path=None, source=None, mode="append", **options):
         """Saves the contents of the DataFrame to a data source.
 
-        The data source is specified by the ``source`` and a set of ``options``.
-        If ``source`` is not specified, the default data source configured by
+        The data source is specified by the `source` and a set of `options`.
+        If `source` is not specified, the default data source configured by
         spark.sql.sources.default will be used.
 
         Additionally, mode is used to specify the behavior of the save operation when
         data already exists in the data source. There are four modes:
+
         * append: Contents of this DataFrame are expected to be appended to existing data.
         * overwrite: Existing data is expected to be overwritten by the contents of this DataFrame.
         * error: An exception is expected to be thrown.
-        * ignore: The save operation is expected to not save the contents of the DataFrame and
-        to not change the existing data.
+        * ignore: The save operation is expected to not save the contents of the DataFrame and \
+            to not change the existing data.
         """
         if path is not None:
             options["path"] = path
