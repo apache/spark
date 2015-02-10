@@ -72,19 +72,19 @@ class SaveLoadSuite extends DataSourceTest with BeforeAndAfterAll {
   test("save with path and load") {
     conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.json")
     df.save(path.toString)
-    checkLoad
+    checkLoad()
   }
 
   test("save with path and datasource, and load") {
     conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "not a source name")
     df.save(path.toString, "org.apache.spark.sql.json")
-    checkLoad
+    checkLoad()
   }
 
   test("save with data source and options, and load") {
     conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "not a source name")
     df.save("org.apache.spark.sql.json", SaveMode.ErrorIfExists, Map("path" -> path.toString))
-    checkLoad
+    checkLoad()
   }
 
   test("save and save again") {
@@ -101,10 +101,10 @@ class SaveLoadSuite extends DataSourceTest with BeforeAndAfterAll {
     if (path.exists()) Utils.deleteRecursively(path)
 
     df.save(path.toString, "org.apache.spark.sql.json")
-    checkLoad
+    checkLoad()
 
     df.save("org.apache.spark.sql.json", SaveMode.Overwrite, Map("path" -> path.toString))
-    checkLoad
+    checkLoad()
 
     message = intercept[RuntimeException] {
       df.save("org.apache.spark.sql.json", SaveMode.Append, Map("path" -> path.toString))
