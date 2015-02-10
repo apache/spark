@@ -41,7 +41,7 @@ import org.apache.spark.api.java.{JavaSparkContext, JavaPairRDD, JavaRDD}
 
 object KafkaUtils {
   /**
-   * Create an input stream that pulls messages from a Kafka Broker.
+   * Create an input stream that pulls messages from Kafka Brokers.
    * @param ssc       StreamingContext object
    * @param zkQuorum  Zookeeper quorum (hostname:port,hostname:port,..)
    * @param groupId   The group id for this consumer
@@ -65,7 +65,7 @@ object KafkaUtils {
   }
 
   /**
-   * Create an input stream that pulls messages from a Kafka Broker.
+   * Create an input stream that pulls messages from Kafka Brokers.
    * @param ssc         StreamingContext object
    * @param kafkaParams Map of kafka configuration parameters,
    *                    see http://kafka.apache.org/08/configuration.html
@@ -84,7 +84,7 @@ object KafkaUtils {
   }
 
   /**
-   * Create an input stream that pulls messages from a Kafka Broker.
+   * Create an input stream that pulls messages from Kafka Brokers.
    * Storage level of the data will be the default StorageLevel.MEMORY_AND_DISK_SER_2.
    * @param jssc      JavaStreamingContext object
    * @param zkQuorum  Zookeeper quorum (hostname:port,hostname:port,..)
@@ -102,7 +102,7 @@ object KafkaUtils {
   }
 
   /**
-   * Create an input stream that pulls messages from a Kafka Broker.
+   * Create an input stream that pulls messages from Kafka Brokers.
    * @param jssc      JavaStreamingContext object
    * @param zkQuorum  Zookeeper quorum (hostname:port,hostname:port,..).
    * @param groupId   The group id for this consumer.
@@ -122,7 +122,7 @@ object KafkaUtils {
   }
 
   /**
-   * Create an input stream that pulls messages from a Kafka Broker.
+   * Create an input stream that pulls messages from Kafka Brokers.
    * @param jssc      JavaStreamingContext object
    * @param keyTypeClass Key type of DStream
    * @param valueTypeClass value type of Dstream
@@ -290,7 +290,7 @@ object KafkaUtils {
 
   /**
    * :: Experimental ::
-   * Create an input stream that directly pulls messages from a Kafka Broker
+   * Create an input stream that directly pulls messages from Kafka Brokers
    * without using any receiver. This stream can guarantee that each message
    * from Kafka is included in transformations exactly once (see points below).
    *
@@ -337,7 +337,7 @@ object KafkaUtils {
 
   /**
    * :: Experimental ::
-   * Create an input stream that directly pulls messages from a Kafka Broker
+   * Create an input stream that directly pulls messages from Kafka Brokers
    * without using any receiver. This stream can guarantee that each message
    * from Kafka is included in transformations exactly once (see points below).
    *
@@ -401,7 +401,7 @@ object KafkaUtils {
 
   /**
    * :: Experimental ::
-   * Create an input stream that directly pulls messages from a Kafka Broker
+   * Create an input stream that directly pulls messages from Kafka Brokers
    * without using any receiver. This stream can guarantee that each message
    * from Kafka is included in transformations exactly once (see points below).
    *
@@ -462,7 +462,7 @@ object KafkaUtils {
 
   /**
    * :: Experimental ::
-   * Create an input stream that directly pulls messages from a Kafka Broker
+   * Create an input stream that directly pulls messages from Kafka Brokers
    * without using any receiver. This stream can guarantee that each message
    * from Kafka is included in transformations exactly once (see points below).
    *
