@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.stat.distribution
 
-import breeze.linalg.{DenseVector => DBV, DenseMatrix => DBM, diag, max, eigSym}
+import breeze.linalg.{DenseVector => DBV, DenseMatrix => DBM, diag, max, eigSym, Vector => BV}
 
 import org.apache.spark.annotation.DeveloperApi;
 import org.apache.spark.mllib.linalg.{Vectors, Vector, Matrices, Matrix}
@@ -62,21 +62,21 @@ class MultivariateGaussian (
   
   /** Returns density of this multivariate Gaussian at given point, x */
   def pdf(x: Vector): Double = {
-    pdf(x.toBreeze.toDenseVector)
+    pdf(x.toBreeze)
   }
   
   /** Returns the log-density of this multivariate Gaussian at given point, x */
   def logpdf(x: Vector): Double = {
-    logpdf(x.toBreeze.toDenseVector)
+    logpdf(x.toBreeze)
   }
   
   /** Returns density of this multivariate Gaussian at given point, x */
-  private[mllib] def pdf(x: DBV[Double]): Double = {
+  private[mllib] def pdf(x: BV[Double]): Double = {
     math.exp(logpdf(x))
   }
   
   /** Returns the log-density of this multivariate Gaussian at given point, x */
-  private[mllib] def logpdf(x: DBV[Double]): Double = {
+  private[mllib] def logpdf(x: BV[Double]): Double = {
     val delta = x - breezeMu
     val v = rootSigmaInv * delta
     u + v.t * v * -0.5

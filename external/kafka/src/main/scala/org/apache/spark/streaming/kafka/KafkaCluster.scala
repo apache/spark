@@ -332,6 +332,9 @@ object KafkaCluster {
       extends ConsumerConfig(originalProps) {
     val seedBrokers: Array[(String, Int)] = brokers.split(",").map { hp =>
       val hpa = hp.split(":")
+      if (hpa.size == 1) {
+        throw new SparkException(s"Broker not the in correct format of <host>:<port> [$brokers]")
+      }
       (hpa(0), hpa(1).toInt)
     }
   }

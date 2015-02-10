@@ -201,13 +201,11 @@ private[sql] class DataFrameImpl protected[sql](
   override def as(alias: Symbol): DataFrame = Subquery(alias.name, logicalPlan)
 
   override def select(cols: Column*): DataFrame = {
-    val exprs = cols.zipWithIndex.map {
-      case (Column(expr: NamedExpression), _) =>
-        expr
-      case (Column(expr: Expression), _) =>
-        Alias(expr, expr.toString)()
+    val namedExpressions = cols.map {
+      case Column(expr: NamedExpression) => expr
+      case Column(expr: Expression) => Alias(expr, expr.prettyString)()
     }
-    Project(exprs.toSeq, logicalPlan)
+    Project(namedExpressions.toSeq, logicalPlan)
   }
 
   override def select(col: String, cols: String*): DataFrame = {

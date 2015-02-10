@@ -42,7 +42,9 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
     }
 
     def makeRow(job: JobUIData): Seq[Node] = {
-      val lastStageInfo = listener.stageIdToInfo.get(job.stageIds.max)
+      val lastStageInfo = Option(job.stageIds)
+        .filter(_.nonEmpty)
+        .flatMap { ids => listener.stageIdToInfo.get(ids.max) }
       val lastStageData = lastStageInfo.flatMap { s =>
         listener.stageIdToData.get((s.stageId, s.attemptId))
       }
