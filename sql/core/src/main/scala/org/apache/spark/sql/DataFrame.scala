@@ -156,7 +156,7 @@ trait DataFrame extends RDDApi[Row] {
   def join(right: DataFrame, joinExprs: Column): DataFrame
 
   /**
-   * Join with another [[DataFrame]], usin  g the given join expression. The following performs
+   * Join with another [[DataFrame]], using the given join expression. The following performs
    * a full outer join between `df1` and `df2`.
    *
    * {{{
@@ -233,7 +233,12 @@ trait DataFrame extends RDDApi[Row] {
   /**
    * Returns a new [[DataFrame]] with an alias set.
    */
-  def as(name: String): DataFrame
+  def as(alias: String): DataFrame
+
+  /**
+   * (Scala-specific) Returns a new [[DataFrame]] with an alias set.
+   */
+  def as(alias: Symbol): DataFrame
 
   /**
    * Selects a set of expressions.
@@ -515,6 +520,9 @@ trait DataFrame extends RDDApi[Row] {
    * Returns a new [[DataFrame]] that has exactly `numPartitions` partitions.
    */
   override def repartition(numPartitions: Int): DataFrame
+
+  /** Returns a new [[DataFrame]] that contains only the unique rows from this [[DataFrame]]. */
+  override def distinct: DataFrame
 
   override def persist(): this.type
 

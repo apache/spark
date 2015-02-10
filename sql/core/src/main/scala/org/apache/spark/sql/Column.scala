@@ -550,6 +550,15 @@ trait Column extends DataFrame {
   override def as(alias: String): Column = exprToColumn(Alias(expr, alias)())
 
   /**
+   * Gives the column an alias.
+   * {{{
+   *   // Renames colA to colB in select output.
+   *   df.select($"colA".as('colB))
+   * }}}
+   */
+  override def as(alias: Symbol): Column = exprToColumn(Alias(expr, alias.name)())
+
+  /**
    * Casts the column to a different data type.
    * {{{
    *   // Casts colA to IntegerType.

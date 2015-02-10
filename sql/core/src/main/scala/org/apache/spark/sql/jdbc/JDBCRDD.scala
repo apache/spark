@@ -17,13 +17,10 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, DatabaseMetaData, DriverManager, ResultSet, ResultSetMetaData, SQLException}
-import scala.collection.mutable.ArrayBuffer
+import java.sql.{Connection, DriverManager, ResultSet, ResultSetMetaData, SQLException}
 
 import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.NextIterator
-import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
 import org.apache.spark.sql.catalyst.expressions.{Row, SpecificMutableRow}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.sources._
@@ -100,7 +97,7 @@ private[sql] object JDBCRDD extends Logging {
       try {
         val rsmd = rs.getMetaData
         val ncols = rsmd.getColumnCount
-        var fields = new Array[StructField](ncols);
+        val fields = new Array[StructField](ncols)
         var i = 0
         while (i < ncols) {
           val columnName = rsmd.getColumnName(i + 1)
@@ -176,23 +173,27 @@ private[sql] object JDBCRDD extends Logging {
    *
    * @return An RDD representing "SELECT requiredColumns FROM fqTable".
    */
-  def scanTable(sc: SparkContext,
-                schema: StructType,
-                driver: String,
-                url: String,
-                fqTable: String,
-                requiredColumns: Array[String],
-                filters: Array[Filter],
-                parts: Array[Partition]): RDD[Row] = {
+  def scanTable(
+      sc: SparkContext,
+      schema: StructType,
+      driver: String,
+      url: String,
+      fqTable: String,
+      requiredColumns: Array[String],
+      filters: Array[Filter],
+      parts: Array[Partition]): RDD[Row] = {
+
     val prunedSchema = pruneSchema(schema, requiredColumns)
 
-    return new JDBCRDD(sc,
-        getConnector(driver, url),
-        prunedSchema,
-        fqTable,
-        requiredColumns,
-        filters,
-        parts)
+    return new
+        JDBCRDD(
+          sc,
+          getConnector(driver, url),
+          prunedSchema,
+          fqTable,
+          requiredColumns,
+          filters,
+          parts)
   }
 }
 
@@ -412,6 +413,5 @@ private[sql] class JDBCRDD(
       gotNext = false
       nextValue
     }
-
   }
 }

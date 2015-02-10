@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, NoRelation}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
@@ -129,6 +129,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * the query planner for advanced functionalities.
    */
   val experimental: ExperimentalMethods = new ExperimentalMethods(this)
+
+  /** Returns a [[DataFrame]] with no rows or columns. */
+  lazy val emptyDataFrame = DataFrame(this, NoRelation)
 
   /**
    * A collection of methods for registering user-defined functions (UDF).
