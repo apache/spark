@@ -607,7 +607,8 @@ object CombineLimits extends Rule[LogicalPlan] {
  */
 object CombineCasts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case cc @ Cast(c2 @ Cast(c1, dataType1), dataType2) =>
+    //only two numeric types can combine now
+    case Cast(Cast(c1, dataType1: NumericType), dataType2: NumericType) =>
       Cast(c1, dataType2)
   }
 }
