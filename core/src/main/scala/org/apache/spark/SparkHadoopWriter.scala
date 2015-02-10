@@ -28,6 +28,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.HadoopRDD
+import org.apache.spark.util.AkkaUtils
 
 /**
  * Internal helper class that saves an RDD using a Hadoop OutputFormat.
@@ -106,18 +107,27 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
     val taCtxt = getTaskContext()
     val cmtr = getOutputCommitter()
     if (cmtr.needsTaskCommit(taCtxt)) {
-      try {
-        cmtr.commitTask(taCtxt)
-        logInfo (taID + ": Committed")
-      } catch {
-        case e: IOException => {
-          logError("Error committing the output of task: " + taID.value, e)
-          cmtr.abortTask(taCtxt)
-          throw e
+      val outputCommitCoordinator = SparkEnv.get.outputCommitCoordinator
+      val canCommit = outputCommitCoordinator.canCommit(jobID, splitID, attemptID)
+      if (canCommit) {
+        try {
+          cmtr.commitTask(taCtxt)
+          logInfo (s"$taID: Committed")
+        } catch {
+          case e: IOException => {
+            logError("Error committing the output of task: " + taID.value, e)
+            cmtr.abortTask(taCtxt)
+            throw e
+          }
         }
+      } else {
+        val msg: String = s"$taID: Not committed because the driver did not authorize commit"
+        logInfo(msg)
+        cmtr.abortTask(taCtxt)
+        throw new CommitDeniedException(msg, jobID, splitID, attemptID)
       }
     } else {
-      logInfo ("No need to commit output of task: " + taID.value)
+      logInfo(s"No need to commit output of task because needsTaskCommit=false: ${taID.value}")
     }
   }
 
