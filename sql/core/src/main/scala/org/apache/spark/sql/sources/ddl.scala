@@ -106,13 +106,14 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
   protected lazy val createTable: Parser[LogicalPlan] =
   (
     (CREATE ~> TEMPORARY.? <~ TABLE) ~ (IF ~> NOT <~ EXISTS).? ~ ident
-      ~ (tableCols).? ~ (USING ~> className) ~ (OPTIONS ~> options) ~ (AS ~> restInput).? ^^ {
+      ~ (tableCols).? ~ (USING ~> className) ~ (OPTIONS ~> options).? ~ (AS ~> restInput).? ^^ {
       case temp ~ allowExisting ~ tableName ~ columns ~ provider ~ opts ~ query =>
         if (temp.isDefined && allowExisting.isDefined) {
           throw new DDLException(
             "a CREATE TEMPORARY TABLE statement does not allow IF NOT EXISTS clause.")
         }
 
+        val options = opts.getOrElse(Map.empty[String, String])
         if (query.isDefined) {
           if (columns.isDefined) {
             throw new DDLException(
@@ -121,7 +122,7 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
           CreateTableUsingAsSelect(tableName,
             provider,
             temp.isDefined,
-            opts,
+            options,
             allowExisting.isDefined,
             query.get)
         } else {
@@ -131,7 +132,7 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
             userSpecifiedSchema,
             provider,
             temp.isDefined,
-            opts,
+            options,
             allowExisting.isDefined)
         }
       }
