@@ -106,7 +106,7 @@ private[spark] object AkkaUtils extends Logging {
       |akka.remote.secure-cookie = "$secureCookie"
       |akka.remote.transport-failure-detector.heartbeat-interval = $akkaHeartBeatInterval s
       |akka.remote.transport-failure-detector.acceptable-heartbeat-pause = $akkaHeartBeatPauses s
-      |akka.remote.transport-failure-detector.threshold = $akkaFailureDetector
+      |akka.remote.watch-failure-detector.threshold = $akkaFailureDetector
       |akka.actor.provider = "akka.remote.RemoteActorRefProvider"
       |akka.remote.netty.tcp.transport-class = "akka.remote.transport.netty.NettyTransport"
       |akka.remote.netty.tcp.hostname = "$host"
