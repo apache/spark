@@ -103,7 +103,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
     reason match {
       case Success =>
       // The task output has been committed successfully
-      case TaskCommitDenied(jobID, splitID, attemptID) =>
+      case denied: TaskCommitDenied =>
         logInfo(s"Task was denied committing, stage: $stage, taskId: $task, attempt: $attempt")
       case otherReason =>
         logDebug(s"Authorized committer $attempt (stage=$stage, task=$task) failed;" +

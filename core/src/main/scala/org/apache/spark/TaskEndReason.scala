@@ -153,11 +153,11 @@ case object TaskKilled extends TaskFailedReason {
 @DeveloperApi
 case class TaskCommitDenied(
     jobID: Int,
-    splitID: Int,
+    partitionID: Int,
     attemptID: Int)
   extends TaskFailedReason {
   override def toErrorString: String = s"TaskCommitDenied (Driver denied task commit)" +
-    s" for job: $jobID, split: $splitID, attempt: $attemptID"
+    s" for job: $jobID, partition: $partitionID, attempt: $attemptID"
 }
 
 /**
