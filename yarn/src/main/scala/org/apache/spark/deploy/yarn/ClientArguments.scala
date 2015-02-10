@@ -62,7 +62,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   val amMemoryOverheadMB = sparkConf.getInt(amMemoryOverheadConf,
     math.max((MEMORY_OVERHEAD_FACTOR * amMemoryMB).toInt, MEMORY_OVERHEAD_MIN))
 
-  val executorMemoryOverhead = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
+  val executorMemoryOverheadMB = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
     math.max((MEMORY_OVERHEAD_FACTOR * executorMemoryMB).toInt, MEMORY_OVERHEAD_MIN))
 
   /** Load any default arguments provided through environment variables and Spark properties. */
