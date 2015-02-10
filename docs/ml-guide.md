@@ -260,7 +260,7 @@ List<LabeledPoint> localTraining = Lists.newArrayList(
   new LabeledPoint(0.0, Vectors.dense(2.0, 1.0, -1.0)),
   new LabeledPoint(0.0, Vectors.dense(2.0, 1.3, 1.0)),
   new LabeledPoint(1.0, Vectors.dense(0.0, 1.2, -0.5)));
-JavaSchemaRDD training = jsql.applySchema(jsc.parallelize(localTraining), LabeledPoint.class);
+JavaSchemaRDD training = jsql.createDataFrame(jsc.parallelize(localTraining), LabeledPoint.class);
 
 // Create a LogisticRegression instance.  This instance is an Estimator.
 LogisticRegression lr = new LogisticRegression();
@@ -300,7 +300,7 @@ List<LabeledPoint> localTest = Lists.newArrayList(
     new LabeledPoint(1.0, Vectors.dense(-1.0, 1.5, 1.3)),
     new LabeledPoint(0.0, Vectors.dense(3.0, 2.0, -0.1)),
     new LabeledPoint(1.0, Vectors.dense(0.0, 2.2, -1.5)));
-JavaSchemaRDD test = jsql.applySchema(jsc.parallelize(localTest), LabeledPoint.class);
+JavaSchemaRDD test = jsql.createDataFrame(jsc.parallelize(localTest), LabeledPoint.class);
 
 // Make predictions on test documents using the Transformer.transform() method.
 // LogisticRegression.transform will only use the 'features' column.
@@ -443,7 +443,7 @@ List<LabeledDocument> localTraining = Lists.newArrayList(
   new LabeledDocument(2L, "spark f g h", 1.0),
   new LabeledDocument(3L, "hadoop mapreduce", 0.0));
 JavaSchemaRDD training =
-  jsql.applySchema(jsc.parallelize(localTraining), LabeledDocument.class);
+  jsql.createDataFrame(jsc.parallelize(localTraining), LabeledDocument.class);
 
 // Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
 Tokenizer tokenizer = new Tokenizer()
@@ -469,7 +469,7 @@ List<Document> localTest = Lists.newArrayList(
   new Document(6L, "mapreduce spark"),
   new Document(7L, "apache hadoop"));
 JavaSchemaRDD test =
-  jsql.applySchema(jsc.parallelize(localTest), Document.class);
+  jsql.createDataFrame(jsc.parallelize(localTest), Document.class);
 
 // Make predictions on test documents.
 model.transform(test).registerAsTable("prediction");
@@ -626,7 +626,7 @@ List<LabeledDocument> localTraining = Lists.newArrayList(
   new LabeledDocument(10L, "spark compile", 1.0),
   new LabeledDocument(11L, "hadoop software", 0.0));
 JavaSchemaRDD training =
-    jsql.applySchema(jsc.parallelize(localTraining), LabeledDocument.class);
+    jsql.createDataFrame(jsc.parallelize(localTraining), LabeledDocument.class);
 
 // Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
 Tokenizer tokenizer = new Tokenizer()
@@ -669,7 +669,7 @@ List<Document> localTest = Lists.newArrayList(
   new Document(5L, "l m n"),
   new Document(6L, "mapreduce spark"),
   new Document(7L, "apache hadoop"));
-JavaSchemaRDD test = jsql.applySchema(jsc.parallelize(localTest), Document.class);
+JavaSchemaRDD test = jsql.createDataFrame(jsc.parallelize(localTest), Document.class);
 
 // Make predictions on test documents. cvModel uses the best model found (lrModel).
 cvModel.transform(test).registerAsTable("prediction");

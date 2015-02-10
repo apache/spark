@@ -54,7 +54,7 @@ public class JavaSimpleParamsExample {
       new LabeledPoint(0.0, Vectors.dense(2.0, 1.0, -1.0)),
       new LabeledPoint(0.0, Vectors.dense(2.0, 1.3, 1.0)),
       new LabeledPoint(1.0, Vectors.dense(0.0, 1.2, -0.5)));
-    DataFrame training = jsql.applySchema(jsc.parallelize(localTraining), LabeledPoint.class);
+    DataFrame training = jsql.createDataFrame(jsc.parallelize(localTraining), LabeledPoint.class);
 
     // Create a LogisticRegression instance.  This instance is an Estimator.
     LogisticRegression lr = new LogisticRegression();
@@ -94,7 +94,7 @@ public class JavaSimpleParamsExample {
         new LabeledPoint(1.0, Vectors.dense(-1.0, 1.5, 1.3)),
         new LabeledPoint(0.0, Vectors.dense(3.0, 2.0, -0.1)),
         new LabeledPoint(1.0, Vectors.dense(0.0, 2.2, -1.5)));
-    DataFrame test = jsql.applySchema(jsc.parallelize(localTest), LabeledPoint.class);
+    DataFrame test = jsql.createDataFrame(jsc.parallelize(localTest), LabeledPoint.class);
 
     // Make predictions on test documents using the Transformer.transform() method.
     // LogisticRegression.transform will only use the 'features' column.

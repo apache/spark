@@ -46,23 +46,11 @@ class SQLContext(object):
         :param sqlContext: An optional JVM Scala SQLContext. If set, we do not instatiate a new
         SQLContext in the JVM, instead we make all calls to this object.
 
-        >>> df = sqlCtx.inferSchema(rdd)
-        >>> sqlCtx.inferSchema(df) # doctest: +IGNORE_EXCEPTION_DETAIL
-        Traceback (most recent call last):
-            ...
-        TypeError:...
-
-        >>> bad_rdd = sc.parallelize([1,2,3])
-        >>> sqlCtx.inferSchema(bad_rdd) # doctest: +IGNORE_EXCEPTION_DETAIL
-        Traceback (most recent call last):
-            ...
-        ValueError:...
-
         >>> from datetime import datetime
         >>> allTypes = sc.parallelize([Row(i=1, s="string", d=1.0, l=1L,
         ...     b=True, list=[1, 2, 3], dict={"s": 0}, row=Row(a=1),
         ...     time=datetime(2014, 8, 1, 14, 1, 5))])
-        >>> df = sqlCtx.inferSchema(allTypes)
+        >>> df = sqlCtx.createDataFrame(allTypes)
         >>> df.registerTempTable("allTypes")
         >>> sqlCtx.sql('select i+1, d+1, not b, list[1], dict["s"], time, row.a '
         ...            'from allTypes where b and i > 0').collect()
@@ -355,7 +343,6 @@ class SQLContext(object):
         Temporary tables exist only during the lifetime of this instance of
         SQLContext.
 
-        >>> df = sqlCtx.inferSchema(rdd)
         >>> sqlCtx.registerRDDAsTable(df, "table1")
         """
         if (rdd.__class__ is DataFrame):
@@ -370,7 +357,6 @@ class SQLContext(object):
         >>> import tempfile, shutil
         >>> parquetFile = tempfile.mkdtemp()
         >>> shutil.rmtree(parquetFile)
-        >>> df = sqlCtx.inferSchema(rdd)
         >>> df.saveAsParquetFile(parquetFile)
         >>> df2 = sqlCtx.parquetFile(parquetFile)
         >>> sorted(df.collect()) == sorted(df2.collect())
@@ -520,7 +506,6 @@ class SQLContext(object):
     def sql(self, sqlQuery):
         """Return a L{DataFrame} representing the result of the given query.
 
-        >>> df = sqlCtx.inferSchema(rdd)
         >>> sqlCtx.registerRDDAsTable(df, "table1")
         >>> df2 = sqlCtx.sql("SELECT field1 AS f1, field2 as f2 from table1")
         >>> df2.collect()
@@ -531,7 +516,6 @@ class SQLContext(object):
     def table(self, tableName):
         """Returns the specified table as a L{DataFrame}.
 
-        >>> df = sqlCtx.inferSchema(rdd)
         >>> sqlCtx.registerRDDAsTable(df, "table1")
         >>> df2 = sqlCtx.table("table1")
         >>> sorted(df.collect()) == sorted(df2.collect())
@@ -679,11 +663,12 @@ def _test():
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
     globs['sqlCtx'] = sqlCtx = SQLContext(sc)
-    globs['rdd'] = sc.parallelize(
+    globs['rdd'] = rdd = sc.parallelize(
         [Row(field1=1, field2="row1"),
          Row(field1=2, field2="row2"),
          Row(field1=3, field2="row3")]
     )
+    globs['df'] = sqlCtx.createDataFrame(rdd)
     jsonStrings = [
         '{"field1": 1, "field2": "row1", "field3":{"field4":11}}',
         '{"field1" : 2, "field3":{"field4":22, "field5": [10, 11]},'

@@ -54,7 +54,7 @@ class JDBCWriteSuite extends FunSuite with BeforeAndAfter {
       StructField("seq", IntegerType) :: Nil)
 
   test("Basic CREATE") {
-    val srdd = TestSQLContext.applySchema(sc.parallelize(arr2x2), schema2)
+    val srdd = TestSQLContext.createDataFrame(sc.parallelize(arr2x2), schema2)
 
     srdd.createJDBCTable(url, "TEST.BASICCREATETEST", false)
     assert(2 == TestSQLContext.jdbcRDD(url, "TEST.BASICCREATETEST").count)
@@ -62,8 +62,8 @@ class JDBCWriteSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("CREATE with overwrite") {
-    val srdd = TestSQLContext.applySchema(sc.parallelize(arr2x3), schema3)
-    val srdd2 = TestSQLContext.applySchema(sc.parallelize(arr1x2), schema2)
+    val srdd = TestSQLContext.createDataFrame(sc.parallelize(arr2x3), schema3)
+    val srdd2 = TestSQLContext.createDataFrame(sc.parallelize(arr1x2), schema2)
 
     srdd.createJDBCTable(url, "TEST.DROPTEST", false)
     assert(2 == TestSQLContext.jdbcRDD(url, "TEST.DROPTEST").count)
@@ -75,8 +75,8 @@ class JDBCWriteSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("CREATE then INSERT to append") {
-    val srdd = TestSQLContext.applySchema(sc.parallelize(arr2x2), schema2)
-    val srdd2 = TestSQLContext.applySchema(sc.parallelize(arr1x2), schema2)
+    val srdd = TestSQLContext.createDataFrame(sc.parallelize(arr2x2), schema2)
+    val srdd2 = TestSQLContext.createDataFrame(sc.parallelize(arr1x2), schema2)
 
     srdd.createJDBCTable(url, "TEST.APPENDTEST", false)
     srdd2.insertIntoJDBC(url, "TEST.APPENDTEST", false)
@@ -85,8 +85,8 @@ class JDBCWriteSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("CREATE then INSERT to truncate") {
-    val srdd = TestSQLContext.applySchema(sc.parallelize(arr2x2), schema2)
-    val srdd2 = TestSQLContext.applySchema(sc.parallelize(arr1x2), schema2)
+    val srdd = TestSQLContext.createDataFrame(sc.parallelize(arr2x2), schema2)
+    val srdd2 = TestSQLContext.createDataFrame(sc.parallelize(arr1x2), schema2)
 
     srdd.createJDBCTable(url, "TEST.TRUNCATETEST", false)
     srdd2.insertIntoJDBC(url, "TEST.TRUNCATETEST", true)
@@ -95,8 +95,8 @@ class JDBCWriteSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("Incompatible INSERT to append") {
-    val srdd = TestSQLContext.applySchema(sc.parallelize(arr2x2), schema2)
-    val srdd2 = TestSQLContext.applySchema(sc.parallelize(arr2x3), schema3)
+    val srdd = TestSQLContext.createDataFrame(sc.parallelize(arr2x2), schema2)
+    val srdd2 = TestSQLContext.createDataFrame(sc.parallelize(arr2x3), schema3)
 
     srdd.createJDBCTable(url, "TEST.INCOMPATIBLETEST", false)
     intercept[org.apache.spark.SparkException] {

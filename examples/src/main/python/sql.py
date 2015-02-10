@@ -31,7 +31,7 @@ if __name__ == "__main__":
                               Row(name="Smith", age=23),
                               Row(name="Sarah", age=18)])
     # Infer schema from the first row, create a DataFrame and print the schema
-    some_df = sqlContext.inferSchema(some_rdd)
+    some_df = sqlContext.createDataFrame(some_rdd)
     some_df.printSchema()
 
     # Another RDD is created from a list of tuples
@@ -40,7 +40,7 @@ if __name__ == "__main__":
     schema = StructType([StructField("person_name", StringType(), False),
                         StructField("person_age", IntegerType(), False)])
     # Create a DataFrame by applying the schema to the RDD and print the schema
-    another_df = sqlContext.applySchema(another_rdd, schema)
+    another_df = sqlContext.createDataFrame(another_rdd, schema)
     another_df.printSchema()
     # root
     #  |-- age: integer (nullable = true)

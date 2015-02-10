@@ -225,7 +225,7 @@ public static class Person implements Serializable {
 {% endhighlight %}
 
 
-A schema can be applied to an existing RDD by calling `applySchema` and providing the Class object
+A schema can be applied to an existing RDD by calling `createDataFrame` and providing the Class object
 for the JavaBean.
 
 {% highlight java %}
@@ -247,7 +247,7 @@ JavaRDD<Person> people = sc.textFile("examples/src/main/resources/people.txt").m
   });
 
 // Apply a schema to an RDD of JavaBeans and register it as a table.
-JavaSchemaRDD schemaPeople = sqlContext.applySchema(people, Person.class);
+JavaSchemaRDD schemaPeople = sqlContext.createDataFrame(people, Person.class);
 schemaPeople.registerTempTable("people");
 
 // SQL can be run over RDDs that have been registered as tables.
@@ -315,7 +315,7 @@ a `SchemaRDD` can be created programmatically with three steps.
 1. Create an RDD of `Row`s from the original RDD;
 2. Create the schema represented by a `StructType` matching the structure of
 `Row`s in the RDD created in Step 1.
-3. Apply the schema to the RDD of `Row`s via `applySchema` method provided
+3. Apply the schema to the RDD of `Row`s via `createDataFrame` method provided
 by `SQLContext`.
 
 For example:
@@ -341,7 +341,7 @@ val schema =
 val rowRDD = people.map(_.split(",")).map(p => Row(p(0), p(1).trim))
 
 // Apply the schema to the RDD.
-val peopleSchemaRDD = sqlContext.applySchema(rowRDD, schema)
+val peopleSchemaRDD = sqlContext.createDataFrame(rowRDD, schema)
 
 // Register the SchemaRDD as a table.
 peopleSchemaRDD.registerTempTable("people")
@@ -367,7 +367,7 @@ a `SchemaRDD` can be created programmatically with three steps.
 1. Create an RDD of `Row`s from the original RDD;
 2. Create the schema represented by a `StructType` matching the structure of
 `Row`s in the RDD created in Step 1.
-3. Apply the schema to the RDD of `Row`s via `applySchema` method provided
+3. Apply the schema to the RDD of `Row`s via `createDataFrame` method provided
 by `JavaSQLContext`.
 
 For example:
@@ -406,7 +406,7 @@ JavaRDD<Row> rowRDD = people.map(
   });
 
 // Apply the schema to the RDD.
-JavaSchemaRDD peopleSchemaRDD = sqlContext.applySchema(rowRDD, schema);
+JavaSchemaRDD peopleSchemaRDD = sqlContext.createDataFrame(rowRDD, schema);
 
 // Register the SchemaRDD as a table.
 peopleSchemaRDD.registerTempTable("people");
@@ -436,7 +436,7 @@ a `SchemaRDD` can be created programmatically with three steps.
 1. Create an RDD of tuples or lists from the original RDD;
 2. Create the schema represented by a `StructType` matching the structure of
 tuples or lists in the RDD created in the step 1.
-3. Apply the schema to the RDD via `applySchema` method provided by `SQLContext`.
+3. Apply the schema to the RDD via `createDataFrame` method provided by `SQLContext`.
 
 For example:
 {% highlight python %}
@@ -458,7 +458,7 @@ fields = [StructField(field_name, StringType(), True) for field_name in schemaSt
 schema = StructType(fields)
 
 # Apply the schema to the RDD.
-schemaPeople = sqlContext.applySchema(people, schema)
+schemaPeople = sqlContext.createDataFrame(people, schema)
 
 # Register the SchemaRDD as a table.
 schemaPeople.registerTempTable("people")

@@ -271,27 +271,28 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * a seq of names of columns to this RDD, the data type for each column will
    * be inferred by the first row.
    *
+   * It does not support nested StructType, use createDataFrame(rdd, schema) instead.
+   *
+   * For example:
+   *
+   * {{{
+   *  val sqlContext = new org.apache.spark.sql.SQLContext(sc)
+   *
+   *  val people = sc.textFile("examples/src/main/resources/people.txt").map(
+   *      _.split(",")).map(p => Row(p(0), p(1).trim.toInt))
+   *  val dataFrame = sqlContext.createDataFrame(people, Seq("name", "age"))
+   *  dataFrame.printSchema
+   *  // root
+   *  // |-- name: string (nullable = false)
+   *  // |-- age: integer (nullable = true)
+   * }}}
+   *
    * @param rowRDD an RDD of Row
    * @param columns names for each column
    * @return DataFrame
    */
   def createDataFrame(rowRDD: RDD[Row], columns: Seq[String]): DataFrame = {
-    def inferType(obj: Any): DataType = obj match {
-      case null => NullType
-      case _: Int => IntegerType
-      case _: java.lang.Integer => IntegerType
-      case _: String => StringType
-      case _: Double => DoubleType
-      case _: java.lang.Float => FloatType
-      case _: Float => FloatType
-      case _: Byte => ByteType
-      case _: java.lang.Byte => ByteType
-      case _: Boolean => BooleanType
-      case _: java.lang.Boolean => BooleanType
-      case _: java.math.BigDecimal => DecimalType()
-      case _: java.sql.Date => DateType
-      case _: java.util.Calendar => TimestampType
-      case _: java.sql.Timestamp => TimestampType
+    def inferType: PartialFunction[Any, DataType] = ScalaReflection.typeOfObject orElse {
       case map: Map[_, _] =>
         if (map.isEmpty) {
           throw new Exception("Cannot infer type from empty Map")

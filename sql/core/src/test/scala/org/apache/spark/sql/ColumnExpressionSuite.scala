@@ -180,7 +180,7 @@ class ColumnExpressionSuite extends QueryTest {
   }
 
   test("!==") {
-    val nullData = TestSQLContext.applySchema(TestSQLContext.sparkContext.parallelize(
+    val nullData = TestSQLContext.createDataFrame(TestSQLContext.sparkContext.parallelize(
       Row(1, 1) ::
       Row(1, 2) ::
       Row(1, null) ::
@@ -240,7 +240,7 @@ class ColumnExpressionSuite extends QueryTest {
       testData2.collect().toSeq.filter(r => r.getInt(0) <= r.getInt(1)))
   }
 
-  val booleanData = TestSQLContext.applySchema(TestSQLContext.sparkContext.parallelize(
+  val booleanData = TestSQLContext.createDataFrame(TestSQLContext.sparkContext.parallelize(
     Row(false, false) ::
       Row(false, true) ::
       Row(true, false) ::
