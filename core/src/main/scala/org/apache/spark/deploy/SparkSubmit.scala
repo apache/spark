@@ -482,7 +482,6 @@ object SparkSubmit {
    * Note that this main class will not be the one provided by the user if we're
    * running cluster deploy mode or python applications.
    */
-  @throws[Exception]
   private def runMain(
       childArgs: Seq[String],
       childClasspath: Seq[String],
