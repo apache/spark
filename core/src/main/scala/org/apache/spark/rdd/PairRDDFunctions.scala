@@ -34,7 +34,7 @@ import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.{FileOutputCommitter, FileOutputFormat, JobConf, OutputFormat}
 import org.apache.hadoop.mapreduce.{Job => NewAPIHadoopJob, OutputFormat => NewOutputFormat,
-RecordWriter => NewRecordWriter}
+  RecordWriter => NewRecordWriter}
 
 import org.apache.spark._
 import org.apache.spark.Partitioner.defaultPartitioner
@@ -993,8 +993,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       val (outputMetrics, bytesWrittenCallback) = initHadoopOutputMetrics(context)
 
       val writer = format.getRecordWriter(hadoopContext).asInstanceOf[NewRecordWriter[K,V]]
+      var recordsWritten = 0L
       try {
-        var recordsWritten = 0L
         while (iter.hasNext) {
           val pair = iter.next()
           writer.write(pair._1, pair._2)
@@ -1008,6 +1008,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       }
       committer.commitTask(hadoopContext)
       bytesWrittenCallback.foreach { fn => outputMetrics.setBytesWritten(fn()) }
+      outputMetrics.setRecordsWritten(recordsWritten)
       1
     } : Int
 
@@ -1065,8 +1066,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
       writer.setup(context.stageId, context.partitionId, taskAttemptId)
       writer.open()
+      var recordsWritten = 0L
       try {
-        var recordsWritten = 0L
         while (iter.hasNext) {
           val record = iter.next()
           writer.write(record._1.asInstanceOf[AnyRef], record._2.asInstanceOf[AnyRef])
@@ -1080,6 +1081,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       }
       writer.commit()
       bytesWrittenCallback.foreach { fn => outputMetrics.setBytesWritten(fn()) }
+      outputMetrics.setRecordsWritten(recordsWritten)
     }
 
     self.context.runJob(self, writeToFile)
@@ -1097,9 +1099,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
   private def maybeUpdateOutputMetrics(bytesWrittenCallback: Option[() => Long],
       outputMetrics: OutputMetrics, recordsWritten: Long): Unit = {
-    if (recordsWritten % PairRDDFunctions.RECORDS_BETWEEN_BYTES_WRITTEN_METRIC_UPDATES == 0
-        && bytesWrittenCallback.isDefined) {
+    if (recordsWritten % PairRDDFunctions.RECORDS_BETWEEN_BYTES_WRITTEN_METRIC_UPDATES == 0) {
       bytesWrittenCallback.foreach { fn => outputMetrics.setBytesWritten(fn()) }
+      outputMetrics.setRecordsWritten(recordsWritten)
     }
   }
 

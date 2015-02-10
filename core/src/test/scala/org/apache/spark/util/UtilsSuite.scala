@@ -29,6 +29,9 @@ import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 import org.scalatest.FunSuite
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.SparkConf
 
 class UtilsSuite extends FunSuite with ResetSystemProperties {
@@ -380,5 +383,33 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     val time = Utils.timeIt(2)({}, Some(prepare))
     require(cnt === 2, "prepare should be called twice")
     require(time < 500, "preparation time should not count")
+  }
+
+  test("fetch hcfs dir") {
+    val tempDir = Utils.createTempDir()
+    val innerTempDir = Utils.createTempDir(tempDir.getPath)
+    val tempFile = File.createTempFile("someprefix", "somesuffix", innerTempDir)
+    val targetDir = new File("target-dir")
+    Files.write("some text", tempFile, UTF_8)
+
+    try {
+      val path = new Path("file://" + tempDir.getAbsolutePath)
+      val conf = new Configuration()
+      val fs = Utils.getHadoopFileSystem(path.toString, conf)
+      Utils.fetchHcfsFile(path, targetDir, fs, new SparkConf(), conf, false)
+      assert(targetDir.exists())
+      assert(targetDir.isDirectory())
+      val newInnerDir = new File(targetDir, innerTempDir.getName)
+      println("inner temp dir: " + innerTempDir.getName)
+      targetDir.listFiles().map(_.getName).foreach(println)
+      assert(newInnerDir.exists())
+      assert(newInnerDir.isDirectory())
+      val newInnerFile = new File(newInnerDir, tempFile.getName)
+      assert(newInnerFile.exists())
+      assert(newInnerFile.isFile())
+    } finally {
+      Utils.deleteRecursively(tempDir)
+      Utils.deleteRecursively(targetDir)
+    }
   }
 }

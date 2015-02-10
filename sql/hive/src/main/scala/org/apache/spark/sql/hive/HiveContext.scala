@@ -75,7 +75,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       DataFrame(this,
         ddlParser(sqlText, exceptionOnError = false).getOrElse(HiveQl.parseSql(substituted)))
     }  else {
-      sys.error(s"Unsupported SQL dialect: ${conf.dialect}.  Try 'sql' or 'hiveql'")
+      sys.error(s"Unsupported SQL dialect: ${conf.dialect}. Try 'sql' or 'hiveql'")
     }
   }
 
@@ -324,6 +324,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         catalog.PreInsertionCasts ::
         ExtractPythonUdfs ::
         ResolveUdtfsAlias ::
+        sources.PreInsertCastAndRename ::
         Nil
     }
 
@@ -423,6 +424,11 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   /** Extends QueryExecution with hive specific features. */
   protected[sql] class QueryExecution(logicalPlan: LogicalPlan)
     extends super.QueryExecution(logicalPlan) {
+    // Like what we do in runHive, makes sure the session represented by the
+    // `sessionState` field is activated.
+    if (SessionState.get() != sessionState) {
+      SessionState.start(sessionState)
+    }
 
     /**
      * Returns the result as a hive compatible sequence of strings.  For native commands, the

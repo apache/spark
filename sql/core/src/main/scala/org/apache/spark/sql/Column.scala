@@ -23,6 +23,7 @@ import scala.language.implicitConversions
 import org.apache.spark.sql.Dsl.lit
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Subquery, Project, LogicalPlan}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedGetField
 import org.apache.spark.sql.types._
 
 
@@ -128,7 +129,6 @@ trait Column extends DataFrame {
    */
   def unary_! : Column = exprToColumn(Not(expr))
 
-
   /**
    * Equality test.
    * {{{
@@ -166,10 +166,26 @@ trait Column extends DataFrame {
    *
    *   // Java:
    *   import static org.apache.spark.sql.Dsl.*;
-   *   df.filter( not(col("colA").equalTo(col("colB"))) );
+   *   df.filter( col("colA").notEqual(col("colB")) );
    * }}}
    */
   def !== (other: Any): Column = constructColumn(other) { o =>
+    Not(EqualTo(expr, o.expr))
+  }
+
+  /**
+   * Inequality test.
+   * {{{
+   *   // Scala:
+   *   df.select( df("colA") !== df("colB") )
+   *   df.select( !(df("colA") === df("colB")) )
+   *
+   *   // Java:
+   *   import static org.apache.spark.sql.Dsl.*;
+   *   df.filter( col("colA").notEqual(col("colB")) );
+   * }}}
+   */
+  def notEqual(other: Any): Column = constructColumn(other) { o =>
     Not(EqualTo(expr, o.expr))
   }
 
@@ -490,7 +506,7 @@ trait Column extends DataFrame {
   /**
    * An expression that gets a field by name in a [[StructField]].
    */
-  def getField(fieldName: String): Column = exprToColumn(GetField(expr, fieldName))
+  def getField(fieldName: String): Column = exprToColumn(UnresolvedGetField(expr, fieldName))
 
   /**
    * An expression that returns a substring.
@@ -532,6 +548,15 @@ trait Column extends DataFrame {
    * }}}
    */
   override def as(alias: String): Column = exprToColumn(Alias(expr, alias)())
+
+  /**
+   * Gives the column an alias.
+   * {{{
+   *   // Renames colA to colB in select output.
+   *   df.select($"colA".as('colB))
+   * }}}
+   */
+  override def as(alias: Symbol): Column = exprToColumn(Alias(expr, alias.name)())
 
   /**
    * Casts the column to a different data type.

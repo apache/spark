@@ -24,20 +24,26 @@ from __future__ import with_statement
 import hashlib
 import logging
 import os
+import os.path
 import pipes
 import random
 import shutil
 import string
+from stat import S_IRUSR
 import subprocess
 import sys
 import tarfile
 import tempfile
+import textwrap
 import time
 import urllib2
 import warnings
 from datetime import datetime
 from optparse import OptionParser
 from sys import stderr
+
+SPARK_EC2_VERSION = "1.2.0"
+SPARK_EC2_DIR = os.path.dirname(os.path.realpath(__file__))
 
 VALID_SPARK_VERSIONS = set([
     "0.7.3",
@@ -54,13 +60,12 @@ VALID_SPARK_VERSIONS = set([
     "1.2.0",
 ])
 
-DEFAULT_SPARK_VERSION = "1.2.0"
+DEFAULT_SPARK_VERSION = SPARK_EC2_VERSION
 DEFAULT_SPARK_GITHUB_REPO = "https://github.com/apache/spark"
-SPARK_EC2_DIR = os.path.dirname(os.path.realpath(__file__))
-MESOS_SPARK_EC2_BRANCH = "branch-1.3"
 
-# A URL prefix from which to fetch AMI information
-AMI_PREFIX = "https://raw.github.com/mesos/spark-ec2/{b}/ami-list".format(b=MESOS_SPARK_EC2_BRANCH)
+# Default location to get the spark-ec2 scripts (and ami-list) from
+DEFAULT_SPARK_EC2_GITHUB_REPO = "https://github.com/mesos/spark-ec2"
+DEFAULT_SPARK_EC2_BRANCH = "branch-1.3"
 
 
 def setup_boto():
@@ -103,12 +108,10 @@ class UsageError(Exception):
 # Configure and parse our command-line arguments
 def parse_args():
     parser = OptionParser(
-        usage="spark-ec2 [options] <action> <cluster_name>"
-        + "\n\n<action> can be: launch, destroy, login, stop, start, get-master, reboot-slaves",
-        add_help_option=False)
-    parser.add_option(
-        "-h", "--help", action="help",
-        help="Show this help message and exit")
+        prog="spark-ec2",
+        version="%prog {v}".format(v=SPARK_EC2_VERSION),
+        usage="%prog [options] <action> <cluster_name>\n\n"
+        + "<action> can be: launch, destroy, login, stop, start, get-master, reboot-slaves")
     parser.add_option(
         "-s", "--slaves", type="int", default=1,
         help="Number of slaves to launch (default: %default)")
@@ -144,6 +147,14 @@ def parse_args():
         "--spark-git-repo",
         default=DEFAULT_SPARK_GITHUB_REPO,
         help="Github repo from which to checkout supplied commit hash (default: %default)")
+    parser.add_option(
+        "--spark-ec2-git-repo",
+        default=DEFAULT_SPARK_EC2_GITHUB_REPO,
+        help="Github repo from which to checkout spark-ec2 (default: %default)")
+    parser.add_option(
+        "--spark-ec2-git-branch",
+        default=DEFAULT_SPARK_EC2_BRANCH,
+        help="Github repo branch of spark-ec2 to use (default: %default)")
     parser.add_option(
         "--hadoop-major-version", default="1",
         help="Major version of Hadoop (default: %default)")
@@ -330,7 +341,12 @@ def get_spark_ami(opts):
         print >> stderr,\
             "Don't recognize %s, assuming type is pvm" % opts.instance_type
 
-    ami_path = "%s/%s/%s" % (AMI_PREFIX, opts.region, instance_type)
+    # URL prefix from which to fetch AMI information
+    ami_prefix = "{r}/{b}/ami-list".format(
+        r=opts.spark_ec2_git_repo.replace("https://github.com", "https://raw.github.com", 1),
+        b=opts.spark_ec2_git_branch)
+
+    ami_path = "%s/%s/%s" % (ami_prefix, opts.region, instance_type)
     try:
         ami = urllib2.urlopen(ami_path).read().strip()
         print "Spark AMI: " + ami
@@ -349,6 +365,7 @@ def launch_cluster(conn, opts, cluster_name):
     if opts.identity_file is None:
         print >> stderr, "ERROR: Must provide an identity file (-i) for ssh connections."
         sys.exit(1)
+
     if opts.key_pair is None:
         print >> stderr, "ERROR: Must provide a key pair name (-k) to use on instances."
         sys.exit(1)
@@ -569,6 +586,9 @@ def launch_cluster(conn, opts, cluster_name):
         master_nodes = master_res.instances
         print "Launched master in %s, regid = %s" % (zone, master_res.id)
 
+    # This wait time corresponds to SPARK-4983
+    print "Waiting for AWS to propagate instance metadata..."
+    time.sleep(5)
     # Give the instances descriptive names
     for master in master_nodes:
         master.add_tag(
@@ -643,12 +663,15 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
 
     # NOTE: We should clone the repository before running deploy_files to
     # prevent ec2-variables.sh from being overwritten
+    print "Cloning spark-ec2 scripts from {r}/tree/{b} on master...".format(
+        r=opts.spark_ec2_git_repo, b=opts.spark_ec2_git_branch)
     ssh(
         host=master,
         opts=opts,
         command="rm -rf spark-ec2"
         + " && "
-        + "git clone https://github.com/mesos/spark-ec2.git -b {b}".format(b=MESOS_SPARK_EC2_BRANCH)
+        + "git clone {r} -b {b} spark-ec2".format(r=opts.spark_ec2_git_repo,
+                                                  b=opts.spark_ec2_git_branch)
     )
 
     print "Deploying files to master..."
@@ -675,21 +698,32 @@ def setup_spark_cluster(master, opts):
         print "Ganglia started at http://%s:5080/ganglia" % master
 
 
-def is_ssh_available(host, opts):
+def is_ssh_available(host, opts, print_ssh_output=True):
     """
     Check if SSH is available on a host.
     """
-    try:
-        with open(os.devnull, 'w') as devnull:
-            ret = subprocess.check_call(
-                ssh_command(opts) + ['-t', '-t', '-o', 'ConnectTimeout=3',
-                                     '%s@%s' % (opts.user, host), stringify_command('true')],
-                stdout=devnull,
-                stderr=devnull
-            )
-        return ret == 0
-    except subprocess.CalledProcessError as e:
-        return False
+    s = subprocess.Popen(
+        ssh_command(opts) + ['-t', '-t', '-o', 'ConnectTimeout=3',
+                             '%s@%s' % (opts.user, host), stringify_command('true')],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT  # we pipe stderr through stdout to preserve output order
+    )
+    cmd_output = s.communicate()[0]  # [1] is stderr, which we redirected to stdout
+
+    if s.returncode != 0 and print_ssh_output:
+        # extra leading newline is for spacing in wait_for_cluster_state()
+        print textwrap.dedent("""\n
+            Warning: SSH connection error. (This could be temporary.)
+            Host: {h}
+            SSH return code: {r}
+            SSH output: {o}
+        """).format(
+            h=host,
+            r=s.returncode,
+            o=cmd_output.strip()
+        )
+
+    return s.returncode == 0
 
 
 def is_cluster_ssh_available(cluster_instances, opts):
@@ -896,6 +930,7 @@ def stringify_command(parts):
 
 def ssh_args(opts):
     parts = ['-o', 'StrictHostKeyChecking=no']
+    parts += ['-o', 'UserKnownHostsFile=/dev/null']
     if opts.identity_file is not None:
         parts += ['-i', opts.identity_file]
     return parts
@@ -1003,8 +1038,31 @@ def real_main():
             DeprecationWarning
         )
 
+    if opts.identity_file is not None:
+        if not os.path.exists(opts.identity_file):
+            print >> stderr,\
+                "ERROR: The identity file '{f}' doesn't exist.".format(f=opts.identity_file)
+            sys.exit(1)
+
+        file_mode = os.stat(opts.identity_file).st_mode
+        if not (file_mode & S_IRUSR) or not oct(file_mode)[-2:] == '00':
+            print >> stderr, "ERROR: The identity file must be accessible only by you."
+            print >> stderr, 'You can fix this with: chmod 400 "{f}"'.format(f=opts.identity_file)
+            sys.exit(1)
+
     if opts.ebs_vol_num > 8:
         print >> stderr, "ebs-vol-num cannot be greater than 8"
+        sys.exit(1)
+
+    # Prevent breaking ami_prefix (/, .git and startswith checks)
+    # Prevent forks with non spark-ec2 names for now.
+    if opts.spark_ec2_git_repo.endswith("/") or \
+            opts.spark_ec2_git_repo.endswith(".git") or \
+            not opts.spark_ec2_git_repo.startswith("https://github.com") or \
+            not opts.spark_ec2_git_repo.endswith("spark-ec2"):
+        print >> stderr, "spark-ec2-git-repo must be a github repo and it must not have a " \
+                         "trailing / or .git. " \
+                         "Furthermore, we currently only support forks named spark-ec2."
         sys.exit(1)
 
     try:

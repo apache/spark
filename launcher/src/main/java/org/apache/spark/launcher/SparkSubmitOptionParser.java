@@ -45,18 +45,22 @@ public abstract class SparkSubmitOptionParser {
   protected static final String EXECUTOR_MEMORY = "--executor-memory";
   protected static final String FILES = "--files";
   protected static final String JARS = "--jars";
+  protected static final String KILL_SUBMISSION = "--kill";
   protected static final String MASTER = "--master";
   protected static final String NAME = "--name";
   protected static final String PACKAGES = "--packages";
   protected static final String PROPERTIES_FILE = "--properties-file";
   protected static final String PY_FILES = "--py-files";
   protected static final String REPOSITORIES = "--repositories";
+  protected static final String STATUS = "--status";
   protected static final String TOTAL_EXECUTOR_CORES = "--total-executor-cores";
 
   // Options that do not take arguments.
   protected static final String HELP = "--help";
   protected static final String SUPERVISE = "--supervise";
   protected static final String VERBOSE = "--verbose";
+
+  // Standalone-only options.
 
   // YARN-only options.
   protected static final String ARCHIVES = "--archives";
@@ -88,6 +92,7 @@ public abstract class SparkSubmitOptionParser {
     { EXECUTOR_MEMORY },
     { FILES },
     { JARS },
+    { KILL_SUBMISSION },
     { MASTER },
     { NAME },
     { NUM_EXECUTORS },
@@ -96,6 +101,7 @@ public abstract class SparkSubmitOptionParser {
     { PY_FILES },
     { QUEUE },
     { REPOSITORIES },
+    { STATUS },
     { TOTAL_EXECUTOR_CORES },
   };
 

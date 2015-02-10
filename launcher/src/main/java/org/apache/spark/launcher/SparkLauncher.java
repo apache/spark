@@ -291,6 +291,7 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
       mergeEnvPathList(env, getLibPathEnvName(), find(DRIVER_EXTRA_LIBRARY_PATH, conf, props));
     }
 
+    addPermGenSizeOpt(cmd);
     cmd.add("org.apache.spark.deploy.SparkSubmit");
     cmd.addAll(buildSparkSubmitArgs());
     return cmd;

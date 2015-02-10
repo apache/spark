@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.analysis.EliminateAnalysisOperators
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedGetField, EliminateAnalysisOperators}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -184,7 +184,7 @@ class ConstantFoldingSuite extends PlanTest {
 
           GetItem(Literal(null, ArrayType(IntegerType)), 1) as 'c3,
           GetItem(Literal(Seq(1), ArrayType(IntegerType)), Literal(null, IntegerType)) as 'c4,
-          GetField(
+          UnresolvedGetField(
             Literal(null, StructType(Seq(StructField("a", IntegerType, true)))),
             "a") as 'c5,
 

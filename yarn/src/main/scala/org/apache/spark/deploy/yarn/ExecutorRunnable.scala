@@ -56,7 +56,7 @@ class ExecutorRunnable(
   var rpc: YarnRPC = YarnRPC.create(conf)
   var nmClient: NMClient = _
   val yarnConf: YarnConfiguration = new YarnConfiguration(conf)
-  lazy val env = prepareEnvironment
+  lazy val env = prepareEnvironment(container)
   
   def run = {
     logInfo("Starting Executor Container")
@@ -128,14 +128,15 @@ class ExecutorRunnable(
 
     // Set the JVM memory
     val executorMemoryString = executorMemory + "m"
-    javaOpts += "-Xms" + executorMemoryString + " -Xmx" + executorMemoryString + " "
+    javaOpts += "-Xms" + executorMemoryString
+    javaOpts += "-Xmx" + executorMemoryString
 
     // Set extra Java options for the executor, if defined
     sys.props.get("spark.executor.extraJavaOptions").foreach { opts =>
-      javaOpts += opts
+      javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
     }
     sys.env.get("SPARK_JAVA_OPTS").foreach { opts =>
-      javaOpts += opts
+      javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
     }
     sys.props.get("spark.executor.extraLibraryPath").foreach { p =>
       prefixEnv = Some(Utils.libraryPathEnvPrefix(Seq(p)))
@@ -173,11 +174,11 @@ class ExecutorRunnable(
           // The options are based on
           // http://www.oracle.com/technetwork/java/gc-tuning-5-138395.html#0.0.0.%20When%20to%20Use
           // %20the%20Concurrent%20Low%20Pause%20Collector|outline
-          javaOpts += " -XX:+UseConcMarkSweepGC "
-          javaOpts += " -XX:+CMSIncrementalMode "
-          javaOpts += " -XX:+CMSIncrementalPacing "
-          javaOpts += " -XX:CMSIncrementalDutyCycleMin=0 "
-          javaOpts += " -XX:CMSIncrementalDutyCycle=10 "
+          javaOpts += "-XX:+UseConcMarkSweepGC"
+          javaOpts += "-XX:+CMSIncrementalMode"
+          javaOpts += "-XX:+CMSIncrementalPacing"
+          javaOpts += "-XX:CMSIncrementalDutyCycleMin=0"
+          javaOpts += "-XX:CMSIncrementalDutyCycle=10"
         }
     */
 
@@ -254,7 +255,7 @@ class ExecutorRunnable(
     localResources
   }
 
-  private def prepareEnvironment: HashMap[String, String] = {
+  private def prepareEnvironment(container: Container): HashMap[String, String] = {
     val env = new HashMap[String, String]()
     val extraCp = sparkConf.getOption("spark.executor.extraClassPath")
     Client.populateClasspath(null, yarnConf, sparkConf, env, extraCp)
@@ -268,6 +269,14 @@ class ExecutorRunnable(
     // Keep this for backwards compatibility but users should move to the config
     sys.env.get("SPARK_YARN_USER_ENV").foreach { userEnvs =>
       YarnSparkHadoopUtil.setEnvFromInputString(env, userEnvs)
+    }
+
+    // Add log urls
+    sys.env.get("SPARK_USER").foreach { user =>
+      val baseUrl = "http://%s/node/containerlogs/%s/%s"
+        .format(container.getNodeHttpAddress, ConverterUtils.toString(container.getId), user)
+      env("SPARK_LOG_URL_STDERR") = s"$baseUrl/stderr?start=0"
+      env("SPARK_LOG_URL_STDOUT") = s"$baseUrl/stdout?start=0"
     }
 
     System.getenv().filterKeys(_.startsWith("SPARK")).foreach { case (k, v) => env(k) = v }

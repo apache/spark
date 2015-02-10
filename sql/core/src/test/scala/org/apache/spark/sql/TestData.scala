@@ -22,9 +22,8 @@ import java.sql.Timestamp
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.Dsl._
 import org.apache.spark.sql.test._
+import org.apache.spark.sql.test.TestSQLContext.implicits._
 
-/* Implicits */
-import org.apache.spark.sql.test.TestSQLContext._
 
 case class TestData(key: Int, value: String)
 

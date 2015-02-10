@@ -21,16 +21,17 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConversions._
+import scala.collection.mutable
 
 import com.google.common.base.Charsets
 import com.google.common.io.Files
-import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
-
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.MiniYARNCluster
+import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
 
 import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException}
-import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.scheduler.cluster.ExecutorInfo
+import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorAdded}
 import org.apache.spark.util.Utils
 
 class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers with Logging {
@@ -74,6 +75,8 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
   private var oldConf: Map[String, String] = _
 
   override def beforeAll() {
+    super.beforeAll()
+
     tempDir = Utils.createTempDir()
 
     val logConfDir = new File(tempDir, "log4j")
@@ -128,8 +131,8 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     sys.props += ("spark.executor.instances" -> "1")
     sys.props += ("spark.driver.extraClassPath" -> childClasspath)
     sys.props += ("spark.executor.extraClassPath" -> childClasspath)
-
-    super.beforeAll()
+    sys.props += ("spark.executor.extraJavaOptions" -> "-Dfoo=\"one two three\"")
+    sys.props += ("spark.driver.extraJavaOptions" -> "-Dfoo=\"one two three\"")
   }
 
   override def afterAll() {
@@ -143,6 +146,11 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     var result = File.createTempFile("result", null, tempDir)
     YarnClusterDriver.main(Array("yarn-client", result.getAbsolutePath()))
     checkResult(result)
+
+    // verify log urls are present
+    YarnClusterDriver.listener.addedExecutorInfos.values.foreach { info =>
+      assert(info.logUrlMap.nonEmpty)
+    }
   }
 
   test("run Spark in yarn-cluster mode") {
@@ -156,6 +164,11 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
       "--num-executors", "1")
     Client.main(args)
     checkResult(result)
+
+    // verify log urls are present.
+    YarnClusterDriver.listener.addedExecutorInfos.values.foreach { info =>
+      assert(info.logUrlMap.nonEmpty)
+    }
   }
 
   test("run Spark in yarn-cluster mode unsuccessfully") {
@@ -203,7 +216,18 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
 
 }
 
+private class SaveExecutorInfo extends SparkListener {
+  val addedExecutorInfos = mutable.Map[String, ExecutorInfo]()
+
+  override def onExecutorAdded(executor : SparkListenerExecutorAdded) {
+    addedExecutorInfos(executor.executorId) = executor.executorInfo
+  }
+}
+
 private object YarnClusterDriver extends Logging with Matchers {
+
+  val WAIT_TIMEOUT_MILLIS = 10000
+  var listener: SaveExecutorInfo = null
 
   def main(args: Array[String]) = {
     if (args.length != 2) {
@@ -216,12 +240,15 @@ private object YarnClusterDriver extends Logging with Matchers {
       System.exit(1)
     }
 
+    listener = new SaveExecutorInfo
     val sc = new SparkContext(new SparkConf().setMaster(args(0))
       .setAppName("yarn \"test app\" 'with quotes' and \\back\\slashes and $dollarSigns"))
+    sc.addSparkListener(listener)
     val status = new File(args(1))
     var result = "failure"
     try {
       val data = sc.parallelize(1 to 4, 4).collect().toSet
+      assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
       data should be (Set(1, 2, 3, 4))
       result = "success"
     } finally {

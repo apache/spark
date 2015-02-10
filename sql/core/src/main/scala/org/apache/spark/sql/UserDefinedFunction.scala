@@ -17,7 +17,13 @@
 
 package org.apache.spark.sql
 
+import java.util.{List => JList, Map => JMap}
+
+import org.apache.spark.Accumulator
+import org.apache.spark.api.python.PythonBroadcast
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.expressions.ScalaUdf
+import org.apache.spark.sql.execution.PythonUDF
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -35,5 +41,26 @@ case class UserDefinedFunction(f: AnyRef, dataType: DataType) {
 
   def apply(exprs: Column*): Column = {
     Column(ScalaUdf(f, dataType, exprs.map(_.expr)))
+  }
+}
+
+/**
+ * A user-defined Python function. To create one, use the `pythonUDF` functions in [[Dsl]].
+ * This is used by Python API.
+ */
+private[sql] case class UserDefinedPythonFunction(
+    name: String,
+    command: Array[Byte],
+    envVars: JMap[String, String],
+    pythonIncludes: JList[String],
+    pythonExec: String,
+    broadcastVars: JList[Broadcast[PythonBroadcast]],
+    accumulator: Accumulator[JList[Array[Byte]]],
+    dataType: DataType) {
+
+  def apply(exprs: Column*): Column = {
+    val udf = PythonUDF(name, command, envVars, pythonIncludes, pythonExec, broadcastVars,
+      accumulator, dataType, exprs.map(_.expr))
+    Column(udf)
   }
 }

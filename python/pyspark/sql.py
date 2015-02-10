@@ -23,7 +23,7 @@ public classes of Spark SQL:
     - L{DataFrame}
       A Resilient Distributed Dataset (RDD) with Schema information for the data contained. In
       addition to normal RDD operations, DataFrames also support SQL.
-    - L{GroupedDataFrame}
+    - L{GroupedData}
     - L{Column}
       Column is a DataFrame with a single column.
     - L{Row}
@@ -51,7 +51,7 @@ from py4j.protocol import Py4JError
 from py4j.java_collections import ListConverter, MapConverter
 
 from pyspark.context import SparkContext
-from pyspark.rdd import RDD
+from pyspark.rdd import RDD, _prepare_for_python_RDD
 from pyspark.serializers import BatchedSerializer, AutoBatchedSerializer, PickleSerializer, \
     CloudPickleSerializer, UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
@@ -62,7 +62,7 @@ __all__ = [
     "StringType", "BinaryType", "BooleanType", "DateType", "TimestampType", "DecimalType",
     "DoubleType", "FloatType", "ByteType", "IntegerType", "LongType",
     "ShortType", "ArrayType", "MapType", "StructField", "StructType",
-    "SQLContext", "HiveContext", "DataFrame", "GroupedDataFrame", "Column", "Row", "Dsl",
+    "SQLContext", "HiveContext", "DataFrame", "GroupedData", "Column", "Row", "Dsl",
     "SchemaRDD"]
 
 
@@ -1274,28 +1274,15 @@ class SQLContext(object):
         [Row(c0=4)]
         """
         func = lambda _, it: imap(lambda x: f(*x), it)
-        command = (func, None,
-                   AutoBatchedSerializer(PickleSerializer()),
-                   AutoBatchedSerializer(PickleSerializer()))
-        ser = CloudPickleSerializer()
-        pickled_command = ser.dumps(command)
-        if len(pickled_command) > (1 << 20):  # 1M
-            broadcast = self._sc.broadcast(pickled_command)
-            pickled_command = ser.dumps(broadcast)
-        broadcast_vars = ListConverter().convert(
-            [x._jbroadcast for x in self._sc._pickled_broadcast_vars],
-            self._sc._gateway._gateway_client)
-        self._sc._pickled_broadcast_vars.clear()
-        env = MapConverter().convert(self._sc.environment,
-                                     self._sc._gateway._gateway_client)
-        includes = ListConverter().convert(self._sc._python_includes,
-                                           self._sc._gateway._gateway_client)
+        ser = AutoBatchedSerializer(PickleSerializer())
+        command = (func, None, ser, ser)
+        pickled_cmd, bvars, env, includes = _prepare_for_python_RDD(self._sc, command, self)
         self._ssql_ctx.udf().registerPython(name,
-                                            bytearray(pickled_command),
+                                            bytearray(pickled_cmd),
                                             env,
                                             includes,
                                             self._sc.pythonExec,
-                                            broadcast_vars,
+                                            bvars,
                                             self._sc._javaAccumulator,
                                             returnType.json())
 
@@ -1484,7 +1471,7 @@ class SQLContext(object):
         else:
             raise ValueError("Can only register DataFrame as table")
 
-    def parquetFile(self, path):
+    def parquetFile(self, *paths):
         """Loads a Parquet file, returning the result as a L{DataFrame}.
 
         >>> import tempfile, shutil
@@ -1496,7 +1483,12 @@ class SQLContext(object):
         >>> sorted(df.collect()) == sorted(df2.collect())
         True
         """
-        jdf = self._ssql_ctx.parquetFile(path)
+        gateway = self._sc._gateway
+        jpath = paths[0]
+        jpaths = gateway.new_array(gateway.jvm.java.lang.String, len(paths) - 1)
+        for i in range(1, len(paths)):
+            jpaths[i] = paths[i]
+        jdf = self._ssql_ctx.parquetFile(jpath, jpaths)
         return DataFrame(jdf, self)
 
     def jsonFile(self, path, schema=None, samplingRatio=1.0):
@@ -1694,17 +1686,6 @@ class HiveContext(SQLContext):
 
     def _get_hive_ctx(self):
         return self._jvm.HiveContext(self._jsc.sc())
-
-
-class LocalHiveContext(HiveContext):
-
-    def __init__(self, sparkContext, sqlContext=None):
-        HiveContext.__init__(self, sparkContext, sqlContext)
-        warnings.warn("LocalHiveContext is deprecated. "
-                      "Use HiveContext instead.", DeprecationWarning)
-
-    def _get_hive_ctx(self):
-        return self._jvm.LocalHiveContext(self._jsc.sc())
 
 
 def _create_row(fields, values):
@@ -2077,9 +2058,9 @@ class DataFrame(object):
         """Return all column names and their data types as a list.
 
         >>> df.dtypes
-        [(u'age', 'IntegerType'), (u'name', 'StringType')]
+        [('age', 'integer'), ('name', 'string')]
         """
-        return [(f.name, str(f.dataType)) for f in self.schema().fields]
+        return [(str(f.name), f.dataType.jsonValue()) for f in self.schema().fields]
 
     @property
     def columns(self):
@@ -2194,7 +2175,7 @@ class DataFrame(object):
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         >>> df.select('name', 'age').collect()
         [Row(name=u'Alice', age=2), Row(name=u'Bob', age=5)]
-        >>> df.select(df.name, (df.age + 10).As('age')).collect()
+        >>> df.select(df.name, (df.age + 10).alias('age')).collect()
         [Row(name=u'Alice', age=12), Row(name=u'Bob', age=15)]
         """
         if not cols:
@@ -2244,7 +2225,7 @@ class DataFrame(object):
 
     def groupBy(self, *cols):
         """ Group the :class:`DataFrame` using the specified columns,
-        so we can run aggregation on them. See :class:`GroupedDataFrame`
+        so we can run aggregation on them. See :class:`GroupedData`
         for all the available aggregate functions.
 
         >>> df.groupBy().avg().collect()
@@ -2257,7 +2238,7 @@ class DataFrame(object):
         jcols = ListConverter().convert([_to_java_column(c) for c in cols],
                                         self._sc._gateway._gateway_client)
         jdf = self._jdf.groupBy(self.sql_ctx._sc._jvm.PythonUtils.toSeq(jcols))
-        return GroupedDataFrame(jdf, self.sql_ctx)
+        return GroupedData(jdf, self.sql_ctx)
 
     def agg(self, *exprs):
         """ Aggregate on the entire :class:`DataFrame` without groups
@@ -2295,25 +2276,25 @@ class DataFrame(object):
         """
         return DataFrame(getattr(self._jdf, "except")(other._jdf), self.sql_ctx)
 
-    def sample(self, withReplacement, fraction, seed=None):
-        """ Return a new DataFrame by sampling a fraction of rows.
-
-        >>> df.sample(False, 0.5, 10).collect()
-        [Row(age=2, name=u'Alice')]
-        """
-        if seed is None:
-            jdf = self._jdf.sample(withReplacement, fraction)
-        else:
-            jdf = self._jdf.sample(withReplacement, fraction, seed)
-        return DataFrame(jdf, self.sql_ctx)
-
     def addColumn(self, colName, col):
         """ Return a new :class:`DataFrame` by adding a column.
 
         >>> df.addColumn('age2', df.age + 2).collect()
         [Row(age=2, name=u'Alice', age2=4), Row(age=5, name=u'Bob', age2=7)]
         """
-        return self.select('*', col.As(colName))
+        return self.select('*', col.alias(colName))
+
+    def to_pandas(self):
+        """
+        Collect all the rows and return a `pandas.DataFrame`.
+
+        >>> df.to_pandas()  # doctest: +SKIP
+           age   name
+        0    2  Alice
+        1    5    Bob
+        """
+        import pandas as pd
+        return pd.DataFrame.from_records(self.collect(), columns=self.columns)
 
 
 # Having SchemaRDD for backward compatibility (for docs)
@@ -2333,7 +2314,7 @@ def dfapi(f):
     return _api
 
 
-class GroupedDataFrame(object):
+class GroupedData(object):
 
     """
     A set of methods for aggregations on a :class:`DataFrame`,
@@ -2408,28 +2389,6 @@ class GroupedDataFrame(object):
         group."""
 
 
-SCALA_METHOD_MAPPINGS = {
-    '=': '$eq',
-    '>': '$greater',
-    '<': '$less',
-    '+': '$plus',
-    '-': '$minus',
-    '*': '$times',
-    '/': '$div',
-    '!': '$bang',
-    '@': '$at',
-    '#': '$hash',
-    '%': '$percent',
-    '^': '$up',
-    '&': '$amp',
-    '~': '$tilde',
-    '?': '$qmark',
-    '|': '$bar',
-    '\\': '$bslash',
-    ':': '$colon',
-}
-
-
 def _create_column_from_literal(literal):
     sc = SparkContext._active_spark_context
     return sc._jvm.Dsl.lit(literal)
@@ -2448,23 +2407,18 @@ def _to_java_column(col):
     return jcol
 
 
-def _scalaMethod(name):
-    """ Translate operators into methodName in Scala
-
-    >>> _scalaMethod('+')
-    '$plus'
-    >>> _scalaMethod('>=')
-    '$greater$eq'
-    >>> _scalaMethod('cast')
-    'cast'
-    """
-    return ''.join(SCALA_METHOD_MAPPINGS.get(c, c) for c in name)
-
-
 def _unary_op(name, doc="unary operator"):
     """ Create a method for given unary operator """
     def _(self):
-        jc = getattr(self._jc, _scalaMethod(name))()
+        jc = getattr(self._jc, name)()
+        return Column(jc, self.sql_ctx)
+    _.__doc__ = doc
+    return _
+
+
+def _dsl_op(name, doc=''):
+    def _(self):
+        jc = getattr(self._sc._jvm.Dsl, name)(self._jc)
         return Column(jc, self.sql_ctx)
     _.__doc__ = doc
     return _
@@ -2475,7 +2429,7 @@ def _bin_op(name, doc="binary operator"):
     """
     def _(self, other):
         jc = other._jc if isinstance(other, Column) else other
-        njc = getattr(self._jc, _scalaMethod(name))(jc)
+        njc = getattr(self._jc, name)(jc)
         return Column(njc, self.sql_ctx)
     _.__doc__ = doc
     return _
@@ -2486,7 +2440,7 @@ def _reverse_op(name, doc="binary operator"):
     """
     def _(self, other):
         jother = _create_column_from_literal(other)
-        jc = getattr(jother, _scalaMethod(name))(self._jc)
+        jc = getattr(jother, name)(self._jc)
         return Column(jc, self.sql_ctx)
     _.__doc__ = doc
     return _
@@ -2513,34 +2467,33 @@ class Column(DataFrame):
         super(Column, self).__init__(jc, sql_ctx)
 
     # arithmetic operators
-    __neg__ = _unary_op("unary_-")
-    __add__ = _bin_op("+")
-    __sub__ = _bin_op("-")
-    __mul__ = _bin_op("*")
-    __div__ = _bin_op("/")
-    __mod__ = _bin_op("%")
-    __radd__ = _bin_op("+")
-    __rsub__ = _reverse_op("-")
-    __rmul__ = _bin_op("*")
-    __rdiv__ = _reverse_op("/")
-    __rmod__ = _reverse_op("%")
-    __abs__ = _unary_op("abs")
+    __neg__ = _dsl_op("negate")
+    __add__ = _bin_op("plus")
+    __sub__ = _bin_op("minus")
+    __mul__ = _bin_op("multiply")
+    __div__ = _bin_op("divide")
+    __mod__ = _bin_op("mod")
+    __radd__ = _bin_op("plus")
+    __rsub__ = _reverse_op("minus")
+    __rmul__ = _bin_op("multiply")
+    __rdiv__ = _reverse_op("divide")
+    __rmod__ = _reverse_op("mod")
 
     # logistic operators
-    __eq__ = _bin_op("===")
-    __ne__ = _bin_op("!==")
-    __lt__ = _bin_op("<")
-    __le__ = _bin_op("<=")
-    __ge__ = _bin_op(">=")
-    __gt__ = _bin_op(">")
+    __eq__ = _bin_op("equalTo")
+    __ne__ = _bin_op("notEqual")
+    __lt__ = _bin_op("lt")
+    __le__ = _bin_op("leq")
+    __ge__ = _bin_op("geq")
+    __gt__ = _bin_op("gt")
 
     # `and`, `or`, `not` cannot be overloaded in Python,
     # so use bitwise operators as boolean operators
-    __and__ = _bin_op('&&')
-    __or__ = _bin_op('||')
-    __invert__ = _unary_op('unary_!')
-    __rand__ = _bin_op("&&")
-    __ror__ = _bin_op("||")
+    __and__ = _bin_op('and')
+    __or__ = _bin_op('or')
+    __invert__ = _dsl_op('not')
+    __rand__ = _bin_op("and")
+    __ror__ = _bin_op("or")
 
     # container operators
     __contains__ = _bin_op("contains")
@@ -2582,24 +2535,20 @@ class Column(DataFrame):
     isNull = _unary_op("isNull", "True if the current expression is null.")
     isNotNull = _unary_op("isNotNull", "True if the current expression is not null.")
 
-    # `as` is keyword
     def alias(self, alias):
         """Return a alias for this column
 
-        >>> df.age.As("age2").collect()
-        [Row(age2=2), Row(age2=5)]
         >>> df.age.alias("age2").collect()
         [Row(age2=2), Row(age2=5)]
         """
         return Column(getattr(self._jc, "as")(alias), self.sql_ctx)
-    As = alias
 
     def cast(self, dataType):
         """ Convert the column into type `dataType`
 
-        >>> df.select(df.age.cast("string").As('ages')).collect()
+        >>> df.select(df.age.cast("string").alias('ages')).collect()
         [Row(ages=u'2'), Row(ages=u'5')]
-        >>> df.select(df.age.cast(StringType()).As('ages')).collect()
+        >>> df.select(df.age.cast(StringType()).alias('ages')).collect()
         [Row(ages=u'2'), Row(ages=u'5')]
         """
         if self.sql_ctx is None:
@@ -2614,6 +2563,19 @@ class Column(DataFrame):
             jc = self._jc.cast(jdt)
         return Column(jc, self.sql_ctx)
 
+    def to_pandas(self):
+        """
+        Return a pandas.Series from the column
+
+        >>> df.age.to_pandas()  # doctest: +SKIP
+        0    2
+        1    5
+        dtype: int64
+        """
+        import pandas as pd
+        data = [c for c, in self.collect()]
+        return pd.Series(data)
+
 
 def _aggregate_func(name, doc=""):
     """ Create a function for aggregator by name"""
@@ -2624,6 +2586,40 @@ def _aggregate_func(name, doc=""):
     _.__name__ = name
     _.__doc__ = doc
     return staticmethod(_)
+
+
+class UserDefinedFunction(object):
+    def __init__(self, func, returnType):
+        self.func = func
+        self.returnType = returnType
+        self._broadcast = None
+        self._judf = self._create_judf()
+
+    def _create_judf(self):
+        f = self.func  # put it in closure `func`
+        func = lambda _, it: imap(lambda x: f(*x), it)
+        ser = AutoBatchedSerializer(PickleSerializer())
+        command = (func, None, ser, ser)
+        sc = SparkContext._active_spark_context
+        pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command, self)
+        ssql_ctx = sc._jvm.SQLContext(sc._jsc.sc())
+        jdt = ssql_ctx.parseDataType(self.returnType.json())
+        judf = sc._jvm.UserDefinedPythonFunction(f.__name__, bytearray(pickled_command), env,
+                                                 includes, sc.pythonExec, broadcast_vars,
+                                                 sc._javaAccumulator, jdt)
+        return judf
+
+    def __del__(self):
+        if self._broadcast is not None:
+            self._broadcast.unpersist()
+            self._broadcast = None
+
+    def __call__(self, *cols):
+        sc = SparkContext._active_spark_context
+        jcols = ListConverter().convert([_to_java_column(c) for c in cols],
+                                        sc._gateway._gateway_client)
+        jc = self._judf.apply(sc._jvm.PythonUtils.toSeq(jcols))
+        return Column(jc)
 
 
 class Dsl(object):
@@ -2659,7 +2655,10 @@ class Dsl(object):
         """ Return a new Column for distinct count of (col, *cols)
 
         >>> from pyspark.sql import Dsl
-        >>> df.agg(Dsl.countDistinct(df.age, df.name).As('c')).collect()
+        >>> df.agg(Dsl.countDistinct(df.age, df.name).alias('c')).collect()
+        [Row(c=2)]
+
+        >>> df.agg(Dsl.countDistinct("age", "name").alias('c')).collect()
         [Row(c=2)]
         """
         sc = SparkContext._active_spark_context
@@ -2674,7 +2673,7 @@ class Dsl(object):
         """ Return a new Column for approxiate distinct count of (col, *cols)
 
         >>> from pyspark.sql import Dsl
-        >>> df.agg(Dsl.approxCountDistinct(df.age).As('c')).collect()
+        >>> df.agg(Dsl.approxCountDistinct(df.age).alias('c')).collect()
         [Row(c=2)]
         """
         sc = SparkContext._active_spark_context
@@ -2683,6 +2682,16 @@ class Dsl(object):
         else:
             jc = sc._jvm.Dsl.approxCountDistinct(_to_java_column(col), rsd)
         return Column(jc)
+
+    @staticmethod
+    def udf(f, returnType=StringType()):
+        """Create a user defined function (UDF)
+
+        >>> slen = Dsl.udf(lambda s: len(s), IntegerType())
+        >>> df.select(slen(df.name).alias('slen')).collect()
+        [Row(slen=5), Row(slen=3)]
+        """
+        return UserDefinedFunction(f, returnType)
 
 
 def _test():

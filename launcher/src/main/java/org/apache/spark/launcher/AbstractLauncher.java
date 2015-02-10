@@ -186,12 +186,6 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
       cmd.add(join(File.separator, javaHome, "bin", "java"));
     }
 
-    // Don't set MaxPermSize for Java 8 and later.
-    String[] version = System.getProperty("java.version").split("\\.");
-    if (Integer.parseInt(version[0]) == 1 && Integer.parseInt(version[1]) < 8) {
-      cmd.add("-XX:MaxPermSize=128m");
-    }
-
     // Load extra JAVA_OPTS from conf/java-opts, if it exists.
     File javaOpts = new File(join(File.separator, getConfDir(), "java-opts"));
     if (javaOpts.isFile()) {
@@ -210,6 +204,26 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
     cmd.add("-cp");
     cmd.add(join(File.pathSeparator, buildClassPath(extraClassPath)));
     return cmd;
+  }
+
+  /**
+   * Adds the default perm gen size option for Spark if the VM requires it and the user hasn't
+   * set it.
+   */
+  protected void addPermGenSizeOpt(List<String> cmd) {
+    // Don't set MaxPermSize for Java 8 and later.
+    String[] version = System.getProperty("java.version").split("\\.");
+    if (Integer.parseInt(version[0]) > 1 || Integer.parseInt(version[1]) > 7) {
+      return;
+    }
+
+    for (String arg : cmd) {
+      if (arg.startsWith("-XX:MaxPermSize=")) {
+        return;
+      }
+    }
+
+    cmd.add("-XX:MaxPermSize=128m");
   }
 
   protected void addOptionString(List<String> cmd, String options) {

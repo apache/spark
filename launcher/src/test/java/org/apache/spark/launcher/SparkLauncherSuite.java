@@ -79,7 +79,7 @@ public class SparkLauncherSuite {
       .addAppArgs("foo", "bar")
       .setConf(SparkLauncher.DRIVER_MEMORY, "1g")
       .setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, "/driver")
-      .setConf(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, "-Ddriver")
+      .setConf(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, "-Ddriver -XX:MaxPermSize=256m")
       .setConf(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, "/native")
       .setConf("spark.foo", "foo");
 
@@ -100,6 +100,16 @@ public class SparkLauncherSuite {
         }
       }
       assertFalse("Memory arguments should not be set.", found);
+    }
+
+    for (String arg : cmd) {
+      if (arg.startsWith("-XX:MaxPermSize=")) {
+        if (isDriver) {
+          assertEquals("-XX:MaxPermSize=256m", arg);
+        } else {
+          assertEquals("-XX:MaxPermSize=128m", arg);
+        }
+      }
     }
 
     String[] cp = findArgValue(cmd, "-cp").split(Pattern.quote(File.pathSeparator));

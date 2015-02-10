@@ -36,7 +36,8 @@ private[sql] object DataFrame {
 
 
 /**
- * A collection of rows that have the same columns.
+ * :: Experimental ::
+ * A distributed collection of data organized into named columns.
  *
  * A [[DataFrame]] is equivalent to a relational table in Spark SQL, and can be created using
  * various functions in [[SQLContext]].
@@ -72,6 +73,7 @@ private[sql] object DataFrame {
  * }}}
  */
 // TODO: Improve documentation.
+@Experimental
 trait DataFrame extends RDDApi[Row] {
 
   val sqlContext: SQLContext
@@ -100,7 +102,7 @@ trait DataFrame extends RDDApi[Row] {
    * }}}
    */
   @scala.annotation.varargs
-  def toDataFrame(colName: String, colNames: String*): DataFrame
+  def toDataFrame(colNames: String*): DataFrame
 
   /** Returns the schema of this [[DataFrame]]. */
   def schema: StructType
@@ -113,6 +115,25 @@ trait DataFrame extends RDDApi[Row] {
 
   /** Prints the schema to the console in a nice tree format. */
   def printSchema(): Unit
+
+  /**
+   * Returns true if the `collect` and `take` methods can be run locally
+   * (without any Spark executors).
+   */
+  def isLocal: Boolean
+
+  /**
+   * Displays the [[DataFrame]] in a tabular form. For example:
+   * {{{
+   *   year  month AVG('Adj Close) MAX('Adj Close)
+   *   1980  12    0.503218        0.595103
+   *   1981  01    0.523289        0.570307
+   *   1982  02    0.436504        0.475256
+   *   1983  03    0.410516        0.442194
+   *   1984  04    0.450090        0.483521
+   * }}}
+   */
+  def show(): Unit
 
   /**
    * Cartesian join with another [[DataFrame]].
@@ -135,7 +156,7 @@ trait DataFrame extends RDDApi[Row] {
   def join(right: DataFrame, joinExprs: Column): DataFrame
 
   /**
-   * Join with another [[DataFrame]], usin  g the given join expression. The following performs
+   * Join with another [[DataFrame]], using the given join expression. The following performs
    * a full outer join between `df1` and `df2`.
    *
    * {{{
@@ -212,7 +233,12 @@ trait DataFrame extends RDDApi[Row] {
   /**
    * Returns a new [[DataFrame]] with an alias set.
    */
-  def as(name: String): DataFrame
+  def as(alias: String): DataFrame
+
+  /**
+   * (Scala-specific) Returns a new [[DataFrame]] with an alias set.
+   */
+  def as(alias: Symbol): DataFrame
 
   /**
    * Selects a set of expressions.
@@ -290,7 +316,7 @@ trait DataFrame extends RDDApi[Row] {
 
   /**
    * Groups the [[DataFrame]] using the specified columns, so we can run aggregation on them.
-   * See [[GroupedDataFrame]] for all the available aggregate functions.
+   * See [[GroupedData]] for all the available aggregate functions.
    *
    * {{{
    *   // Compute the average for all numeric columns grouped by department.
@@ -304,11 +330,11 @@ trait DataFrame extends RDDApi[Row] {
    * }}}
    */
   @scala.annotation.varargs
-  def groupBy(cols: Column*): GroupedDataFrame
+  def groupBy(cols: Column*): GroupedData
 
   /**
    * Groups the [[DataFrame]] using the specified columns, so we can run aggregation on them.
-   * See [[GroupedDataFrame]] for all the available aggregate functions.
+   * See [[GroupedData]] for all the available aggregate functions.
    *
    * This is a variant of groupBy that can only group by existing columns using column names
    * (i.e. cannot construct expressions).
@@ -325,7 +351,7 @@ trait DataFrame extends RDDApi[Row] {
    * }}}
    */
   @scala.annotation.varargs
-  def groupBy(col1: String, cols: String*): GroupedDataFrame
+  def groupBy(col1: String, cols: String*): GroupedData
 
   /**
    * (Scala-specific) Compute aggregates by specifying a map from column name to
@@ -426,6 +452,11 @@ trait DataFrame extends RDDApi[Row] {
   def addColumn(colName: String, col: Column): DataFrame
 
   /**
+   * Returns a new [[DataFrame]] with a column renamed.
+   */
+  def renameColumn(existingName: String, newName: String): DataFrame
+
+  /**
    * Returns the first `n` rows.
    */
   def head(n: Int): Array[Row]
@@ -489,6 +520,9 @@ trait DataFrame extends RDDApi[Row] {
    * Returns a new [[DataFrame]] that has exactly `numPartitions` partitions.
    */
   override def repartition(numPartitions: Int): DataFrame
+
+  /** Returns a new [[DataFrame]] that contains only the unique rows from this [[DataFrame]]. */
+  override def distinct: DataFrame
 
   override def persist(): this.type
 

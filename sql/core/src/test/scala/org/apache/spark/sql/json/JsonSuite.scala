@@ -23,6 +23,7 @@ import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.Dsl._
 import org.apache.spark.sql.json.JsonRDD.{compatibleType, enforceCorrectType}
+import org.apache.spark.sql.sources.LogicalRelation
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.types._
@@ -341,21 +342,19 @@ class JsonSuite extends QueryTest {
     )
   }
 
-  ignore("Complex field and type inferring (Ignored)") {
+  test("GetField operation on complex data type") {
     val jsonDF = jsonRDD(complexFieldAndType1)
     jsonDF.registerTempTable("jsonTable")
 
-    // Right now, "field1" and "field2" are treated as aliases. We should fix it.
     checkAnswer(
       sql("select arrayOfStruct[0].field1, arrayOfStruct[0].field2 from jsonTable"),
       Row(true, "str1")
     )
 
-    // Right now, the analyzer cannot resolve arrayOfStruct.field1 and arrayOfStruct.field2.
     // Getting all values of a specific field from an array of structs.
     checkAnswer(
       sql("select arrayOfStruct.field1, arrayOfStruct.field2 from jsonTable"),
-      Row(Seq(true, false), Seq("str1", null))
+      Row(Seq(true, false, null), Seq("str1", null, null))
     )
   }
 
@@ -923,6 +922,30 @@ class JsonSuite extends QueryTest {
       sql("select structWithArrayFields.field1[1], structWithArrayFields.field2[3] from complexTable"),
       Row(5, null)
     )
+  }
 
+  test("JSONRelation equality test") {
+    val relation1 =
+      JSONRelation("path", 1.0, Some(StructType(StructField("a", IntegerType, true) :: Nil)))(null)
+    val logicalRelation1 = LogicalRelation(relation1)
+    val relation2 =
+      JSONRelation("path", 0.5, Some(StructType(StructField("a", IntegerType, true) :: Nil)))(
+        org.apache.spark.sql.test.TestSQLContext)
+    val logicalRelation2 = LogicalRelation(relation2)
+    val relation3 =
+      JSONRelation("path", 1.0, Some(StructType(StructField("b", StringType, true) :: Nil)))(null)
+    val logicalRelation3 = LogicalRelation(relation3)
+
+    assert(relation1 === relation2)
+    assert(logicalRelation1.sameResult(logicalRelation2),
+      s"$logicalRelation1 and $logicalRelation2 should be considered having the same result.")
+
+    assert(relation1 !== relation3)
+    assert(!logicalRelation1.sameResult(logicalRelation3),
+      s"$logicalRelation1 and $logicalRelation3 should be considered not having the same result.")
+
+    assert(relation2 !== relation3)
+    assert(!logicalRelation2.sameResult(logicalRelation3),
+      s"$logicalRelation2 and $logicalRelation3 should be considered not having the same result.")
   }
 }
