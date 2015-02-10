@@ -113,7 +113,7 @@ object PowerIterationClusteringExample {
         case _ => outerRadius * cx / (nCircles - 1)
       }
     }
-    val groupSizes = for (cx <- 0 until nCircles) yield (cx+1) * nPoints
+    val groupSizes = for (cx <- 0 until nCircles) yield (cx + 1) * nPoints
     var ix = 0
     val points = for (cx <- 0 until nCircles;
                       px <- 0 until groupSizes(cx)) yield {
