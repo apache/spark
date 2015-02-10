@@ -342,7 +342,7 @@
           </exclusion>
         </exclusions>
       </dependency>
- 
+
       <!-- Shaded deps marked as provided. These are promoted to compile scope
            in the modules where we want the shaded classes to appear in the
            associated jar. -->
@@ -395,7 +395,7 @@
         <scope>provided</scope>
       </dependency>
       <!-- End of shaded deps -->
- 
+
       <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-lang3</artifactId>
@@ -1178,13 +1178,19 @@
             </includes>
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
             <argLine>-Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=512m</argLine>
+            <environmentVariables>
+              <!--
+                Setting SPARK_DIST_CLASSPATH is a simple way to make sure any child processes
+                launched by the tests have access to the correct test-time classpath.
+              -->
+              <SPARK_DIST_CLASSPATH>${test_classpath}</SPARK_DIST_CLASSPATH>
+            </environmentVariables>
             <systemProperties>
               <java.awt.headless>true</java.awt.headless>
               <spark.test.home>${session.executionRootDirectory}</spark.test.home>
               <spark.testing>1</spark.testing>
               <spark.ui.enabled>false</spark.ui.enabled>
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
-              <spark.executor.extraClassPath>${test_classpath}</spark.executor.extraClassPath>
               <spark.driver.allowMultipleContexts>true</spark.driver.allowMultipleContexts>
             </systemProperties>
             <failIfNoTests>false</failIfNoTests>

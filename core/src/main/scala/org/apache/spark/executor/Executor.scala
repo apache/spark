@@ -19,6 +19,7 @@ package org.apache.spark.executor
 
 import java.io.File
 import java.lang.management.ManagementFactory
+import java.net.URL
 import java.nio.ByteBuffer
 import java.util.concurrent._
 
@@ -33,7 +34,8 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler._
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
-import org.apache.spark.util.{SparkUncaughtExceptionHandler, AkkaUtils, Utils}
+import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader,
+  SparkUncaughtExceptionHandler, AkkaUtils, Utils}
 
 /**
  * Spark executor used with Mesos, YARN, and the standalone scheduler.
@@ -43,6 +45,7 @@ private[spark] class Executor(
     executorId: String,
     executorHostname: String,
     env: SparkEnv,
+    userClassPath: Seq[URL] = Nil,
     isLocal: Boolean = false)
   extends Logging
 {
@@ -288,17 +291,23 @@ private[spark] class Executor(
    * created by the interpreter to the search path
    */
   private def createClassLoader(): MutableURLClassLoader = {
+    // Bootstrap the list of jars with the user class path.
+    val now = System.currentTimeMillis()
+    userClassPath.foreach { url =>
+      currentJars(url.getPath().split("/").last) = now
+    }
+
     val currentLoader = Utils.getContextOrSparkClassLoader
 
     // For each of the jars in the jarSet, add them to the class loader.
     // We assume each of the files has already been fetched.
-    val urls = currentJars.keySet.map { uri =>
+    val urls = userClassPath.toArray ++ currentJars.keySet.map { uri =>
       new File(uri.split("/").last).toURI.toURL
-    }.toArray
-    val userClassPathFirst = conf.getBoolean("spark.files.userClassPathFirst", false)
-    userClassPathFirst match {
-      case true => new ChildExecutorURLClassLoader(urls, currentLoader)
-      case false => new ExecutorURLClassLoader(urls, currentLoader)
+    }
+    if (conf.getBoolean("spark.executor.userClassPathFirst", false)) {
+      new ChildFirstURLClassLoader(urls, currentLoader)
+    } else {
+      new MutableURLClassLoader(urls, currentLoader)
     }
   }
 
@@ -311,7 +320,7 @@ private[spark] class Executor(
     if (classUri != null) {
       logInfo("Using REPL class URI: " + classUri)
       val userClassPathFirst: java.lang.Boolean =
-        conf.getBoolean("spark.files.userClassPathFirst", false)
+        conf.getBoolean("spark.executor.userClassPathFirst", false)
       try {
         val klass = Class.forName("org.apache.spark.repl.ExecutorClassLoader")
           .asInstanceOf[Class[_ <: ClassLoader]]
@@ -344,18 +353,23 @@ private[spark] class Executor(
           env.securityManager, hadoopConf, timestamp, useCache = !isLocal)
         currentFiles(name) = timestamp
       }
-      for ((name, timestamp) <- newJars if currentJars.getOrElse(name, -1L) < timestamp) {
-        logInfo("Fetching " + name + " with timestamp " + timestamp)
-        // Fetch file with useCache mode, close cache for local mode.
-        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf,
-          env.securityManager, hadoopConf, timestamp, useCache = !isLocal)
-        currentJars(name) = timestamp
-        // Add it to our class loader
+      for ((name, timestamp) <- newJars) {
         val localName = name.split("/").last
-        val url = new File(SparkFiles.getRootDirectory, localName).toURI.toURL
-        if (!urlClassLoader.getURLs.contains(url)) {
-          logInfo("Adding " + url + " to class loader")
-          urlClassLoader.addURL(url)
+        val currentTimeStamp = currentJars.get(name)
+          .orElse(currentJars.get(localName))
+          .getOrElse(-1L)
+        if (currentTimeStamp < timestamp) {
+          logInfo("Fetching " + name + " with timestamp " + timestamp)
+          // Fetch file with useCache mode, close cache for local mode.
+          Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf,
+            env.securityManager, hadoopConf, timestamp, useCache = !isLocal)
+          currentJars(name) = timestamp
+          // Add it to our class loader
+          val url = new File(SparkFiles.getRootDirectory, localName).toURI.toURL
+          if (!urlClassLoader.getURLs.contains(url)) {
+            logInfo("Adding " + url + " to class loader")
+            urlClassLoader.addURL(url)
+          }
         }
       }
     }
