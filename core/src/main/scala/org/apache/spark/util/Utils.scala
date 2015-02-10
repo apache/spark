@@ -980,6 +980,12 @@ private[spark] object Utils extends Logging {
     )
   }
 
+
+  private val TB = 1L << 40
+  private val GB = 1L << 30
+  private val MB = 1L << 20
+  private val KB = 1L << 10
+
   /**
    * Convert a Java memory parameter passed to -Xmx (such as 300m or 1g) to a number of megabytes.
    */
@@ -1012,11 +1018,6 @@ private[spark] object Utils extends Logging {
    * Convert a quantity in bytes to a human-readable string such as "4.0 MB".
    */
   def bytesToString(size: Long): String = {
-    val TB = 1L << 40
-    val GB = 1L << 30
-    val MB = 1L << 20
-    val KB = 1L << 10
-
     val (value, unit) = {
       if (size >= 2*TB) {
         (size.asInstanceOf[Double] / TB, "TB")
@@ -1057,7 +1058,7 @@ private[spark] object Utils extends Logging {
    * Convert a quantity in megabytes to a human-readable string such as "4.0 MB".
    */
   def megabytesToString(megabytes: Long): String = {
-    bytesToString(megabytes * 1024L * 1024L)
+    bytesToString(megabytes * MB)
   }
 
   /**
