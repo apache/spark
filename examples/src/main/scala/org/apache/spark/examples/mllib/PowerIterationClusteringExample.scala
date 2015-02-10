@@ -43,7 +43,8 @@ import scopt.OptionParser
  *
  * Here is a sample run and output:
  *
- * ./bin/run-example org.apache.spark.examples.mllib.PowerIterationClusteringExample -k 3 --n 30 --numIterations 15
+ * ./bin/run-example org.apache.spark.examples.mllib.PowerIterationClusteringExample
+ *      -k 3 --n 30 --numIterations 15
  *
  * Cluster assignments: 1 -> [0,1,2,3,4],2 -> [5,6,7,8,9,10,11,12,13,14],
  *    0 -> [15,16,17,18,19,20,21,22,23,24,25,26,27,28,29]
@@ -140,7 +141,8 @@ object PowerIterationClusteringExample {
   }
 
   /**
-   * Gaussian Similarity: http://www.stat.wisc.edu/~mchung/teaching/MIA/reading/diffusion.gaussian.kernel.pdf
+   * Gaussian Similarity:
+   * http://www.stat.wisc.edu/~mchung/teaching/MIA/reading/diffusion.gaussian.kernel.pdf
    */
   def gaussianSimilarity(p1: (Double, Double), p2: (Double, Double), sigma: Double) = {
     (1.0 /
@@ -168,7 +170,8 @@ object PowerIterationClusteringExample {
 
     val clusters = model.assignments.collect.groupBy(_._2).mapValues(_.map(_._1))
     println(s"Cluster assignments: "
-      + s"${clusters.toList.sortBy{ case (k,v) => v.length}.map { case (k, v) => s"$k -> ${v.sorted.mkString("[", ",", "]")}"}
+      + s"${clusters.toList.sortBy{ case (k,v) => v.length}
+      .map { case (k, v) => s"$k -> ${v.sorted.mkString("[", ",", "]")}"}
       .mkString(",")}")
 
     sc.stop()
