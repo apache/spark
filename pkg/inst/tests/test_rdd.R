@@ -229,6 +229,19 @@ test_that("flatMapValues() on pairwise RDDs", {
                     list(2L, 1), list(2L, 2), list(1L, 200), list(1L, 201)))
 })
 
+test_that("reduceByKeyLocally() on PairwiseRDDs", {
+  pairs <- parallelize(sc, list(list(1, 2), list(1.1, 3), list(1, 4)), 2L)
+  actual <- reduceByKeyLocally(pairs, "+")
+  expect_equal(sortKeyValueList(actual),
+               sortKeyValueList(list(list(1, 6), list(1.1, 3))))
+
+  pairs <- parallelize(sc, list(list("abc", 1.2), list(1.1, 0), list("abc", 1.3),
+                                list("bb", 5)), 4L)
+  actual <- reduceByKeyLocally(pairs, "+")
+  expect_equal(sortKeyValueList(actual),
+               sortKeyValueList(list(list("abc", 2.5), list(1.1, 0), list("bb", 5))))
+})
+
 test_that("distinct() on RDDs", {
   nums.rep2 <- rep(1:10, 2)
   rdd.rep2 <- parallelize(sc, nums.rep2, 2L)
@@ -432,4 +445,22 @@ test_that("sortByKey() on pairwise RDDs", {
   sortedRdd7 <- sortByKey(rdd7)
   actual <- collect(sortedRdd7)
   expect_equal(actual, l3)  
+})
+
+test_that("collectAsMap() on a pairwise RDD", {
+  rdd <- parallelize(sc, list(list(1, 2), list(3, 4)))
+  vals <- collectAsMap(rdd)
+  expect_equal(vals, list(`1` = 2, `3` = 4))
+
+  rdd <- parallelize(sc, list(list("a", 1), list("b", 2)))
+  vals <- collectAsMap(rdd)
+  expect_equal(vals, list(a = 1, b = 2))
+ 
+  rdd <- parallelize(sc, list(list(1.1, 2.2), list(1.2, 2.4)))
+  vals <- collectAsMap(rdd)
+  expect_equal(vals, list(`1.1` = 2.2, `1.2` = 2.4))
+ 
+  rdd <- parallelize(sc, list(list(1, "a"), list(2, "b")))
+  vals <- collectAsMap(rdd)
+  expect_equal(vals, list(`1` = "a", `2` = "b"))
 })

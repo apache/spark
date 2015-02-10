@@ -23,30 +23,39 @@ connExists <- function(env) {
 
 # Stop the Spark context.
 # Also terminates the backend this R session is connected to
-sparkR.stop <- function(env) {
-  cat("Stopping SparkR\n")
+sparkR.stop <- function(env = .sparkREnv) {
 
   if (!connExists(env)) {
     # When the workspace is saved in R, the connections are closed
     # *before* the finalizer is run. In these cases, we reconnect
     # to the backend, so we can shut it down.
-    connectBackend("localhost", .sparkREnv$sparkRBackendPort)
+    tryCatch({
+      connectBackend("localhost", .sparkREnv$sparkRBackendPort)
+    }, error = function(err) {
+      cat("Error in Connection: Use sparkR.init() to restart SparkR\n")
+    }, warning = function(war) {
+      cat("No Connection Found: Use sparkR.init() to restart SparkR\n")
+    })
+  } 
+
+  if (exists(".sparkRCon", envir = env)) {
+    cat("Stopping SparkR\n")
+    if (exists(".sparkRjsc", envir = env)) {
+      sc <- get(".sparkRjsc", envir = env)
+      callJMethod(sc, "stop")
+      rm(".sparkRjsc", envir = env)
+    }
+  
+    callJStatic("SparkRHandler", "stopBackend")
+    # Also close the connection and remove it from our env
+    conn <- get(".sparkRCon", env)
+    close(conn)
+    rm(".sparkRCon", envir = env)
+    # Finally, sleep for 1 sec to let backend finish exiting.
+    # Without this we get port conflicts in RStudio when we try to 'Restart R'.
+    Sys.sleep(1)
   }
-
-  if (exists(".sparkRjsc", envir = env)) {
-    sc <- get(".sparkRjsc", envir = env)
-    callJMethod(sc, "stop")
-  }
-
-  callJStatic("SparkRHandler", "stopBackend")
-  # Also close the connection and remove it from our env
-  conn <- get(".sparkRCon", env)
-  close(conn)
-  rm(".sparkRCon", envir = env)
-
-  # Finally, sleep for 1 sec to let backend finish exiting.
-  # Without this we get port conflicts in RStudio when we try to 'Restart R'.
-  Sys.sleep(1)
+  
 }
 
 #' Initialize a new Spark Context.
@@ -84,7 +93,7 @@ sparkR.init <- function(
   sparkRBackendPort = 12345) {
 
   if (exists(".sparkRjsc", envir = .sparkREnv)) {
-    cat("Re-using existing Spark Context. Please restart R to create a new Spark Context\n")
+    cat("Re-using existing Spark Context. Please stop SparkR with sparkR.stop() or restart R to create a new Spark Context\n")
     return(get(".sparkRjsc", envir = .sparkREnv))
   }
 

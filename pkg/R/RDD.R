@@ -358,6 +358,7 @@ setMethod("collect",
             convertJListToRList(collected, flatten)
           })
 
+
 #' @rdname collect-methods
 #' @export
 #' @description
@@ -382,6 +383,29 @@ setMethod("collectPartition",
             convertJListToRList(jList, flatten = TRUE)
           })
 
+#' @rdname collect-methods
+#' @export
+#' @description
+#' \code{collectAsMap} returns a named list as a map that contains all of the elements
+#' in a key-value pair RDD. 
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, list(list(1, 2), list(3, 4)), 2L)
+#' collectAsMap(rdd) # list(`1` = 2, `3` = 4)
+#'}
+setGeneric("collectAsMap", function(rdd) { standardGeneric("collectAsMap") })
+
+#' @rdname collect-methods
+#' @aliases collectAsMap,RDD-method
+setMethod("collectAsMap",
+          signature(rdd = "RDD"),
+          function(rdd) {
+            pairList <- collect(rdd)
+            map <- new.env()
+            lapply(pairList, function(x) { assign(as.character(x[[1]]), x[[2]], envir = map) })
+            as.list(map)
+          })
 
 #' Look up elements of a key in an RDD
 #'
@@ -1388,26 +1412,32 @@ setMethod("groupByKey",
             groupVals <- function(part) {
               vals <- new.env()
               keys <- new.env()
+              pred <- function(item) exists(item$hash, keys)
+              appendList <- function(acc, x) {
+                addItemToAccumulator(acc, x)
+                acc
+              }
+              makeList <- function(x) {
+                acc <- initAccumulator()
+                addItemToAccumulator(acc, x)
+                acc
+              }
               # Each item in the partition is list of (K, V)
               lapply(part,
                      function(item) {
-                       hashVal <- as.character(hashCode(item[[1]]))
-                       if (exists(hashVal, vals)) {
-                         acc <- vals[[hashVal]]
-                         acc[[length(acc) + 1]] <- item[[2]]
-                         vals[[hashVal]] <- acc
-                       } else {
-                         vals[[hashVal]] <- list(item[[2]])
-                         keys[[hashVal]] <- item[[1]]
-                       }
+                       item$hash <- as.character(hashCode(item[[1]]))
+                       updateOrCreatePair(item, keys, vals, pred,
+                                          appendList, makeList)
                      })
+              # extract out data field
+              vals <- eapply(vals,
+                             function(x) {
+                               length(x$data) <- x$counter
+                               x$data
+                             })
               # Every key in the environment contains a list
               # Convert that to list(K, Seq[V])
-              grouped <- lapply(ls(vals),
-                                function(name) {
-                                  list(keys[[name]], vals[[name]])
-                                })
-              grouped
+              convertEnvsToList(keys, vals)
             }
             lapplyPartition(shuffled, groupVals)
           })
@@ -1448,26 +1478,76 @@ setMethod("reduceByKey",
             reduceVals <- function(part) {
               vals <- new.env()
               keys <- new.env()
+              pred <- function(item) exists(item$hash, keys)
               lapply(part,
                      function(item) {
-                       hashVal <- as.character(hashCode(item[[1]]))
-                       if (exists(hashVal, vals)) {
-                         vals[[hashVal]] <- do.call(
-                           combineFunc, list(vals[[hashVal]], item[[2]]))
-                       } else {
-                         vals[[hashVal]] <- item[[2]]
-                         keys[[hashVal]] <- item[[1]]
-                       }
+                       item$hash <- as.character(hashCode(item[[1]]))
+                       updateOrCreatePair(item, keys, vals, pred, combineFunc, identity)
                      })
-              combined <- lapply(ls(vals),
-                                  function(name) {
-                                    list(keys[[name]], vals[[name]])
-                                  })
-              combined
+              convertEnvsToList(keys, vals)
             }
             locallyReduced <- lapplyPartition(rdd, reduceVals)
             shuffled <- partitionBy(locallyReduced, numPartitions)
             lapplyPartition(shuffled, reduceVals)
+          })
+
+#' Merge values by key locally
+#'
+#' This function operates on RDDs where every element is of the form list(K, V) or c(K, V).
+#' and merges the values for each key using an associative reduce function, but return the
+#' results immediately to the driver as an R list.
+#'
+#' @param rdd The RDD to reduce by key. Should be an RDD where each element is
+#'             list(K, V) or c(K, V).
+#' @param combineFunc The associative reduce function to use.
+#' @return A list of elements of type list(K, V') where V' is the merged value for each key
+#' @rdname reduceByKeyLocally
+#' @seealso reduceByKey
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' pairs <- list(list(1, 2), list(1.1, 3), list(1, 4))
+#' rdd <- parallelize(sc, pairs)
+#' reduced <- reduceByKeyLocally(rdd, "+")
+#' reduced # list(list(1, 6), list(1.1, 3))
+#'}
+setGeneric("reduceByKeyLocally",
+           function(rdd, combineFunc) {
+             standardGeneric("reduceByKeyLocally")
+           })
+
+#' @rdname reduceByKeyLocally
+#' @aliases reduceByKeyLocally,RDD,integer-method
+setMethod("reduceByKeyLocally",
+          signature(rdd = "RDD", combineFunc = "ANY"),
+          function(rdd, combineFunc) {
+            reducePart <- function(part) {
+              vals <- new.env()
+              keys <- new.env()
+              pred <- function(item) exists(item$hash, keys)
+              lapply(part,
+                     function(item) {
+                       item$hash <- as.character(hashCode(item[[1]]))
+                       updateOrCreatePair(item, keys, vals, pred, combineFunc, identity)
+                     })
+              list(list(keys, vals)) # return hash to avoid re-compute in merge
+            }
+            mergeParts <- function(accum, x) {
+              pred <- function(item) {
+                exists(item$hash, accum[[1]])
+              }
+              lapply(ls(x[[1]]),
+                     function(name) {
+                       item <- list(x[[1]][[name]], x[[2]][[name]])
+                       item$hash <- name
+                       updateOrCreatePair(item, accum[[1]], accum[[2]], pred, combineFunc, identity)
+                     })
+              accum
+            }
+            reduced <- mapPartitions(rdd, reducePart)
+            merged <- reduce(reduced, mergeParts)
+            convertEnvsToList(merged[[1]], merged[[2]])
           })
 
 #' Combine values by key
@@ -1519,46 +1599,28 @@ setMethod("combineByKey",
             combineLocally <- function(part) {
               combiners <- new.env()
               keys <- new.env()
+              pred <- function(item) exists(item$hash, keys)
               lapply(part,
                      function(item) {
-                       k <- as.character(item[[1]])
-                       if (!exists(k, keys)) {
-                         combiners[[k]] <- do.call(createCombiner,
-                                                   list(item[[2]]))
-                         keys[[k]] <- item[[1]]
-                       } else {
-                         combiners[[k]] <- do.call(mergeValue,
-                                                   list(combiners[[k]],
-                                                        item[[2]]))
-                       }
+                       item$hash <- as.character(item[[1]])
+                       updateOrCreatePair(item, keys, combiners, pred, mergeValue, createCombiner)
                      })
-              lapply(ls(keys), function(k) {
-                      list(keys[[k]], combiners[[k]])
-                     })
+              convertEnvsToList(keys, combiners)
             }
             locallyCombined <- lapplyPartition(rdd, combineLocally)
             shuffled <- partitionBy(locallyCombined, numPartitions)
             mergeAfterShuffle <- function(part) {
               combiners <- new.env()
               keys <- new.env()
+              pred <- function(item) exists(item$hash, keys)
               lapply(part,
                      function(item) {
-                       k <- as.character(item[[1]])
-                       if (!exists(k, combiners)) {
-                         combiners[[k]] <- item[[2]]
-                         keys[[k]] <- item[[1]]
-                       } else {
-                         combiners[[k]] <- do.call(mergeCombiners,
-                                                   list(combiners[[k]],
-                                                        item[[2]]))
-                       }
+                       item$hash <- as.character(item[[1]])
+                       updateOrCreatePair(item, keys, combiners, pred, mergeCombiners, identity)
                      })
-              lapply(ls(keys), function(k) {
-                      list(keys[[k]], combiners[[k]])
-                     })
+              convertEnvsToList(keys, combiners)
             }
-            combined <-lapplyPartition(shuffled, mergeAfterShuffle)
-            combined
+            lapplyPartition(shuffled, mergeAfterShuffle)
           })
 
 ############ Binary Functions #############
