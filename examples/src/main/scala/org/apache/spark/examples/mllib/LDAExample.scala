@@ -21,15 +21,12 @@ import java.text.BreakIterator
 
 import scala.collection.mutable
 
-import scopt.OptionParser
-
 import org.apache.log4j.{Level, Logger}
-
-import org.apache.spark.{SparkContext, SparkConf}
 import org.apache.spark.mllib.clustering.LDA
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
-
+import org.apache.spark.{SparkConf, SparkContext}
+import scopt.OptionParser
 
 /**
  * An example Latent Dirichlet Allocation (LDA) app. Run with
@@ -159,7 +156,7 @@ object LDAExample {
       }
       println()
     }
-
+    sc.stop()
   }
 
   /**
