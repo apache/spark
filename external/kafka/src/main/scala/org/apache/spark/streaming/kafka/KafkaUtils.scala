@@ -290,8 +290,9 @@ object KafkaUtils {
 
   /**
    * :: Experimental ::
-   * Create an input stream that pulls messages from a Kafka Broker. This stream can guarantee
-   * that each message from Kafka is included in transformations exactly once (see points below).
+   * Create an input stream that directly pulls messages from a Kafka Broker
+   * without using any receiver. This stream can guarantee that each message
+   * from Kafka is included in transformations exactly once (see points below).
    *
    * Points to note:
    *  - No receivers: This stream does not use any receiver. It directly queries Kafka
@@ -336,8 +337,9 @@ object KafkaUtils {
 
   /**
    * :: Experimental ::
-   * Create an input stream that pulls messages from a Kafka Broker. This stream can guarantee
-   * that each message from Kafka is included in transformations exactly once (see points below).
+   * Create an input stream that directly pulls messages from a Kafka Broker
+   * without using any receiver. This stream can guarantee that each message
+   * from Kafka is included in transformations exactly once (see points below).
    *
    * Points to note:
    *  - No receivers: This stream does not use any receiver. It directly queries Kafka
@@ -399,8 +401,9 @@ object KafkaUtils {
 
   /**
    * :: Experimental ::
-   * Create an input stream that pulls messages from a Kafka Broker. This stream can guarantee
-   * that each message from Kafka is included in transformations exactly once (see points below).
+   * Create an input stream that directly pulls messages from a Kafka Broker
+   * without using any receiver. This stream can guarantee that each message
+   * from Kafka is included in transformations exactly once (see points below).
    *
    * Points to note:
    *  - No receivers: This stream does not use any receiver. It directly queries Kafka
@@ -459,8 +462,9 @@ object KafkaUtils {
 
   /**
    * :: Experimental ::
-   * Create an input stream that pulls messages from a Kafka Broker. This stream can guarantee
-   * that each message from Kafka is included in transformations exactly once (see points below).
+   * Create an input stream that directly pulls messages from a Kafka Broker
+   * without using any receiver. This stream can guarantee that each message
+   * from Kafka is included in transformations exactly once (see points below).
    *
    * Points to note:
    *  - No receivers: This stream does not use any receiver. It directly queries Kafka
