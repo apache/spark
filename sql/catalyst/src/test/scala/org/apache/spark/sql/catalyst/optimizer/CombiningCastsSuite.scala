@@ -42,13 +42,13 @@ class CombiningCastsSuite extends PlanTest {
     assert(Optimizer(plan) === expectedPlan)
   }
 
-  test("limits: combines two casts") {
+  test("casts: combines two casts") {
     val expr = Cast(Cast(UnresolvedAttribute("a"), ShortType), LongType)
     val expectedExpr = Cast(UnresolvedAttribute("a"), LongType)
     checkResult(expr, expectedExpr)
   }
 
-  test("limits: combines three casts") {
+  test("casts: combines three casts") {
     val expr = Cast(Cast(Cast(UnresolvedAttribute("a"), ShortType), LongType), DoubleType)
     val expectedExpr = Cast(UnresolvedAttribute("a"), DoubleType)
     checkResult(expr, expectedExpr)
