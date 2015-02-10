@@ -166,6 +166,11 @@ class Node (
     }
   }
 
+  /** Returns an iterator that traverses (DFS, left to right) the subtree of this node. */
+  private[tree] def subtreeIterator: Iterator[Node] = {
+    Iterator.single(this) ++ leftNode.map(_.subtreeIterator).getOrElse(Iterator.empty) ++
+      rightNode.map(_.subtreeIterator).getOrElse(Iterator.empty)
+  }
 }
 
 private[tree] object Node {
