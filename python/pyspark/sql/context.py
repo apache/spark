@@ -24,7 +24,7 @@ from py4j.protocol import Py4JError
 
 from pyspark.rdd import _prepare_for_python_RDD
 from pyspark.serializers import AutoBatchedSerializer, PickleSerializer
-from pyspark.sql.types import StringType, StructType, _verify_type, \
+from pyspark.sql.types import StringType, StructType, _infer_type, _verify_type, \
     _infer_schema, _has_nulltype, _merge_type, _create_converter, _python_to_sql_converter
 from pyspark.sql.dataframe import DataFrame
 
@@ -118,6 +118,9 @@ class SQLContext(object):
     def inferSchema(self, rdd, samplingRatio=None):
         """Infer and apply a schema to an RDD of L{Row}.
 
+        ::note:
+            Deprecated in 1.3, use :func:`createDataFrame` instead
+
         When samplingRatio is specified, the schema is inferred by looking
         at the types of each row in the sampled dataset. Otherwise, the
         first 100 rows of the RDD are inspected. Nested collections are
@@ -186,7 +189,7 @@ class SQLContext(object):
                     warnings.warn("Some of types cannot be determined by the "
                                   "first 100 rows, please try again with sampling")
         else:
-            if samplingRatio > 0.99:
+            if samplingRatio < 0.99:
                 rdd = rdd.sample(False, float(samplingRatio))
             schema = rdd.map(_infer_schema).reduce(_merge_type)
 
@@ -197,6 +200,9 @@ class SQLContext(object):
     def applySchema(self, rdd, schema):
         """
         Applies the given schema to the given RDD of L{tuple} or L{list}.
+
+        ::note:
+            Deprecated in 1.3, use :func:`createDataFrame` instead
 
         These tuples or lists can contain complex nested structures like
         lists, maps or nested rows.
@@ -286,6 +292,62 @@ class SQLContext(object):
         jrdd = self._jvm.SerDeUtil.toJavaArray(rdd._to_java_object_rdd())
         df = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), schema.json())
         return DataFrame(df, self)
+
+    def createDataFrame(self, rdd, schema=None, samplingRatio=None):
+        """
+        Create a DataFrame from an RDD of tuple/list and an optional `schema`.
+
+        `schema` could be :class:`StructType` or a list of column names.
+
+        When `schema` is a list of column names, the type of each column
+        will be inferred from `rdd`.
+
+        When `schema` is None, it will try to infer the column name and type
+        from `rdd`, which should be an RDD of :class:`Row`, or namedtuple,
+        or dict.
+
+        If referring needed, `samplingRatio` is used to determined how many
+        rows will be used to do referring. The first row will be used if
+        `samplingRatio` is None.
+
+        :param rdd: an RDD of Row or tuple or list or dict
+        :param schema: a StructType or list of names of columns
+        :param samplingRatio: the sample ratio of rows used for inferring
+        :return: a DataFrame
+
+        >>> rdd = sc.parallelize([('Alice', 1)])
+        >>> df = sqlCtx.createDataFrame(rdd, ['name', 'age'])
+        >>> df.collect()
+        [Row(name=u'Alice', age=1)]
+
+        >>> from pyspark.sql import Row
+        >>> Person = Row('name', 'age')
+        >>> person = rdd.map(lambda r: Person(*r))
+        >>> df2 = sqlCtx.createDataFrame(person)
+        >>> df2.collect()
+        [Row(name=u'Alice', age=1)]
+
+        >>> from pyspark.sql.types import *
+        >>> schema = StructType([
+        ...    StructField("name", StringType(), True),
+        ...    StructField("age", IntegerType(), True)])
+        >>> df3 = sqlCtx.createDataFrame(rdd, schema)
+        >>> df3.collect()
+        [Row(name=u'Alice', age=1)]
+        """
+        if isinstance(rdd, DataFrame):
+            raise TypeError("rdd is already a DataFrame")
+
+        if isinstance(schema, StructType):
+            return self.applySchema(rdd, schema)
+        else:
+            if isinstance(schema, (list, tuple)):
+                first = rdd.first()
+                if not isinstance(first, (list, tuple)):
+                    raise ValueError("each row in `rdd` should be list or tuple")
+                row_cls = Row(*schema)
+                rdd = rdd.map(lambda r: row_cls(*r))
+            return self.inferSchema(rdd, samplingRatio)
 
     def registerRDDAsTable(self, rdd, tableName):
         """Registers the given RDD as a temporary table in the catalog.
