@@ -234,65 +234,73 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
     primitiveType
 }
 
-object ResolvedDataSource {
+private[sql] object ResolvedDataSource {
+
+  private val builtinSources = Map(
+    "jdbc" -> classOf[org.apache.spark.sql.jdbc.DefaultSource],
+    "json" -> classOf[org.apache.spark.sql.json.DefaultSource],
+    "parquet" -> classOf[org.apache.spark.sql.parquet.DefaultSource]
+  )
+
+  /** Given a provider name, look up the data source class definition. */
+  def lookupDataSource(provider: String): Class[_] = {
+    if (builtinSources.contains(provider)) {
+      return builtinSources(provider)
+    }
+
+    val loader = Utils.getContextOrSparkClassLoader
+    try {
+      loader.loadClass(provider)
+    } catch {
+      case cnf: java.lang.ClassNotFoundException =>
+        try {
+          loader.loadClass(provider + ".DefaultSource")
+        } catch {
+          case cnf: java.lang.ClassNotFoundException =>
+            sys.error(s"Failed to load class for data source: $provider")
+        }
+    }
+  }
+
+  /** Create a [[ResolvedDataSource]] for reading data in. */
   def apply(
       sqlContext: SQLContext,
       userSpecifiedSchema: Option[StructType],
       provider: String,
       options: Map[String, String]): ResolvedDataSource = {
-    val loader = Utils.getContextOrSparkClassLoader
-    val clazz: Class[_] = try loader.loadClass(provider) catch {
-      case cnf: java.lang.ClassNotFoundException =>
-        try loader.loadClass(provider + ".DefaultSource") catch {
-          case cnf: java.lang.ClassNotFoundException =>
-            sys.error(s"Failed to load class for data source: $provider")
-        }
-    }
-
+    val clazz: Class[_] = lookupDataSource(provider)
     val relation = userSpecifiedSchema match {
-      case Some(schema: StructType) => {
-        clazz.newInstance match {
-          case dataSource: SchemaRelationProvider =>
-            dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options), schema)
-          case dataSource: org.apache.spark.sql.sources.RelationProvider =>
-            sys.error(s"${clazz.getCanonicalName} does not allow user-specified schemas.")
-        }
+      case Some(schema: StructType) => clazz.newInstance() match {
+        case dataSource: SchemaRelationProvider =>
+          dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options), schema)
+        case dataSource: org.apache.spark.sql.sources.RelationProvider =>
+          sys.error(s"${clazz.getCanonicalName} does not allow user-specified schemas.")
       }
-      case None => {
-        clazz.newInstance match {
-          case dataSource: RelationProvider =>
-            dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options))
-          case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
-            sys.error(s"A schema needs to be specified when using ${clazz.getCanonicalName}.")
-        }
+
+      case None => clazz.newInstance() match {
+        case dataSource: RelationProvider =>
+          dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options))
+        case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
+          sys.error(s"A schema needs to be specified when using ${clazz.getCanonicalName}.")
       }
     }
-
     new ResolvedDataSource(clazz, relation)
   }
 
+  /** Create a [[ResolvedDataSource]] for saving the content of the given [[DataFrame]]. */
   def apply(
       sqlContext: SQLContext,
       provider: String,
       mode: SaveMode,
       options: Map[String, String],
       data: DataFrame): ResolvedDataSource = {
-    val loader = Utils.getContextOrSparkClassLoader
-    val clazz: Class[_] = try loader.loadClass(provider) catch {
-      case cnf: java.lang.ClassNotFoundException =>
-        try loader.loadClass(provider + ".DefaultSource") catch {
-          case cnf: java.lang.ClassNotFoundException =>
-            sys.error(s"Failed to load class for data source: $provider")
-        }
-    }
-
-    val relation = clazz.newInstance match {
+    val clazz: Class[_] = lookupDataSource(provider)
+    val relation = clazz.newInstance() match {
       case dataSource: CreatableRelationProvider =>
         dataSource.createRelation(sqlContext, mode, options, data)
       case _ =>
         sys.error(s"${clazz.getCanonicalName} does not allow create table as select.")
     }
-
     new ResolvedDataSource(clazz, relation)
   }
 }
@@ -405,6 +413,5 @@ protected[sql] class CaseInsensitiveMap(map: Map[String, String]) extends Map[St
 
 /**
  * The exception thrown from the DDL parser.
- * @param message
  */
 protected[sql] class DDLException(message: String) extends Exception(message)
