@@ -42,6 +42,7 @@ import json
 import re
 import random
 import os
+import string
 from tempfile import NamedTemporaryFile
 from array import array
 from operator import itemgetter
@@ -1456,6 +1457,41 @@ class SQLContext(object):
         df = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), schema.json())
         return DataFrame(df, self)
 
+    def getReservedWords(self):
+        return self._ssql_ctx.getReservedWords()
+
+    def applyNames(self, nameString, plainRdd):
+        """
+        Builds a DataFrame from an RDD based on column names.
+
+        Assumes RDD contains iterables of equal length.
+        >>> unparsedStrings = sc.parallelize(["1, A1, true", "2, B2, false", "3, C3, true", "4, D4, false"])
+        >>> input = unparsedStrings.map(lambda x: x.split(",")).map(lambda x: [int(x[0]), x[1], bool(x[2])])
+        >>> df1 = sqlCtx.applyNames("a b c", input)
+        >>> df1.registerTempTable("df1")
+        >>> sqlCtx.sql("select a from df1").collect()
+        [Row(a=1), Row(a=2), Row(a=3), Row(a=4)]
+        >>> input2 = unparsedStrings.map(lambda x: x.split(",")).map(lambda x: [int(x[0]), x[1], bool(x[2]), {"k":int(x[0]), "v":2*int(x[0])}, x])
+        >>> df2 = sqlCtx.applyNames("a b c d e", input2)
+        >>> df2.registerTempTable("df2")
+        >>> sqlCtx.sql("select d['k']+d['v'] from df2").collect()
+        [Row(c0=3), Row(c0=6), Row(c0=9), Row(c0=12)]
+        >>> sqlCtx.sql("select b, e[1] from df2").collect()
+        [Row(b=u' A1', c1=u' A1'), Row(b=u' B2', c1=u' B2'), Row(b=u' C3', c1=u' C3'), Row(b=u' D4', c1=u' D4')]
+        """
+        fieldNames = [f for f in re.split("( |\\\".*?\\\"|'.*?')", nameString) if f.strip()]
+        reservedWords = set(map(string.lower,self._ssql_ctx.getReservedWords()))
+
+        if len(reservedWords.intersection(map(string.lower, fieldNames))) > 0:
+            raise ValueError("Reserved words not allowed as column names")
+
+        sampleRow = plainRdd.first()
+        sampledTypes = map(_infer_type, sampleRow)
+        fields= [StructField(k,v,True) for k, v in zip(fieldNames, sampledTypes)]
+        sampledSchema = StructType(fields)
+        return self.applySchema(plainRdd, sampledSchema)
+
+
     def registerRDDAsTable(self, rdd, tableName):
         """Registers the given RDD as a temporary table in the catalog.
 
@@ -1467,7 +1503,7 @@ class SQLContext(object):
         """
         if (rdd.__class__ is DataFrame):
             df = rdd._jdf
-            self._ssql_ctx.registerRDDAsTable(df, tableName)
+            self.ssql_ctx.registerRDDAsTable(df, tableName)
         else:
             raise ValueError("Can only register DataFrame as table")
 
