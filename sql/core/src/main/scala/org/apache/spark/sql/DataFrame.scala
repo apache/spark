@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
+import scala.util.control.NonFatal
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
@@ -92,6 +93,12 @@ trait DataFrame extends RDDApi[Row] {
    * Returns the object itself. Used to force an implicit conversion from RDD to DataFrame in Scala.
    */
   def toDataFrame: DataFrame = this
+
+  override def toString =
+     try schema.map(f => s"${f.name}: ${f.dataType.simpleString}").mkString("[", ", ", "]") catch {
+       case NonFatal(e) =>
+         s"Invalid tree; ${e.getMessage}:\n$queryExecution"
+     }
 
   /**
    * Returns a new [[DataFrame]] with columns renamed. This can be quite convenient in conversion

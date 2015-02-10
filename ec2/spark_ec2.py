@@ -134,7 +134,7 @@ def parse_args():
         help="Master instance type (leave empty for same as instance-type)")
     parser.add_option(
         "-r", "--region", default="us-east-1",
-        help="EC2 region zone to launch instances in")
+        help="EC2 region used to launch instances in, or to find them in")
     parser.add_option(
         "-z", "--zone", default="",
         help="Availability zone to launch instances in, or 'all' to spread " +
@@ -614,7 +614,8 @@ def launch_cluster(conn, opts, cluster_name):
 # Get the EC2 instances in an existing cluster if available.
 # Returns a tuple of lists of EC2 instance objects for the masters and slaves
 def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
-    print "Searching for existing cluster " + cluster_name + "..."
+    print "Searching for existing cluster " + cluster_name + " in region " \
+        + opts.region + "..."
     reservations = conn.get_all_reservations()
     master_nodes = []
     slave_nodes = []
@@ -632,9 +633,11 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
         return (master_nodes, slave_nodes)
     else:
         if master_nodes == [] and slave_nodes != []:
-            print >> sys.stderr, "ERROR: Could not find master in group " + cluster_name + "-master"
+            print >> sys.stderr, "ERROR: Could not find master in group " + cluster_name \
+                + "-master" + " in region " + opts.region
         else:
-            print >> sys.stderr, "ERROR: Could not find any existing cluster"
+            print >> sys.stderr, "ERROR: Could not find any existing cluster" \
+                + " in region " + opts.region
         sys.exit(1)
 
 
