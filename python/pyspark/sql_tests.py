@@ -326,6 +326,7 @@ class SQLTests(ReusedPySparkTestCase):
         pydoc.render_doc(df.foo)
         pydoc.render_doc(df.take(1))
 
+
 class HiveContextSQLTests(ReusedPySparkTestCase):
 
     @classmethod
