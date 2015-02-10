@@ -100,6 +100,7 @@ class GaussianMixtureSuite extends FunSuite with MLlibTestSparkContext {
       val gmm = new GaussianMixture().setK(1).setSeed(seed).run(data)
       assert(gmm.weights(0) ~== Ew absTol 1E-5)
       assert(gmm.gaussians(0).mu ~== Emu absTol 1E-5)
+      assert(gmm.gaussians(0).sigma ~== Esigma absTol 1E-5)
     }
   }
 
