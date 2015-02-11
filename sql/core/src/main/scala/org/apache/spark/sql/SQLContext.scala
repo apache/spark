@@ -183,14 +183,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
      *
      * @group userf
      */
-    implicit def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
+    implicit def rddToDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
       self.createDataFrame(rdd)
     }
 
     /**
      * Creates a DataFrame from a local Seq of Product.
      */
-    implicit def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
+    implicit def localSeqToDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
       self.createDataFrame(data)
     }
   }
