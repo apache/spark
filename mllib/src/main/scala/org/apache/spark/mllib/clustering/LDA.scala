@@ -456,13 +456,11 @@ private[clustering] object LDA {
           val random = new Random(partIndex + randomSeed)
           partEdges.flatMap { edge =>
             val gamma = normalize(BDV.fill[Double](k)(random.nextDouble()), 1.0)
-            val sum = BDV.zeros[Double](k)
-            brzAxpy(edge.attr, gamma, sum)
-
+            val sum = gamma * edge.attr
             Seq((edge.srcId, sum), (edge.dstId, sum))
           }
         }
-      verticesTMP.reduceByKey((sum0, sum1) => { sum0 + sum1 })
+      verticesTMP.reduceByKey(_ + _)
     }
 
     val docTermVertices = createVertices()
