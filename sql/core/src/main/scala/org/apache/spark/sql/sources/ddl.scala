@@ -291,7 +291,7 @@ private[sql] case class ResolvedDataSource(provider: Class[_], relation: BaseRel
  * Returned for the "DESCRIBE [EXTENDED] [dbName.]tableName" command.
  * @param table The table to be described.
  * @param isExtended True if "DESCRIBE EXTENDED" is used. Otherwise, false.
- * It is effective only when the table is a Hive table.
+ *                   It is effective only when the table is a Hive table.
  */
 private[sql] case class DescribeCommand(
     table: LogicalPlan,
