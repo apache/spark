@@ -117,10 +117,10 @@ private[streaming] abstract class ReceiverSupervisor(
   /** Start receiver */
   def startReceiver(): Unit = synchronized {
     try {
+      onReceiverStart()
       logInfo("Starting receiver")
       receiver.onStart()
       logInfo("Called receiver onStart")
-      onReceiverStart()
       receiverState = Started
     } catch {
       case t: Throwable =>

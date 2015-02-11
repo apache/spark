@@ -76,24 +76,24 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   import TrackerState._
 
   /** State of the tracker */
-  @volatile private[streaming] var trackerState = Initialized
+  @volatile private var trackerState = Initialized
 
   // actor is created when generator starts.
   // This not being null means the tracker has been started and not stopped
   private var actor: ActorRef = null
 
   /** Check if tracker has been marked for starting */
-  def isTrackerStarted() = {
+  private def isTrackerStarted() = {
     trackerState == Started
   }
  
   /** Check if tracker has been marked for stopping */
-  def isTrackerStopping() = {
+  private def isTrackerStopping() = {
     trackerState == Stopping
   }
  
   /** Check if tracker has been marked for stopped */
-  def isTrackerStopped() = {
+  private def isTrackerStopped() = {
     trackerState == Stopped
   }
 
@@ -232,21 +232,19 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   /** Actor to receive messages from the receivers. */
   private class ReceiverTrackerActor extends Actor {
     def receive = {
-      // Actor stops to receive when tracker is stopping
-      if (!isTrackerStopping) {
-        case RegisterReceiver(streamId, typ, host, receiverActor) =>
+      case RegisterReceiver(streamId, typ, host, receiverActor) =>
+        // Actor stops to accept registering when tracker is stopping
+        if (!isTrackerStopping) {
           registerReceiver(streamId, typ, host, receiverActor, sender)
           sender ! true
-        case AddBlock(receivedBlockInfo) =>
-          sender ! addBlock(receivedBlockInfo)
-        case ReportError(streamId, message, error) =>
-          reportError(streamId, message, error)
-        case DeregisterReceiver(streamId, message, error) =>
-          deregisterReceiver(streamId, message, error)
-          sender ! true
-      } else {
-        case _ => sender ! false
-      }
+        }
+      case AddBlock(receivedBlockInfo) =>
+        sender ! addBlock(receivedBlockInfo)
+      case ReportError(streamId, message, error) =>
+        reportError(streamId, message, error)
+      case DeregisterReceiver(streamId, message, error) =>
+        deregisterReceiver(streamId, message, error)
+        sender ! true
     }
   }
 
