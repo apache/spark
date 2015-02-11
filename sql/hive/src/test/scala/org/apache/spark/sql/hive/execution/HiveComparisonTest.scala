@@ -242,7 +242,8 @@ abstract class HiveComparisonTest
       outputDirectories.map(new File(_, testCaseName)).filter(_.exists()).foreach(_.delete())
 
       val sqlWithoutComment =
-        sql.split("\n").filterNot(l => l.startsWith("--")).reduce((l1, l2) => l1 + "\n" + l2)
+        sql.split("\n").filterNot(l => l.matches("--.*(?<=[^\\\\]);"))
+          .reduce((l1, l2) => l1 + "\n" + l2)
       val allQueries =
         sqlWithoutComment.split("(?<=[^\\\\]);").map(_.trim).filterNot(q => q == "").toSeq
 
