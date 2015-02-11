@@ -38,7 +38,19 @@ private[sql] object JsonRDD extends Logging {
       json: RDD[String],
       schema: StructType,
       columnNameOfCorruptRecords: String): RDD[Row] = {
-    parseJson(json, columnNameOfCorruptRecords).map(parsed => asRow(parsed, schema))
+    // Reuse the mutable row for each record, however we still need to 
+    // create a new row for every nested struct type in each record
+    val mutableRow = new SpecificMutableRow(schema.fields.map(_.dataType))
+    parseJson(json, columnNameOfCorruptRecords).mapPartitions( iter => {
+      iter.map { parsed =>
+        schema.fields.zipWithIndex.foreach {
+          case (StructField(name, dataType, _, _), i) =>
+            mutableRow.update(i, parsed.get(name).flatMap(v => Option(v)).map(
+              enforceCorrectType(_, dataType)).orNull)
+        }
+        mutableRow: Row
+      }
+    })
   }
 
   private[sql] def inferSchema(
