@@ -81,7 +81,7 @@ private[streaming] class WriteAheadLogManager(
     var succeeded = false
     while (!succeeded && failures < maxFailures) {
       try {
-        fileSegment = getLogWriter(clock.getTime()).write(byteBuffer)
+        fileSegment = getLogWriter(clock.getTimeMillis()).write(byteBuffer)
         succeeded = true
       } catch {
         case ex: Exception =>

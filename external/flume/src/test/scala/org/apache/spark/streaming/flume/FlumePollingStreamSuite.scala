@@ -36,7 +36,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import org.apache.spark.streaming.{Seconds, TestOutputStream, StreamingContext}
 import org.apache.spark.streaming.flume.sink._
-import org.apache.spark.util.{FakeClock, Utils}
+import org.apache.spark.util.{ManualClock, Utils}
 
 class FlumePollingStreamSuite extends FunSuite with BeforeAndAfter with Logging {
 
@@ -53,7 +53,7 @@ class FlumePollingStreamSuite extends FunSuite with BeforeAndAfter with Logging 
 
   def beforeFunction() {
     logInfo("Using manual clock")
-    conf.set("spark.streaming.clock", "org.apache.spark.util.FakeClock")
+    conf.set("spark.streaming.clock", "org.apache.spark.util.ManualClock")
   }
 
   before(beforeFunction())
@@ -170,7 +170,7 @@ class FlumePollingStreamSuite extends FunSuite with BeforeAndAfter with Logging 
 
   def writeAndVerify(channels: Seq[MemoryChannel], ssc: StreamingContext,
     outputBuffer: ArrayBuffer[Seq[SparkFlumeEvent]]) {
-    val clock = ssc.scheduler.clock.asInstanceOf[FakeClock]
+    val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     val executor = Executors.newCachedThreadPool()
     val executorCompletion = new ExecutorCompletionService[Void](executor)
     channels.map(channel => {
@@ -220,7 +220,7 @@ class FlumePollingStreamSuite extends FunSuite with BeforeAndAfter with Logging 
     assert(m.invoke(queueRemaining.get(channel)).asInstanceOf[Int] === 5000)
   }
 
-  private class TxnSubmitter(channel: MemoryChannel, clock: FakeClock) extends Callable[Void] {
+  private class TxnSubmitter(channel: MemoryChannel, clock: ManualClock) extends Callable[Void] {
     override def call(): Void = {
       var t = 0
       for (i <- 0 until batchCount) {

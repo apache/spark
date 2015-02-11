@@ -85,7 +85,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
 
   // Initial ignore threshold based on which old, existing files in the directory (at the time of
   // starting the streaming application) will be ignored or considered
-  private val initialModTimeIgnoreThreshold = if (newFilesOnly) clock.getTime() else 0L
+  private val initialModTimeIgnoreThreshold = if (newFilesOnly) clock.getTimeMillis() else 0L
 
   /*
    * Make sure that the information of files selected in the last few batches are remembered.
@@ -158,7 +158,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
    */
   private def findNewFiles(currentTime: Long): Array[String] = {
     try {
-      lastNewFileFindingTime = clock.getTime()
+      lastNewFileFindingTime = clock.getTimeMillis()
 
       // Calculate ignore threshold
       val modTimeIgnoreThreshold = math.max(
@@ -171,7 +171,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
         def accept(path: Path): Boolean = isNewFile(path, currentTime, modTimeIgnoreThreshold)
       }
       val newFiles = fs.listStatus(directoryPath, filter).map(_.getPath.toString)
-      val timeTaken = clock.getTime() - lastNewFileFindingTime
+      val timeTaken = clock.getTimeMillis() - lastNewFileFindingTime
       logInfo("Finding new files took " + timeTaken + " ms")
       logDebug("# cached file times = " + fileToModTime.size)
       if (timeTaken > slideDuration.milliseconds) {

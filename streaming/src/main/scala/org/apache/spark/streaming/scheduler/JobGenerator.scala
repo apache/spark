@@ -24,7 +24,7 @@ import akka.actor.{ActorRef, Props, Actor}
 import org.apache.spark.{SparkEnv, Logging}
 import org.apache.spark.streaming.{Checkpoint, CheckpointWriter, Time}
 import org.apache.spark.streaming.util.RecurringTimer
-import org.apache.spark.util.{Clock, FakeClock}
+import org.apache.spark.util.{Clock, ManualClock}
 
 /** Event classes for JobGenerator */
 private[scheduler] sealed trait JobGeneratorEvent
@@ -185,10 +185,10 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     // If manual clock is being used for testing, then
     // either set the manual clock to the last checkpointed time,
     // or if the property is defined set it to that time
-    if (clock.isInstanceOf[FakeClock]) {
+    if (clock.isInstanceOf[ManualClock]) {
       val lastTime = ssc.initialCheckpoint.checkpointTime.milliseconds
       val jumpTime = ssc.sc.conf.getLong("spark.streaming.manualClock.jump", 0)
-      clock.asInstanceOf[FakeClock].setTime(lastTime + jumpTime)
+      clock.asInstanceOf[ManualClock].setTime(lastTime + jumpTime)
     }
 
     val batchDuration = ssc.graph.batchDuration

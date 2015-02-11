@@ -39,7 +39,7 @@ class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name:
    * current system time.
    */
   def getStartTime(): Long = {
-    (math.floor(clock.getTime().toDouble / period) + 1).toLong * period
+    (math.floor(clock.getTimeMillis().toDouble / period) + 1).toLong * period
   }
 
   /**
@@ -49,7 +49,7 @@ class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name:
    * more than current time.
    */
   def getRestartTime(originalStartTime: Long): Long = {
-    val gap = clock.getTime() - originalStartTime
+    val gap = clock.getTimeMillis() - originalStartTime
     (math.floor(gap.toDouble / period).toLong + 1) * period + originalStartTime
   }
 

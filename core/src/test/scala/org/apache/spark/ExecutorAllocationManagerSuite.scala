@@ -23,7 +23,7 @@ import org.scalatest.{FunSuite, PrivateMethodTester}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
-import org.apache.spark.util.FakeClock
+import org.apache.spark.util.ManualClock
 
 /**
  * Test add and remove behavior of ExecutorAllocationManager.
@@ -322,7 +322,7 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
 
   test("starting/canceling add timer") {
     sc = createSparkContext(2, 10)
-    val clock = new FakeClock(8888L)
+    val clock = new ManualClock(8888L)
     val manager = sc.executorAllocationManager.get
     manager.setClock(clock)
 
@@ -330,7 +330,7 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
     assert(addTime(manager) === NOT_SET)
     onSchedulerBacklogged(manager)
     val firstAddTime = addTime(manager)
-    assert(firstAddTime === clock.getTime() + schedulerBacklogTimeout * 1000)
+    assert(firstAddTime === clock.getTimeMillis() + schedulerBacklogTimeout * 1000)
     clock.advance(100L)
     onSchedulerBacklogged(manager)
     assert(addTime(manager) === firstAddTime) // timer is already started
@@ -344,7 +344,7 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
     assert(addTime(manager) === NOT_SET)
     onSchedulerBacklogged(manager)
     val secondAddTime = addTime(manager)
-    assert(secondAddTime === clock.getTime() + schedulerBacklogTimeout * 1000)
+    assert(secondAddTime === clock.getTimeMillis() + schedulerBacklogTimeout * 1000)
     clock.advance(100L)
     onSchedulerBacklogged(manager)
     assert(addTime(manager) === secondAddTime) // timer is already started
@@ -354,7 +354,7 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
 
   test("starting/canceling remove timers") {
     sc = createSparkContext(2, 10)
-    val clock = new FakeClock(14444L)
+    val clock = new ManualClock(14444L)
     val manager = sc.executorAllocationManager.get
     manager.setClock(clock)
 
@@ -366,7 +366,7 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
     assert(removeTimes(manager).size === 1)
     assert(removeTimes(manager).contains("1"))
     val firstRemoveTime = removeTimes(manager)("1")
-    assert(firstRemoveTime === clock.getTime() + executorIdleTimeout * 1000)
+    assert(firstRemoveTime === clock.getTimeMillis() + executorIdleTimeout * 1000)
     clock.advance(100L)
     onExecutorIdle(manager, "1")
     assert(removeTimes(manager)("1") === firstRemoveTime) // timer is already started
@@ -376,11 +376,11 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
     clock.advance(300L)
     onExecutorIdle(manager, "2")
     assert(removeTimes(manager)("2") !== firstRemoveTime) // different executor
-    assert(removeTimes(manager)("2") === clock.getTime() + executorIdleTimeout * 1000)
+    assert(removeTimes(manager)("2") === clock.getTimeMillis() + executorIdleTimeout * 1000)
     clock.advance(400L)
     onExecutorIdle(manager, "3")
     assert(removeTimes(manager)("3") !== firstRemoveTime)
-    assert(removeTimes(manager)("3") === clock.getTime() + executorIdleTimeout * 1000)
+    assert(removeTimes(manager)("3") === clock.getTimeMillis() + executorIdleTimeout * 1000)
     assert(removeTimes(manager).size === 3)
     assert(removeTimes(manager).contains("2"))
     assert(removeTimes(manager).contains("3"))
@@ -393,7 +393,7 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
     assert(removeTimes(manager).size === 3)
     assert(removeTimes(manager).contains("1"))
     val secondRemoveTime = removeTimes(manager)("1")
-    assert(secondRemoveTime === clock.getTime() + executorIdleTimeout * 1000)
+    assert(secondRemoveTime === clock.getTimeMillis() + executorIdleTimeout * 1000)
     assert(removeTimes(manager)("1") === secondRemoveTime) // timer is already started
     assert(removeTimes(manager)("1") !== firstRemoveTime)
     assert(firstRemoveTime !== secondRemoveTime)
@@ -402,7 +402,7 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
   test("mock polling loop with no events") {
     sc = createSparkContext(1, 20)
     val manager = sc.executorAllocationManager.get
-    val clock = new FakeClock(2020L)
+    val clock = new ManualClock(2020L)
     manager.setClock(clock)
 
     // No events - we should not be adding or removing
@@ -427,7 +427,7 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
 
   test("mock polling loop add behavior") {
     sc = createSparkContext(1, 20)
-    val clock = new FakeClock(2020L)
+    val clock = new ManualClock(2020L)
     val manager = sc.executorAllocationManager.get
     manager.setClock(clock)
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(0, 1000)))
@@ -477,7 +477,7 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
 
   test("mock polling loop remove behavior") {
     sc = createSparkContext(1, 20)
-    val clock = new FakeClock(2020L)
+    val clock = new ManualClock(2020L)
     val manager = sc.executorAllocationManager.get
     manager.setClock(clock)
 

@@ -17,11 +17,11 @@
 
 package org.apache.spark.util
 
-class FakeClock(private var time: Long) extends Clock {
+class ManualClock(private var time: Long) extends Clock {
 
   def this() = this(0L)
 
-  def getTime(): Long =
+  def getTimeMillis(): Long =
     synchronized {
       time
     }
@@ -43,7 +43,7 @@ class FakeClock(private var time: Long) extends Clock {
       while (time < targetTime) {
         wait(100)
       }
-      getTime()
+      getTimeMillis()
     }
 
 }

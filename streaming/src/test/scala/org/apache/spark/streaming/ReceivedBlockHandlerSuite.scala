@@ -39,7 +39,7 @@ import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.storage._
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.streaming.util._
-import org.apache.spark.util.{AkkaUtils, FakeClock}
+import org.apache.spark.util.{AkkaUtils, ManualClock}
 import WriteAheadLogBasedBlockHandler._
 import WriteAheadLogSuite._
 
@@ -53,7 +53,7 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
   val mapOutputTracker = new MapOutputTrackerMaster(conf)
   val shuffleManager = new HashShuffleManager(conf)
   val serializer = new KryoSerializer(conf)
-  val manualClock = new FakeClock()
+  val manualClock = new ManualClock()
   val blockManagerSize = 10000000
 
   var actorSystem: ActorSystem = null
@@ -165,7 +165,7 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
       preCleanupLogFiles.size should be > 1
 
       // this depends on the number of blocks inserted using generateAndStoreData()
-      manualClock.getTime() shouldEqual 5000L
+      manualClock.getTimeMillis() shouldEqual 5000L
 
       val cleanupThreshTime = 3000L
       handler.cleanupOldBlocks(cleanupThreshTime)

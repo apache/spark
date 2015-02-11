@@ -130,7 +130,7 @@ class DriverRunnerTest extends FunSuite {
       .thenReturn(-1) // fail 3
       .thenReturn(-1) // fail 4
       .thenReturn(0) // success
-    when(clock.getTime())
+    when(clock.getTimeMillis())
       .thenReturn(0).thenReturn(1000) // fail 1 (short)
       .thenReturn(1000).thenReturn(2000) // fail 2 (short)
       .thenReturn(2000).thenReturn(10000) // fail 3 (long)

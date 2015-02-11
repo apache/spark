@@ -33,7 +33,7 @@ import org.apache.spark.streaming.dstream.{DStream, InputDStream, ForEachDStream
 import org.apache.spark.streaming.scheduler.{StreamingListenerBatchStarted, StreamingListenerBatchCompleted, StreamingListener}
 import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.{FakeClock, Utils}
+import org.apache.spark.util.{ManualClock, Utils}
 
 /**
  * This is a input stream just for the testsuites. This is equivalent to a checkpointable,
@@ -188,7 +188,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
   def beforeFunction() {
     if (useManualClock) {
       logInfo("Using manual clock")
-      conf.set("spark.streaming.clock", "org.apache.spark.util.FakeClock")
+      conf.set("spark.streaming.clock", "org.apache.spark.util.ManualClock")
     } else {
       logInfo("Using real clock")
       conf.set("spark.streaming.clock", "org.apache.spark.util.SystemClock")
@@ -331,8 +331,8 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
       ssc.start()
 
       // Advance manual clock
-      val clock = ssc.scheduler.clock.asInstanceOf[FakeClock]
-      logInfo("Manual clock before advancing = " + clock.getTime())
+      val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+      logInfo("Manual clock before advancing = " + clock.getTimeMillis())
       if (actuallyWait) {
         for (i <- 1 to numBatches) {
           logInfo("Actually waiting for " + batchDuration)
@@ -342,7 +342,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
       } else {
         clock.advance(numBatches * batchDuration.milliseconds)
       }
-      logInfo("Manual clock after advancing = " + clock.getTime())
+      logInfo("Manual clock after advancing = " + clock.getTimeMillis())
 
       // Wait until expected number of output items have been generated
       val startTime = System.currentTimeMillis()

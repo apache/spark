@@ -26,7 +26,7 @@ import scala.language.{implicitConversions, postfixOps}
 import WriteAheadLogSuite._
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.spark.util.{FakeClock, Utils}
+import org.apache.spark.util.{ManualClock, Utils}
 import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.concurrent.Eventually._
 
@@ -191,13 +191,13 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
 
   private def logCleanUpTest(waitForCompletion: Boolean): Unit = {
     // Write data with manager, recover with new manager and verify
-    val manualClock = new FakeClock()
+    val manualClock = new ManualClock()
     val dataToWrite = generateRandomData()
     manager = writeDataUsingManager(testDir, dataToWrite, manualClock, stopManager = false)
     val logFiles = getLogFilesInDirectory(testDir)
     assert(logFiles.size > 1)
 
-    manager.cleanupOldLogs(manualClock.getTime() / 2, waitForCompletion)
+    manager.cleanupOldLogs(manualClock.getTimeMillis() / 2, waitForCompletion)
 
     if (waitForCompletion) {
       assert(getLogFilesInDirectory(testDir).size < logFiles.size)
@@ -210,7 +210,7 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
 
   test("WriteAheadLogManager - handling file errors while reading rotating logs") {
     // Generate a set of log files
-    val fakeClock = new FakeClock()
+    val fakeClock = new ManualClock()
     val dataToWrite1 = generateRandomData()
     writeDataUsingManager(testDir, dataToWrite1, fakeClock)
     val logFiles1 = getLogFilesInDirectory(testDir)
@@ -276,10 +276,10 @@ object WriteAheadLogSuite {
   def writeDataUsingManager(
       logDirectory: String,
       data: Seq[String],
-      fakeClock: FakeClock = new FakeClock(),
+      fakeClock: ManualClock = new ManualClock(),
       stopManager: Boolean = true
     ): WriteAheadLogManager = {
-    if (fakeClock.getTime() < 100000) fakeClock.setTime(10000)
+    if (fakeClock.getTimeMillis() < 100000) fakeClock.setTime(10000)
     val manager = new WriteAheadLogManager(logDirectory, hadoopConf,
       rollingIntervalSecs = 1, callerName = "WriteAheadLogSuite", clock = fakeClock)
     // Ensure that 500 does not get sorted after 2000, so put a high base value.

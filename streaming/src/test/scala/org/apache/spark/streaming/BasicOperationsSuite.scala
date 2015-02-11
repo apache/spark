@@ -27,7 +27,7 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.{BlockRDD, RDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.{DStream, WindowedDStream}
-import org.apache.spark.util.{Clock, FakeClock}
+import org.apache.spark.util.{Clock, ManualClock}
 import org.apache.spark.HashPartitioner
 
 class BasicOperationsSuite extends TestSuiteBase {
@@ -566,7 +566,7 @@ class BasicOperationsSuite extends TestSuiteBase {
         ssc.start()
 
         // Feed data to the server to send to the network receiver
-        val clock = ssc.scheduler.clock.asInstanceOf[FakeClock]
+        val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
         val input = Seq(1, 2, 3, 4, 5, 6)
 
         val blockRdds = new mutable.HashMap[Time, BlockRDD[_]]
@@ -637,7 +637,7 @@ class BasicOperationsSuite extends TestSuiteBase {
       if (rememberDuration != null) ssc.remember(rememberDuration)
       val output = runStreams[(Int, Int)](ssc, cleanupTestInput.size, numExpectedOutput)
       val clock = ssc.scheduler.clock.asInstanceOf[Clock]
-      assert(clock.getTime() === Seconds(10).milliseconds)
+      assert(clock.getTimeMillis() === Seconds(10).milliseconds)
       assert(output.size === numExpectedOutput)
       operatedStream
     }

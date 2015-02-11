@@ -32,7 +32,7 @@ import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutput
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.streaming.dstream.{DStream, FileInputDStream}
-import org.apache.spark.util.{Clock, FakeClock, Utils}
+import org.apache.spark.util.{Clock, ManualClock, Utils}
 
 /**
  * This test suites tests the checkpointing functionality of DStreams -
@@ -60,7 +60,7 @@ class CheckpointSuite extends TestSuiteBase {
 
     assert(batchDuration === Milliseconds(500), "batchDuration for this test must be 1 second")
 
-    conf.set("spark.streaming.clock", "org.apache.spark.util.FakeClock")
+    conf.set("spark.streaming.clock", "org.apache.spark.util.ManualClock")
 
     val stateStreamCheckpointInterval = Seconds(1)
     val fs = FileSystem.getLocal(new Configuration())
@@ -326,10 +326,10 @@ class CheckpointSuite extends TestSuiteBase {
     def writeFile(i: Int, clock: Clock): Unit = {
       val file = new File(testDir, i.toString)
       Files.write(i + "\n", file, Charsets.UTF_8)
-      assert(file.setLastModified(clock.getTime()))
+      assert(file.setLastModified(clock.getTimeMillis()))
       // Check that the file's modification date is actually the value we wrote, since rounding or
       // truncation will break the test:
-      assert(file.lastModified() === clock.getTime())
+      assert(file.lastModified() === clock.getTimeMillis())
     }
 
     /**
@@ -344,10 +344,10 @@ class CheckpointSuite extends TestSuiteBase {
 
     try {
       // This is a var because it's re-assigned when we restart from a checkpoint
-      var clock: FakeClock = null
+      var clock: ManualClock = null
       withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
         ssc.checkpoint(checkpointDir)
-        clock = ssc.scheduler.clock.asInstanceOf[FakeClock]
+        clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
         val batchCounter = new BatchCounter(ssc)
         val fileStream = ssc.textFileStream(testDir.toString)
         // Make value 3 take a large time to process, to ensure that the driver
@@ -418,8 +418,8 @@ class CheckpointSuite extends TestSuiteBase {
       withStreamingContext(new StreamingContext(checkpointDir)) { ssc =>
         // So that the restarted StreamingContext's clock has gone forward in time since failure
         ssc.conf.set("spark.streaming.manualClock.jump", (batchDuration * 3).milliseconds.toString)
-        val oldClockTime = clock.getTime()
-        clock = ssc.scheduler.clock.asInstanceOf[FakeClock]
+        val oldClockTime = clock.getTimeMillis()
+        clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
         val batchCounter = new BatchCounter(ssc)
         val outputStream = ssc.graph.getOutputStreams().head.asInstanceOf[TestOutputStream[Int]]
         // Check that we remember files that were recorded before the restart
@@ -429,7 +429,7 @@ class CheckpointSuite extends TestSuiteBase {
         ssc.start()
         // Verify that the clock has traveled forward to the expected time
         eventually(eventuallyTimeout) {
-          clock.getTime() === oldClockTime
+          clock.getTimeMillis() === oldClockTime
         }
         // Wait for pre-failure batch to be recomputed (3 while SSC was down plus last batch)
         val numBatchesAfterRestart = 4
@@ -519,13 +519,13 @@ class CheckpointSuite extends TestSuiteBase {
    * It also waits for the expected amount of time for each batch.
    */
   def advanceTimeWithRealDelay[V: ClassTag](ssc: StreamingContext, numBatches: Long): Seq[Seq[V]] = {
-    val clock = ssc.scheduler.clock.asInstanceOf[FakeClock]
-    logInfo("Manual clock before advancing = " + clock.getTime())
+    val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+    logInfo("Manual clock before advancing = " + clock.getTimeMillis())
     for (i <- 1 to numBatches.toInt) {
       clock.advance(batchDuration.milliseconds)
       Thread.sleep(batchDuration.milliseconds)
     }
-    logInfo("Manual clock after advancing = " + clock.getTime())
+    logInfo("Manual clock after advancing = " + clock.getTimeMillis())
     Thread.sleep(batchDuration.milliseconds)
 
     val outputStream = ssc.graph.getOutputStreams.filter { dstream =>

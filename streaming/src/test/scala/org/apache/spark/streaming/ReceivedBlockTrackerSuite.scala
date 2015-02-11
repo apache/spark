@@ -36,7 +36,7 @@ import org.apache.spark.streaming.receiver.BlockManagerBasedStoreResult
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.streaming.util.WriteAheadLogReader
 import org.apache.spark.streaming.util.WriteAheadLogSuite._
-import org.apache.spark.util.{Clock, FakeClock, SystemClock, Utils}
+import org.apache.spark.util.{Clock, ManualClock, SystemClock, Utils}
 
 class ReceivedBlockTrackerSuite
   extends FunSuite with BeforeAndAfter with Matchers with Logging {
@@ -94,7 +94,7 @@ class ReceivedBlockTrackerSuite
   }
 
   test("block addition, block to batch allocation and cleanup with write ahead log") {
-    val manualClock = new FakeClock()
+    val manualClock = new ManualClock()
     // Set the time increment level to twice the rotation interval so that every increment creates
     // a new log file
 
@@ -138,13 +138,13 @@ class ReceivedBlockTrackerSuite
     tracker2.getUnallocatedBlocks(streamId).toList shouldEqual blockInfos1
 
     // Allocate blocks to batch and verify whether the unallocated blocks got allocated
-    val batchTime1 = manualClock.getTime()
+    val batchTime1 = manualClock.getTimeMillis()
     tracker2.allocateBlocksToBatch(batchTime1)
     tracker2.getBlocksOfBatchAndStream(batchTime1, streamId) shouldEqual blockInfos1
 
     // Add more blocks and allocate to another batch
     incrementTime()
-    val batchTime2 = manualClock.getTime()
+    val batchTime2 = manualClock.getTimeMillis()
     val blockInfos2 = addBlockInfos(tracker2)
     tracker2.allocateBlocksToBatch(batchTime2)
     tracker2.getBlocksOfBatchAndStream(batchTime2, streamId) shouldEqual blockInfos2

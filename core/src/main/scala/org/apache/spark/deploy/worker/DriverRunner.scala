@@ -187,9 +187,9 @@ private[spark] class DriverRunner(
         initialize(process.get)
       }
 
-      val processStart = clock.getTime()
+      val processStart = clock.getTimeMillis()
       val exitCode = process.get.waitFor()
-      if (clock.getTime() - processStart > successfulRunDuration * 1000) {
+      if (clock.getTimeMillis() - processStart > successfulRunDuration * 1000) {
         waitSeconds = 1
       }
 

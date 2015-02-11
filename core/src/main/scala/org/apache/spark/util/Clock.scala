@@ -21,7 +21,7 @@ package org.apache.spark.util
  * An interface to represent clocks, so that they can be mocked out in unit tests.
  */
 private[spark] trait Clock {
-  def getTime(): Long
+  def getTimeMillis(): Long
   def waitTillTime(targetTime: Long): Long
 }
 
@@ -29,7 +29,7 @@ private[spark] class SystemClock extends Clock {
 
   val minPollTime = 25L
 
-  def getTime(): Long = System.currentTimeMillis()
+  def getTimeMillis(): Long = System.currentTimeMillis()
 
   def waitTillTime(targetTime: Long): Long = {
     var currentTime = 0L

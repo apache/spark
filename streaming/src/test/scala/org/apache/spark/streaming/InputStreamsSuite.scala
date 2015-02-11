@@ -32,7 +32,7 @@ import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{FakeClock, Utils}
+import org.apache.spark.util.{ManualClock, Utils}
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.rdd.RDD
 import org.apache.hadoop.io.{Text, LongWritable}
@@ -57,7 +57,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     ssc.start()
 
     // Feed data to the server to send to the network receiver
-    val clock = ssc.scheduler.clock.asInstanceOf[FakeClock]
+    val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     val input = Seq(1, 2, 3, 4, 5)
     val expectedOutput = input.map(_.toString)
     Thread.sleep(1000)
@@ -102,7 +102,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
       // Set up the streaming context and input streams
       withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
-        val clock = ssc.scheduler.clock.asInstanceOf[FakeClock]
+        val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
         // This `setTime` call ensures that the clock is past the creation time of `existingFile`
         clock.setTime(existingFile.lastModified + batchDuration.milliseconds)
         val batchCounter = new BatchCounter(ssc)
@@ -122,8 +122,8 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
           Thread.sleep(batchDuration.milliseconds)
           val file = new File(testDir, i.toString)
           Files.write(Array[Byte](i.toByte), file)
-          assert(file.setLastModified(clock.getTime()))
-          assert(file.lastModified === clock.getTime())
+          assert(file.setLastModified(clock.getTimeMillis()))
+          assert(file.lastModified === clock.getTimeMillis())
           logInfo("Created file " + file)
           // Advance the clock after creating the file to avoid a race when
           // setting its modification time
@@ -169,7 +169,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     ssc.start()
 
     // Let the data from the receiver be received
-    val clock = ssc.scheduler.clock.asInstanceOf[FakeClock]
+    val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     val startTime = System.currentTimeMillis()
     while((!MultiThreadTestReceiver.haveAllThreadsFinished || output.sum < numTotalRecords) &&
       System.currentTimeMillis() - startTime < 5000) {
@@ -201,7 +201,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     ssc.start()
 
     // Setup data queued into the stream
-    val clock = ssc.scheduler.clock.asInstanceOf[FakeClock]
+    val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     val input = Seq("1", "2", "3", "4", "5")
     val expectedOutput = input.map(Seq(_))
     //Thread.sleep(1000)
@@ -244,7 +244,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     ssc.start()
 
     // Setup data queued into the stream
-    val clock = ssc.scheduler.clock.asInstanceOf[FakeClock]
+    val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     val input = Seq("1", "2", "3", "4", "5")
     val expectedOutput = Seq(Seq("1", "2", "3"), Seq("4", "5"))
 
@@ -290,7 +290,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
       // Set up the streaming context and input streams
       withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
-        val clock = ssc.scheduler.clock.asInstanceOf[FakeClock]
+        val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
         // This `setTime` call ensures that the clock is past the creation time of `existingFile`
         clock.setTime(existingFile.lastModified + batchDuration.milliseconds)
         val batchCounter = new BatchCounter(ssc)
@@ -310,8 +310,8 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         input.foreach { i =>
           val file = new File(testDir, i.toString)
           Files.write(i + "\n", file, Charset.forName("UTF-8"))
-          assert(file.setLastModified(clock.getTime()))
-          assert(file.lastModified === clock.getTime())
+          assert(file.setLastModified(clock.getTimeMillis()))
+          assert(file.lastModified === clock.getTimeMillis())
           logInfo("Created file " + file)
           // Advance the clock after creating the file to avoid a race when
           // setting its modification time
