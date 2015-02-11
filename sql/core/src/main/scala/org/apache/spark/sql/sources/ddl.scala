@@ -118,11 +118,20 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
             throw new DDLException(
               "a CREATE TABLE AS SELECT statement does not allow column definitions.")
           }
+          // When IF NOT EXISTS clause appears in the query, the save mode will be ignore.
+          val mode = if (allowExisting.isDefined) {
+            SaveMode.Ignore
+          } else if (temp.isDefined) {
+            SaveMode.Overwrite
+          } else {
+            SaveMode.ErrorIfExists
+          }
+
           CreateTableUsingAsSelect(tableName,
             provider,
             temp.isDefined,
+            mode,
             opts,
-            allowExisting.isDefined,
             query.get)
         } else {
           val userSpecifiedSchema = columns.flatMap(fields => Some(StructType(fields)))
@@ -132,7 +141,8 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
             provider,
             temp.isDefined,
             opts,
-            allowExisting.isDefined)
+            allowExisting.isDefined,
+            managedIfNoPath = false)
         }
       }
   )
@@ -263,6 +273,7 @@ object ResolvedDataSource {
   def apply(
       sqlContext: SQLContext,
       provider: String,
+      mode: SaveMode,
       options: Map[String, String],
       data: DataFrame): ResolvedDataSource = {
     val loader = Utils.getContextOrSparkClassLoader
@@ -276,7 +287,7 @@ object ResolvedDataSource {
 
     val relation = clazz.newInstance match {
       case dataSource: CreatableRelationProvider =>
-        dataSource.createRelation(sqlContext, options, data)
+        dataSource.createRelation(sqlContext, mode, options, data)
       case _ =>
         sys.error(s"${clazz.getCanonicalName} does not allow create table as select.")
     }
@@ -306,28 +317,40 @@ private[sql] case class DescribeCommand(
       new MetadataBuilder().putString("comment", "comment of the column").build())())
 }
 
+/**
+  * Used to represent the operation of create table using a data source.
+  * @param tableName
+  * @param userSpecifiedSchema
+  * @param provider
+  * @param temporary
+  * @param options
+  * @param allowExisting If it is true, we will do nothing when the table already exists.
+ *                      If it is false, an exception will be thrown
+  * @param managedIfNoPath
+  */
 private[sql] case class CreateTableUsing(
     tableName: String,
     userSpecifiedSchema: Option[StructType],
     provider: String,
     temporary: Boolean,
     options: Map[String, String],
-    allowExisting: Boolean) extends Command
+    allowExisting: Boolean,
+    managedIfNoPath: Boolean) extends Command
 
 private[sql] case class CreateTableUsingAsSelect(
     tableName: String,
     provider: String,
     temporary: Boolean,
+    mode: SaveMode,
     options: Map[String, String],
-    allowExisting: Boolean,
     query: String) extends Command
 
 private[sql] case class CreateTableUsingAsLogicalPlan(
     tableName: String,
     provider: String,
     temporary: Boolean,
+    mode: SaveMode,
     options: Map[String, String],
-    allowExisting: Boolean,
     query: LogicalPlan) extends Command
 
 private [sql] case class CreateTempTableUsing(
@@ -347,12 +370,13 @@ private [sql] case class CreateTempTableUsing(
 private [sql] case class CreateTempTableUsingAsSelect(
     tableName: String,
     provider: String,
+    mode: SaveMode,
     options: Map[String, String],
     query: LogicalPlan) extends RunnableCommand {
 
   def run(sqlContext: SQLContext) = {
     val df = DataFrame(sqlContext, query)
-    val resolved = ResolvedDataSource(sqlContext, provider, options, df)
+    val resolved = ResolvedDataSource(sqlContext, provider, mode, options, df)
     sqlContext.registerRDDAsTable(
       DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
 
@@ -363,7 +387,7 @@ private [sql] case class CreateTempTableUsingAsSelect(
 /**
  * Builds a map in which keys are case insensitive
  */
-protected class CaseInsensitiveMap(map: Map[String, String]) extends Map[String, String]
+protected[sql] class CaseInsensitiveMap(map: Map[String, String]) extends Map[String, String]
   with Serializable {
 
   val baseMap = map.map(kv => kv.copy(_1 = kv._1.toLowerCase))

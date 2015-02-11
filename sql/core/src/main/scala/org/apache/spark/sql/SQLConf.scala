@@ -50,7 +50,7 @@ private[spark] object SQLConf {
   val THRIFTSERVER_POOL = "spark.sql.thriftserver.scheduler.pool"
 
   // This is used to set the default data source
-  val DEFAULT_DATA_SOURCE_NAME = "spark.sql.default.datasource"
+  val DEFAULT_DATA_SOURCE_NAME = "spark.sql.sources.default"
 
   // Whether to perform eager analysis on a DataFrame.
   val DATAFRAME_EAGER_ANALYSIS = "spark.sql.dataframe.eagerAnalysis"

@@ -28,13 +28,14 @@ import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.sql.catalyst.{SqlParser, ScalaReflection}
-import org.apache.spark.sql.catalyst.analysis.{ResolvedStar, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{EliminateAnalysisOperators, ResolvedStar, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, EvaluatePython}
 import org.apache.spark.sql.json.JsonRDD
-import org.apache.spark.sql.sources.{ResolvedDataSource, CreateTableUsingAsLogicalPlan}
+import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{NumericType, StructType}
 
 
@@ -341,68 +342,34 @@ private[sql] class DataFrameImpl protected[sql](
 
   override def saveAsParquetFile(path: String): Unit = {
     if (sqlContext.conf.parquetUseDataSourceApi) {
-      save("org.apache.spark.sql.parquet", "path" -> path)
+      save("org.apache.spark.sql.parquet", SaveMode.ErrorIfExists, Map("path" -> path))
     } else {
       sqlContext.executePlan(WriteToFile(path, logicalPlan)).toRdd
     }
   }
 
-  override def saveAsTable(tableName: String): Unit = {
-    val dataSourceName = sqlContext.conf.defaultDataSourceName
+  override def saveAsTable(
+      tableName: String,
+      source: String,
+      mode: SaveMode,
+      options: Map[String, String]): Unit = {
     val cmd =
       CreateTableUsingAsLogicalPlan(
         tableName,
-        dataSourceName,
+        source,
         temporary = false,
-        Map.empty,
-        allowExisting = false,
+        mode,
+        options,
         logicalPlan)
 
     sqlContext.executePlan(cmd).toRdd
   }
 
-  override def saveAsTable(
-      tableName: String,
-      dataSourceName: String,
-      option: (String, String),
-      options: (String, String)*): Unit = {
-    val cmd =
-      CreateTableUsingAsLogicalPlan(
-        tableName,
-        dataSourceName,
-        temporary = false,
-        (option +: options).toMap,
-        allowExisting = false,
-        logicalPlan)
-
-    sqlContext.executePlan(cmd).toRdd
-  }
-
-  override def saveAsTable(
-      tableName: String,
-      dataSourceName: String,
-      options: java.util.Map[String, String]): Unit = {
-    val opts = options.toSeq
-    saveAsTable(tableName, dataSourceName, opts.head, opts.tail:_*)
-  }
-
-  override def save(path: String): Unit = {
-    val dataSourceName = sqlContext.conf.defaultDataSourceName
-    save(dataSourceName, "path" -> path)
-  }
-
   override def save(
-      dataSourceName: String,
-      option: (String, String),
-      options: (String, String)*): Unit = {
-    ResolvedDataSource(sqlContext, dataSourceName, (option +: options).toMap, this)
-  }
-
-  override def save(
-      dataSourceName: String,
-      options: java.util.Map[String, String]): Unit = {
-    val opts = options.toSeq
-    save(dataSourceName, opts.head, opts.tail:_*)
+      source: String,
+      mode: SaveMode,
+      options: Map[String, String]): Unit = {
+    ResolvedDataSource(sqlContext, source, mode, options, this)
   }
 
   override def insertInto(tableName: String, overwrite: Boolean): Unit = {

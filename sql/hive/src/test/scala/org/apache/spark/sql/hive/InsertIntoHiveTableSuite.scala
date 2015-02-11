@@ -19,7 +19,11 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
+import org.scalatest.BeforeAndAfter
+
 import com.google.common.io.Files
+
+import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.{QueryTest, _}
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.types._
@@ -29,15 +33,22 @@ import org.apache.spark.sql.hive.test.TestHive._
 
 case class TestData(key: Int, value: String)
 
-class InsertIntoHiveTableSuite extends QueryTest {
+class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter {
   import org.apache.spark.sql.hive.test.TestHive.implicits._
 
   val testData = TestHive.sparkContext.parallelize(
     (1 to 100).map(i => TestData(i, i.toString)))
-  testData.registerTempTable("testData")
+
+  before {
+    // Since every we are doing tests for DDL statements,
+    // it is better to reset before every test.
+    TestHive.reset()
+    // Register the testData, which will be used in every test.
+    testData.registerTempTable("testData")
+  }
 
   test("insertInto() HiveTable") {
-    createTable[TestData]("createAndInsertTest")
+    sql("CREATE TABLE createAndInsertTest (key int, value string)")
 
     // Add some data.
     testData.insertInto("createAndInsertTest")
@@ -68,16 +79,18 @@ class InsertIntoHiveTableSuite extends QueryTest {
   }
 
   test("Double create fails when allowExisting = false") {
-    createTable[TestData]("doubleCreateAndInsertTest")
+    sql("CREATE TABLE doubleCreateAndInsertTest (key int, value string)")
 
-    intercept[org.apache.hadoop.hive.ql.metadata.HiveException] {
-      createTable[TestData]("doubleCreateAndInsertTest", allowExisting = false)
-    }
+    val message = intercept[QueryExecutionException] {
+      sql("CREATE TABLE doubleCreateAndInsertTest (key int, value string)")
+    }.getMessage
+
+    println("message!!!!" + message)
   }
 
   test("Double create does not fail when allowExisting = true") {
-    createTable[TestData]("createAndInsertTest")
-    createTable[TestData]("createAndInsertTest")
+    sql("CREATE TABLE doubleCreateAndInsertTest (key int, value string)")
+    sql("CREATE TABLE IF NOT EXISTS doubleCreateAndInsertTest (key int, value string)")
   }
 
   test("SPARK-4052: scala.collection.Map as value type of MapType") {
@@ -98,7 +111,7 @@ class InsertIntoHiveTableSuite extends QueryTest {
   }
 
   test("SPARK-4203:random partition directory order") {
-    createTable[TestData]("tmp_table")
+    sql("CREATE TABLE tmp_table (key int, value string)")
     val tmpDir = Files.createTempDir()
     sql(s"CREATE TABLE table_with_partition(c1 string) PARTITIONED by (p1 string,p2 string,p3 string,p4 string,p5 string) location '${tmpDir.toURI.toString}'  ")
     sql("INSERT OVERWRITE TABLE table_with_partition  partition (p1='a',p2='b',p3='c',p4='c',p5='1') SELECT 'blarr' FROM tmp_table")
