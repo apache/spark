@@ -85,7 +85,10 @@ class KafkaRDDSuite extends KafkaStreamSuiteBase with BeforeAndAfterAll {
     val ranges = rdd.get.asInstanceOf[HasOffsetRanges]
       .offsetRanges.map(o => TopicAndPartition(o.topic, o.partition) -> o.untilOffset).toMap
 
-    kc.setConsumerOffsets(kafkaParams("group.id"), ranges)
+    kc.setConsumerOffsets(kafkaParams("group.id"), ranges).fold(
+      err => throw new Exception(err.mkString("\n")),
+      _ => ()
+    )
 
     // this is the "0 messages" case
     val rdd2 = getRdd(kc, Set(topic))

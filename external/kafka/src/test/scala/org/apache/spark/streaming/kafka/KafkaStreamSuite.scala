@@ -88,8 +88,7 @@ abstract class KafkaStreamSuiteBase extends FunSuite with Eventually with Loggin
     var bindSuccess: Boolean = false
     while(!bindSuccess) {
       try {
-        val brokerProps = getBrokerConfig()
-        brokerConf = new KafkaConfig(brokerProps)
+        brokerConf = new KafkaConfig(brokerConfig)
         server = new KafkaServer(brokerConf)
         server.startup()
         logInfo("==================== Kafka Broker Started ====================")
@@ -137,7 +136,7 @@ abstract class KafkaStreamSuiteBase extends FunSuite with Eventually with Loggin
   def createTopic(topic: String) {
     AdminUtils.createTopic(zkClient, topic, 1, 1)
     // wait until metadata is propagated
-    waitUntilMetadataIsPropagated(topic, 0)
+    waitUntilMetadataIsPropagated(Seq(server), topic, 0)
     logInfo(s"==================== Topic $topic Created ====================")
   }
 
@@ -147,13 +146,13 @@ abstract class KafkaStreamSuiteBase extends FunSuite with Eventually with Loggin
   }
   
   def sendMessages(topic: String, messages: Array[String]) {
-    producer = new Producer[String, String](new ProducerConfig(getProducerConfig()))
+    producer = new Producer[String, String](new ProducerConfig(producerConfig))
     producer.send(messages.map { new KeyedMessage[String, String](topic, _ ) }: _*)
     producer.close()
     logInfo(s"==================== Sent Messages: ${messages.mkString(", ")} ====================")
   }
 
-  private def getBrokerConfig(): Properties = {
+  private def brokerConfig: Properties = {
     val props = new Properties()
     props.put("broker.id", "0")
     props.put("host.name", "localhost")
@@ -165,7 +164,7 @@ abstract class KafkaStreamSuiteBase extends FunSuite with Eventually with Loggin
     props
   }
 
-  private def getProducerConfig(): Properties = {
+  private def producerConfig: Properties = {
     val brokerAddr = brokerConf.hostName + ":" + brokerConf.port
     val props = new Properties()
     props.put("metadata.broker.list", brokerAddr)
@@ -173,13 +172,20 @@ abstract class KafkaStreamSuiteBase extends FunSuite with Eventually with Loggin
     props
   }
 
-  private def waitUntilMetadataIsPropagated(topic: String, partition: Int) {
-    eventually(timeout(10000 milliseconds), interval(100 milliseconds)) {
-      assert(
-        server.apis.metadataCache.containsTopicAndPartition(topic, partition),
-        s"Partition [$topic, $partition] metadata not propagated after timeout"
-      )
+  private def waitUntilMetadataIsPropagated(servers: Seq[KafkaServer], topic: String, partition: Int): Int = {
+    var leader: Int = -1
+    eventually(timeout(1000 milliseconds), interval(100 milliseconds)) {
+      assert(servers.forall { server =>
+        val partitionStateOpt = server.apis.metadataCache.getPartitionInfo(topic, partition)
+        partitionStateOpt match {
+          case Some(partitionState) =>
+            leader = partitionState.leaderIsrAndControllerEpoch.leaderAndIsr.leader
+            leader >= 0 // is valid broker id
+          case _ => false
+        }
+      }, s"Partition [$topic, $partition] metadata not propagated after timeout")
     }
+    leader
   }
 
   class EmbeddedZookeeper(val zkConnect: String) {
