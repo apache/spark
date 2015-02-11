@@ -180,7 +180,7 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
     def save(model: MatrixFactorizationModel, path: String): Unit = {
       val sc = model.userFeatures.sparkContext
       val sqlContext = new SQLContext(sc)
-      import sqlContext.implicits.createDataFrame
+      import sqlContext.implicits._
       val metadata = (thisClassName, thisFormatVersion, model.rank)
       val metadataRDD = sc.parallelize(Seq(metadata), 1).toDataFrame("class", "version", "rank")
       metadataRDD.toJSON.saveAsTextFile(metadataPath(path))
