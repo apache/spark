@@ -20,9 +20,10 @@ package org.apache.spark.sql.execution
 import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.types.StringType
 import org.apache.spark.sql.{DataFrame, SQLConf, SQLContext}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.expressions.{Row, Attribute}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Row, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import scala.collection.mutable.ArrayBuffer
@@ -116,7 +117,9 @@ case class SetCommand(
 @DeveloperApi
 case class ExplainCommand(
     logicalPlan: LogicalPlan,
-    override val output: Seq[Attribute], extended: Boolean = false) extends RunnableCommand {
+    override val output: Seq[Attribute] =
+      Seq(AttributeReference("plan", StringType, nullable = false)()),
+    extended: Boolean = false) extends RunnableCommand {
 
   // Run through the optimizer to generate the physical plan.
   override def run(sqlContext: SQLContext) = try {
