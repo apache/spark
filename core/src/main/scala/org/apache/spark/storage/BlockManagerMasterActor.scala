@@ -66,8 +66,8 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
   }
 
   override def receiveWithLogging = {
-    case RegisterBlockManager(blockManagerId, maxMemSize, slaveActor) =>
-      register(blockManagerId, maxMemSize, slaveActor)
+    case RegisterBlockManager(blockManagerId, maxMemSize, slaveActor, executoLogUrl) =>
+      register(blockManagerId, maxMemSize, slaveActor, executoLogUrl)
       sender ! true
 
     case UpdateBlockInfo(
@@ -325,7 +325,11 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     ).map(_.flatten.toSeq)
   }
 
-  private def register(id: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
+  private def register(
+      id: BlockManagerId,
+      maxMemSize: Long,
+      slaveActor: ActorRef,
+      executorLogUrl: String) {
     val time = System.currentTimeMillis()
     if (!blockManagerInfo.contains(id)) {
       blockManagerIdByExecutor.get(id.executorId) match {
@@ -344,7 +348,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       blockManagerInfo(id) = new BlockManagerInfo(
         id, System.currentTimeMillis(), maxMemSize, slaveActor)
     }
-    listenerBus.post(SparkListenerBlockManagerAdded(time, id, maxMemSize))
+    listenerBus.post(SparkListenerBlockManagerAdded(time, id, maxMemSize, executorLogUrl))
   }
 
   private def updateBlockInfo(

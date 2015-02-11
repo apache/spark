@@ -82,8 +82,17 @@ class ExecutorRunnable(
     credentials.writeTokenStorageToStream(dob)
     ctx.setTokens(ByteBuffer.wrap(dob.getData()))
 
+    var nnAddres = yarnConf.get(YarnConfiguration.NM_WEBAPP_ADDRESS, 
+      YarnConfiguration.DEFAULT_NM_WEBAPP_ADDRESS)
+    if(nnAddres.startsWith("0.0.0.0:")) {
+      val port = nnAddres.substring(8)
+      nnAddres = s"$hostname:$port"
+    }
+    val containerId = container.getId()
+    val containerLogUrl = s"https://$nnAddres/node/containerlogs/$containerId/"
+
     val commands = prepareCommand(masterAddress, slaveId, hostname, executorMemory, executorCores,
-      appId, localResources)
+      appId, localResources, containerLogUrl)
 
     logInfo(s"Setting up executor with environment: $env")
     logInfo("Setting up executor with commands: " + commands)
@@ -118,7 +127,8 @@ class ExecutorRunnable(
       executorMemory: Int,
       executorCores: Int,
       appId: String,
-      localResources: HashMap[String, LocalResource]): List[String] = {
+      localResources: HashMap[String, LocalResource],
+      executorLogUrl: String): List[String] = {
     // Extra options for the JVM
     val javaOpts = ListBuffer[String]()
 
@@ -200,6 +210,8 @@ class ExecutorRunnable(
         hostname.toString,
         executorCores.toString,
         appId,
+        "executorLogUrl",
+        executorLogUrl,
         "1>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout",
         "2>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr")
 

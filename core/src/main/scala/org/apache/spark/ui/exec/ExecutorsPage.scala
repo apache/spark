@@ -40,7 +40,8 @@ private case class ExecutorSummaryInfo(
     totalInputBytes: Long,
     totalShuffleRead: Long,
     totalShuffleWrite: Long,
-    maxMemory: Long)
+    maxMemory: Long,
+    executorLogUrl: String)
 
 private[ui] class ExecutorsPage(
     parent: ExecutorsTab,
@@ -80,6 +81,7 @@ private[ui] class ExecutorsPage(
             </span>
           </th>
           {if (threadDumpEnabled) <th class="sorttable_nosort">Thread Dump</th> else Seq.empty}
+          <th>Log</th>
         </thead>
         <tbody>
           {execInfoSorted.map(execRow)}
@@ -148,6 +150,9 @@ private[ui] class ExecutorsPage(
           Seq.empty
         }
       }
+      <td>
+        <a href={info.executorLogUrl}>Log</a>
+      </td>
     </tr>
   }
 
@@ -168,6 +173,7 @@ private[ui] class ExecutorsPage(
     val totalInputBytes = listener.executorToInputBytes.getOrElse(execId, 0L)
     val totalShuffleRead = listener.executorToShuffleRead.getOrElse(execId, 0L)
     val totalShuffleWrite = listener.executorToShuffleWrite.getOrElse(execId, 0L)
+    val executorLogUrl = status.executorLogUrl
 
     new ExecutorSummaryInfo(
       execId,
@@ -183,7 +189,8 @@ private[ui] class ExecutorsPage(
       totalInputBytes,
       totalShuffleRead,
       totalShuffleWrite,
-      maxMem
+      maxMem,
+      executorLogUrl
     )
   }
 }

@@ -46,9 +46,13 @@ class BlockManagerMaster(
   }
 
   /** Register the BlockManager's id with the driver. */
-  def registerBlockManager(blockManagerId: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
+  def registerBlockManager(
+      blockManagerId: BlockManagerId,
+      maxMemSize: Long,
+      slaveActor: ActorRef,
+      executorLogUrl: String) {
     logInfo("Trying to register BlockManager")
-    tell(RegisterBlockManager(blockManagerId, maxMemSize, slaveActor))
+    tell(RegisterBlockManager(blockManagerId, maxMemSize, slaveActor, executorLogUrl))
     logInfo("Registered BlockManager")
   }
 

@@ -52,7 +52,8 @@ private[spark] object BlockManagerMessages {
   case class RegisterBlockManager(
       blockManagerId: BlockManagerId,
       maxMemSize: Long,
-      sender: ActorRef)
+      sender: ActorRef,
+      executoLogUrl: String)
     extends ToBlockManagerMaster
 
   case class UpdateBlockInfo(

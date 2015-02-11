@@ -38,7 +38,8 @@ private[spark] class CoarseGrainedExecutorBackend(
     executorId: String,
     hostPort: String,
     cores: Int,
-    env: SparkEnv)
+    env: SparkEnv,
+    executorLogUrl: String)
   extends Actor with ActorLogReceive with ExecutorBackend with Logging {
 
   Utils.checkHostPort(hostPort, "Expected hostport")
@@ -57,7 +58,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     case RegisteredExecutor =>
       logInfo("Successfully registered with driver")
       val (hostname, _) = Utils.parseHostPort(hostPort)
-      executor = new Executor(executorId, hostname, env, isLocal = false)
+      executor = new Executor(executorId, hostname, env, isLocal = false, executorLogUrl)
 
     case RegisterExecutorFailed(message) =>
       logError("Slave registration failed: " + message)
@@ -111,7 +112,8 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       hostname: String,
       cores: Int,
       appId: String,
-      workerUrl: Option[String]) {
+      workerUrl: Option[String],
+      executorLogUrl: String) {
 
     SignalLogger.register(log)
 
@@ -156,7 +158,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       val sparkHostPort = hostname + ":" + boundPort
       env.actorSystem.actorOf(
         Props(classOf[CoarseGrainedExecutorBackend],
-          driverUrl, executorId, sparkHostPort, cores, env),
+          driverUrl, executorId, sparkHostPort, cores, env, executorLogUrl),
         name = "Executor")
       workerUrl.foreach { url =>
         env.actorSystem.actorOf(Props(classOf[WorkerWatcher], url), name = "WorkerWatcher")
@@ -171,15 +173,17 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         System.err.println(
           // Worker url is used in spark standalone mode to enforce fate-sharing with worker
           "Usage: CoarseGrainedExecutorBackend <driverUrl> <executorId> <hostname> " +
-          "<cores> <appid> [<workerUrl>] ")
+          "<cores> <appid> [<workerUrl>] [executorLogUrl <executorLogUrl>]")
         System.exit(1)
 
       // NB: These arguments are provided by SparkDeploySchedulerBackend (for standalone mode)
       // and CoarseMesosSchedulerBackend (for mesos mode).
       case 5 =>
-        run(args(0), args(1), args(2), args(3).toInt, args(4), None)
+        run(args(0), args(1), args(2), args(3).toInt, args(4), None, "")
+      case 7 =>
+        run(args(0), args(1), args(2), args(3).toInt, args(4), None, args(6))
       case x if x > 5 =>
-        run(args(0), args(1), args(2), args(3).toInt, args(4), Some(args(5)))
+        run(args(0), args(1), args(2), args(3).toInt, args(4), Some(args(5)), "")
     }
   }
 }

@@ -43,7 +43,8 @@ private[spark] class Executor(
     executorId: String,
     executorHostname: String,
     env: SparkEnv,
-    isLocal: Boolean = false)
+    isLocal: Boolean = false,
+    executorLogUrl: String = "")
   extends Logging
 {
 
@@ -79,6 +80,7 @@ private[spark] class Executor(
 
   if (!isLocal) {
     env.metricsSystem.registerSource(executorSource)
+    env.blockManager.setExecutorLogUrl(executorLogUrl)
     env.blockManager.initialize(conf.getAppId)
   }
 

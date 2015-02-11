@@ -154,6 +154,7 @@ private[spark] class BlockManager(
   @volatile private var cachedPeers: Seq[BlockManagerId] = _
   private val peerFetchLock = new Object
   private var lastPeerFetchTime = 0L
+  private var executorLogUrl = ""
 
   /* The compression codec to use. Note that the "lazy" val is necessary because we want to delay
    * the initialization of the compression codec until it is first used. The reason is that a Spark
@@ -202,7 +203,7 @@ private[spark] class BlockManager(
       blockManagerId
     }
 
-    master.registerBlockManager(blockManagerId, maxMemory, slaveActor)
+    master.registerBlockManager(blockManagerId, maxMemory, slaveActor, executorLogUrl)
 
     // Register Executors' configuration with the local shuffle service, if one should exist.
     if (externalShuffleServiceEnabled && !blockManagerId.isDriver) {
@@ -256,6 +257,10 @@ private[spark] class BlockManager(
     }
   }
 
+  def setExecutorLogUrl(url: String): Unit = {
+    executorLogUrl = url
+  }
+  
   /**
    * Re-register with the master and report all blocks to it. This will be called by the heart beat
    * thread if our heartbeat to the block manager indicates that we were not registered.
@@ -265,7 +270,7 @@ private[spark] class BlockManager(
   def reregister(): Unit = {
     // TODO: We might need to rate limit re-registering.
     logInfo("BlockManager re-registering with master")
-    master.registerBlockManager(blockManagerId, maxMemory, slaveActor)
+    master.registerBlockManager(blockManagerId, maxMemory, slaveActor, executorLogUrl)
     reportAllBlocks()
   }
 

@@ -30,7 +30,10 @@ import org.apache.spark.annotation.DeveloperApi
  * class cannot mutate the source of the information. Accesses are not thread-safe.
  */
 @DeveloperApi
-class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
+class StorageStatus(
+    val blockManagerId: BlockManagerId,
+    val maxMem: Long, 
+    val executorLogUrl: String = "") {
 
   /**
    * Internal representation of the blocks stored in this block manager.
