@@ -27,8 +27,10 @@ import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.impl.DecisionTreeMetadata
 import org.apache.spark.mllib.tree.impurity.{Gini, Variance}
-import org.apache.spark.mllib.tree.model.Node
+import org.apache.spark.mllib.tree.model.{Node, RandomForestModel}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.util.Utils
+
 
 /**
  * Test suite for [[RandomForest]].
@@ -212,6 +214,26 @@ class RandomForestSuite extends FunSuite with MLlibTestSparkContext {
     assert(rf1.toDebugString != rf2.toDebugString)
   }
 
+  test("model save/load") {
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+
+    Array(Classification, Regression).foreach { algo =>
+      val trees = Range(0, 3).map(_ => DecisionTreeSuite.createModel(algo)).toArray
+      val model = new RandomForestModel(algo, trees)
+
+      // Save model, load it back, and compare.
+      try {
+        model.save(sc, path)
+        val sameModel = RandomForestModel.load(sc, path)
+        assert(model.algo == sameModel.algo)
+        model.trees.zip(sameModel.trees).foreach { case (treeA, treeB) =>
+          DecisionTreeSuite.checkEqual(treeA, treeB)
+        }
+      } finally {
+        Utils.deleteRecursively(tempDir)
+      }
+    }
+  }
+
 }
-
-

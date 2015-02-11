@@ -43,6 +43,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   private val originalTimeZone = TimeZone.getDefault
   private val originalLocale = Locale.getDefault
 
+  import org.apache.spark.sql.hive.test.TestHive.implicits._
+
   override def beforeAll() {
     TestHive.cacheTables = true
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
@@ -57,7 +59,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     Locale.setDefault(originalLocale)
   }
 
-  test("SPARK-4908: concurent hive native commands") {
+  test("SPARK-4908: concurrent hive native commands") {
     (1 to 100).par.map { _ =>
       sql("USE default")
       sql("SHOW TABLES")
@@ -200,6 +202,9 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("having no references",
     "SELECT key FROM src GROUP BY key HAVING COUNT(*) > 1")
 
+  createQueryTest("no from clause",
+    "SELECT 1, +1, -1")
+
   createQueryTest("boolean = number",
     """
       |SELECT
@@ -253,8 +258,30 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   createQueryTest("Cast Timestamp to Timestamp in UDF",
     """
-       | SELECT DATEDIFF(CAST(value AS timestamp), CAST('2002-03-21 00:00:00' AS timestamp))
-       | FROM src LIMIT 1
+      | SELECT DATEDIFF(CAST(value AS timestamp), CAST('2002-03-21 00:00:00' AS timestamp))
+      | FROM src LIMIT 1
+    """.stripMargin)
+
+  createQueryTest("Date comparison test 1",
+    """
+      | SELECT
+      | CAST(CAST('1970-01-01 22:00:00' AS timestamp) AS date) ==
+      | CAST(CAST('1970-01-01 23:00:00' AS timestamp) AS date)
+      | FROM src LIMIT 1
+    """.stripMargin)
+
+  createQueryTest("Date comparison test 2",
+    "SELECT CAST(CAST(0 AS timestamp) AS date) > CAST(0 AS timestamp) FROM src LIMIT 1")
+
+  createQueryTest("Date cast",
+    """
+      | SELECT
+      | CAST(CAST(0 AS timestamp) AS date),
+      | CAST(CAST(CAST(0 AS timestamp) AS date) AS string),
+      | CAST(0 AS timestamp),
+      | CAST(CAST(0 AS timestamp) AS string),
+      | CAST(CAST(CAST('1970-01-01 23:00:00' AS timestamp) AS date) AS timestamp)
+      | FROM src LIMIT 1
     """.stripMargin)
 
   createQueryTest("Simple Average",
@@ -583,9 +610,23 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assert(sql("select key from src having key > 490").collect().size < 100)
   }
 
+  test("SPARK-5383 alias for udfs with multi output columns") {
+    assert(
+      sql("select stack(2, key, value, key, value) as (a, b) from src limit 5")
+        .collect()
+        .size == 5)
+
+    assert(
+      sql("select a, b from (select stack(2, key, value, key, value) as (a, b) from src) t limit 5")
+        .collect()
+        .size == 5)
+  }
+
   test("SPARK-5367: resolve star expression in udf") {
     assert(sql("select concat(*) from src limit 5").collect().size == 5)
     assert(sql("select array(*) from src limit 5").collect().size == 5)
+    assert(sql("select concat(key, *) from src limit 5").collect().size == 5)
+    assert(sql("select array(key, *) from src limit 5").collect().size == 5)
   }
 
   test("Query Hive native command execution result") {
@@ -703,8 +744,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
     assertResult(
       Array(
-        Row("a", "IntegerType", null),
-        Row("b", "StringType", null))
+        Row("a", "int", ""),
+        Row("b", "string", ""))
     ) {
       sql("DESCRIBE test_describe_commands2")
         .select('col_name, 'data_type, 'comment)
@@ -816,6 +857,22 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
       assert(sql("SELECT * FROM dp_verify").collect() === Array(Row(value)))
     }
+  }
+
+  test("SPARK-5592: get java.net.URISyntaxException when dynamic partitioning") {
+    sql("""
+      |create table sc as select *
+      |from (select '2011-01-11', '2011-01-11+14:18:26' from src tablesample (1 rows)
+      |union all
+      |select '2011-01-11', '2011-01-11+15:18:26' from src tablesample (1 rows)
+      |union all
+      |select '2011-01-11', '2011-01-11+16:18:26' from src tablesample (1 rows) ) s
+    """.stripMargin)
+    sql("create table sc_part (key string) partitioned by (ts string) stored as rcfile")
+    sql("set hive.exec.dynamic.partition=true")
+    sql("set hive.exec.dynamic.partition.mode=nonstrict")
+    sql("insert overwrite table sc_part partition(ts) select * from sc")
+    sql("drop table sc_part")
   }
 
   test("Partition spec validation") {

@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.util.TimeZone
-
+import org.apache.spark.sql.test.TestSQLContext
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.Dsl._
@@ -26,24 +25,15 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types._
 
-/* Implicits */
 import org.apache.spark.sql.TestData._
-import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.test.TestSQLContext.{udf => _, _}
 
 
 class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   // Make sure the tables are loaded.
   TestData
 
-  var origZone: TimeZone = _
-  override protected def beforeAll() {
-    origZone = TimeZone.getDefault
-    TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
-  }
-
-  override protected def afterAll() {
-    TimeZone.setDefault(origZone)
-  }
+  import org.apache.spark.sql.test.TestSQLContext.implicits._
 
   test("SPARK-4625 support SORT BY in SimpleSQLParser & DSL") {
     checkAnswer(
@@ -143,26 +133,26 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
 
   test("SPARK-3173 Timestamp support in the parser") {
     checkAnswer(sql(
-      "SELECT time FROM timestamps WHERE time=CAST('1970-01-01 00:00:00.001' AS TIMESTAMP)"),
-      Row(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.001")))
+      "SELECT time FROM timestamps WHERE time=CAST('1969-12-31 16:00:00.001' AS TIMESTAMP)"),
+      Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.001")))
 
     checkAnswer(sql(
-      "SELECT time FROM timestamps WHERE time='1970-01-01 00:00:00.001'"),
-      Row(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.001")))
+      "SELECT time FROM timestamps WHERE time='1969-12-31 16:00:00.001'"),
+      Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.001")))
 
     checkAnswer(sql(
-      "SELECT time FROM timestamps WHERE '1970-01-01 00:00:00.001'=time"),
-      Row(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.001")))
+      "SELECT time FROM timestamps WHERE '1969-12-31 16:00:00.001'=time"),
+      Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.001")))
 
     checkAnswer(sql(
-      """SELECT time FROM timestamps WHERE time<'1970-01-01 00:00:00.003'
-          AND time>'1970-01-01 00:00:00.001'"""),
-      Row(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.002")))
+      """SELECT time FROM timestamps WHERE time<'1969-12-31 16:00:00.003'
+          AND time>'1969-12-31 16:00:00.001'"""),
+      Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.002")))
 
     checkAnswer(sql(
-      "SELECT time FROM timestamps WHERE time IN ('1970-01-01 00:00:00.001','1970-01-01 00:00:00.002')"),
-      Seq(Row(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.001")),
-        Row(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.002"))))
+      "SELECT time FROM timestamps WHERE time IN ('1969-12-31 16:00:00.001','1969-12-31 16:00:00.002')"),
+      Seq(Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.001")),
+        Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.002"))))
 
     checkAnswer(sql(
       "SELECT time FROM timestamps WHERE time='123'"),
@@ -294,6 +284,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(
       sql("SELECT * FROM mapData LIMIT 1"),
       mapData.collect().take(1).map(Row.fromTuple).toSeq)
+  }
+
+  test("date row") {
+    checkAnswer(sql(
+      """select cast("2015-01-28" as date) from testData limit 1"""),
+      Row(java.sql.Date.valueOf("2015-01-28"))
+    )
   }
 
   test("from follow multiple brackets") {
@@ -592,7 +589,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       ("1" :: "2" :: "3" :: "4" :: "A" :: "B" :: "C" :: "D" :: "E" :: "F" :: Nil).map(Row(_)))
     // Column type mismatches where a coercion is not possible, in this case between integer
     // and array types, trigger a TreeNodeException.
-    intercept[TreeNodeException[_]] {
+    intercept[AnalysisException] {
       sql("SELECT data FROM arrayData UNION SELECT 1 FROM arrayData").collect()
     }
   }
@@ -787,7 +784,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("SPARK-3371 Renaming a function expression with group by gives error") {
-    udf.register("len", (s: String) => s.length)
+    TestSQLContext.udf.register("len", (s: String) => s.length)
     checkAnswer(
       sql("SELECT len(value) as temp FROM testData WHERE key = 1 group by len(value)"),
       Row(1))

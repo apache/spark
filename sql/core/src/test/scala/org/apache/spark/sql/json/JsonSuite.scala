@@ -23,6 +23,7 @@ import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.Dsl._
 import org.apache.spark.sql.json.JsonRDD.{compatibleType, enforceCorrectType}
+import org.apache.spark.sql.sources.LogicalRelation
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.types._
@@ -67,14 +68,15 @@ class JsonSuite extends QueryTest {
     checkTypePromotion(Timestamp.valueOf(strTime), enforceCorrectType(strTime, TimestampType))
 
     val strDate = "2014-10-15"
-    checkTypePromotion(Date.valueOf(strDate), enforceCorrectType(strDate, DateType))
+    checkTypePromotion(
+      DateUtils.fromJavaDate(Date.valueOf(strDate)), enforceCorrectType(strDate, DateType))
 
     val ISO8601Time1 = "1970-01-01T01:00:01.0Z"
     checkTypePromotion(new Timestamp(3601000), enforceCorrectType(ISO8601Time1, TimestampType))
-    checkTypePromotion(new Date(3601000), enforceCorrectType(ISO8601Time1, DateType))
+    checkTypePromotion(DateUtils.millisToDays(3601000), enforceCorrectType(ISO8601Time1, DateType))
     val ISO8601Time2 = "1970-01-01T02:00:01-01:00"
     checkTypePromotion(new Timestamp(10801000), enforceCorrectType(ISO8601Time2, TimestampType))
-    checkTypePromotion(new Date(10801000), enforceCorrectType(ISO8601Time2, DateType))
+    checkTypePromotion(DateUtils.millisToDays(10801000), enforceCorrectType(ISO8601Time2, DateType))
   }
 
   test("Get compatible type") {
@@ -340,21 +342,19 @@ class JsonSuite extends QueryTest {
     )
   }
 
-  ignore("Complex field and type inferring (Ignored)") {
+  test("GetField operation on complex data type") {
     val jsonDF = jsonRDD(complexFieldAndType1)
     jsonDF.registerTempTable("jsonTable")
 
-    // Right now, "field1" and "field2" are treated as aliases. We should fix it.
     checkAnswer(
       sql("select arrayOfStruct[0].field1, arrayOfStruct[0].field2 from jsonTable"),
       Row(true, "str1")
     )
 
-    // Right now, the analyzer cannot resolve arrayOfStruct.field1 and arrayOfStruct.field2.
     // Getting all values of a specific field from an array of structs.
     checkAnswer(
       sql("select arrayOfStruct.field1, arrayOfStruct.field2 from jsonTable"),
-      Row(Seq(true, false), Seq("str1", null))
+      Row(Seq(true, false, null), Seq("str1", null, null))
     )
   }
 
@@ -824,8 +824,8 @@ class JsonSuite extends QueryTest {
     df1.registerTempTable("applySchema1")
     val df2 = df1.toDataFrame
     val result = df2.toJSON.collect()
-    assert(result(0) == "{\"f1\":1,\"f2\":\"A1\",\"f3\":true,\"f4\":[\"1\",\" A1\",\" true\",\" null\"]}")
-    assert(result(3) == "{\"f1\":4,\"f2\":\"D4\",\"f3\":true,\"f4\":[\"4\",\" D4\",\" true\",\" 2147483644\"],\"f5\":2147483644}")
+    assert(result(0) === "{\"f1\":1,\"f2\":\"A1\",\"f3\":true,\"f4\":[\"1\",\" A1\",\" true\",\" null\"]}")
+    assert(result(3) === "{\"f1\":4,\"f2\":\"D4\",\"f3\":true,\"f4\":[\"4\",\" D4\",\" true\",\" 2147483644\"],\"f5\":2147483644}")
 
     val schema2 = StructType(
       StructField("f1", StructType(
@@ -846,8 +846,8 @@ class JsonSuite extends QueryTest {
     val df4 = df3.toDataFrame
     val result2 = df4.toJSON.collect()
 
-    assert(result2(1) == "{\"f1\":{\"f11\":2,\"f12\":false},\"f2\":{\"B2\":null}}")
-    assert(result2(3) == "{\"f1\":{\"f11\":4,\"f12\":true},\"f2\":{\"D4\":2147483644}}")
+    assert(result2(1) === "{\"f1\":{\"f11\":2,\"f12\":false},\"f2\":{\"B2\":null}}")
+    assert(result2(3) === "{\"f1\":{\"f11\":4,\"f12\":true},\"f2\":{\"D4\":2147483644}}")
 
     val jsonDF = jsonRDD(primitiveFieldAndType)
     val primTable = jsonRDD(jsonDF.toJSON)
@@ -922,6 +922,30 @@ class JsonSuite extends QueryTest {
       sql("select structWithArrayFields.field1[1], structWithArrayFields.field2[3] from complexTable"),
       Row(5, null)
     )
+  }
 
+  test("JSONRelation equality test") {
+    val relation1 =
+      JSONRelation("path", 1.0, Some(StructType(StructField("a", IntegerType, true) :: Nil)))(null)
+    val logicalRelation1 = LogicalRelation(relation1)
+    val relation2 =
+      JSONRelation("path", 0.5, Some(StructType(StructField("a", IntegerType, true) :: Nil)))(
+        org.apache.spark.sql.test.TestSQLContext)
+    val logicalRelation2 = LogicalRelation(relation2)
+    val relation3 =
+      JSONRelation("path", 1.0, Some(StructType(StructField("b", StringType, true) :: Nil)))(null)
+    val logicalRelation3 = LogicalRelation(relation3)
+
+    assert(relation1 === relation2)
+    assert(logicalRelation1.sameResult(logicalRelation2),
+      s"$logicalRelation1 and $logicalRelation2 should be considered having the same result.")
+
+    assert(relation1 !== relation3)
+    assert(!logicalRelation1.sameResult(logicalRelation3),
+      s"$logicalRelation1 and $logicalRelation3 should be considered not having the same result.")
+
+    assert(relation2 !== relation3)
+    assert(!logicalRelation2.sameResult(logicalRelation3),
+      s"$logicalRelation2 and $logicalRelation3 should be considered not having the same result.")
   }
 }

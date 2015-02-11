@@ -137,15 +137,18 @@ We use the scala-maven-plugin which supports incremental and continuous compilat
 
 should run continuous compilation (i.e. wait for changes). However, this has not been tested
 extensively. A couple of gotchas to note:
+
 * it only scans the paths `src/main` and `src/test` (see
 [docs](http://scala-tools.org/mvnsites/maven-scala-plugin/usage_cc.html)), so it will only work
 from within certain submodules that have that structure.
+
 * you'll typically need to run `mvn install` from the project root for compilation within
 specific submodules to work; this is because submodules that depend on other submodules do so via
 the `spark-parent` module).
 
 Thus, the full flow for running continuous-compilation of the `core` submodule may look more like:
- ```
+
+```
  $ mvn install
  $ cd core
  $ mvn scala:cc

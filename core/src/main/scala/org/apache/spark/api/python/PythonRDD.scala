@@ -316,6 +316,7 @@ private object SpecialLengths {
   val PYTHON_EXCEPTION_THROWN = -2
   val TIMING_DATA = -3
   val END_OF_STREAM = -4
+  val NULL = -5
 }
 
 private[spark] object PythonRDD extends Logging {
@@ -374,54 +375,25 @@ private[spark] object PythonRDD extends Logging {
   }
 
   def writeIteratorToStream[T](iter: Iterator[T], dataOut: DataOutputStream) {
-    // The right way to implement this would be to use TypeTags to get the full
-    // type of T.  Since I don't want to introduce breaking changes throughout the
-    // entire Spark API, I have to use this hacky approach:
-    if (iter.hasNext) {
-      val first = iter.next()
-      val newIter = Seq(first).iterator ++ iter
-      first match {
-        case arr: Array[Byte] =>
-          newIter.asInstanceOf[Iterator[Array[Byte]]].foreach { bytes =>
-            dataOut.writeInt(bytes.length)
-            dataOut.write(bytes)
-          }
-        case string: String =>
-          newIter.asInstanceOf[Iterator[String]].foreach { str =>
-            writeUTF(str, dataOut)
-          }
-        case stream: PortableDataStream =>
-          newIter.asInstanceOf[Iterator[PortableDataStream]].foreach { stream =>
-            val bytes = stream.toArray()
-            dataOut.writeInt(bytes.length)
-            dataOut.write(bytes)
-          }
-        case (key: String, stream: PortableDataStream) =>
-          newIter.asInstanceOf[Iterator[(String, PortableDataStream)]].foreach {
-            case (key, stream) =>
-              writeUTF(key, dataOut)
-              val bytes = stream.toArray()
-              dataOut.writeInt(bytes.length)
-              dataOut.write(bytes)
-          }
-        case (key: String, value: String) =>
-          newIter.asInstanceOf[Iterator[(String, String)]].foreach {
-            case (key, value) =>
-              writeUTF(key, dataOut)
-              writeUTF(value, dataOut)
-          }
-        case (key: Array[Byte], value: Array[Byte]) =>
-          newIter.asInstanceOf[Iterator[(Array[Byte], Array[Byte])]].foreach {
-            case (key, value) =>
-              dataOut.writeInt(key.length)
-              dataOut.write(key)
-              dataOut.writeInt(value.length)
-              dataOut.write(value)
-          }
-        case other =>
-          throw new SparkException("Unexpected element type " + first.getClass)
-      }
+
+    def write(obj: Any): Unit = obj match {
+      case null =>
+        dataOut.writeInt(SpecialLengths.NULL)
+      case arr: Array[Byte] =>
+        dataOut.writeInt(arr.length)
+        dataOut.write(arr)
+      case str: String =>
+        writeUTF(str, dataOut)
+      case stream: PortableDataStream =>
+        write(stream.toArray())
+      case (key, value) =>
+        write(key)
+        write(value)
+      case other =>
+        throw new SparkException("Unexpected element type " + other.getClass)
     }
+
+    iter.foreach(write)
   }
 
   /**

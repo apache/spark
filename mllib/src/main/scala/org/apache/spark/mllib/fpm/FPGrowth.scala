@@ -18,38 +18,66 @@
 package org.apache.spark.mllib.fpm
 
 import java.{util => ju}
+import java.lang.{Iterable => JavaIterable}
 
 import scala.collection.mutable
+import scala.collection.JavaConverters._
+import scala.reflect.ClassTag
 
-import org.apache.spark.{SparkException, HashPartitioner, Logging, Partitioner}
+import org.apache.spark.{HashPartitioner, Logging, Partitioner, SparkException}
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.api.java.{JavaPairRDD, JavaRDD}
+import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
-class FPGrowthModel(val freqItemsets: RDD[(Array[String], Long)]) extends Serializable
+/**
+ * :: Experimental ::
+ *
+ * Model trained by [[FPGrowth]], which holds frequent itemsets.
+ * @param freqItemsets frequent itemset, which is an RDD of (itemset, frequency) pairs
+ * @tparam Item item type
+ */
+@Experimental
+class FPGrowthModel[Item: ClassTag](
+    val freqItemsets: RDD[(Array[Item], Long)]) extends Serializable {
+
+  /** Returns frequent itemsets as a [[org.apache.spark.api.java.JavaPairRDD]]. */
+  def javaFreqItemsets(): JavaPairRDD[Array[Item], java.lang.Long] = {
+    JavaPairRDD.fromRDD(freqItemsets).asInstanceOf[JavaPairRDD[Array[Item], java.lang.Long]]
+  }
+}
 
 /**
- * This class implements Parallel FP-growth algorithm to do frequent pattern matching on input data.
- * Parallel FPGrowth (PFP) partitions computation in such a way that each machine executes an
- * independent group of mining tasks. More detail of this algorithm can be found at
- * [[http://dx.doi.org/10.1145/1454008.1454027, PFP]], and the original FP-growth paper can be
- * found at [[http://dx.doi.org/10.1145/335191.335372, FP-growth]]
+ * :: Experimental ::
+ *
+ * A parallel FP-growth algorithm to mine frequent itemsets. The algorithm is described in
+ * [[http://dx.doi.org/10.1145/1454008.1454027 Li et al., PFP: Parallel FP-Growth for Query
+ *  Recommendation]]. PFP distributes computation in such a way that each worker executes an
+ * independent group of mining tasks. The FP-Growth algorithm is described in
+ * [[http://dx.doi.org/10.1145/335191.335372 Han et al., Mining frequent patterns without candidate
+ *  generation]].
  *
  * @param minSupport the minimal support level of the frequent pattern, any pattern appears
  *                   more than (minSupport * size-of-the-dataset) times will be output
  * @param numPartitions number of partitions used by parallel FP-growth
+ *
+ * @see [[http://en.wikipedia.org/wiki/Association_rule_learning Association rule learning
+ *       (Wikipedia)]]
  */
+@Experimental
 class FPGrowth private (
     private var minSupport: Double,
     private var numPartitions: Int) extends Logging with Serializable {
 
   /**
-   * Constructs a FPGrowth instance with default parameters:
-   * {minSupport: 0.3, numPartitions: auto}
+   * Constructs a default instance with default parameters {minSupport: `0.3`, numPartitions: same
+   * as the input data}.
    */
   def this() = this(0.3, -1)
 
   /**
-   * Sets the minimal support level (default: 0.3).
+   * Sets the minimal support level (default: `0.3`).
    */
   def setMinSupport(minSupport: Double): this.type = {
     this.minSupport = minSupport
@@ -69,7 +97,7 @@ class FPGrowth private (
    * @param data input data set, each element contains a transaction
    * @return an [[FPGrowthModel]]
    */
-  def run(data: RDD[Array[String]]): FPGrowthModel = {
+  def run[Item: ClassTag](data: RDD[Array[Item]]): FPGrowthModel[Item] = {
     if (data.getStorageLevel == StorageLevel.NONE) {
       logWarning("Input data is not cached.")
     }
@@ -82,19 +110,24 @@ class FPGrowth private (
     new FPGrowthModel(freqItemsets)
   }
 
+  def run[Item, Basket <: JavaIterable[Item]](data: JavaRDD[Basket]): FPGrowthModel[Item] = {
+    implicit val tag = fakeClassTag[Item]
+    run(data.rdd.map(_.asScala.toArray))
+  }
+
   /**
    * Generates frequent items by filtering the input data using minimal support level.
    * @param minCount minimum count for frequent itemsets
    * @param partitioner partitioner used to distribute items
    * @return array of frequent pattern ordered by their frequencies
    */
-  private def genFreqItems(
-      data: RDD[Array[String]],
+  private def genFreqItems[Item: ClassTag](
+      data: RDD[Array[Item]],
       minCount: Long,
-      partitioner: Partitioner): Array[String] = {
+      partitioner: Partitioner): Array[Item] = {
     data.flatMap { t =>
       val uniq = t.toSet
-      if (t.length != uniq.size) {
+      if (t.size != uniq.size) {
         throw new SparkException(s"Items in a transaction must be unique but got ${t.toSeq}.")
       }
       t
@@ -114,11 +147,11 @@ class FPGrowth private (
    * @param partitioner partitioner used to distribute transactions
    * @return an RDD of (frequent itemset, count)
    */
-  private def genFreqItemsets(
-      data: RDD[Array[String]],
+  private def genFreqItemsets[Item: ClassTag](
+      data: RDD[Array[Item]],
       minCount: Long,
-      freqItems: Array[String],
-      partitioner: Partitioner): RDD[(Array[String], Long)] = {
+      freqItems: Array[Item],
+      partitioner: Partitioner): RDD[(Array[Item], Long)] = {
     val itemToRank = freqItems.zipWithIndex.toMap
     data.flatMap { transaction =>
       genCondTransactions(transaction, itemToRank, partitioner)
@@ -139,9 +172,9 @@ class FPGrowth private (
    * @param partitioner partitioner used to distribute transactions
    * @return a map of (target partition, conditional transaction)
    */
-  private def genCondTransactions(
-      transaction: Array[String],
-      itemToRank: Map[String, Int],
+  private def genCondTransactions[Item: ClassTag](
+      transaction: Array[Item],
+      itemToRank: Map[Item, Int],
       partitioner: Partitioner): mutable.Map[Int, Array[Int]] = {
     val output = mutable.Map.empty[Int, Array[Int]]
     // Filter the basket by frequent items pattern and sort their ranks.

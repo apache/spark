@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.{BufferedReader, InputStreamReader, PrintStream}
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.analysis.{Analyzer, EliminateAnalysisOperat
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUdfs, SetCommand, QueryExecutionException}
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DescribeHiveTableCommand}
-import org.apache.spark.sql.sources.DataSourceStrategy
+import org.apache.spark.sql.sources.{CreateTableUsing, DataSourceStrategy}
 import org.apache.spark.sql.types._
 
 /**
@@ -75,19 +75,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       DataFrame(this,
         ddlParser(sqlText, exceptionOnError = false).getOrElse(HiveQl.parseSql(substituted)))
     }  else {
-      sys.error(s"Unsupported SQL dialect: ${conf.dialect}.  Try 'sql' or 'hiveql'")
+      sys.error(s"Unsupported SQL dialect: ${conf.dialect}. Try 'sql' or 'hiveql'")
     }
-  }
-
-  /**
-   * Creates a table using the schema of the given class.
-   *
-   * @param tableName The name of the table to create.
-   * @param allowExisting When false, an exception will be thrown if the table already exists.
-   * @tparam A A case class that is used to describe the schema of the table to be created.
-   */
-  def createTable[A <: Product : TypeTag](tableName: String, allowExisting: Boolean = true) {
-    catalog.createTable("default", tableName, ScalaReflection.attributesFor[A], allowExisting)
   }
 
   /**
@@ -246,7 +235,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   // Note that HiveUDFs will be overridden by functions registered in this context.
   @transient
   override protected[sql] lazy val functionRegistry =
-    new HiveFunctionRegistry with OverrideFunctionRegistry
+    new HiveFunctionRegistry with OverrideFunctionRegistry {
+      def caseSensitive = false
+    }
 
   /* An analyzer that uses the Hive metastore. */
   @transient
@@ -256,6 +247,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         catalog.CreateTables ::
         catalog.PreInsertionCasts ::
         ExtractPythonUdfs ::
+        ResolveUdtfsAlias ::
+        sources.PreInsertCastAndRename ::
         Nil
     }
 
@@ -355,6 +348,11 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   /** Extends QueryExecution with hive specific features. */
   protected[sql] class QueryExecution(logicalPlan: LogicalPlan)
     extends super.QueryExecution(logicalPlan) {
+    // Like what we do in runHive, makes sure the session represented by the
+    // `sessionState` field is activated.
+    if (SessionState.get() != sessionState) {
+      SessionState.start(sessionState)
+    }
 
     /**
      * Returns the result as a hive compatible sequence of strings.  For native commands, the
@@ -410,7 +408,7 @@ private object HiveContext {
           toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
       }.toSeq.sorted.mkString("{", ",", "}")
     case (null, _) => "NULL"
-    case (d: Date, DateType) => new DateWritable(d).toString
+    case (d: Int, DateType) => new DateWritable(d).toString
     case (t: Timestamp, TimestampType) => new TimestampWritable(t).toString
     case (bin: Array[Byte], BinaryType) => new String(bin, "UTF-8")
     case (decimal: java.math.BigDecimal, DecimalType()) =>

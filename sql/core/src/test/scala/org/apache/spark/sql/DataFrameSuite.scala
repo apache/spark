@@ -17,18 +17,25 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.Dsl._
-import org.apache.spark.sql.types._
-
-/* Implicits */
-import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.TestData._
 
 import scala.language.postfixOps
+
+import org.apache.spark.sql.Dsl._
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.test.TestSQLContext.logicalPlanToSparkQuery
+import org.apache.spark.sql.test.TestSQLContext.implicits._
+
 
 class DataFrameSuite extends QueryTest {
   import org.apache.spark.sql.TestData._
 
   test("analysis error should be eagerly reported") {
+    val oldSetting = TestSQLContext.conf.dataFrameEagerAnalysis
+    // Eager analysis.
+    TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, "true")
+
     intercept[Exception] { testData.select('nonExistentName) }
     intercept[Exception] {
       testData.groupBy('key).agg(Map("nonExistentName" -> "sum"))
@@ -39,12 +46,58 @@ class DataFrameSuite extends QueryTest {
     intercept[Exception] {
       testData.groupBy($"abcd").agg(Map("key" -> "sum"))
     }
+
+    // No more eager analysis once the flag is turned off
+    TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, "false")
+    testData.select('nonExistentName)
+
+    // Set the flag back to original value before this test.
+    TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, oldSetting.toString)
+  }
+
+  test("dataframe toString") {
+    assert(testData.toString === "[key: int, value: string]")
+    assert(testData("key").toString === "[key: int]")
+  }
+
+  test("incomputable toString") {
+    assert($"test".toString === "test")
+  }
+
+  test("invalid plan toString, debug mode") {
+    val oldSetting = TestSQLContext.conf.dataFrameEagerAnalysis
+    TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, "true")
+
+    // Turn on debug mode so we can see invalid query plans.
+    import org.apache.spark.sql.execution.debug._
+    TestSQLContext.debug()
+
+    val badPlan = testData.select('badColumn)
+
+    assert(badPlan.toString contains badPlan.queryExecution.toString,
+      "toString on bad query plans should include the query execution but was:\n" +
+        badPlan.toString)
+
+    // Set the flag back to original value before this test.
+    TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, oldSetting.toString)
   }
 
   test("table scan") {
     checkAnswer(
       testData,
       testData.collect().toSeq)
+  }
+
+  test("selectExpr") {
+    checkAnswer(
+      testData.selectExpr("abs(key)", "value"),
+      testData.collect().map(row => Row(math.abs(row.getInt(0)), row.getString(1))).toSeq)
+  }
+
+  test("filterExpr") {
+    checkAnswer(
+      testData.filter("key > 90"),
+      testData.collect().filter(_.getInt(0) > 90).toSeq)
   }
 
   test("repartition") {
@@ -280,13 +333,34 @@ class DataFrameSuite extends QueryTest {
   }
 
   test("udf") {
-    val foo = (a: Int, b: String) => a.toString + b
+    val foo = udf((a: Int, b: String) => a.toString + b)
 
     checkAnswer(
       // SELECT *, foo(key, value) FROM testData
-      testData.select($"*", callUDF(foo, 'key, 'value)).limit(3),
+      testData.select($"*", foo('key, 'value)).limit(3),
       Row(1, "1", "11") :: Row(2, "2", "22") :: Row(3, "3", "33") :: Nil
     )
+  }
+
+  test("addColumn") {
+    val df = testData.toDataFrame.addColumn("newCol", col("key") + 1)
+    checkAnswer(
+      df,
+      testData.collect().map { case Row(key: Int, value: String) =>
+        Row(key, value, key + 1)
+      }.toSeq)
+    assert(df.schema.map(_.name).toSeq === Seq("key", "value", "newCol"))
+  }
+
+  test("renameColumn") {
+    val df = testData.toDataFrame.addColumn("newCol", col("key") + 1)
+      .renameColumn("value", "valueRenamed")
+    checkAnswer(
+      df,
+      testData.collect().map { case Row(key: Int, value: String) =>
+        Row(key, value, key + 1)
+      }.toSeq)
+    assert(df.schema.map(_.name).toSeq === Seq("key", "valueRenamed", "newCol"))
   }
 
   test("apply on query results (SPARK-5462)") {

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.trees.TreeNode
@@ -65,6 +66,17 @@ abstract class Expression extends TreeNode[Expression] {
    * and false if any still contains any unresolved placeholders.
    */
   def childrenResolved = !children.exists(!_.resolved)
+
+  /**
+   * Returns a string representation of this expression that does not have developer centric
+   * debugging information like the expression id.
+   */
+  def prettyString: String = {
+    transform {
+      case a: AttributeReference => PrettyAttribute(a.name)
+      case u: UnresolvedAttribute => PrettyAttribute(u.name)
+    }.toString
+  }
 
   /**
    * A set of helper functions that return the correct descendant of `scala.math.Numeric[T]` type
