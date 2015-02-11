@@ -236,6 +236,24 @@ class DataFrame(object):
         """
         print (self._jdf.schema().treeString())
 
+    def show(self):
+        """
+        Print the first 20 rows.
+
+        >>> df.show()
+        age name
+        2   Alice
+        5   Bob
+        >>> df
+        age name
+        2   Alice
+        5   Bob
+        """
+        print (self)
+
+    def __repr__(self):
+        return self._jdf.showString()
+
     def count(self):
         """Return the number of elements in this RDD.
 
@@ -380,9 +398,9 @@ class DataFrame(object):
         """Return all column names and their data types as a list.
 
         >>> df.dtypes
-        [('age', 'integer'), ('name', 'string')]
+        [('age', 'int'), ('name', 'string')]
         """
-        return [(str(f.name), f.dataType.jsonValue()) for f in self.schema().fields]
+        return [(str(f.name), f.dataType.simpleString()) for f in self.schema().fields]
 
     @property
     def columns(self):
@@ -605,6 +623,17 @@ class DataFrame(object):
         [Row(age=2, name=u'Alice', age2=4), Row(age=5, name=u'Bob', age2=7)]
         """
         return self.select('*', col.alias(colName))
+
+    def renameColumn(self, existing, new):
+        """ Rename an existing column to a new name
+
+        >>> df.renameColumn('age', 'age2').collect()
+        [Row(age2=2, name=u'Alice'), Row(age2=5, name=u'Bob')]
+        """
+        cols = [Column(_to_java_column(c), self.sql_ctx).alias(new)
+                if c == existing else c
+                for c in self.columns]
+        return self.select(*cols)
 
     def to_pandas(self):
         """
@@ -885,6 +914,12 @@ class Column(DataFrame):
             jc = self._jc.cast(jdt)
         return Column(jc, self.sql_ctx)
 
+    def __repr__(self):
+        if self._jdf.isComputable():
+            return self._jdf.samples()
+        else:
+            return 'Column<%s>' % self._jdf.toString()
+
     def to_pandas(self):
         """
         Return a pandas.Series from the column
@@ -1030,7 +1065,8 @@ def _test():
     globs['df'] = sqlCtx.inferSchema(rdd2)
     globs['df2'] = sqlCtx.inferSchema(rdd3)
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.dataframe, globs=globs, optionflags=doctest.ELLIPSIS)
+        pyspark.sql.dataframe, globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
     globs['sc'].stop()
     if failure_count:
         exit(-1)

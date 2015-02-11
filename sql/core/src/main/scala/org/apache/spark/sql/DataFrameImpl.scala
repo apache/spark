@@ -126,7 +126,10 @@ private[sql] class DataFrameImpl protected[sql](
     logicalPlan.isInstanceOf[LocalRelation]
   }
 
-  override def show(): Unit = {
+  /**
+   * Internal API for Python
+   */
+  private[sql] def showString(): String = {
     val data = take(20)
     val numCols = schema.fieldNames.length
 
@@ -146,12 +149,16 @@ private[sql] class DataFrameImpl protected[sql](
       }
     }
 
-    // Pad the cells and print them
-    println(rows.map { row =>
+    // Pad the cells
+    rows.map { row =>
       row.zipWithIndex.map { case (cell, i) =>
         String.format(s"%-${colWidths(i)}s", cell)
       }.mkString(" ")
-    }.mkString("\n"))
+    }.mkString("\n")
+  }
+
+  override def show(): Unit = {
+    println(showString)
   }
 
   override def join(right: DataFrame): DataFrame = {
