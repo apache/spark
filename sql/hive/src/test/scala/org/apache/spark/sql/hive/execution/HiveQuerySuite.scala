@@ -27,9 +27,7 @@ import scala.util.Try
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.{SparkFiles, SparkException}
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.expressions.Cast
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.Dsl._
 import org.apache.spark.sql.hive._
@@ -69,7 +67,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   }
 
   test("SPARK-5649: added a rule to check datatypes cast") {
-    intercept[TreeNodeException[Cast]] {
+    intercept[AnalysisException] {
       sql("select cast(key as binary) from src").collect()
     }
   }

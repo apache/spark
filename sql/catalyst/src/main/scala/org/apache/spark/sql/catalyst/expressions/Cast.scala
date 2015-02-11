@@ -51,7 +51,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
   private[this] def resolvableNullability(from: Boolean, to: Boolean) = !from || to
 
-  private[this] def resolve(from: DataType, to: DataType): Boolean = {
+  private[sql] def resolve(from: DataType, to: DataType): Boolean = {
     (from, to) match {
       case (from, to) if from == to         => true
 

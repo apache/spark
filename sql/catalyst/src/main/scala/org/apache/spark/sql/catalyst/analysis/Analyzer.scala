@@ -84,9 +84,8 @@ class Analyzer(catalog: Catalog,
     def apply(plan: LogicalPlan): LogicalPlan = plan.transform {
       case q: LogicalPlan =>
         q transformExpressions {
-          case cast @ Cast(child, dataType) if cast.childrenResolved && !cast.resolved =>
-            throw new TreeNodeException(q,
-              s"can not cast from ${child.dataType} to $dataType!")
+          case cast @ Cast(child, dataType) if !cast.resolve(child.dataType, dataType) =>
+            throw new AnalysisException(s"can not cast from ${child.dataType} to $dataType!")
           case p => p
         }
     }
