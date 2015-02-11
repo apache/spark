@@ -25,8 +25,8 @@ package org.apache.spark.sql.catalyst
 package object analysis {
 
   /**
-   * Responsible for resolving which identifiers refer to the same entity.  For example, by using
-   * case insensitive equality.
+   * Resolver should return true if the first string refers to the same entity as the second string.
+   * For example, by using case insensitive equality.
    */
   type Resolver = (String, String) => Boolean
 
