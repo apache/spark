@@ -605,6 +605,10 @@ def _infer_type(obj):
 
     dataType = _type_mappings.get(type(obj))
     if dataType is not None:
+        # Conform to Java int/long sizes SPARK-5722
+        if dataType == IntegerType:
+            if obj > 2**31 - 1 or obj < -2**31:
+                dataType = LongType
         return dataType()
 
     if isinstance(obj, dict):
