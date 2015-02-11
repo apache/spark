@@ -106,13 +106,7 @@ object PowerIterationClusteringExample {
       nPoints: Int = 30,
       outerRadius: Double): RDD[(Long, Long, Double)] = {
 
-    val radii = for (cx <- 0 until nCircles) yield {
-      cx match {
-        case 0 => 0.1 * outerRadius / nCircles
-        case _ if cx == nCircles - 1 => outerRadius
-        case _ => outerRadius * cx / (nCircles - 1)
-      }
-    }
+    val radii = for (cx <- 0 until nCircles) yield outerRadius / (nCircles-cx)
     val groupSizes = for (cx <- 0 until nCircles) yield (cx + 1) * nPoints
     var ix = 0
     val points = for (cx <- 0 until nCircles;
