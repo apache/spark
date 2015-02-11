@@ -258,7 +258,7 @@
           <plugin>
             <groupId>org.vafer</groupId>
             <artifactId>jdeb</artifactId>
-            <version>0.11</version>
+            <version>1.3</version>
             <executions>
               <execution>
                 <phase>package</phase>
@@ -269,6 +269,7 @@
                   <deb>${project.build.directory}/${deb.pkg.name}_${project.version}-${buildNumber}_all.deb</deb>
                   <attach>false</attach>
                   <compression>gzip</compression>
+                  <skipPOMs>false</skipPOMs>
                   <dataSet>
                     <data>
                       <src>${spark.jar}</src>
@@ -289,6 +290,12 @@
                         <group>${deb.user}</group>
                         <prefix>${deb.install.path}</prefix>
                       </mapper>
+                    </data>
+                    <data>
+                      <type>link</type>
+                      <symlink>true</symlink>
+                      <linkName>${deb.install.path}/lib</linkName>
+                      <linkTarget>${deb.install.path}/jars</linkTarget>
                     </data>
                     <data>
                       <src>${basedir}/../conf</src>
