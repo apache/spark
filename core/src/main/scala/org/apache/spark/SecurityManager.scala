@@ -27,6 +27,7 @@ import org.apache.hadoop.io.Text
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.network.sasl.SecretKeyHolder
+import org.apache.spark.util.Utils
 
 /**
  * Spark class responsible for security.
@@ -203,7 +204,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
 
   // always add the current user and SPARK_USER to the viewAcls
   private val defaultAclUsers = Set[String](System.getProperty("user.name", ""),
-    Option(System.getenv("SPARK_USER")).getOrElse("")).filter(!_.isEmpty)
+    Utils.getCurrentUserName())
 
   setViewAcls(defaultAclUsers, sparkConf.get("spark.ui.view.acls", ""))
   setModifyAcls(defaultAclUsers, sparkConf.get("spark.modify.acls", ""))
