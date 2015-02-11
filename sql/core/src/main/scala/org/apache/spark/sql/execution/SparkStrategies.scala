@@ -309,7 +309,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object DDLStrategy extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case CreateTableUsing(tableName, userSpecifiedSchema, provider, true, opts, false) =>
+      case CreateTableUsing(tableName, userSpecifiedSchema, provider, true, opts, false, _) =>
         ExecutedCommand(
           CreateTempTableUsing(
             tableName, userSpecifiedSchema, provider, opts)) :: Nil
@@ -318,24 +318,20 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case c: CreateTableUsing if c.temporary && c.allowExisting =>
         sys.error("allowExisting should be set to false when creating a temporary table.")
 
-      case CreateTableUsingAsSelect(tableName, provider, true, opts, false, query) =>
+      case CreateTableUsingAsSelect(tableName, provider, true, mode, opts, query) =>
         val logicalPlan = sqlContext.parseSql(query)
         val cmd =
-          CreateTempTableUsingAsSelect(tableName, provider, opts, logicalPlan)
+          CreateTempTableUsingAsSelect(tableName, provider, mode, opts, logicalPlan)
         ExecutedCommand(cmd) :: Nil
       case c: CreateTableUsingAsSelect if !c.temporary =>
         sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
-      case c: CreateTableUsingAsSelect if c.temporary && c.allowExisting =>
-        sys.error("allowExisting should be set to false when creating a temporary table.")
 
-      case CreateTableUsingAsLogicalPlan(tableName, provider, true, opts, false, query) =>
+      case CreateTableUsingAsLogicalPlan(tableName, provider, true, mode, opts, query) =>
         val cmd =
-          CreateTempTableUsingAsSelect(tableName, provider, opts, query)
+          CreateTempTableUsingAsSelect(tableName, provider, mode, opts, query)
         ExecutedCommand(cmd) :: Nil
       case c: CreateTableUsingAsLogicalPlan if !c.temporary =>
         sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
-      case c: CreateTableUsingAsLogicalPlan if c.temporary && c.allowExisting =>
-        sys.error("allowExisting should be set to false when creating a temporary table.")
 
       case LogicalDescribeCommand(table, isExtended) =>
         val resultPlan = self.sqlContext.executePlan(table).executedPlan

@@ -146,9 +146,75 @@ class DataFrame(object):
         """
         self._jdf.insertInto(tableName, overwrite)
 
-    def saveAsTable(self, tableName):
-        """Creates a new table with the contents of this DataFrame."""
-        self._jdf.saveAsTable(tableName)
+    def _java_save_mode(self, mode):
+        """Returns the Java save mode based on the Python save mode represented by a string.
+        """
+        jSaveMode = self._sc._jvm.org.apache.spark.sql.sources.SaveMode
+        jmode = jSaveMode.ErrorIfExists
+        mode = mode.lower()
+        if mode == "append":
+            jmode = jSaveMode.Append
+        elif mode == "overwrite":
+            jmode = jSaveMode.Overwrite
+        elif mode == "ignore":
+            jmode = jSaveMode.Ignore
+        elif mode == "error":
+            pass
+        else:
+            raise ValueError(
+                "Only 'append', 'overwrite', 'ignore', and 'error' are acceptable save mode.")
+        return jmode
+
+    def saveAsTable(self, tableName, source=None, mode="append", **options):
+        """Saves the contents of the DataFrame to a data source as a table.
+
+        The data source is specified by the `source` and a set of `options`.
+        If `source` is not specified, the default data source configured by
+        spark.sql.sources.default will be used.
+
+        Additionally, mode is used to specify the behavior of the saveAsTable operation when
+        table already exists in the data source. There are four modes:
+
+        * append: Contents of this DataFrame are expected to be appended to existing table.
+        * overwrite: Data in the existing table is expected to be overwritten by the contents of \
+            this DataFrame.
+        * error: An exception is expected to be thrown.
+        * ignore: The save operation is expected to not save the contents of the DataFrame and \
+            to not change the existing table.
+        """
+        if source is None:
+            source = self.sql_ctx.getConf("spark.sql.sources.default",
+                                          "org.apache.spark.sql.parquet")
+        jmode = self._java_save_mode(mode)
+        joptions = MapConverter().convert(options,
+                                          self.sql_ctx._sc._gateway._gateway_client)
+        self._jdf.saveAsTable(tableName, source, jmode, joptions)
+
+    def save(self, path=None, source=None, mode="append", **options):
+        """Saves the contents of the DataFrame to a data source.
+
+        The data source is specified by the `source` and a set of `options`.
+        If `source` is not specified, the default data source configured by
+        spark.sql.sources.default will be used.
+
+        Additionally, mode is used to specify the behavior of the save operation when
+        data already exists in the data source. There are four modes:
+
+        * append: Contents of this DataFrame are expected to be appended to existing data.
+        * overwrite: Existing data is expected to be overwritten by the contents of this DataFrame.
+        * error: An exception is expected to be thrown.
+        * ignore: The save operation is expected to not save the contents of the DataFrame and \
+            to not change the existing data.
+        """
+        if path is not None:
+            options["path"] = path
+        if source is None:
+            source = self.sql_ctx.getConf("spark.sql.sources.default",
+                                          "org.apache.spark.sql.parquet")
+        jmode = self._java_save_mode(mode)
+        joptions = MapConverter().convert(options,
+                                          self._sc._gateway._gateway_client)
+        self._jdf.save(source, jmode, joptions)
 
     def schema(self):
         """Returns the schema of this DataFrame (represented by
