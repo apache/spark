@@ -93,6 +93,7 @@ class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
 
   private def setupMQTT() {
     broker = new BrokerService()
+    broker.setDataDirectoryFile(Utils.createTempDir())
     connector = new TransportConnector()
     connector.setName("mqtt")
     connector.setUri(new URI("mqtt:" + brokerUri))
