@@ -249,7 +249,16 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   conf.set("spark.executor.id", SparkContext.DRIVER_IDENTIFIER)
 
   // Create the Spark execution environment (cache, map output tracker, etc)
-  private[spark] val env = SparkEnv.createDriverEnv(conf, isLocal, listenerBus)
+
+  // This function allows components created by SparkEnv to be mocked in unit tests:
+  private[spark] def createSparkEnv(
+      conf: SparkConf,
+      isLocal: Boolean,
+      listenerBus: LiveListenerBus): SparkEnv = {
+    SparkEnv.createDriverEnv(conf, isLocal, listenerBus)
+  }
+
+  private[spark] val env = createSparkEnv(conf, isLocal, listenerBus)
   SparkEnv.set(env)
 
   // Used to store a URL for each static file/jar together with the file's local timestamp
