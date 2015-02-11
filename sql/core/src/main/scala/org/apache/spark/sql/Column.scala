@@ -73,10 +73,11 @@ trait Column extends DataFrame {
   }
 
   private def computableCol(baseCol: ComputableColumn, expr: Expression) = {
-    val plan = Project(Seq(expr match {
+    val namedExpr = expr match {
       case named: NamedExpression => named
       case unnamed: Expression => Alias(unnamed, "col")()
-    }), stripProject(baseCol.plan))
+    }
+    val plan = Project(Seq(namedExpr), stripProject(baseCol.plan))
     Column(baseCol.sqlContext, plan, expr)
   }
 
@@ -101,6 +102,8 @@ trait Column extends DataFrame {
         if (stripProject(left.plan).sameResult(stripProject(right.plan))) {
           computableCol(right, newExpr(right))
         } else {
+          // We don't want to throw an exception here because "df1("a") === df2("b")" can be
+          // a valid expression for join conditions, even though standalone they are not valid.
           Column(newExpr(right))
         }
       case (left: ComputableColumn, right) => computableCol(left, newExpr(right))
