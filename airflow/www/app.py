@@ -26,6 +26,7 @@ import jinja2
 import markdown
 import chartkick
 
+import airflow
 from airflow.settings import Session
 from airflow import jobs
 from airflow import models
@@ -541,6 +542,7 @@ class Airflow(BaseView):
         f.close()
         return self.render(
             'airflow/code.html',
+            pre_subtitle = settings.HEADER + "  v" + airflow.__version__,
             code_html=code_html, title=title, subtitle=subtitle)
 
     @expose('/noaccess')

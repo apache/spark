@@ -7,6 +7,11 @@
 {% block body %}
     {{ super() }}
     <h2>{{ title }}</h2>
+
+    {% if pre_subtitle %}
+        <pre>{{ pre_subtitle }}</pre>
+    {% endif %}
+
     {% if subtitle %}
         <h5>{{ subtitle }}</h5>
     {% endif %}
