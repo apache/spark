@@ -589,7 +589,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       ("1" :: "2" :: "3" :: "4" :: "A" :: "B" :: "C" :: "D" :: "E" :: "F" :: Nil).map(Row(_)))
     // Column type mismatches where a coercion is not possible, in this case between integer
     // and array types, trigger a TreeNodeException.
-    intercept[TreeNodeException[_]] {
+    intercept[AnalysisException] {
       sql("SELECT data FROM arrayData UNION SELECT 1 FROM arrayData").collect()
     }
   }
