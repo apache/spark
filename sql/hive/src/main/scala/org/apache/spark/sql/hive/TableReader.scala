@@ -35,6 +35,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, RDD, UnionRDD}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.DateUtils
+import org.apache.hadoop.util.StringUtils
 
 /**
  * A trait for subclasses that handle table scans.
@@ -248,7 +249,7 @@ private[hive] object HadoopTableReader extends HiveInspectors {
    * instantiate a HadoopRDD.
    */
   def initializeLocalJobConfFunc(path: String, tableDesc: TableDesc)(jobConf: JobConf) {
-    FileInputFormat.setInputPaths(jobConf, path)
+    jobConf.set("mapred.input.dir", StringUtils.escapeString(path.toString()))
     if (tableDesc != null) {
       PlanUtils.configureInputJobPropertiesForStorageHandler(tableDesc)
       Utilities.copyTableJobPropertiesToConf(tableDesc, jobConf)
