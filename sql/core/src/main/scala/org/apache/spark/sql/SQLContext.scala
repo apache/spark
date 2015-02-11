@@ -122,6 +122,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     case _ =>
   }
 
+  @transient
   protected[sql] val cacheManager = new CacheManager(this)
 
   /**
@@ -159,6 +160,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *       DataTypes.StringType);
    * }}}
    */
+  @transient
   val udf: UDFRegistration = new UDFRegistration(this)
 
   /** Returns true if the table is currently cached in-memory. */
