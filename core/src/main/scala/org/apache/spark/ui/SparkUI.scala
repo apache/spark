@@ -34,7 +34,7 @@ import org.apache.spark.ui.storage.{StorageListener, StorageTab}
 private[spark] class SparkUI private (
     val sc: Option[SparkContext],
     val conf: SparkConf,
-    val securityManager: SecurityManager,
+    securityManager: SecurityManager,
     val environmentListener: EnvironmentListener,
     val storageStatusListener: StorageStatusListener,
     val executorsListener: ExecutorsListener,

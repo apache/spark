@@ -20,11 +20,15 @@ import javax.servlet.ServletContext
 import javax.ws.rs._
 import javax.ws.rs.core.{Response, Context}
 
+import com.sun.jersey.api.core.ResourceConfig
 import com.sun.jersey.spi.container.servlet.ServletContainer
-import org.apache.spark.ui.SparkUI
+
 import org.eclipse.jetty.server.handler.ContextHandler
 import org.eclipse.jetty.servlet.{ServletHolder, ServletContextHandler}
 import org.glassfish.jersey.jackson._
+
+import org.apache.spark.SecurityManager
+import org.apache.spark.ui.SparkUI
 
 
 @Path("/v1")
@@ -81,6 +85,8 @@ object JsonRootResource {
       "com.sun.jersey.api.core.PackagesResourceConfig")
     holder.setInitParameter("com.sun.jersey.config.property.packages",
       "org.apache.spark.status.api.v1")
+    holder.setInitParameter(ResourceConfig.PROPERTY_CONTAINER_REQUEST_FILTERS,
+      classOf[SecurityFilter].getCanonicalName)
     UIRootFromServletContext.setUiRoot(jerseyContext, uiRoot)
     jerseyContext.addServlet(holder, "/*")
     jerseyContext
@@ -97,6 +103,7 @@ private[spark] trait UIRoot {
       case None => throw new NotFoundException("no such app: " + appId)
     }
   }
+  def securityManager: SecurityManager
 }
 
 object UIRootFromServletContext {

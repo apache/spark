@@ -36,7 +36,7 @@ import org.apache.spark.util.Utils
  * pages. The use of tabs is optional, however; a WebUI may choose to include pages directly.
  */
 private[spark] abstract class WebUI(
-    securityManager: SecurityManager,
+    val securityManager: SecurityManager,
     port: Int,
     conf: SparkConf,
     basePath: String = "",

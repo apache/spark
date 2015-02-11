@@ -91,12 +91,32 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers {
       }
   }
 
-  test("fields w/ None are skipped (not written as null)") {
-    pending
-  }
-
   test("security") {
-    pending
+    val conf = new SparkConf()
+      .set("spark.history.fs.logDirectory", logDir.getAbsolutePath)
+      .set("spark.history.fs.updateInterval", "0")
+      .set("spark.acls.enable", "true")
+      .set("spark.ui.view.acls", "user1")
+    val securityManager = new SecurityManager(conf)
+
+    val securePort = port + 1
+    val secureServer = new HistoryServer(conf, provider, securityManager, securePort)
+    secureServer.initialize()
+    secureServer.bind()
+
+    securityManager.checkUIViewPermissions("user1") should be (true)
+    securityManager.checkUIViewPermissions("user2") should be (false)
+
+    try {
+
+      //TODO figure out a way to authenticate as the users in the requests
+//      getContentAndCode("applications", securePort)._1 should be (200)
+      pending
+
+    } finally {
+      secureServer.stop()
+    }
+
   }
 
   test("response codes on bad paths") {
@@ -117,7 +137,7 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers {
 
   }
 
-  def getContentAndCode(path: String): (Int, Option[String], Option[String]) = {
+  def getContentAndCode(path: String, port: Int = port): (Int, Option[String], Option[String]) = {
     val url = new URL(s"http://localhost:$port/json/v1/$path")
     val connection = url.openConnection().asInstanceOf[HttpURLConnection]
     connection.setRequestMethod("GET")
