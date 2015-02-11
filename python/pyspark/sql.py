@@ -606,6 +606,9 @@ def _infer_type(obj):
     dataType = _type_mappings.get(type(obj))
     if dataType is not None:
         # Conform to Java int/long sizes SPARK-5722
+        # Inference is usually done on a sample of the dataset
+        # so, if values that should be Long do not appear in
+        # the sample, the dataType will be chosen as IntegerType
         if dataType == IntegerType:
             if obj > 2**31 - 1 or obj < -2**31:
                 dataType = LongType
