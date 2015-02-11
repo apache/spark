@@ -121,7 +121,7 @@ public class JavaMetastoreDataSourcesSuite {
       sqlContext.sql("SELECT * FROM javaSavedTable"),
       df.collectAsList());
 
-    List<StructField> fields = new ArrayList<>();
+    List<StructField> fields = new ArrayList<StructField>();
     fields.add(DataTypes.createStructField("b", DataTypes.StringType, true));
     StructType schema = DataTypes.createStructType(fields);
     DataFrame loadedDF =
