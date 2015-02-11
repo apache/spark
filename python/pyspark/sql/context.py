@@ -354,7 +354,7 @@ class SQLContext(object):
         [Row(name=u'Alice', age=1)]
         """
         if isinstance(data, DataFrame):
-            raise TypeError("rdd is already a DataFrame")
+            raise TypeError("data is already a DataFrame")
 
         if has_pandas and isinstance(data, pandas.DataFrame):
             data = self._sc.parallelize(data.to_records(index=False))
@@ -362,7 +362,11 @@ class SQLContext(object):
                 schema = list(data.columns)
 
         if not isinstance(data, RDD):
-            data = self._sc.parallelize(data)
+            try:
+                # data could be list, tuple, generator ...
+                data = self._sc.parallelize(data)
+            except Exception:
+                raise ValueError("Cann't create an RDD from type: %s" % type(data))
 
         if schema is None:
             return self.inferSchema(data, samplingRatio)

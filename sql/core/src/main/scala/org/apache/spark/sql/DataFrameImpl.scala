@@ -129,7 +129,7 @@ private[sql] class DataFrameImpl protected[sql](
   /**
    * Internal API for Python
    */
-  private[sql] def samples(): String = {
+  private[sql] def showString(): String = {
     val data = take(20)
     val numCols = schema.fieldNames.length
 
@@ -158,7 +158,7 @@ private[sql] class DataFrameImpl protected[sql](
   }
 
   override def show(): Unit = {
-    println(samples)
+    println(showString)
   }
 
   override def join(right: DataFrame): DataFrame = {

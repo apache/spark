@@ -249,10 +249,10 @@ class DataFrame(object):
         2   Alice
         5   Bob
         """
-        print self
+        print (self)
 
     def __repr__(self):
-        return self._jdf.samples()
+        return self._jdf.showString()
 
     def count(self):
         """Return the number of elements in this RDD.
