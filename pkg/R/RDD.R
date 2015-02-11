@@ -1311,14 +1311,21 @@ takeOrderedElem <- function(rdd, num, ascending = TRUE) {
     if (num < length(part)) {
       # R limitation: order works only on primitive types!
       ord <- order(unlist(part, recursive = FALSE), decreasing = !ascending)
-      part[ord[1:num]]
+      list(part[ord[1:num]])
     } else {
-      part
+      list(part)
     }
+  }
+
+  reduceFunc <- function(elems, part) {
+    newElems <- append(elems, part)
+    # R limitation: order works only on primitive types!
+    ord <- order(unlist(newElems, recursive = FALSE), decreasing = !ascending)
+    newElems[ord[1:num]]
   }
   
   newRdd <- mapPartitions(rdd, partitionFunc)
-  take(sortBy(newRdd, function(x) { x }, ascending = ascending), num)
+  reduce(newRdd, reduceFunc)
 }
 
 #' Returns the first N elements from an RDD in ascending order.
