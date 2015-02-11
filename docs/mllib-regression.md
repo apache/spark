@@ -4,11 +4,13 @@ title: Naive Bayes - MLlib
 displayTitle: <a href="mllib-guide.html">MLlib</a> - Regression
 ---
 
+## Regression
 [Regression](http://en.wikipedia.org/wiki/Regression_analysis) is a statistical process
 for estimating the relationships among variables. It includes many techniques for modeling
 and analyzing several variables, when the focus is on the relationship between
 a dependent variable and one or more independent variables.
 
+## Isotonic regression
 [Isotonic regression](http://en.wikipedia.org/wiki/Isotonic_regression)
 belongs to the family of regression algorithms. Formally isotonic regression is a problem where
 given a finite set of real numbers `$Y = {y_1, y_2, ..., y_n}$` representing observed responses
@@ -53,7 +55,7 @@ is treated as piecewise linear function. The rules the prediction uses therefore
   as piecewise linear function and interpolated value is returned. In case there are
   multiple values with the same boundary then the same rules as in previous point are used.
 
-## Examples
+### Examples
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
