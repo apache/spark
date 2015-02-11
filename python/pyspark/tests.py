@@ -929,6 +929,13 @@ class SQLTests(ReusedPySparkTestCase):
         slrdd = self.sqlCtx.inferSchema(lrdd)
         self.assertEqual(slrdd.schema().fields[1].dataType, LongType())
 
+        # this saving as Parquet caused issues as well.
+        output_dir = os.path.join(self.tempdir.name, "infer_long_type")
+        slrdd.saveAsParquetFile(output_dir)
+        df1 = self.sqlCtx.parquetFile(output_dir)
+        self.assertEquals('a', df1.first().f1)
+        self.assertEquals(100000000000000, df1.first().f2)
+
         self.assertEqual(_infer_type(1), IntegerType())
         self.assertEqual(_infer_type(2**10), IntegerType())
         self.assertEqual(_infer_type(2**20), IntegerType())
