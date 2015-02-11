@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.UnaryTransformer
-import org.apache.spark.ml.param.{ParamMap, IntParam, BooleanParam}
+import org.apache.spark.ml.param.{ParamMap, IntParam, BooleanParam, Param}
 import org.apache.spark.sql.types.{DataType, StringType, ArrayType}
 
 /**
@@ -50,36 +50,48 @@ class Tokenizer extends UnaryTransformer[String, Seq[String], Tokenizer] {
 @AlphaComponent
 class RegexTokenizer extends UnaryTransformer[String, Seq[String], RegexTokenizer] {
 
-  val lowercase = new BooleanParam(this, "numFeatures", "number of features", Some(true))
-  def setLowercase(value: Boolean) = set(lowercase, value)
-  def getLowercase: Boolean = get(lowercase)
+  val lowerCase = new BooleanParam(this, 
+      "lowerCase", 
+      "enable case folding to lower case", 
+      Some(true))
+  def setLowercase(value: Boolean) = set(lowerCase, value)
+  def getLowercase: Boolean = get(lowerCase)
 
-  val minLength = new IntParam(this, "numFeatures", "number of features", Some(0))
+  val minLength = new IntParam(this, 
+      "minLength", 
+      "minimum token length (excluded)", 
+      Some(0))
   def setMinLength(value: Int) = set(minLength, value)
   def getMinLength: Int = get(minLength)
 
-  val regEx = "\\p{L}+|[^\\p{L}\\s]+".r
-  // def setRegex(value: scala.util.matching.Regex) = set(regEx, value)
-  // def getRegex: scala.util.matching.Regex = get(regEx)
+  val regEx = new Param(this, 
+      "regEx", 
+      "RegEx used for tokenizing", 
+      Some("\\p{L}+|[^\\p{L}\\s]+".r))
+  def setRegex(value: scala.util.matching.Regex) = set(regEx, value)
+  def getRegex: scala.util.matching.Regex = get(regEx)
 
-  val stopWords = Array[String]()
-  // def setStopWords(value: Array[String]) = set(stopWords, value)
-  // def getStopWords: Array[String] = get(stopWords)
+  val stopWords = new Param(this, 
+      "stopWords", 
+      "array of tokens to filter from results", 
+      Some(Array[String]()))
+  def setStopWords(value: Array[String]) = set(stopWords, value)
+  def getStopWords: Array[String] = get(stopWords)
 
 
   override protected def createTransformFunc(paramMap: ParamMap): String => Seq[String] = { x =>
 
     var string = x
-    if (paramMap(lowercase)) {
+    if (paramMap(lowerCase)) {
       string = string.toLowerCase
     }
-    var tokens = (regEx findAllIn string).toList
+    var tokens = (paramMap(regEx) findAllIn string).toList
     
     if(paramMap(minLength) > 0){
       tokens = tokens.filter(_.length > paramMap(minLength))
     }
-    if(stopWords.length > 0){
-      tokens = tokens.filter(!stopWords.contains(_))
+    if(paramMap(stopWords).length > 0){
+      tokens = tokens.filter(!paramMap(stopWords).contains(_))
     }
     tokens
   }
