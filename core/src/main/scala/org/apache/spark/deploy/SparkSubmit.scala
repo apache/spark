@@ -40,6 +40,7 @@ import org.apache.ivy.plugins.resolver.{ChainResolver, IBiblioResolver}
 import org.apache.spark.deploy.rest._
 import org.apache.spark.executor._
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
+import org.apache.spark
 
 /**
  * Whether to submit, kill, or request the status of an application.
@@ -87,6 +88,10 @@ object SparkSubmit {
   private[spark] def printErrorAndExit(str: String) = {
     printStream.println("Error: " + str)
     printStream.println("Run with --help for usage help or --verbose for debug output")
+    exitFn()
+  }
+  private[spark] def printVersionAndExit() = {
+    printStream.println(s"Spark Version: ${spark.SPARK_VERSION}")
     exitFn()
   }
 
