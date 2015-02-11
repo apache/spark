@@ -23,8 +23,7 @@ import java.sql.{Date, Timestamp}
 import scala.collection.Map
 import scala.collection.convert.Wrappers.{JMapWrapper, JListWrapper}
 
-import com.fasterxml.jackson.core.JsonProcessingException
-import com.fasterxml.jackson.core.JsonFactory
+import com.fasterxml.jackson.core.{JsonGenerator, JsonProcessingException, JsonFactory}
 import com.fasterxml.jackson.databind.ObjectMapper
 
 import org.apache.spark.rdd.RDD
@@ -430,14 +429,11 @@ private[sql] object JsonRDD extends Logging {
 
   /** Transforms a single Row to JSON using Jackson
     *
-    * @param jsonFactory a JsonFactory object to construct a JsonGenerator
     * @param rowSchema the schema object used for conversion
+    * @param gen a JsonGenerator object
     * @param row The row to convert
     */
-  private[sql] def rowToJSON(rowSchema: StructType, jsonFactory: JsonFactory)(row: Row): String = {
-    val writer = new StringWriter()
-    val gen = jsonFactory.createGenerator(writer)
-
+  private[sql] def rowToJSON(rowSchema: StructType, gen: JsonGenerator)(row: Row) = {
     def valWriter: (DataType, Any) => Unit = {
       case (_, null) | (NullType, _)  => gen.writeNull()
       case (StringType, v: String) => gen.writeString(v)
@@ -479,8 +475,5 @@ private[sql] object JsonRDD extends Logging {
     }
 
     valWriter(rowSchema, row)
-    gen.close()
-    writer.toString
   }
-
 }
