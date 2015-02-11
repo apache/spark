@@ -141,7 +141,7 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
 
   /*
    * describe [extended] table avroTable
-   * This will display all columns of table `avroTable` includes column_name,column_type,nullable
+   * This will display all columns of table `avroTable` includes column_name,column_type,comment
    */
   protected lazy val describeTable: Parser[LogicalPlan] =
     (DESCRIBE ~> opt(EXTENDED)) ~ (ident <~ ".").? ~ ident  ^^ {
