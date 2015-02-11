@@ -77,7 +77,7 @@ private[spark] class StandaloneRestServer(
     new SubmitRequestServlet(masterActor, masterUrl, masterConf) -> s"$baseContext/create/*",
     new KillRequestServlet(masterActor, masterConf) -> s"$baseContext/kill/*",
     new StatusRequestServlet(masterActor, masterConf) -> s"$baseContext/status/*",
-    new ErrorServlet -> "/" // default handler
+    new ErrorServlet -> "/*" // default handler
   )
 
   /** Start the server and return the bound port. */
