@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.test.TestHive.{sparkContext, jsonRDD, sql}
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 
@@ -40,7 +41,7 @@ class HiveResolutionSuite extends HiveComparisonTest {
       """{"a": [{"b": 1, "B": 2}]}""" :: Nil)).registerTempTable("nested")
 
     // there are 2 filed matching field name "b", we should report Ambiguous reference error
-    val exception = intercept[RuntimeException] {
+    val exception = intercept[AnalysisException] {
       sql("SELECT a[0].b from nested").queryExecution.analyzed
     }
     assert(exception.getMessage.contains("Ambiguous reference to fields"))

@@ -183,14 +183,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
      *
      * @group userf
      */
-    implicit def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
+    implicit def rddToDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
       self.createDataFrame(rdd)
     }
 
     /**
      * Creates a DataFrame from a local Seq of Product.
      */
-    implicit def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
+    implicit def localSeqToDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
       self.createDataFrame(data)
     }
   }
@@ -243,7 +243,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *  val people =
    *    sc.textFile("examples/src/main/resources/people.txt").map(
    *      _.split(",")).map(p => Row(p(0), p(1).trim.toInt))
-   *  val dataFrame = sqlContext. applySchema(people, schema)
+   *  val dataFrame = sqlContext.createDataFrame(people, schema)
    *  dataFrame.printSchema
    *  // root
    *  // |-- name: string (nullable = false)
@@ -252,11 +252,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *  dataFrame.registerTempTable("people")
    *  sqlContext.sql("select name from people").collect.foreach(println)
    * }}}
-   *
-   * @group userf
    */
   @DeveloperApi
-  def applySchema(rowRDD: RDD[Row], schema: StructType): DataFrame = {
+  def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = {
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
     val logicalPlan = LogicalRDD(schema.toAttributes, rowRDD)(self)
@@ -264,8 +262,21 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   @DeveloperApi
-  def applySchema(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
-    applySchema(rowRDD.rdd, schema);
+  def createDataFrame(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
+    createDataFrame(rowRDD.rdd, schema)
+  }
+
+  /**
+   * Creates a [[DataFrame]] from an [[JavaRDD]] containing [[Row]]s by applying
+   * a seq of names of columns to this RDD, the data type for each column will
+   * be inferred by the first row.
+   *
+   * @param rowRDD an JavaRDD of Row
+   * @param columns names for each column
+   * @return DataFrame
+   */
+  def createDataFrame(rowRDD: JavaRDD[Row], columns: java.util.List[String]): DataFrame = {
+    createDataFrame(rowRDD.rdd, columns.toSeq)
   }
 
   /**
@@ -274,7 +285,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
    *          SELECT * queries will return the columns in an undefined order.
    */
-  def applySchema(rdd: RDD[_], beanClass: Class[_]): DataFrame = {
+  def createDataFrame(rdd: RDD[_], beanClass: Class[_]): DataFrame = {
     val attributeSeq = getSchema(beanClass)
     val className = beanClass.getName
     val rowRdd = rdd.mapPartitions { iter =>
@@ -301,8 +312,72 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
    *          SELECT * queries will return the columns in an undefined order.
    */
+  def createDataFrame(rdd: JavaRDD[_], beanClass: Class[_]): DataFrame = {
+    createDataFrame(rdd.rdd, beanClass)
+  }
+
+  /**
+   * :: DeveloperApi ::
+   * Creates a [[DataFrame]] from an [[RDD]] containing [[Row]]s by applying a schema to this RDD.
+   * It is important to make sure that the structure of every [[Row]] of the provided RDD matches
+   * the provided schema. Otherwise, there will be runtime exception.
+   * Example:
+   * {{{
+   *  import org.apache.spark.sql._
+   *  val sqlContext = new org.apache.spark.sql.SQLContext(sc)
+   *
+   *  val schema =
+   *    StructType(
+   *      StructField("name", StringType, false) ::
+   *      StructField("age", IntegerType, true) :: Nil)
+   *
+   *  val people =
+   *    sc.textFile("examples/src/main/resources/people.txt").map(
+   *      _.split(",")).map(p => Row(p(0), p(1).trim.toInt))
+   *  val dataFrame = sqlContext. applySchema(people, schema)
+   *  dataFrame.printSchema
+   *  // root
+   *  // |-- name: string (nullable = false)
+   *  // |-- age: integer (nullable = true)
+   *
+   *  dataFrame.registerTempTable("people")
+   *  sqlContext.sql("select name from people").collect.foreach(println)
+   * }}}
+   *
+   * @group userf
+   */
+  @DeveloperApi
+  @deprecated("use createDataFrame", "1.3.0")
+  def applySchema(rowRDD: RDD[Row], schema: StructType): DataFrame = {
+    createDataFrame(rowRDD, schema)
+  }
+
+  @DeveloperApi
+  @deprecated("use createDataFrame", "1.3.0")
+  def applySchema(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
+    createDataFrame(rowRDD, schema)
+  }
+
+  /**
+   * Applies a schema to an RDD of Java Beans.
+   *
+   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
+   *          SELECT * queries will return the columns in an undefined order.
+   */
+  @deprecated("use createDataFrame", "1.3.0")
+  def applySchema(rdd: RDD[_], beanClass: Class[_]): DataFrame = {
+    createDataFrame(rdd, beanClass)
+  }
+
+  /**
+   * Applies a schema to an RDD of Java Beans.
+   *
+   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
+   *          SELECT * queries will return the columns in an undefined order.
+   */
+  @deprecated("use createDataFrame", "1.3.0")
   def applySchema(rdd: JavaRDD[_], beanClass: Class[_]): DataFrame = {
-    applySchema(rdd.rdd, beanClass)
+    createDataFrame(rdd, beanClass)
   }
 
   /**
@@ -375,7 +450,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
         JsonRDD.nullTypeToStringType(
           JsonRDD.inferSchema(json, 1.0, columnNameOfCorruptJsonRecord)))
     val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
-    applySchema(rowRDD, appliedSchema)
+    createDataFrame(rowRDD, appliedSchema)
   }
 
   @Experimental
@@ -393,7 +468,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       JsonRDD.nullTypeToStringType(
         JsonRDD.inferSchema(json, samplingRatio, columnNameOfCorruptJsonRecord))
     val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
-    applySchema(rowRDD, appliedSchema)
+    createDataFrame(rowRDD, appliedSchema)
   }
 
   @Experimental
@@ -401,27 +476,173 @@ class SQLContext(@transient val sparkContext: SparkContext)
     jsonRDD(json.rdd, samplingRatio);
   }
 
+  /**
+   * :: Experimental ::
+   * Returns the dataset stored at path as a DataFrame,
+   * using the default data source configured by spark.sql.sources.default.
+   */
   @Experimental
   def load(path: String): DataFrame = {
     val dataSourceName = conf.defaultDataSourceName
-    load(dataSourceName, ("path", path))
+    load(path, dataSourceName)
   }
 
+  /**
+   * :: Experimental ::
+   * Returns the dataset stored at path as a DataFrame,
+   * using the given data source.
+   */
   @Experimental
-  def load(
-      dataSourceName: String,
-      option: (String, String),
-      options: (String, String)*): DataFrame = {
-    val resolved = ResolvedDataSource(this, None, dataSourceName, (option +: options).toMap)
+  def load(path: String, source: String): DataFrame = {
+    load(source, Map("path" -> path))
+  }
+
+  /**
+   * :: Experimental ::
+   * Returns the dataset specified by the given data source and a set of options as a DataFrame.
+   */
+  @Experimental
+  def load(source: String, options: java.util.Map[String, String]): DataFrame = {
+    load(source, options.toMap)
+  }
+
+  /**
+   * :: Experimental ::
+   * (Scala-specific)
+   * Returns the dataset specified by the given data source and a set of options as a DataFrame.
+   */
+  @Experimental
+  def load(source: String, options: Map[String, String]): DataFrame = {
+    val resolved = ResolvedDataSource(this, None, source, options)
     DataFrame(this, LogicalRelation(resolved.relation))
   }
 
+  /**
+   * :: Experimental ::
+   * Returns the dataset specified by the given data source and a set of options as a DataFrame,
+   * using the given schema as the schema of the DataFrame.
+   */
   @Experimental
   def load(
-      dataSourceName: String,
+      source: String,
+      schema: StructType,
       options: java.util.Map[String, String]): DataFrame = {
-    val opts = options.toSeq
-    load(dataSourceName, opts.head, opts.tail:_*)
+    load(source, schema, options.toMap)
+  }
+
+  /**
+   * :: Experimental ::
+   * (Scala-specific)
+   * Returns the dataset specified by the given data source and a set of options as a DataFrame,
+   * using the given schema as the schema of the DataFrame.
+   */
+  @Experimental
+  def load(
+      source: String,
+      schema: StructType,
+      options: Map[String, String]): DataFrame = {
+    val resolved = ResolvedDataSource(this, Some(schema), source, options)
+    DataFrame(this, LogicalRelation(resolved.relation))
+  }
+
+  /**
+   * :: Experimental ::
+   * Creates an external table from the given path and returns the corresponding DataFrame.
+   * It will use the default data source configured by spark.sql.sources.default.
+   */
+  @Experimental
+  def createExternalTable(tableName: String, path: String): DataFrame = {
+    val dataSourceName = conf.defaultDataSourceName
+    createExternalTable(tableName, path, dataSourceName)
+  }
+
+  /**
+   * :: Experimental ::
+   * Creates an external table from the given path based on a data source
+   * and returns the corresponding DataFrame.
+   */
+  @Experimental
+  def createExternalTable(
+      tableName: String,
+      path: String,
+      source: String): DataFrame = {
+    createExternalTable(tableName, source, Map("path" -> path))
+  }
+
+  /**
+   * :: Experimental ::
+   * Creates an external table from the given path based on a data source and a set of options.
+   * Then, returns the corresponding DataFrame.
+   */
+  @Experimental
+  def createExternalTable(
+      tableName: String,
+      source: String,
+      options: java.util.Map[String, String]): DataFrame = {
+    createExternalTable(tableName, source, options.toMap)
+  }
+
+  /**
+   * :: Experimental ::
+   * (Scala-specific)
+   * Creates an external table from the given path based on a data source and a set of options.
+   * Then, returns the corresponding DataFrame.
+   */
+  @Experimental
+  def createExternalTable(
+      tableName: String,
+      source: String,
+      options: Map[String, String]): DataFrame = {
+    val cmd =
+      CreateTableUsing(
+        tableName,
+        userSpecifiedSchema = None,
+        source,
+        temporary = false,
+        options,
+        allowExisting = false,
+        managedIfNoPath = false)
+    executePlan(cmd).toRdd
+    table(tableName)
+  }
+
+  /**
+   * :: Experimental ::
+   * Create an external table from the given path based on a data source, a schema and
+   * a set of options. Then, returns the corresponding DataFrame.
+   */
+  @Experimental
+  def createExternalTable(
+      tableName: String,
+      source: String,
+      schema: StructType,
+      options: java.util.Map[String, String]): DataFrame = {
+    createExternalTable(tableName, source, schema, options.toMap)
+  }
+
+  /**
+   * :: Experimental ::
+   * (Scala-specific)
+   * Create an external table from the given path based on a data source, a schema and
+   * a set of options. Then, returns the corresponding DataFrame.
+   */
+  @Experimental
+  def createExternalTable(
+      tableName: String,
+      source: String,
+      schema: StructType,
+      options: Map[String, String]): DataFrame = {
+    val cmd =
+      CreateTableUsing(
+        tableName,
+        userSpecifiedSchema = Some(schema),
+        source,
+        temporary = false,
+        options,
+        allowExisting = false,
+        managedIfNoPath = false)
+    executePlan(cmd).toRdd
+    table(tableName)
   }
 
   /**

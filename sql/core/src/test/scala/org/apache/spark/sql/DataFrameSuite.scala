@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.TestData._
+
 import scala.language.postfixOps
 
 import org.apache.spark.sql.Dsl._
@@ -48,6 +50,33 @@ class DataFrameSuite extends QueryTest {
     // No more eager analysis once the flag is turned off
     TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, "false")
     testData.select('nonExistentName)
+
+    // Set the flag back to original value before this test.
+    TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, oldSetting.toString)
+  }
+
+  test("dataframe toString") {
+    assert(testData.toString === "[key: int, value: string]")
+    assert(testData("key").toString === "[key: int]")
+  }
+
+  test("incomputable toString") {
+    assert($"test".toString === "test")
+  }
+
+  test("invalid plan toString, debug mode") {
+    val oldSetting = TestSQLContext.conf.dataFrameEagerAnalysis
+    TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, "true")
+
+    // Turn on debug mode so we can see invalid query plans.
+    import org.apache.spark.sql.execution.debug._
+    TestSQLContext.debug()
+
+    val badPlan = testData.select('badColumn)
+
+    assert(badPlan.toString contains badPlan.queryExecution.toString,
+      "toString on bad query plans should include the query execution but was:\n" +
+        badPlan.toString)
 
     // Set the flag back to original value before this test.
     TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, oldSetting.toString)

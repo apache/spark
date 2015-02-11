@@ -48,11 +48,6 @@ private[sql] object JDBCRelation {
    * exactly once.  The parameters minValue and maxValue are advisory in that
    * incorrect values may cause the partitioning to be poor, but no data
    * will fail to be represented.
-   *
-   * @param column - Column name.  Must refer to a column of integral type.
-   * @param numPartitions - Number of partitions
-   * @param minValue - Smallest value of column.  Advisory.
-   * @param maxValue - Largest value of column.  Advisory.
    */
   def columnPartition(partitioning: JDBCPartitioningInfo): Array[Partition] = {
     if (partitioning == null) return Array[Partition](JDBCPartition(null, 0))
@@ -68,12 +63,17 @@ private[sql] object JDBCRelation {
     var currentValue: Long = partitioning.lowerBound
     var ans = new ArrayBuffer[Partition]()
     while (i < numPartitions) {
-      val lowerBound = (if (i != 0) s"$column >= $currentValue" else null)
+      val lowerBound = if (i != 0) s"$column >= $currentValue" else null
       currentValue += stride
-      val upperBound = (if (i != numPartitions - 1) s"$column < $currentValue" else null)
-      val whereClause = (if (upperBound == null) lowerBound
-                    else if (lowerBound == null) upperBound
-                    else s"$lowerBound AND $upperBound")
+      val upperBound = if (i != numPartitions - 1) s"$column < $currentValue" else null
+      val whereClause =
+        if (upperBound == null) {
+          lowerBound
+        } else if (lowerBound == null) {
+          upperBound
+        } else {
+          s"$lowerBound AND $upperBound"
+        }
       ans += JDBCPartition(whereClause, i)
       i = i + 1
     }
@@ -96,8 +96,7 @@ private[sql] class DefaultSource extends RelationProvider {
 
     if (driver != null) Class.forName(driver)
 
-    if (
-      partitionColumn != null
+    if (partitionColumn != null
         && (lowerBound == null || upperBound == null || numPartitions == null)) {
       sys.error("Partitioning incompletely specified")
     }
@@ -119,7 +118,8 @@ private[sql] class DefaultSource extends RelationProvider {
 private[sql] case class JDBCRelation(
     url: String,
     table: String,
-    parts: Array[Partition])(@transient val sqlContext: SQLContext) extends PrunedFilteredScan {
+    parts: Array[Partition])(@transient val sqlContext: SQLContext)
+  extends PrunedFilteredScan {
 
   override val schema = JDBCRDD.resolveTable(url, table)
 
