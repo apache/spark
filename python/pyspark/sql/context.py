@@ -366,7 +366,7 @@ class SQLContext(object):
                 # data could be list, tuple, generator ...
                 data = self._sc.parallelize(data)
             except Exception:
-                raise ValueError("Cann't create an RDD from type: %s" % type(data))
+                raise ValueError("cannot create an RDD from type: %s" % type(data))
 
         if schema is None:
             return self.inferSchema(data, samplingRatio)
