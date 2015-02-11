@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.hive.HiveShim
+import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{QueryTest, Row, SQLConf}
@@ -34,6 +35,7 @@ case class Nested3(f3: Int)
 class SQLQuerySuite extends QueryTest {
 
   import org.apache.spark.sql.hive.test.TestHive.implicits._
+  val sqlCtx = TestHive
 
   test("SPARK-4512 Fix attribute reference resolution error when using SORT BY") {
     checkAnswer(
@@ -277,7 +279,7 @@ class SQLQuerySuite extends QueryTest {
 
     val rowRdd = sparkContext.parallelize(row :: Nil)
 
-    applySchema(rowRdd, schema).registerTempTable("testTable")
+    sqlCtx.createDataFrame(rowRdd, schema).registerTempTable("testTable")
 
     sql(
       """CREATE TABLE nullValuesInInnerComplexTypes

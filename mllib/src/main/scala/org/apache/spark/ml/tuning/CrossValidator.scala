@@ -76,8 +76,8 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
     val metrics = new Array[Double](epm.size)
     val splits = MLUtils.kFold(dataset.rdd, map(numFolds), 0)
     splits.zipWithIndex.foreach { case ((training, validation), splitIndex) =>
-      val trainingDataset = sqlCtx.applySchema(training, schema).cache()
-      val validationDataset = sqlCtx.applySchema(validation, schema).cache()
+      val trainingDataset = sqlCtx.createDataFrame(training, schema).cache()
+      val validationDataset = sqlCtx.createDataFrame(validation, schema).cache()
       // multi-model training
       logDebug(s"Train split $splitIndex with multiple sets of parameters.")
       val models = est.fit(trainingDataset, epm).asInstanceOf[Seq[Model[_]]]
