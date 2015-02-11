@@ -59,7 +59,7 @@ private[sql] object DataSourceStrategy extends Strategy {
       if (partition.nonEmpty) {
         sys.error(s"Insert into a partition is not allowed because $l is not partitioned.")
       }
-      execution.ExecutedCommand(InsertIntoRelation(t, query, overwrite)) :: Nil
+      execution.ExecutedCommand(InsertIntoDataSource(l, query, overwrite)) :: Nil
 
     case _ => Nil
   }

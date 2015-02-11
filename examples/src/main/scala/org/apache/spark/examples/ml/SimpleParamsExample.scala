@@ -72,7 +72,7 @@ object SimpleParamsExample {
     paramMap.put(lr.regParam -> 0.1, lr.threshold -> 0.55) // Specify multiple Params.
 
     // One can also combine ParamMaps.
-    val paramMap2 = ParamMap(lr.scoreCol -> "probability") // Change output column name
+    val paramMap2 = ParamMap(lr.probabilityCol -> "myProbability") // Change output column name
     val paramMapCombined = paramMap ++ paramMap2
 
     // Now learn a new model using the paramMapCombined parameters.
@@ -80,21 +80,21 @@ object SimpleParamsExample {
     val model2 = lr.fit(training, paramMapCombined)
     println("Model 2 was fit using parameters: " + model2.fittingParamMap)
 
-    // Prepare test documents.
+    // Prepare test data.
     val test = sc.parallelize(Seq(
       LabeledPoint(1.0, Vectors.dense(-1.0, 1.5, 1.3)),
       LabeledPoint(0.0, Vectors.dense(3.0, 2.0, -0.1)),
       LabeledPoint(1.0, Vectors.dense(0.0, 2.2, -1.5))))
 
-    // Make predictions on test documents using the Transformer.transform() method.
+    // Make predictions on test data using the Transformer.transform() method.
     // LogisticRegression.transform will only use the 'features' column.
-    // Note that model2.transform() outputs a 'probability' column instead of the usual 'score'
-    // column since we renamed the lr.scoreCol parameter previously.
+    // Note that model2.transform() outputs a 'myProbability' column instead of the usual
+    // 'probability' column since we renamed the lr.probabilityCol parameter previously.
     model2.transform(test)
-      .select("features", "label", "probability", "prediction")
+      .select("features", "label", "myProbability", "prediction")
       .collect()
-      .foreach { case Row(features: Vector, label: Double, prob: Double, prediction: Double) =>
-        println("(" + features + ", " + label + ") -> prob=" + prob + ", prediction=" + prediction)
+      .foreach { case Row(features: Vector, label: Double, prob: Vector, prediction: Double) =>
+        println("($features, $label) -> prob=$prob, prediction=$prediction")
       }
 
     sc.stop()

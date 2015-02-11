@@ -166,6 +166,14 @@ class BLASSuite extends FunSuite {
         syr(alpha, y, dA)
       }
     }
+
+    val xSparse = new SparseVector(4, Array(0, 2, 3), Array(1.0, 3.0, 4.0))
+    val dD = new DenseMatrix(4, 4,
+      Array(0.0, 1.2, 2.2, 3.1, 1.2, 3.2, 5.3, 4.6, 2.2, 5.3, 1.8, 3.0, 3.1, 4.6, 3.0, 0.8))
+    syr(0.1, xSparse, dD)
+    val expectedSparse = new DenseMatrix(4, 4,
+      Array(0.1, 1.2, 2.5, 3.5, 1.2, 3.2, 5.3, 4.6, 2.5, 5.3, 2.7, 4.2, 3.5, 4.6, 4.2, 2.4))
+    assert(dD ~== expectedSparse absTol 1e-15)
   }
 
   test("gemm") {

@@ -154,18 +154,25 @@ private[spark] class CoarseMesosSchedulerBackend(
     if (uri == null) {
       val runScript = new File(executorSparkHome, "./bin/spark-class").getCanonicalPath
       command.setValue(
-        "%s \"%s\" org.apache.spark.executor.CoarseGrainedExecutorBackend %s %s %s %d %s".format(
-          prefixEnv, runScript, driverUrl, offer.getSlaveId.getValue,
-          offer.getHostname, numCores, appId))
+        "%s \"%s\" org.apache.spark.executor.CoarseGrainedExecutorBackend"
+          .format(prefixEnv, runScript) +
+        s" --driver-url $driverUrl" +
+        s" --executor-id ${offer.getSlaveId.getValue}" +
+        s" --hostname ${offer.getHostname}" +
+        s" --cores $numCores" +
+        s" --app-id $appId")
     } else {
       // Grab everything to the first '.'. We'll use that and '*' to
       // glob the directory "correctly".
       val basename = uri.split('/').last.split('.').head
       command.setValue(
-        ("cd %s*; %s " +
-          "./bin/spark-class org.apache.spark.executor.CoarseGrainedExecutorBackend %s %s %s %d %s")
-          .format(basename, prefixEnv, driverUrl, offer.getSlaveId.getValue,
-            offer.getHostname, numCores, appId))
+        s"cd $basename*; $prefixEnv " +
+         "./bin/spark-class org.apache.spark.executor.CoarseGrainedExecutorBackend" +
+        s" --driver-url $driverUrl" +
+        s" --executor-id ${offer.getSlaveId.getValue}" +
+        s" --hostname ${offer.getHostname}" +
+        s" --cores $numCores" +
+        s" --app-id $appId")
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri))
     }
     command.build()

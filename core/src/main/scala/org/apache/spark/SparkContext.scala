@@ -191,7 +191,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   // log out Spark Version in Spark driver log
   logInfo(s"Running Spark version $SPARK_VERSION")
-  
+
   private[spark] val conf = config.clone()
   conf.validateSettings()
 
@@ -288,7 +288,12 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   // the bound port to the cluster manager properly
   ui.foreach(_.bind())
 
-  /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
+  /**
+   * A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse.
+   *
+   * '''Note:''' As it will be reused in all Hadoop RDDs, it's better not to modify it unless you
+   * plan to set some global configurations for all Hadoop RDDs.
+   */
   val hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(conf)
 
   // Add each JAR given through the constructor
@@ -330,11 +335,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   executorEnvs ++= conf.getExecutorEnv
 
   // Set SPARK_USER for user who is running SparkContext.
-  val sparkUser = Option {
-    Option(System.getenv("SPARK_USER")).getOrElse(System.getProperty("user.name"))
-  }.getOrElse {
-    SparkContext.SPARK_UNKNOWN_USER
-  }
+  val sparkUser = Utils.getCurrentUserName()
   executorEnvs("SPARK_USER") = sparkUser
 
   // Create and start the scheduler
@@ -694,7 +695,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * necessary info (e.g. file name for a filesystem-based dataset, table name for HyperTable),
    * using the older MapReduce API (`org.apache.hadoop.mapred`).
    *
-   * @param conf JobConf for setting up the dataset
+   * @param conf JobConf for setting up the dataset. Note: This will be put into a Broadcast.
+   *             Therefore if you plan to reuse this conf to create multiple RDDs, you need to make
+   *             sure you won't modify the conf. A safe approach is always creating a new conf for
+   *             a new RDD.
    * @param inputFormatClass Class of the InputFormat
    * @param keyClass Class of the keys
    * @param valueClass Class of the values
@@ -818,7 +822,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       vClass: Class[V],
       conf: Configuration = hadoopConfiguration): RDD[(K, V)] = {
     assertNotStopped()
-    // The call to new NewHadoopJob automatically adds security credentials to conf, 
+    // The call to new NewHadoopJob automatically adds security credentials to conf,
     // so we don't need to explicitly add them ourselves
     val job = new NewHadoopJob(conf)
     NewFileInputFormat.addInputPath(job, new Path(path))
@@ -829,6 +833,14 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
    * and extra configuration options to pass to the input format.
+   *
+   * @param conf Configuration for setting up the dataset. Note: This will be put into a Broadcast.
+   *             Therefore if you plan to reuse this conf to create multiple RDDs, you need to make
+   *             sure you won't modify the conf. A safe approach is always creating a new conf for
+   *             a new RDD.
+   * @param fClass Class of the InputFormat
+   * @param kClass Class of the keys
+   * @param vClass Class of the values
    *
    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
@@ -1088,9 +1100,26 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
+   * Express a preference to the cluster manager for a given total number of executors.
+   * This can result in canceling pending requests or filing additional requests.
+   * This is currently only supported in YARN mode. Return whether the request is received.
+   */
+  private[spark] override def requestTotalExecutors(numExecutors: Int): Boolean = {
+    assert(master.contains("yarn") || dynamicAllocationTesting,
+      "Requesting executors is currently only supported in YARN mode")
+    schedulerBackend match {
+      case b: CoarseGrainedSchedulerBackend =>
+        b.requestTotalExecutors(numExecutors)
+      case _ =>
+        logWarning("Requesting executors is only supported in coarse-grained mode")
+        false
+    }
+  }
+
+  /**
    * :: DeveloperApi ::
    * Request an additional number of executors from the cluster manager.
-   * This is currently only supported in Yarn mode. Return whether the request is received.
+   * This is currently only supported in YARN mode. Return whether the request is received.
    */
   @DeveloperApi
   override def requestExecutors(numAdditionalExecutors: Int): Boolean = {
@@ -1108,7 +1137,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * :: DeveloperApi ::
    * Request that the cluster manager kill the specified executors.
-   * This is currently only supported in Yarn mode. Return whether the request is received.
+   * This is currently only supported in YARN mode. Return whether the request is received.
    */
   @DeveloperApi
   override def killExecutors(executorIds: Seq[String]): Boolean = {
@@ -1404,6 +1433,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     val callSite = getCallSite
     val cleanedFunc = clean(func)
     logInfo("Starting job: " + callSite.shortForm)
+    if (conf.getBoolean("spark.logLineage", false)) {
+      logInfo("RDD's recursive dependencies:\n" + rdd.toDebugString)
+    }
     dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, allowLocal,
       resultHandler, localProperties.get)
     progressBar.foreach(_.finishAll())
@@ -1590,8 +1622,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   @deprecated("use defaultMinPartitions", "1.0.0")
   def defaultMinSplits: Int = math.min(defaultParallelism, 2)
 
-  /** 
-   * Default min number of partitions for Hadoop RDDs when not given by user 
+  /**
+   * Default min number of partitions for Hadoop RDDs when not given by user
    * Notice that we use math.min so the "defaultMinPartitions" cannot be higher than 2.
    * The reasons for this are discussed in https://github.com/mesos/spark/pull/718
    */
@@ -1807,8 +1839,6 @@ object SparkContext extends Logging {
   private[spark] val SPARK_JOB_GROUP_ID = "spark.jobGroup.id"
 
   private[spark] val SPARK_JOB_INTERRUPT_ON_CANCEL = "spark.job.interruptOnCancel"
-
-  private[spark] val SPARK_UNKNOWN_USER = "<unknown>"
 
   private[spark] val DRIVER_IDENTIFIER = "<driver>"
 
@@ -2094,7 +2124,7 @@ object SparkContext extends Logging {
 
         val scheduler = new TaskSchedulerImpl(sc)
         val localCluster = new LocalSparkCluster(
-          numSlaves.toInt, coresPerSlave.toInt, memoryPerSlaveInt)
+          numSlaves.toInt, coresPerSlave.toInt, memoryPerSlaveInt, sc.conf)
         val masterUrls = localCluster.start()
         val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls)
         scheduler.initialize(backend)

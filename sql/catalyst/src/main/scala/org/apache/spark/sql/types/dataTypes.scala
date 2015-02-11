@@ -240,9 +240,15 @@ abstract class DataType {
  * @group dataType
  */
 @DeveloperApi
-case object NullType extends DataType {
+class NullType private() extends DataType {
+  // The companion object and this class is separated so the companion object also subclasses
+  // this type. Otherwise, the companion object would be of type "NullType$" in byte code.
+  // Defined with a private constructor so the companion object is the only possible instantiation.
   override def defaultSize: Int = 1
 }
+
+case object NullType extends NullType
+
 
 protected[sql] object NativeType {
   val all = Seq(
@@ -292,7 +298,10 @@ protected[sql] abstract class NativeType extends DataType {
  * @group dataType
  */
 @DeveloperApi
-case object StringType extends NativeType with PrimitiveType {
+class StringType private() extends NativeType with PrimitiveType {
+  // The companion object and this class is separated so the companion object also subclasses
+  // this type. Otherwise, the companion object would be of type "StringType$" in byte code.
+  // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type JvmType = String
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val ordering = implicitly[Ordering[JvmType]]
@@ -302,6 +311,8 @@ case object StringType extends NativeType with PrimitiveType {
    */
   override def defaultSize: Int = 4096
 }
+
+case object StringType extends StringType
 
 
 /**
@@ -313,7 +324,10 @@ case object StringType extends NativeType with PrimitiveType {
  * @group dataType
  */
 @DeveloperApi
-case object BinaryType extends NativeType with PrimitiveType {
+class BinaryType private() extends NativeType with PrimitiveType {
+  // The companion object and this class is separated so the companion object also subclasses
+  // this type. Otherwise, the companion object would be of type "BinaryType$" in byte code.
+  // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type JvmType = Array[Byte]
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val ordering = new Ordering[JvmType] {
@@ -332,6 +346,8 @@ case object BinaryType extends NativeType with PrimitiveType {
   override def defaultSize: Int = 4096
 }
 
+case object BinaryType extends BinaryType
+
 
 /**
  * :: DeveloperApi ::
@@ -341,7 +357,10 @@ case object BinaryType extends NativeType with PrimitiveType {
  *@group dataType
  */
 @DeveloperApi
-case object BooleanType extends NativeType with PrimitiveType {
+class BooleanType private() extends NativeType with PrimitiveType {
+  // The companion object and this class is separated so the companion object also subclasses
+  // this type. Otherwise, the companion object would be of type "BooleanType$" in byte code.
+  // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type JvmType = Boolean
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val ordering = implicitly[Ordering[JvmType]]
@@ -351,6 +370,8 @@ case object BooleanType extends NativeType with PrimitiveType {
    */
   override def defaultSize: Int = 1
 }
+
+case object BooleanType extends BooleanType
 
 
 /**
@@ -362,7 +383,10 @@ case object BooleanType extends NativeType with PrimitiveType {
  * @group dataType
  */
 @DeveloperApi
-case object TimestampType extends NativeType {
+class TimestampType private() extends NativeType {
+  // The companion object and this class is separated so the companion object also subclasses
+  // this type. Otherwise, the companion object would be of type "TimestampType$" in byte code.
+  // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type JvmType = Timestamp
 
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
@@ -377,6 +401,8 @@ case object TimestampType extends NativeType {
   override def defaultSize: Int = 12
 }
 
+case object TimestampType extends TimestampType
+
 
 /**
  * :: DeveloperApi ::
@@ -387,7 +413,10 @@ case object TimestampType extends NativeType {
  * @group dataType
  */
 @DeveloperApi
-case object DateType extends NativeType {
+class DateType private() extends NativeType {
+  // The companion object and this class is separated so the companion object also subclasses
+  // this type. Otherwise, the companion object would be of type "DateType$" in byte code.
+  // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type JvmType = Int
 
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
@@ -399,6 +428,8 @@ case object DateType extends NativeType {
    */
   override def defaultSize: Int = 4
 }
+
+case object DateType extends DateType
 
 
 abstract class NumericType extends NativeType with PrimitiveType {
@@ -438,7 +469,10 @@ protected[sql] sealed abstract class IntegralType extends NumericType {
  * @group dataType
  */
 @DeveloperApi
-case object LongType extends IntegralType {
+class LongType private() extends IntegralType {
+  // The companion object and this class is separated so the companion object also subclasses
+  // this type. Otherwise, the companion object would be of type "LongType$" in byte code.
+  // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type JvmType = Long
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = implicitly[Numeric[Long]]
@@ -453,6 +487,8 @@ case object LongType extends IntegralType {
   override def simpleString = "bigint"
 }
 
+case object LongType extends LongType
+
 
 /**
  * :: DeveloperApi ::
@@ -462,7 +498,10 @@ case object LongType extends IntegralType {
  * @group dataType
  */
 @DeveloperApi
-case object IntegerType extends IntegralType {
+class IntegerType private() extends IntegralType {
+  // The companion object and this class is separated so the companion object also subclasses
+  // this type. Otherwise, the companion object would be of type "IntegerType$" in byte code.
+  // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type JvmType = Int
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = implicitly[Numeric[Int]]
@@ -477,6 +516,8 @@ case object IntegerType extends IntegralType {
   override def simpleString = "int"
 }
 
+case object IntegerType extends IntegerType
+
 
 /**
  * :: DeveloperApi ::
@@ -486,7 +527,10 @@ case object IntegerType extends IntegralType {
  * @group dataType
  */
 @DeveloperApi
-case object ShortType extends IntegralType {
+class ShortType private() extends IntegralType {
+  // The companion object and this class is separated so the companion object also subclasses
+  // this type. Otherwise, the companion object would be of type "ShortType$" in byte code.
+  // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type JvmType = Short
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = implicitly[Numeric[Short]]
@@ -501,6 +545,8 @@ case object ShortType extends IntegralType {
   override def simpleString = "smallint"
 }
 
+case object ShortType extends ShortType
+
 
 /**
  * :: DeveloperApi ::
@@ -510,7 +556,10 @@ case object ShortType extends IntegralType {
  * @group dataType
  */
 @DeveloperApi
-case object ByteType extends IntegralType {
+class ByteType private() extends IntegralType {
+  // The companion object and this class is separated so the companion object also subclasses
+  // this type. Otherwise, the companion object would be of type "ByteType$" in byte code.
+  // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type JvmType = Byte
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = implicitly[Numeric[Byte]]
@@ -524,6 +573,8 @@ case object ByteType extends IntegralType {
 
   override def simpleString = "tinyint"
 }
+
+case object ByteType extends ByteType
 
 
 /** Matcher for any expressions that evaluate to [[FractionalType]]s */
@@ -630,7 +681,10 @@ object DecimalType {
  * @group dataType
  */
 @DeveloperApi
-case object DoubleType extends FractionalType {
+class DoubleType private() extends FractionalType {
+  // The companion object and this class is separated so the companion object also subclasses
+  // this type. Otherwise, the companion object would be of type "DoubleType$" in byte code.
+  // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type JvmType = Double
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = implicitly[Numeric[Double]]
@@ -644,6 +698,8 @@ case object DoubleType extends FractionalType {
   override def defaultSize: Int = 8
 }
 
+case object DoubleType extends DoubleType
+
 
 /**
  * :: DeveloperApi ::
@@ -653,7 +709,10 @@ case object DoubleType extends FractionalType {
  * @group dataType
  */
 @DeveloperApi
-case object FloatType extends FractionalType {
+class FloatType private() extends FractionalType {
+  // The companion object and this class is separated so the companion object also subclasses
+  // this type. Otherwise, the companion object would be of type "FloatType$" in byte code.
+  // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type JvmType = Float
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = implicitly[Numeric[Float]]
@@ -666,6 +725,8 @@ case object FloatType extends FractionalType {
    */
   override def defaultSize: Int = 4
 }
+
+case object FloatType extends FloatType
 
 
 object ArrayType {

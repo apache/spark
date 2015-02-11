@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.sql.Date
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.hive.conf.HiveConf
@@ -68,6 +69,7 @@ private[hive] object HiveQl {
     "TOK_SHOWLOCKS",
     "TOK_UNLOCKTABLE",
 
+    "TOK_SHOW_ROLES",
     "TOK_CREATEROLE",
     "TOK_DROPROLE",
     "TOK_GRANT",
@@ -75,6 +77,7 @@ private[hive] object HiveQl {
     "TOK_REVOKE",
     "TOK_SHOW_GRANT",
     "TOK_SHOW_ROLE_GRANT",
+    "TOK_SHOW_SET_ROLE",
 
     "TOK_CREATEFUNCTION",
     "TOK_DROPFUNCTION",
@@ -102,6 +105,7 @@ private[hive] object HiveQl {
     "TOK_CREATEINDEX",
     "TOK_DROPDATABASE",
     "TOK_DROPINDEX",
+    "TOK_DROPTABLE_PROPERTIES",
     "TOK_MSCK",
 
     "TOK_ALTERVIEW_ADDPARTS",
@@ -110,6 +114,7 @@ private[hive] object HiveQl {
     "TOK_ALTERVIEW_PROPERTIES",
     "TOK_ALTERVIEW_RENAME",
     "TOK_CREATEVIEW",
+    "TOK_DROPVIEW_PROPERTIES",
     "TOK_DROPVIEW",
 
     "TOK_EXPORT",
@@ -496,15 +501,14 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                 // TODO: Actually, a user may mean tableName.columnName. Need to resolve this issue.
                 val tableIdent = extractTableIdent(nameParts.head)
                 DescribeCommand(
-                  UnresolvedRelation(tableIdent, None), extended.isDefined)
+                  UnresolvedRelation(tableIdent, None), isExtended = extended.isDefined)
               case Token(".", dbName :: tableName :: colName :: Nil) =>
                 // It is describing a column with the format like "describe db.table column".
                 NativePlaceholder
               case tableName =>
                 // It is describing a table with the format like "describe table".
                 DescribeCommand(
-                  UnresolvedRelation(Seq(tableName.getText), None),
-                  extended.isDefined)
+                  UnresolvedRelation(Seq(tableName.getText), None), isExtended = extended.isDefined)
             }
           }
           // All other cases.
@@ -556,9 +560,14 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case Token("TOK_TRUNCATETABLE",
           Token("TOK_TABLE_PARTITION",table)::Nil) =>  NativePlaceholder
 
-    case Token("TOK_QUERY",
-           Token("TOK_FROM", fromClause :: Nil) ::
-           insertClauses) =>
+    case Token("TOK_QUERY", queryArgs)
+        if Seq("TOK_FROM", "TOK_INSERT").contains(queryArgs.head.getText) =>
+
+      val (fromClause: Option[ASTNode], insertClauses) = queryArgs match {
+        case Token("TOK_FROM", args: Seq[ASTNode]) :: insertClauses =>
+          (Some(args.head), insertClauses)
+        case Token("TOK_INSERT", _) :: Nil => (None, queryArgs)
+      }
 
       // Return one query for each insert clause.
       val queries = insertClauses.map { case Token("TOK_INSERT", singleInsert) =>
@@ -599,8 +608,12 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
               "TOK_LATERAL_VIEW"),
             singleInsert)
         }
-
-        val relations = nodeToRelation(fromClause)
+ 
+        val relations = fromClause match {
+          case Some(f) => nodeToRelation(f)
+          case None => NoRelation
+        }
+ 
         val withWhere = whereClause.map { whereNode =>
           val Seq(whereExpr) = whereNode.getChildren.toSeq
           Filter(nodeToExpr(whereExpr), relations)
@@ -1029,7 +1042,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       nodeToExpr(qualifier) match {
         case UnresolvedAttribute(qualifierName) =>
           UnresolvedAttribute(qualifierName + "." + cleanIdentifier(attr))
-        case other => GetField(other, attr)
+        case other => UnresolvedGetField(other, attr)
       }
 
     /* Stars (*) */
@@ -1225,6 +1238,9 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
     case ast: ASTNode if ast.getType == HiveParser.TOK_DATELITERAL =>
       Literal(Date.valueOf(ast.getText.substring(1, ast.getText.length - 1)))
+
+    case ast: ASTNode if ast.getType == HiveParser.TOK_CHARSETLITERAL =>
+      Literal(BaseSemanticAnalyzer.charSetString(ast.getChild(0).getText, ast.getChild(1).getText))
 
     case a: ASTNode =>
       throw new NotImplementedError(

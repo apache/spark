@@ -62,17 +62,22 @@ private[spark] object JettyUtils extends Logging {
       securityMgr: SecurityManager): HttpServlet = {
     new HttpServlet {
       override def doGet(request: HttpServletRequest, response: HttpServletResponse) {
-        if (securityMgr.checkUIViewPermissions(request.getRemoteUser)) {
-          response.setContentType("%s;charset=utf-8".format(servletParams.contentType))
-          response.setStatus(HttpServletResponse.SC_OK)
-          val result = servletParams.responder(request)
-          response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
-          response.getWriter.println(servletParams.extractFn(result))
-        } else {
-          response.setStatus(HttpServletResponse.SC_UNAUTHORIZED)
-          response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
-          response.sendError(HttpServletResponse.SC_UNAUTHORIZED,
-            "User is not authorized to access this page.")
+        try {
+          if (securityMgr.checkUIViewPermissions(request.getRemoteUser)) {
+            response.setContentType("%s;charset=utf-8".format(servletParams.contentType))
+            response.setStatus(HttpServletResponse.SC_OK)
+            val result = servletParams.responder(request)
+            response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
+            response.getWriter.println(servletParams.extractFn(result))
+          } else {
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED)
+            response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED,
+              "User is not authorized to access this page.")
+          }
+        } catch {
+          case e: IllegalArgumentException =>
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST, e.getMessage)
         }
       }
     }
