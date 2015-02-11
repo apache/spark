@@ -361,9 +361,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       s"""
         |CREATE TABLE ctasJsonTable
         |USING org.apache.spark.sql.json.DefaultSource
-        |OPTIONS (
-        |
-        |) AS
+        |AS
         |SELECT * FROM jsonTable
       """.stripMargin)
 
