@@ -53,6 +53,14 @@ private[sql] object JsonRDD extends Logging {
     createSchema(allKeys)
   }
 
+  private[sql] def inferSchema(json: String, columnNameOfCorruptRecords: String): StructType = {
+    val allKeys = 
+        parseJson(
+          new ObjectMapper(), 
+          columnNameOfCorruptRecords)(json).map(allKeysWithValueTypes).reduce(_ ++ _)
+    createSchema(allKeys)
+  }
+
   private def createSchema(allKeys: Set[(String, DataType)]): StructType = {
     // Resolve type conflicts
     val resolved = allKeys.groupBy {
@@ -126,7 +134,7 @@ private[sql] object JsonRDD extends Logging {
       StructType((topLevelFields ++ structFields).sortBy(_.name))
     }
 
-    makeStruct(resolved.keySet.toSeq, Nil)
+    nullTypeToStringType(makeStruct(resolved.keySet.toSeq, Nil))
   }
 
   private[sql] def nullTypeToStringType(struct: StructType): StructType = {
@@ -297,19 +305,23 @@ private[sql] object JsonRDD extends Logging {
       // the ObjectMapper will take the last value associated with this duplicate key.
       // For example: for {"key": 1, "key":2}, we will get "key"->2.
       val mapper = new ObjectMapper()
-      iter.flatMap { record =>
-        try {
-          val parsed = mapper.readValue(record, classOf[Object]) match {
-            case map: java.util.Map[_, _] => scalafy(map).asInstanceOf[Map[String, Any]] :: Nil
-            case list: java.util.List[_] => scalafy(list).asInstanceOf[Seq[Map[String, Any]]]
-          }
-
-          parsed
-        } catch {
-          case e: JsonProcessingException => Map(columnNameOfCorruptRecords -> record) :: Nil
-        }
-      }
+      iter.flatMap(parseJson(mapper, columnNameOfCorruptRecords))
     })
+  }
+
+  private def parseJson(
+      mapper: ObjectMapper,
+      columnNameOfCorruptRecords: String)(record: String): Seq[Map[String, Any]] = {
+    try {
+      val parsed = mapper.readValue(record, classOf[Object]) match {
+        case map: java.util.Map[_, _] => scalafy(map).asInstanceOf[Map[String, Any]] :: Nil
+        case list: java.util.List[_] => scalafy(list).asInstanceOf[Seq[Map[String, Any]]]
+      }
+
+      parsed
+    } catch {
+      case e: JsonProcessingException => Map(columnNameOfCorruptRecords -> record) :: Nil
+    }
   }
 
   private def toLong(value: Any): Long = {

@@ -243,32 +243,14 @@ class JsonSuite extends QueryTest {
     )
   }
 
+  test("Complex field and type inferring with single json row") {
+    assert(complexFieldAndType1Schema === inferJsonSchema(complexFieldAndType1Data))
+  }
+
   test("Complex field and type inferring") {
     val jsonDF = jsonRDD(complexFieldAndType1)
 
-    val expectedSchema = StructType(
-      StructField("arrayOfArray1", ArrayType(ArrayType(StringType, false), false), true) ::
-      StructField("arrayOfArray2", ArrayType(ArrayType(DoubleType, false), false), true) ::
-      StructField("arrayOfBigInteger", ArrayType(DecimalType.Unlimited, false), true) ::
-      StructField("arrayOfBoolean", ArrayType(BooleanType, false), true) ::
-      StructField("arrayOfDouble", ArrayType(DoubleType, false), true) ::
-      StructField("arrayOfInteger", ArrayType(IntegerType, false), true) ::
-      StructField("arrayOfLong", ArrayType(LongType, false), true) ::
-      StructField("arrayOfNull", ArrayType(StringType, true), true) ::
-      StructField("arrayOfString", ArrayType(StringType, false), true) ::
-      StructField("arrayOfStruct", ArrayType(
-        StructType(
-          StructField("field1", BooleanType, true) ::
-          StructField("field2", StringType, true) ::
-          StructField("field3", StringType, true) :: Nil), false), true) ::
-      StructField("struct", StructType(
-        StructField("field1", BooleanType, true) ::
-        StructField("field2", DecimalType.Unlimited, true) :: Nil), true) ::
-      StructField("structWithArrayFields", StructType(
-        StructField("field1", ArrayType(IntegerType, false), true) ::
-        StructField("field2", ArrayType(StringType, false), true) :: Nil), true) :: Nil)
-
-    assert(expectedSchema === jsonDF.schema)
+    assert(complexFieldAndType1Schema === jsonDF.schema)
 
     jsonDF.registerTempTable("jsonTable")
 
