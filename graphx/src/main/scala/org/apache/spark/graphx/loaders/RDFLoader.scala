@@ -97,6 +97,16 @@ object RDFLoader extends Logging {
     return graph // so far
   } // end of edgeListFile
   
+  
+  /**
+   * Gets dictionary for entities (not properties) from the provided graph.
+   */
+  def getdictionary(graph:Graph[String,String]): RDD[(Long,String)] = {
+    val vertices = graph.vertices.map(x => (x._1.toLong, x._2))
+    return vertices
+  }
+  
+  
   /**
    *   Implements a simple hashing function for Strings
    */
