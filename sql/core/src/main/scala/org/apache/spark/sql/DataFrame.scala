@@ -124,6 +124,12 @@ trait DataFrame extends RDDApi[Row] {
   /** Prints the schema to the console in a nice tree format. */
   def printSchema(): Unit
 
+  /** Prints the plans (logical and physical) to the console for debugging purpose. */
+  def explain(extended: Boolean): Unit
+
+  /** Only prints the physical plan to the console for debugging purpose. */
+  def explain(): Unit = explain(false)
+
   /**
    * Returns true if the `collect` and `take` methods can be run locally
    * (without any Spark executors).
