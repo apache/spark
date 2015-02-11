@@ -78,9 +78,9 @@ class OutputCommitCoordinatorSuite extends FunSuite with BeforeAndAfter {
       .set("spark.speculation", "true")
     sc = new SparkContext(conf) {
       override private[spark] def createSparkEnv(
-        conf: SparkConf,
-        isLocal: Boolean,
-        listenerBus: LiveListenerBus): SparkEnv = {
+          conf: SparkConf,
+          isLocal: Boolean,
+          listenerBus: LiveListenerBus): SparkEnv = {
         outputCommitCoordinator = spy(new OutputCommitCoordinator(conf))
         // Use Mockito.spy() to maintain the default infrastructure everywhere else.
         // This mocking allows us to control the coordinator responses in test cases.
@@ -146,6 +146,7 @@ class OutputCommitCoordinatorSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("Job should not complete if all commits are denied") {
+    // Create a mock OutputCommitCoordinator that denies all attempts to commit
     doReturn(false).when(outputCommitCoordinator).handleAskPermissionToCommit(
       Matchers.any(), Matchers.any(), Matchers.any())
     val rdd: RDD[Int] = sc.parallelize(Seq(1), 1)
@@ -153,6 +154,8 @@ class OutputCommitCoordinatorSuite extends FunSuite with BeforeAndAfter {
     val futureAction: SimpleFutureAction[Unit] = sc.submitJob[Int, Unit, Unit](rdd,
       OutputCommitFunctions(tempDir.getAbsolutePath).commitSuccessfully,
       0 until rdd.partitions.size, resultHandler, 0)
+    // It's an error if the job completes successfully even though no committer was authorized,
+    // so throw an exception if the job was allowed to complete.
     intercept[TimeoutException] {
       Await.result(futureAction, 5 seconds)
     }

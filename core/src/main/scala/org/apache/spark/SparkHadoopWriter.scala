@@ -124,7 +124,7 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
     if (cmtr.needsTaskCommit(taCtxt)) {
       // The task output needs to be committed, but we don't know whether some other task attempt
       // might be racing to commit the same output partition. Therefore, coordinate with the driver
-      // in order to determine whether this attempt can commit.
+      // in order to determine whether this attempt can commit (see SPARK-4879).
       val shouldCoordinateWithDriver: Boolean = {
         val sparkConf = SparkEnv.get.conf
         // We only need to coordinate with the driver if there are multiple concurrent task

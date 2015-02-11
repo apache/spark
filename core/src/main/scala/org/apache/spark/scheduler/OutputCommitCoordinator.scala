@@ -30,9 +30,12 @@ private case object StopCoordinator extends OutputCommitCoordinationMessage
 private case class AskPermissionToCommitOutput(stage: Int, task: Long, taskAttempt: Long)
 
 /**
- * Authority that decides whether tasks can commit output to HDFS.
+ * Authority that decides whether tasks can commit output to HDFS. Uses a "first committer wins"
+ * policy.
  *
- * This lives on the driver, but the actor allows the tasks that commit to Hadoop to invoke it.
+ * OutputCommitCoordinator is instantiated in both the drivers and executors. On executors, it is
+ * configured with a reference to the driver's OutputCommitCoordinatorActor, so requests to commit
+ * output will be forwarded to the driver's OutputCommitCoordinator.
  *
  * This class was introduced in SPARK-4879; see that JIRA issue (and the associated pull requests)
  * for an extensive design discussion.
@@ -46,12 +49,20 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
   private val retryInterval = AkkaUtils.retryWaitMs(conf)
 
   private type StageId = Int
-  private type TaskId = Long
+  private type PartitionId = Long
   private type TaskAttemptId = Long
-  private type CommittersByStageMap = mutable.Map[StageId, mutable.Map[TaskId, TaskAttemptId]]
 
-  // Access to this state should be guarded by synchronizing on the instance.
+  /**
+   * Map from active stages's id => partition id => task attempt with exclusive lock on committing
+   * output for that partition.
+   *
+   * Entries are added to the top-level map when stages start and are removed they finish
+   * (either successfully or unsuccessfully).
+   *
+   * Access to this map should be guarded by synchronizing on the OutputCommitCoordinator instance.
+   */
   private val authorizedCommittersByStage: CommittersByStageMap = mutable.Map()
+  private type CommittersByStageMap = mutable.Map[StageId, mutable.Map[PartitionId, TaskAttemptId]]
 
   /**
    * Called by tasks to ask whether they can commit their output to HDFS.
@@ -61,15 +72,15 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
    * lost), then a subsequent task attempt may be authorized to commit its output.
    *
    * @param stage the stage number
-   * @param task the task number
+   * @param partition the partition number
    * @param attempt a unique identifier for this task attempt
    * @return true if this task is authorized to commit, false otherwise
    */
   def canCommit(
       stage: StageId,
-      task: TaskId,
+      partition: PartitionId,
       attempt: TaskAttemptId): Boolean = {
-    val msg = AskPermissionToCommitOutput(stage, task, attempt)
+    val msg = AskPermissionToCommitOutput(stage, partition, attempt)
     coordinatorActor match {
       case Some(actor) =>
         AkkaUtils.askWithReply[Boolean](msg, actor, maxAttempts, retryInterval, timeout)
@@ -82,7 +93,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
 
   // Called by DAGScheduler
   private[scheduler] def stageStart(stage: StageId): Unit = synchronized {
-    authorizedCommittersByStage(stage) = mutable.HashMap[TaskId, TaskAttemptId]()
+    authorizedCommittersByStage(stage) = mutable.HashMap[PartitionId, TaskAttemptId]()
   }
 
   // Called by DAGScheduler
@@ -93,7 +104,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
   // Called by DAGScheduler
   private[scheduler] def taskCompleted(
       stage: StageId,
-      task: TaskId,
+      partition: PartitionId,
       attempt: TaskAttemptId,
       reason: TaskEndReason): Unit = synchronized {
     val authorizedCommitters = authorizedCommittersByStage.getOrElse(stage, {
@@ -104,36 +115,36 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
       case Success =>
       // The task output has been committed successfully
       case denied: TaskCommitDenied =>
-        logInfo(s"Task was denied committing, stage: $stage, taskId: $task, attempt: $attempt")
+        logInfo(
+          s"Task was denied committing, stage: $stage, partition: $partition, attempt: $attempt")
       case otherReason =>
-        logDebug(s"Authorized committer $attempt (stage=$stage, task=$task) failed;" +
+        logDebug(s"Authorized committer $attempt (stage=$stage, partition=$partition) failed;" +
           s" clearing lock")
-        authorizedCommitters.remove(task)
+        authorizedCommitters.remove(partition)
     }
   }
 
   def stop(): Unit = synchronized {
     coordinatorActor.foreach(_ ! StopCoordinator)
     coordinatorActor = None
-    authorizedCommittersByStage.foreach(_._2.clear)
-    authorizedCommittersByStage.clear
+    authorizedCommittersByStage.clear()
   }
 
   // Marked private[scheduler] instead of private so this can be mocked in tests
   private[scheduler] def handleAskPermissionToCommit(
       stage: StageId,
-      task: TaskId,
+      partition: PartitionId,
       attempt: TaskAttemptId): Boolean = synchronized {
     authorizedCommittersByStage.get(stage) match {
       case Some(authorizedCommitters) =>
-        authorizedCommitters.get(task) match {
+        authorizedCommitters.get(partition) match {
           case Some(existingCommitter) =>
-            logDebug(s"Denying $attempt to commit for stage=$stage, task=$task; " +
+            logDebug(s"Denying $attempt to commit for stage=$stage, partition=$partition; " +
               s"existingCommitter = $existingCommitter")
             false
           case None =>
-            logDebug(s"Authorizing $attempt to commit for stage=$stage, task=$task")
-            authorizedCommitters(task) = attempt
+            logDebug(s"Authorizing $attempt to commit for stage=$stage, partition=$partition")
+            authorizedCommitters(partition) = attempt
             true
         }
       case None =>
@@ -150,8 +161,8 @@ private[spark] object OutputCommitCoordinator {
     extends Actor with ActorLogReceive with Logging {
 
     override def receiveWithLogging = {
-      case AskPermissionToCommitOutput(stage, task, taskAttempt) =>
-        sender ! outputCommitCoordinator.handleAskPermissionToCommit(stage, task, taskAttempt)
+      case AskPermissionToCommitOutput(stage, partition, taskAttempt) =>
+        sender ! outputCommitCoordinator.handleAskPermissionToCommit(stage, partition, taskAttempt)
       case StopCoordinator =>
         logInfo("OutputCommitCoordinator stopped!")
         context.stop(self)

@@ -126,7 +126,7 @@ class DAGScheduler(
   private[scheduler] val eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
   taskScheduler.setDAGScheduler(this)
 
-  private val outputCommitCoordinator = SparkEnv.get.outputCommitCoordinator
+  private val outputCommitCoordinator = env.outputCommitCoordinator
 
   // Called by TaskScheduler to report task's starting.
   def taskStarted(task: Task[_], taskInfo: TaskInfo) {
