@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.io.CharArrayWriter
+
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.collection.JavaConversions._
@@ -380,8 +382,26 @@ private[sql] class DataFrameImpl protected[sql](
   override def toJSON: RDD[String] = {
     val rowSchema = this.schema
     this.mapPartitions { iter =>
-      val jsonFactory = new JsonFactory()
-      iter.map(JsonRDD.rowToJSON(rowSchema, jsonFactory))
+      val writer = new CharArrayWriter()
+      // create the Generator without separator inserted between 2 records
+      val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
+
+      new Iterator[String] {
+        override def hasNext() = iter.hasNext
+        override def next(): String = {
+          JsonRDD.rowToJSON(rowSchema, gen)(iter.next())
+          gen.flush()
+
+          val json = writer.toString
+          if (hasNext) {
+            writer.reset()
+          } else {
+            gen.close()
+          }
+
+          json
+        }
+      }
     }
   }
 
