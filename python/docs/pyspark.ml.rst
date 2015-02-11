@@ -1,11 +1,8 @@
 pyspark.ml package
 =====================
 
-Submodules
-----------
-
-pyspark.ml module
------------------
+Module Context
+--------------
 
 .. automodule:: pyspark.ml
     :members:

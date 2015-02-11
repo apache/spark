@@ -18,12 +18,12 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.util.collection.OpenHashSet
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{ArrayType, StructField, StructType, IntegerType}
 
 /**
  * A trivial [[Analyzer]] with an [[EmptyCatalog]] and [[EmptyFunctionRegistry]]. Used for testing
@@ -81,16 +81,18 @@ class Analyzer(catalog: Catalog,
    */
   object CheckResolution extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = {
-      plan.transform {
+      plan.transformUp {
         case p if p.expressions.exists(!_.resolved) =>
-          throw new TreeNodeException(p,
-            s"Unresolved attributes: ${p.expressions.filterNot(_.resolved).mkString(",")}")
+          val missing = p.expressions.filterNot(_.resolved).map(_.prettyString).mkString(",")
+          val from = p.inputSet.map(_.name).mkString("{", ", ", "}")
+
+          throw new AnalysisException(s"Cannot resolve '$missing' given input columns $from")
         case p if !p.resolved && p.childrenResolved =>
-          throw new TreeNodeException(p, "Unresolved plan found")
+          throw new AnalysisException(s"Unresolved operator in the query plan ${p.simpleString}")
       } match {
         // As a backstop, use the root node to check that the entire plan tree is resolved.
         case p if !p.resolved =>
-          throw new TreeNodeException(p, "Unresolved plan in tree")
+          throw new AnalysisException(s"Unresolved operator in the query plan ${p.simpleString}")
         case p => p
       }
     }
@@ -311,19 +313,28 @@ class Analyzer(catalog: Catalog,
      * desired fields are found.
      */
     protected def resolveGetField(expr: Expression, fieldName: String): Expression = {
+      def findField(fields: Array[StructField]): Int = {
+        val checkField = (f: StructField) => resolver(f.name, fieldName)
+        val ordinal = fields.indexWhere(checkField)
+        if (ordinal == -1) {
+          throw new AnalysisException(
+            s"No such struct field $fieldName in ${fields.map(_.name).mkString(", ")}")
+        } else if (fields.indexWhere(checkField, ordinal + 1) != -1) {
+          throw new AnalysisException(
+            s"Ambiguous reference to fields ${fields.filter(checkField).mkString(", ")}")
+        } else {
+          ordinal
+        }
+      }
       expr.dataType match {
         case StructType(fields) =>
-          val actualField = fields.filter(f => resolver(f.name, fieldName))
-          if (actualField.length == 0) {
-            sys.error(
-              s"No such struct field $fieldName in ${fields.map(_.name).mkString(", ")}")
-          } else if (actualField.length == 1) {
-            val field = actualField(0)
-            GetField(expr, field, fields.indexOf(field))
-          } else {
-            sys.error(s"Ambiguous reference to fields ${actualField.mkString(", ")}")
-          }
-        case otherType => sys.error(s"GetField is not valid on fields of type $otherType")
+          val ordinal = findField(fields)
+          StructGetField(expr, fields(ordinal), ordinal)
+        case ArrayType(StructType(fields), containsNull) =>
+          val ordinal = findField(fields)
+          ArrayGetField(expr, fields(ordinal), ordinal, containsNull)
+        case otherType =>
+          throw new AnalysisException(s"GetField is not valid on fields of type $otherType")
       }
     }
   }

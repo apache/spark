@@ -190,6 +190,26 @@ case class AttributeReference(
   override def toString: String = s"$name#${exprId.id}$typeSuffix"
 }
 
+/**
+ * A place holder used when printing expressions without debugging information such as the
+ * expression id or the unresolved indicator.
+ */
+case class PrettyAttribute(name: String) extends Attribute with trees.LeafNode[Expression] {
+  type EvaluatedType = Any
+
+  override def toString = name
+
+  override def withNullability(newNullability: Boolean): Attribute = ???
+  override def newInstance(): Attribute = ???
+  override def withQualifiers(newQualifiers: Seq[String]): Attribute = ???
+  override def withName(newName: String): Attribute = ???
+  override def qualifiers: Seq[String] = ???
+  override def exprId: ExprId = ???
+  override def eval(input: Row): EvaluatedType = ???
+  override def nullable: Boolean = ???
+  override def dataType: DataType = ???
+}
+
 object VirtualColumn {
   val groupingIdName = "grouping__id"
   def newGroupingId = AttributeReference(groupingIdName, IntegerType, false)()

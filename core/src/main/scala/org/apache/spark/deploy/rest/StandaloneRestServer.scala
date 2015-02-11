@@ -77,7 +77,7 @@ private[spark] class StandaloneRestServer(
     new SubmitRequestServlet(masterActor, masterUrl, masterConf) -> s"$baseContext/create/*",
     new KillRequestServlet(masterActor, masterConf) -> s"$baseContext/kill/*",
     new StatusRequestServlet(masterActor, masterConf) -> s"$baseContext/status/*",
-    new ErrorServlet -> "/" // default handler
+    new ErrorServlet -> "/*" // default handler
   )
 
   /** Start the server and return the bound port. */
@@ -392,7 +392,7 @@ private class SubmitRequestServlet(
     val javaOpts = sparkJavaOpts ++ extraJavaOpts
     val command = new Command(
       "org.apache.spark.deploy.worker.DriverWrapper",
-      Seq("{{WORKER_URL}}", mainClass) ++ appArgs, // args to the DriverWrapper
+      Seq("{{WORKER_URL}}", "{{USER_JAR}}", mainClass) ++ appArgs, // args to the DriverWrapper
       environmentVariables, extraClassPath, extraLibraryPath, javaOpts)
     val actualDriverMemory = driverMemory.map(Utils.memoryStringToMb).getOrElse(DEFAULT_MEMORY)
     val actualDriverCores = driverCores.map(_.toInt).getOrElse(DEFAULT_CORES)

@@ -1,9 +1,6 @@
 pyspark.mllib package
 =====================
 
-Submodules
-----------
-
 pyspark.mllib.classification module
 -----------------------------------
 

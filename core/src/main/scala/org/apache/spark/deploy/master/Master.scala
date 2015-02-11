@@ -671,7 +671,7 @@ private[spark] class Master(
 
   def registerApplication(app: ApplicationInfo): Unit = {
     val appAddress = app.driver.path.address
-    if (addressToWorker.contains(appAddress)) {
+    if (addressToApp.contains(appAddress)) {
       logInfo("Attempted to re-register application at same address: " + appAddress)
       return
     }

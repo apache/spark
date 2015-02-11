@@ -46,9 +46,9 @@ class KafkaRDDSuite extends KafkaStreamSuiteBase with BeforeAndAfter {
     val topic = "topic1"
     val sent = Map("a" -> 5, "b" -> 3, "c" -> 10)
     createTopic(topic)
-    produceAndSendMessage(topic, sent)
+    sendMessages(topic, sent)
 
-    val kafkaParams = Map("metadata.broker.list" -> s"localhost:$brokerPort",
+    val kafkaParams = Map("metadata.broker.list" -> brokerAddress,
       "group.id" -> s"test-consumer-${Random.nextInt(10000)}")
 
     val kc = new KafkaCluster(kafkaParams)
@@ -65,14 +65,14 @@ class KafkaRDDSuite extends KafkaStreamSuiteBase with BeforeAndAfter {
 
     val rdd2 = getRdd(kc, Set(topic))
     val sent2 = Map("d" -> 1)
-    produceAndSendMessage(topic, sent2)
+    sendMessages(topic, sent2)
     // this is the "0 messages" case
     // make sure we dont get anything, since messages were sent after rdd was defined
     assert(rdd2.isDefined)
     assert(rdd2.get.count === 0)
 
     val rdd3 = getRdd(kc, Set(topic))
-    produceAndSendMessage(topic, Map("extra" -> 22))
+    sendMessages(topic, Map("extra" -> 22))
     // this is the "exactly 1 message" case
     // make sure we get exactly one message, despite there being lots more available
     assert(rdd3.isDefined)
