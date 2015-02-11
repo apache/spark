@@ -44,8 +44,8 @@ import org.apache.spark.sql.types.{NumericType, StructType}
  * Internal implementation of [[DataFrame]]. Users of the API should use [[DataFrame]] directly.
  */
 private[sql] class DataFrameImpl protected[sql](
-    override val sqlContext: SQLContext,
-    val queryExecution: SQLContext#QueryExecution)
+    @transient override val sqlContext: SQLContext,
+    @transient val queryExecution: SQLContext#QueryExecution)
   extends DataFrame {
 
   /**
@@ -323,7 +323,7 @@ private[sql] class DataFrameImpl protected[sql](
   override def count(): Long = groupBy().count().rdd.collect().head.getLong(0)
 
   override def repartition(numPartitions: Int): DataFrame = {
-    sqlContext.applySchema(rdd.repartition(numPartitions), schema)
+    sqlContext.createDataFrame(rdd.repartition(numPartitions), schema)
   }
 
   override def distinct: DataFrame = Distinct(logicalPlan)

@@ -76,7 +76,7 @@ private[sql] object DataFrame {
  */
 // TODO: Improve documentation.
 @Experimental
-trait DataFrame extends RDDApi[Row] {
+trait DataFrame extends RDDApi[Row] with Serializable {
 
   val sqlContext: SQLContext
 
