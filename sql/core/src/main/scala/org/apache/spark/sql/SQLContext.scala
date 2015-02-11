@@ -267,66 +267,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
-   * Creates a [[DataFrame]] from an [[RDD]] containing [[Row]]s by applying
-   * a seq of names of columns to this RDD, the data type for each column will
-   * be inferred by the first row.
-   *
-   * It does not support nested StructType, use createDataFrame(rdd, schema) instead.
-   *
-   * For example:
-   *
-   * {{{
-   *  val sqlContext = new org.apache.spark.sql.SQLContext(sc)
-   *
-   *  val people = sc.textFile("examples/src/main/resources/people.txt").map(
-   *      _.split(",")).map(p => Row(p(0), p(1).trim.toInt))
-   *  val dataFrame = sqlContext.createDataFrame(people, Seq("name", "age"))
-   *  dataFrame.printSchema
-   *  // root
-   *  // |-- name: string (nullable = false)
-   *  // |-- age: integer (nullable = true)
-   * }}}
-   *
-   * @param rowRDD an RDD of Row
-   * @param columns names for each column
-   * @return DataFrame
-   */
-  def createDataFrame(rowRDD: RDD[Row], columns: Seq[String]): DataFrame = {
-    def inferType: PartialFunction[Any, DataType] = ScalaReflection.typeOfObject orElse {
-      case map: Map[_, _] =>
-        if (map.isEmpty) {
-          throw new Exception("Cannot infer type from empty Map")
-        }
-        val (k, v) = map.head
-        MapType(inferType(k), inferType(v), true)
-      case map: java.util.Map[_, _] =>
-        if (map.isEmpty) {
-          throw new Exception("Cannot infer type from empty Map")
-        }
-        val (k, v) = map.head
-        MapType(inferType(k), inferType(v), true)
-      case seq: Seq[Any] =>
-        if (seq.isEmpty) {
-          throw new Exception("Cannot infer type from empty seq")
-        }
-        ArrayType(inferType(seq.head), true)
-      case arr: Array[Any] =>
-        if (arr.isEmpty) {
-          throw new Exception("Cannot infer type from empty array")
-        }
-        ArrayType(inferType(arr.head), true)
-      case other =>
-        throw new Exception(s"Cannot infer type from $other")
-    }
-
-    val first = rowRDD.first()
-    val types = first.toSeq.map(inferType)
-    val fields = columns.zip(types).map(x => new StructField(x._1, x._2, true))
-    val schema = StructType(fields)
-    createDataFrame(rowRDD, schema)
-  }
-
-  /**
    * Creates a [[DataFrame]] from an [[JavaRDD]] containing [[Row]]s by applying
    * a seq of names of columns to this RDD, the data type for each column will
    * be inferred by the first row.

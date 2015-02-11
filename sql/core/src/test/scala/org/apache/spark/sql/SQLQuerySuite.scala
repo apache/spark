@@ -736,33 +736,6 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Row(4, 2147483644) :: Nil)
   }
 
-  test("create data frame with names") {
-    val rowRDD1 = unparsedStrings.map { r =>
-      val values = r.split(",").map(_.trim)
-      val v4 = try values(3).toInt catch {
-        case _: NumberFormatException => null
-      }
-      Row(values(0).toInt, values(1), values(2).toBoolean, v4)
-    }
-    val columns = Seq("f1", "f2", "f3", "f4")
-
-    val df1 = sqlCtx.createDataFrame(rowRDD1, columns)
-    df1.registerTempTable("applySchema1")
-    checkAnswer(
-      sql("SELECT * FROM applySchema1"),
-      Row(1, "A1", true, null) ::
-        Row(2, "B2", false, null) ::
-        Row(3, "C3", true, null) ::
-        Row(4, "D4", true, 2147483644) :: Nil)
-
-    checkAnswer(
-      sql("SELECT f1, f4 FROM applySchema1"),
-      Row(1, null) ::
-        Row(2, null) ::
-        Row(3, null) ::
-        Row(4, 2147483644) :: Nil)
-  }
-
   test("SPARK-3423 BETWEEN") {
     checkAnswer(
       sql("SELECT key, value FROM testData WHERE key BETWEEN 5 and 7"),
