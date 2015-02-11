@@ -413,11 +413,11 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
       case ("--help" | "-h") :: tail =>
         printUsageAndExit(0)
 
-      case ("--verbose" | "-v") :: tail =>
+      case ("--verbose") :: tail =>
         verbose = true
         parse(tail)
 
-      case ("--version") :: tail =>
+      case ("--version" | "-v") :: tail =>
         SparkSubmit.printVersionAndExit()
 
       case EQ_SEPARATED_OPT(opt, value) :: tail =>
