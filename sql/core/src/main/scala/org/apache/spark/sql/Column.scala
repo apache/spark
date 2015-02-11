@@ -600,6 +600,14 @@ trait Column extends DataFrame {
   def desc: Column = exprToColumn(SortOrder(expr, Descending), computable = false)
 
   def asc: Column = exprToColumn(SortOrder(expr, Ascending), computable = false)
+
+  override def explain(extended: Boolean): Unit = {
+    if (extended) {
+      println(expr)
+    } else {
+      println(expr.prettyString)
+    }
+  }
 }
 
 
