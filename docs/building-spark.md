@@ -161,7 +161,7 @@ For help in setting up IntelliJ IDEA or Eclipse for Spark development, and troub
 
 # Building Spark Debian Packages
 
-_NOTE: Debian packaging is deprecated and will be removed in a future release._
+_NOTE: Debian packaging is deprecated and is scheduled to be removed in Spark 1.4._
 
 The Maven build includes support for building a Debian package containing the assembly 'fat-jar', PySpark, and the necessary scripts and configuration files. This can be created by specifying the following:
 

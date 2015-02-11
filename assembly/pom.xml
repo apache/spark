@@ -232,7 +232,7 @@
                 <configuration>
                   <target>
                     <echo>
-                      NOTE: Debian packaging is deprecated and will be removed in a future release.
+                      NOTE: Debian packaging is deprecated and is scheduled to be removed in Spark 1.4.
                     </echo>
                   </target>
                 </configuration>
