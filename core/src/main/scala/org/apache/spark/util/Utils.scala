@@ -433,6 +433,13 @@ private[spark] object Utils extends Logging {
         targetFile,
         conf.getBoolean("spark.files.overwrite", false)
       )
+
+      if(cachedFile.exists()) {
+        cachedFile.delete()
+      }
+      if(lockFile.exists()) {
+        lockFile.delete()
+      }
     } else {
       doFetchFile(url, targetDir, fileName, conf, securityMgr, hadoopConf)
     }
