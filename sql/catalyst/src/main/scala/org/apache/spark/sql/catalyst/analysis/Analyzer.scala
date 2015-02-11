@@ -285,11 +285,9 @@ class Analyzer(catalog: Catalog,
 
         val (oldRelation, newRelation, attributeRewrites) = right.collect {
           case oldVersion: MultiInstanceRelation
-            if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty=>
+              if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
             val newVersion = oldVersion.newInstance()
             val newAttributes = AttributeMap(oldVersion.output.zip(newVersion.output))
-
-
             (oldVersion, newVersion, newAttributes)
         }.head // Only handle first case found, others will be fixed on the next pass.
 
