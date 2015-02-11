@@ -44,7 +44,9 @@ class MasterWebUI(val master: Master, requestedPort: Int)
     attachPage(masterPage)
     attachHandler(createStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR, "/static"))
     attachHandler(
-      createRedirectHandler("/app/kill", "/", masterPage.handleKillRequest))
+      createRedirectHandler("/app/kill", "/", masterPage.handleAppKillRequest))
+    attachHandler(
+      createRedirectHandler("/driver/kill", "/", masterPage.handleDriverKillRequest))
   }
 
   /** Attach a reconstructed UI to this Master UI. Only valid after bind(). */

@@ -26,8 +26,8 @@ import akka.pattern.ask
 import org.json4s.JValue
 
 import org.apache.spark.deploy.JsonProtocol
-import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
-import org.apache.spark.deploy.master.{ApplicationInfo, ApplicationState, DriverInfo, WorkerInfo}
+import org.apache.spark.deploy.DeployMessages.{RequestKillDriver, MasterStateResponse, RequestMasterState}
+import org.apache.spark.deploy.master._
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
@@ -41,15 +41,25 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     JsonProtocol.writeMasterState(state)
   }
 
-  def handleKillRequest(request: HttpServletRequest): Unit = {
+  def handleAppKillRequest(request: HttpServletRequest): Unit = {
+    handleKillRequest(request, id => {
+      parent.master.idToApp.get(id).foreach { app =>
+        parent.master.removeApplication(app, ApplicationState.KILLED)
+      }
+    })
+  }
+
+  def handleDriverKillRequest(request: HttpServletRequest): Unit = {
+    handleKillRequest(request, id => { master ! RequestKillDriver(id) })
+  }
+
+  private def handleKillRequest(request: HttpServletRequest, action: String => Unit): Unit = {
     if (parent.killEnabled &&
         parent.master.securityMgr.checkModifyPermissions(request.getRemoteUser)) {
       val killFlag = Option(request.getParameter("terminate")).getOrElse("false").toBoolean
-      val appId = Option(request.getParameter("id"))
-      if (appId.isDefined && killFlag) {
-        parent.master.idToApp.get(appId.get).map { app =>
-          parent.master.removeApplication(app, ApplicationState.KILLED)
-        }
+      val id = Option(request.getParameter("id"))
+      if (id.isDefined && killFlag) {
+        action(id.get)
       }
 
       Thread.sleep(100)
@@ -228,8 +238,16 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   }
 
   private def driverRow(driver: DriverInfo): Seq[Node] = {
+    val killLink = if (parent.killEnabled && driver.state == DriverState.RUNNING) {
+    val killLinkUri = s"driver/kill?id=${driver.id}&terminate=true"
+    val confirm = "return window.confirm(" +
+      s"'Are you sure you want to kill driver ${driver.id} ?');"
+      <span class="kill-link">
+        (<a href={killLinkUri} onclick={confirm}>kill</a>)
+      </span>
+    }
     <tr>
-      <td>{driver.id} </td>
+      <td>{driver.id} {killLink}</td>
       <td>{driver.submitDate}</td>
       <td>{driver.worker.map(w => <a href={w.webUiAddress}>{w.id.toString}</a>).getOrElse("None")}
       </td>
