@@ -93,7 +93,10 @@ private[streaming] abstract class ReceiverSupervisor(
 
   /** Called when supervisor is stopped */
   protected def onStop(message: String, error: Option[Throwable]) { }
-
+ 
+  /** Called when receiver is registered */
+  protected def onReceiverRegister() { }
+ 
   /** Called when receiver is started */
   protected def onReceiverStart() { }
 
@@ -117,10 +120,11 @@ private[streaming] abstract class ReceiverSupervisor(
   /** Start receiver */
   def startReceiver(): Unit = synchronized {
     try {
-      onReceiverStart()
+      onReceiverRegister()
       logInfo("Starting receiver")
       receiver.onStart()
       logInfo("Called receiver onStart")
+      onReceiverStart()
       receiverState = Started
     } catch {
       case t: Throwable =>

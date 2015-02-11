@@ -38,6 +38,12 @@ private[streaming] case class RegisterReceiver(
     host: String,
     receiverActor: ActorRef
   ) extends ReceiverTrackerMessage
+private[streaming] case class ReceiverStarted(
+    streamId: Int,
+    typ: String,
+    host: String,
+    receiverActor: ActorRef
+ ) extends ReceiverTrackerMessage
 private[streaming] case class AddBlock(receivedBlockInfo: ReceivedBlockInfo)
   extends ReceiverTrackerMessage
 private[streaming] case class ReportError(streamId: Int, message: String, error: String)
@@ -177,10 +183,27 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     }
     receiverInfo(streamId) = ReceiverInfo(
       streamId, s"${typ}-${streamId}", receiverActor, true, host)
-    listenerBus.post(StreamingListenerReceiverStarted(receiverInfo(streamId)))
+    listenerBus.post(StreamingListenerReceiverRegistered(receiverInfo(streamId)))
     logInfo("Registered receiver for stream " + streamId + " from " + sender.path.address)
   }
-
+ 
+  /** Receiver started */
+  private def receiverStarted(
+      streamId: Int,
+      typ: String,
+      host: String,
+      receiverActor: ActorRef,
+      sender: ActorRef
+    ) {
+    if (!receiverInputStreamIds.contains(streamId)) {
+      throw new SparkException("Start received for unexpected id " + streamId)
+    }
+    receiverInfo(streamId) = ReceiverInfo(
+      streamId, s"${typ}-${streamId}", receiverActor, true, host)
+    listenerBus.post(StreamingListenerReceiverStarted(receiverInfo(streamId)))
+    logInfo("Receiver started for stream " + streamId + " from " + sender.path.address)
+  }
+ 
   /** Deregister a receiver */
   private def deregisterReceiver(streamId: Int, message: String, error: String) {
     val newReceiverInfo = receiverInfo.get(streamId) match {
@@ -236,6 +259,12 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         // Actor stops to accept registering when tracker is stopping
         if (!isTrackerStopping) {
           registerReceiver(streamId, typ, host, receiverActor, sender)
+          sender ! true
+        }
+      case ReceiverStarted(streamId, typ, host, receiverActor) =>
+        // Actor stops to accept starting when tracker is stopping
+        if (!isTrackerStopping) {
+          receiverStarted(streamId, typ, host, receiverActor, sender)
           sender ! true
         }
       case AddBlock(receivedBlockInfo) =>

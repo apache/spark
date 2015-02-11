@@ -182,9 +182,16 @@ private[streaming] class ReceiverSupervisorImpl(
     blockGenerator.stop()
     env.actorSystem.stop(actor)
   }
-
-  override protected def onReceiverStart() {
+ 
+  override protected def onReceiverRegister() {
     val msg = RegisterReceiver(
+      streamId, receiver.getClass.getSimpleName, Utils.localHostName(), actor)
+    val future = trackerActor.ask(msg)(askTimeout)
+    Await.result(future, askTimeout)
+  }
+ 
+  override protected def onReceiverStart() {
+    val msg = ReceiverStarted(
       streamId, receiver.getClass.getSimpleName, Utils.localHostName(), actor)
     val future = trackerActor.ask(msg)(askTimeout)
     Await.result(future, askTimeout)
