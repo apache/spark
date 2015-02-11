@@ -194,7 +194,7 @@ class SQLTests(ReusedPySparkTestCase):
         result = self.sqlCtx.sql("SELECT l[0].a from test where d['key'].d = '2'")
         self.assertEqual(1, result.head()[0])
 
-        df2 = self.sqlCtx.createDataFrame(rdd, 1.0)
+        df2 = self.sqlCtx.createDataFrame(rdd, samplingRatio=1.0)
         self.assertEqual(df.schema(), df2.schema())
         self.assertEqual({}, df2.map(lambda r: r.d).first())
         self.assertEqual([None, ""], df2.map(lambda r: r.s).collect())
