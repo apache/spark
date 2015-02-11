@@ -45,6 +45,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest {
 
     // This test case will trigger the NPE mentioned in
     // https://issues.apache.org/jira/browse/PARQUET-151.
+    // Update: This also triggers SPARK-5746, should re enable it when we get both fixed.
     ignore(s"$prefix: overwriting") {
       val data = (0 until 10).map(i => (i, i.toString))
       withParquetTable(data, "t") {

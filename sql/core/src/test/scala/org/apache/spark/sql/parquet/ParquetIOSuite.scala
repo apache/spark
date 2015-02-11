@@ -21,6 +21,8 @@ import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
 import parquet.example.data.simple.SimpleGroup
 import parquet.example.data.{Group, GroupWriter}
 import parquet.hadoop.api.WriteSupport
@@ -30,16 +32,13 @@ import parquet.hadoop.{ParquetFileWriter, ParquetWriter}
 import parquet.io.api.RecordConsumer
 import parquet.schema.{MessageType, MessageTypeParser}
 
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.spark.sql.{DataFrame, QueryTest, SQLConf}
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.types.DecimalType
+import org.apache.spark.sql.{DataFrame, QueryTest, SQLConf, SaveMode}
 
 // Write support class for nested groups: ParquetWriter initializes GroupWriteSupport
 // with an empty configuration (it is after all not intended to be used in this way?)
@@ -67,6 +66,8 @@ private[parquet] class TestGroupWriteSupport(schema: MessageType) extends WriteS
 class ParquetIOSuite extends QueryTest with ParquetTest {
 
   val sqlContext = TestSQLContext
+
+  import sqlContext.implicits.localSeqToDataFrameHolder
 
   /**
    * Writes `data` to a Parquet file, reads it back and check file contents.
@@ -291,10 +292,49 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
         expectedSchema.checkContains(actualSchema)
       }
     }
+
+    test(s"$prefix: save - overwrite") {
+      withParquetFile((1 to 10).map(i => (i, i.toString))) { file =>
+        val newData = (11 to 20).map(i => (i, i.toString))
+        newData.toDF().save("org.apache.spark.sql.parquet", SaveMode.Overwrite, Map("path" -> file))
+        checkAnswer(parquetFile(file), newData.map(Row.fromTuple))
+      }
+    }
+
+    test(s"$prefix: save - ignore") {
+      val data = (1 to 10).map(i => (i, i.toString))
+      withParquetFile(data) { file =>
+        val newData = (11 to 20).map(i => (i, i.toString))
+        newData.toDF().save("org.apache.spark.sql.parquet", SaveMode.Ignore, Map("path" -> file))
+        checkAnswer(parquetFile(file), data.map(Row.fromTuple))
+      }
+    }
+
+    test(s"$prefix: save - throw") {
+      val data = (1 to 10).map(i => (i, i.toString))
+      withParquetFile(data) { file =>
+        val newData = (11 to 20).map(i => (i, i.toString))
+        val errorMessage = intercept[Throwable] {
+          newData.toDF().save(
+            "org.apache.spark.sql.parquet", SaveMode.ErrorIfExists, Map("path" -> file))
+        }.getMessage
+        assert(errorMessage.contains("already exists"))
+      }
+    }
   }
 
   withSQLConf(SQLConf.PARQUET_USE_DATA_SOURCE_API -> "true") {
     run("Parquet data source enabled")
+
+    // Appending is not supported in the old Parquet implementation
+    test(s"Parquet data source enabled: save - append") {
+      val data = (1 to 10).map(i => (i, i.toString))
+      withParquetFile(data) { file =>
+        val newData = (11 to 20).map(i => (i, i.toString))
+        newData.toDF().save("org.apache.spark.sql.parquet", SaveMode.Append, Map("path" -> file))
+        checkAnswer(parquetFile(file), (data ++ newData).map(Row.fromTuple))
+      }
+    }
   }
 
   withSQLConf(SQLConf.PARQUET_USE_DATA_SOURCE_API -> "false") {
