@@ -23,78 +23,55 @@ import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.types.{BooleanType, StringType, StructField, StructType}
 
 class ListTablesSuite extends QueryTest with BeforeAndAfterAll {
 
   import org.apache.spark.sql.hive.test.TestHive.implicits._
 
-  val sqlContext = TestHive
   val df =
     sparkContext.parallelize((1 to 10).map(i => (i,s"str$i"))).toDataFrame("key", "value")
 
   override def beforeAll(): Unit = {
     // The catalog in HiveContext is a case insensitive one.
-    (1 to 10).foreach(i => catalog.registerTable(Seq(s"Table$i"), df.logicalPlan))
-    (1 to 10).foreach(i => catalog.registerTable(Seq("db1", s"db1TempTable$i"), df.logicalPlan))
-    (1 to 10).foreach {
-      i => sql(s"CREATE TABLE hivetable$i (key int, value string)")
-    }
-    sql("CREATE DATABASE IF NOT EXISTS db1")
-    (1 to 10).foreach {
-      i => sql(s"CREATE TABLE db1.db1hivetable$i (key int, value string)")
-    }
+    catalog.registerTable(Seq("ListTablesSuiteTable"), df.logicalPlan)
+    catalog.registerTable(Seq("ListTablesSuiteDB", "InDBListTablesSuiteTable"), df.logicalPlan)
+    sql("CREATE TABLE HiveListTablesSuiteTable (key int, value string)")
+    sql("CREATE DATABASE IF NOT EXISTS ListTablesSuiteDB")
+    sql("CREATE TABLE ListTablesSuiteDB.HiveInDBListTablesSuiteTable (key int, value string)")
   }
 
   override def afterAll(): Unit = {
-    (1 to 10).foreach(i => catalog.unregisterTable(Seq(s"Table$i")))
-    (1 to 10).foreach(i => catalog.unregisterTable(Seq("db1", s"db1TempTable$i")))
-    (1 to 10).foreach {
-      i => sql(s"DROP TABLE IF EXISTS hivetable$i")
-    }
-    (1 to 10).foreach {
-      i => sql(s"DROP TABLE IF EXISTS db1.db1hivetable$i")
-    }
-    sql("DROP DATABASE IF EXISTS db1")
+    catalog.unregisterTable(Seq("ListTablesSuiteTable"))
+    catalog.unregisterTable(Seq("ListTablesSuiteDB", "InDBListTablesSuiteTable"))
+    sql("DROP TABLE IF EXISTS HiveListTablesSuiteTable")
+    sql("DROP TABLE IF EXISTS ListTablesSuiteDB.HiveInDBListTablesSuiteTable")
+    sql("DROP DATABASE IF EXISTS ListTablesSuiteDB")
   }
 
   test("get all tables of current database") {
+    val allTables = tables()
     // We are using default DB.
-    val expectedTables =
-      (1 to 10).map(i => Row(s"table$i", true)) ++
-      (1 to 10).map(i => Row(s"hivetable$i", false))
-    checkAnswer(tables(), expectedTables)
+    checkAnswer(
+      allTables.filter("tableName = 'listtablessuitetable'"),
+      Row("listtablessuitetable", true))
+    assert(allTables.filter("tableName = 'indblisttablessuitetable'").count() === 0)
+    checkAnswer(
+      allTables.filter("tableName = 'hivelisttablessuitetable'"),
+      Row("hivelisttablessuitetable", false))
+    assert(allTables.filter("tableName = 'hiveindblisttablessuitetable'").count() === 0)
   }
 
   test("getting all tables with a database name") {
-    val expectedTables =
-      // We are expecting to see Table1 to Table10 since there is no database associated with them.
-      (1 to 10).map(i => Row(s"table$i", true)) ++
-      (1 to 10).map(i => Row(s"db1temptable$i", true)) ++
-      (1 to 10).map(i => Row(s"db1hivetable$i", false))
-    checkAnswer(tables("db1"), expectedTables)
-  }
-
-  test("query the returned DataFrame of tables") {
-    val tableDF = tables()
-    val schema = StructType(
-      StructField("tableName", StringType, true) ::
-      StructField("isTemporary", BooleanType, false) :: Nil)
-    assert(schema === tableDF.schema)
-
+    val allTables = tables("ListTablesSuiteDB")
     checkAnswer(
-      tableDF.filter("NOT isTemporary").select("tableName"),
-      (1 to 10).map(i => Row(s"hivetable$i"))
-    )
-
-    tableDF.registerTempTable("tables")
+      allTables.filter("tableName = 'listtablessuitetable'"),
+      Row("listtablessuitetable", true))
     checkAnswer(
-      sql("SELECT isTemporary, tableName from tables WHERE isTemporary"),
-      (1 to 10).map(i => Row(true, s"table$i"))
-    )
+      allTables.filter("tableName = 'indblisttablessuitetable'"),
+      Row("indblisttablessuitetable", true))
+    assert(allTables.filter("tableName = 'hivelisttablessuitetable'").count() === 0)
     checkAnswer(
-      tables().filter("tableName = 'tables'").select("tableName", "isTemporary"),
-      Row("tables", true))
-    dropTempTable("tables")
+      allTables.filter("tableName = 'hiveindblisttablessuitetable'"),
+      Row("hiveindblisttablessuitetable", false))
   }
 }

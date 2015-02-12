@@ -150,12 +150,18 @@ trait OverrideCatalog extends Catalog {
   }
 
   abstract override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {
+    val dbName = if (!caseSensitive) {
+      if (databaseName.isDefined) Some(databaseName.get.toLowerCase) else None
+    } else {
+      databaseName
+    }
+
     val temporaryTables = overrides.filter {
       // If a temporary table does not have an associated database, we should return its name.
       case ((None, _), _) => true
       // If a temporary table does have an associated database, we should return it if the database
       // matches the given database name.
-      case ((db: Some[String], _), _) if db == databaseName => true
+      case ((db: Some[String], _), _) if db == dbName => true
       case _ => false
     }.map {
       case ((_, tableName), _) => (tableName, true)

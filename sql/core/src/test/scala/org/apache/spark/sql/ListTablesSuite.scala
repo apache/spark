@@ -17,33 +17,43 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.types.{BooleanType, StringType, StructField, StructType}
 
-class ListTablesSuite extends QueryTest with BeforeAndAfterAll {
+class ListTablesSuite extends QueryTest with BeforeAndAfter {
 
   import org.apache.spark.sql.test.TestSQLContext.implicits._
 
   val df =
     sparkContext.parallelize((1 to 10).map(i => (i,s"str$i"))).toDataFrame("key", "value")
 
-  override def beforeAll(): Unit = {
-    (1 to 10).foreach(i => df.registerTempTable(s"table$i"))
+  before {
+    df.registerTempTable("ListTablesSuiteTable")
   }
 
-  override def afterAll(): Unit = {
-    (1 to 10).foreach(i => catalog.unregisterTable(Seq(s"table$i")))
+  after {
+    catalog.unregisterTable(Seq("ListTablesSuiteTable"))
   }
 
   test("get all tables") {
-    checkAnswer(tables(), (1 to 10).map(i => Row(s"table$i", true)))
+    checkAnswer(
+      tables().filter("tableName = 'ListTablesSuiteTable'"),
+      Row("ListTablesSuiteTable", true))
+
+    catalog.unregisterTable(Seq("ListTablesSuiteTable"))
+    assert(tables().filter("tableName = 'ListTablesSuiteTable'").count() === 0)
   }
 
   test("getting all Tables with a database name has no impact on returned table names") {
-    checkAnswer(tables("DB"), (1 to 10).map(i => Row(s"table$i", true)))
+    checkAnswer(
+      tables("DB").filter("tableName = 'ListTablesSuiteTable'"),
+      Row("ListTablesSuiteTable", true))
+
+    catalog.unregisterTable(Seq("ListTablesSuiteTable"))
+    assert(tables().filter("tableName = 'ListTablesSuiteTable'").count() === 0)
   }
 
   test("query the returned DataFrame of tables") {
@@ -53,15 +63,10 @@ class ListTablesSuite extends QueryTest with BeforeAndAfterAll {
       StructField("isTemporary", BooleanType, false) :: Nil)
     assert(schema === tableDF.schema)
 
-    checkAnswer(
-      tableDF.select("tableName"),
-      (1 to 10).map(i => Row(s"table$i"))
-    )
-
     tableDF.registerTempTable("tables")
     checkAnswer(
-      sql("SELECT isTemporary, tableName from tables WHERE isTemporary"),
-      (1 to 10).map(i => Row(true, s"table$i"))
+      sql("SELECT isTemporary, tableName from tables WHERE tableName = 'ListTablesSuiteTable'"),
+      Row(true, "ListTablesSuiteTable")
     )
     checkAnswer(
       tables().filter("tableName = 'tables'").select("tableName", "isTemporary"),
