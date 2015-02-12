@@ -81,9 +81,9 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures):
         self.setParams(**kwargs)
 
     @keyword_only(start=1)
-    def setParams(self, numFeatures=1<<18, inputCol="input", outputCol="output"):
+    def setParams(self, numFeatures=1 << 18, inputCol="input", outputCol="output"):
         """
-        setParams(self, numFeatures=1<<18, inputCol="input", outputCol="output")
+        setParams(self, numFeatures=1 << 18, inputCol="input", outputCol="output")
         Sets params for HashingTF.
         """
         kwargs = self.setParams._input_kwargs
