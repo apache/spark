@@ -723,6 +723,7 @@ private[spark] class ExternalSorter[K, V, C](
       partitionWriters.foreach(_.commitAndClose())
       var out: FileOutputStream = null
       var in: FileInputStream = null
+      val writeStartTime = System.nanoTime
       try {
         out = new FileOutputStream(outputFile, true)
         for (i <- 0 until numPartitions) {
@@ -739,6 +740,8 @@ private[spark] class ExternalSorter[K, V, C](
         if (in != null) {
           in.close()
         }
+        context.taskMetrics.shuffleWriteMetrics.foreach(
+          _.incShuffleWriteTime(System.nanoTime - writeStartTime))
       }
     } else {
       // Either we're not bypassing merge-sort or we have only in-memory data; get an iterator by
