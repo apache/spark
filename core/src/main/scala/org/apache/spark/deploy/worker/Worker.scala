@@ -349,7 +349,7 @@ private[spark] class Worker(
           // application finishes.
           val appLocalDirs = appDirectories.get(appId).getOrElse {
             Utils.getOrCreateLocalRootDirs(conf).map { dir =>
-              Utils.createDirectory(dir, conf=conf).getAbsolutePath()
+              Utils.createDirectory(dir).getAbsolutePath()
             }.toSeq
           }
           appDirectories(appId) = appLocalDirs
