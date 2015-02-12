@@ -32,6 +32,22 @@ def inherit_doc(cls):
     return cls
 
 
+def keyword_only(start=0):
+    """
+    A decorator that forces keyword arguments and provide actual
+    input keyword arguments.
+    """
+    def inner(func):
+        def wrapper(*args, **kwargs):
+            if len(args) > start:
+                raise ValueError("Function %s forces keyword arguments starting from position %d "
+                                 "(counting self if this is a member function)." %
+                                 (func.__name__, start))
+            wrapper._input_kwargs = kwargs
+            return func(*args, **kwargs)
+        return wrapper
+    return inner
+
 class Identifiable(object):
     """
     Object with a unique ID.

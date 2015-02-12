@@ -45,17 +45,10 @@ if __name__ == "__main__":
           .map(lambda x: LabeledDocument(*x)))
 
     # Configure an ML pipeline, which consists of tree stages: tokenizer, hashingTF, and lr.
-    tokenizer = Tokenizer() \
-        .setInputCol("text") \
-        .setOutputCol("words")
-    hashingTF = HashingTF() \
-        .setInputCol(tokenizer.getOutputCol()) \
-        .setOutputCol("features")
-    lr = LogisticRegression() \
-        .setMaxIter(10) \
-        .setRegParam(0.01)
-    pipeline = Pipeline() \
-        .setStages([tokenizer, hashingTF, lr])
+    tokenizer = Tokenizer(inputCol="text, outputCol="words")
+    hashingTF = HashingTF(inputCol=tokenizer.getOutputCol(), outputCol="features")
+    lr = LogisticRegression(maxIter=10, regParam=0.01)
+    pipeline = Pipeline(stages=[tokenizer, hashingTF, lr])
 
     # Fit the pipeline to training documents.
     model = pipeline.fit(training)

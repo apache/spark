@@ -16,7 +16,7 @@
 #
 
 from pyspark.ml.param.shared import HasInputCol, HasOutputCol, HasNumFeatures
-from pyspark.ml.util import inherit_doc
+from pyspark.ml.util import inherit_doc, keyword_only
 from pyspark.ml.wrapper import JavaTransformer
 
 __all__ = ['Tokenizer', 'HashingTF']
@@ -41,6 +41,18 @@ class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol):
 
     _java_class = "org.apache.spark.ml.feature.Tokenizer"
 
+    def __init__(self, **kwargs):
+        super(Tokenizer, self).__init__()
+        self.setParams(**kwargs)
+
+    @keyword_only(start=1)
+    def setParams(self, inputCol="input", outputCol="output"):
+        """
+        Set params for Tokenizer.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set_params(**kwargs)
+
 
 @inherit_doc
 class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures):
@@ -62,6 +74,18 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures):
     """
 
     _java_class = "org.apache.spark.ml.feature.HashingTF"
+
+    def __init__(self, **kwargs):
+        super(HashingTF, self).__init__()
+        self.setParams(**kwargs)
+
+    @keyword_only(start=1)
+    def setParams(self, numFeatures=1<<18, inputCol="input", outputCol="output"):
+        """
+        Sets params for HashingTF.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set_params(**kwargs)
 
 
 if __name__ == "__main__":
