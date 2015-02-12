@@ -237,6 +237,12 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   protected val mapStatuses = new TimeStampedHashMap[Int, Array[MapStatus]]()
   private val cachedSerializedStatuses = new TimeStampedHashMap[Int, Array[Byte]]()
 
+  // For each shuffleId we also maintain a Map from reducerId -> (location, size)
+  // Lazily populated whenever the statuses are requested from DAGScheduler
+  private val statusByReducer =
+    new TimeStampedHashMap[Int, HashMap[Int, Array[(BlockManagerId, Long)]]]()
+
+
   // For cleaning up TimeStampedHashMaps
   private val metadataCleaner =
     new MetadataCleaner(MetadataCleanerType.MAP_OUTPUT_TRACKER, this.cleanup, conf)
@@ -282,11 +288,35 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   override def unregisterShuffle(shuffleId: Int) {
     mapStatuses.remove(shuffleId)
     cachedSerializedStatuses.remove(shuffleId)
+    statusByReducer.remove(shuffleId)
   }
 
   /** Check if the given shuffle is being tracked */
   def containsShuffle(shuffleId: Int): Boolean = {
     cachedSerializedStatuses.contains(shuffleId) || mapStatuses.contains(shuffleId)
+  }
+
+  // Return the list of locations and blockSizes for each reducer.
+  // The map is keyed by reducerId and for each reducer the value contains the array
+  // of (location, size) of map outputs.
+  //
+  // This method is not thread-safe
+  def getStatusByReducer(shuffleId: Int, numReducers: Int): Option[Map[Int, Array[(BlockManagerId, Long)]]] = {
+    if (!statusByReducer.contains(shuffleId) && mapStatuses.contains(shuffleId)) {
+      val statuses = mapStatuses(shuffleId)
+      if (statuses.length > 0) {
+        statusByReducer(shuffleId) = new HashMap[Int, Array[(BlockManagerId, Long)]]
+        var r = 0
+        while (r < numReducers) {
+          val locs = statuses.map { s =>
+            (s.location, s.getSizeForBlock(r))
+          }
+          statusByReducer(shuffleId) += (r -> locs)
+          r = r + 1
+        }
+      }
+    }
+    statusByReducer.get(shuffleId)
   }
 
   def incrementEpoch() {
@@ -336,6 +366,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   private def cleanup(cleanupTime: Long) {
     mapStatuses.clearOldValues(cleanupTime)
     cachedSerializedStatuses.clearOldValues(cleanupTime)
+    statusByReducer.clearOldValues(cleanupTime)
   }
 }
 
