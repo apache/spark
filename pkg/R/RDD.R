@@ -1292,6 +1292,86 @@ setMethod("sortBy",
             values(sortByKey(keyBy(rdd, func), ascending, numPartitions))
           })
 
+# Helper function to get first N elements from an RDD in the specified order.
+# Param:
+#   rdd An RDD.
+#   num Number of elements to return.
+#   ascending A flag to indicate whether the sorting is ascending or descending.
+# Return:
+#   A list of the first N elements from the RDD in the specified order.
+#
+takeOrderedElem <- function(rdd, num, ascending = TRUE) {          
+  if (num <= 0L) {
+    return(list())
+  }
+  
+  partitionFunc <- function(part) {
+    if (num < length(part)) {
+      # R limitation: order works only on primitive types!
+      ord <- order(unlist(part, recursive = FALSE), decreasing = !ascending)
+      list(part[ord[1:num]])
+    } else {
+      list(part)
+    }
+  }
+
+  reduceFunc <- function(elems, part) {
+    newElems <- append(elems, part)
+    # R limitation: order works only on primitive types!
+    ord <- order(unlist(newElems, recursive = FALSE), decreasing = !ascending)
+    newElems[ord[1:num]]
+  }
+  
+  newRdd <- mapPartitions(rdd, partitionFunc)
+  reduce(newRdd, reduceFunc)
+}
+
+#' Returns the first N elements from an RDD in ascending order.
+#'
+#' @param rdd An RDD.
+#' @param num Number of elements to return.
+#' @return The first N elements from the RDD in ascending order.
+#' @rdname takeOrdered
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, list(10, 1, 2, 9, 3, 4, 5, 6, 7))
+#' takeOrdered(rdd, 6L) # list(1, 2, 3, 4, 5, 6)
+#'}
+setGeneric("takeOrdered", function(rdd, num) { standardGeneric("takeOrdered") })
+
+#' @rdname takeOrdered
+#' @aliases takeOrdered,RDD,RDD-method
+setMethod("takeOrdered",
+          signature(rdd = "RDD", num = "integer"),
+          function(rdd, num) {          
+            takeOrderedElem(rdd, num)
+          })
+
+#' Returns the top N elements from an RDD.
+#'
+#' @param rdd An RDD.
+#' @param num Number of elements to return.
+#' @return The top N elements from the RDD.
+#' @rdname top
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, list(10, 1, 2, 9, 3, 4, 5, 6, 7))
+#' top(rdd, 6L) # list(10, 9, 7, 6, 5, 4)
+#'}
+setGeneric("top", function(rdd, num) { standardGeneric("top") })
+
+#' @rdname top
+#' @aliases top,RDD,RDD-method
+setMethod("top",
+          signature(rdd = "RDD", num = "integer"),
+          function(rdd, num) {          
+            takeOrderedElem(rdd, num, FALSE)
+          })
+
 ############ Shuffle Functions ############
 
 #' Partition an RDD by key
