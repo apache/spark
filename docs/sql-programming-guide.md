@@ -85,7 +85,7 @@ feature parity with a HiveContext.
 
 The entry point into all relational functionality in Spark is the
 [SQLContext](api/scala/index.html#org.apache.spark.sql.api.SQLContext) class, or one
-of its descendants.  To create a basic JavaSQLContext, all you need is a JavaSparkContext.
+of its descendants.  To create a basic SQLContext, all you need is a JavaSparkContext.
 
 {% highlight java %}
 JavaSparkContext sc = ...; // An existing JavaSparkContext.
