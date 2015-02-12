@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.types.{ArrayType, StructField, StructType, IntegerType}
+import org.apache.spark.sql.types._
 
 /**
  * A trivial [[Analyzer]] with an [[EmptyCatalog]] and [[EmptyFunctionRegistry]]. Used for testing
@@ -66,9 +66,7 @@ class Analyzer(catalog: Catalog,
       typeCoercionRules ++
       extendedRules : _*),
     Batch("Check Analysis", Once,
-      CheckResolution ::
-      CheckAggregation ::
-      Nil: _*),
+      CheckResolution),
     Batch("AnalysisOperators", fixedPoint,
       EliminateAnalysisOperators)
   )
@@ -77,21 +75,70 @@ class Analyzer(catalog: Catalog,
    * Makes sure all attributes and logical plans have been resolved.
    */
   object CheckResolution extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = {
-      plan.transformUp {
-        case p if p.expressions.exists(!_.resolved) =>
-          val missing = p.expressions.filterNot(_.resolved).map(_.prettyString).mkString(",")
-          val from = p.inputSet.map(_.name).mkString("{", ", ", "}")
+    def failAnalysis(msg: String) = { throw new AnalysisException(msg) }
 
-          throw new AnalysisException(s"Cannot resolve '$missing' given input columns $from")
-        case p if !p.resolved && p.childrenResolved =>
-          throw new AnalysisException(s"Unresolved operator in the query plan ${p.simpleString}")
-      } match {
-        // As a backstop, use the root node to check that the entire plan tree is resolved.
-        case p if !p.resolved =>
-          throw new AnalysisException(s"Unresolved operator in the query plan ${p.simpleString}")
-        case p => p
+    def apply(plan: LogicalPlan): LogicalPlan = {
+      plan.foreachUp {
+        case operator: LogicalPlan =>
+          operator transformAllExpressions {
+            case a: Attribute if !a.resolved =>
+              val from = operator.inputSet.map(_.name).mkString("{", ", ", "}")
+              failAnalysis(s"cannot resolve '$a' given input columns $from")
+
+            case c: Cast if !c.resolved =>
+              failAnalysis(
+                s"invalid cast from ${c.child.dataType.simpleString} to ${c.dataType.simpleString}")
+
+            case b: BinaryExpression if !b.resolved =>
+              failAnalysis(
+                s"invalid expression ${b.prettyString} " +
+                s"between ${b.left.simpleString} and ${b.right.simpleString}")
+
+
+          }
+
+          operator match {
+            case f: Filter if f.condition.dataType != BooleanType =>
+              failAnalysis(s"filter expression '${f.condition.prettyString}' is not a boolean.")
+
+            case aggregatePlan @ Aggregate(groupingExprs, aggregateExprs, child) =>
+              def isValidAggregateExpression(expr: Expression): Boolean = expr match {
+                case _: AggregateExpression => true
+                case e: Attribute => groupingExprs.contains(e)
+                case e if groupingExprs.contains(e) => true
+                case e if e.references.isEmpty => true
+                case e => e.children.forall(isValidAggregateExpression)
+              }
+
+              aggregateExprs.find { e =>
+                !isValidAggregateExpression(e.transform {
+                  // Should trim aliases around `GetField`s. These aliases are introduced while
+                  // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
+                  // (Should we just turn `GetField` into a `NamedExpression`?)
+                  case Alias(g: GetField, _) => g
+                })
+              }.foreach { e =>
+                failAnalysis(s"expression must be aggregates or be in group by $e")
+              }
+
+              aggregatePlan
+
+            case o if o.children.nonEmpty && !o.references.subsetOf(o.inputSet) =>
+              val missingAttributes = (o.references -- o.inputSet).map(_.prettyString).mkString(",")
+              val input = o.inputSet.map(_.prettyString).mkString(",")
+
+              failAnalysis(s"resolved attributes $missingAttributes missing from $input")
+
+            // Catch all
+            case o if !o.resolved =>
+              failAnalysis(
+                s"unresolved operator ${operator.simpleString}")
+
+            case _ => // Analysis successful!
+          }
       }
+
+      plan
     }
   }
 
@@ -189,37 +236,6 @@ class Analyzer(catalog: Catalog,
           x.groupByExprs :+ x.gid,
           x.aggregations,
           Expand(expand(x), x.child.output :+ x.gid, x.child))
-    }
-  }
-
-  /**
-   * Checks for non-aggregated attributes with aggregation
-   */
-  object CheckAggregation extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = {
-      plan.transform {
-        case aggregatePlan @ Aggregate(groupingExprs, aggregateExprs, child) =>
-          def isValidAggregateExpression(expr: Expression): Boolean = expr match {
-            case _: AggregateExpression => true
-            case e: Attribute => groupingExprs.contains(e)
-            case e if groupingExprs.contains(e) => true
-            case e if e.references.isEmpty => true
-            case e => e.children.forall(isValidAggregateExpression)
-          }
-
-          aggregateExprs.find { e =>
-            !isValidAggregateExpression(e.transform {
-              // Should trim aliases around `GetField`s. These aliases are introduced while
-              // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
-              // (Should we just turn `GetField` into a `NamedExpression`?)
-              case Alias(g: GetField, _) => g
-            })
-          }.foreach { e =>
-            throw new TreeNodeException(plan, s"Expression not in GROUP BY: $e")
-          }
-
-          aggregatePlan
-      }
     }
   }
 
