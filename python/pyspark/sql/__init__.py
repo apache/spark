@@ -34,9 +34,8 @@ public classes of Spark SQL:
 
 from pyspark.sql.context import SQLContext, HiveContext
 from pyspark.sql.types import Row
-from pyspark.sql.dataframe import DataFrame, GroupedData, Column, Dsl, SchemaRDD
+from pyspark.sql.dataframe import DataFrame, GroupedData, Column, SchemaRDD
 
 __all__ = [
     'SQLContext', 'HiveContext', 'DataFrame', 'GroupedData', 'Column', 'Row',
-    'Dsl',
 ]

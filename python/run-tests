@@ -67,6 +67,7 @@ function run_sql_tests() {
     run_test "pyspark/sql/types.py"
     run_test "pyspark/sql/context.py"
     run_test "pyspark/sql/dataframe.py"
+    run_test "pyspark/sql/functions.py"
     run_test "pyspark/sql/tests.py"
 }
 

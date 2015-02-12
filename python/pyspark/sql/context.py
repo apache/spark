@@ -38,6 +38,25 @@ except ImportError:
 __all__ = ["SQLContext", "HiveContext"]
 
 
+def _monkey_patch_RDD(sqlCtx):
+    def toDF(self, schema=None, sampleRatio=None):
+        """
+        Convert current :class:`RDD` into a :class:`DataFrame`
+
+        This is a shorthand for `sqlCtx.createDataFrame(rdd, schema, sampleRatio)`
+
+        :param schema: a StructType or list of names of columns
+        :param samplingRatio: the sample ratio of rows used for inferring
+        :return: a DataFrame
+
+        >>> rdd.toDF().collect()
+        [Row(name=u'Alice', age=1)]
+        """
+        return sqlCtx.createDataFrame(self, schema, sampleRatio)
+
+    RDD.toDF = toDF
+
+
 class SQLContext(object):
 
     """Main entry point for Spark SQL functionality.
@@ -70,6 +89,7 @@ class SQLContext(object):
         self._jsc = self._sc._jsc
         self._jvm = self._sc._jvm
         self._scala_SQLContext = sqlContext
+        _monkey_patch_RDD(self)
 
     @property
     def _ssql_ctx(self):
@@ -800,7 +820,8 @@ def _test():
          Row(field1=2, field2="row2"),
          Row(field1=3, field2="row3")]
     )
-    globs['df'] = sqlCtx.createDataFrame(rdd)
+    _monkey_patch_RDD(sqlCtx)
+    globs['df'] = rdd.toDF()
     jsonStrings = [
         '{"field1": 1, "field2": "row1", "field3":{"field4":11}}',
         '{"field1" : 2, "field3":{"field4":22, "field5": [10, 11]},'
