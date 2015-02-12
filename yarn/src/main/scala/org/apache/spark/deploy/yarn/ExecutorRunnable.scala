@@ -38,7 +38,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
-import org.apache.spark.{SecurityManager, SparkConf, Logging}
+import org.apache.spark.{SparkException, SecurityManager, SparkConf, Logging}
 import org.apache.spark.network.util.JavaUtils
 
 class ExecutorRunnable(
@@ -109,7 +109,13 @@ class ExecutorRunnable(
     }
 
     // Send the start request to the ContainerManager
-    nmClient.startContainer(container, ctx)
+    try {
+      nmClient.startContainer(container, ctx)
+    } catch {
+      case ex: Exception =>
+        throw new SparkException("Exception while starting container ${container.getId}" +
+          " on host $hostname", ex)
+    }
   }
 
   private def prepareCommand(
