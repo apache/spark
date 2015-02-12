@@ -129,9 +129,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * A collection of methods that are considered experimental, but can be used to hook into
    * the query planner for advanced functionalities.
    */
+  @transient
   val experimental: ExperimentalMethods = new ExperimentalMethods(this)
 
   /** Returns a [[DataFrame]] with no rows or columns. */
+  @transient
   lazy val emptyDataFrame = DataFrame(this, NoRelation)
 
   /**
@@ -178,7 +180,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * (Scala-specific)
    * Implicit methods available in Scala for converting common Scala objects into [[DataFrame]]s.
    */
-  object implicits {
+  object implicits extends Serializable {
     // scalastyle:on
 
     /** Creates a DataFrame from an RDD of case classes or tuples. */
