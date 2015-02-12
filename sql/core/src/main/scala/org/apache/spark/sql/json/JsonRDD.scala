@@ -38,19 +38,11 @@ private[sql] object JsonRDD extends Logging {
       json: RDD[String],
       schema: StructType,
       columnNameOfCorruptRecords: String): RDD[Row] = {
-    // Reuse the mutable row for each record, however we still need to 
-    // create a new row for every nested struct type in each record
-    val mutableRow = new SpecificMutableRow(schema.fields.map(_.dataType))
-    parseJson(json, columnNameOfCorruptRecords).mapPartitions( iter => {
-      iter.map { parsed =>
-        schema.fields.zipWithIndex.foreach {
-          case (StructField(name, dataType, _, _), i) =>
-            mutableRow.update(i, parsed.get(name).flatMap(v => Option(v)).map(
-              enforceCorrectType(_, dataType)).orNull)
-        }
-        mutableRow: Row
-      }
-    })
+    // Reuse the mutable row for each record and all innner nested structures
+    parseJson(json, columnNameOfCorruptRecords).mapPartitions {
+      val row = new GenericMutableRow(schema.fields.length)
+      iter => iter.map(parsed => asRow(parsed, schema, row))
+    }
   }
 
   private[sql] def inferSchema(
@@ -413,7 +405,7 @@ private[sql] object JsonRDD extends Logging {
     }
   }
 
-  private[json] def enforceCorrectType(value: Any, desiredType: DataType): Any ={
+  private[json] def enforceCorrectType(value: Any, desiredType: DataType, slot: Any = null): Any ={
     if (value == null) {
       null
     } else {
@@ -428,20 +420,29 @@ private[sql] object JsonRDD extends Logging {
         case NullType => null
         case ArrayType(elementType, _) =>
           value.asInstanceOf[Seq[Any]].map(enforceCorrectType(_, elementType))
-        case struct: StructType => asRow(value.asInstanceOf[Map[String, Any]], struct)
+        case struct: StructType => 
+          asRow(value.asInstanceOf[Map[String, Any]], struct, slot.asInstanceOf[GenericMutableRow])
         case DateType => toDate(value)
         case TimestampType => toTimestamp(value)
       }
     }
   }
 
-  private def asRow(json: Map[String,Any], schema: StructType): Row = {
-    // TODO: Reuse the row instead of creating a new one for every record.
-    val row = new GenericMutableRow(schema.fields.length)
-    schema.fields.zipWithIndex.foreach {
-      case (StructField(name, dataType, _, _), i) =>
-        row.update(i, json.get(name).flatMap(v => Option(v)).map(
-          enforceCorrectType(_, dataType)).orNull)
+  private def asRow(
+    json: Map[String,Any], 
+    schema: StructType, 
+    mutable: GenericMutableRow = null): Row = {
+    val row = if (mutable == null) {
+      new GenericMutableRow(schema.fields.length)
+    } else {
+      mutable
+    }
+
+    for(i <- 0 until schema.fields.length) {
+      val fieldName = schema.fields(i).name
+      val fieldType = schema.fields(i).dataType
+      row.update(i, json.get(fieldName).flatMap(v => Option(v)).map(
+        enforceCorrectType(_, fieldType, row(i))).orNull)
     }
 
     row
