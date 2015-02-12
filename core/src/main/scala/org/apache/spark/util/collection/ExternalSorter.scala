@@ -361,7 +361,8 @@ private[spark] class ExternalSorter[K, V, C](
         blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, curWriteMetrics).open()
       }
       // Creating the file to write to and creating a disk writer both involve interacting with
-      // the disk, so should be included in the shuffle write time.
+      // the disk, and can take a long time in aggregate when we open many files, so should be
+      // included in the shuffle write time.
       curWriteMetrics.incShuffleWriteTime(System.nanoTime - openStartTime)
     }
 
