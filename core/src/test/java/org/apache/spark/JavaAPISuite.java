@@ -219,6 +219,8 @@ public class JavaAPISuite implements Serializable {
   public void emptyRDD() {
     JavaRDD<String> rdd = sc.emptyRDD();
     Assert.assertEquals("Empty RDD shouldn't have any values", 0, rdd.count());
+    Assert.assertEquals(0, rdd.collect().size());
+    Assert.assertEquals(0, rdd.partitions().size());
   }
 
   @Test
@@ -634,12 +636,18 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(1, rdd.first().intValue());
     rdd.take(2);
     rdd.takeSample(false, 2, 42);
+
+    // SPARK-5744:
+    Assert.assertTrue(sc.parallelize(new ArrayList<Object>(0)).take(1).isEmpty());
   }
 
   @Test
   public void isEmpty() {
     Assert.assertTrue(sc.emptyRDD().isEmpty());
     Assert.assertTrue(sc.parallelize(new ArrayList<Integer>()).isEmpty());
+    Assert.assertTrue(sc.parallelize(new ArrayList<Integer>(), 1).isEmpty());
+    // SPARK-5744:
+    Assert.assertTrue(sc.parallelize(new ArrayList<Object>(0)).isEmpty());
     Assert.assertFalse(sc.parallelize(Arrays.asList(1)).isEmpty());
     Assert.assertTrue(sc.parallelize(Arrays.asList(1, 2, 3), 3).filter(
         new Function<Integer,Boolean>() {
@@ -708,6 +716,11 @@ public class JavaAPISuite implements Serializable {
     // Test with provided buckets
     long[] histogram = rdd.histogram(expected_buckets);
     Assert.assertArrayEquals(expected_counts, histogram);
+
+    // SPARK-5744:
+    Assert.assertArrayEquals(
+        new long[] {0},
+        sc.parallelizeDoubles(new ArrayList<Double>(0), 1).histogram(new double[]{0.0, 1.0}));
   }
 
   @Test

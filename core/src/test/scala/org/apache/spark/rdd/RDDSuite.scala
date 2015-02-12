@@ -202,6 +202,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val empty = new EmptyRDD[Int](sc)
     assert(empty.count === 0)
     assert(empty.collect().size === 0)
+    assert(empty.partitions.length === 0)
 
     val thrown = intercept[UnsupportedOperationException]{
       empty.reduce(_+_)
@@ -520,6 +521,10 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(nums.take(501) === (1 to 501).toArray)
     assert(nums.take(999) === (1 to 999).toArray)
     assert(nums.take(1000) === (1 to 999).toArray)
+
+    // SPARK-5744:
+    assert(sc.makeRDD(Seq(), 0).take(1).size === 0)
+    assert(sc.makeRDD(Seq[Int]()).take(1).size === 0)
   }
 
   test("top with predefined ordering") {
@@ -567,6 +572,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
   test("isEmpty") {
     assert(sc.emptyRDD.isEmpty())
     assert(sc.parallelize(Seq[Int]()).isEmpty())
+    // SPARK-5744:
+    assert(sc.parallelize(Seq(), 0).isEmpty())
     assert(!sc.parallelize(Seq(1)).isEmpty())
     assert(sc.parallelize(Seq(1,2,3), 3).filter(_ < 0).isEmpty())
     assert(!sc.parallelize(Seq(1,2,3), 3).filter(_ > 1).isEmpty())

@@ -26,13 +26,14 @@ class DoubleRDDSuite extends FunSuite with SharedSparkContext {
   // and non-evenly spaced buckets as the bucket lookup function changes.
   test("WorksOnEmpty") {
     // Make sure that it works on an empty input
-    val rdd: RDD[Double] = sc.parallelize(Seq())
     val buckets = Array(0.0, 10.0)
-    val histogramResults = rdd.histogram(buckets)
-    val histogramResults2 = rdd.histogram(buckets, true)
     val expectedHistogramResults = Array(0)
-    assert(histogramResults === expectedHistogramResults)
-    assert(histogramResults2 === expectedHistogramResults)
+    val rddParSeq: RDD[Double] = sc.parallelize(Seq())
+    assert(rddParSeq.histogram(buckets) === expectedHistogramResults)
+    assert(rddParSeq.histogram(buckets, true) === expectedHistogramResults)
+    val emptyRDD: RDD[Double] = sc.emptyRDD
+    assert(emptyRDD.histogram(buckets) === expectedHistogramResults)
+    assert(emptyRDD.histogram(buckets, true) === expectedHistogramResults)
   }
 
   test("WorksWithOutOfRangeWithOneBucket") {
