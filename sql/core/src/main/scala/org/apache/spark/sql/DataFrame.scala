@@ -460,9 +460,9 @@ trait DataFrame extends RDDApi[Row] {
   }
 
   /**
-   * Returns a new [[DataFrame]] where each row has been expanded to zero or more rows by the
-   * provided function.  This is similar to a `LATERAL VIEW` in HiveQL.  The columns of the
-   * input row are implicitly joined with each row that is output by the function.
+   * (Scala-specific) Returns a new [[DataFrame]] where each row has been expanded to zero or more
+   * rows by the provided function.  This is similar to a `LATERAL VIEW` in HiveQL.  The columns of
+   * the input row are implicitly joined with each row that is output by the function.
    *
    * The following example uses this function to count the number of books which contain
    * a given word:
