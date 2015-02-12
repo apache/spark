@@ -112,7 +112,7 @@ private[spark] class StandaloneRestServer(
   }
 }
 
-private[spark] object StandaloneRestServer {
+private[rest] object StandaloneRestServer {
   val PROTOCOL_VERSION = StandaloneRestClient.PROTOCOL_VERSION
   val SC_UNKNOWN_PROTOCOL_VERSION = 468
 }
@@ -120,7 +120,7 @@ private[spark] object StandaloneRestServer {
 /**
  * An abstract servlet for handling requests passed to the [[StandaloneRestServer]].
  */
-private[spark] abstract class StandaloneRestServlet extends HttpServlet with Logging {
+private[rest] abstract class StandaloneRestServlet extends HttpServlet with Logging {
 
   /**
    * Serialize the given response message to JSON and send it through the response servlet.
@@ -204,7 +204,7 @@ private[spark] abstract class StandaloneRestServlet extends HttpServlet with Log
 /**
  * A servlet for handling kill requests passed to the [[StandaloneRestServer]].
  */
-private[spark] class KillRequestServlet(masterActor: ActorRef, conf: SparkConf)
+private[rest] class KillRequestServlet(masterActor: ActorRef, conf: SparkConf)
   extends StandaloneRestServlet {
 
   /**
@@ -238,7 +238,7 @@ private[spark] class KillRequestServlet(masterActor: ActorRef, conf: SparkConf)
 /**
  * A servlet for handling status requests passed to the [[StandaloneRestServer]].
  */
-private[spark] class StatusRequestServlet(masterActor: ActorRef, conf: SparkConf)
+private[rest] class StatusRequestServlet(masterActor: ActorRef, conf: SparkConf)
   extends StandaloneRestServlet {
 
   /**
@@ -276,7 +276,7 @@ private[spark] class StatusRequestServlet(masterActor: ActorRef, conf: SparkConf
 /**
  * A servlet for handling submit requests passed to the [[StandaloneRestServer]].
  */
-private[spark] class SubmitRequestServlet(
+private[rest] class SubmitRequestServlet(
     masterActor: ActorRef,
     masterUrl: String,
     conf: SparkConf)

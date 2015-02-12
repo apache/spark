@@ -158,7 +158,7 @@ private[spark] class StandaloneRestClient extends Logging {
    * If the response represents an error, report the embedded message to the user.
    * Exposed for testing.
    */
-  private[spark] def readResponse(connection: HttpURLConnection): SubmitRestProtocolResponse = {
+  private[rest] def readResponse(connection: HttpURLConnection): SubmitRestProtocolResponse = {
     try {
       val dataStream =
         if (connection.getResponseCode == HttpServletResponse.SC_OK) {
@@ -300,7 +300,7 @@ private[spark] object StandaloneRestClient {
    * Submit an application, assuming Spark parameters are specified through the given config.
    * This is abstracted to its own method for testing purposes.
    */
-  def run(
+  private[rest] def run(
       appResource: String,
       mainClass: String,
       appArgs: Array[String],
