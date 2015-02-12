@@ -17,15 +17,16 @@
 
 package org.apache.spark
 
+import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfter, FunSuite}
-import org.scalatest.mock.EasyMockSugar
+import org.scalatest.mock.MockitoSugar
 
 import org.apache.spark.executor.{DataReadMethod, TaskMetrics}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
 
 // TODO: Test the CacheManager's thread-safety aspects
-class CacheManagerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar {
+class CacheManagerSuite extends FunSuite with BeforeAndAfter with MockitoSugar {
   var sc : SparkContext = _
   var blockManager: BlockManager = _
   var cacheManager: CacheManager = _
@@ -75,29 +76,21 @@ class CacheManagerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
   }
 
   test("get cached rdd") {
-    expecting {
-      val result = new BlockResult(Array(5, 6, 7).iterator, DataReadMethod.Memory, 12)
-      blockManager.get(RDDBlockId(0, 0)).andReturn(Some(result))
-    }
+    val result = new BlockResult(Array(5, 6, 7).iterator, DataReadMethod.Memory, 12)
+    when(blockManager.get(RDDBlockId(0, 0))).thenReturn(Some(result))
 
-    whenExecuting(blockManager) {
-      val context = new TaskContextImpl(0, 0, 0, 0)
-      val value = cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY)
-      assert(value.toList === List(5, 6, 7))
-    }
+    val context = new TaskContextImpl(0, 0, 0, 0)
+    val value = cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY)
+    assert(value.toList === List(5, 6, 7))
   }
 
   test("get uncached local rdd") {
-    expecting {
-      // Local computation should not persist the resulting value, so don't expect a put().
-      blockManager.get(RDDBlockId(0, 0)).andReturn(None)
-    }
+    // Local computation should not persist the resulting value, so don't expect a put().
+    when(blockManager.get(RDDBlockId(0, 0))).thenReturn(None)
 
-    whenExecuting(blockManager) {
-      val context = new TaskContextImpl(0, 0, 0, 0, true)
-      val value = cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY)
-      assert(value.toList === List(1, 2, 3, 4))
-    }
+    val context = new TaskContextImpl(0, 0, 0, 0, true)
+    val value = cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY)
+    assert(value.toList === List(1, 2, 3, 4))
   }
 
   test("verify task metrics updated correctly") {
