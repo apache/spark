@@ -167,6 +167,15 @@ object Dsl {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
+   * Returns the first column that is not null.
+   * {{{
+   *   df.select(coalesce(df("a"), df("b")))
+   * }}}
+   */
+  @scala.annotation.varargs
+  def coalesce(e: Column*): Column = Coalesce(e.map(_.expr))
+
+  /**
    * Unary minus, i.e. negate the expression.
    * {{{
    *   // Select the amount column and negates all values.
