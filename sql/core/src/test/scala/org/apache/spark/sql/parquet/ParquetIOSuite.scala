@@ -33,7 +33,7 @@ import parquet.schema.{MessageType, MessageTypeParser}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.sql.{DataFrame, QueryTest, SQLConf}
-import org.apache.spark.sql.Dsl._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.test.TestSQLContext
@@ -106,7 +106,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
         sparkContext
           .parallelize(0 to 1000)
           .map(i => Tuple1(i / 100.0))
-          .toDataFrame
+          .toDF
           // Parquet doesn't allow column names with spaces, have to add an alias here
           .select($"_1" cast decimal as "dec")
 

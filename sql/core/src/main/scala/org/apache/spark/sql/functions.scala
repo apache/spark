@@ -28,17 +28,7 @@ import org.apache.spark.sql.types._
 /**
  * Domain specific functions available for [[DataFrame]].
  */
-object Dsl {
-
-  /** An implicit conversion that turns a Scala `Symbol` into a [[Column]]. */
-  implicit def symbolToColumn(s: Symbol): ColumnName = new ColumnName(s.name)
-
-  /** Converts $"col name" into an [[Column]]. */
-  implicit class StringToColumn(val sc: StringContext) extends AnyVal {
-    def $(args: Any*): ColumnName = {
-      new ColumnName(sc.s(args :_*))
-    }
-  }
+object functions {
 
   private[this] implicit def toColumn(expr: Expression): Column = Column(expr)
 

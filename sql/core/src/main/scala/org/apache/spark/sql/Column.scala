@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql
 
-import scala.annotation.tailrec
 import scala.language.implicitConversions
 
-import org.apache.spark.sql.Dsl.lit
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{Subquery, Project, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Project, LogicalPlan}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGetField
 import org.apache.spark.sql.types._
 
@@ -127,7 +126,7 @@ trait Column extends DataFrame {
    *   df.select( -df("amount") )
    *
    *   // Java:
-   *   import static org.apache.spark.sql.Dsl.*;
+   *   import static org.apache.spark.sql.functions.*;
    *   df.select( negate(col("amount") );
    * }}}
    */
@@ -140,7 +139,7 @@ trait Column extends DataFrame {
    *   df.filter( !df("isActive") )
    *
    *   // Java:
-   *   import static org.apache.spark.sql.Dsl.*;
+   *   import static org.apache.spark.sql.functions.*;
    *   df.filter( not(df.col("isActive")) );
    * }}
    */
@@ -153,7 +152,7 @@ trait Column extends DataFrame {
    *   df.filter( df("colA") === df("colB") )
    *
    *   // Java
-   *   import static org.apache.spark.sql.Dsl.*;
+   *   import static org.apache.spark.sql.functions.*;
    *   df.filter( col("colA").equalTo(col("colB")) );
    * }}}
    */
@@ -168,7 +167,7 @@ trait Column extends DataFrame {
    *   df.filter( df("colA") === df("colB") )
    *
    *   // Java
-   *   import static org.apache.spark.sql.Dsl.*;
+   *   import static org.apache.spark.sql.functions.*;
    *   df.filter( col("colA").equalTo(col("colB")) );
    * }}}
    */
@@ -182,7 +181,7 @@ trait Column extends DataFrame {
    *   df.select( !(df("colA") === df("colB")) )
    *
    *   // Java:
-   *   import static org.apache.spark.sql.Dsl.*;
+   *   import static org.apache.spark.sql.functions.*;
    *   df.filter( col("colA").notEqual(col("colB")) );
    * }}}
    */
@@ -198,7 +197,7 @@ trait Column extends DataFrame {
    *   df.select( !(df("colA") === df("colB")) )
    *
    *   // Java:
-   *   import static org.apache.spark.sql.Dsl.*;
+   *   import static org.apache.spark.sql.functions.*;
    *   df.filter( col("colA").notEqual(col("colB")) );
    * }}}
    */
@@ -213,7 +212,7 @@ trait Column extends DataFrame {
    *   people.select( people("age") > 21 )
    *
    *   // Java:
-   *   import static org.apache.spark.sql.Dsl.*;
+   *   import static org.apache.spark.sql.functions.*;
    *   people.select( people("age").gt(21) );
    * }}}
    */
@@ -228,7 +227,7 @@ trait Column extends DataFrame {
    *   people.select( people("age") > lit(21) )
    *
    *   // Java:
-   *   import static org.apache.spark.sql.Dsl.*;
+   *   import static org.apache.spark.sql.functions.*;
    *   people.select( people("age").gt(21) );
    * }}}
    */

@@ -151,7 +151,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
   test("check change without refresh") {
     val tempDir = File.createTempFile("sparksql", "json")
     tempDir.delete()
-    sparkContext.parallelize(("a", "b") :: Nil).toDataFrame
+    sparkContext.parallelize(("a", "b") :: Nil).toDF
       .toJSON.saveAsTextFile(tempDir.getCanonicalPath)
 
     sql(
@@ -168,7 +168,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       Row("a", "b"))
 
     FileUtils.deleteDirectory(tempDir)
-    sparkContext.parallelize(("a1", "b1", "c1") :: Nil).toDataFrame
+    sparkContext.parallelize(("a1", "b1", "c1") :: Nil).toDF
       .toJSON.saveAsTextFile(tempDir.getCanonicalPath)
 
     // Schema is cached so the new column does not show. The updated values in existing columns
@@ -189,7 +189,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
   test("drop, change, recreate") {
     val tempDir = File.createTempFile("sparksql", "json")
     tempDir.delete()
-    sparkContext.parallelize(("a", "b") :: Nil).toDataFrame
+    sparkContext.parallelize(("a", "b") :: Nil).toDF
       .toJSON.saveAsTextFile(tempDir.getCanonicalPath)
 
     sql(
@@ -206,7 +206,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       Row("a", "b"))
 
     FileUtils.deleteDirectory(tempDir)
-    sparkContext.parallelize(("a", "b", "c") :: Nil).toDataFrame
+    sparkContext.parallelize(("a", "b", "c") :: Nil).toDF
       .toJSON.saveAsTextFile(tempDir.getCanonicalPath)
 
     sql("DROP TABLE jsonTable")

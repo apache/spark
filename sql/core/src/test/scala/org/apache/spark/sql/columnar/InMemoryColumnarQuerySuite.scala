@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.columnar
 
-import org.apache.spark.sql.Dsl._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.test.TestSQLContext._
@@ -39,7 +39,7 @@ class InMemoryColumnarQuerySuite extends QueryTest {
   test("default size avoids broadcast") {
     // TODO: Improve this test when we have better statistics
     sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString))
-      .toDataFrame().registerTempTable("sizeTst")
+      .toDF().registerTempTable("sizeTst")
     cacheTable("sizeTst")
     assert(
       table("sizeTst").queryExecution.logical.statistics.sizeInBytes >

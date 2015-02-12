@@ -168,14 +168,14 @@ abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll 
       val partDir = new File(partitionedTableDir, s"p=$p")
       sparkContext.makeRDD(1 to 10)
         .map(i => ParquetData(i, s"part-$p"))
-        .toDataFrame()
+        .toDF()
         .saveAsParquetFile(partDir.getCanonicalPath)
     }
 
     sparkContext
       .makeRDD(1 to 10)
       .map(i => ParquetData(i, s"part-1"))
-      .toDataFrame()
+      .toDF()
       .saveAsParquetFile(new File(normalTableDir, "normal").getCanonicalPath)
 
     partitionedTableDirWithKey = File.createTempFile("parquettests", "sparksql")
@@ -186,7 +186,7 @@ abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll 
       val partDir = new File(partitionedTableDirWithKey, s"p=$p")
       sparkContext.makeRDD(1 to 10)
         .map(i => ParquetDataWithKey(p, i, s"part-$p"))
-        .toDataFrame()
+        .toDF()
         .saveAsParquetFile(partDir.getCanonicalPath)
     }
   }

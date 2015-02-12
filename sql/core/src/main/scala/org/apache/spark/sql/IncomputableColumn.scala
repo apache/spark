@@ -50,7 +50,7 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
 
   protected[sql] override def logicalPlan: LogicalPlan = err()
 
-  override def toDataFrame(colNames: String*): DataFrame = err()
+  override def toDF(colNames: String*): DataFrame = err()
 
   override def schema: StructType = err()
 
@@ -86,9 +86,9 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
 
   override def selectExpr(exprs: String*): DataFrame = err()
 
-  override def addColumn(colName: String, col: Column): DataFrame = err()
+  override def withColumn(colName: String, col: Column): DataFrame = err()
 
-  override def renameColumn(existingName: String, newName: String): DataFrame = err()
+  override def withColumnRenamed(existingName: String, newName: String): DataFrame = err()
 
   override def filter(condition: Column): DataFrame = err()
 

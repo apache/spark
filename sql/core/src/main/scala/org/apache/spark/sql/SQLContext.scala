@@ -183,15 +183,25 @@ class SQLContext(@transient val sparkContext: SparkContext)
   object implicits extends Serializable {
     // scalastyle:on
 
+    /** Converts $"col name" into an [[Column]]. */
+    implicit class StringToColumn(val sc: StringContext) {
+      def $(args: Any*): ColumnName = {
+        new ColumnName(sc.s(args :_*))
+      }
+    }
+
+    /** An implicit conversion that turns a Scala `Symbol` into a [[Column]]. */
+    implicit def symbolToColumn(s: Symbol): ColumnName = new ColumnName(s.name)
+
     /** Creates a DataFrame from an RDD of case classes or tuples. */
-    implicit def rddToDataFrameHolder[A <: Product : TypeTag](rdd: RDD[A]): DataFrame.Holder = {
-      DataFrame.Holder(self.createDataFrame(rdd))
+    implicit def rddToDataFrameHolder[A <: Product : TypeTag](rdd: RDD[A]): DataFrameHolder = {
+      DataFrameHolder(self.createDataFrame(rdd))
     }
 
     /** Creates a DataFrame from a local Seq of Product. */
-    implicit def localSeqToDataFrameHolder[A <: Product : TypeTag](data: Seq[A]): DataFrame.Holder
-      = {
-      DataFrame.Holder(self.createDataFrame(data))
+    implicit def localSeqToDataFrameHolder[A <: Product : TypeTag](data: Seq[A]): DataFrameHolder =
+    {
+      DataFrameHolder(self.createDataFrame(data))
     }
 
     // Do NOT add more implicit conversions. They are likely to break source compatibility by
@@ -199,7 +209,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     // because of [[DoubleRDDFunctions]].
 
     /** Creates a single column DataFrame from an RDD[Int]. */
-    implicit def intRddToDataFrameHolder(data: RDD[Int]): DataFrame.Holder = {
+    implicit def intRddToDataFrameHolder(data: RDD[Int]): DataFrameHolder = {
       val dataType = IntegerType
       val rows = data.mapPartitions { iter =>
         val row = new SpecificMutableRow(dataType :: Nil)
@@ -208,11 +218,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
           row: Row
         }
       }
-      DataFrame.Holder(self.createDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
+      DataFrameHolder(self.createDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
     }
 
     /** Creates a single column DataFrame from an RDD[Long]. */
-    implicit def longRddToDataFrameHolder(data: RDD[Long]): DataFrame.Holder = {
+    implicit def longRddToDataFrameHolder(data: RDD[Long]): DataFrameHolder = {
       val dataType = LongType
       val rows = data.mapPartitions { iter =>
         val row = new SpecificMutableRow(dataType :: Nil)
@@ -221,11 +231,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
           row: Row
         }
       }
-      DataFrame.Holder(self.createDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
+      DataFrameHolder(self.createDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
     }
 
     /** Creates a single column DataFrame from an RDD[String]. */
-    implicit def stringRddToDataFrame(data: RDD[String]): DataFrame.Holder = {
+    implicit def stringRddToDataFrame(data: RDD[String]): DataFrameHolder = {
       val dataType = StringType
       val rows = data.mapPartitions { iter =>
         val row = new SpecificMutableRow(dataType :: Nil)
@@ -234,7 +244,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
           row: Row
         }
       }
-      DataFrame.Holder(self.createDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
+      DataFrameHolder(self.createDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
     }
   }
 
