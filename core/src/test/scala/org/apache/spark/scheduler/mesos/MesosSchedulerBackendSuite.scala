@@ -24,7 +24,7 @@ import java.util
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.FunSuite
 import org.scalatest.mock.MockitoSugar
 import org.apache.mesos.SchedulerDriver
 import org.apache.mesos.Protos._
