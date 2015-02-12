@@ -510,22 +510,8 @@ private[spark] object Utils extends Logging {
 
     if (destFile.exists) {
       if (!filesEqualRecursive(sourceFile, destFile)) {
-        if (fileOverwrite) {
-          logInfo(
-            s"File $destFile exists and does not match contents of $url, replacing it with $url"
-          )
-          if (!destFile.delete()) {
-            throw new SparkException(
-              "Failed to delete %s while attempting to overwrite it with %s".format(
-                destFile.getAbsolutePath,
-                sourceFile.getAbsolutePath
-              )
-            )
-          }
-        } else {
-          throw new SparkException(
-            s"File $destFile exists and does not match contents of $url")
-        }
+        throw new SparkException(
+          s"File $destFile exists and does not match contents of $url")
       } else {
         // Do nothing if the file contents are the same, i.e. this file has been copied
         // previously.
