@@ -74,6 +74,7 @@ class DataFrame(object):
         self.sql_ctx = sql_ctx
         self._sc = sql_ctx and sql_ctx._sc
         self.is_cached = False
+        self._schema = None
 
     @property
     def rdd(self):
@@ -84,7 +85,7 @@ class DataFrame(object):
         if not hasattr(self, '_lazy_rdd'):
             jrdd = self._jdf.javaToPython()
             rdd = RDD(jrdd, self.sql_ctx._sc, BatchedSerializer(PickleSerializer()))
-            schema = self.schema()
+            schema = self.schema
 
             def applySchema(it):
                 cls = _create_cls(schema)
@@ -214,14 +215,17 @@ class DataFrame(object):
                                           self._sc._gateway._gateway_client)
         self._jdf.save(source, jmode, joptions)
 
+    @property
     def schema(self):
         """Returns the schema of this DataFrame (represented by
         a L{StructType}).
 
-        >>> df.schema()
+        >>> df.schema
         StructType(List(StructField(age,IntegerType,true),StructField(name,StringType,true)))
         """
-        return _parse_datatype_json_string(self._jdf.schema().json())
+        if self._schema is None:
+            self._schema = _parse_datatype_json_string(self._jdf.schema().json())
+        return self._schema
 
     def printSchema(self):
         """Prints out the schema in the tree format.
@@ -282,7 +286,7 @@ class DataFrame(object):
         with open(tempFile.name, 'rb') as tempFile:
             rs = list(BatchedSerializer(PickleSerializer()).load_stream(tempFile))
         os.unlink(tempFile.name)
-        cls = _create_cls(self.schema())
+        cls = _create_cls(self.schema)
         return [cls(r) for r in rs]
 
     def limit(self, num):
@@ -389,7 +393,7 @@ class DataFrame(object):
     #         bytesInJava = self._jdf \
     #             .takeSampleToPython(withReplacement, num, long(seed)) \
     #             .iterator()
-    #     cls = _create_cls(self.schema())
+    #     cls = _create_cls(self.schema)
     #     return map(cls, self._collect_iterator_through_file(bytesInJava))
 
     @property
@@ -399,7 +403,7 @@ class DataFrame(object):
         >>> df.dtypes
         [('age', 'int'), ('name', 'string')]
         """
-        return [(str(f.name), f.dataType.simpleString()) for f in self.schema().fields]
+        return [(str(f.name), f.dataType.simpleString()) for f in self.schema.fields]
 
     @property
     def columns(self):
@@ -408,7 +412,7 @@ class DataFrame(object):
         >>> df.columns
         [u'age', u'name']
         """
-        return [f.name for f in self.schema().fields]
+        return [f.name for f in self.schema.fields]
 
     def join(self, other, joinExprs=None, joinType=None):
         """
