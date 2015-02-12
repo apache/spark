@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.util.collection.OpenHashSet
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -52,14 +53,11 @@ class Analyzer(catalog: Catalog,
   val extendedRules: Seq[Rule[LogicalPlan]] = Nil
 
   lazy val batches: Seq[Batch] = Seq(
-    Batch("MultiInstanceRelations", Once,
-      NewRelationInstances),
     Batch("Resolution", fixedPoint,
-      ResolveReferences ::
       ResolveRelations ::
+      ResolveReferences ::
       ResolveGroupingAnalytics ::
       ResolveSortReferences ::
-      NewRelationInstances ::
       ImplicitGenerate ::
       ResolveFunctions ::
       GlobalAggregates ::
@@ -80,16 +78,18 @@ class Analyzer(catalog: Catalog,
    */
   object CheckResolution extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = {
-      plan.transform {
+      plan.transformUp {
         case p if p.expressions.exists(!_.resolved) =>
-          throw new TreeNodeException(p,
-            s"Unresolved attributes: ${p.expressions.filterNot(_.resolved).mkString(",")}")
+          val missing = p.expressions.filterNot(_.resolved).map(_.prettyString).mkString(",")
+          val from = p.inputSet.map(_.name).mkString("{", ", ", "}")
+
+          throw new AnalysisException(s"Cannot resolve '$missing' given input columns $from")
         case p if !p.resolved && p.childrenResolved =>
-          throw new TreeNodeException(p, "Unresolved plan found")
+          throw new AnalysisException(s"Unresolved operator in the query plan ${p.simpleString}")
       } match {
         // As a backstop, use the root node to check that the entire plan tree is resolved.
         case p if !p.resolved =>
-          throw new TreeNodeException(p, "Unresolved plan in tree")
+          throw new AnalysisException(s"Unresolved operator in the query plan ${p.simpleString}")
         case p => p
       }
     }
@@ -282,6 +282,27 @@ class Analyzer(catalog: Catalog,
           }
         )
 
+      // Special handling for cases when self-join introduce duplicate expression ids.
+      case j @ Join(left, right, _, _) if left.outputSet.intersect(right.outputSet).nonEmpty =>
+        val conflictingAttributes = left.outputSet.intersect(right.outputSet)
+
+        val (oldRelation, newRelation, attributeRewrites) = right.collect {
+          case oldVersion: MultiInstanceRelation
+              if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+            val newVersion = oldVersion.newInstance()
+            val newAttributes = AttributeMap(oldVersion.output.zip(newVersion.output))
+            (oldVersion, newVersion, newAttributes)
+        }.head // Only handle first case found, others will be fixed on the next pass.
+
+        val newRight = right transformUp {
+          case r if r == oldRelation => newRelation
+          case other => other transformExpressions {
+            case a: Attribute => attributeRewrites.get(a).getOrElse(a)
+          }
+        }
+
+        j.copy(right = newRight)
+
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
         q transformExpressionsUp  {
@@ -314,10 +335,11 @@ class Analyzer(catalog: Catalog,
         val checkField = (f: StructField) => resolver(f.name, fieldName)
         val ordinal = fields.indexWhere(checkField)
         if (ordinal == -1) {
-          sys.error(
+          throw new AnalysisException(
             s"No such struct field $fieldName in ${fields.map(_.name).mkString(", ")}")
         } else if (fields.indexWhere(checkField, ordinal + 1) != -1) {
-          sys.error(s"Ambiguous reference to fields ${fields.filter(checkField).mkString(", ")}")
+          throw new AnalysisException(
+            s"Ambiguous reference to fields ${fields.filter(checkField).mkString(", ")}")
         } else {
           ordinal
         }
@@ -329,7 +351,8 @@ class Analyzer(catalog: Catalog,
         case ArrayType(StructType(fields), containsNull) =>
           val ordinal = findField(fields)
           ArrayGetField(expr, fields(ordinal), ordinal, containsNull)
-        case otherType => sys.error(s"GetField is not valid on fields of type $otherType")
+        case otherType =>
+          throw new AnalysisException(s"GetField is not valid on fields of type $otherType")
       }
     }
   }

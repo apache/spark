@@ -34,10 +34,9 @@ if sys.version_info[:2] <= (2, 6):
 else:
     import unittest
 
-
-from pyspark.sql import SQLContext, Column
+from pyspark.sql import SQLContext, HiveContext, Column
 from pyspark.sql.types import IntegerType, Row, ArrayType, StructType, StructField, \
-    UserDefinedType, DoubleType, LongType
+    UserDefinedType, DoubleType, LongType, StringType
 from pyspark.tests import ReusedPySparkTestCase
 
 
@@ -97,7 +96,7 @@ class SQLTests(ReusedPySparkTestCase):
         cls.sqlCtx = SQLContext(cls.sc)
         cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
         rdd = cls.sc.parallelize(cls.testData)
-        cls.df = cls.sqlCtx.inferSchema(rdd)
+        cls.df = cls.sqlCtx.createDataFrame(rdd)
 
     @classmethod
     def tearDownClass(cls):
@@ -111,14 +110,14 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_udf2(self):
         self.sqlCtx.registerFunction("strlen", lambda string: len(string), IntegerType())
-        self.sqlCtx.inferSchema(self.sc.parallelize([Row(a="test")])).registerTempTable("test")
+        self.sqlCtx.createDataFrame(self.sc.parallelize([Row(a="test")])).registerTempTable("test")
         [res] = self.sqlCtx.sql("SELECT strlen(a) FROM test WHERE strlen(a) > 1").collect()
         self.assertEqual(4, res[0])
 
     def test_udf_with_array_type(self):
         d = [Row(l=range(3), d={"key": range(5)})]
         rdd = self.sc.parallelize(d)
-        self.sqlCtx.inferSchema(rdd).registerTempTable("test")
+        self.sqlCtx.createDataFrame(rdd).registerTempTable("test")
         self.sqlCtx.registerFunction("copylist", lambda l: list(l), ArrayType(IntegerType()))
         self.sqlCtx.registerFunction("maplen", lambda d: len(d), IntegerType())
         [(l1, l2)] = self.sqlCtx.sql("select copylist(l), maplen(d) from test").collect()
@@ -156,17 +155,17 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_apply_schema_to_row(self):
         df = self.sqlCtx.jsonRDD(self.sc.parallelize(["""{"a":2}"""]))
-        df2 = self.sqlCtx.applySchema(df.map(lambda x: x), df.schema())
+        df2 = self.sqlCtx.createDataFrame(df.map(lambda x: x), df.schema())
         self.assertEqual(df.collect(), df2.collect())
 
         rdd = self.sc.parallelize(range(10)).map(lambda x: Row(a=x))
-        df3 = self.sqlCtx.applySchema(rdd, df.schema())
+        df3 = self.sqlCtx.createDataFrame(rdd, df.schema())
         self.assertEqual(10, df3.count())
 
     def test_serialize_nested_array_and_map(self):
         d = [Row(l=[Row(a=1, b='s')], d={"key": Row(c=1.0, d="2")})]
         rdd = self.sc.parallelize(d)
-        df = self.sqlCtx.inferSchema(rdd)
+        df = self.sqlCtx.createDataFrame(rdd)
         row = df.head()
         self.assertEqual(1, len(row.l))
         self.assertEqual(1, row.l[0].a)
@@ -188,14 +187,14 @@ class SQLTests(ReusedPySparkTestCase):
         d = [Row(l=[], d={}),
              Row(l=[Row(a=1, b='s')], d={"key": Row(c=1.0, d="2")}, s="")]
         rdd = self.sc.parallelize(d)
-        df = self.sqlCtx.inferSchema(rdd)
+        df = self.sqlCtx.createDataFrame(rdd)
         self.assertEqual([], df.map(lambda r: r.l).first())
         self.assertEqual([None, ""], df.map(lambda r: r.s).collect())
         df.registerTempTable("test")
         result = self.sqlCtx.sql("SELECT l[0].a from test where d['key'].d = '2'")
         self.assertEqual(1, result.head()[0])
 
-        df2 = self.sqlCtx.inferSchema(rdd, 1.0)
+        df2 = self.sqlCtx.createDataFrame(rdd, samplingRatio=1.0)
         self.assertEqual(df.schema(), df2.schema())
         self.assertEqual({}, df2.map(lambda r: r.d).first())
         self.assertEqual([None, ""], df2.map(lambda r: r.s).collect())
@@ -206,7 +205,7 @@ class SQLTests(ReusedPySparkTestCase):
     def test_struct_in_map(self):
         d = [Row(m={Row(i=1): Row(s="")})]
         rdd = self.sc.parallelize(d)
-        df = self.sqlCtx.inferSchema(rdd)
+        df = self.sqlCtx.createDataFrame(rdd)
         k, v = df.head().m.items()[0]
         self.assertEqual(1, k.i)
         self.assertEqual("", v.s)
@@ -215,7 +214,7 @@ class SQLTests(ReusedPySparkTestCase):
         row = Row(l=[Row(a=1, b='s')], d={"key": Row(c=1.0, d="2")})
         self.assertEqual(1, row.asDict()['l'][0].a)
         rdd = self.sc.parallelize([row])
-        df = self.sqlCtx.inferSchema(rdd)
+        df = self.sqlCtx.createDataFrame(rdd)
         df.registerTempTable("test")
         row = self.sqlCtx.sql("select l, d from test").head()
         self.assertEqual(1, row.asDict()["l"][0].a)
@@ -225,7 +224,7 @@ class SQLTests(ReusedPySparkTestCase):
         from pyspark.sql.tests import ExamplePoint, ExamplePointUDT
         row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
         rdd = self.sc.parallelize([row])
-        df = self.sqlCtx.inferSchema(rdd)
+        df = self.sqlCtx.createDataFrame(rdd)
         schema = df.schema()
         field = [f for f in schema.fields if f.name == "point"][0]
         self.assertEqual(type(field.dataType), ExamplePointUDT)
@@ -239,7 +238,7 @@ class SQLTests(ReusedPySparkTestCase):
         rdd = self.sc.parallelize([row])
         schema = StructType([StructField("label", DoubleType(), False),
                              StructField("point", ExamplePointUDT(), False)])
-        df = self.sqlCtx.applySchema(rdd, schema)
+        df = self.sqlCtx.createDataFrame(rdd, schema)
         point = df.head().point
         self.assertEquals(point, ExamplePoint(1.0, 2.0))
 
@@ -247,7 +246,7 @@ class SQLTests(ReusedPySparkTestCase):
         from pyspark.sql.tests import ExamplePoint
         row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
         rdd = self.sc.parallelize([row])
-        df0 = self.sqlCtx.inferSchema(rdd)
+        df0 = self.sqlCtx.createDataFrame(rdd)
         output_dir = os.path.join(self.tempdir.name, "labeled_point")
         df0.saveAsParquetFile(output_dir)
         df1 = self.sqlCtx.parquetFile(output_dir)
@@ -286,6 +285,37 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(95 < g.agg(Dsl.approxCountDistinct(df.key)).first()[0])
         self.assertEqual(100, g.agg(Dsl.countDistinct(df.value)).first()[0])
 
+    def test_save_and_load(self):
+        df = self.df
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
+        df.save(tmpPath, "org.apache.spark.sql.json", "error")
+        actual = self.sqlCtx.load(tmpPath, "org.apache.spark.sql.json")
+        self.assertTrue(sorted(df.collect()) == sorted(actual.collect()))
+
+        schema = StructType([StructField("value", StringType(), True)])
+        actual = self.sqlCtx.load(tmpPath, "org.apache.spark.sql.json", schema)
+        self.assertTrue(sorted(df.select("value").collect()) == sorted(actual.collect()))
+
+        df.save(tmpPath, "org.apache.spark.sql.json", "overwrite")
+        actual = self.sqlCtx.load(tmpPath, "org.apache.spark.sql.json")
+        self.assertTrue(sorted(df.collect()) == sorted(actual.collect()))
+
+        df.save(source="org.apache.spark.sql.json", mode="overwrite", path=tmpPath,
+                noUse="this options will not be used in save.")
+        actual = self.sqlCtx.load(source="org.apache.spark.sql.json", path=tmpPath,
+                                  noUse="this options will not be used in load.")
+        self.assertTrue(sorted(df.collect()) == sorted(actual.collect()))
+
+        defaultDataSourceName = self.sqlCtx.getConf("spark.sql.sources.default",
+                                                    "org.apache.spark.sql.parquet")
+        self.sqlCtx.sql("SET spark.sql.sources.default=org.apache.spark.sql.json")
+        actual = self.sqlCtx.load(path=tmpPath)
+        self.assertTrue(sorted(df.collect()) == sorted(actual.collect()))
+        self.sqlCtx.sql("SET spark.sql.sources.default=" + defaultDataSourceName)
+
+        shutil.rmtree(tmpPath)
+
     def test_help_command(self):
         # Regression test for SPARK-5464
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
@@ -295,6 +325,77 @@ class SQLTests(ReusedPySparkTestCase):
         pydoc.render_doc(df.foo)
         pydoc.render_doc(df.take(1))
 
+
+class HiveContextSQLTests(ReusedPySparkTestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        ReusedPySparkTestCase.setUpClass()
+        cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
+        os.unlink(cls.tempdir.name)
+        print "type", type(cls.sc)
+        print "type", type(cls.sc._jsc)
+        _scala_HiveContext =\
+            cls.sc._jvm.org.apache.spark.sql.hive.test.TestHiveContext(cls.sc._jsc.sc())
+        cls.sqlCtx = HiveContext(cls.sc, _scala_HiveContext)
+        cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
+        rdd = cls.sc.parallelize(cls.testData)
+        cls.df = cls.sqlCtx.inferSchema(rdd)
+
+    @classmethod
+    def tearDownClass(cls):
+        ReusedPySparkTestCase.tearDownClass()
+        shutil.rmtree(cls.tempdir.name, ignore_errors=True)
+
+    def test_save_and_load_table(self):
+        df = self.df
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
+        df.saveAsTable("savedJsonTable", "org.apache.spark.sql.json", "append", path=tmpPath)
+        actual = self.sqlCtx.createExternalTable("externalJsonTable", tmpPath,
+                                                 "org.apache.spark.sql.json")
+        self.assertTrue(
+            sorted(df.collect()) ==
+            sorted(self.sqlCtx.sql("SELECT * FROM savedJsonTable").collect()))
+        self.assertTrue(
+            sorted(df.collect()) ==
+            sorted(self.sqlCtx.sql("SELECT * FROM externalJsonTable").collect()))
+        self.assertTrue(sorted(df.collect()) == sorted(actual.collect()))
+        self.sqlCtx.sql("DROP TABLE externalJsonTable")
+
+        df.saveAsTable("savedJsonTable", "org.apache.spark.sql.json", "overwrite", path=tmpPath)
+        schema = StructType([StructField("value", StringType(), True)])
+        actual = self.sqlCtx.createExternalTable("externalJsonTable",
+                                                 source="org.apache.spark.sql.json",
+                                                 schema=schema, path=tmpPath,
+                                                 noUse="this options will not be used")
+        self.assertTrue(
+            sorted(df.collect()) ==
+            sorted(self.sqlCtx.sql("SELECT * FROM savedJsonTable").collect()))
+        self.assertTrue(
+            sorted(df.select("value").collect()) ==
+            sorted(self.sqlCtx.sql("SELECT * FROM externalJsonTable").collect()))
+        self.assertTrue(sorted(df.select("value").collect()) == sorted(actual.collect()))
+        self.sqlCtx.sql("DROP TABLE savedJsonTable")
+        self.sqlCtx.sql("DROP TABLE externalJsonTable")
+
+        defaultDataSourceName = self.sqlCtx.getConf("spark.sql.sources.default",
+                                                    "org.apache.spark.sql.parquet")
+        self.sqlCtx.sql("SET spark.sql.sources.default=org.apache.spark.sql.json")
+        df.saveAsTable("savedJsonTable", path=tmpPath, mode="overwrite")
+        actual = self.sqlCtx.createExternalTable("externalJsonTable", path=tmpPath)
+        self.assertTrue(
+            sorted(df.collect()) ==
+            sorted(self.sqlCtx.sql("SELECT * FROM savedJsonTable").collect()))
+        self.assertTrue(
+            sorted(df.collect()) ==
+            sorted(self.sqlCtx.sql("SELECT * FROM externalJsonTable").collect()))
+        self.assertTrue(sorted(df.collect()) == sorted(actual.collect()))
+        self.sqlCtx.sql("DROP TABLE savedJsonTable")
+        self.sqlCtx.sql("DROP TABLE externalJsonTable")
+        self.sqlCtx.sql("SET spark.sql.sources.default=" + defaultDataSourceName)
+
+        shutil.rmtree(tmpPath)
 
 if __name__ == "__main__":
     unittest.main()

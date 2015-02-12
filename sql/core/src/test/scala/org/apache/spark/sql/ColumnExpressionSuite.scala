@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.Dsl._
 import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.types.{BooleanType, IntegerType, StructField, StructType}
 
 
@@ -44,10 +45,10 @@ class ColumnExpressionSuite extends QueryTest {
     shouldBeComputable(-testData2("a"))
     shouldBeComputable(!testData2("a"))
 
-    shouldBeComputable(testData2.select(($"a" + 1).as("c"))("c") + testData2("b"))
-    shouldBeComputable(
+    shouldNotBeComputable(testData2.select(($"a" + 1).as("c"))("c") + testData2("b"))
+    shouldNotBeComputable(
       testData2.select(($"a" + 1).as("c"))("c") + testData2.select(($"b" / 2).as("d"))("d"))
-    shouldBeComputable(
+    shouldNotBeComputable(
       testData2.select(($"a" + 1).as("c")).select(($"c" + 2).as("d"))("d") + testData2("b"))
 
     // Literals and unresolved columns should not be computable.
@@ -64,6 +65,12 @@ class ColumnExpressionSuite extends QueryTest {
 
     // Aggregate functions alone should not be computable.
     shouldNotBeComputable(sum(testData2("a")))
+  }
+
+  test("collect on column produced by a binary operator") {
+    val df = Seq((1, 2, 3)).toDataFrame("a", "b", "c")
+    checkAnswer(df("a") + df("b"), Seq(Row(3)))
+    checkAnswer(df("a") + df("b").as("c"), Seq(Row(3)))
   }
 
   test("star") {
@@ -180,7 +187,7 @@ class ColumnExpressionSuite extends QueryTest {
   }
 
   test("!==") {
-    val nullData = TestSQLContext.applySchema(TestSQLContext.sparkContext.parallelize(
+    val nullData = TestSQLContext.createDataFrame(TestSQLContext.sparkContext.parallelize(
       Row(1, 1) ::
       Row(1, 2) ::
       Row(1, null) ::
@@ -240,7 +247,7 @@ class ColumnExpressionSuite extends QueryTest {
       testData2.collect().toSeq.filter(r => r.getInt(0) <= r.getInt(1)))
   }
 
-  val booleanData = TestSQLContext.applySchema(TestSQLContext.sparkContext.parallelize(
+  val booleanData = TestSQLContext.createDataFrame(TestSQLContext.sparkContext.parallelize(
     Row(false, false) ::
       Row(false, true) ::
       Row(true, false) ::

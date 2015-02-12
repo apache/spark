@@ -25,8 +25,8 @@ import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedSt
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.sql.sources.SaveMode
 import org.apache.spark.sql.types.StructType
-
 
 private[sql] class IncomputableColumn(protected[sql] val expr: Expression) extends Column {
 
@@ -80,8 +80,6 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
 
   override def col(colName: String): Column = err()
 
-  override def apply(projection: Product): DataFrame = err()
-
   override def select(cols: Column*): DataFrame = err()
 
   override def select(col: String, cols: String*): DataFrame = err()
@@ -97,8 +95,6 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
   override def filter(conditionExpr: String): DataFrame = err()
 
   override def where(condition: Column): DataFrame = err()
-
-  override def apply(condition: Column): DataFrame = err()
 
   override def groupBy(cols: Column*): GroupedData = err()
 
@@ -156,29 +152,16 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
 
   override def saveAsParquetFile(path: String): Unit = err()
 
-  override def saveAsTable(tableName: String): Unit = err()
-
   override def saveAsTable(
       tableName: String,
-      dataSourceName: String,
-      option: (String, String),
-      options: (String, String)*): Unit = err()
-
-  override def saveAsTable(
-      tableName: String,
-      dataSourceName: String,
-      options: java.util.Map[String, String]): Unit = err()
-
-  override def save(path: String): Unit = err()
+      source: String,
+      mode: SaveMode,
+      options: Map[String, String]): Unit = err()
 
   override def save(
-      dataSourceName: String,
-      option: (String, String),
-      options: (String, String)*): Unit = err()
-
-  override def save(
-      dataSourceName: String,
-      options: java.util.Map[String, String]): Unit = err()
+      source: String,
+      mode: SaveMode,
+      options: Map[String, String]): Unit = err()
 
   override def insertInto(tableName: String, overwrite: Boolean): Unit = err()
 

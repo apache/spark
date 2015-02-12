@@ -17,41 +17,52 @@
 
 package org.apache.spark.streaming.kafka
 
-import kafka.common.TopicAndPartition
-
 import org.apache.spark.annotation.Experimental
 
 /**
  * :: Experimental ::
- * Represent the host info for the leader of a Kafka partition.
+ * Represent the host and port info for a Kafka broker.
+ * Differs from the Kafka project's internal kafka.cluster.Broker, which contains a server ID
  */
 @Experimental
-final class Leader private(
-    /** Kafka topic name */
-    val topic: String,
-    /** Kafka partition id */
-    val partition: Int,
-    /** Leader's hostname */
+final class Broker private(
+    /** Broker's hostname */
     val host: String,
-    /** Leader's port */
-    val port: Int) extends Serializable
+    /** Broker's port */
+    val port: Int) extends Serializable {
+  override def equals(obj: Any): Boolean = obj match {
+    case that: Broker =>
+      this.host == that.host &&
+      this.port == that.port
+    case _ => false
+  }
+
+  override def hashCode: Int = {
+    41 * (41 + host.hashCode) + port
+  }
+
+  override def toString(): String = {
+    s"Broker($host, $port)"
+  }
+}
 
 /**
  * :: Experimental ::
- * Companion object the provides methods to create instances of [[Leader]].
+ * Companion object that provides methods to create instances of [[Broker]].
  */
 @Experimental
-object Leader {
-  def create(topic: String, partition: Int, host: String, port: Int): Leader =
-    new Leader(topic, partition, host, port)
+object Broker {
+  def create(host: String, port: Int): Broker =
+    new Broker(host, port)
 
-  def create(topicAndPartition: TopicAndPartition, host: String, port: Int): Leader =
-    new Leader(topicAndPartition.topic, topicAndPartition.partition, host, port)
+  def apply(host: String, port: Int): Broker =
+    new Broker(host, port)
 
-  def apply(topic: String, partition: Int, host: String, port: Int): Leader =
-    new Leader(topic, partition, host, port)
-
-  def apply(topicAndPartition: TopicAndPartition, host: String, port: Int): Leader =
-    new Leader(topicAndPartition.topic, topicAndPartition.partition, host, port)
-
+  def unapply(broker: Broker): Option[(String, Int)] = {
+    if (broker == null) {
+      None
+    } else {
+      Some((broker.host, broker.port))
+    }
+  }
 }

@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference}
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -69,12 +69,12 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
           UnresolvedRelation(Seq("TaBlE"), Some("TbL")))) ===
         Project(testRelation.output, testRelation))
 
-    val e = intercept[TreeNodeException[_]] {
+    val e = intercept[AnalysisException] {
       caseSensitiveAnalyze(
         Project(Seq(UnresolvedAttribute("tBl.a")),
           UnresolvedRelation(Seq("TaBlE"), Some("TbL"))))
     }
-    assert(e.getMessage().toLowerCase.contains("unresolved"))
+    assert(e.getMessage().toLowerCase.contains("cannot resolve"))
 
     assert(
       caseInsensitiveAnalyze(
@@ -109,10 +109,10 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("throw errors for unresolved attributes during analysis") {
-    val e = intercept[TreeNodeException[_]] {
+    val e = intercept[AnalysisException] {
       caseSensitiveAnalyze(Project(Seq(UnresolvedAttribute("abcd")), testRelation))
     }
-    assert(e.getMessage().toLowerCase.contains("unresolved attribute"))
+    assert(e.getMessage().toLowerCase.contains("cannot resolve"))
   }
 
   test("throw errors for unresolved plans during analysis") {
@@ -120,10 +120,10 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
       override lazy val resolved = false
       override def output = Nil
     }
-    val e = intercept[TreeNodeException[_]] {
+    val e = intercept[AnalysisException] {
       caseSensitiveAnalyze(UnresolvedTestPlan())
     }
-    assert(e.getMessage().toLowerCase.contains("unresolved plan"))
+    assert(e.getMessage().toLowerCase.contains("unresolved"))
   }
 
   test("divide should be casted into fractional types") {
