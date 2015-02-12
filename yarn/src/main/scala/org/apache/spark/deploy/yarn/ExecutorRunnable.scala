@@ -35,6 +35,7 @@ import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.NMClient
 import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.apache.hadoop.yarn.exceptions.YarnException
 import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
@@ -109,7 +110,14 @@ class ExecutorRunnable(
     }
 
     // Send the start request to the ContainerManager
-    nmClient.startContainer(container, ctx)
+    try {
+      nmClient.startContainer(container, ctx)
+    } catch {
+      case ex: YarnException =>
+        logError("Exception while start container %s on host %s:"
+          .format(container.getId, hostname), ex)
+        throw ex
+    }
   }
 
   private def prepareCommand(
