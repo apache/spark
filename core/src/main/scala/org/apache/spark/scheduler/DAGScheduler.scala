@@ -1339,8 +1339,9 @@ class DAGScheduler(
             // Get the map output locations for this reducer
             if (status.contains(partition)) {
               // Select first few locations as preferred locations for the reducer
-              val topLocs = CollectionUtils.takeOrdered(status(partition).iterator,
-                NUM_REDUCER_PREF_LOCS)(Ordering.by[(BlockManagerId, Long), Long](_._2).reverse).toSeq
+              val topLocs = CollectionUtils.takeOrdered(
+                status(partition).iterator, NUM_REDUCER_PREF_LOCS)
+                  (Ordering.by[(BlockManagerId, Long), Long](_._2).reverse).toSeq
               return topLocs.map(_._1).map(loc => TaskLocation(loc.host, loc.executorId))
             }
           }

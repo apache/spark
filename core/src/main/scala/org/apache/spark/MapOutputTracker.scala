@@ -301,7 +301,10 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   // of (location, size) of map outputs.
   //
   // This method is not thread-safe
-  def getStatusByReducer(shuffleId: Int, numReducers: Int): Option[Map[Int, Array[(BlockManagerId, Long)]]] = {
+  def getStatusByReducer(
+      shuffleId: Int,
+      numReducers: Int)
+    : Option[Map[Int, Array[(BlockManagerId, Long)]]] = {
     if (!statusByReducer.contains(shuffleId) && mapStatuses.contains(shuffleId)) {
       val statuses = mapStatuses(shuffleId)
       if (statuses.length > 0) {
