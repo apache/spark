@@ -37,15 +37,18 @@ Training returns an IsotonicRegressionModel that can be used to predict
 labels for both known and unknown features. The result of isotonic regression
 is treated as piecewise linear function. The rules for prediction therefore are:
 
-* If testData exactly matches a boundary then associated prediction is returned.
-  In case there are multiple predictions with the same boundary then one of them
-  is returned. Which one is undefined (same as java.util.Arrays.binarySearch).
-* If testData is lower or higher than all boundaries then first or last prediction
-  is returned respectively. In case there are multiple predictions with the same
-  boundary then the lowest or highest is returned respectively.
-* If testData falls between two values in boundary array then prediction is treated
-  as piecewise linear function and interpolated value is returned. In case there are
-  multiple values with the same boundary then the same rules as in previous point are used.
+* If the prediction input exactly matches a training feature
+  then associated prediction is returned. In case there are multiple predictions with the same
+  feature then one of them is returned. Which one is undefined
+  (same as java.util.Arrays.binarySearch).
+* If the prediction input is lower or higher than all training features
+  then prediction with lowest or highest feature is returned respectively.
+  In case there are multiple predictions with the same feature
+  then the lowest or highest is returned respectively.
+* If the prediction input falls between two training features then prediction is treated
+  as piecewise linear function and interpolated value is calculated from the
+  predictions of the two closest features. In case there are multiple values
+  with the same feature then the same rules as in previous point are used.
 
 ### Examples
 
