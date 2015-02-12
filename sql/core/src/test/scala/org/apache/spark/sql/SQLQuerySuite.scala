@@ -806,10 +806,8 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   test("throw errors for non-aggregate attributes with aggregation") {
     def checkAggregation(query: String, isInvalidQuery: Boolean = true) {
       if (isInvalidQuery) {
-        val e = intercept[TreeNodeException[LogicalPlan]](sql(query).queryExecution.analyzed)
-        assert(
-          e.getMessage.startsWith("Expression not in GROUP BY"),
-          "Non-aggregate attribute(s) not detected\n")
+        val e = intercept[AnalysisException](sql(query).queryExecution.analyzed)
+        assert(e.getMessage contains "group by")
       } else {
         // Should not throw
         sql(query).queryExecution.analyzed
