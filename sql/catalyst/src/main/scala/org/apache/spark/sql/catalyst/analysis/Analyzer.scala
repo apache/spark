@@ -78,6 +78,8 @@ class Analyzer(catalog: Catalog,
     def failAnalysis(msg: String) = { throw new AnalysisException(msg) }
 
     def apply(plan: LogicalPlan): LogicalPlan = {
+      // We transform up and order the rules so as to catch the first possible failure instead
+      // of the result of cascading resolution failures.
       plan.foreachUp {
         case operator: LogicalPlan =>
           operator transformAllExpressions {
