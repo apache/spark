@@ -121,7 +121,7 @@ case class Alias(child: Expression, name: String)
     }
   }
 
-  override def toString: String = s"$child AS $name#${exprId.id}$typeSuffix"
+  override def toString: String = s"$child AS $name#${exprId.id}"
 
   override protected final def otherCopyArgs = exprId :: qualifiers :: Nil
 }
