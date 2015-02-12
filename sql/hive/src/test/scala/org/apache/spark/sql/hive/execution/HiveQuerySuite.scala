@@ -859,6 +859,22 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     }
   }
 
+  test("SPARK-5592: get java.net.URISyntaxException when dynamic partitioning") {
+    sql("""
+      |create table sc as select *
+      |from (select '2011-01-11', '2011-01-11+14:18:26' from src tablesample (1 rows)
+      |union all
+      |select '2011-01-11', '2011-01-11+15:18:26' from src tablesample (1 rows)
+      |union all
+      |select '2011-01-11', '2011-01-11+16:18:26' from src tablesample (1 rows) ) s
+    """.stripMargin)
+    sql("create table sc_part (key string) partitioned by (ts string) stored as rcfile")
+    sql("set hive.exec.dynamic.partition=true")
+    sql("set hive.exec.dynamic.partition.mode=nonstrict")
+    sql("insert overwrite table sc_part partition(ts) select * from sc")
+    sql("drop table sc_part")
+  }
+
   test("Partition spec validation") {
     sql("DROP TABLE IF EXISTS dp_test")
     sql("CREATE TABLE dp_test(key INT, value STRING) PARTITIONED BY (dp INT, sp INT)")

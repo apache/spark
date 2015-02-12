@@ -71,7 +71,7 @@ public class JavaCrossValidatorExample {
       new LabeledDocument(9L, "a e c l", 0.0),
       new LabeledDocument(10L, "spark compile", 1.0),
       new LabeledDocument(11L, "hadoop software", 0.0));
-    DataFrame training = jsql.applySchema(jsc.parallelize(localTraining), LabeledDocument.class);
+    DataFrame training = jsql.createDataFrame(jsc.parallelize(localTraining), LabeledDocument.class);
 
     // Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
     Tokenizer tokenizer = new Tokenizer()
@@ -112,7 +112,7 @@ public class JavaCrossValidatorExample {
       new Document(5L, "l m n"),
       new Document(6L, "mapreduce spark"),
       new Document(7L, "apache hadoop"));
-    DataFrame test = jsql.applySchema(jsc.parallelize(localTest), Document.class);
+    DataFrame test = jsql.createDataFrame(jsc.parallelize(localTest), Document.class);
 
     // Make predictions on test documents. cvModel uses the best model found (lrModel).
     cvModel.transform(test).registerTempTable("prediction");

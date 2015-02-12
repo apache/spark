@@ -19,6 +19,7 @@ package org.apache.spark.repl
 
 import org.apache.spark.util.Utils
 import org.apache.spark._
+import org.apache.spark.sql.SQLContext
 
 import scala.tools.nsc.Settings
 import scala.tools.nsc.interpreter.SparkILoop
@@ -34,6 +35,7 @@ object Main extends Logging {
     "-Yrepl-outdir", s"${outputDir.getAbsolutePath}", "-Yrepl-sync"), true)
   val classServer = new HttpServer(conf, outputDir, new SecurityManager(conf))
   var sparkContext: SparkContext = _
+  var sqlContext: SQLContext = _
   var interp = new SparkILoop // this is a public var because tests reset it.
 
   def main(args: Array[String]) {
@@ -72,6 +74,22 @@ object Main extends Logging {
     sparkContext = new SparkContext(conf)
     logInfo("Created spark context..")
     sparkContext
+  }
+
+  def createSQLContext(): SQLContext = {
+    val name = "org.apache.spark.sql.hive.HiveContext"
+    val loader = Utils.getContextOrSparkClassLoader
+    try {
+      sqlContext = loader.loadClass(name).getConstructor(classOf[SparkContext])
+        .newInstance(sparkContext).asInstanceOf[SQLContext] 
+      logInfo("Created sql context (with Hive support)..")
+    }
+    catch {
+      case cnf: java.lang.ClassNotFoundException =>
+        sqlContext = new SQLContext(sparkContext)
+        logInfo("Created sql context..")
+    }
+    sqlContext
   }
 
   private def getMaster: String = {

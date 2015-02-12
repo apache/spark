@@ -40,6 +40,17 @@ abstract class NamedExpression extends Expression {
 
   def name: String
   def exprId: ExprId
+
+  /**
+   * All possible qualifiers for the expression.
+   *
+   * For now, since we do not allow using original table name to qualify a column name once the
+   * table is aliased, this can only be:
+   *
+   * 1. Empty Seq: when an attribute doesn't have a qualifier,
+   *    e.g. top level attributes aliased in the SELECT clause, or column from a LocalRelation.
+   * 2. Single element: either the table name or the alias name of the table.
+   */
   def qualifiers: Seq[String]
 
   def toAttribute: Attribute
@@ -188,6 +199,26 @@ case class AttributeReference(
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 
   override def toString: String = s"$name#${exprId.id}$typeSuffix"
+}
+
+/**
+ * A place holder used when printing expressions without debugging information such as the
+ * expression id or the unresolved indicator.
+ */
+case class PrettyAttribute(name: String) extends Attribute with trees.LeafNode[Expression] {
+  type EvaluatedType = Any
+
+  override def toString = name
+
+  override def withNullability(newNullability: Boolean): Attribute = ???
+  override def newInstance(): Attribute = ???
+  override def withQualifiers(newQualifiers: Seq[String]): Attribute = ???
+  override def withName(newName: String): Attribute = ???
+  override def qualifiers: Seq[String] = ???
+  override def exprId: ExprId = ???
+  override def eval(input: Row): EvaluatedType = ???
+  override def nullable: Boolean = ???
+  override def dataType: DataType = ???
 }
 
 object VirtualColumn {

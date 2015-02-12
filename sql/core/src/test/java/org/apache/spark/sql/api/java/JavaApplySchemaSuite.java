@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import org.apache.spark.sql.test.TestSQLContext$;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -42,13 +43,12 @@ public class JavaApplySchemaSuite implements Serializable {
 
   @Before
   public void setUp() {
-    javaCtx = new JavaSparkContext("local", "JavaApplySchemaSuite");
-    javaSqlCtx = new SQLContext(javaCtx);
+    javaSqlCtx = TestSQLContext$.MODULE$;
+    javaCtx = new JavaSparkContext(javaSqlCtx.sparkContext());
   }
 
   @After
   public void tearDown() {
-    javaCtx.stop();
     javaCtx = null;
     javaSqlCtx = null;
   }

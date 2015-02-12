@@ -17,16 +17,18 @@
 
 package org.apache.spark.sql
 
+import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
+import scala.util.control.NonFatal
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.sources.SaveMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
-
 
 private[sql] object DataFrame {
   def apply(sqlContext: SQLContext, logicalPlan: LogicalPlan): DataFrame = {
@@ -92,6 +94,12 @@ trait DataFrame extends RDDApi[Row] {
    */
   def toDataFrame: DataFrame = this
 
+  override def toString =
+     try schema.map(f => s"${f.name}: ${f.dataType.simpleString}").mkString("[", ", ", "]") catch {
+       case NonFatal(e) =>
+         s"Invalid tree; ${e.getMessage}:\n$queryExecution"
+     }
+
   /**
    * Returns a new [[DataFrame]] with columns renamed. This can be quite convenient in conversion
    * from a RDD of tuples into a [[DataFrame]] with meaningful names. For example:
@@ -102,7 +110,7 @@ trait DataFrame extends RDDApi[Row] {
    * }}}
    */
   @scala.annotation.varargs
-  def toDataFrame(colName: String, colNames: String*): DataFrame
+  def toDataFrame(colNames: String*): DataFrame
 
   /** Returns the schema of this [[DataFrame]]. */
   def schema: StructType
@@ -115,6 +123,31 @@ trait DataFrame extends RDDApi[Row] {
 
   /** Prints the schema to the console in a nice tree format. */
   def printSchema(): Unit
+
+  /** Prints the plans (logical and physical) to the console for debugging purpose. */
+  def explain(extended: Boolean): Unit
+
+  /** Only prints the physical plan to the console for debugging purpose. */
+  def explain(): Unit = explain(false)
+
+  /**
+   * Returns true if the `collect` and `take` methods can be run locally
+   * (without any Spark executors).
+   */
+  def isLocal: Boolean
+
+  /**
+   * Displays the [[DataFrame]] in a tabular form. For example:
+   * {{{
+   *   year  month AVG('Adj Close) MAX('Adj Close)
+   *   1980  12    0.503218        0.595103
+   *   1981  01    0.523289        0.570307
+   *   1982  02    0.436504        0.475256
+   *   1983  03    0.410516        0.442194
+   *   1984  04    0.450090        0.483521
+   * }}}
+   */
+  def show(): Unit
 
   /**
    * Cartesian join with another [[DataFrame]].
@@ -137,7 +170,7 @@ trait DataFrame extends RDDApi[Row] {
   def join(right: DataFrame, joinExprs: Column): DataFrame
 
   /**
-   * Join with another [[DataFrame]], usin  g the given join expression. The following performs
+   * Join with another [[DataFrame]], using the given join expression. The following performs
    * a full outer join between `df1` and `df2`.
    *
    * {{{
@@ -214,7 +247,12 @@ trait DataFrame extends RDDApi[Row] {
   /**
    * Returns a new [[DataFrame]] with an alias set.
    */
-  def as(name: String): DataFrame
+  def as(alias: String): DataFrame
+
+  /**
+   * (Scala-specific) Returns a new [[DataFrame]] with an alias set.
+   */
+  def as(alias: Symbol): DataFrame
 
   /**
    * Selects a set of expressions.
@@ -497,6 +535,9 @@ trait DataFrame extends RDDApi[Row] {
    */
   override def repartition(numPartitions: Int): DataFrame
 
+  /** Returns a new [[DataFrame]] that contains only the unique rows from this [[DataFrame]]. */
+  override def distinct: DataFrame
+
   override def persist(): this.type
 
   override def persist(newLevel: StorageLevel): this.type
@@ -539,8 +580,9 @@ trait DataFrame extends RDDApi[Row] {
 
   /**
    * :: Experimental ::
-   * Creates a table from the the contents of this DataFrame.  This will fail if the table already
-   * exists.
+   * Creates a table from the the contents of this DataFrame.
+   * It will use the default data source configured by spark.sql.sources.default.
+   * This will fail if the table already exists.
    *
    * Note that this currently only works with DataFrames that are created from a HiveContext as
    * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
@@ -548,12 +590,37 @@ trait DataFrame extends RDDApi[Row] {
    * be the target of an `insertInto`.
    */
   @Experimental
-  def saveAsTable(tableName: String): Unit
+  def saveAsTable(tableName: String): Unit = {
+    saveAsTable(tableName, SaveMode.ErrorIfExists)
+  }
 
   /**
    * :: Experimental ::
-   * Creates a table from the the contents of this DataFrame based on a given data source and
-   * a set of options. This will fail if the table already exists.
+   * Creates a table from the the contents of this DataFrame, using the default data source
+   * configured by spark.sql.sources.default and [[SaveMode.ErrorIfExists]] as the save mode.
+   *
+   * Note that this currently only works with DataFrames that are created from a HiveContext as
+   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
+   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
+   * be the target of an `insertInto`.
+   */
+  @Experimental
+  def saveAsTable(tableName: String, mode: SaveMode): Unit = {
+    if (sqlContext.catalog.tableExists(Seq(tableName)) && mode == SaveMode.Append) {
+      // If table already exists and the save mode is Append,
+      // we will just call insertInto to append the contents of this DataFrame.
+      insertInto(tableName, overwrite = false)
+    } else {
+      val dataSourceName = sqlContext.conf.defaultDataSourceName
+      saveAsTable(tableName, dataSourceName, mode)
+    }
+  }
+
+  /**
+   * :: Experimental ::
+   * Creates a table at the given path from the the contents of this DataFrame
+   * based on a given data source and a set of options,
+   * using [[SaveMode.ErrorIfExists]] as the save mode.
    *
    * Note that this currently only works with DataFrames that are created from a HiveContext as
    * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
@@ -563,14 +630,14 @@ trait DataFrame extends RDDApi[Row] {
   @Experimental
   def saveAsTable(
       tableName: String,
-      dataSourceName: String,
-      option: (String, String),
-      options: (String, String)*): Unit
+      source: String): Unit = {
+    saveAsTable(tableName, source, SaveMode.ErrorIfExists)
+  }
 
   /**
    * :: Experimental ::
-   * Creates a table from the the contents of this DataFrame based on a given data source and
-   * a set of options. This will fail if the table already exists.
+   * Creates a table at the given path from the the contents of this DataFrame
+   * based on a given data source, [[SaveMode]] specified by mode, and a set of options.
    *
    * Note that this currently only works with DataFrames that are created from a HiveContext as
    * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
@@ -580,22 +647,114 @@ trait DataFrame extends RDDApi[Row] {
   @Experimental
   def saveAsTable(
       tableName: String,
-      dataSourceName: String,
-      options: java.util.Map[String, String]): Unit
+      source: String,
+      mode: SaveMode): Unit = {
+    saveAsTable(tableName, source, mode, Map.empty[String, String])
+  }
 
+  /**
+   * :: Experimental ::
+   * Creates a table at the given path from the the contents of this DataFrame
+   * based on a given data source, [[SaveMode]] specified by mode, and a set of options.
+   *
+   * Note that this currently only works with DataFrames that are created from a HiveContext as
+   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
+   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
+   * be the target of an `insertInto`.
+   */
   @Experimental
-  def save(path: String): Unit
+  def saveAsTable(
+      tableName: String,
+      source: String,
+      mode: SaveMode,
+      options: java.util.Map[String, String]): Unit = {
+    saveAsTable(tableName, source, mode, options.toMap)
+  }
 
+  /**
+   * :: Experimental ::
+   * (Scala-specific)
+   * Creates a table from the the contents of this DataFrame based on a given data source,
+   * [[SaveMode]] specified by mode, and a set of options.
+   *
+   * Note that this currently only works with DataFrames that are created from a HiveContext as
+   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
+   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
+   * be the target of an `insertInto`.
+   */
+  @Experimental
+  def saveAsTable(
+      tableName: String,
+      source: String,
+      mode: SaveMode,
+      options: Map[String, String]): Unit
+
+  /**
+   * :: Experimental ::
+   * Saves the contents of this DataFrame to the given path,
+   * using the default data source configured by spark.sql.sources.default and
+   * [[SaveMode.ErrorIfExists]] as the save mode.
+   */
+  @Experimental
+  def save(path: String): Unit = {
+    save(path, SaveMode.ErrorIfExists)
+  }
+
+  /**
+   * :: Experimental ::
+   * Saves the contents of this DataFrame to the given path and [[SaveMode]] specified by mode,
+   * using the default data source configured by spark.sql.sources.default.
+   */
+  @Experimental
+  def save(path: String, mode: SaveMode): Unit = {
+    val dataSourceName = sqlContext.conf.defaultDataSourceName
+    save(path, dataSourceName, mode)
+  }
+
+  /**
+   * :: Experimental ::
+   * Saves the contents of this DataFrame to the given path based on the given data source,
+   * using [[SaveMode.ErrorIfExists]] as the save mode.
+   */
+  @Experimental
+  def save(path: String, source: String): Unit = {
+    save(source, SaveMode.ErrorIfExists, Map("path" -> path))
+  }
+
+  /**
+   * :: Experimental ::
+   * Saves the contents of this DataFrame to the given path based on the given data source and
+   * [[SaveMode]] specified by mode.
+   */
+  @Experimental
+  def save(path: String, source: String, mode: SaveMode): Unit = {
+    save(source, mode, Map("path" -> path))
+  }
+
+  /**
+   * :: Experimental ::
+   * Saves the contents of this DataFrame based on the given data source,
+   * [[SaveMode]] specified by mode, and a set of options.
+   */
   @Experimental
   def save(
-      dataSourceName: String,
-      option: (String, String),
-      options: (String, String)*): Unit
+      source: String,
+      mode: SaveMode,
+      options: java.util.Map[String, String]): Unit = {
+    save(source, mode, options.toMap)
+  }
 
+  /**
+   * :: Experimental ::
+   * (Scala-specific)
+   * Saves the contents of this DataFrame based on the given data source,
+   * [[SaveMode]] specified by mode, and a set of options
+   */
   @Experimental
   def save(
-      dataSourceName: String,
-      options: java.util.Map[String, String]): Unit
+      source: String,
+      mode: SaveMode,
+      options: Map[String, String]): Unit
 
   /**
    * :: Experimental ::

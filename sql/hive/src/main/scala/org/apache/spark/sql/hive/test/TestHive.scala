@@ -20,9 +20,6 @@ package org.apache.spark.sql.hive.test
 import java.io.File
 import java.util.{Set => JavaSet}
 
-import scala.collection.mutable
-import scala.language.implicitConversions
-
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.ql.io.avro.{AvroContainerInputFormat, AvroContainerOutputFormat}
 import org.apache.hadoop.hive.ql.metadata.Table
@@ -30,16 +27,18 @@ import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.serde2.RegexSerDe
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.hive.serde2.avro.AvroSerDe
-
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.CacheTableCommand
 import org.apache.spark.sql.hive._
-import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
+import org.apache.spark.util.Utils
+import org.apache.spark.{SparkConf, SparkContext}
+
+import scala.collection.mutable
+import scala.language.implicitConversions
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -224,11 +223,10 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       }
     }),
     TestTable("src_thrift", () => {
-      import org.apache.thrift.protocol.TBinaryProtocol
-      import org.apache.hadoop.hive.serde2.thrift.test.Complex
       import org.apache.hadoop.hive.serde2.thrift.ThriftDeserializer
-      import org.apache.hadoop.mapred.SequenceFileInputFormat
-      import org.apache.hadoop.mapred.SequenceFileOutputFormat
+      import org.apache.hadoop.hive.serde2.thrift.test.Complex
+      import org.apache.hadoop.mapred.{SequenceFileInputFormat, SequenceFileOutputFormat}
+      import org.apache.thrift.protocol.TBinaryProtocol
 
       val srcThrift = new Table("default", "src_thrift")
       srcThrift.setFields(Nil)

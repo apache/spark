@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.executor
+package org.apache.spark.util
 
 import java.net.URLClassLoader
 
@@ -24,7 +24,7 @@ import org.scalatest.FunSuite
 import org.apache.spark.{LocalSparkContext, SparkContext, SparkException, TestUtils}
 import org.apache.spark.util.Utils
 
-class ExecutorURLClassLoaderSuite extends FunSuite {
+class MutableURLClassLoaderSuite extends FunSuite {
 
   val urls2 = List(TestUtils.createJarWithClasses(
       classNames = Seq("FakeClass1", "FakeClass2", "FakeClass3"),
@@ -37,7 +37,7 @@ class ExecutorURLClassLoaderSuite extends FunSuite {
 
   test("child first") {
     val parentLoader = new URLClassLoader(urls2, null)
-    val classLoader = new ChildExecutorURLClassLoader(urls, parentLoader)
+    val classLoader = new ChildFirstURLClassLoader(urls, parentLoader)
     val fakeClass = classLoader.loadClass("FakeClass2").newInstance()
     val fakeClassVersion = fakeClass.toString
     assert(fakeClassVersion === "1")
@@ -47,7 +47,7 @@ class ExecutorURLClassLoaderSuite extends FunSuite {
 
   test("parent first") {
     val parentLoader = new URLClassLoader(urls2, null)
-    val classLoader = new ExecutorURLClassLoader(urls, parentLoader)
+    val classLoader = new MutableURLClassLoader(urls, parentLoader)
     val fakeClass = classLoader.loadClass("FakeClass1").newInstance()
     val fakeClassVersion = fakeClass.toString
     assert(fakeClassVersion === "2")
@@ -57,7 +57,7 @@ class ExecutorURLClassLoaderSuite extends FunSuite {
 
   test("child first can fall back") {
     val parentLoader = new URLClassLoader(urls2, null)
-    val classLoader = new ChildExecutorURLClassLoader(urls, parentLoader)
+    val classLoader = new ChildFirstURLClassLoader(urls, parentLoader)
     val fakeClass = classLoader.loadClass("FakeClass3").newInstance()
     val fakeClassVersion = fakeClass.toString
     assert(fakeClassVersion === "2")
@@ -65,7 +65,7 @@ class ExecutorURLClassLoaderSuite extends FunSuite {
 
   test("child first can fail") {
     val parentLoader = new URLClassLoader(urls2, null)
-    val classLoader = new ChildExecutorURLClassLoader(urls, parentLoader)
+    val classLoader = new ChildFirstURLClassLoader(urls, parentLoader)
     intercept[java.lang.ClassNotFoundException] {
       classLoader.loadClass("FakeClassDoesNotExist").newInstance()
     }

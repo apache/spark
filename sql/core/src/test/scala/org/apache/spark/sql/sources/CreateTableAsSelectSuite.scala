@@ -77,12 +77,10 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
       sql("SELECT a, b FROM jsonTable"),
       sql("SELECT a, b FROM jt").collect())
 
-    dropTempTable("jsonTable")
-
-    val message = intercept[RuntimeException]{
+    val message = intercept[DDLException]{
       sql(
         s"""
-        |CREATE TEMPORARY TABLE jsonTable
+        |CREATE TEMPORARY TABLE IF NOT EXISTS jsonTable
         |USING org.apache.spark.sql.json.DefaultSource
         |OPTIONS (
         |  path '${path.toString}'
@@ -91,12 +89,10 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
       """.stripMargin)
     }.getMessage
     assert(
-      message.contains(s"path ${path.toString} already exists."),
+      message.contains(s"a CREATE TEMPORARY TABLE statement does not allow IF NOT EXISTS clause."),
       "CREATE TEMPORARY TABLE IF NOT EXISTS should not be allowed.")
 
-    // Explicitly delete it.
-    if (path.exists()) Utils.deleteRecursively(path)
-
+    // Overwrite the temporary table.
     sql(
       s"""
         |CREATE TEMPORARY TABLE jsonTable
@@ -106,10 +102,27 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
         |) AS
         |SELECT a * 4 FROM jt
       """.stripMargin)
-
     checkAnswer(
       sql("SELECT * FROM jsonTable"),
       sql("SELECT a * 4 FROM jt").collect())
+
+    dropTempTable("jsonTable")
+    // Explicitly delete the data.
+    if (path.exists()) Utils.deleteRecursively(path)
+
+    sql(
+      s"""
+        |CREATE TEMPORARY TABLE jsonTable
+        |USING org.apache.spark.sql.json.DefaultSource
+        |OPTIONS (
+        |  path '${path.toString}'
+        |) AS
+        |SELECT b FROM jt
+      """.stripMargin)
+
+    checkAnswer(
+      sql("SELECT * FROM jsonTable"),
+      sql("SELECT b FROM jt").collect())
 
     dropTempTable("jsonTable")
   }

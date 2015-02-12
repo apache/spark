@@ -17,11 +17,17 @@
 
 package org.apache.spark.mllib.tree.model
 
+import scala.collection.mutable
+
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.tree.configuration.{Algo, FeatureType}
 import org.apache.spark.mllib.tree.configuration.Algo._
+import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
 /**
  * :: Experimental ::
@@ -31,7 +37,7 @@ import org.apache.spark.rdd.RDD
  * @param algo algorithm type -- classification or regression
  */
 @Experimental
-class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable {
+class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable with Saveable {
 
   /**
    * Predict values for a single data point using the model trained.
@@ -98,4 +104,193 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
     header + topNode.subtreeToString(2)
   }
 
+  override def save(sc: SparkContext, path: String): Unit = {
+    DecisionTreeModel.SaveLoadV1_0.save(sc, path, this)
+  }
+
+  override protected def formatVersion: String = "1.0"
+}
+
+object DecisionTreeModel extends Loader[DecisionTreeModel] {
+
+  private[tree] object SaveLoadV1_0 {
+
+    def thisFormatVersion = "1.0"
+
+    // Hard-code class name string in case it changes in the future
+    def thisClassName = "org.apache.spark.mllib.tree.DecisionTreeModel"
+
+    case class PredictData(predict: Double, prob: Double) {
+      def toPredict: Predict = new Predict(predict, prob)
+    }
+
+    object PredictData {
+      def apply(p: Predict): PredictData = PredictData(p.predict, p.prob)
+
+      def apply(r: Row): PredictData = PredictData(r.getDouble(0), r.getDouble(1))
+    }
+
+    case class SplitData(
+        feature: Int,
+        threshold: Double,
+        featureType: Int,
+        categories: Seq[Double]) { // TODO: Change to List once SPARK-3365 is fixed
+      def toSplit: Split = {
+        new Split(feature, threshold, FeatureType(featureType), categories.toList)
+      }
+    }
+
+    object SplitData {
+      def apply(s: Split): SplitData = {
+        SplitData(s.feature, s.threshold, s.featureType.id, s.categories)
+      }
+
+      def apply(r: Row): SplitData = {
+        SplitData(r.getInt(0), r.getDouble(1), r.getInt(2), r.getAs[Seq[Double]](3))
+      }
+    }
+
+    /** Model data for model import/export */
+    case class NodeData(
+        treeId: Int,
+        nodeId: Int,
+        predict: PredictData,
+        impurity: Double,
+        isLeaf: Boolean,
+        split: Option[SplitData],
+        leftNodeId: Option[Int],
+        rightNodeId: Option[Int],
+        infoGain: Option[Double])
+
+    object NodeData {
+      def apply(treeId: Int, n: Node): NodeData = {
+        NodeData(treeId, n.id, PredictData(n.predict), n.impurity, n.isLeaf,
+          n.split.map(SplitData.apply), n.leftNode.map(_.id), n.rightNode.map(_.id),
+          n.stats.map(_.gain))
+      }
+
+      def apply(r: Row): NodeData = {
+        val split = if (r.isNullAt(5)) None else Some(SplitData(r.getStruct(5)))
+        val leftNodeId = if (r.isNullAt(6)) None else Some(r.getInt(6))
+        val rightNodeId = if (r.isNullAt(7)) None else Some(r.getInt(7))
+        val infoGain = if (r.isNullAt(8)) None else Some(r.getDouble(8))
+        NodeData(r.getInt(0), r.getInt(1), PredictData(r.getStruct(2)), r.getDouble(3),
+          r.getBoolean(4), split, leftNodeId, rightNodeId, infoGain)
+      }
+    }
+
+    def save(sc: SparkContext, path: String, model: DecisionTreeModel): Unit = {
+      val sqlContext = new SQLContext(sc)
+      import sqlContext.implicits._
+
+      // Create JSON metadata.
+      val metadataRDD = sc.parallelize(
+        Seq((thisClassName, thisFormatVersion, model.algo.toString, model.numNodes)), 1)
+        .toDataFrame("class", "version", "algo", "numNodes")
+      metadataRDD.toJSON.saveAsTextFile(Loader.metadataPath(path))
+
+      // Create Parquet data.
+      val nodes = model.topNode.subtreeIterator.toSeq
+      val dataRDD: DataFrame = sc.parallelize(nodes)
+        .map(NodeData.apply(0, _))
+        .toDataFrame
+      dataRDD.saveAsParquetFile(Loader.dataPath(path))
+    }
+
+    def load(sc: SparkContext, path: String, algo: String, numNodes: Int): DecisionTreeModel = {
+      val datapath = Loader.dataPath(path)
+      val sqlContext = new SQLContext(sc)
+      // Load Parquet data.
+      val dataRDD = sqlContext.parquetFile(datapath)
+      // Check schema explicitly since erasure makes it hard to use match-case for checking.
+      Loader.checkSchema[NodeData](dataRDD.schema)
+      val nodes = dataRDD.map(NodeData.apply)
+      // Build node data into a tree.
+      val trees = constructTrees(nodes)
+      assert(trees.size == 1,
+        "Decision tree should contain exactly one tree but got ${trees.size} trees.")
+      val model = new DecisionTreeModel(trees(0), Algo.fromString(algo))
+      assert(model.numNodes == numNodes, s"Unable to load DecisionTreeModel data from: $datapath." +
+        s" Expected $numNodes nodes but found ${model.numNodes}")
+      model
+    }
+
+    def constructTrees(nodes: RDD[NodeData]): Array[Node] = {
+      val trees = nodes
+        .groupBy(_.treeId)
+        .mapValues(_.toArray)
+        .collect()
+        .map { case (treeId, data) =>
+          (treeId, constructTree(data))
+        }.sortBy(_._1)
+      val numTrees = trees.size
+      val treeIndices = trees.map(_._1).toSeq
+      assert(treeIndices == (0 until numTrees),
+        s"Tree indices must start from 0 and increment by 1, but we found $treeIndices.")
+      trees.map(_._2)
+    }
+
+    /**
+     * Given a list of nodes from a tree, construct the tree.
+     * @param data array of all node data in a tree.
+     */
+    def constructTree(data: Array[NodeData]): Node = {
+      val dataMap: Map[Int, NodeData] = data.map(n => n.nodeId -> n).toMap
+      assert(dataMap.contains(1),
+        s"DecisionTree missing root node (id = 1).")
+      constructNode(1, dataMap, mutable.Map.empty)
+    }
+
+    /**
+     * Builds a node from the node data map and adds new nodes to the input nodes map.
+     */
+    private def constructNode(
+      id: Int,
+      dataMap: Map[Int, NodeData],
+      nodes: mutable.Map[Int, Node]): Node = {
+      if (nodes.contains(id)) {
+        return nodes(id)
+      }
+      val data = dataMap(id)
+      val node =
+        if (data.isLeaf) {
+          Node(data.nodeId, data.predict.toPredict, data.impurity, data.isLeaf)
+        } else {
+          val leftNode = constructNode(data.leftNodeId.get, dataMap, nodes)
+          val rightNode = constructNode(data.rightNodeId.get, dataMap, nodes)
+          val stats = new InformationGainStats(data.infoGain.get, data.impurity, leftNode.impurity,
+            rightNode.impurity, leftNode.predict, rightNode.predict)
+          new Node(data.nodeId, data.predict.toPredict, data.impurity, data.isLeaf,
+            data.split.map(_.toSplit), Some(leftNode), Some(rightNode), Some(stats))
+        }
+      nodes += node.id -> node
+      node
+    }
+  }
+
+  override def load(sc: SparkContext, path: String): DecisionTreeModel = {
+    val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)
+    val (algo: String, numNodes: Int) = try {
+      val algo_numNodes = metadata.select("algo", "numNodes").collect()
+      assert(algo_numNodes.length == 1)
+      algo_numNodes(0) match {
+        case Row(a: String, n: Int) => (a, n)
+      }
+    } catch {
+      // Catch both Error and Exception since the checks above can throw either.
+      case e: Throwable =>
+        throw new Exception(
+          s"Unable to load DecisionTreeModel metadata from: ${Loader.metadataPath(path)}."
+          + s"  Error message: ${e.getMessage}")
+    }
+    val classNameV1_0 = SaveLoadV1_0.thisClassName
+    (loadedClassName, version) match {
+      case (className, "1.0") if className == classNameV1_0 =>
+        SaveLoadV1_0.load(sc, path, algo, numNodes)
+      case _ => throw new Exception(
+        s"DecisionTreeModel.load did not recognize model with (className, format version):" +
+        s"($loadedClassName, $version).  Supported:\n" +
+        s"  ($classNameV1_0, 1.0)")
+    }
+  }
 }

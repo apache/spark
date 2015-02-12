@@ -71,7 +71,7 @@ class PlannerSuite extends FunSuite {
       val schema = StructType(fields)
       val row = Row.fromSeq(Seq.fill(fields.size)(null))
       val rowRDD = org.apache.spark.sql.test.TestSQLContext.sparkContext.parallelize(row :: Nil)
-      applySchema(rowRDD, schema).registerTempTable("testLimit")
+      createDataFrame(rowRDD, schema).registerTempTable("testLimit")
 
       val planned = sql(
         """

@@ -35,7 +35,6 @@ class ParquetQuerySuite extends QueryTest with ParquetTest {
       }
     }
 
-    // TODO Re-enable this after data source insertion API is merged
     test(s"$prefix: appending") {
       val data = (0 until 10).map(i => (i, i.toString))
       withParquetTable(data, "t") {
