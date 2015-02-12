@@ -631,7 +631,7 @@ class SQLContext(object):
 
         >>> sqlCtx.registerRDDAsTable(df, "table1")
         >>> df2 = sqlCtx.tables()
-        >>> df2.first()
+        >>> df2.filter("tableName = 'table1'").first()
         Row(tableName=u'table1', isTemporary=True)
         """
         if dbName is None:
