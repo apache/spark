@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.analysis.EliminateAnalysisOperators
+import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.{DataFrame, SQLContext}
@@ -175,7 +175,7 @@ case class CreateMetastoreDataSourceAsSelect(
           val resolved =
             ResolvedDataSource(sqlContext, Some(query.schema), provider, optionsWithPath)
           val createdRelation = LogicalRelation(resolved.relation)
-          EliminateAnalysisOperators(sqlContext.table(tableName).logicalPlan) match {
+          EliminateSubQueries(sqlContext.table(tableName).logicalPlan) match {
             case l @ LogicalRelation(i: InsertableRelation) =>
               if (l.schema != createdRelation.schema) {
                 val errorDescription =

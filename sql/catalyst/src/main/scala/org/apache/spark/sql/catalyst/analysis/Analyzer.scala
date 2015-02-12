@@ -67,8 +67,8 @@ class Analyzer(catalog: Catalog,
       extendedRules : _*),
     Batch("Check Analysis", Once,
       CheckResolution),
-    Batch("AnalysisOperators", fixedPoint,
-      EliminateAnalysisOperators)
+    Batch("Remove SubQueries", fixedPoint,
+      EliminateSubQueries)
   )
 
   /**
@@ -104,25 +104,27 @@ class Analyzer(catalog: Catalog,
                 s"of type ${f.condition.dataType.simpleString} is not a boolean.")
 
             case aggregatePlan @ Aggregate(groupingExprs, aggregateExprs, child) =>
-              def isValidAggregateExpression(expr: Expression): Boolean = expr match {
-                case _: AggregateExpression => true
-                case e: Attribute => groupingExprs.contains(e)
-                case e if groupingExprs.contains(e) => true
-                case e if e.references.isEmpty => true
-                case e => e.children.forall(isValidAggregateExpression)
+              def checkValidAggregateExpression(expr: Expression): Unit = expr match {
+                case _: AggregateExpression => // OK
+                case e: Attribute if !groupingExprs.contains(e) =>
+                  failAnalysis(
+                    s"expression '${e.prettyString}' is neither present in the group by, " +
+                    s"nor is it an aggregate function. " +
+                     "Add to group by or wrap in first() if you don't care which value you get.")
+                case e: Attribute => // OK
+                case e if groupingExprs.contains(e) => // OK
+                case e if e.references.isEmpty => // OK
+                case e => e.children.foreach(checkValidAggregateExpression)
               }
 
-              aggregateExprs.find { e =>
-                !isValidAggregateExpression(e.transform {
-                  // Should trim aliases around `GetField`s. These aliases are introduced while
-                  // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
-                  // (Should we just turn `GetField` into a `NamedExpression`?)
-                  case Alias(g: GetField, _) => g
-                })
-              }.foreach { e =>
-                failAnalysis(
-                  s"expression '${e.prettyString}' is not an aggregate function or in the group by")
-              }
+              val cleaned = aggregateExprs.map(_.transform {
+                // Should trim aliases around `GetField`s. These aliases are introduced while
+                // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
+                // (Should we just turn `GetField` into a `NamedExpression`?)
+                case Alias(g, _) => g
+              })
+
+              cleaned.foreach(checkValidAggregateExpression)
 
             case o if o.children.nonEmpty && !o.references.subsetOf(o.inputSet) =>
               val missingAttributes = (o.references -- o.inputSet).map(_.prettyString).mkString(",")
@@ -247,7 +249,7 @@ class Analyzer(catalog: Catalog,
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case i @ InsertIntoTable(UnresolvedRelation(tableIdentifier, alias), _, _, _) =>
         i.copy(
-          table = EliminateAnalysisOperators(catalog.lookupRelation(tableIdentifier, alias)))
+          table = EliminateSubQueries(catalog.lookupRelation(tableIdentifier, alias)))
       case UnresolvedRelation(tableIdentifier, alias) =>
         catalog.lookupRelation(tableIdentifier, alias)
     }
@@ -494,7 +496,7 @@ class Analyzer(catalog: Catalog,
  * only required to provide scoping information for attributes and can be removed once analysis is
  * complete.
  */
-object EliminateAnalysisOperators extends Rule[LogicalPlan] {
+object EliminateSubQueries extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Subquery(_, child) => child
   }
