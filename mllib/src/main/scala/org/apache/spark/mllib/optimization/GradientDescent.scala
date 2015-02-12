@@ -103,7 +103,7 @@ class GradientDescent private[mllib] (private var gradient: Gradient, private va
    * @return solution vector
    */
   @DeveloperApi
-  def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector = {
+  def optimize(data: RDD[(Vector, Vector)], initialWeights: Vector): Vector = {
     val (weights, _) = GradientDescent.runMiniBatchSGD(
       data,
       gradient,
@@ -147,7 +147,7 @@ object GradientDescent extends Logging {
    *         stochastic loss computed for every iteration.
    */
   def runMiniBatchSGD(
-      data: RDD[(Double, Vector)],
+      data: RDD[(Vector, Vector)],
       gradient: Gradient,
       updater: Updater,
       stepSize: Double,
@@ -188,7 +188,7 @@ object GradientDescent extends Logging {
       val (gradientSum, lossSum, miniBatchSize) = data.sample(false, miniBatchFraction, 42 + i)
         .treeAggregate((BDV.zeros[Double](n), 0.0, 0L))(
           seqOp = (c, v) => {
-            // c: (grad, loss, count), v: (label, features)
+            // c: (grad, loss, count), v: (output, features)
             val l = gradient.compute(v._2, v._1, bcWeights.value, Vectors.fromBreeze(c._1))
             (c._1, c._2 + l, c._3 + 1)
           },

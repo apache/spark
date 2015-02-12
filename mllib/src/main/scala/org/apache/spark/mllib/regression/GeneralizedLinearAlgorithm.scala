@@ -234,15 +234,19 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
     val data = if (addIntercept) {
       if (useFeatureScaling) {
         input.map(labeledPoint =>
-          (labeledPoint.label, appendBias(scaler.transform(labeledPoint.features))))
+          (Vectors.dense(Array(labeledPoint.label)),
+            appendBias(scaler.transform(labeledPoint.features))))
       } else {
-        input.map(labeledPoint => (labeledPoint.label, appendBias(labeledPoint.features)))
+        input.map(labeledPoint =>
+          (Vectors.dense(Array(labeledPoint.label)), appendBias(labeledPoint.features)))
       }
     } else {
       if (useFeatureScaling) {
-        input.map(labeledPoint => (labeledPoint.label, scaler.transform(labeledPoint.features)))
+        input.map(labeledPoint =>
+          (Vectors.dense(Array(labeledPoint.label)), scaler.transform(labeledPoint.features)))
       } else {
-        input.map(labeledPoint => (labeledPoint.label, labeledPoint.features))
+        input.map(labeledPoint =>
+          (Vectors.dense(Array(labeledPoint.label)), labeledPoint.features))
       }
     }
 

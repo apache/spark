@@ -81,7 +81,7 @@ class GradientDescentSuite extends FunSuite with MLlibTestSparkContext with Matc
     // Add a extra variable consisting of all 1.0's for the intercept.
     val testData = GradientDescentSuite.generateGDInput(A, B, nPoints, 42)
     val data = testData.map { case LabeledPoint(label, features) =>
-      label -> Vectors.dense(1.0 +: features.toArray)
+      Vectors.dense(Array(label)) -> Vectors.dense(1.0 +: features.toArray)
     }
 
     val dataRDD = sc.parallelize(data, 2).cache()
@@ -111,7 +111,7 @@ class GradientDescentSuite extends FunSuite with MLlibTestSparkContext with Matc
     // Add a extra variable consisting of all 1.0's for the intercept.
     val testData = GradientDescentSuite.generateGDInput(2.0, -1.5, 10000, 42)
     val data = testData.map { case LabeledPoint(label, features) =>
-      label -> Vectors.dense(1.0 +: features.toArray)
+      Vectors.dense(Array(label)) -> Vectors.dense(1.0 +: features.toArray)
     }
 
     val dataRDD = sc.parallelize(data, 2).cache()
@@ -147,7 +147,7 @@ class GradientDescentClusterSuite extends FunSuite with LocalClusterSparkContext
     val n = 200000
     val points = sc.parallelize(0 until m, 2).mapPartitionsWithIndex { (idx, iter) =>
       val random = new Random(idx)
-      iter.map(i => (1.0, Vectors.dense(Array.fill(n)(random.nextDouble()))))
+      iter.map(i => (Vectors.dense(Array(1.0)), Vectors.dense(Array.fill(n)(random.nextDouble()))))
     }.cache()
     // If we serialize data directly in the task closure, the size of the serialized task would be
     // greater than 1MB and hence Spark would throw an error.
