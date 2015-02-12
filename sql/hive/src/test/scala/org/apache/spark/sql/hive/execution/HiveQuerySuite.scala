@@ -27,7 +27,7 @@ import scala.util.Try
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.{SparkFiles, SparkException}
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.Dsl._
 import org.apache.spark.sql.hive._
@@ -572,6 +572,12 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assertResult(Array(Row(2, "str2"))) {
       sql("SELECT tablealias.A, TABLEALIAS.b FROM reGisteredTABle TableAlias " +
         "WHERE TableAliaS.a > 1").collect()
+    }
+  }
+
+  test("analyzer should not throw NotImplementedError") {
+    intercept[AnalysisException] {
+      sql("SELECT CAST(x AS STRING) FROM src").collect()
     }
   }
 
