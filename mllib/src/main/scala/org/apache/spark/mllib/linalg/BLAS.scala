@@ -276,13 +276,15 @@ private[spark] object BLAS extends Serializable with Logging {
 
     var i = 0
     while (i < nnz) {
-      var j = i
+      val multiplier = alpha * xValues(i)
+      val offset = xIndices(i) * mA
+      Avalues(xIndices(i) + offset) += multiplier * xValues(i)
+
+      var j = i + 1
       while (j < nnz) {
-        val value = alpha * xValues(i) * xValues(j)
-        Avalues(xIndices(j) + xIndices(i) * mA) += value
-        if (i != j) {
-          Avalues(xIndices(i) + xIndices(j) * mA) += value
-        }
+        val value = multiplier * xValues(j)
+        Avalues(xIndices(j) + offset) += value
+        Avalues(xIndices(i) + xIndices(j) * mA) += value
         j += 1
       }
       i += 1
