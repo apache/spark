@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
+import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
@@ -457,6 +458,28 @@ trait DataFrame extends RDDApi[Row] {
   def sample(withReplacement: Boolean, fraction: Double): DataFrame = {
     sample(withReplacement, fraction, Utils.random.nextLong)
   }
+
+  /**
+   * Returns a new [[DataFrame]] where each row has been expanded to zero or more rows by the
+   * provided function.  This is similar to a `LATERAL VIEW` in HiveQL.  The columns of the
+   * input row are implicitly joined with each row that is output by the function.
+   *
+   * The following examples use this function to count the number of books which contain
+   * a given word.
+   *
+   * {{{
+   *   case class Book(title: String, words: String)
+   *   val df: RDD[Book]
+   *
+   *   case class Word(word: String)
+   *   val allWords = df.explode('words) {
+   *     case Row(words: String) => words.split(" ").map(Word(_))
+   *   }
+   *
+   *   val bookCountPerWord = allWords.groupBy("word").agg(countDistinct("title"))
+   * }}}
+   */
+  def explode[A <: Product : TypeTag](input: Column*)(f: Row => TraversableOnce[A]): DataFrame
 
   /////////////////////////////////////////////////////////////////////////////
 

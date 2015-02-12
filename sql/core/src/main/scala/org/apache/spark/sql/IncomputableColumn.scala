@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import scala.reflect.ClassTag
+import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
@@ -114,7 +115,10 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
 
   override def sample(withReplacement: Boolean, fraction: Double, seed: Long): DataFrame = err()
 
-  /////////////////////////////////////////////////////////////////////////////
+  override def explode[A <: Product : TypeTag]
+      (input: Column*)(f: Row => TraversableOnce[A]): DataFrame = err()
+
+    /////////////////////////////////////////////////////////////////////////////
 
   override def head(n: Int): Array[Row] = err()
 

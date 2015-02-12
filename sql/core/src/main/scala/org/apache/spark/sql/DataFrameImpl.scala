@@ -21,6 +21,7 @@ import java.io.CharArrayWriter
 
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
+import scala.reflect.runtime.universe.TypeTag
 import scala.collection.JavaConversions._
 
 import com.fasterxml.jackson.core.JsonFactory
@@ -29,7 +30,7 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.sql.catalyst.{SqlParser, ScalaReflection}
+import org.apache.spark.sql.catalyst.{expressions, SqlParser, ScalaReflection}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedStar, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
@@ -38,7 +39,6 @@ import org.apache.spark.sql.execution.{ExplainCommand, LogicalRDD, EvaluatePytho
 import org.apache.spark.sql.json.JsonRDD
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{NumericType, StructType}
-
 
 /**
  * Internal implementation of [[DataFrame]]. Users of the API should use [[DataFrame]] directly.
@@ -291,6 +291,18 @@ private[sql] class DataFrameImpl protected[sql](
   override def sample(withReplacement: Boolean, fraction: Double, seed: Long): DataFrame = {
     Sample(fraction, withReplacement, seed, logicalPlan)
   }
+
+  override def explode[A <: Product : TypeTag]
+      (input: Column*)(f: Row => TraversableOnce[A]): DataFrame = {
+    val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
+    val attributes = schema.toAttributes
+    val rowFunction =
+      f.andThen(_.map(ScalaReflection.convertToCatalyst(_, schema).asInstanceOf[Row]))
+
+    val generator = UserDefinedGenerator(attributes, rowFunction, input.map(_.expr))
+    Generate(generator, join = true, outer = false, None, logicalPlan)
+  }
+
 
   /////////////////////////////////////////////////////////////////////////////
   // RDD API

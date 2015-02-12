@@ -73,6 +73,22 @@ abstract class Generator extends Expression {
   }
 }
 
+case class UserDefinedGenerator(
+    schema: Seq[Attribute],
+    function: Row => TraversableOnce[Row],
+    children: Seq[Expression])
+  extends Generator{
+
+  override protected def makeOutput(): Seq[Attribute] = schema
+
+  override def eval(input: Row): TraversableOnce[Row] = {
+    val inputRow = new InterpretedProjection(children)
+    function(inputRow(input))
+  }
+
+  override def toString = s"UserDefinedGenerator(${children.mkString(",")})"
+}
+
 /**
  * Given an input array produces a sequence of rows for each value in the array.
  */
