@@ -171,7 +171,7 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
         <a href={app.desc.appUiUrl}>{app.desc.name}</a>
       </td>
       <td>
-        {app.coresGranted}
+        {app.coresMax}
       </td>
       <td sorttable_customkey={app.desc.memoryPerSlave.toString}>
         {Utils.megabytesToString(app.desc.memoryPerSlave)}
