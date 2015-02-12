@@ -464,8 +464,8 @@ trait DataFrame extends RDDApi[Row] {
    * provided function.  This is similar to a `LATERAL VIEW` in HiveQL.  The columns of the
    * input row are implicitly joined with each row that is output by the function.
    *
-   * The following examples use this function to count the number of books which contain
-   * a given word.
+   * The following example uses this function to count the number of books which contain
+   * a given word:
    *
    * {{{
    *   case class Book(title: String, words: String)

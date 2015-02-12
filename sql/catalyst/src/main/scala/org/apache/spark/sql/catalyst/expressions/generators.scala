@@ -73,6 +73,9 @@ abstract class Generator extends Expression {
   }
 }
 
+/**
+ * A generator that produces its output using the provided lambda function.
+ */
 case class UserDefinedGenerator(
     schema: Seq[Attribute],
     function: Row => TraversableOnce[Row],

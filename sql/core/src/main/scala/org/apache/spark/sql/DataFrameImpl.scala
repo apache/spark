@@ -298,8 +298,8 @@ private[sql] class DataFrameImpl protected[sql](
     val attributes = schema.toAttributes
     val rowFunction =
       f.andThen(_.map(ScalaReflection.convertToCatalyst(_, schema).asInstanceOf[Row]))
-
     val generator = UserDefinedGenerator(attributes, rowFunction, input.map(_.expr))
+
     Generate(generator, join = true, outer = false, None, logicalPlan)
   }
 
