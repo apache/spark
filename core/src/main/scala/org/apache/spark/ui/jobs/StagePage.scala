@@ -338,7 +338,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             getFormattedTimeQuantiles(shuffleReadBlockedTimes)
 
           val shuffleReadTotalSizes = validTasks.map { case TaskUIData(_, metrics, _) =>
-            metrics.get.shuffleReadMetrics.map(_totalBytesRead).getOrElse(0L).toDouble
+            metrics.get.shuffleReadMetrics.map(_.totalBytesRead).getOrElse(0L).toDouble
           }
           val shuffleReadTotalRecords = validTasks.map { case TaskUIData(_, metrics, _) =>
             metrics.get.shuffleReadMetrics.map(_.recordsRead).getOrElse(0L).toDouble
