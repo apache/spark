@@ -17,6 +17,9 @@
 
 package org.apache.spark.mllib.regression.impl
 
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.util.Loader
@@ -48,10 +51,10 @@ private[regression] object GLMRegressionModel {
       import sqlContext.implicits._
 
       // Create JSON metadata.
-      val metadataRDD =
-        sc.parallelize(Seq((modelClass, thisFormatVersion, weights.size)), 1)
-          .toDataFrame("class", "version", "numFeatures")
-      metadataRDD.toJSON.saveAsTextFile(Loader.metadataPath(path))
+      val metadata = compact(render(
+        ("class" -> modelClass) ~ ("version" -> thisFormatVersion) ~
+          ("numFeatures" -> weights.size)))
+      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       // Create Parquet data.
       val data = Data(weights, intercept)

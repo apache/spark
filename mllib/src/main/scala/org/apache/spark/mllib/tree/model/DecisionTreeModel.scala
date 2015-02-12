@@ -19,6 +19,10 @@ package org.apache.spark.mllib.tree.model
 
 import scala.collection.mutable
 
+import org.json4s._
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
@@ -184,10 +188,10 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] {
       import sqlContext.implicits._
 
       // Create JSON metadata.
-      val metadataRDD = sc.parallelize(
-        Seq((thisClassName, thisFormatVersion, model.algo.toString, model.numNodes)), 1)
-        .toDataFrame("class", "version", "algo", "numNodes")
-      metadataRDD.toJSON.saveAsTextFile(Loader.metadataPath(path))
+      val metadata = compact(render(
+        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
+          ("algo" -> model.algo.toString) ~ ("numNodes" -> model.numNodes)))
+      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       // Create Parquet data.
       val nodes = model.topNode.subtreeIterator.toSeq
@@ -269,20 +273,10 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] {
   }
 
   override def load(sc: SparkContext, path: String): DecisionTreeModel = {
+    implicit val formats = DefaultFormats
     val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)
-    val (algo: String, numNodes: Int) = try {
-      val algo_numNodes = metadata.select("algo", "numNodes").collect()
-      assert(algo_numNodes.length == 1)
-      algo_numNodes(0) match {
-        case Row(a: String, n: Int) => (a, n)
-      }
-    } catch {
-      // Catch both Error and Exception since the checks above can throw either.
-      case e: Throwable =>
-        throw new Exception(
-          s"Unable to load DecisionTreeModel metadata from: ${Loader.metadataPath(path)}."
-          + s"  Error message: ${e.getMessage}")
-    }
+    val algo = (metadata \ "algo").extract[String]
+    val numNodes = (metadata \ "numNodes").extract[Int]
     val classNameV1_0 = SaveLoadV1_0.thisClassName
     (loadedClassName, version) match {
       case (className, "1.0") if className == classNameV1_0 =>
