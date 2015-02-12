@@ -80,8 +80,6 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
 
   override def col(colName: String): Column = err()
 
-  override def apply(projection: Product): DataFrame = err()
-
   override def select(cols: Column*): DataFrame = err()
 
   override def select(col: String, cols: String*): DataFrame = err()
@@ -97,8 +95,6 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
   override def filter(conditionExpr: String): DataFrame = err()
 
   override def where(condition: Column): DataFrame = err()
-
-  override def apply(condition: Column): DataFrame = err()
 
   override def groupBy(cols: Column*): GroupedData = err()
 
