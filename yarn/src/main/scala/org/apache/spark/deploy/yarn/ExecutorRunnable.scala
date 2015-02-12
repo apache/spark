@@ -35,11 +35,10 @@ import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.NMClient
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.hadoop.yarn.exceptions.YarnException
 import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
-import org.apache.spark.{SecurityManager, SparkConf, Logging}
+import org.apache.spark.{SparkException, SecurityManager, SparkConf, Logging}
 import org.apache.spark.network.util.JavaUtils
 
 class ExecutorRunnable(
@@ -113,10 +112,9 @@ class ExecutorRunnable(
     try {
       nmClient.startContainer(container, ctx)
     } catch {
-      case ex: YarnException =>
-        logError("Exception while start container %s on host %s:"
-          .format(container.getId, hostname), ex)
-        throw ex
+      case ex: Exception =>
+        throw new SparkException("Exception while starting container ${container.getId}" +
+          " on host $hostname", ex)
     }
   }
 
