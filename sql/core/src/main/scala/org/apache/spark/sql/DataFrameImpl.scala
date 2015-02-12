@@ -49,8 +49,10 @@ private[sql] class DataFrameImpl protected[sql](
   extends DataFrame {
 
   /**
-   * A constructor that automatically analyzes the logical plan. This reports error eagerly
-   * as the [[DataFrame]] is constructed.
+   * A constructor that automatically analyzes the logical plan.
+   *
+   * This reports error eagerly as the [[DataFrame]] is constructed, unless
+   * [[SQLConf.dataFrameEagerAnalysis]] is turned off.
    */
   def this(sqlContext: SQLContext, logicalPlan: LogicalPlan) = {
     this(sqlContext, {
@@ -158,7 +160,7 @@ private[sql] class DataFrameImpl protected[sql](
   }
 
   override def show(): Unit = {
-    println(showString)
+    println(showString())
   }
 
   override def join(right: DataFrame): DataFrame = {
@@ -205,14 +207,6 @@ private[sql] class DataFrameImpl protected[sql](
       Column(sqlContext, Project(Seq(expr), logicalPlan), expr)
   }
 
-  override def apply(projection: Product): DataFrame = {
-    require(projection.productArity >= 1)
-    select(projection.productIterator.map {
-      case c: Column => c
-      case o: Any => Column(Literal(o))
-    }.toSeq :_*)
-  }
-
   override def as(alias: String): DataFrame = Subquery(alias, logicalPlan)
 
   override def as(alias: Symbol): DataFrame = Subquery(alias.name, logicalPlan)
@@ -256,10 +250,6 @@ private[sql] class DataFrameImpl protected[sql](
   }
 
   override def where(condition: Column): DataFrame = {
-    filter(condition)
-  }
-
-  override def apply(condition: Column): DataFrame = {
     filter(condition)
   }
 
@@ -323,7 +313,7 @@ private[sql] class DataFrameImpl protected[sql](
   override def count(): Long = groupBy().count().rdd.collect().head.getLong(0)
 
   override def repartition(numPartitions: Int): DataFrame = {
-    sqlContext.applySchema(rdd.repartition(numPartitions), schema)
+    sqlContext.createDataFrame(rdd.repartition(numPartitions), schema)
   }
 
   override def distinct: DataFrame = Distinct(logicalPlan)
@@ -401,7 +391,7 @@ private[sql] class DataFrameImpl protected[sql](
       val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
 
       new Iterator[String] {
-        override def hasNext() = iter.hasNext
+        override def hasNext = iter.hasNext
         override def next(): String = {
           JsonRDD.rowToJSON(rowSchema, gen)(iter.next())
           gen.flush()

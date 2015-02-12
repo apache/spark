@@ -85,6 +85,14 @@ trait DataFrame extends RDDApi[Row] {
 
   protected[sql] def logicalPlan: LogicalPlan
 
+  override def toString =
+    try {
+      schema.map(f => s"${f.name}: ${f.dataType.simpleString}").mkString("[", ", ", "]")
+    } catch {
+      case NonFatal(e) =>
+        s"Invalid tree; ${e.getMessage}:\n$queryExecution"
+    }
+
   /** Left here for backward compatibility. */
   @deprecated("1.3.0", "use toDataFrame")
   def toSchemaRDD: DataFrame = this
@@ -92,13 +100,9 @@ trait DataFrame extends RDDApi[Row] {
   /**
    * Returns the object itself. Used to force an implicit conversion from RDD to DataFrame in Scala.
    */
-  def toDataFrame: DataFrame = this
-
-  override def toString =
-     try schema.map(f => s"${f.name}: ${f.dataType.simpleString}").mkString("[", ", ", "]") catch {
-       case NonFatal(e) =>
-         s"Invalid tree; ${e.getMessage}:\n$queryExecution"
-     }
+  // This is declared with parentheses to prevent the Scala compiler from treating
+  // `rdd.toDataFrame("1")` as invoking this toDataFrame and then apply on the returned DataFrame.
+  def toDataFrame(): DataFrame = this
 
   /**
    * Returns a new [[DataFrame]] with columns renamed. This can be quite convenient in conversion
@@ -235,16 +239,6 @@ trait DataFrame extends RDDApi[Row] {
   def col(colName: String): Column
 
   /**
-   * Selects a set of expressions, wrapped in a Product.
-   * {{{
-   *   // The following two are equivalent:
-   *   df.apply(($"colA", $"colB" + 1))
-   *   df.select($"colA", $"colB" + 1)
-   * }}}
-   */
-  def apply(projection: Product): DataFrame
-
-  /**
    * Returns a new [[DataFrame]] with an alias set.
    */
   def as(alias: String): DataFrame
@@ -316,17 +310,6 @@ trait DataFrame extends RDDApi[Row] {
    * }}}
    */
   def where(condition: Column): DataFrame
-
-  /**
-   * Filters rows using the given condition. This is a shorthand meant for Scala.
-   * {{{
-   *   // The following are equivalent:
-   *   peopleDf.filter($"age" > 15)
-   *   peopleDf.where($"age" > 15)
-   *   peopleDf($"age" > 15)
-   * }}}
-   */
-  def apply(condition: Column): DataFrame
 
   /**
    * Groups the [[DataFrame]] using the specified columns, so we can run aggregation on them.
