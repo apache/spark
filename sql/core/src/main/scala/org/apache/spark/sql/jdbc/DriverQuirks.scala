@@ -73,6 +73,22 @@ private[sql] class PostgresQuirks extends DriverQuirks {
       StringType
     } else if (sqlType == Types.OTHER && typeName.equals("inet")) {
       StringType
+    } else if (sqlType == Types.OTHER && typeName.equals("uuid")) {
+      StringType
+    } else if (sqlType == Types.OTHER && typeName.equals("hstore")) {
+      MapType(keyType = StringType, valueType = StringType)
+    } else if (sqlType == Types.ARRAY) {
+      ArrayType(elementType = typeName match {
+        case "_varchar" => StringType
+        case "_text" => StringType
+        case "_name" => StringType
+        case "_int2" => IntegerType
+        case "_int4" => IntegerType
+        case "_int8" => LongType
+        case "_float4" => FloatType
+        case "_float8" => DoubleType
+        case _ => StringType
+      })
     } else null
   }
 
