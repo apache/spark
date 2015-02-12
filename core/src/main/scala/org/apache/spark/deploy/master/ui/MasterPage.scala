@@ -50,8 +50,8 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     val workers = state.workers.sortBy(_.id)
     val workerTable = UIUtils.listingTable(workerHeaders, workerRow, workers)
 
-    val appHeaders = Seq("Application ID", "Name", "Cores", "Memory per Node", "Submitted Time",
-      "User", "State", "Duration")
+    val appHeaders = Seq("Application ID", "Name", "Cores (max)", "Memory per Node",
+      "Submitted Time", "User", "State", "Duration")
     val activeApps = state.activeApps.sortBy(_.startTime).reverse
     val activeAppsTable = UIUtils.listingTable(appHeaders, appRow, activeApps)
     val completedApps = state.completedApps.sortBy(_.endTime).reverse

@@ -81,7 +81,7 @@ private[spark] class ApplicationInfo(
     val exec = new ExecutorDesc(newExecutorId(useID), this, worker, cores, desc.memoryPerSlave)
     executors(exec.id) = exec
     coresGranted += cores
-    coresMax = if(coresGranted > coresMax) coresGranted else coresMax
+    coresMax = Math.max(coresGranted, coresMax)
     exec
   }
 
