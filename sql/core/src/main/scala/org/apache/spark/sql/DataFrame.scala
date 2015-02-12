@@ -27,7 +27,6 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.sources.SaveMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
