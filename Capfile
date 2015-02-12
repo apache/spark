@@ -9,6 +9,9 @@ set :shared_conf_path, "/u/apps/spark/shared/conf"
 set :spark_jar_path, "hdfs://hadoop-production/user/sparkles"
 set :gateway, nil
 set :keep_releases, 5
+set :branch, fetch(:branch, `git symbolic-ref --short HEAD`.gsub("\s",""))
+# turns out that fetch(:sha), when combined with packserv, will show only the latest sha on packserv
+set :local_sha, `git rev-parse HEAD`.rstrip
 
 DATANODES = (2..47).map {|i| "dn%02d.chi.shopify.com" % i }
 OTHERNODES = ["hadoop-etl1.chi.shopify.com", "spark-etl1.chi.shopify.com", "reports-reportify-etl3.chi.shopify.com", "reports-reportify-skydb4.chi.shopify.com", "platfora2.chi.shopify.com"]
@@ -41,11 +44,22 @@ namespace :deploy do
   end
 
   task :upload_to_hdfs, :roles => :uploader, :on_no_matching_servers => :continue do
-    run "hdfs dfs -copyFromLocal -f #{release_path}/lib/spark-assembly-*.jar hdfs://hadoop-production/user/sparkles/spark-assembly-#{fetch(:sha)}.jar"
+    raw_binary_path = "./assembly/target/scala-2.10/spark-assembly-1.3.0-SNAPSHOT-hadoop2.5.0.jar"
+    modified_binary_path = "./lib/spark-assembly-#{fetch(:local_sha)}.jar"
+    if fetch(:branch) == "master"
+      run "hdfs dfs -copyFromLocal -f #{release_path}/lib/spark-assembly-*.jar hdfs://hadoop-production/user/sparkles/spark-assembly-#{fetch(:sha)}.jar"
+    else
+      unless File.exist?(modified_binary_path)
+        system("mvn package -DskipTests -Phadoop-2.4 -Dhadoop.version=2.5.0 -Pyarn -Phive")
+        system("mv #{raw_binary_path} #{modified_binary_path}")
+      end
+      system("hdfs dfs -copyFromLocal #{modified_binary_path} hdfs://nn01.chi.shopify.com/user/sparkles")
+    end
   end
 
   task :test_spark_jar, :roles => :uploader, :on_no_master_servers => :continue do
-    run "sudo -u azkaban sh -c '. /u/virtualenvs/starscream/bin/activate && cd /u/apps/starscream/current && PYTHON_ENV=production SPARK_OPTS=\"spark.yarn.jar=hdfs://hadoop-production/user/sparkles/spark-assembly-#{fetch(:sha)}.jar\" exec python shopify/tools/canary.py'"
+    spark_yarn_jar_sha = fetch(:branch) == "master" ? fetch(:sha) : fetch(:local_sha)
+    run "sudo -u azkaban sh -c '. /u/virtualenvs/starscream/bin/activate && cd /u/apps/starscream/current && PYTHON_ENV=production SPARK_OPTS=\"spark.yarn.jar=hdfs://hadoop-production/user/sparkles/spark-assembly-#{spark_yarn_jar_sha}.jar\" exec python shopify/tools/canary.py'"
   end
 
   task :prevent_gateway do
