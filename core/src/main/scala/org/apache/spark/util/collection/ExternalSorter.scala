@@ -740,7 +740,7 @@ private[spark] class ExternalSorter[K, V, C](
         if (in != null) {
           in.close()
         }
-        context.taskMetrics.shuffleWriteMetrics.map(
+        context.taskMetrics.shuffleWriteMetrics.foreach(
           _.incShuffleWriteTime(System.nanoTime - writeStartTime))
       }
     } else {
