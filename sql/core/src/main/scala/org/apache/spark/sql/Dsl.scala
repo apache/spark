@@ -172,6 +172,7 @@ object Dsl {
    *   df.select(coalesce(df("a"), df("b")))
    * }}}
    */
+  @scala.annotation.varargs
   def coalesce(e: Column*): Column = Coalesce(e.map(_.expr))
 
   /**
