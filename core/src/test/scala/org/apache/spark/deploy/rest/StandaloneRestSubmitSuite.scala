@@ -462,7 +462,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
     }
     conn
   }
-  
+
   /**
    * Send an HTTP request to the given URL using the method and the body specified.
    * Return a 2-tuple of the response message from the server and the response code.

@@ -409,7 +409,7 @@ private class ErrorServlet extends StandaloneRestServlet {
         case Nil =>
           // http://host:port/
           "Missing protocol version."
-        case "v1" :: Nil =>
+        case `serverVersion` :: Nil =>
           // http://host:port/correct-version
           "Missing the /submissions prefix."
         case `serverVersion` :: "submissions" :: tail =>
