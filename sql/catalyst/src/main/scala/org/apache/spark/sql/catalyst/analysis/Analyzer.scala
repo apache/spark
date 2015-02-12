@@ -66,12 +66,27 @@ class Analyzer(catalog: Catalog,
       typeCoercionRules ++
       extendedRules : _*),
     Batch("Check Analysis", Once,
+      CheckCast ::
       CheckResolution ::
       CheckAggregation ::
       Nil: _*),
     Batch("AnalysisOperators", fixedPoint,
       EliminateAnalysisOperators)
   )
+
+  /**
+   * Makes sure datatype cast is legitimate, if not throw an exception
+   */
+  object CheckCast extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.transform {
+      case q: LogicalPlan =>
+        q transformExpressions {
+          case cast @ Cast(child, dataType) if !cast.resolve(child.dataType, dataType) =>
+            throw new AnalysisException(s"can not cast from ${child.dataType} to $dataType!")
+          case p => p
+        }
+    }
+  }
 
   /**
    * Makes sure all attributes and logical plans have been resolved.
