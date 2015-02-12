@@ -22,6 +22,9 @@ import java.lang.{Integer => JavaInteger}
 
 import org.apache.hadoop.fs.Path
 import org.jblas.DoubleMatrix
+import org.json4s._
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD}
@@ -153,7 +156,7 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
   import org.apache.spark.mllib.util.Loader._
 
   override def load(sc: SparkContext, path: String): MatrixFactorizationModel = {
-    val (loadedClassName, formatVersion, metadata) = loadMetadata(sc, path)
+    val (loadedClassName, formatVersion, _) = loadMetadata(sc, path)
     val classNameV1_0 = SaveLoadV1_0.thisClassName
     (loadedClassName, formatVersion) match {
       case (className, "1.0") if className == classNameV1_0 =>
@@ -181,19 +184,20 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       val sc = model.userFeatures.sparkContext
       val sqlContext = new SQLContext(sc)
       import sqlContext.implicits._
-      val metadata = (thisClassName, thisFormatVersion, model.rank)
-      val metadataRDD = sc.parallelize(Seq(metadata), 1).toDataFrame("class", "version", "rank")
-      metadataRDD.toJSON.saveAsTextFile(metadataPath(path))
+      val metadata = compact(render(
+        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ ("rank" -> model.rank)))
+      sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
       model.userFeatures.toDataFrame("id", "features").saveAsParquetFile(userPath(path))
       model.productFeatures.toDataFrame("id", "features").saveAsParquetFile(productPath(path))
     }
 
     def load(sc: SparkContext, path: String): MatrixFactorizationModel = {
+      implicit val formats = DefaultFormats
       val sqlContext = new SQLContext(sc)
       val (className, formatVersion, metadata) = loadMetadata(sc, path)
       assert(className == thisClassName)
       assert(formatVersion == thisFormatVersion)
-      val rank = metadata.select("rank").first().getInt(0)
+      val rank = (metadata \ "rank").extract[Int]
       val userFeatures = sqlContext.parquetFile(userPath(path))
         .map { case Row(id: Int, features: Seq[Double]) =>
           (id, features.toArray)
