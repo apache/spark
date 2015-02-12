@@ -247,6 +247,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
    */
   private def replay(eventLog: FileStatus, bus: ReplayListenerBus): FsApplicationHistoryInfo = {
     val logPath = eventLog.getPath()
+    logInfo(s"Replaying log path: $logPath")
     val (logInput, sparkVersion) =
       if (isLegacyLogDirectory(eventLog)) {
         openLegacyEventLog(logPath)
