@@ -76,7 +76,7 @@ fi
 
 num_jars=0
 
-for f in ${assembly_folder}/spark-assembly*hadoop*.jar; do
+for f in "${assembly_folder}"/spark-assembly*hadoop*.jar; do
   if [[ ! -e "$f" ]]; then
     echo "Failed to find Spark assembly in $assembly_folder" 1>&2
     echo "You need to build Spark before running this program." 1>&2
@@ -88,7 +88,7 @@ done
 
 if [ "$num_jars" -gt "1" ]; then
   echo "Found multiple Spark assembly jars in $assembly_folder:" 1>&2
-  ls ${assembly_folder}/spark-assembly*hadoop*.jar 1>&2
+  ls "${assembly_folder}"/spark-assembly*hadoop*.jar 1>&2
   echo "Please remove all but one jar." 1>&2
   exit 1
 fi
