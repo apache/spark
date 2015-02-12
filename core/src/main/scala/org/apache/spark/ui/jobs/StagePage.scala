@@ -147,7 +147,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
                   <span data-toggle="tooltip"
                         title={ToolTips.SHUFFLE_READ_REMOTE_SIZE} data-placement="right">
                     <input type="checkbox" name={TaskDetailsClassNames.SHUFFLE_READ_REMOTE_SIZE}/>
-                    <span class="additional-metric-title">Shuffle Data Read Remotely</span>
+                    <span class="additional-metric-title">Shuffle Remote Reads</span>
                   </span>
                 </li>
               }}
@@ -189,7 +189,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         {if (stageData.hasShuffleRead) {
           Seq(("Shuffle Read Blocked Time", TaskDetailsClassNames.SHUFFLE_READ_BLOCKED_TIME),
             ("Shuffle Read Size / Records", ""),
-            ("Shuffle Data Read Remotely", TaskDetailsClassNames.SHUFFLE_READ_REMOTE_SIZE))
+            ("Shuffle Remote Reads", TaskDetailsClassNames.SHUFFLE_READ_REMOTE_SIZE))
         } else {
           Nil
         }} ++
@@ -338,8 +338,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             getFormattedTimeQuantiles(shuffleReadBlockedTimes)
 
           val shuffleReadTotalSizes = validTasks.map { case TaskUIData(_, metrics, _) =>
-            metrics.get.shuffleReadMetrics.map(m => m.remoteBytesRead + m.localBytesRead)
-              .getOrElse(0L).toDouble
+            metrics.get.shuffleReadMetrics.map(_totalBytesRead).getOrElse(0L).toDouble
           }
           val shuffleReadTotalRecords = validTasks.map { case TaskUIData(_, metrics, _) =>
             metrics.get.shuffleReadMetrics.map(_.recordsRead).getOrElse(0L).toDouble
@@ -360,7 +359,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             <td>
               <span data-toggle="tooltip"
                     title={ToolTips.SHUFFLE_READ_REMOTE_SIZE} data-placement="right">
-                Shuffle Data Read Remotely
+                Shuffle Remote Reads
               </span>
             </td> +:
             getFormattedSizeQuantiles(shuffleReadRemoteSizes)
@@ -488,7 +487,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val shuffleReadBlockedTimeReadable =
         maybeShuffleRead.map(ms => UIUtils.formatDuration(ms.fetchWaitTime)).getOrElse("")
 
-      val totalShuffleBytes = maybeShuffleRead.map(s => s.remoteBytesRead + s.localBytesRead)
+      val totalShuffleBytes = maybeShuffleRead.map(_.totalBytesRead)
       val shuffleReadSortable = totalShuffleBytes.map(_.toString).getOrElse("")
       val shuffleReadReadable = totalShuffleBytes
         .map(bytes => s"${Utils.bytesToString(bytes)}").getOrElse("")

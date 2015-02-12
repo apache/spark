@@ -360,6 +360,11 @@ class ShuffleReadMetrics extends Serializable {
   private[spark] def incLocalBytesRead(value: Long) = _localBytesRead += value
 
   /**
+   * Total bytes fetched in the shuffle by this task (both remote and local).
+   */
+  def totalBytesRead = _remoteBytesRead + _localBytesRead
+
+  /**
    * Number of blocks fetched in this shuffle by this task (remote or local)
    */
   def totalBlocksFetched = _remoteBlocksFetched + _localBlocksFetched
