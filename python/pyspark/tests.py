@@ -923,6 +923,7 @@ class SQLTests(ReusedPySparkTestCase):
         result = self.sqlCtx.sql("SELECT l[0].a from test2 where d['key'].d = '2'")
         self.assertEqual(1, result.first()[0])
 
+    # SPARK-5722
     def test_infer_long_type(self):
         longrow = [Row(f1='a', f2=100000000000000)]
         lrdd = self.sc.parallelize(longrow)
@@ -936,10 +937,10 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEquals('a', df1.first().f1)
         self.assertEquals(100000000000000, df1.first().f2)
 
-        self.assertEqual(_infer_type(1), IntegerType())
-        self.assertEqual(_infer_type(2**10), IntegerType())
-        self.assertEqual(_infer_type(2**20), IntegerType())
-        self.assertEqual(_infer_type(2**31 - 1), IntegerType())
+        self.assertEqual(_infer_type(1), LongType())
+        self.assertEqual(_infer_type(2**10), LongType())
+        self.assertEqual(_infer_type(2**20), LongType())
+        self.assertEqual(_infer_type(2**31 - 1), LongType())
         self.assertEqual(_infer_type(2**31), LongType())
         self.assertEqual(_infer_type(2**61), LongType())
         self.assertEqual(_infer_type(2**71), LongType())

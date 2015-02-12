@@ -574,10 +574,13 @@ def _parse_datatype_json_value(json_value):
 
 
 # Mapping Python types to Spark SQL DataType
+# int -> LongType below so we can do not have to deal with
+# the differences between Java int and Python ints when 
+# inferring data types. SPARK-5722
 _type_mappings = {
     type(None): NullType,
     bool: BooleanType,
-    int: IntegerType,
+    int: LongType,
     long: LongType,
     float: DoubleType,
     str: StringType,
@@ -605,13 +608,6 @@ def _infer_type(obj):
 
     dataType = _type_mappings.get(type(obj))
     if dataType is not None:
-        # Conform to Java int/long sizes SPARK-5722
-        # Inference is usually done on a sample of the dataset
-        # so, if values that should be Long do not appear in
-        # the sample, the dataType will be chosen as IntegerType
-        if dataType == IntegerType:
-            if obj > 2**31 - 1 or obj < -2**31:
-                dataType = LongType
         return dataType()
 
     if isinstance(obj, dict):
