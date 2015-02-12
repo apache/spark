@@ -21,6 +21,7 @@ filtering, dimensionality reduction, as well as underlying optimization primitiv
   * [naive Bayes](mllib-naive-bayes.html)
   * [decision trees](mllib-decision-tree.html)
   * [ensembles of trees](mllib-ensembles.html) (Random Forests and Gradient-Boosted Trees)
+  * [isotonic regression](mllib-isotonic-regression.html)
 * [Collaborative filtering](mllib-collaborative-filtering.html)
   * alternating least squares (ALS)
 * [Clustering](mllib-clustering.html)
