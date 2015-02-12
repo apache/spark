@@ -21,6 +21,8 @@ import java.io.IOException
 import java.util.{List => JList}
 import javax.security.auth.login.LoginException
 
+import org.apache.spark.SparkContext
+
 import scala.collection.JavaConversions._
 
 import org.apache.commons.logging.Log
@@ -36,14 +38,14 @@ import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.util.Utils
 
-private[hive] class SparkSQLCLIService(hiveContext: HiveContext)
+private[hive] class SparkSQLCLIService(sc: SparkContext)
   extends CLIService
   with ReflectedCompositeService {
 
   override def init(hiveConf: HiveConf) {
     setSuperField(this, "hiveConf", hiveConf)
 
-    val sparkSqlSessionManager = new SparkSQLSessionManager(hiveContext)
+    val sparkSqlSessionManager = new SparkSQLSessionManager(sc)
     setSuperField(this, "sessionManager", sparkSqlSessionManager)
     addService(sparkSqlSessionManager)
     var sparkServiceUGI: UserGroupInformation = null
@@ -66,7 +68,7 @@ private[hive] class SparkSQLCLIService(hiveContext: HiveContext)
     getInfoType match {
       case GetInfoType.CLI_SERVER_NAME => new GetInfoValue("Spark SQL")
       case GetInfoType.CLI_DBMS_NAME => new GetInfoValue("Spark SQL")
-      case GetInfoType.CLI_DBMS_VER => new GetInfoValue(hiveContext.sparkContext.version)
+      case GetInfoType.CLI_DBMS_VER => new GetInfoValue(sc.version)
       case _ => super.getInfo(sessionHandle, getInfoType)
     }
   }

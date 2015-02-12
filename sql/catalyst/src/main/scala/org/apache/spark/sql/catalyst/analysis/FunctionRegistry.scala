@@ -93,3 +93,5 @@ class StringKeyHashMap[T](normalizer: (String) => String) {
   def iterator: Iterator[(String, T)] = base.toIterator
 }
 
+object SimpleCaseSentiveFunctionRegistry extends SimpleFunctionRegistry(true)
+object SimpleInCaseSentiveFunctionRegistry extends SimpleFunctionRegistry(false)

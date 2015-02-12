@@ -249,14 +249,13 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   /* A catalyst metadata catalog that points to the Hive Metastore. */
   @transient
-  override protected[sql] lazy val catalog = new HiveMetastoreCatalog(this) with OverrideCatalog
+  override protected[sql] lazy val catalog: HiveMetastoreCatalog = {
+    HiveMetastore.initializeOrGet(this)
+  }
 
   // Note that HiveUDFs will be overridden by functions registered in this context.
   @transient
-  override protected[sql] lazy val functionRegistry =
-    new HiveFunctionRegistry with OverrideFunctionRegistry {
-      def caseSensitive = false
-    }
+  override protected[sql] lazy val functionRegistry = HiveCaseInsensitiveFunctionRegistry
 
   /* An analyzer that uses the Hive metastore. */
   @transient

@@ -819,7 +819,7 @@ class DataFrame protected[sql](
    * @group basic
    */
   override def persist(): this.type = {
-    sqlContext.cacheManager.cacheQuery(this)
+    CacheManager.cacheQuery(this)
     this
   }
 
@@ -827,7 +827,7 @@ class DataFrame protected[sql](
    * @group basic
    */
   override def persist(newLevel: StorageLevel): this.type = {
-    sqlContext.cacheManager.cacheQuery(this, None, newLevel)
+    CacheManager.cacheQuery(this, None, newLevel)
     this
   }
 
@@ -835,7 +835,7 @@ class DataFrame protected[sql](
    * @group basic
    */
   override def unpersist(blocking: Boolean): this.type = {
-    sqlContext.cacheManager.tryUncacheQuery(this, blocking)
+    CacheManager.tryUncacheQuery(this, blocking)
     this
   }
 

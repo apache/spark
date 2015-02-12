@@ -22,7 +22,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.{SaveMode, DataFrame, SQLContext}
+import org.apache.spark.sql.{SaveMode, CacheManager, DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.RunnableCommand
@@ -59,7 +59,7 @@ case class DropTable(
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     val ifExistsClause = if (ifExists) "IF EXISTS " else ""
     try {
-      hiveContext.cacheManager.tryUncacheQuery(hiveContext.table(tableName))
+      CacheManager.tryUncacheQuery(hiveContext.table(tableName))
     } catch {
       // This table's metadata is not in
       case _: org.apache.hadoop.hive.ql.metadata.InvalidTableException =>

@@ -759,3 +759,19 @@ object HiveMetastoreTypes {
     case udt: UserDefinedType[_] => toMetastoreType(udt.sqlType)
   }
 }
+
+private[hive] object HiveMetastore {
+  private[this] var catalog: HiveMetastoreCatalog = _
+
+  /**
+   * Reuse the Catalog instance only create it if the catalog doesn't exist.
+   * And we can not change the catalog once it's created.
+   */
+  def initializeOrGet(context: HiveContext): HiveMetastoreCatalog = synchronized {
+    if (catalog == null) {
+      catalog = new HiveMetastoreCatalog(context) with OverrideCatalog
+    }
+
+    catalog
+  }
+}

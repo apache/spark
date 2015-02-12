@@ -23,7 +23,7 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.service.cli.thrift.{ThriftBinaryCLIService, ThriftHttpCLIService}
 import org.apache.hive.service.server.{HiveServer2, ServerOptionsProcessor}
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkContext, Logging}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
@@ -39,10 +39,11 @@ object HiveThriftServer2 extends Logging {
   /**
    * :: DeveloperApi ::
    * Starts a new thrift server with the given context.
+   * TODO probably a SparkContext, and HiveConf as parameter would be better
    */
   @DeveloperApi
   def startWithContext(sqlContext: HiveContext): Unit = {
-    val server = new HiveThriftServer2(sqlContext)
+    val server = new HiveThriftServer2(sqlContext.sparkContext)
     server.init(sqlContext.hiveconf)
     server.start()
     sqlContext.sparkContext.addSparkListener(new HiveThriftServer2Listener(server))
@@ -66,7 +67,7 @@ object HiveThriftServer2 extends Logging {
     )
 
     try {
-      val server = new HiveThriftServer2(SparkSQLEnv.hiveContext)
+      val server = new HiveThriftServer2(SparkSQLEnv.sparkContext)
       server.init(SparkSQLEnv.hiveContext.hiveconf)
       server.start()
       logInfo("HiveThriftServer2 started")
@@ -89,12 +90,12 @@ object HiveThriftServer2 extends Logging {
 
 }
 
-private[hive] class HiveThriftServer2(hiveContext: HiveContext)
+private[hive] class HiveThriftServer2(sc: SparkContext)
   extends HiveServer2
   with ReflectedCompositeService {
 
   override def init(hiveConf: HiveConf) {
-    val sparkSqlCliService = new SparkSQLCLIService(hiveContext)
+    val sparkSqlCliService = new SparkSQLCLIService(sc)
     setSuperField(this, "cliService", sparkSqlCliService)
     addService(sparkSqlCliService)
 
