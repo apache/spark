@@ -18,8 +18,6 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
-
-import org.apache.spark.sql.sources.SaveMode
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.commons.io.FileUtils

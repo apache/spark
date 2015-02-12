@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.sources;
+package org.apache.spark.sql;
 
 /**
  * SaveMode is used to specify the expected behavior of saving a DataFrame to a data source.
