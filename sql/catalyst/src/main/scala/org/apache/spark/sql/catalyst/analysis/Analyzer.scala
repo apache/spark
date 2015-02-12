@@ -82,7 +82,7 @@ class Analyzer(catalog: Catalog,
       // of the result of cascading resolution failures.
       plan.foreachUp {
         case operator: LogicalPlan =>
-          operator transformAllExpressions {
+          operator transformExpressionsUp {
             case a: Attribute if !a.resolved =>
               val from = operator.inputSet.map(_.name).mkString(", ")
               failAnalysis(s"cannot resolve '${a.prettyString}' given input columns $from")
@@ -125,7 +125,8 @@ class Analyzer(catalog: Catalog,
 
               cleaned.foreach(checkValidAggregateExpression)
 
-            case o if o.children.nonEmpty && !o.references.subsetOf(o.inputSet) =>
+            case o if o.children.nonEmpty &&
+              !o.references.filter(_.name != "grouping__id").subsetOf(o.inputSet) =>
               val missingAttributes = (o.references -- o.inputSet).map(_.prettyString).mkString(",")
               val input = o.inputSet.map(_.prettyString).mkString(",")
 
