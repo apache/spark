@@ -260,6 +260,19 @@ class JsonProtocolSuite extends FunSuite {
     assert(expectedFetchFailed === JsonProtocol.taskEndReasonFromJson(oldEvent))
   }
 
+  test("ShuffleReadMetrics: Local bytes read and time taken backwards compatibility") {
+    // Metrics about local shuffle bytes read and local read time were added in 1.3.1.
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6,
+      hasHadoopInput = false, hasOutput = false, hasRecords = false)
+    assert(metrics.shuffleReadMetrics.nonEmpty)
+    val newJson = JsonProtocol.taskMetricsToJson(metrics)
+    val oldJson = newJson.removeField { case (field, _) => field == "Local Bytes Read" }
+      .removeField { case (field, _) => field == "Local Read Time" }
+    val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
+    assert(newMetrics.shuffleReadMetrics.get.localBytesRead == 0)
+    assert(newMetrics.shuffleReadMetrics.get.localReadTime == 0)
+  }
+
   test("SparkListenerApplicationStart backwards compatibility") {
     // SparkListenerApplicationStart in Spark 1.0.0 do not have an "appId" property.
     val applicationStart = SparkListenerApplicationStart("test", None, 1L, "user")
@@ -695,6 +708,8 @@ class JsonProtocolSuite extends FunSuite {
       sr.incFetchWaitTime(a + d)
       sr.incRemoteBlocksFetched(f)
       sr.incRecordsRead(if (hasRecords) (b + d) / 100 else -1)
+      sr.incLocalReadTime(a + e)
+      sr.incLocalBytesRead(a + f)
       t.setShuffleReadMetrics(Some(sr))
     }
     if (hasOutput) {
@@ -941,6 +956,8 @@ class JsonProtocolSuite extends FunSuite {
       |      "Local Blocks Fetched": 700,
       |      "Fetch Wait Time": 900,
       |      "Remote Bytes Read": 1000,
+      |      "Local Read Time": 1000,
+      |      "Local Bytes Read": 1100,
       |      "Total Records Read" : 10
       |    },
       |    "Shuffle Write Metrics": {
