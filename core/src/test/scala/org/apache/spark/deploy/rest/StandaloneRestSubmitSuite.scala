@@ -23,7 +23,7 @@ import javax.servlet.http.HttpServletResponse
 
 import scala.collection.mutable
 
-import akka.actor.{ActorRef, Actor, ActorSystem, Props}
+import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import com.google.common.base.Charsets
 import org.scalatest.{BeforeAndAfterEach, FunSuite}
 
@@ -64,7 +64,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
   test("create submission") {
     val submittedDriverId = "my-driver-id"
     val submitMessage = "your driver is submitted"
-    val masterUrl = startServerForSubmit(submittedDriverId, submitMessage)
+    val masterUrl = startDummyServer(submitId = submittedDriverId, submitMessage = submitMessage)
     val appArgs = Array("one", "two", "four")
     val request = constructSubmitRequest(masterUrl, appArgs)
     assert(request.appArgs === appArgs)
@@ -81,7 +81,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
   test("create submission from main method") {
     val submittedDriverId = "your-driver-id"
     val submitMessage = "my driver is submitted"
-    val masterUrl = startServerForSubmit(submittedDriverId, submitMessage)
+    val masterUrl = startDummyServer(submitId = submittedDriverId, submitMessage = submitMessage)
     val conf = new SparkConf(loadDefaults = false)
     conf.set("spark.master", masterUrl)
     conf.set("spark.app.name", "dreamer")
@@ -99,7 +99,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
   test("kill submission") {
     val submissionId = "my-lyft-driver"
     val killMessage = "your driver is killed"
-    val masterUrl = startServerForKill(killMessage)
+    val masterUrl = startDummyServer(killMessage = killMessage)
     val response = client.killSubmission(masterUrl, submissionId)
     val killResponse = getKillResponse(response)
     assert(killResponse.action === Utils.getFormattedClassName(killResponse))
@@ -113,7 +113,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
     val submissionId = "my-uber-driver"
     val submissionState = KILLED
     val submissionException = new Exception("there was an irresponsible mix of alcohol and cars")
-    val masterUrl = startServerForStatus(submissionState, Some(submissionException))
+    val masterUrl = startDummyServer(state = submissionState, exception = Some(submissionException))
     val response = client.requestSubmissionStatus(masterUrl, submissionId)
     val statusResponse = getStatusResponse(response)
     assert(statusResponse.action === Utils.getFormattedClassName(statusResponse))
@@ -204,7 +204,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
    * ---------------------------------------- */
 
   test("good request paths") {
-    val masterUrl = startDummyServer()
+    val masterUrl = startSmartServer()
     val httpUrl = masterUrl.replace("spark://", "http://")
     val v = StandaloneRestServer.PROTOCOL_VERSION
     val json = constructSubmitRequest(masterUrl).toJson
@@ -234,7 +234,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
   }
 
   test("good request paths, bad requests") {
-    val masterUrl = startDummyServer()
+    val masterUrl = startSmartServer()
     val httpUrl = masterUrl.replace("spark://", "http://")
     val v = StandaloneRestServer.PROTOCOL_VERSION
     val submitRequestPath = s"$httpUrl/$v/submissions/create"
@@ -268,7 +268,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
   }
 
   test("bad request paths") {
-    val masterUrl = startDummyServer()
+    val masterUrl = startSmartServer()
     val httpUrl = masterUrl.replace("spark://", "http://")
     val v = StandaloneRestServer.PROTOCOL_VERSION
     val (response1, code1) = sendHttpRequestWithResponse(httpUrl, "GET")
@@ -311,13 +311,13 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
     val masterUrl = startFaultyServer()
     val httpUrl = masterUrl.replace("spark://", "http://")
     val v = StandaloneRestServer.PROTOCOL_VERSION
-    val submitRequestPath = httpUrl + s"/$v/submissions/create"
-    val killRequestPath = httpUrl + s"/$v/submissions/kill/anything"
-    val statusRequestPath = httpUrl + s"/$v/submissions/status/anything"
-    val submitJson = constructSubmitRequest(masterUrl).toJson
+    val submitRequestPath = s"$httpUrl/$v/submissions/create"
+    val killRequestPath = s"$httpUrl/$v/submissions/kill/anything"
+    val statusRequestPath = s"$httpUrl/$v/submissions/status/anything"
+    val json = constructSubmitRequest(masterUrl).toJson
     // server returns malformed response unwittingly
     // client should throw an appropriate exception to indicate server failure
-    val conn1 = sendHttpRequest(submitRequestPath, "POST", submitJson)
+    val conn1 = sendHttpRequest(submitRequestPath, "POST", json)
     intercept[SubmitRestProtocolException] { client.readResponse(conn1) }
     // server attempts to send invalid response, but fails internally on validation
     // client should receive an error response as server is able to recover
@@ -336,24 +336,14 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
    |     Helper methods    |
    * --------------------- */
 
-  /** Start a dummy server that responds to status requests using the specified parameters. */
-  private def startServerForStatus(state: DriverState, exception: Option[Exception]): String = {
-    startServer(new DummyMaster(state = state, exception = exception))
-  }
-
-  /** Start a dummy server that responds to kill requests using the specified parameters. */
-  private def startServerForKill(killMessage: String): String = {
-    startServer(new DummyMaster(killMessage = killMessage))
-  }
-
-  /** Start a dummy server that responds to submit requests using the specified parameters. */
-  private def startServerForSubmit(submittedDriverId: String, submitMessage: String): String = {
-    startServer(new DummyMaster(submitId = submittedDriverId, submitMessage = submitMessage))
-  }
-
-  /** Start a dummy server that responds to all requests with the default parameters. */
-  private def startDummyServer(): String = {
-    startServer(new DummyMaster)
+  /** Start a dummy server that responds to requests using the specified parameters. */
+  private def startDummyServer(
+      submitId: String = "fake-driver-id",
+      submitMessage: String = "driver is submitted",
+      killMessage: String = "driver is killed",
+      state: DriverState = FINISHED,
+      exception: Option[Exception] = None): String = {
+    startServer(new DummyMaster(submitId, submitMessage, killMessage, state, exception))
   }
 
   /** Start a smarter dummy server that keeps track of submitted driver states. */
