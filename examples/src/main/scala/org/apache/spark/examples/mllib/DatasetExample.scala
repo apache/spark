@@ -81,7 +81,7 @@ object DatasetExample {
     println(s"Loaded ${origData.count()} instances from file: ${params.input}")
 
     // Convert input data to DataFrame explicitly.
-    val df: DataFrame = origData.toDataFrame
+    val df: DataFrame = origData.toDF
     println(s"Inferred schema:\n${df.schema.prettyJson}")
     println(s"Converted to DataFrame with ${df.count()} records")
 

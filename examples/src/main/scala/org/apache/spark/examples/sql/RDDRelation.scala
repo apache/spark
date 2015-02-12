@@ -19,7 +19,7 @@ package org.apache.spark.examples.sql
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.Dsl._
+import org.apache.spark.sql.functions._
 
 // One method for defining the schema of an RDD is to make a case class with the desired column
 // names and types.
@@ -34,7 +34,7 @@ object RDDRelation {
     // Importing the SQL context gives access to all the SQL functions and implicit conversions.
     import sqlContext.implicits._
 
-    val df = sc.parallelize((1 to 100).map(i => Record(i, s"val_$i"))).toDataFrame
+    val df = sc.parallelize((1 to 100).map(i => Record(i, s"val_$i"))).toDF
     // Any RDD containing case classes can be registered as a table.  The schema of the table is
     // automatically inferred using scala reflection.
     df.registerTempTable("records")
