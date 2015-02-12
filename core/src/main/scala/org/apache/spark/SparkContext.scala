@@ -1034,14 +1034,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     logInfo("Added file " + path + " at " + key + " with timestamp " + addedFiles(key))
     postEnvironmentUpdate()
   }
-  
-  def supportKillExecutor(): Boolean = {
-    if(master.contains("yarn") || dynamicAllocationTesting) {
-      true
-    } else {
-      false
-    }
-  }
+
+  private[spark] def supportKillExecutor = master.contains("yarn") || dynamicAllocationTesting
 
   /**
    * :: DeveloperApi ::
