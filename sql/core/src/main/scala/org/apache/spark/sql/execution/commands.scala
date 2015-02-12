@@ -186,7 +186,7 @@ case class DescribeCommand(
   override def run(sqlContext: SQLContext) = {
     child.schema.fields.map { field =>
       val cmtKey = "comment"
-      val comment = if (field.metadata.contains(cmtKey)) field.metadata.getString(cmtKey) else ""
+      val comment = if (field.metadata.contains(cmtKey)) field.metadata.getString(cmtKey) else null
       Row(field.name, field.dataType.simpleString, comment)
     }
   }
