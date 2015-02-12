@@ -136,6 +136,17 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
     testRelation.select(Literal(1).cast(BinaryType).as('badCast)),
     "invalid cast" :: Literal(1).dataType.simpleString :: BinaryType.simpleString :: Nil)
 
+  errorTest(
+    "non-boolean filters",
+    testRelation.where(Literal(1)),
+    "filter" :: "'1'" :: "not a boolean" :: Literal(1).dataType.simpleString :: Nil)
+
+  errorTest(
+    "missing group by",
+    testRelation2.groupBy('a)('b),
+    "'b'" :: "group by" :: Nil
+  )
+
   case class UnresolvedTestPlan() extends LeafNode {
     override lazy val resolved = false
     override def output = Nil

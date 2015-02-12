@@ -83,7 +83,7 @@ class Analyzer(catalog: Catalog,
           operator transformAllExpressions {
             case a: Attribute if !a.resolved =>
               val from = operator.inputSet.map(_.name).mkString("{", ", ", "}")
-              failAnalysis(s"cannot resolve '$a' given input columns $from")
+              failAnalysis(s"cannot resolve '${a.prettyString}' given input columns $from")
 
             case c: Cast if !c.resolved =>
               failAnalysis(
@@ -93,13 +93,13 @@ class Analyzer(catalog: Catalog,
               failAnalysis(
                 s"invalid expression ${b.prettyString} " +
                 s"between ${b.left.simpleString} and ${b.right.simpleString}")
-
-
           }
 
           operator match {
             case f: Filter if f.condition.dataType != BooleanType =>
-              failAnalysis(s"filter expression '${f.condition.prettyString}' is not a boolean.")
+              failAnalysis(
+                s"filter expression '${f.condition.prettyString}' " +
+                s"of type ${f.condition.dataType.simpleString} is not a boolean.")
 
             case aggregatePlan @ Aggregate(groupingExprs, aggregateExprs, child) =>
               def isValidAggregateExpression(expr: Expression): Boolean = expr match {
@@ -118,10 +118,9 @@ class Analyzer(catalog: Catalog,
                   case Alias(g: GetField, _) => g
                 })
               }.foreach { e =>
-                failAnalysis(s"expression must be aggregates or be in group by $e")
+                failAnalysis(
+                  s"expression '${e.prettyString}' is not an aggregate function or in the group by")
               }
-
-              aggregatePlan
 
             case o if o.children.nonEmpty && !o.references.subsetOf(o.inputSet) =>
               val missingAttributes = (o.references -- o.inputSet).map(_.prettyString).mkString(",")
