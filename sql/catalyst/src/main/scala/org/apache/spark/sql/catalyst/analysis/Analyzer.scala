@@ -111,7 +111,6 @@ class Analyzer(catalog: Catalog,
                     s"expression '${e.prettyString}' is neither present in the group by, " +
                     s"nor is it an aggregate function. " +
                      "Add to group by or wrap in first() if you don't care which value you get.")
-                case e: Attribute => // OK
                 case e if groupingExprs.contains(e) => // OK
                 case e if e.references.isEmpty => // OK
                 case e => e.children.foreach(checkValidAggregateExpression)
