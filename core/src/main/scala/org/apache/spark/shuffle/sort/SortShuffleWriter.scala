@@ -63,7 +63,9 @@ private[spark] class SortShuffleWriter[K, V, C](
       sorter.insertAll(records)
     }
 
+    val fileOpenStartTime = System.nanoTime
     val outputFile = shuffleBlockManager.getDataFile(dep.shuffleId, mapId)
+    writeMetrics.incShuffleWriteTime(System.nanoTime - fileOpenStartTime)
     val blockId = shuffleBlockManager.consolidateId(dep.shuffleId, mapId)
     val partitionLengths = sorter.writePartitionedFile(blockId, context, outputFile)
     shuffleBlockManager.writeIndexFile(dep.shuffleId, mapId, partitionLengths)

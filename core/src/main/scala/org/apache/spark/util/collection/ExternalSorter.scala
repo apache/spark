@@ -740,9 +740,9 @@ private[spark] class ExternalSorter[K, V, C](
         if (in != null) {
           in.close()
         }
+        context.taskMetrics.shuffleWriteMetrics.map(
+          _.incShuffleWriteTime(System.nanoTime - writeStartTime))
       }
-      context.taskMetrics.shuffleWriteMetrics.map(
-        _.incShuffleWriteTime(System.nanoTime - writeStartTime))
     } else {
       // Either we're not bypassing merge-sort or we have only in-memory data; get an iterator by
       // partition and just write everything directly.
