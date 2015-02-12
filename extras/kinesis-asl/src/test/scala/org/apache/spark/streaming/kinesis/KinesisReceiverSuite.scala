@@ -74,6 +74,14 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     currentClockMock = mock[Clock]
   }
 
+  override def afterFunction(): Unit = {
+    super.afterFunction()
+    // Since this suite was originally written using EasyMock, add this to preserve the old
+    // mocking semantics (see SPARK-5735 for more details)
+    verifyNoMoreInteractions(receiverMock, checkpointerMock, checkpointClockMock,
+      checkpointStateMock, currentClockMock)
+  }
+
   test("kinesis utils api") {
     val ssc = new StreamingContext(master, framework, batchDuration)
     // Tests the API, does not actually test data receiving
@@ -93,6 +101,7 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     verify(receiverMock, times(1)).isStopped()
     verify(receiverMock, times(1)).store(record1.getData().array())
     verify(receiverMock, times(1)).store(record2.getData().array())
+    verify(checkpointStateMock, times(1)).shouldCheckpoint()
     verify(checkpointerMock, times(1)).checkpoint()
     verify(checkpointStateMock, times(1)).advanceCheckpoint()
   }

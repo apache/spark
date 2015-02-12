@@ -24,11 +24,11 @@ import java.util
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.FunSuite
-import org.scalatest.mock.MockitoSugar
 import org.apache.mesos.SchedulerDriver
 import org.apache.mesos.Protos._
 import org.apache.mesos.Protos.Value.Scalar
+import org.scalatest.FunSuite
+import org.scalatest.mock.MockitoSugar
 import org.mockito.Mockito._
 import org.mockito.Matchers._
 import org.mockito.{Matchers, ArgumentCaptor}
@@ -139,6 +139,11 @@ class MesosSchedulerBackendSuite extends FunSuite with LocalSparkContext with Mo
 
     backend.resourceOffers(driver, mesosOffers)
 
+    verify(driver, times(1)).launchTasks(
+      Matchers.eq(Collections.singleton(mesosOffers.get(0).getId)),
+      capture.capture(),
+      any(classOf[Filters])
+    )
     verify(driver, times(1)).declineOffer(mesosOffers.get(1).getId)
     verify(driver, times(1)).declineOffer(mesosOffers.get(2).getId)
     assert(capture.getValue.size() == 1)
