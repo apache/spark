@@ -26,6 +26,8 @@ import scala.collection.mutable
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import com.google.common.base.Charsets
 import org.scalatest.{BeforeAndAfterEach, FunSuite}
+import org.json4s.JsonAST._
+import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark._
 import org.apache.spark.util.{AkkaUtils, Utils}
@@ -305,6 +307,30 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
     assert(errorResponse6.highestProtocolVersion === null)
     assert(errorResponse7.highestProtocolVersion === null)
     assert(errorResponse8.highestProtocolVersion === StandaloneRestServer.PROTOCOL_VERSION)
+  }
+
+  test("server returns unknown fields") {
+    val masterUrl = startSmartServer()
+    val httpUrl = masterUrl.replace("spark://", "http://")
+    val v = StandaloneRestServer.PROTOCOL_VERSION
+    val submitRequestPath = s"$httpUrl/$v/submissions/create"
+    val oldJson = constructSubmitRequest(masterUrl).toJson
+    val oldFields = parse(oldJson).asInstanceOf[JObject].obj
+    val newFields = oldFields ++ Seq(
+      JField("tomato", JString("not-a-fruit")),
+      JField("potato", JString("not-po-tah-to"))
+    )
+    val newJson = pretty(render(JObject(newFields)))
+    // send two requests, one with the unknown fields and the other without
+    val (response1, code1) = sendHttpRequestWithResponse(submitRequestPath, "POST", oldJson)
+    val (response2, code2) = sendHttpRequestWithResponse(submitRequestPath, "POST", newJson)
+    val submitResponse1 = getSubmitResponse(response1)
+    val submitResponse2 = getSubmitResponse(response2)
+    assert(code1 === HttpServletResponse.SC_OK)
+    assert(code2 === HttpServletResponse.SC_OK)
+    // only the response to the modified request should have unknown fields set
+    assert(submitResponse1.unknownFields === null)
+    assert(submitResponse2.unknownFields === Array("tomato", "potato"))
   }
 
   test("client handles faulty server") {
