@@ -621,6 +621,24 @@ class SQLContext(object):
         """
         return DataFrame(self._ssql_ctx.table(tableName), self)
 
+    def tables(self, dbName=None):
+        """Returns a DataFrame containing names of table in the given database.
+
+        If `dbName` is `None`, the database will be the current database.
+
+        The returned DataFrame has two columns, tableName and isTemporary
+        (a column with BooleanType indicating if a table is a temporary one or not).
+
+        >>> sqlCtx.registerRDDAsTable(df, "table1")
+        >>> df2 = sqlCtx.tables()
+        >>> df2.first()
+        Row(tableName=u'table1', isTemporary=True)
+        """
+        if dbName is None:
+            return DataFrame(self._ssql_ctx.tables(), self)
+        else:
+            return DataFrame(self._ssql_ctx.tables(dbName), self)
+
     def cacheTable(self, tableName):
         """Caches the specified table in-memory."""
         self._ssql_ctx.cacheTable(tableName)

@@ -34,6 +34,12 @@ trait Catalog {
       tableIdentifier: Seq[String],
       alias: Option[String] = None): LogicalPlan
 
+  /**
+   * Returns names and flags indicating if a table is temporary or not of all tables in the
+   * database identified by `databaseIdentifier`.
+   */
+  def getTables(databaseIdentifier: Seq[String]): Seq[(String, Boolean)]
+
   def registerTable(tableIdentifier: Seq[String], plan: LogicalPlan): Unit
 
   def unregisterTable(tableIdentifier: Seq[String]): Unit
@@ -59,6 +65,10 @@ trait Catalog {
 
   protected def getDBTable(tableIdent: Seq[String]) : (Option[String], String) = {
     (tableIdent.lift(tableIdent.size - 2), tableIdent.last)
+  }
+
+  protected def getDBName(databaseIdentifier: Seq[String]): Option[String] = {
+    databaseIdentifier.lift(databaseIdentifier.size - 1)
   }
 }
 
@@ -101,6 +111,12 @@ class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
     // properly qualified with this alias.
     alias.map(a => Subquery(a, tableWithQualifiers)).getOrElse(tableWithQualifiers)
   }
+
+  override def getTables(databaseIdentifier: Seq[String]): Seq[(String, Boolean)] = {
+    tables.map {
+      case (name, _) => (name, true)
+    }.toSeq
+  }
 }
 
 /**
@@ -137,6 +153,22 @@ trait OverrideCatalog extends Catalog {
     withAlias.getOrElse(super.lookupRelation(tableIdentifier, alias))
   }
 
+  abstract override def getTables(databaseIdentifier: Seq[String]): Seq[(String, Boolean)] = {
+    val dbName = getDBName(databaseIdentifier)
+    val temporaryTables = overrides.filter {
+      // If a temporary table does not have an associated database, we should return its name.
+      case ((None, _), _) => true
+      // If a temporary table does have an associated database, we should return it if the database
+      // matches the given database name.
+      case ((db: Some[String], _), _) if db == dbName => true
+      case _ => false
+    }.map {
+      case ((_, tableName), _) => (tableName, true)
+    }.toSeq
+
+    temporaryTables ++ super.getTables(databaseIdentifier)
+  }
+
   override def registerTable(
       tableIdentifier: Seq[String],
       plan: LogicalPlan): Unit = {
@@ -169,6 +201,10 @@ object EmptyCatalog extends Catalog {
   def lookupRelation(
     tableIdentifier: Seq[String],
     alias: Option[String] = None) = {
+    throw new UnsupportedOperationException
+  }
+
+  override def getTables(databaseIdentifier: Seq[String]): Seq[(String, Boolean)] = {
     throw new UnsupportedOperationException
   }
 
