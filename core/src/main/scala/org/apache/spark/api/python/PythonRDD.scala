@@ -202,7 +202,7 @@ private[spark] class PythonRDD(
       this.interrupt()
     }
 
-    override def run(): Unit = Utils.logUncaughtExceptions {
+    override def run(): Unit = Utils.tryLog {
       try {
         val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
         val dataOut = new DataOutputStream(stream)
