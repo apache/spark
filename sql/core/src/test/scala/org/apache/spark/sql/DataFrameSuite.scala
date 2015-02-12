@@ -98,6 +98,15 @@ class DataFrameSuite extends QueryTest {
       sql("SELECT a.key, b.key FROM testData a JOIN testData b ON a.key = b.key").collect().toSeq)
   }
 
+  test("simple explode") {
+    val df = Seq(Tuple1("a b c"), Tuple1("d e")).toDataFrame("words")
+
+    checkAnswer(
+      df.explode("words", "word") { word: String => word.split(" ").toSeq }.select('word),
+      Row("a") :: Row("b") :: Row("c") :: Row("d") ::Row("e") :: Nil
+    )
+  }
+
   test("explode") {
     val df = Seq((1, "a b c"), (2, "a b"), (3, "a")).toDataFrame("number", "letters")
     val df2 =

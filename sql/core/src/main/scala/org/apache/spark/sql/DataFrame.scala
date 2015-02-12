@@ -461,7 +461,7 @@ trait DataFrame extends RDDApi[Row] {
 
   /**
    * (Scala-specific) Returns a new [[DataFrame]] where each row has been expanded to zero or more
-   * rows by the provided function.  This is similar to a `LATERAL VIEW` in HiveQL.  The columns of
+   * rows by the provided function.  This is similar to a `LATERAL VIEW` in HiveQL. The columns of
    * the input row are implicitly joined with each row that is output by the function.
    *
    * The following example uses this function to count the number of books which contain
@@ -480,6 +480,21 @@ trait DataFrame extends RDDApi[Row] {
    * }}}
    */
   def explode[A <: Product : TypeTag](input: Column*)(f: Row => TraversableOnce[A]): DataFrame
+
+
+  /**
+   * (Scala-specific) Returns a new [[DataFrame]] where a single column has been expanded to zero
+   * or more rows by the provided function.  This is similar to a `LATERAL VIEW` in HiveQL. All
+   * columns of the input row are implicitly joined with each value that is output by the function.
+   *
+   * {{{
+   *   df.explode("words", "word")(words: String => words.split(" "))
+   * }}}
+   */
+  def explode[A, B : TypeTag](
+      inputColumn: String,
+      outputColumn: String)(
+      f: A => TraversableOnce[B]): DataFrame
 
   /////////////////////////////////////////////////////////////////////////////
 

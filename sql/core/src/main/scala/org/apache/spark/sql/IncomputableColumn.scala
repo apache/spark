@@ -118,7 +118,12 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
   override def explode[A <: Product : TypeTag]
       (input: Column*)(f: Row => TraversableOnce[A]): DataFrame = err()
 
-    /////////////////////////////////////////////////////////////////////////////
+  override def explode[A, B : TypeTag](
+      inputColumn: String,
+      outputColumn: String)(
+      f: A => TraversableOnce[B]): DataFrame = err()
+
+  /////////////////////////////////////////////////////////////////////////////
 
   override def head(n: Int): Array[Row] = err()
 

@@ -303,6 +303,21 @@ private[sql] class DataFrameImpl protected[sql](
     Generate(generator, join = true, outer = false, None, logicalPlan)
   }
 
+  override def explode[A, B : TypeTag](
+      inputColumn: String,
+      outputColumn: String)(
+      f: A => TraversableOnce[B]): DataFrame = {
+    val dataType = ScalaReflection.schemaFor[B].dataType
+    val attributes = AttributeReference(outputColumn, dataType)() :: Nil
+    def rowFunction(row: Row) = {
+      f(row(0).asInstanceOf[A]).map(o => Row(ScalaReflection.convertToCatalyst(o, dataType)))
+    }
+    val generator = UserDefinedGenerator(attributes, rowFunction, apply(inputColumn).expr :: Nil)
+
+    Generate(generator, join = true, outer = false, None, logicalPlan)
+
+  }
+
 
   /////////////////////////////////////////////////////////////////////////////
   // RDD API
