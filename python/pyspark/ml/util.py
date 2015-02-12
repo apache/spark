@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+from functools import wraps
 import uuid
 
 
@@ -38,6 +39,7 @@ def keyword_only(start=0):
     input keyword arguments.
     """
     def inner(func):
+        @wraps(func)
         def wrapper(*args, **kwargs):
             if len(args) > start:
                 raise ValueError("Function %s forces keyword arguments starting from position %d "

@@ -114,6 +114,7 @@ class Pipeline(Estimator):
     @keyword_only(start=1)
     def setParams(self, stages=[]):
         """
+        setParams(self, stages=[])
         Sets params for Pipeline.
         """
         kwargs = self.setParams._input_kwargs

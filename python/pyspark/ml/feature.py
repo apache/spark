@@ -48,6 +48,7 @@ class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol):
     @keyword_only(start=1)
     def setParams(self, inputCol="input", outputCol="output"):
         """
+        setParams(self, inputCol="input", outputCol="output")
         Set params for Tokenizer.
         """
         kwargs = self.setParams._input_kwargs
@@ -82,6 +83,7 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures):
     @keyword_only(start=1)
     def setParams(self, numFeatures=1<<18, inputCol="input", outputCol="output"):
         """
+        setParams(self, numFeatures=1<<18, inputCol="input", outputCol="output")
         Sets params for HashingTF.
         """
         kwargs = self.setParams._input_kwargs

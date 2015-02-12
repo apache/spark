@@ -17,7 +17,6 @@
 
 from pyspark.ml.util import inherit_doc, keyword_only
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
-from pyspark.ml.param import Params
 from pyspark.ml.param.shared import HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,\
     HasRegParam
 
@@ -57,6 +56,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxIter=100, regParam=0.1):
         """
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                  maxIter=100, regParam=0.1)
         Sets params for logistic regression.
         """
         kwargs = self.setParams._input_kwargs
