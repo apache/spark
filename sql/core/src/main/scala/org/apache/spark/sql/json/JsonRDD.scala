@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.json
 
-import java.io.StringWriter
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 
 import scala.collection.Map
 import scala.collection.convert.Wrappers.{JMapWrapper, JListWrapper}
 
-import com.fasterxml.jackson.core.{JsonGenerator, JsonProcessingException, JsonFactory}
+import com.fasterxml.jackson.core.{JsonGenerator, JsonProcessingException}
 import com.fasterxml.jackson.databind.ObjectMapper
 
 import org.apache.spark.rdd.RDD
@@ -178,7 +177,12 @@ private[sql] object JsonRDD extends Logging {
   }
 
   private def typeOfPrimitiveValue: PartialFunction[Any, DataType] = {
-    ScalaReflection.typeOfObject orElse {
+    // For Integer values, use LongType by default.
+    val useLongType: PartialFunction[Any, DataType] = {
+      case value: IntegerType.JvmType => LongType
+    }
+
+    useLongType orElse ScalaReflection.typeOfObject orElse {
       // Since we do not have a data type backed by BigInteger,
       // when we see a Java BigInteger, we use DecimalType.
       case value: java.math.BigInteger => DecimalType.Unlimited
