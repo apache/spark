@@ -114,7 +114,7 @@ object TestData {
     TestSQLContext.sparkContext.parallelize(
       ArrayData(Seq(1,2,3), Seq(Seq(1,2,3))) ::
       ArrayData(Seq(2,3,4), Seq(Seq(2,3,4))) :: Nil)
-  arrayData.registerTempTable("arrayData")
+  arrayData.toDataFrame.registerTempTable("arrayData")
 
   case class MapData(data: scala.collection.Map[Int, String])
   val mapData =
@@ -124,18 +124,18 @@ object TestData {
       MapData(Map(1 -> "a3", 2 -> "b3", 3 -> "c3")) ::
       MapData(Map(1 -> "a4", 2 -> "b4")) ::
       MapData(Map(1 -> "a5")) :: Nil)
-  mapData.registerTempTable("mapData")
+  mapData.toDataFrame.registerTempTable("mapData")
 
   case class StringData(s: String)
   val repeatedData =
     TestSQLContext.sparkContext.parallelize(List.fill(2)(StringData("test")))
-  repeatedData.registerTempTable("repeatedData")
+  repeatedData.toDataFrame.registerTempTable("repeatedData")
 
   val nullableRepeatedData =
     TestSQLContext.sparkContext.parallelize(
       List.fill(2)(StringData(null)) ++
       List.fill(2)(StringData("test")))
-  nullableRepeatedData.registerTempTable("nullableRepeatedData")
+  nullableRepeatedData.toDataFrame.registerTempTable("nullableRepeatedData")
 
   case class NullInts(a: Integer)
   val nullInts =
@@ -144,7 +144,7 @@ object TestData {
       NullInts(2) ::
       NullInts(3) ::
       NullInts(null) :: Nil
-    )
+    ).toDataFrame
   nullInts.registerTempTable("nullInts")
 
   val allNulls =
@@ -152,7 +152,7 @@ object TestData {
       NullInts(null) ::
       NullInts(null) ::
       NullInts(null) ::
-      NullInts(null) :: Nil)
+      NullInts(null) :: Nil).toDataFrame
   allNulls.registerTempTable("allNulls")
 
   case class NullStrings(n: Int, s: String)
@@ -164,7 +164,7 @@ object TestData {
   nullStrings.registerTempTable("nullStrings")
 
   case class TableName(tableName: String)
-  TestSQLContext.sparkContext.parallelize(TableName("test") :: Nil).registerTempTable("tableName")
+  TestSQLContext.sparkContext.parallelize(TableName("test") :: Nil).toDataFrame.registerTempTable("tableName")
 
   val unparsedStrings =
     TestSQLContext.sparkContext.parallelize(
@@ -177,22 +177,22 @@ object TestData {
   val timestamps = TestSQLContext.sparkContext.parallelize((1 to 3).map { i =>
     TimestampField(new Timestamp(i))
   })
-  timestamps.registerTempTable("timestamps")
+  timestamps.toDataFrame.registerTempTable("timestamps")
 
   case class IntField(i: Int)
   // An RDD with 4 elements and 8 partitions
   val withEmptyParts = TestSQLContext.sparkContext.parallelize((1 to 4).map(IntField), 8)
-  withEmptyParts.registerTempTable("withEmptyParts")
+  withEmptyParts.toDataFrame.registerTempTable("withEmptyParts")
 
   case class Person(id: Int, name: String, age: Int)
   case class Salary(personId: Int, salary: Double)
   val person = TestSQLContext.sparkContext.parallelize(
     Person(0, "mike", 30) ::
-    Person(1, "jim", 20) :: Nil)
+    Person(1, "jim", 20) :: Nil).toDataFrame
   person.registerTempTable("person")
   val salary = TestSQLContext.sparkContext.parallelize(
     Salary(0, 2000.0) ::
-    Salary(1, 1000.0) :: Nil)
+    Salary(1, 1000.0) :: Nil).toDataFrame
   salary.registerTempTable("salary")
 
   case class ComplexData(m: Map[Int, String], s: TestData, a: Seq[Int], b: Boolean)

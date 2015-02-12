@@ -137,9 +137,9 @@ object MovieLensALS {
       .setRegParam(params.regParam)
       .setNumBlocks(params.numBlocks)
 
-    val model = als.fit(training)
+    val model = als.fit(training.toDataFrame)
 
-    val predictions = model.transform(test).cache()
+    val predictions = model.transform(test.toDataFrame).cache()
 
     // Evaluate the model.
     // TODO: Create an evaluator to compute RMSE.
@@ -158,7 +158,7 @@ object MovieLensALS {
 
     // Inspect false positives.
     predictions.registerTempTable("prediction")
-    sc.textFile(params.movies).map(Movie.parseMovie).registerTempTable("movie")
+    sc.textFile(params.movies).map(Movie.parseMovie).toDataFrame.registerTempTable("movie")
     sqlContext.sql(
       """
         |SELECT userId, prediction.movieId, title, rating, prediction

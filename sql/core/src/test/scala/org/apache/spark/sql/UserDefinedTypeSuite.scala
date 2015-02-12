@@ -66,7 +66,7 @@ class UserDefinedTypeSuite extends QueryTest {
   val points = Seq(
     MyLabeledPoint(1.0, new MyDenseVector(Array(0.1, 1.0))),
     MyLabeledPoint(0.0, new MyDenseVector(Array(0.2, 2.0))))
-  val pointsRDD: RDD[MyLabeledPoint] = sparkContext.parallelize(points)
+  val pointsRDD = sparkContext.parallelize(points).toDataFrame()
 
 
   test("register user type: MyDenseVector for MyLabeledPoint") {

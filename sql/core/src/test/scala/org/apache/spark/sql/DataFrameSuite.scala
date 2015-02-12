@@ -218,19 +218,19 @@ class DataFrameSuite extends QueryTest {
       Seq(Row(3,1), Row(3,2), Row(2,1), Row(2,2), Row(1,1), Row(1,2)))
 
     checkAnswer(
-      arrayData.orderBy('data.getItem(0).asc),
+      arrayData.toDataFrame.orderBy('data.getItem(0).asc),
       arrayData.toDataFrame.collect().sortBy(_.getAs[Seq[Int]](0)(0)).toSeq)
 
     checkAnswer(
-      arrayData.orderBy('data.getItem(0).desc),
+      arrayData.toDataFrame.orderBy('data.getItem(0).desc),
       arrayData.toDataFrame.collect().sortBy(_.getAs[Seq[Int]](0)(0)).reverse.toSeq)
 
     checkAnswer(
-      arrayData.orderBy('data.getItem(1).asc),
+      arrayData.toDataFrame.orderBy('data.getItem(1).asc),
       arrayData.toDataFrame.collect().sortBy(_.getAs[Seq[Int]](0)(1)).toSeq)
 
     checkAnswer(
-      arrayData.orderBy('data.getItem(1).desc),
+      arrayData.toDataFrame.orderBy('data.getItem(1).desc),
       arrayData.toDataFrame.collect().sortBy(_.getAs[Seq[Int]](0)(1)).reverse.toSeq)
   }
 
@@ -240,11 +240,11 @@ class DataFrameSuite extends QueryTest {
       testData.take(10).toSeq)
 
     checkAnswer(
-      arrayData.limit(1),
+      arrayData.toDataFrame.limit(1),
       arrayData.take(1).map(r => Row.fromSeq(r.productIterator.toSeq)))
 
     checkAnswer(
-      mapData.limit(1),
+      mapData.toDataFrame.limit(1),
       mapData.take(1).map(r => Row.fromSeq(r.productIterator.toSeq)))
   }
 
