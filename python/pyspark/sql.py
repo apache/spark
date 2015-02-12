@@ -575,7 +575,7 @@ def _parse_datatype_json_value(json_value):
 
 # Mapping Python types to Spark SQL DataType
 # int -> LongType below so we can do not have to deal with
-# the differences between Java int and Python ints when 
+# the differences between Java int and Python ints when
 # inferring data types. SPARK-5722
 _type_mappings = {
     type(None): NullType,
