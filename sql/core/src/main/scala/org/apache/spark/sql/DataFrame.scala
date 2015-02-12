@@ -34,6 +34,11 @@ private[sql] object DataFrame {
   def apply(sqlContext: SQLContext, logicalPlan: LogicalPlan): DataFrame = {
     new DataFrameImpl(sqlContext, logicalPlan)
   }
+
+  private[sql] case class Holder(df: DataFrame) {
+    def toDataFrame(): DataFrame = df
+    def toDataFrame(colNames: String*): DataFrame = df.toDataFrame(colNames :_*)
+  }
 }
 
 
@@ -132,7 +137,7 @@ trait DataFrame extends RDDApi[Row] with Serializable {
   def explain(extended: Boolean): Unit
 
   /** Only prints the physical plan to the console for debugging purpose. */
-  def explain(): Unit = explain(false)
+  def explain(): Unit = explain(extended = false)
 
   /**
    * Returns true if the `collect` and `take` methods can be run locally

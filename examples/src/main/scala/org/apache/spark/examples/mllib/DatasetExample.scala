@@ -85,14 +85,14 @@ object DatasetExample {
     println(s"Inferred schema:\n${df.schema.prettyJson}")
     println(s"Converted to DataFrame with ${df.count()} records")
 
-    // Select columns, using implicit conversion to DataFrames.
-    val labelsDf: DataFrame = origData.select("label")
+    // Select columns
+    val labelsDf: DataFrame = df.select("label")
     val labels: RDD[Double] = labelsDf.map { case Row(v: Double) => v }
     val numLabels = labels.count()
     val meanLabel = labels.fold(0.0)(_ + _) / numLabels
     println(s"Selected label column with average value $meanLabel")
 
-    val featuresDf: DataFrame = origData.select("features")
+    val featuresDf: DataFrame = df.select("features")
     val features: RDD[Vector] = featuresDf.map { case Row(v: Vector) => v }
     val featureSummary = features.aggregate(new MultivariateOnlineSummarizer())(
       (summary, feat) => summary.add(feat),

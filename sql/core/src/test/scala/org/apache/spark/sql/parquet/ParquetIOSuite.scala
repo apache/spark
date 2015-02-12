@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.types.DecimalType
 
 // Write support class for nested groups: ParquetWriter initializes GroupWriteSupport
@@ -64,6 +65,7 @@ private[parquet] class TestGroupWriteSupport(schema: MessageType) extends WriteS
  * A test suite that tests basic Parquet I/O.
  */
 class ParquetIOSuite extends QueryTest with ParquetTest {
+
   val sqlContext = TestSQLContext
 
   /**
@@ -99,12 +101,12 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
     }
 
     test(s"$prefix: fixed-length decimals") {
-      import org.apache.spark.sql.test.TestSQLContext.implicits._
 
       def makeDecimalRDD(decimal: DecimalType): DataFrame =
         sparkContext
           .parallelize(0 to 1000)
           .map(i => Tuple1(i / 100.0))
+          .toDataFrame
           // Parquet doesn't allow column names with spaces, have to add an alias here
           .select($"_1" cast decimal as "dec")
 
