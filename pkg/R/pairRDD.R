@@ -1,4 +1,4 @@
-# Pair RDD in R implemented in S4 OO system.
+# Operations supported on RDDs contains pairs (i.e key, value)
 
 ############ Actions and Transformations ############
 
