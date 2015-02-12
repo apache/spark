@@ -47,27 +47,23 @@ private[spark] class MetricsConfig(val configFile: Option[String]) extends Loggi
     setDefaultProperties(properties)
 
     // If spark.metrics.conf is not set, try to get file in class path
-    (configFile match {
-      case Some(f) => {
-        logInfo(s"Loading MetricsConfig file: $f")
-        Some(new FileInputStream(f))
+    val isOpt: Option[InputStream] = configFile.map(new FileInputStream(_)).orElse {
+      try {
+        Option(Utils.getSparkClassLoader.getResourceAsStream(METRICS_CONF))
+      } catch {
+        case e: Exception =>
+          logError("Error loading default configuration file", e)
+          None
       }
-      case None =>
-        try {
-          Some(Utils.getSparkClassLoader.getResourceAsStream(METRICS_CONF))
-        } catch {
-          case e: Exception => {
-            logError("Error loading default configuration file", e)
-            None
-          }
-        }
-    }).foreach(is =>
+    }
+
+    isOpt.foreach { is =>
       try {
         properties.load(is)
       } finally {
         is.close()
       }
-    )
+    }
 
     propertyCategories = subProperties(properties, INSTANCE_REGEX)
     if (propertyCategories.contains(DEFAULT_PREFIX)) {
