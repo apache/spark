@@ -180,20 +180,58 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   object implicits {
     // scalastyle:on
-    /**
-     * Creates a DataFrame from an RDD of case classes.
-     *
-     * @group userf
-     */
+
+    /** Creates a DataFrame from an RDD of case classes or tuples. */
     implicit def rddToDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
       self.createDataFrame(rdd)
     }
 
-    /**
-     * Creates a DataFrame from a local Seq of Product.
-     */
+    /** Creates a DataFrame from a local Seq of Product. */
     implicit def localSeqToDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
       self.createDataFrame(data)
+    }
+
+    // Do NOT add more implicit conversions. They are likely to break source compatibility by
+    // making existing implicit conversions ambiguous. In particular, RDD[Double] is dangerous
+    // because of [[DoubleRDDFunctions]].
+
+    /** Creates a single column DataFrame from an RDD[Int]. */
+    implicit def intRddToDataFrame(data: RDD[Int]): DataFrame = {
+      val dataType = IntegerType
+      val rows = data.mapPartitions { iter =>
+        val row = new SpecificMutableRow(dataType :: Nil)
+        iter.map { v =>
+          row.setInt(0, v)
+          row: Row
+        }
+      }
+      self.createDataFrame(rows, StructType(StructField("_1", dataType) :: Nil))
+    }
+
+    /** Creates a single column DataFrame from an RDD[Long]. */
+    implicit def longRddToDataFrame(data: RDD[Long]): DataFrame = {
+      val dataType = LongType
+      val rows = data.mapPartitions { iter =>
+        val row = new SpecificMutableRow(dataType :: Nil)
+        iter.map { v =>
+          row.setLong(0, v)
+          row: Row
+        }
+      }
+      self.createDataFrame(rows, StructType(StructField("_1", dataType) :: Nil))
+    }
+
+    /** Creates a single column DataFrame from an RDD[String]. */
+    implicit def stringRddToDataFrame(data: RDD[String]): DataFrame = {
+      val dataType = StringType
+      val rows = data.mapPartitions { iter =>
+        val row = new SpecificMutableRow(dataType :: Nil)
+        iter.map { v =>
+          row.setString(0, v)
+          row: Row
+        }
+      }
+      self.createDataFrame(rows, StructType(StructField("_1", dataType) :: Nil))
     }
   }
 
