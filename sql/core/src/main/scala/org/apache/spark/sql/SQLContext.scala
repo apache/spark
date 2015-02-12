@@ -740,7 +740,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * indicating if a table is a temporary one or not).
    */
   def tables(databaseName: String): DataFrame = {
-    createDataFrame(catalog.getTables(Seq(databaseName))).toDataFrame("tableName", "isTemporary")
+    createDataFrame(catalog.getTables(Some(databaseName))).toDataFrame("tableName", "isTemporary")
   }
 
   /**
@@ -749,7 +749,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * indicating if a table is a temporary one or not).
    */
   def tables(): DataFrame = {
-    createDataFrame(catalog.getTables(Seq.empty[String])).toDataFrame("tableName", "isTemporary")
+    createDataFrame(catalog.getTables(None)).toDataFrame("tableName", "isTemporary")
   }
 
   protected[sql] class SparkPlanner extends SparkStrategies {

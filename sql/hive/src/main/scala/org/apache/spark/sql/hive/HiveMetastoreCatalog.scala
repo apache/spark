@@ -198,8 +198,8 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     }
   }
 
-  override def getTables(databaseIdentifier: Seq[String]): Seq[(String, Boolean)] = {
-    val dbName = getDBName(databaseIdentifier).getOrElse(hive.sessionState.getCurrentDatabase)
+  override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {
+    val dbName = databaseName.getOrElse(hive.sessionState.getCurrentDatabase)
     client.getAllTables(dbName).map(tableName => (tableName, false))
   }
 

@@ -624,7 +624,7 @@ class SQLContext(object):
     def tables(self, dbName=None):
         """Returns a DataFrame containing names of table in the given database.
 
-        If `dbName` is `None`, the database will be the current database.
+        If `dbName` is not specified, the current database will be used.
 
         The returned DataFrame has two columns, tableName and isTemporary
         (a column with BooleanType indicating if a table is a temporary one or not).

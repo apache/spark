@@ -47,7 +47,8 @@ class ListTablesSuite extends QueryTest with BeforeAndAfterAll {
   }
 
   override def afterAll(): Unit = {
-    catalog.unregisterAllTables()
+    (1 to 10).foreach(i => catalog.unregisterTable(Seq(s"Table$i")))
+    (1 to 10).foreach(i => catalog.unregisterTable(Seq("db1", s"db1TempTable$i")))
     (1 to 10).foreach {
       i => sql(s"DROP TABLE IF EXISTS hivetable$i")
     }
@@ -57,7 +58,7 @@ class ListTablesSuite extends QueryTest with BeforeAndAfterAll {
     sql("DROP DATABASE IF EXISTS db1")
   }
 
-  test("get All Tables of current database") {
+  test("get all tables of current database") {
     // We are using default DB.
     val expectedTables =
       (1 to 10).map(i => Row(s"table$i", true)) ++
@@ -65,7 +66,7 @@ class ListTablesSuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(tables(), expectedTables)
   }
 
-  test("getting All Tables with a database name has not impact on returned table names") {
+  test("getting all tables with a database name") {
     val expectedTables =
       // We are expecting to see Table1 to Table10 since there is no database associated with them.
       (1 to 10).map(i => Row(s"table$i", true)) ++

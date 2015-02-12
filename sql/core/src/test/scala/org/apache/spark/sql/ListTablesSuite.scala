@@ -35,14 +35,14 @@ class ListTablesSuite extends QueryTest with BeforeAndAfterAll {
   }
 
   override def afterAll(): Unit = {
-    catalog.unregisterAllTables()
+    (1 to 10).foreach(i => catalog.unregisterTable(Seq(s"table$i")))
   }
 
-  test("get All Tables") {
+  test("get all tables") {
     checkAnswer(tables(), (1 to 10).map(i => Row(s"table$i", true)))
   }
 
-  test("getting All Tables with a database name has not impact on returned table names") {
+  test("getting all Tables with a database name has no impact on returned table names") {
     checkAnswer(tables("DB"), (1 to 10).map(i => Row(s"table$i", true)))
   }
 

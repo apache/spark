@@ -35,10 +35,10 @@ trait Catalog {
       alias: Option[String] = None): LogicalPlan
 
   /**
-   * Returns names and flags indicating if a table is temporary or not of all tables in the
-   * database identified by `databaseIdentifier`.
+   * Returns tuples of (tableName, isTemporary) for all tables in the given database.
+   * isTemporary is a Boolean value indicates if a table is a temporary or not.
    */
-  def getTables(databaseIdentifier: Seq[String]): Seq[(String, Boolean)]
+  def getTables(databaseName: Option[String]): Seq[(String, Boolean)]
 
   def registerTable(tableIdentifier: Seq[String], plan: LogicalPlan): Unit
 
@@ -65,10 +65,6 @@ trait Catalog {
 
   protected def getDBTable(tableIdent: Seq[String]) : (Option[String], String) = {
     (tableIdent.lift(tableIdent.size - 2), tableIdent.last)
-  }
-
-  protected def getDBName(databaseIdentifier: Seq[String]): Option[String] = {
-    databaseIdentifier.lift(databaseIdentifier.size - 1)
   }
 }
 
@@ -112,7 +108,7 @@ class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
     alias.map(a => Subquery(a, tableWithQualifiers)).getOrElse(tableWithQualifiers)
   }
 
-  override def getTables(databaseIdentifier: Seq[String]): Seq[(String, Boolean)] = {
+  override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {
     tables.map {
       case (name, _) => (name, true)
     }.toSeq
@@ -153,20 +149,19 @@ trait OverrideCatalog extends Catalog {
     withAlias.getOrElse(super.lookupRelation(tableIdentifier, alias))
   }
 
-  abstract override def getTables(databaseIdentifier: Seq[String]): Seq[(String, Boolean)] = {
-    val dbName = getDBName(databaseIdentifier)
+  abstract override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {
     val temporaryTables = overrides.filter {
       // If a temporary table does not have an associated database, we should return its name.
       case ((None, _), _) => true
       // If a temporary table does have an associated database, we should return it if the database
       // matches the given database name.
-      case ((db: Some[String], _), _) if db == dbName => true
+      case ((db: Some[String], _), _) if db == databaseName => true
       case _ => false
     }.map {
       case ((_, tableName), _) => (tableName, true)
     }.toSeq
 
-    temporaryTables ++ super.getTables(databaseIdentifier)
+    temporaryTables ++ super.getTables(databaseName)
   }
 
   override def registerTable(
@@ -204,7 +199,7 @@ object EmptyCatalog extends Catalog {
     throw new UnsupportedOperationException
   }
 
-  override def getTables(databaseIdentifier: Seq[String]): Seq[(String, Boolean)] = {
+  override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {
     throw new UnsupportedOperationException
   }
 
