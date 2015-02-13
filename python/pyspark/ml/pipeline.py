@@ -89,10 +89,15 @@ class Pipeline(Estimator):
     identity transformer.
     """
 
-    def __init__(self, **kwargs):
+    @keyword_only
+    def __init__(self, stages=[]):
+        """
+        __init__(self, stages=[])
+        """
         super(Pipeline, self).__init__()
         #: Param for pipeline stages.
         self.stages = Param(self, "stages", "pipeline stages")
+        kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     def setStages(self, value):
