@@ -417,6 +417,9 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         verbose = true
         parse(tail)
 
+      case ("--version") :: tail =>
+        SparkSubmit.printVersionAndExit()
+
       case EQ_SEPARATED_OPT(opt, value) :: tail =>
         parse(opt :: value :: tail)
 
@@ -485,6 +488,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         |
         |  --help, -h                  Show this help message and exit
         |  --verbose, -v               Print additional debug output
+        |  --version,                  Print the version of current Spark
         |
         | Spark standalone with cluster deploy mode only:
         |  --driver-cores NUM          Cores for driver (Default: 1).
