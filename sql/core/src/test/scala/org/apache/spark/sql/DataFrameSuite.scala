@@ -154,6 +154,18 @@ class DataFrameSuite extends QueryTest {
       testData2.agg(sum('b)),
       Row(9)
     )
+
+    val df1 = Seq(("a", 1, 0, "b"), ("b", 2, 4, "c"), ("a", 2, 3, "d"))
+      .toDataFrame("key", "value1", "value2", "rest")
+
+    checkAnswer(
+      df1.groupBy("key").min(),
+      df1.groupBy("key").min("value1", "value2").collect
+    )
+    checkAnswer(
+      df1.groupBy("key").min("value2"),
+      Seq(Row("a",0), Row("b",4))
+    )
   }
 
   test("convert $\"attribute name\" into unresolved attribute") {

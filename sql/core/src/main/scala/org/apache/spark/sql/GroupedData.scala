@@ -45,7 +45,15 @@ class GroupedData protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expressio
       Alias(a, a.toString)()
     }
   }
-
+ 
+  private[this] def aggregateNumericColumns(colName: String, colNames: String*)
+    (f: Expression => Expression): Seq[NamedExpression] = {
+      df.numericColumns((Seq(colName) ++ colNames):_*).map { c =>
+        val a = f(c)
+        Alias(a, a.toString)()
+      }
+  }
+ 
   private[this] def strToExpr(expr: String): (Expression => Expression) = {
     expr.toLowerCase match {
       case "avg" | "average" | "mean" => Average
@@ -149,28 +157,70 @@ class GroupedData protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expressio
    * The resulting [[DataFrame]] will also contain the grouping columns.
    */
   def mean(): DataFrame = aggregateNumericColumns(Average)
+ 
+  /**
+   * Compute the average value for given numeric columns for each group. This is an alias for `avg`.
+   * The resulting [[DataFrame]] will also contain the grouping columns.
+   */
+  def mean(colName: String, colNames: String*): DataFrame = {
+    aggregateNumericColumns(colName, colNames:_*)(Average)
+  }
 
   /**
    * Compute the max value for each numeric columns for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
    */
   def max(): DataFrame = aggregateNumericColumns(Max)
+ 
+  /**
+   * Compute the max value for given numeric columns for each group.
+   * The resulting [[DataFrame]] will also contain the grouping columns.
+   */
+  def max(colName: String, colNames: String*): DataFrame = {
+    aggregateNumericColumns(colName, colNames:_*)(Max)
+  }
 
   /**
    * Compute the mean value for each numeric columns for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
    */
   def avg(): DataFrame = aggregateNumericColumns(Average)
+ 
+  /**
+   * Compute the mean value for given numeric columns for each group.
+   * The resulting [[DataFrame]] will also contain the grouping columns.
+   */
+  def avg(colName: String, colNames: String*): DataFrame = {
+    aggregateNumericColumns(colName, colNames:_*)(Average)
+  }
 
   /**
    * Compute the min value for each numeric column for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
    */
   def min(): DataFrame = aggregateNumericColumns(Min)
+ 
+  /**
+   * Compute the min value for given numeric column for each group.
+   * The resulting [[DataFrame]] will also contain the grouping columns.
+   */
+  def min(colName: String, colNames: String*): DataFrame = {
+    aggregateNumericColumns(colName, colNames:_*)(Min)
+  }
 
   /**
    * Compute the sum for each numeric columns for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
    */
   def sum(): DataFrame = aggregateNumericColumns(Sum)
+ 
+  /**
+   * Compute the sum for given numeric columns for each group.
+   * The resulting [[DataFrame]] will also contain the grouping columns.
+   */
+  def sum(colName: String, colNames: String*): DataFrame = {
+    aggregateNumericColumns(colName, colNames:_*)(Sum)
+  }
+ 
+ 
 }

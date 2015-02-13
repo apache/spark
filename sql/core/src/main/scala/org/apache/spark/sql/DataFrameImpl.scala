@@ -93,7 +93,14 @@ private[sql] class DataFrameImpl protected[sql](
       queryExecution.analyzed.resolve(n.name, sqlContext.analyzer.resolver).get
     }
   }
-
+ 
+  protected[sql] def numericColumns(colNames: String*): Seq[Expression] = {
+    schema.fields.filter(n => colNames.contains(n.name) && n.dataType.isInstanceOf[NumericType])
+      .map { n =>
+        queryExecution.analyzed.resolve(n.name, sqlContext.analyzer.resolver).get
+      }
+  }
+ 
   override def toDataFrame(colNames: String*): DataFrame = {
     require(schema.size == colNames.size,
       "The number of columns doesn't match.\n" +
