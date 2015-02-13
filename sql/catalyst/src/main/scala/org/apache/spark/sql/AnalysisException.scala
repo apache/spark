@@ -37,5 +37,5 @@ class AnalysisException protected[sql] (
   }
 
   def getLine: Integer = line.map(new java.lang.Integer(_)).orNull
-  def getStartPosition: Int = startPosition.map(new java.lang.Integer(_)).orNull
+  def getStartPosition: Integer = startPosition.map(new java.lang.Integer(_)).orNull
 }
