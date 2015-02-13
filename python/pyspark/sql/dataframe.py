@@ -701,8 +701,8 @@ class GroupedData(object):
                       name to aggregate methods.
 
         >>> gdf = df.groupBy(df.name)
-        >>> gdf.agg({"age": "max"}).collect()
-        [Row(name=u'Bob', MAX(age#0)=5), Row(name=u'Alice', MAX(age#0)=2)]
+        >>> gdf.agg({"*": "count"}).collect()
+        [Row(name=u'Bob', COUNT(1)=1), Row(name=u'Alice', COUNT(1)=1)]
 
         >>> from pyspark.sql import functions as F
         >>> gdf.agg(F.min(df.age)).collect()
