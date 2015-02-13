@@ -4,12 +4,6 @@ title: Clustering - MLlib
 displayTitle: <a href="mllib-guide.html">MLlib</a> - Clustering
 ---
 
-* Table of contents
-{:toc}
-
-
-## Clustering
-
 Clustering is an unsupervised learning problem whereby we aim to group subsets
 of entities with one another based on some notion of similarity.  Clustering is
 often used for exploratory analysis and/or as a component of a hierarchical
@@ -18,7 +12,10 @@ models are trained for each cluster).
 
 MLlib supports the following models:
 
-### k-means
+* Table of contents
+{:toc}
+
+## K-means
 
 [k-means](http://en.wikipedia.org/wiki/K-means_clustering) is one of the
 most commonly used clustering algorithms that clusters the data points into a
@@ -37,72 +34,7 @@ a given dataset, the algorithm returns the best clustering result).
 * *initializationSteps* determines the number of steps in the k-means\|\| algorithm.
 * *epsilon* determines the distance threshold within which we consider k-means to have converged.
 
-### Gaussian mixture
-
-A [Gaussian Mixture Model](http://en.wikipedia.org/wiki/Mixture_model#Multivariate_Gaussian_mixture_model)
-represents a composite distribution whereby points are drawn from one of *k* Gaussian sub-distributions,
-each with its own probability.  The MLlib implementation uses the
-[expectation-maximization](http://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm)
- algorithm to induce the maximum-likelihood model given a set of samples.  The implementation
-has the following parameters:
-
-* *k* is the number of desired clusters.
-* *convergenceTol* is the maximum change in log-likelihood at which we consider convergence achieved.
-* *maxIterations* is the maximum number of iterations to perform without reaching convergence.
-* *initialModel* is an optional starting point from which to start the EM algorithm. If this parameter is omitted, a random starting point will be constructed from the data.
-
-### Power Iteration Clustering
-
-Power iteration clustering is a scalable and efficient algorithm for clustering points given pointwise mutual affinity values.  Internally the algorithm:
-
-* accepts a [Graph](api/graphx/index.html#org.apache.spark.graphx.Graph) that represents a  normalized pairwise affinity between all input points.
-* calculates the principal eigenvalue and eigenvector
-* Clusters each of the input points according to their principal eigenvector component value
-
-Details of this algorithm are found within [Power Iteration Clustering, Lin and Cohen]{www.icml2010.org/papers/387.pdf}
-
-Example outputs for a dataset inspired by the paper - but with five clusters instead of three- have he following output from our implementation:
-
-<p style="text-align: center;">
-  <img src="img/PIClusteringFiveCirclesInputsAndOutputs.png"
-       title="The Property Graph"
-       alt="The Property Graph"
-       width="50%" />
-  <!-- Images are downsized intentionally to improve quality on retina displays -->
-</p>
-
-### Latent Dirichlet Allocation (LDA)
-
-[Latent Dirichlet Allocation (LDA)](http://en.wikipedia.org/wiki/Latent_Dirichlet_allocation)
-is a topic model which infers topics from a collection of text documents.
-LDA can be thought of as a clustering algorithm as follows:
-
-* Topics correspond to cluster centers, and documents correspond to examples (rows) in a dataset.
-* Topics and documents both exist in a feature space, where feature vectors are vectors of word counts.
-* Rather than estimating a clustering using a traditional distance, LDA uses a function based
- on a statistical model of how text documents are generated.
-
-LDA takes in a collection of documents as vectors of word counts.
-It learns clustering using [expectation-maximization](http://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm)
-on the likelihood function. After fitting on the documents, LDA provides:
-
-* Topics: Inferred topics, each of which is a probability distribution over terms (words).
-* Topic distributions for documents: For each document in the training set, LDA gives a probability distribution over topics.
-
-LDA takes the following parameters:
-
-* `k`: Number of topics (i.e., cluster centers)
-* `maxIterations`: Limit on the number of iterations of EM used for learning
-* `docConcentration`: Hyperparameter for prior over documents' distributions over topics. Currently must be > 1, where larger values encourage smoother inferred distributions.
-* `topicConcentration`: Hyperparameter for prior over topics' distributions over terms (words). Currently must be > 1, where larger values encourage smoother inferred distributions.
-* `checkpointInterval`: If using checkpointing (set in the Spark configuration), this parameter specifies the frequency with which checkpoints will be created.  If `maxIterations` is large, using checkpointing can help reduce shuffle file sizes on disk and help with failure recovery.
-
-*Note*: LDA is a new feature with some missing functionality.  In particular, it does not yet
-support prediction on new documents, and it does not have a Python API.  These will be added in the future.
-
-### Examples
-
-#### k-means
+**Examples**
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -216,7 +148,21 @@ print("Within Set Sum of Squared Error = " + str(WSSSE))
 
 </div>
 
-#### GaussianMixture
+## Gaussian mixture
+
+A [Gaussian Mixture Model](http://en.wikipedia.org/wiki/Mixture_model#Multivariate_Gaussian_mixture_model)
+represents a composite distribution whereby points are drawn from one of *k* Gaussian sub-distributions,
+each with its own probability.  The MLlib implementation uses the
+[expectation-maximization](http://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm)
+ algorithm to induce the maximum-likelihood model given a set of samples.  The implementation
+has the following parameters:
+
+* *k* is the number of desired clusters.
+* *convergenceTol* is the maximum change in log-likelihood at which we consider convergence achieved.
+* *maxIterations* is the maximum number of iterations to perform without reaching convergence.
+* *initialModel* is an optional starting point from which to start the EM algorithm. If this parameter is omitted, a random starting point will be constructed from the data.
+
+**Examples**
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -322,7 +268,56 @@ for i in range(2):
 
 </div>
 
-#### Latent Dirichlet Allocation (LDA) Example
+## Power iteration clustering (PIC)
+
+Power iteration clustering (PIC) is a scalable and efficient algorithm for clustering points given pointwise mutual affinity values.  Internally the algorithm:
+
+* accepts a [Graph](api/graphx/index.html#org.apache.spark.graphx.Graph) that represents a  normalized pairwise affinity between all input points.
+* calculates the principal eigenvalue and eigenvector
+* Clusters each of the input points according to their principal eigenvector component value
+
+Details of this algorithm are found within [Power Iteration Clustering, Lin and Cohen]{www.icml2010.org/papers/387.pdf}
+
+Example outputs for a dataset inspired by the paper - but with five clusters instead of three- have he following output from our implementation:
+
+<p style="text-align: center;">
+  <img src="img/PIClusteringFiveCirclesInputsAndOutputs.png"
+       title="The Property Graph"
+       alt="The Property Graph"
+       width="50%" />
+  <!-- Images are downsized intentionally to improve quality on retina displays -->
+</p>
+
+## Latent Dirichlet allocation (LDA)
+
+[Latent Dirichlet allocation (LDA)](http://en.wikipedia.org/wiki/Latent_Dirichlet_allocation)
+is a topic model which infers topics from a collection of text documents.
+LDA can be thought of as a clustering algorithm as follows:
+
+* Topics correspond to cluster centers, and documents correspond to examples (rows) in a dataset.
+* Topics and documents both exist in a feature space, where feature vectors are vectors of word counts.
+* Rather than estimating a clustering using a traditional distance, LDA uses a function based
+ on a statistical model of how text documents are generated.
+
+LDA takes in a collection of documents as vectors of word counts.
+It learns clustering using [expectation-maximization](http://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm)
+on the likelihood function. After fitting on the documents, LDA provides:
+
+* Topics: Inferred topics, each of which is a probability distribution over terms (words).
+* Topic distributions for documents: For each document in the training set, LDA gives a probability distribution over topics.
+
+LDA takes the following parameters:
+
+* `k`: Number of topics (i.e., cluster centers)
+* `maxIterations`: Limit on the number of iterations of EM used for learning
+* `docConcentration`: Hyperparameter for prior over documents' distributions over topics. Currently must be > 1, where larger values encourage smoother inferred distributions.
+* `topicConcentration`: Hyperparameter for prior over topics' distributions over terms (words). Currently must be > 1, where larger values encourage smoother inferred distributions.
+* `checkpointInterval`: If using checkpointing (set in the Spark configuration), this parameter specifies the frequency with which checkpoints will be created.  If `maxIterations` is large, using checkpointing can help reduce shuffle file sizes on disk and help with failure recovery.
+
+*Note*: LDA is a new feature with some missing functionality.  In particular, it does not yet
+support prediction on new documents, and it does not have a Python API.  These will be added in the future.
+
+**Examples**
 
 In the following example, we load word count vectors representing a corpus of documents.
 We then use [LDA](api/scala/index.html#org.apache.spark.mllib.clustering.LDA)
@@ -419,14 +414,7 @@ public class JavaLDAExample {
 
 </div>
 
-
-In order to run the above application, follow the instructions
-provided in the [Self-Contained Applications](quick-start.html#self-contained-applications)
-section of the Spark
-Quick Start guide. Be sure to also include *spark-mllib* to your build file as
-a dependency.
-
-## Streaming clustering
+## Streaming k-means
 
 When data arrive in a stream, we may want to estimate clusters dynamically,
 updating them as new data arrive. MLlib provides support for streaming k-means clustering,
@@ -454,7 +442,7 @@ at time `t`, its contribution by time `t + halfLife` will have dropped to 0.5.
 The unit of time can be specified either as `batches` or `points` and the update rule
 will be adjusted accordingly.
 
-### Examples
+**Examples**
 
 This example shows how to estimate clusters on streaming data.
 
