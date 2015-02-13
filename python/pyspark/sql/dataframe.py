@@ -149,7 +149,7 @@ class DataFrame(object):
     def _java_save_mode(self, mode):
         """Returns the Java save mode based on the Python save mode represented by a string.
         """
-        jSaveMode = self._sc._jvm.org.apache.spark.sql.sources.SaveMode
+        jSaveMode = self._sc._jvm.org.apache.spark.sql.SaveMode
         jmode = jSaveMode.ErrorIfExists
         mode = mode.lower()
         if mode == "append":

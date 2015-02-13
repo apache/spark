@@ -44,9 +44,8 @@ import org.apache.spark.rdd.{NewHadoopPartition, NewHadoopRDD, RDD}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.parquet.ParquetTypesConverter._
 import org.apache.spark.sql.sources._
+import org.apache.spark.sql.{DataFrame, Row, SaveMode, SQLConf, SQLContext}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType, _}
-import org.apache.spark.sql.types.StructType._
-import org.apache.spark.sql.{DataFrame, Row, SQLConf, SQLContext}
 import org.apache.spark.{Partition => SparkPartition, TaskContext, SerializableWritable, Logging, SparkException}
 
 

@@ -401,9 +401,9 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     execSummary.shuffleWriteRecords += shuffleWriteRecordsDelta
 
     val shuffleReadDelta =
-      (taskMetrics.shuffleReadMetrics.map(_.remoteBytesRead).getOrElse(0L)
-      - oldMetrics.flatMap(_.shuffleReadMetrics).map(_.remoteBytesRead).getOrElse(0L))
-    stageData.shuffleReadBytes += shuffleReadDelta
+      (taskMetrics.shuffleReadMetrics.map(_.totalBytesRead).getOrElse(0L)
+        - oldMetrics.flatMap(_.shuffleReadMetrics).map(_.totalBytesRead).getOrElse(0L))
+    stageData.shuffleReadTotalBytes += shuffleReadDelta
     execSummary.shuffleRead += shuffleReadDelta
 
     val shuffleReadRecordsDelta =

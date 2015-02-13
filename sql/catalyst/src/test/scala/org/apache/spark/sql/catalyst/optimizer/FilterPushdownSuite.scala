@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.analysis
-import org.apache.spark.sql.catalyst.analysis.EliminateAnalysisOperators
+import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.expressions.Explode
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{PlanTest, LeftOuter, RightOuter}
@@ -32,7 +32,7 @@ class FilterPushdownSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Subqueries", Once,
-        EliminateAnalysisOperators) ::
+        EliminateSubQueries) ::
       Batch("Filter Pushdown", Once,
         CombineFilters,
         PushPredicateThroughProject,
@@ -351,7 +351,7 @@ class FilterPushdownSuite extends PlanTest {
     }
     val optimized = Optimize(originalQuery.analyze)
 
-    comparePlans(analysis.EliminateAnalysisOperators(originalQuery.analyze), optimized)
+    comparePlans(analysis.EliminateSubQueries(originalQuery.analyze), optimized)
   }
 
   test("joins: conjunctive predicates") {
@@ -370,7 +370,7 @@ class FilterPushdownSuite extends PlanTest {
       left.join(right, condition = Some("x.b".attr === "y.b".attr))
         .analyze
 
-    comparePlans(optimized, analysis.EliminateAnalysisOperators(correctAnswer))
+    comparePlans(optimized, analysis.EliminateSubQueries(correctAnswer))
   }
 
   test("joins: conjunctive predicates #2") {
@@ -389,7 +389,7 @@ class FilterPushdownSuite extends PlanTest {
       left.join(right, condition = Some("x.b".attr === "y.b".attr))
         .analyze
 
-    comparePlans(optimized, analysis.EliminateAnalysisOperators(correctAnswer))
+    comparePlans(optimized, analysis.EliminateSubQueries(correctAnswer))
   }
 
   test("joins: conjunctive predicates #3") {
@@ -412,7 +412,7 @@ class FilterPushdownSuite extends PlanTest {
           condition = Some("z.a".attr === "x.b".attr))
         .analyze
 
-    comparePlans(optimized, analysis.EliminateAnalysisOperators(correctAnswer))
+    comparePlans(optimized, analysis.EliminateSubQueries(correctAnswer))
   }
 
   val testRelationWithArrayType = LocalRelation('a.int, 'b.int, 'c_arr.array(IntegerType))

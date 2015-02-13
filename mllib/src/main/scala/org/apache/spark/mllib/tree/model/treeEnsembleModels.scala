@@ -20,18 +20,20 @@ package org.apache.spark.mllib.tree.model
 import scala.collection.mutable
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
+import org.json4s._
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.Algo
+import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.EnsembleCombiningStrategy._
-import org.apache.spark.mllib.util.{Saveable, Loader}
+import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, SQLContext}
-
+import org.apache.spark.sql.SQLContext
 
 /**
  * :: Experimental ::
@@ -59,11 +61,11 @@ class RandomForestModel(override val algo: Algo, override val trees: Array[Decis
 object RandomForestModel extends Loader[RandomForestModel] {
 
   override def load(sc: SparkContext, path: String): RandomForestModel = {
-    val (loadedClassName, version, metadataRDD) = Loader.loadMetadata(sc, path)
+    val (loadedClassName, version, jsonMetadata) = Loader.loadMetadata(sc, path)
     val classNameV1_0 = SaveLoadV1_0.thisClassName
     (loadedClassName, version) match {
       case (className, "1.0") if className == classNameV1_0 =>
-        val metadata = TreeEnsembleModel.SaveLoadV1_0.readMetadata(metadataRDD, path)
+        val metadata = TreeEnsembleModel.SaveLoadV1_0.readMetadata(jsonMetadata)
         assert(metadata.treeWeights.forall(_ == 1.0))
         val trees =
           TreeEnsembleModel.SaveLoadV1_0.loadTrees(sc, path, metadata.treeAlgo)
@@ -110,11 +112,11 @@ class GradientBoostedTreesModel(
 object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
 
   override def load(sc: SparkContext, path: String): GradientBoostedTreesModel = {
-    val (loadedClassName, version, metadataRDD) = Loader.loadMetadata(sc, path)
+    val (loadedClassName, version, jsonMetadata) = Loader.loadMetadata(sc, path)
     val classNameV1_0 = SaveLoadV1_0.thisClassName
     (loadedClassName, version) match {
       case (className, "1.0") if className == classNameV1_0 =>
-        val metadata = TreeEnsembleModel.SaveLoadV1_0.readMetadata(metadataRDD, path)
+        val metadata = TreeEnsembleModel.SaveLoadV1_0.readMetadata(jsonMetadata)
         assert(metadata.combiningStrategy == Sum.toString)
         val trees =
           TreeEnsembleModel.SaveLoadV1_0.loadTrees(sc, path, metadata.treeAlgo)
@@ -252,7 +254,7 @@ private[tree] object TreeEnsembleModel {
 
   object SaveLoadV1_0 {
 
-    import DecisionTreeModel.SaveLoadV1_0.{NodeData, constructTrees}
+    import org.apache.spark.mllib.tree.model.DecisionTreeModel.SaveLoadV1_0.{NodeData, constructTrees}
 
     def thisFormatVersion = "1.0"
 
@@ -276,11 +278,13 @@ private[tree] object TreeEnsembleModel {
       import sqlContext.implicits._
 
       // Create JSON metadata.
-      val metadata = Metadata(model.algo.toString, model.trees(0).algo.toString,
+      implicit val format = DefaultFormats
+      val ensembleMetadata = Metadata(model.algo.toString, model.trees(0).algo.toString,
         model.combiningStrategy.toString, model.treeWeights)
-      val metadataRDD = sc.parallelize(Seq((className, thisFormatVersion, metadata)), 1)
-        .toDataFrame("class", "version", "metadata")
-      metadataRDD.toJSON.saveAsTextFile(Loader.metadataPath(path))
+      val metadata = compact(render(
+        ("class" -> className) ~ ("version" -> thisFormatVersion) ~
+          ("metadata" -> Extraction.decompose(ensembleMetadata))))
+      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       // Create Parquet data.
       val dataRDD = sc.parallelize(model.trees.zipWithIndex).flatMap { case (tree, treeId) =>
@@ -290,24 +294,11 @@ private[tree] object TreeEnsembleModel {
     }
 
     /**
-     * Read metadata from the loaded metadata DataFrame.
-     * @param path  Path for loading data, used for debug messages.
+     * Read metadata from the loaded JSON metadata.
      */
-    def readMetadata(metadata: DataFrame, path: String): Metadata = {
-      try {
-        // We rely on the try-catch for schema checking rather than creating a schema just for this.
-        val metadataArray = metadata.select("metadata.algo", "metadata.treeAlgo",
-          "metadata.combiningStrategy", "metadata.treeWeights").collect()
-        assert(metadataArray.size == 1)
-        Metadata(metadataArray(0).getString(0), metadataArray(0).getString(1),
-          metadataArray(0).getString(2), metadataArray(0).getAs[Seq[Double]](3).toArray)
-      } catch {
-        // Catch both Error and Exception since the checks above can throw either.
-        case e: Throwable =>
-          throw new Exception(
-            s"Unable to load TreeEnsembleModel metadata from: ${Loader.metadataPath(path)}."
-              + s"  Error message: ${e.getMessage}")
-      }
+    def readMetadata(metadata: JValue): Metadata = {
+      implicit val formats = DefaultFormats
+      (metadata \ "metadata").extract[Metadata]
     }
 
     /**

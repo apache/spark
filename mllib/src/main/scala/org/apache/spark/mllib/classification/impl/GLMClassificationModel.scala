@@ -17,10 +17,13 @@
 
 package org.apache.spark.mllib.classification.impl
 
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.util.Loader
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{Row, SQLContext}
 
 /**
  * Helper class for import/export of GLM classification models.
@@ -52,16 +55,14 @@ private[classification] object GLMClassificationModel {
       import sqlContext.implicits._
 
       // Create JSON metadata.
-      val metadataRDD =
-        sc.parallelize(Seq((modelClass, thisFormatVersion, numFeatures, numClasses)), 1)
-          .toDataFrame("class", "version", "numFeatures", "numClasses")
-      metadataRDD.toJSON.saveAsTextFile(Loader.metadataPath(path))
+      val metadata = compact(render(
+        ("class" -> modelClass) ~ ("version" -> thisFormatVersion) ~
+        ("numFeatures" -> numFeatures) ~ ("numClasses" -> numClasses)))
+      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       // Create Parquet data.
       val data = Data(weights, intercept, threshold)
-      val dataRDD: DataFrame = sc.parallelize(Seq(data), 1)
-      // TODO: repartition with 1 partition after SPARK-5532 gets fixed
-      dataRDD.saveAsParquetFile(Loader.dataPath(path))
+      sc.parallelize(Seq(data), 1).saveAsParquetFile(Loader.dataPath(path))
     }
 
     /**

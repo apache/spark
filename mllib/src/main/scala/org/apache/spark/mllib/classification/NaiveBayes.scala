@@ -18,14 +18,15 @@
 package org.apache.spark.mllib.classification
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax => brzArgmax, sum => brzSum}
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{SparkContext, SparkException, Logging}
+import org.apache.spark.{Logging, SparkContext, SparkException}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SQLContext}
-
 
 /**
  * Model for Naive Bayes Classifiers.
@@ -78,7 +79,7 @@ class NaiveBayesModel private[mllib] (
 
 object NaiveBayesModel extends Loader[NaiveBayesModel] {
 
-  import Loader._
+  import org.apache.spark.mllib.util.Loader._
 
   private object SaveLoadV1_0 {
 
@@ -95,10 +96,10 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
       import sqlContext.implicits._
 
       // Create JSON metadata.
-      val metadataRDD =
-        sc.parallelize(Seq((thisClassName, thisFormatVersion, data.theta(0).size, data.pi.size)), 1)
-          .toDataFrame("class", "version", "numFeatures", "numClasses")
-      metadataRDD.toJSON.saveAsTextFile(metadataPath(path))
+      val metadata = compact(render(
+        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
+          ("numFeatures" -> data.theta(0).length) ~ ("numClasses" -> data.pi.length)))
+      sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
 
       // Create Parquet data.
       val dataRDD: DataFrame = sc.parallelize(Seq(data), 1)
@@ -126,8 +127,7 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
     val classNameV1_0 = SaveLoadV1_0.thisClassName
     (loadedClassName, version) match {
       case (className, "1.0") if className == classNameV1_0 =>
-        val (numFeatures, numClasses) =
-          ClassificationModel.getNumFeaturesClasses(metadata, classNameV1_0, path)
+        val (numFeatures, numClasses) = ClassificationModel.getNumFeaturesClasses(metadata)
         val model = SaveLoadV1_0.load(sc, path)
         assert(model.pi.size == numClasses,
           s"NaiveBayesModel.load expected $numClasses classes," +

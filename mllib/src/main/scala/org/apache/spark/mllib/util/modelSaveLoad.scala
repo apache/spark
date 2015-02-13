@@ -20,13 +20,13 @@ package org.apache.spark.mllib.util
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.hadoop.fs.Path
+import org.json4s._
+import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.types.{DataType, StructType, StructField}
-
+import org.apache.spark.sql.types.{DataType, StructField, StructType}
 
 /**
  * :: DeveloperApi ::
@@ -120,20 +120,11 @@ private[mllib] object Loader {
    * Load metadata from the given path.
    * @return (class name, version, metadata)
    */
-  def loadMetadata(sc: SparkContext, path: String): (String, String, DataFrame) = {
-    val sqlContext = new SQLContext(sc)
-    val metadata = sqlContext.jsonFile(metadataPath(path))
-    val (clazz, version) = try {
-      val metadataArray = metadata.select("class", "version").take(1)
-      assert(metadataArray.size == 1)
-      metadataArray(0) match {
-        case Row(clazz: String, version: String) => (clazz, version)
-      }
-    } catch {
-      case e: Exception =>
-        throw new Exception(s"Unable to load model metadata from: ${metadataPath(path)}")
-    }
+  def loadMetadata(sc: SparkContext, path: String): (String, String, JValue) = {
+    implicit val formats = DefaultFormats
+    val metadata = parse(sc.textFile(metadataPath(path)).first())
+    val clazz = (metadata \ "class").extract[String]
+    val version = (metadata \ "version").extract[String]
     (clazz, version, metadata)
   }
-
 }
