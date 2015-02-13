@@ -141,15 +141,30 @@ class DataFrameSuite extends QueryTest {
       testData.select('key).collect().toSeq)
   }
 
-  test("agg") {
+  test("groupBy") {
     checkAnswer(
       testData2.groupBy("a").agg($"a", sum($"b")),
-      Seq(Row(1,3), Row(2,3), Row(3,3))
+      Seq(Row(1, 3), Row(2, 3), Row(3, 3))
     )
     checkAnswer(
       testData2.groupBy("a").agg($"a", sum($"b").as("totB")).agg(sum('totB)),
       Row(9)
     )
+    checkAnswer(
+      testData2.groupBy("a").agg(col("a"), count("*")),
+      Row(1, 2) :: Row(2, 2) :: Row(3, 2) :: Nil
+    )
+    checkAnswer(
+      testData2.groupBy("a").agg(Map("*" -> "count")),
+      Row(1, 2) :: Row(2, 2) :: Row(3, 2) :: Nil
+    )
+    checkAnswer(
+      testData2.groupBy("a").agg(Map("b" -> "sum")),
+      Row(1, 3) :: Row(2, 3) :: Row(3, 3) :: Nil
+    )
+  }
+
+  test("agg without groups") {
     checkAnswer(
       testData2.agg(sum('b)),
       Row(9)

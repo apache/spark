@@ -20,8 +20,8 @@ package org.apache.spark.sql
 import scala.language.implicitConversions
 import scala.collection.JavaConversions._
 
+import org.apache.spark.sql.catalyst.analysis.Star
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Literal => LiteralExpr}
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 
 
@@ -52,7 +52,12 @@ class GroupedData protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expressio
       case "max" => Max
       case "min" => Min
       case "sum" => Sum
-      case "count" | "size" => Count
+      case "count" | "size" =>
+        // Turn count(*) into count(1)
+        (inputExpr: Expression) => inputExpr match {
+          case s: Star => Count(Literal(1))
+          case _ => Count(inputExpr)
+        }
     }
   }
 
@@ -142,7 +147,7 @@ class GroupedData protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expressio
    * Count the number of rows for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
    */
-  def count(): DataFrame = Seq(Alias(Count(LiteralExpr(1)), "count")())
+  def count(): DataFrame = Seq(Alias(Count(Literal(1)), "count")())
 
   /**
    * Compute the average value for each numeric columns for each group. This is an alias for `avg`.
