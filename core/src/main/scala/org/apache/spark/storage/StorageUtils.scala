@@ -331,8 +331,6 @@ private[spark] object StorageUtils {
   def updateBroadcastInfo(broadcastInfo: BroadcastInfo,
                           statuses: Seq[StorageStatus]): Unit = {
     val broadcastId = broadcastInfo.id
-    // Assume all blocks belonging to the same RDD have the same storage level
-    val numCachedPartitions = statuses.map(_.numBroadcastBlocksById(broadcastId)).sum
     val memSize = statuses.map(_.memUsedByBroadcast(broadcastId)).sum
     val diskSize = statuses.map(_.diskUsedByBroadcast(broadcastId)).sum
     val tachyonSize = statuses.map(_.offHeapUsedByBroadcast(broadcastId)).sum
