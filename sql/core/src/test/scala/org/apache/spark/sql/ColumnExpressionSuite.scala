@@ -349,4 +349,14 @@ class ColumnExpressionSuite extends QueryTest {
       (1 to 100).map(n => Row(null))
     )
   }
+
+  test("explode") {
+    val df = Seq(Tuple1("a b c"), Tuple1("d e")).toDataFrame("words")
+    val column = df("words")
+  
+    checkAnswer(
+      column.explode("word") { word: String => word.split(" ").toSeq }.as("t"),
+      Row("a") :: Row("b") :: Row("c") :: Row("d") ::Row("e") :: Nil
+    )
+  }
 }
