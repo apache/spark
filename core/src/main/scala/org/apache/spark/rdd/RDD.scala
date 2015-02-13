@@ -1162,7 +1162,7 @@ abstract class RDD[T: ClassTag](
         } else {
           // the left side of max is >=1 whenever partsScanned >= 2
           numPartsToTry = Math.max((1.5 * num * partsScanned / buf.size).toInt - partsScanned, 1)
-          numPartsToTry = Math.min(numPartsToTry, partsScanned * 4) 
+          numPartsToTry = Math.min(numPartsToTry, partsScanned * 4)
         }
       }
 
@@ -1253,9 +1253,9 @@ abstract class RDD[T: ClassTag](
 
   /**
    * @return true if and only if the RDD contains no elements at all. Note that an RDD
-   *         may be empty even when it has at least 1 partition.
+   *         may be empty even when it has 1 or more partitions.
    */
-  def isEmpty(): Boolean = partitions.length == 0 || take(1).length == 0
+  def isEmpty(): Boolean = partitions.length == 0 || mapPartitions(it => Iterator(!it.hasNext)).reduce(_&&_)
 
   /**
    * Save this RDD as a text file, using string representations of elements.
