@@ -155,9 +155,8 @@ def _test():
     globs = pyspark.sql.dataframe.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
-    globs['sqlCtx'] = sqlCtx = SQLContext(sc)
-    rdd2 = sc.parallelize([Row(name='Alice', age=2), Row(name='Bob', age=5)])
-    globs['df'] = sqlCtx.inferSchema(rdd2)
+    globs['sqlCtx'] = SQLContext(sc)
+    globs['df'] = sc.parallelize([Row(name='Alice', age=2), Row(name='Bob', age=5)]).toDF()
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.dataframe, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
