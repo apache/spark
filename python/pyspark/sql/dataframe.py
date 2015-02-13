@@ -321,6 +321,17 @@ class DataFrame(object):
         """
         return self.rdd.map(f)
 
+    def flatMap(self, f):
+        """ Return a new RDD by first applying a function to all elements of this,
+        and then flattening the results.
+
+        It's a shorthand for df.rdd.flatMap()
+
+        >>> df.flatMap(lambda p: p.name).collect()
+        [u'A', u'l', u'i', u'c', u'e', u'B', u'o', u'b']
+        """
+        return self.rdd.flatMap(f)
+
     def mapPartitions(self, f, preservesPartitioning=False):
         """
         Return a new RDD by applying a function to each partition.
