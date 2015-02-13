@@ -23,6 +23,7 @@ import java.io._
 import java.util.{ArrayList => JArrayList}
 
 import jline.{ConsoleReader, History}
+
 import org.apache.commons.lang.StringUtils
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.conf.Configuration
@@ -39,7 +40,6 @@ import org.apache.thrift.transport.TSocket
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.hive.HiveShim
-import org.apache.spark.sql.hive.thriftserver.HiveThriftServerShim
 
 private[hive] object SparkSQLCLIDriver {
   private var prompt = "spark-sql"

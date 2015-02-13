@@ -1,6 +1,8 @@
 ---
 layout: global
-title: Spark Streaming Programming Guide
+displayTitle: Spark Streaming Programming Guide
+title: Spark Streaming
+description: Spark Streaming programming guide and tutorial for Spark SPARK_VERSION_SHORT
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -1574,7 +1576,7 @@ To run a Spark Streaming applications, you need to have the following.
   recovery, thus ensuring zero data loss (discussed in detail in the
   [Fault-tolerance Semantics](#fault-tolerance-semantics) section). This can be enabled by setting
   the [configuration parameter](configuration.html#spark-streaming)
-  `spark.streaming.receiver.writeAheadLogs.enable` to `true`. However, these stronger semantics may
+  `spark.streaming.receiver.writeAheadLog.enable` to `true`. However, these stronger semantics may
   come at the cost of the receiving throughput of individual receivers. This can be corrected by
   running [more receivers in parallel](#level-of-parallelism-in-data-receiving)
   to increase aggregate throughput. Additionally, it is recommended that the replication of the

@@ -157,18 +157,20 @@ class DStream(object):
         api = self._ssc._jvm.PythonDStream
         api.callForeachRDD(self._jdstream, jfunc)
 
-    def pprint(self):
+    def pprint(self, num=10):
         """
-        Print the first ten elements of each RDD generated in this DStream.
+        Print the first num elements of each RDD generated in this DStream.
+
+        @param num: the number of elements from the first will be printed.
         """
         def takeAndPrint(time, rdd):
-            taken = rdd.take(11)
+            taken = rdd.take(num + 1)
             print "-------------------------------------------"
             print "Time: %s" % time
             print "-------------------------------------------"
-            for record in taken[:10]:
+            for record in taken[:num]:
                 print record
-            if len(taken) > 10:
+            if len(taken) > num:
                 print "..."
             print
 

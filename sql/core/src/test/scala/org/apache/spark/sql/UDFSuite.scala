@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.Dsl.StringToColumn
 import org.apache.spark.sql.test._
 
 /* Implicits */
@@ -27,27 +28,26 @@ case class FunctionResult(f1: String, f2: String)
 class UDFSuite extends QueryTest {
 
   test("Simple UDF") {
-    registerFunction("strLenScala", (_: String).length)
-    assert(sql("SELECT strLenScala('test')").first().getInt(0) === 4)
+    udf.register("strLenScala", (_: String).length)
+    assert(sql("SELECT strLenScala('test')").head().getInt(0) === 4)
   }
 
   test("ZeroArgument UDF") {
-    registerFunction("random0", () => { Math.random()})
-    assert(sql("SELECT random0()").first().getDouble(0) >= 0.0)
+    udf.register("random0", () => { Math.random()})
+    assert(sql("SELECT random0()").head().getDouble(0) >= 0.0)
   }
 
   test("TwoArgument UDF") {
-    registerFunction("strLenScala", (_: String).length + (_:Int))
-    assert(sql("SELECT strLenScala('test', 1)").first().getInt(0) === 5)
+    udf.register("strLenScala", (_: String).length + (_:Int))
+    assert(sql("SELECT strLenScala('test', 1)").head().getInt(0) === 5)
   }
 
-
   test("struct UDF") {
-    registerFunction("returnStruct", (f1: String, f2: String) => FunctionResult(f1, f2))
+    udf.register("returnStruct", (f1: String, f2: String) => FunctionResult(f1, f2))
 
-    val result=
+    val result =
       sql("SELECT returnStruct('test', 'test2') as ret")
-        .select("ret.f1".attr).first().getString(0)
-    assert(result == "test")
+        .select($"ret.f1").head().getString(0)
+    assert(result === "test")
   }
 }

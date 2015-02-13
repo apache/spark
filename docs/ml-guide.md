@@ -3,13 +3,16 @@ layout: global
 title: Spark ML Programming Guide
 ---
 
-Spark ML is Spark's new machine learning package.  It is currently an alpha component but is potentially a successor to [MLlib](mllib-guide.html). The `spark.ml` package aims to replace the old APIs with a cleaner, more uniform set of APIs which will help users create full machine learning pipelines.
+`spark.ml` is a new package introduced in Spark 1.2, which aims to provide a uniform set of
+high-level APIs that help users create and tune practical machine learning pipelines.
+It is currently an alpha component, and we would like to hear back from the community about
+how it fits real-world use cases and how it could be improved.
 
-MLlib vs. Spark ML:
-
-* Users can use algorithms from either of the two packages, but APIs may differ.  Currently, `spark.ml` offers a subset of the algorithms from `spark.mllib`. Since Spark ML is an alpha component, its API may change in future releases.
-* Developers should contribute new algorithms to `spark.mllib` and can optionally contribute to `spark.ml`.  See below for more details.
-* Spark ML only has Scala and Java APIs, whereas MLlib also has a Python API.
+Note that we will keep supporting and adding features to `spark.mllib` along with the
+development of `spark.ml`.
+Users should be comfortable using `spark.mllib` features and expect more features coming.
+Developers should contribute new algorithms to `spark.mllib` and can optionally contribute
+to `spark.ml`.
 
 **Table of Contents**
 
@@ -257,7 +260,7 @@ List<LabeledPoint> localTraining = Lists.newArrayList(
   new LabeledPoint(0.0, Vectors.dense(2.0, 1.0, -1.0)),
   new LabeledPoint(0.0, Vectors.dense(2.0, 1.3, 1.0)),
   new LabeledPoint(1.0, Vectors.dense(0.0, 1.2, -0.5)));
-JavaSchemaRDD training = jsql.applySchema(jsc.parallelize(localTraining), LabeledPoint.class);
+JavaSchemaRDD training = jsql.createDataFrame(jsc.parallelize(localTraining), LabeledPoint.class);
 
 // Create a LogisticRegression instance.  This instance is an Estimator.
 LogisticRegression lr = new LogisticRegression();
@@ -297,7 +300,7 @@ List<LabeledPoint> localTest = Lists.newArrayList(
     new LabeledPoint(1.0, Vectors.dense(-1.0, 1.5, 1.3)),
     new LabeledPoint(0.0, Vectors.dense(3.0, 2.0, -0.1)),
     new LabeledPoint(1.0, Vectors.dense(0.0, 2.2, -1.5)));
-JavaSchemaRDD test = jsql.applySchema(jsc.parallelize(localTest), LabeledPoint.class);
+JavaSchemaRDD test = jsql.createDataFrame(jsc.parallelize(localTest), LabeledPoint.class);
 
 // Make predictions on test documents using the Transformer.transform() method.
 // LogisticRegression.transform will only use the 'features' column.
@@ -440,7 +443,7 @@ List<LabeledDocument> localTraining = Lists.newArrayList(
   new LabeledDocument(2L, "spark f g h", 1.0),
   new LabeledDocument(3L, "hadoop mapreduce", 0.0));
 JavaSchemaRDD training =
-  jsql.applySchema(jsc.parallelize(localTraining), LabeledDocument.class);
+  jsql.createDataFrame(jsc.parallelize(localTraining), LabeledDocument.class);
 
 // Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
 Tokenizer tokenizer = new Tokenizer()
@@ -466,7 +469,7 @@ List<Document> localTest = Lists.newArrayList(
   new Document(6L, "mapreduce spark"),
   new Document(7L, "apache hadoop"));
 JavaSchemaRDD test =
-  jsql.applySchema(jsc.parallelize(localTest), Document.class);
+  jsql.createDataFrame(jsc.parallelize(localTest), Document.class);
 
 // Make predictions on test documents.
 model.transform(test).registerAsTable("prediction");
@@ -623,7 +626,7 @@ List<LabeledDocument> localTraining = Lists.newArrayList(
   new LabeledDocument(10L, "spark compile", 1.0),
   new LabeledDocument(11L, "hadoop software", 0.0));
 JavaSchemaRDD training =
-    jsql.applySchema(jsc.parallelize(localTraining), LabeledDocument.class);
+    jsql.createDataFrame(jsc.parallelize(localTraining), LabeledDocument.class);
 
 // Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
 Tokenizer tokenizer = new Tokenizer()
@@ -666,7 +669,7 @@ List<Document> localTest = Lists.newArrayList(
   new Document(5L, "l m n"),
   new Document(6L, "mapreduce spark"),
   new Document(7L, "apache hadoop"));
-JavaSchemaRDD test = jsql.applySchema(jsc.parallelize(localTest), Document.class);
+JavaSchemaRDD test = jsql.createDataFrame(jsc.parallelize(localTest), Document.class);
 
 // Make predictions on test documents. cvModel uses the best model found (lrModel).
 cvModel.transform(test).registerAsTable("prediction");
@@ -686,17 +689,3 @@ Spark ML currently depends on MLlib and has the same dependencies.
 Please see the [MLlib Dependencies guide](mllib-guide.html#Dependencies) for more info.
 
 Spark ML also depends upon Spark SQL, but the relevant parts of Spark SQL do not bring additional dependencies.
-
-# Developers
-
-**Development plan**
-
-If all goes well, `spark.ml` will become the primary ML package at the time of the Spark 1.3 release.  Initially, simple wrappers will be used to port algorithms to `spark.ml`, but eventually, code will be moved to `spark.ml` and `spark.mllib` will be deprecated.
-
-**Advice to developers**
-
-During the next development cycle, new algorithms should be contributed to `spark.mllib`, but we welcome patches sent to either package.  If an algorithm is best expressed using the new API (e.g., feature transformers), we may ask for developers to use the new `spark.ml` API.
-Wrappers for old and new algorithms can be contributed to `spark.ml`.
-
-Users will be able to use algorithms from either of the two packages.  The main difficulty will be the differences in APIs between the two packages.
-

@@ -111,10 +111,9 @@ def launch_gateway():
     java_import(gateway.jvm, "org.apache.spark.api.java.*")
     java_import(gateway.jvm, "org.apache.spark.api.python.*")
     java_import(gateway.jvm, "org.apache.spark.mllib.api.python.*")
-    java_import(gateway.jvm, "org.apache.spark.sql.SQLContext")
-    java_import(gateway.jvm, "org.apache.spark.sql.hive.HiveContext")
-    java_import(gateway.jvm, "org.apache.spark.sql.hive.LocalHiveContext")
-    java_import(gateway.jvm, "org.apache.spark.sql.hive.TestHiveContext")
+    # TODO(davies): move into sql
+    java_import(gateway.jvm, "org.apache.spark.sql.*")
+    java_import(gateway.jvm, "org.apache.spark.sql.hive.*")
     java_import(gateway.jvm, "scala.Tuple2")
 
     return gateway

@@ -137,31 +137,27 @@ We use the scala-maven-plugin which supports incremental and continuous compilat
 
 should run continuous compilation (i.e. wait for changes). However, this has not been tested
 extensively. A couple of gotchas to note:
+
 * it only scans the paths `src/main` and `src/test` (see
 [docs](http://scala-tools.org/mvnsites/maven-scala-plugin/usage_cc.html)), so it will only work
 from within certain submodules that have that structure.
+
 * you'll typically need to run `mvn install` from the project root for compilation within
 specific submodules to work; this is because submodules that depend on other submodules do so via
 the `spark-parent` module).
 
 Thus, the full flow for running continuous-compilation of the `core` submodule may look more like:
- ```
+
+```
  $ mvn install
  $ cd core
  $ mvn scala:cc
 ```
 
-# Using With IntelliJ IDEA
+# Building Spark with IntelliJ IDEA or Eclipse
 
-This setup works fine in IntelliJ IDEA 11.1.4. After opening the project via the pom.xml file in the project root folder, you only need to activate either the hadoop1 or hadoop2 profile in the "Maven Properties" popout. We have not tried Eclipse/Scala IDE with this.
-
-# Building Spark Debian Packages
-
-The Maven build includes support for building a Debian package containing the assembly 'fat-jar', PySpark, and the necessary scripts and configuration files. This can be created by specifying the following:
-
-    mvn -Pdeb -DskipTests clean package
-
-The debian package can then be found under assembly/target. We added the short commit hash to the file name so that we can distinguish individual packages built for SNAPSHOT versions.
+For help in setting up IntelliJ IDEA or Eclipse for Spark development, and troubleshooting, refer to the
+[wiki page for IDE setup](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark#ContributingtoSpark-IDESetup).
 
 # Running Java 8 Test Suites
 

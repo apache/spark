@@ -42,7 +42,7 @@ private[streaming] trait ReceivedBlockHandler {
   def storeBlock(blockId: StreamBlockId, receivedBlock: ReceivedBlock): ReceivedBlockStoreResult
 
   /** Cleanup old blocks older than the given threshold time */
-  def cleanupOldBlock(threshTime: Long)
+  def cleanupOldBlocks(threshTime: Long)
 }
 
 
@@ -82,7 +82,7 @@ private[streaming] class BlockManagerBasedBlockHandler(
     BlockManagerBasedStoreResult(blockId)
   }
 
-  def cleanupOldBlock(threshTime: Long) {
+  def cleanupOldBlocks(threshTime: Long) {
     // this is not used as blocks inserted into the BlockManager are cleared by DStream's clearing
     // of BlockRDDs.
   }
@@ -192,8 +192,8 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
     WriteAheadLogBasedStoreResult(blockId, segment)
   }
 
-  def cleanupOldBlock(threshTime: Long) {
-    logManager.cleanupOldLogs(threshTime)
+  def cleanupOldBlocks(threshTime: Long) {
+    logManager.cleanupOldLogs(threshTime, waitForCompletion = false)
   }
 
   def stop() {

@@ -17,14 +17,13 @@
 
 package org.apache.spark.mllib.tree
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
-
+import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.Logging
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.RandomForest.NodeIndexInfo
 import org.apache.spark.mllib.tree.configuration.Strategy
@@ -32,13 +31,10 @@ import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.FeatureType._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 import org.apache.spark.mllib.tree.impl._
-import org.apache.spark.mllib.tree.impurity.{Impurities, Impurity}
 import org.apache.spark.mllib.tree.impurity._
 import org.apache.spark.mllib.tree.model._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
-import org.apache.spark.SparkContext._
-
 
 /**
  * :: Experimental ::
@@ -64,13 +60,6 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
     val rfModel = rf.run(input)
     rfModel.trees(0)
   }
-
-  /**
-   * Trains a decision tree model over an RDD. This is deprecated because it hides the static
-   * methods with the same name in Java.
-   */
-  @deprecated("Please use DecisionTree.run instead.", "1.2.0")
-  def train(input: RDD[LabeledPoint]): DecisionTreeModel = run(input)
 }
 
 object DecisionTree extends Serializable with Logging {

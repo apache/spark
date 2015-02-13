@@ -43,7 +43,7 @@ case class BroadcastHashJoin(
   extends BinaryNode with HashJoin {
 
   val timeout = {
-    val timeoutValue = sqlContext.broadcastTimeout
+    val timeoutValue = sqlContext.conf.broadcastTimeout
     if (timeoutValue < 0) {
       Duration.Inf
     } else {

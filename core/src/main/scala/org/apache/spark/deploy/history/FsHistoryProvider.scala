@@ -173,20 +173,10 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       val logInfos = statusList
         .filter { entry =>
           try {
-            val isFinishedApplication =
-              if (isLegacyLogDirectory(entry)) {
-                fs.exists(new Path(entry.getPath(), APPLICATION_COMPLETE))
-              } else {
-                !entry.getPath().getName().endsWith(EventLoggingListener.IN_PROGRESS)
-              }
-
-            if (isFinishedApplication) {
-              val modTime = getModificationTime(entry)
-              newLastModifiedTime = math.max(newLastModifiedTime, modTime)
-              modTime >= lastModifiedTime
-            } else {
-              false
-            }
+            getModificationTime(entry).map { time =>
+              newLastModifiedTime = math.max(newLastModifiedTime, time)
+              time >= lastModifiedTime
+            }.getOrElse(false)
           } catch {
             case e: AccessControlException =>
               // Do not use "logInfo" since these messages can get pretty noisy if printed on
@@ -204,7 +194,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
               None
           }
         }
-        .sortBy { info => -info.endTime }
+        .sortWith(compareAppInfo)
 
       lastModifiedTime = newLastModifiedTime
 
@@ -214,7 +204,9 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       if (!logInfos.isEmpty) {
         val newApps = new mutable.LinkedHashMap[String, FsApplicationHistoryInfo]()
         def addIfAbsent(info: FsApplicationHistoryInfo) = {
-          if (!newApps.contains(info.id)) {
+          if (!newApps.contains(info.id) ||
+              newApps(info.id).logPath.endsWith(EventLoggingListener.IN_PROGRESS) &&
+              !info.logPath.endsWith(EventLoggingListener.IN_PROGRESS)) {
             newApps += (info.id -> info)
           }
         }
@@ -222,7 +214,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         val newIterator = logInfos.iterator.buffered
         val oldIterator = applications.values.iterator.buffered
         while (newIterator.hasNext && oldIterator.hasNext) {
-          if (newIterator.head.endTime > oldIterator.head.endTime) {
+          if (compareAppInfo(newIterator.head, oldIterator.head)) {
             addIfAbsent(newIterator.next)
           } else {
             addIfAbsent(oldIterator.next)
@@ -236,6 +228,17 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     } catch {
       case e: Exception => logError("Exception in checking for event log updates", e)
     }
+  }
+
+  /**
+   * Comparison function that defines the sort order for the application listing.
+   *
+   * @return Whether `i1` should precede `i2`.
+   */
+  private def compareAppInfo(
+      i1: FsApplicationHistoryInfo,
+      i2: FsApplicationHistoryInfo): Boolean = {
+    if (i1.endTime != i2.endTime) i1.endTime >= i2.endTime else i1.startTime >= i2.startTime
   }
 
   /**
@@ -260,8 +263,9 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         appListener.appName.getOrElse(NOT_STARTED),
         appListener.startTime.getOrElse(-1L),
         appListener.endTime.getOrElse(-1L),
-        getModificationTime(eventLog),
-        appListener.sparkUser.getOrElse(NOT_STARTED))
+        getModificationTime(eventLog).get,
+        appListener.sparkUser.getOrElse(NOT_STARTED),
+        isApplicationCompleted(eventLog))
     } finally {
       logInput.close()
     }
@@ -318,16 +322,32 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
    */
   private def isLegacyLogDirectory(entry: FileStatus): Boolean = entry.isDir()
 
-  private def getModificationTime(fsEntry: FileStatus): Long = {
-    if (fsEntry.isDir) {
-      fs.listStatus(fsEntry.getPath).map(_.getModificationTime()).max
+  /**
+   * Returns the modification time of the given event log. If the status points at an empty
+   * directory, `None` is returned, indicating that there isn't an event log at that location.
+   */
+  private def getModificationTime(fsEntry: FileStatus): Option[Long] = {
+    if (isLegacyLogDirectory(fsEntry)) {
+      val statusList = fs.listStatus(fsEntry.getPath)
+      if (!statusList.isEmpty) Some(statusList.map(_.getModificationTime()).max) else None
     } else {
-      fsEntry.getModificationTime()
+      Some(fsEntry.getModificationTime())
     }
   }
 
   /** Returns the system's mononotically increasing time. */
   private def getMonotonicTimeMs(): Long = System.nanoTime() / (1000 * 1000)
+
+  /**
+   * Return true when the application has completed.
+   */
+  private def isApplicationCompleted(entry: FileStatus): Boolean = {
+    if (isLegacyLogDirectory(entry)) {
+      fs.exists(new Path(entry.getPath(), APPLICATION_COMPLETE))
+    } else {
+      !entry.getPath().getName().endsWith(EventLoggingListener.IN_PROGRESS)
+    }
+  }
 
 }
 
@@ -342,5 +362,6 @@ private class FsApplicationHistoryInfo(
     startTime: Long,
     endTime: Long,
     lastUpdated: Long,
-    sparkUser: String)
-  extends ApplicationHistoryInfo(id, name, startTime, endTime, lastUpdated, sparkUser)
+    sparkUser: String,
+    completed: Boolean = true)
+  extends ApplicationHistoryInfo(id, name, startTime, endTime, lastUpdated, sparkUser, completed)

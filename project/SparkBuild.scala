@@ -44,8 +44,9 @@ object BuildCommons {
     sparkKinesisAsl) = Seq("yarn", "yarn-stable", "java8-tests", "ganglia-lgpl",
     "kinesis-asl").map(ProjectRef(buildLocation, _))
 
-  val assemblyProjects@Seq(assembly, examples, networkYarn) =
-    Seq("assembly", "examples", "network-yarn").map(ProjectRef(buildLocation, _))
+  val assemblyProjects@Seq(assembly, examples, networkYarn, streamingKafkaAssembly) =
+    Seq("assembly", "examples", "network-yarn", "streaming-kafka-assembly")
+      .map(ProjectRef(buildLocation, _))
 
   val tools = ProjectRef(buildLocation, "tools")
   // Root project.
@@ -114,17 +115,6 @@ object SparkBuild extends PomBuild {
 
   override val userPropertiesMap = System.getProperties.toMap
 
-  // Handle case where hadoop.version is set via profile.
-  // Needed only because we read back this property in sbt
-  // when we create the assembly jar.
-  val pom = loadEffectivePom(new File("pom.xml"),
-    profiles = profiles,
-    userProps = userPropertiesMap)
-  if (System.getProperty("hadoop.version") == null) {
-    System.setProperty("hadoop.version",
-      pom.getProperties.get("hadoop.version").asInstanceOf[String])
-  }
-
   lazy val MavenCompile = config("m2r") extend(Compile)
   lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
 
@@ -166,7 +156,7 @@ object SparkBuild extends PomBuild {
 
   // TODO: Add Sql to mima checks
   allProjects.filterNot(x => Seq(spark, sql, hive, hiveThriftServer, catalyst, repl,
-    streamingFlumeSink, networkCommon, networkShuffle, networkYarn).contains(x)).foreach {
+    networkCommon, networkShuffle, networkYarn).contains(x)).foreach {
       x => enable(MimaBuild.mimaSettings(sparkHome, x))(x)
     }
 
@@ -186,6 +176,29 @@ object SparkBuild extends PomBuild {
   enable(Hive.settings)(hive)
 
   enable(Flume.settings)(streamingFlumeSink)
+
+
+  /**
+   * Adds the ability to run the spark shell directly from SBT without building an assembly
+   * jar.
+   *
+   * Usage: `build/sbt sparkShell`
+   */
+  val sparkShell = taskKey[Unit]("start a spark-shell.")
+
+  enable(Seq(
+    connectInput in run := true,
+    fork := true,
+    outputStrategy in run := Some (StdoutOutput),
+
+    javaOptions ++= Seq("-Xmx2G", "-XX:MaxPermSize=1g"),
+
+    sparkShell := {
+      (runMain in Compile).toTask(" org.apache.spark.repl.Main -usejavacp").value
+    }
+  ))(assembly)
+
+  enable(Seq(sparkShell := sparkShell in "assembly"))(spark)
 
   // TODO: move this to its upstream project.
   override def projectDefinitions(baseDirectory: File): Seq[Project] = {
@@ -254,10 +267,11 @@ object SQL {
         |import org.apache.spark.sql.catalyst.expressions._
         |import org.apache.spark.sql.catalyst.plans.logical._
         |import org.apache.spark.sql.catalyst.rules._
-        |import org.apache.spark.sql.catalyst.types._
         |import org.apache.spark.sql.catalyst.util._
+        |import org.apache.spark.sql.Dsl._
         |import org.apache.spark.sql.execution
         |import org.apache.spark.sql.test.TestSQLContext._
+        |import org.apache.spark.sql.types._
         |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin,
     cleanupCommands in console := "sparkContext.stop()"
   )
@@ -284,11 +298,12 @@ object Hive {
         |import org.apache.spark.sql.catalyst.expressions._
         |import org.apache.spark.sql.catalyst.plans.logical._
         |import org.apache.spark.sql.catalyst.rules._
-        |import org.apache.spark.sql.catalyst.types._
         |import org.apache.spark.sql.catalyst.util._
+        |import org.apache.spark.sql.Dsl._
         |import org.apache.spark.sql.execution
         |import org.apache.spark.sql.hive._
         |import org.apache.spark.sql.hive.test.TestHive._
+        |import org.apache.spark.sql.types._
         |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin,
     cleanupCommands in console := "sparkContext.stop()",
     // Some of our log4j jars make it impossible to submit jobs from this JVM to Hive Map/Reduce
@@ -303,14 +318,20 @@ object Assembly {
   import sbtassembly.Plugin._
   import AssemblyKeys._
 
+  val hadoopVersion = taskKey[String]("The version of hadoop that spark is compiled against.")
+
   lazy val settings = assemblySettings ++ Seq(
     test in assembly := {},
-    jarName in assembly <<= (version, moduleName) map { (v, mName) =>
-      if (mName.contains("network-yarn")) {
-        // This must match the same name used in maven (see network/yarn/pom.xml)
-        "spark-" + v + "-yarn-shuffle.jar"
+    hadoopVersion := {
+      sys.props.get("hadoop.version")
+        .getOrElse(SbtPomKeys.effectivePom.value.getProperties.get("hadoop.version").asInstanceOf[String])
+    },
+    jarName in assembly <<= (version, moduleName, hadoopVersion) map { (v, mName, hv) =>
+      if (mName.contains("streaming-kafka-assembly")) {
+        // This must match the same name used in maven (see external/kafka-assembly/pom.xml)
+        s"${mName}-${v}.jar"
       } else {
-        mName + "-" + v + "-hadoop" + System.getProperty("hadoop.version") + ".jar"
+        s"${mName}-${v}-hadoop${hv}.jar"
       }
     },
     mergeStrategy in assembly := {
@@ -323,7 +344,6 @@ object Assembly {
       case _                                                   => MergeStrategy.first
     }
   )
-
 }
 
 object Unidoc {
@@ -378,7 +398,10 @@ object Unidoc {
       ),
       "-group", "Spark SQL", packageList("sql.api.java", "sql.api.java.types", "sql.hive.api.java"),
       "-noqualifier", "java.lang"
-    )
+    ),
+
+    // Group similar methods together based on the @group annotation.
+    scalacOptions in (ScalaUnidoc, unidoc) ++= Seq("-groups")
   )
 }
 
@@ -388,6 +411,10 @@ object TestSettings {
   lazy val settings = Seq (
     // Fork new JVMs for tests and set Java options for those
     fork := true,
+    // Setting SPARK_DIST_CLASSPATH is a simple way to make sure any child processes
+    // launched by the tests have access to the correct test-time classpath.
+    envVars in Test += ("SPARK_DIST_CLASSPATH" ->
+      (fullClasspath in Test).value.files.map(_.getAbsolutePath).mkString(":").stripSuffix(":")),
     javaOptions in Test += "-Dspark.test.home=" + sparkHome,
     javaOptions in Test += "-Dspark.testing=1",
     javaOptions in Test += "-Dspark.port.maxRetries=100",
@@ -400,10 +427,6 @@ object TestSettings {
     javaOptions in Test += "-ea",
     javaOptions in Test ++= "-Xmx3g -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g"
       .split(" ").toSeq,
-    // This places test scope jars on the classpath of executors during tests.
-    javaOptions in Test +=
-      "-Dspark.executor.extraClassPath=" + (fullClasspath in Test).value.files.
-      map(_.getAbsolutePath).mkString(":").stripSuffix(":"),
     javaOptions += "-Xmx3g",
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),

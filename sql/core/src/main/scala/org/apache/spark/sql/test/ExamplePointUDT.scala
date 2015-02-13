@@ -20,9 +20,7 @@ package org.apache.spark.sql.test
 import java.util
 
 import scala.collection.JavaConverters._
-
-import org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 
 /**
  * An example class to demonstrate UDT in Scala, Java, and Python.
@@ -39,7 +37,7 @@ private[sql] class ExamplePointUDT extends UserDefinedType[ExamplePoint] {
 
   override def sqlType: DataType = ArrayType(DoubleType, false)
 
-  override def pyUDT: String = "pyspark.tests.ExamplePointUDT"
+  override def pyUDT: String = "pyspark.sql.tests.ExamplePointUDT"
 
   override def serialize(obj: Any): Seq[Double] = {
     obj match {

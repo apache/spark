@@ -100,10 +100,7 @@ case class InsertIntoHiveTable(
       val wrappers = fieldOIs.map(wrapperFor)
       val outputData = new Array[Any](fieldOIs.length)
 
-      // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
-      // around by taking a mod. We expect that no task will be attempted 2 billion times.
-      val attemptNumber = (context.attemptId % Int.MaxValue).toInt
-      writerContainer.executorSideSetup(context.stageId, context.partitionId, attemptNumber)
+      writerContainer.executorSideSetup(context.stageId, context.partitionId, context.attemptNumber)
 
       iterator.foreach { row =>
         var i = 0
@@ -242,7 +239,7 @@ case class InsertIntoHiveTable(
     }
 
     // Invalidate the cache.
-    sqlContext.invalidateCache(table)
+    sqlContext.cacheManager.invalidateCache(table)
 
     // It would be nice to just return the childRdd unchanged so insert operations could be chained,
     // however for now we return an empty list to simplify compatibility checks with hive, which

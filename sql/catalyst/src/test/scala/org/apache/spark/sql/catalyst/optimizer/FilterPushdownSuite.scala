@@ -18,23 +18,26 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.analysis
-import org.apache.spark.sql.catalyst.analysis.EliminateAnalysisOperators
+import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
+import org.apache.spark.sql.catalyst.expressions.Explode
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{PlanTest, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.types.IntegerType
 
 class FilterPushdownSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Subqueries", Once,
-        EliminateAnalysisOperators) ::
+        EliminateSubQueries) ::
       Batch("Filter Pushdown", Once,
         CombineFilters,
         PushPredicateThroughProject,
-        PushPredicateThroughJoin) :: Nil
+        PushPredicateThroughJoin,
+        PushPredicateThroughGenerate) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
@@ -348,7 +351,7 @@ class FilterPushdownSuite extends PlanTest {
     }
     val optimized = Optimize(originalQuery.analyze)
 
-    comparePlans(analysis.EliminateAnalysisOperators(originalQuery.analyze), optimized)
+    comparePlans(analysis.EliminateSubQueries(originalQuery.analyze), optimized)
   }
 
   test("joins: conjunctive predicates") {
@@ -367,7 +370,7 @@ class FilterPushdownSuite extends PlanTest {
       left.join(right, condition = Some("x.b".attr === "y.b".attr))
         .analyze
 
-    comparePlans(optimized, analysis.EliminateAnalysisOperators(correctAnswer))
+    comparePlans(optimized, analysis.EliminateSubQueries(correctAnswer))
   }
 
   test("joins: conjunctive predicates #2") {
@@ -386,7 +389,7 @@ class FilterPushdownSuite extends PlanTest {
       left.join(right, condition = Some("x.b".attr === "y.b".attr))
         .analyze
 
-    comparePlans(optimized, analysis.EliminateAnalysisOperators(correctAnswer))
+    comparePlans(optimized, analysis.EliminateSubQueries(correctAnswer))
   }
 
   test("joins: conjunctive predicates #3") {
@@ -409,6 +412,64 @@ class FilterPushdownSuite extends PlanTest {
           condition = Some("z.a".attr === "x.b".attr))
         .analyze
 
-    comparePlans(optimized, analysis.EliminateAnalysisOperators(correctAnswer))
+    comparePlans(optimized, analysis.EliminateSubQueries(correctAnswer))
+  }
+
+  val testRelationWithArrayType = LocalRelation('a.int, 'b.int, 'c_arr.array(IntegerType))
+
+  test("generate: predicate referenced no generated column") {
+    val originalQuery = {
+      testRelationWithArrayType
+        .generate(Explode(Seq("c"), 'c_arr), true, false, Some("arr"))
+        .where(('b >= 5) && ('a > 6))
+    }
+    val optimized = Optimize(originalQuery.analyze)
+    val correctAnswer = {
+      testRelationWithArrayType
+        .where(('b >= 5) && ('a > 6))
+        .generate(Explode(Seq("c"), 'c_arr), true, false, Some("arr")).analyze
+    }
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("generate: part of conjuncts referenced generated column") {
+    val generator = Explode(Seq("c"), 'c_arr)
+    val originalQuery = {
+      testRelationWithArrayType
+        .generate(generator, true, false, Some("arr"))
+        .where(('b >= 5) && ('c > 6))
+    }
+    val optimized = Optimize(originalQuery.analyze)
+    val referenceResult = {
+      testRelationWithArrayType
+        .where('b >= 5)
+        .generate(generator, true, false, Some("arr"))
+        .where('c > 6).analyze
+    }
+
+    // Since newly generated columns get different ids every time being analyzed
+    // e.g. comparePlans(originalQuery.analyze, originalQuery.analyze) fails.
+    // So we check operators manually here.
+    // Filter("c" > 6)
+    assertResult(classOf[Filter])(optimized.getClass)
+    assertResult(1)(optimized.asInstanceOf[Filter].condition.references.size)
+    assertResult("c"){
+      optimized.asInstanceOf[Filter].condition.references.toSeq(0).name
+    }
+
+    // the rest part
+    comparePlans(optimized.children(0), referenceResult.children(0))
+  }
+
+  test("generate: all conjuncts referenced generated column") {
+    val originalQuery = {
+      testRelationWithArrayType
+        .generate(Explode(Seq("c"), 'c_arr), true, false, Some("arr"))
+        .where(('c > 6) || ('b > 5)).analyze
+    }
+    val optimized = Optimize(originalQuery)
+
+    comparePlans(optimized, originalQuery)
   }
 }

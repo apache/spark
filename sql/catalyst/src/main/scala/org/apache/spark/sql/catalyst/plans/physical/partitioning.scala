@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.physical
 
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Expression, Row, SortOrder}
-import org.apache.spark.sql.catalyst.types.IntegerType
+import org.apache.spark.sql.types.IntegerType
 
 /**
  * Specifies how tuples that share common expressions will be distributed when a query is executed

@@ -22,12 +22,13 @@ import java.nio.ByteBuffer
 import scala.collection.JavaConversions._
 
 import org.apache.mesos.protobuf.ByteString
-import org.apache.mesos.{Executor => MesosExecutor, ExecutorDriver, MesosExecutorDriver, MesosNativeLibrary}
+import org.apache.mesos.{Executor => MesosExecutor, ExecutorDriver, MesosExecutorDriver}
 import org.apache.mesos.Protos.{TaskStatus => MesosTaskStatus, _}
 
 import org.apache.spark.{Logging, TaskState, SparkConf, SparkEnv}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.scheduler.cluster.mesos.{MesosTaskLaunchData}
 import org.apache.spark.util.{SignalLogger, Utils}
 
 private[spark] class MesosExecutorBackend
@@ -77,10 +78,14 @@ private[spark] class MesosExecutorBackend
 
   override def launchTask(d: ExecutorDriver, taskInfo: TaskInfo) {
     val taskId = taskInfo.getTaskId.getValue.toLong
+    val taskData = MesosTaskLaunchData.fromByteString(taskInfo.getData)
     if (executor == null) {
       logError("Received launchTask but executor was null")
     } else {
-      executor.launchTask(this, taskId, taskInfo.getName, taskInfo.getData.asReadOnlyByteBuffer)
+      SparkHadoopUtil.get.runAsSparkUser { () =>
+        executor.launchTask(this, taskId = taskId, attemptNumber = taskData.attemptNumber,
+          taskInfo.getName, taskData.serializedTask)
+      }
     }
   }
 
@@ -112,11 +117,8 @@ private[spark] class MesosExecutorBackend
 private[spark] object MesosExecutorBackend extends Logging {
   def main(args: Array[String]) {
     SignalLogger.register(log)
-    SparkHadoopUtil.get.runAsSparkUser { () =>
-        MesosNativeLibrary.load()
-        // Create a new Executor and start it running
-        val runner = new MesosExecutorBackend()
-        new MesosExecutorDriver(runner).run()
-    }
+    // Create a new Executor and start it running
+    val runner = new MesosExecutorBackend()
+    new MesosExecutorDriver(runner).run()
   }
 }

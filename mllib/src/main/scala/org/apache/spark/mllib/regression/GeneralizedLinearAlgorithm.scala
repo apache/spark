@@ -99,12 +99,34 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   protected var validateData: Boolean = true
 
   /**
+   * In `GeneralizedLinearModel`, only single linear predictor is allowed for both weights
+   * and intercept. However, for multinomial logistic regression, with K possible outcomes,
+   * we are training K-1 independent binary logistic regression models which requires K-1 sets
+   * of linear predictor.
+   *
+   * As a result, the workaround here is if more than two sets of linear predictors are needed,
+   * we construct bigger `weights` vector which can hold both weights and intercepts.
+   * If the intercepts are added, the dimension of `weights` will be
+   * (numOfLinearPredictor) * (numFeatures + 1) . If the intercepts are not added,
+   * the dimension of `weights` will be (numOfLinearPredictor) * numFeatures.
+   *
+   * Thus, the intercepts will be encapsulated into weights, and we leave the value of intercept
+   * in GeneralizedLinearModel as zero.
+   */
+  protected var numOfLinearPredictor: Int = 1
+
+  /**
    * Whether to perform feature scaling before model training to reduce the condition numbers
    * which can significantly help the optimizer converging faster. The scaling correction will be
    * translated back to resulting model weights, so it's transparent to users.
    * Note: This technique is used in both libsvm and glmnet packages. Default false.
    */
   private var useFeatureScaling = false
+
+  /**
+   * The dimension of training features.
+   */
+  protected var numFeatures: Int = 0
 
   /**
    * Set if the algorithm should use feature scaling to improve the convergence during optimization.
@@ -141,8 +163,28 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    * RDD of LabeledPoint entries.
    */
   def run(input: RDD[LabeledPoint]): M = {
-    val numFeatures: Int = input.first().features.size
-    val initialWeights = Vectors.dense(new Array[Double](numFeatures))
+    numFeatures = input.first().features.size
+
+    /**
+     * When `numOfLinearPredictor > 1`, the intercepts are encapsulated into weights,
+     * so the `weights` will include the intercepts. When `numOfLinearPredictor == 1`,
+     * the intercept will be stored as separated value in `GeneralizedLinearModel`.
+     * This will result in different behaviors since when `numOfLinearPredictor == 1`,
+     * users have no way to set the initial intercept, while in the other case, users
+     * can set the intercepts as part of weights.
+     *
+     * TODO: See if we can deprecate `intercept` in `GeneralizedLinearModel`, and always
+     * have the intercept as part of weights to have consistent design.
+     */
+    val initialWeights = {
+      if (numOfLinearPredictor == 1) {
+        Vectors.dense(new Array[Double](numFeatures))
+      } else if (addIntercept) {
+        Vectors.dense(new Array[Double]((numFeatures + 1) * numOfLinearPredictor))
+      } else {
+        Vectors.dense(new Array[Double](numFeatures * numOfLinearPredictor))
+      }
+    }
     run(input, initialWeights)
   }
 
@@ -151,6 +193,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    * of LabeledPoint entries starting from the initial weights provided.
    */
   def run(input: RDD[LabeledPoint], initialWeights: Vector): M = {
+    numFeatures = input.first().features.size
 
     if (input.getStorageLevel == StorageLevel.NONE) {
       logWarning("The input data is not directly cached, which may hurt performance if its"
@@ -182,14 +225,14 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
      * Currently, it's only enabled in LogisticRegressionWithLBFGS
      */
     val scaler = if (useFeatureScaling) {
-      (new StandardScaler).fit(input.map(x => x.features))
+      (new StandardScaler(withStd = true, withMean = false)).fit(input.map(x => x.features))
     } else {
       null
     }
 
     // Prepend an extra variable consisting of all 1.0's for the intercept.
     val data = if (addIntercept) {
-      if(useFeatureScaling) {
+      if (useFeatureScaling) {
         input.map(labeledPoint =>
           (labeledPoint.label, appendBias(scaler.transform(labeledPoint.features))))
       } else {
@@ -203,21 +246,31 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
       }
     }
 
-    val initialWeightsWithIntercept = if (addIntercept) {
+    /**
+     * TODO: For better convergence, in logistic regression, the intercepts should be computed
+     * from the prior probability distribution of the outcomes; for linear regression,
+     * the intercept should be set as the average of response.
+     */
+    val initialWeightsWithIntercept = if (addIntercept && numOfLinearPredictor == 1) {
       appendBias(initialWeights)
     } else {
+      /** If `numOfLinearPredictor > 1`, initialWeights already contains intercepts. */
       initialWeights
     }
 
     val weightsWithIntercept = optimizer.optimize(data, initialWeightsWithIntercept)
 
-    val intercept = if (addIntercept) weightsWithIntercept(weightsWithIntercept.size - 1) else 0.0
-    var weights =
-      if (addIntercept) {
-        Vectors.dense(weightsWithIntercept.toArray.slice(0, weightsWithIntercept.size - 1))
-      } else {
-        weightsWithIntercept
-      }
+    val intercept = if (addIntercept && numOfLinearPredictor == 1) {
+      weightsWithIntercept(weightsWithIntercept.size - 1)
+    } else {
+      0.0
+    }
+
+    var weights = if (addIntercept && numOfLinearPredictor == 1) {
+      Vectors.dense(weightsWithIntercept.toArray.slice(0, weightsWithIntercept.size - 1))
+    } else {
+      weightsWithIntercept
+    }
 
     /**
      * The weights and intercept are trained in the scaled space; we're converting them back to
@@ -228,7 +281,29 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
      * is the coefficient in the original space, and v_i is the variance of the column i.
      */
     if (useFeatureScaling) {
-      weights = scaler.transform(weights)
+      if (numOfLinearPredictor == 1) {
+        weights = scaler.transform(weights)
+      } else {
+        /**
+         * For `numOfLinearPredictor > 1`, we have to transform the weights back to the original
+         * scale for each set of linear predictor. Note that the intercepts have to be explicitly
+         * excluded when `addIntercept == true` since the intercepts are part of weights now.
+         */
+        var i = 0
+        val n = weights.size / numOfLinearPredictor
+        val weightsArray = weights.toArray
+        while (i < numOfLinearPredictor) {
+          val start = i * n
+          val end = (i + 1) * n - { if (addIntercept) 1 else 0 }
+
+          val partialWeightsArray = scaler.transform(
+            Vectors.dense(weightsArray.slice(start, end))).toArray
+
+          System.arraycopy(partialWeightsArray, 0, weightsArray, start, partialWeightsArray.size)
+          i += 1
+        }
+        weights = Vectors.dense(weightsArray)
+      }
     }
 
     // Warn at the end of the run as well, for increased visibility.

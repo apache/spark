@@ -19,10 +19,14 @@ package org.apache.spark.sql.hive
 
 import java.util.{ArrayList => JArrayList}
 import java.util.Properties
+import java.rmi.server.UID
+
+import scala.collection.JavaConversions._
+import scala.language.implicitConversions
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.io.NullWritable
+import org.apache.hadoop.io.{NullWritable, Writable}
 import org.apache.hadoop.mapred.InputFormat
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.common.`type`.{HiveDecimal}
@@ -36,13 +40,11 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.{HiveDecimalObjec
 import org.apache.hadoop.hive.serde2.objectinspector.{PrimitiveObjectInspector, ObjectInspector}
 import org.apache.hadoop.hive.serde2.{Deserializer, ColumnProjectionUtils}
 import org.apache.hadoop.hive.serde2.{io => hiveIo}
+import org.apache.hadoop.hive.serde2.avro.AvroGenericRecordWritable
 import org.apache.hadoop.{io => hadoopIo}
-import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.types.DecimalType
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
 
-import scala.collection.JavaConversions._
-import scala.language.implicitConversions
+import org.apache.spark.Logging
+import org.apache.spark.sql.types.{Decimal, DecimalType}
 
 
 /**
@@ -53,7 +55,7 @@ import scala.language.implicitConversions
  *
  * @param functionClassName UDF class name
  */
-class HiveFunctionWrapper(var functionClassName: String) extends java.io.Externalizable {
+case class HiveFunctionWrapper(var functionClassName: String) extends java.io.Externalizable {
   // for Serialization
   def this() = this(null)
 
@@ -261,7 +263,7 @@ private[hive] object HiveShim {
     }
 
   def getDateWritable(value: Any): hiveIo.DateWritable =
-    if (value == null) null else new hiveIo.DateWritable(value.asInstanceOf[java.sql.Date])
+    if (value == null) null else new hiveIo.DateWritable(value.asInstanceOf[Int])
 
   def getTimestampWritable(value: Any): hiveIo.TimestampWritable =
     if (value == null) {
@@ -276,7 +278,7 @@ private[hive] object HiveShim {
     } else {
       // TODO precise, scale?
       new hiveIo.HiveDecimalWritable(
-        HiveShim.createDecimal(value.asInstanceOf[Decimal].toBigDecimal.underlying()))
+        HiveShim.createDecimal(value.asInstanceOf[Decimal].toJavaBigDecimal))
     }
 
   def getPrimitiveNullWritable: NullWritable = NullWritable.get()
@@ -395,10 +397,23 @@ private[hive] object HiveShim {
       Decimal(hdoi.getPrimitiveJavaObject(data).bigDecimalValue(), hdoi.precision(), hdoi.scale())
     }
   }
+ 
+  /*
+   * Bug introduced in hive-0.13. AvroGenericRecordWritable has a member recordReaderID that
+   * is needed to initialize before serialization.
+   */
+  def prepareWritable(w: Writable): Writable = {
+    w match {
+      case w: AvroGenericRecordWritable =>
+        w.setRecordReaderID(new UID())
+      case _ =>
+    }
+    w
+  }
 }
 
 /*
- * Bug introdiced in hive-0.13. FileSinkDesc is serilizable, but its member path is not.
+ * Bug introduced in hive-0.13. FileSinkDesc is serilizable, but its member path is not.
  * Fix it through wrapper.
  */
 class ShimFileSinkDesc(var dir: String, var tableInfo: TableDesc, var compressed: Boolean)

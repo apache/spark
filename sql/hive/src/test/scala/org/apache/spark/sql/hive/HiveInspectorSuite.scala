@@ -17,21 +17,19 @@
 
 package org.apache.spark.sql.hive
 
-import java.sql.Date
 import java.util
-
-import org.apache.hadoop.hive.serde2.io.DoubleWritable
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
-import org.scalatest.FunSuite
+import java.util.{Locale, TimeZone}
 
 import org.apache.hadoop.hive.ql.udf.UDAFPercentile
-import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, StructObjectInspector, ObjectInspectorFactory}
+import org.apache.hadoop.hive.serde2.io.DoubleWritable
+import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory.ObjectInspectorOptions
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
 import org.apache.hadoop.io.LongWritable
+import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.expressions.{Literal, Row}
+import org.apache.spark.sql.types._
 
 class HiveInspectorSuite extends FunSuite with HiveInspectors {
   test("Test wrap SettableStructObjectInspector") {
@@ -63,6 +61,11 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
       .get())
   }
 
+  // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
+  TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+  // Add Locale setting
+  Locale.setDefault(Locale.US)
+
   val data =
     Literal(true) ::
     Literal(0.asInstanceOf[Byte]) ::
@@ -72,7 +75,7 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
     Literal(0.asInstanceOf[Float]) ::
     Literal(0.asInstanceOf[Double]) ::
     Literal("0") ::
-    Literal(new Date(2014, 9, 23)) ::
+    Literal(new java.sql.Date(114, 8, 23)) ::
     Literal(Decimal(BigDecimal(123.123))) ::
     Literal(new java.sql.Timestamp(123123)) ::
     Literal(Array[Byte](1,2,3)) ::
@@ -87,7 +90,6 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
   val row = data.map(_.eval(null))
   val dataTypes = data.map(_.dataType)
 
-  import scala.collection.JavaConversions._
   def toWritableInspector(dataType: DataType): ObjectInspector = dataType match {
     case ArrayType(tpe, _) =>
       ObjectInspectorFactory.getStandardListObjectInspector(toWritableInspector(tpe))
@@ -109,7 +111,8 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
     case DecimalType() => PrimitiveObjectInspectorFactory.writableHiveDecimalObjectInspector
     case StructType(fields) =>
       ObjectInspectorFactory.getStandardStructObjectInspector(
-        fields.map(f => f.name), fields.map(f => toWritableInspector(f.dataType)))
+        java.util.Arrays.asList(fields.map(f => f.name) :_*),
+        java.util.Arrays.asList(fields.map(f => toWritableInspector(f.dataType)) :_*))
   }
 
   def checkDataType(dt1: Seq[DataType], dt2: Seq[DataType]): Unit = {
@@ -121,11 +124,17 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
 
   def checkValues(row1: Seq[Any], row2: Seq[Any]): Unit = {
     row1.zip(row2).map {
-      case (r1, r2) => checkValues(r1, r2)
+      case (r1, r2) => checkValue(r1, r2)
     }
   }
 
-  def checkValues(v1: Any, v2: Any): Unit = {
+  def checkValues(row1: Seq[Any], row2: Row): Unit = {
+    row1.zip(row2.toSeq).map {
+      case (r1, r2) => checkValue(r1, r2)
+    }
+  }
+
+  def checkValue(v1: Any, v2: Any): Unit = {
     (v1, v2) match {
       case (r1: Decimal, r2: Decimal) =>
         // Ignore the Decimal precision
@@ -133,7 +142,6 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
       case (r1: Array[Byte], r2: Array[Byte])
         if r1 != null && r2 != null && r1.length == r2.length =>
         r1.zip(r2).map { case (b1, b2) => assert(b1 === b2) }
-      case (r1: Date, r2: Date) => assert(r1.compareTo(r2) === 0)
       case (r1, r2) => assert(r1 === r2)
     }
   }
@@ -194,27 +202,27 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
       case (t, idx) => StructField(s"c_$idx", t)
     })
 
-    checkValues(row, unwrap(wrap(row, toInspector(dt)), toInspector(dt)).asInstanceOf[Row])
-    checkValues(null, unwrap(wrap(null, toInspector(dt)), toInspector(dt)))
+    checkValues(row, unwrap(wrap(Row.fromSeq(row), toInspector(dt)), toInspector(dt)).asInstanceOf[Row])
+    checkValue(null, unwrap(wrap(null, toInspector(dt)), toInspector(dt)))
   }
 
   test("wrap / unwrap Array Type") {
     val dt = ArrayType(dataTypes(0))
 
     val d = row(0) :: row(0) :: Nil
-    checkValues(d, unwrap(wrap(d, toInspector(dt)), toInspector(dt)))
-    checkValues(null, unwrap(wrap(null, toInspector(dt)), toInspector(dt)))
-    checkValues(d, unwrap(wrap(d, toInspector(Literal(d, dt))), toInspector(Literal(d, dt))))
-    checkValues(d, unwrap(wrap(null, toInspector(Literal(d, dt))), toInspector(Literal(d, dt))))
+    checkValue(d, unwrap(wrap(d, toInspector(dt)), toInspector(dt)))
+    checkValue(null, unwrap(wrap(null, toInspector(dt)), toInspector(dt)))
+    checkValue(d, unwrap(wrap(d, toInspector(Literal(d, dt))), toInspector(Literal(d, dt))))
+    checkValue(d, unwrap(wrap(null, toInspector(Literal(d, dt))), toInspector(Literal(d, dt))))
   }
 
   test("wrap / unwrap Map Type") {
     val dt = MapType(dataTypes(0), dataTypes(1))
 
     val d = Map(row(0) -> row(1))
-    checkValues(d, unwrap(wrap(d, toInspector(dt)), toInspector(dt)))
-    checkValues(null, unwrap(wrap(null, toInspector(dt)), toInspector(dt)))
-    checkValues(d, unwrap(wrap(d, toInspector(Literal(d, dt))), toInspector(Literal(d, dt))))
-    checkValues(d, unwrap(wrap(null, toInspector(Literal(d, dt))), toInspector(Literal(d, dt))))
+    checkValue(d, unwrap(wrap(d, toInspector(dt)), toInspector(dt)))
+    checkValue(null, unwrap(wrap(null, toInspector(dt)), toInspector(dt)))
+    checkValue(d, unwrap(wrap(d, toInspector(Literal(d, dt))), toInspector(Literal(d, dt))))
+    checkValue(d, unwrap(wrap(null, toInspector(Literal(d, dt))), toInspector(Literal(d, dt))))
   }
 }

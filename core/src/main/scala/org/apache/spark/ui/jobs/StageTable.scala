@@ -112,9 +112,8 @@ private[ui] class StageTableBase(
       stageData <- listener.stageIdToData.get((s.stageId, s.attemptId))
       desc <- stageData.description
     } yield {
-      <div><em>{desc}</em></div>
+      <span class="description-input" title={desc}>{desc}</span>
     }
-
     <div>{stageDesc.getOrElse("")} {killLink} {nameLink} {details}</div>
   }
 
@@ -139,7 +138,7 @@ private[ui] class StageTableBase(
     val inputReadWithUnit = if (inputRead > 0) Utils.bytesToString(inputRead) else ""
     val outputWrite = stageData.outputBytes
     val outputWriteWithUnit = if (outputWrite > 0) Utils.bytesToString(outputWrite) else ""
-    val shuffleRead = stageData.shuffleReadBytes
+    val shuffleRead = stageData.shuffleReadTotalBytes
     val shuffleReadWithUnit = if (shuffleRead > 0) Utils.bytesToString(shuffleRead) else ""
     val shuffleWrite = stageData.shuffleWriteBytes
     val shuffleWriteWithUnit = if (shuffleWrite > 0) Utils.bytesToString(shuffleWrite) else ""
