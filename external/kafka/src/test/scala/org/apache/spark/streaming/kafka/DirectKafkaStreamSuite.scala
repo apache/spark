@@ -208,7 +208,7 @@ class DirectKafkaStreamSuite extends KafkaStreamSuiteBase
   }
 
   // Test to verify the offset ranges can be recovered from the checkpoints
-  ignore("offset recovery") {
+  test("offset recovery") {
     val topic = "recovery"
     createTopic(topic)
     testDir = Utils.createTempDir()
