@@ -19,10 +19,12 @@ package org.apache.spark.sql
 
 import scala.annotation.tailrec
 import scala.language.implicitConversions
+import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.Dsl.lit
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{Subquery, Project, LogicalPlan}
+import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.plans.logical.{Subquery, Project, LogicalPlan, Generate}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGetField
 import org.apache.spark.sql.types._
 
@@ -574,6 +576,27 @@ trait Column extends DataFrame {
    * }}}
    */
   override def as(alias: Symbol): Column = exprToColumn(Alias(expr, alias.name)())
+
+  /**
+   * (Scala-specific) Explodes the column to zero or more rows by the provided function.
+   * {{{
+   *   val df = Seq(Tuple1("a b c"), Tuple1("d e")).toDataFrame("words")
+   *   val col = df("words")
+   *   col.explode("word"){words: String => words.split(" ")}
+   * }}}
+   */
+  def explode[A, B : TypeTag](
+      outputColumn: String)(
+      f: A => TraversableOnce[B]): Column = {
+    val dataType = ScalaReflection.schemaFor[B].dataType
+    val attributes = AttributeReference(outputColumn, dataType)() :: Nil
+    def rowFunction(row: Row) = {
+      f(row(0).asInstanceOf[A]).map(o => Row(ScalaReflection.convertToCatalyst(o, dataType)))
+    }
+    val generator = UserDefinedGenerator(attributes, rowFunction, expr :: Nil)
+    val plan = Generate(generator, join = true, outer = false, None, logicalPlan)
+    Column(sqlContext, Project(attributes, plan), attributes(0))
+  }
 
   /**
    * Casts the column to a different data type.
