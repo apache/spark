@@ -1374,6 +1374,71 @@ setMethod("top",
             takeOrderedElem(rdd, num, FALSE)
           })
 
+#' Fold an RDD using a given associative function and a neutral "zero value".
+#'
+#' Aggregate the elements of each partition, and then the results for all the
+#' partitions, using a given associative function and a neutral "zero value".
+#' 
+#' @param rdd An RDD.
+#' @param zeroValue A neutral "zero value".
+#' @param op An associative function for the folding operation.
+#' @return The folding result.
+#' @rdname fold
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, list(1, 2, 3, 4, 5))
+#' fold(rdd, 0, "+") # 15
+#'}
+setGeneric("fold", function(rdd, zeroValue, op) { standardGeneric("fold") })
+
+#' @rdname fold
+#' @aliases fold,RDD,RDD-method
+setMethod("fold",
+          signature(rdd = "RDD", zeroValue = "ANY", op = "ANY"),
+          function(rdd, zeroValue, op) {
+            aggregateRDD(rdd, zeroValue, op, op)
+          })
+
+#' Aggregate an RDD using the given combine functions and a neutral "zero value".
+#'
+#' Aggregate the elements of each partition, and then the results for all the
+#' partitions, using given combine functions and a neutral "zero value".
+#' 
+#' @param rdd An RDD.
+#' @param zeroValue A neutral "zero value".
+#' @param seqOp A function to aggregate the RDD elements. It may return a different
+#'              result type from the type of the RDD elements.
+#' @param combOp A function to aggregate results of seqOp.
+#' @return The aggregation result.
+#' @rdname aggregateRDD
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, list(1, 2, 3, 4))
+#' zeroValue <- list(0, 0)
+#' seqOp <- function(x, y) { list(x[[1]] + y, x[[2]] + 1) }
+#' combOp <- function(x, y) { list(x[[1]] + y[[1]], x[[2]] + y[[2]]) }
+#' aggregateRDD(rdd, zeroValue, seqOp, combOp) # list(10, 4)
+#'}
+setGeneric("aggregateRDD", function(rdd, zeroValue, seqOp, combOp) { standardGeneric("aggregateRDD") })
+
+#' @rdname aggregateRDD
+#' @aliases aggregateRDD,RDD,RDD-method
+setMethod("aggregateRDD",
+          signature(rdd = "RDD", zeroValue = "ANY", seqOp = "ANY", combOp = "ANY"),
+          function(rdd, zeroValue, seqOp, combOp) {        
+            partitionFunc <- function(part) {
+              Reduce(seqOp, part, zeroValue)
+            }
+            
+            partitionList <- collect(lapplyPartition(rdd, partitionFunc),
+                                     flatten = FALSE)
+            Reduce(combOp, partitionList, zeroValue)
+          })
+
 ############ Shuffle Functions ############
 
 #' Partition an RDD by key

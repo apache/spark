@@ -302,6 +302,28 @@ test_that("top() on RDDs", {
   expect_equal(actual, as.list(sort(unlist(l), decreasing = TRUE))[1:3])
 })
 
+test_that("fold() on RDDs", {
+  actual <- fold(rdd, 0, "+")
+  expect_equal(actual, Reduce("+", nums, 0))
+  
+  rdd <- parallelize(sc, list())
+  actual <- fold(rdd, 0, "+")
+  expect_equal(actual, 0)
+})
+
+test_that("aggregate() on RDDs", {
+  rdd <- parallelize(sc, list(1, 2, 3, 4))
+  zeroValue <- list(0, 0)
+  seqOp <- function(x, y) { list(x[[1]] + y, x[[2]] + 1) }
+  combOp <- function(x, y) { list(x[[1]] + y[[1]], x[[2]] + y[[2]]) }
+  actual <- aggregateRDD(rdd, zeroValue, seqOp, combOp)
+  expect_equal(actual, list(10, 4))
+  
+  rdd <- parallelize(sc, list())
+  actual <- aggregateRDD(rdd, zeroValue, seqOp, combOp)
+  expect_equal(actual, list(0, 0))
+})
+
 test_that("keys() on RDDs", {
   keys <- keys(intRdd)
   actual <- collect(keys)
