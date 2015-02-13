@@ -32,7 +32,8 @@ import org.apache.spark.util.Utils
 /**
  * A parser for foreign DDL commands.
  */
-private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
+private[sql] class DDLParser(
+    parseQuery: String => LogicalPlan) extends AbstractSparkSQLParser with Logging {
 
   def apply(input: String, exceptionOnError: Boolean): Option[LogicalPlan] = {
     try {
@@ -128,12 +129,13 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
             SaveMode.ErrorIfExists
           }
 
+          val queryPlan = parseQuery(query.get)
           CreateTableUsingAsSelect(tableName,
             provider,
             temp.isDefined,
             mode,
             options,
-            query.get)
+            queryPlan)
         } else {
           val userSpecifiedSchema = columns.flatMap(fields => Some(StructType(fields)))
           CreateTableUsing(
@@ -347,14 +349,6 @@ private[sql] case class CreateTableUsing(
     managedIfNoPath: Boolean) extends Command
 
 private[sql] case class CreateTableUsingAsSelect(
-    tableName: String,
-    provider: String,
-    temporary: Boolean,
-    mode: SaveMode,
-    options: Map[String, String],
-    query: String) extends Command
-
-private[sql] case class CreateTableUsingAsLogicalPlan(
     tableName: String,
     provider: String,
     temporary: Boolean,

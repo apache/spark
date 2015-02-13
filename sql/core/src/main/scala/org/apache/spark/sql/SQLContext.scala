@@ -101,7 +101,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] lazy val optimizer: Optimizer = DefaultOptimizer
 
   @transient
-  protected[sql] val ddlParser = new DDLParser
+  protected[sql] val ddlParser = new DDLParser(sqlParser.apply(_))
 
   @transient
   protected[sql] val sqlParser = {
