@@ -413,11 +413,11 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
       case ("--help" | "-h") :: tail =>
         printUsageAndExit(0)
 
-      case ("--verbose") :: tail =>
+      case ("--verbose" | "-v") :: tail =>
         verbose = true
         parse(tail)
 
-      case ("--version" | "-v") :: tail =>
+      case ("--version") :: tail =>
         SparkSubmit.printVersionAndExit()
 
       case EQ_SEPARATED_OPT(opt, value) :: tail =>
@@ -487,8 +487,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         |  --proxy-user NAME           User to impersonate when submitting the application.
         |
         |  --help, -h                  Show this help message and exit
-        |  --verbose,                  Print additional debug output
-        |  --version, -v               Print the version of current Spark
+        |  --verbose, -v               Print additional debug output
+        |  --version,                  Print the version of current Spark
         |
         | Spark standalone with cluster deploy mode only:
         |  --driver-cores NUM          Cores for driver (Default: 1).

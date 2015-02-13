@@ -40,7 +40,7 @@ import org.apache.ivy.plugins.resolver.{ChainResolver, IBiblioResolver}
 import org.apache.spark.deploy.rest._
 import org.apache.spark.executor._
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
-import org.apache.spark
+import org.apache.spark._
 
 /**
  * Whether to submit, kill, or request the status of an application.
@@ -91,7 +91,14 @@ object SparkSubmit {
     exitFn()
   }
   private[spark] def printVersionAndExit() = {
-    printStream.println(s"Spark Version: ${spark.SPARK_VERSION}")
+    printStream.println("""Welcome to
+      ____              __
+     / __/__  ___ _____/ /__
+    _\ \/ _ \/ _ `/ __/  '_/
+   /___/ .__/\_,_/_/ /_/\_\   version %s
+      /_/
+                        """.format(SPARK_VERSION))
+    printStream.println("Type --help for more information.")
     exitFn()
   }
 
