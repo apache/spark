@@ -28,12 +28,12 @@ import org.apache.spark.util.Utils
 
 private[spark] class MetricsConfig(val configFile: Option[String]) extends Logging {
 
-  val DEFAULT_PREFIX = "*"
-  val INSTANCE_REGEX = "^(\\*|[a-zA-Z]+)\\.(.+)".r
-  val DEFAULT_METRICS_CONF_FILENAME = "metrics.properties"
+  private val DEFAULT_PREFIX = "*"
+  private val INSTANCE_REGEX = "^(\\*|[a-zA-Z]+)\\.(.+)".r
+  private val DEFAULT_METRICS_CONF_FILENAME = "metrics.properties"
 
-  val properties = new Properties()
-  var propertyCategories: mutable.HashMap[String, Properties] = null
+  private[metrics] val properties = new Properties()
+  private[metrics] var propertyCategories: mutable.HashMap[String, Properties] = null
 
   private def setDefaultProperties(prop: Properties) {
     prop.setProperty("*.sink.servlet.class", "org.apache.spark.metrics.sink.MetricsServlet")
