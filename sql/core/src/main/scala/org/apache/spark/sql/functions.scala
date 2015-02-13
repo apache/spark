@@ -21,6 +21,7 @@ import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.analysis.Star
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
@@ -96,7 +97,11 @@ object functions {
   def sumDistinct(columnName: String): Column = sumDistinct(Column(columnName))
 
   /** Aggregate function: returns the number of items in a group. */
-  def count(e: Column): Column = Count(e.expr)
+  def count(e: Column): Column = e.expr match {
+    // Turn count(*) into count(1)
+    case s: Star => Count(Literal(1))
+    case _ => Count(e.expr)
+  }
 
   /** Aggregate function: returns the number of items in a group. */
   def count(columnName: String): Column = count(Column(columnName))
