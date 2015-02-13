@@ -81,7 +81,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   private val broadcastId = BroadcastBlockId(id)
 
   /** Total number of blocks this broadcast variable contains. */
-  private[spark] val numBlocks: Int = writeBlocks(obj)
+  private val numBlocks: Int = writeBlocks(obj)
 
   override protected def getValue() = {
     _value

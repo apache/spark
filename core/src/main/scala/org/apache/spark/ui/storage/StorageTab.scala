@@ -87,14 +87,16 @@ class StorageListener(storageStatusListener: StorageStatusListener) extends Spar
 
   override def onBlockUpdate(blockUpdateEvent: SparkListenerBlockUpdate) = synchronized {
     // only update broadcast for now, need to be modified if want to track other blocks
-    val broadcastId = blockUpdateEvent.blockId.asBroadcastId.get.broadcastId
-    val blocksToUpdate = blockUpdateEvent.blockStatus
-    val broadcastInfoToUpdate = _broadcastInfoMap.getOrElseUpdate(
-      broadcastId, new BroadcastInfo(broadcastId, "broadcast_%d".format(broadcastId), 0))
-    StorageUtils.updateBroadcastInfo(broadcastInfoToUpdate, storageStatusList)
-    if (broadcastInfoToUpdate.memSize == 0 && broadcastInfoToUpdate.diskSize == 0 &&
-      broadcastInfoToUpdate.tachyonSize == 0) {
-      _broadcastInfoMap.remove(broadcastId)
+    val broadcastIdOpt = blockUpdateEvent.blockId.asBroadcastId
+    if (broadcastIdOpt.isDefined) {
+      val broadcastId = broadcastIdOpt.get.broadcastId
+      val broadcastInfoToUpdate = _broadcastInfoMap.getOrElseUpdate(
+        broadcastId, new BroadcastInfo(broadcastId, "broadcast_%d".format(broadcastId), 0))
+      StorageUtils.updateBroadcastInfo(broadcastInfoToUpdate, storageStatusList)
+      if (broadcastInfoToUpdate.memSize == 0 && broadcastInfoToUpdate.diskSize == 0 &&
+        broadcastInfoToUpdate.tachyonSize == 0) {
+        _broadcastInfoMap.remove(broadcastId)
+      }
     }
   }
 }
