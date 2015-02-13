@@ -85,8 +85,13 @@ private[spark] abstract class Predictor[
     M <: PredictionModel[FeaturesType, M]]
   extends Estimator[M] with PredictorParams {
 
+  /** @group setParam */
   def setLabelCol(value: String): Learner = set(labelCol, value).asInstanceOf[Learner]
+
+  /** @group setParam */
   def setFeaturesCol(value: String): Learner = set(featuresCol, value).asInstanceOf[Learner]
+
+  /** @group setParam */
   def setPredictionCol(value: String): Learner = set(predictionCol, value).asInstanceOf[Learner]
 
   override def fit(dataset: DataFrame, paramMap: ParamMap): M = {
@@ -160,8 +165,10 @@ private[spark] abstract class Predictor[
 private[spark] abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, M]]
   extends Model[M] with PredictorParams {
 
+  /** @group setParam */
   def setFeaturesCol(value: String): M = set(featuresCol, value).asInstanceOf[M]
 
+  /** @group setParam */
   def setPredictionCol(value: String): M = set(predictionCol, value).asInstanceOf[M]
 
   /**
