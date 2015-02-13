@@ -19,10 +19,8 @@ package org.apache.spark.scheduler
 
 import scala.collection.mutable
 
-import akka.actor.{ActorRef, Actor}
-
 import org.apache.spark._
-import org.apache.spark.util.{AkkaUtils, ActorLogReceive}
+import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv, RpcEndpoint}
 
 private sealed trait OutputCommitCoordinationMessage extends Serializable
 
@@ -43,10 +41,7 @@ private case class AskPermissionToCommitOutput(stage: Int, task: Long, taskAttem
 private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
 
   // Initialized by SparkEnv
-  var coordinatorActor: Option[ActorRef] = None
-  private val timeout = AkkaUtils.askTimeout(conf)
-  private val maxAttempts = AkkaUtils.numRetries(conf)
-  private val retryInterval = AkkaUtils.retryWaitMs(conf)
+  var coordinatorRef: Option[RpcEndpointRef] = None
 
   private type StageId = Int
   private type PartitionId = Long
@@ -81,9 +76,9 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
       partition: PartitionId,
       attempt: TaskAttemptId): Boolean = {
     val msg = AskPermissionToCommitOutput(stage, partition, attempt)
-    coordinatorActor match {
-      case Some(actor) =>
-        AkkaUtils.askWithReply[Boolean](msg, actor, maxAttempts, retryInterval, timeout)
+    coordinatorRef match {
+      case Some(endpointRef) =>
+        endpointRef.askWithReply[Boolean](msg)
       case None =>
         logError(
           "canCommit called after coordinator was stopped (is SparkEnv shutdown in progress)?")
@@ -125,8 +120,8 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
   }
 
   def stop(): Unit = synchronized {
-    coordinatorActor.foreach(_ ! StopCoordinator)
-    coordinatorActor = None
+    coordinatorRef.foreach(_ send StopCoordinator)
+    coordinatorRef = None
     authorizedCommittersByStage.clear()
   }
 
@@ -157,16 +152,18 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
 private[spark] object OutputCommitCoordinator {
 
   // This actor is used only for RPC
-  class OutputCommitCoordinatorActor(outputCommitCoordinator: OutputCommitCoordinator)
-    extends Actor with ActorLogReceive with Logging {
+  class OutputCommitCoordinatorEndpoint(
+      override val rpcEnv: RpcEnv, outputCommitCoordinator: OutputCommitCoordinator)
+    extends RpcEndpoint with Logging {
 
-    override def receiveWithLogging = {
+    override def receive(sender: RpcEndpointRef) = {
       case AskPermissionToCommitOutput(stage, partition, taskAttempt) =>
-        sender ! outputCommitCoordinator.handleAskPermissionToCommit(stage, partition, taskAttempt)
+        sender.send(
+          outputCommitCoordinator.handleAskPermissionToCommit(stage, partition, taskAttempt))
       case StopCoordinator =>
         logInfo("OutputCommitCoordinator stopped!")
-        context.stop(self)
-        sender ! true
+        sender.send(true)
+        stop()
     }
   }
 }

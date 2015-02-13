@@ -182,7 +182,7 @@ private[spark] object AkkaUtils extends Logging {
       message: Any,
       actor: ActorRef,
       maxAttempts: Int,
-      retryInterval: Int,
+      retryInterval: Long,
       timeout: FiniteDuration): T = {
     // TODO: Consider removing multiple attempts
     if (actor == null) {
