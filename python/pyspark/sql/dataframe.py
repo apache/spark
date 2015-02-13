@@ -114,8 +114,8 @@ class DataFrame(object):
         >>> parquetFile = tempfile.mkdtemp()
         >>> shutil.rmtree(parquetFile)
         >>> df.saveAsParquetFile(parquetFile)
-        >>> df2 = sqlCtx.parquetFile(parquetFile)
-        >>> sorted(df2.collect()) == sorted(df.collect())
+        >>> df3 = sqlCtx.parquetFile(parquetFile)
+        >>> sorted(df3.collect()) == sorted(df.collect())
         True
         """
         self._jdf.saveAsParquetFile(path)
@@ -127,8 +127,8 @@ class DataFrame(object):
         that was used to create this DataFrame.
 
         >>> df.registerTempTable("people")
-        >>> df2 = sqlCtx.sql("select * from people")
-        >>> sorted(df.collect()) == sorted(df2.collect())
+        >>> df3 = sqlCtx.sql("select * from people")
+        >>> sorted(df.collect()) == sorted(df3.collect())
         True
         """
         self._jdf.registerTempTable(name)
