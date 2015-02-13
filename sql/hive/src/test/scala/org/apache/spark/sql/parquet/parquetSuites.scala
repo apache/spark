@@ -121,12 +121,49 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
+
+    sql(s"""
+      create table test_parquet
+      (
+        intField INT,
+        stringField STRING
+      )
+      ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+       STORED AS
+       INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+       OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+    """)
+
+    val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
+    jsonRDD(rdd).registerTempTable("jt")
+    sql("""
+      create table test ROW FORMAT
+          |  SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+          |  STORED AS INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+          |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+          |  AS select * from jt""".stripMargin)
+
     conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
   }
 
   override def afterAll(): Unit = {
     super.afterAll()
+    sql("DROP TABLE test_parquet")
+    sql("DROP TABLE test")
+    sql("DROP TABLE jt")
+
     setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
+  }
+
+  test("scan from an empty parquet table") {
+    checkAnswer(sql("SELECT count(*) FROM test_parquet"), Row(0))
+  }
+
+  test("scan from an non empty parquet table") {
+    checkAnswer(
+      sql(s"SELECT a, b FROM jt WHERE a = '1'"),
+      Seq(Row(1, "str1"))
+    )
   }
 }
 
