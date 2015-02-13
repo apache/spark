@@ -68,15 +68,20 @@ class SQLContext(object):
     def __init__(self, sparkContext, sqlContext=None):
         """Create a new SQLContext.
 
+        It will add a method called `toDF` to :class:`RDD`, which could be
+        used to convert an RDD into a DataFrame, it's a shorthand for
+        :func:`SQLContext.createDataFrame`.
+
         :param sparkContext: The SparkContext to wrap.
         :param sqlContext: An optional JVM Scala SQLContext. If set, we do not instatiate a new
         SQLContext in the JVM, instead we make all calls to this object.
 
         >>> from datetime import datetime
+        >>> sqlCtx = SQLContext(sc)
         >>> allTypes = sc.parallelize([Row(i=1, s="string", d=1.0, l=1L,
         ...     b=True, list=[1, 2, 3], dict={"s": 0}, row=Row(a=1),
         ...     time=datetime(2014, 8, 1, 14, 1, 5))])
-        >>> df = sqlCtx.createDataFrame(allTypes)
+        >>> df = allTypes.toDF()
         >>> df.registerTempTable("allTypes")
         >>> sqlCtx.sql('select i+1, d+1, not b, list[1], dict["s"], time, row.a '
         ...            'from allTypes where b and i > 0').collect()
