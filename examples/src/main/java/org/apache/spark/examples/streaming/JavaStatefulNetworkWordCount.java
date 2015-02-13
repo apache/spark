@@ -17,10 +17,14 @@
 
 package org.apache.spark.examples.streaming;
 
-import static java.util.Arrays.asList;
-
+import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
+
+import scala.Tuple2;
+
+import com.google.common.base.Optional;
+import com.google.common.collect.Lists;
 
 import org.apache.spark.HashPartitioner;
 import org.apache.spark.SparkConf;
@@ -35,10 +39,6 @@ import org.apache.spark.streaming.api.java.JavaPairDStream;
 import org.apache.spark.streaming.api.java.JavaReceiverInputDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
 
-import com.google.common.base.Optional;
-import com.google.common.collect.Lists;
-
-import scala.Tuple2;
 
 /**
  * Counts words cumulatively in UTF8 encoded, '\n' delimited text received from the network every
@@ -54,63 +54,62 @@ import scala.Tuple2;
  * org.apache.spark.examples.streaming.JavaStatefulNetworkWordCount localhost 9999`
  */
 public class JavaStatefulNetworkWordCount {
-    private static final Pattern SPACE = Pattern.compile(" ");
+  private static final Pattern SPACE = Pattern.compile(" ");
 
-    public static void main(String[] args) {
-        if (args.length < 2) {
-            System.err.println("Usage: StatefulNetworkWordCount <hostname> <port>");
-            System.exit(1);
-        }
-
-        StreamingExamples.setStreamingLogLevels();
-
-        // Update the cumulative count function
-        final Function2<List<Integer>, Optional<Integer>, Optional<Integer>> updateFunction = new
-                Function2<List<Integer>, Optional<Integer>, Optional<Integer>>() {
-                    @Override public Optional<Integer> call(List<Integer> values, Optional<Integer> state) {
-                        Integer newSum = state.or(0);
-                        for (Integer value : values) {
-                            newSum += value;
-                        }
-
-                        return Optional.of(newSum);
-                    }
-                };
-
-        // Create the context with a 1 second batch size
-        SparkConf sparkConf = new SparkConf().setAppName("JavaStatefulNetworkWordCount");
-        JavaStreamingContext ssc = new JavaStreamingContext(sparkConf, Durations.seconds(1));
-        ssc.checkpoint(".");
-
-        // Initial RDD input to updateStateByKey
-        JavaPairRDD<String, Integer> initialRDD = ssc.sc()
-                .parallelizePairs(asList(new Tuple2<String, Integer>("hello", 1), new Tuple2<String, Integer>
-                        ("world", 1)));
-
-        JavaReceiverInputDStream<String> lines = ssc.socketTextStream(
-                args[0], Integer.parseInt(args[1]), StorageLevels.MEMORY_AND_DISK_SER_2);
-
-        JavaDStream<String> words = lines.flatMap(new FlatMapFunction<String, String>() {
-            @Override
-            public Iterable<String> call(String x) {
-                return Lists.newArrayList(SPACE.split(x));
-            }
-        });
-
-        JavaPairDStream<String, Integer> wordsDstream = words.mapToPair(
-                new PairFunction<String, String, Integer>() {
-                    @Override
-                    public Tuple2<String, Integer> call(String s) {
-                        return new Tuple2<String, Integer>(s, 1);
-                    }
-                });
-
-        // This will give a Dstream made of state (which is the cumulative count of the words)
-        JavaPairDStream<String, Integer> stateDstream = wordsDstream.updateStateByKey(updateFunction, new
-                HashPartitioner(ssc.sc().defaultParallelism()), initialRDD);
-
-        stateDstream.print();
-        ssc.start();
-        ssc.awaitTermination();
+  public static void main(String[] args) {
+    if (args.length < 2) {
+      System.err.println("Usage: JavaStatefulNetworkWordCount <hostname> <port>");
+      System.exit(1);
     }
+
+    StreamingExamples.setStreamingLogLevels();
+
+    // Update the cumulative count function
+    final Function2<List<Integer>, Optional<Integer>, Optional<Integer>> updateFunction = new
+            Function2<List<Integer>, Optional<Integer>, Optional<Integer>>() {
+              @Override
+              public Optional<Integer> call(List<Integer> values, Optional<Integer> state) {
+                Integer newSum = state.or(0);
+                for (Integer value : values) {
+                  newSum += value;
+                }
+                return Optional.of(newSum);
+              }
+            };
+
+    // Create the context with a 1 second batch size
+    SparkConf sparkConf = new SparkConf().setAppName("JavaStatefulNetworkWordCount");
+    JavaStreamingContext ssc = new JavaStreamingContext(sparkConf, Durations.seconds(1));
+    ssc.checkpoint(".");
+
+    // Initial RDD input to updateStateByKey
+    JavaPairRDD<String, Integer> initialRDD = ssc.sc()
+            .parallelizePairs(Arrays.asList(new Tuple2<String, Integer>("hello", 1), new Tuple2<String, Integer>
+                    ("world", 1)));
+
+    JavaReceiverInputDStream<String> lines = ssc.socketTextStream(
+            args[0], Integer.parseInt(args[1]), StorageLevels.MEMORY_AND_DISK_SER_2);
+
+    JavaDStream<String> words = lines.flatMap(new FlatMapFunction<String, String>() {
+      @Override
+      public Iterable<String> call(String x) {
+        return Lists.newArrayList(SPACE.split(x));
+      }
+    });
+
+    JavaPairDStream<String, Integer> wordsDstream = words.mapToPair(new PairFunction<String, String, Integer>() {
+      @Override
+      public Tuple2<String, Integer> call(String s) {
+        return new Tuple2<String, Integer>(s, 1);
+      }
+    });
+
+    // This will give a Dstream made of state (which is the cumulative count of the words)
+    JavaPairDStream<String, Integer> stateDstream = wordsDstream.updateStateByKey(updateFunction, new
+            HashPartitioner(ssc.sc().defaultParallelism()), initialRDD);
+
+    stateDstream.print();
+    ssc.start();
+    ssc.awaitTermination();
+  }
 }
