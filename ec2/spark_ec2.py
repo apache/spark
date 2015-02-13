@@ -38,6 +38,7 @@ import textwrap
 import time
 import urllib2
 import warnings
+import shutil
 from datetime import datetime
 from optparse import OptionParser
 from sys import stderr
@@ -899,6 +900,10 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
         template_vars["aws_access_key_id"] = ""
         template_vars["aws_secret_access_key"] = ""
 
+    # Note: It may be nicer to reverse logic and list supported substitutable
+    # types instead, but this is playing it safe.
+    non_substitutable = [".rpm", ".deb", ".7z", ".gz", ".tar", ".tgz", ".bz2", ".jar"]
+
     # Create a temp directory in which we will place all the files to be
     # deployed after we substitue template parameters in them
     tmp_dir = tempfile.mkdtemp()
@@ -912,13 +917,19 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
                 if filename[0] not in '#.~' and filename[-1] != '~':
                     dest_file = os.path.join(dest_dir, filename)
                     local_file = tmp_dir + dest_file
-                    with open(os.path.join(path, filename)) as src:
-                        with open(local_file, "w") as dest:
-                            text = src.read()
-                            for key in template_vars:
-                                text = text.replace("{{" + key + "}}", template_vars[key])
-                            dest.write(text)
-                            dest.close()
+                    if reduce(lambda x, y: x or y,
+                              map(lambda x: filename.endswith(x), non_substitutable)):
+                        # Just copy the file
+                        shutil.copyfile(os.path.join(path, filename), local_file)
+                    else:
+                        # Copy with substitution
+                        with open(os.path.join(path, filename)) as src:
+                            with open(local_file, "w") as dest:
+                                text = src.read()
+                                for key in template_vars:
+                                    text = text.replace("{{" + key + "}}", template_vars[key])
+                                dest.write(text)
+                                dest.close()
     # rsync the whole directory over to the master machine
     command = [
         'rsync', '-rv',
