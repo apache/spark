@@ -308,8 +308,8 @@ private[sql] object JsonRDD extends Logging {
             case list: java.util.List[_] => scalafy(list).asInstanceOf[Seq[Map[String, Any]]]
             case _ =>
               sys.error(
-                s"Failed to parse record $record. Please make sure that " +
-                "every record in the dataset is a JSON object or an array of JSON objects.")
+                s"Failed to parse record $record. Please make sure that each line of the file " +
+                "(or each string in the RDD) is a valid JSON object or an array of JSON objects.")
           }
 
           parsed
