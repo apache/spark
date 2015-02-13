@@ -74,7 +74,7 @@ class DataFrame(object):
         self.sql_ctx = sql_ctx
         self._sc = sql_ctx and sql_ctx._sc
         self.is_cached = False
-        self._schema = None
+        self._schema = None  # initialized lazily
 
     @property
     def rdd(self):
