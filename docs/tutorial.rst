@@ -3,7 +3,65 @@ Airflow Tutorial
 ================
 
 This tutorial walks you through some of the fundamental Airflow concepts, 
-objects and their usage while writting your first pipeline.
+objects and their usage while writing your first pipeline.
+
+Example Pipeline definition
+---------------------------
+
+Here is an example of a basic pipeline definition. Do not worry if this looks 
+complicated, a line by line explanation follows below.
+
+.. code:: python
+
+    """
+    Code that goes along with the Airflow located at:
+    http://airflow.readthedocs.org/en/latest/tutorial.html
+    """
+    from airflow import DAG
+    from airflow.operators import BashOperator
+    from datetime import datetime
+
+
+    default_args = {
+        'owner': 'airflow',
+        'depends_on_past': True,
+        'start_date': datetime(2015, 01, 23),
+        'email': ['airflow@airflow.com'],
+        'email_on_failure': False,
+        'email_on_retry': False,
+    }
+
+    dag = DAG('tutorial', default_args=default_args)
+
+    t1 = BashOperator(
+        task_id='print_date',
+        bash_command='date',
+        dag=dag)
+
+    t2 = BashOperator(
+        task_id='sleep',
+        depends_on_past=False,
+        bash_command='sleep 5',
+        dag=dag)
+
+    templated_command = """
+    {% for i in range(5) %}
+        echo "{{ ds }}"
+        echo "{{ macros.ds_add(ds, 7)}}"
+        echo "{{ params.my_param }}"
+    {% endfor %}
+    """
+
+    t3 = BashOperator(
+        task_id='templated',
+        depends_on_past=False,
+        bash_command=templated_command,
+        params={'my_param': 'Paramater I passed in'},
+        dag=dag)
+
+    t2.set_upstream(t1)
+    t3.set_upstream(t1)
+
 
 Importing Modules
 -----------------
@@ -152,8 +210,10 @@ you can define dependencies between them:
 .. code:: python
 
     t2.set_upstream(t1)
-
-    # is equivalent to
+    
+    # This means that t2 will depend on t1 
+    # running successfully to run
+    # It is equivalent to
     # t1.set_downstream(t2)
 
     t3.set_upstream(t1)
