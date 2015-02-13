@@ -41,7 +41,7 @@ def keyword_only(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
         if len(args) > 1:
-           raise TypeError("Method %s forces keyword arguments." % func.__name__)
+            raise TypeError("Method %s forces keyword arguments." % func.__name__)
         wrapper._input_kwargs = kwargs
         return func(*args, **kwargs)
     return wrapper
