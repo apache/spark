@@ -30,7 +30,7 @@ private[spark] class MetricsConfig(val configFile: Option[String]) extends Loggi
 
   val DEFAULT_PREFIX = "*"
   val INSTANCE_REGEX = "^(\\*|[a-zA-Z]+)\\.(.+)".r
-  val METRICS_CONF = "metrics.properties"
+  val DEFAULT_METRICS_CONF_FILENAME = "metrics.properties"
 
   val properties = new Properties()
   var propertyCategories: mutable.HashMap[String, Properties] = null
@@ -49,7 +49,7 @@ private[spark] class MetricsConfig(val configFile: Option[String]) extends Loggi
     // If spark.metrics.conf is not set, try to get file in class path
     val isOpt: Option[InputStream] = configFile.map(new FileInputStream(_)).orElse {
       try {
-        Option(Utils.getSparkClassLoader.getResourceAsStream(METRICS_CONF))
+        Option(Utils.getSparkClassLoader.getResourceAsStream(DEFAULT_METRICS_CONF_FILENAME))
       } catch {
         case e: Exception =>
           logError("Error loading default configuration file", e)
