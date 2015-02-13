@@ -111,10 +111,13 @@ private[graphx] abstract class VertexPartitionBaseOps
         }
         i = newMask.nextSetBit(i + 1)
       }*/
+    /*
       this
         .withIndex(other.index)
         .withValues(other.values)
         .withMask((self.mask & other.mask) ^ other.mask)
+        * */
+    other.withMask((self.mask & other.mask) ^ other.mask)
 //    }
   }
 
