@@ -35,7 +35,8 @@ import org.scalatest.mock.MockitoSugar
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext}
 import org.apache.spark.executor.MesosExecutorBackend
-import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerExecutorAdded,
+  TaskDescription, TaskSchedulerImpl, WorkerOffer}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.scheduler.cluster.mesos.{MesosSchedulerBackend, MemoryUtils}
 
