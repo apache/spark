@@ -99,7 +99,7 @@ class DataFrameSuite extends QueryTest {
   }
 
   test("simple explode") {
-    val df = Seq(Tuple1("a b c"), Tuple1("d e")).toDataFrame("words")
+    val df = Seq(Tuple1("a b c"), Tuple1("d e")).toDF("words")
 
     checkAnswer(
       df.explode("words", "word") { word: String => word.split(" ").toSeq }.select('word),
@@ -108,7 +108,7 @@ class DataFrameSuite extends QueryTest {
   }
 
   test("explode") {
-    val df = Seq((1, "a b c"), (2, "a b"), (3, "a")).toDataFrame("number", "letters")
+    val df = Seq((1, "a b c"), (2, "a b"), (3, "a")).toDF("number", "letters")
     val df2 =
       df.explode('letters) {
         case Row(letters: String) => letters.split(" ").map(Tuple1(_)).toSeq
