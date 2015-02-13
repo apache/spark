@@ -306,6 +306,10 @@ private[sql] object JsonRDD extends Logging {
           val parsed = mapper.readValue(record, classOf[Object]) match {
             case map: java.util.Map[_, _] => scalafy(map).asInstanceOf[Map[String, Any]] :: Nil
             case list: java.util.List[_] => scalafy(list).asInstanceOf[Seq[Map[String, Any]]]
+            case _ =>
+              sys.error(
+                s"Failed to parse record $record. Please make sure that each line of the file " +
+                "(or each string in the RDD) is a valid JSON object or an array of JSON objects.")
           }
 
           parsed
