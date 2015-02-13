@@ -41,7 +41,6 @@ private[spark] class ApplicationInfo(
   @transient var executors: mutable.HashMap[Int, ExecutorDesc] = _
   @transient var removedExecutors: ArrayBuffer[ExecutorDesc] = _
   @transient var coresGranted: Int = _
-  @transient var coresMax: Int = _
   @transient var endTime: Long = _
   @transient var appSource: ApplicationSource = _
 
@@ -58,7 +57,6 @@ private[spark] class ApplicationInfo(
     state = ApplicationState.WAITING
     executors = new mutable.HashMap[Int, ExecutorDesc]
     coresGranted = 0
-    coresMax = 0
     endTime = -1L
     appSource = new ApplicationSource(this)
     nextExecutorId = 0
@@ -81,7 +79,6 @@ private[spark] class ApplicationInfo(
     val exec = new ExecutorDesc(newExecutorId(useID), this, worker, cores, desc.memoryPerSlave)
     executors(exec.id) = exec
     coresGranted += cores
-    coresMax = Math.max(coresGranted, coresMax)
     exec
   }
 
@@ -93,9 +90,9 @@ private[spark] class ApplicationInfo(
     }
   }
 
-  private val myMaxCores = desc.maxCores.getOrElse(defaultCores)
+  val requestedCores = desc.maxCores.getOrElse(defaultCores)
 
-  def coresLeft: Int = myMaxCores - coresGranted
+  def coresLeft: Int = requestedCores - coresGranted
 
   private var _retryCount = 0
 
