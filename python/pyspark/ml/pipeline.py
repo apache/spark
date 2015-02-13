@@ -111,7 +111,7 @@ class Pipeline(Estimator):
         if self.stages in self.paramMap:
             return self.paramMap[self.stages]
 
-    @keyword_only(start=1)
+    @keyword_only
     def setParams(self, stages=[]):
         """
         setParams(self, stages=[])

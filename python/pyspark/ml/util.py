@@ -33,22 +33,18 @@ def inherit_doc(cls):
     return cls
 
 
-def keyword_only(start=0):
+def keyword_only(func):
     """
-    A decorator that forces keyword arguments and provide actual
-    input keyword arguments.
+    A decorator that forces keyword arguments in the wrapped method
+    and saves actual input keyword arguments in `_input_kwargs`.
     """
-    def inner(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            if len(args) > start:
-                raise ValueError("Function %s forces keyword arguments starting from position %d "
-                                 "(counting self if this is a member function)." %
-                                 (func.__name__, start))
-            wrapper._input_kwargs = kwargs
-            return func(*args, **kwargs)
-        return wrapper
-    return inner
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if len(args) > 1:
+           raise TypeError("Method %s forces keyword arguments." % func.__name__)
+        wrapper._input_kwargs = kwargs
+        return func(*args, **kwargs)
+    return wrapper
 
 
 class Identifiable(object):

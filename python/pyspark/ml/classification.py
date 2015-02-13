@@ -32,27 +32,36 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
 
     >>> from pyspark.sql import Row
     >>> from pyspark.mllib.linalg import Vectors
-    >>> dataset = sqlCtx.inferSchema(sc.parallelize([ \
-            Row(label=1.0, features=Vectors.dense(1.0)), \
-            Row(label=0.0, features=Vectors.sparse(1, [], []))]))
-    >>> lr = LogisticRegression() \
-            .setMaxIter(5) \
-            .setRegParam(0.01)
-    >>> model = lr.fit(dataset)
+    >>> df = sqlCtx.inferSchema(sc.parallelize([
+    ...     Row(label=1.0, features=Vectors.dense(1.0)),
+    ...     Row(label=0.0, features=Vectors.sparse(1, [], []))]))
+    >>> lr = LogisticRegression(maxIter=5, regParam=0.01)
+    >>> model = lr.fit(df)
     >>> test0 = sqlCtx.inferSchema(sc.parallelize([Row(features=Vectors.dense(-1.0))]))
     >>> print model.transform(test0).head().prediction
     0.0
     >>> test1 = sqlCtx.inferSchema(sc.parallelize([Row(features=Vectors.sparse(1, [0], [1.0]))]))
     >>> print model.transform(test1).head().prediction
     1.0
+    >>> lr.setParams("vector")
+    Traceback (most recent call last):
+        ...
+    TypeError: Method setParams forces keyword arguments.
     """
     _java_class = "org.apache.spark.ml.classification.LogisticRegression"
 
-    def __init__(self, **kwargs):
+    @keyword_only
+    def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 maxIter=100, regParam=0.1):
+        """
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 maxIter=100, regParam=0.1)
+        """
         super(LogisticRegression, self).__init__()
+        kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
-    @keyword_only(start=1)
+    @keyword_only
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxIter=100, regParam=0.1):
         """
