@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.{Param, ParamMap}
-import org.apache.spark.mllib.feature.ElementwiseProduct
+import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql.types.DataType
 
@@ -29,7 +29,7 @@ import org.apache.spark.sql.types.DataType
  * Maps a vector to the hadamard product of it and a reference vector.
  */
 @AlphaComponent
-class ElementwiseProductTF extends UnaryTransformer[Vector, Vector, ElementwiseProductTF] {
+class ElementwiseProduct extends UnaryTransformer[Vector, Vector, ElementwiseProduct] {
 
   /** the vector to multiply with input vectors */
   val scalingVec : Param[Vector] = new Param(this, "scalingVector", "vector for hadamard product")
@@ -37,7 +37,7 @@ class ElementwiseProductTF extends UnaryTransformer[Vector, Vector, ElementwiseP
   def getScalingVec: Vector = get(scalingVec)
 
   override protected def createTransformFunc(paramMap: ParamMap): Vector => Vector = {
-    val elemScaler = new ElementwiseProduct(paramMap(scalingVec))
+    val elemScaler = new feature.ElementwiseProduct(paramMap(scalingVec))
     elemScaler.transform
   }
 
