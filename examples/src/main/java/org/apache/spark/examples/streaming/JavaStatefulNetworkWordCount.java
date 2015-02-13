@@ -60,6 +60,19 @@ public class JavaStatefulNetworkWordCount {
 
         StreamingExamples.setStreamingLogLevels();
 
+        // Update the cumulative count function
+        final Function2<List<Integer>, Optional<Integer>, Optional<Integer>> updateFunction = new
+                Function2<List<Integer>, Optional<Integer>, Optional<Integer>>() {
+                    @Override public Optional<Integer> call(List<Integer> values, Optional<Integer> state) {
+                        Integer newSum = state.or(0);
+                        for (Integer value : values) {
+                            newSum += value;
+                        }
+
+                        return Optional.of(newSum);
+                    }
+                };
+
         // Create the context with a 1 second batch size
         SparkConf sparkConf = new SparkConf().setAppName("JavaStatefulNetworkWordCount");
         JavaStreamingContext ssc = new JavaStreamingContext(sparkConf, Durations.seconds(1));
@@ -86,20 +99,6 @@ public class JavaStatefulNetworkWordCount {
                         return new Tuple2<String, Integer>(s, 1);
                     }
                 });
-
-        // Update the cumulative count function
-        final Function2<List<Integer>, Optional<Integer>, Optional<Integer>> updateFunction = new
-                Function2<List<Integer>, Optional<Integer>, Optional<Integer>>() {
-                    @Override public Optional<Integer> call(List<Integer> values, Optional<Integer> state)
-                            throws Exception {
-                        Integer newSum = state.or(0);
-                        for (Integer value : values) {
-                            newSum += value;
-                        }
-
-                        return Optional.of(newSum);
-                    }
-                };
 
         // This will give a Dstream made of state (which is the cumulative count of the words)
         JavaPairDStream<String, Integer> stateDstream = wordsDstream.updateStateByKey(updateFunction);
