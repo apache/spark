@@ -542,7 +542,7 @@ class Airflow(BaseView):
         f.close()
         return self.render(
             'airflow/code.html',
-            pre_subtitle = settings.HEADER + "  v" + airflow.__version__,
+            pre_subtitle=settings.HEADER + "  v" + airflow.__version__,
             code_html=code_html, title=title, subtitle=subtitle)
 
     @expose('/noaccess')
@@ -1148,7 +1148,7 @@ class ConnectionModelView(LoginMixin, ModelView):
             ('mysql', 'MySQL',),
             ('oracle', 'Oracle',),
             ('presto', 'Presto',),
-            ('s3','S3',),
+            ('s3', 'S3',),
             ('samba', 'Samba',),
         ]
     }
@@ -1213,7 +1213,7 @@ class ChartModelView(LoginMixin, ModelView):
     column_formatters = dict(label=label_link)
     create_template = 'airflow/chart/create.html'
     edit_template = 'airflow/chart/edit.html'
-    column_filters = ('owner.username', 'conn_id',)
+    column_filters = ('label', 'owner.username', 'conn_id')
     column_searchable_list = ('owner.username', 'label', 'sql')
     column_descriptions = {
         'label': "Can include {{ templated_fields }} and {{ macros }}",

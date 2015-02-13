@@ -174,6 +174,8 @@ class HivePartitionSensor(BaseSensorOperator):
         super(HivePartitionSensor, self).__init__(*args, **kwargs)
         if '.' in table:
             schema, table = table.split('.')
+        if not partition:
+            partition = "ds='{{ ds }}'"
         self.hive_conn_id = hive_conn_id
         self.hook = HiveHook(hive_conn_id=hive_conn_id)
         self.table = table

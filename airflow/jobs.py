@@ -125,7 +125,7 @@ class BaseJob(Base):
         session.merge(job)
         session.commit()
         session.close()
-        logging.info('[heart] Boom.')
+        logging.debug('[heart] Boom.')
 
     def run(self):
         # Adding an entry in the DB
