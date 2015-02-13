@@ -129,9 +129,9 @@ case $option in
     mkdir -p "$SPARK_PID_DIR"
 
     if [ -f $pid ]; then
-      TARGET_ID=`cat $pid`
-      if [[ `ps -p $TARGET_ID -o args=` =~ $command ]]; then
-        echo $command running as process $TARGET_ID.  Stop it first.
+      TARGET_ID="$(cat "$pid")"
+      if [[ $(ps -p "$TARGET_ID" -o args=) =~ $command ]]; then
+        echo "$command running as process $TARGET_ID.  Stop it first."
         exit 1
       fi
     fi
@@ -142,7 +142,7 @@ case $option in
     fi
 
     spark_rotate_log "$log"
-    echo starting $command, logging to $log
+    echo "starting $command, logging to $log"
     if [ $option == spark-submit ]; then
       source "$SPARK_HOME"/bin/utils.sh
       gatherSparkSubmitOpts "$@"
@@ -155,7 +155,7 @@ case $option in
     echo $newpid > $pid
     sleep 2
     # Check if the process has died; in that case we'll tail the log so the user can see
-    if [[ ! `ps -p $newpid -o args=` =~ $command ]]; then
+    if [[ ! $(ps -p "$newpid" -o args=) =~ $command ]]; then
       echo "failed to launch $command:"
       tail -2 "$log" | sed 's/^/  /'
       echo "full log in $log"
@@ -165,15 +165,15 @@ case $option in
   (stop)
 
     if [ -f $pid ]; then
-      TARGET_ID=`cat $pid`
-      if [[ `ps -p $TARGET_ID -o args=` =~ $command ]]; then
-        echo stopping $command
-        kill $TARGET_ID
+      TARGET_ID="$(cat "$pid")"
+      if [[ $(ps -p "$TARGET_ID" -o args=) =~ $command ]]; then
+        echo "stopping $command"
+        kill "$TARGET_ID"
       else
-        echo no $command to stop
+        echo "no $command to stop"
       fi
     else
-      echo no $command to stop
+      echo "no $command to stop"
     fi
     ;;
 
