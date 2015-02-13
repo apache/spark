@@ -114,8 +114,8 @@ class DataFrame(object):
         >>> parquetFile = tempfile.mkdtemp()
         >>> shutil.rmtree(parquetFile)
         >>> df.saveAsParquetFile(parquetFile)
-        >>> df3 = sqlCtx.parquetFile(parquetFile)
-        >>> sorted(df3.collect()) == sorted(df.collect())
+        >>> df2 = sqlCtx.parquetFile(parquetFile)
+        >>> sorted(df2.collect()) == sorted(df.collect())
         True
         """
         self._jdf.saveAsParquetFile(path)
@@ -127,8 +127,8 @@ class DataFrame(object):
         that was used to create this DataFrame.
 
         >>> df.registerTempTable("people")
-        >>> df3 = sqlCtx.sql("select * from people")
-        >>> sorted(df.collect()) == sorted(df3.collect())
+        >>> df2 = sqlCtx.sql("select * from people")
+        >>> sorted(df.collect()) == sorted(df2.collect())
         True
         """
         self._jdf.registerTempTable(name)
@@ -920,11 +920,11 @@ class Column(DataFrame):
         else:
             return 'Column<%s>' % self._jdf.toString()
 
-    def to_pandas(self):
+    def toPandas(self):
         """
         Return a pandas.Series from the column
 
-        >>> df.age.to_pandas()  # doctest: +SKIP
+        >>> df.age.toPandas()  # doctest: +SKIP
         0    2
         1    5
         dtype: int64
