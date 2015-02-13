@@ -28,7 +28,9 @@ import org.apache.spark.sql.types._
 /**
  * Domain specific functions available for [[DataFrame]].
  */
+// scalastyle:off
 object functions {
+// scalastyle:on
 
   private[this] implicit def toColumn(expr: Expression): Column = Column(expr)
 
