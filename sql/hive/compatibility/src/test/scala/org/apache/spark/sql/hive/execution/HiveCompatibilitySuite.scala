@@ -885,6 +885,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_power",
     "udf_radians",
     "udf_rand",
+    "udf_reflect",
+    "udf_reflect2",
     "udf_regexp",
     "udf_regexp_extract",
     "udf_regexp_replace",
