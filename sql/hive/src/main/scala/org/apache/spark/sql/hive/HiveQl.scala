@@ -19,6 +19,8 @@ package org.apache.spark.sql.hive
 
 import java.sql.Date
 
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.hive.conf.HiveConf
@@ -292,6 +294,7 @@ private[hive] object HiveQl {
     /** @return matches of the form (tokenName, children). */
     def unapply(t: Any): Option[(String, Seq[ASTNode])] = t match {
       case t: ASTNode =>
+        CurrentOrigin.setPosition(t.getLine, t.getCharPositionInLine)
         Some((t.getText,
           Option(t.getChildren).map(_.toList).getOrElse(Nil).asInstanceOf[Seq[ASTNode]]))
       case _ => None
@@ -1278,7 +1281,12 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   def dumpTree(node: Node, builder: StringBuilder = new StringBuilder, indent: Int = 0)
     : StringBuilder = {
     node match {
-      case a: ASTNode => builder.append(("  " * indent) + a.getText + "\n")
+      case a: ASTNode => builder.append(
+        ("  " * indent) + a.getText + " " +
+          a.getLine + ", " +
+          a.getTokenStartIndex + "," +
+          a.getTokenStopIndex + ", " +
+          a.getCharPositionInLine + "\n")
       case other => sys.error(s"Non ASTNode encountered: $other")
     }
 

@@ -85,7 +85,7 @@ class Analyzer(catalog: Catalog,
           operator transformExpressionsUp {
             case a: Attribute if !a.resolved =>
               val from = operator.inputSet.map(_.name).mkString(", ")
-              failAnalysis(s"cannot resolve '${a.prettyString}' given input columns $from")
+              a.failAnalysis(s"cannot resolve '${a.prettyString}' given input columns $from")
 
             case c: Cast if !c.resolved =>
               failAnalysis(

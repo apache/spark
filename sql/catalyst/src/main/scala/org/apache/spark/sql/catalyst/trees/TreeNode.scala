@@ -22,8 +22,41 @@ import org.apache.spark.sql.catalyst.errors._
 /** Used by [[TreeNode.getNodeNumbered]] when traversing the tree for a given number */
 private class MutableInt(var i: Int)
 
+case class Origin(
+  line: Option[Int] = None,
+  startPosition: Option[Int] = None)
+
+/**
+ * Provides a location for TreeNodes to ask about the context of their origin.  For example, which
+ * line of code is currently being parsed.
+ */
+object CurrentOrigin {
+  private val value = new ThreadLocal[Origin]()
+
+  def get = value.get()
+  def set(o: Origin) = value.set(o)
+
+  def reset() = value.set(Origin())
+
+  def setPosition(line: Int, start: Int) = {
+    value.set(
+      Option(value.get)
+        .map(_.copy(line = Some(line), startPosition = Some(start)))
+        .getOrElse(Origin(line = Some(line), startPosition = Some(start))))
+  }
+
+  def withOrigin[A](o: Origin)(f: => A): A = {
+    set(o)
+    val ret = try f finally { reset() }
+    reset()
+    ret
+  }
+}
+
 abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   self: BaseType with Product =>
+
+  val origin = CurrentOrigin.get
 
   /** Returns a Seq of the children of this node */
   def children: Seq[BaseType]

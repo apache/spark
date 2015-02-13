@@ -17,7 +17,25 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.annotation.DeveloperApi
+
 /**
+ * :: DeveloperApi ::
  * Thrown when a query fails to analyze, usually because the query itself is invalid.
  */
-class AnalysisException(message: String) extends Exception(message) with Serializable
+@DeveloperApi
+class AnalysisException protected[sql] (
+    val message: String,
+    val line: Option[Int] = None,
+    val startPosition: Option[Int] = None)
+  extends Exception with Serializable {
+
+  override def getMessage: String = {
+    val lineAnnotation = line.map(l => s" line $l").getOrElse("")
+    val positionAnnotation = startPosition.map(p => s" pos $p").getOrElse("")
+    s"$message;$lineAnnotation$positionAnnotation"
+  }
+
+  def getLine: Integer = line.map(new java.lang.Integer(_)).orNull
+  def getStartPosition: Int = startPosition.map(new java.lang.Integer(_)).orNull
+}
