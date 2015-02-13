@@ -774,6 +774,42 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def table(tableName: String): DataFrame =
     DataFrame(this, catalog.lookupRelation(Seq(tableName)))
 
+  /**
+   * Returns a [[DataFrame]] containing names of existing tables in the given database.
+   * The returned DataFrame has two columns, tableName and isTemporary (a column with BooleanType
+   * indicating if a table is a temporary one or not).
+   */
+  def tables(): DataFrame = {
+    createDataFrame(catalog.getTables(None)).toDataFrame("tableName", "isTemporary")
+  }
+
+  /**
+   * Returns a [[DataFrame]] containing names of existing tables in the current database.
+   * The returned DataFrame has two columns, tableName and isTemporary (a column with BooleanType
+   * indicating if a table is a temporary one or not).
+   */
+  def tables(databaseName: String): DataFrame = {
+    createDataFrame(catalog.getTables(Some(databaseName))).toDataFrame("tableName", "isTemporary")
+  }
+
+  /**
+   * Returns an array of names of tables in the current database.
+   */
+  def tableNames(): Array[String] = {
+    catalog.getTables(None).map {
+      case (tableName, _) => tableName
+    }.toArray
+  }
+
+  /**
+   * Returns an array of names of tables in the given database.
+   */
+  def tableNames(databaseName: String): Array[String] = {
+    catalog.getTables(Some(databaseName)).map {
+      case (tableName, _) => tableName
+    }.toArray
+  }
+
   protected[sql] class SparkPlanner extends SparkStrategies {
     val sparkContext: SparkContext = self.sparkContext
 
