@@ -350,9 +350,11 @@ private[spark] trait ClientBase extends Logging {
 
     // Include driver-specific java options if we are launching a driver
     if (isLaunchingDriver) {
-      sparkConf.getOption("spark.driver.extraJavaOptions")
+      val driverOpts = sparkConf.getOption("spark.driver.extraJavaOptions")
         .orElse(sys.env.get("SPARK_JAVA_OPTS"))
-        .foreach(opts => javaOpts += opts)
+      driverOpts.foreach { opts =>
+        javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
+      }
       val libraryPaths = Seq(sys.props.get("spark.driver.extraLibraryPath"),
         sys.props.get("spark.driver.libraryPath")).flatten
       if (libraryPaths.nonEmpty) {
