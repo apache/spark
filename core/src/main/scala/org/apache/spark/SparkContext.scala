@@ -379,7 +379,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private val dynamicAllocationTesting = conf.getBoolean("spark.dynamicAllocation.testing", false)
   private[spark] val executorAllocationManager: Option[ExecutorAllocationManager] =
     if (dynamicAllocationEnabled) {
-      assert(supportKillExecutor(),
+      assert(supportKillExecutor,
         "Dynamic allocation of executors is currently only supported in YARN mode")
       Some(new ExecutorAllocationManager(this, listenerBus, conf))
     } else {
@@ -1053,7 +1053,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   @DeveloperApi
   override def requestExecutors(numAdditionalExecutors: Int): Boolean = {
-    assert(supportKillExecutor(), "Requesting executors is currently only supported in YARN mode")
+    assert(supportKillExecutor, "Requesting executors is currently only supported in YARN mode")
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
         b.requestExecutors(numAdditionalExecutors)
@@ -1070,7 +1070,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   @DeveloperApi
   override def killExecutors(executorIds: Seq[String]): Boolean = {
-    assert(supportKillExecutor(), "Killing executors is currently only supported in YARN mode")
+    assert(supportKillExecutor, "Killing executors is currently only supported in YARN mode")
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
         b.killExecutors(executorIds)
