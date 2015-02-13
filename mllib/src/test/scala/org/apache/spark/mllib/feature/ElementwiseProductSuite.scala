@@ -22,7 +22,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.scalatest.FunSuite
 import org.apache.spark.mllib.util.TestingUtils._
 
-class HadamardProductSuite extends FunSuite with MLlibTestSparkContext{
+class ElementwiseProductSuite extends FunSuite with MLlibTestSparkContext{
 
   val denseData =  Array(
     Vectors.dense(1.0, 1.0, 0.0, 0.0),
@@ -43,14 +43,14 @@ class HadamardProductSuite extends FunSuite with MLlibTestSparkContext{
 
   val scalingVector = Vectors.dense(2.0, 0.5, 0.0, 0.25)
 
-  test("hadamard product should properly apply vector to dense data set") {
+  test("elementwise (hadamard) product should properly apply vector to dense data set") {
 
-    val scaler = new HadamardProduct(scalingVector)
-    val scaledData = scaler.transform(sc.makeRDD(denseData))
+    val transformer = new ElementwiseProduct(scalingVector)
+    val transformedData = transformer.transform(sc.makeRDD(denseData))
 
-    val scaledVecs = scaledData.collect()
+    val transformedVecs = transformedData.collect()
 
-    val fourthVec = scaledVecs.apply(3).toArray
+    val fourthVec = transformedVecs.apply(3).toArray
 
     assert(fourthVec.apply(0) === 2.0, "product by 2.0 should have been applied")
     assert(fourthVec.apply(1) === 2.0, "product by 0.5 should have been applied")
@@ -58,16 +58,16 @@ class HadamardProductSuite extends FunSuite with MLlibTestSparkContext{
     assert(fourthVec.apply(3) === -2.25, "product by 0.25 should have been applied")
   }
 
-  test("hadamard product should properly apply vector to sparse data set") {
+  test("elementwise (hadamard) product should properly apply vector to sparse data set") {
 
     val dataRDD = sc.parallelize(sparseData, 3)
 
     val scalingVec = Vectors.dense(1.0, 0.0, 0.5)
 
-    val hadScaler = new HadamardProduct(scalingVec)
+    val transformer = new ElementwiseProduct(scalingVec)
 
-    val data2 = sparseData.map(hadScaler.transform)
-    val data2RDD = hadScaler.transform(dataRDD)
+    val data2 = sparseData.map(transformer.transform)
+    val data2RDD = transformer.transform(dataRDD)
 
     assert((sparseData, data2, data2RDD.collect()).zipped.forall {
       case (v1: DenseVector, v2: DenseVector, v3: DenseVector) => true

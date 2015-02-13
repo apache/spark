@@ -22,12 +22,12 @@ import org.apache.spark.mllib.linalg._
 
 /**
  * :: Experimental ::
- * Component-wise scaling of dense vectors by a provided vector's components.
+ * Element-wise product of dense vectors by a provided vector's components.
  *
  * @param scalingVector The values used to scale the reference vector's individual components.
  */
 @Experimental
-class HadamardProduct(val scalingVector: Vector) extends VectorTransformer {
+class ElementwiseProduct(val scalingVector: Vector) extends VectorTransformer {
 
   /**
    * Does the hadamard product transformation.

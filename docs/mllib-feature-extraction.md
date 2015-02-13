@@ -477,9 +477,9 @@ sc.stop();
 </div>
 </div>
 
-## HadamardProduct
+## ElementwiseProduct
 
-HadamardProduct scales individual vector samples by a provided weighting vector component-wise.  This represents the [Hadamard product](https://en.wikipedia.org/wiki/Hadamard_product_%28matrices%29) between the input vector, `v` and weighting vector, `w`, to yield a result vector.
+ElementwiseProduct multiplies individual vector samples by a provided weighting vector component-wise.  This represents the [Hadamard product](https://en.wikipedia.org/wiki/Hadamard_product_%28matrices%29) between the input vector, `v` and transforming vector, `w`, to yield a result vector.
 
 `\[ \begin{pmatrix}
 v_1 \\
@@ -497,34 +497,34 @@ v_N
   \end{pmatrix}
 \]`
 
-[`HadamardProduct`](api/scala/index.html#org.apache.spark.mllib.feature.HadamardProduct) has the following parameter in the constructor:
+[`ElementwiseProduct`](api/scala/index.html#org.apache.spark.mllib.feature.ElementwiseProduct) has the following parameter in the constructor:
 
-* `w` Vector, the scaling vector.
+* `w` Vector, the transforming vector.
 
-`HadamardProduct` implements [`VectorTransformer`](api/scala/index.html#org.apache.spark.mllib.feature.VectorTransformer) which can apply the weighting on a `Vector` to produce a transformed `Vector` or on an `RDD[Vector]` to produce a transformed `RDD[Vector]`.
+`ElementwiseProduct` implements [`VectorTransformer`](api/scala/index.html#org.apache.spark.mllib.feature.VectorTransformer) which can apply the weighting on a `Vector` to produce a transformed `Vector` or on an `RDD[Vector]` to produce a transformed `RDD[Vector]`.
 
 ### Example
 
-This example below demonstrates how to load a simple vectors file, extract a set of vectors, then weight those vectors using a weighting vector value.
+This example below demonstrates how to load a simple vectors file, extract a set of vectors, then transform those vectors using a transforming vector value.
 
 
 <div class="codetabs">
 <div data-lang="scala">
 {% highlight scala %}
 import org.apache.spark.SparkContext._
-import org.apache.spark.mllib.feature.HadamardProduct
+import org.apache.spark.mllib.feature.ElementwiseProduct
 import org.apache.spark.mllib.linalg.Vectors
 
 //load and parse the data
 val data = sc.textFile("data/mllib/kmeans_data.txt")
 val parsedData = data.map(s => Vectors.dense(s.split(' ').map(_.toDouble)))
 
-val weightingVector = Vectors.dense(0.0, 1.0, 2.0)
-val scaler = new HadamardProduct(weightingVector)
+val transformingVector = Vectors.dense(0.0, 1.0, 2.0)
+val transformer = new ElementwiseProduct(transformingVector)
 
 //same results:
-val weightedData = scaler.transform(parsedData)
-val weightedData2 = parsedData.map(x => scaler.transform(x))
+val transformedData = transformer.transform(parsedData)
+val transformedData2 = parsedData.map(x => transformer.transform(x))
 
 {% endhighlight %}
 </div>
@@ -532,18 +532,18 @@ val weightedData2 = parsedData.map(x => scaler.transform(x))
 <div data-lang="python">
 {% highlight python %}
 from pyspark.mllib.linalg import Vectors
-from pyspark.mllib.feature import HadamardProduct
+from pyspark.mllib.feature import ElementwiseProduct
 
 # Load and parse the data
 data = sc.textFile("data/mllib/kmeans_data.txt")
 parsedData = data.map(lambda line: array([float(x) for x in line.split(' ')]))
 
-weightingVector = Vectors.dense(0.0, 1.0, 2.0)
-scaler = HadamardProduct(weightingVector)
+transformingVector = Vectors.dense(0.0, 1.0, 2.0)
+transformer = ElementwiseProduct(transformingVector)
 
 # Same results:
-weightedData = scaler.transform(parsedData)
-weightedData2 = parsedData.map(lambda x: scaler.transform(x))
+transformedData = transformer.transform(parsedData)
+transformedData2 = parsedData.map(lambda x: transformer.transform(x))
 
 {% endhighlight %}
 </div>
