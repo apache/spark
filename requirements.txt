@@ -1,3 +1,4 @@
+boto
 celery
 chartkick
 coverage

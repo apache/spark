@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 # Kept manually in sync with airflow.__version__
-version = '0.3.2'
+version = '0.3.3'
 
 setup(
     name='airflow',
@@ -12,6 +12,7 @@ setup(
     zip_safe=False,
     scripts=['airflow/bin/airflow'],
     install_requires=[
+        'boto>=2.36.0',
         'celery>=3.1.17',
         'chartkick>=0.4.2',
         'dill>=0.2.2',
