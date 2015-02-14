@@ -29,7 +29,7 @@ class ListTablesSuite extends QueryTest with BeforeAndAfterAll {
   import org.apache.spark.sql.hive.test.TestHive.implicits._
 
   val df =
-    sparkContext.parallelize((1 to 10).map(i => (i,s"str$i"))).toDataFrame("key", "value")
+    sparkContext.parallelize((1 to 10).map(i => (i,s"str$i"))).toDF("key", "value")
 
   override def beforeAll(): Unit = {
     // The catalog in HiveContext is a case insensitive one.

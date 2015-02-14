@@ -23,7 +23,7 @@ import org.apache.spark.Logging
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param._
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.Dsl._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 /**
@@ -100,7 +100,7 @@ private[ml] abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, O
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     transformSchema(dataset.schema, paramMap, logging = true)
     val map = this.paramMap ++ paramMap
-    dataset.select($"*", callUDF(
-      this.createTransformFunc(map), outputDataType, dataset(map(inputCol))).as(map(outputCol)))
+    dataset.withColumn(map(outputCol),
+      callUDF(this.createTransformFunc(map), outputDataType, dataset(map(inputCol))))
   }
 }
