@@ -9,6 +9,8 @@ from sensors import SqlSensor
 from sensors import ExternalTaskSensor
 from sensors import HivePartitionSensor
 from sensors import HdfsSensor
+from sensors import S3KeySensor
+from sensors import S3PrefixSensor
 from email_operator import EmailOperator
 from dummy_operator import DummyOperator
 from hive2samba_operator import Hive2SambaOperator

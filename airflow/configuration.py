@@ -36,6 +36,7 @@ flower_port = 5555
 [hooks]
 presto_default_conn_id = presto_default
 hive_default_conn_id = hive_default
+s3_default_conn_id = s3_default
 
 [misc]
 job_heartbeat_sec = 5
@@ -75,6 +76,7 @@ flower_port = 5555
 [hooks]
 presto_default_conn_id = presto_default
 hive_default_conn_id = hive_default
+s3_default_conn_id = s3_default
 
 [misc]
 job_heartbeat_sec = 1

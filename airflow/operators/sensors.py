@@ -1,10 +1,12 @@
 from datetime import datetime
 import logging
+from urlparse import urlparse
 from time import sleep
 
 from airflow import settings
 from airflow.configuration import conf
 from airflow.hooks import HiveHook
+from airflow.hooks import S3Hook
 from airflow.models import BaseOperator
 from airflow.models import Connection as DB
 from airflow.models import State
@@ -228,3 +230,105 @@ class HdfsSensor(BaseSensorOperator):
             return False
         print([i for i in f])
         return True
+
+
+class S3KeySensor(BaseSensorOperator):
+    """
+    Waits for a key (a file-like instance on S3) to be present in a S3 bucket.
+    S3 being a key/value it does not support folders. The path is just a key
+    a resource.
+
+    :param bucket_key: The key being waited on. Supports full s3:// style url
+        or relative path from root level.
+    :type bucket_key: str
+    :param bucket_name: Name of the S3 bucket
+    :type bucket_name: str
+    """
+    template_fields = ('bucket_key', 'bucket_name')
+    __mapper_args__ = {
+        'polymorphic_identity': 'S3KeySensor'
+    }
+
+    @apply_defaults
+    def __init__(
+            self, bucket_key,
+            bucket_name=None,
+            s3_conn_id=conf.get('hooks', 'S3_DEFAULT_CONN_ID'),
+            *args, **kwargs):
+        super(S3KeySensor, self).__init__(*args, **kwargs)
+        session = settings.Session()
+        db = session.query(DB).filter(DB.conn_id == s3_conn_id).first()
+        if not db:
+            raise Exception("conn_id doesn't exist in the repository")
+        # Parse
+        if bucket_name is None:
+            parsed_url = urlparse(bucket_key)
+            if parsed_url.netloc == '':
+                raise Exception('Please provide a bucket_name')
+            else:
+                bucket_name = parsed_url.netloc
+                bucket_key = parsed_url.path
+        self.bucket_name = bucket_name
+        self.bucket_key = bucket_key
+        self.full_url = "s3://" + bucket_name + bucket_key
+        self.s3_conn_id = s3_conn_id
+        self.hook = S3Hook(s3_conn_id=s3_conn_id)
+        session.commit()
+        session.close()
+
+    def poke(self):
+        logging.info('Poking for key : {self.full_url}'.format(**locals()))
+        return self.hook.check_for_key(self.bucket_key, self.bucket_name)
+
+
+class S3PrefixSensor(BaseSensorOperator):
+    """
+    Waits for a prefix to exist. A prefix is the first part of a key,
+    thus enabling checking of constructs similar to glob airfl* or
+    SQL LIKE 'airfl%'. There is the possibility to precise a delimiter to
+    indicate the hierarchy or keys, meaning that the match will stop at that
+    delimiter. Current code accepts sane delimiters, i.e. characters that
+    are NOT special characters in python regex engine.
+
+
+    :param prefix: The key being waited on. Supports full s3:// style url or
+        or relative path from root level.
+    :type prefix: str
+    :param delimiter: The delimiter intended to show hierarchy.
+        Defaults to '/'.
+    :type delimiter: str
+    :param bucket_name: Name of the S3 bucket
+    :type bucket_name: str
+    """
+    template_fields = ('bucket_key', 'bucket_name')
+    __mapper_args__ = {
+        'polymorphic_identity': 'S3PrefixSensor'
+    }
+
+    @apply_defaults
+    def __init__(
+            self, bucket_name,
+            prefix, delimiter='/',
+            s3_conn_id=conf.get('hooks', 'S3_DEFAULT_CONN_ID'),
+            *args, **kwargs):
+        super(S3PrefixSensor, self).__init__(*args, **kwargs)
+        session = settings.Session()
+        db = session.query(DB).filter(DB.conn_id == s3_conn_id).first()
+        if not db:
+            raise Exception("conn_id doesn't exist in the repository")
+        # Parse
+        self.bucket_name = bucket_name
+        self.prefix = prefix
+        self.delimiter = delimiter
+        self.full_url = "s3://" + bucket_name + '/' + prefix
+        self.s3_conn_id = s3_conn_id
+        self.hook = S3Hook(s3_conn_id=s3_conn_id)
+        session.commit()
+        session.close()
+
+    def poke(self):
+        logging.info('Poking for prefix : {self.prefix}\n'
+                     'in bucket s3://{self.bucket_name}'.format(**locals()))
+        return self.hook.check_for_prefix(prefix=self.prefix,
+                                          delimiter=self.delimiter,
+                                          bucket_name=self.bucket_name)
