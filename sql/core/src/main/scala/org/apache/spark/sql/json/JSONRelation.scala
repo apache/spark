@@ -77,7 +77,6 @@ private[sql] class DefaultSource
     }
     val relation = if (doSave) {
       // Only save data when the save mode is not ignore.
-      //data.toJSON.saveAsTextFile(path)
       val createdRelation = createRelation(sqlContext,parameters, data.schema)
       createdRelation.asInstanceOf[JSONRelation].insert(data, true)
 
