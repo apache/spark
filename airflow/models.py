@@ -642,6 +642,12 @@ class TaskInstance(Base):
         ti_key_str = "{task.dag_id}__{task.task_id}__{ds_nodash}"
         ti_key_str = ti_key_str.format(**locals())
 
+        params = {}
+        if hasattr(task, 'dag'):
+            params.update(task.dag.params)
+        if task.params:
+            params.update(task.params)
+
         return {
             'dag': task.dag,
             'ds': ds,
@@ -651,7 +657,7 @@ class TaskInstance(Base):
             'execution_date': self.execution_date,
             'latest_date': ds,
             'macros': macros,
-            'params': task.params,
+            'params': params,
             'tables': tables,
             'task': task,
             'task_instance': self,
@@ -1108,7 +1114,8 @@ class DAG(Base):
             full_filepath=None,
             template_searchpath=None,
             user_defined_macros=None,
-            default_args=None):
+            default_args=None,
+            params=None):
 
         utils.validate_key(dag_id)
         self.tasks = []
@@ -1122,6 +1129,7 @@ class DAG(Base):
         self.template_searchpath = template_searchpath
         self.user_defined_macros = user_defined_macros
         self.default_args = default_args or {}
+        self.params = params
 
     def __repr__(self):
         return "<DAG: {self.dag_id}>".format(self=self)
