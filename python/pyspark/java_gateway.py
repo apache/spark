@@ -50,8 +50,8 @@ def launch_gateway():
         callback_socket.listen(1)
         callback_host, callback_port = callback_socket.getsockname()
         env = dict(os.environ)
-        env['PYSPARK_DRIVER_CALLBACK_HOST'] = callback_host
-        env['PYSPARK_DRIVER_CALLBACK_PORT'] = str(callback_port)
+        env['_PYSPARK_DRIVER_CALLBACK_HOST'] = callback_host
+        env['_PYSPARK_DRIVER_CALLBACK_PORT'] = str(callback_port)
 
         # Launch the Java gateway.
         # We open a pipe to stdin so that the Java gateway can die when the pipe is broken
