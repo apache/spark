@@ -200,7 +200,7 @@ private[spark] class TaskSchedulerImpl(
         val execId = taskIdToExecutorId(tid)
         backend.killTask(tid, execId, interruptThread)
       }
-      tsm.abort("Stage %s cancelled".format(stageId))
+      tsm.abort("Stage %d was cancelled".format(stageId))
       logInfo("Stage %d was cancelled".format(stageId))
     }
   }
