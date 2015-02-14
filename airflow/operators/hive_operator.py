@@ -33,7 +33,7 @@ class HiveOperator(BaseOperator):
     @apply_defaults
     def __init__(
             self, hql,
-            hive_conn_id=conf.get('hooks', 'HIVE_DEFAULT_CONN_ID'),
+            hive_conn_id='hive_default',
             hiveconf_jinja_translate=False,
             script_begin_tag=None,
             *args, **kwargs):
