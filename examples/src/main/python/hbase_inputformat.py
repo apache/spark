@@ -75,7 +75,6 @@ if __name__ == "__main__":
         keyConverter=keyConv,
         valueConverter=valueConv,
         conf=conf)
-    # hbase_rdd is a RDD of dict
     hbase_rdd = hbase_rdd.flatMapValues(lambda v: v).mapValues(json.loads)
 
     output = hbase_rdd.collect()
