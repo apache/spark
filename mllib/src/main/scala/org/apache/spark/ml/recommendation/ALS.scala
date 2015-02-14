@@ -49,43 +49,89 @@ import org.apache.spark.util.random.XORShiftRandom
 private[recommendation] trait ALSParams extends Params with HasMaxIter with HasRegParam
   with HasPredictionCol {
 
-  /** Param for rank of the matrix factorization. */
+  /**
+   * Param for rank of the matrix factorization.
+   * @group param
+   */
   val rank = new IntParam(this, "rank", "rank of the factorization", Some(10))
+
+  /** @group getParam */
   def getRank: Int = get(rank)
 
-  /** Param for number of user blocks. */
+  /**
+   * Param for number of user blocks.
+   * @group param
+   */
   val numUserBlocks = new IntParam(this, "numUserBlocks", "number of user blocks", Some(10))
+
+  /** @group getParam */
   def getNumUserBlocks: Int = get(numUserBlocks)
 
-  /** Param for number of item blocks. */
+  /**
+   * Param for number of item blocks.
+   * @group param
+   */
   val numItemBlocks =
     new IntParam(this, "numItemBlocks", "number of item blocks", Some(10))
+
+  /** @group getParam */
   def getNumItemBlocks: Int = get(numItemBlocks)
 
-  /** Param to decide whether to use implicit preference. */
+  /**
+   * Param to decide whether to use implicit preference.
+   * @group param
+   */
   val implicitPrefs =
     new BooleanParam(this, "implicitPrefs", "whether to use implicit preference", Some(false))
+
+  /** @group getParam */
   def getImplicitPrefs: Boolean = get(implicitPrefs)
 
-  /** Param for the alpha parameter in the implicit preference formulation. */
+  /**
+   * Param for the alpha parameter in the implicit preference formulation.
+   * @group param
+   */
   val alpha = new DoubleParam(this, "alpha", "alpha for implicit preference", Some(1.0))
+
+  /** @group getParam */
   def getAlpha: Double = get(alpha)
 
-  /** Param for the column name for user ids. */
+  /**
+   * Param for the column name for user ids.
+   * @group param
+   */
   val userCol = new Param[String](this, "userCol", "column name for user ids", Some("user"))
+
+  /** @group getParam */
   def getUserCol: String = get(userCol)
 
-  /** Param for the column name for item ids. */
+  /**
+   * Param for the column name for item ids.
+   * @group param
+   */
   val itemCol =
     new Param[String](this, "itemCol", "column name for item ids", Some("item"))
+
+  /** @group getParam */
   def getItemCol: String = get(itemCol)
 
-  /** Param for the column name for ratings. */
+  /**
+   * Param for the column name for ratings.
+   * @group param
+   */
   val ratingCol = new Param[String](this, "ratingCol", "column name for ratings", Some("rating"))
+
+  /** @group getParam */
   def getRatingCol: String = get(ratingCol)
 
+  /**
+   * Param for whether to apply nonnegativity constraints.
+   * @group param
+   */
   val nonnegative = new BooleanParam(
     this, "nonnegative", "whether to use nonnegative constraint for least squares", Some(false))
+
+  /** @group getParam */
   val getNonnegative: Boolean = get(nonnegative)
 
   /**
@@ -181,20 +227,46 @@ class ALS extends Estimator[ALSModel] with ALSParams {
 
   import org.apache.spark.ml.recommendation.ALS.Rating
 
+  /** @group setParam */
   def setRank(value: Int): this.type = set(rank, value)
+
+  /** @group setParam */
   def setNumUserBlocks(value: Int): this.type = set(numUserBlocks, value)
+
+  /** @group setParam */
   def setNumItemBlocks(value: Int): this.type = set(numItemBlocks, value)
+
+  /** @group setParam */
   def setImplicitPrefs(value: Boolean): this.type = set(implicitPrefs, value)
+
+  /** @group setParam */
   def setAlpha(value: Double): this.type = set(alpha, value)
+
+  /** @group setParam */
   def setUserCol(value: String): this.type = set(userCol, value)
+
+  /** @group setParam */
   def setItemCol(value: String): this.type = set(itemCol, value)
+
+  /** @group setParam */
   def setRatingCol(value: String): this.type = set(ratingCol, value)
+
+  /** @group setParam */
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
+
+  /** @group setParam */
   def setMaxIter(value: Int): this.type = set(maxIter, value)
+
+  /** @group setParam */
   def setRegParam(value: Double): this.type = set(regParam, value)
+
+  /** @group setParam */
   def setNonnegative(value: Boolean): this.type = set(nonnegative, value)
 
-  /** Sets both numUserBlocks and numItemBlocks to the specific value. */
+  /**
+   * Sets both numUserBlocks and numItemBlocks to the specific value.
+   * @group setParam
+   */
   def setNumBlocks(value: Int): this.type = {
     setNumUserBlocks(value)
     setNumItemBlocks(value)
