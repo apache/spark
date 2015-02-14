@@ -22,7 +22,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
 import org.apache.spark.mllib.linalg.{VectorUDT, BLAS, Vector, Vectors}
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.Dsl._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.storage.StorageLevel
 
@@ -49,8 +49,13 @@ class LogisticRegression
   setMaxIter(100)
   setThreshold(0.5)
 
+  /** @group setParam */
   def setRegParam(value: Double): this.type = set(regParam, value)
+
+  /** @group setParam */
   def setMaxIter(value: Int): this.type = set(maxIter, value)
+
+  /** @group setParam */
   def setThreshold(value: Double): this.type = set(threshold, value)
 
   override protected def train(dataset: DataFrame, paramMap: ParamMap): LogisticRegressionModel = {
@@ -93,6 +98,7 @@ class LogisticRegressionModel private[ml] (
 
   setThreshold(0.5)
 
+  /** @group setParam */
   def setThreshold(value: Double): this.type = set(threshold, value)
 
   private val margin: Vector => Double = (features) => {
@@ -124,44 +130,39 @@ class LogisticRegressionModel private[ml] (
     var numColsOutput = 0
     if (map(rawPredictionCol) != "") {
       val features2raw: Vector => Vector = (features) => predictRaw(features)
-      tmpData = tmpData.select($"*",
-        callUDF(features2raw, new VectorUDT, col(map(featuresCol))).as(map(rawPredictionCol)))
+      tmpData = tmpData.withColumn(map(rawPredictionCol),
+        callUDF(features2raw, new VectorUDT, col(map(featuresCol))))
       numColsOutput += 1
     }
     if (map(probabilityCol) != "") {
       if (map(rawPredictionCol) != "") {
-        val raw2prob: Vector => Vector = { (rawPreds: Vector) =>
+        val raw2prob = udf { (rawPreds: Vector) =>
           val prob1 = 1.0 / (1.0 + math.exp(-rawPreds(1)))
-          Vectors.dense(1.0 - prob1, prob1)
+          Vectors.dense(1.0 - prob1, prob1): Vector
         }
-        tmpData = tmpData.select($"*",
-          callUDF(raw2prob, new VectorUDT, col(map(rawPredictionCol))).as(map(probabilityCol)))
+        tmpData = tmpData.withColumn(map(probabilityCol), raw2prob(col(map(rawPredictionCol))))
       } else {
-        val features2prob: Vector => Vector = (features: Vector) => predictProbabilities(features)
-        tmpData = tmpData.select($"*",
-          callUDF(features2prob, new VectorUDT, col(map(featuresCol))).as(map(probabilityCol)))
+        val features2prob = udf { (features: Vector) => predictProbabilities(features) : Vector }
+        tmpData = tmpData.withColumn(map(probabilityCol), features2prob(col(map(featuresCol))))
       }
       numColsOutput += 1
     }
     if (map(predictionCol) != "") {
       val t = map(threshold)
       if (map(probabilityCol) != "") {
-        val predict: Vector => Double = { probs: Vector =>
+        val predict = udf { probs: Vector =>
           if (probs(1) > t) 1.0 else 0.0
         }
-        tmpData = tmpData.select($"*",
-          callUDF(predict, DoubleType, col(map(probabilityCol))).as(map(predictionCol)))
+        tmpData = tmpData.withColumn(map(predictionCol), predict(col(map(probabilityCol))))
       } else if (map(rawPredictionCol) != "") {
-        val predict: Vector => Double = { rawPreds: Vector =>
+        val predict = udf { rawPreds: Vector =>
           val prob1 = 1.0 / (1.0 + math.exp(-rawPreds(1)))
           if (prob1 > t) 1.0 else 0.0
         }
-        tmpData = tmpData.select($"*",
-          callUDF(predict, DoubleType, col(map(rawPredictionCol))).as(map(predictionCol)))
+        tmpData = tmpData.withColumn(map(predictionCol), predict(col(map(rawPredictionCol))))
       } else {
-        val predict: Vector => Double = (features: Vector) => this.predict(features)
-        tmpData = tmpData.select($"*",
-          callUDF(predict, DoubleType, col(map(featuresCol))).as(map(predictionCol)))
+        val predict = udf { features: Vector => this.predict(features) }
+        tmpData = tmpData.withColumn(map(predictionCol), predict(col(map(featuresCol))))
       }
       numColsOutput += 1
     }

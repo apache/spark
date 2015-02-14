@@ -37,7 +37,7 @@ class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter {
   import org.apache.spark.sql.hive.test.TestHive.implicits._
 
   val testData = TestHive.sparkContext.parallelize(
-    (1 to 100).map(i => TestData(i, i.toString)))
+    (1 to 100).map(i => TestData(i, i.toString))).toDF
 
   before {
     // Since every we are doing tests for DDL statements,
@@ -56,7 +56,7 @@ class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter {
     // Make sure the table has also been updated.
     checkAnswer(
       sql("SELECT * FROM createAndInsertTest"),
-      testData.collect().toSeq.map(Row.fromTuple)
+      testData.collect().toSeq
     )
 
     // Add more data.
@@ -65,7 +65,7 @@ class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter {
     // Make sure the table has been updated.
     checkAnswer(
       sql("SELECT * FROM createAndInsertTest"),
-      testData.toDataFrame.collect().toSeq ++ testData.toDataFrame.collect().toSeq
+      testData.toDF.collect().toSeq ++ testData.toDF.collect().toSeq
     )
 
     // Now overwrite.
@@ -74,7 +74,7 @@ class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter {
     // Make sure the registered table has also been updated.
     checkAnswer(
       sql("SELECT * FROM createAndInsertTest"),
-      testData.collect().toSeq.map(Row.fromTuple)
+      testData.collect().toSeq
     )
   }
 

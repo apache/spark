@@ -61,7 +61,7 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
     try {
       val replayer = new ReplayListenerBus()
       replayer.addListener(eventMonster)
-      replayer.replay(logData, SPARK_VERSION)
+      replayer.replay(logData, SPARK_VERSION, logFilePath.toString)
     } finally {
       logData.close()
     }
@@ -120,7 +120,7 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
     try {
       val replayer = new ReplayListenerBus()
       replayer.addListener(eventMonster)
-      replayer.replay(logData, version)
+      replayer.replay(logData, version, eventLog.getPath().toString)
     } finally {
       logData.close()
     }

@@ -62,7 +62,7 @@ private[classification] object GLMClassificationModel {
 
       // Create Parquet data.
       val data = Data(weights, intercept, threshold)
-      sc.parallelize(Seq(data), 1).saveAsParquetFile(Loader.dataPath(path))
+      sc.parallelize(Seq(data), 1).toDF.saveAsParquetFile(Loader.dataPath(path))
     }
 
     /**

@@ -262,7 +262,7 @@ class ReplSuite extends FunSuite {
         |val sqlContext = new org.apache.spark.sql.SQLContext(sc)
         |import sqlContext.implicits._
         |case class TestCaseClass(value: Int)
-        |sc.parallelize(1 to 10).map(x => TestCaseClass(x)).toDataFrame.collect()
+        |sc.parallelize(1 to 10).map(x => TestCaseClass(x)).toDF.collect()
       """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)

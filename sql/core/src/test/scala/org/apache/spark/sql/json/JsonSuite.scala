@@ -21,11 +21,12 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.Dsl._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.json.JsonRDD.{compatibleType, enforceCorrectType}
 import org.apache.spark.sql.sources.LogicalRelation
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{QueryTest, Row, SQLConf}
 
@@ -822,7 +823,7 @@ class JsonSuite extends QueryTest {
 
     val df1 = createDataFrame(rowRDD1, schema1)
     df1.registerTempTable("applySchema1")
-    val df2 = df1.toDataFrame
+    val df2 = df1.toDF
     val result = df2.toJSON.collect()
     assert(result(0) === "{\"f1\":1,\"f2\":\"A1\",\"f3\":true,\"f4\":[\"1\",\" A1\",\" true\",\" null\"]}")
     assert(result(3) === "{\"f1\":4,\"f2\":\"D4\",\"f3\":true,\"f4\":[\"4\",\" D4\",\" true\",\" 2147483644\"],\"f5\":2147483644}")
@@ -843,7 +844,7 @@ class JsonSuite extends QueryTest {
 
     val df3 = createDataFrame(rowRDD2, schema2)
     df3.registerTempTable("applySchema2")
-    val df4 = df3.toDataFrame
+    val df4 = df3.toDF
     val result2 = df4.toJSON.collect()
 
     assert(result2(1) === "{\"f1\":{\"f11\":2,\"f12\":false},\"f2\":{\"B2\":null}}")
