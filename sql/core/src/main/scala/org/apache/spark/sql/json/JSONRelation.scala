@@ -67,7 +67,6 @@ private[sql] class DefaultSource
         case SaveMode.Append =>
           sys.error(s"Append mode is not supported by ${this.getClass.getCanonicalName}")
         case SaveMode.Overwrite =>
-          //fs.delete(filesystemPath, true)
           true
         case SaveMode.ErrorIfExists =>
           sys.error(s"path $path already exists.")
