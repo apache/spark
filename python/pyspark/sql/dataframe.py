@@ -721,7 +721,7 @@ class GroupedData(object):
                                         self.sql_ctx._sc._gateway._gateway_client)
         jdf = self._jdf.mean(self.sql_ctx._sc._jvm.PythonUtils.toSeq(jcols))
         return DataFrame(jdf, self.sql_ctx)
- 
+
     def avg(self, *cols):
         """Compute the average value for each numeric columns
         for each group."""
@@ -737,7 +737,7 @@ class GroupedData(object):
                                         self.sql_ctx._sc._gateway._gateway_client)
         jdf = self._jdf.max(self.sql_ctx._sc._jvm.PythonUtils.toSeq(jcols))
         return DataFrame(jdf, self.sql_ctx)
- 
+
     def min(self, *cols):
         """Compute the min value for each numeric column for
         each group."""
@@ -745,7 +745,7 @@ class GroupedData(object):
                                         self.sql_ctx._sc._gateway._gateway_client)
         jdf = self._jdf.min(self.sql_ctx._sc._jvm.PythonUtils.toSeq(jcols))
         return DataFrame(jdf, self.sql_ctx)
- 
+
     def sum(self, *cols):
         """Compute the sum for each numeric columns for each
         group."""
@@ -753,6 +753,7 @@ class GroupedData(object):
                                         self.sql_ctx._sc._gateway._gateway_client)
         jdf = self._jdf.sum(self.sql_ctx._sc._jvm.PythonUtils.toSeq(jcols))
         return DataFrame(jdf, self.sql_ctx)
+
 
 def _create_column_from_literal(literal):
     sc = SparkContext._active_spark_context
