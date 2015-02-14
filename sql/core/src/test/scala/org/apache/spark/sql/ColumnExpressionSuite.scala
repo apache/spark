@@ -351,7 +351,7 @@ class ColumnExpressionSuite extends QueryTest {
   }
 
   test("explode") {
-    val df = Seq(Tuple1("a b c"), Tuple1("d e")).toDataFrame("words")
+    val df = Seq(Tuple1("a b c"), Tuple1("d e")).toDF("words")
     val column = df("words")
   
     checkAnswer(
