@@ -162,24 +162,24 @@ class DataFrameSuite extends QueryTest {
       testData2.groupBy("a").agg(Map("b" -> "sum")),
       Row(1, 3) :: Row(2, 3) :: Row(3, 3) :: Nil
     )
+
+    val df1 = Seq(("a", 1, 0, "b"), ("b", 2, 4, "c"), ("a", 2, 3, "d"))
+      .toDF("key", "value1", "value2", "rest")
+
+    checkAnswer(
+      df1.groupBy("key").min(),
+      df1.groupBy("key").min("value1", "value2").collect()
+    )
+    checkAnswer(
+      df1.groupBy("key").min("value2"),
+      Seq(Row("a", 0), Row("b", 4))
+    )
   }
 
   test("agg without groups") {
     checkAnswer(
       testData2.agg(sum('b)),
       Row(9)
-    )
-
-    val df1 = Seq(("a", 1, 0, "b"), ("b", 2, 4, "c"), ("a", 2, 3, "d"))
-      .toDataFrame("key", "value1", "value2", "rest")
-
-    checkAnswer(
-      df1.groupBy("key").min(),
-      df1.groupBy("key").min("value1", "value2").collect
-    )
-    checkAnswer(
-      df1.groupBy("key").min("value2"),
-      Seq(Row("a",0), Row("b",4))
     )
   }
 

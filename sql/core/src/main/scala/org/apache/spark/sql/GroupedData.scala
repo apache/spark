@@ -39,17 +39,9 @@ class GroupedData protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expressio
       df.sqlContext, Aggregate(groupingExprs, namedGroupingExprs ++ aggExprs, df.logicalPlan))
   }
 
-  private[this] def aggregateNumericColumns(f: Expression => Expression): Seq[NamedExpression] = {
-    df.numericColumns.map { c =>
-      val a = f(c)
-      Alias(a, a.toString)()
-    }
-  }
-
-  @scala.annotation.varargs
-  private[this] def aggregateNumericColumns(colName: String, colNames: String*)
+  private[this] def aggregateNumericColumns(colNames: String*)
     (f: Expression => Expression): Seq[NamedExpression] = {
-      df.numericColumns((Seq(colName) ++ colNames):_*).map { c =>
+      df.numericColumns(colNames:_*).map { c =>
         val a = f(c)
         Alias(a, a.toString)()
       }
@@ -165,11 +157,7 @@ class GroupedData protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expressio
    */
   @scala.annotation.varargs
   def mean(colNames: String*): DataFrame = {
-    if (colNames.isEmpty) {
-      aggregateNumericColumns(Average)
-    } else {
-      aggregateNumericColumns(colNames.head, colNames.tail:_*)(Average)
-    }
+    aggregateNumericColumns(colNames:_*)(Average)
   }
  
   /**
@@ -179,11 +167,7 @@ class GroupedData protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expressio
    */
   @scala.annotation.varargs
   def max(colNames: String*): DataFrame = {
-    if (colNames.isEmpty) {
-      aggregateNumericColumns(Max)
-    } else {
-      aggregateNumericColumns(colNames.head, colNames.tail:_*)(Max)
-    }
+    aggregateNumericColumns(colNames:_*)(Max)
   }
 
   /**
@@ -193,11 +177,7 @@ class GroupedData protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expressio
    */
   @scala.annotation.varargs
   def avg(colNames: String*): DataFrame = {
-    if (colNames.isEmpty) {
-      aggregateNumericColumns(Average)
-    } else {
-      aggregateNumericColumns(colNames.head, colNames.tail:_*)(Average)
-    }
+    aggregateNumericColumns(colNames:_*)(Average)
   }
 
   /**
@@ -207,11 +187,7 @@ class GroupedData protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expressio
    */
   @scala.annotation.varargs
   def min(colNames: String*): DataFrame = {
-    if (colNames.isEmpty) {
-      aggregateNumericColumns(Min)
-    } else {
-      aggregateNumericColumns(colNames.head, colNames.tail:_*)(Min)
-    }
+    aggregateNumericColumns(colNames:_*)(Min)
   }
 
   /**
@@ -221,10 +197,6 @@ class GroupedData protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expressio
    */
   @scala.annotation.varargs
   def sum(colNames: String*): DataFrame = {
-    if (colNames.isEmpty) {
-      aggregateNumericColumns(Sum)
-    } else {
-      aggregateNumericColumns(colNames.head, colNames.tail:_*)(Sum)
-    }
+    aggregateNumericColumns(colNames:_*)(Sum)
   }    
 }

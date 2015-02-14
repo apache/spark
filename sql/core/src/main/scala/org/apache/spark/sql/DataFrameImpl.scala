@@ -88,19 +88,24 @@ private[sql] class DataFrameImpl protected[sql](
     }
   }
 
-  protected[sql] def numericColumns: Seq[Expression] = {
-    schema.fields.filter(_.dataType.isInstanceOf[NumericType]).map { n =>
-      queryExecution.analyzed.resolve(n.name, sqlContext.analyzer.resolver).get
+  protected[sql] def numericColumns(colNames: String*): Seq[Expression] = {
+    val allNumbericCols = schema.fields.filter(_.dataType.isInstanceOf[NumericType]).map(_.name)
+    val diff = colNames.diff(allNumbericCols)
+    if (diff.nonEmpty) {
+      val diffStr = diff.mkString(", ")
+      throw new RuntimeException(
+        s"""Cannot resolve column names "($diffStr)" among (${schema.fieldNames.mkString(", ")})""")
+    }
+    val colsToResolve: Seq[String] = if (colNames.isEmpty) {
+      allNumbericCols
+    } else {
+      colNames
+    }
+    colsToResolve.map { n =>
+      queryExecution.analyzed.resolve(n, sqlContext.analyzer.resolver).get
     }
   }
  
-  protected[sql] def numericColumns(colNames: String*): Seq[Expression] = {
-    schema.fields.filter(n => colNames.contains(n.name) && n.dataType.isInstanceOf[NumericType])
-      .map { n =>
-        queryExecution.analyzed.resolve(n.name, sqlContext.analyzer.resolver).get
-      }
-  }
-
   override def toDF(colNames: String*): DataFrame = {
     require(schema.size == colNames.size,
       "The number of columns doesn't match.\n" +
