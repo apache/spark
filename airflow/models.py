@@ -643,7 +643,7 @@ class TaskInstance(Base):
         ti_key_str = ti_key_str.format(**locals())
 
         params = {}
-        if hasattr(task, 'dag'):
+        if hasattr(task, 'dag') and task.dag.params:
             params.update(task.dag.params)
         if task.params:
             params.update(task.params)
@@ -664,7 +664,6 @@ class TaskInstance(Base):
             'ti': self,
             'task_instance_key_str': ti_key_str
         }
-
 
     def render_templates(self):
         task = self.task
