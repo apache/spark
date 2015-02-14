@@ -30,25 +30,33 @@ import py4j.GatewayServer
  */
 private[spark] object PythonGatewayServer {
   def main(args: Array[String]): Unit = {
-    // Start a GatewayServer on an ephemeral port
-    val gatewayServer: GatewayServer = new GatewayServer(null, 0)
-    gatewayServer.start()
-    val boundPort: Int = gatewayServer.getListeningPort
+    try {
+      // Start a GatewayServer on an ephemeral port
+      val gatewayServer: GatewayServer = new GatewayServer(null, 0)
+      gatewayServer.start()
+      val boundPort: Int = gatewayServer.getListeningPort
 
-    // Communicate the bound port back to the caller via the caller-specified callback port
-    val callbackHost = sys.env("PYSPARK_DRIVER_CALLBACK_HOST")
-    val callbackPort = sys.env("PYSPARK_DRIVER_CALLBACK_PORT").toInt
-    val callbackSocket = new Socket(callbackHost, callbackPort)
-    val dos = new DataOutputStream(callbackSocket.getOutputStream)
-    dos.writeInt(boundPort)
-    dos.close()
-    callbackSocket.close()
+      // Communicate the bound port back to the caller via the caller-specified callback port
+      val callbackHost = sys.env("PYSPARK_DRIVER_CALLBACK_HOST")
+      val callbackPort = sys.env("PYSPARK_DRIVER_CALLBACK_PORT").toInt
+      val callbackSocket = new Socket(callbackHost, callbackPort)
+      val dos = new DataOutputStream(callbackSocket.getOutputStream)
+      dos.writeInt(boundPort)
+      dos.close()
+      callbackSocket.close()
 
-    System.in.read()
-    // Exit on EOF or broken pipe to ensure that this process dies when the Python driver dies:
-    while (System.in.read() != -1) {
-      // Do nothing
+      // Exit on EOF or broken pipe to ensure that this process dies when the Python driver dies:
+      while (System.in.read() != -1) {
+        // Do nothing
+      }
+      System.exit(0)
+    } catch {
+      case e: Exception =>
+        try {
+          throw e
+        } finally {
+          System.exit(1)
+        }
     }
-    System.exit(0)
   }
 }
