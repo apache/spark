@@ -21,6 +21,7 @@ import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.analysis.Star
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
@@ -28,17 +29,9 @@ import org.apache.spark.sql.types._
 /**
  * Domain specific functions available for [[DataFrame]].
  */
-object Dsl {
-
-  /** An implicit conversion that turns a Scala `Symbol` into a [[Column]]. */
-  implicit def symbolToColumn(s: Symbol): ColumnName = new ColumnName(s.name)
-
-  /** Converts $"col name" into an [[Column]]. */
-  implicit class StringToColumn(val sc: StringContext) extends AnyVal {
-    def $(args: Any*): ColumnName = {
-      new ColumnName(sc.s(args :_*))
-    }
-  }
+// scalastyle:off
+object functions {
+// scalastyle:on
 
   private[this] implicit def toColumn(expr: Expression): Column = Column(expr)
 
@@ -104,7 +97,11 @@ object Dsl {
   def sumDistinct(columnName: String): Column = sumDistinct(Column(columnName))
 
   /** Aggregate function: returns the number of items in a group. */
-  def count(e: Column): Column = Count(e.expr)
+  def count(e: Column): Column = e.expr match {
+    // Turn count(*) into count(1)
+    case s: Star => Count(Literal(1))
+    case _ => Count(e.expr)
+  }
 
   /** Aggregate function: returns the number of items in a group. */
   def count(columnName: String): Column = count(Column(columnName))

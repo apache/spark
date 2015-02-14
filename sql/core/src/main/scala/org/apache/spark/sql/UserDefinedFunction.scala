@@ -27,7 +27,7 @@ import org.apache.spark.sql.execution.PythonUDF
 import org.apache.spark.sql.types.DataType
 
 /**
- * A user-defined function. To create one, use the `udf` functions in [[Dsl]].
+ * A user-defined function. To create one, use the `udf` functions in [[functions]].
  * As an example:
  * {{{
  *   // Defined a UDF that returns true or false based on some numeric score.
@@ -45,7 +45,7 @@ case class UserDefinedFunction(f: AnyRef, dataType: DataType) {
 }
 
 /**
- * A user-defined Python function. To create one, use the `pythonUDF` functions in [[Dsl]].
+ * A user-defined Python function. To create one, use the `pythonUDF` functions in [[functions]].
  * This is used by Python API.
  */
 private[sql] case class UserDefinedPythonFunction(

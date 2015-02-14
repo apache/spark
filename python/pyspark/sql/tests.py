@@ -96,7 +96,7 @@ class SQLTests(ReusedPySparkTestCase):
         cls.sqlCtx = SQLContext(cls.sc)
         cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
         rdd = cls.sc.parallelize(cls.testData)
-        cls.df = cls.sqlCtx.createDataFrame(rdd)
+        cls.df = rdd.toDF()
 
     @classmethod
     def tearDownClass(cls):
@@ -138,7 +138,7 @@ class SQLTests(ReusedPySparkTestCase):
         df = self.sqlCtx.jsonRDD(rdd)
         df.count()
         df.collect()
-        df.schema()
+        df.schema
 
         # cache and checkpoint
         self.assertFalse(df.is_cached)
@@ -155,11 +155,11 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_apply_schema_to_row(self):
         df = self.sqlCtx.jsonRDD(self.sc.parallelize(["""{"a":2}"""]))
-        df2 = self.sqlCtx.createDataFrame(df.map(lambda x: x), df.schema())
+        df2 = self.sqlCtx.createDataFrame(df.map(lambda x: x), df.schema)
         self.assertEqual(df.collect(), df2.collect())
 
         rdd = self.sc.parallelize(range(10)).map(lambda x: Row(a=x))
-        df3 = self.sqlCtx.createDataFrame(rdd, df.schema())
+        df3 = self.sqlCtx.createDataFrame(rdd, df.schema)
         self.assertEqual(10, df3.count())
 
     def test_serialize_nested_array_and_map(self):
@@ -195,7 +195,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(1, result.head()[0])
 
         df2 = self.sqlCtx.createDataFrame(rdd, samplingRatio=1.0)
-        self.assertEqual(df.schema(), df2.schema())
+        self.assertEqual(df.schema, df2.schema)
         self.assertEqual({}, df2.map(lambda r: r.d).first())
         self.assertEqual([None, ""], df2.map(lambda r: r.s).collect())
         df2.registerTempTable("test2")
@@ -204,8 +204,7 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_struct_in_map(self):
         d = [Row(m={Row(i=1): Row(s="")})]
-        rdd = self.sc.parallelize(d)
-        df = self.sqlCtx.createDataFrame(rdd)
+        df = self.sc.parallelize(d).toDF()
         k, v = df.head().m.items()[0]
         self.assertEqual(1, k.i)
         self.assertEqual("", v.s)
@@ -213,8 +212,7 @@ class SQLTests(ReusedPySparkTestCase):
     def test_convert_row_to_dict(self):
         row = Row(l=[Row(a=1, b='s')], d={"key": Row(c=1.0, d="2")})
         self.assertEqual(1, row.asDict()['l'][0].a)
-        rdd = self.sc.parallelize([row])
-        df = self.sqlCtx.createDataFrame(rdd)
+        df = self.sc.parallelize([row]).toDF()
         df.registerTempTable("test")
         row = self.sqlCtx.sql("select l, d from test").head()
         self.assertEqual(1, row.asDict()["l"][0].a)
@@ -223,9 +221,8 @@ class SQLTests(ReusedPySparkTestCase):
     def test_infer_schema_with_udt(self):
         from pyspark.sql.tests import ExamplePoint, ExamplePointUDT
         row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
-        rdd = self.sc.parallelize([row])
-        df = self.sqlCtx.createDataFrame(rdd)
-        schema = df.schema()
+        df = self.sc.parallelize([row]).toDF()
+        schema = df.schema
         field = [f for f in schema.fields if f.name == "point"][0]
         self.assertEqual(type(field.dataType), ExamplePointUDT)
         df.registerTempTable("labeled_point")
@@ -238,15 +235,14 @@ class SQLTests(ReusedPySparkTestCase):
         rdd = self.sc.parallelize([row])
         schema = StructType([StructField("label", DoubleType(), False),
                              StructField("point", ExamplePointUDT(), False)])
-        df = self.sqlCtx.createDataFrame(rdd, schema)
+        df = rdd.toDF(schema)
         point = df.head().point
         self.assertEquals(point, ExamplePoint(1.0, 2.0))
 
     def test_parquet_with_udt(self):
         from pyspark.sql.tests import ExamplePoint
         row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
-        rdd = self.sc.parallelize([row])
-        df0 = self.sqlCtx.createDataFrame(rdd)
+        df0 = self.sc.parallelize([row]).toDF()
         output_dir = os.path.join(self.tempdir.name, "labeled_point")
         df0.saveAsParquetFile(output_dir)
         df1 = self.sqlCtx.parquetFile(output_dir)
@@ -280,10 +276,11 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual([99, 100], sorted(g.agg({'key': 'max', 'value': 'count'}).collect()[0]))
         self.assertEqual([Row(**{"AVG(key#0)": 49.5})], g.mean().collect())
 
-        from pyspark.sql import Dsl
-        self.assertEqual((0, u'99'), tuple(g.agg(Dsl.first(df.key), Dsl.last(df.value)).first()))
-        self.assertTrue(95 < g.agg(Dsl.approxCountDistinct(df.key)).first()[0])
-        self.assertEqual(100, g.agg(Dsl.countDistinct(df.value)).first()[0])
+        from pyspark.sql import functions
+        self.assertEqual((0, u'99'),
+                         tuple(g.agg(functions.first(df.key), functions.last(df.value)).first()))
+        self.assertTrue(95 < g.agg(functions.approxCountDistinct(df.key)).first()[0])
+        self.assertEqual(100, g.agg(functions.countDistinct(df.value)).first()[0])
 
     def test_save_and_load(self):
         df = self.df
@@ -339,8 +336,7 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
             cls.sc._jvm.org.apache.spark.sql.hive.test.TestHiveContext(cls.sc._jsc.sc())
         cls.sqlCtx = HiveContext(cls.sc, _scala_HiveContext)
         cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
-        rdd = cls.sc.parallelize(cls.testData)
-        cls.df = cls.sqlCtx.inferSchema(rdd)
+        cls.df = cls.sc.parallelize(cls.testData).toDF()
 
     @classmethod
     def tearDownClass(cls):
