@@ -582,14 +582,12 @@ trait Column extends DataFrame {
    * {{{
    *   val df = Seq(Tuple1("a b c"), Tuple1("d e")).toDataFrame("words")
    *   val col = df("words")
-   *   col.explode("word"){words: String => words.split(" ")}
+   *   col.explode {words: String => words.split(" ")}
    * }}}
    */
-  def explode[A, B : TypeTag](
-      outputColumn: String)(
-      f: A => TraversableOnce[B]): Column = {
+  def explode[A, B : TypeTag](f: A => TraversableOnce[B]): Column = {
     val dataType = ScalaReflection.schemaFor[B].dataType
-    val attributes = AttributeReference(outputColumn, dataType)() :: Nil
+    val attributes = AttributeReference(schema.fields(0).name, dataType)() :: Nil
     def rowFunction(row: Row) = {
       f(row(0).asInstanceOf[A]).map(o => Row(ScalaReflection.convertToCatalyst(o, dataType)))
     }

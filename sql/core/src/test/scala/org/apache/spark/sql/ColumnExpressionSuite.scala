@@ -355,7 +355,7 @@ class ColumnExpressionSuite extends QueryTest {
     val column = df("words")
   
     checkAnswer(
-      column.explode("word") { word: String => word.split(" ").toSeq }.as("t"),
+      column.explode { word: String => word.split(" ").toSeq }.as("word"),
       Row("a") :: Row("b") :: Row("c") :: Row("d") ::Row("e") :: Nil
     )
   }
