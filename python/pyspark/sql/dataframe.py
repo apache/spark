@@ -392,21 +392,6 @@ class DataFrame(object):
         rdd = self._jdf.sample(withReplacement, fraction, long(seed))
         return DataFrame(rdd, self.sql_ctx)
 
-    # def takeSample(self, withReplacement, num, seed=None):
-    #     """Return a fixed-size sampled subset of this DataFrame.
-    #
-    #     >>> df = sqlCtx.inferSchema(rdd)
-    #     >>> df.takeSample(False, 2, 97)
-    #     [Row(field1=3, field2=u'row3'), Row(field1=1, field2=u'row1')]
-    #     """
-    #     seed = seed if seed is not None else random.randint(0, sys.maxint)
-    #     with SCCallSiteSync(self.context) as css:
-    #         bytesInJava = self._jdf \
-    #             .takeSampleToPython(withReplacement, num, long(seed)) \
-    #             .iterator()
-    #     cls = _create_cls(self.schema)
-    #     return map(cls, self._collect_iterator_through_file(bytesInJava))
-
     @property
     def dtypes(self):
         """Return all column names and their data types as a list.
@@ -649,11 +634,11 @@ class DataFrame(object):
                 for c in self.columns]
         return self.select(*cols)
 
-    def to_pandas(self):
+    def toPandas(self):
         """
         Collect all the rows and return a `pandas.DataFrame`.
 
-        >>> df.to_pandas()  # doctest: +SKIP
+        >>> df.toPandas()  # doctest: +SKIP
            age   name
         0    2  Alice
         1    5    Bob
@@ -701,8 +686,13 @@ class GroupedData(object):
                       name to aggregate methods.
 
         >>> gdf = df.groupBy(df.name)
+<<<<<<< HEAD
         >>> gdf.agg({"age": "max"}).collect()
         [Row(name=u'Bob', MAX(age#0)=5), Row(name=u'Alice', MAX(age#0)=2)]
+=======
+        >>> gdf.agg({"*": "count"}).collect()
+        [Row(name=u'Bob', COUNT(1)=1), Row(name=u'Alice', COUNT(1)=1)]
+>>>>>>> 97dd47cfa9af95ac2f6445d966ae43dc140542f1
 
         >>> from pyspark.sql import functions as F
         >>> gdf.agg(F.min(df.age)).collect()
@@ -935,11 +925,11 @@ class Column(DataFrame):
         else:
             return 'Column<%s>' % self._jdf.toString()
 
-    def to_pandas(self):
+    def toPandas(self):
         """
         Return a pandas.Series from the column
 
-        >>> df.age.to_pandas()  # doctest: +SKIP
+        >>> df.age.toPandas()  # doctest: +SKIP
         0    2
         1    5
         dtype: int64
@@ -957,11 +947,9 @@ def _test():
     globs = pyspark.sql.dataframe.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
-    globs['sqlCtx'] = sqlCtx = SQLContext(sc)
-    rdd2 = sc.parallelize([Row(name='Alice', age=2), Row(name='Bob', age=5)])
-    rdd3 = sc.parallelize([Row(name='Tom', height=80), Row(name='Bob', height=85)])
-    globs['df'] = sqlCtx.inferSchema(rdd2)
-    globs['df2'] = sqlCtx.inferSchema(rdd3)
+    globs['sqlCtx'] = SQLContext(sc)
+    globs['df'] = sc.parallelize([Row(name='Alice', age=2), Row(name='Bob', age=5)]).toDF()
+    globs['df2'] = sc.parallelize([Row(name='Tom', height=80), Row(name='Bob', height=85)]).toDF()
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.dataframe, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
