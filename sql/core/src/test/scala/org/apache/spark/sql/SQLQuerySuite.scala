@@ -1055,6 +1055,6 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
         sql(
           """SELECT a.key FROM testData a 
             |WHERE a.key in
-            |(SELECT b.key FROM testData b WHERE b.key in (1))""".stripMargin), 1)
+            |(SELECT b.key FROM testData b WHERE b.key in (1))""".stripMargin), Row(1))
   }
 }
