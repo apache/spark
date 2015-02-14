@@ -94,7 +94,7 @@ private[sql] class DataFrameImpl protected[sql](
     }
   }
 
-  override def toDataFrame(colNames: String*): DataFrame = {
+  override def toDF(colNames: String*): DataFrame = {
     require(schema.size == colNames.size,
       "The number of columns doesn't match.\n" +
         "Old column names: " + schema.fields.map(_.name).mkString(", ") + "\n" +
@@ -229,11 +229,11 @@ private[sql] class DataFrameImpl protected[sql](
     }: _*)
   }
 
-  override def addColumn(colName: String, col: Column): DataFrame = {
+  override def withColumn(colName: String, col: Column): DataFrame = {
     select(Column("*"), col.as(colName))
   }
 
-  override def renameColumn(existingName: String, newName: String): DataFrame = {
+  override def withColumnRenamed(existingName: String, newName: String): DataFrame = {
     val colNames = schema.map { field =>
       val name = field.name
       if (name == existingName) Column(name).as(newName) else Column(name)

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.Dsl._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.types.{BooleanType, IntegerType, StructField, StructType}
@@ -68,7 +68,7 @@ class ColumnExpressionSuite extends QueryTest {
   }
 
   test("collect on column produced by a binary operator") {
-    val df = Seq((1, 2, 3)).toDataFrame("a", "b", "c")
+    val df = Seq((1, 2, 3)).toDF("a", "b", "c")
     checkAnswer(df("a") + df("b"), Seq(Row(3)))
     checkAnswer(df("a") + df("b").as("c"), Seq(Row(3)))
   }
@@ -79,7 +79,7 @@ class ColumnExpressionSuite extends QueryTest {
 
   test("star qualified by data frame object") {
     // This is not yet supported.
-    val df = testData.toDataFrame
+    val df = testData.toDF
     val goldAnswer = df.collect().toSeq
     checkAnswer(df.select(df("*")), goldAnswer)
 
@@ -156,13 +156,13 @@ class ColumnExpressionSuite extends QueryTest {
 
   test("isNull") {
     checkAnswer(
-      nullStrings.toDataFrame.where($"s".isNull),
+      nullStrings.toDF.where($"s".isNull),
       nullStrings.collect().toSeq.filter(r => r.getString(1) eq null))
   }
 
   test("isNotNull") {
     checkAnswer(
-      nullStrings.toDataFrame.where($"s".isNotNull),
+      nullStrings.toDF.where($"s".isNotNull),
       nullStrings.collect().toSeq.filter(r => r.getString(1) ne null))
   }
 
