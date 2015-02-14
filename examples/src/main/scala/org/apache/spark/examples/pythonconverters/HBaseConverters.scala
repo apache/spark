@@ -18,6 +18,7 @@
 package org.apache.spark.examples.pythonconverters
 
 import scala.collection.JavaConversions._
+import scala.util.parsing.json._
 
 import org.apache.spark.api.python.Converter
 import org.apache.hadoop.hbase.client.{Put, Result}
@@ -28,22 +29,23 @@ import org.apache.hadoop.hbase.CellUtil
 
 /**
  * Implementation of [[org.apache.spark.api.python.Converter]] that converts all
- * the records in an HBase Result to a String
+ * the records in an HBase Result to an Array[String]
  */
-class HBaseResultToStringConverter extends Converter[Any, String] {
-  override def convert(obj: Any): String = {
+class HBaseResultToStringConverter extends Converter[Any, Array[String]] {
+  override def convert(obj: Any): Array[String] = {
     import collection.JavaConverters._
     val result = obj.asInstanceOf[Result]
     val output = result.listCells.asScala.map(cell =>
-        "{'columnFamily':'%s','qualifier':'%s','timestamp':'%s','type':'%s','value':'%s'}".format(
-          Bytes.toStringBinary(CellUtil.cloneFamily(cell)),
-          Bytes.toStringBinary(CellUtil.cloneQualifier(cell)),
-          cell.getTimestamp.toString,
-          Type.codeToType(cell.getTypeByte),
-          Bytes.toStringBinary(CellUtil.cloneValue(cell))
+        Map(
+          "row" -> Bytes.toStringBinary(CellUtil.cloneRow(cell)),
+          "columnFamily" -> Bytes.toStringBinary(CellUtil.cloneFamily(cell)),
+          "qualifier" -> Bytes.toStringBinary(CellUtil.cloneQualifier(cell)),
+          "timestamp" -> cell.getTimestamp.toString,
+          "type" -> Type.codeToType(cell.getTypeByte).toString,
+          "value" -> Bytes.toStringBinary(CellUtil.cloneValue(cell))
         )
-    )   
-    output.mkString(" ")
+    )
+    output.map(JSONObject(_).toString()).toArray
   }
 }
 

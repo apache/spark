@@ -16,7 +16,7 @@
 #
 
 import sys
-import ast
+import simplejson as json
 
 from pyspark import SparkContext
 
@@ -75,8 +75,8 @@ if __name__ == "__main__":
         keyConverter=keyConv,
         valueConverter=valueConv,
         conf=conf)
-    # hbase_rdd is a RDD[dict]
-    hbase_rdd = hbase_rdd.flatMapValues(lambda v: v.split(" ")).mapValues(ast.literal_eval)
+    # hbase_rdd is a RDD of dict
+    hbase_rdd = hbase_rdd.flatMapValues(lambda v: v).mapValues(json.loads)
 
     output = hbase_rdd.collect()
     for (k, v) in output:
