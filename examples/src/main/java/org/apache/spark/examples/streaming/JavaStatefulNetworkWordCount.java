@@ -83,9 +83,9 @@ public class JavaStatefulNetworkWordCount {
     ssc.checkpoint(".");
 
     // Initial RDD input to updateStateByKey
-    JavaPairRDD<String, Integer> initialRDD = ssc.sc()
-            .parallelizePairs(Arrays.asList(new Tuple2<String, Integer>("hello", 1), new Tuple2<String, Integer>
-                    ("world", 1)));
+    List<Tuple2<String, Integer>> tuples = Arrays.asList(new Tuple2<String, Integer>("hello", 1),
+            new Tuple2<String, Integer>("world", 1));
+    JavaPairRDD<String, Integer> initialRDD = ssc.sc().parallelizePairs(tuples);
 
     JavaReceiverInputDStream<String> lines = ssc.socketTextStream(
             args[0], Integer.parseInt(args[1]), StorageLevels.MEMORY_AND_DISK_SER_2);
@@ -105,8 +105,8 @@ public class JavaStatefulNetworkWordCount {
     });
 
     // This will give a Dstream made of state (which is the cumulative count of the words)
-    JavaPairDStream<String, Integer> stateDstream = wordsDstream.updateStateByKey(updateFunction, new
-            HashPartitioner(ssc.sc().defaultParallelism()), initialRDD);
+    JavaPairDStream<String, Integer> stateDstream = wordsDstream.updateStateByKey(updateFunction,
+            new HashPartitioner(ssc.sc().defaultParallelism()), initialRDD);
 
     stateDstream.print();
     ssc.start();
