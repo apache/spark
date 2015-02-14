@@ -20,16 +20,20 @@ import os
 import sys
 import signal
 import shlex
+import socket
 import platform
 from subprocess import Popen, PIPE
 from threading import Thread
 from py4j.java_gateway import java_import, JavaGateway, GatewayClient
 
+from pyspark.serializers import read_int
+
+_gateway_connection = None
 
 def launch_gateway():
+    global _gateway_connection
     SPARK_HOME = os.environ["SPARK_HOME"]
 
-    gateway_port = -1
     if "PYSPARK_GATEWAY_PORT" in os.environ:
         gateway_port = int(os.environ["PYSPARK_GATEWAY_PORT"])
     else:
@@ -41,36 +45,29 @@ def launch_gateway():
         submit_args = submit_args if submit_args is not None else ""
         submit_args = shlex.split(submit_args)
         command = [os.path.join(SPARK_HOME, script)] + submit_args + ["pyspark-shell"]
+
+        # Start a socket that will be used by PythonGatewayServer to communicate its port to us
+        callback_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        callback_socket.bind(('127.0.0.1', 0))
+        callback_socket.listen(1)
+        callback_host, callback_port = callback_socket.getsockname()
+        env = dict(os.environ)
+        env['PYSPARK_DRIVER_CALLBACK_HOST'] = callback_host
+        env['PYSPARK_DRIVER_CALLBACK_PORT'] = str(callback_port)
+
         if not on_windows:
             # Don't send ctrl-c / SIGINT to the Java gateway:
             def preexec_func():
                 signal.signal(signal.SIGINT, signal.SIG_IGN)
-            env = dict(os.environ)
             env["IS_SUBPROCESS"] = "1"  # tell JVM to exit after python exits
             proc = Popen(command, stdout=PIPE, stdin=PIPE, preexec_fn=preexec_func, env=env)
         else:
             # preexec_fn not supported on Windows
-            proc = Popen(command, stdout=PIPE, stdin=PIPE)
+            proc = Popen(command, stdout=PIPE, stdin=PIPE, env=env)
 
-        try:
-            # Determine which ephemeral port the server started on:
-            gateway_port = proc.stdout.readline()
-            gateway_port = int(gateway_port)
-        except ValueError:
-            # Grab the remaining lines of stdout
-            (stdout, _) = proc.communicate()
-            exit_code = proc.poll()
-            error_msg = "Launching GatewayServer failed"
-            error_msg += " with exit code %d!\n" % exit_code if exit_code else "!\n"
-            error_msg += "Warning: Expected GatewayServer to output a port, but found "
-            if gateway_port == "" and stdout == "":
-                error_msg += "no output.\n"
-            else:
-                error_msg += "the following:\n\n"
-                error_msg += "--------------------------------------------------------------\n"
-                error_msg += gateway_port + stdout
-                error_msg += "--------------------------------------------------------------\n"
-            raise Exception(error_msg)
+        _gateway_connection = callback_socket.accept()[0]
+        # Determine which ephemeral port the server started on:
+        gateway_port = read_int(_gateway_connection.makefile())
 
         # In Windows, ensure the Java child processes do not linger after Python has exited.
         # In UNIX-based systems, the child process can kill itself on broken pipe (i.e. when
