@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.orc
 
 import java.io.IOException
 import java.util.{Locale, Properties}
+
 import scala.collection.JavaConversions._
 
 import org.apache.hadoop.mapred.{JobConf, InputFormat, FileInputFormat}
@@ -28,6 +29,7 @@ import org.apache.hadoop.fs.{Path, FileSystem}
 import org.apache.hadoop.hive.ql.io.orc._
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorUtils, StructObjectInspector}
 
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.{SaveMode, DataFrame, SQLContext}
 import org.apache.spark.annotation.DeveloperApi
@@ -117,8 +119,15 @@ case class OrcRelation
 
   def sparkContext = sqlContext.sparkContext
 
-  // todo: how to calculate this size
-//  override val sizeInBytes = ???
+  // todo: Should calculate per scan size
+  override val sizeInBytes = {
+    val fs = FileSystem.get(new java.net.URI(path), sparkContext.hadoopConfiguration)
+    val fileStatus = fs.getFileStatus(fs.makeQualified(new Path(path)))
+    val leaves = SparkHadoopUtil.get.listLeafStatuses(fs, fileStatus.getPath).filter { f =>
+      !(f.getPath.getName.startsWith("_") || f.getPath.getName.startsWith("."))
+    }
+    leaves.map(_.getLen).sum
+  }
 
   private def initialColumnsNamesTypes(schema: StructType) = {
     val inspector = toInspector(schema).asInstanceOf[StructObjectInspector]
@@ -205,7 +214,10 @@ case class OrcRelation
    * @param relationOutput
    * @param conf
    */
-  private def addColumnIds(output: Seq[Attribute], relationOutput: Seq[Attribute], conf: Configuration) {
+  private def addColumnIds(
+      output: Seq[Attribute],
+      relationOutput: Seq[Attribute],
+      conf: Configuration) {
     val names = output.map(_.name)
     val fieldIdMap = relationOutput.map(_.name.toLowerCase(Locale.ENGLISH)).zipWithIndex.toMap
     val ids = output.map { att =>
