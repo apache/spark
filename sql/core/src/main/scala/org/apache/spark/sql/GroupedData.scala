@@ -45,7 +45,8 @@ class GroupedData protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expressio
       Alias(a, a.toString)()
     }
   }
- 
+
+  @scala.annotation.varargs
   private[this] def aggregateNumericColumns(colName: String, colNames: String*)
     (f: Expression => Expression): Seq[NamedExpression] = {
       df.numericColumns((Seq(colName) ++ colNames):_*).map { c =>
@@ -155,72 +156,70 @@ class GroupedData protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expressio
   /**
    * Compute the average value for each numeric columns for each group. This is an alias for `avg`.
    * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the average values for them.
    */
-  def mean(): DataFrame = aggregateNumericColumns(Average)
- 
-  /**
-   * Compute the average value for given numeric columns for each group. This is an alias for `avg`.
-   * The resulting [[DataFrame]] will also contain the grouping columns.
-   */
-  def mean(colName: String, colNames: String*): DataFrame = {
-    aggregateNumericColumns(colName, colNames:_*)(Average)
+  @scala.annotation.varargs
+  def mean(colNames: String*): DataFrame = {
+    if (colNames.isEmpty) {
+      aggregateNumericColumns(Average)
+    } else {
+      aggregateNumericColumns(colNames.head, colNames.tail:_*)(Average)
+    }
   }
-
+ 
   /**
    * Compute the max value for each numeric columns for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the max values for them.
    */
-  def max(): DataFrame = aggregateNumericColumns(Max)
- 
-  /**
-   * Compute the max value for given numeric columns for each group.
-   * The resulting [[DataFrame]] will also contain the grouping columns.
-   */
-  def max(colName: String, colNames: String*): DataFrame = {
-    aggregateNumericColumns(colName, colNames:_*)(Max)
+  @scala.annotation.varargs
+  def max(colNames: String*): DataFrame = {
+    if (colNames.isEmpty) {
+      aggregateNumericColumns(Max)
+    } else {
+      aggregateNumericColumns(colNames.head, colNames.tail:_*)(Max)
+    }
   }
 
   /**
    * Compute the mean value for each numeric columns for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the mean values for them.
    */
-  def avg(): DataFrame = aggregateNumericColumns(Average)
- 
-  /**
-   * Compute the mean value for given numeric columns for each group.
-   * The resulting [[DataFrame]] will also contain the grouping columns.
-   */
-  def avg(colName: String, colNames: String*): DataFrame = {
-    aggregateNumericColumns(colName, colNames:_*)(Average)
+  @scala.annotation.varargs
+  def avg(colNames: String*): DataFrame = {
+    if (colNames.isEmpty) {
+      aggregateNumericColumns(Average)
+    } else {
+      aggregateNumericColumns(colNames.head, colNames.tail:_*)(Average)
+    }
   }
 
   /**
    * Compute the min value for each numeric column for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the min values for them.
    */
-  def min(): DataFrame = aggregateNumericColumns(Min)
- 
-  /**
-   * Compute the min value for given numeric column for each group.
-   * The resulting [[DataFrame]] will also contain the grouping columns.
-   */
-  def min(colName: String, colNames: String*): DataFrame = {
-    aggregateNumericColumns(colName, colNames:_*)(Min)
+  @scala.annotation.varargs
+  def min(colNames: String*): DataFrame = {
+    if (colNames.isEmpty) {
+      aggregateNumericColumns(Min)
+    } else {
+      aggregateNumericColumns(colNames.head, colNames.tail:_*)(Min)
+    }
   }
 
   /**
    * Compute the sum for each numeric columns for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the sum for them.
    */
-  def sum(): DataFrame = aggregateNumericColumns(Sum)
- 
-  /**
-   * Compute the sum for given numeric columns for each group.
-   * The resulting [[DataFrame]] will also contain the grouping columns.
-   */
-  def sum(colName: String, colNames: String*): DataFrame = {
-    aggregateNumericColumns(colName, colNames:_*)(Sum)
-  }
- 
- 
+  @scala.annotation.varargs
+  def sum(colNames: String*): DataFrame = {
+    if (colNames.isEmpty) {
+      aggregateNumericColumns(Sum)
+    } else {
+      aggregateNumericColumns(colNames.head, colNames.tail:_*)(Sum)
+    }
+  }    
 }
