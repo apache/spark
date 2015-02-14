@@ -275,7 +275,7 @@ private[hive] object HadoopTableReader extends HiveInspectors {
 
     val soi = deserializer.getObjectInspector().asInstanceOf[StructObjectInspector]
     val (fieldRefs, fieldOrdinals) = nonPartitionKeyAttrs.map { case (attr, ordinal) =>
-      soi.getStructFieldRef(attr.name) -> ordinal
+      soi.getStructFieldRef(attr.name.toLowerCase) -> ordinal
     }.unzip
 
     // Builds specific unwrappers ahead of time according to object inspector types to avoid pattern
