@@ -62,7 +62,10 @@ abstract class Transformer extends PipelineStage with Params {
 private[ml] abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, OUT, T]]
   extends Transformer with HasInputCol with HasOutputCol with Logging {
 
+  /** @group setParam */
   def setInputCol(value: String): T = set(inputCol, value).asInstanceOf[T]
+
+  /** @group setParam */
   def setOutputCol(value: String): T = set(outputCol, value).asInstanceOf[T]
 
   /**

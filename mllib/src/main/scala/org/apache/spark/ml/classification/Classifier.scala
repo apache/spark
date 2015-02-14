@@ -66,6 +66,7 @@ private[spark] abstract class Classifier[
   extends Predictor[FeaturesType, E, M]
   with ClassifierParams {
 
+  /** @group setParam */
   def setRawPredictionCol(value: String): E =
     set(rawPredictionCol, value).asInstanceOf[E]
 
@@ -87,6 +88,7 @@ private[spark]
 abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[FeaturesType, M]]
   extends PredictionModel[FeaturesType, M] with ClassifierParams {
 
+  /** @group setParam */
   def setRawPredictionCol(value: String): M = set(rawPredictionCol, value).asInstanceOf[M]
 
   /** Number of classes (values which the label can take). */

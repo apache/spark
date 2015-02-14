@@ -61,6 +61,7 @@ private[spark] abstract class ProbabilisticClassifier[
     M <: ProbabilisticClassificationModel[FeaturesType, M]]
   extends Classifier[FeaturesType, E, M] with ProbabilisticClassifierParams {
 
+  /** @group setParam */
   def setProbabilityCol(value: String): E = set(probabilityCol, value).asInstanceOf[E]
 }
 
@@ -82,6 +83,7 @@ private[spark] abstract class ProbabilisticClassificationModel[
     M <: ProbabilisticClassificationModel[FeaturesType, M]]
   extends ClassificationModel[FeaturesType, M] with ProbabilisticClassifierParams {
 
+  /** @group setParam */
   def setProbabilityCol(value: String): M = set(probabilityCol, value).asInstanceOf[M]
 
   /**

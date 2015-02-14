@@ -49,8 +49,13 @@ class LogisticRegression
   setMaxIter(100)
   setThreshold(0.5)
 
+  /** @group setParam */
   def setRegParam(value: Double): this.type = set(regParam, value)
+
+  /** @group setParam */
   def setMaxIter(value: Int): this.type = set(maxIter, value)
+
+  /** @group setParam */
   def setThreshold(value: Double): this.type = set(threshold, value)
 
   override protected def train(dataset: DataFrame, paramMap: ParamMap): LogisticRegressionModel = {
@@ -93,6 +98,7 @@ class LogisticRegressionModel private[ml] (
 
   setThreshold(0.5)
 
+  /** @group setParam */
   def setThreshold(value: Double): this.type = set(threshold, value)
 
   private val margin: Vector => Double = (features) => {

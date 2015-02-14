@@ -39,7 +39,10 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
 @AlphaComponent
 class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerParams {
 
+  /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
+
+  /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def fit(dataset: DataFrame, paramMap: ParamMap): StandardScalerModel = {
@@ -75,7 +78,10 @@ class StandardScalerModel private[ml] (
     scaler: feature.StandardScalerModel)
   extends Model[StandardScalerModel] with StandardScalerParams {
 
+  /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
+
+  /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
