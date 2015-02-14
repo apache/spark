@@ -29,7 +29,7 @@ libraryDependencies ++= Seq(
   val excludeHadoop = ExclusionRule(organization = "org.apache.hadoop")
   val sbtYarnFlag = scala.util.Properties.envOrElse("USE_YARN", "")
   val defaultHadoopVersion = "1.0.4"
-  val defaultSparkVersion = "1.3.0-SNAPSHOT"
+  val defaultSparkVersion = "1.3.0"
   val hadoopVersion = scala.util.Properties.envOrElse("SPARK_HADOOP_VERSION", defaultHadoopVersion)
   val sparkVersion = scala.util.Properties.envOrElse("SPARK_VERSION", defaultSparkVersion)
   libraryDependencies ++= Seq(
@@ -53,6 +53,7 @@ libraryDependencies ++= Seq(
 }
 
 resolvers ++= Seq(
+  "Apache Staging" at "https://repository.apache.org/content/repositories/staging/",
   "Typesafe" at "http://repo.typesafe.com/typesafe/releases",
   "Scala Tools Snapshots" at "http://scala-tools.org/repo-snapshots/",
   "Cloudera Repository"  at "https://repository.cloudera.com/artifactory/cloudera-repos/",

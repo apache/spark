@@ -19,6 +19,17 @@
       </snapshots>
     </repository>
     <repository>
+      <id>apache-staging-repo</id>
+      <name>Apache Staging Repository</name>
+      <url>https://repository.apache.org/content/repositories/staging</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
       <id>apache-repo</id>
       <name>Apache Repository</name>
       <url>https://repository.apache.org/content/repositories/releases</url>
@@ -100,6 +111,17 @@
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_2.10</artifactId>
+      <version>${spark.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-client</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-sql_2.10</artifactId>
       <version>${spark.version}</version>
       <exclusions>
         <exclusion>
