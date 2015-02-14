@@ -60,7 +60,7 @@ class Analyzer(catalog: Catalog,
       ResolveGroupingAnalytics ::
       ResolveSortReferences ::
       ImplicitGenerate ::
-//      SubQueryExpressions ::      
+      SubQueryExpressions ::
       ResolveFunctions ::
       GlobalAggregates ::
       UnresolvedHavingClauseAttributes ::
