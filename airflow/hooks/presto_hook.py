@@ -1,5 +1,4 @@
 from airflow import settings
-from airflow.configuration import conf
 from airflow.models import Connection
 from airflow.hooks.base_hook import BaseHook
 from pyhive import presto
@@ -18,7 +17,7 @@ class PrestoHook(BaseHook):
     [[340698]]
     """
     def __init__(self, host=None, db=None, port=None,
-                 presto_conn_id=conf.get('hooks', 'PRESTO_DEFAULT_CONN_ID')):
+                 presto_conn_id='presto_default'):
         self.user = 'airflow'
         if not presto_conn_id:
             self.host = host

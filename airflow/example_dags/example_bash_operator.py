@@ -16,7 +16,7 @@ run_this = BashOperator(
     task_id='run_after_loop', bash_command='echo 1', dag=dag)
 run_this.set_downstream(run_this_last)
 
-for i in range(5):
+for i in range(3):
     i = str(i)
     task = BashOperator(
         task_id='runme_'+i,

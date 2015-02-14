@@ -12,6 +12,7 @@ setup(
     zip_safe=False,
     scripts=['airflow/bin/airflow'],
     install_requires=[
+        'boto>=2.36.0',
         'celery>=3.1.17',
         'chartkick>=0.4.2',
         'dill>=0.2.2',

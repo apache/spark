@@ -33,11 +33,6 @@ broker_url = sqla+mysql://airflow:airflow@localhost:3306/airflow
 celery_result_backend = db+mysql://airflow:airflow@localhost:3306/airflow
 flower_port = 5555
 
-[hooks]
-presto_default_conn_id = presto_default
-hive_default_conn_id = hive_default
-s3_default_conn_id = s3_default
-
 [misc]
 job_heartbeat_sec = 5
 id_len = 250
@@ -72,11 +67,6 @@ worker_log_server_port = 8793
 broker_url = sqla+mysql://airflow:airflow@localhost:3306/airflow
 celery_result_backend = db+mysql://airflow:airflow@localhost:3306/airflow
 flower_port = 5555
-
-[hooks]
-presto_default_conn_id = presto_default
-hive_default_conn_id = hive_default
-s3_default_conn_id = s3_default
 
 [misc]
 job_heartbeat_sec = 1
@@ -134,7 +124,6 @@ logging.info("Reading the config from " + AIRFLOW_CONFIG)
 def test_mode():
     conf = ConfigParser()
     conf.read(TEST_CONFIG)
-    print("Using configuration located at: " + TEST_CONFIG)
 
 conf = ConfigParser()
 conf.read(AIRFLOW_CONFIG)

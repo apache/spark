@@ -72,8 +72,7 @@ class S3Hook(BaseHook):
     '''
     def __init__(
             self,
-            s3_conn_id=conf.get('hooks', 'S3_DEFAULT_CONN_ID'),
-            ):
+            s3_conn_id='s3_default'):
         session = settings.Session()
         db = session.query(
             Connection).filter(

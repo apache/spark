@@ -4,7 +4,6 @@ import subprocess
 from tempfile import NamedTemporaryFile
 
 from airflow.models import Connection
-from airflow.configuration import conf
 from airflow import settings
 
 from thrift.transport import TSocket
@@ -22,7 +21,7 @@ class HiveHook(BaseHook):
     '''
     def __init__(
             self,
-            hive_conn_id=conf.get('hooks', 'HIVE_DEFAULT_CONN_ID')):
+            hive_conn_id='hive_default'):
         session = settings.Session()
         db = session.query(
             Connection).filter(

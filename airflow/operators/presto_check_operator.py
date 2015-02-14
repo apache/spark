@@ -26,7 +26,7 @@ class PrestoCheckOperator(BaseOperator):
     @apply_defaults
     def __init__(
             self, sql,
-            presto_conn_id=conf.get('hooks', 'PRESTO_DEFAULT_CONN_ID'),
+            presto_conn_id='presto_default',
             *args, **kwargs):
         super(PrestoCheckOperator, self).__init__(*args, **kwargs)
 
@@ -81,7 +81,7 @@ class PrestoValueCheckOperator(BaseOperator):
     @apply_defaults
     def __init__(
             self, sql, pass_value, tolerance=None,
-            presto_conn_id=conf.get('hooks', 'PRESTO_DEFAULT_CONN_ID'),
+            presto_conn_id='presto_default',
             *args, **kwargs):
         super(PrestoValueCheckOperator, self).__init__(*args, **kwargs)
         self.presto_conn_id = presto_conn_id
@@ -146,7 +146,7 @@ class PrestoIntervalCheckOperator(BaseOperator):
     def __init__(
             self, table, metrics_thresholds,
             date_filter_column='ds', days_back=-7,
-            presto_conn_id=conf.get('hooks', 'PRESTO_DEFAULT_CONN_ID'),
+            presto_conn_id='presto_default',
             *args, **kwargs):
         super(PrestoIntervalCheckOperator, self).__init__(*args, **kwargs)
         self.presto_conn_id = presto_conn_id

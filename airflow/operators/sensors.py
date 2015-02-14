@@ -4,7 +4,6 @@ from urlparse import urlparse
 from time import sleep
 
 from airflow import settings
-from airflow.configuration import conf
 from airflow.hooks import HiveHook
 from airflow.hooks import S3Hook
 from airflow.models import BaseOperator
@@ -170,7 +169,7 @@ class HivePartitionSensor(BaseSensorOperator):
     def __init__(
             self,
             table, partition="ds='{{ ds }}'",
-            hive_conn_id=conf.get('hooks', 'HIVE_DEFAULT_CONN_ID'),
+            hive_conn_id='hive_default',
             schema='default',
             *args, **kwargs):
         super(HivePartitionSensor, self).__init__(*args, **kwargs)
@@ -253,7 +252,7 @@ class S3KeySensor(BaseSensorOperator):
     def __init__(
             self, bucket_key,
             bucket_name=None,
-            s3_conn_id=conf.get('hooks', 'S3_DEFAULT_CONN_ID'),
+            s3_conn_id='s3_default',
             *args, **kwargs):
         super(S3KeySensor, self).__init__(*args, **kwargs)
         session = settings.Session()
@@ -309,7 +308,7 @@ class S3PrefixSensor(BaseSensorOperator):
     def __init__(
             self, bucket_name,
             prefix, delimiter='/',
-            s3_conn_id=conf.get('hooks', 'S3_DEFAULT_CONN_ID'),
+            s3_conn_id='s3_default',
             *args, **kwargs):
         super(S3PrefixSensor, self).__init__(*args, **kwargs)
         session = settings.Session()
