@@ -714,31 +714,45 @@ class GroupedData(object):
         [Row(age=2, count=1), Row(age=5, count=1)]
         """
 
-    @dfapi
-    def mean(self):
+    def mean(self, *cols):
         """Compute the average value for each numeric columns
         for each group. This is an alias for `avg`."""
-
-    @dfapi
-    def avg(self):
+        jcols = ListConverter().convert(list(cols),
+                                        self.sql_ctx._sc._gateway._gateway_client)
+        jdf = self._jdf.mean(self.sql_ctx._sc._jvm.PythonUtils.toSeq(jcols))
+        return DataFrame(jdf, self.sql_ctx)
+ 
+    def avg(self, *cols):
         """Compute the average value for each numeric columns
         for each group."""
+        jcols = ListConverter().convert(list(cols),
+                                        self.sql_ctx._sc._gateway._gateway_client)
+        jdf = self._jdf.avg(self.sql_ctx._sc._jvm.PythonUtils.toSeq(jcols))
+        return DataFrame(jdf, self.sql_ctx)
 
-    @dfapi
-    def max(self):
+    def max(self, *cols):
         """Compute the max value for each numeric columns for
         each group. """
-
-    @dfapi
-    def min(self):
+        jcols = ListConverter().convert(list(cols),
+                                        self.sql_ctx._sc._gateway._gateway_client)
+        jdf = self._jdf.max(self.sql_ctx._sc._jvm.PythonUtils.toSeq(jcols))
+        return DataFrame(jdf, self.sql_ctx)
+ 
+    def min(self, *cols):
         """Compute the min value for each numeric column for
         each group."""
-
-    @dfapi
-    def sum(self):
+        jcols = ListConverter().convert(list(cols),
+                                        self.sql_ctx._sc._gateway._gateway_client)
+        jdf = self._jdf.min(self.sql_ctx._sc._jvm.PythonUtils.toSeq(jcols))
+        return DataFrame(jdf, self.sql_ctx)
+ 
+    def sum(self, *cols):
         """Compute the sum for each numeric columns for each
         group."""
-
+        jcols = ListConverter().convert(list(cols),
+                                        self.sql_ctx._sc._gateway._gateway_client)
+        jdf = self._jdf.sum(self.sql_ctx._sc._jvm.PythonUtils.toSeq(jcols))
+        return DataFrame(jdf, self.sql_ctx)
 
 def _create_column_from_literal(literal):
     sc = SparkContext._active_spark_context
