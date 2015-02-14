@@ -60,10 +60,10 @@ def launch_gateway():
             def preexec_func():
                 signal.signal(signal.SIGINT, signal.SIG_IGN)
             env["IS_SUBPROCESS"] = "1"  # tell JVM to exit after python exits
-            proc = Popen(command, stdout=PIPE, stdin=PIPE, preexec_fn=preexec_func, env=env)
+            proc = Popen(command, stdin=PIPE, preexec_fn=preexec_func, env=env)
         else:
             # preexec_fn not supported on Windows
-            proc = Popen(command, stdout=PIPE, stdin=PIPE, env=env)
+            proc = Popen(command, stdin=PIPE, env=env)
 
         gateway_connection = callback_socket.accept()[0]
         # Determine which ephemeral port the server started on:
