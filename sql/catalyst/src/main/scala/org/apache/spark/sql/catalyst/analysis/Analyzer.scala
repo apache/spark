@@ -246,12 +246,21 @@ class Analyzer(catalog: Catalog,
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
    */
   object ResolveRelations extends Rule[LogicalPlan] {
+    def getTable(u: UnresolvedRelation) = {
+      try {
+        catalog.lookupRelation(u.tableIdentifier, u.alias)
+      } catch {
+        case _: NoSuchTableException =>
+          u.failAnalysis(s"no such table ${u.tableIdentifier}")
+      }
+    }
+
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case i @ InsertIntoTable(UnresolvedRelation(tableIdentifier, alias), _, _, _) =>
+      case i @ InsertIntoTable(u: UnresolvedRelation, _, _, _) =>
         i.copy(
-          table = EliminateSubQueries(catalog.lookupRelation(tableIdentifier, alias)))
-      case UnresolvedRelation(tableIdentifier, alias) =>
-        catalog.lookupRelation(tableIdentifier, alias)
+          table = EliminateSubQueries(getTable(u)))
+      case u: UnresolvedRelation =>
+        getTable(u)
     }
   }
 

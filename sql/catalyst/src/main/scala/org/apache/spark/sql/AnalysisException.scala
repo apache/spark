@@ -35,7 +35,4 @@ class AnalysisException protected[sql] (
     val positionAnnotation = startPosition.map(p => s" pos $p").getOrElse("")
     s"$message;$lineAnnotation$positionAnnotation"
   }
-
-  def getLine: Integer = line.map(new java.lang.Integer(_)).orNull
-  def getStartPosition: Int = startPosition.map(new java.lang.Integer(_)).orNull
 }

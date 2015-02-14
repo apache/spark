@@ -17,11 +17,16 @@
 
 package org.apache.spark.sql.hive
 
+import java.io.{OutputStream, PrintStream, PrintWriter}
+import java.util.regex.Pattern
+
 import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest}
 import org.apache.spark.storage.RDDBlockId
+
+import scala.util.Try
 
 class ErrorPositionSuite extends QueryTest {
 
@@ -80,6 +85,36 @@ class ErrorPositionSuite extends QueryTest {
   positionTest("unresolved attribute backticks",
     "SELECT `x` FROM src", "`x`")
 
+  positionTest("parse error",
+    "SELECT WHERE", "WHERE")
+
+  positionTest("bad relation",
+    "SELECT * FROM badTable", "badTable")
+
+  ignore("other expressions") {
+    positionTest("bad addition",
+      "SELECT 1 + array(1)", "1 + array")
+  }
+
+  /** Hive can be very noisy, messing up the output of our tests. */
+  private def quietly[A](f: => A): A = {
+    val origErr = System.err
+    val origOut = System.out
+    try {
+      System.setErr(new PrintStream(new OutputStream {
+        def write(b: Int) = {}
+      }))
+      System.setOut(new PrintStream(new OutputStream {
+        def write(b: Int) = {}
+      }))
+
+      f
+    } finally {
+      System.setErr(origErr)
+      System.setOut(origOut)
+    }
+  }
+
   /**
    * Creates a test that checks to see if the error thrown when analyzing a given query includes
    * the location of the given token in the query string.
@@ -89,26 +124,24 @@ class ErrorPositionSuite extends QueryTest {
    * @param token a unique token in the string that should be indicated by the exception
    */
   def positionTest(name: String, query: String, token: String) = {
+    def parseTree =
+      Try(quietly(HiveQl.dumpTree(HiveQl.getAst(query)))).getOrElse("<failed to parse>")
+
     test(name) {
       val error = intercept[AnalysisException] {
-        sql(query)
+        quietly(sql(query))
       }
       val (line, expectedLineNum) = query.split("\n").zipWithIndex.collect {
         case (l, i) if l.contains(token) => (l, i + 1)
       }.headOption.getOrElse(sys.error(s"Invalid test. Token $token not in $query"))
       val actualLine = error.line.getOrElse {
         fail(
-          s"line not returned for error on token $token\n" +
-            HiveQl.dumpTree(HiveQl.getAst(query))
+          s"line not returned for error '${error.getMessage}' on token $token\n$parseTree"
         )
       }
       assert(actualLine === expectedLineNum, "wrong line")
 
-      val expectedStart =
-        token.r
-          .findFirstMatchIn(line)
-          .map(m => m.start)
-          .getOrElse(sys.error(s"Bug in test harness, can't find token."))
+      val expectedStart = line.indexOf(token)
       val actualStart = error.startPosition.getOrElse {
         fail(
           s"start not returned for error on token $token\n" +
@@ -121,7 +154,7 @@ class ErrorPositionSuite extends QueryTest {
           |$query
           |
           |== AST ==
-          |${HiveQl.dumpTree(HiveQl.getAst(query))}
+          |$parseTree
           |
           |Actual: $actualStart, Expected: $expectedStart
           |$line

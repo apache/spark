@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive
 
 import java.sql.Date
 
-import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -29,13 +28,14 @@ import org.apache.hadoop.hive.ql.lib.Node
 import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.parse._
 import org.apache.hadoop.hive.ql.plan.PlanUtils
-import org.apache.spark.sql.SparkSQLParser
+import org.apache.spark.sql.{AnalysisException, SparkSQLParser}
 
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.execution.ExplainCommand
 import org.apache.spark.sql.sources.DescribeCommand
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, AnalyzeTable, HiveScriptIOSchema}
@@ -213,12 +213,6 @@ private[hive] object HiveQl {
     }
   }
 
-  class ParseException(sql: String, cause: Throwable)
-    extends Exception(s"Failed to parse: $sql", cause)
-
-  class SemanticException(msg: String)
-    extends Exception(s"Error in semantic analysis: $msg")
-
   /**
    * Returns the AST for the given SQL string.
    */
@@ -238,8 +232,10 @@ private[hive] object HiveQl {
   /** Returns a LogicalPlan for a given HiveQL string. */
   def parseSql(sql: String): LogicalPlan = hqlParser(sql)
 
+  val errorRegEx = "line (\\d+):(\\d+) (.*)".r
+
   /** Creates LogicalPlan for a given HiveQL string. */
-  def createPlan(sql: String) = {
+  def createPlan(sql: String): LogicalPlan = {
     try {
       val tree = getAst(sql)
       if (nativeCommands contains tree.getText) {
@@ -251,14 +247,23 @@ private[hive] object HiveQl {
         }
       }
     } catch {
-      case e: Exception => throw new ParseException(sql, e)
-      case e: NotImplementedError => sys.error(
-        s"""
-          |Unsupported language features in query: $sql
-          |${dumpTree(getAst(sql))}
-          |$e
-          |${e.getStackTrace.head}
-        """.stripMargin)
+      case pe: org.apache.hadoop.hive.ql.parse.ParseException =>
+        pe.getMessage match {
+          case errorRegEx(line, start, message) =>
+            throw new AnalysisException(message, Some(line.toInt), Some(start.toInt))
+          case otherMessage =>
+            throw new AnalysisException(otherMessage)
+        }
+      case e: Exception =>
+        throw new AnalysisException(e.getMessage)
+      case e: NotImplementedError =>
+        throw new AnalysisException(
+          s"""
+            |Unsupported language features in query: $sql
+            |${dumpTree(getAst(sql))}
+            |$e
+            |${e.getStackTrace.head}
+          """.stripMargin)
     }
   }
 

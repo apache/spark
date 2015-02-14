@@ -31,7 +31,9 @@ case class Origin(
  * line of code is currently being parsed.
  */
 object CurrentOrigin {
-  private val value = new ThreadLocal[Origin]()
+  private val value = new ThreadLocal[Origin]() {
+    override def initialValue: Origin = Origin()
+  }
 
   def get = value.get()
   def set(o: Origin) = value.set(o)
@@ -40,9 +42,7 @@ object CurrentOrigin {
 
   def setPosition(line: Int, start: Int) = {
     value.set(
-      Option(value.get)
-        .map(_.copy(line = Some(line), startPosition = Some(start)))
-        .getOrElse(Origin(line = Some(line), startPosition = Some(start))))
+      value.get.copy(line = Some(line), startPosition = Some(start)))
   }
 
   def withOrigin[A](o: Origin)(f: => A): A = {
@@ -183,7 +183,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
    * @param rule the function used to transform this nodes children
    */
   def transformDown(rule: PartialFunction[BaseType, BaseType]): BaseType = {
-    val afterRule = rule.applyOrElse(this, identity[BaseType])
+    val afterRule = CurrentOrigin.withOrigin(origin) {
+      rule.applyOrElse(this, identity[BaseType])
+    }
+
     // Check if unchanged and then possibly return old copy to avoid gc churn.
     if (this fastEquals afterRule) {
       transformChildrenDown(rule)
@@ -243,9 +246,13 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   def transformUp(rule: PartialFunction[BaseType, BaseType]): BaseType = {
     val afterRuleOnChildren = transformChildrenUp(rule);
     if (this fastEquals afterRuleOnChildren) {
-      rule.applyOrElse(this, identity[BaseType])
+      CurrentOrigin.withOrigin(origin) {
+        rule.applyOrElse(this, identity[BaseType])
+      }
     } else {
-      rule.applyOrElse(afterRuleOnChildren, identity[BaseType])
+      CurrentOrigin.withOrigin(origin) {
+        rule.applyOrElse(afterRuleOnChildren, identity[BaseType])
+      }
     }
   }
 
@@ -301,12 +308,14 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
    */
   def makeCopy(newArgs: Array[AnyRef]): this.type = attachTree(this, "makeCopy") {
     try {
-      // Skip no-arg constructors that are just there for kryo.
-      val defaultCtor = getClass.getConstructors.find(_.getParameterTypes.size != 0).head
-      if (otherCopyArgs.isEmpty) {
-        defaultCtor.newInstance(newArgs: _*).asInstanceOf[this.type]
-      } else {
-        defaultCtor.newInstance((newArgs ++ otherCopyArgs).toArray: _*).asInstanceOf[this.type]
+      CurrentOrigin.withOrigin(origin) {
+        // Skip no-arg constructors that are just there for kryo.
+        val defaultCtor = getClass.getConstructors.find(_.getParameterTypes.size != 0).head
+        if (otherCopyArgs.isEmpty) {
+          defaultCtor.newInstance(newArgs: _*).asInstanceOf[this.type]
+        } else {
+          defaultCtor.newInstance((newArgs ++ otherCopyArgs).toArray: _*).asInstanceOf[this.type]
+        }
       }
     } catch {
       case e: java.lang.IllegalArgumentException =>

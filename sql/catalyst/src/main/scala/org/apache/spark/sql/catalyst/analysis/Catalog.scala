@@ -22,6 +22,12 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery}
 
 /**
+ * Thrown by a catalog when a table cannot be found.  The analzyer will rethrow the exception
+ * as an AnalysisException with the correct position information.
+ */
+class NoSuchTableException extends Exception
+
+/**
  * An interface for looking up relations by name.  Used by an [[Analyzer]].
  */
 trait Catalog {

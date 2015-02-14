@@ -32,8 +32,8 @@ import org.apache.hadoop.hive.serde2.{Deserializer, SerDeException}
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.analysis.{Catalog, OverrideCatalog}
+import org.apache.spark.sql.{AnalysisException, SQLContext}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, Catalog, OverrideCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -160,7 +160,10 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     val databaseName = tableIdent.lift(tableIdent.size - 2).getOrElse(
       hive.sessionState.getCurrentDatabase)
     val tblName = tableIdent.last
-    val table = client.getTable(databaseName, tblName)
+    val table = try client.getTable(databaseName, tblName) catch {
+      case te: org.apache.hadoop.hive.ql.metadata.InvalidTableException =>
+        throw new NoSuchTableException
+    }
 
     if (table.getProperty("spark.sql.sources.provider") != null) {
       cachedDataSourceTables(QualifiedTableName(databaseName, tblName).toLowerCase)
