@@ -37,7 +37,12 @@ private[spark] object PythonGatewayServer extends Logging {
     val gatewayServer: GatewayServer = new GatewayServer(null, 0)
     gatewayServer.start()
     val boundPort: Int = gatewayServer.getListeningPort
-    logDebug(s"Started PythonGatewayServer on port $boundPort")
+    if (boundPort == -1) {
+      logError("GatewayServer failed to bind; exiting")
+      System.exit(1)
+    } else {
+      logDebug(s"Started PythonGatewayServer on port $boundPort")
+    }
 
     // Communicate the bound port back to the caller via the caller-specified callback port
     val callbackHost = sys.env("_PYSPARK_DRIVER_CALLBACK_HOST")
