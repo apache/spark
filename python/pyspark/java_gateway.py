@@ -28,10 +28,8 @@ from py4j.java_gateway import java_import, JavaGateway, GatewayClient
 
 from pyspark.serializers import read_int
 
-_gateway_connection = None
 
 def launch_gateway():
-    global _gateway_connection
     SPARK_HOME = os.environ["SPARK_HOME"]
 
     if "PYSPARK_GATEWAY_PORT" in os.environ:
@@ -55,6 +53,8 @@ def launch_gateway():
         env['PYSPARK_DRIVER_CALLBACK_HOST'] = callback_host
         env['PYSPARK_DRIVER_CALLBACK_PORT'] = str(callback_port)
 
+        # Launch the Java gateway.
+        # We open a pipe to stdin so that the Java gateway can die when the pipe is broken
         if not on_windows:
             # Don't send ctrl-c / SIGINT to the Java gateway:
             def preexec_func():
@@ -65,9 +65,11 @@ def launch_gateway():
             # preexec_fn not supported on Windows
             proc = Popen(command, stdout=PIPE, stdin=PIPE, env=env)
 
-        _gateway_connection = callback_socket.accept()[0]
+        gateway_connection = callback_socket.accept()[0]
         # Determine which ephemeral port the server started on:
-        gateway_port = read_int(_gateway_connection.makefile())
+        gateway_port = read_int(gateway_connection.makefile())
+        gateway_connection.close()
+        callback_socket.close()
 
         # In Windows, ensure the Java child processes do not linger after Python has exited.
         # In UNIX-based systems, the child process can kill itself on broken pipe (i.e. when

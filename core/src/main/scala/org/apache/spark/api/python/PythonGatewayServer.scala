@@ -41,11 +41,12 @@ private[spark] object PythonGatewayServer {
     val callbackSocket = new Socket(callbackHost, callbackPort)
     val dos = new DataOutputStream(callbackSocket.getOutputStream)
     dos.writeInt(boundPort)
-    dos.flush()
+    dos.close()
+    callbackSocket.close()
 
-    // Exit once the callback socket is closed to ensure that this process dies when the Python
-    // driver dies:
-    while (callbackSocket.getInputStream.read() != -1) {
+    System.in.read()
+    // Exit on EOF or broken pipe to ensure that this process dies when the Python driver dies:
+    while (System.in.read() != -1) {
       // Do nothing
     }
     System.exit(0)
