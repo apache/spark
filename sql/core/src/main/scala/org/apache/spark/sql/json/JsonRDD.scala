@@ -425,7 +425,9 @@ private[sql] object JsonRDD extends Logging {
           } else {
             slot.asInstanceOf[Seq[Any]]
           }
-          value.asInstanceOf[Seq[Any]].zip(arraySlot).map{case (v, s) => enforceCorrectType(v, elementType,s)}
+          value.asInstanceOf[Seq[Any]].zip(arraySlot).map {
+            case (v, s) => enforceCorrectType(v, elementType,s)
+          }
         }
         case struct: StructType => 
           asRow(value.asInstanceOf[Map[String, Any]], struct, slot.asInstanceOf[GenericMutableRow])
