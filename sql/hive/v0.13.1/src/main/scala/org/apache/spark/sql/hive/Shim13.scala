@@ -21,6 +21,8 @@ import java.util.{ArrayList => JArrayList}
 import java.util.Properties
 import java.rmi.server.UID
 
+import org.apache.hadoop.hive.serde.serdeConstants
+
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 
@@ -409,6 +411,12 @@ private[hive] object HiveShim {
       case _ =>
     }
     w
+  }
+
+  def setTblNullFormat(crtTbl: CreateTableDesc, tbl: Table) = {
+    if (crtTbl != null && crtTbl.getNullFormat() != null) {
+      tbl.setSerdeParam(serdeConstants.SERIALIZATION_NULL_FORMAT, crtTbl.getNullFormat())
+    }
   }
 }
 
