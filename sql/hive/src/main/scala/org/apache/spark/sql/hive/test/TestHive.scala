@@ -202,7 +202,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       "CREATE TABLE src (key STRING, value STRING)".cmd,
       s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/kv1.txt")}' INTO TABLE src".cmd),
     TestTable("src1",
-      "CREATE TABLE src1 (key STRING, value STRING)".cmd,
+      "CREATE TABLE src1 (key INT, value STRING)".cmd,
       s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/kv3.txt")}' INTO TABLE src1".cmd),
     TestTable("srcpart", () => {
       runSqlHive(
