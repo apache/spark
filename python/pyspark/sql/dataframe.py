@@ -664,6 +664,18 @@ def dfapi(f):
     return _api
 
 
+def df_varargs_api(f, *args):
+    def _api(self):
+        jargs = ListConverter().convert(list(args),
+                                        self.sql_ctx._sc._gateway._gateway_client)
+        name = f.__name__
+        jdf = getattr(self._jdf, name)(self.sql_ctx._sc._jvm.PythonUtils.toSeq(jargs))
+        return DataFrame(jdf, self.sql_ctx)
+    _api.__name__ = f.__name__
+    _api.__doc__ = f.__doc__
+    return _api
+
+
 class GroupedData(object):
 
     """
@@ -714,45 +726,30 @@ class GroupedData(object):
         [Row(age=2, count=1), Row(age=5, count=1)]
         """
 
+    @df_varargs_api
     def mean(self, *cols):
         """Compute the average value for each numeric columns
         for each group. This is an alias for `avg`."""
-        jcols = ListConverter().convert(list(cols),
-                                        self.sql_ctx._sc._gateway._gateway_client)
-        jdf = self._jdf.mean(self.sql_ctx._sc._jvm.PythonUtils.toSeq(jcols))
-        return DataFrame(jdf, self.sql_ctx)
 
+    @df_varargs_api
     def avg(self, *cols):
         """Compute the average value for each numeric columns
         for each group."""
-        jcols = ListConverter().convert(list(cols),
-                                        self.sql_ctx._sc._gateway._gateway_client)
-        jdf = self._jdf.avg(self.sql_ctx._sc._jvm.PythonUtils.toSeq(jcols))
-        return DataFrame(jdf, self.sql_ctx)
 
+    @df_varargs_api
     def max(self, *cols):
         """Compute the max value for each numeric columns for
         each group. """
-        jcols = ListConverter().convert(list(cols),
-                                        self.sql_ctx._sc._gateway._gateway_client)
-        jdf = self._jdf.max(self.sql_ctx._sc._jvm.PythonUtils.toSeq(jcols))
-        return DataFrame(jdf, self.sql_ctx)
 
+    @df_varargs_api
     def min(self, *cols):
         """Compute the min value for each numeric column for
         each group."""
-        jcols = ListConverter().convert(list(cols),
-                                        self.sql_ctx._sc._gateway._gateway_client)
-        jdf = self._jdf.min(self.sql_ctx._sc._jvm.PythonUtils.toSeq(jcols))
-        return DataFrame(jdf, self.sql_ctx)
 
+    @df_varargs_api
     def sum(self, *cols):
         """Compute the sum for each numeric columns for each
         group."""
-        jcols = ListConverter().convert(list(cols),
-                                        self.sql_ctx._sc._gateway._gateway_client)
-        jdf = self._jdf.sum(self.sql_ctx._sc._jvm.PythonUtils.toSeq(jcols))
-        return DataFrame(jdf, self.sql_ctx)
 
 
 def _create_column_from_literal(literal):
