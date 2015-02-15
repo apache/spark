@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive
 import java.io.{BufferedReader, InputStreamReader, PrintStream}
 import java.sql.Timestamp
 
+import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 
 import org.apache.hadoop.fs.{FileSystem, Path}
