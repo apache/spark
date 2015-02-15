@@ -90,19 +90,18 @@ private[sql] class DataFrameImpl protected[sql](
 
   protected[sql] def numericColumns(colNames: String*): Seq[Expression] = {
     val allNumbericCols = schema.fields.filter(_.dataType.isInstanceOf[NumericType]).map(_.name)
-    val diff = colNames.diff(allNumbericCols)
-    if (diff.nonEmpty) {
-      val diffStr = diff.mkString(", ")
-      throw new RuntimeException(
-        s"""Cannot resolve column names "($diffStr)" among (${schema.fieldNames.mkString(", ")})""")
-    }
     val colsToResolve: Seq[String] = if (colNames.isEmpty) {
       allNumbericCols
     } else {
       colNames
     }
     colsToResolve.map { n =>
-      queryExecution.analyzed.resolve(n, sqlContext.analyzer.resolver).get
+      if (colNames.isEmpty || allNumbericCols.contains(n)) {
+        queryExecution.analyzed.resolve(n, sqlContext.analyzer.resolver).get
+      } else {
+        throw new RuntimeException(
+          s"""Cannot resolve column name "($n)" among (${schema.fieldNames.mkString(", ")})""")
+      }
     }
   }
  
