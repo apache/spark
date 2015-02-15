@@ -358,5 +358,13 @@ class ColumnExpressionSuite extends QueryTest {
       column.explode { word: String => word.split(" ").toSeq }.as("word"),
       Row("a") :: Row("b") :: Row("c") :: Row("d") ::Row("e") :: Nil
     )
+
+    val df2 = Seq(Tuple1("1 2 3"), Tuple1("4 5")).toDF("numbers")
+    val column2 = df2("numbers")
+
+    checkAnswer(
+      column2.explode { number: String => number.split(" ").toSeq } + 1,
+      Row(2.0) :: Row(3.0) :: Row(4.0) :: Row(5.0) ::Row(6.0) :: Nil
+    )
   }
 }
