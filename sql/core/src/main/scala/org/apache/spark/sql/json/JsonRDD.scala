@@ -420,14 +420,14 @@ private[sql] object JsonRDD extends Logging {
         case NullType => null
         case ArrayType(elementType, _) => {
           val arrayLength = value.asInstanceOf[Seq[Any]].length
-          val arraySlot = if (slot == null) {
-            (new Array[Any](arrayLength)).toSeq
-          } else {
+          val arraySlot = if (slot != null && slot.asInstanceOf[Seq[Any]].size == arrayLength) {
             slot.asInstanceOf[Seq[Any]]
+          } else {
+            (new Array[Any](arrayLength)).toSeq
           }
           value.asInstanceOf[Seq[Any]].zip(arraySlot).map {
             case (v, s) => enforceCorrectType(v, elementType,s)
-          }
+          }.toList
         }
         case struct: StructType => 
           asRow(value.asInstanceOf[Map[String, Any]], struct, slot.asInstanceOf[GenericMutableRow])
@@ -441,10 +441,11 @@ private[sql] object JsonRDD extends Logging {
     json: Map[String,Any], 
     schema: StructType, 
     mutable: GenericMutableRow = null): Row = {
-    val row = if (mutable == null) {
-      new GenericMutableRow(schema.fields.length)
-    } else {
+  
+    val row = if (mutable != null && mutable.length == schema.fields.length) {
       mutable
+    } else {
+      new GenericMutableRow(schema.fields.length)
     }
 
     for(i <- 0 until schema.fields.length) {
