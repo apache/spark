@@ -29,7 +29,7 @@ class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol):
     splits it by white spaces.
 
     >>> from pyspark.sql import Row
-    >>> df = sqlCtx.inferSchema(sc.parallelize([Row(text="a b c")]))
+    >>> df = sc.parallelize([Row(text="a b c")]).toDF()
     >>> tokenizer = Tokenizer(inputCol="text", outputCol="words")
     >>> print tokenizer.transform(df).head()
     Row(text=u'a b c', words=[u'a', u'b', u'c'])
@@ -76,7 +76,7 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures):
     hashing trick.
 
     >>> from pyspark.sql import Row
-    >>> df = sqlCtx.inferSchema(sc.parallelize([Row(words=["a", "b", "c"])]))
+    >>> df = sc.parallelize([Row(words=["a", "b", "c"])]).toDF()
     >>> hashingTF = HashingTF(numFeatures=10, inputCol="words", outputCol="features")
     >>> print hashingTF.transform(df).head().features
     (10,[7,8,9],[1.0,1.0,1.0])

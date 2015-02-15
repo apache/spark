@@ -32,15 +32,15 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
 
     >>> from pyspark.sql import Row
     >>> from pyspark.mllib.linalg import Vectors
-    >>> df = sqlCtx.inferSchema(sc.parallelize([
+    >>> df = sc.parallelize([
     ...     Row(label=1.0, features=Vectors.dense(1.0)),
-    ...     Row(label=0.0, features=Vectors.sparse(1, [], []))]))
+    ...     Row(label=0.0, features=Vectors.sparse(1, [], []))]).toDF()
     >>> lr = LogisticRegression(maxIter=5, regParam=0.01)
     >>> model = lr.fit(df)
-    >>> test0 = sqlCtx.inferSchema(sc.parallelize([Row(features=Vectors.dense(-1.0))]))
+    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0))]).toDF()
     >>> print model.transform(test0).head().prediction
     0.0
-    >>> test1 = sqlCtx.inferSchema(sc.parallelize([Row(features=Vectors.sparse(1, [0], [1.0]))]))
+    >>> test1 = sc.parallelize([Row(features=Vectors.sparse(1, [0], [1.0]))]).toDF()
     >>> print model.transform(test1).head().prediction
     1.0
     >>> lr.setParams("vector")

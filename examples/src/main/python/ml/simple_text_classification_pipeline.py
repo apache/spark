@@ -36,13 +36,12 @@ if __name__ == "__main__":
     sqlCtx = SQLContext(sc)
 
     # Prepare training documents, which are labeled.
-    LabeledDocument = Row('id', 'text', 'label')
-    training = sqlCtx.inferSchema(
-        sc.parallelize([(0L, "a b c d e spark", 1.0),
-                        (1L, "b d", 0.0),
-                        (2L, "spark f g h", 1.0),
-                        (3L, "hadoop mapreduce", 0.0)])
-          .map(lambda x: LabeledDocument(*x)))
+    LabeledDocument = Row("id", "text", "label")
+    training = sc.parallelize([(0L, "a b c d e spark", 1.0),
+                               (1L, "b d", 0.0),
+                               (2L, "spark f g h", 1.0),
+                               (3L, "hadoop mapreduce", 0.0)]) \
+        .map(lambda x: LabeledDocument(*x)).toDF()
 
     # Configure an ML pipeline, which consists of tree stages: tokenizer, hashingTF, and lr.
     tokenizer = Tokenizer(inputCol="text", outputCol="words")
@@ -54,18 +53,16 @@ if __name__ == "__main__":
     model = pipeline.fit(training)
 
     # Prepare test documents, which are unlabeled.
-    Document = Row('id', 'text')
-    test = sqlCtx.inferSchema(
-        sc.parallelize([(4L, "spark i j k"),
-                        (5L, "l m n"),
-                        (6L, "mapreduce spark"),
-                        (7L, "apache hadoop")])
-          .map(lambda x: Document(*x)))
+    Document = Row("id", "text")
+    test = sc.parallelize([(4L, "spark i j k"),
+                           (5L, "l m n"),
+                           (6L, "mapreduce spark"),
+                           (7L, "apache hadoop")]) \
+        .map(lambda x: Document(*x)).toDF()
 
     # Make predictions on test documents and print columns of interest.
     prediction = model.transform(test)
-    prediction.registerTempTable("prediction")
-    selected = sqlCtx.sql("SELECT id, text, prediction from prediction")
+    selected = prediction.select("id", "text", "prediction")
     for row in selected.collect():
         print row
 
