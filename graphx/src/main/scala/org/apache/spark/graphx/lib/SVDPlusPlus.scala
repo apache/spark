@@ -51,6 +51,16 @@ object SVDPlusPlus {
    *
    * @return a graph with vertex attributes containing the trained model
    */
+  def runSVDPlusPlus(edges: RDD[Edge[Double]], conf: Conf)
+    : (Graph[(Array[Double], Array[Double], Double, Double), Double], Double) =
+  {
+    val (graph, u) = run(edges, conf)
+    // Convert DoubleMatrix to Array[Double]:
+    val newVertices = graph.vertices.mapValues(v => (v._1.toArray, v._2.toArray, v._3, v._4))
+    (Graph(newVertices, graph.edges), u)
+  }
+
+  @deprecated("Call runSVDPlusPlus", "1.3.0")
   def run(edges: RDD[Edge[Double]], conf: Conf)
     : (Graph[(DoubleMatrix, DoubleMatrix, Double, Double), Double], Double) =
   {
