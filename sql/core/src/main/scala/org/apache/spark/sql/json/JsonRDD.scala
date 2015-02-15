@@ -418,8 +418,15 @@ private[sql] object JsonRDD extends Logging {
         case DecimalType() => toDecimal(value)
         case BooleanType => value.asInstanceOf[BooleanType.JvmType]
         case NullType => null
-        case ArrayType(elementType, _) =>
-          value.asInstanceOf[Seq[Any]].map(enforceCorrectType(_, elementType))
+        case ArrayType(elementType, _) => {
+          val arrayLength = value.asInstanceOf[Seq[Any]].length
+          val arraySlot = if (slot == null) {
+            (new Array[Any](arrayLength)).toSeq
+          } else {
+            slot.asInstanceOf[Seq[Any]]
+          }
+          value.asInstanceOf[Seq[Any]].zip(arraySlot).map{case (v, s) => enforceCorrectType(v, elementType,s)}
+        }
         case struct: StructType => 
           asRow(value.asInstanceOf[Map[String, Any]], struct, slot.asInstanceOf[GenericMutableRow])
         case DateType => toDate(value)
