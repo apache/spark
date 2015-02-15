@@ -50,9 +50,13 @@ object Main extends Logging {
 
 
   def getAddedJars: Array[String] = {
-    val envJars = sys.env.get("ADD_JARS")
+    sys.env.get("ADD_JARS") match {
+      case Some(envJars) =>
+        logWarning("ADD_JARS environment variable is deprecated, use --jar spark submit argument instead")
+      case None =>
+    }
     val propJars = sys.props.get("spark.jars").flatMap { p => if (p == "") None else Some(p) }
-    val jars = propJars.orElse(envJars).getOrElse("")
+    val jars = propJars.getOrElse("")
     Utils.resolveURIs(jars).split(",").filter(_.nonEmpty)
   }
 
