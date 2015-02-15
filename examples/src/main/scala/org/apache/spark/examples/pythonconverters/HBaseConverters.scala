@@ -29,10 +29,10 @@ import org.apache.hadoop.hbase.CellUtil
 
 /**
  * Implementation of [[org.apache.spark.api.python.Converter]] that converts all
- * the records in an HBase Result to an Array[String]
+ * the records in an HBase Result to a String
  */
-class HBaseResultToStringConverter extends Converter[Any, Array[String]] {
-  override def convert(obj: Any): Array[String] = {
+class HBaseResultToStringConverter extends Converter[Any, String] {
+  override def convert(obj: Any): String = {
     import collection.JavaConverters._
     val result = obj.asInstanceOf[Result]
     val output = result.listCells.asScala.map(cell =>
@@ -45,7 +45,7 @@ class HBaseResultToStringConverter extends Converter[Any, Array[String]] {
           "value" -> Bytes.toStringBinary(CellUtil.cloneValue(cell))
         )
     )
-    output.map(JSONObject(_).toString()).toArray
+    output.map(JSONObject(_).toString()).mkString("\n")
   }
 }
 
