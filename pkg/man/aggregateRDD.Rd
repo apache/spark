@@ -37,4 +37,7 @@ combOp <- function(x, y) { list(x[[1]] + y[[1]], x[[2]] + y[[2]]) }
 aggregateRDD(rdd, zeroValue, seqOp, combOp) # list(10, 4)
 }
 }
+\seealso{
+reduce
+}
 

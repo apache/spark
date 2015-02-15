@@ -311,7 +311,7 @@ test_that("fold() on RDDs", {
   expect_equal(actual, 0)
 })
 
-test_that("aggregate() on RDDs", {
+test_that("aggregateRDD() on RDDs", {
   rdd <- parallelize(sc, list(1, 2, 3, 4))
   zeroValue <- list(0, 0)
   seqOp <- function(x, y) { list(x[[1]] + y, x[[2]] + 1) }

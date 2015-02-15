@@ -1384,6 +1384,7 @@ setMethod("top",
 #' @param op An associative function for the folding operation.
 #' @return The folding result.
 #' @rdname fold
+#' @seealso reduce
 #' @export
 #' @examples
 #'\dontrun{
@@ -1413,6 +1414,7 @@ setMethod("fold",
 #' @param combOp A function to aggregate results of seqOp.
 #' @return The aggregation result.
 #' @rdname aggregateRDD
+#' @seealso reduce
 #' @export
 #' @examples
 #'\dontrun{

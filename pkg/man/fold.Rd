@@ -31,4 +31,7 @@ rdd <- parallelize(sc, list(1, 2, 3, 4, 5))
 fold(rdd, 0, "+") # 15
 }
 }
+\seealso{
+reduce
+}
 
