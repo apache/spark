@@ -198,6 +198,11 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     }
   }
 
+  override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {
+    val dbName = databaseName.getOrElse(hive.sessionState.getCurrentDatabase)
+    client.getAllTables(dbName).map(tableName => (tableName, false))
+  }
+
   /**
    * Create table with specified database, table name, table description and schema
    * @param databaseName Database Name

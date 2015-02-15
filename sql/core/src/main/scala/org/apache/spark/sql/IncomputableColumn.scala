@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import scala.reflect.ClassTag
+import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
@@ -25,7 +26,6 @@ import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedSt
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.sql.sources.SaveMode
 import org.apache.spark.sql.types.StructType
 
 private[sql] class IncomputableColumn(protected[sql] val expr: Expression) extends Column {
@@ -50,7 +50,7 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
 
   protected[sql] override def logicalPlan: LogicalPlan = err()
 
-  override def toDataFrame(colNames: String*): DataFrame = err()
+  override def toDF(colNames: String*): DataFrame = err()
 
   override def schema: StructType = err()
 
@@ -86,9 +86,9 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
 
   override def selectExpr(exprs: String*): DataFrame = err()
 
-  override def addColumn(colName: String, col: Column): DataFrame = err()
+  override def withColumn(colName: String, col: Column): DataFrame = err()
 
-  override def renameColumn(existingName: String, newName: String): DataFrame = err()
+  override def withColumnRenamed(existingName: String, newName: String): DataFrame = err()
 
   override def filter(condition: Column): DataFrame = err()
 
@@ -109,6 +109,14 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
   override def except(other: DataFrame): DataFrame = err()
 
   override def sample(withReplacement: Boolean, fraction: Double, seed: Long): DataFrame = err()
+
+  override def explode[A <: Product : TypeTag]
+      (input: Column*)(f: Row => TraversableOnce[A]): DataFrame = err()
+
+  override def explode[A, B : TypeTag](
+      inputColumn: String,
+      outputColumn: String)(
+      f: A => TraversableOnce[B]): DataFrame = err()
 
   /////////////////////////////////////////////////////////////////////////////
 

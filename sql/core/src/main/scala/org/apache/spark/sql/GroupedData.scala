@@ -20,8 +20,8 @@ package org.apache.spark.sql
 import scala.language.implicitConversions
 import scala.collection.JavaConversions._
 
+import org.apache.spark.sql.catalyst.analysis.Star
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Literal => LiteralExpr}
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 
 
@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.Aggregate
  */
 class GroupedData protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expression]) {
 
-  private[this] implicit def toDataFrame(aggExprs: Seq[NamedExpression]): DataFrame = {
+  private[this] implicit def toDF(aggExprs: Seq[NamedExpression]): DataFrame = {
     val namedGroupingExprs = groupingExprs.map {
       case expr: NamedExpression => expr
       case expr: Expression => Alias(expr, expr.toString)()
@@ -52,7 +52,12 @@ class GroupedData protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expressio
       case "max" => Max
       case "min" => Min
       case "sum" => Sum
-      case "count" | "size" => Count
+      case "count" | "size" =>
+        // Turn count(*) into count(1)
+        (inputExpr: Expression) => inputExpr match {
+          case s: Star => Count(Literal(1))
+          case _ => Count(inputExpr)
+        }
     }
   }
 
@@ -115,17 +120,17 @@ class GroupedData protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expressio
    * Compute aggregates by specifying a series of aggregate columns. Unlike other methods in this
    * class, the resulting [[DataFrame]] won't automatically include the grouping columns.
    *
-   * The available aggregate methods are defined in [[org.apache.spark.sql.Dsl]].
+   * The available aggregate methods are defined in [[org.apache.spark.sql.functions]].
    *
    * {{{
    *   // Selects the age of the oldest employee and the aggregate expense for each department
    *
    *   // Scala:
-   *   import org.apache.spark.sql.dsl._
+   *   import org.apache.spark.sql.functions._
    *   df.groupBy("department").agg($"department", max($"age"), sum($"expense"))
    *
    *   // Java:
-   *   import static org.apache.spark.sql.Dsl.*;
+   *   import static org.apache.spark.sql.functions.*;
    *   df.groupBy("department").agg(col("department"), max(col("age")), sum(col("expense")));
    * }}}
    */
@@ -142,7 +147,7 @@ class GroupedData protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expressio
    * Count the number of rows for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
    */
-  def count(): DataFrame = Seq(Alias(Count(LiteralExpr(1)), "count")())
+  def count(): DataFrame = Seq(Alias(Count(Literal(1)), "count")())
 
   /**
    * Compute the average value for each numeric columns for each group. This is an alias for `avg`.

@@ -69,7 +69,7 @@ object SimpleTextClassificationPipeline {
       .setStages(Array(tokenizer, hashingTF, lr))
 
     // Fit the pipeline to training documents.
-    val model = pipeline.fit(training)
+    val model = pipeline.fit(training.toDF)
 
     // Prepare test documents, which are unlabeled.
     val test = sc.parallelize(Seq(
@@ -79,7 +79,7 @@ object SimpleTextClassificationPipeline {
       Document(7L, "apache hadoop")))
 
     // Make predictions on test documents.
-    model.transform(test)
+    model.transform(test.toDF)
       .select("id", "text", "probability", "prediction")
       .collect()
       .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>

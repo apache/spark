@@ -19,7 +19,7 @@ package org.apache.spark.examples.sql
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.Dsl._
+import org.apache.spark.sql.functions._
 
 // One method for defining the schema of an RDD is to make a case class with the desired column
 // names and types.
@@ -34,10 +34,10 @@ object RDDRelation {
     // Importing the SQL context gives access to all the SQL functions and implicit conversions.
     import sqlContext.implicits._
 
-    val rdd = sc.parallelize((1 to 100).map(i => Record(i, s"val_$i")))
+    val df = sc.parallelize((1 to 100).map(i => Record(i, s"val_$i"))).toDF
     // Any RDD containing case classes can be registered as a table.  The schema of the table is
     // automatically inferred using scala reflection.
-    rdd.registerTempTable("records")
+    df.registerTempTable("records")
 
     // Once tables have been registered, you can run SQL queries over them.
     println("Result of SELECT *:")
@@ -55,10 +55,10 @@ object RDDRelation {
     rddFromSql.map(row => s"Key: ${row(0)}, Value: ${row(1)}").collect().foreach(println)
 
     // Queries can also be written using a LINQ-like Scala DSL.
-    rdd.where($"key" === 1).orderBy($"value".asc).select($"key").collect().foreach(println)
+    df.where($"key" === 1).orderBy($"value".asc).select($"key").collect().foreach(println)
 
     // Write out an RDD as a parquet file.
-    rdd.saveAsParquetFile("pair.parquet")
+    df.saveAsParquetFile("pair.parquet")
 
     // Read in parquet file.  Parquet files are self-describing so the schmema is preserved.
     val parquetFile = sqlContext.parquetFile("pair.parquet")
