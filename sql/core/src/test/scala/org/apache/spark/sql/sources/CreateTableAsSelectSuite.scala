@@ -29,10 +29,13 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
   import caseInsensisitiveContext._
 
   var path: File = null
+  var existPath: File = null
 
   override def beforeAll(): Unit = {
     path = util.getTempFilePath("jsonCTAS").getCanonicalFile
+    existPath = util.getTempFilePath("existJsonCTAS").getCanonicalFile
     val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
+    rdd.saveAsTextFile(existPath.toURI.toString)
     jsonRDD(rdd).registerTempTable("jt")
   }
 
@@ -60,6 +63,34 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
       sql("SELECT a, b FROM jt").collect())
 
     dropTempTable("jsonTable")
+  }
+
+  test("INSERT OVERWRITE with the source and destination point to the same table") {
+    sql(
+      s"""
+         |CREATE TEMPORARY TABLE jsonTable1
+         |USING org.apache.spark.sql.json.DefaultSource
+         |OPTIONS (
+         |  path '${existPath.toString}'
+         |)
+      """.stripMargin)
+
+    sql(
+      s"""
+         |CREATE TEMPORARY TABLE jsonTable2
+         |USING org.apache.spark.sql.json.DefaultSource
+         |OPTIONS (
+         |  path '${existPath.toString}'
+         |) AS
+         |SELECT a, b FROM jsonTable1
+      """.stripMargin)
+
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable2"),
+      sql("SELECT a, b FROM jt").collect())
+
+    dropTempTable("jsonTable1")
+    dropTempTable("jsonTable2")
   }
 
   test("create a table, drop it and create another one with the same name") {

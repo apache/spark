@@ -67,7 +67,7 @@ private[sql] class DefaultSource
         case SaveMode.Append =>
           sys.error(s"Append mode is not supported by ${this.getClass.getCanonicalName}")
         case SaveMode.Overwrite =>
-          fs.delete(filesystemPath, true)
+          //fs.delete(filesystemPath, true)
           true
         case SaveMode.ErrorIfExists =>
           sys.error(s"path $path already exists.")
@@ -76,12 +76,18 @@ private[sql] class DefaultSource
     } else {
       true
     }
-    if (doSave) {
+    val relation = if (doSave) {
       // Only save data when the save mode is not ignore.
-      data.toJSON.saveAsTextFile(path)
+      //data.toJSON.saveAsTextFile(path)
+      val createdRelation = createRelation(sqlContext,parameters, data.schema)
+      createdRelation.asInstanceOf[JSONRelation].insert(data, true)
+
+      createdRelation
+    } else {
+      createRelation(sqlContext, parameters, data.schema)
     }
 
-    createRelation(sqlContext, parameters, data.schema)
+    relation
   }
 }
 
@@ -92,7 +98,15 @@ private[sql] case class JSONRelation(
     @transient val sqlContext: SQLContext)
   extends TableScan with InsertableRelation {
   // TODO: Support partitioned JSON relation.
-  private def baseRDD = sqlContext.sparkContext.textFile(path)
+  val filesystemPath = new Path(path)
+  val fs = filesystemPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+  // TableScan can support base on ordinary file, but InsertableRelation only base on directory.
+  val newPath = if (fs.exists(filesystemPath) && fs.getFileStatus(filesystemPath).isFile()) {
+    filesystemPath
+  } else {
+    new Path(filesystemPath.toUri.toString,"*")
+  }
+  private def baseRDD = sqlContext.sparkContext.textFile(newPath.toUri.toString)
 
   override val schema = userSpecifiedSchema.getOrElse(
     JsonRDD.nullTypeToStringType(
@@ -104,21 +118,35 @@ private[sql] case class JSONRelation(
   override def buildScan() =
     JsonRDD.jsonStringToRow(baseRDD, schema, sqlContext.conf.columnNameOfCorruptRecord)
 
+  private def isTemporaryFile(file: Path): Boolean = {
+    file.getName == "_temporary"
+  }
+
   override def insert(data: DataFrame, overwrite: Boolean) = {
-    val filesystemPath = new Path(path)
-    val fs = filesystemPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+
+    // If the path exists, it must be a directory, error for not.
+    // Otherwise we create a directory with the path name.
+    if (fs.exists(filesystemPath) && !fs.getFileStatus(filesystemPath).isDirectory) {
+      sys.error("a CREATE [TEMPORARY] TABLE AS SELECT statement need the path must be directory")
+    }
 
     if (overwrite) {
+      val temporaryPath = new Path(path, "_temporary")
+      val dataPath = new Path(path, "data")
+      // Write the data.
+      data.toJSON.saveAsTextFile(temporaryPath.toUri.toString)
+      val pathsToDelete = fs.listStatus(filesystemPath).filter(
+        f => !isTemporaryFile(f.getPath)).map(_.getPath)
+
       try {
-        fs.delete(filesystemPath, true)
+        pathsToDelete.foreach(fs.delete(_,true))
       } catch {
         case e: IOException =>
           throw new IOException(
-            s"Unable to clear output directory ${filesystemPath.toString} prior"
-              + s" to INSERT OVERWRITE a JSON table:\n${e.toString}")
+            s"Unable to delete original data in directory ${filesystemPath.toString} when"
+              + s" run INSERT OVERWRITE a JSON table:\n${e.toString}")
       }
-      // Write the data.
-      data.toJSON.saveAsTextFile(path)
+      fs.rename(temporaryPath,dataPath)
       // Right now, we assume that the schema is not changed. We will not update the schema.
       // schema = data.schema
     } else {
