@@ -286,6 +286,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Example:
    * {{{
    *  import org.apache.spark.sql._
+   *  import org.apache.spark.sql.types._
    *  val sqlContext = new org.apache.spark.sql.SQLContext(sc)
    *
    *  val schema =
@@ -377,6 +378,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Example:
    * {{{
    *  import org.apache.spark.sql._
+   *  import org.apache.spark.sql.types._
    *  val sqlContext = new org.apache.spark.sql.SQLContext(sc)
    *
    *  val schema =
