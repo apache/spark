@@ -405,7 +405,8 @@ private[sql] object JsonRDD extends Logging {
     }
   }
 
-  private[json] def enforceCorrectType(value: Any, desiredType: DataType, slot: Any = null): Any ={
+  private[json] def enforceCorrectType(
+    value: Any, desiredType: DataType, slot: Any = null): Any = {
     if (value == null) {
       null
     } else {
