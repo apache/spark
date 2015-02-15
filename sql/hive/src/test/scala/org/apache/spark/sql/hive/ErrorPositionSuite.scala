@@ -17,14 +17,10 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.{OutputStream, PrintStream, PrintWriter}
-import java.util.regex.Pattern
+import java.io.{OutputStream, PrintStream}
 
-import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
-import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest}
-import org.apache.spark.storage.RDDBlockId
+import org.apache.spark.sql.{AnalysisException, QueryTest}
 
 import scala.util.Try
 
