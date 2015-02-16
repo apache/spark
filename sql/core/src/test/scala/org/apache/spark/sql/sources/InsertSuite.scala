@@ -21,11 +21,11 @@ import java.io.File
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.util
 import org.apache.spark.util.Utils
 
-class InsertIntoSuite extends DataSourceTest with BeforeAndAfterAll {
+class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
 
   import caseInsensisitiveContext._
 
@@ -129,6 +129,18 @@ class InsertIntoSuite extends DataSourceTest with BeforeAndAfterAll {
     }
   }
 
+  test("it is not allowed to write to a table while querying it.") {
+    val message = intercept[AnalysisException] {
+      sql(
+        s"""
+        |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jsonTable
+      """.stripMargin)
+    }.getMessage
+    assert(
+      message.contains("Cannot insert overwrite into table that is also being read from."),
+      "INSERT OVERWRITE to a table while querying it should not be allowed.")
+  }
+
   test("Caching")  {
     // Cached Query Execution
     cacheTable("jsonTable")
@@ -172,5 +184,35 @@ class InsertIntoSuite extends DataSourceTest with BeforeAndAfterAll {
     // Verify uncaching
     uncacheTable("jsonTable")
     assertCached(sql("SELECT * FROM jsonTable"), 0)
+  }
+
+  test("it's not allowed to insert into a relation that is not an InsertableRelation") {
+    sql(
+      """
+        |CREATE TEMPORARY TABLE oneToTen
+        |USING org.apache.spark.sql.sources.SimpleScanSource
+        |OPTIONS (
+        |  From '1',
+        |  To '10'
+        |)
+      """.stripMargin)
+
+    checkAnswer(
+      sql("SELECT * FROM oneToTen"),
+      (1 to 10).map(Row(_)).toSeq
+    )
+
+    val message = intercept[AnalysisException] {
+      sql(
+        s"""
+        |INSERT OVERWRITE TABLE oneToTen SELECT a FROM jt
+        """.stripMargin)
+    }.getMessage
+    assert(
+      message.contains("does not allow insertion."),
+      "It is not allowed to insert into a table that is not an InsertableRelation."
+    )
+
+    dropTempTable("oneToTen")
   }
 }

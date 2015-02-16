@@ -55,10 +55,7 @@ private[sql] object DataSourceStrategy extends Strategy {
       execution.PhysicalRDD(l.output, t.buildScan()) :: Nil
 
     case i @ logical.InsertIntoTable(
-      l @ LogicalRelation(t: InsertableRelation), partition, query, overwrite) =>
-      if (partition.nonEmpty) {
-        sys.error(s"Insert into a partition is not allowed because $l is not partitioned.")
-      }
+      l @ LogicalRelation(t: InsertableRelation), part, query, overwrite) if part.isEmpty =>
       execution.ExecutedCommand(InsertIntoDataSource(l, query, overwrite)) :: Nil
 
     case _ => Nil

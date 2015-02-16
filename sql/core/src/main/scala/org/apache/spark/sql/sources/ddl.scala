@@ -24,7 +24,7 @@ import org.apache.spark.sql.{SaveMode, DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.expressions.{Row, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Row}
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -32,7 +32,8 @@ import org.apache.spark.util.Utils
 /**
  * A parser for foreign DDL commands.
  */
-private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
+private[sql] class DDLParser(
+    parseQuery: String => LogicalPlan) extends AbstractSparkSQLParser with Logging {
 
   def apply(input: String, exceptionOnError: Boolean): Option[LogicalPlan] = {
     try {
@@ -105,6 +106,7 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
    * AS SELECT ...
    */
   protected lazy val createTable: Parser[LogicalPlan] =
+    // TODO: Support database.table.
     (CREATE ~> TEMPORARY.? <~ TABLE) ~ (IF ~> NOT <~ EXISTS).? ~ ident ~
       tableCols.? ~ (USING ~> className) ~ (OPTIONS ~> options).? ~ (AS ~> restInput).? ^^ {
       case temp ~ allowExisting ~ tableName ~ columns ~ provider ~ opts ~ query =>
@@ -128,12 +130,13 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
             SaveMode.ErrorIfExists
           }
 
+          val queryPlan = parseQuery(query.get)
           CreateTableUsingAsSelect(tableName,
             provider,
             temp.isDefined,
             mode,
             options,
-            query.get)
+            queryPlan)
         } else {
           val userSpecifiedSchema = columns.flatMap(fields => Some(StructType(fields)))
           CreateTableUsing(
@@ -345,21 +348,23 @@ private[sql] case class CreateTableUsing(
     allowExisting: Boolean,
     managedIfNoPath: Boolean) extends Command
 
+/**
+ * A node used to support CTAS statements and saveAsTable for the data source API.
+ * This node is a [[UnaryNode]] instead of a [[Command]] because we want the analyzer
+ * can analyze the logical plan that will be used to populate the table.
+ * So, [[PreWriteCheck]] can detect cases that are not allowed.
+ */
 private[sql] case class CreateTableUsingAsSelect(
     tableName: String,
     provider: String,
     temporary: Boolean,
     mode: SaveMode,
     options: Map[String, String],
-    query: String) extends Command
-
-private[sql] case class CreateTableUsingAsLogicalPlan(
-    tableName: String,
-    provider: String,
-    temporary: Boolean,
-    mode: SaveMode,
-    options: Map[String, String],
-    query: LogicalPlan) extends Command
+    child: LogicalPlan) extends UnaryNode {
+  override def output = Seq.empty[Attribute]
+  // TODO: Override resolved after we support databaseName.
+  // override lazy val resolved = databaseName != None && childrenResolved
+}
 
 private[sql] case class CreateTempTableUsing(
     tableName: String,
