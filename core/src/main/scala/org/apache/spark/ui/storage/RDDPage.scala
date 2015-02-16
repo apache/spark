@@ -17,134 +17,84 @@
 
 package org.apache.spark.ui.storage
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.xml.Node
 
-import org.apache.spark.storage.{BlockId, BlockStatus, StorageStatus, StorageUtils}
-import org.apache.spark.ui.{WebUIPage, UIUtils}
+import org.apache.spark.storage.StorageUtils
+import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.Utils
 
 /** Page showing storage details for a given RDD */
-private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
-  private val listener = parent.listener
+private[ui] class RDDPage(parent: StorageTab) extends InMemoryObjectPage("rdd", parent) {
 
-  def render(request: HttpServletRequest): Seq[Node] = {
-    val parameterId = request.getParameter("id")
-    require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
+  protected override val workerTableID: String = "rdd-storage-by-block-table"
+  
+  protected override def objectList = listener.rddInfoList
 
-    val rddId = parameterId.toInt
-    val storageStatusList = listener.storageStatusList
-    val rddInfo = listener.rddInfoList.find(_.id == rddId).getOrElse {
-      // Rather than crashing, render an "RDD Not Found" page
-      return UIUtils.headerSparkPage("RDD Not Found", Seq[Node](), parent)
-    }
-
-    // Worker table
-    val workers = storageStatusList.map((rddId, _))
-    val workerTable = UIUtils.listingTable(workerHeader, workerRow, workers,
-      id = Some("rdd-storage-by-worker-table"))
-
-    // Block table
-    val blockLocations = StorageUtils.getRddBlockLocations(rddId, storageStatusList)
-    val blocks = storageStatusList
-      .flatMap(_.rddBlocksById(rddId))
+  protected override def getBlockTableAndSize(objectId: Any): (Seq[Node], Int) = {
+    val blockLocations = StorageUtils.getRddBlockLocations(objectId.asInstanceOf[Long],
+      storageStatusList)
+    val blocks = listener.storageStatusList
+      .flatMap(_.rddBlocksById(objectId.asInstanceOf[Long]))
       .sortWith(_._1.name < _._1.name)
       .map { case (blockId, status) =>
-        (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
-      }
-    val blockTable = UIUtils.listingTable(blockHeader, blockRow, blocks,
-      id = Some("rdd-storage-by-block-table"))
+      (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
+    }
+    (UIUtils.listingTable(blockHeader, blockRow, blocks, id = Some("rdd-storage-by-block-table")),
+      blocks.size)
+  }
+  
 
-    val content =
-      <div class="row-fluid">
-        <div class="span12">
-          <ul class="unstyled">
-            <li>
-              <strong>Storage Level:</strong>
-              {rddInfo.storageLevel.description}
-            </li>
-            <li>
-              <strong>Cached Partitions:</strong>
-              {rddInfo.numCachedPartitions}
-            </li>
-            <li>
-              <strong>Total Partitions:</strong>
-              {rddInfo.numPartitions}
-            </li>
-            <li>
-              <strong>Memory Size:</strong>
-              {Utils.bytesToString(rddInfo.memSize)}
-            </li>
-            <li>
-              <strong>Disk Size:</strong>
-              {Utils.bytesToString(rddInfo.diskSize)}
-            </li>
-          </ul>
-        </div>
+  protected def generateContent(objectId: Long): (String, Seq[Node]) = {
+    val objectInfo = objectList.find(_.id == objectId).getOrElse {
+      // Rather than crashing, render an "Not Found" page
+      return (objectId.toString, nonFoundErrorInfo)
+    }
+    val (workerTable, workerCount) = getWorkerTableAndSize(objectId)
+
+    val (blockTable, blockCount) = getBlockTableAndSize(objectId)
+
+    val content = <div class="row-fluid">
+      <div class="span12">
+        <ul class="unstyled">
+          <li>
+            <strong>Storage Level:</strong>
+            {objectInfo.storageLevel.description}
+          </li>
+          <li>
+            <strong>Cached Partitions:</strong>
+            {objectInfo.numCachedPartitions}
+          </li>
+          <li>
+            <strong>Total Partitions:</strong>
+            {objectInfo.numPartitions}
+          </li>
+          <li>
+            <strong>Memory Size:</strong>
+            {Utils.bytesToString(objectInfo.memSize)}
+          </li>
+          <li>
+            <strong>Disk Size:</strong>
+            {Utils.bytesToString(objectInfo.diskSize)}
+          </li>
+        </ul>
       </div>
+    </div>
 
       <div class="row-fluid">
         <div class="span12">
-          <h4> Data Distribution on {workers.size} Executors </h4>
+          <h4> Data Distribution on {workerCount} Executors </h4>
           {workerTable}
         </div>
       </div>
 
       <div class="row-fluid">
         <div class="span12">
-          <h4> {blocks.size} Partitions </h4>
+          <h4> {blockCount} Partitions </h4>
           {blockTable}
         </div>
       </div>;
 
-    UIUtils.headerSparkPage("RDD Storage Info for " + rddInfo.name, content, parent)
+    (objectInfo.name, content)
   }
 
-  /** Header fields for the worker table */
-  private def workerHeader = Seq(
-    "Host",
-    "Memory Usage",
-    "Disk Usage")
-
-  /** Header fields for the block table */
-  private def blockHeader = Seq(
-    "Block Name",
-    "Storage Level",
-    "Size in Memory",
-    "Size on Disk",
-    "Executors")
-
-  /** Render an HTML row representing a worker */
-  private def workerRow(worker: (Int, StorageStatus)): Seq[Node] = {
-    val (rddId, status) = worker
-    <tr>
-      <td>{status.blockManagerId.host + ":" + status.blockManagerId.port}</td>
-      <td>
-        {Utils.bytesToString(status.memUsedByRdd(rddId))}
-        ({Utils.bytesToString(status.memRemaining)} Remaining)
-      </td>
-      <td>{Utils.bytesToString(status.diskUsedByRdd(rddId))}</td>
-    </tr>
-  }
-
-  /** Render an HTML row representing a block */
-  private def blockRow(row: (BlockId, BlockStatus, Seq[String])): Seq[Node] = {
-    val (id, block, locations) = row
-    <tr>
-      <td>{id}</td>
-      <td>
-        {block.storageLevel.description}
-      </td>
-      <td sorttable_customkey={block.memSize.toString}>
-        {Utils.bytesToString(block.memSize)}
-      </td>
-      <td sorttable_customkey={block.diskSize.toString}>
-        {Utils.bytesToString(block.diskSize)}
-      </td>
-      <td>
-        {locations.map(l => <span>{l}<br/></span>)}
-      </td>
-    </tr>
-  }
 }

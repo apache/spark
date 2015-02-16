@@ -17,8 +17,7 @@
 
 package org.apache.spark.storage
 
-import scala.collection.Map
-import scala.collection.mutable
+import scala.collection.{mutable, Map}
 
 import org.apache.spark.annotation.DeveloperApi
 
@@ -31,7 +30,7 @@ import org.apache.spark.annotation.DeveloperApi
  */
 @DeveloperApi
 class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
-
+  
   /**
    * Internal representation of the blocks stored in this block manager.
    *
@@ -39,7 +38,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
    * retrievals of RDD and broadcast blocks. These collections should only be mutated through the
    * add/update/removeBlock methods.
    */
-  private val _rddBlocks = new mutable.HashMap[Int, mutable.Map[BlockId, BlockStatus]]
+  private val _rddBlocks = new mutable.HashMap[Long, mutable.Map[BlockId, BlockStatus]]
   private val _broadcastBlocks = new mutable.HashMap[Long, mutable.Map[BlockId, BlockStatus]]
   private val _nonRddNorBroadcastBlocks = new mutable.HashMap[BlockId, BlockStatus]
 
@@ -56,7 +55,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
    * This field is not relevant to non-RDD blocks, however, so the storage information for
    * non-RDD blocks contains only the first 3 fields (in the same order).
    */
-  private val _rddStorageInfo = new mutable.HashMap[Int, (Long, Long, Long, StorageLevel)]
+  private val _rddStorageInfo = new mutable.HashMap[Long, (Long, Long, Long, StorageLevel)]
   private val _broadcastStorageInfo = new mutable.HashMap[Long, (Long, Long, Long)]
   private var _nonRddNorBroadcastStorageInfo: (Long, Long, Long) = (0L, 0L, 0L)
 
@@ -90,14 +89,15 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
    *
    * Note that this is somewhat expensive, as it involves cloning the underlying maps and then
    * concatenating them together. Much faster alternatives exist for common operations such as
-   * getting the memory, disk, and off-heap memory sizes occupied by this RDD.
+   * getting the memory, disk, and off-heap memory sizes occupied by the broadcast variables in 
+   * this block manager.
    */
   def broadcastBlocks: Map[BlockId, BlockStatus] = _broadcastBlocks.flatMap {
     case (_, blocks) => blocks
   }
 
   /** Return the blocks that belong to the given RDD stored in this block manager. */
-  def rddBlocksById(rddId: Int): Map[BlockId, BlockStatus] = {
+  def rddBlocksById(rddId: Long): Map[BlockId, BlockStatus] = {
     _rddBlocks.get(rddId).getOrElse(Map.empty)
   }
 
@@ -110,10 +110,9 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   private[spark] def addBlock(blockId: BlockId, blockStatus: BlockStatus): Unit = {
     updateStorageInfo(blockId, blockStatus)
     blockId match {
-      case RDDBlockId(rddId, _) =>
-        _rddBlocks.getOrElseUpdate(rddId, new mutable.HashMap)(blockId) = blockStatus
-      case BroadcastBlockId(broadcastId, _) =>
-        _broadcastBlocks.getOrElseUpdate(broadcastId, new mutable.HashMap)(blockId) = blockStatus
+      case rddOrBroadcastBlockId @ (_: BroadcastBlockId | _: RDDBlockId) =>
+        val (id, blockMap) = getIdAndBlockMap(blockId)
+        blockMap.getOrElseUpdate(id, new mutable.HashMap)(blockId) = blockStatus
       case _ =>
         _nonRddNorBroadcastBlocks(blockId) = blockStatus
     }
@@ -123,30 +122,22 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   private[spark] def updateBlock(blockId: BlockId, blockStatus: BlockStatus): Unit = {
     addBlock(blockId, blockStatus)
   }
+  
+  private def getIdAndBlockMap(blockId: BlockId) = blockId match { 
+    case RDDBlockId(rddId, _) => (rddId.toLong, _rddBlocks)
+    case BroadcastBlockId(broadcastId, _) => (broadcastId, _broadcastBlocks)
+  }
 
   /** Remove the given block from this storage status. */
   private[spark] def removeBlock(blockId: BlockId): Option[BlockStatus] = {
     updateStorageInfo(blockId, BlockStatus.empty)
     blockId match {
-      case RDDBlockId(rddId, _) =>
-        // Actually remove the block, if it exists
-        if (_rddBlocks.contains(rddId)) {
-          val removed = _rddBlocks(rddId).remove(blockId)
-          // If the given RDD has no more blocks left, remove the RDD
-          if (_rddBlocks(rddId).isEmpty) {
-            _rddBlocks.remove(rddId)
-          }
-          removed
-        } else {
-          None
-        }
-      case BroadcastBlockId(broadcastId, _) =>
-        // Actually remove the block, if it exists
-        if (_broadcastBlocks.contains(broadcastId)) {
-          val removed = _broadcastBlocks(broadcastId).remove(blockId)
-          // If the given RDD has no more blocks left, remove the RDD
-          if (_broadcastBlocks(broadcastId).isEmpty) {
-            _broadcastBlocks.remove(broadcastId)
+      case rddOrBroadcastBlockId @ (_: BroadcastBlockId | _: RDDBlockId) =>
+        val (id, blockMap) = getIdAndBlockMap(rddOrBroadcastBlockId)
+        val removed = blockMap(id).remove(blockId)
+        if (blockMap.contains(id)) {
+          if (blockMap(id).isEmpty) {
+            blockMap.remove(id)
           }
           removed
         } else {
@@ -163,10 +154,9 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
    */
   def containsBlock(blockId: BlockId): Boolean = {
     blockId match {
-      case RDDBlockId(rddId, _) =>
-        _rddBlocks.get(rddId).exists(_.contains(blockId))
-      case BroadcastBlockId(broadcastId, _) =>
-        _broadcastBlocks.get(broadcastId).exists(_.contains(blockId))
+      case rddOrBroadcastBlockId @ (_: BroadcastBlockId | _: RDDBlockId) =>
+        val (id, blockMap) = getIdAndBlockMap(blockId)
+        blockMap.get(id).exists(_.contains(blockId))
       case _ =>
         _nonRddNorBroadcastBlocks.contains(blockId)
     }
@@ -204,7 +194,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
    * Note that this is much faster than `this.rddBlocksById(rddId).size`, which is
    * O(blocks in this RDD) time.
    */
-  def numRddBlocksById(rddId: Int): Int = _rddBlocks.get(rddId).map(_.size).getOrElse(0)
+  def numRddBlocksById(rddId: Long): Int = _rddBlocks.get(rddId).map(_.size).getOrElse(0)
 
 
   /**
@@ -241,13 +231,13 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
     _rddBlocks.keys.toSeq.map(offHeapUsedByRdd).sum
 
   /** Return the memory used by the given RDD in this block manager in O(1) time. */
-  def memUsedByRdd(rddId: Int): Long = _rddStorageInfo.get(rddId).map(_._1).getOrElse(0L)
+  def memUsedByRdd(rddId: Long): Long = _rddStorageInfo.get(rddId).map(_._1).getOrElse(0L)
 
   /** Return the disk space used by the given RDD in this block manager in O(1) time. */
-  def diskUsedByRdd(rddId: Int): Long = _rddStorageInfo.get(rddId).map(_._2).getOrElse(0L)
+  def diskUsedByRdd(rddId: Long): Long = _rddStorageInfo.get(rddId).map(_._2).getOrElse(0L)
 
   /** Return the off-heap space used by the given RDD in this block manager in O(1) time. */
-  def offHeapUsedByRdd(rddId: Int): Long = _rddStorageInfo.get(rddId).map(_._3).getOrElse(0L)
+  def offHeapUsedByRdd(rddId: Long): Long = _rddStorageInfo.get(rddId).map(_._3).getOrElse(0L)
 
   /** Return the memory used by the given broadcast variable in this block manager in O(1) time. */
   def memUsedByBroadcast(broadcastId: Long): Long = _broadcastStorageInfo.get(broadcastId).
@@ -366,7 +356,7 @@ private[spark] object StorageUtils {
   /**
    * Return a mapping from block ID to its locations for each block that belongs to the given RDD.
    */
-  def getRddBlockLocations(rddId: Int, statuses: Seq[StorageStatus]): Map[BlockId, Seq[String]] = {
+  def getRddBlockLocations(rddId: Long, statuses: Seq[StorageStatus]): Map[BlockId, Seq[String]] = {
     val blockLocations = new mutable.HashMap[BlockId, mutable.ListBuffer[String]]
     statuses.foreach { status =>
       status.rddBlocksById(rddId).foreach { case (bid, _) =>

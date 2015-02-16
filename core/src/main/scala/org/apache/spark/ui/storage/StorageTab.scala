@@ -45,7 +45,10 @@ class StorageListener(storageStatusListener: StorageStatusListener) extends Spar
   def storageStatusList = storageStatusListener.storageStatusList
 
   /** Filter RDD info to include only those with cached partitions */
-  def rddInfoList = _rddInfoMap.values.filter(_.numCachedPartitions > 0).toSeq
+  def rddInfoList = {
+    _rddInfoMap.values.filter(_.numCachedPartitions > 0).toSeq
+  }
+    
 
   /** Filter broadcast info to include only those with cached partitions */
   def broadcastInfoList = _broadcastInfoMap.values.toSeq
@@ -75,7 +78,7 @@ class StorageListener(storageStatusListener: StorageStatusListener) extends Spar
 
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) = synchronized {
     // Remove all partitions that are no longer cached in current completed stage
-    val completedRddIds = stageCompleted.stageInfo.rddInfos.map(r => r.id).toSet
+    val completedRddIds = stageCompleted.stageInfo.rddInfos.map(r => r.id.toLong).toSet
     _rddInfoMap.retain { case (id, info) =>
       !completedRddIds.contains(id) || info.numCachedPartitions > 0
     }

@@ -17,41 +17,39 @@
 
 package org.apache.spark.ui.storage
 
-import javax.servlet.http.HttpServletRequest
-
-import org.apache.spark.storage.{BlockStatus, BlockId, StorageStatus, StorageUtils}
-import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.storage.StorageUtils
+import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.Utils
 
 import scala.xml.Node
 
-private[ui] class BroadcastPage(parent: StorageTab) extends WebUIPage("broadcast"){
+private[ui] class BroadcastPage(parent: StorageTab) extends InMemoryObjectPage("broadcast", parent){
 
-  private val listener = parent.listener
+  protected override val workerTableID: String = "broadcast-storage-by-block-table"
+  
+  protected override def objectList = listener.broadcastInfoList
 
-  override def render(request: HttpServletRequest): Seq[Node] = {
-    val broadcastId = request.getParameter("id").toLong
-    val storageStatusList = listener.storageStatusList
-    val broadcastInfo = listener.broadcastInfoList.find(_.id == broadcastId).getOrElse {
-      // Rather than crashing, render an "RDD Not Found" page
-      return UIUtils.headerSparkPage("Broadcast Not Found", Seq[Node](), parent)
-    }
-
-    // Worker table
-    val workers = storageStatusList.map((broadcastId, _))
-    val workerTable = UIUtils.listingTable(workerHeader, workerRowForBroadcast, workers,
-      id = Some("broadcast-storage-by-worker-table"))
-
-    // Block table
-    val blockLocations = StorageUtils.getBroadcastBlockLocation(broadcastId, storageStatusList)
-    val blocks = storageStatusList
-      .flatMap(_.broadcastBlocksById(broadcastId))
+  protected override def getBlockTableAndSize(objectId: Any): (Seq[Node], Int) = {
+    val blockLocations = StorageUtils.getBroadcastBlockLocation(objectId.asInstanceOf[Long],
+      storageStatusList)
+    val blocks = listener.storageStatusList
+      .flatMap(_.broadcastBlocksById(objectId.asInstanceOf[Long]))
       .sortWith(_._1.name < _._1.name)
       .map { case (blockId, status) =>
       (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
     }
-    val blockTable = UIUtils.listingTable(blockHeader, blockRow, blocks,
-      id = Some("rdd-storage-by-block-table"))
+    (UIUtils.listingTable(blockHeader, blockRow, blocks, id = Some("rdd-storage-by-block-table")),
+      blocks.size)
+  }
+
+  protected override def generateContent(objectId: Long): (String, Seq[Node]) = {
+    val objectInfo = objectList.find(_.id == objectId).getOrElse {
+      // Rather than crashing, render an "Not Found" page
+      return (objectId.toString, nonFoundErrorInfo)
+    }
+    val (workerTable, workerCount) = getWorkerTableAndSize(objectId)
+
+    val (blockTable, blockCount) = getBlockTableAndSize(objectId)
 
     val content =
       <div class="row-fluid">
@@ -59,15 +57,15 @@ private[ui] class BroadcastPage(parent: StorageTab) extends WebUIPage("broadcast
           <ul class="unstyled">
             <li>
               <strong>Total Partitions:</strong>
-              {broadcastInfo.numPartitions}
+              {objectInfo.numPartitions}
             </li>
             <li>
               <strong>Memory Size:</strong>
-              {Utils.bytesToString(broadcastInfo.memSize)}
+              {Utils.bytesToString(objectInfo.memSize)}
             </li>
             <li>
               <strong>Disk Size:</strong>
-              {Utils.bytesToString(broadcastInfo.diskSize)}
+              {Utils.bytesToString(objectInfo.diskSize)}
             </li>
           </ul>
         </div>
@@ -75,78 +73,18 @@ private[ui] class BroadcastPage(parent: StorageTab) extends WebUIPage("broadcast
 
         <div class="row-fluid">
           <div class="span12">
-            <h4> Data Distribution on {workers.size} Executors </h4>
+            <h4> Data Distribution on {workerCount} Executors </h4>
             {workerTable}
           </div>
         </div>
 
         <div class="row-fluid">
           <div class="span12">
-            <h4> {blocks.size} Partitions </h4>
+            <h4> {blockCount} Partitions </h4>
             {blockTable}
           </div>
         </div>;
 
-    UIUtils.headerSparkPage("Storage Info for " + broadcastInfo.name, content, parent)
-  }
-
-  /** Header fields for the worker table */
-  private def workerHeader = Seq(
-    "Host",
-    "Memory Usage",
-    "Disk Usage")
-
-  /** Header fields for the block table */
-  private def blockHeader = Seq(
-    "Block Name",
-    "Storage Level",
-    "Size in Memory",
-    "Size on Disk",
-    "Executors")
-
-  /** Render an HTML row representing a worker */
-  private def workerRowForRDD(worker: (Int, StorageStatus)): Seq[Node] = {
-    val (rddId, status) = worker
-    <tr>
-      <td>{status.blockManagerId.host + ":" + status.blockManagerId.port}</td>
-      <td>
-        {Utils.bytesToString(status.memUsedByRdd(rddId))}
-        ({Utils.bytesToString(status.memRemaining)} Remaining)
-      </td>
-      <td>{Utils.bytesToString(status.diskUsedByRdd(rddId))}</td>
-    </tr>
-  }
-
-  /** Render an HTML row representing a worker */
-  private def workerRowForBroadcast(worker: (Long, StorageStatus)): Seq[Node] = {
-    val (broadcastId, status) = worker
-    <tr>
-      <td>{status.blockManagerId.host + ":" + status.blockManagerId.port}</td>
-      <td>
-        {Utils.bytesToString(status.memUsedByBroadcast(broadcastId))}
-        ({Utils.bytesToString(status.memRemaining)} Remaining)
-      </td>
-      <td>{Utils.bytesToString(status.diskUsedByBroadcast(broadcastId))}</td>
-    </tr>
-  }
-
-  /** Render an HTML row representing a block */
-  private def blockRow(row: (BlockId, BlockStatus, Seq[String])): Seq[Node] = {
-    val (id, block, locations) = row
-    <tr>
-      <td>{id}</td>
-      <td>
-        {block.storageLevel.description}
-      </td>
-      <td sorttable_customkey={block.memSize.toString}>
-        {Utils.bytesToString(block.memSize)}
-      </td>
-      <td sorttable_customkey={block.diskSize.toString}>
-        {Utils.bytesToString(block.diskSize)}
-      </td>
-      <td>
-        {locations.map(l => <span>{l}<br/></span>)}
-      </td>
-    </tr>
+    (objectInfo.name, content)
   }
 }
