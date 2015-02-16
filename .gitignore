@@ -21,3 +21,6 @@ SparkR-pkg.Rproj
 *.o
 *.so
 SparkR.Rcheck
+# Eclipse Meta Files
+.project
+.classpath

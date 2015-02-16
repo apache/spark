@@ -17,6 +17,7 @@ License: Apache License (== 2.0)
 Collate:
     'jobj.R'
     'RDD.R'
+    'pairRDD.R'
     'DataFrame.R'
     'SQLContext.R'
     'broadcast.R'

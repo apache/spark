@@ -229,6 +229,19 @@ test_that("flatMapValues() on pairwise RDDs", {
                     list(2L, 1), list(2L, 2), list(1L, 200), list(1L, 201)))
 })
 
+test_that("reduceByKeyLocally() on PairwiseRDDs", {
+  pairs <- parallelize(sc, list(list(1, 2), list(1.1, 3), list(1, 4)), 2L)
+  actual <- reduceByKeyLocally(pairs, "+")
+  expect_equal(sortKeyValueList(actual),
+               sortKeyValueList(list(list(1, 6), list(1.1, 3))))
+
+  pairs <- parallelize(sc, list(list("abc", 1.2), list(1.1, 0), list("abc", 1.3),
+                                list("bb", 5)), 4L)
+  actual <- reduceByKeyLocally(pairs, "+")
+  expect_equal(sortKeyValueList(actual),
+               sortKeyValueList(list(list("abc", 2.5), list(1.1, 0), list("bb", 5))))
+})
+
 test_that("distinct() on RDDs", {
   nums.rep2 <- rep(1:10, 2)
   rdd.rep2 <- parallelize(sc, nums.rep2, 2L)
@@ -252,6 +265,63 @@ test_that("keyBy on RDDs", {
   keys <- keyBy(rdd, func)
   actual <- collect(keys)
   expect_equal(actual, lapply(nums, function(x) { list(func(x), x) }))
+})
+
+test_that("sortBy() on RDDs", {
+  sortedRdd <- sortBy(rdd, function(x) { x * x }, ascending = FALSE)
+  actual <- collect(sortedRdd)
+  expect_equal(actual, as.list(sort(nums, decreasing = TRUE)))
+
+  rdd2 <- parallelize(sc, sort(nums, decreasing = TRUE), 2L)
+  sortedRdd2 <- sortBy(rdd2, function(x) { x * x })
+  actual <- collect(sortedRdd2)
+  expect_equal(actual, as.list(nums))
+})
+
+test_that("takeOrdered() on RDDs", {
+  l <- list(10, 1, 2, 9, 3, 4, 5, 6, 7)
+  rdd <- parallelize(sc, l)
+  actual <- takeOrdered(rdd, 6L)
+  expect_equal(actual, as.list(sort(unlist(l)))[1:6])
+
+  l <- list("e", "d", "c", "d", "a")
+  rdd <- parallelize(sc, l)
+  actual <- takeOrdered(rdd, 3L)
+  expect_equal(actual, as.list(sort(unlist(l)))[1:3])
+})
+
+test_that("top() on RDDs", {
+  l <- list(10, 1, 2, 9, 3, 4, 5, 6, 7)
+  rdd <- parallelize(sc, l)
+  actual <- top(rdd, 6L)
+  expect_equal(actual, as.list(sort(unlist(l), decreasing = TRUE))[1:6])
+  
+  l <- list("e", "d", "c", "d", "a")
+  rdd <- parallelize(sc, l)
+  actual <- top(rdd, 3L)
+  expect_equal(actual, as.list(sort(unlist(l), decreasing = TRUE))[1:3])
+})
+
+test_that("fold() on RDDs", {
+  actual <- fold(rdd, 0, "+")
+  expect_equal(actual, Reduce("+", nums, 0))
+  
+  rdd <- parallelize(sc, list())
+  actual <- fold(rdd, 0, "+")
+  expect_equal(actual, 0)
+})
+
+test_that("aggregateRDD() on RDDs", {
+  rdd <- parallelize(sc, list(1, 2, 3, 4))
+  zeroValue <- list(0, 0)
+  seqOp <- function(x, y) { list(x[[1]] + y, x[[2]] + 1) }
+  combOp <- function(x, y) { list(x[[1]] + y[[1]], x[[2]] + y[[2]]) }
+  actual <- aggregateRDD(rdd, zeroValue, seqOp, combOp)
+  expect_equal(actual, list(10, 4))
+  
+  rdd <- parallelize(sc, list())
+  actual <- aggregateRDD(rdd, zeroValue, seqOp, combOp)
+  expect_equal(actual, list(0, 0))
 })
 
 test_that("keys() on RDDs", {
@@ -372,4 +442,71 @@ test_that("fullOuterJoin() on pairwise RDDs", {
   actual <- collect(fullOuterJoin(rdd1, rdd2, 2L))
   expect_equal(sortKeyValueList(actual),
                sortKeyValueList(list(list("a", list(1, NULL)), list("b", list(2, NULL)), list("d", list(NULL, 4)), list("c", list(NULL, 3)))))
+})
+
+test_that("sortByKey() on pairwise RDDs", {
+  numPairsRdd <- map(rdd, function(x) { list (x, x) })
+  sortedRdd <- sortByKey(numPairsRdd, ascending = FALSE)
+  actual <- collect(sortedRdd)
+  numPairs <- lapply(nums, function(x) { list (x, x) })
+  expect_equal(actual, sortKeyValueList(numPairs, decreasing = TRUE))
+
+  rdd2 <- parallelize(sc, sort(nums, decreasing = TRUE), 2L)
+  numPairsRdd2 <- map(rdd2, function(x) { list (x, x) })
+  sortedRdd2 <- sortByKey(numPairsRdd2)
+  actual <- collect(sortedRdd2)
+  expect_equal(actual, numPairs)
+
+  # sort by string keys
+  l <- list(list("a", 1), list("b", 2), list("1", 3), list("d", 4), list("2", 5))
+  rdd3 <- parallelize(sc, l, 2L)
+  sortedRdd3 <- sortByKey(rdd3)
+  actual <- collect(sortedRdd3)
+  expect_equal(actual, list(list("1", 3), list("2", 5), list("a", 1), list("b", 2), list("d", 4)))
+  
+  # test on the boundary cases
+  
+  # boundary case 1: the RDD to be sorted has only 1 partition
+  rdd4 <- parallelize(sc, l, 1L)
+  sortedRdd4 <- sortByKey(rdd4)
+  actual <- collect(sortedRdd4)
+  expect_equal(actual, list(list("1", 3), list("2", 5), list("a", 1), list("b", 2), list("d", 4)))
+
+  # boundary case 2: the sorted RDD has only 1 partition
+  rdd5 <- parallelize(sc, l, 2L)
+  sortedRdd5 <- sortByKey(rdd5, numPartitions = 1L)
+  actual <- collect(sortedRdd5)
+  expect_equal(actual, list(list("1", 3), list("2", 5), list("a", 1), list("b", 2), list("d", 4)))
+
+  # boundary case 3: the RDD to be sorted has only 1 element
+  l2 <- list(list("a", 1))
+  rdd6 <- parallelize(sc, l2, 2L)
+  sortedRdd6 <- sortByKey(rdd6)
+  actual <- collect(sortedRdd6)
+  expect_equal(actual, l2)
+
+  # boundary case 4: the RDD to be sorted has 0 element
+  l3 <- list()
+  rdd7 <- parallelize(sc, l3, 2L)
+  sortedRdd7 <- sortByKey(rdd7)
+  actual <- collect(sortedRdd7)
+  expect_equal(actual, l3)  
+})
+
+test_that("collectAsMap() on a pairwise RDD", {
+  rdd <- parallelize(sc, list(list(1, 2), list(3, 4)))
+  vals <- collectAsMap(rdd)
+  expect_equal(vals, list(`1` = 2, `3` = 4))
+
+  rdd <- parallelize(sc, list(list("a", 1), list("b", 2)))
+  vals <- collectAsMap(rdd)
+  expect_equal(vals, list(a = 1, b = 2))
+ 
+  rdd <- parallelize(sc, list(list(1.1, 2.2), list(1.2, 2.4)))
+  vals <- collectAsMap(rdd)
+  expect_equal(vals, list(`1.1` = 2.2, `1.2` = 2.4))
+ 
+  rdd <- parallelize(sc, list(list(1, "a"), list(2, "b")))
+  vals <- collectAsMap(rdd)
+  expect_equal(vals, list(`1` = "a", `2` = "b"))
 })
