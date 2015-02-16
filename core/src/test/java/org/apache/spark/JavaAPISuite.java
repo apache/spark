@@ -25,17 +25,16 @@ import java.util.*;
 import java.util.concurrent.*;
 
 import org.apache.spark.input.PortableDataStream;
+import org.apache.spark.rdd.RDD;
+import scala.collection.JavaConversions;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
 
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Iterators;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.common.base.Throwables;
 import com.google.common.base.Optional;
 import com.google.common.base.Charsets;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.io.Files;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
@@ -1302,6 +1301,43 @@ public class JavaAPISuite implements Serializable {
     Assert.assertTrue(rdd.getCheckpointFile().isPresent());
     JavaRDD<Integer> recovered = sc.checkpointFile(rdd.getCheckpointFile().get());
     Assert.assertEquals(Arrays.asList(1, 2, 3, 4, 5), recovered.collect());
+  }
+
+  @Test
+  public void combineByKey() {
+    JavaRDD<Integer> originalRDD = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5, 6));
+    Function<Integer, Integer> keyFunction = new Function<Integer, Integer>() {
+      @Override
+      public Integer call(Integer v1) throws Exception {
+        return v1 % 3;
+      }
+    };
+    Function<Integer, Integer> createCombinerFunction = new Function<Integer, Integer>() {
+      @Override
+      public Integer call(Integer v1) throws Exception {
+        return v1;
+      }
+    };
+
+    Function2<Integer, Integer, Integer> mergeValueFunction = new Function2<Integer, Integer, Integer>() {
+      @Override
+      public Integer call(Integer v1, Integer v2) throws Exception {
+        return v1 + v2;
+      }
+    };
+
+    JavaPairRDD<Integer, Integer> combinedRDD = originalRDD.keyBy(keyFunction)
+        .combineByKey(createCombinerFunction, mergeValueFunction, mergeValueFunction);
+    Map<Integer, Integer> results = combinedRDD.collectAsMap();
+    ImmutableMap<Integer, Integer> expected = ImmutableMap.of(0, 9, 1, 5, 2, 7);
+    Assert.assertEquals(expected, results);
+
+    Partitioner defaultPartitioner = Partitioner.defaultPartitioner(
+        combinedRDD.rdd(), JavaConversions.asScalaBuffer(Lists.<RDD<?>>newArrayList()));
+    combinedRDD = originalRDD.keyBy(keyFunction)
+        .combineByKey(createCombinerFunction, mergeValueFunction, mergeValueFunction, defaultPartitioner, false);
+    results = combinedRDD.collectAsMap();
+    Assert.assertEquals(expected, results);
   }
 
   @SuppressWarnings("unchecked")
