@@ -83,7 +83,7 @@ private[sql] class DataFrameImpl protected[sql](
 
   protected[sql] def resolve(colName: String): NamedExpression = {
     queryExecution.analyzed.resolve(colName, sqlContext.analyzer.resolver).getOrElse {
-      throw new RuntimeException(
+      throw new AnalysisException(
         s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""")
     }
   }

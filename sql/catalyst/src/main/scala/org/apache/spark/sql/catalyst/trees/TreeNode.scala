@@ -22,8 +22,41 @@ import org.apache.spark.sql.catalyst.errors._
 /** Used by [[TreeNode.getNodeNumbered]] when traversing the tree for a given number */
 private class MutableInt(var i: Int)
 
+case class Origin(
+  line: Option[Int] = None,
+  startPosition: Option[Int] = None)
+
+/**
+ * Provides a location for TreeNodes to ask about the context of their origin.  For example, which
+ * line of code is currently being parsed.
+ */
+object CurrentOrigin {
+  private val value = new ThreadLocal[Origin]() {
+    override def initialValue: Origin = Origin()
+  }
+
+  def get = value.get()
+  def set(o: Origin) = value.set(o)
+
+  def reset() = value.set(Origin())
+
+  def setPosition(line: Int, start: Int) = {
+    value.set(
+      value.get.copy(line = Some(line), startPosition = Some(start)))
+  }
+
+  def withOrigin[A](o: Origin)(f: => A): A = {
+    set(o)
+    val ret = try f finally { reset() }
+    reset()
+    ret
+  }
+}
+
 abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   self: BaseType with Product =>
+
+  val origin = CurrentOrigin.get
 
   /** Returns a Seq of the children of this node */
   def children: Seq[BaseType]
@@ -150,7 +183,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
    * @param rule the function used to transform this nodes children
    */
   def transformDown(rule: PartialFunction[BaseType, BaseType]): BaseType = {
-    val afterRule = rule.applyOrElse(this, identity[BaseType])
+    val afterRule = CurrentOrigin.withOrigin(origin) {
+      rule.applyOrElse(this, identity[BaseType])
+    }
+
     // Check if unchanged and then possibly return old copy to avoid gc churn.
     if (this fastEquals afterRule) {
       transformChildrenDown(rule)
@@ -210,9 +246,13 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   def transformUp(rule: PartialFunction[BaseType, BaseType]): BaseType = {
     val afterRuleOnChildren = transformChildrenUp(rule);
     if (this fastEquals afterRuleOnChildren) {
-      rule.applyOrElse(this, identity[BaseType])
+      CurrentOrigin.withOrigin(origin) {
+        rule.applyOrElse(this, identity[BaseType])
+      }
     } else {
-      rule.applyOrElse(afterRuleOnChildren, identity[BaseType])
+      CurrentOrigin.withOrigin(origin) {
+        rule.applyOrElse(afterRuleOnChildren, identity[BaseType])
+      }
     }
   }
 
@@ -268,12 +308,14 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
    */
   def makeCopy(newArgs: Array[AnyRef]): this.type = attachTree(this, "makeCopy") {
     try {
-      // Skip no-arg constructors that are just there for kryo.
-      val defaultCtor = getClass.getConstructors.find(_.getParameterTypes.size != 0).head
-      if (otherCopyArgs.isEmpty) {
-        defaultCtor.newInstance(newArgs: _*).asInstanceOf[this.type]
-      } else {
-        defaultCtor.newInstance((newArgs ++ otherCopyArgs).toArray: _*).asInstanceOf[this.type]
+      CurrentOrigin.withOrigin(origin) {
+        // Skip no-arg constructors that are just there for kryo.
+        val defaultCtor = getClass.getConstructors.find(_.getParameterTypes.size != 0).head
+        if (otherCopyArgs.isEmpty) {
+          defaultCtor.newInstance(newArgs: _*).asInstanceOf[this.type]
+        } else {
+          defaultCtor.newInstance((newArgs ++ otherCopyArgs).toArray: _*).asInstanceOf[this.type]
+        }
       }
     } catch {
       case e: java.lang.IllegalArgumentException =>
