@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql
 
-import scala.annotation.tailrec
 import scala.language.implicitConversions
 
-import org.apache.spark.sql.Dsl.lit
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{Subquery, Project, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Project, LogicalPlan}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGetField
 import org.apache.spark.sql.types._
 
@@ -66,27 +65,44 @@ trait Column extends DataFrame {
    */
   def isComputable: Boolean
 
+  /** Removes the top project so we can get to the underlying plan. */
+  private def stripProject(p: LogicalPlan): LogicalPlan = p match {
+    case Project(_, child) => child
+    case p => sys.error("Unexpected logical plan (expected Project): " + p)
+  }
+
   private def computableCol(baseCol: ComputableColumn, expr: Expression) = {
-    val plan = Project(Seq(expr match {
+    val namedExpr = expr match {
       case named: NamedExpression => named
       case unnamed: Expression => Alias(unnamed, "col")()
-    }), baseCol.plan)
+    }
+    val plan = Project(Seq(namedExpr), stripProject(baseCol.plan))
     Column(baseCol.sqlContext, plan, expr)
   }
 
+  /**
+   * Construct a new column based on the expression and the other column value.
+   *
+   * There are two cases that can happen here:
+   * If otherValue is a constant, it is first turned into a Column.
+   * If otherValue is a Column, then:
+   *   - If this column and otherValue are both computable and come from the same logical plan,
+   *     then we can construct a ComputableColumn by applying a Project on top of the base plan.
+   *   - If this column is not computable, but otherValue is computable, then we can construct
+   *     a ComputableColumn based on otherValue's base plan.
+   *   - If this column is computable, but otherValue is not, then we can construct a
+   *     ComputableColumn based on this column's base plan.
+   *   - If neither columns are computable, then we create an IncomputableColumn.
+   */
   private def constructColumn(otherValue: Any)(newExpr: Column => Expression): Column = {
-    // Removes all the top level projection and subquery so we can get to the underlying plan.
-    @tailrec def stripProject(p: LogicalPlan): LogicalPlan = p match {
-      case Project(_, child) => stripProject(child)
-      case Subquery(_, child) => stripProject(child)
-      case _ => p
-    }
-
+    // lit(otherValue) returns a Column always.
     (this, lit(otherValue)) match {
       case (left: ComputableColumn, right: ComputableColumn) =>
         if (stripProject(left.plan).sameResult(stripProject(right.plan))) {
           computableCol(right, newExpr(right))
         } else {
+          // We don't want to throw an exception here because "df1("a") === df2("b")" can be
+          // a valid expression for join conditions, even though standalone they are not valid.
           Column(newExpr(right))
         }
       case (left: ComputableColumn, right) => computableCol(left, newExpr(right))
@@ -110,7 +126,7 @@ trait Column extends DataFrame {
    *   df.select( -df("amount") )
    *
    *   // Java:
-   *   import static org.apache.spark.sql.Dsl.*;
+   *   import static org.apache.spark.sql.functions.*;
    *   df.select( negate(col("amount") );
    * }}}
    */
@@ -123,7 +139,7 @@ trait Column extends DataFrame {
    *   df.filter( !df("isActive") )
    *
    *   // Java:
-   *   import static org.apache.spark.sql.Dsl.*;
+   *   import static org.apache.spark.sql.functions.*;
    *   df.filter( not(df.col("isActive")) );
    * }}
    */
@@ -136,7 +152,7 @@ trait Column extends DataFrame {
    *   df.filter( df("colA") === df("colB") )
    *
    *   // Java
-   *   import static org.apache.spark.sql.Dsl.*;
+   *   import static org.apache.spark.sql.functions.*;
    *   df.filter( col("colA").equalTo(col("colB")) );
    * }}}
    */
@@ -151,7 +167,7 @@ trait Column extends DataFrame {
    *   df.filter( df("colA") === df("colB") )
    *
    *   // Java
-   *   import static org.apache.spark.sql.Dsl.*;
+   *   import static org.apache.spark.sql.functions.*;
    *   df.filter( col("colA").equalTo(col("colB")) );
    * }}}
    */
@@ -165,7 +181,7 @@ trait Column extends DataFrame {
    *   df.select( !(df("colA") === df("colB")) )
    *
    *   // Java:
-   *   import static org.apache.spark.sql.Dsl.*;
+   *   import static org.apache.spark.sql.functions.*;
    *   df.filter( col("colA").notEqual(col("colB")) );
    * }}}
    */
@@ -181,7 +197,7 @@ trait Column extends DataFrame {
    *   df.select( !(df("colA") === df("colB")) )
    *
    *   // Java:
-   *   import static org.apache.spark.sql.Dsl.*;
+   *   import static org.apache.spark.sql.functions.*;
    *   df.filter( col("colA").notEqual(col("colB")) );
    * }}}
    */
@@ -196,7 +212,7 @@ trait Column extends DataFrame {
    *   people.select( people("age") > 21 )
    *
    *   // Java:
-   *   import static org.apache.spark.sql.Dsl.*;
+   *   import static org.apache.spark.sql.functions.*;
    *   people.select( people("age").gt(21) );
    * }}}
    */
@@ -211,7 +227,7 @@ trait Column extends DataFrame {
    *   people.select( people("age") > lit(21) )
    *
    *   // Java:
-   *   import static org.apache.spark.sql.Dsl.*;
+   *   import static org.apache.spark.sql.functions.*;
    *   people.select( people("age").gt(21) );
    * }}}
    */
@@ -550,6 +566,15 @@ trait Column extends DataFrame {
   override def as(alias: String): Column = exprToColumn(Alias(expr, alias)())
 
   /**
+   * Gives the column an alias.
+   * {{{
+   *   // Renames colA to colB in select output.
+   *   df.select($"colA".as('colB))
+   * }}}
+   */
+  override def as(alias: Symbol): Column = exprToColumn(Alias(expr, alias.name)())
+
+  /**
    * Casts the column to a different data type.
    * {{{
    *   // Casts colA to IntegerType.
@@ -591,6 +616,14 @@ trait Column extends DataFrame {
   def desc: Column = exprToColumn(SortOrder(expr, Descending), computable = false)
 
   def asc: Column = exprToColumn(SortOrder(expr, Ascending), computable = false)
+
+  override def explain(extended: Boolean): Unit = {
+    if (extended) {
+      println(expr)
+    } else {
+      println(expr.prettyString)
+    }
+  }
 }
 
 

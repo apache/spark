@@ -38,6 +38,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.log4j.PropertyConfigurator
 import org.eclipse.jetty.util.MultiException
 import org.json4s._
@@ -282,13 +283,6 @@ private[spark] object Utils extends Logging {
         dir = new File(root, namePrefix + "-" + UUID.randomUUID.toString)
         if (dir.exists() || !dir.mkdirs()) {
           dir = null
-        } else {
-          // Restrict file permissions via chmod if available.
-          // For Windows this step is ignored.
-          if (!isWindows && !chmod700(dir)) {
-            dir.delete()
-            dir = null
-          }
         }
       } catch { case e: SecurityException => dir = null; }
     }
@@ -702,7 +696,9 @@ private[spark] object Utils extends Logging {
           try {
             val rootDir = new File(root)
             if (rootDir.exists || rootDir.mkdirs()) {
-              Some(createDirectory(root).getAbsolutePath())
+              val dir = createDirectory(root)
+              chmod700(dir)
+              Some(dir.getAbsolutePath)
             } else {
               logError(s"Failed to create dir in $root. Ignoring this directory.")
               None
@@ -1986,6 +1982,16 @@ private[spark] object Utils extends Logging {
         throw new SparkException("Invalid master URL: " + sparkUrl, e)
     }
   }
+
+  /**
+   * Returns the current user name. This is the currently logged in user, unless that's been
+   * overridden by the `SPARK_USER` environment variable.
+   */
+  def getCurrentUserName(): String = {
+    Option(System.getenv("SPARK_USER"))
+      .getOrElse(UserGroupInformation.getCurrentUser().getUserName())
+  }
+
 }
 
 /**

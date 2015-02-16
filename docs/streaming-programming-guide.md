@@ -878,6 +878,12 @@ This is applied on a DStream containing words (say, the `pairs` DStream containi
 val runningCounts = pairs.updateStateByKey[Int](updateFunction _)
 {% endhighlight %}
 
+The update function will be called for each word, with `newValues` having a sequence of 1's (from
+the `(word, 1)` pairs) and the `runningCount` having the previous count. For the complete
+Scala code, take a look at the example
+[StatefulNetworkWordCount.scala]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache
+/spark/examples/streaming/StatefulNetworkWordCount.scala).
+
 </div>
 <div data-lang="java" markdown="1">
 
@@ -899,6 +905,13 @@ This is applied on a DStream containing words (say, the `pairs` DStream containi
 JavaPairDStream<String, Integer> runningCounts = pairs.updateStateByKey(updateFunction);
 {% endhighlight %}
 
+The update function will be called for each word, with `newValues` having a sequence of 1's (from
+the `(word, 1)` pairs) and the `runningCount` having the previous count. For the complete
+Java code, take a look at the example
+[JavaStatefulNetworkWordCount.java]({{site
+.SPARK_GITHUB_URL}}/blob/master/examples/src/main/java/org/apache/spark/examples/streaming
+/JavaStatefulNetworkWordCount.java).
+
 </div>
 <div data-lang="python" markdown="1">
 
@@ -916,13 +929,13 @@ This is applied on a DStream containing words (say, the `pairs` DStream containi
 runningCounts = pairs.updateStateByKey(updateFunction)
 {% endhighlight %}
 
-</div>
-</div>
-
 The update function will be called for each word, with `newValues` having a sequence of 1's (from
 the `(word, 1)` pairs) and the `runningCount` having the previous count. For the complete
-Scala code, take a look at the example
+Python code, take a look at the example
 [stateful_network_wordcount.py]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/python/streaming/stateful_network_wordcount.py).
+
+</div>
+</div>
 
 Note that using `updateStateByKey` requires the checkpoint directory to be configured, which is
 discussed in detail in the [checkpointing](#checkpointing) section.

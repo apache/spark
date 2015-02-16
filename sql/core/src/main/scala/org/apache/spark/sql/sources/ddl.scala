@@ -20,7 +20,7 @@ package org.apache.spark.sql.sources
 import scala.language.implicitConversions
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{SaveMode, DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
@@ -106,23 +106,33 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
   protected lazy val createTable: Parser[LogicalPlan] =
   (
     (CREATE ~> TEMPORARY.? <~ TABLE) ~ (IF ~> NOT <~ EXISTS).? ~ ident
-      ~ (tableCols).? ~ (USING ~> className) ~ (OPTIONS ~> options) ~ (AS ~> restInput).? ^^ {
+      ~ (tableCols).? ~ (USING ~> className) ~ (OPTIONS ~> options).? ~ (AS ~> restInput).? ^^ {
       case temp ~ allowExisting ~ tableName ~ columns ~ provider ~ opts ~ query =>
         if (temp.isDefined && allowExisting.isDefined) {
           throw new DDLException(
             "a CREATE TEMPORARY TABLE statement does not allow IF NOT EXISTS clause.")
         }
 
+        val options = opts.getOrElse(Map.empty[String, String])
         if (query.isDefined) {
           if (columns.isDefined) {
             throw new DDLException(
               "a CREATE TABLE AS SELECT statement does not allow column definitions.")
           }
+          // When IF NOT EXISTS clause appears in the query, the save mode will be ignore.
+          val mode = if (allowExisting.isDefined) {
+            SaveMode.Ignore
+          } else if (temp.isDefined) {
+            SaveMode.Overwrite
+          } else {
+            SaveMode.ErrorIfExists
+          }
+
           CreateTableUsingAsSelect(tableName,
             provider,
             temp.isDefined,
-            opts,
-            allowExisting.isDefined,
+            mode,
+            options,
             query.get)
         } else {
           val userSpecifiedSchema = columns.flatMap(fields => Some(StructType(fields)))
@@ -131,8 +141,9 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
             userSpecifiedSchema,
             provider,
             temp.isDefined,
-            opts,
-            allowExisting.isDefined)
+            options,
+            allowExisting.isDefined,
+            managedIfNoPath = false)
         }
       }
   )
@@ -141,7 +152,7 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
 
   /*
    * describe [extended] table avroTable
-   * This will display all columns of table `avroTable` includes column_name,column_type,nullable
+   * This will display all columns of table `avroTable` includes column_name,column_type,comment
    */
   protected lazy val describeTable: Parser[LogicalPlan] =
     (DESCRIBE ~> opt(EXTENDED)) ~ (ident <~ ".").? ~ ident  ^^ {
@@ -223,64 +234,73 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
     primitiveType
 }
 
-object ResolvedDataSource {
+private[sql] object ResolvedDataSource {
+
+  private val builtinSources = Map(
+    "jdbc" -> classOf[org.apache.spark.sql.jdbc.DefaultSource],
+    "json" -> classOf[org.apache.spark.sql.json.DefaultSource],
+    "parquet" -> classOf[org.apache.spark.sql.parquet.DefaultSource]
+  )
+
+  /** Given a provider name, look up the data source class definition. */
+  def lookupDataSource(provider: String): Class[_] = {
+    if (builtinSources.contains(provider)) {
+      return builtinSources(provider)
+    }
+
+    val loader = Utils.getContextOrSparkClassLoader
+    try {
+      loader.loadClass(provider)
+    } catch {
+      case cnf: java.lang.ClassNotFoundException =>
+        try {
+          loader.loadClass(provider + ".DefaultSource")
+        } catch {
+          case cnf: java.lang.ClassNotFoundException =>
+            sys.error(s"Failed to load class for data source: $provider")
+        }
+    }
+  }
+
+  /** Create a [[ResolvedDataSource]] for reading data in. */
   def apply(
       sqlContext: SQLContext,
       userSpecifiedSchema: Option[StructType],
       provider: String,
       options: Map[String, String]): ResolvedDataSource = {
-    val loader = Utils.getContextOrSparkClassLoader
-    val clazz: Class[_] = try loader.loadClass(provider) catch {
-      case cnf: java.lang.ClassNotFoundException =>
-        try loader.loadClass(provider + ".DefaultSource") catch {
-          case cnf: java.lang.ClassNotFoundException =>
-            sys.error(s"Failed to load class for data source: $provider")
-        }
-    }
-
+    val clazz: Class[_] = lookupDataSource(provider)
     val relation = userSpecifiedSchema match {
-      case Some(schema: StructType) => {
-        clazz.newInstance match {
-          case dataSource: SchemaRelationProvider =>
-            dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options), schema)
-          case dataSource: org.apache.spark.sql.sources.RelationProvider =>
-            sys.error(s"${clazz.getCanonicalName} does not allow user-specified schemas.")
-        }
+      case Some(schema: StructType) => clazz.newInstance() match {
+        case dataSource: SchemaRelationProvider =>
+          dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options), schema)
+        case dataSource: org.apache.spark.sql.sources.RelationProvider =>
+          sys.error(s"${clazz.getCanonicalName} does not allow user-specified schemas.")
       }
-      case None => {
-        clazz.newInstance match {
-          case dataSource: RelationProvider =>
-            dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options))
-          case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
-            sys.error(s"A schema needs to be specified when using ${clazz.getCanonicalName}.")
-        }
+
+      case None => clazz.newInstance() match {
+        case dataSource: RelationProvider =>
+          dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options))
+        case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
+          sys.error(s"A schema needs to be specified when using ${clazz.getCanonicalName}.")
       }
     }
-
     new ResolvedDataSource(clazz, relation)
   }
 
+  /** Create a [[ResolvedDataSource]] for saving the content of the given [[DataFrame]]. */
   def apply(
       sqlContext: SQLContext,
       provider: String,
+      mode: SaveMode,
       options: Map[String, String],
       data: DataFrame): ResolvedDataSource = {
-    val loader = Utils.getContextOrSparkClassLoader
-    val clazz: Class[_] = try loader.loadClass(provider) catch {
-      case cnf: java.lang.ClassNotFoundException =>
-        try loader.loadClass(provider + ".DefaultSource") catch {
-          case cnf: java.lang.ClassNotFoundException =>
-            sys.error(s"Failed to load class for data source: $provider")
-        }
-    }
-
-    val relation = clazz.newInstance match {
+    val clazz: Class[_] = lookupDataSource(provider)
+    val relation = clazz.newInstance() match {
       case dataSource: CreatableRelationProvider =>
-        dataSource.createRelation(sqlContext, options, data)
+        dataSource.createRelation(sqlContext, mode, options, data)
       case _ =>
         sys.error(s"${clazz.getCanonicalName} does not allow create table as select.")
     }
-
     new ResolvedDataSource(clazz, relation)
   }
 }
@@ -306,28 +326,40 @@ private[sql] case class DescribeCommand(
       new MetadataBuilder().putString("comment", "comment of the column").build())())
 }
 
+/**
+  * Used to represent the operation of create table using a data source.
+  * @param tableName
+  * @param userSpecifiedSchema
+  * @param provider
+  * @param temporary
+  * @param options
+  * @param allowExisting If it is true, we will do nothing when the table already exists.
+ *                      If it is false, an exception will be thrown
+  * @param managedIfNoPath
+  */
 private[sql] case class CreateTableUsing(
     tableName: String,
     userSpecifiedSchema: Option[StructType],
     provider: String,
     temporary: Boolean,
     options: Map[String, String],
-    allowExisting: Boolean) extends Command
+    allowExisting: Boolean,
+    managedIfNoPath: Boolean) extends Command
 
 private[sql] case class CreateTableUsingAsSelect(
     tableName: String,
     provider: String,
     temporary: Boolean,
+    mode: SaveMode,
     options: Map[String, String],
-    allowExisting: Boolean,
     query: String) extends Command
 
 private[sql] case class CreateTableUsingAsLogicalPlan(
     tableName: String,
     provider: String,
     temporary: Boolean,
+    mode: SaveMode,
     options: Map[String, String],
-    allowExisting: Boolean,
     query: LogicalPlan) extends Command
 
 private [sql] case class CreateTempTableUsing(
@@ -347,12 +379,13 @@ private [sql] case class CreateTempTableUsing(
 private [sql] case class CreateTempTableUsingAsSelect(
     tableName: String,
     provider: String,
+    mode: SaveMode,
     options: Map[String, String],
     query: LogicalPlan) extends RunnableCommand {
 
   def run(sqlContext: SQLContext) = {
     val df = DataFrame(sqlContext, query)
-    val resolved = ResolvedDataSource(sqlContext, provider, options, df)
+    val resolved = ResolvedDataSource(sqlContext, provider, mode, options, df)
     sqlContext.registerRDDAsTable(
       DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
 
@@ -363,7 +396,7 @@ private [sql] case class CreateTempTableUsingAsSelect(
 /**
  * Builds a map in which keys are case insensitive
  */
-protected class CaseInsensitiveMap(map: Map[String, String]) extends Map[String, String]
+protected[sql] class CaseInsensitiveMap(map: Map[String, String]) extends Map[String, String]
   with Serializable {
 
   val baseMap = map.map(kv => kv.copy(_1 = kv._1.toLowerCase))
@@ -380,6 +413,5 @@ protected class CaseInsensitiveMap(map: Map[String, String]) extends Map[String,
 
 /**
  * The exception thrown from the DDL parser.
- * @param message
  */
 protected[sql] class DDLException(message: String) extends Exception(message)

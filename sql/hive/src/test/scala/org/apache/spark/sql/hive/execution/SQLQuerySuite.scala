@@ -18,7 +18,9 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.hive.HiveShim
+import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{QueryTest, Row, SQLConf}
 
@@ -32,8 +34,6 @@ case class Nested3(f3: Int)
  * valid, but Hive currently cannot execute it.
  */
 class SQLQuerySuite extends QueryTest {
-
-  import org.apache.spark.sql.hive.test.TestHive.implicits._
 
   test("SPARK-4512 Fix attribute reference resolution error when using SORT BY") {
     checkAnswer(
@@ -174,7 +174,8 @@ class SQLQuerySuite extends QueryTest {
   }
 
   test("double nested data") {
-    sparkContext.parallelize(Nested1(Nested2(Nested3(1))) :: Nil).registerTempTable("nested")
+    sparkContext.parallelize(Nested1(Nested2(Nested3(1))) :: Nil)
+      .toDF().registerTempTable("nested")
     checkAnswer(
       sql("SELECT f1.f2.f3 FROM nested"),
       Row(1))
@@ -197,7 +198,7 @@ class SQLQuerySuite extends QueryTest {
   }
 
   test("SPARK-4825 save join to table") {
-    val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString))
+    val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).toDF()
     sql("CREATE TABLE test1 (key INT, value STRING)")
     testData.insertInto("test1")
     sql("CREATE TABLE test2 (key INT, value STRING)")
@@ -277,7 +278,7 @@ class SQLQuerySuite extends QueryTest {
 
     val rowRdd = sparkContext.parallelize(row :: Nil)
 
-    applySchema(rowRdd, schema).registerTempTable("testTable")
+    TestHive.createDataFrame(rowRdd, schema).registerTempTable("testTable")
 
     sql(
       """CREATE TABLE nullValuesInInnerComplexTypes

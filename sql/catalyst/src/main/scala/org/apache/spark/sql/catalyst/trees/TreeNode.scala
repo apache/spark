@@ -47,6 +47,15 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   }
 
   /**
+   * Runs the given function recursively on [[children]] then on this node.
+   * @param f the function to be applied to each node in the tree.
+   */
+  def foreachUp(f: BaseType => Unit): Unit = {
+    children.foreach(_.foreach(f))
+    f(this)
+  }
+
+  /**
    * Returns a Seq containing the result of applying the given function to each
    * node in this tree in a preorder traversal.
    * @param f the function to be applied.

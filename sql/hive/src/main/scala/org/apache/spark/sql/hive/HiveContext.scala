@@ -37,7 +37,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, EliminateAnalysisOperators, OverrideCatalog, OverrideFunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, EliminateSubQueries, OverrideCatalog, OverrideFunctionRegistry}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUdfs, SetCommand, QueryExecutionException}
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DescribeHiveTableCommand}
@@ -80,18 +80,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   }
 
   /**
-   * Creates a table using the schema of the given class.
-   *
-   * @param tableName The name of the table to create.
-   * @param allowExisting When false, an exception will be thrown if the table already exists.
-   * @tparam A A case class that is used to describe the schema of the table to be created.
-   */
-  @Deprecated
-  def createTable[A <: Product : TypeTag](tableName: String, allowExisting: Boolean = true) {
-    catalog.createTable("default", tableName, ScalaReflection.attributesFor[A], allowExisting)
-  }
-
-  /**
    * Invalidate and refresh all the cached the metadata of the given table. For performance reasons,
    * Spark SQL or the external data source library it uses might cache certain metadata about a
    * table, such as the location of blocks. When those change outside of Spark SQL, users should
@@ -107,70 +95,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     catalog.invalidateTable("default", tableName)
   }
 
-  @Experimental
-  def createTable(tableName: String, path: String, allowExisting: Boolean): Unit = {
-    val dataSourceName = conf.defaultDataSourceName
-    createTable(tableName, dataSourceName, allowExisting, ("path", path))
-  }
-
-  @Experimental
-  def createTable(
-      tableName: String,
-      dataSourceName: String,
-      allowExisting: Boolean,
-      option: (String, String),
-      options: (String, String)*): Unit = {
-    val cmd =
-      CreateTableUsing(
-        tableName,
-        userSpecifiedSchema = None,
-        dataSourceName,
-        temporary = false,
-        (option +: options).toMap,
-        allowExisting)
-    executePlan(cmd).toRdd
-  }
-
-  @Experimental
-  def createTable(
-      tableName: String,
-      dataSourceName: String,
-      schema: StructType,
-      allowExisting: Boolean,
-      option: (String, String),
-      options: (String, String)*): Unit = {
-    val cmd =
-      CreateTableUsing(
-        tableName,
-        userSpecifiedSchema = Some(schema),
-        dataSourceName,
-        temporary = false,
-        (option +: options).toMap,
-        allowExisting)
-    executePlan(cmd).toRdd
-  }
-
-  @Experimental
-  def createTable(
-      tableName: String,
-      dataSourceName: String,
-      allowExisting: Boolean,
-      options: java.util.Map[String, String]): Unit = {
-    val opts = options.toSeq
-    createTable(tableName, dataSourceName, allowExisting, opts.head, opts.tail:_*)
-  }
-
-  @Experimental
-  def createTable(
-      tableName: String,
-      dataSourceName: String,
-      schema: StructType,
-      allowExisting: Boolean,
-      options: java.util.Map[String, String]): Unit = {
-    val opts = options.toSeq
-    createTable(tableName, dataSourceName, schema, allowExisting, opts.head, opts.tail:_*)
-  }
-
   /**
    * Analyzes the given table in the current database to generate statistics, which will be
    * used in query optimizations.
@@ -180,7 +104,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    */
   @Experimental
   def analyze(tableName: String) {
-    val relation = EliminateAnalysisOperators(catalog.lookupRelation(Seq(tableName)))
+    val relation = EliminateSubQueries(catalog.lookupRelation(Seq(tableName)))
 
     relation match {
       case relation: MetastoreRelation =>
@@ -424,6 +348,11 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   /** Extends QueryExecution with hive specific features. */
   protected[sql] class QueryExecution(logicalPlan: LogicalPlan)
     extends super.QueryExecution(logicalPlan) {
+    // Like what we do in runHive, makes sure the session represented by the
+    // `sessionState` field is activated.
+    if (SessionState.get() != sessionState) {
+      SessionState.start(sessionState)
+    }
 
     /**
      * Returns the result as a hive compatible sequence of strings.  For native commands, the

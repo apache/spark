@@ -671,7 +671,7 @@ private[spark] class Master(
 
   def registerApplication(app: ApplicationInfo): Unit = {
     val appAddress = app.driver.path.address
-    if (addressToWorker.contains(appAddress)) {
+    if (addressToApp.contains(appAddress)) {
       logInfo("Attempted to re-register application at same address: " + appAddress)
       return
     }
@@ -761,7 +761,7 @@ private[spark] class Master(
       val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
         appName + " (completed)", HistoryServer.UI_PATH_PREFIX + s"/${app.id}")
       try {
-        replayBus.replay(logInput, sparkVersion)
+        replayBus.replay(logInput, sparkVersion, eventLogFile)
       } finally {
         logInput.close()
       }

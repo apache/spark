@@ -21,6 +21,8 @@ import java.io._
 
 import scala.collection.mutable.ArrayBuffer
 
+import com.google.common.base.Charsets.UTF_8
+import com.google.common.io.ByteStreams
 import org.scalatest.FunSuite
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Timeouts
@@ -450,6 +452,19 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       PythonRunner.formatPaths(Utils.resolveURIs(pyFiles)).mkString(","))
   }
 
+  test("user classpath first in driver") {
+    val systemJar = TestUtils.createJarWithFiles(Map("test.resource" -> "SYSTEM"))
+    val userJar = TestUtils.createJarWithFiles(Map("test.resource" -> "USER"))
+    val args = Seq(
+      "--class", UserClasspathFirstTest.getClass.getName.stripSuffix("$"),
+      "--name", "testApp",
+      "--master", "local",
+      "--conf", "spark.driver.extraClassPath=" + systemJar,
+      "--conf", "spark.driver.userClassPathFirst=true",
+      userJar.toString)
+    runSparkSubmit(args)
+  }
+
   test("SPARK_CONF_DIR overrides spark-defaults.conf") {
     forConfDir(Map("spark.executor.memory" -> "2.3g")) { path =>
       val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
@@ -538,6 +553,18 @@ object SimpleApplicationTest {
         throw new SparkException(
           s"Master had $config=$masterValue but executor had $config=$executorValue")
       }
+    }
+  }
+}
+
+object UserClasspathFirstTest {
+  def main(args: Array[String]) {
+    val ccl = Thread.currentThread().getContextClassLoader()
+    val resource = ccl.getResourceAsStream("test.resource")
+    val bytes = ByteStreams.toByteArray(resource)
+    val contents = new String(bytes, 0, bytes.length, UTF_8)
+    if (contents != "USER") {
+      throw new SparkException("Should have read user resource, but instead read: " + contents)
     }
   }
 }
