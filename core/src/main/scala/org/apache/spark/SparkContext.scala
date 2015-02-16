@@ -972,7 +972,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /** Build the union of a list of RDDs passed as variable-length arguments. */
   def union[T: ClassTag](first: RDD[T], rest: RDD[T]*): RDD[T] =
-    new UnionRDD(this, Seq(first) ++ rest)
+    union(Seq(first) ++ rest)
 
   /** Get an RDD that has no partitions or elements. */
   def emptyRDD[T: ClassTag] = new EmptyRDD[T](this)
