@@ -18,13 +18,11 @@
 import atexit
 import os
 import select
-import sys
 import signal
 import shlex
 import socket
 import platform
 from subprocess import Popen, PIPE
-from threading import Thread
 from py4j.java_gateway import java_import, JavaGateway, GatewayClient
 
 from pyspark.serializers import read_int
@@ -96,21 +94,6 @@ def launch_gateway():
             def killChild():
                 Popen(["cmd", "/c", "taskkill", "/f", "/t", "/pid", str(proc.pid)])
             atexit.register(killChild)
-
-        # Create a thread to echo output from the GatewayServer, which is required
-        # for Java log output to show up:
-        class EchoOutputThread(Thread):
-
-            def __init__(self, stream):
-                Thread.__init__(self)
-                self.daemon = True
-                self.stream = stream
-
-            def run(self):
-                while True:
-                    line = self.stream.readline()
-                    sys.stderr.write(line)
-        EchoOutputThread(proc.stdout).start()
 
     # Connect to the gateway
     gateway = JavaGateway(GatewayClient(port=gateway_port), auto_convert=False)
