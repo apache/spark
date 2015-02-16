@@ -17,6 +17,8 @@
 
 package org.apache.spark.graphx.lib
 
+import org.apache.spark.annotation.Experimental
+
 import scala.util.Random
 import org.jblas.DoubleMatrix
 import org.apache.spark.rdd._
@@ -38,6 +40,8 @@ object SVDPlusPlus {
     extends Serializable
 
   /**
+   * :: Experimental ::
+   *
    * Implement SVD++ based on "Factorization Meets the Neighborhood:
    * a Multifaceted Collaborative Filtering Model",
    * available at [[http://public.research.att.com/~volinsky/netflix/kdd08koren.pdf]].
@@ -45,12 +49,33 @@ object SVDPlusPlus {
    * The prediction rule is rui = u + bu + bi + qi*(pu + |N(u)|^(-0.5)*sum(y)),
    * see the details on page 6.
    *
+   * This method temporarily replaces `run()`, and replaces `DoubleMatrix` in `run()`'s return
+   * value with `Array[Double]`. In 1.4.0, this method will be deprecated, but will be copied
+   * to replace `run()`, which will then be undeprecated.
+   *
    * @param edges edges for constructing the graph
    *
    * @param conf SVDPlusPlus parameters
    *
    * @return a graph with vertex attributes containing the trained model
    */
+  @Experimental
+  def runSVDPlusPlus(edges: RDD[Edge[Double]], conf: Conf)
+    : (Graph[(Array[Double], Array[Double], Double, Double), Double], Double) =
+  {
+    val (graph, u) = run(edges, conf)
+    // Convert DoubleMatrix to Array[Double]:
+    val newVertices = graph.vertices.mapValues(v => (v._1.toArray, v._2.toArray, v._3, v._4))
+    (Graph(newVertices, graph.edges), u)
+  }
+
+  /**
+   * This method is deprecated in favor of `runSVDPlusPlus()`, which replaces `DoubleMatrix`
+   * with `Array[Double]` in its return value. This method is deprecated. It will effectively
+   * be removed in 1.4.0 when `runSVDPlusPlus()` is copied to replace `run()`, and hence the
+   * return type of this method changes.
+   */
+  @deprecated("Call runSVDPlusPlus", "1.3.0")
   def run(edges: RDD[Edge[Double]], conf: Conf)
     : (Graph[(DoubleMatrix, DoubleMatrix, Double, Double), Double], Double) =
   {
