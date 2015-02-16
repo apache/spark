@@ -32,12 +32,13 @@ import org.apache.spark.rdd.RDD
  *
  * Model produced by [[AffinityPropagation]].
  *
- * @param k number of clusters
- * @param assignments an RDD of (vertexID, clusterID) pairs
+ * @param clusters the vertexIDs of each cluster.
+ * @param exemplars the vertexIDs of all exemplars.
  */
 @Experimental
 class AffinityPropagationModel(
-    val clusters: Seq[Set[Long]]) extends Serializable {
+    val clusters: Seq[Set[Long]],
+    val exemplars: Seq[Long]) extends Serializable {
 
   /**
    * Set the number of clusters
@@ -302,41 +303,47 @@ private[clustering] object AffinityPropagation extends Logging {
  
   /**
    * Choose exemplars for nodes in graph.
-   * @param g input graph with edges representing the (normalized) similarity matrix (S) and
-   *          the final availabilities and responsibilities.
+   * @param g input graph with edges representing the final availabilities and responsibilities.
    * @return a [[AffinityPropagationModel]] representing the clustering results.
    */
   def chooseExemplars(
       g: Graph[Seq[Double], Seq[Double]]): AffinityPropagationModel = {
     val accum = g.edges.map(a => (a.srcId, (a.dstId, a.attr(1) + a.attr(2))))
-    val exemplars = accum.reduceByKey((ar1, ar2) => {
+    val clusterMembers = accum.reduceByKey((ar1, ar2) => {
       if (ar1._2 > ar2._2) {
         (ar1._1, ar1._2)
       } else {
         (ar2._1, ar2._2)
       }
-    }).map(kv => (kv._1, kv._2._1)).collect().toMap
+    }).map(kv => (kv._2._1, kv._1)).aggregateByKey(Set[Long]())(
+      seqOp = (s, d) => s ++ Set(d),
+      combOp = (s1, s2) => s1 ++ s2
+    ).cache()
+    
+    val neighbors = clusterMembers.map(kv => kv._2 ++ Set(kv._1)).collect()
+    val exemplars = clusterMembers.map(kv => kv._1).collect()
 
     var clusters = Seq[Set[Long]]()
-    
-    def findPath(node: Long, path: Set[Long]): Set[Long] = {
-      path += node
-      if (exemplars.contains(node) && !path.contains(exemplars(node))) {
-        path ++ findPath(exemplars(node), path)
-      } else {
-        path
-      }
-    }
 
-    exemplars.keys.foreach(k => {
-      val neighbors = findPath(k, Set[Long]())
-      val dup = clusters.filter(!_.intersect(neighbors).isEmpty)
-      if (dup.isEmpty) {
-        clusters = clusters.:+(neighbors)
-      } else {
-        dup(0) ++= neighbors
+    var i = 0
+    var nz = neighbors.size
+    while (i < nz) {    
+      var curCluster = neighbors(i)
+      var j = i + 1
+      while (j < nz) {
+        if (!curCluster.intersect(neighbors(j)).isEmpty) {
+          curCluster ++= neighbors(j)
+        }
+        j += 1
       }
-    })
-    new AffinityPropagationModel(clusters)
+      val overlap = clusters.filter(!_.intersect(curCluster).isEmpty)
+      if (overlap.isEmpty) {
+        clusters = clusters.:+(curCluster)
+      } else {
+        overlap(0) ++= curCluster
+      }
+      i += 1
+    }
+    new AffinityPropagationModel(clusters, exemplars)
   }
 }
