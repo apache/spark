@@ -663,7 +663,7 @@ private[hive] case class MetastoreRelation
 }
 
 object HiveMetastoreTypes {
-  protected val ddlParser = new DDLParser
+  protected val ddlParser = new DDLParser(HiveQl.parseSql(_))
 
   def toDataType(metastoreType: String): DataType = synchronized {
     ddlParser.parseType(metastoreType)

@@ -67,7 +67,11 @@ private[sql] class DataFrameImpl protected[sql](
   @transient protected[sql] override val logicalPlan: LogicalPlan = queryExecution.logical match {
     // For various commands (like DDL) and queries with side effects, we force query optimization to
     // happen right away to let these side effects take place eagerly.
-    case _: Command | _: InsertIntoTable | _: CreateTableAsSelect[_] |_: WriteToFile =>
+    case _: Command |
+         _: InsertIntoTable |
+         _: CreateTableAsSelect[_] |
+         _: CreateTableUsingAsSelect |
+         _: WriteToFile =>
       LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sqlContext)
     case _ =>
       queryExecution.logical
@@ -386,7 +390,7 @@ private[sql] class DataFrameImpl protected[sql](
       mode: SaveMode,
       options: Map[String, String]): Unit = {
     val cmd =
-      CreateTableUsingAsLogicalPlan(
+      CreateTableUsingAsSelect(
         tableName,
         source,
         temporary = false,

@@ -50,7 +50,13 @@ class Analyzer(catalog: Catalog,
   /**
    * Override to provide additional rules for the "Resolution" batch.
    */
-  val extendedRules: Seq[Rule[LogicalPlan]] = Nil
+  val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Nil
+
+  /**
+   * Override to provide additional rules for the "Check Analysis" batch.
+   * These rules will be evaluated after our built-in check rules.
+   */
+  val extendedCheckRules: Seq[Rule[LogicalPlan]] = Nil
 
   lazy val batches: Seq[Batch] = Seq(
     Batch("Resolution", fixedPoint,
@@ -64,9 +70,10 @@ class Analyzer(catalog: Catalog,
       UnresolvedHavingClauseAttributes ::
       TrimGroupingAliases ::
       typeCoercionRules ++
-      extendedRules : _*),
+      extendedResolutionRules : _*),
     Batch("Check Analysis", Once,
-      CheckResolution),
+      CheckResolution +:
+      extendedCheckRules: _*),
     Batch("Remove SubQueries", fixedPoint,
       EliminateSubQueries)
   )
