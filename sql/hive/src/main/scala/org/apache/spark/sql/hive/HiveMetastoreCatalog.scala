@@ -160,12 +160,13 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     }
 
     if (table.getProperty("spark.sql.sources.provider") != null) {
-      val datasourceTable =
+      val dataSourceTable =
         cachedDataSourceTables(QualifiedTableName(databaseName, tblName).toLowerCase)
-      // Wrap the table with a Subquery with the table name.
-      val tableWithQualifers = Subquery(tableIdent.last, datasourceTable)
-      // Then, if alias is specified, wrap the table again with the alias in a Subquery.
-      val withAlias = alias.map(a => Subquery(a, tableWithQualifers)).getOrElse(tableWithQualifers)
+      // Then, if alias is specified, wrap the table with a Subquery using the alias.
+      // Othersie, wrap the table with a Subquery using the table name.
+      val withAlias =
+        alias.map(a => Subquery(a, dataSourceTable)).getOrElse(
+          Subquery(tableIdent.last, dataSourceTable))
 
       withAlias
     } else if (table.isView) {
