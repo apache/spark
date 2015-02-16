@@ -19,12 +19,11 @@ package org.apache.spark.mllib.tree
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.ArrayBuilder
 
-
+import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.Logging
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.RandomForest.NodeIndexInfo
 import org.apache.spark.mllib.tree.configuration.Strategy
@@ -32,13 +31,10 @@ import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.FeatureType._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 import org.apache.spark.mllib.tree.impl._
-import org.apache.spark.mllib.tree.impurity.{Impurities, Impurity}
 import org.apache.spark.mllib.tree.impurity._
 import org.apache.spark.mllib.tree.model._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
-import org.apache.spark.SparkContext._
-
 
 /**
  * :: Experimental ::
@@ -1140,7 +1136,7 @@ object DecisionTree extends Serializable with Logging {
         logDebug("stride = " + stride)
 
         // iterate `valueCount` to find splits
-        val splits = new ArrayBuffer[Double]
+        val splitsBuilder = ArrayBuilder.make[Double]
         var index = 1
         // currentCount: sum of counts of values that have been visited
         var currentCount = valueCounts(0)._2
@@ -1158,13 +1154,13 @@ object DecisionTree extends Serializable with Logging {
           // makes the gap between currentCount and targetCount smaller,
           // previous value is a split threshold.
           if (previousGap < currentGap) {
-            splits.append(valueCounts(index - 1)._1)
+            splitsBuilder += valueCounts(index - 1)._1
             targetCount += stride
           }
           index += 1
         }
 
-        splits.toArray
+        splitsBuilder.result()
       }
     }
 

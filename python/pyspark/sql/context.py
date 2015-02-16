@@ -38,6 +38,25 @@ except ImportError:
 __all__ = ["SQLContext", "HiveContext"]
 
 
+def _monkey_patch_RDD(sqlCtx):
+    def toDF(self, schema=None, sampleRatio=None):
+        """
+        Convert current :class:`RDD` into a :class:`DataFrame`
+
+        This is a shorthand for `sqlCtx.createDataFrame(rdd, schema, sampleRatio)`
+
+        :param schema: a StructType or list of names of columns
+        :param samplingRatio: the sample ratio of rows used for inferring
+        :return: a DataFrame
+
+        >>> rdd.toDF().collect()
+        [Row(name=u'Alice', age=1)]
+        """
+        return sqlCtx.createDataFrame(self, schema, sampleRatio)
+
+    RDD.toDF = toDF
+
+
 class SQLContext(object):
 
     """Main entry point for Spark SQL functionality.
@@ -49,15 +68,20 @@ class SQLContext(object):
     def __init__(self, sparkContext, sqlContext=None):
         """Create a new SQLContext.
 
+        It will add a method called `toDF` to :class:`RDD`, which could be
+        used to convert an RDD into a DataFrame, it's a shorthand for
+        :func:`SQLContext.createDataFrame`.
+
         :param sparkContext: The SparkContext to wrap.
         :param sqlContext: An optional JVM Scala SQLContext. If set, we do not instatiate a new
         SQLContext in the JVM, instead we make all calls to this object.
 
         >>> from datetime import datetime
+        >>> sqlCtx = SQLContext(sc)
         >>> allTypes = sc.parallelize([Row(i=1, s="string", d=1.0, l=1L,
         ...     b=True, list=[1, 2, 3], dict={"s": 0}, row=Row(a=1),
         ...     time=datetime(2014, 8, 1, 14, 1, 5))])
-        >>> df = sqlCtx.createDataFrame(allTypes)
+        >>> df = allTypes.toDF()
         >>> df.registerTempTable("allTypes")
         >>> sqlCtx.sql('select i+1, d+1, not b, list[1], dict["s"], time, row.a '
         ...            'from allTypes where b and i > 0').collect()
@@ -70,6 +94,7 @@ class SQLContext(object):
         self._jsc = self._sc._jsc
         self._jvm = self._sc._jvm
         self._scala_SQLContext = sqlContext
+        _monkey_patch_RDD(self)
 
     @property
     def _ssql_ctx(self):
@@ -442,7 +467,7 @@ class SQLContext(object):
         Row(f1=2, f2=None, f3=Row(field4=22,..., f4=[Row(field7=u'row2')])
         Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)
 
-        >>> df3 = sqlCtx.jsonFile(jsonFile, df1.schema())
+        >>> df3 = sqlCtx.jsonFile(jsonFile, df1.schema)
         >>> sqlCtx.registerRDDAsTable(df3, "table2")
         >>> df4 = sqlCtx.sql(
         ...   "SELECT field1 AS f1, field2 as f2, field3 as f3, "
@@ -495,7 +520,7 @@ class SQLContext(object):
         Row(f1=2, f2=None, f3=Row(field4=22..., f4=[Row(field7=u'row2')])
         Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)
 
-        >>> df3 = sqlCtx.jsonRDD(json, df1.schema())
+        >>> df3 = sqlCtx.jsonRDD(json, df1.schema)
         >>> sqlCtx.registerRDDAsTable(df3, "table2")
         >>> df4 = sqlCtx.sql(
         ...   "SELECT field1 AS f1, field2 as f2, field3 as f3, "
@@ -620,6 +645,40 @@ class SQLContext(object):
         True
         """
         return DataFrame(self._ssql_ctx.table(tableName), self)
+
+    def tables(self, dbName=None):
+        """Returns a DataFrame containing names of tables in the given database.
+
+        If `dbName` is not specified, the current database will be used.
+
+        The returned DataFrame has two columns, tableName and isTemporary
+        (a column with BooleanType indicating if a table is a temporary one or not).
+
+        >>> sqlCtx.registerRDDAsTable(df, "table1")
+        >>> df2 = sqlCtx.tables()
+        >>> df2.filter("tableName = 'table1'").first()
+        Row(tableName=u'table1', isTemporary=True)
+        """
+        if dbName is None:
+            return DataFrame(self._ssql_ctx.tables(), self)
+        else:
+            return DataFrame(self._ssql_ctx.tables(dbName), self)
+
+    def tableNames(self, dbName=None):
+        """Returns a list of names of tables in the database `dbName`.
+
+        If `dbName` is not specified, the current database will be used.
+
+        >>> sqlCtx.registerRDDAsTable(df, "table1")
+        >>> "table1" in sqlCtx.tableNames()
+        True
+        >>> "table1" in sqlCtx.tableNames("db")
+        True
+        """
+        if dbName is None:
+            return [name for name in self._ssql_ctx.tableNames()]
+        else:
+            return [name for name in self._ssql_ctx.tableNames(dbName)]
 
     def cacheTable(self, tableName):
         """Caches the specified table in-memory."""
@@ -766,7 +825,8 @@ def _test():
          Row(field1=2, field2="row2"),
          Row(field1=3, field2="row3")]
     )
-    globs['df'] = sqlCtx.createDataFrame(rdd)
+    _monkey_patch_RDD(sqlCtx)
+    globs['df'] = rdd.toDF()
     jsonStrings = [
         '{"field1": 1, "field2": "row1", "field3":{"field4":11}}',
         '{"field1" : 2, "field3":{"field4":22, "field5": [10, 11]},'

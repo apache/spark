@@ -183,14 +183,25 @@ class SQLContext(@transient val sparkContext: SparkContext)
   object implicits extends Serializable {
     // scalastyle:on
 
+    /** Converts $"col name" into an [[Column]]. */
+    implicit class StringToColumn(val sc: StringContext) {
+      def $(args: Any*): ColumnName = {
+        new ColumnName(sc.s(args :_*))
+      }
+    }
+
+    /** An implicit conversion that turns a Scala `Symbol` into a [[Column]]. */
+    implicit def symbolToColumn(s: Symbol): ColumnName = new ColumnName(s.name)
+
     /** Creates a DataFrame from an RDD of case classes or tuples. */
-    implicit def rddToDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
-      self.createDataFrame(rdd)
+    implicit def rddToDataFrameHolder[A <: Product : TypeTag](rdd: RDD[A]): DataFrameHolder = {
+      DataFrameHolder(self.createDataFrame(rdd))
     }
 
     /** Creates a DataFrame from a local Seq of Product. */
-    implicit def localSeqToDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
-      self.createDataFrame(data)
+    implicit def localSeqToDataFrameHolder[A <: Product : TypeTag](data: Seq[A]): DataFrameHolder =
+    {
+      DataFrameHolder(self.createDataFrame(data))
     }
 
     // Do NOT add more implicit conversions. They are likely to break source compatibility by
@@ -198,7 +209,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     // because of [[DoubleRDDFunctions]].
 
     /** Creates a single column DataFrame from an RDD[Int]. */
-    implicit def intRddToDataFrame(data: RDD[Int]): DataFrame = {
+    implicit def intRddToDataFrameHolder(data: RDD[Int]): DataFrameHolder = {
       val dataType = IntegerType
       val rows = data.mapPartitions { iter =>
         val row = new SpecificMutableRow(dataType :: Nil)
@@ -207,11 +218,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
           row: Row
         }
       }
-      self.createDataFrame(rows, StructType(StructField("_1", dataType) :: Nil))
+      DataFrameHolder(self.createDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
     }
 
     /** Creates a single column DataFrame from an RDD[Long]. */
-    implicit def longRddToDataFrame(data: RDD[Long]): DataFrame = {
+    implicit def longRddToDataFrameHolder(data: RDD[Long]): DataFrameHolder = {
       val dataType = LongType
       val rows = data.mapPartitions { iter =>
         val row = new SpecificMutableRow(dataType :: Nil)
@@ -220,11 +231,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
           row: Row
         }
       }
-      self.createDataFrame(rows, StructType(StructField("_1", dataType) :: Nil))
+      DataFrameHolder(self.createDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
     }
 
     /** Creates a single column DataFrame from an RDD[String]. */
-    implicit def stringRddToDataFrame(data: RDD[String]): DataFrame = {
+    implicit def stringRddToDataFrameHolder(data: RDD[String]): DataFrameHolder = {
       val dataType = StringType
       val rows = data.mapPartitions { iter =>
         val row = new SpecificMutableRow(dataType :: Nil)
@@ -233,7 +244,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
           row: Row
         }
       }
-      self.createDataFrame(rows, StructType(StructField("_1", dataType) :: Nil))
+      DataFrameHolder(self.createDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
     }
   }
 
@@ -275,6 +286,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Example:
    * {{{
    *  import org.apache.spark.sql._
+   *  import org.apache.spark.sql.types._
    *  val sqlContext = new org.apache.spark.sql.SQLContext(sc)
    *
    *  val schema =
@@ -366,6 +378,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Example:
    * {{{
    *  import org.apache.spark.sql._
+   *  import org.apache.spark.sql.types._
    *  val sqlContext = new org.apache.spark.sql.SQLContext(sc)
    *
    *  val schema =
@@ -433,7 +446,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       baseRelationToDataFrame(parquet.ParquetRelation2(path +: paths, Map.empty)(this))
     } else {
       DataFrame(this, parquet.ParquetRelation(
-        paths.mkString(","), Some(sparkContext.hadoopConfiguration), this))
+        (path +: paths).mkString(","), Some(sparkContext.hadoopConfiguration), this))
     }
 
   /**
@@ -773,6 +786,42 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /** Returns the specified table as a [[DataFrame]]. */
   def table(tableName: String): DataFrame =
     DataFrame(this, catalog.lookupRelation(Seq(tableName)))
+
+  /**
+   * Returns a [[DataFrame]] containing names of existing tables in the current database.
+   * The returned DataFrame has two columns, tableName and isTemporary (a Boolean
+   * indicating if a table is a temporary one or not).
+   */
+  def tables(): DataFrame = {
+    createDataFrame(catalog.getTables(None)).toDF("tableName", "isTemporary")
+  }
+
+  /**
+   * Returns a [[DataFrame]] containing names of existing tables in the given database.
+   * The returned DataFrame has two columns, tableName and isTemporary (a Boolean
+   * indicating if a table is a temporary one or not).
+   */
+  def tables(databaseName: String): DataFrame = {
+    createDataFrame(catalog.getTables(Some(databaseName))).toDF("tableName", "isTemporary")
+  }
+
+  /**
+   * Returns the names of tables in the current database as an array.
+   */
+  def tableNames(): Array[String] = {
+    catalog.getTables(None).map {
+      case (tableName, _) => tableName
+    }.toArray
+  }
+
+  /**
+   * Returns the names of tables in the given database as an array.
+   */
+  def tableNames(databaseName: String): Array[String] = {
+    catalog.getTables(Some(databaseName)).map {
+      case (tableName, _) => tableName
+    }.toArray
+  }
 
   protected[sql] class SparkPlanner extends SparkStrategies {
     val sparkContext: SparkContext = self.sparkContext

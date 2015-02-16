@@ -21,7 +21,7 @@ import java.io.IOException
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{SaveMode, DataFrame, SQLContext}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 

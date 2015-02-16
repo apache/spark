@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Literal, Alias, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -108,23 +108,55 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
         testRelation)
   }
 
-  test("throw errors for unresolved attributes during analysis") {
-    val e = intercept[AnalysisException] {
-      caseSensitiveAnalyze(Project(Seq(UnresolvedAttribute("abcd")), testRelation))
+  def errorTest(
+      name: String,
+      plan: LogicalPlan,
+      errorMessages: Seq[String],
+      caseSensitive: Boolean = true) = {
+    test(name) {
+      val error = intercept[AnalysisException] {
+        if(caseSensitive) {
+          caseSensitiveAnalyze(plan)
+        } else {
+          caseInsensitiveAnalyze(plan)
+        }
+      }
+
+      errorMessages.foreach(m => assert(error.getMessage contains m))
     }
-    assert(e.getMessage().toLowerCase.contains("cannot resolve"))
   }
 
-  test("throw errors for unresolved plans during analysis") {
-    case class UnresolvedTestPlan() extends LeafNode {
-      override lazy val resolved = false
-      override def output = Nil
-    }
-    val e = intercept[AnalysisException] {
-      caseSensitiveAnalyze(UnresolvedTestPlan())
-    }
-    assert(e.getMessage().toLowerCase.contains("unresolved"))
+  errorTest(
+    "unresolved attributes",
+    testRelation.select('abcd),
+    "cannot resolve" :: "abcd" :: Nil)
+
+  errorTest(
+    "bad casts",
+    testRelation.select(Literal(1).cast(BinaryType).as('badCast)),
+    "invalid cast" :: Literal(1).dataType.simpleString :: BinaryType.simpleString :: Nil)
+
+  errorTest(
+    "non-boolean filters",
+    testRelation.where(Literal(1)),
+    "filter" :: "'1'" :: "not a boolean" :: Literal(1).dataType.simpleString :: Nil)
+
+  errorTest(
+    "missing group by",
+    testRelation2.groupBy('a)('b),
+    "'b'" :: "group by" :: Nil
+  )
+
+  case class UnresolvedTestPlan() extends LeafNode {
+    override lazy val resolved = false
+    override def output = Nil
   }
+
+  errorTest(
+    "catch all unresolved plan",
+    UnresolvedTestPlan(),
+    "unresolved" :: Nil)
+
 
   test("divide should be casted into fractional types") {
     val testRelation2 = LocalRelation(
@@ -134,18 +166,15 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
       AttributeReference("d", DecimalType.Unlimited)(),
       AttributeReference("e", ShortType)())
 
-    val expr0 = 'a / 2
-    val expr1 = 'a / 'b
-    val expr2 = 'a / 'c
-    val expr3 = 'a / 'd
-    val expr4 = 'e / 'e
-    val plan = caseInsensitiveAnalyze(Project(
-      Alias(expr0, s"Analyzer($expr0)")() ::
-      Alias(expr1, s"Analyzer($expr1)")() ::
-      Alias(expr2, s"Analyzer($expr2)")() ::
-      Alias(expr3, s"Analyzer($expr3)")() ::
-      Alias(expr4, s"Analyzer($expr4)")() :: Nil, testRelation2))
+    val plan = caseInsensitiveAnalyze(
+      testRelation2.select(
+        'a / Literal(2) as 'div1,
+        'a / 'b as 'div2,
+        'a / 'c as 'div3,
+        'a / 'd as 'div4,
+        'e / 'e as 'div5))
     val pl = plan.asInstanceOf[Project].projectList
+
     assert(pl(0).dataType == DoubleType)
     assert(pl(1).dataType == DoubleType)
     assert(pl(2).dataType == DoubleType)

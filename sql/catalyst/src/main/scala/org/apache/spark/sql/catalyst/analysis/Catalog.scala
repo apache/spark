@@ -34,6 +34,12 @@ trait Catalog {
       tableIdentifier: Seq[String],
       alias: Option[String] = None): LogicalPlan
 
+  /**
+   * Returns tuples of (tableName, isTemporary) for all tables in the given database.
+   * isTemporary is a Boolean value indicates if a table is a temporary or not.
+   */
+  def getTables(databaseName: Option[String]): Seq[(String, Boolean)]
+
   def registerTable(tableIdentifier: Seq[String], plan: LogicalPlan): Unit
 
   def unregisterTable(tableIdentifier: Seq[String]): Unit
@@ -101,6 +107,12 @@ class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
     // properly qualified with this alias.
     alias.map(a => Subquery(a, tableWithQualifiers)).getOrElse(tableWithQualifiers)
   }
+
+  override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {
+    tables.map {
+      case (name, _) => (name, true)
+    }.toSeq
+  }
 }
 
 /**
@@ -137,6 +149,27 @@ trait OverrideCatalog extends Catalog {
     withAlias.getOrElse(super.lookupRelation(tableIdentifier, alias))
   }
 
+  abstract override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {
+    val dbName = if (!caseSensitive) {
+      if (databaseName.isDefined) Some(databaseName.get.toLowerCase) else None
+    } else {
+      databaseName
+    }
+
+    val temporaryTables = overrides.filter {
+      // If a temporary table does not have an associated database, we should return its name.
+      case ((None, _), _) => true
+      // If a temporary table does have an associated database, we should return it if the database
+      // matches the given database name.
+      case ((db: Some[String], _), _) if db == dbName => true
+      case _ => false
+    }.map {
+      case ((_, tableName), _) => (tableName, true)
+    }.toSeq
+
+    temporaryTables ++ super.getTables(databaseName)
+  }
+
   override def registerTable(
       tableIdentifier: Seq[String],
       plan: LogicalPlan): Unit = {
@@ -169,6 +202,10 @@ object EmptyCatalog extends Catalog {
   def lookupRelation(
     tableIdentifier: Seq[String],
     alias: Option[String] = None) = {
+    throw new UnsupportedOperationException
+  }
+
+  override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {
     throw new UnsupportedOperationException
   }
 

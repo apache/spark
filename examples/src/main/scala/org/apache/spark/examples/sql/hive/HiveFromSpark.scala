@@ -68,7 +68,7 @@ object HiveFromSpark {
 
     // You can also register RDDs as temporary tables within a HiveContext.
     val rdd = sc.parallelize((1 to 100).map(i => Record(i, s"val_$i")))
-    rdd.registerTempTable("records")
+    rdd.toDF.registerTempTable("records")
 
     // Queries can then join RDD data with data stored in Hive.
     println("Result of SELECT *:")

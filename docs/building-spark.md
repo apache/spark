@@ -159,16 +159,6 @@ Thus, the full flow for running continuous-compilation of the `core` submodule m
 For help in setting up IntelliJ IDEA or Eclipse for Spark development, and troubleshooting, refer to the
 [wiki page for IDE setup](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark#ContributingtoSpark-IDESetup).
 
-# Building Spark Debian Packages
-
-_NOTE: Debian packaging is deprecated and is scheduled to be removed in Spark 1.4._
-
-The Maven build includes support for building a Debian package containing the assembly 'fat-jar', PySpark, and the necessary scripts and configuration files. This can be created by specifying the following:
-
-    mvn -Pdeb -DskipTests clean package
-
-The debian package can then be found under assembly/target. We added the short commit hash to the file name so that we can distinguish individual packages built for SNAPSHOT versions.
-
 # Running Java 8 Test Suites
 
 Running only Java 8 tests and nothing else.

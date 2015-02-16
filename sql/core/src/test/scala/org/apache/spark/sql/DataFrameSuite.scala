@@ -21,7 +21,7 @@ import org.apache.spark.sql.TestData._
 
 import scala.language.postfixOps
 
-import org.apache.spark.sql.Dsl._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.logicalPlanToSparkQuery
@@ -98,6 +98,31 @@ class DataFrameSuite extends QueryTest {
       sql("SELECT a.key, b.key FROM testData a JOIN testData b ON a.key = b.key").collect().toSeq)
   }
 
+  test("simple explode") {
+    val df = Seq(Tuple1("a b c"), Tuple1("d e")).toDF("words")
+
+    checkAnswer(
+      df.explode("words", "word") { word: String => word.split(" ").toSeq }.select('word),
+      Row("a") :: Row("b") :: Row("c") :: Row("d") ::Row("e") :: Nil
+    )
+  }
+
+  test("explode") {
+    val df = Seq((1, "a b c"), (2, "a b"), (3, "a")).toDF("number", "letters")
+    val df2 =
+      df.explode('letters) {
+        case Row(letters: String) => letters.split(" ").map(Tuple1(_)).toSeq
+      }
+
+    checkAnswer(
+      df2
+        .select('_1 as 'letter, 'number)
+        .groupBy('letter)
+        .agg('letter, countDistinct('number)),
+      Row("a", 3) :: Row("b", 2) :: Row("c", 1) :: Nil
+    )
+  }
+
   test("selectExpr") {
     checkAnswer(
       testData.selectExpr("abs(key)", "value"),
@@ -116,15 +141,30 @@ class DataFrameSuite extends QueryTest {
       testData.select('key).collect().toSeq)
   }
 
-  test("agg") {
+  test("groupBy") {
     checkAnswer(
       testData2.groupBy("a").agg($"a", sum($"b")),
-      Seq(Row(1,3), Row(2,3), Row(3,3))
+      Seq(Row(1, 3), Row(2, 3), Row(3, 3))
     )
     checkAnswer(
       testData2.groupBy("a").agg($"a", sum($"b").as("totB")).agg(sum('totB)),
       Row(9)
     )
+    checkAnswer(
+      testData2.groupBy("a").agg(col("a"), count("*")),
+      Row(1, 2) :: Row(2, 2) :: Row(3, 2) :: Nil
+    )
+    checkAnswer(
+      testData2.groupBy("a").agg(Map("*" -> "count")),
+      Row(1, 2) :: Row(2, 2) :: Row(3, 2) :: Nil
+    )
+    checkAnswer(
+      testData2.groupBy("a").agg(Map("b" -> "sum")),
+      Row(1, 3) :: Row(2, 3) :: Row(3, 3) :: Nil
+    )
+  }
+
+  test("agg without groups") {
     checkAnswer(
       testData2.agg(sum('b)),
       Row(9)
@@ -193,20 +233,20 @@ class DataFrameSuite extends QueryTest {
       Seq(Row(3,1), Row(3,2), Row(2,1), Row(2,2), Row(1,1), Row(1,2)))
 
     checkAnswer(
-      arrayData.orderBy('data.getItem(0).asc),
-      arrayData.toDataFrame.collect().sortBy(_.getAs[Seq[Int]](0)(0)).toSeq)
+      arrayData.toDF.orderBy('data.getItem(0).asc),
+      arrayData.toDF.collect().sortBy(_.getAs[Seq[Int]](0)(0)).toSeq)
 
     checkAnswer(
-      arrayData.orderBy('data.getItem(0).desc),
-      arrayData.toDataFrame.collect().sortBy(_.getAs[Seq[Int]](0)(0)).reverse.toSeq)
+      arrayData.toDF.orderBy('data.getItem(0).desc),
+      arrayData.toDF.collect().sortBy(_.getAs[Seq[Int]](0)(0)).reverse.toSeq)
 
     checkAnswer(
-      arrayData.orderBy('data.getItem(1).asc),
-      arrayData.toDataFrame.collect().sortBy(_.getAs[Seq[Int]](0)(1)).toSeq)
+      arrayData.toDF.orderBy('data.getItem(1).asc),
+      arrayData.toDF.collect().sortBy(_.getAs[Seq[Int]](0)(1)).toSeq)
 
     checkAnswer(
-      arrayData.orderBy('data.getItem(1).desc),
-      arrayData.toDataFrame.collect().sortBy(_.getAs[Seq[Int]](0)(1)).reverse.toSeq)
+      arrayData.toDF.orderBy('data.getItem(1).desc),
+      arrayData.toDF.collect().sortBy(_.getAs[Seq[Int]](0)(1)).reverse.toSeq)
   }
 
   test("limit") {
@@ -215,11 +255,11 @@ class DataFrameSuite extends QueryTest {
       testData.take(10).toSeq)
 
     checkAnswer(
-      arrayData.limit(1),
+      arrayData.toDF.limit(1),
       arrayData.take(1).map(r => Row.fromSeq(r.productIterator.toSeq)))
 
     checkAnswer(
-      mapData.limit(1),
+      mapData.toDF.limit(1),
       mapData.take(1).map(r => Row.fromSeq(r.productIterator.toSeq)))
   }
 
@@ -353,7 +393,7 @@ class DataFrameSuite extends QueryTest {
   }
 
   test("addColumn") {
-    val df = testData.toDataFrame.addColumn("newCol", col("key") + 1)
+    val df = testData.toDF.withColumn("newCol", col("key") + 1)
     checkAnswer(
       df,
       testData.collect().map { case Row(key: Int, value: String) =>
@@ -363,8 +403,8 @@ class DataFrameSuite extends QueryTest {
   }
 
   test("renameColumn") {
-    val df = testData.toDataFrame.addColumn("newCol", col("key") + 1)
-      .renameColumn("value", "valueRenamed")
+    val df = testData.toDF.withColumn("newCol", col("key") + 1)
+      .withColumnRenamed("value", "valueRenamed")
     checkAnswer(
       df,
       testData.collect().map { case Row(key: Int, value: String) =>

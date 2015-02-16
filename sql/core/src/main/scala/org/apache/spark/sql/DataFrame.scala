@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
+import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
@@ -26,7 +27,6 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.sources.SaveMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -48,7 +48,7 @@ private[sql] object DataFrame {
  * }}}
  *
  * Once created, it can be manipulated using the various domain-specific-language (DSL) functions
- * defined in: [[DataFrame]] (this class), [[Column]], [[Dsl]] for the DSL.
+ * defined in: [[DataFrame]] (this class), [[Column]], [[functions]] for the DSL.
  *
  * To select a column from the data frame, use the apply method:
  * {{{
@@ -94,27 +94,27 @@ trait DataFrame extends RDDApi[Row] with Serializable {
     }
 
   /** Left here for backward compatibility. */
-  @deprecated("1.3.0", "use toDataFrame")
+  @deprecated("1.3.0", "use toDF")
   def toSchemaRDD: DataFrame = this
 
   /**
    * Returns the object itself. Used to force an implicit conversion from RDD to DataFrame in Scala.
    */
   // This is declared with parentheses to prevent the Scala compiler from treating
-  // `rdd.toDataFrame("1")` as invoking this toDataFrame and then apply on the returned DataFrame.
-  def toDataFrame(): DataFrame = this
+  // `rdd.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
+  def toDF(): DataFrame = this
 
   /**
    * Returns a new [[DataFrame]] with columns renamed. This can be quite convenient in conversion
    * from a RDD of tuples into a [[DataFrame]] with meaningful names. For example:
    * {{{
    *   val rdd: RDD[(Int, String)] = ...
-   *   rdd.toDataFrame  // this implicit conversion creates a DataFrame with column name _1 and _2
-   *   rdd.toDataFrame("id", "name")  // this creates a DataFrame with column name "id" and "name"
+   *   rdd.toDF  // this implicit conversion creates a DataFrame with column name _1 and _2
+   *   rdd.toDF("id", "name")  // this creates a DataFrame with column name "id" and "name"
    * }}}
    */
   @scala.annotation.varargs
-  def toDataFrame(colNames: String*): DataFrame
+  def toDF(colNames: String*): DataFrame
 
   /** Returns the schema of this [[DataFrame]]. */
   def schema: StructType
@@ -132,7 +132,7 @@ trait DataFrame extends RDDApi[Row] with Serializable {
   def explain(extended: Boolean): Unit
 
   /** Only prints the physical plan to the console for debugging purpose. */
-  def explain(): Unit = explain(false)
+  def explain(): Unit = explain(extended = false)
 
   /**
    * Returns true if the `collect` and `take` methods can be run locally
@@ -179,11 +179,11 @@ trait DataFrame extends RDDApi[Row] with Serializable {
    *
    * {{{
    *   // Scala:
-   *   import org.apache.spark.sql.dsl._
+   *   import org.apache.spark.sql.functions._
    *   df1.join(df2, "outer", $"df1Key" === $"df2Key")
    *
    *   // Java:
-   *   import static org.apache.spark.sql.Dsl.*;
+   *   import static org.apache.spark.sql.functions.*;
    *   df1.join(df2, "outer", col("df1Key") === col("df2Key"));
    * }}}
    *
@@ -441,17 +441,54 @@ trait DataFrame extends RDDApi[Row] with Serializable {
     sample(withReplacement, fraction, Utils.random.nextLong)
   }
 
+  /**
+   * (Scala-specific) Returns a new [[DataFrame]] where each row has been expanded to zero or more
+   * rows by the provided function.  This is similar to a `LATERAL VIEW` in HiveQL. The columns of
+   * the input row are implicitly joined with each row that is output by the function.
+   *
+   * The following example uses this function to count the number of books which contain
+   * a given word:
+   *
+   * {{{
+   *   case class Book(title: String, words: String)
+   *   val df: RDD[Book]
+   *
+   *   case class Word(word: String)
+   *   val allWords = df.explode('words) {
+   *     case Row(words: String) => words.split(" ").map(Word(_))
+   *   }
+   *
+   *   val bookCountPerWord = allWords.groupBy("word").agg(countDistinct("title"))
+   * }}}
+   */
+  def explode[A <: Product : TypeTag](input: Column*)(f: Row => TraversableOnce[A]): DataFrame
+
+
+  /**
+   * (Scala-specific) Returns a new [[DataFrame]] where a single column has been expanded to zero
+   * or more rows by the provided function.  This is similar to a `LATERAL VIEW` in HiveQL. All
+   * columns of the input row are implicitly joined with each value that is output by the function.
+   *
+   * {{{
+   *   df.explode("words", "word")(words: String => words.split(" "))
+   * }}}
+   */
+  def explode[A, B : TypeTag](
+      inputColumn: String,
+      outputColumn: String)(
+      f: A => TraversableOnce[B]): DataFrame
+
   /////////////////////////////////////////////////////////////////////////////
 
   /**
    * Returns a new [[DataFrame]] by adding a column.
    */
-  def addColumn(colName: String, col: Column): DataFrame
+  def withColumn(colName: String, col: Column): DataFrame
 
   /**
    * Returns a new [[DataFrame]] with a column renamed.
    */
-  def renameColumn(existingName: String, newName: String): DataFrame
+  def withColumnRenamed(existingName: String, newName: String): DataFrame
 
   /**
    * Returns the first `n` rows.
@@ -483,6 +520,7 @@ trait DataFrame extends RDDApi[Row] with Serializable {
    * Returns a new RDD by applying a function to each partition of this DataFrame.
    */
   override def mapPartitions[R: ClassTag](f: Iterator[Row] => Iterator[R]): RDD[R]
+
   /**
    * Applies a function `f` to all rows.
    */
