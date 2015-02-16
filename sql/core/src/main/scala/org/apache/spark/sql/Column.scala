@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import scala.language.implicitConversions
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Project, LogicalPlan}
@@ -41,21 +42,15 @@ private[sql] object Column {
 
 
 /**
+ * :: Experimental ::
  * A column in a [[DataFrame]].
  *
- * `Column` instances can be created by:
- * {{{
- *   // 1. Select a column out of a DataFrame
- *   df("colName")
- *
- *   // 2. Create a literal expression
- *   Literal(1)
- *
- *   // 3. Create new columns from
- * }}}
- *
+ * @groupname java_expr_ops Java-specific expression operators.
+ * @groupname expr_ops Expression operators.
+ * @groupname df_ops DataFrame functions.
+ * @groupname Ungrouped Support functions for DataFrames.
  */
-// TODO: Improve documentation.
+@Experimental
 trait Column extends DataFrame {
 
   protected[sql] def expr: Expression
@@ -129,6 +124,8 @@ trait Column extends DataFrame {
    *   import static org.apache.spark.sql.functions.*;
    *   df.select( negate(col("amount") );
    * }}}
+   *
+   * @group expr_ops
    */
   def unary_- : Column = exprToColumn(UnaryMinus(expr))
 
@@ -142,6 +139,8 @@ trait Column extends DataFrame {
    *   import static org.apache.spark.sql.functions.*;
    *   df.filter( not(df.col("isActive")) );
    * }}
+   *
+   * @group expr_ops
    */
   def unary_! : Column = exprToColumn(Not(expr))
 
@@ -155,6 +154,8 @@ trait Column extends DataFrame {
    *   import static org.apache.spark.sql.functions.*;
    *   df.filter( col("colA").equalTo(col("colB")) );
    * }}}
+   *
+   * @group expr_ops
    */
   def === (other: Any): Column = constructColumn(other) { o =>
     EqualTo(expr, o.expr)
@@ -170,6 +171,8 @@ trait Column extends DataFrame {
    *   import static org.apache.spark.sql.functions.*;
    *   df.filter( col("colA").equalTo(col("colB")) );
    * }}}
+   *
+   * @group expr_ops
    */
   def equalTo(other: Any): Column = this === other
 
@@ -184,6 +187,8 @@ trait Column extends DataFrame {
    *   import static org.apache.spark.sql.functions.*;
    *   df.filter( col("colA").notEqual(col("colB")) );
    * }}}
+   *
+   * @group expr_ops
    */
   def !== (other: Any): Column = constructColumn(other) { o =>
     Not(EqualTo(expr, o.expr))
@@ -200,6 +205,8 @@ trait Column extends DataFrame {
    *   import static org.apache.spark.sql.functions.*;
    *   df.filter( col("colA").notEqual(col("colB")) );
    * }}}
+   *
+   * @group java_expr_ops
    */
   def notEqual(other: Any): Column = constructColumn(other) { o =>
     Not(EqualTo(expr, o.expr))
@@ -215,6 +222,8 @@ trait Column extends DataFrame {
    *   import static org.apache.spark.sql.functions.*;
    *   people.select( people("age").gt(21) );
    * }}}
+   *
+   * @group expr_ops
    */
   def > (other: Any): Column = constructColumn(other) { o =>
     GreaterThan(expr, o.expr)
@@ -230,6 +239,8 @@ trait Column extends DataFrame {
    *   import static org.apache.spark.sql.functions.*;
    *   people.select( people("age").gt(21) );
    * }}}
+   *
+   * @group java_expr_ops
    */
   def gt(other: Any): Column = this > other
 
@@ -242,6 +253,8 @@ trait Column extends DataFrame {
    *   // Java:
    *   people.select( people("age").lt(21) );
    * }}}
+   *
+   * @group expr_ops
    */
   def < (other: Any): Column = constructColumn(other) { o =>
     LessThan(expr, o.expr)
@@ -256,6 +269,8 @@ trait Column extends DataFrame {
    *   // Java:
    *   people.select( people("age").lt(21) );
    * }}}
+   *
+   * @group java_expr_ops
    */
   def lt(other: Any): Column = this < other
 
@@ -268,6 +283,8 @@ trait Column extends DataFrame {
    *   // Java:
    *   people.select( people("age").leq(21) );
    * }}}
+   *
+   * @group expr_ops
    */
   def <= (other: Any): Column = constructColumn(other) { o =>
     LessThanOrEqual(expr, o.expr)
@@ -282,6 +299,8 @@ trait Column extends DataFrame {
    *   // Java:
    *   people.select( people("age").leq(21) );
    * }}}
+   *
+   * @group java_expr_ops
    */
   def leq(other: Any): Column = this <= other
 
@@ -294,6 +313,8 @@ trait Column extends DataFrame {
    *   // Java:
    *   people.select( people("age").geq(21) )
    * }}}
+   *
+   * @group expr_ops
    */
   def >= (other: Any): Column = constructColumn(other) { o =>
     GreaterThanOrEqual(expr, o.expr)
@@ -308,11 +329,15 @@ trait Column extends DataFrame {
    *   // Java:
    *   people.select( people("age").geq(21) )
    * }}}
+   *
+   * @group java_expr_ops
    */
   def geq(other: Any): Column = this >= other
 
   /**
    * Equality test that is safe for null values.
+   *
+   * @group expr_ops
    */
   def <=> (other: Any): Column = constructColumn(other) { o =>
     EqualNullSafe(expr, o.expr)
@@ -320,16 +345,22 @@ trait Column extends DataFrame {
 
   /**
    * Equality test that is safe for null values.
+   *
+   * @group java_expr_ops
    */
   def eqNullSafe(other: Any): Column = this <=> other
 
   /**
    * True if the current expression is null.
+   *
+   * @group expr_ops
    */
   def isNull: Column = exprToColumn(IsNull(expr))
 
   /**
    * True if the current expression is NOT null.
+   *
+   * @group expr_ops
    */
   def isNotNull: Column = exprToColumn(IsNotNull(expr))
 
@@ -342,6 +373,8 @@ trait Column extends DataFrame {
    *   // Java:
    *   people.filter( people("inSchool").or(people("isEmployed")) );
    * }}}
+   *
+   * @group expr_ops
    */
   def || (other: Any): Column = constructColumn(other) { o =>
     Or(expr, o.expr)
@@ -356,6 +389,8 @@ trait Column extends DataFrame {
    *   // Java:
    *   people.filter( people("inSchool").or(people("isEmployed")) );
    * }}}
+   *
+   * @group java_expr_ops
    */
   def or(other: Column): Column = this || other
 
@@ -368,6 +403,8 @@ trait Column extends DataFrame {
    *   // Java:
    *   people.select( people("inSchool").and(people("isEmployed")) );
    * }}}
+   *
+   * @group expr_ops
    */
   def && (other: Any): Column = constructColumn(other) { o =>
     And(expr, o.expr)
@@ -382,6 +419,8 @@ trait Column extends DataFrame {
    *   // Java:
    *   people.select( people("inSchool").and(people("isEmployed")) );
    * }}}
+   *
+   * @group java_expr_ops
    */
   def and(other: Column): Column = this && other
 
@@ -394,6 +433,8 @@ trait Column extends DataFrame {
    *   // Java:
    *   people.select( people("height").plus(people("weight")) );
    * }}}
+   *
+   * @group expr_ops
    */
   def + (other: Any): Column = constructColumn(other) { o =>
     Add(expr, o.expr)
@@ -408,6 +449,8 @@ trait Column extends DataFrame {
    *   // Java:
    *   people.select( people("height").plus(people("weight")) );
    * }}}
+   *
+   * @group java_expr_ops
    */
   def plus(other: Any): Column = this + other
 
@@ -420,6 +463,8 @@ trait Column extends DataFrame {
    *   // Java:
    *   people.select( people("height").minus(people("weight")) );
    * }}}
+   *
+   * @group expr_ops
    */
   def - (other: Any): Column = constructColumn(other) { o =>
     Subtract(expr, o.expr)
@@ -434,6 +479,8 @@ trait Column extends DataFrame {
    *   // Java:
    *   people.select( people("height").minus(people("weight")) );
    * }}}
+   *
+   * @group java_expr_ops
    */
   def minus(other: Any): Column = this - other
 
@@ -446,6 +493,8 @@ trait Column extends DataFrame {
    *   // Java:
    *   people.select( people("height").multiply(people("weight")) );
    * }}}
+   *
+   * @group expr_ops
    */
   def * (other: Any): Column = constructColumn(other) { o =>
     Multiply(expr, o.expr)
@@ -460,6 +509,8 @@ trait Column extends DataFrame {
    *   // Java:
    *   people.select( people("height").multiply(people("weight")) );
    * }}}
+   *
+   * @group java_expr_ops
    */
   def multiply(other: Any): Column = this * other
 
@@ -472,6 +523,8 @@ trait Column extends DataFrame {
    *   // Java:
    *   people.select( people("height").divide(people("weight")) );
    * }}}
+   *
+   * @group expr_ops
    */
   def / (other: Any): Column = constructColumn(other) { o =>
     Divide(expr, o.expr)
@@ -486,11 +539,15 @@ trait Column extends DataFrame {
    *   // Java:
    *   people.select( people("height").divide(people("weight")) );
    * }}}
+   *
+   * @group java_expr_ops
    */
   def divide(other: Any): Column = this / other
 
   /**
    * Modulo (a.k.a. remainder) expression.
+   *
+   * @group expr_ops
    */
   def % (other: Any): Column = constructColumn(other) { o =>
     Remainder(expr, o.expr)
@@ -498,29 +555,47 @@ trait Column extends DataFrame {
 
   /**
    * Modulo (a.k.a. remainder) expression.
+   *
+   * @group java_expr_ops
    */
   def mod(other: Any): Column = this % other
 
   /**
    * A boolean expression that is evaluated to true if the value of this expression is contained
    * by the evaluated values of the arguments.
+   *
+   * @group expr_ops
    */
   @scala.annotation.varargs
   def in(list: Column*): Column = {
     new IncomputableColumn(In(expr, list.map(_.expr)))
   }
 
+  /**
+   * SQL like expression.
+   *
+   * @group expr_ops
+   */
   def like(literal: String): Column = exprToColumn(Like(expr, lit(literal).expr))
 
+  /**
+   * SQL RLIKE expression (LIKE with Regex).
+   *
+   * @group expr_ops
+   */
   def rlike(literal: String): Column = exprToColumn(RLike(expr, lit(literal).expr))
 
   /**
    * An expression that gets an item at position `ordinal` out of an array.
+   *
+   * @group expr_ops
    */
   def getItem(ordinal: Int): Column = exprToColumn(GetItem(expr, Literal(ordinal)))
 
   /**
    * An expression that gets a field by name in a [[StructField]].
+   *
+   * @group expr_ops
    */
   def getField(fieldName: String): Column = exprToColumn(UnresolvedGetField(expr, fieldName))
 
@@ -528,6 +603,8 @@ trait Column extends DataFrame {
    * An expression that returns a substring.
    * @param startPos expression for the starting position.
    * @param len expression for the length of the substring.
+   *
+   * @group expr_ops
    */
   def substr(startPos: Column, len: Column): Column =
     exprToColumn(Substring(expr, startPos.expr, len.expr), computable = false)
@@ -536,24 +613,51 @@ trait Column extends DataFrame {
    * An expression that returns a substring.
    * @param startPos starting position.
    * @param len length of the substring.
+   *
+   * @group expr_ops
    */
   def substr(startPos: Int, len: Int): Column =
     exprToColumn(Substring(expr, lit(startPos).expr, lit(len).expr))
 
+  /**
+   * Contains the other element.
+   *
+   * @group expr_ops
+   */
   def contains(other: Any): Column = constructColumn(other) { o =>
     Contains(expr, o.expr)
   }
 
+  /**
+   * String starts with.
+   *
+   * @group expr_ops
+   */
   def startsWith(other: Column): Column = constructColumn(other) { o =>
     StartsWith(expr, o.expr)
   }
 
+  /**
+   * String starts with another string literal.
+   *
+   * @group expr_ops
+   */
   def startsWith(literal: String): Column = this.startsWith(lit(literal))
 
+  /**
+   * String ends with.
+   *
+   * @group expr_ops
+   */
   def endsWith(other: Column): Column = constructColumn(other) { o =>
     EndsWith(expr, o.expr)
   }
 
+  /**
+   * String ends with another string literal.
+   *
+   * @group expr_ops
+   */
   def endsWith(literal: String): Column = this.endsWith(lit(literal))
 
   /**
@@ -562,6 +666,8 @@ trait Column extends DataFrame {
    *   // Renames colA to colB in select output.
    *   df.select($"colA".as("colB"))
    * }}}
+   *
+   * @group expr_ops
    */
   override def as(alias: String): Column = exprToColumn(Alias(expr, alias)())
 
@@ -571,6 +677,8 @@ trait Column extends DataFrame {
    *   // Renames colA to colB in select output.
    *   df.select($"colA".as('colB))
    * }}}
+   *
+   * @group expr_ops
    */
   override def as(alias: Symbol): Column = exprToColumn(Alias(expr, alias.name)())
 
@@ -584,6 +692,8 @@ trait Column extends DataFrame {
    *   // equivalent to
    *   df.select(df("colA").cast("int"))
    * }}}
+   *
+   * @group expr_ops
    */
   def cast(to: DataType): Column = exprToColumn(Cast(expr, to))
 
@@ -595,6 +705,8 @@ trait Column extends DataFrame {
    *   // Casts colA to integer.
    *   df.select(df("colA").cast("int"))
    * }}}
+   *
+   * @group expr_ops
    */
   def cast(to: String): Column = exprToColumn(
     Cast(expr, to.toLowerCase match {
@@ -613,10 +725,39 @@ trait Column extends DataFrame {
     })
   )
 
+  /**
+   * Returns an ordering used in sorting.
+   * {{{
+   *   // Scala: sort a DataFrame by age column in descending order.
+   *   df.sort(df("age").desc)
+   *
+   *   // Java
+   *   df.sort(df.col("age").desc());
+   * }}}
+   *
+   * @group expr_ops
+   */
   def desc: Column = exprToColumn(SortOrder(expr, Descending), computable = false)
 
+  /**
+   * Returns an ordering used in sorting.
+   * {{{
+   *   // Scala: sort a DataFrame by age column in ascending order.
+   *   df.sort(df("age").asc)
+   *
+   *   // Java
+   *   df.sort(df.col("age").asc());
+   * }}}
+   *
+   * @group expr_ops
+   */
   def asc: Column = exprToColumn(SortOrder(expr, Ascending), computable = false)
 
+  /**
+   * Prints the plans (logical and physical) to the console for debugging purpose.
+   *
+   * @group df_ops
+   */
   override def explain(extended: Boolean): Unit = {
     if (extended) {
       println(expr)
