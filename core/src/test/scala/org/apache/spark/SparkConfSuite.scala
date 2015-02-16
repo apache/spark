@@ -17,6 +17,10 @@
 
 package org.apache.spark
 
+import java.util.concurrent.{TimeUnit, Executors}
+
+import scala.util.{Try, Random}
+
 import org.scalatest.FunSuite
 import org.apache.spark.serializer.{KryoRegistrator, KryoSerializer}
 import org.apache.spark.util.ResetSystemProperties
@@ -123,6 +127,27 @@ class SparkConfSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     assert(conf.get("spark.test.a.b.c") === "a.b.c")
   }
 
+  test("Thread safeness - SPARK-5425") {
+    import scala.collection.JavaConversions._
+    val executor = Executors.newSingleThreadScheduledExecutor()
+    val sf = executor.scheduleAtFixedRate(new Runnable {
+      override def run(): Unit =
+        System.setProperty("spark.5425." + Random.nextInt(), Random.nextInt().toString)
+    }, 0, 1, TimeUnit.MILLISECONDS)
+
+    try {
+      val t0 = System.currentTimeMillis()
+      while ((System.currentTimeMillis() - t0) < 1000) {
+        val conf = Try(new SparkConf(loadDefaults = true))
+        assert(conf.isSuccess === true)
+      }
+    } finally {
+      executor.shutdownNow()
+      for (key <- System.getProperties.stringPropertyNames() if key.startsWith("spark.5425."))
+        System.getProperties.remove(key)
+    }
+  }
+
   test("register kryo classes through registerKryoClasses") {
     val conf = new SparkConf().set("spark.kryo.registrationRequired", "true")
 
@@ -170,6 +195,18 @@ class SparkConfSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     // blow up.
     val serializer = new KryoSerializer(conf)
     serializer.newInstance().serialize(new StringBuffer())
+  }
+
+  test("deprecated config keys") {
+    val conf = new SparkConf()
+      .set("spark.files.userClassPathFirst", "true")
+      .set("spark.yarn.user.classpath.first", "true")
+    assert(conf.contains("spark.files.userClassPathFirst"))
+    assert(conf.contains("spark.executor.userClassPathFirst"))
+    assert(conf.contains("spark.yarn.user.classpath.first"))
+    assert(conf.getBoolean("spark.files.userClassPathFirst", false))
+    assert(conf.getBoolean("spark.executor.userClassPathFirst", false))
+    assert(conf.getBoolean("spark.yarn.user.classpath.first", false))
   }
 
 }

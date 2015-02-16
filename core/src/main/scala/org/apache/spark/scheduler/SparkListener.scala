@@ -116,9 +116,6 @@ case class SparkListenerApplicationStart(appName: String, appId: Option[String],
 @DeveloperApi
 case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
 
-/** An event used in the listener to shutdown the listener daemon thread. */
-private[spark] case object SparkListenerShutdown extends SparkListenerEvent
-
 
 /**
  * :: DeveloperApi ::

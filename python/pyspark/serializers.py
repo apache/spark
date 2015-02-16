@@ -70,6 +70,7 @@ class SpecialLengths(object):
     PYTHON_EXCEPTION_THROWN = -2
     TIMING_DATA = -3
     END_OF_STREAM = -4
+    NULL = -5
 
 
 class Serializer(object):
@@ -133,6 +134,8 @@ class FramedSerializer(Serializer):
 
     def _write_with_length(self, obj, stream):
         serialized = self.dumps(obj)
+        if serialized is None:
+            raise ValueError("serialized value should not be None")
         if len(serialized) > (1 << 31):
             raise ValueError("can not serialize object larger than 2G")
         write_int(len(serialized), stream)
@@ -145,8 +148,10 @@ class FramedSerializer(Serializer):
         length = read_int(stream)
         if length == SpecialLengths.END_OF_DATA_SECTION:
             raise EOFError
+        elif length == SpecialLengths.NULL:
+            return None
         obj = stream.read(length)
-        if obj == "":
+        if len(obj) < length:
             raise EOFError
         return self.loads(obj)
 
@@ -484,6 +489,8 @@ class UTF8Deserializer(Serializer):
         length = read_int(stream)
         if length == SpecialLengths.END_OF_DATA_SECTION:
             raise EOFError
+        elif length == SpecialLengths.NULL:
+            return None
         s = stream.read(length)
         return s.decode("utf-8") if self.use_unicode else s
 

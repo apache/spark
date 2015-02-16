@@ -22,8 +22,9 @@
 # Expects to be run in a totally empty directory.
 #
 # Options:
-#  --package-only   only packages an existing release candidate
-#
+#  --skip-create-release	Assume the desired release tag already exists
+#  --skip-publish 		Do not publish to Maven central
+#  --skip-package		Do not package and upload binary artifacts
 # Would be nice to add:
 #  - Send output to stderr and have useful logging in stdout
 
@@ -51,7 +52,7 @@ set -e
 
 GIT_TAG=v$RELEASE_VERSION-$RC_NAME
 
-if [[ ! "$@" =~ --package-only ]]; then
+if [[ ! "$@" =~ --skip-create-release ]]; then
   echo "Creating release commit and publishing to Apache repository"
   # Artifact publishing
   git clone https://$ASF_USERNAME:$ASF_PASSWORD@git-wip-us.apache.org/repos/asf/spark.git \
@@ -87,8 +88,15 @@ if [[ ! "$@" =~ --package-only ]]; then
   git commit -a -m "Preparing development version $next_ver"
   git push origin $GIT_TAG
   git push origin HEAD:$GIT_BRANCH
-  git checkout -f $GIT_TAG
+  popd
+  rm -rf spark
+fi
 
+if [[ ! "$@" =~ --skip-publish ]]; then
+  git clone https://$ASF_USERNAME:$ASF_PASSWORD@git-wip-us.apache.org/repos/asf/spark.git
+  pushd spark
+  git checkout --force $GIT_TAG 
+  
   # Using Nexus API documented here:
   # https://support.sonatype.com/entries/39720203-Uploading-to-a-Staging-Repository-via-REST-API
   echo "Creating Nexus staging repository"
@@ -106,7 +114,7 @@ if [[ ! "$@" =~ --package-only ]]; then
     clean install
 
   ./dev/change-version-to-2.11.sh
-
+  
   mvn -DskipTests -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
     -Dscala-2.11 -Pyarn -Phive -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
     clean install
@@ -155,88 +163,90 @@ if [[ ! "$@" =~ --package-only ]]; then
   rm -rf spark
 fi
 
-# Source and binary tarballs
-echo "Packaging release tarballs"
-git clone https://git-wip-us.apache.org/repos/asf/spark.git
-cd spark
-git checkout --force $GIT_TAG
-release_hash=`git rev-parse HEAD`
+if [[ ! "$@" =~ --skip-package ]]; then
+  # Source and binary tarballs
+  echo "Packaging release tarballs"
+  git clone https://git-wip-us.apache.org/repos/asf/spark.git
+  cd spark
+  git checkout --force $GIT_TAG
+  release_hash=`git rev-parse HEAD`
 
-rm .gitignore
-rm -rf .git
-cd ..
-
-cp -r spark spark-$RELEASE_VERSION
-tar cvzf spark-$RELEASE_VERSION.tgz spark-$RELEASE_VERSION
-echo $GPG_PASSPHRASE | gpg --passphrase-fd 0 --armour --output spark-$RELEASE_VERSION.tgz.asc \
-  --detach-sig spark-$RELEASE_VERSION.tgz
-echo $GPG_PASSPHRASE | gpg --passphrase-fd 0 --print-md MD5 spark-$RELEASE_VERSION.tgz > \
-  spark-$RELEASE_VERSION.tgz.md5
-echo $GPG_PASSPHRASE | gpg --passphrase-fd 0 --print-md SHA512 spark-$RELEASE_VERSION.tgz > \
-  spark-$RELEASE_VERSION.tgz.sha
-rm -rf spark-$RELEASE_VERSION
-
-make_binary_release() {
-  NAME=$1
-  FLAGS=$2
-  cp -r spark spark-$RELEASE_VERSION-bin-$NAME
-
-  cd spark-$RELEASE_VERSION-bin-$NAME
-
-  # TODO There should probably be a flag to make-distribution to allow 2.11 support
-  if [[ $FLAGS == *scala-2.11* ]]; then
-    ./dev/change-version-to-2.11.sh
-  fi
-
-  ./make-distribution.sh --name $NAME --tgz $FLAGS 2>&1 | tee ../binary-release-$NAME.log
+  rm .gitignore
+  rm -rf .git
   cd ..
-  cp spark-$RELEASE_VERSION-bin-$NAME/spark-$RELEASE_VERSION-bin-$NAME.tgz .
-  rm -rf spark-$RELEASE_VERSION-bin-$NAME
 
-  echo $GPG_PASSPHRASE | gpg --passphrase-fd 0 --armour \
-    --output spark-$RELEASE_VERSION-bin-$NAME.tgz.asc \
-    --detach-sig spark-$RELEASE_VERSION-bin-$NAME.tgz
-  echo $GPG_PASSPHRASE | gpg --passphrase-fd 0 --print-md \
-    MD5 spark-$RELEASE_VERSION-bin-$NAME.tgz > \
-    spark-$RELEASE_VERSION-bin-$NAME.tgz.md5
-  echo $GPG_PASSPHRASE | gpg --passphrase-fd 0 --print-md \
-    SHA512 spark-$RELEASE_VERSION-bin-$NAME.tgz > \
-    spark-$RELEASE_VERSION-bin-$NAME.tgz.sha
-}
+  cp -r spark spark-$RELEASE_VERSION
+  tar cvzf spark-$RELEASE_VERSION.tgz spark-$RELEASE_VERSION
+  echo $GPG_PASSPHRASE | gpg --passphrase-fd 0 --armour --output spark-$RELEASE_VERSION.tgz.asc \
+    --detach-sig spark-$RELEASE_VERSION.tgz
+  echo $GPG_PASSPHRASE | gpg --passphrase-fd 0 --print-md MD5 spark-$RELEASE_VERSION.tgz > \
+    spark-$RELEASE_VERSION.tgz.md5
+  echo $GPG_PASSPHRASE | gpg --passphrase-fd 0 --print-md SHA512 spark-$RELEASE_VERSION.tgz > \
+    spark-$RELEASE_VERSION.tgz.sha
+  rm -rf spark-$RELEASE_VERSION
+
+  make_binary_release() {
+    NAME=$1
+    FLAGS=$2
+    cp -r spark spark-$RELEASE_VERSION-bin-$NAME
+    
+    cd spark-$RELEASE_VERSION-bin-$NAME
+
+    # TODO There should probably be a flag to make-distribution to allow 2.11 support
+    if [[ $FLAGS == *scala-2.11* ]]; then
+      ./dev/change-version-to-2.11.sh
+    fi
+
+    ./make-distribution.sh --name $NAME --tgz $FLAGS 2>&1 | tee ../binary-release-$NAME.log
+    cd ..
+    cp spark-$RELEASE_VERSION-bin-$NAME/spark-$RELEASE_VERSION-bin-$NAME.tgz .
+    rm -rf spark-$RELEASE_VERSION-bin-$NAME
+
+    echo $GPG_PASSPHRASE | gpg --passphrase-fd 0 --armour \
+      --output spark-$RELEASE_VERSION-bin-$NAME.tgz.asc \
+      --detach-sig spark-$RELEASE_VERSION-bin-$NAME.tgz
+    echo $GPG_PASSPHRASE | gpg --passphrase-fd 0 --print-md \
+      MD5 spark-$RELEASE_VERSION-bin-$NAME.tgz > \
+      spark-$RELEASE_VERSION-bin-$NAME.tgz.md5
+    echo $GPG_PASSPHRASE | gpg --passphrase-fd 0 --print-md \
+      SHA512 spark-$RELEASE_VERSION-bin-$NAME.tgz > \
+      spark-$RELEASE_VERSION-bin-$NAME.tgz.sha
+  }
 
 
-make_binary_release "hadoop1" "-Phive -Phive-thriftserver -Dhadoop.version=1.0.4" &
-make_binary_release "hadoop1-scala2.11" "-Phive -Dscala-2.11" &
-make_binary_release "cdh4" "-Phive -Phive-thriftserver -Dhadoop.version=2.0.0-mr1-cdh4.2.0" &
-make_binary_release "hadoop2.3" "-Phadoop-2.3 -Phive -Phive-thriftserver -Pyarn" &
-make_binary_release "hadoop2.4" "-Phadoop-2.4 -Phive -Phive-thriftserver -Pyarn" &
-make_binary_release "mapr3" "-Pmapr3 -Phive -Phive-thriftserver" &
-make_binary_release "mapr4" "-Pmapr4 -Pyarn -Phive -Phive-thriftserver" &
-make_binary_release "hadoop2.4-without-hive" "-Phadoop-2.4 -Pyarn" &
-wait
+  make_binary_release "hadoop1" "-Phive -Phive-thriftserver -Dhadoop.version=1.0.4" &
+  make_binary_release "hadoop1-scala2.11" "-Phive -Dscala-2.11" &
+  make_binary_release "cdh4" "-Phive -Phive-thriftserver -Dhadoop.version=2.0.0-mr1-cdh4.2.0" &
+  make_binary_release "hadoop2.3" "-Phadoop-2.3 -Phive -Phive-thriftserver -Pyarn" &
+  make_binary_release "hadoop2.4" "-Phadoop-2.4 -Phive -Phive-thriftserver -Pyarn" &
+  make_binary_release "mapr3" "-Pmapr3 -Phive -Phive-thriftserver" &
+  make_binary_release "mapr4" "-Pmapr4 -Pyarn -Phive -Phive-thriftserver" &
+  make_binary_release "hadoop2.4-without-hive" "-Phadoop-2.4 -Pyarn" &
+  wait
 
-# Copy data
-echo "Copying release tarballs"
-rc_folder=spark-$RELEASE_VERSION-$RC_NAME
-ssh $ASF_USERNAME@people.apache.org \
-  mkdir /home/$ASF_USERNAME/public_html/$rc_folder
-scp spark-* \
-  $ASF_USERNAME@people.apache.org:/home/$ASF_USERNAME/public_html/$rc_folder/
+  # Copy data
+  echo "Copying release tarballs"
+  rc_folder=spark-$RELEASE_VERSION-$RC_NAME
+  ssh $ASF_USERNAME@people.apache.org \
+    mkdir /home/$ASF_USERNAME/public_html/$rc_folder
+  scp spark-* \
+    $ASF_USERNAME@people.apache.org:/home/$ASF_USERNAME/public_html/$rc_folder/
 
-# Docs
-cd spark
-build/sbt clean
-cd docs
-# Compile docs with Java 7 to use nicer format
-JAVA_HOME=$JAVA_7_HOME PRODUCTION=1 jekyll build
-echo "Copying release documentation"
-rc_docs_folder=${rc_folder}-docs
-ssh $ASF_USERNAME@people.apache.org \
-  mkdir /home/$ASF_USERNAME/public_html/$rc_docs_folder
-rsync -r _site/* $ASF_USERNAME@people.apache.org:/home/$ASF_USERNAME/public_html/$rc_docs_folder
+  # Docs
+  cd spark
+  sbt/sbt clean
+  cd docs
+  # Compile docs with Java 7 to use nicer format
+  JAVA_HOME=$JAVA_7_HOME PRODUCTION=1 jekyll build
+  echo "Copying release documentation"
+  rc_docs_folder=${rc_folder}-docs
+  ssh $ASF_USERNAME@people.apache.org \
+    mkdir /home/$ASF_USERNAME/public_html/$rc_docs_folder
+  rsync -r _site/* $ASF_USERNAME@people.apache.org:/home/$ASF_USERNAME/public_html/$rc_docs_folder
 
-echo "Release $RELEASE_VERSION completed:"
-echo "Git tag:\t $GIT_TAG"
-echo "Release commit:\t $release_hash"
-echo "Binary location:\t http://people.apache.org/~$ASF_USERNAME/$rc_folder"
-echo "Doc location:\t http://people.apache.org/~$ASF_USERNAME/$rc_docs_folder"
+  echo "Release $RELEASE_VERSION completed:"
+  echo "Git tag:\t $GIT_TAG"
+  echo "Release commit:\t $release_hash"
+  echo "Binary location:\t http://people.apache.org/~$ASF_USERNAME/$rc_folder"
+  echo "Doc location:\t http://people.apache.org/~$ASF_USERNAME/$rc_docs_folder"
+fi

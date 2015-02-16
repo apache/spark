@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.types.BooleanType
+import org.apache.spark.sql.types.{BinaryType, BooleanType}
 
 object InterpretedPredicate {
   def apply(expression: Expression, inputSchema: Seq[Attribute]): (Row => Boolean) =
@@ -175,7 +175,10 @@ case class EqualTo(left: Expression, right: Expression) extends BinaryComparison
       null
     } else {
       val r = right.eval(input)
-      if (r == null) null else l == r
+      if (r == null) null
+      else if (left.dataType != BinaryType) l == r
+      else BinaryType.ordering.compare(
+        l.asInstanceOf[Array[Byte]], r.asInstanceOf[Array[Byte]]) == 0
     }
   }
 }

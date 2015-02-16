@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.QueryTest
-
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.hive.HiveShim
+import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SQLConf}
 
 case class Nested1(f1: Nested2)
 case class Nested2(f2: Nested3)
@@ -33,6 +34,7 @@ case class Nested3(f3: Int)
  * valid, but Hive currently cannot execute it.
  */
 class SQLQuerySuite extends QueryTest {
+
   test("SPARK-4512 Fix attribute reference resolution error when using SORT BY") {
     checkAnswer(
       sql("SELECT * FROM (SELECT key + key AS a FROM src SORT BY value) t ORDER BY t.a"),
@@ -102,6 +104,37 @@ class SQLQuerySuite extends QueryTest {
       "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe",
       "serde_p1=p1", "serde_p2=p2", "tbl_p1=p11", "tbl_p2=p22","MANAGED_TABLE"
     )
+
+    if (HiveShim.version =="0.13.1") {
+      val origUseParquetDataSource = conf.parquetUseDataSourceApi
+      try {
+        setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "false")
+        sql(
+          """CREATE TABLE ctas5
+            | STORED AS parquet AS
+            |   SELECT key, value
+            |   FROM src
+            |   ORDER BY key, value""".stripMargin).collect()
+
+        checkExistence(sql("DESC EXTENDED ctas5"), true,
+          "name:key", "type:string", "name:value", "ctas5",
+          "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
+          "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
+          "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
+          "MANAGED_TABLE"
+        )
+
+        val default = getConf("spark.sql.hive.convertMetastoreParquet", "true")
+        // use the Hive SerDe for parquet tables
+        sql("set spark.sql.hive.convertMetastoreParquet = false")
+        checkAnswer(
+          sql("SELECT key, value FROM ctas5 ORDER BY key, value"),
+          sql("SELECT key, value FROM src ORDER BY key, value").collect().toSeq)
+        sql(s"set spark.sql.hive.convertMetastoreParquet = $default")
+      } finally {
+        setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, origUseParquetDataSource.toString)
+      }
+    }
   }
 
   test("command substitution") {
@@ -141,7 +174,8 @@ class SQLQuerySuite extends QueryTest {
   }
 
   test("double nested data") {
-    sparkContext.parallelize(Nested1(Nested2(Nested3(1))) :: Nil).registerTempTable("nested")
+    sparkContext.parallelize(Nested1(Nested2(Nested3(1))) :: Nil)
+      .toDF().registerTempTable("nested")
     checkAnswer(
       sql("SELECT f1.f2.f3 FROM nested"),
       Row(1))
@@ -151,7 +185,7 @@ class SQLQuerySuite extends QueryTest {
       sql("SELECT * FROM test_ctas_1234"),
       sql("SELECT * FROM nested").collect().toSeq)
 
-    intercept[org.apache.hadoop.hive.ql.metadata.InvalidTableException] {
+    intercept[AnalysisException] {
       sql("CREATE TABLE test_ctas_12345 AS SELECT * from notexists").collect()
     }
   }
@@ -159,18 +193,18 @@ class SQLQuerySuite extends QueryTest {
   test("test CTAS") {
     checkAnswer(sql("CREATE TABLE test_ctas_123 AS SELECT key, value FROM src"), Seq.empty[Row])
     checkAnswer(
-      sql("SELECT key, value FROM test_ctas_123 ORDER BY key"), 
+      sql("SELECT key, value FROM test_ctas_123 ORDER BY key"),
       sql("SELECT key, value FROM src ORDER BY key").collect().toSeq)
   }
 
   test("SPARK-4825 save join to table") {
-    val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString))
+    val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).toDF()
     sql("CREATE TABLE test1 (key INT, value STRING)")
     testData.insertInto("test1")
     sql("CREATE TABLE test2 (key INT, value STRING)")
     testData.insertInto("test2")
     testData.insertInto("test2")
-    sql("SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key").saveAsTable("test")
+    sql("CREATE TABLE test AS SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key")
     checkAnswer(
       table("test"),
       sql("SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key").collect().toSeq)
@@ -244,7 +278,7 @@ class SQLQuerySuite extends QueryTest {
 
     val rowRdd = sparkContext.parallelize(row :: Nil)
 
-    applySchema(rowRdd, schema).registerTempTable("testTable")
+    TestHive.createDataFrame(rowRdd, schema).registerTempTable("testTable")
 
     sql(
       """CREATE TABLE nullValuesInInnerComplexTypes
@@ -266,5 +300,20 @@ class SQLQuerySuite extends QueryTest {
 
     sql("DROP TABLE nullValuesInInnerComplexTypes")
     dropTempTable("testTable")
+  }
+
+  test("SPARK-4296 Grouping field with Hive UDF as sub expression") {
+    val rdd = sparkContext.makeRDD( """{"a": "str", "b":"1", "c":"1970-01-01 00:00:00"}""" :: Nil)
+    jsonRDD(rdd).registerTempTable("data")
+    checkAnswer(
+      sql("SELECT concat(a, '-', b), year(c) FROM data GROUP BY concat(a, '-', b), year(c)"),
+      Row("str-1", 1970))
+
+    dropTempTable("data")
+
+    jsonRDD(rdd).registerTempTable("data")
+    checkAnswer(sql("SELECT year(c) + 1 FROM data GROUP BY year(c) + 1"), Row(1971))
+
+    dropTempTable("data")
   }
 }

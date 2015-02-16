@@ -23,7 +23,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql._
-import org.apache.spark.sql.api.scala.dsl._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
@@ -39,7 +39,10 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
 @AlphaComponent
 class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerParams {
 
+  /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
+
+  /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def fit(dataset: DataFrame, paramMap: ParamMap): StandardScalerModel = {
@@ -75,16 +78,17 @@ class StandardScalerModel private[ml] (
     scaler: feature.StandardScalerModel)
   extends Model[StandardScalerModel] with StandardScalerParams {
 
+  /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
+
+  /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     transformSchema(dataset.schema, paramMap, logging = true)
     val map = this.paramMap ++ paramMap
-    val scale: (Vector) => Vector = (v) => {
-      scaler.transform(v)
-    }
-    dataset.select($"*", callUDF(scale, col(map(inputCol))).as(map(outputCol)))
+    val scale = udf((v: Vector) => { scaler.transform(v) } : Vector)
+    dataset.withColumn(map(outputCol), scale(col(map(inputCol))))
   }
 
   private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {

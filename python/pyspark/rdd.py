@@ -1366,9 +1366,13 @@ class RDD(object):
             ser = BatchedSerializer(PickleSerializer(), batchSize)
         self._reserialize(ser)._jrdd.saveAsObjectFile(path)
 
-    def saveAsTextFile(self, path):
+    def saveAsTextFile(self, path, compressionCodecClass=None):
         """
         Save this RDD as a text file, using string representations of elements.
+
+        @param path: path to text file
+        @param compressionCodecClass: (None by default) string i.e.
+            "org.apache.hadoop.io.compress.GzipCodec"
 
         >>> tempFile = NamedTemporaryFile(delete=True)
         >>> tempFile.close()
@@ -1385,6 +1389,16 @@ class RDD(object):
         >>> sc.parallelize(['', 'foo', '', 'bar', '']).saveAsTextFile(tempFile2.name)
         >>> ''.join(sorted(input(glob(tempFile2.name + "/part-0000*"))))
         '\\n\\n\\nbar\\nfoo\\n'
+
+        Using compressionCodecClass
+
+        >>> tempFile3 = NamedTemporaryFile(delete=True)
+        >>> tempFile3.close()
+        >>> codec = "org.apache.hadoop.io.compress.GzipCodec"
+        >>> sc.parallelize(['foo', 'bar']).saveAsTextFile(tempFile3.name, codec)
+        >>> from fileinput import input, hook_compressed
+        >>> ''.join(sorted(input(glob(tempFile3.name + "/part*.gz"), openhook=hook_compressed)))
+        'bar\\nfoo\\n'
         """
         def func(split, iterator):
             for x in iterator:
@@ -1395,7 +1409,11 @@ class RDD(object):
                 yield x
         keyed = self.mapPartitionsWithIndex(func)
         keyed._bypass_serializer = True
-        keyed._jrdd.map(self.ctx._jvm.BytesToString()).saveAsTextFile(path)
+        if compressionCodecClass:
+            compressionCodec = self.ctx._jvm.java.lang.Class.forName(compressionCodecClass)
+            keyed._jrdd.map(self.ctx._jvm.BytesToString()).saveAsTextFile(path, compressionCodec)
+        else:
+            keyed._jrdd.map(self.ctx._jvm.BytesToString()).saveAsTextFile(path)
 
     # Pair functions
 
@@ -2162,6 +2180,25 @@ class RDD(object):
                 yield row
 
 
+def _prepare_for_python_RDD(sc, command, obj=None):
+    # the serialized command will be compressed by broadcast
+    ser = CloudPickleSerializer()
+    pickled_command = ser.dumps(command)
+    if len(pickled_command) > (1 << 20):  # 1M
+        broadcast = sc.broadcast(pickled_command)
+        pickled_command = ser.dumps(broadcast)
+        # tracking the life cycle by obj
+        if obj is not None:
+            obj._broadcast = broadcast
+    broadcast_vars = ListConverter().convert(
+        [x._jbroadcast for x in sc._pickled_broadcast_vars],
+        sc._gateway._gateway_client)
+    sc._pickled_broadcast_vars.clear()
+    env = MapConverter().convert(sc.environment, sc._gateway._gateway_client)
+    includes = ListConverter().convert(sc._python_includes, sc._gateway._gateway_client)
+    return pickled_command, broadcast_vars, env, includes
+
+
 class PipelinedRDD(RDD):
 
     """
@@ -2228,25 +2265,12 @@ class PipelinedRDD(RDD):
 
         command = (self.func, profiler, self._prev_jrdd_deserializer,
                    self._jrdd_deserializer)
-        # the serialized command will be compressed by broadcast
-        ser = CloudPickleSerializer()
-        pickled_command = ser.dumps(command)
-        if len(pickled_command) > (1 << 20):  # 1M
-            self._broadcast = self.ctx.broadcast(pickled_command)
-            pickled_command = ser.dumps(self._broadcast)
-        broadcast_vars = ListConverter().convert(
-            [x._jbroadcast for x in self.ctx._pickled_broadcast_vars],
-            self.ctx._gateway._gateway_client)
-        self.ctx._pickled_broadcast_vars.clear()
-        env = MapConverter().convert(self.ctx.environment,
-                                     self.ctx._gateway._gateway_client)
-        includes = ListConverter().convert(self.ctx._python_includes,
-                                           self.ctx._gateway._gateway_client)
+        pickled_cmd, bvars, env, includes = _prepare_for_python_RDD(self.ctx, command, self)
         python_rdd = self.ctx._jvm.PythonRDD(self._prev_jrdd.rdd(),
-                                             bytearray(pickled_command),
+                                             bytearray(pickled_cmd),
                                              env, includes, self.preservesPartitioning,
                                              self.ctx.pythonExec,
-                                             broadcast_vars, self.ctx._javaAccumulator)
+                                             bvars, self.ctx._javaAccumulator)
         self._jrdd_val = python_rdd.asJavaRDD()
 
         if profiler:

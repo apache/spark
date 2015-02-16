@@ -17,17 +17,17 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{SQLContext, Strategy, execution}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
+import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand}
 import org.apache.spark.sql.parquet._
+import org.apache.spark.sql.sources.{CreateTableUsing, CreateTempTableUsing, DescribeCommand => LogicalDescribeCommand, _}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.sources.{CreateTempTableUsing, CreateTableUsing}
-
+import org.apache.spark.sql.{SQLContext, Strategy, execution}
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SQLContext#SparkPlanner =>
@@ -284,13 +284,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Aggregate(partial = false, group, agg, planLater(child)) :: Nil
       case logical.Sample(fraction, withReplacement, seed, child) =>
         execution.Sample(fraction, withReplacement, seed, planLater(child)) :: Nil
-      case SparkLogicalPlan(alreadyPlanned) => alreadyPlanned :: Nil
       case logical.LocalRelation(output, data) =>
-        val nPartitions = if (data.isEmpty) 1 else numPartitions
-        PhysicalRDD(
-          output,
-          RDDConversions.productToRowRdd(sparkContext.parallelize(data, nPartitions),
-            StructType.fromAttributes(output))) :: Nil
+        LocalTableScan(output, data) :: Nil
       case logical.Limit(IntegerLiteral(limit), child) =>
         execution.Limit(limit, planLater(child)) :: Nil
       case Unions(unionChildren) =>
@@ -314,12 +309,34 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object DDLStrategy extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case CreateTableUsing(tableName, userSpecifiedSchema, provider, true, options) =>
+      case CreateTableUsing(tableName, userSpecifiedSchema, provider, true, opts, false, _) =>
         ExecutedCommand(
-          CreateTempTableUsing(tableName, userSpecifiedSchema, provider, options)) :: Nil
-
-      case CreateTableUsing(tableName, userSpecifiedSchema, provider, false, options) =>
+          CreateTempTableUsing(
+            tableName, userSpecifiedSchema, provider, opts)) :: Nil
+      case c: CreateTableUsing if !c.temporary =>
         sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
+      case c: CreateTableUsing if c.temporary && c.allowExisting =>
+        sys.error("allowExisting should be set to false when creating a temporary table.")
+
+      case CreateTableUsingAsSelect(tableName, provider, true, mode, opts, query) =>
+        val logicalPlan = sqlContext.parseSql(query)
+        val cmd =
+          CreateTempTableUsingAsSelect(tableName, provider, mode, opts, logicalPlan)
+        ExecutedCommand(cmd) :: Nil
+      case c: CreateTableUsingAsSelect if !c.temporary =>
+        sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
+
+      case CreateTableUsingAsLogicalPlan(tableName, provider, true, mode, opts, query) =>
+        val cmd =
+          CreateTempTableUsingAsSelect(tableName, provider, mode, opts, query)
+        ExecutedCommand(cmd) :: Nil
+      case c: CreateTableUsingAsLogicalPlan if !c.temporary =>
+        sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
+
+      case LogicalDescribeCommand(table, isExtended) =>
+        val resultPlan = self.sqlContext.executePlan(table).executedPlan
+        ExecutedCommand(
+          RunnableDescribeCommand(resultPlan, resultPlan.output, isExtended)) :: Nil
 
       case _ => Nil
     }

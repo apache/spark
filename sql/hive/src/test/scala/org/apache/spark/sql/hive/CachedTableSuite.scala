@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive
 import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest}
 import org.apache.spark.storage.RDDBlockId
 
 class CachedTableSuite extends QueryTest {
@@ -64,6 +64,12 @@ class CachedTableSuite extends QueryTest {
       sql("SELECT * FROM src"),
       preCacheResults)
 
+    assertCached(sql("SELECT * FROM src s"))
+
+    checkAnswer(
+      sql("SELECT * FROM src s"),
+      preCacheResults)
+    
     uncacheTable("src")
     assertCached(sql("SELECT * FROM src"), 0)
   }
@@ -90,7 +96,7 @@ class CachedTableSuite extends QueryTest {
     cacheTable("test")
     sql("SELECT * FROM test").collect()
     sql("DROP TABLE test")
-    intercept[org.apache.hadoop.hive.ql.metadata.InvalidTableException] {
+    intercept[AnalysisException] {
       sql("SELECT * FROM test").collect()
     }
   }

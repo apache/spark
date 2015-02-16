@@ -1,6 +1,7 @@
 ---
 layout: global
 title: Spark Programming Guide
+description: Spark SPARK_VERSION_SHORT programming guide in Java, Scala and Python
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -974,7 +975,7 @@ for details.
 </tr>
 <tr>
   <td> <b>take</b>(<i>n</i>) </td>
-  <td> Return an array with the first <i>n</i> elements of the dataset. Note that this is currently not executed in parallel. Instead, the driver program computes all the elements. </td>
+  <td> Return an array with the first <i>n</i> elements of the dataset. </td>
 </tr>
 <tr>
   <td> <b>takeSample</b>(<i>withReplacement</i>, <i>num</i>, [<i>seed</i>]) </td>

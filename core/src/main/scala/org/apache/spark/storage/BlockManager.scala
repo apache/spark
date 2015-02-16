@@ -53,7 +53,7 @@ private[spark] class BlockResult(
     readMethod: DataReadMethod.Value,
     bytes: Long) {
   val inputMetrics = new InputMetrics(readMethod)
-  inputMetrics.addBytesRead(bytes)
+  inputMetrics.incBytesRead(bytes)
 }
 
 /**

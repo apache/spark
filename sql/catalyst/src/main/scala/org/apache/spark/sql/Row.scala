@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import scala.util.hashing.MurmurHash3
 
 import org.apache.spark.sql.catalyst.expressions.GenericRow
-
+import org.apache.spark.sql.types.DateUtils
 
 object Row {
   /**

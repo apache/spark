@@ -344,4 +344,24 @@ class TableScanSuite extends DataSourceTest {
     }
     assert(schemaNeeded.getMessage.contains("A schema needs to be specified when using"))
   }
+
+  test("SPARK-5196 schema field with comment") {
+    sql(
+      """
+       |CREATE TEMPORARY TABLE student(name string comment "SN", age int comment "SA", grade int)
+       |USING org.apache.spark.sql.sources.AllDataTypesScanSource
+       |OPTIONS (
+       |  from '1',
+       |  to '10'
+       |)
+       """.stripMargin)
+
+       val planned = sql("SELECT * FROM student").queryExecution.executedPlan
+       val comments = planned.schema.fields.map { field =>
+         if (field.metadata.contains("comment")) field.metadata.getString("comment")
+         else "NO_COMMENT"
+       }.mkString(",")
+
+    assert(comments === "SN,SA,NO_COMMENT")
+  }
 }

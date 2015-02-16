@@ -29,16 +29,13 @@ import org.apache.hadoop.mapreduce.lib.input.{CombineFileSplit, FileSplit}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.input.WholeTextFileInputFormat
-import org.apache.spark.InterruptibleIterator
-import org.apache.spark.Logging
-import org.apache.spark.Partition
-import org.apache.spark.SerializableWritable
-import org.apache.spark.{SparkContext, TaskContext}
+import org.apache.spark._
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.rdd.NewHadoopRDD.NewHadoopMapPartitionsWithSplitRDD
 import org.apache.spark.util.Utils
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.storage.StorageLevel
 
 private[spark] class NewHadoopPartition(
     rddId: Int,
@@ -154,7 +151,9 @@ class NewHadoopRDD[K, V](
           throw new java.util.NoSuchElementException("End of stream")
         }
         havePair = false
-
+        if (!finished) {
+          inputMetrics.incRecordsRead(1)
+        }
         (reader.getCurrentKey, reader.getCurrentValue)
       }
 
@@ -168,7 +167,7 @@ class NewHadoopRDD[K, V](
             // If we can't get the bytes read from the FS stats, fall back to the split size,
             // which may be inaccurate.
             try {
-              inputMetrics.addBytesRead(split.serializableHadoopSplit.value.getLength)
+              inputMetrics.incBytesRead(split.serializableHadoopSplit.value.getLength)
             } catch {
               case e: java.io.IOException =>
                 logWarning("Unable to get input size to set InputMetrics for task", e)
@@ -210,6 +209,16 @@ class NewHadoopRDD[K, V](
     }
     locs.getOrElse(split.getLocations.filter(_ != "localhost"))
   }
+
+  override def persist(storageLevel: StorageLevel): this.type = {
+    if (storageLevel.deserialized) {
+      logWarning("Caching NewHadoopRDDs as deserialized objects usually leads to undesired" +
+        " behavior because Hadoop's RecordReader reuses the same Writable object for all records." +
+        " Use a map transformation to make copies of the records.")
+    }
+    super.persist(storageLevel)
+  }
+
 
   def getConf: Configuration = confBroadcast.value.value
 }

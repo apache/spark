@@ -29,7 +29,7 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.spark.{SparkFiles, SparkException}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.plans.logical.Project
-import org.apache.spark.sql.api.scala.dsl._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
@@ -42,6 +42,8 @@ case class TestData(a: Int, b: String)
 class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   private val originalTimeZone = TimeZone.getDefault
   private val originalLocale = Locale.getDefault
+
+  import org.apache.spark.sql.hive.test.TestHive.implicits._
 
   override def beforeAll() {
     TestHive.cacheTables = true
@@ -57,13 +59,13 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     Locale.setDefault(originalLocale)
   }
 
-  test("SPARK-4908: concurent hive native commands") {
+  test("SPARK-4908: concurrent hive native commands") {
     (1 to 100).par.map { _ =>
       sql("USE default")
       sql("SHOW TABLES")
     }
   }
-  
+
   createQueryTest("! operator",
     """
       |SELECT a FROM (
@@ -200,6 +202,9 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("having no references",
     "SELECT key FROM src GROUP BY key HAVING COUNT(*) > 1")
 
+  createQueryTest("no from clause",
+    "SELECT 1, +1, -1")
+
   createQueryTest("boolean = number",
     """
       |SELECT
@@ -253,8 +258,30 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   createQueryTest("Cast Timestamp to Timestamp in UDF",
     """
-       | SELECT DATEDIFF(CAST(value AS timestamp), CAST('2002-03-21 00:00:00' AS timestamp))
-       | FROM src LIMIT 1
+      | SELECT DATEDIFF(CAST(value AS timestamp), CAST('2002-03-21 00:00:00' AS timestamp))
+      | FROM src LIMIT 1
+    """.stripMargin)
+
+  createQueryTest("Date comparison test 1",
+    """
+      | SELECT
+      | CAST(CAST('1970-01-01 22:00:00' AS timestamp) AS date) ==
+      | CAST(CAST('1970-01-01 23:00:00' AS timestamp) AS date)
+      | FROM src LIMIT 1
+    """.stripMargin)
+
+  createQueryTest("Date comparison test 2",
+    "SELECT CAST(CAST(0 AS timestamp) AS date) > CAST(0 AS timestamp) FROM src LIMIT 1")
+
+  createQueryTest("Date cast",
+    """
+      | SELECT
+      | CAST(CAST(0 AS timestamp) AS date),
+      | CAST(CAST(CAST(0 AS timestamp) AS date) AS string),
+      | CAST(0 AS timestamp),
+      | CAST(CAST(0 AS timestamp) AS string),
+      | CAST(CAST(CAST('1970-01-01 23:00:00' AS timestamp) AS date) AS timestamp)
+      | FROM src LIMIT 1
     """.stripMargin)
 
   createQueryTest("Simple Average",
@@ -329,6 +356,80 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("transform",
     "SELECT TRANSFORM (key) USING 'cat' AS (tKey) FROM src")
 
+  createQueryTest("schema-less transform",
+    """
+      |SELECT TRANSFORM (key, value) USING 'cat' FROM src;
+      |SELECT TRANSFORM (*) USING 'cat' FROM src;
+    """.stripMargin)
+
+  val delimiter = "'\t'"
+
+  createQueryTest("transform with custom field delimiter",
+    s"""
+      |SELECT TRANSFORM (key) ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter}
+      |USING 'cat' AS (tKey) ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter} FROM src;
+    """.stripMargin.replaceAll("\n", " "))
+
+  createQueryTest("transform with custom field delimiter2",
+    s"""
+      |SELECT TRANSFORM (key, value) ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter}
+      |USING 'cat' ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter} FROM src;
+    """.stripMargin.replaceAll("\n", " "))
+
+  createQueryTest("transform with custom field delimiter3",
+    s"""
+      |SELECT TRANSFORM (*) ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter}
+      |USING 'cat' ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter} FROM src;
+    """.stripMargin.replaceAll("\n", " "))
+
+  createQueryTest("transform with SerDe",
+    """
+      |SELECT TRANSFORM (key, value) ROW FORMAT SERDE
+      |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+      |USING 'cat' AS (tKey, tValue) ROW FORMAT SERDE
+      |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' FROM src;
+    """.stripMargin.replaceAll("\n", " "))
+
+  test("transform with SerDe2") {
+
+    sql("CREATE TABLE small_src(key INT, value STRING)")
+    sql("INSERT OVERWRITE TABLE small_src SELECT key, value FROM src LIMIT 10")
+
+    val expected = sql("SELECT key FROM small_src").collect().head
+    val res = sql(
+      """
+        |SELECT TRANSFORM (key) ROW FORMAT SERDE
+        |'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
+        |WITH SERDEPROPERTIES ('avro.schema.literal'='{"namespace":
+        |"testing.hive.avro.serde","name": "src","type": "record","fields":
+        |[{"name":"key","type":"int"}]}') USING 'cat' AS (tKey INT) ROW FORMAT SERDE
+        |'org.apache.hadoop.hive.serde2.avro.AvroSerDe' WITH SERDEPROPERTIES
+        |('avro.schema.literal'='{"namespace": "testing.hive.avro.serde","name":
+        |"src","type": "record","fields": [{"name":"key","type":"int"}]}')
+        |FROM small_src
+      """.stripMargin.replaceAll("\n", " ")).collect().head
+
+    assert(expected(0) === res(0))
+  }
+
+  createQueryTest("transform with SerDe3",
+    """
+      |SELECT TRANSFORM (*) ROW FORMAT SERDE
+      |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' WITH SERDEPROPERTIES
+      |('serialization.last.column.takes.rest'='true') USING 'cat' AS (tKey, tValue)
+      |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+      |WITH SERDEPROPERTIES ('serialization.last.column.takes.rest'='true') FROM src;
+    """.stripMargin.replaceAll("\n", " "))
+
+  createQueryTest("transform with SerDe4",
+    """
+      |SELECT TRANSFORM (*) ROW FORMAT SERDE
+      |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' WITH SERDEPROPERTIES
+      |('serialization.last.column.takes.rest'='true') USING 'cat' ROW FORMAT SERDE
+      |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' WITH SERDEPROPERTIES
+      |('serialization.last.column.takes.rest'='true') FROM src;
+    """.stripMargin.replaceAll("\n", " "))
+ 
   createQueryTest("LIKE",
     "SELECT * FROM src WHERE value LIKE '%1%'")
 
@@ -466,7 +567,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       TestHive.sparkContext.parallelize(
         TestData(1, "str1") ::
         TestData(2, "str2") :: Nil)
-    testData.registerTempTable("REGisteredTABle")
+    testData.toDF.registerTempTable("REGisteredTABle")
 
     assertResult(Array(Row(2, "str2"))) {
       sql("SELECT tablealias.A, TABLEALIAS.b FROM reGisteredTABle TableAlias " +
@@ -491,7 +592,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   test("SPARK-2180: HAVING support in GROUP BY clauses (positive)") {
     val fixture = List(("foo", 2), ("bar", 1), ("foo", 4), ("bar", 3))
       .zipWithIndex.map {case Pair(Pair(value, attr), key) => HavingRow(key, value, attr)}
-    TestHive.sparkContext.parallelize(fixture).registerTempTable("having_test")
+    TestHive.sparkContext.parallelize(fixture).toDF.registerTempTable("having_test")
     val results =
       sql("SELECT value, max(attr) AS attr FROM having_test GROUP BY value HAVING attr > 3")
       .collect()
@@ -507,6 +608,25 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   test("SPARK-2225: turn HAVING without GROUP BY into a simple filter") {
     assert(sql("select key from src having key > 490").collect().size < 100)
+  }
+
+  test("SPARK-5383 alias for udfs with multi output columns") {
+    assert(
+      sql("select stack(2, key, value, key, value) as (a, b) from src limit 5")
+        .collect()
+        .size == 5)
+
+    assert(
+      sql("select a, b from (select stack(2, key, value, key, value) as (a, b) from src) t limit 5")
+        .collect()
+        .size == 5)
+  }
+
+  test("SPARK-5367: resolve star expression in udf") {
+    assert(sql("select concat(*) from src limit 5").collect().size == 5)
+    assert(sql("select array(*) from src limit 5").collect().size == 5)
+    assert(sql("select concat(key, *) from src limit 5").collect().size == 5)
+    assert(sql("select array(key, *) from src limit 5").collect().size == 5)
   }
 
   test("Query Hive native command execution result") {
@@ -620,12 +740,12 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       TestHive.sparkContext.parallelize(
         TestData(1, "str1") ::
         TestData(1, "str2") :: Nil)
-    testData.registerTempTable("test_describe_commands2")
+    testData.toDF.registerTempTable("test_describe_commands2")
 
     assertResult(
       Array(
-        Row("a", "IntegerType", null),
-        Row("b", "StringType", null))
+        Row("a", "int", ""),
+        Row("b", "string", ""))
     ) {
       sql("DESCRIBE test_describe_commands2")
         .select('col_name, 'data_type, 'comment)
@@ -739,6 +859,22 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     }
   }
 
+  test("SPARK-5592: get java.net.URISyntaxException when dynamic partitioning") {
+    sql("""
+      |create table sc as select *
+      |from (select '2011-01-11', '2011-01-11+14:18:26' from src tablesample (1 rows)
+      |union all
+      |select '2011-01-11', '2011-01-11+15:18:26' from src tablesample (1 rows)
+      |union all
+      |select '2011-01-11', '2011-01-11+16:18:26' from src tablesample (1 rows) ) s
+    """.stripMargin)
+    sql("create table sc_part (key string) partitioned by (ts string) stored as rcfile")
+    sql("set hive.exec.dynamic.partition=true")
+    sql("set hive.exec.dynamic.partition.mode=nonstrict")
+    sql("insert overwrite table sc_part partition(ts) select * from sc")
+    sql("drop table sc_part")
+  }
+
   test("Partition spec validation") {
     sql("DROP TABLE IF EXISTS dp_test")
     sql("CREATE TABLE dp_test(key INT, value STRING) PARTITIONED BY (dp INT, sp INT)")
@@ -764,8 +900,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   }
 
   test("SPARK-3414 regression: should store analyzed logical plan when registering a temp table") {
-    sparkContext.makeRDD(Seq.empty[LogEntry]).registerTempTable("rawLogs")
-    sparkContext.makeRDD(Seq.empty[LogFile]).registerTempTable("logFiles")
+    sparkContext.makeRDD(Seq.empty[LogEntry]).toDF.registerTempTable("rawLogs")
+    sparkContext.makeRDD(Seq.empty[LogFile]).toDF.registerTempTable("logFiles")
 
     sql(
       """
