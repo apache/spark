@@ -85,10 +85,10 @@ class SqlSensor(BaseSensorOperator):
         self.conn_id = conn_id
 
         session = settings.Session()
-        db = session.query(DB).filter(DB.conn_id == conn_id).all()
+        db = session.query(DB).filter(DB.conn_id == conn_id).first()
         if not db:
             raise Exception("conn_id doesn't exist in the repository")
-        self.hook = db[0].get_hook()
+        self.hook = db.get_hook()
         session.commit()
         session.close()
 
@@ -227,7 +227,6 @@ class HdfsSensor(BaseSensorOperator):
             files = [f for f in self.sb.ls([self.filepath])]
         except:
             return False
-        print([i for i in f])
         return True
 
 
@@ -331,3 +330,26 @@ class S3PrefixSensor(BaseSensorOperator):
         return self.hook.check_for_prefix(prefix=self.prefix,
                                           delimiter=self.delimiter,
                                           bucket_name=self.bucket_name)
+
+
+class TimeSensor(BaseSensorOperator):
+    """
+    Waits until the specified time of the day.
+
+    :param target_time: time after which the job succeeds
+    :type target_time: datetime.time
+    """
+    template_fields = tuple()
+    __mapper_args__ = {
+        'polymorphic_identity': 'TimeSensor'
+    }
+
+    @apply_defaults
+    def __init__(self, target_time, *args, **kwargs):
+        super(TimeSensor, self).__init__(*args, **kwargs)
+        self.target_time = target_time
+
+    def poke(self):
+        logging.info(
+            'Checking if the time ({0}) has come'.format(self.target_time))
+        return datetime.now().time() > self.target_time

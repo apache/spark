@@ -3,8 +3,8 @@ TODO
 #### UI
 * Backfill wizard
 
-#### Write unittests
-* For each existing operator
+#### unittests
+* Increase coverage, now 70ish%
 
 #### Command line
 * `airflow task_state dag_id task_id YYYY-MM-DD`

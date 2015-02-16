@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, time
 import unittest
 from airflow import configuration
 configuration.test_mode()
@@ -15,6 +15,8 @@ configuration.test_mode()
 class HivePrestoTest(unittest.TestCase):
 
     def setUp(self):
+        configuration.test_mode()
+        utils.initdb()
         args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
         dag = DAG('hive_test', default_args=args)
         self.dag = dag
@@ -45,6 +47,21 @@ class HivePrestoTest(unittest.TestCase):
             task_id='presto_check', sql=sql, dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE)
 
+    def test_hdfs_sensor(self):
+        t = operators.HdfsSensor(
+            task_id='hdfs_sensor_check',
+            filepath='/user/hive/warehouse/airflow.db/static_babynames',
+            dag=self.dag)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE)
+
+    def test_sql_sensor(self):
+        t = operators.SqlSensor(
+            task_id='hdfs_sensor_check',
+            conn_id='presto_default',
+            sql="SELECT 'x' FROM airflow.static_babynames LIMIT 1;",
+            dag=self.dag)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE)
+
 
 class CoreTest(unittest.TestCase):
 
@@ -54,11 +71,21 @@ class CoreTest(unittest.TestCase):
         self.dagbag = models.DagBag(
             dag_folder=DEV_NULL, include_examples=True)
         utils.initdb()
+        args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
+        dag = DAG('core_test', default_args=args)
+        self.dag = dag
         self.dag_bash = self.dagbag.dags['example_bash_operator']
         self.runme_0 = self.dag_bash.get_task('runme_0')
 
     def test_confirm_unittest_mod(self):
         assert configuration.conf.get('core', 'unit_test_mode')
+
+    def test_time_sensor(self):
+        t = operators.TimeSensor(
+            task_id='time_sensor_check',
+            target_time=time(0),
+            dag=self.dag)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE)
 
     def test_import_examples(self):
         self.assertEqual(len(self.dagbag.dags), NUM_EXAMPLE_DAGS)
