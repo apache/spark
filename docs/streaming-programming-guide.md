@@ -908,8 +908,7 @@ JavaPairDStream<String, Integer> runningCounts = pairs.updateStateByKey(updateFu
 The update function will be called for each word, with `newValues` having a sequence of 1's (from
 the `(word, 1)` pairs) and the `runningCount` having the previous count. For the complete
 Java code, take a look at the example
-[JavaStatefulNetworkWordCount.java]({{site
-.SPARK_GITHUB_URL}}/blob/master/examples/src/main/java/org/apache/spark/examples/streaming
+[JavaStatefulNetworkWordCount.java]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/java/org/apache/spark/examples/streaming
 /JavaStatefulNetworkWordCount.java).
 
 </div>
