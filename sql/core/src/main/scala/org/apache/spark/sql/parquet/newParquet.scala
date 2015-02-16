@@ -20,7 +20,7 @@ import java.io.IOException
 import java.lang.{Double => JDouble, Float => JFloat, Long => JLong}
 import java.math.{BigDecimal => JBigDecimal}
 import java.text.SimpleDateFormat
-import java.util.{List => JList, Date}
+import java.util.{Date, List => JList}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
@@ -34,19 +34,20 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.hadoop.mapreduce.{InputSplit, Job, JobContext}
 import parquet.filter2.predicate.FilterApi
 import parquet.format.converter.ParquetMetadataConverter
-import parquet.hadoop.{ParquetInputFormat, _}
 import parquet.hadoop.util.ContextUtil
+import parquet.hadoop.{ParquetInputFormat, _}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.rdd.{NewHadoopPartition, NewHadoopRDD, RDD}
+import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.parquet.ParquetTypesConverter._
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.{DataFrame, Row, SaveMode, SQLConf, SQLContext}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType, _}
-import org.apache.spark.{Partition => SparkPartition, TaskContext, SerializableWritable, Logging, SparkException}
+import org.apache.spark.sql.{DataFrame, Row, SQLConf, SQLContext, SaveMode}
+import org.apache.spark.{Logging, Partition => SparkPartition, SerializableWritable, SparkException, TaskContext}
 
 
 /**
@@ -442,7 +443,8 @@ case class ParquetRelation2
       _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
     }
 
-    val rawPredicate = partitionPruningPredicates.reduceOption(And).getOrElse(Literal(true))
+    val rawPredicate =
+      partitionPruningPredicates.reduceOption(expressions.And).getOrElse(Literal(true))
     val boundPredicate = InterpretedPredicate(rawPredicate transform {
       case a: AttributeReference =>
         val index = partitionColumns.indexWhere(a.name == _.name)
