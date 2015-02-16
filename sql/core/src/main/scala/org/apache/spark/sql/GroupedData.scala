@@ -23,6 +23,8 @@ import scala.collection.JavaConversions._
 import org.apache.spark.sql.catalyst.analysis.Star
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.types.NumericType
+
 
 
 /**
@@ -39,13 +41,30 @@ class GroupedData protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expressio
       df.sqlContext, Aggregate(groupingExprs, namedGroupingExprs ++ aggExprs, df.logicalPlan))
   }
 
-  private[this] def aggregateNumericColumns(f: Expression => Expression): Seq[NamedExpression] = {
-    df.numericColumns.map { c =>
+  private[this] def aggregateNumericColumns(colNames: String*)(f: Expression => Expression)
+    : Seq[NamedExpression] = {
+
+    val columnExprs = if (colNames.isEmpty) {
+      // No columns specified. Use all numeric columns.
+      df.numericColumns
+    } else {
+      // Make sure all specified columns are numeric
+      colNames.map { colName =>
+        val namedExpr = df.resolve(colName)
+        if (!namedExpr.dataType.isInstanceOf[NumericType]) {
+          throw new AnalysisException(
+            s""""$colName" is not a numeric column. """ +
+            "Aggregation function can only be performed on a numeric column.")
+        }
+        namedExpr
+      }
+    }
+    columnExprs.map { c =>
       val a = f(c)
       Alias(a, a.toString)()
     }
   }
-
+ 
   private[this] def strToExpr(expr: String): (Expression => Expression) = {
     expr.toLowerCase match {
       case "avg" | "average" | "mean" => Average
@@ -152,30 +171,50 @@ class GroupedData protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expressio
   /**
    * Compute the average value for each numeric columns for each group. This is an alias for `avg`.
    * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the average values for them.
    */
-  def mean(): DataFrame = aggregateNumericColumns(Average)
-
+  @scala.annotation.varargs
+  def mean(colNames: String*): DataFrame = {
+    aggregateNumericColumns(colNames:_*)(Average)
+  }
+ 
   /**
    * Compute the max value for each numeric columns for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the max values for them.
    */
-  def max(): DataFrame = aggregateNumericColumns(Max)
+  @scala.annotation.varargs
+  def max(colNames: String*): DataFrame = {
+    aggregateNumericColumns(colNames:_*)(Max)
+  }
 
   /**
    * Compute the mean value for each numeric columns for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the mean values for them.
    */
-  def avg(): DataFrame = aggregateNumericColumns(Average)
+  @scala.annotation.varargs
+  def avg(colNames: String*): DataFrame = {
+    aggregateNumericColumns(colNames:_*)(Average)
+  }
 
   /**
    * Compute the min value for each numeric column for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the min values for them.
    */
-  def min(): DataFrame = aggregateNumericColumns(Min)
+  @scala.annotation.varargs
+  def min(colNames: String*): DataFrame = {
+    aggregateNumericColumns(colNames:_*)(Min)
+  }
 
   /**
    * Compute the sum for each numeric columns for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the sum for them.
    */
-  def sum(): DataFrame = aggregateNumericColumns(Sum)
+  @scala.annotation.varargs
+  def sum(colNames: String*): DataFrame = {
+    aggregateNumericColumns(colNames:_*)(Sum)
+  }    
 }
