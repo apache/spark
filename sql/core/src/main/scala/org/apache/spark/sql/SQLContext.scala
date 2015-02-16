@@ -235,7 +235,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     }
 
     /** Creates a single column DataFrame from an RDD[String]. */
-    implicit def stringRddToDataFrame(data: RDD[String]): DataFrameHolder = {
+    implicit def stringRddToDataFrameHolder(data: RDD[String]): DataFrameHolder = {
       val dataType = StringType
       val rows = data.mapPartitions { iter =>
         val row = new SpecificMutableRow(dataType :: Nil)
