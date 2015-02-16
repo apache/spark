@@ -106,7 +106,6 @@ private[sql] class DDLParser(
    * AS SELECT ...
    */
   protected lazy val createTable: Parser[LogicalPlan] =
-  (
     // TODO: Support database.table.
     (CREATE ~> TEMPORARY.? <~ TABLE) ~ (IF ~> NOT <~ EXISTS).? ~ ident ~
       tableCols.? ~ (USING ~> className) ~ (OPTIONS ~> options).? ~ (AS ~> restInput).? ^^ {
