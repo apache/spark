@@ -446,7 +446,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       baseRelationToDataFrame(parquet.ParquetRelation2(path +: paths, Map.empty)(this))
     } else {
       DataFrame(this, parquet.ParquetRelation(
-        paths.mkString(","), Some(sparkContext.hadoopConfiguration), this))
+        (path +: paths).mkString(","), Some(sparkContext.hadoopConfiguration), this))
     }
 
   /**
