@@ -647,6 +647,6 @@ private[parquet] object FileSystemHelper {
         sys.error("ERROR: attempting to append to set of Parquet files and found file" +
           s"that does not match name pattern: $other")
       case _ => 0
-    }.reduceLeft((a, b) => if (a < b) b else a)
+    }.reduceOption(_ max _).getOrElse(0)
   }
 }

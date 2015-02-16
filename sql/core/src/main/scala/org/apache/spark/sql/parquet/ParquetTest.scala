@@ -23,8 +23,8 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
 
-import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.util
+import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 import org.apache.spark.util.Utils
 
 /**
@@ -37,7 +37,8 @@ import org.apache.spark.util.Utils
 trait ParquetTest {
   val sqlContext: SQLContext
 
-  import sqlContext._
+  import sqlContext.implicits.{localSeqToDataFrameHolder, rddToDataFrameHolder}
+  import sqlContext.{conf, sparkContext}
 
   protected def configuration = sparkContext.hadoopConfiguration
 
@@ -49,11 +50,11 @@ trait ParquetTest {
    */
   protected def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
     val (keys, values) = pairs.unzip
-    val currentValues = keys.map(key => Try(getConf(key)).toOption)
-    (keys, values).zipped.foreach(setConf)
+    val currentValues = keys.map(key => Try(conf.getConf(key)).toOption)
+    (keys, values).zipped.foreach(conf.setConf)
     try f finally {
       keys.zip(currentValues).foreach {
-        case (key, Some(value)) => setConf(key, value)
+        case (key, Some(value)) => conf.setConf(key, value)
         case (key, None) => conf.unsetConf(key)
       }
     }
@@ -88,7 +89,6 @@ trait ParquetTest {
   protected def withParquetFile[T <: Product: ClassTag: TypeTag]
       (data: Seq[T])
       (f: String => Unit): Unit = {
-    import sqlContext.implicits._
     withTempPath { file =>
       sparkContext.parallelize(data).toDF().saveAsParquetFile(file.getCanonicalPath)
       f(file.getCanonicalPath)
@@ -102,14 +102,14 @@ trait ParquetTest {
   protected def withParquetRDD[T <: Product: ClassTag: TypeTag]
       (data: Seq[T])
       (f: DataFrame => Unit): Unit = {
-    withParquetFile(data)(path => f(parquetFile(path)))
+    withParquetFile(data)(path => f(sqlContext.parquetFile(path)))
   }
 
   /**
    * Drops temporary table `tableName` after calling `f`.
    */
   protected def withTempTable(tableName: String)(f: => Unit): Unit = {
-    try f finally dropTempTable(tableName)
+    try f finally sqlContext.dropTempTable(tableName)
   }
 
   /**
@@ -124,5 +124,27 @@ trait ParquetTest {
       sqlContext.registerRDDAsTable(rdd, tableName)
       withTempTable(tableName)(f)
     }
+  }
+
+  protected def makeParquetFile[T <: Product: ClassTag: TypeTag](
+      data: Seq[T], path: File): Unit = {
+    data.toDF().save(path.getCanonicalPath, "org.apache.spark.sql.parquet", SaveMode.Overwrite)
+  }
+
+  protected def makePartitionDir(
+      basePath: File,
+      defaultPartitionName: String,
+      partitionCols: (String, Any)*): File = {
+    val partNames = partitionCols.map { case (k, v) =>
+      val valueString = if (v == null || v == "") defaultPartitionName else v.toString
+      s"$k=$valueString"
+    }
+
+    val partDir = partNames.foldLeft(basePath) { (parent, child) =>
+      new File(parent, child)
+    }
+
+    assert(partDir.mkdirs(), s"Couldn't create directory $partDir")
+    partDir
   }
 }
