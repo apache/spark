@@ -399,7 +399,8 @@ private[spark] object Utils extends Logging {
       securityMgr: SecurityManager,
       hadoopConf: Configuration,
       timestamp: Long,
-      useCache: Boolean) {
+      useCache: Boolean,
+      isJar: Boolean) {
     val fileName = url.split("/").last
     val targetFile = new File(targetDir, fileName)
     if (useCache) {
@@ -415,7 +416,7 @@ private[spark] object Utils extends Logging {
       val cachedFile = new File(localDir, cachedFileName)
       try {
         if (!cachedFile.exists()) {
-          doFetchFile(url, localDir, cachedFileName, conf, securityMgr, hadoopConf)
+          doFetchFile(url, localDir, cachedFileName, conf, securityMgr, hadoopConf, isJar)
         }
       } finally {
         lock.release()
@@ -424,10 +425,11 @@ private[spark] object Utils extends Logging {
         url,
         cachedFile,
         targetFile,
+        isJar,
         conf.getBoolean("spark.files.overwrite", false)
       )
     } else {
-      doFetchFile(url, targetDir, fileName, conf, securityMgr, hadoopConf)
+      doFetchFile(url, targetDir, fileName, conf, securityMgr, hadoopConf, isJar)
     }
 
     // Decompress the file if it's a .tar or .tar.gz
@@ -460,6 +462,7 @@ private[spark] object Utils extends Logging {
       url: String,
       in: InputStream,
       destFile: File,
+      isJar: Boolean,
       fileOverwrite: Boolean): Unit = {
     val tempFile = File.createTempFile("fetchFileTemp", null,
       new File(destFile.getParentFile.getAbsolutePath))
@@ -468,7 +471,7 @@ private[spark] object Utils extends Logging {
     try {
       val out = new FileOutputStream(tempFile)
       Utils.copyStream(in, out, closeStreams = true)
-      copyFile(url, tempFile, destFile, fileOverwrite, removeSourceFile = true)
+      copyFile(url, tempFile, destFile, isJar, fileOverwrite, removeSourceFile = true)
     } finally {
       // Catch-all for the couple of cases where for some reason we didn't move `tempFile` to
       // `destFile`.
@@ -498,12 +501,13 @@ private[spark] object Utils extends Logging {
       url: String,
       sourceFile: File,
       destFile: File,
+      isJar: Boolean,
       fileOverwrite: Boolean,
       removeSourceFile: Boolean = false): Unit = {
 
     if (destFile.exists) {
       if (!filesEqualRecursive(sourceFile, destFile)) {
-        if (fileOverwrite) {
+        if (!isJar && fileOverwrite) {
           logInfo(
             s"File $destFile exists and does not match contents of $url, replacing it with $url"
           )
@@ -585,7 +589,8 @@ private[spark] object Utils extends Logging {
       filename: String,
       conf: SparkConf,
       securityMgr: SecurityManager,
-      hadoopConf: Configuration) {
+      hadoopConf: Configuration,
+      isJar: Boolean) {
     val targetFile = new File(targetDir, filename)
     val uri = new URI(url)
     val fileOverwrite = conf.getBoolean("spark.files.overwrite", defaultValue = false)
@@ -608,16 +613,17 @@ private[spark] object Utils extends Logging {
         uc.setReadTimeout(timeout)
         uc.connect()
         val in = uc.getInputStream()
-        downloadFile(url, in, targetFile, fileOverwrite)
+        downloadFile(url, in, targetFile, isJar, fileOverwrite)
       case "file" =>
         // In the case of a local file, copy the local file to the target directory.
         // Note the difference between uri vs url.
         val sourceFile = if (uri.isAbsolute) new File(uri) else new File(url)
-        copyFile(url, sourceFile, targetFile, fileOverwrite)
+        copyFile(url, sourceFile, targetFile, isJar, fileOverwrite)
       case _ =>
         val fs = getHadoopFileSystem(uri, hadoopConf)
         val path = new Path(uri)
-        fetchHcfsFile(path, new File(targetDir, path.getName), fs, conf, hadoopConf, fileOverwrite)
+        fetchHcfsFile(path, new File(targetDir, path.getName), fs, conf, hadoopConf,
+          isJar, fileOverwrite)
     }
   }
 
@@ -632,6 +638,7 @@ private[spark] object Utils extends Logging {
       fs: FileSystem,
       conf: SparkConf,
       hadoopConf: Configuration,
+      isJar: Boolean,
       fileOverwrite: Boolean): Unit = {
     if (!targetDir.mkdir()) {
       throw new IOException(s"Failed to create directory ${targetDir.getPath}")
@@ -640,11 +647,11 @@ private[spark] object Utils extends Logging {
       val innerPath = fileStatus.getPath
       if (fileStatus.isDir) {
         fetchHcfsFile(innerPath, new File(targetDir, innerPath.getName), fs, conf, hadoopConf,
-          fileOverwrite)
+          isJar, fileOverwrite)
       } else {
         val in = fs.open(innerPath)
         val targetFile = new File(targetDir, innerPath.getName)
-        downloadFile(innerPath.toString, in, targetFile, fileOverwrite)
+        downloadFile(innerPath.toString, in, targetFile, isJar, fileOverwrite)
       }
     }
   }

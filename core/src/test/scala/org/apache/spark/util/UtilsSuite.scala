@@ -396,7 +396,7 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
       val path = new Path("file://" + tempDir.getAbsolutePath)
       val conf = new Configuration()
       val fs = Utils.getHadoopFileSystem(path.toString, conf)
-      Utils.fetchHcfsFile(path, targetDir, fs, new SparkConf(), conf, false)
+      Utils.fetchHcfsFile(path, targetDir, fs, new SparkConf(), conf, false, false)
       assert(targetDir.exists())
       assert(targetDir.isDirectory())
       val newInnerDir = new File(targetDir, innerTempDir.getName)
