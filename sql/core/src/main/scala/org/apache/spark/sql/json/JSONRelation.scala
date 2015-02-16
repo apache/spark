@@ -66,9 +66,17 @@ private[sql] class DefaultSource
       mode match {
         case SaveMode.Append =>
           sys.error(s"Append mode is not supported by ${this.getClass.getCanonicalName}")
-        case SaveMode.Overwrite =>
-          fs.delete(filesystemPath, true)
+        case SaveMode.Overwrite => {
+          try {
+            fs.delete(filesystemPath, true)
+          } catch {
+            case e: IOException =>
+              throw new IOException(
+                s"Unable to clear output directory ${filesystemPath.toString} prior"
+                  + s" to CREATE a JSON table AS SELECT:\n${e.toString}")
+          }
           true
+        }
         case SaveMode.ErrorIfExists =>
           sys.error(s"path $path already exists.")
         case SaveMode.Ignore => false
