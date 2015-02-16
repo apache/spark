@@ -727,7 +727,6 @@ class RDDTests(ReusedPySparkTestCase):
             (u'1', {u'director': u'David Lean'}),
             (u'2', {u'director': u'Andrew Dominik'})
         ]
-        from pyspark.rdd import RDD
         data_rdd = self.sc.parallelize(data)
         data_java_rdd = data_rdd._to_java_object_rdd()
         data_python_rdd = self.sc._jvm.SerDe.javaToPython(data_java_rdd)
@@ -739,6 +738,27 @@ class RDDTests(ReusedPySparkTestCase):
         data_python_rdd = self.sc._jvm.SerDe.javaToPython(data_java_rdd)
         converted_rdd = RDD(data_python_rdd, self.sc)
         self.assertEqual(2, converted_rdd.count())
+
+    def test_narrow_dependency_in_join(self):
+        rdd = self.sc.parallelize(range(10)).map(lambda x: (x, x))
+        parted = rdd.partitionBy(2)
+        self.assertEqual(2, parted.union(parted).getNumPartitions())
+        self.assertEqual(rdd.getNumPartitions() + 2, parted.union(rdd).getNumPartitions())
+        self.assertEqual(rdd.getNumPartitions() + 2, rdd.union(parted).getNumPartitions())
+
+        d = sorted(parted.join(parted).collect())
+        self.assertEqual(10, len(d))
+        self.assertEqual((0, (0, 0)), d[0])
+        d = sorted(parted.join(rdd).collect())
+        self.assertEqual(10, len(d))
+        self.assertEqual((0, (0, 0)), d[0])
+
+        d = sorted(parted.cogroup(parted).collect())
+        self.assertEqual(10, len(d))
+        self.assertEqual([[0], [0]], map(list, d[0][1]))
+        d = sorted(parted.cogroup(rdd).collect())
+        self.assertEqual(10, len(d))
+        self.assertEqual([[0], [0]], map(list, d[0][1]))
 
 
 class ProfilerTests(PySparkTestCase):
