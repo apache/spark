@@ -17,6 +17,7 @@
 
 import atexit
 import os
+import select
 import sys
 import signal
 import shlex
@@ -65,11 +66,20 @@ def launch_gateway():
             # preexec_fn not supported on Windows
             proc = Popen(command, stdin=PIPE, env=env)
 
-        gateway_connection = callback_socket.accept()[0]
-        # Determine which ephemeral port the server started on:
-        gateway_port = read_int(gateway_connection.makefile())
-        gateway_connection.close()
-        callback_socket.close()
+        gateway_port = None
+        # We use select() here in order to avoid blocking indefinitely if the subprocess dies
+        # before connecting
+        while gateway_port is None and proc.poll() is None:
+            timeout = 1  # (seconds)
+            readable, _, _ = select.select([callback_socket], [], [], timeout)
+            if callback_socket in readable:
+                gateway_connection = callback_socket.accept()[0]
+                # Determine which ephemeral port the server started on:
+                gateway_port = read_int(gateway_connection.makefile())
+                gateway_connection.close()
+                callback_socket.close()
+        if gateway_port is None:
+            raise Exception("Java gateway process exited before sending the driver its port number")
 
         # In Windows, ensure the Java child processes do not linger after Python has exited.
         # In UNIX-based systems, the child process can kill itself on broken pipe (i.e. when
