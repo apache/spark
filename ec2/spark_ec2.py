@@ -702,12 +702,9 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
     if opts.deploy_root_dir is not None:
         print "Deploying {s} to master...".format(s=opts.deploy_root_dir)
         deploy_user_files(
-            conn=conn,
             root_dir=opts.deploy_root_dir,
             opts=opts,
-            master_nodes=master_nodes,
-            slave_nodes=slave_nodes,
-            modules=modules
+            master_nodes=master_nodes
         )
 
     print "Running setup on master..."
@@ -952,7 +949,7 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
 # Files are only deployed to the first master instance in the cluster.
 #
 # root_dir should be an absolute path to the directory with the files we want to deploy.
-def deploy_user_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
+def deploy_user_files(root_dir, opts, master_nodes):
     active_master = master_nodes[0].public_dns_name
     command = [
         'rsync', '-rv',
