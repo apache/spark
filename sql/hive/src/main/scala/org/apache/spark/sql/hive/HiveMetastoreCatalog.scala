@@ -240,7 +240,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     val hiveSchema: JList[FieldSchema] = if (schema == null || schema.isEmpty) {
       crtTbl.getCols
     } else {
-      schema.map(attr => new FieldSchema(attr.name, toMetastoreType(attr.dataType), ""))
+      schema.map(attr => new FieldSchema(attr.name, toMetastoreType(attr.dataType), null))
     }
     tbl.setFields(hiveSchema)
 
@@ -314,6 +314,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     if (crtTbl != null && crtTbl.getLineDelim() != null) {
       tbl.setSerdeParam(serdeConstants.LINE_DELIM, crtTbl.getLineDelim())
     }
+    HiveShim.setTblNullFormat(crtTbl, tbl)
 
     if (crtTbl != null && crtTbl.getSerdeProps() != null) {
       val iter = crtTbl.getSerdeProps().entrySet().iterator()
