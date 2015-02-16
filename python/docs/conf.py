@@ -97,6 +97,10 @@ pygments_style = 'sphinx'
 # If true, keep warnings as "system message" paragraphs in the built documents.
 #keep_warnings = False
 
+# -- Options for autodoc --------------------------------------------------
+
+# Look at the first line of the docstring for function and method signatures.
+autodoc_docstring_signature = True
 
 # -- Options for HTML output ----------------------------------------------
 
