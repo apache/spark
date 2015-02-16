@@ -74,7 +74,7 @@ sparkR.stop <- function(env) {
 #'}
 
 sparkR.init <- function(
-  master = "local",
+  master = "",
   appName = "SparkR",
   sparkHome = Sys.getenv("SPARK_HOME"),
   sparkEnvir = list(),
@@ -101,10 +101,21 @@ sparkR.init <- function(
   if (sparkRExistingPort != "") {
     sparkRBackendPort <- sparkRExistingPort
   } else {
-    launchBackend(classPath = cp,
-                  mainClass = "edu.berkeley.cs.amplab.sparkr.SparkRBackend",
-                  args = as.character(sparkRBackendPort),
-                  javaOpts = paste("-Xmx", sparkMem, sep = ""))
+    if (Sys.getenv("SPARKR_USE_SPARK_SUBMIT", "") == "") {
+      launchBackend(classPath = cp,
+                    mainClass = "edu.berkeley.cs.amplab.sparkr.SparkRBackend",
+                    args = as.character(sparkRBackendPort),
+                    javaOpts = paste("-Xmx", sparkMem, sep = ""))
+    } else {
+      # TODO: We should deprecate sparkJars and ask users to add it to the
+      # command line (using --jars) which is picked up by SparkSubmit
+      launchBackendSparkSubmit(
+          mainClass = "edu.berkeley.cs.amplab.sparkr.SparkRBackend",
+          args = as.character(sparkRBackendPort),
+          appJar = .sparkREnv$assemblyJarPath,
+          sparkHome = sparkHome,
+          sparkSubmitOpts = Sys.getenv("SPARKR_SUBMIT_ARGS", ""))
+    }
     Sys.sleep(2) # Wait for backend to come up
   }
   .sparkREnv$sparkRBackendPort <- sparkRBackendPort

@@ -33,6 +33,26 @@ fi
 
 export R_PROFILE_USER="/tmp/sparkR.profile"
 
+# Build up arguments list manually to preserve quotes and backslashes.
+SUBMIT_USAGE_FUNCTION=usage
+gatherSparkSubmitOpts "$@"
+
+SPARKR_SUBMIT_ARGS=""
+whitespace="[[:space:]]"
+for i in "${SUBMISSION_OPTS[@]}"
+do
+  if [[ $i =~ \" ]]; then i=$(echo $i | sed 's/\"/\\\"/g'); fi
+  if [[ $i =~ $whitespace ]]; then i=\"$i\"; fi
+  SPARKR_SUBMIT_ARGS="$SPARKR_SUBMIT_ARGS $i"
+done
+export SPARKR_SUBMIT_ARGS
+export SPARKR_USE_SPARK_SUBMIT=1
+
+NUM_APPLICATION_OPTS=${#APPLICATION_OPTS[@]}
+
+# If a R file is provided, directly run spark-submit. 
+if [[ $NUM_APPLICATION_OPTS -gt 0 && "${APPLICATION_OPTS[0]}" =~ \.R$ ]]; then
+
 cat > /tmp/sparkR.profile << EOF
   .First <- function() {
   projecHome <- Sys.getenv("PROJECT_HOME")
@@ -41,16 +61,30 @@ cat > /tmp/sparkR.profile << EOF
 }
 EOF
 
-# Build up arguments list manually to preserve quotes and backslashes.
-SUBMIT_USAGE_FUNCTION=usage
-gatherSparkSubmitOpts "$@"
-
-# If a R file is provided, directly run spark-submit. 
-if [[ "${APPLICATION_OPTS[0]}" =~ \.R$ ]]; then
   primary="${APPLICATION_OPTS[0]}"
   shift
   # Set the main class to SparkRRunner and add the primary R file to --files to make sure its copied to the cluster
+  echo "Running $SPARK_HOME/bin/spark-submit --class edu.berkeley.cs.amplab.sparkr.SparkRRunner --files $primary ${SUBMISSION_OPTS[@]} $SPARKR_JAR_FILE $primary" "${APPLICATION_OPTS[@]:1}"
   exec "$SPARK_HOME"/bin/spark-submit --class edu.berkeley.cs.amplab.sparkr.SparkRRunner --files "$primary" "${SUBMISSION_OPTS[@]}" "$SPARKR_JAR_FILE" "$primary" "${APPLICATION_OPTS[@]:1}"
 else
-  echo "sparkR-submit can only be used to run R programs. Please use sparkR to launch a shell."
+
+  # If we don't have an R file to run, initialize context and run R
+cat > /tmp/sparkR.profile << EOF
+.First <- function() {
+  projecHome <- Sys.getenv("PROJECT_HOME")
+  Sys.setenv(NOAWT=1)
+  .libPaths(c(paste(projecHome,"/lib", sep=""), .libPaths()))
+  require(SparkR)
+  sc <- sparkR.init(Sys.getenv("MASTER", unset = ""))
+  assign("sc", sc, envir=.GlobalEnv)
+  cat("\n Welcome to SparkR!")
+  cat("\n Spark context is available as sc\n")
+}
+EOF
+  
+  # Add SPARKR_JAR, main class etc. to SPARKR_SUBMIT_ARGS 
+  export SPARKR_SUBMIT_ARGS
+
+  R
+
 fi
