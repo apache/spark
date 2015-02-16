@@ -91,7 +91,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     CacheBuilder.newBuilder().maximumSize(1000).build(cacheLoader)
   }
 
-  def refreshTable(databaseName: String, tableName: String): Unit = {
+  override def refreshTable(databaseName: String, tableName: String): Unit = {
     cachedDataSourceTables.refresh(QualifiedTableName(databaseName, tableName).toLowerCase)
   }
 

@@ -177,7 +177,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       sql("SELECT * FROM jsonTable"),
       Row("a1", "b1"))
 
-    refreshTable("jsonTable")
+    sql("REFRESH TABLE jsonTable")
 
     // Check that the refresh worked
     checkAnswer(
