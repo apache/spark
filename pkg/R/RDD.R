@@ -407,38 +407,6 @@ setMethod("collectAsMap",
             as.list(map)
           })
 
-#' Look up elements of a key in an RDD
-#'
-#' @description
-#' \code{lookup} returns a list of values in this RDD for key key.
-#'
-#' @param rdd The RDD to collect
-#' @param key The key to look up for
-#' @return a list of values in this RDD for key key
-#' @rdname lookup
-#' @export
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' pairs <- list(c(1, 1), c(2, 2), c(1, 3))
-#' rdd <- parallelize(sc, pairs)
-#' lookup(rdd, 1) # list(1, 3)
-#'}
-setGeneric("lookup", function(rdd, key) { standardGeneric("lookup") })
-
-#' @rdname lookup
-#' @aliases lookup,RDD-method
-setMethod("lookup",
-          signature(rdd = "RDD", key = "ANY"),
-          function(rdd, key) {
-            partitionFunc <- function(part) {
-              filtered <- part[unlist(lapply(part, function(x) { identical(key, x[[1]]) }))]
-              lapply(filtered, function(x) { x[[2]] })
-            }
-            valsRDD <- lapplyPartition(rdd, partitionFunc)
-            collect(valsRDD)
-          })
-
 #' Return the number of elements in the RDD.
 #'
 #' @param x The RDD to count
@@ -501,32 +469,6 @@ setMethod("countByValue",
           function(rdd) {
             ones <- lapply(rdd, function(item) { list(item, 1L) })
             collect(reduceByKey(ones, `+`, numPartitions(rdd)))
-          })
-
-#' Count the number of elements for each key, and return the result to the
-#' master as lists of (key, count) pairs.
-#'
-#' Same as countByKey in Spark.
-#'
-#' @param rdd The RDD to count keys.
-#' @return list of (key, count) pairs, where count is number of each key in rdd.
-#' @rdname countByKey
-#' @export
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' rdd <- parallelize(sc, list(c("a", 1), c("b", 1), c("a", 1)))
-#' countByKey(rdd) # ("a", 2L), ("b", 1L)
-#'}
-setGeneric("countByKey", function(rdd) { standardGeneric("countByKey") })
-
-#' @rdname countByKey
-#' @aliases countByKey,RDD-method
-setMethod("countByKey",
-          signature(rdd = "RDD"),
-          function(rdd) {
-            keys <- lapply(rdd, function(item) { item[[1]] })
-            countByValue(keys)
           })
 
 #' Apply a function to all elements
@@ -1156,668 +1098,181 @@ setMethod("saveAsTextFile",
               callJMethod(getJRDD(stringRdd, dataSerialization = FALSE), "saveAsTextFile", path))
           })
 
-#' Return an RDD with the keys of each tuple.
+#' Sort an RDD by the given key function.
 #'
-#' @param rdd The RDD from which the keys of each tuple is returned.
-#' @rdname keys
-#' @export
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' rdd <- parallelize(sc, list(list(1, 2), list(3, 4)))
-#' collect(keys(rdd)) # list(1, 3)
-#'}
-setGeneric("keys", function(rdd) { standardGeneric("keys") })
-
-#' @rdname keys
-#' @aliases keys,RDD
-setMethod("keys",
-          signature(rdd = "RDD"),
-          function(rdd) {
-            func <- function(x) {
-              x[[1]]
-            }
-            lapply(rdd, func)
-          })
-
-#' Return an RDD with the values of each tuple.
-#'
-#' @param rdd The RDD from which the values of each tuple is returned.
-#' @rdname values
-#' @export
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' rdd <- parallelize(sc, list(list(1, 2), list(3, 4)))
-#' collect(values(rdd)) # list(2, 4)
-#'}
-setGeneric("values", function(rdd) { standardGeneric("values") })
-
-#' @rdname values
-#' @aliases values,RDD
-setMethod("values",
-          signature(rdd = "RDD"),
-          function(rdd) {
-            func <- function(x) {
-              x[[2]]
-            }
-            lapply(rdd, func)
-          })
-
-#' Applies a function to all values of the elements, without modifying the keys.
-#'
-#' The same as `mapValues()' in Spark.
-#'
-#' @param X The RDD to apply the transformation.
-#' @param FUN the transformation to apply on the value of each element.
-#' @return a new RDD created by the transformation.
-#' @rdname mapValues
-#' @export
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' rdd <- parallelize(sc, 1:10)
-#' makePairs <- lapply(rdd, function(x) { list(x, x) })
-#' collect(mapValues(makePairs, function(x) { x * 2) })
-#' Output: list(list(1,2), list(2,4), list(3,6), ...)
-#'}
-setGeneric("mapValues", function(X, FUN) { standardGeneric("mapValues") })
-
-#' @rdname mapValues
-#' @aliases mapValues,RDD,function-method
-setMethod("mapValues",
-          signature(X = "RDD", FUN = "function"),
-          function(X, FUN) {
-            func <- function(x) {
-              list(x[[1]], FUN(x[[2]]))
-            }
-            lapply(X, func)
-          })
-
-#' Pass each value in the key-value pair RDD through a flatMap function without
-#' changing the keys; this also retains the original RDD's partitioning.
-#'
-#' The same as 'flatMapValues()' in Spark.
-#'
-#' @param X The RDD to apply the transformation.
-#' @param FUN the transformation to apply on the value of each element.
-#' @return a new RDD created by the transformation.
-#' @rdname flatMapValues
-#' @export
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' rdd <- parallelize(sc, list(list(1, c(1,2)), list(2, c(3,4))))
-#' collect(flatMapValues(rdd, function(x) { x }))
-#' Output: list(list(1,1), list(1,2), list(2,3), list(2,4))
-#'}
-setGeneric("flatMapValues", function(X, FUN) { standardGeneric("flatMapValues") })
-
-#' @rdname flatMapValues
-#' @aliases flatMapValues,RDD,function-method
-setMethod("flatMapValues",
-          signature(X = "RDD", FUN = "function"),
-          function(X, FUN) {
-            flatMapFunc <- function(x) {
-              lapply(FUN(x[[2]]), function(v) { list(x[[1]], v) })
-            }
-            flatMap(X, flatMapFunc)
-          })
-
-############ Shuffle Functions ############
-
-#' Partition an RDD by key
-#'
-#' This function operates on RDDs where every element is of the form list(K, V) or c(K, V).
-#' For each element of this RDD, the partitioner is used to compute a hash
-#' function and the RDD is partitioned using this hash value.
-#'
-#' @param rdd The RDD to partition. Should be an RDD where each element is
-#'             list(K, V) or c(K, V).
+#' @param rdd An RDD to be sorted.
+#' @param func A function used to compute the sort key for each element.
+#' @param ascending A flag to indicate whether the sorting is ascending or descending.
 #' @param numPartitions Number of partitions to create.
-#' @param ... Other optional arguments to partitionBy.
-#'
-#' @param partitionFunc The partition function to use. Uses a default hashCode
-#'                      function if not provided
-#' @return An RDD partitioned using the specified partitioner.
-#' @rdname partitionBy
+#' @return An RDD where all elements are sorted.
+#' @rdname sortBy
 #' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
-#' pairs <- list(list(1, 2), list(1.1, 3), list(1, 4))
-#' rdd <- parallelize(sc, pairs)
-#' parts <- partitionBy(rdd, 2L)
-#' collectPartition(parts, 0L) # First partition should contain list(1, 2) and list(1, 4)
+#' rdd <- parallelize(sc, list(3, 2, 1))
+#' collect(sortBy(rdd, function(x) { x })) # list (1, 2, 3)
 #'}
-setGeneric("partitionBy",
-           function(rdd, numPartitions, ...) {
-             standardGeneric("partitionBy")
-           })
+setGeneric("sortBy", function(rdd,
+                              func,
+                              ascending = TRUE,
+                              numPartitions = 1L) {
+                       standardGeneric("sortBy")
+                     })
 
-#' @rdname partitionBy
-#' @aliases partitionBy,RDD,integer-method
-setMethod("partitionBy",
-          signature(rdd = "RDD", numPartitions = "integer"),
-          function(rdd, numPartitions, partitionFunc = hashCode) {
-
-            #if (missing(partitionFunc)) {
-            #  partitionFunc <- hashCode
-            #}
-
-            depsBinArr <- getDependencies(partitionFunc)
-
-            serializedHashFuncBytes <- serialize(as.character(substitute(partitionFunc)),
-                                                 connection = NULL,
-                                                 ascii = TRUE)
-
-            packageNamesArr <- serialize(.sparkREnv$.packages,
-                                         connection = NULL,
-                                         ascii = TRUE)
-            broadcastArr <- lapply(ls(.broadcastNames), function(name) {
-                                   get(name, .broadcastNames) })
-            jrdd <- getJRDD(rdd)
-
-            # We create a PairwiseRRDD that extends RDD[(Array[Byte],
-            # Array[Byte])], where the key is the hashed split, the value is
-            # the content (key-val pairs).
-            pairwiseRRDD <- newJObject("edu.berkeley.cs.amplab.sparkr.PairwiseRRDD",
-                                       callJMethod(jrdd, "rdd"),
-                                       as.integer(numPartitions),
-                                       serializedHashFuncBytes,
-                                       rdd@env$serialized,
-                                       depsBinArr,
-                                       packageNamesArr,
-                                       as.character(.sparkREnv$libname),
-                                       broadcastArr,
-                                       callJMethod(jrdd, "classTag"))
-
-            # Create a corresponding partitioner.
-            rPartitioner <- newJObject("org.apache.spark.HashPartitioner",
-                                       as.integer(numPartitions))
-
-            # Call partitionBy on the obtained PairwiseRDD.
-            javaPairRDD <- callJMethod(pairwiseRRDD, "asJavaPairRDD")
-            javaPairRDD <- callJMethod(javaPairRDD, "partitionBy", rPartitioner)
-
-            # Call .values() on the result to get back the final result, the
-            # shuffled acutal content key-val pairs.
-            r <- callJMethod(javaPairRDD, "values")
-
-            RDD(r, serialized = TRUE)
+#' @rdname sortBy
+#' @aliases sortBy,RDD,RDD-method
+setMethod("sortBy",
+          signature(rdd = "RDD", func = "function"),
+          function(rdd, func, ascending = TRUE, numPartitions = SparkR::numPartitions(rdd)) {          
+            values(sortByKey(keyBy(rdd, func), ascending, numPartitions))
           })
 
-#' Group values by key
+# Helper function to get first N elements from an RDD in the specified order.
+# Param:
+#   rdd An RDD.
+#   num Number of elements to return.
+#   ascending A flag to indicate whether the sorting is ascending or descending.
+# Return:
+#   A list of the first N elements from the RDD in the specified order.
+#
+takeOrderedElem <- function(rdd, num, ascending = TRUE) {          
+  if (num <= 0L) {
+    return(list())
+  }
+  
+  partitionFunc <- function(part) {
+    if (num < length(part)) {
+      # R limitation: order works only on primitive types!
+      ord <- order(unlist(part, recursive = FALSE), decreasing = !ascending)
+      list(part[ord[1:num]])
+    } else {
+      list(part)
+    }
+  }
+
+  reduceFunc <- function(elems, part) {
+    newElems <- append(elems, part)
+    # R limitation: order works only on primitive types!
+    ord <- order(unlist(newElems, recursive = FALSE), decreasing = !ascending)
+    newElems[ord[1:num]]
+  }
+  
+  newRdd <- mapPartitions(rdd, partitionFunc)
+  reduce(newRdd, reduceFunc)
+}
+
+#' Returns the first N elements from an RDD in ascending order.
 #'
-#' This function operates on RDDs where every element is of the form list(K, V) or c(K, V).
-#' and group values for each key in the RDD into a single sequence.
-#'
-#' @param rdd The RDD to group. Should be an RDD where each element is
-#'             list(K, V) or c(K, V).
-#' @param numPartitions Number of partitions to create.
-#' @return An RDD where each element is list(K, list(V))
-#' @seealso reduceByKey
-#' @rdname groupByKey
+#' @param rdd An RDD.
+#' @param num Number of elements to return.
+#' @return The first N elements from the RDD in ascending order.
+#' @rdname takeOrdered
 #' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
-#' pairs <- list(list(1, 2), list(1.1, 3), list(1, 4))
-#' rdd <- parallelize(sc, pairs)
-#' parts <- groupByKey(rdd, 2L)
-#' grouped <- collect(parts)
-#' grouped[[1]] # Should be a list(1, list(2, 4))
+#' rdd <- parallelize(sc, list(10, 1, 2, 9, 3, 4, 5, 6, 7))
+#' takeOrdered(rdd, 6L) # list(1, 2, 3, 4, 5, 6)
 #'}
-setGeneric("groupByKey",
-           function(rdd, numPartitions) {
-             standardGeneric("groupByKey")
-           })
+setGeneric("takeOrdered", function(rdd, num) { standardGeneric("takeOrdered") })
 
-#' @rdname groupByKey
-#' @aliases groupByKey,RDD,integer-method
-setMethod("groupByKey",
-          signature(rdd = "RDD", numPartitions = "integer"),
-          function(rdd, numPartitions) {
-            shuffled <- partitionBy(rdd, numPartitions)
-            groupVals <- function(part) {
-              vals <- new.env()
-              keys <- new.env()
-              # Each item in the partition is list of (K, V)
-              lapply(part,
-                     function(item) {
-                       hashVal <- as.character(hashCode(item[[1]]))
-                       if (exists(hashVal, vals)) {
-                         acc <- vals[[hashVal]]
-                         acc[[length(acc) + 1]] <- item[[2]]
-                         vals[[hashVal]] <- acc
-                       } else {
-                         vals[[hashVal]] <- list(item[[2]])
-                         keys[[hashVal]] <- item[[1]]
-                       }
-                     })
-              # Every key in the environment contains a list
-              # Convert that to list(K, Seq[V])
-              grouped <- lapply(ls(vals),
-                                function(name) {
-                                  list(keys[[name]], vals[[name]])
-                                })
-              grouped
-            }
-            lapplyPartition(shuffled, groupVals)
+#' @rdname takeOrdered
+#' @aliases takeOrdered,RDD,RDD-method
+setMethod("takeOrdered",
+          signature(rdd = "RDD", num = "integer"),
+          function(rdd, num) {          
+            takeOrderedElem(rdd, num)
           })
 
-#' Merge values by key
+#' Returns the top N elements from an RDD.
 #'
-#' This function operates on RDDs where every element is of the form list(K, V) or c(K, V).
-#' and merges the values for each key using an associative reduce function.
-#'
-#' @param rdd The RDD to reduce by key. Should be an RDD where each element is
-#'             list(K, V) or c(K, V).
-#' @param combineFunc The associative reduce function to use.
-#' @param numPartitions Number of partitions to create.
-#' @return An RDD where each element is list(K, V') where V' is the merged
-#'         value
-#' @rdname reduceByKey
-#' @seealso groupByKey
+#' @param rdd An RDD.
+#' @param num Number of elements to return.
+#' @return The top N elements from the RDD.
+#' @rdname top
 #' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
-#' pairs <- list(list(1, 2), list(1.1, 3), list(1, 4))
-#' rdd <- parallelize(sc, pairs)
-#' parts <- reduceByKey(rdd, "+", 2L)
-#' reduced <- collect(parts)
-#' reduced[[1]] # Should be a list(1, 6)
+#' rdd <- parallelize(sc, list(10, 1, 2, 9, 3, 4, 5, 6, 7))
+#' top(rdd, 6L) # list(10, 9, 7, 6, 5, 4)
 #'}
-setGeneric("reduceByKey",
-           function(rdd, combineFunc, numPartitions) {
-             standardGeneric("reduceByKey")
-           })
+setGeneric("top", function(rdd, num) { standardGeneric("top") })
 
-#' @rdname reduceByKey
-#' @aliases reduceByKey,RDD,integer-method
-setMethod("reduceByKey",
-          signature(rdd = "RDD", combineFunc = "ANY", numPartitions = "integer"),
-          function(rdd, combineFunc, numPartitions) {
-            reduceVals <- function(part) {
-              vals <- new.env()
-              keys <- new.env()
-              lapply(part,
-                     function(item) {
-                       hashVal <- as.character(hashCode(item[[1]]))
-                       if (exists(hashVal, vals)) {
-                         vals[[hashVal]] <- do.call(
-                           combineFunc, list(vals[[hashVal]], item[[2]]))
-                       } else {
-                         vals[[hashVal]] <- item[[2]]
-                         keys[[hashVal]] <- item[[1]]
-                       }
-                     })
-              combined <- lapply(ls(vals),
-                                  function(name) {
-                                    list(keys[[name]], vals[[name]])
-                                  })
-              combined
-            }
-            locallyReduced <- lapplyPartition(rdd, reduceVals)
-            shuffled <- partitionBy(locallyReduced, numPartitions)
-            lapplyPartition(shuffled, reduceVals)
+#' @rdname top
+#' @aliases top,RDD,RDD-method
+setMethod("top",
+          signature(rdd = "RDD", num = "integer"),
+          function(rdd, num) {          
+            takeOrderedElem(rdd, num, FALSE)
           })
 
-#' Combine values by key
+#' Fold an RDD using a given associative function and a neutral "zero value".
 #'
-#' Generic function to combine the elements for each key using a custom set of
-#' aggregation functions. Turns an RDD[(K, V)] into a result of type RDD[(K, C)],
-#' for a "combined type" C. Note that V and C can be different -- for example, one
-#' might group an RDD of type (Int, Int) into an RDD of type (Int, Seq[Int]).
-
-#' Users provide three functions:
-#' \itemize{
-#'   \item createCombiner, which turns a V into a C (e.g., creates a one-element list)
-#'   \item mergeValue, to merge a V into a C (e.g., adds it to the end of a list) -
-#'   \item mergeCombiners, to combine two C's into a single one (e.g., concatentates
-#'    two lists).
-#' }
-#'
-#' @param rdd The RDD to combine. Should be an RDD where each element is
-#'             list(K, V) or c(K, V).
-#' @param createCombiner Create a combiner (C) given a value (V)
-#' @param mergeValue Merge the given value (V) with an existing combiner (C)
-#' @param mergeCombiners Merge two combiners and return a new combiner
-#' @param numPartitions Number of partitions to create.
-#' @return An RDD where each element is list(K, C) where C is the combined type
-#'
-#' @rdname combineByKey
-#' @seealso groupByKey, reduceByKey
+#' Aggregate the elements of each partition, and then the results for all the
+#' partitions, using a given associative function and a neutral "zero value".
+#' 
+#' @param rdd An RDD.
+#' @param zeroValue A neutral "zero value".
+#' @param op An associative function for the folding operation.
+#' @return The folding result.
+#' @rdname fold
+#' @seealso reduce
 #' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
-#' pairs <- list(list(1, 2), list(1.1, 3), list(1, 4))
-#' rdd <- parallelize(sc, pairs)
-#' parts <- combineByKey(rdd, function(x) { x }, "+", "+", 2L)
-#' combined <- collect(parts)
-#' combined[[1]] # Should be a list(1, 6)
+#' rdd <- parallelize(sc, list(1, 2, 3, 4, 5))
+#' fold(rdd, 0, "+") # 15
 #'}
-setGeneric("combineByKey",
-           function(rdd, createCombiner, mergeValue, mergeCombiners, numPartitions) {
-             standardGeneric("combineByKey")
-           })
+setGeneric("fold", function(rdd, zeroValue, op) { standardGeneric("fold") })
 
-#' @rdname combineByKey
-#' @aliases combineByKey,RDD,ANY,ANY,ANY,integer-method
-setMethod("combineByKey",
-          signature(rdd = "RDD", createCombiner = "ANY", mergeValue = "ANY",
-                    mergeCombiners = "ANY", numPartitions = "integer"),
-          function(rdd, createCombiner, mergeValue, mergeCombiners, numPartitions) {
-            combineLocally <- function(part) {
-              combiners <- new.env()
-              keys <- new.env()
-              lapply(part,
-                     function(item) {
-                       k <- as.character(item[[1]])
-                       if (!exists(k, keys)) {
-                         combiners[[k]] <- do.call(createCombiner,
-                                                   list(item[[2]]))
-                         keys[[k]] <- item[[1]]
-                       } else {
-                         combiners[[k]] <- do.call(mergeValue,
-                                                   list(combiners[[k]],
-                                                        item[[2]]))
-                       }
-                     })
-              lapply(ls(keys), function(k) {
-                      list(keys[[k]], combiners[[k]])
-                     })
-            }
-            locallyCombined <- lapplyPartition(rdd, combineLocally)
-            shuffled <- partitionBy(locallyCombined, numPartitions)
-            mergeAfterShuffle <- function(part) {
-              combiners <- new.env()
-              keys <- new.env()
-              lapply(part,
-                     function(item) {
-                       k <- as.character(item[[1]])
-                       if (!exists(k, combiners)) {
-                         combiners[[k]] <- item[[2]]
-                         keys[[k]] <- item[[1]]
-                       } else {
-                         combiners[[k]] <- do.call(mergeCombiners,
-                                                   list(combiners[[k]],
-                                                        item[[2]]))
-                       }
-                     })
-              lapply(ls(keys), function(k) {
-                      list(keys[[k]], combiners[[k]])
-                     })
-            }
-            combined <-lapplyPartition(shuffled, mergeAfterShuffle)
-            combined
+#' @rdname fold
+#' @aliases fold,RDD,RDD-method
+setMethod("fold",
+          signature(rdd = "RDD", zeroValue = "ANY", op = "ANY"),
+          function(rdd, zeroValue, op) {
+            aggregateRDD(rdd, zeroValue, op, op)
           })
 
-############ Binary Functions #############
-
-#' Return the union RDD of two RDDs.
-#' The same as union() in Spark.
+#' Aggregate an RDD using the given combine functions and a neutral "zero value".
 #'
-#' @param x An RDD.
-#' @param y An RDD.
-#' @return a new RDD created by performing the simple union (witout removing
-#' duplicates) of two input RDDs.
-#' @rdname unionRDD
+#' Aggregate the elements of each partition, and then the results for all the
+#' partitions, using given combine functions and a neutral "zero value".
+#' 
+#' @param rdd An RDD.
+#' @param zeroValue A neutral "zero value".
+#' @param seqOp A function to aggregate the RDD elements. It may return a different
+#'              result type from the type of the RDD elements.
+#' @param combOp A function to aggregate results of seqOp.
+#' @return The aggregation result.
+#' @rdname aggregateRDD
+#' @seealso reduce
 #' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
-#' rdd <- parallelize(sc, 1:3)
-#' unionRDD(rdd, rdd) # 1, 2, 3, 1, 2, 3
+#' rdd <- parallelize(sc, list(1, 2, 3, 4))
+#' zeroValue <- list(0, 0)
+#' seqOp <- function(x, y) { list(x[[1]] + y, x[[2]] + 1) }
+#' combOp <- function(x, y) { list(x[[1]] + y[[1]], x[[2]] + y[[2]]) }
+#' aggregateRDD(rdd, zeroValue, seqOp, combOp) # list(10, 4)
 #'}
-setGeneric("unionRDD", function(x, y) { standardGeneric("unionRDD") })
+setGeneric("aggregateRDD", function(rdd, zeroValue, seqOp, combOp) { standardGeneric("aggregateRDD") })
 
-#' @rdname unionRDD
-#' @aliases unionRDD,RDD,RDD-method
-setMethod("unionRDD",
-          signature(x = "RDD", y = "RDD"),
-          function(x, y) {
-            if (x@env$serialized == y@env$serialized) {
-              jrdd <- callJMethod(getJRDD(x), "union", getJRDD(y))
-              union.rdd <- RDD(jrdd, x@env$serialized)
-            } else {
-              # One of the RDDs is not serialized, we need to serialize it first.
-              if (!x@env$serialized) {
-                x <- reserialize(x)
-              } else {
-                y <- reserialize(y)
-              }
-              jrdd <- callJMethod(getJRDD(x), "union", getJRDD(y))
-              union.rdd <- RDD(jrdd, TRUE)
-            }
-            union.rdd
-          })
-
-#' Join two RDDs
-#'
-#' This function joins two RDDs where every element is of the form list(K, V).
-#' The key types of the two RDDs should be the same.
-#'
-#' @param rdd1 An RDD to be joined. Should be an RDD where each element is
-#'             list(K, V).
-#' @param rdd2 An RDD to be joined. Should be an RDD where each element is
-#'             list(K, V).
-#' @param numPartitions Number of partitions to create.
-#' @return a new RDD containing all pairs of elements with matching keys in
-#'         two input RDDs.
-#' @rdname join
-#' @export
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' rdd1 <- parallelize(sc, list(list(1, 1), list(2, 4)))
-#' rdd2 <- parallelize(sc, list(list(1, 2), list(1, 3)))
-#' join(rdd1, rdd2, 2L) # list(list(1, list(1, 2)), list(1, list(1, 3))
-#'}
-setGeneric("join", function(rdd1, rdd2, numPartitions) { standardGeneric("join") })
-
-#' @rdname join
-#' @aliases join,RDD,RDD-method
-setMethod("join",
-          signature(rdd1 = "RDD", rdd2 = "RDD", numPartitions = "integer"),
-          function(rdd1, rdd2, numPartitions) {
-            rdd1Tagged <- lapply(rdd1, function(x) { list(x[[1]], list(1L, x[[2]])) })
-            rdd2Tagged <- lapply(rdd2, function(x) { list(x[[1]], list(2L, x[[2]])) })
-            
-            doJoin <- function(v) {
-              joinTaggedList(v, list(FALSE, FALSE))
+#' @rdname aggregateRDD
+#' @aliases aggregateRDD,RDD,RDD-method
+setMethod("aggregateRDD",
+          signature(rdd = "RDD", zeroValue = "ANY", seqOp = "ANY", combOp = "ANY"),
+          function(rdd, zeroValue, seqOp, combOp) {        
+            partitionFunc <- function(part) {
+              Reduce(seqOp, part, zeroValue)
             }
             
-            joined <- flatMapValues(groupByKey(unionRDD(rdd1Tagged, rdd2Tagged), numPartitions), doJoin)
-          })
-
-#' Left outer join two RDDs
-#'
-#' This function left-outer-joins two RDDs where every element is of the form list(K, V).
-#' The key types of the two RDDs should be the same.
-#'
-#' @param rdd1 An RDD to be joined. Should be an RDD where each element is
-#'             list(K, V).
-#' @param rdd2 An RDD to be joined. Should be an RDD where each element is
-#'             list(K, V).
-#' @param numPartitions Number of partitions to create.
-#' @return For each element (k, v) in rdd1, the resulting RDD will either contain 
-#'         all pairs (k, (v, w)) for (k, w) in rdd2, or the pair (k, (v, NULL)) 
-#'         if no elements in rdd2 have key k.
-#' @rdname leftOuterJoin
-#' @export
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' rdd1 <- parallelize(sc, list(list(1, 1), list(2, 4)))
-#' rdd2 <- parallelize(sc, list(list(1, 2), list(1, 3)))
-#' leftOuterJoin(rdd1, rdd2, 2L)
-#' # list(list(1, list(1, 2)), list(1, list(1, 3)), list(2, list(4, NULL)))
-#'}
-setGeneric("leftOuterJoin", function(rdd1, rdd2, numPartitions) { standardGeneric("leftOuterJoin") })
-
-#' @rdname leftOuterJoin
-#' @aliases leftOuterJoin,RDD,RDD-method
-setMethod("leftOuterJoin",
-          signature(rdd1 = "RDD", rdd2 = "RDD", numPartitions = "integer"),
-          function(rdd1, rdd2, numPartitions) {
-            rdd1Tagged <- lapply(rdd1, function(x) { list(x[[1]], list(1L, x[[2]])) })
-            rdd2Tagged <- lapply(rdd2, function(x) { list(x[[1]], list(2L, x[[2]])) })
-            
-            doJoin <- function(v) {
-              joinTaggedList(v, list(FALSE, TRUE))
-            }
-            
-            joined <- flatMapValues(groupByKey(unionRDD(rdd1Tagged, rdd2Tagged), numPartitions), doJoin)
-          })
-
-#' Right outer join two RDDs
-#'
-#' This function right-outer-joins two RDDs where every element is of the form list(K, V).
-#' The key types of the two RDDs should be the same.
-#'
-#' @param rdd1 An RDD to be joined. Should be an RDD where each element is
-#'             list(K, V).
-#' @param rdd2 An RDD to be joined. Should be an RDD where each element is
-#'             list(K, V).
-#' @param numPartitions Number of partitions to create.
-#' @return For each element (k, w) in rdd2, the resulting RDD will either contain
-#'         all pairs (k, (v, w)) for (k, v) in rdd1, or the pair (k, (NULL, w))
-#'         if no elements in rdd1 have key k.
-#' @rdname rightOuterJoin
-#' @export
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' rdd1 <- parallelize(sc, list(list(1, 2), list(1, 3)))
-#' rdd2 <- parallelize(sc, list(list(1, 1), list(2, 4)))
-#' rightOuterJoin(rdd1, rdd2, 2L)
-#' # list(list(1, list(2, 1)), list(1, list(3, 1)), list(2, list(NULL, 4)))
-#'}
-setGeneric("rightOuterJoin", function(rdd1, rdd2, numPartitions) { standardGeneric("rightOuterJoin") })
-
-#' @rdname rightOuterJoin
-#' @aliases rightOuterJoin,RDD,RDD-method
-setMethod("rightOuterJoin",
-          signature(rdd1 = "RDD", rdd2 = "RDD", numPartitions = "integer"),
-          function(rdd1, rdd2, numPartitions) {
-            rdd1Tagged <- lapply(rdd1, function(x) { list(x[[1]], list(1L, x[[2]])) })
-            rdd2Tagged <- lapply(rdd2, function(x) { list(x[[1]], list(2L, x[[2]])) })
-            
-            doJoin <- function(v) {
-              joinTaggedList(v, list(TRUE, FALSE))
-            }
-            
-            joined <- flatMapValues(groupByKey(unionRDD(rdd1Tagged, rdd2Tagged), numPartitions), doJoin)
-          })
-
-#' Full outer join two RDDs
-#'
-#' This function full-outer-joins two RDDs where every element is of the form 
-#' list(K, V). 
-#' The key types of the two RDDs should be the same.
-#'
-#' @param rdd1 An RDD to be joined. Should be an RDD where each element is
-#'             list(K, V).
-#' @param rdd2 An RDD to be joined. Should be an RDD where each element is
-#'             list(K, V).
-#' @param numPartitions Number of partitions to create.
-#' @return For each element (k, v) in rdd1 and (k, w) in rdd2, the resulting RDD
-#'         will contain all pairs (k, (v, w)) for both (k, v) in rdd1 and and
-#'         (k, w) in rdd2, or the pair (k, (NULL, w))/(k, (v, NULL)) if no elements 
-#'         in rdd1/rdd2 have key k.
-#' @rdname fullOuterJoin
-#' @export
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' rdd1 <- parallelize(sc, list(list(1, 2), list(1, 3), list(3, 3)))
-#' rdd2 <- parallelize(sc, list(list(1, 1), list(2, 4)))
-#' fullOuterJoin(rdd1, rdd2, 2L) # list(list(1, list(2, 1)),
-#'                               #      list(1, list(3, 1)),
-#'                               #      list(2, list(NULL, 4)))
-#'                               #      list(3, list(3, NULL)),
-#'}
-setGeneric("fullOuterJoin", function(rdd1, rdd2, numPartitions) { standardGeneric("fullOuterJoin") })
-
-#' @rdname fullOuterJoin
-#' @aliases fullOuterJoin,RDD,RDD-method
-
-setMethod("fullOuterJoin",
-          signature(rdd1 = "RDD", rdd2 = "RDD", numPartitions = "integer"),
-          function(rdd1, rdd2, numPartitions) {
-            rdd1Tagged <- lapply(rdd1, function(x) { list(x[[1]], list(1L, x[[2]])) })
-            rdd2Tagged <- lapply(rdd2, function(x) { list(x[[1]], list(2L, x[[2]])) })
-
-            doJoin <- function(v) {
-              joinTaggedList(v, list(TRUE, TRUE))
-            }
-
-            joined <- flatMapValues(groupByKey(unionRDD(rdd1Tagged, rdd2Tagged), numPartitions), doJoin)
-          })
-
-#' For each key k in several RDDs, return a resulting RDD that
-#' whose values are a list of values for the key in all RDDs.
-#'
-#' @param ... Several RDDs.
-#' @param numPartitions Number of partitions to create.
-#' @return a new RDD containing all pairs of elements with values in a list
-#' in all RDDs.
-#' @rdname cogroup
-#' @export
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' rdd1 <- parallelize(sc, list(list(1, 1), list(2, 4)))
-#' rdd2 <- parallelize(sc, list(list(1, 2), list(1, 3)))
-#' cogroup(rdd1, rdd2, numPartitions = 2L) 
-#' # list(list(1, list(1, list(2, 3))), list(2, list(list(4), list()))
-#'}
-setGeneric("cogroup", 
-           function(..., numPartitions) { standardGeneric("cogroup") },
-           signature = "...")
-
-#' @rdname cogroup
-#' @aliases cogroup,RDD-method
-setMethod("cogroup",
-          "RDD",
-          function(..., numPartitions) {
-            rdds <- list(...)
-            rddsLen <- length(rdds)
-            for (i in 1:rddsLen) {
-              rdds[[i]] <- lapply(rdds[[i]], 
-                                  function(x) { list(x[[1]], list(i, x[[2]])) })
-              # TODO(hao): As issue [SparkR-142] mentions, the right value of i
-              # will not be captured into UDF if getJRDD is not invoked.
-              # It should be resolved together with that issue.
-              getJRDD(rdds[[i]])  # Capture the closure.
-            }
-            union.rdd <- Reduce(unionRDD, rdds)
-            group.func <- function(vlist) {
-              res <- list()
-              length(res) <- rddsLen
-              for (x in vlist) {
-                i <- x[[1]]
-                acc <- res[[i]]
-                # Create an accumulator.
-                if (is.null(acc)) {
-                  acc <- SparkR:::initAccumulator()
-                }
-                SparkR:::addItemToAccumulator(acc, x[[2]])
-                res[[i]] <- acc
-              }
-              lapply(res, function(acc) {
-                if (is.null(acc)) {
-                  list()
-                } else {
-                  acc$data
-                }
-              })
-            }
-            cogroup.rdd <- mapValues(groupByKey(union.rdd, numPartitions), 
-                                     group.func)
+            partitionList <- collect(lapplyPartition(rdd, partitionFunc),
+                                     flatten = FALSE)
+            Reduce(combOp, partitionList, zeroValue)
           })
 
 # TODO: Consider caching the name in the RDD's environment
@@ -1865,4 +1320,44 @@ setMethod("setName",
           function(rdd, name) {
             callJMethod(getJRDD(rdd), "setName", name)
             rdd
+          })
+
+############ Binary Functions #############
+
+#' Return the union RDD of two RDDs.
+#' The same as union() in Spark.
+#'
+#' @param x An RDD.
+#' @param y An RDD.
+#' @return a new RDD created by performing the simple union (witout removing
+#' duplicates) of two input RDDs.
+#' @rdname unionRDD
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:3)
+#' unionRDD(rdd, rdd) # 1, 2, 3, 1, 2, 3
+#'}
+setGeneric("unionRDD", function(x, y) { standardGeneric("unionRDD") })
+
+#' @rdname unionRDD
+#' @aliases unionRDD,RDD,RDD-method
+setMethod("unionRDD",
+          signature(x = "RDD", y = "RDD"),
+          function(x, y) {
+            if (x@env$serialized == y@env$serialized) {
+              jrdd <- callJMethod(getJRDD(x), "union", getJRDD(y))
+              union.rdd <- RDD(jrdd, x@env$serialized)
+            } else {
+              # One of the RDDs is not serialized, we need to serialize it first.
+              if (!x@env$serialized) {
+                x <- reserialize(x)
+              } else {
+                y <- reserialize(y)
+              }
+              jrdd <- callJMethod(getJRDD(x), "union", getJRDD(y))
+              union.rdd <- RDD(jrdd, TRUE)
+            }
+            union.rdd
           })

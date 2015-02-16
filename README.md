@@ -84,7 +84,12 @@ pass the variable `spark.executor.memory` to the SparkContext constructor.
     sc <- sparkR.init(master="spark://<master>:7077",
                       sparkEnvir=list(spark.executor.memory="1g"))
 
+Finally, to stop the cluster run
 
+    sparkR.stop()
+    
+sparkR.stop() can be invoked to terminate a SparkContext created previously via sparkR.init(). Then you can call sparR.init() again to create a new SparkContext that may have different configurations.
+    
 ## Examples, Unit tests
 
 SparkR comes with several sample programs in the `examples` directory.

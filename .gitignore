@@ -20,3 +20,6 @@ work/
 SparkR-pkg.Rproj
 *.o
 *.so
+# Eclipse Meta Files
+.project
+.classpath
