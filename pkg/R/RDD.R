@@ -1275,129 +1275,6 @@ setMethod("aggregateRDD",
             Reduce(combOp, partitionList, zeroValue)
           })
 
-############ Shuffle Functions ############
-
-#' Partition an RDD by key
-#'
-#' This function operates on RDDs where every element is of the form list(K, V) or c(K, V).
-#' For each element of this RDD, the partitioner is used to compute a hash
-#' function and the RDD is partitioned using this hash value.
-#'
-#' @param rdd The RDD to partition. Should be an RDD where each element is
-#'             list(K, V) or c(K, V).
-#' @param numPartitions Number of partitions to create.
-#' @param ... Other optional arguments to partitionBy.
-#'
-#' @param partitionFunc The partition function to use. Uses a default hashCode
-#'                      function if not provided
-#' @return An RDD partitioned using the specified partitioner.
-#' @rdname partitionBy
-#' @export
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' pairs <- list(list(1, 2), list(1.1, 3), list(1, 4))
-#' rdd <- parallelize(sc, pairs)
-#' parts <- partitionBy(rdd, 2L)
-#' collectPartition(parts, 0L) # First partition should contain list(1, 2) and list(1, 4)
-#'}
-setGeneric("partitionBy",
-           function(rdd, numPartitions, ...) {
-             standardGeneric("partitionBy")
-           })
-
-#' @rdname partitionBy
-#' @aliases partitionBy,RDD,integer-method
-setMethod("partitionBy",
-          signature(rdd = "RDD", numPartitions = "integer"),
-          function(rdd, numPartitions, partitionFunc = hashCode) {
-
-            #if (missing(partitionFunc)) {
-            #  partitionFunc <- hashCode
-            #}
-
-            depsBinArr <- getDependencies(partitionFunc)
-
-            serializedHashFuncBytes <- serialize(as.character(substitute(partitionFunc)),
-                                                 connection = NULL,
-                                                 ascii = TRUE)
-
-            packageNamesArr <- serialize(.sparkREnv$.packages,
-                                         connection = NULL,
-                                         ascii = TRUE)
-            broadcastArr <- lapply(ls(.broadcastNames), function(name) {
-                                   get(name, .broadcastNames) })
-            jrdd <- getJRDD(rdd)
-
-            # We create a PairwiseRRDD that extends RDD[(Array[Byte],
-            # Array[Byte])], where the key is the hashed split, the value is
-            # the content (key-val pairs).
-            pairwiseRRDD <- newJObject("edu.berkeley.cs.amplab.sparkr.PairwiseRRDD",
-                                       callJMethod(jrdd, "rdd"),
-                                       as.integer(numPartitions),
-                                       serializedHashFuncBytes,
-                                       rdd@env$serialized,
-                                       depsBinArr,
-                                       packageNamesArr,
-                                       as.character(.sparkREnv$libname),
-                                       broadcastArr,
-                                       callJMethod(jrdd, "classTag"))
-
-            # Create a corresponding partitioner.
-            rPartitioner <- newJObject("org.apache.spark.HashPartitioner",
-                                       as.integer(numPartitions))
-
-            # Call partitionBy on the obtained PairwiseRDD.
-            javaPairRDD <- callJMethod(pairwiseRRDD, "asJavaPairRDD")
-            javaPairRDD <- callJMethod(javaPairRDD, "partitionBy", rPartitioner)
-
-            # Call .values() on the result to get back the final result, the
-            # shuffled acutal content key-val pairs.
-            r <- callJMethod(javaPairRDD, "values")
-
-            RDD(r, serialized = TRUE)
-          })
-
-############ Binary Functions #############
-
-#' Return the union RDD of two RDDs.
-#' The same as union() in Spark.
-#'
-#' @param x An RDD.
-#' @param y An RDD.
-#' @return a new RDD created by performing the simple union (witout removing
-#' duplicates) of two input RDDs.
-#' @rdname unionRDD
-#' @export
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' rdd <- parallelize(sc, 1:3)
-#' unionRDD(rdd, rdd) # 1, 2, 3, 1, 2, 3
-#'}
-setGeneric("unionRDD", function(x, y) { standardGeneric("unionRDD") })
-
-#' @rdname unionRDD
-#' @aliases unionRDD,RDD,RDD-method
-setMethod("unionRDD",
-          signature(x = "RDD", y = "RDD"),
-          function(x, y) {
-            if (x@env$serialized == y@env$serialized) {
-              jrdd <- callJMethod(getJRDD(x), "union", getJRDD(y))
-              union.rdd <- RDD(jrdd, x@env$serialized)
-            } else {
-              # One of the RDDs is not serialized, we need to serialize it first.
-              if (!x@env$serialized) {
-                x <- reserialize(x)
-              } else {
-                y <- reserialize(y)
-              }
-              jrdd <- callJMethod(getJRDD(x), "union", getJRDD(y))
-              union.rdd <- RDD(jrdd, TRUE)
-            }
-            union.rdd
-          })
-
 # TODO: Consider caching the name in the RDD's environment
 #' Return an RDD's name.
 #'
@@ -1443,4 +1320,44 @@ setMethod("setName",
           function(rdd, name) {
             callJMethod(getJRDD(rdd), "setName", name)
             rdd
+          })
+
+############ Binary Functions #############
+
+#' Return the union RDD of two RDDs.
+#' The same as union() in Spark.
+#'
+#' @param x An RDD.
+#' @param y An RDD.
+#' @return a new RDD created by performing the simple union (witout removing
+#' duplicates) of two input RDDs.
+#' @rdname unionRDD
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:3)
+#' unionRDD(rdd, rdd) # 1, 2, 3, 1, 2, 3
+#'}
+setGeneric("unionRDD", function(x, y) { standardGeneric("unionRDD") })
+
+#' @rdname unionRDD
+#' @aliases unionRDD,RDD,RDD-method
+setMethod("unionRDD",
+          signature(x = "RDD", y = "RDD"),
+          function(x, y) {
+            if (x@env$serialized == y@env$serialized) {
+              jrdd <- callJMethod(getJRDD(x), "union", getJRDD(y))
+              union.rdd <- RDD(jrdd, x@env$serialized)
+            } else {
+              # One of the RDDs is not serialized, we need to serialize it first.
+              if (!x@env$serialized) {
+                x <- reserialize(x)
+              } else {
+                y <- reserialize(y)
+              }
+              jrdd <- callJMethod(getJRDD(x), "union", getJRDD(y))
+              union.rdd <- RDD(jrdd, TRUE)
+            }
+            union.rdd
           })
