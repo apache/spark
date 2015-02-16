@@ -88,12 +88,12 @@ private[sql] class DataFrameImpl protected[sql](
     }
   }
 
-  protected[sql] def numericColumns: Seq[Expression] = {
+  protected[sql] def numericColumns(): Seq[Expression] = {
     schema.fields.filter(_.dataType.isInstanceOf[NumericType]).map { n =>
       queryExecution.analyzed.resolve(n.name, sqlContext.analyzer.resolver).get
     }
   }
-
+ 
   override def toDF(colNames: String*): DataFrame = {
     require(schema.size == colNames.size,
       "The number of columns doesn't match.\n" +
