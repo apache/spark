@@ -134,8 +134,9 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
     blockId match {
       case rddOrBroadcastBlockId @ (_: BroadcastBlockId | _: RDDBlockId) =>
         val (id, blockMap) = getIdAndBlockMap(rddOrBroadcastBlockId)
-        val removed = blockMap(id).remove(blockId)
+        var removed: Option[BlockStatus] = None
         if (blockMap.contains(id)) {
+          removed = blockMap(id).remove(blockId)
           if (blockMap(id).isEmpty) {
             blockMap.remove(id)
           }
