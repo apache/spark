@@ -87,8 +87,8 @@ class CoarseMesosSchedulerBackendSuite extends FunSuite
       2
     ))
 
-    val taskDesc = new TaskDescription(1L, "s1", "n1", 0, ByteBuffer.wrap(new Array[Byte](0)))
-    val taskDesc2 = new TaskDescription(2L, "s2", "n2", 0, ByteBuffer.wrap(new Array[Byte](0)))
+    val taskDesc = new TaskDescription(1L, 0, "s1", "n1", 0, ByteBuffer.wrap(new Array[Byte](0)))
+    val taskDesc2 = new TaskDescription(2L, 0, "s2", "n2", 0, ByteBuffer.wrap(new Array[Byte](0)))
     EasyMock.expect(taskScheduler.resourceOffers(EasyMock.eq(expectedWorkerOffers)))
       .andReturn(Seq(Seq(taskDesc, taskDesc2)))
     EasyMock.expect(taskScheduler.CPUS_PER_TASK).andReturn(2).anyTimes()
