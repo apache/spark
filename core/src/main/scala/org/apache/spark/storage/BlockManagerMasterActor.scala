@@ -435,8 +435,6 @@ private[spark] class BlockManagerInfo(
       diskSize: Long,
       tachyonSize: Long): BlockStatus =  {
 
-    var blockStatus: BlockStatus = null
-
     updateLastSeenMs()
     if (_blocks.containsKey(blockId)) {
       // The block exists on the slave already.
@@ -473,10 +471,10 @@ private[spark] class BlockManagerInfo(
         logInfo("Added %s on tachyon on %s (size: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(tachyonSize)))
       }
-      blockStatus =  _blocks.get(blockId)
+      _blocks.get(blockId)
     } else if (_blocks.containsKey(blockId)) {
       // If isValid is not true, drop the block.
-      blockStatus = _blocks.get(blockId)
+      val blockStatus = _blocks.get(blockId)
       _blocks.remove(blockId)
       if (blockStatus.storageLevel.useMemory) {
         logInfo("Removed %s on %s in memory (size: %s, free: %s)".format(
@@ -493,7 +491,7 @@ private[spark] class BlockManagerInfo(
       }
       return BlockStatus(storageLevel, 0, 0, 0)
     }
-    blockStatus
+    null
   }
 
   def removeBlock(blockId: BlockId) {

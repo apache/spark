@@ -75,12 +75,12 @@ class BroadcastInfo(
         name, id, bytesToString(memSize), bytesToString(tachyonSize), bytesToString(diskSize))
   }
 
-  override def compare(that: BroadcastInfo) = {
+  override def compare(that: BroadcastInfo): Int = {
     if (this.id > that.id) {
       1
     } else {
       if (this.id == that.id) {
-        0
+        return 0
       }
       -1
     }
