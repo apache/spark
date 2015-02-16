@@ -428,7 +428,7 @@ private[spark] class BlockManagerInfo(
     _lastSeenMs = System.currentTimeMillis()
   }
 
-  def updateBlockInfo(
+  private[storage] def updateBlockInfo(
       blockId: BlockId,
       storageLevel: StorageLevel,
       memSize: Long,
@@ -471,7 +471,7 @@ private[spark] class BlockManagerInfo(
         logInfo("Added %s on tachyon on %s (size: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(tachyonSize)))
       }
-      _blocks.get(blockId)
+      return _blocks.get(blockId)
     } else if (_blocks.containsKey(blockId)) {
       // If isValid is not true, drop the block.
       val blockStatus = _blocks.get(blockId)

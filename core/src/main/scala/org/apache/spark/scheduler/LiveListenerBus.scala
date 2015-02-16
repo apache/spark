@@ -34,8 +34,6 @@ private[spark] class LiveListenerBus
 
   private val logDroppedEvent = new AtomicBoolean(false)
   
-  private[spark] var filter: DefaultSparkListenerEventFilter = null
-
   override def onDropEvent(event: SparkListenerEvent): Unit = {
     if (logDroppedEvent.compareAndSet(false, true)) {
       // Only log the following message once to avoid duplicated annoying logs.

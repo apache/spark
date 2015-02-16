@@ -24,7 +24,13 @@ import org.apache.spark.util.ListenerBus
  */
 private[spark] trait SparkListenerBus extends ListenerBus[SparkListener, SparkListenerEvent] {
 
+  private[spark] var filter: DefaultSparkListenerEventFilter = null
+
   override def onPostEvent(listener: SparkListener, event: SparkListenerEvent): Unit = {
+    if (!filter.validate(event)) {
+      return  
+    }
+    
     event match {
       case stageSubmitted: SparkListenerStageSubmitted =>
         listener.onStageSubmitted(stageSubmitted)

@@ -19,6 +19,8 @@ package org.apache.spark.util
 
 import java.util.concurrent.CopyOnWriteArrayList
 
+import org.apache.spark.scheduler.DefaultSparkListenerEventFilter
+
 import scala.util.control.NonFatal
 
 import org.apache.spark.Logging
