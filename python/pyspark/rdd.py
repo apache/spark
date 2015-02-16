@@ -1632,14 +1632,14 @@ class RDD(object):
                 yield pack_long(split)
                 yield outputSerializer.dumps(items)
 
-        keyed = self.mapPartitionsWithIndex(add_shuffle_key)
+        keyed = self.mapPartitionsWithIndex(add_shuffle_key, preservesPartitioning=True)
         keyed._bypass_serializer = True
         with SCCallSiteSync(self.context) as css:
             pairRDD = self.ctx._jvm.PairwiseRDD(
                 keyed._jrdd.rdd()).asJavaPairRDD()
             partitioner = self.ctx._jvm.PythonPartitioner(numPartitions,
                                                           id(partitionFunc))
-        jrdd = pairRDD.partitionBy(partitioner).values()
+        jrdd = self.ctx._jvm.PythonRDD.valueOfPair(pairRDD.partitionBy(partitioner))
         rdd = RDD(jrdd, self.ctx, BatchedSerializer(outputSerializer))
         # This is required so that id(partitionFunc) remains unique,
         # even if partitionFunc is a lambda:
@@ -1689,7 +1689,7 @@ class RDD(object):
             merger.mergeValues(iterator)
             return merger.iteritems()
 
-        locally_combined = self.mapPartitions(combineLocally)
+        locally_combined = self.mapPartitions(combineLocally, preservesPartitioning=True)
         shuffled = locally_combined.partitionBy(numPartitions)
 
         def _mergeCombiners(iterator):
@@ -1698,7 +1698,7 @@ class RDD(object):
             merger.mergeCombiners(iterator)
             return merger.iteritems()
 
-        return shuffled.mapPartitions(_mergeCombiners, True)
+        return shuffled.mapPartitions(_mergeCombiners, preservesPartitioning=True)
 
     def aggregateByKey(self, zeroValue, seqFunc, combFunc, numPartitions=None):
         """

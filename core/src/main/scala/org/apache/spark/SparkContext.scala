@@ -961,7 +961,14 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /** Build the union of a list of RDDs. */
-  def union[T: ClassTag](rdds: Seq[RDD[T]]): RDD[T] = new UnionRDD(this, rdds)
+  def union[T: ClassTag](rdds: Seq[RDD[T]]): RDD[T] = {
+    val partitioners = rdds.map(_.partitioner).toSet
+    if (partitioners.size == 1 && partitioners.head.isDefined) {
+      new PartitionerAwareUnionRDD(this, rdds)
+    } else {
+      new UnionRDD(this, rdds)
+    }
+  }
 
   /** Build the union of a list of RDDs passed as variable-length arguments. */
   def union[T: ClassTag](first: RDD[T], rest: RDD[T]*): RDD[T] =
