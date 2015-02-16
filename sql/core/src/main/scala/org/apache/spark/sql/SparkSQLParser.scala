@@ -23,7 +23,7 @@ import scala.util.parsing.combinator.RegexParsers
 import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.{UncacheTableCommand, CacheTableCommand, SetCommand}
+import org.apache.spark.sql.execution.{ShowTablesCommand, UncacheTableCommand, CacheTableCommand, SetCommand}
 import org.apache.spark.sql.types.StringType
 
 
@@ -57,12 +57,15 @@ private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends Abstr
 
   protected val AS      = Keyword("AS")
   protected val CACHE   = Keyword("CACHE")
+  protected val IN      = Keyword("IN")
   protected val LAZY    = Keyword("LAZY")
   protected val SET     = Keyword("SET")
+  protected val SHOW    = Keyword("SHOW")
   protected val TABLE   = Keyword("TABLE")
+  protected val TABLES  = Keyword("TABLES")
   protected val UNCACHE = Keyword("UNCACHE")
 
-  override protected lazy val start: Parser[LogicalPlan] = cache | uncache | set | others
+  override protected lazy val start: Parser[LogicalPlan] = cache | uncache | set | show | others
 
   private lazy val cache: Parser[LogicalPlan] =
     CACHE ~> LAZY.? ~ (TABLE ~> ident) ~ (AS ~> restInput).? ^^ {
@@ -78,6 +81,11 @@ private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends Abstr
   private lazy val set: Parser[LogicalPlan] =
     SET ~> restInput ^^ {
       case input => SetCommandParser(input)
+    }
+
+  private lazy val show: Parser[LogicalPlan] =
+    SHOW ~> TABLES ~ (IN ~> ident).? ^^ {
+      case _ ~ dbName => ShowTablesCommand(dbName)
     }
 
   private lazy val others: Parser[LogicalPlan] =

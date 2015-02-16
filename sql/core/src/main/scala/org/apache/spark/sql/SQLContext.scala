@@ -793,7 +793,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * indicating if a table is a temporary one or not).
    */
   def tables(): DataFrame = {
-    createDataFrame(catalog.getTables(None)).toDF("tableName", "isTemporary")
+    // Set the nullable field of both tableName and isTemporary to false.
+    val schema = StructType(
+      StructField("tableName", StringType, false) ::
+      StructField("isTemporary", BooleanType, false) :: Nil)
+    val df = DataFrame(
+      self,
+      LocalRelation.fromProduct(schema.toAttributes, catalog.getTables(None)))
+    df.toDF("tableName", "isTemporary")
   }
 
   /**
@@ -802,7 +809,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * indicating if a table is a temporary one or not).
    */
   def tables(databaseName: String): DataFrame = {
-    createDataFrame(catalog.getTables(Some(databaseName))).toDF("tableName", "isTemporary")
+    // Set the nullable field of both tableName and isTemporary to false.
+    val schema = StructType(
+      StructField("tableName", StringType, false) ::
+      StructField("isTemporary", BooleanType, false) :: Nil)
+    val df = DataFrame(
+      self,
+      LocalRelation.fromProduct(schema.toAttributes, catalog.getTables(Some(databaseName))))
+    df.toDF("tableName", "isTemporary")
   }
 
   /**
