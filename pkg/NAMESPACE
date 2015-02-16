@@ -41,6 +41,7 @@ exportMethods(
               "numPartitions",
               "partitionBy",
               "persist",
+              "pipeRDD",
               "reduce",
               "reduceByKey",
               "reduceByKeyLocally",

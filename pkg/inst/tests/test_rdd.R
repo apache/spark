@@ -336,6 +336,18 @@ test_that("values() on RDDs", {
   expect_equal(actual, lapply(intPairs, function(x) { x[[2]] }))
 })
 
+test_that("pipeRDD() on RDDs", {
+  actual <- collect(pipeRDD(rdd, "more"))
+  expected <- as.list(as.character(1:10))
+  expect_equal(actual, expected)
+  
+  rev.nums <- 9:0
+  rev.rdd <- parallelize(sc, rev.nums, 2L)
+  actual <- collect(pipeRDD(rev.rdd, "sort"))
+  expected <- as.list(as.character(c(5:9, 0:4)))
+  expect_equal(actual, expected)
+})
+
 test_that("join() on pairwise RDDs", {
   rdd1 <- parallelize(sc, list(list(1,1), list(2,4)))
   rdd2 <- parallelize(sc, list(list(1,2), list(1,3)))
