@@ -64,7 +64,6 @@ private[hive] object HiveQl {
     "TOK_SHOWINDEXES",
     "TOK_SHOWINDEXES",
     "TOK_SHOWPARTITIONS",
-    "TOK_SHOWTABLES",
     "TOK_SHOW_TBLPROPERTIES",
 
     "TOK_LOCKTABLE",
@@ -129,6 +128,7 @@ private[hive] object HiveQl {
   // Commands that we do not need to explain.
   protected val noExplainCommands = Seq(
     "TOK_DESCTABLE",
+    "TOK_SHOWTABLES",
     "TOK_TRUNCATETABLE"     // truncate table" is a NativeCommand, does not need to explain.
   ) ++ nativeCommands
 

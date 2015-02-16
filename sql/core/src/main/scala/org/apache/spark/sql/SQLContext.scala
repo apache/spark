@@ -794,7 +794,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * indicating if a table is a temporary one or not).
    */
   def tables(): DataFrame = {
-    createDataFrame(catalog.getTables(None)).toDF("tableName", "isTemporary")
+    DataFrame(this, ShowTablesCommand(None))
   }
 
   /**
@@ -803,7 +803,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * indicating if a table is a temporary one or not).
    */
   def tables(databaseName: String): DataFrame = {
-    createDataFrame(catalog.getTables(Some(databaseName))).toDF("tableName", "isTemporary")
+    DataFrame(this, ShowTablesCommand(Some(databaseName)))
   }
 
   /**
