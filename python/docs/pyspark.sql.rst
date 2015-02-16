@@ -16,3 +16,11 @@ pyspark.sql.types module
     :members:
     :undoc-members:
     :show-inheritance:
+
+
+pyspark.sql.functions module
+------------------------
+.. automodule:: pyspark.sql.functions
+    :members:
+    :undoc-members:
+    :show-inheritance:

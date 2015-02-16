@@ -187,8 +187,8 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ ("rank" -> model.rank)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
-      model.userFeatures.toDataFrame("id", "features").saveAsParquetFile(userPath(path))
-      model.productFeatures.toDataFrame("id", "features").saveAsParquetFile(productPath(path))
+      model.userFeatures.toDF("id", "features").saveAsParquetFile(userPath(path))
+      model.productFeatures.toDF("id", "features").saveAsParquetFile(productPath(path))
     }
 
     def load(sc: SparkContext, path: String): MatrixFactorizationModel = {

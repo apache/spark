@@ -36,7 +36,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.mllib.optimization.NNLS
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.Dsl._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, FloatType, IntegerType, StructField, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -170,8 +170,8 @@ class ALSModel private[ml] (
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     import dataset.sqlContext.implicits._
     val map = this.paramMap ++ paramMap
-    val users = userFactors.toDataFrame("id", "features")
-    val items = itemFactors.toDataFrame("id", "features")
+    val users = userFactors.toDF("id", "features")
+    val items = itemFactors.toDF("id", "features")
 
     // Register a UDF for DataFrame, and then
     // create a new column named map(predictionCol) by running the predict UDF.

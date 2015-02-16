@@ -90,7 +90,7 @@ trait ParquetTest {
       (f: String => Unit): Unit = {
     import sqlContext.implicits._
     withTempPath { file =>
-      sparkContext.parallelize(data).saveAsParquetFile(file.getCanonicalPath)
+      sparkContext.parallelize(data).toDF().saveAsParquetFile(file.getCanonicalPath)
       f(file.getCanonicalPath)
     }
   }
