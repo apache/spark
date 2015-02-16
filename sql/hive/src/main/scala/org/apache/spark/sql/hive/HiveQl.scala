@@ -62,7 +62,6 @@ private[hive] object HiveQl {
     "TOK_SHOWINDEXES",
     "TOK_SHOWINDEXES",
     "TOK_SHOWPARTITIONS",
-    "TOK_SHOWTABLES",
     "TOK_SHOW_TBLPROPERTIES",
 
     "TOK_LOCKTABLE",

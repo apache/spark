@@ -62,7 +62,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   test("SPARK-4908: concurrent hive native commands") {
     (1 to 100).par.map { _ =>
       sql("USE default")
-      sql("SHOW TABLES")
+      sql("SHOW DATABASES")
     }
   }
 
@@ -630,24 +630,24 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   }
 
   test("Query Hive native command execution result") {
-    val tableName = "test_native_commands"
+    val databaseName = "test_native_commands"
 
     assertResult(0) {
-      sql(s"DROP TABLE IF EXISTS $tableName").count()
+      sql(s"DROP DATABASE IF EXISTS $databaseName").count()
     }
 
     assertResult(0) {
-      sql(s"CREATE TABLE $tableName(key INT, value STRING)").count()
+      sql(s"CREATE DATABASE $databaseName").count()
     }
 
     assert(
-      sql("SHOW TABLES")
+      sql("SHOW DATABASES")
         .select('result)
         .collect()
         .map(_.getString(0))
-        .contains(tableName))
+        .contains(databaseName))
 
-    assert(isExplanation(sql(s"EXPLAIN SELECT key, COUNT(*) FROM $tableName GROUP BY key")))
+    assert(isExplanation(sql(s"EXPLAIN SELECT key, COUNT(*) FROM src GROUP BY key")))
 
     TestHive.reset()
   }
