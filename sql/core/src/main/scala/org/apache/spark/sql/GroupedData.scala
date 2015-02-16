@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql
 
-import scala.language.implicitConversions
 import scala.collection.JavaConversions._
+import scala.language.implicitConversions
 
 import org.apache.spark.sql.catalyst.analysis.Star
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.types.NumericType
-
 
 
 /**
@@ -48,13 +47,13 @@ class GroupedData protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expressio
       // No columns specified. Use all numeric columns.
       df.numericColumns
     } else {
-      // Make sure all specified columns are numeric
+      // Make sure all specified columns are numeric.
       colNames.map { colName =>
         val namedExpr = df.resolve(colName)
         if (!namedExpr.dataType.isInstanceOf[NumericType]) {
           throw new AnalysisException(
             s""""$colName" is not a numeric column. """ +
-            "Aggregation function can only be performed on a numeric column.")
+            "Aggregation function can only be applied on a numeric column.")
         }
         namedExpr
       }
@@ -64,7 +63,7 @@ class GroupedData protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expressio
       Alias(a, a.toString)()
     }
   }
- 
+
   private[this] def strToExpr(expr: String): (Expression => Expression) = {
     expr.toLowerCase match {
       case "avg" | "average" | "mean" => Average
