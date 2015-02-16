@@ -40,6 +40,8 @@ trait Catalog {
    */
   def getTables(databaseName: Option[String]): Seq[(String, Boolean)]
 
+  def refreshTable(databaseName: String, tableName: String): Unit
+
   def registerTable(tableIdentifier: Seq[String], plan: LogicalPlan): Unit
 
   def unregisterTable(tableIdentifier: Seq[String]): Unit
@@ -112,6 +114,10 @@ class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
     tables.map {
       case (name, _) => (name, true)
     }.toSeq
+  }
+
+  override def refreshTable(databaseName: String, tableName: String): Unit = {
+    throw new UnsupportedOperationException
   }
 }
 
@@ -218,4 +224,8 @@ object EmptyCatalog extends Catalog {
   }
 
   override def unregisterAllTables(): Unit = {}
+
+  override def refreshTable(databaseName: String, tableName: String): Unit = {
+    throw new UnsupportedOperationException
+  }
 }
