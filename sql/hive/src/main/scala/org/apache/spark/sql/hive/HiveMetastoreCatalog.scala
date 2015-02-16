@@ -20,25 +20,25 @@ package org.apache.spark.sql.hive
 import java.io.IOException
 import java.util.{List => JList}
 
-import com.google.common.cache.{LoadingCache, CacheLoader, CacheBuilder}
-
-import org.apache.hadoop.util.ReflectionUtils
-import org.apache.hadoop.hive.metastore.{Warehouse, TableType}
-import org.apache.hadoop.hive.metastore.api.{Table => TTable, Partition => TPartition, FieldSchema}
+import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
+import org.apache.hadoop.hive.metastore.api.{FieldSchema, Partition => TPartition, Table => TTable}
+import org.apache.hadoop.hive.metastore.{TableType, Warehouse}
 import org.apache.hadoop.hive.ql.metadata._
 import org.apache.hadoop.hive.ql.plan.CreateTableDesc
 import org.apache.hadoop.hive.serde.serdeConstants
-import org.apache.hadoop.hive.serde2.{Deserializer, SerDeException}
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
+import org.apache.hadoop.hive.serde2.{Deserializer, SerDeException}
+import org.apache.hadoop.util.ReflectionUtils
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.analysis.{Catalog, OverrideCatalog}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.parquet.ParquetRelation2
+import org.apache.spark.sql.parquet.{ParquetRelation2, Partition => ParquetPartition, PartitionSpec}
 import org.apache.spark.sql.sources.{DDLParser, LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -101,16 +101,10 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
   val caseSensitive: Boolean = false
 
-  /** *
-    * Creates a data source table (a table created with USING clause) in Hive's metastore.
-    * Returns true when the table has been created. Otherwise, false.
-    * @param tableName
-    * @param userSpecifiedSchema
-    * @param provider
-    * @param options
-    * @param isExternal
-    * @return
-    */
+  /**
+   * Creates a data source table (a table created with USING clause) in Hive's metastore.
+   * Returns true when the table has been created. Otherwise, false.
+   */
   def createDataSourceTable(
       tableName: String,
       userSpecifiedSchema: Option[StructType],
@@ -141,7 +135,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
   }
 
   def hiveDefaultTableFilePath(tableName: String): String = {
-    val currentDatabase = client.getDatabase(hive.sessionState.getCurrentDatabase())
+    val currentDatabase = client.getDatabase(hive.sessionState.getCurrentDatabase)
     hiveWarehouse.getTablePath(currentDatabase, tableName).toString
   }
 
@@ -176,25 +170,41 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
           Nil
         }
 
-      val relation = MetastoreRelation(
-        databaseName, tblName, alias)(
-          table.getTTable, partitions.map(part => part.getTPartition))(hive)
+      MetastoreRelation(databaseName, tblName, alias)(
+        table.getTTable, partitions.map(part => part.getTPartition))(hive)
+    }
+  }
 
-      if (hive.convertMetastoreParquet &&
-          hive.conf.parquetUseDataSourceApi &&
-          relation.tableDesc.getSerdeClassName.toLowerCase.contains("parquet")) {
-        val metastoreSchema = StructType.fromAttributes(relation.output)
-        val paths = if (relation.hiveQlTable.isPartitioned) {
-          relation.hiveQlPartitions.map(p => p.getLocation)
-        } else {
-          Seq(relation.hiveQlTable.getDataLocation.toString)
-        }
+  private def convertToParquetRelation(metastoreRelation: MetastoreRelation): LogicalRelation = {
+    val metastoreSchema = StructType.fromAttributes(metastoreRelation.output)
 
-        LogicalRelation(ParquetRelation2(
-          paths, Map(ParquetRelation2.METASTORE_SCHEMA -> metastoreSchema.json))(hive))
-      } else {
-        relation
+    // NOTE: Instead of passing Metastore schema directly to `ParquetRelation2`, we have to
+    // serialize the Metastore schema to JSON and pass it as a data source option because of the
+    // evil case insensitivity issue, which is reconciled within `ParquetRelation2`.
+    if (metastoreRelation.hiveQlTable.isPartitioned) {
+      val partitionSchema = StructType.fromAttributes(metastoreRelation.partitionKeys)
+      val partitionColumnDataTypes = partitionSchema.map(_.dataType)
+      val partitions = metastoreRelation.hiveQlPartitions.map { p =>
+        val location = p.getLocation
+        val values = Row.fromSeq(p.getValues.zip(partitionColumnDataTypes).map {
+          case (rawValue, dataType) => Cast(Literal(rawValue), dataType).eval(null)
+        })
+        ParquetPartition(values, location)
       }
+      val partitionSpec = PartitionSpec(partitionSchema, partitions)
+      val paths = partitions.map(_.path)
+      LogicalRelation(
+        ParquetRelation2(
+          paths,
+          Map(ParquetRelation2.METASTORE_SCHEMA -> metastoreSchema.json),
+          None,
+          Some(partitionSpec))(hive))
+    } else {
+      val paths = Seq(metastoreRelation.hiveQlTable.getDataLocation.toString)
+      LogicalRelation(
+        ParquetRelation2(
+          paths,
+          Map(ParquetRelation2.METASTORE_SCHEMA -> metastoreSchema.json))(hive))
     }
   }
 
@@ -261,9 +271,9 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         logInfo(s"Default to LazySimpleSerDe for table $dbName.$tblName")
         tbl.setSerializationLib(classOf[LazySimpleSerDe].getName())
 
-        import org.apache.hadoop.mapred.TextInputFormat
         import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
         import org.apache.hadoop.io.Text
+        import org.apache.hadoop.mapred.TextInputFormat
 
         tbl.setInputFormatClass(classOf[TextInputFormat])
         tbl.setOutputFormatClass(classOf[HiveIgnoreKeyTextOutputFormat[Text, Text]])
@@ -386,12 +396,55 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
   }
 
   /**
+   * When scanning or writing to non-partitioned Metastore Parquet tables, convert them to Parquet
+   * data source relations for better performance.
+   *
+   * This rule can be considered as [[HiveStrategies.ParquetConversion]] done right.
+   */
+  object ParquetConversions extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = {
+      // Collects all `MetastoreRelation`s which should be replaced
+      val toBeReplaced = plan.collect {
+        // Write path
+        case InsertIntoTable(relation: MetastoreRelation, _, _, _)
+            // Inserting into partitioned table is not supported in Parquet data source (yet).
+            if !relation.hiveQlTable.isPartitioned &&
+              hive.convertMetastoreParquet &&
+              hive.conf.parquetUseDataSourceApi &&
+              relation.tableDesc.getSerdeClassName.toLowerCase.contains("parquet") =>
+          relation
+
+        // Read path
+        case p @ PhysicalOperation(_, _, relation: MetastoreRelation)
+            if hive.convertMetastoreParquet &&
+              hive.conf.parquetUseDataSourceApi &&
+              relation.tableDesc.getSerdeClassName.toLowerCase.contains("parquet") =>
+          relation
+      }
+
+      // Replaces all `MetastoreRelation`s with corresponding `ParquetRelation2`s, and fixes
+      // attribute IDs referenced in other nodes.
+      toBeReplaced.distinct.foldLeft(plan) { (lastPlan, relation) =>
+        val parquetRelation = convertToParquetRelation(relation)
+        val attributedRewrites = AttributeMap(relation.output.zip(parquetRelation.output))
+
+        lastPlan.transformUp {
+          case r: MetastoreRelation if r == relation => parquetRelation
+          case other => other.transformExpressions {
+            case a: Attribute if a.resolved => attributedRewrites.getOrElse(a, a)
+          }
+        }
+      }
+    }
+  }
+
+  /**
    * Creates any tables required for query execution.
    * For example, because of a CREATE TABLE X AS statement.
    */
   object CreateTables extends Rule[LogicalPlan] {
     import org.apache.hadoop.hive.ql.Context
-    import org.apache.hadoop.hive.ql.parse.{QB, ASTNode, SemanticAnalyzer}
+    import org.apache.hadoop.hive.ql.parse.{ASTNode, QB, SemanticAnalyzer}
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       // Wait until children are resolved.

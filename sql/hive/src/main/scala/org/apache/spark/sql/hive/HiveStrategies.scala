@@ -139,15 +139,19 @@ private[hive] trait HiveStrategies {
 
             val partitionLocations = partitions.map(_.getLocation)
 
-            hiveContext
-              .parquetFile(partitionLocations.head, partitionLocations.tail: _*)
-              .addPartitioningAttributes(relation.partitionKeys)
-              .lowerCase
-              .where(unresolvedOtherPredicates)
-              .select(unresolvedProjection: _*)
-              .queryExecution
-              .executedPlan
-              .fakeOutput(projectList.map(_.toAttribute)) :: Nil
+            if (partitionLocations.isEmpty) {
+              PhysicalRDD(plan.output, sparkContext.emptyRDD[Row]) :: Nil
+            } else {
+              hiveContext
+                .parquetFile(partitionLocations.head, partitionLocations.tail: _*)
+                .addPartitioningAttributes(relation.partitionKeys)
+                .lowerCase
+                .where(unresolvedOtherPredicates)
+                .select(unresolvedProjection: _*)
+                .queryExecution
+                .executedPlan
+                .fakeOutput(projectList.map(_.toAttribute)) :: Nil
+            }
           } else {
             hiveContext
               .parquetFile(relation.hiveQlTable.getDataLocation.toString)

@@ -38,6 +38,17 @@ object SVDPlusPlus {
     extends Serializable
 
   /**
+   * This method is now replaced by the updated version of `run()` and returns exactly
+   * the same result.
+   */
+  @deprecated("Call run()", "1.4.0")
+  def runSVDPlusPlus(edges: RDD[Edge[Double]], conf: Conf)
+    : (Graph[(Array[Double], Array[Double], Double, Double), Double], Double) =
+  {
+    run(edges, conf)
+  }
+
+  /**
    * Implement SVD++ based on "Factorization Meets the Neighborhood:
    * a Multifaceted Collaborative Filtering Model",
    * available at [[http://public.research.att.com/~volinsky/netflix/kdd08koren.pdf]].
@@ -52,7 +63,7 @@ object SVDPlusPlus {
    * @return a graph with vertex attributes containing the trained model
    */
   def run(edges: RDD[Edge[Double]], conf: Conf)
-    : (Graph[(DoubleMatrix, DoubleMatrix, Double, Double), Double], Double) =
+    : (Graph[(Array[Double], Array[Double], Double, Double), Double], Double) =
   {
     // Generate default vertex attribute
     def defaultF(rank: Int): (DoubleMatrix, DoubleMatrix, Double, Double) = {
@@ -169,7 +180,9 @@ object SVDPlusPlus {
     g.unpersist()
     g = gJoinT3
 
-    (g, u)
+    // Convert DoubleMatrix to Array[Double]:
+    val newVertices = g.vertices.mapValues(v => (v._1.toArray, v._2.toArray, v._3, v._4))
+    (Graph(newVertices, g.edges), u)
   }
 
   /**
