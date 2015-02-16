@@ -441,7 +441,13 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         val attributedRewrites = AttributeMap(relation.output.zip(parquetRelation.output))
 
         lastPlan.transformUp {
-          case r: MetastoreRelation if r == relation => parquetRelation
+          case r: MetastoreRelation if r == relation => {
+            val withAlias =
+              r.alias.map(a => Subquery(a, parquetRelation)).getOrElse(
+                Subquery(r.tableName, parquetRelation))
+
+            withAlias
+          }
           case other => other.transformExpressions {
             case a: Attribute if a.resolved => attributedRewrites.getOrElse(a, a)
           }
