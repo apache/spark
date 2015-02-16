@@ -36,6 +36,8 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
   private[metrics] val properties = new Properties()
   private[metrics] var perInstanceProperties: mutable.HashMap[String, Properties] = null
 
+  private[metrics] var metricsNamespaceConfParam: String = null
+
   private def setDefaultProperties(prop: Properties) {
     prop.setProperty("*.sink.servlet.class", "org.apache.spark.metrics.sink.MetricsServlet")
     prop.setProperty("*.sink.servlet.path", "/metrics/json")
@@ -65,6 +67,8 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
         prop.put(k, v)
       }
     }
+
+    metricsNamespaceConfParam = properties.getProperty("namespace-conf-param", "spark.app.id")
   }
 
   def subProperties(prop: Properties, regex: Regex): mutable.HashMap[String, Properties] = {

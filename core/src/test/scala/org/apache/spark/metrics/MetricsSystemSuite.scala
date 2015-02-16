@@ -114,6 +114,32 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     assert(metricName === source.sourceName)
   }
 
+  test("MetricsSystem with Driver instance and alternate namespace set") {
+    val source = new Source {
+      override val sourceName = "dummySource"
+      override val metricRegistry = new MetricRegistry()
+    }
+
+    val appId = "testId"
+    conf.set("spark.app.id", appId)
+
+    val appName = "testName"
+    conf.set("spark.app.name", appName)
+
+    val executorId = "driver"
+    conf.set("spark.executor.id", executorId)
+
+    val alternateNamespaceFile =
+      getClass.getClassLoader.getResource("test_metrics_system_namespace.properties").getFile
+    conf.set("spark.metrics.conf", alternateNamespaceFile)
+
+    val instanceName = "driver"
+    val driverMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, securityMgr)
+
+    val metricName = driverMetricsSystem.buildRegistryName(source)
+    assert(metricName === s"$appName.$executorId.${source.sourceName}")
+  }
+
   test("MetricsSystem with Executor instance") {
     val source = new Source {
       override val sourceName = "dummySource"
