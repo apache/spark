@@ -24,8 +24,7 @@ import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
 
 import org.apache.spark.sql.catalyst.util
-import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 import org.apache.spark.util.Utils
 
 /**
@@ -38,8 +37,8 @@ import org.apache.spark.util.Utils
 trait ParquetTest {
   val sqlContext: SQLContext
 
-  import sqlContext._
   import sqlContext.implicits.{localSeqToDataFrameHolder, rddToDataFrameHolder}
+  import sqlContext.{conf, sparkContext}
 
   protected def configuration = sparkContext.hadoopConfiguration
 
@@ -51,11 +50,11 @@ trait ParquetTest {
    */
   protected def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
     val (keys, values) = pairs.unzip
-    val currentValues = keys.map(key => Try(getConf(key)).toOption)
-    (keys, values).zipped.foreach(setConf)
+    val currentValues = keys.map(key => Try(conf.getConf(key)).toOption)
+    (keys, values).zipped.foreach(conf.setConf)
     try f finally {
       keys.zip(currentValues).foreach {
-        case (key, Some(value)) => setConf(key, value)
+        case (key, Some(value)) => conf.setConf(key, value)
         case (key, None) => conf.unsetConf(key)
       }
     }
@@ -103,14 +102,14 @@ trait ParquetTest {
   protected def withParquetRDD[T <: Product: ClassTag: TypeTag]
       (data: Seq[T])
       (f: DataFrame => Unit): Unit = {
-    withParquetFile(data)(path => f(parquetFile(path)))
+    withParquetFile(data)(path => f(sqlContext.parquetFile(path)))
   }
 
   /**
    * Drops temporary table `tableName` after calling `f`.
    */
   protected def withTempTable(tableName: String)(f: => Unit): Unit = {
-    try f finally dropTempTable(tableName)
+    try f finally sqlContext.dropTempTable(tableName)
   }
 
   /**
