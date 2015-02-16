@@ -20,6 +20,8 @@ package org.apache.spark.api.java
 import java.util.{Comparator, List => JList, Map => JMap}
 import java.lang.{Iterable => JIterable}
 
+import org.apache.spark.serializer.Serializer
+
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
@@ -234,14 +236,16 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
     mergeValue: JFunction2[C, V, C],
     mergeCombiners: JFunction2[C, C, C],
     partitioner: Partitioner,
-    mapSideCombine: Boolean): JavaPairRDD[K, C] = {
+    mapSideCombine: Boolean,
+    serializer: Serializer): JavaPairRDD[K, C] = {
     implicit val ctag: ClassTag[C] = fakeClassTag
     fromRDD(rdd.combineByKey(
       createCombiner,
       mergeValue,
       mergeCombiners,
       partitioner,
-      mapSideCombine
+      mapSideCombine,
+      serializer
     ))
   }
 
@@ -263,7 +267,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
     mergeValue: JFunction2[C, V, C],
     mergeCombiners: JFunction2[C, C, C],
     partitioner: Partitioner): JavaPairRDD[K, C] = {
-    combineByKey(createCombiner, mergeValue, mergeCombiners, partitioner, true)
+    combineByKey(createCombiner, mergeValue, mergeCombiners, partitioner, true, null)
   }
 
   /**

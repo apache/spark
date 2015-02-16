@@ -26,6 +26,7 @@ import java.util.concurrent.*;
 
 import org.apache.spark.input.PortableDataStream;
 import org.apache.spark.rdd.RDD;
+import org.apache.spark.serializer.KryoSerializer;
 import scala.collection.JavaConversions;
 import scala.Tuple2;
 import scala.Tuple3;
@@ -34,7 +35,7 @@ import scala.Tuple4;
 import com.google.common.base.Throwables;
 import com.google.common.base.Optional;
 import com.google.common.base.Charsets;
-import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.*;
 import com.google.common.io.Files;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
@@ -1335,7 +1336,13 @@ public class JavaAPISuite implements Serializable {
     Partitioner defaultPartitioner = Partitioner.defaultPartitioner(
         combinedRDD.rdd(), JavaConversions.asScalaBuffer(Lists.<RDD<?>>newArrayList()));
     combinedRDD = originalRDD.keyBy(keyFunction)
-        .combineByKey(createCombinerFunction, mergeValueFunction, mergeValueFunction, defaultPartitioner, false);
+        .combineByKey(
+             createCombinerFunction,
+             mergeValueFunction,
+             mergeValueFunction,
+             defaultPartitioner,
+             false,
+             new KryoSerializer(new SparkConf()));
     results = combinedRDD.collectAsMap();
     Assert.assertEquals(expected, results);
   }
