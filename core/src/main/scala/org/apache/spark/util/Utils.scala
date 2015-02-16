@@ -696,9 +696,6 @@ private[spark] object Utils extends Logging {
           try {
             val rootDir = new File(root)
             if (rootDir.exists || rootDir.mkdirs()) {
-//              val dir = createDirectory(root)
-//              chmod700(dir)
-//              Some(dir.getAbsolutePath)
               chmod700(rootDir)
               Some(rootDir.getAbsolutePath)
             } else {
