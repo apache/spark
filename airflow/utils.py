@@ -177,6 +177,10 @@ def apply_defaults(func):
     '''
     @wraps(func)
     def wrapper(*args, **kwargs):
+        if len(args) > 1:
+            print args
+            raise Exception(
+                "Use keyword arguments when initializing operators")
         dag_args = {}
         if 'dag' in kwargs and kwargs['dag']:
             dag = kwargs['dag']

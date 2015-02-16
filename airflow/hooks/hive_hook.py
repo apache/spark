@@ -74,7 +74,7 @@ class HiveHook(BaseHook):
 
         >>> hh = HiveHook()
         >>> t = 'static_babynames_partitioned'
-        >>> hh.check_for_partition('airflow', t, "year='2008'")
+        >>> hh.check_for_partition('airflow', t, "ds='2015-01-01'")
         True
         '''
         self.hive._oprot.trans.open()
@@ -184,9 +184,9 @@ class HiveHook(BaseHook):
         >>> t = 'static_babynames_partitioned'
         >>> parts = hh.get_partitions(schema='airflow', table_name=t)
         >>> len(parts)
-        49
+        1
         >>> max(parts)
-        '2008'
+        '2015-01-01'
         '''
         self.hive._oprot.trans.open()
         table = self.hive.get_table(dbname=schema, tbl_name=table_name)
@@ -212,7 +212,7 @@ class HiveHook(BaseHook):
         >>> hh = HiveHook()
         >>> t = 'static_babynames_partitioned'
         >>> hh.max_partition(schema='airflow', table_name=t)
-        '2008'
+        '2015-01-01'
         '''
         return max(self.get_partitions(schema, table_name))
 

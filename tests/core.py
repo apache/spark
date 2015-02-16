@@ -2,7 +2,7 @@ from datetime import datetime
 import unittest
 from airflow import configuration
 configuration.test_mode()
-from airflow import jobs, models, executors, utils
+from airflow import jobs, models, DAG, executors, utils, operators
 from airflow.www.app import app
 
 NUM_EXAMPLE_DAGS = 3
@@ -10,6 +10,40 @@ DEV_NULL = '/dev/null'
 LOCAL_EXECUTOR = executors.LocalExecutor()
 DEFAULT_DATE = datetime(2015, 1, 1)
 configuration.test_mode()
+
+
+class HivePrestoTest(unittest.TestCase):
+
+    def setUp(self):
+        args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
+        dag = DAG('hive_test', default_args=args)
+        self.dag = dag
+
+    def test_hive(self):
+        hql = """
+        USE airflow;
+        DROP TABLE IF EXISTS static_babynames_partitioned;
+        CREATE TABLE IF NOT EXISTS static_babynames_partitioned (
+            state string,
+            year string,
+            name string,
+            gender string,
+            num int)
+        PARTITIONED BY (ds string);
+        INSERT OVERWRITE TABLE static_babynames_partitioned
+            PARTITION(ds='{{ ds }}')
+        SELECT state, year, name, gender, num FROM static_babynames;
+        """
+        t = operators.HiveOperator(task_id='basic_hql', hql=hql, dag=self.dag)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE)
+
+    def test_presto(self):
+        sql = """
+        SELECT count(1) FROM airflow.static_babynames_partitioned;
+        """
+        t = operators.PrestoCheckOperator(
+            task_id='presto_check', sql=sql, dag=self.dag)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE)
 
 
 class CoreTest(unittest.TestCase):
@@ -104,6 +138,39 @@ class WebUiTests(unittest.TestCase):
         response = self.app.get(
             '/admin/airflow/code?dag_id=example_bash_operator')
         assert "DAG: example_bash_operator" in response.data
+        response = self.app.get(
+            '/admin/airflow/conf')
+        assert "Airflow Configuration" in response.data
+        response = self.app.get(
+            '/admin/airflow/rendered?'
+            'task_id=runme_1&dag_id=example_bash_operator&'
+            'execution_date=2015-01-07T00:00:00')
+        assert "example_bash_operator__runme_1__20150107" in response.data
+        response = self.app.get(
+            '/admin/airflow/log?task_id=run_this_last&'
+            'dag_id=example_bash_operator&execution_date=2015-01-01T00:00:00')
+        assert "Logs for run_this_last on 2015-01-01T00:00:00" in response.data
+        response = self.app.get(
+            '/admin/airflow/task?task_id=runme_0&dag_id=example_bash_operator')
+        assert "Attributes" in response.data
+        response = self.app.get(
+            '/admin/airflow/dag_stats')
+        assert "example_bash_operator" in response.data
+        response = self.app.get(
+            '/admin/airflow/action?action=clear&task_id=run_this_last&'
+            'dag_id=example_bash_operator&future=true&past=false&'
+            'upstream=true&downstream=false&'
+            'execution_date=2015-01-01T00:00:00&'
+            'origin=http%3A%2F%2Fjn8.brain.musta.ch%3A8080%2Fadmin%2Fairflow'
+            '%2Ftree%3Fnum_runs%3D65%26dag_id%3Dexample_bash_operator')
+        assert "Wait a minute" in response.data
+        response = self.app.get(
+            '/admin/airflow/action?action=clear&task_id=run_this_last&'
+            'dag_id=example_bash_operator&future=true&past=false&'
+            'upstream=true&downstream=false&'
+            'execution_date=2015-01-01T00:00:00&confirmed=true&'
+            'origin=http%3A%2F%2Fjn8.brain.musta.ch%3A8080%2Fadmin%2Fairflow'
+            '%2Ftree%3Fnum_runs%3D65%26dag_id%3Dexample_bash_operator')
 
     def test_charts(self):
         response = self.app.get(
