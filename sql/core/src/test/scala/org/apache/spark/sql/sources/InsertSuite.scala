@@ -137,7 +137,7 @@ class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
       """.stripMargin)
     }.getMessage
     assert(
-      message.contains("It is not allowed to insert overwrite the table"),
+      message.contains("Cannot insert overwrite into table that is also being read from."),
       "INSERT OVERWRITE to a table while querying it should not be allowed.")
   }
 
@@ -184,5 +184,35 @@ class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
     // Verify uncaching
     uncacheTable("jsonTable")
     assertCached(sql("SELECT * FROM jsonTable"), 0)
+  }
+
+  test("it's not allowed to insert into a relation that is not an InsertableRelation") {
+    sql(
+      """
+        |CREATE TEMPORARY TABLE oneToTen
+        |USING org.apache.spark.sql.sources.SimpleScanSource
+        |OPTIONS (
+        |  From '1',
+        |  To '10'
+        |)
+      """.stripMargin)
+
+    checkAnswer(
+      sql("SELECT * FROM oneToTen"),
+      (1 to 10).map(Row(_)).toSeq
+    )
+
+    val message = intercept[AnalysisException] {
+      sql(
+        s"""
+        |INSERT OVERWRITE TABLE oneToTen SELECT a FROM jt
+        """.stripMargin)
+    }.getMessage
+    assert(
+      message.contains("does not allow insertion."),
+      "It is not allowed to insert into a table that is not an InsertableRelation."
+    )
+
+    dropTempTable("oneToTen")
   }
 }

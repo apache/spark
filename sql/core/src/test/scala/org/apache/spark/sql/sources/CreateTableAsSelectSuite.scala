@@ -182,7 +182,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
       """.stripMargin)
     }.getMessage
     assert(
-      message.contains("It is not allowed to save to table"),
+      message.contains("Cannot overwrite table "),
       "Writing to a table while querying it should not be allowed.")
   }
 }

@@ -95,14 +95,14 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends Rule[LogicalPlan
           }
           if (srcRelations.exists(src => src == t)) {
             failAnalysis(
-              s"It is not allowed to insert overwrite the table because it is used as " +
-              s"an input table.")
+              "Cannot insert overwrite into table that is also being read from.")
           } else {
             // OK
           }
         }
 
-      case i @ logical.InsertIntoTable(l: LogicalRelation, partition, query, overwrite) =>
+      case i @ logical.InsertIntoTable(
+        l: LogicalRelation, partition, query, overwrite) if !l.isInstanceOf[InsertableRelation] =>
         // The relation in l is not an InsertableRelation.
         failAnalysis(s"$l does not allow insertion.")
 
@@ -121,8 +121,7 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends Rule[LogicalPlan
               }
               if (srcRelations.exists(src => src == dest)) {
                 failAnalysis(
-                  s"It is not allowed to save to table $tableName because it is used as " +
-                  s"an input table .")
+                  s"Cannot overwrite table $tableName that is also being read from.")
               } else {
                 // OK
               }
