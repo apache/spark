@@ -160,7 +160,15 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     }
 
     if (table.getProperty("spark.sql.sources.provider") != null) {
-      cachedDataSourceTables(QualifiedTableName(databaseName, tblName).toLowerCase)
+      val dataSourceTable =
+        cachedDataSourceTables(QualifiedTableName(databaseName, tblName).toLowerCase)
+      // Then, if alias is specified, wrap the table with a Subquery using the alias.
+      // Othersie, wrap the table with a Subquery using the table name.
+      val withAlias =
+        alias.map(a => Subquery(a, dataSourceTable)).getOrElse(
+          Subquery(tableIdent.last, dataSourceTable))
+
+      withAlias
     } else if (table.isView) {
       // if the unresolved relation is from hive view
       // parse the text into logic node.
@@ -433,7 +441,13 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         val attributedRewrites = AttributeMap(relation.output.zip(parquetRelation.output))
 
         lastPlan.transformUp {
-          case r: MetastoreRelation if r == relation => parquetRelation
+          case r: MetastoreRelation if r == relation => {
+            val withAlias =
+              r.alias.map(a => Subquery(a, parquetRelation)).getOrElse(
+                Subquery(r.tableName, parquetRelation))
+
+            withAlias
+          }
           case other => other.transformExpressions {
             case a: Attribute if a.resolved => attributedRewrites.getOrElse(a, a)
           }
