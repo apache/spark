@@ -37,7 +37,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest {
 
     test(s"$prefix: appending") {
       val data = (0 until 10).map(i => (i, i.toString))
-      createDataFrame(data).toDataFrame("c1", "c2").registerTempTable("tmp")
+      createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
       withParquetTable(data, "t") {
         sql("INSERT INTO TABLE t SELECT * FROM tmp")
         checkAnswer(table("t"), (data ++ data).map(Row.fromTuple))
@@ -47,7 +47,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest {
 
     test(s"$prefix: overwriting") {
       val data = (0 until 10).map(i => (i, i.toString))
-      createDataFrame(data).toDataFrame("c1", "c2").registerTempTable("tmp")
+      createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
       withParquetTable(data, "t") {
         sql("INSERT OVERWRITE TABLE t SELECT * FROM tmp")
         checkAnswer(table("t"), data.map(Row.fromTuple))
