@@ -24,7 +24,7 @@ import org.apache.spark.util.ListenerBus
  */
 private[spark] trait SparkListenerBus extends ListenerBus[SparkListener, SparkListenerEvent] {
 
-  private[spark] var filter: DefaultSparkListenerEventFilter = null
+  private[spark] var filter: DefaultSparkListenerEventFilter = new DefaultSparkListenerEventFilter
 
   override def onPostEvent(listener: SparkListener, event: SparkListenerEvent): Unit = {
     if (!filter.validate(event)) {
