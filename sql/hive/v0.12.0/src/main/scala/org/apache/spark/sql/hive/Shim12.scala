@@ -245,6 +245,8 @@ private[hive] object HiveShim {
   def prepareWritable(w: Writable): Writable = {
     w
   }
+
+  def setTblNullFormat(crtTbl: CreateTableDesc, tbl: Table) = {}
 }
 
 class ShimFileSinkDesc(var dir: String, var tableInfo: TableDesc, var compressed: Boolean)
