@@ -37,20 +37,22 @@ class ParquetQuerySuite extends QueryTest with ParquetTest {
 
     test(s"$prefix: appending") {
       val data = (0 until 10).map(i => (i, i.toString))
+      createDataFrame(data).toDataFrame("c1", "c2").registerTempTable("tmp")
       withParquetTable(data, "t") {
-        sql("INSERT INTO TABLE t SELECT * FROM t")
+        sql("INSERT INTO TABLE t SELECT * FROM tmp")
         checkAnswer(table("t"), (data ++ data).map(Row.fromTuple))
       }
+      catalog.unregisterTable(Seq("tmp"))
     }
 
-    // This test case will trigger the NPE mentioned in
-    // https://issues.apache.org/jira/browse/PARQUET-151.
-    ignore(s"$prefix: overwriting") {
+    test(s"$prefix: overwriting") {
       val data = (0 until 10).map(i => (i, i.toString))
+      createDataFrame(data).toDataFrame("c1", "c2").registerTempTable("tmp")
       withParquetTable(data, "t") {
-        sql("INSERT OVERWRITE TABLE t SELECT * FROM t")
+        sql("INSERT OVERWRITE TABLE t SELECT * FROM tmp")
         checkAnswer(table("t"), data.map(Row.fromTuple))
       }
+      catalog.unregisterTable(Seq("tmp"))
     }
 
     test(s"$prefix: self-join") {

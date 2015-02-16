@@ -24,7 +24,7 @@ import org.apache.spark.sql.{SaveMode, DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -106,6 +106,7 @@ private[sql] class DDLParser(
    */
   protected lazy val createTable: Parser[LogicalPlan] =
   (
+    // TODO: Support database.table.
     (CREATE ~> TEMPORARY.? <~ TABLE) ~ (IF ~> NOT <~ EXISTS).? ~ ident
       ~ (tableCols).? ~ (USING ~> className) ~ (OPTIONS ~> options).? ~ (AS ~> restInput).? ^^ {
       case temp ~ allowExisting ~ tableName ~ columns ~ provider ~ opts ~ query =>
@@ -336,7 +337,7 @@ private[sql] case class DescribeCommand(
   * @param temporary
   * @param options
   * @param allowExisting If it is true, we will do nothing when the table already exists.
- *                      If it is false, an exception will be thrown
+  *                      If it is false, an exception will be thrown
   * @param managedIfNoPath
   */
 private[sql] case class CreateTableUsing(
@@ -348,13 +349,23 @@ private[sql] case class CreateTableUsing(
     allowExisting: Boolean,
     managedIfNoPath: Boolean) extends Command
 
+/**
+ * A node used to support CTAS statements and saveAsTable for the data source API.
+ * This node is a [[UnaryNode]] instead of a [[Command]] because we want the analyzer
+ * can analyze the logical plan that will be used to populate the table.
+ * So, [[PreWriteCheck]] can detect cases that are not allowed.
+ */
 private[sql] case class CreateTableUsingAsSelect(
     tableName: String,
     provider: String,
     temporary: Boolean,
     mode: SaveMode,
     options: Map[String, String],
-    query: LogicalPlan) extends Command
+    child: LogicalPlan) extends UnaryNode {
+  override def output = Seq.empty[Attribute]
+  // TODO: Override resolved after we support databaseName.
+  // override lazy val resolved = databaseName != None && childrenResolved
+}
 
 private [sql] case class CreateTempTableUsing(
     tableName: String,

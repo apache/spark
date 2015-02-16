@@ -21,11 +21,11 @@ import java.io.File
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.util
 import org.apache.spark.util.Utils
 
-class InsertIntoSuite extends DataSourceTest with BeforeAndAfterAll {
+class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
 
   import caseInsensisitiveContext._
 
@@ -127,6 +127,18 @@ class InsertIntoSuite extends DataSourceTest with BeforeAndAfterAll {
         |INSERT INTO TABLE jsonTable SELECT a, b FROM jt
       """.stripMargin)
     }
+  }
+
+  test("it is not allowed to write to a table while querying it.") {
+    val message = intercept[AnalysisException] {
+      sql(
+        s"""
+        |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jsonTable
+      """.stripMargin)
+    }.getMessage
+    assert(
+      message.contains("It is not allowed to insert overwrite the table"),
+      "INSERT OVERWRITE to a table while querying it should not be allowed.")
   }
 
   test("Caching")  {
