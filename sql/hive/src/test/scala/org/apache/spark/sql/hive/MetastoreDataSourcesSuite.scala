@@ -401,6 +401,40 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     sql("DROP TABLE jsonTable").collect().foreach(println)
   }
 
+  test("SPARK-5839 HiveMetastoreCatalog does not recognize table aliases of data source tables.") {
+    val originalDefaultSource = conf.defaultDataSourceName
+
+    val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
+    val df = jsonRDD(rdd)
+
+    conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.json")
+    // Save the df as a managed table (by not specifiying the path).
+    df.saveAsTable("savedJsonTable")
+
+    checkAnswer(
+      sql("SELECT * FROM savedJsonTable where savedJsonTable.a < 5"),
+      (1 to 4).map(i => Row(i, s"str${i}")))
+
+    checkAnswer(
+      sql("SELECT * FROM savedJsonTable tmp where tmp.a > 5"),
+      (6 to 10).map(i => Row(i, s"str${i}")))
+
+    invalidateTable("savedJsonTable")
+
+    checkAnswer(
+      sql("SELECT * FROM savedJsonTable where savedJsonTable.a < 5"),
+      (1 to 4).map(i => Row(i, s"str${i}")))
+
+    checkAnswer(
+      sql("SELECT * FROM savedJsonTable tmp where tmp.a > 5"),
+      (6 to 10).map(i => Row(i, s"str${i}")))
+
+    // Drop table will also delete the data.
+    sql("DROP TABLE savedJsonTable")
+
+    conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, originalDefaultSource)
+  }
+
   test("save table") {
     val originalDefaultSource = conf.defaultDataSourceName
 
