@@ -191,7 +191,7 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
 
   private def logCleanUpTest(waitForCompletion: Boolean): Unit = {
     // Write data with manager, recover with new manager and verify
-    val manualClock = new ManualClock()
+    val manualClock = new ManualClock
     val dataToWrite = generateRandomData()
     manager = writeDataUsingManager(testDir, dataToWrite, manualClock, stopManager = false)
     val logFiles = getLogFilesInDirectory(testDir)
@@ -210,17 +210,17 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
 
   test("WriteAheadLogManager - handling file errors while reading rotating logs") {
     // Generate a set of log files
-    val fakeClock = new ManualClock()
+    val manualClock = new ManualClock
     val dataToWrite1 = generateRandomData()
-    writeDataUsingManager(testDir, dataToWrite1, fakeClock)
+    writeDataUsingManager(testDir, dataToWrite1, manualClock)
     val logFiles1 = getLogFilesInDirectory(testDir)
     assert(logFiles1.size > 1)
 
 
     // Recover old files and generate a second set of log files
     val dataToWrite2 = generateRandomData()
-    fakeClock.advance(100000)
-    writeDataUsingManager(testDir, dataToWrite2, fakeClock)
+    manualClock.advance(100000)
+    writeDataUsingManager(testDir, dataToWrite2, manualClock)
     val logFiles2 = getLogFilesInDirectory(testDir)
     assert(logFiles2.size > logFiles1.size)
 
@@ -276,15 +276,15 @@ object WriteAheadLogSuite {
   def writeDataUsingManager(
       logDirectory: String,
       data: Seq[String],
-      fakeClock: ManualClock = new ManualClock(),
+      manualClock: ManualClock = new ManualClock,
       stopManager: Boolean = true
     ): WriteAheadLogManager = {
-    if (fakeClock.getTimeMillis() < 100000) fakeClock.setTime(10000)
+    if (manualClock.getTimeMillis() < 100000) manualClock.setTime(10000)
     val manager = new WriteAheadLogManager(logDirectory, hadoopConf,
-      rollingIntervalSecs = 1, callerName = "WriteAheadLogSuite", clock = fakeClock)
+      rollingIntervalSecs = 1, callerName = "WriteAheadLogSuite", clock = manualClock)
     // Ensure that 500 does not get sorted after 2000, so put a high base value.
     data.foreach { item =>
-      fakeClock.advance(500)
+      manualClock.advance(500)
       manager.writeToLog(item)
     }
     if (stopManager) manager.stop()

@@ -227,7 +227,7 @@ private[spark] class ExecutorAllocationManager(
    * This is factored out into its own method for testing.
    */
   private def schedule(): Unit = synchronized {
-    val now = clock.getTimeMillis()
+    val now = clock.getTimeMillis
 
     addOrCancelExecutorRequests(now)
 
@@ -410,7 +410,7 @@ private[spark] class ExecutorAllocationManager(
     if (addTime == NOT_SET) {
       logDebug(s"Starting timer to add executors because pending tasks " +
         s"are building up (to expire in $schedulerBacklogTimeout seconds)")
-      addTime = clock.getTimeMillis() + schedulerBacklogTimeout * 1000
+      addTime = clock.getTimeMillis + schedulerBacklogTimeout * 1000
     }
   }
 
@@ -434,7 +434,7 @@ private[spark] class ExecutorAllocationManager(
       if (!removeTimes.contains(executorId) && !executorsPendingToRemove.contains(executorId)) {
         logDebug(s"Starting idle timer for $executorId because there are no more tasks " +
           s"scheduled to run on the executor (to expire in $executorIdleTimeout seconds)")
-        removeTimes(executorId) = clock.getTimeMillis() + executorIdleTimeout * 1000
+        removeTimes(executorId) = clock.getTimeMillis + executorIdleTimeout * 1000
       }
     } else {
       logWarning(s"Attempted to mark unknown executor $executorId idle")

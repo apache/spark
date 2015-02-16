@@ -111,7 +111,7 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
     conf: SparkConf,
     hadoopConf: Configuration,
     checkpointDir: String,
-    clock: Clock = new SystemClock()
+    clock: Clock = new SystemClock
   ) extends ReceivedBlockHandler with Logging {
 
   private val blockStoreTimeout = conf.getInt(

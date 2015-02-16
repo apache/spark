@@ -53,7 +53,7 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
   val mapOutputTracker = new MapOutputTrackerMaster(conf)
   val shuffleManager = new HashShuffleManager(conf)
   val serializer = new KryoSerializer(conf)
-  val manualClock = new ManualClock()
+  val manualClock = new ManualClock
   val blockManagerSize = 10000000
 
   var actorSystem: ActorSystem = null

@@ -51,7 +51,7 @@ private[streaming] class WriteAheadLogManager(
     rollingIntervalSecs: Int = 60,
     maxFailures: Int = 3,
     callerName: String = "",
-    clock: Clock = new SystemClock()
+    clock: Clock = new SystemClock
   ) extends Logging {
 
   private val pastLogs = new ArrayBuffer[LogInfo]

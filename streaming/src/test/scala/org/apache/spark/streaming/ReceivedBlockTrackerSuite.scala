@@ -94,7 +94,7 @@ class ReceivedBlockTrackerSuite
   }
 
   test("block addition, block to batch allocation and cleanup with write ahead log") {
-    val manualClock = new ManualClock()
+    val manualClock = new ManualClock
     // Set the time increment level to twice the rotation interval so that every increment creates
     // a new log file
 
@@ -211,7 +211,7 @@ class ReceivedBlockTrackerSuite
    */
   def createTracker(
       setCheckpointDir: Boolean = true,
-      clock: Clock = new SystemClock()): ReceivedBlockTracker = {
+      clock: Clock = new SystemClock): ReceivedBlockTracker = {
     val cpDirOption = if (setCheckpointDir) Some(checkpointDirectory.toString) else None
     val tracker = new ReceivedBlockTracker(conf, hadoopConf, Seq(streamId), clock, cpDirOption)
     allReceivedBlockTrackers += tracker
