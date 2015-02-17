@@ -20,15 +20,15 @@ package org.apache.spark.sql.parquet
 
 import java.io.File
 
-import org.apache.spark.sql.catalyst.expressions.Row
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.{SQLConf, QueryTest}
+import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.execution.PhysicalRDD
 import org.apache.spark.sql.hive.execution.HiveTableScan
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
-
+import org.apache.spark.sql.sources.LogicalRelation
 
 // The data where the partitioning key exists only in the directory structure.
 case class ParquetData(intField: Int, stringField: String)
@@ -121,12 +121,122 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
+
+    val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
+    jsonRDD(rdd).registerTempTable("jt")
+
+    sql(
+      """
+        |create table test_parquet
+        |(
+        |  intField INT,
+        |  stringField STRING
+        |)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        |STORED AS
+        |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+      """.stripMargin)
+
     conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
   }
 
   override def afterAll(): Unit = {
     super.afterAll()
+    sql("DROP TABLE IF EXISTS jt")
+    sql("DROP TABLE IF EXISTS test_parquet")
+
     setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
+  }
+
+  test("scan an empty parquet table") {
+    checkAnswer(sql("SELECT count(*) FROM test_parquet"), Row(0))
+  }
+
+  test("scan an empty parquet table with upper case") {
+    checkAnswer(sql("SELECT count(INTFIELD) FROM TEST_parquet"), Row(0))
+  }
+
+  test("insert into an empty parquet table") {
+    sql(
+      """
+        |create table test_insert_parquet
+        |(
+        |  intField INT,
+        |  stringField STRING
+        |)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        |STORED AS
+        |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+      """.stripMargin)
+
+    // Insert into am empty table.
+    sql("insert into table test_insert_parquet select a, b from jt where jt.a > 5")
+    checkAnswer(
+      sql(s"SELECT intField, stringField FROM test_insert_parquet WHERE intField < 8"),
+      Row(6, "str6") :: Row(7, "str7") :: Nil
+    )
+    // Insert overwrite.
+    sql("insert overwrite table test_insert_parquet select a, b from jt where jt.a < 5")
+    checkAnswer(
+      sql(s"SELECT intField, stringField FROM test_insert_parquet WHERE intField > 2"),
+      Row(3, "str3") :: Row(4, "str4") :: Nil
+    )
+    sql("DROP TABLE IF EXISTS test_insert_parquet")
+
+    // Create it again.
+    sql(
+      """
+        |create table test_insert_parquet
+        |(
+        |  intField INT,
+        |  stringField STRING
+        |)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        |STORED AS
+        |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+      """.stripMargin)
+    // Insert overwrite an empty table.
+    sql("insert overwrite table test_insert_parquet select a, b from jt where jt.a < 5")
+    checkAnswer(
+      sql(s"SELECT intField, stringField FROM test_insert_parquet WHERE intField > 2"),
+      Row(3, "str3") :: Row(4, "str4") :: Nil
+    )
+    // Insert into the table.
+    sql("insert into table test_insert_parquet select a, b from jt")
+    checkAnswer(
+      sql(s"SELECT intField, stringField FROM test_insert_parquet"),
+      (1 to 10).map(i => Row(i, s"str$i")) ++ (1 to 4).map(i => Row(i, s"str$i"))
+    )
+    sql("DROP TABLE IF EXISTS test_insert_parquet")
+  }
+
+  test("scan a parquet table created through a CTAS statement") {
+    sql(
+      """
+        |create table test_parquet_ctas ROW FORMAT
+        |SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        |STORED AS
+        |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+        |AS select * from jt
+      """.stripMargin)
+
+    checkAnswer(
+      sql(s"SELECT a, b FROM test_parquet_ctas WHERE a = 1"),
+      Seq(Row(1, "str1"))
+    )
+
+    table("test_parquet_ctas").queryExecution.analyzed match {
+      case LogicalRelation(p: ParquetRelation2) => // OK
+      case _ =>
+        fail(
+          s"test_parquet_ctas should be converted to ${classOf[ParquetRelation2].getCanonicalName}")
+    }
+
+    sql("DROP TABLE IF EXISTS test_parquet_ctas")
   }
 }
 
