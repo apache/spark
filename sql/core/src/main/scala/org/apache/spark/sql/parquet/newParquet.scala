@@ -287,11 +287,16 @@ case class ParquetRelation2(
         }
       }
 
-      try {
-        parquetSchema = readSchema().getOrElse(maybeSchema.getOrElse(maybeMetastoreSchema.get))
-      } catch {
-        case e => throw new SparkException(s"Failed to find schema for ${paths.mkString(",")}", e)
-      }
+      // To get the schema. We first try to get the schema defined in maybeSchema.
+      // If maybeSchema is not defined, we will try to get the schema from existing parquet data
+      // (through readSchema). If data does not exist, we will try to get the schema defined in
+      // maybeMetastoreSchema (defined in the options of the data source).
+      // Finally, if we still could not get the schema. We throw an error.
+      parquetSchema =
+        maybeSchema
+          .orElse(readSchema())
+          .orElse(maybeMetastoreSchema)
+          .getOrElse(sys.error("Failed to get the schema."))
 
       partitionKeysIncludedInParquetSchema =
         isPartitioned &&
@@ -617,7 +622,7 @@ object ParquetRelation2 {
 
   private[parquet] def readSchema(
       footers: Seq[Footer], sqlContext: SQLContext): Option[StructType] = {
-    val mergedSchema = footers.map { footer =>
+    footers.map { footer =>
       val metadata = footer.getParquetMetadata.getFileMetaData
       val parquetSchema = metadata.getSchema
       val maybeSparkSchema = metadata
@@ -635,14 +640,11 @@ object ParquetRelation2 {
             sqlContext.conf.isParquetBinaryAsString,
             sqlContext.conf.isParquetINT96AsTimestamp))
       }
-    }.foldLeft[StructType](null) {
-      case (null, right) => right
-      case (left, right) => try left.merge(right) catch { case e: Throwable =>
-          throw new SparkException(s"Failed to merge incompatible schemas $left and $right", e)
-        }
+    }.reduceOption { (left, right) =>
+      try left.merge(right) catch { case e: Throwable =>
+        throw new SparkException(s"Failed to merge incompatible schemas $left and $right", e)
+      }
     }
-
-    Option(mergedSchema)
   }
 
   /**
