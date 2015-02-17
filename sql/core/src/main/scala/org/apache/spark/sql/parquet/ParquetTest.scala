@@ -34,7 +34,7 @@ import org.apache.spark.util.Utils
  * convenient to use tuples rather than special case classes when writing test cases/suites.
  * Especially, `Tuple1.apply` can be used to easily wrap a single type/value.
  */
-trait ParquetTest {
+private[sql] trait ParquetTest {
   val sqlContext: SQLContext
 
   import sqlContext.implicits.{localSeqToDataFrameHolder, rddToDataFrameHolder}
@@ -121,7 +121,7 @@ trait ParquetTest {
       (data: Seq[T], tableName: String)
       (f: => Unit): Unit = {
     withParquetRDD(data) { rdd =>
-      sqlContext.registerRDDAsTable(rdd, tableName)
+      sqlContext.registerDataFrameAsTable(rdd, tableName)
       withTempTable(tableName)(f)
     }
   }

@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.Star
 import org.apache.spark.sql.catalyst.expressions._
@@ -27,8 +28,15 @@ import org.apache.spark.sql.types._
 
 
 /**
- * Domain specific functions available for [[DataFrame]].
+ * :: Experimental ::
+ * Functions available for [[DataFrame]].
+ *
+ * @groupname udf_funcs UDF functions
+ * @groupname agg_funcs Aggregate functions
+ * @groupname normal_funcs Non-aggregate functions
+ * @groupname Ungrouped Support functions for DataFrames.
  */
+@Experimental
 // scalastyle:off
 object functions {
 // scalastyle:on
@@ -37,11 +45,15 @@ object functions {
 
   /**
    * Returns a [[Column]] based on the given column name.
+   *
+   * @group normal_funcs
    */
   def col(colName: String): Column = Column(colName)
 
   /**
    * Returns a [[Column]] based on the given column name. Alias of [[col]].
+   *
+   * @group normal_funcs
    */
   def column(colName: String): Column = Column(colName)
 
@@ -51,6 +63,8 @@ object functions {
    * The passed in object is returned directly if it is already a [[Column]].
    * If the object is a Scala Symbol, it is converted into a [[Column]] also.
    * Otherwise, a new [[Column]] is created to represent the literal value.
+   *
+   * @group normal_funcs
    */
   def lit(literal: Any): Column = {
     literal match {
@@ -84,80 +98,168 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////
 
-  /** Aggregate function: returns the sum of all values in the expression. */
+  /**
+   * Aggregate function: returns the sum of all values in the expression.
+   *
+   * @group agg_funcs
+   */
   def sum(e: Column): Column = Sum(e.expr)
 
-  /** Aggregate function: returns the sum of all values in the given column. */
+  /**
+   * Aggregate function: returns the sum of all values in the given column.
+   *
+   * @group agg_funcs
+   */
   def sum(columnName: String): Column = sum(Column(columnName))
 
-  /** Aggregate function: returns the sum of distinct values in the expression. */
+  /**
+   * Aggregate function: returns the sum of distinct values in the expression.
+   *
+   * @group agg_funcs
+   */
   def sumDistinct(e: Column): Column = SumDistinct(e.expr)
 
-  /** Aggregate function: returns the sum of distinct values in the expression. */
+  /**
+   * Aggregate function: returns the sum of distinct values in the expression.
+   *
+   * @group agg_funcs
+   */
   def sumDistinct(columnName: String): Column = sumDistinct(Column(columnName))
 
-  /** Aggregate function: returns the number of items in a group. */
+  /**
+   * Aggregate function: returns the number of items in a group.
+   *
+   * @group agg_funcs
+   */
   def count(e: Column): Column = e.expr match {
     // Turn count(*) into count(1)
     case s: Star => Count(Literal(1))
     case _ => Count(e.expr)
   }
 
-  /** Aggregate function: returns the number of items in a group. */
+  /**
+   * Aggregate function: returns the number of items in a group.
+   *
+   * @group agg_funcs
+   */
   def count(columnName: String): Column = count(Column(columnName))
 
-  /** Aggregate function: returns the number of distinct items in a group. */
+  /**
+   * Aggregate function: returns the number of distinct items in a group.
+   *
+   * @group agg_funcs
+   */
   @scala.annotation.varargs
   def countDistinct(expr: Column, exprs: Column*): Column =
     CountDistinct((expr +: exprs).map(_.expr))
 
-  /** Aggregate function: returns the number of distinct items in a group. */
+  /**
+   * Aggregate function: returns the number of distinct items in a group.
+   *
+   * @group agg_funcs
+   */
   @scala.annotation.varargs
   def countDistinct(columnName: String, columnNames: String*): Column =
     countDistinct(Column(columnName), columnNames.map(Column.apply) :_*)
 
-  /** Aggregate function: returns the approximate number of distinct items in a group. */
+  /**
+   * Aggregate function: returns the approximate number of distinct items in a group.
+   *
+   * @group agg_funcs
+   */
   def approxCountDistinct(e: Column): Column = ApproxCountDistinct(e.expr)
 
-  /** Aggregate function: returns the approximate number of distinct items in a group. */
+  /**
+   * Aggregate function: returns the approximate number of distinct items in a group.
+   *
+   * @group agg_funcs
+   */
   def approxCountDistinct(columnName: String): Column = approxCountDistinct(column(columnName))
 
-  /** Aggregate function: returns the approximate number of distinct items in a group. */
+  /**
+   * Aggregate function: returns the approximate number of distinct items in a group.
+   *
+   * @group agg_funcs
+   */
   def approxCountDistinct(e: Column, rsd: Double): Column = ApproxCountDistinct(e.expr, rsd)
 
-  /** Aggregate function: returns the approximate number of distinct items in a group. */
+  /**
+   * Aggregate function: returns the approximate number of distinct items in a group.
+   *
+   * @group agg_funcs
+   */
   def approxCountDistinct(columnName: String, rsd: Double): Column = {
     approxCountDistinct(Column(columnName), rsd)
   }
 
-  /** Aggregate function: returns the average of the values in a group. */
+  /**
+   * Aggregate function: returns the average of the values in a group.
+   *
+   * @group agg_funcs
+   */
   def avg(e: Column): Column = Average(e.expr)
 
-  /** Aggregate function: returns the average of the values in a group. */
+  /**
+   * Aggregate function: returns the average of the values in a group.
+   *
+   * @group agg_funcs
+   */
   def avg(columnName: String): Column = avg(Column(columnName))
 
-  /** Aggregate function: returns the first value in a group. */
+  /**
+   * Aggregate function: returns the first value in a group.
+   *
+   * @group agg_funcs
+   */
   def first(e: Column): Column = First(e.expr)
 
-  /** Aggregate function: returns the first value of a column in a group. */
+  /**
+   * Aggregate function: returns the first value of a column in a group.
+   *
+   * @group agg_funcs
+   */
   def first(columnName: String): Column = first(Column(columnName))
 
-  /** Aggregate function: returns the last value in a group. */
+  /**
+   * Aggregate function: returns the last value in a group.
+   *
+   * @group agg_funcs
+   */
   def last(e: Column): Column = Last(e.expr)
 
-  /** Aggregate function: returns the last value of the column in a group. */
+  /**
+   * Aggregate function: returns the last value of the column in a group.
+   *
+   * @group agg_funcs
+   */
   def last(columnName: String): Column = last(Column(columnName))
 
-  /** Aggregate function: returns the minimum value of the expression in a group. */
+  /**
+   * Aggregate function: returns the minimum value of the expression in a group.
+   *
+   * @group agg_funcs
+   */
   def min(e: Column): Column = Min(e.expr)
 
-  /** Aggregate function: returns the minimum value of the column in a group. */
+  /**
+   * Aggregate function: returns the minimum value of the column in a group.
+   *
+   * @group agg_funcs
+   */
   def min(columnName: String): Column = min(Column(columnName))
 
-  /** Aggregate function: returns the maximum value of the expression in a group. */
+  /**
+   * Aggregate function: returns the maximum value of the expression in a group.
+   *
+   * @group agg_funcs
+   */
   def max(e: Column): Column = Max(e.expr)
 
-  /** Aggregate function: returns the maximum value of the column in a group. */
+  /**
+   * Aggregate function: returns the maximum value of the column in a group.
+   *
+   * @group agg_funcs
+   */
   def max(columnName: String): Column = max(Column(columnName))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -168,6 +270,8 @@ object functions {
    * {{{
    *   df.select(coalesce(df("a"), df("b")))
    * }}}
+   *
+   * @group normal_funcs
    */
   @scala.annotation.varargs
   def coalesce(e: Column*): Column = Coalesce(e.map(_.expr))
@@ -182,6 +286,8 @@ object functions {
    *   // Java:
    *   df.select( negate(df.col("amount")) );
    * }}}
+   *
+   * @group normal_funcs
    */
   def negate(e: Column): Column = -e
 
@@ -194,19 +300,37 @@ object functions {
    *   // Java:
    *   df.filter( not(df.col("isActive")) );
    * }}
+   *
+   * @group normal_funcs
    */
   def not(e: Column): Column = !e
 
-  /** Converts a string expression to upper case. */
+  /**
+   * Converts a string expression to upper case.
+   *
+   * @group normal_funcs
+   */
   def upper(e: Column): Column = Upper(e.expr)
 
-  /** Converts a string exprsesion to lower case. */
+  /**
+   * Converts a string exprsesion to lower case.
+   *
+   * @group normal_funcs
+   */
   def lower(e: Column): Column = Lower(e.expr)
 
-  /** Computes the square root of the specified float value. */
+  /**
+   * Computes the square root of the specified float value.
+   *
+   * @group normal_funcs
+   */
   def sqrt(e: Column): Column = Sqrt(e.expr)
 
-  /** Computes the absolutle value. */
+  /**
+   * Computes the absolutle value.
+   *
+   * @group normal_funcs
+   */
   def abs(e: Column): Column = Abs(e.expr)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -222,6 +346,8 @@ object functions {
     /**
      * Defines a user-defined function of ${x} arguments as user-defined function (UDF).
      * The data types are automatically inferred based on the function's signature.
+     *
+     * @group udf_funcs
      */
     def udf[$typeTags](f: Function$x[$types]): UserDefinedFunction = {
       UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType)
@@ -236,6 +362,8 @@ object functions {
     /**
      * Call a Scala function of ${x} arguments as user-defined function (UDF). This requires
      * you to specify the return data type.
+     *
+     * @group udf_funcs
      */
     def callUDF(f: Function$x[$fTypes], returnType: DataType${if (args.length > 0) ", " + args else ""}): Column = {
       ScalaUdf(f, returnType, Seq($argsInUdf))
@@ -246,6 +374,8 @@ object functions {
   /**
    * Defines a user-defined function of 0 arguments as user-defined function (UDF).
    * The data types are automatically inferred based on the function's signature.
+   *
+   * @group udf_funcs
    */
   def udf[RT: TypeTag](f: Function0[RT]): UserDefinedFunction = {
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType)
@@ -254,6 +384,8 @@ object functions {
   /**
    * Defines a user-defined function of 1 arguments as user-defined function (UDF).
    * The data types are automatically inferred based on the function's signature.
+   *
+   * @group udf_funcs
    */
   def udf[RT: TypeTag, A1: TypeTag](f: Function1[A1, RT]): UserDefinedFunction = {
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType)
@@ -262,6 +394,8 @@ object functions {
   /**
    * Defines a user-defined function of 2 arguments as user-defined function (UDF).
    * The data types are automatically inferred based on the function's signature.
+   *
+   * @group udf_funcs
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag](f: Function2[A1, A2, RT]): UserDefinedFunction = {
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType)
@@ -270,6 +404,8 @@ object functions {
   /**
    * Defines a user-defined function of 3 arguments as user-defined function (UDF).
    * The data types are automatically inferred based on the function's signature.
+   *
+   * @group udf_funcs
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag](f: Function3[A1, A2, A3, RT]): UserDefinedFunction = {
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType)
@@ -278,6 +414,8 @@ object functions {
   /**
    * Defines a user-defined function of 4 arguments as user-defined function (UDF).
    * The data types are automatically inferred based on the function's signature.
+   *
+   * @group udf_funcs
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag](f: Function4[A1, A2, A3, A4, RT]): UserDefinedFunction = {
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType)
@@ -286,6 +424,8 @@ object functions {
   /**
    * Defines a user-defined function of 5 arguments as user-defined function (UDF).
    * The data types are automatically inferred based on the function's signature.
+   *
+   * @group udf_funcs
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag](f: Function5[A1, A2, A3, A4, A5, RT]): UserDefinedFunction = {
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType)
@@ -294,6 +434,8 @@ object functions {
   /**
    * Defines a user-defined function of 6 arguments as user-defined function (UDF).
    * The data types are automatically inferred based on the function's signature.
+   *
+   * @group udf_funcs
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag](f: Function6[A1, A2, A3, A4, A5, A6, RT]): UserDefinedFunction = {
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType)
@@ -302,6 +444,8 @@ object functions {
   /**
    * Defines a user-defined function of 7 arguments as user-defined function (UDF).
    * The data types are automatically inferred based on the function's signature.
+   *
+   * @group udf_funcs
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag](f: Function7[A1, A2, A3, A4, A5, A6, A7, RT]): UserDefinedFunction = {
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType)
@@ -310,6 +454,8 @@ object functions {
   /**
    * Defines a user-defined function of 8 arguments as user-defined function (UDF).
    * The data types are automatically inferred based on the function's signature.
+   *
+   * @group udf_funcs
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag](f: Function8[A1, A2, A3, A4, A5, A6, A7, A8, RT]): UserDefinedFunction = {
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType)
@@ -318,6 +464,8 @@ object functions {
   /**
    * Defines a user-defined function of 9 arguments as user-defined function (UDF).
    * The data types are automatically inferred based on the function's signature.
+   *
+   * @group udf_funcs
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag](f: Function9[A1, A2, A3, A4, A5, A6, A7, A8, A9, RT]): UserDefinedFunction = {
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType)
@@ -326,6 +474,8 @@ object functions {
   /**
    * Defines a user-defined function of 10 arguments as user-defined function (UDF).
    * The data types are automatically inferred based on the function's signature.
+   *
+   * @group udf_funcs
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag](f: Function10[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, RT]): UserDefinedFunction = {
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType)
@@ -336,6 +486,8 @@ object functions {
   /**
    * Call a Scala function of 0 arguments as user-defined function (UDF). This requires
    * you to specify the return data type.
+   *
+   * @group udf_funcs
    */
   def callUDF(f: Function0[_], returnType: DataType): Column = {
     ScalaUdf(f, returnType, Seq())
@@ -344,6 +496,8 @@ object functions {
   /**
    * Call a Scala function of 1 arguments as user-defined function (UDF). This requires
    * you to specify the return data type.
+   *
+   * @group udf_funcs
    */
   def callUDF(f: Function1[_, _], returnType: DataType, arg1: Column): Column = {
     ScalaUdf(f, returnType, Seq(arg1.expr))
@@ -352,6 +506,8 @@ object functions {
   /**
    * Call a Scala function of 2 arguments as user-defined function (UDF). This requires
    * you to specify the return data type.
+   *
+   * @group udf_funcs
    */
   def callUDF(f: Function2[_, _, _], returnType: DataType, arg1: Column, arg2: Column): Column = {
     ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr))
@@ -360,6 +516,8 @@ object functions {
   /**
    * Call a Scala function of 3 arguments as user-defined function (UDF). This requires
    * you to specify the return data type.
+   *
+   * @group udf_funcs
    */
   def callUDF(f: Function3[_, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column): Column = {
     ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr))
@@ -368,6 +526,8 @@ object functions {
   /**
    * Call a Scala function of 4 arguments as user-defined function (UDF). This requires
    * you to specify the return data type.
+   *
+   * @group udf_funcs
    */
   def callUDF(f: Function4[_, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column): Column = {
     ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr))
@@ -376,6 +536,8 @@ object functions {
   /**
    * Call a Scala function of 5 arguments as user-defined function (UDF). This requires
    * you to specify the return data type.
+   *
+   * @group udf_funcs
    */
   def callUDF(f: Function5[_, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column): Column = {
     ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr))
@@ -384,6 +546,8 @@ object functions {
   /**
    * Call a Scala function of 6 arguments as user-defined function (UDF). This requires
    * you to specify the return data type.
+   *
+   * @group udf_funcs
    */
   def callUDF(f: Function6[_, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column): Column = {
     ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr))
@@ -392,6 +556,8 @@ object functions {
   /**
    * Call a Scala function of 7 arguments as user-defined function (UDF). This requires
    * you to specify the return data type.
+   *
+   * @group udf_funcs
    */
   def callUDF(f: Function7[_, _, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column, arg7: Column): Column = {
     ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr))
@@ -400,6 +566,8 @@ object functions {
   /**
    * Call a Scala function of 8 arguments as user-defined function (UDF). This requires
    * you to specify the return data type.
+   *
+   * @group udf_funcs
    */
   def callUDF(f: Function8[_, _, _, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column, arg7: Column, arg8: Column): Column = {
     ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr))
@@ -408,6 +576,8 @@ object functions {
   /**
    * Call a Scala function of 9 arguments as user-defined function (UDF). This requires
    * you to specify the return data type.
+   *
+   * @group udf_funcs
    */
   def callUDF(f: Function9[_, _, _, _, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column, arg7: Column, arg8: Column, arg9: Column): Column = {
     ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr, arg9.expr))
@@ -416,6 +586,8 @@ object functions {
   /**
    * Call a Scala function of 10 arguments as user-defined function (UDF). This requires
    * you to specify the return data type.
+   *
+   * @group udf_funcs
    */
   def callUDF(f: Function10[_, _, _, _, _, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column, arg7: Column, arg8: Column, arg9: Column, arg10: Column): Column = {
     ScalaUdf(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr, arg9.expr, arg10.expr))

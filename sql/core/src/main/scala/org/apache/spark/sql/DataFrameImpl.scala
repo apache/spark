@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.CharArrayWriter
+import java.sql.DriverManager
 
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
@@ -36,6 +37,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{ExplainCommand, LogicalRDD, EvaluatePython}
+import org.apache.spark.sql.jdbc.JDBCWriteDetails
 import org.apache.spark.sql.json.JsonRDD
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{NumericType, StructType}
@@ -67,7 +69,11 @@ private[sql] class DataFrameImpl protected[sql](
   @transient protected[sql] override val logicalPlan: LogicalPlan = queryExecution.logical match {
     // For various commands (like DDL) and queries with side effects, we force query optimization to
     // happen right away to let these side effects take place eagerly.
-    case _: Command | _: InsertIntoTable | _: CreateTableAsSelect[_] |_: WriteToFile =>
+    case _: Command |
+         _: InsertIntoTable |
+         _: CreateTableAsSelect[_] |
+         _: CreateTableUsingAsSelect |
+         _: WriteToFile =>
       LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sqlContext)
     case _ =>
       queryExecution.logical
@@ -234,9 +240,10 @@ private[sql] class DataFrameImpl protected[sql](
   }
 
   override def withColumnRenamed(existingName: String, newName: String): DataFrame = {
+    val resolver = sqlContext.analyzer.resolver
     val colNames = schema.map { field =>
       val name = field.name
-      if (name == existingName) Column(name).as(newName) else Column(name)
+      if (resolver(name, existingName)) Column(name).as(newName) else Column(name)
     }
     select(colNames :_*)
   }
@@ -364,12 +371,13 @@ private[sql] class DataFrameImpl protected[sql](
   /////////////////////////////////////////////////////////////////////////////
 
   override def rdd: RDD[Row] = {
+    // use a local variable to make sure the map closure doesn't capture the whole DataFrame
     val schema = this.schema
     queryExecution.executedPlan.execute().map(ScalaReflection.convertRowToScala(_, schema))
   }
 
   override def registerTempTable(tableName: String): Unit = {
-    sqlContext.registerRDDAsTable(this, tableName)
+    sqlContext.registerDataFrameAsTable(this, tableName)
   }
 
   override def saveAsParquetFile(path: String): Unit = {
@@ -386,7 +394,7 @@ private[sql] class DataFrameImpl protected[sql](
       mode: SaveMode,
       options: Map[String, String]): Unit = {
     val cmd =
-      CreateTableUsingAsLogicalPlan(
+      CreateTableUsingAsSelect(
         tableName,
         source,
         temporary = false,
@@ -433,6 +441,35 @@ private[sql] class DataFrameImpl protected[sql](
         }
       }
     }
+  }
+
+  def createJDBCTable(url: String, table: String, allowExisting: Boolean): Unit = {
+    val conn = DriverManager.getConnection(url)
+    try {
+      if (allowExisting) {
+        val sql = s"DROP TABLE IF EXISTS $table"
+        conn.prepareStatement(sql).executeUpdate()
+      }
+      val schema = JDBCWriteDetails.schemaString(this, url)
+      val sql = s"CREATE TABLE $table ($schema)"
+      conn.prepareStatement(sql).executeUpdate()
+    } finally {
+      conn.close()
+    }
+    JDBCWriteDetails.saveTable(this, url, table)
+  }
+
+  def insertIntoJDBC(url: String, table: String, overwrite: Boolean): Unit = {
+    if (overwrite) {
+      val conn = DriverManager.getConnection(url)
+      try {
+        val sql = s"TRUNCATE TABLE $table"
+        conn.prepareStatement(sql).executeUpdate()
+      } finally {
+        conn.close()
+      }
+    }
+    JDBCWriteDetails.saveTable(this, url, table)
   }
 
   ////////////////////////////////////////////////////////////////////////////

@@ -37,7 +37,7 @@ private[sql] class DefaultSource
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
-    val path = parameters.getOrElse("path", sys.error("Option 'path' not specified"))
+    val path = checkPath(parameters)
     val samplingRatio = parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
 
     JSONRelation(path, samplingRatio, None)(sqlContext)
@@ -48,7 +48,7 @@ private[sql] class DefaultSource
       sqlContext: SQLContext,
       parameters: Map[String, String],
       schema: StructType): BaseRelation = {
-    val path = parameters.getOrElse("path", sys.error("Option 'path' not specified"))
+    val path = checkPath(parameters)
     val samplingRatio = parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
 
     JSONRelation(path, samplingRatio, Some(schema))(sqlContext)

@@ -32,6 +32,7 @@ import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.hadoop.mapreduce.{InputSplit, Job, JobContext}
+
 import parquet.filter2.predicate.FilterApi
 import parquet.format.converter.ParquetMetadataConverter
 import parquet.hadoop.metadata.CompressionCodecName
@@ -42,6 +43,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.rdd.{NewHadoopPartition, NewHadoopRDD, RDD}
+import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.parquet.ParquetTypesConverter._
 import org.apache.spark.sql.sources._
@@ -70,7 +72,7 @@ import org.apache.spark.{Logging, Partition => SparkPartition, SerializableWrita
  *    null or empty string. This is similar to the `hive.exec.default.partition.name` configuration
  *    in Hive.
  */
-class DefaultSource
+private[sql] class DefaultSource
     extends RelationProvider
     with SchemaRelationProvider
     with CreatableRelationProvider {
@@ -145,7 +147,7 @@ private[sql] case class PartitionSpec(partitionColumns: StructType, partitions: 
  *    discovery.
  */
 @DeveloperApi
-case class ParquetRelation2(
+private[sql] case class ParquetRelation2(
     paths: Seq[String],
     parameters: Map[String, String],
     maybeSchema: Option[StructType] = None,
@@ -497,7 +499,8 @@ case class ParquetRelation2(
       _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
     }
 
-    val rawPredicate = partitionPruningPredicates.reduceOption(And).getOrElse(Literal(true))
+    val rawPredicate =
+      partitionPruningPredicates.reduceOption(expressions.And).getOrElse(Literal(true))
     val boundPredicate = InterpretedPredicate(rawPredicate transform {
       case a: AttributeReference =>
         val index = partitionColumns.indexWhere(a.name == _.name)
@@ -597,7 +600,7 @@ case class ParquetRelation2(
   }
 }
 
-object ParquetRelation2 {
+private[sql] object ParquetRelation2 {
   // Whether we should merge schemas collected from all Parquet part-files.
   val MERGE_SCHEMA = "mergeSchema"
 

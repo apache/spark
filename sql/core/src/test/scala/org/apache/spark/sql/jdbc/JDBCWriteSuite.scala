@@ -57,8 +57,8 @@ class JDBCWriteSuite extends FunSuite with BeforeAndAfter {
     val srdd = TestSQLContext.createDataFrame(sc.parallelize(arr2x2), schema2)
 
     srdd.createJDBCTable(url, "TEST.BASICCREATETEST", false)
-    assert(2 == TestSQLContext.jdbcRDD(url, "TEST.BASICCREATETEST").count)
-    assert(2 == TestSQLContext.jdbcRDD(url, "TEST.BASICCREATETEST").collect()(0).length)
+    assert(2 == TestSQLContext.jdbc(url, "TEST.BASICCREATETEST").count)
+    assert(2 == TestSQLContext.jdbc(url, "TEST.BASICCREATETEST").collect()(0).length)
   }
 
   test("CREATE with overwrite") {
@@ -66,12 +66,12 @@ class JDBCWriteSuite extends FunSuite with BeforeAndAfter {
     val srdd2 = TestSQLContext.createDataFrame(sc.parallelize(arr1x2), schema2)
 
     srdd.createJDBCTable(url, "TEST.DROPTEST", false)
-    assert(2 == TestSQLContext.jdbcRDD(url, "TEST.DROPTEST").count)
-    assert(3 == TestSQLContext.jdbcRDD(url, "TEST.DROPTEST").collect()(0).length)
+    assert(2 == TestSQLContext.jdbc(url, "TEST.DROPTEST").count)
+    assert(3 == TestSQLContext.jdbc(url, "TEST.DROPTEST").collect()(0).length)
 
     srdd2.createJDBCTable(url, "TEST.DROPTEST", true)
-    assert(1 == TestSQLContext.jdbcRDD(url, "TEST.DROPTEST").count)
-    assert(2 == TestSQLContext.jdbcRDD(url, "TEST.DROPTEST").collect()(0).length)
+    assert(1 == TestSQLContext.jdbc(url, "TEST.DROPTEST").count)
+    assert(2 == TestSQLContext.jdbc(url, "TEST.DROPTEST").collect()(0).length)
   }
 
   test("CREATE then INSERT to append") {
@@ -80,8 +80,8 @@ class JDBCWriteSuite extends FunSuite with BeforeAndAfter {
 
     srdd.createJDBCTable(url, "TEST.APPENDTEST", false)
     srdd2.insertIntoJDBC(url, "TEST.APPENDTEST", false)
-    assert(3 == TestSQLContext.jdbcRDD(url, "TEST.APPENDTEST").count)
-    assert(2 == TestSQLContext.jdbcRDD(url, "TEST.APPENDTEST").collect()(0).length)
+    assert(3 == TestSQLContext.jdbc(url, "TEST.APPENDTEST").count)
+    assert(2 == TestSQLContext.jdbc(url, "TEST.APPENDTEST").collect()(0).length)
   }
 
   test("CREATE then INSERT to truncate") {
@@ -90,8 +90,8 @@ class JDBCWriteSuite extends FunSuite with BeforeAndAfter {
 
     srdd.createJDBCTable(url, "TEST.TRUNCATETEST", false)
     srdd2.insertIntoJDBC(url, "TEST.TRUNCATETEST", true)
-    assert(1 == TestSQLContext.jdbcRDD(url, "TEST.TRUNCATETEST").count)
-    assert(2 == TestSQLContext.jdbcRDD(url, "TEST.TRUNCATETEST").collect()(0).length)
+    assert(1 == TestSQLContext.jdbc(url, "TEST.TRUNCATETEST").count)
+    assert(2 == TestSQLContext.jdbc(url, "TEST.TRUNCATETEST").collect()(0).length)
   }
 
   test("Incompatible INSERT to append") {

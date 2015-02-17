@@ -1370,6 +1370,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         cleaner.foreach(_.stop())
         dagScheduler.stop()
         dagScheduler = null
+        progressBar.foreach(_.stop())
         taskScheduler = null
         // TODO: Cache.stop()?
         env.stop()
