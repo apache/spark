@@ -177,7 +177,7 @@ private[clustering] object AffinityPropagation extends Logging {
     symmetric: Boolean):
     Graph[Seq[Double], Seq[Double]] = {
     val edges = similarities.flatMap { case (i, j, s) =>
-      if (symmetric) {
+      if (symmetric && i != j) {
         Seq(Edge(i, j, Seq(s, 0.0, 0.0)), Edge(j, i, Seq(s, 0.0, 0.0)))
       } else {
         Seq(Edge(i, j, Seq(s, 0.0, 0.0)))
