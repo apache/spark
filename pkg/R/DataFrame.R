@@ -177,9 +177,9 @@ setGeneric("toRDD", function(df) { standardGeneric("toRDD") })
 setMethod("toRDD",
           signature(df = "DataFrame"),
           function(df) {
-            jrdd <- SparkR:::callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "dfToRowRDD", df@sdf)
-            names <- SparkR:::callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "getColNames", df@sdf)
-            SparkR:::RDD(jrdd, serialized = "rows", colNames = names)
+            jrdd <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "dfToRowRDD", df@sdf)
+            names <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "getColNames", df@sdf)
+            RDD(jrdd, serialized = "rows", colNames = names)
           })
 
 ############################## RDD Map Functions ##################################
