@@ -183,15 +183,16 @@ class DAGScheduler(
     eventProcessLoop.post(TaskSetFailed(taskSet, reason))
   }
 
-  private def getCacheLocs(rdd: RDD[_]): Array[Seq[TaskLocation]] = {
-    if (!cacheLocs.contains(rdd.id)) {
-      val blockIds = rdd.partitions.indices.map(index => RDDBlockId(rdd.id, index)).toArray[BlockId]
-      val locs = BlockManager.blockIdsToBlockManagers(blockIds, env, blockManagerMaster)
-      cacheLocs(rdd.id) = blockIds.map { id =>
-        locs.getOrElse(id, Nil).map(bm => TaskLocation(bm.host, bm.executorId))
-      }
+  private def getLocs(rdd: RDD[_]): Array[Seq[TaskLocation]] = {
+    val blockIds = rdd.partitions.indices.map(index => RDDBlockId(rdd.id, index)).toArray[BlockId]
+    val locs = BlockManager.blockIdsToBlockManagers(blockIds, env, blockManagerMaster)
+    blockIds.map { id =>
+      locs.getOrElse(id, Nil).map(bm => TaskLocation(bm.host, bm.executorId))
     }
-    cacheLocs(rdd.id)
+  }
+
+  private def getCacheLocs(rdd: RDD[_]): Array[Seq[TaskLocation]] = {
+    cacheLocs.getOrElseUpdate(rdd.id,getLocs(rdd))
   }
 
   private def clearCacheLocs() {
