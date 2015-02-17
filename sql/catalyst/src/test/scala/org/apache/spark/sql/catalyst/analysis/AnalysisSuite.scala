@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Literal, Alias, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -56,6 +56,17 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
       }
 
     assert(caseInsensitiveAnalyze(plan).resolved)
+  }
+
+  test("check project's resolved") {
+    assert(Project(testRelation.output, testRelation).resolved)
+
+    assert(!Project(Seq(UnresolvedAttribute("a")), testRelation).resolved)
+
+    val explode = Explode(Nil, AttributeReference("a", IntegerType, nullable = true)())
+    assert(!Project(Seq(Alias(explode, "explode")()), testRelation).resolved)
+
+    assert(!Project(Seq(Alias(Count(Literal(1)), "count")()), testRelation).resolved)
   }
 
   test("analyze project") {

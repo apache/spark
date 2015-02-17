@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.hive.HiveShim
+import org.apache.spark.sql.hive.{MetastoreRelation, HiveShim}
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
@@ -315,5 +315,35 @@ class SQLQuerySuite extends QueryTest {
     checkAnswer(sql("SELECT year(c) + 1 FROM data GROUP BY year(c) + 1"), Row(1971))
 
     dropTempTable("data")
+  }
+
+  test("logical.Project should not be resolved if it contains aggregates or generators") {
+    // This test is used to test the fix of SPARK-5875.
+    // The original issue was that Project's resolved will be true when it contains
+    // AggregateExpressions or Generators. However, in this case, the Project
+    // is not in a valid state (cannot be executed). Because of this bug, the analysis rule of
+    // PreInsertionCasts will actually start to work before ImplicitGenerate and then
+    // generates an invalid query plan.
+    val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i+1}]}"""))
+    jsonRDD(rdd).registerTempTable("data")
+    val originalConf = getConf("spark.sql.hive.convertCTAS", "false")
+    setConf("spark.sql.hive.convertCTAS", "false")
+
+    sql("CREATE TABLE explodeTest (key bigInt)")
+    table("explodeTest").queryExecution.analyzed match {
+      case metastoreRelation: MetastoreRelation => // OK
+      case _ =>
+        fail("To correctly test the fix of SPARK-5875, explodeTest should be a MetastoreRelation")
+    }
+
+    sql(s"INSERT OVERWRITE TABLE explodeTest SELECT explode(a) AS val FROM data")
+    checkAnswer(
+      sql("SELECT key from explodeTest"),
+      (1 to 5).flatMap(i => Row(i) :: Row(i + 1) :: Nil)
+    )
+
+    sql("DROP TABLE explodeTest")
+    dropTempTable("data")
+    setConf("spark.sql.hive.convertCTAS", originalConf)
   }
 }
