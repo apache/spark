@@ -74,28 +74,24 @@ class MesosSchedulerBackendSuite extends FunSuite with LocalSparkContext with Mo
   }
 
   test("spark docker properties correctly populate the DockerInfo message") {
-    val taskScheduler = EasyMock.createNiceMock(classOf[TaskSchedulerImpl])
+    val taskScheduler = mock[TaskSchedulerImpl]
 
     val conf = new SparkConf()
       .set("spark.mesos.executor.docker.image", "spark/mock")
       .set("spark.mesos.executor.docker.volumes", "/a,/b:/b,/c:/c:rw,/d:ro,/e:/e:ro")
       .set("spark.mesos.executor.docker.portmaps", "80:8080,53:53:tcp")
      
-    val listenerBus = EasyMock.createMock(classOf[LiveListenerBus])
-    listenerBus.post(SparkListenerExecutorAdded(EasyMock.anyLong, "s1", new ExecutorInfo("host1", 2)))
-    EasyMock.replay(listenerBus)
+    val listenerBus = mock[LiveListenerBus]
+    listenerBus.post(SparkListenerExecutorAdded(anyLong, "s1", new ExecutorInfo("host1", 2, Map.empty)))
                          
-    val sc = EasyMock.createMock(classOf[SparkContext])
-    EasyMock.expect(sc.executorMemory).andReturn(100).anyTimes()
-    EasyMock.expect(sc.getSparkHome()).andReturn(Option("/path")).anyTimes()
-    EasyMock.expect(sc.executorEnvs).andReturn(new mutable.HashMap).anyTimes()
-    EasyMock.expect(sc.conf).andReturn(conf).anyTimes()
-    EasyMock.expect(sc.listenerBus).andReturn(listenerBus)
-    EasyMock.replay(sc)
+    val sc = mock[SparkContext]
+    when(sc.executorMemory).thenReturn(100)
+    when(sc.getSparkHome()).thenReturn(Option("/spark-home"))
+    when(sc.executorEnvs).thenReturn(new mutable.HashMap[String, String])
+    when(sc.conf).thenReturn(conf)
+    when(sc.listenerBus).thenReturn(listenerBus)
 
     val backend = new MesosSchedulerBackend(taskScheduler, sc, "master")
-    EasyMock.replay(taskScheduler)
-    EasyMock.verify(taskScheduler)
 
     val execInfo = backend.createExecutorInfo("mockExecutor")
     assert(execInfo.getContainer.getDocker.getImage.equals("spark/mock"))
