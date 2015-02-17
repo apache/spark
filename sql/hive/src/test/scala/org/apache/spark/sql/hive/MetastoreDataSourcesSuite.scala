@@ -547,7 +547,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
         Map.empty[String, String])
     }.getMessage
     assert(
-      message.contains("Option 'path' not specified"),
+      message.contains("'path' must be specified for json data."),
       "We should complain that path is not specified.")
 
     sql("DROP TABLE savedJsonTable")
