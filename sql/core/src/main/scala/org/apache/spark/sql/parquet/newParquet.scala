@@ -288,7 +288,7 @@ case class ParquetRelation2(
       }
 
       try {
-        parquetSchema = readSchema().getOrElse(maybeSchema.get)
+        parquetSchema = readSchema().getOrElse(maybeSchema.getOrElse(maybeMetastoreSchema.get))
       } catch {
         case e => throw new SparkException(s"Failed to find schema for ${paths.mkString(",")}", e)
       }
@@ -617,7 +617,7 @@ object ParquetRelation2 {
 
   private[parquet] def readSchema(
       footers: Seq[Footer], sqlContext: SQLContext): Option[StructType] = {
-    Option(footers.map { footer =>
+    val mergedSchema = footers.map { footer =>
       val metadata = footer.getParquetMetadata.getFileMetaData
       val parquetSchema = metadata.getSchema
       val maybeSparkSchema = metadata
@@ -640,7 +640,9 @@ object ParquetRelation2 {
       case (left, right) => try left.merge(right) catch { case e: Throwable =>
           throw new SparkException(s"Failed to merge incompatible schemas $left and $right", e)
         }
-    })
+    }
+
+    Option(mergedSchema)
   }
 
   /**
