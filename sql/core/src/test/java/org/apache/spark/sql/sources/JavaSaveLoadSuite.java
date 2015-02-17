@@ -87,7 +87,7 @@ public class JavaSaveLoadSuite {
     options.put("path", path.toString());
     df.save("org.apache.spark.sql.json", SaveMode.ErrorIfExists, options);
 
-    List<StructField> fields = new ArrayList<>();
+    List<StructField> fields = new ArrayList<StructField>();
     fields.add(DataTypes.createStructField("b", DataTypes.StringType, true));
     StructType schema = DataTypes.createStructType(fields);
     DataFrame loadedDF = sqlContext.load("org.apache.spark.sql.json", schema, options);

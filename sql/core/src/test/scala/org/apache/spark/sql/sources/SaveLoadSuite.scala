@@ -22,7 +22,7 @@ import java.io.File
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.catalyst.util
-import org.apache.spark.sql.{SQLConf, DataFrame}
+import org.apache.spark.sql.{SaveMode, SQLConf, DataFrame}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 

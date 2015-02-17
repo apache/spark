@@ -23,13 +23,38 @@ from itertools import imap
 from py4j.protocol import Py4JError
 from py4j.java_collections import MapConverter
 
-from pyspark.rdd import _prepare_for_python_RDD
+from pyspark.rdd import RDD, _prepare_for_python_RDD
 from pyspark.serializers import AutoBatchedSerializer, PickleSerializer
-from pyspark.sql.types import StringType, StructType, _infer_type, _verify_type, \
+from pyspark.sql.types import StringType, StructType, _verify_type, \
     _infer_schema, _has_nulltype, _merge_type, _create_converter, _python_to_sql_converter
 from pyspark.sql.dataframe import DataFrame
 
+try:
+    import pandas
+    has_pandas = True
+except ImportError:
+    has_pandas = False
+
 __all__ = ["SQLContext", "HiveContext"]
+
+
+def _monkey_patch_RDD(sqlCtx):
+    def toDF(self, schema=None, sampleRatio=None):
+        """
+        Convert current :class:`RDD` into a :class:`DataFrame`
+
+        This is a shorthand for `sqlCtx.createDataFrame(rdd, schema, sampleRatio)`
+
+        :param schema: a StructType or list of names of columns
+        :param samplingRatio: the sample ratio of rows used for inferring
+        :return: a DataFrame
+
+        >>> rdd.toDF().collect()
+        [Row(name=u'Alice', age=1)]
+        """
+        return sqlCtx.createDataFrame(self, schema, sampleRatio)
+
+    RDD.toDF = toDF
 
 
 class SQLContext(object):
@@ -43,15 +68,20 @@ class SQLContext(object):
     def __init__(self, sparkContext, sqlContext=None):
         """Create a new SQLContext.
 
+        It will add a method called `toDF` to :class:`RDD`, which could be
+        used to convert an RDD into a DataFrame, it's a shorthand for
+        :func:`SQLContext.createDataFrame`.
+
         :param sparkContext: The SparkContext to wrap.
         :param sqlContext: An optional JVM Scala SQLContext. If set, we do not instatiate a new
         SQLContext in the JVM, instead we make all calls to this object.
 
         >>> from datetime import datetime
+        >>> sqlCtx = SQLContext(sc)
         >>> allTypes = sc.parallelize([Row(i=1, s="string", d=1.0, l=1L,
         ...     b=True, list=[1, 2, 3], dict={"s": 0}, row=Row(a=1),
         ...     time=datetime(2014, 8, 1, 14, 1, 5))])
-        >>> df = sqlCtx.createDataFrame(allTypes)
+        >>> df = allTypes.toDF()
         >>> df.registerTempTable("allTypes")
         >>> sqlCtx.sql('select i+1, d+1, not b, list[1], dict["s"], time, row.a '
         ...            'from allTypes where b and i > 0').collect()
@@ -64,6 +94,7 @@ class SQLContext(object):
         self._jsc = self._sc._jsc
         self._jvm = self._sc._jvm
         self._scala_SQLContext = sqlContext
+        _monkey_patch_RDD(self)
 
     @property
     def _ssql_ctx(self):
@@ -115,6 +146,31 @@ class SQLContext(object):
                                             bvars,
                                             self._sc._javaAccumulator,
                                             returnType.json())
+
+    def _inferSchema(self, rdd, samplingRatio=None):
+        first = rdd.first()
+        if not first:
+            raise ValueError("The first row in RDD is empty, "
+                             "can not infer schema")
+        if type(first) is dict:
+            warnings.warn("Using RDD of dict to inferSchema is deprecated,"
+                          "please use pyspark.sql.Row instead")
+
+        if samplingRatio is None:
+            schema = _infer_schema(first)
+            if _has_nulltype(schema):
+                for row in rdd.take(100)[1:]:
+                    schema = _merge_type(schema, _infer_schema(row))
+                    if not _has_nulltype(schema):
+                        break
+                else:
+                    raise ValueError("Some of types cannot be determined by the "
+                                     "first 100 rows, please try again with sampling")
+        else:
+            if samplingRatio < 0.99:
+                rdd = rdd.sample(False, float(samplingRatio))
+            schema = rdd.map(_infer_schema).reduce(_merge_type)
+        return schema
 
     def inferSchema(self, rdd, samplingRatio=None):
         """Infer and apply a schema to an RDD of L{Row}.
@@ -171,29 +227,7 @@ class SQLContext(object):
         if isinstance(rdd, DataFrame):
             raise TypeError("Cannot apply schema to DataFrame")
 
-        first = rdd.first()
-        if not first:
-            raise ValueError("The first row in RDD is empty, "
-                             "can not infer schema")
-        if type(first) is dict:
-            warnings.warn("Using RDD of dict to inferSchema is deprecated,"
-                          "please use pyspark.sql.Row instead")
-
-        if samplingRatio is None:
-            schema = _infer_schema(first)
-            if _has_nulltype(schema):
-                for row in rdd.take(100)[1:]:
-                    schema = _merge_type(schema, _infer_schema(row))
-                    if not _has_nulltype(schema):
-                        break
-                else:
-                    warnings.warn("Some of types cannot be determined by the "
-                                  "first 100 rows, please try again with sampling")
-        else:
-            if samplingRatio < 0.99:
-                rdd = rdd.sample(False, float(samplingRatio))
-            schema = rdd.map(_infer_schema).reduce(_merge_type)
-
+        schema = self._inferSchema(rdd, samplingRatio)
         converter = _create_converter(schema)
         rdd = rdd.map(converter)
         return self.applySchema(rdd, schema)
@@ -274,7 +308,7 @@ class SQLContext(object):
             raise TypeError("Cannot apply schema to DataFrame")
 
         if not isinstance(schema, StructType):
-            raise TypeError("schema should be StructType")
+            raise TypeError("schema should be StructType, but got %s" % schema)
 
         # take the first few rows to verify schema
         rows = rdd.take(10)
@@ -294,9 +328,9 @@ class SQLContext(object):
         df = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), schema.json())
         return DataFrame(df, self)
 
-    def createDataFrame(self, rdd, schema=None, samplingRatio=None):
+    def createDataFrame(self, data, schema=None, samplingRatio=None):
         """
-        Create a DataFrame from an RDD of tuple/list and an optional `schema`.
+        Create a DataFrame from an RDD of tuple/list, list or pandas.DataFrame.
 
         `schema` could be :class:`StructType` or a list of column names.
 
@@ -311,12 +345,20 @@ class SQLContext(object):
         rows will be used to do referring. The first row will be used if
         `samplingRatio` is None.
 
-        :param rdd: an RDD of Row or tuple or list or dict
+        :param data: an RDD of Row/tuple/list/dict, list, or pandas.DataFrame
         :param schema: a StructType or list of names of columns
         :param samplingRatio: the sample ratio of rows used for inferring
         :return: a DataFrame
 
-        >>> rdd = sc.parallelize([('Alice', 1)])
+        >>> l = [('Alice', 1)]
+        >>> sqlCtx.createDataFrame(l, ['name', 'age']).collect()
+        [Row(name=u'Alice', age=1)]
+
+        >>> d = [{'name': 'Alice', 'age': 1}]
+        >>> sqlCtx.createDataFrame(d).collect()
+        [Row(age=1, name=u'Alice')]
+
+        >>> rdd = sc.parallelize(l)
         >>> df = sqlCtx.createDataFrame(rdd, ['name', 'age'])
         >>> df.collect()
         [Row(name=u'Alice', age=1)]
@@ -336,19 +378,32 @@ class SQLContext(object):
         >>> df3.collect()
         [Row(name=u'Alice', age=1)]
         """
-        if isinstance(rdd, DataFrame):
-            raise TypeError("rdd is already a DataFrame")
+        if isinstance(data, DataFrame):
+            raise TypeError("data is already a DataFrame")
 
-        if isinstance(schema, StructType):
-            return self.applySchema(rdd, schema)
-        else:
-            if isinstance(schema, (list, tuple)):
-                first = rdd.first()
-                if not isinstance(first, (list, tuple)):
-                    raise ValueError("each row in `rdd` should be list or tuple")
-                row_cls = Row(*schema)
-                rdd = rdd.map(lambda r: row_cls(*r))
-            return self.inferSchema(rdd, samplingRatio)
+        if has_pandas and isinstance(data, pandas.DataFrame):
+            data = self._sc.parallelize(data.to_records(index=False))
+            if schema is None:
+                schema = list(data.columns)
+
+        if not isinstance(data, RDD):
+            try:
+                # data could be list, tuple, generator ...
+                data = self._sc.parallelize(data)
+            except Exception:
+                raise ValueError("cannot create an RDD from type: %s" % type(data))
+
+        if schema is None:
+            return self.inferSchema(data, samplingRatio)
+
+        if isinstance(schema, (list, tuple)):
+            first = data.first()
+            if not isinstance(first, (list, tuple)):
+                raise ValueError("each row in `rdd` should be list or tuple")
+            row_cls = Row(*schema)
+            schema = self._inferSchema(data.map(lambda r: row_cls(*r)), samplingRatio)
+
+        return self.applySchema(data, schema)
 
     def registerRDDAsTable(self, rdd, tableName):
         """Registers the given RDD as a temporary table in the catalog.
@@ -376,11 +431,10 @@ class SQLContext(object):
         True
         """
         gateway = self._sc._gateway
-        jpath = paths[0]
-        jpaths = gateway.new_array(gateway.jvm.java.lang.String, len(paths) - 1)
-        for i in range(1, len(paths)):
+        jpaths = gateway.new_array(gateway.jvm.java.lang.String, len(paths))
+        for i in range(0, len(paths)):
             jpaths[i] = paths[i]
-        jdf = self._ssql_ctx.parquetFile(jpath, jpaths)
+        jdf = self._ssql_ctx.parquetFile(jpaths)
         return DataFrame(jdf, self)
 
     def jsonFile(self, path, schema=None, samplingRatio=1.0):
@@ -412,7 +466,7 @@ class SQLContext(object):
         Row(f1=2, f2=None, f3=Row(field4=22,..., f4=[Row(field7=u'row2')])
         Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)
 
-        >>> df3 = sqlCtx.jsonFile(jsonFile, df1.schema())
+        >>> df3 = sqlCtx.jsonFile(jsonFile, df1.schema)
         >>> sqlCtx.registerRDDAsTable(df3, "table2")
         >>> df4 = sqlCtx.sql(
         ...   "SELECT field1 AS f1, field2 as f2, field3 as f3, "
@@ -465,7 +519,7 @@ class SQLContext(object):
         Row(f1=2, f2=None, f3=Row(field4=22..., f4=[Row(field7=u'row2')])
         Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)
 
-        >>> df3 = sqlCtx.jsonRDD(json, df1.schema())
+        >>> df3 = sqlCtx.jsonRDD(json, df1.schema)
         >>> sqlCtx.registerRDDAsTable(df3, "table2")
         >>> df4 = sqlCtx.sql(
         ...   "SELECT field1 AS f1, field2 as f2, field3 as f3, "
@@ -590,6 +644,40 @@ class SQLContext(object):
         True
         """
         return DataFrame(self._ssql_ctx.table(tableName), self)
+
+    def tables(self, dbName=None):
+        """Returns a DataFrame containing names of tables in the given database.
+
+        If `dbName` is not specified, the current database will be used.
+
+        The returned DataFrame has two columns, tableName and isTemporary
+        (a column with BooleanType indicating if a table is a temporary one or not).
+
+        >>> sqlCtx.registerRDDAsTable(df, "table1")
+        >>> df2 = sqlCtx.tables()
+        >>> df2.filter("tableName = 'table1'").first()
+        Row(tableName=u'table1', isTemporary=True)
+        """
+        if dbName is None:
+            return DataFrame(self._ssql_ctx.tables(), self)
+        else:
+            return DataFrame(self._ssql_ctx.tables(dbName), self)
+
+    def tableNames(self, dbName=None):
+        """Returns a list of names of tables in the database `dbName`.
+
+        If `dbName` is not specified, the current database will be used.
+
+        >>> sqlCtx.registerRDDAsTable(df, "table1")
+        >>> "table1" in sqlCtx.tableNames()
+        True
+        >>> "table1" in sqlCtx.tableNames("db")
+        True
+        """
+        if dbName is None:
+            return [name for name in self._ssql_ctx.tableNames()]
+        else:
+            return [name for name in self._ssql_ctx.tableNames(dbName)]
 
     def cacheTable(self, tableName):
         """Caches the specified table in-memory."""
@@ -736,7 +824,8 @@ def _test():
          Row(field1=2, field2="row2"),
          Row(field1=3, field2="row3")]
     )
-    globs['df'] = sqlCtx.createDataFrame(rdd)
+    _monkey_patch_RDD(sqlCtx)
+    globs['df'] = rdd.toDF()
     jsonStrings = [
         '{"field1": 1, "field2": "row1", "field3":{"field4":11}}',
         '{"field1" : 2, "field3":{"field4":22, "field5": [10, 11]},'
