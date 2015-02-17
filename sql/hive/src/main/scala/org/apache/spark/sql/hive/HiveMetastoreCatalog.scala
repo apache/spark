@@ -208,14 +208,14 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         ParquetRelation2(
           paths,
           Map(ParquetRelation2.METASTORE_SCHEMA -> metastoreSchema.json),
-          Some(metastoreSchema),
+          None,
           Some(partitionSpec))(hive))
     } else {
       val paths = Seq(metastoreRelation.hiveQlTable.getDataLocation.toString)
-      LogicalRelation(ParquetRelation2(
+      LogicalRelation(
+        ParquetRelation2(
           paths,
-          Map(ParquetRelation2.METASTORE_SCHEMA -> metastoreSchema.json),
-          Some(metastoreSchema))(hive))
+          Map(ParquetRelation2.METASTORE_SCHEMA -> metastoreSchema.json))(hive))
     }
   }
 
