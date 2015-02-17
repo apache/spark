@@ -89,6 +89,12 @@ class DataFrameSuite extends QueryTest {
       testData.collect().toSeq)
   }
 
+  test("head and take") {
+    assert(testData.take(2) === testData.collect().take(2))
+    assert(testData.head(2) === testData.collect().take(2))
+    assert(testData.head(2).head.schema === testData.schema)
+  }
+
   test("self join") {
     val df1 = testData.select(testData("key")).as('df1)
     val df2 = testData.select(testData("key")).as('df2)
@@ -161,6 +167,18 @@ class DataFrameSuite extends QueryTest {
     checkAnswer(
       testData2.groupBy("a").agg(Map("b" -> "sum")),
       Row(1, 3) :: Row(2, 3) :: Row(3, 3) :: Nil
+    )
+
+    val df1 = Seq(("a", 1, 0, "b"), ("b", 2, 4, "c"), ("a", 2, 3, "d"))
+      .toDF("key", "value1", "value2", "rest")
+
+    checkAnswer(
+      df1.groupBy("key").min(),
+      df1.groupBy("key").min("value1", "value2").collect()
+    )
+    checkAnswer(
+      df1.groupBy("key").min("value2"),
+      Seq(Row("a", 0), Row("b", 4))
     )
   }
 

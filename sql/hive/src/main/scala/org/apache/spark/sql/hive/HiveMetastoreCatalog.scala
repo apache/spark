@@ -31,8 +31,8 @@ import org.apache.hadoop.hive.serde2.{Deserializer, SerDeException}
 import org.apache.hadoop.util.ReflectionUtils
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.analysis.{Catalog, OverrideCatalog}
+import org.apache.spark.sql.{AnalysisException, SQLContext}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, Catalog, OverrideCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
@@ -91,7 +91,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     CacheBuilder.newBuilder().maximumSize(1000).build(cacheLoader)
   }
 
-  def refreshTable(databaseName: String, tableName: String): Unit = {
+  override def refreshTable(databaseName: String, tableName: String): Unit = {
     cachedDataSourceTables.refresh(QualifiedTableName(databaseName, tableName).toLowerCase)
   }
 
@@ -154,10 +154,21 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     val databaseName = tableIdent.lift(tableIdent.size - 2).getOrElse(
       hive.sessionState.getCurrentDatabase)
     val tblName = tableIdent.last
-    val table = client.getTable(databaseName, tblName)
+    val table = try client.getTable(databaseName, tblName) catch {
+      case te: org.apache.hadoop.hive.ql.metadata.InvalidTableException =>
+        throw new NoSuchTableException
+    }
 
     if (table.getProperty("spark.sql.sources.provider") != null) {
-      cachedDataSourceTables(QualifiedTableName(databaseName, tblName).toLowerCase)
+      val dataSourceTable =
+        cachedDataSourceTables(QualifiedTableName(databaseName, tblName).toLowerCase)
+      // Then, if alias is specified, wrap the table with a Subquery using the alias.
+      // Othersie, wrap the table with a Subquery using the table name.
+      val withAlias =
+        alias.map(a => Subquery(a, dataSourceTable)).getOrElse(
+          Subquery(tableIdent.last, dataSourceTable))
+
+      withAlias
     } else if (table.isView) {
       // if the unresolved relation is from hive view
       // parse the text into logic node.
@@ -209,8 +220,14 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
   }
 
   override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {
-    val dbName = databaseName.getOrElse(hive.sessionState.getCurrentDatabase)
-    client.getAllTables(dbName).map(tableName => (tableName, false))
+    val dbName = if (!caseSensitive) {
+      if (databaseName.isDefined) Some(databaseName.get.toLowerCase) else None
+    } else {
+      databaseName
+    }
+    val db = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
+
+    client.getAllTables(db).map(tableName => (tableName, false))
   }
 
   /**
@@ -240,7 +257,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     val hiveSchema: JList[FieldSchema] = if (schema == null || schema.isEmpty) {
       crtTbl.getCols
     } else {
-      schema.map(attr => new FieldSchema(attr.name, toMetastoreType(attr.dataType), ""))
+      schema.map(attr => new FieldSchema(attr.name, toMetastoreType(attr.dataType), null))
     }
     tbl.setFields(hiveSchema)
 
@@ -314,6 +331,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     if (crtTbl != null && crtTbl.getLineDelim() != null) {
       tbl.setSerdeParam(serdeConstants.LINE_DELIM, crtTbl.getLineDelim())
     }
+    HiveShim.setTblNullFormat(crtTbl, tbl)
 
     if (crtTbl != null && crtTbl.getSerdeProps() != null) {
       val iter = crtTbl.getSerdeProps().entrySet().iterator()
@@ -429,7 +447,13 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         val attributedRewrites = AttributeMap(relation.output.zip(parquetRelation.output))
 
         lastPlan.transformUp {
-          case r: MetastoreRelation if r == relation => parquetRelation
+          case r: MetastoreRelation if r == relation => {
+            val withAlias =
+              r.alias.map(a => Subquery(a, parquetRelation)).getOrElse(
+                Subquery(r.tableName, parquetRelation))
+
+            withAlias
+          }
           case other => other.transformExpressions {
             case a: Attribute if a.resolved => attributedRewrites.getOrElse(a, a)
           }
@@ -659,7 +683,7 @@ private[hive] case class MetastoreRelation
 }
 
 object HiveMetastoreTypes {
-  protected val ddlParser = new DDLParser
+  protected val ddlParser = new DDLParser(HiveQl.parseSql(_))
 
   def toDataType(metastoreType: String): DataType = synchronized {
     ddlParser.parseType(metastoreType)

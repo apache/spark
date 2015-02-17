@@ -245,6 +245,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
     val goodJson = constructSubmitRequest(masterUrl).toJson
     val badJson1 = goodJson.replaceAll("action", "fraction") // invalid JSON
     val badJson2 = goodJson.substring(goodJson.size / 2) // malformed JSON
+    val notJson = "\"hello, world\""
     val (response1, code1) = sendHttpRequestWithResponse(submitRequestPath, "POST") // missing JSON
     val (response2, code2) = sendHttpRequestWithResponse(submitRequestPath, "POST", badJson1)
     val (response3, code3) = sendHttpRequestWithResponse(submitRequestPath, "POST", badJson2)
@@ -252,6 +253,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
     val (response5, code5) = sendHttpRequestWithResponse(s"$killRequestPath/", "POST")
     val (response6, code6) = sendHttpRequestWithResponse(statusRequestPath, "GET") // missing ID
     val (response7, code7) = sendHttpRequestWithResponse(s"$statusRequestPath/", "GET")
+    val (response8, code8) = sendHttpRequestWithResponse(submitRequestPath, "POST", notJson)
     // these should all fail as error responses
     getErrorResponse(response1)
     getErrorResponse(response2)
@@ -260,6 +262,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
     getErrorResponse(response5)
     getErrorResponse(response6)
     getErrorResponse(response7)
+    getErrorResponse(response8)
     assert(code1 === HttpServletResponse.SC_BAD_REQUEST)
     assert(code2 === HttpServletResponse.SC_BAD_REQUEST)
     assert(code3 === HttpServletResponse.SC_BAD_REQUEST)
@@ -267,6 +270,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
     assert(code5 === HttpServletResponse.SC_BAD_REQUEST)
     assert(code6 === HttpServletResponse.SC_BAD_REQUEST)
     assert(code7 === HttpServletResponse.SC_BAD_REQUEST)
+    assert(code8 === HttpServletResponse.SC_BAD_REQUEST)
   }
 
   test("bad request paths") {

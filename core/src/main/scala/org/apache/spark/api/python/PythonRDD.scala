@@ -144,11 +144,24 @@ private[spark] class PythonRDD(
                 stream.readFully(update)
                 accumulator += Collections.singletonList(update)
               }
+
               // Check whether the worker is ready to be re-used.
-              if (stream.readInt() == SpecialLengths.END_OF_STREAM) {
-                if (reuse_worker) {
-                  env.releasePythonWorker(pythonExec, envVars.toMap, worker)
-                  released = true
+              if (reuse_worker) {
+                // It has a high possibility that the ending mark is already available,
+                // And current task should not be blocked by checking it
+
+                if (stream.available() >= 4) {
+                  val ending = stream.readInt()
+                  if (ending == SpecialLengths.END_OF_STREAM) {
+                    env.releasePythonWorker(pythonExec, envVars.toMap, worker)
+                    released = true
+                    logInfo(s"Communication with worker ended cleanly, re-use it: $worker")
+                  } else {
+                    logInfo(s"Communication with worker did not end cleanly " +
+                      s"(ending with $ending), close it: $worker")
+                  }
+                } else {
+                  logInfo(s"The ending mark from worker is not available, close it: $worker")
                 }
               }
               null
@@ -248,13 +261,13 @@ private[spark] class PythonRDD(
       } catch {
         case e: Exception if context.isCompleted || context.isInterrupted =>
           logDebug("Exception thrown after task completion (likely due to cleanup)", e)
-          worker.shutdownOutput()
+          Utils.tryLog(worker.shutdownOutput())
 
         case e: Exception =>
           // We must avoid throwing exceptions here, because the thread uncaught exception handler
           // will kill the whole executor (see org.apache.spark.executor.Executor).
           _exception = e
-          worker.shutdownOutput()
+          Utils.tryLog(worker.shutdownOutput())
       } finally {
         // Release memory used by this thread for shuffles
         env.shuffleMemoryManager.releaseMemoryForThisThread()
