@@ -20,6 +20,7 @@ package org.apache.spark.util
 import java.util.concurrent.TimeoutException
 
 import scala.concurrent.Await
+import scala.util.{Failure, Try}
 
 import akka.actor._
 
@@ -370,9 +371,13 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     val selection = slaveSystem.actorSelection(
       AkkaUtils.address(AkkaUtils.protocol(slaveSystem), "spark", "localhost", boundPort, "MapOutputTracker"))
     val timeout = AkkaUtils.lookupTimeout(conf)
-    intercept[TimeoutException] {
-      slaveTracker.trackerActor = Await.result(selection.resolveOne(timeout * 2), timeout)
+    val result = Try(Await.result(selection.resolveOne(timeout * 2), timeout))
+
+    assert(result.isFailure === true)
+    val exception = result match {
+      case Failure(ex) => ex
     }
+    assert(exception.isInstanceOf[ActorNotFound] || exception.isInstanceOf[TimeoutException])
 
     actorSystem.shutdown()
     slaveSystem.shutdown()
