@@ -20,9 +20,11 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types._
 
+/**
+ * Throws user facing errors when passed invalid queries that fail to analyze.
+ */
 class CheckAnalysis {
 
   /**
