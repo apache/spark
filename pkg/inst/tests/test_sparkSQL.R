@@ -8,9 +8,9 @@ sc <- sparkR.init()
 
 sqlCtx <- sparkRSQL.init(sc)
 
-mockLines <- c("{\"Name\":\"Michael\"}",
-               "{\"Name\":\"Andy\", \"Age\":30}",
-               "{\"Name\":\"Justin\", \"Age\":19}")
+mockLines <- c("{\"name\":\"Michael\"}",
+               "{\"name\":\"Andy\", \"age\":30}",
+               "{\"name\":\"Justin\", \"age\":19}")
 jsonPath <- tempfile(pattern="sparkr-test", fileext=".tmp")
 writeLines(mockLines, jsonPath)
 
@@ -23,7 +23,7 @@ test_that("jsonFile() on a local file returns a DataFrame", {
 test_that("registerTempTable() results in a queryable table and sql() results in a new DataFrame", {
   df <- jsonFile(sqlCtx, jsonPath)
   registerTempTable(df, "table1")
-  newdf <- sql(sqlCtx, "SELECT * FROM table1 where Name = 'Michael'")
+  newdf <- sql(sqlCtx, "SELECT * FROM table1 where name = 'Michael'")
   expect_true(inherits(newdf, "DataFrame"))
   expect_true(count(newdf) == 1)
 })
@@ -32,6 +32,57 @@ test_that("table() returns a new DataFrame", {
   tabledf <- table(sqlCtx, "table1")
   expect_true(inherits(tabledf, "DataFrame"))
   expect_true(count(tabledf) == 3)
+})
+
+test_that("toRDD() returns an RRDD", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  testRDD <- toRDD(df)
+  expect_true(inherits(testRDD, "RDD"))
+  expect_true(count(testRDD) == 3)
+})
+
+test_that("lapply() on a DataFrame returns an RDD with the correct columns", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  testRDD <- lapply(df, function(row) {
+    row$newCol <- row$age + 5
+    row
+    })
+  expect_true(inherits(testRDD, "RDD"))
+  collected <- collect(testRDD)
+  expect_true(collected[[1]]$name == "Michael")
+  expect_true(collected[[2]]$newCol == "35")
+})
+
+test_that("collect() and take() on a DataFrame return the same number of rows and columns", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  expect_true(length(collect(df)) == length(take(df, 10)))
+  expect_true(length(collect(df)[[1]]) == length(take(df, 10)[[1]]))
+})
+
+test_that("multiple pipeline transformations starting with a DataFrame result in an RDD with the correct values", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  first <- lapply(df, function(row) {
+    row$age <- row$age + 5
+    row
+  })
+  second <- lapply(first, function(row) {
+    row$testCol <- if (row$age == 35 && !is.na(row$age)) TRUE else FALSE
+    row
+  })
+  expect_true(inherits(second, "RDD"))
+  expect_true(count(second) == 3)
+  expect_true(collect(second)[[2]]$age == 35)
+  expect_true(collect(second)[[2]]$testCol)
+  expect_false(collect(second)[[3]]$testCol)
+})
+
+test_that("collectToDF() returns a data.frame", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  rdf <- collectToDF(df)
+  expect_true(is.data.frame(rdf))
+  expect_true(names(rdf)[1] == "age")
+  expect_true(nrow(rdf) == 3)
+  expect_true(ncol(rdf) == 2)
 })
 
 unlink(jsonPath)

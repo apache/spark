@@ -81,8 +81,10 @@ importFrom(methods, setGeneric, setMethod, setOldClass)
 
 exportClasses("DataFrame")
 
-exportMethods("printSchema",
-              "registerTempTable")
+exportMethods("collectToDF",
+              "printSchema",
+              "registerTempTable",
+              "toRDD")
 
 export("jsonFile",
        "parquetFile",
