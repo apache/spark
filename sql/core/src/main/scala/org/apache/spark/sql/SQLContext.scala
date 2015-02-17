@@ -113,6 +113,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] lazy val analyzer: Analyzer =
     new Analyzer(catalog, functionRegistry, caseSensitive = true) {
       override val extendedResolutionRules =
+        ExtractPythonUdfs ::
         sources.PreWriteCheck(catalog) ::
         sources.PreInsertCastAndRename ::
         Nil
@@ -1059,7 +1060,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @DeveloperApi
   protected[sql] class QueryExecution(val logical: LogicalPlan) {
 
-    lazy val analyzed: LogicalPlan = ExtractPythonUdfs(analyzer(logical))
+    lazy val analyzed: LogicalPlan = analyzer(logical)
     lazy val withCachedData: LogicalPlan = cacheManager.useCachedData(analyzed)
     lazy val optimizedPlan: LogicalPlan = optimizer(withCachedData)
 
