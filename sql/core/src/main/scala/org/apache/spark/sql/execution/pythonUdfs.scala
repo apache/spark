@@ -139,6 +139,8 @@ object EvaluatePython {
 
     case (dec: BigDecimal, dt: DecimalType) => dec.underlying()  // Pyrolite can handle BigDecimal
 
+    case (_, LongType) => obj.asInstanceOf[Long]
+
     // Pyrolite can handle Timestamp
     case (other, _) => other
   }
