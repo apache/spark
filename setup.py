@@ -31,6 +31,7 @@ setup(
         'pygments>=2.0.1',
         'pysmbclient>=0.1.3',
         'pyhive>=0.1.3',
+        'pyhs2>=0.6.0',
         'python-dateutil>=2.3',
         'requests>=2.5.1',
         'setproctitle>=1.1.8',

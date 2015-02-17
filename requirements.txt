@@ -21,6 +21,7 @@ pygments
 pyhive
 PySmbClient
 python-dateutil
+pyhs2
 requests
 setproctitle
 snakebite

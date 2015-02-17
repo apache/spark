@@ -1,10 +1,9 @@
-from airflow.configuration import conf
 import datetime
 
 
 def max_partition(
         table, schema="default",
-        hive_conn_id='hive_default'):
+        metastore_conn_id='metastore_default'):
     '''
     Gets the max partition for a table.
 
@@ -17,11 +16,14 @@ def max_partition(
     :param hive_conn_id: The hive connection you are interested in.
         If your default is set you don't need to use this parameter.
     :type hive_conn_id: string
+
+    >>> max_partition('airflow.static_babynames_partitioned')
+    '2015-01-01'
     '''
-    from airflow.hooks.hive_hook import HiveHook
+    from airflow.hooks import HiveMetastoreHook
     if '.' in table:
         schema, table = table.split('.')
-    hh = HiveHook(hive_conn_id=hive_conn_id)
+    hh = HiveMetastoreHook(metastore_conn_id=metastore_conn_id)
     return hh.max_partition(schema=schema, table_name=table)
 
 
@@ -52,7 +54,7 @@ def _closest_date(target_dt, date_list, before_target=None):
 
 def closest_ds_partition(
         table, ds, before=True, schema="default",
-        hive_conn_id='hive_default'):
+        metastore_conn_id='metastore_default'):
     '''
     This function finds the date in a list closest to the target date.
     An optional paramter can be given to get the closest before or after.
@@ -66,12 +68,15 @@ def closest_ds_partition(
     :returns: The closest date
     :rtype: str or None
 
+    >>> tbl = 'airflow.static_babynames_partitioned'
+    >>> closest_ds_partition(tbl, '2015-01-02')
+    '2015-01-01'
     '''
-    from airflow.hooks.hive_hook import HiveHook
+    from airflow.hooks import HiveMetastoreHook
     if '.' in table:
         schema, table = table.split('.')
     target_dt = datetime.datetime.strptime(ds, '%Y-%m-%d')
-    hh = HiveHook(hive_conn_id=hive_conn_id)
+    hh = HiveMetastoreHook(metastore_conn_id=metastore_conn_id)
     partitions = hh.get_partitions(schema=schema, table_name=table)
     parts = [datetime.datetime.strptime(p, '%Y-%m-%d') for p in partitions]
     if partitions is None or partitions == []:
