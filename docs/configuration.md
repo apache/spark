@@ -116,7 +116,7 @@ of the most common options to set are:
     Amount of memory to use for the driver process, i.e. where SparkContext is initialized.
     (e.g. <code>512m</code>, <code>2g</code>).
     
-    <br /><br />Note: this setting only works in <code>cluster</code> mode (e.g. YARN deployment). In client mode (e.g. spark-shell), this setting has no effect. In client mode, driver memory should be configured in the run-time settings ; i.e. --driver-memory 2g.
+    <br /><br />Note: this setting only works in <code>cluster</code> mode (e.g. YARN deployment). In <code>client</code> mode (e.g. spark-shell), this setting has no effect. In client mode, driver memory should be configured in the run-time settings ; i.e. --driver-memory 2g.
   </td>
 </tr>
 <tr>
