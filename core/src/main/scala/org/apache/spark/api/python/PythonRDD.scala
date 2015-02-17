@@ -157,8 +157,8 @@ private[spark] class PythonRDD(
                     released = true
                     logInfo(s"Communication with worker ended cleanly, re-use it: $worker")
                   } else {
-                    logInfo(s"Communication with worker did not end cleanly (ending with $ending), " +
-                      s"close it: $worker")
+                    logInfo(s"Communication with worker did not end cleanly " +
+                      s"(ending with $ending), close it: $worker")
                   }
                 } else {
                   logInfo(s"The ending mark from worker is not available, close it: $worker")
