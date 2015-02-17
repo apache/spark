@@ -25,6 +25,8 @@ import pydoc
 import shutil
 import tempfile
 
+import py4j
+
 if sys.version_info[:2] <= (2, 6):
     try:
         import unittest2 as unittest
@@ -329,9 +331,12 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
     def setUpClass(cls):
         ReusedPySparkTestCase.setUpClass()
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
+        try:
+            cls.sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
+        except py4j.protocol.Py4JError:
+            cls.sqlCtx = None
+            return
         os.unlink(cls.tempdir.name)
-        print "type", type(cls.sc)
-        print "type", type(cls.sc._jsc)
         _scala_HiveContext =\
             cls.sc._jvm.org.apache.spark.sql.hive.test.TestHiveContext(cls.sc._jsc.sc())
         cls.sqlCtx = HiveContext(cls.sc, _scala_HiveContext)
@@ -344,6 +349,9 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         shutil.rmtree(cls.tempdir.name, ignore_errors=True)
 
     def test_save_and_load_table(self):
+        if self.sqlCtx is None:
+            return  # no hive available, skipped
+
         df = self.df
         tmpPath = tempfile.mkdtemp()
         shutil.rmtree(tmpPath)
