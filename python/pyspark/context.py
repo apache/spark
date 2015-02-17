@@ -32,6 +32,7 @@ from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deseria
 from pyspark.storagelevel import StorageLevel
 from pyspark.rdd import RDD
 from pyspark.traceback_utils import CallSite, first_spark_call
+from pyspark.status import StatusTracker
 from pyspark.profiler import ProfilerCollector, BasicProfiler
 
 from py4j.java_collections import ListConverter
@@ -809,6 +810,12 @@ class SparkContext(object):
         Cancel all jobs that have been scheduled or are running.
         """
         self._jsc.sc().cancelAllJobs()
+
+    def statusTracker(self):
+        """
+        Return :class:`StatusTracker` object
+        """
+        return StatusTracker(self._jsc.statusTracker())
 
     def runJob(self, rdd, partitionFunc, partitions=None, allowLocal=False):
         """
