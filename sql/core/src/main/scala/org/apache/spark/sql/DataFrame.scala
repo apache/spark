@@ -41,19 +41,23 @@ private[sql] object DataFrame {
  * :: Experimental ::
  * A distributed collection of data organized into named columns.
  *
- * A [[DataFrame]] is equivalent to a relational table in Spark SQL, and can be created using
- * various functions in [[SQLContext]].
+ * A [[DataFrame]] is equivalent to a relational table in Spark SQL. There are multiple ways
+ * to create a [[DataFrame]]:
  * {{{
+ *   // Create a DataFrame from Parquet files
  *   val people = sqlContext.parquetFile("...")
+ *
+ *   // Create a DataFrame from data sources
+ *   val df =
  * }}}
  *
  * Once created, it can be manipulated using the various domain-specific-language (DSL) functions
- * defined in: [[DataFrame]] (this class), [[Column]], [[functions]] for the DSL.
+ * defined in: [[DataFrame]] (this class), [[Column]], and [[functions]].
  *
- * To select a column from the data frame, use the apply method:
+ * To select a column from the data frame, use `apply` method in Scala and `col` in Java.
  * {{{
  *   val ageCol = people("age")  // in Scala
- *   Column ageCol = people.apply("age")  // in Java
+ *   Column ageCol = people.col("age")  // in Java
  * }}}
  *
  * Note that the [[Column]] type can also be manipulated through its various functions.

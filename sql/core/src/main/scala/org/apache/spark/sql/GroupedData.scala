@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.Star
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
@@ -27,8 +28,10 @@ import org.apache.spark.sql.types.NumericType
 
 
 /**
+ * :: Experimental ::
  * A set of methods for aggregations on a [[DataFrame]], created by [[DataFrame.groupBy]].
  */
+@Experimental
 class GroupedData protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expression]) {
 
   private[this] implicit def toDF(aggExprs: Seq[NamedExpression]): DataFrame = {

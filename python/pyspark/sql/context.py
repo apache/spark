@@ -431,11 +431,10 @@ class SQLContext(object):
         True
         """
         gateway = self._sc._gateway
-        jpath = paths[0]
-        jpaths = gateway.new_array(gateway.jvm.java.lang.String, len(paths) - 1)
-        for i in range(1, len(paths)):
+        jpaths = gateway.new_array(gateway.jvm.java.lang.String, len(paths))
+        for i in range(0, len(paths)):
             jpaths[i] = paths[i]
-        jdf = self._ssql_ctx.parquetFile(jpath, jpaths)
+        jdf = self._ssql_ctx.parquetFile(jpaths)
         return DataFrame(jdf, self)
 
     def jsonFile(self, path, schema=None, samplingRatio=1.0):
