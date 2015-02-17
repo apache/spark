@@ -130,6 +130,16 @@ class HiveMetastoreHook(BaseHook):
         self.metastore._oprot.trans.close()
         return table
 
+    def get_tables(self, db, pattern='*'):
+        '''
+        Get a metastore table object
+        '''
+        self.metastore._oprot.trans.open()
+        tables = self.metastore.get_tables(db_name=db, pattern=pattern)
+        objs = self.metastore.get_table_objects_by_name(db, tables)
+        self.metastore._oprot.trans.close()
+        return objs
+
     def get_partitions(self, schema, table_name):
         '''
         Returns a list of all partitions in a table. Works only
@@ -204,14 +214,20 @@ class HiveServer2Hook(BaseHook):
             user='airflow',
             database=schema) as conn:
             with conn.cursor() as cur:
+                logging.info("Running query: " + hql)
                 cur.execute(hql)
                 schema = cur.getSchema()
                 with open(csv_filepath, 'w') as f:
                     writer = csv.writer(f)
                     writer.writerow([c['columnName'] for c in cur.getSchema()])
+                    i = 0
                     while cur.hasMoreRows:
-                        writer.writerows(
-                            [row for row in cur.fetchmany() if row])
+                        rows = [row for row in cur.fetchmany() if row]
+                        writer.writerows(rows)
+                        i += len(rows)
+                        logging.info("Written {0} rows so far.".format(i))
+                    logging.info("Done. Loaded a total of {0} rows.".format(i))
+
 
     def get_records(self, hql, schema='default'):
         '''

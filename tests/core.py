@@ -73,8 +73,8 @@ class HivePrestoTest(unittest.TestCase):
         t = operators.Hive2SambaOperator(
             task_id='hive2samba_check',
             samba_conn_id='tableau_samba',
-            hql="SELECT * FROM airflow.static_babynames LIMIT 1000",
-            destination_filepath='test_airflow3.csv',
+            hql="SELECT * FROM airflow.static_babynames LIMIT 10000",
+            destination_filepath='test_airflow.csv',
             dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 

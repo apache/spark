@@ -21,7 +21,7 @@ class Hive2SambaOperator(BaseOperator):
     __mapper_args__ = {
         'polymorphic_identity': 'Hive2SambaOperator'
     }
-    template_fields = ('hql',)
+    template_fields = ('hql', 'destination_filepath')
     template_ext = ('.hql', '.sql',)
 
     @apply_defaults
