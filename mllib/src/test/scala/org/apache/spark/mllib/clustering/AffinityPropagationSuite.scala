@@ -65,26 +65,26 @@ class AffinityPropagationSuite extends FunSuite with MLlibTestSparkContext {
 
      The similarity matrix (A) is
 
-     0 -1 -1 -1
-    -1  0  1  0
-    -1 -1  0 -1
-    -1  0 -1  0
+     0 1 1 1
+     1 0 1 0
+     1 1 0 1
+     1 0 1 0
 
      D is diag(3, 2, 3, 2) and hence S is
 
-        0 -1/3 -1/3 -1/3
-     -1/2    0 -1/2    0
-     -1/3 -1/3    0 -1/3
-     -1/2    0 -1/2    0
+       0 1/3 1/3 1/3
+     1/2   0 1/2   0
+     1/3 1/3   0 1/3
+     1/2   0 1/2   0
      */
     val similarities = Seq[(Long, Long, Double)](
-      (0, 1, -1.0), (1, 0, -1.0), (0, 2, -1.0), (2, 0, -1.0), (0, 3, -1.0), (3, 0, -1.0),
-      (1, 2, -1.0), (2, 1, -1.0), (2, 3, -1.0), (3, 2, -1.0))
+      (0, 1, 1.0), (1, 0, 1.0), (0, 2, 1.0), (2, 0, 1.0), (0, 3, 1.0), (3, 0, 1.0),
+      (1, 2, 1.0), (2, 1, 1.0), (2, 3, 1.0), (3, 2, 1.0))
     val expected = Array(
-      Array(0.0,     -1.0/3.0, -1.0/3.0, -1.0/3.0),
-      Array(-1.0/2.0,     0.0, -1.0/2.0,     0.0),
-      Array(-1.0/3.0, -1.0/3.0,     0.0, -1.0/3.0),
-      Array(-1.0/2.0,     0.0, -1.0/2.0,     0.0))
+      Array(0.0,     1.0/3.0, 1.0/3.0, 1.0/3.0),
+      Array(1.0/2.0,     0.0, 1.0/2.0,     0.0),
+      Array(1.0/3.0, 1.0/3.0,     0.0, 1.0/3.0),
+      Array(1.0/2.0,     0.0, 1.0/2.0,     0.0))
     val s = constructGraph(sc.parallelize(similarities, 2), true, false)
     s.edges.collect().foreach { case Edge(i, j, x) =>
       assert(x(0) ~== expected(i.toInt)(j.toInt) absTol 1e-14)

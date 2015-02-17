@@ -24,7 +24,6 @@ import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.GraphImpl
-import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 
 /**
@@ -141,7 +140,7 @@ class AffinityPropagation private[clustering] (
    * Run the AP algorithm.
    *
    * @param similarities an RDD of (i, j, s,,ij,,) tuples representing the similarity matrix, which
-   *                     is the matrix S in the AP paper. The similarity s,,ij,, is set to negative
+   *                     is the matrix S in the AP paper. The similarity s,,ij,, is set to
    *                     real-valued similarities. This is not required to be a symmetric matrix 
    *                     and hence s,,ij,, can be not equal to s,,ji,,. Tuples with i = j are
    *                     referred to as "preferences" in the AP paper. The data points with larger
@@ -178,9 +177,6 @@ private[clustering] object AffinityPropagation extends Logging {
     symmetric: Boolean):
     Graph[Seq[Double], Seq[Double]] = {
     val edges = similarities.flatMap { case (i, j, s) =>
-      if (s > 0.0) {
-        throw new SparkException("Similarity must be negative but found s($i, $j) = $s.")
-      }
       if (symmetric) {
         Seq(Edge(i, j, Seq(s, 0.0, 0.0)), Edge(j, i, Seq(s, 0.0, 0.0)))
       } else {
@@ -198,8 +194,10 @@ private[clustering] object AffinityPropagation extends Logging {
         TripletFields.EdgeOnly)
       val normalized = GraphImpl.fromExistingRDDs(vD, gA.edges)
         .mapTriplets(
-          e => Seq(e.attr(0) / math.max(math.abs(e.srcAttr(0)), MLUtils.EPSILON), 0.0, 0.0),
-          TripletFields.Src)
+          e => {
+            val s = if (e.srcAttr(0) == 0.0) { e.attr(0) } else { e.attr(0) / e.srcAttr(0) }
+            Seq(s, 0.0, 0.0)
+          }, TripletFields.Src)
       Graph.fromEdges(normalized.edges, Seq(0.0, 0.0))
     } else {
       Graph.fromEdges(edges, Seq(0.0, 0.0))
