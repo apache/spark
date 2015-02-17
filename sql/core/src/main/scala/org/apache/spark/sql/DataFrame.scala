@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import java.sql.DriverManager
 
-import org.apache.spark.sql.jdbc.JDBCWriteDetails
 
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
@@ -31,6 +30,7 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.jdbc.JDBCWriteDetails
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -919,21 +919,7 @@ trait DataFrame extends RDDApi[Row] with Serializable {
    * exists.
    * @group output
    */
-  def createJDBCTable(url: String, table: String, allowExisting: Boolean) {
-    val conn = DriverManager.getConnection(url)
-    try {
-      if (allowExisting) {
-        val sql = s"DROP TABLE IF EXISTS $table"
-        conn.prepareStatement(sql).executeUpdate()
-      }
-      val schema = JDBCWriteDetails.schemaString(this, url)
-      val sql = s"CREATE TABLE $table ($schema)"
-      conn.prepareStatement(sql).executeUpdate()
-    } finally {
-      conn.close()
-    }
-    JDBCWriteDetails.saveTable(this, url, table)
-  }
+  def createJDBCTable(url: String, table: String, allowExisting: Boolean): Unit
 
   /**
    * Save this RDD to a JDBC database at `url` under the table name `table`.
@@ -947,19 +933,7 @@ trait DataFrame extends RDDApi[Row] with Serializable {
    * `INSERT INTO table VALUES (?, ?, ..., ?)` should not fail.
    * @group output
    */
-  def insertIntoJDBC(url: String, table: String, overwrite: Boolean) {
-    if (overwrite) {
-      val conn = DriverManager.getConnection(url)
-      try {
-        val sql = s"TRUNCATE TABLE $table"
-        conn.prepareStatement(sql).executeUpdate()
-      } finally {
-        conn.close()
-      }
-    }
-    JDBCWriteDetails.saveTable(this, url, table)
-  }
-
+  def insertIntoJDBC(url: String, table: String, overwrite: Boolean): Unit
 
 
   ////////////////////////////////////////////////////////////////////////////
