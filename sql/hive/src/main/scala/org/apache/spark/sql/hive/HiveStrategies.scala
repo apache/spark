@@ -143,7 +143,7 @@ private[hive] trait HiveStrategies {
               PhysicalRDD(plan.output, sparkContext.emptyRDD[Row]) :: Nil
             } else {
               hiveContext
-                .parquetFile(partitionLocations.head, partitionLocations.tail: _*)
+                .parquetFile(partitionLocations: _*)
                 .addPartitioningAttributes(relation.partitionKeys)
                 .lowerCase
                 .where(unresolvedOtherPredicates)
@@ -152,6 +152,7 @@ private[hive] trait HiveStrategies {
                 .executedPlan
                 .fakeOutput(projectList.map(_.toAttribute)) :: Nil
             }
+
           } else {
             hiveContext
               .parquetFile(relation.hiveQlTable.getDataLocation.toString)

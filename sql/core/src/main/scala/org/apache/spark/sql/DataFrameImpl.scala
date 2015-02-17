@@ -238,9 +238,10 @@ private[sql] class DataFrameImpl protected[sql](
   }
 
   override def withColumnRenamed(existingName: String, newName: String): DataFrame = {
+    val resolver = sqlContext.analyzer.resolver
     val colNames = schema.map { field =>
       val name = field.name
-      if (name == existingName) Column(name).as(newName) else Column(name)
+      if (resolver(name, existingName)) Column(name).as(newName) else Column(name)
     }
     select(colNames :_*)
   }
@@ -368,6 +369,7 @@ private[sql] class DataFrameImpl protected[sql](
   /////////////////////////////////////////////////////////////////////////////
 
   override def rdd: RDD[Row] = {
+    // use a local variable to make sure the map closure doesn't capture the whole DataFrame
     val schema = this.schema
     queryExecution.executedPlan.execute().map(ScalaReflection.convertRowToScala(_, schema))
   }
