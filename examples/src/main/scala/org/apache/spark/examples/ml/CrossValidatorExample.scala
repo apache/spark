@@ -90,7 +90,7 @@ object CrossValidatorExample {
     crossval.setNumFolds(2) // Use 3+ in practice
 
     // Run cross-validation, and choose the best set of parameters.
-    val cvModel = crossval.fit(training.toDF)
+    val cvModel = crossval.fit(training.toDF())
 
     // Prepare test documents, which are unlabeled.
     val test = sc.parallelize(Seq(

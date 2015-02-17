@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.math.BigDecimal
-import org.apache.spark.sql.test._
-import org.scalatest.{FunSuite, BeforeAndAfterAll, Ignore}
 import java.sql.DriverManager
-import TestSQLContext._
-import com.spotify.docker.client.{DefaultDockerClient, DockerClient}
+
+import com.spotify.docker.client.DockerClient
 import com.spotify.docker.client.messages.ContainerConfig
+import org.scalatest.{BeforeAndAfterAll, FunSuite, Ignore}
+
+import org.apache.spark.sql.test._
 
 class PostgresDatabase {
   val docker: DockerClient = DockerClientFactory.get()
@@ -31,9 +31,9 @@ class PostgresDatabase {
     println("Pulling postgres")
     docker.pull("postgres")
     println("Configuring container")
-    val config = (ContainerConfig.builder().image("postgres")
-        .env("POSTGRES_PASSWORD=rootpass")
-        .build())
+    val config = ContainerConfig.builder().image("postgres")
+      .env("POSTGRES_PASSWORD=rootpass")
+      .build()
     println("Creating container")
     val id = docker.createContainer(config).id
     println("Starting container " + id)
@@ -51,11 +51,10 @@ class PostgresDatabase {
       println("Closing docker client")
       DockerClientFactory.close(docker)
     } catch {
-      case e: Exception => {
+      case e: Exception =>
         println(e)
         println("You may need to clean this up manually.")
         throw e
-      }
     }
   }
 }
@@ -79,10 +78,9 @@ class PostgresDatabase {
         println("Database is up.")
         return;
       } catch {
-        case e: java.sql.SQLException => {
+        case e: java.sql.SQLException =>
           lastException = e
           java.lang.Thread.sleep(250)
-        }
       }
     }
   }
@@ -113,8 +111,8 @@ class PostgresDatabase {
   }
 
   test("Type mapping for various types") {
-    val rdd = TestSQLContext.jdbc(url(db.ip), "public.bar")
-    val rows = rdd.collect
+    val df = TestSQLContext.jdbc(url(db.ip), "public.bar")
+    val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
     assert(types.length == 10)
@@ -142,8 +140,8 @@ class PostgresDatabase {
   }
 
   test("Basic write test") {
-    val rdd = TestSQLContext.jdbc(url(db.ip), "public.bar")
-    rdd.createJDBCTable(url(db.ip), "public.barcopy", false)
+    val df = TestSQLContext.jdbc(url(db.ip), "public.bar")
+    df.createJDBCTable(url(db.ip), "public.barcopy", false)
     // Test only that it doesn't bomb out.
   }
 }
