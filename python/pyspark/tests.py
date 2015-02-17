@@ -746,19 +746,35 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertEqual(rdd.getNumPartitions() + 2, parted.union(rdd).getNumPartitions())
         self.assertEqual(rdd.getNumPartitions() + 2, rdd.union(parted).getNumPartitions())
 
+        self.sc.setJobGroup("test1", "test", True)
+        tracker = self.sc.statusTracker()
+
         d = sorted(parted.join(parted).collect())
         self.assertEqual(10, len(d))
         self.assertEqual((0, (0, 0)), d[0])
+        jobId = tracker.getJobIdsForGroup("test1")[0]
+        self.assertEqual(2, len(tracker.getJobInfo(jobId).stageIds))
+
+        self.sc.setJobGroup("test2", "test", True)
         d = sorted(parted.join(rdd).collect())
         self.assertEqual(10, len(d))
         self.assertEqual((0, (0, 0)), d[0])
+        jobId = tracker.getJobIdsForGroup("test2")[0]
+        self.assertEqual(3, len(tracker.getJobInfo(jobId).stageIds))
 
+        self.sc.setJobGroup("test3", "test", True)
         d = sorted(parted.cogroup(parted).collect())
         self.assertEqual(10, len(d))
         self.assertEqual([[0], [0]], map(list, d[0][1]))
+        jobId = tracker.getJobIdsForGroup("test3")[0]
+        self.assertEqual(2, len(tracker.getJobInfo(jobId).stageIds))
+
+        self.sc.setJobGroup("test4", "test", True)
         d = sorted(parted.cogroup(rdd).collect())
         self.assertEqual(10, len(d))
         self.assertEqual([[0], [0]], map(list, d[0][1]))
+        jobId = tracker.getJobIdsForGroup("test4")[0]
+        self.assertEqual(3, len(tracker.getJobInfo(jobId).stageIds))
 
 
 class ProfilerTests(PySparkTestCase):
