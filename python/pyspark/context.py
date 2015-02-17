@@ -185,7 +185,8 @@ class SparkContext(object):
         for path in self._conf.get("spark.submit.pyFiles", "").split(","):
             if path != "":
                 (dirname, filename) = os.path.split(path)
-                if filename.lower().endswith("zip") or filename.lower().endswith("egg"):
+                if filename.lower().endswith("zip") or filename.lower().endswith("egg") \
+                    or filename.lower().endswith("jar"):
                     self._python_includes.append(filename)
                     sys.path.insert(1, os.path.join(SparkFiles.getRootDirectory(), filename))
 

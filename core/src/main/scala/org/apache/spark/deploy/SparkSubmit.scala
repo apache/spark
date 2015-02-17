@@ -263,10 +263,12 @@ object SparkSubmit {
       } else {
         args.jars += s",$resolvedMavenCoordinates"
       }
-      if (args.pyFiles == null || args.pyFiles.trim.isEmpty) {
-        args.pyFiles = resolvedMavenCoordinates
-      } else {
-        args.pyFiles += s",$resolvedMavenCoordinates"
+      if (args.isPython) {
+        if (args.pyFiles == null || args.pyFiles.trim.isEmpty) {
+          args.pyFiles = resolvedMavenCoordinates
+        } else {
+          args.pyFiles += s",$resolvedMavenCoordinates"
+        }
       }
     }
 
@@ -809,14 +811,19 @@ private[spark] object SparkSubmitUtils {
       val md = getModuleDescriptor
       md.setDefaultConf(ivyConfName)
 
-      // Add an exclusion rule for Spark
+      // Add an exclusion rule for Spark and Scala Library
       val sparkArtifacts = new ArtifactId(new ModuleId("org.apache.spark", "*"), "*", "*", "*")
       val sparkDependencyExcludeRule =
         new DefaultExcludeRule(sparkArtifacts, ivySettings.getMatcher("glob"), null)
       sparkDependencyExcludeRule.addConfiguration(ivyConfName)
+      val scalaArtifacts = new ArtifactId(new ModuleId("*", "scala-library"), "*", "*", "*")
+      val scalaDependencyExcludeRule =
+        new DefaultExcludeRule(scalaArtifacts, ivySettings.getMatcher("glob"), null)
+      scalaDependencyExcludeRule.addConfiguration(ivyConfName)
 
       // Exclude any Spark dependencies, and add all supplied maven artifacts as dependencies
       md.addExcludeRule(sparkDependencyExcludeRule)
+      md.addExcludeRule(scalaDependencyExcludeRule)
       addDependenciesToIvy(md, artifacts, ivyConfName)
 
       // resolve dependencies
