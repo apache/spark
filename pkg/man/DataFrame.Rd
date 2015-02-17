@@ -3,18 +3,34 @@
 \name{DataFrame-class}
 \alias{DataFrame-class}
 \alias{dataFrame}
+\alias{toRDD}
 \title{S4 class that represents a DataFrame}
 \usage{
 dataFrame(sdf)
+
+toRDD(df)
 }
 \arguments{
 \item{sdf}{A Java object reference to the backing Scala SchemaRDD}
+
+\item{df}{A Spark DataFrame}
 
 \item{env}{An R environment that stores bookkeeping states of the DataFrame}
 }
 \description{
 DataFrames can be created using functions like
              \code{jsonFile}, \code{table} etc.
+
+Converts a Spark DataFrame to an RDD while preserving column names.
+}
+\examples{
+\dontrun{
+sc <- sparkR.init()
+sqlCtx <- sparkRSQL.init(sc)
+path <- "path/to/file.json"
+df <- jsonFile(sqlCtx, path)
+rdd <- toRDD(df)
+}
 }
 \seealso{
 jsonFile, table
