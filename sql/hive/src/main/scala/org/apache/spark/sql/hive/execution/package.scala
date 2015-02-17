@@ -15,16 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.jdbc
+package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.DataFrame
-
-private[jdbc] class JavaJDBCTrampoline {
-  def createJDBCTable(rdd: DataFrame, url: String, table: String, allowExisting: Boolean) {
-    rdd.createJDBCTable(url, table, allowExisting);
-  }
-
-  def insertIntoJDBC(rdd: DataFrame, url: String, table: String, overwrite: Boolean) {
-    rdd.insertIntoJDBC(url, table, overwrite);
-  }
-}
+/**
+ * Physical execution operators used for running queries against data stored in Hive.  These
+ * are not intended for use by users, but are documents so that it is easier to understand
+ * the output of EXPLAIN queries.
+ */
+package object execution

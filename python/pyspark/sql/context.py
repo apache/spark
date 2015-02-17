@@ -252,7 +252,7 @@ class SQLContext(object):
         >>> schema = StructType([StructField("field1", IntegerType(), False),
         ...     StructField("field2", StringType(), False)])
         >>> df = sqlCtx.applySchema(rdd2, schema)
-        >>> sqlCtx.registerRDDAsTable(df, "table1")
+        >>> sqlCtx.registerDataFrameAsTable(df, "table1")
         >>> df2 = sqlCtx.sql("SELECT * from table1")
         >>> df2.collect()
         [Row(field1=1, field2=u'row1'),..., Row(field1=3, field2=u'row3')]
@@ -405,17 +405,17 @@ class SQLContext(object):
 
         return self.applySchema(data, schema)
 
-    def registerRDDAsTable(self, rdd, tableName):
+    def registerDataFrameAsTable(self, rdd, tableName):
         """Registers the given RDD as a temporary table in the catalog.
 
         Temporary tables exist only during the lifetime of this instance of
         SQLContext.
 
-        >>> sqlCtx.registerRDDAsTable(df, "table1")
+        >>> sqlCtx.registerDataFrameAsTable(df, "table1")
         """
         if (rdd.__class__ is DataFrame):
             df = rdd._jdf
-            self._ssql_ctx.registerRDDAsTable(df, tableName)
+            self._ssql_ctx.registerDataFrameAsTable(df, tableName)
         else:
             raise ValueError("Can only register DataFrame as table")
 
@@ -456,7 +456,7 @@ class SQLContext(object):
         ...   print>>ofn, json
         >>> ofn.close()
         >>> df1 = sqlCtx.jsonFile(jsonFile)
-        >>> sqlCtx.registerRDDAsTable(df1, "table1")
+        >>> sqlCtx.registerDataFrameAsTable(df1, "table1")
         >>> df2 = sqlCtx.sql(
         ...   "SELECT field1 AS f1, field2 as f2, field3 as f3, "
         ...   "field6 as f4 from table1")
@@ -467,7 +467,7 @@ class SQLContext(object):
         Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)
 
         >>> df3 = sqlCtx.jsonFile(jsonFile, df1.schema)
-        >>> sqlCtx.registerRDDAsTable(df3, "table2")
+        >>> sqlCtx.registerDataFrameAsTable(df3, "table2")
         >>> df4 = sqlCtx.sql(
         ...   "SELECT field1 AS f1, field2 as f2, field3 as f3, "
         ...   "field6 as f4 from table2")
@@ -485,7 +485,7 @@ class SQLContext(object):
         ...             StructField("field5",
         ...                 ArrayType(IntegerType(), False), True)]), False)])
         >>> df5 = sqlCtx.jsonFile(jsonFile, schema)
-        >>> sqlCtx.registerRDDAsTable(df5, "table3")
+        >>> sqlCtx.registerDataFrameAsTable(df5, "table3")
         >>> df6 = sqlCtx.sql(
         ...   "SELECT field2 AS f1, field3.field5 as f2, "
         ...   "field3.field5[0] as f3 from table3")
@@ -509,7 +509,7 @@ class SQLContext(object):
         determine the schema.
 
         >>> df1 = sqlCtx.jsonRDD(json)
-        >>> sqlCtx.registerRDDAsTable(df1, "table1")
+        >>> sqlCtx.registerDataFrameAsTable(df1, "table1")
         >>> df2 = sqlCtx.sql(
         ...   "SELECT field1 AS f1, field2 as f2, field3 as f3, "
         ...   "field6 as f4 from table1")
@@ -520,7 +520,7 @@ class SQLContext(object):
         Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)
 
         >>> df3 = sqlCtx.jsonRDD(json, df1.schema)
-        >>> sqlCtx.registerRDDAsTable(df3, "table2")
+        >>> sqlCtx.registerDataFrameAsTable(df3, "table2")
         >>> df4 = sqlCtx.sql(
         ...   "SELECT field1 AS f1, field2 as f2, field3 as f3, "
         ...   "field6 as f4 from table2")
@@ -538,7 +538,7 @@ class SQLContext(object):
         ...             StructField("field5",
         ...                 ArrayType(IntegerType(), False), True)]), False)])
         >>> df5 = sqlCtx.jsonRDD(json, schema)
-        >>> sqlCtx.registerRDDAsTable(df5, "table3")
+        >>> sqlCtx.registerDataFrameAsTable(df5, "table3")
         >>> df6 = sqlCtx.sql(
         ...   "SELECT field2 AS f1, field3.field5 as f2, "
         ...   "field3.field5[0] as f3 from table3")
@@ -628,7 +628,7 @@ class SQLContext(object):
     def sql(self, sqlQuery):
         """Return a L{DataFrame} representing the result of the given query.
 
-        >>> sqlCtx.registerRDDAsTable(df, "table1")
+        >>> sqlCtx.registerDataFrameAsTable(df, "table1")
         >>> df2 = sqlCtx.sql("SELECT field1 AS f1, field2 as f2 from table1")
         >>> df2.collect()
         [Row(f1=1, f2=u'row1'), Row(f1=2, f2=u'row2'), Row(f1=3, f2=u'row3')]
@@ -638,7 +638,7 @@ class SQLContext(object):
     def table(self, tableName):
         """Returns the specified table as a L{DataFrame}.
 
-        >>> sqlCtx.registerRDDAsTable(df, "table1")
+        >>> sqlCtx.registerDataFrameAsTable(df, "table1")
         >>> df2 = sqlCtx.table("table1")
         >>> sorted(df.collect()) == sorted(df2.collect())
         True
@@ -653,7 +653,7 @@ class SQLContext(object):
         The returned DataFrame has two columns, tableName and isTemporary
         (a column with BooleanType indicating if a table is a temporary one or not).
 
-        >>> sqlCtx.registerRDDAsTable(df, "table1")
+        >>> sqlCtx.registerDataFrameAsTable(df, "table1")
         >>> df2 = sqlCtx.tables()
         >>> df2.filter("tableName = 'table1'").first()
         Row(tableName=u'table1', isTemporary=True)
@@ -668,7 +668,7 @@ class SQLContext(object):
 
         If `dbName` is not specified, the current database will be used.
 
-        >>> sqlCtx.registerRDDAsTable(df, "table1")
+        >>> sqlCtx.registerDataFrameAsTable(df, "table1")
         >>> "table1" in sqlCtx.tableNames()
         True
         >>> "table1" in sqlCtx.tableNames("db")

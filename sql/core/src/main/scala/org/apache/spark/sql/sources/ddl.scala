@@ -374,7 +374,7 @@ private[sql] case class CreateTempTableUsing(
 
   def run(sqlContext: SQLContext) = {
     val resolved = ResolvedDataSource(sqlContext, userSpecifiedSchema, provider, options)
-    sqlContext.registerRDDAsTable(
+    sqlContext.registerDataFrameAsTable(
       DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
     Seq.empty
   }
@@ -390,7 +390,7 @@ private[sql] case class CreateTempTableUsingAsSelect(
   def run(sqlContext: SQLContext) = {
     val df = DataFrame(sqlContext, query)
     val resolved = ResolvedDataSource(sqlContext, provider, mode, options, df)
-    sqlContext.registerRDDAsTable(
+    sqlContext.registerDataFrameAsTable(
       DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
 
     Seq.empty
