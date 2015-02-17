@@ -65,22 +65,27 @@ class SQLQuerySuite extends QueryTest {
       }
     }
 
-    val originalConf = getConf("spark.sql.sources.convertHiveCTASWithoutStorageSpec", "false")
+    val originalConf = getConf("spark.sql.hive.convertCTAS", "false")
 
-    setConf("spark.sql.sources.convertHiveCTASWithoutStorageSpec", "true")
+    setConf("spark.sql.hive.convertCTAS", "true")
 
     sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
+    sql("CREATE TABLE IF NOT EXISTS ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
+    var message = intercept[RuntimeException] {
+      sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
+    }.getMessage
+    assert(message.contains("Table ctas1 already exists"))
     checkRelation("ctas1", true)
     sql("DROP TABLE ctas1")
 
     // Specifying database name for query can be converted to data source write path
     // is not allowed right now.
-    val message = intercept[AnalysisException] {
+    message = intercept[AnalysisException] {
       sql("CREATE TABLE default.ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
     }.getMessage
     assert(
       message.contains("Cannot specify database name in a CTAS statement"),
-      "When spark.sql.sources.convertHiveCTASWithoutStorageSpec is true, we should not allow " +
+      "When spark.sql.hive.convertCTAS is true, we should not allow " +
       "database name specified.")
 
     sql("CREATE TABLE ctas1 stored as textfile AS SELECT key k, value FROM src ORDER BY k, value")
@@ -105,7 +110,7 @@ class SQLQuerySuite extends QueryTest {
     // checkRelation("ctas1", false)
     // sql("DROP TABLE ctas1")
 
-    setConf("spark.sql.sources.convertHiveCTASWithoutStorageSpec", originalConf)
+    setConf("spark.sql.hive.convertCTAS", originalConf)
   }
 
   test("CTAS with serde") {

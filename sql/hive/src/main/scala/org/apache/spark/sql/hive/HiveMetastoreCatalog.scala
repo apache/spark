@@ -506,13 +506,13 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
           case None => false
         }
 
-        if (hive.convertHiveCTASWithoutStorageSpec && !hasStorageSpec) {
+        if (hive.convertCTAS && !hasStorageSpec) {
           // Do the conversion when convertHiveCTASWithoutStorageSpec is true and the query
           // does not specify any storage format (file format and storage handler).
           if (dbName.isDefined) {
             throw new AnalysisException(
               "Cannot specify database name in a CTAS statement " +
-              "when spark.sql.sources.convertHiveCTASWithoutStorageSpec is set to true.")
+              "when spark.sql.hive.convertCTAS is set to true.")
           }
 
           val mode = if (allowExisting) SaveMode.Ignore else SaveMode.ErrorIfExists
@@ -537,11 +537,11 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
       case p @ CreateTableAsSelect(db, tableName, child, allowExisting, None) =>
         val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
-        if (hive.convertHiveCTASWithoutStorageSpec) {
+        if (hive.convertCTAS) {
           if (dbName.isDefined) {
             throw new AnalysisException(
               "Cannot specify database name in a CTAS statement " +
-              "when spark.sql.sources.convertHiveCTASWithoutStorageSpec is set to true.")
+              "when spark.sql.hive.convertCTAS is set to true.")
           }
 
           val mode = if (allowExisting) SaveMode.Ignore else SaveMode.ErrorIfExists
