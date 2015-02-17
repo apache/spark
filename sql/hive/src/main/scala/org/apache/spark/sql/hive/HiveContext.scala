@@ -61,6 +61,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   protected[sql] def convertMetastoreParquet: Boolean =
     getConf("spark.sql.hive.convertMetastoreParquet", "true") == "true"
 
+  protected[sql] def convertHiveCTASWithoutStorageSpec: Boolean =
+    getConf("spark.sql.sources.convertHiveCTASWithoutStorageSpec", "false") == "true"
+
   override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution(plan)
 
