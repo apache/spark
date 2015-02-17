@@ -249,7 +249,7 @@ setMethod("partitionBy",
             # shuffled acutal content key-val pairs.
             r <- callJMethod(javaPairRDD, "values")
 
-            RDD(r, serialized = TRUE)
+            RDD(r, serialized = "byte")
           })
 
 #' Group values by key
