@@ -450,12 +450,12 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       // Replaces all `MetastoreRelation`s with corresponding `ParquetRelation2`s, and fixes
       // attribute IDs referenced in other nodes.
       plan.transformUp {
-        case r: MetastoreRelation => {
+        case r: MetastoreRelation if relationMap.contains(r) => {
           val parquetRelation = relationMap(r)
           val withAlias =
             r.alias.map(a => Subquery(a, parquetRelation)).getOrElse(
               Subquery(r.tableName, parquetRelation))
-        
+
           withAlias
         }
         case other => other.transformExpressions {
