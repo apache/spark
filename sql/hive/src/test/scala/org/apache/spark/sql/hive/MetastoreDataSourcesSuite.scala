@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
+
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.commons.io.FileUtils
@@ -30,6 +31,8 @@ import org.apache.spark.util.Utils
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
+import org.apache.spark.sql.parquet.ParquetRelation2
+import org.apache.spark.sql.sources.LogicalRelation
 
 /**
  * Tests for persisting tables created though the data sources API into the metastore.
@@ -552,5 +555,40 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
 
     sql("DROP TABLE savedJsonTable")
     conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, originalDefaultSource)
+  }
+
+  if (HiveShim.version == "0.13.1") {
+    test("scan a parquet table created through a CTAS statement") {
+      val originalConvertMetastore = getConf("spark.sql.hive.convertMetastoreParquet", "true")
+      val originalUseDataSource = getConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
+      setConf("spark.sql.hive.convertMetastoreParquet", "true")
+      setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
+
+      val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
+      jsonRDD(rdd).registerTempTable("jt")
+      sql(
+        """
+          |create table test_parquet_ctas STORED AS parquET
+          |AS select tmp.a from jt tmp where tmp.a < 5
+        """.stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT a FROM test_parquet_ctas WHERE a > 2 "),
+        Row(3) :: Row(4) :: Nil
+      )
+
+      table("test_parquet_ctas").queryExecution.analyzed match {
+        case LogicalRelation(p: ParquetRelation2) => // OK
+        case _ =>
+          fail(
+            s"test_parquet_ctas should be converted to ${classOf[ParquetRelation2].getCanonicalName}")
+      }
+
+      // Clenup and reset confs.
+      sql("DROP TABLE IF EXISTS jt")
+      sql("DROP TABLE IF EXISTS test_parquet_ctas")
+      setConf("spark.sql.hive.convertMetastoreParquet", originalConvertMetastore)
+      setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalUseDataSource)
+    }
   }
 }
