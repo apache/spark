@@ -72,7 +72,7 @@ import org.apache.spark.{Logging, Partition => SparkPartition, SerializableWrita
  *    null or empty string. This is similar to the `hive.exec.default.partition.name` configuration
  *    in Hive.
  */
-class DefaultSource
+private[sql] class DefaultSource
     extends RelationProvider
     with SchemaRelationProvider
     with CreatableRelationProvider {
@@ -147,7 +147,7 @@ private[sql] case class PartitionSpec(partitionColumns: StructType, partitions: 
  *    discovery.
  */
 @DeveloperApi
-case class ParquetRelation2(
+private[sql] case class ParquetRelation2(
     paths: Seq[String],
     parameters: Map[String, String],
     maybeSchema: Option[StructType] = None,
@@ -600,7 +600,7 @@ case class ParquetRelation2(
   }
 }
 
-object ParquetRelation2 {
+private[sql] object ParquetRelation2 {
   // Whether we should merge schemas collected from all Parquet part-files.
   val MERGE_SCHEMA = "mergeSchema"
 

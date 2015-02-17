@@ -355,6 +355,10 @@ class LogisticRegressionWithLBFGS
   }
 
   override protected def createModel(weights: Vector, intercept: Double) = {
-    new LogisticRegressionModel(weights, intercept, numFeatures, numOfLinearPredictor + 1)
+    if (numOfLinearPredictor == 1) {
+      new LogisticRegressionModel(weights, intercept)
+    } else {
+      new LogisticRegressionModel(weights, intercept, numFeatures, numOfLinearPredictor + 1)
+    }
   }
 }
