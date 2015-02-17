@@ -191,7 +191,10 @@ private[spark] class MetricsSystem private (
             sinks += sink.asInstanceOf[Sink]
           }
         } catch {
-          case e: Exception => logError("Sink class " + classPath + " cannot be instantialized", e)
+          case e: Exception => {
+            logError("Sink class " + classPath + " cannot be instantialized")
+            throw e
+          }
         }
       }
     }

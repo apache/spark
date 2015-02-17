@@ -18,10 +18,10 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.analysis.EliminateAnalysisOperators
+import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{SaveMode, DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.RunnableCommand
@@ -102,6 +102,10 @@ case class AddFile(path: String) extends RunnableCommand {
   }
 }
 
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 case class CreateMetastoreDataSource(
     tableName: String,
     userSpecifiedSchema: Option[StructType],
@@ -141,6 +145,10 @@ case class CreateMetastoreDataSource(
   }
 }
 
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 case class CreateMetastoreDataSourceAsSelect(
     tableName: String,
     provider: String,
@@ -175,7 +183,7 @@ case class CreateMetastoreDataSourceAsSelect(
           val resolved =
             ResolvedDataSource(sqlContext, Some(query.schema), provider, optionsWithPath)
           val createdRelation = LogicalRelation(resolved.relation)
-          EliminateAnalysisOperators(sqlContext.table(tableName).logicalPlan) match {
+          EliminateSubQueries(sqlContext.table(tableName).logicalPlan) match {
             case l @ LogicalRelation(i: InsertableRelation) =>
               if (l.schema != createdRelation.schema) {
                 val errorDescription =

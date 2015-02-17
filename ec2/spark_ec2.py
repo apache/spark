@@ -42,7 +42,7 @@ from datetime import datetime
 from optparse import OptionParser
 from sys import stderr
 
-SPARK_EC2_VERSION = "1.2.0"
+SPARK_EC2_VERSION = "1.2.1"
 SPARK_EC2_DIR = os.path.dirname(os.path.realpath(__file__))
 
 VALID_SPARK_VERSIONS = set([
@@ -58,6 +58,7 @@ VALID_SPARK_VERSIONS = set([
     "1.1.0",
     "1.1.1",
     "1.2.0",
+    "1.2.1",
 ])
 
 DEFAULT_SPARK_VERSION = SPARK_EC2_VERSION
@@ -1173,11 +1174,12 @@ def real_main():
                     time.sleep(30)  # Yes, it does have to be this long :-(
                     for group in groups:
                         try:
-                            conn.delete_security_group(group.name)
-                            print "Deleted security group " + group.name
+                            # It is needed to use group_id to make it work with VPC
+                            conn.delete_security_group(group_id=group.id)
+                            print "Deleted security group %s" % group.name
                         except boto.exception.EC2ResponseError:
                             success = False
-                            print "Failed to delete security group " + group.name
+                            print "Failed to delete security group %s" % group.name
 
                     # Unfortunately, group.revoke() returns True even if a rule was not
                     # deleted, so this needs to be rerun if something fails

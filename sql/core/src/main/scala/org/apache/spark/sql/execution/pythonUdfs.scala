@@ -205,6 +205,9 @@ case class EvaluatePython(
   extends logical.UnaryNode {
 
   def output = child.output :+ resultAttribute
+
+  // References should not include the produced attribute.
+  override def references = udf.references
 }
 
 /**

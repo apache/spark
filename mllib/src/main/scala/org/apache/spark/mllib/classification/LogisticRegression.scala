@@ -173,8 +173,7 @@ object LogisticRegressionModel extends Loader[LogisticRegressionModel] {
     val classNameV1_0 = "org.apache.spark.mllib.classification.LogisticRegressionModel"
     (loadedClassName, version) match {
       case (className, "1.0") if className == classNameV1_0 =>
-        val (numFeatures, numClasses) =
-          ClassificationModel.getNumFeaturesClasses(metadata, classNameV1_0, path)
+        val (numFeatures, numClasses) = ClassificationModel.getNumFeaturesClasses(metadata)
         val data = GLMClassificationModel.SaveLoadV1_0.loadData(sc, path, classNameV1_0)
         // numFeatures, numClasses, weights are checked in model initialization
         val model =
@@ -356,6 +355,10 @@ class LogisticRegressionWithLBFGS
   }
 
   override protected def createModel(weights: Vector, intercept: Double) = {
-    new LogisticRegressionModel(weights, intercept, numFeatures, numOfLinearPredictor + 1)
+    if (numOfLinearPredictor == 1) {
+      new LogisticRegressionModel(weights, intercept)
+    } else {
+      new LogisticRegressionModel(weights, intercept, numFeatures, numOfLinearPredictor + 1)
+    }
   }
 }

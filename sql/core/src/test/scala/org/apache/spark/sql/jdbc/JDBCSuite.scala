@@ -164,17 +164,16 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("Basic API") {
-    assert(TestSQLContext.jdbcRDD(url, "TEST.PEOPLE").collect.size == 3)
+    assert(TestSQLContext.jdbc(url, "TEST.PEOPLE").collect.size == 3)
   }
 
   test("Partitioning via JDBCPartitioningInfo API") {
-    val parts = JDBCPartitioningInfo("THEID", 0, 4, 3)
-    assert(TestSQLContext.jdbcRDD(url, "TEST.PEOPLE", parts).collect.size == 3)
+    assert(TestSQLContext.jdbc(url, "TEST.PEOPLE", "THEID", 0, 4, 3).collect.size == 3)
   }
 
   test("Partitioning via list-of-where-clauses API") {
     val parts = Array[String]("THEID < 2", "THEID >= 2")
-    assert(TestSQLContext.jdbcRDD(url, "TEST.PEOPLE", parts).collect.size == 3)
+    assert(TestSQLContext.jdbc(url, "TEST.PEOPLE", parts).collect.size == 3)
   }
 
   test("H2 integral types") {

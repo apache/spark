@@ -218,7 +218,7 @@ case class PrettyAttribute(name: String) extends Attribute with trees.LeafNode[E
   override def exprId: ExprId = ???
   override def eval(input: Row): EvaluatedType = ???
   override def nullable: Boolean = ???
-  override def dataType: DataType = ???
+  override def dataType: DataType = NullType
 }
 
 object VirtualColumn {
