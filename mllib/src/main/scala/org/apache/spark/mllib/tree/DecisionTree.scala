@@ -327,7 +327,6 @@ object DecisionTree extends Serializable with Logging {
    * @param agg  Array storing aggregate calculation, with a set of sufficient statistics for
    *             each (feature, bin).
    * @param treePoint  Data point being aggregated.
-   * @param bins possible bins for all features, indexed (numFeatures)(numBins)
    * @param splits possible splits indexed (numFeatures)(numSplits)
    * @param unorderedFeatures  Set of indices of unordered features.
    * @param instanceWeight  Weight (importance) of instance in dataset.
@@ -1046,7 +1045,7 @@ object DecisionTree extends Serializable with Logging {
             // For unordered categorical features, there is no need to construct the bins.
             // since there is a one-to-one correspondence between the splits and the bins.
             bins(featureIndex) = new Array[Bin](0)
-            }
+          }
           featureIndex += 1
         }
         (splits, bins)
