@@ -137,6 +137,8 @@ object EvaluatePython {
 
     case (date: Int, DateType) => DateUtils.toJavaDate(date)
 
+    case (_, LongType) => obj.asInstanceOf[Long]
+
     // Pyrolite can handle Timestamp and Decimal
     case (other, _) => other
   }

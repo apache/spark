@@ -221,7 +221,7 @@ class DataFrame(object):
         a L{StructType}).
 
         >>> df.schema()
-        StructType(List(StructField(age,IntegerType,true),StructField(name,StringType,true)))
+        StructType(List(StructField(age,LongType,true),StructField(name,StringType,true)))
         """
         return _parse_datatype_json_string(self._jdf.schema().json())
 
@@ -230,7 +230,7 @@ class DataFrame(object):
 
         >>> df.printSchema()
         root
-         |-- age: integer (nullable = true)
+         |-- age: long (nullable = true)
          |-- name: string (nullable = true)
         <BLANKLINE>
         """
@@ -380,7 +380,7 @@ class DataFrame(object):
         """Return all column names and their data types as a list.
 
         >>> df.dtypes
-        [('age', 'integer'), ('name', 'string')]
+        [('age', 'long'), ('name', 'string')]
         """
         return [(str(f.name), f.dataType.jsonValue()) for f in self.schema().fields]
 
@@ -551,11 +551,11 @@ class DataFrame(object):
         for all the available aggregate functions.
 
         >>> df.groupBy().avg().collect()
-        [Row(AVG(age#0)=3.5)]
+        [Row(AVG(age#0L)=3.5)]
         >>> df.groupBy('name').agg({'age': 'mean'}).collect()
-        [Row(name=u'Bob', AVG(age#0)=5.0), Row(name=u'Alice', AVG(age#0)=2.0)]
+        [Row(name=u'Bob', AVG(age#0L)=5.0), Row(name=u'Alice', AVG(age#0L)=2.0)]
         >>> df.groupBy(df.name).avg().collect()
-        [Row(name=u'Bob', AVG(age#0)=5.0), Row(name=u'Alice', AVG(age#0)=2.0)]
+        [Row(name=u'Bob', AVG(age#0L)=5.0), Row(name=u'Alice', AVG(age#0L)=2.0)]
         """
         jcols = ListConverter().convert([_to_java_column(c) for c in cols],
                                         self._sc._gateway._gateway_client)
@@ -567,10 +567,10 @@ class DataFrame(object):
         (shorthand for df.groupBy.agg()).
 
         >>> df.agg({"age": "max"}).collect()
-        [Row(MAX(age#0)=5)]
+        [Row(MAX(age#0L)=5)]
         >>> from pyspark.sql import Dsl
         >>> df.agg(Dsl.min(df.age)).collect()
-        [Row(MIN(age#0)=2)]
+        [Row(MIN(age#0L)=2)]
         """
         return self.groupBy().agg(*exprs)
 
@@ -659,10 +659,10 @@ class GroupedData(object):
 
         >>> gdf = df.groupBy(df.name)
         >>> gdf.agg({"age": "max"}).collect()
-        [Row(name=u'Bob', MAX(age#0)=5), Row(name=u'Alice', MAX(age#0)=2)]
+        [Row(name=u'Bob', MAX(age#0L)=5), Row(name=u'Alice', MAX(age#0L)=2)]
         >>> from pyspark.sql import Dsl
         >>> gdf.agg(Dsl.min(df.age)).collect()
-        [Row(MIN(age#0)=5), Row(MIN(age#0)=2)]
+        [Row(MIN(age#0L)=5), Row(MIN(age#0L)=2)]
         """
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):

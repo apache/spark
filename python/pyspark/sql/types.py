@@ -551,7 +551,7 @@ def _parse_datatype_json_value(json_value):
 _type_mappings = {
     type(None): NullType,
     bool: BooleanType,
-    int: IntegerType,
+    int: LongType,
     long: LongType,
     float: DoubleType,
     str: StringType,
@@ -655,6 +655,8 @@ def _need_python_to_sql_conversion(dataType):
             _need_python_to_sql_conversion(dataType.valueType)
     elif isinstance(dataType, UserDefinedType):
         return True
+    elif isinstance(dataType, LongType):
+        return True
     else:
         return False
 
@@ -708,6 +710,8 @@ def _python_to_sql_converter(dataType):
         return lambda m: dict([(key_converter(k), value_converter(v)) for k, v in m.items()])
     elif isinstance(dataType, UserDefinedType):
         return lambda obj: dataType.serialize(obj)
+    elif isinstance(dataType, LongType):
+        return lambda x: long(x)
     else:
         raise ValueError("Unexpected type %r" % dataType)
 
@@ -901,11 +905,11 @@ def _infer_schema_type(obj, dataType):
     >>> schema = _parse_schema_abstract("a b c d")
     >>> row = (1, 1.0, "str", datetime.date(2014, 10, 10))
     >>> _infer_schema_type(row, schema)
-    StructType...IntegerType...DoubleType...StringType...DateType...
+    StructType...LongType...DoubleType...StringType...DateType...
     >>> row = [[1], {"key": (1, 2.0)}]
     >>> schema = _parse_schema_abstract("a[] b{c d}")
     >>> _infer_schema_type(row, schema)
-    StructType...a,ArrayType...b,MapType(StringType,...c,IntegerType...
+    StructType...a,ArrayType...b,MapType(StringType,...c,LongType...
     """
     if dataType is None:
         return _infer_type(obj)
