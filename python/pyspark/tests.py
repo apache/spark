@@ -1449,8 +1449,8 @@ class SparkSubmitTests(unittest.TestCase):
             |   <artifactId>%s</artifactId>
             |   <version>%s</version>
             |</project>
-            """ % (group_id, artifact_id, version)).lstrip(), 
-                            os.path.join(group_id, artifact_id, version))
+            """ % (group_id, artifact_id, version)).lstrip(),
+            os.path.join(group_id, artifact_id, version))
         self.createFileInZip("%s.py" % artifact_id, """
             |def myfunc(x):
             |    return x + 1
