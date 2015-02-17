@@ -197,7 +197,7 @@ private[spark] class CoarseMesosSchedulerBackend(
             .addResources(createResource("mem",
               MemoryUtils.calculateTotalMemory(sc)))
 
-          sc.conf.getOption("spark.executor.docker.image").foreach { image =>
+          sc.conf.getOption("spark.executor.docker.image").map { image =>
             val container = task.getContainerBuilder()
             val volumes = sc.conf
               .getOption("spark.executor.docker.volumes")
