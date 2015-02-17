@@ -205,7 +205,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
       throw new SparkException("Input validation failed.")
     }
 
-    /**
+    /*
      * Scaling columns to unit variance as a heuristic to reduce the condition number:
      *
      * During the optimization process, the convergence (rate) depends on the condition number of
@@ -225,26 +225,27 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
      * Currently, it's only enabled in LogisticRegressionWithLBFGS
      */
     val scaler = if (useFeatureScaling) {
-      (new StandardScaler(withStd = true, withMean = false)).fit(input.map(x => x.features))
+      new StandardScaler(withStd = true, withMean = false).fit(input.map(_.features))
     } else {
       null
     }
 
     // Prepend an extra variable consisting of all 1.0's for the intercept.
-    val data = if (addIntercept) {
-      if (useFeatureScaling) {
-        input.map(labeledPoint =>
-          (labeledPoint.label, appendBias(scaler.transform(labeledPoint.features))))
+    // TODO: Apply feature scaling to the weight vector instead of input data.
+    val data =
+      if (addIntercept) {
+        if (useFeatureScaling) {
+          input.map(lp => (lp.label, appendBias(scaler.transform(lp.features)))).cache()
+        } else {
+          input.map(lp => (lp.label, appendBias(lp.features))).cache()
+        }
       } else {
-        input.map(labeledPoint => (labeledPoint.label, appendBias(labeledPoint.features)))
+        if (useFeatureScaling) {
+          input.map(lp => (lp.label, scaler.transform(lp.features))).cache()
+        } else {
+          input.map(lp => (lp.label, lp.features))
+        }
       }
-    } else {
-      if (useFeatureScaling) {
-        input.map(labeledPoint => (labeledPoint.label, scaler.transform(labeledPoint.features)))
-      } else {
-        input.map(labeledPoint => (labeledPoint.label, labeledPoint.features))
-      }
-    }
 
     /**
      * TODO: For better convergence, in logistic regression, the intercepts should be computed
