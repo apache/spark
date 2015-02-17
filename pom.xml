@@ -404,7 +404,7 @@
       <dependency>
         <groupId>commons-codec</groupId>
         <artifactId>commons-codec</artifactId>
-        <version>1.5</version>
+        <version>1.10</version>
       </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
@@ -1083,6 +1083,12 @@
           <artifactId>scala-maven-plugin</artifactId>
           <version>3.2.0</version>
           <executions>
+            <execution>
+              <id>eclipse-add-source</id>
+              <goals>
+                <goal>add-source</goal>
+              </goals>
+            </execution>
             <execution>
               <id>scala-compile-first</id>
               <phase>process-resources</phase>

@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from pyspark.ml.util import inherit_doc
+from pyspark.ml.util import inherit_doc, keyword_only
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.param.shared import HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,\
     HasRegParam
@@ -32,21 +32,45 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
 
     >>> from pyspark.sql import Row
     >>> from pyspark.mllib.linalg import Vectors
-    >>> dataset = sqlCtx.inferSchema(sc.parallelize([ \
-            Row(label=1.0, features=Vectors.dense(1.0)), \
-            Row(label=0.0, features=Vectors.sparse(1, [], []))]))
-    >>> lr = LogisticRegression() \
-            .setMaxIter(5) \
-            .setRegParam(0.01)
-    >>> model = lr.fit(dataset)
-    >>> test0 = sqlCtx.inferSchema(sc.parallelize([Row(features=Vectors.dense(-1.0))]))
+    >>> df = sc.parallelize([
+    ...     Row(label=1.0, features=Vectors.dense(1.0)),
+    ...     Row(label=0.0, features=Vectors.sparse(1, [], []))]).toDF()
+    >>> lr = LogisticRegression(maxIter=5, regParam=0.01)
+    >>> model = lr.fit(df)
+    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0))]).toDF()
     >>> print model.transform(test0).head().prediction
     0.0
-    >>> test1 = sqlCtx.inferSchema(sc.parallelize([Row(features=Vectors.sparse(1, [0], [1.0]))]))
+    >>> test1 = sc.parallelize([Row(features=Vectors.sparse(1, [0], [1.0]))]).toDF()
     >>> print model.transform(test1).head().prediction
     1.0
+    >>> lr.setParams("vector")
+    Traceback (most recent call last):
+        ...
+    TypeError: Method setParams forces keyword arguments.
     """
     _java_class = "org.apache.spark.ml.classification.LogisticRegression"
+
+    @keyword_only
+    def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 maxIter=100, regParam=0.1):
+        """
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 maxIter=100, regParam=0.1)
+        """
+        super(LogisticRegression, self).__init__()
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                  maxIter=100, regParam=0.1):
+        """
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                  maxIter=100, regParam=0.1)
+        Sets params for logistic regression.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set_params(**kwargs)
 
     def _create_model(self, java_model):
         return LogisticRegressionModel(java_model)

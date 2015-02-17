@@ -23,7 +23,7 @@ import org.apache.spark.sql.Column;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.types.DataTypes;
 
-import static org.apache.spark.sql.Dsl.*;
+import static org.apache.spark.sql.functions.*;
 
 /**
  * This test doesn't actually run anything. It is here to check the API compatibility for Java.

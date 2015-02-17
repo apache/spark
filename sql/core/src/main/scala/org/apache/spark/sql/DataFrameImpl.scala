@@ -67,7 +67,11 @@ private[sql] class DataFrameImpl protected[sql](
   @transient protected[sql] override val logicalPlan: LogicalPlan = queryExecution.logical match {
     // For various commands (like DDL) and queries with side effects, we force query optimization to
     // happen right away to let these side effects take place eagerly.
-    case _: Command | _: InsertIntoTable | _: CreateTableAsSelect[_] |_: WriteToFile =>
+    case _: Command |
+         _: InsertIntoTable |
+         _: CreateTableAsSelect[_] |
+         _: CreateTableUsingAsSelect |
+         _: WriteToFile =>
       LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sqlContext)
     case _ =>
       queryExecution.logical
@@ -83,7 +87,7 @@ private[sql] class DataFrameImpl protected[sql](
 
   protected[sql] def resolve(colName: String): NamedExpression = {
     queryExecution.analyzed.resolve(colName, sqlContext.analyzer.resolver).getOrElse {
-      throw new RuntimeException(
+      throw new AnalysisException(
         s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""")
     }
   }
@@ -94,7 +98,7 @@ private[sql] class DataFrameImpl protected[sql](
     }
   }
 
-  override def toDataFrame(colNames: String*): DataFrame = {
+  override def toDF(colNames: String*): DataFrame = {
     require(schema.size == colNames.size,
       "The number of columns doesn't match.\n" +
         "Old column names: " + schema.fields.map(_.name).mkString(", ") + "\n" +
@@ -229,14 +233,15 @@ private[sql] class DataFrameImpl protected[sql](
     }: _*)
   }
 
-  override def addColumn(colName: String, col: Column): DataFrame = {
+  override def withColumn(colName: String, col: Column): DataFrame = {
     select(Column("*"), col.as(colName))
   }
 
-  override def renameColumn(existingName: String, newName: String): DataFrame = {
+  override def withColumnRenamed(existingName: String, newName: String): DataFrame = {
+    val resolver = sqlContext.analyzer.resolver
     val colNames = schema.map { field =>
       val name = field.name
-      if (name == existingName) Column(name).as(newName) else Column(name)
+      if (resolver(name, existingName)) Column(name).as(newName) else Column(name)
     }
     select(colNames :_*)
   }
@@ -364,6 +369,7 @@ private[sql] class DataFrameImpl protected[sql](
   /////////////////////////////////////////////////////////////////////////////
 
   override def rdd: RDD[Row] = {
+    // use a local variable to make sure the map closure doesn't capture the whole DataFrame
     val schema = this.schema
     queryExecution.executedPlan.execute().map(ScalaReflection.convertRowToScala(_, schema))
   }
@@ -386,7 +392,7 @@ private[sql] class DataFrameImpl protected[sql](
       mode: SaveMode,
       options: Map[String, String]): Unit = {
     val cmd =
-      CreateTableUsingAsLogicalPlan(
+      CreateTableUsingAsSelect(
         tableName,
         source,
         temporary = false,

@@ -23,7 +23,7 @@ the supported algorithms for each type of problem.
       <td>Multiclass Classification</td><td>decision trees, naive Bayes</td>
     </tr>
     <tr>
-      <td>Regression</td><td>linear least squares, Lasso, ridge regression, decision trees</td>
+      <td>Regression</td><td>linear least squares, Lasso, ridge regression, decision trees, isotonic regression</td>
     </tr>
   </tbody>
 </table>
@@ -35,3 +35,4 @@ More details for these methods can be found here:
   * [linear regression (least squares, Lasso, ridge)](mllib-linear-methods.html#linear-least-squares-lasso-and-ridge-regression)
 * [Decision trees](mllib-decision-tree.html)
 * [Naive Bayes](mllib-naive-bayes.html)
+* [Isotonic regression](mllib-isotonic-regression.html)
