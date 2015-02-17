@@ -58,7 +58,7 @@ class SparkSubmitUtilsSuite extends FunSuite with BeforeAndAfterAll {
   test("create repo resolvers") {
     val resolver1 = SparkSubmitUtils.createRepoResolvers(None)
     // should have central by default
-    assert(resolver1.getResolvers.size() === 1)
+    assert(resolver1.getResolvers.size() === 2)
     assert(resolver1.getResolvers.get(0).asInstanceOf[IBiblioResolver].getName === "central")
 
     val repos = "a/1,b/2,c/3"

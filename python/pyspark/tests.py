@@ -1553,8 +1553,8 @@ class SparkSubmitTests(unittest.TestCase):
             """)
         self.create_spark_package("a:mylib:0.1")
         proc = subprocess.Popen([self.sparkSubmit, "--packages", "a:mylib:0.1", "--repositories",
-                                 "file:" + self.programDir, "--master", "local-cluster[1,1,512]", script],
-                                stdout=subprocess.PIPE)
+                                 "file:" + self.programDir, "--master", 
+                                 "local-cluster[1,1,512]", script], stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
         self.assertIn("[2, 3, 4]", out)
