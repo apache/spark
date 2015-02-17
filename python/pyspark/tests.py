@@ -1451,7 +1451,7 @@ class SparkSubmitTests(unittest.TestCase):
             |</project>
             """ % (group_id, artifact_id, version)).lstrip(),
                                   os.path.join(group_id, artifact_id, version))
-        self.createFileInZip("%s/%s.py" % (artifact_id, artifact_id), """
+        self.createFileInZip("%s.py" % artifact_id, """
             |def myfunc(x):
             |    return x + 1
             """, ".jar", os.path.join(group_id, artifact_id, version), 
@@ -1539,8 +1539,6 @@ class SparkSubmitTests(unittest.TestCase):
                                  "file:" + self.programDir, script], stdout=subprocess.PIPE)
         
         out, err = proc.communicate()
-        print "\n\nout: %s\n\n" % out
-        print "\n\nerr: %s\n\n" % err
         self.assertEqual(0, proc.returncode)
         self.assertIn("[2, 3, 4]", out)
 
