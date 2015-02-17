@@ -640,6 +640,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "nonblock_op_deduplicate",
     "notable_alias1",
     "notable_alias2",
+    "nullformatCTAS",
     "nullgroup",
     "nullgroup2",
     "nullgroup3",

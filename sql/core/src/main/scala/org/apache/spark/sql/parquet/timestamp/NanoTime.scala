@@ -53,7 +53,7 @@ private[parquet] class NanoTime extends Serializable {
     "NanoTime{julianDay=" + julianDay + ", timeOfDayNanos=" + timeOfDayNanos + "}"
 }
 
-object NanoTime {
+private[sql] object NanoTime {
   def fromBinary(bytes: Binary): NanoTime = {
     Preconditions.checkArgument(bytes.length() == 12, "Must be 12 bytes")
     val buf = bytes.toByteBuffer
