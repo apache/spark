@@ -37,7 +37,7 @@ def _create_function(name, doc=""):
     """ Create a function for aggregator by name"""
     def _(col):
         sc = SparkContext._active_spark_context
-        jc = getattr(sc._jvm.functions, name)(_to_java_column(col))
+        jc = getattr(sc._jvm.functions, name)(col._jc if isinstance(col, Column) else col)
         return Column(jc)
     _.__name__ = name
     _.__doc__ = doc
@@ -140,6 +140,7 @@ class UserDefinedFunction(object):
 def udf(f, returnType=StringType()):
     """Create a user defined function (UDF)
 
+    >>> from pyspark.sql.types import IntegerType
     >>> slen = udf(lambda s: len(s), IntegerType())
     >>> df.select(slen(df.name).alias('slen')).collect()
     [Row(slen=5), Row(slen=3)]
@@ -151,17 +152,14 @@ def _test():
     import doctest
     from pyspark.context import SparkContext
     from pyspark.sql import Row, SQLContext
-    import pyspark.sql.dataframe
-    globs = pyspark.sql.dataframe.__dict__.copy()
+    import pyspark.sql.functions
+    globs = pyspark.sql.functions.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
     globs['sqlCtx'] = SQLContext(sc)
     globs['df'] = sc.parallelize([Row(name='Alice', age=2), Row(name='Bob', age=5)]).toDF()
-    globs['df2'] = sc.parallelize([Row(name='Tom', height=80), Row(name='Bob', height=85)]).toDF()
-    globs['df3'] = sc.parallelize([Row(name='Alice', age=2, height=80),
-                                  Row(name='Bob', age=5, height=85)]).toDF()
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.dataframe, globs=globs,
+        pyspark.sql.functions, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
     globs['sc'].stop()
     if failure_count:
