@@ -370,7 +370,8 @@ private[spark] object StorageUtils {
 
 
   /**
-   * Return a mapping from block ID to its locations for each block that belongs to the given RDD.
+   * Return a mapping from block ID to its locations for each block that belongs to the given 
+   * Broadcast variable.
    */
   def getBroadcastBlockLocation(broadcastId: Long,
                                 statuses: Seq[StorageStatus]): Map[BlockId, Seq[String]] = {

@@ -24,7 +24,7 @@ import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.Utils
 
 /** Page showing storage details for a given RDD */
-private[ui] class RDDPage(parent: StorageTab) extends InMemoryObjectPage("rdd", parent) {
+private[ui] class RDDPage(parent: StorageTab) extends StorageDetailPage("rdd", parent) {
 
   protected override val workerTableID: String = "rdd-storage-by-block-table"
   

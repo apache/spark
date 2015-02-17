@@ -21,14 +21,14 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
-trait InMemoryObjectInfo
+trait StorageObjectInfo
 
 @DeveloperApi
 class RDDInfo(
     val id: Int,
     val name: String,
     val numPartitions: Int,
-    var storageLevel: StorageLevel) extends Ordered[RDDInfo] with InMemoryObjectInfo {
+    var storageLevel: StorageLevel) extends Ordered[RDDInfo] with StorageObjectInfo {
 
   var numCachedPartitions = 0
   var memSize = 0L
@@ -61,8 +61,7 @@ private[spark] object RDDInfo {
 @DeveloperApi
 class BroadcastInfo(
     val id: Long,
-    val name: String,
-    val numPartitions: Int) extends Ordered[BroadcastInfo] with InMemoryObjectInfo {
+    val name: String) extends Ordered[BroadcastInfo] with StorageObjectInfo {
 
   var memSize = 0L
   var diskSize = 0L
@@ -78,10 +77,9 @@ class BroadcastInfo(
   override def compare(that: BroadcastInfo): Int = {
     if (this.id > that.id) {
       1
+    } else if (this.id == that.id) {
+      0
     } else {
-      if (this.id == that.id) {
-        return 0
-      }
       -1
     }
   }

@@ -23,7 +23,7 @@ import org.apache.spark.util.Utils
 
 import scala.xml.Node
 
-private[ui] class BroadcastPage(parent: StorageTab) extends InMemoryObjectPage("broadcast", parent){
+private[ui] class BroadcastPage(parent: StorageTab) extends StorageDetailPage("broadcast", parent){
 
   protected override val workerTableID: String = "broadcast-storage-by-block-table"
   
@@ -55,10 +55,6 @@ private[ui] class BroadcastPage(parent: StorageTab) extends InMemoryObjectPage("
       <div class="row-fluid">
         <div class="span12">
           <ul class="unstyled">
-            <li>
-              <strong>Total Partitions:</strong>
-              {objectInfo.numPartitions}
-            </li>
             <li>
               <strong>Memory Size:</strong>
               {Utils.bytesToString(objectInfo.memSize)}

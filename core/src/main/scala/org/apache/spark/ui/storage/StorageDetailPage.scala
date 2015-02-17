@@ -25,7 +25,7 @@ import org.apache.spark.util.Utils
 
 import scala.xml.Node
 
-private[ui] abstract class InMemoryObjectPage(pageName: String, parent: StorageTab)
+private[ui] abstract class StorageDetailPage(pageName: String, parent: StorageTab)
   extends WebUIPage(pageName){
   
   protected val listener = parent.listener
@@ -44,7 +44,7 @@ private[ui] abstract class InMemoryObjectPage(pageName: String, parent: StorageT
   }
   
   // the object
-  protected def objectList: Seq[InMemoryObjectInfo]
+  protected def objectList: Seq[StorageObjectInfo]
   
   protected def storageStatusList = listener.storageStatusList
   
