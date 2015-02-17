@@ -147,7 +147,7 @@ private[spark] class PythonRDD(
 
               // Check whether the worker is ready to be re-used.
               if (reuse_worker) {
-                // Tt has a high possibility that the ending mark is already available,
+                // It has a high possibility that the ending mark is already available,
                 // And current task should not be blocked by checking it
 
                 if (stream.available() >= 4) {
