@@ -155,13 +155,13 @@ private[spark] class PythonRDD(
                   if (ending == SpecialLengths.END_OF_STREAM) {
                     env.releasePythonWorker(pythonExec, envVars.toMap, worker)
                     released = true
-                    logInfo(s"Socket is ended cleanly, reuse it: $worker")
+                    logInfo(s"Communication with worker ended cleanly, re-use it: $worker")
                   } else {
-                    logInfo(s"Socket is not ended cleanly (ending with $ending), " +
+                    logInfo(s"Communication with worker did not end cleanly (ending with $ending), " +
                       s"close it: $worker")
                   }
                 } else {
-                  logInfo(s"The ending mark is not available, close it: $worker")
+                  logInfo(s"The ending mark from worker is not available, close it: $worker")
                 }
               }
               null
