@@ -22,7 +22,7 @@ import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
 import java.nio.ByteBuffer
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.{ArrayBuffer, HashMap, ListBuffer, Map}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.util.{Try, Success, Failure}
 
 import com.google.common.base.Objects
@@ -211,6 +211,7 @@ private[spark] class Client(
     val fs = FileSystem.get(hadoopConf)
     val dst = new Path(fs.getHomeDirectory(), appStagingDir)
     val nns = getNameNodesToAccess(sparkConf) + dst
+    val distributedUris = new HashSet[String]
     obtainTokensForNamenodes(nns, hadoopConf, credentials)
 
     val replication = sparkConf.getInt("spark.yarn.submit.file.replication",
@@ -226,6 +227,15 @@ private[spark] class Client(
         "SPARK_LOG4J_CONF detected in the system environment. This variable has been " +
           "deprecated. Please refer to the \"Launching Spark on YARN\" documentation " +
           "for alternatives.")
+    }
+
+    def addDistributedUri(uri: URI): Unit = {
+      val uriStr = uri.toString()
+      if (distributedUris.contains(uriStr)) {
+        throw new IllegalArgumentException(
+          s"Resource $uri added multiple times to distributed cache.")
+      }
+      distributedUris += uriStr
     }
 
     /**
@@ -245,6 +255,7 @@ private[spark] class Client(
       if (!localPath.isEmpty()) {
         val localURI = new URI(localPath)
         if (localURI.getScheme != LOCAL_SCHEME) {
+          addDistributedUri(localURI)
           val src = getQualifiedLocalPath(localURI, hadoopConf)
           val destPath = copyFileToRemote(dst, src, replication)
           val destFs = FileSystem.get(destPath.toUri(), hadoopConf)
@@ -288,6 +299,7 @@ private[spark] class Client(
     fs.mkdirs(hadoopConfPath)
 
     hadoopConfFiles.foreach { case (name, file) =>
+      addDistributedUri(file.toURI())
       val destPath = copyFileToRemote(hadoopConfPath, new Path(file.toURI()), replication)
       distCacheMgr.addResource(fs, hadoopConf, destPath,
         localResources,
@@ -313,6 +325,7 @@ private[spark] class Client(
         flist.split(',').foreach { file =>
           val localURI = new URI(file.trim())
           if (localURI.getScheme != LOCAL_SCHEME) {
+            addDistributedUri(localURI)
             val localPath = new Path(localURI)
             val linkname = Option(localURI.getFragment()).getOrElse(localPath.getName())
             val destPath = copyFileToRemote(dst, localPath, replication)
