@@ -197,13 +197,13 @@ private[spark] class CoarseMesosSchedulerBackend(
             .addResources(createResource("mem",
               MemoryUtils.calculateTotalMemory(sc)))
 
-          sc.conf.getOption("spark.executor.docker.image").map { image =>
+          sc.conf.getOption("spark.mesos.executor.docker.image").map { image =>
             val container = task.getContainerBuilder()
             val volumes = sc.conf
-              .getOption("spark.executor.docker.volumes")
+              .getOption("spark.mesos.executor.docker.volumes")
               .map(MesosSchedulerBackendUtil.parseVolumesSpec)
             val portmaps = sc.conf
-              .getOption("spark.executor.docker.portmaps")
+              .getOption("spark.mesos.executor.docker.portmaps")
               .map(MesosSchedulerBackendUtil.parsePortMappingsSpec)
             MesosSchedulerBackendUtil.withDockerInfo(
               container, image, volumes = volumes, portmaps = portmaps)
