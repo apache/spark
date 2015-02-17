@@ -365,10 +365,11 @@ object Unidoc {
     unidocProjectFilter in(JavaUnidoc, unidoc) :=
       inAnyProject -- inProjects(OldDeps.project, repl, bagel, examples, tools, streamingFlumeSink, yarn),
 
-    // Skip class names containing $ and some internal packages in Javadocs
+    // Skip actual catalyst, but include the subproject.
+    // Catalyst is not public API and contains quasiquotes which break scaladoc.
     unidocAllSources in (ScalaUnidoc, unidoc) := {
       (unidocAllSources in (ScalaUnidoc, unidoc)).value
-        .map(_.filterNot(_.getCanonicalPath.contains("spark/sql/catalyst")))
+        .map(_.filterNot(_.getCanonicalPath.contains("sql/catalyst")))
     },
 
     // Skip class names containing $ and some internal packages in Javadocs
