@@ -20,15 +20,15 @@ package org.apache.spark.sql.parquet
 
 import java.io.File
 
-import org.apache.spark.sql.catalyst.expressions.Row
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.{SQLConf, QueryTest}
+import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.execution.PhysicalRDD
 import org.apache.spark.sql.hive.execution.HiveTableScan
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
-
+import org.apache.spark.sql.sources.LogicalRelation
 
 // The data where the partitioning key exists only in the directory structure.
 case class ParquetData(intField: Int, stringField: String)
@@ -122,52 +122,71 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    sql(s"""
-      create table test_parquet
-      (
-        intField INT,
-        stringField STRING
-      )
-      ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
-       STORED AS
-       INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
-       OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-    """)
-
-    val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
-    jsonRDD(rdd).registerTempTable("jt")
-    sql("""
-      create table test_parquet_jt ROW FORMAT
-          |  SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
-          |  STORED AS INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
-          |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-          |  AS select * from jt""".stripMargin)
+    sql(
+      """
+        |create table test_parquet
+        |(
+        |  intField INT,
+        |  stringField STRING
+        |)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        |STORED AS
+        |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+      """.stripMargin)
 
     conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
   }
 
   override def afterAll(): Unit = {
     super.afterAll()
-    sql("DROP TABLE test_parquet")
-    sql("DROP TABLE jt")
-    sql("DROP TABLE test_parquet_jt")
+    sql("DROP TABLE IF EXISTS test_parquet")
 
     setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
   }
 
-  test("scan from an empty parquet table") {
+  test("scan an empty parquet table") {
     checkAnswer(sql("SELECT count(*) FROM test_parquet"), Row(0))
   }
 
-  test("scan from an empty parquet table with upper case") {
+  test("scan an empty parquet table with upper case") {
     checkAnswer(sql("SELECT count(INTFIELD) FROM TEST_parquet"), Row(0))
   }
 
-  test("scan from an non empty parquet table #1") {
+  test("scan a parquet table created through a CTAS statement") {
+    val originalConvertMetastore = getConf("spark.sql.hive.convertMetastoreParquet", "true")
+    val originalUseDataSource = getConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
+    setConf("spark.sql.hive.convertMetastoreParquet", "true")
+    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
+
+    val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
+    jsonRDD(rdd).registerTempTable("jt")
+    sql(
+      """
+        |create table test_parquet_ctas ROW FORMAT
+        |SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        |STORED AS
+        |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+        |AS select * from jt
+      """.stripMargin)
+
     checkAnswer(
-      sql(s"SELECT a, b FROM test_parquet_jt WHERE a = '1'"),
+      sql(s"SELECT a, b FROM test_parquet_ctas WHERE a = 1"),
       Seq(Row(1, "str1"))
     )
+
+    table("test_parquet_ctas").queryExecution.analyzed match {
+      case LogicalRelation(p: ParquetRelation2) => // OK
+      case _ =>
+        fail(
+          s"test_parquet_ctas should be converted to ${classOf[ParquetRelation2].getCanonicalName}")
+    }
+
+    sql("DROP TABLE IF EXISTS jt")
+    sql("DROP TABLE IF EXISTS test_parquet_ctas")
+    setConf("spark.sql.hive.convertMetastoreParquet", originalConvertMetastore)
+    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalUseDataSource)
   }
 }
 
