@@ -106,8 +106,8 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
             }
           } catch {
             case cnd: ClassNotFoundException =>
-              // Log an error but keep going here -- the task failed, so not catastrophic if we can't
-              // deserialize the reason.
+              // Log an error but keep going here -- the task failed, so not catastrophic
+              // if we can't deserialize the reason.
               val loader = Utils.getContextOrSparkClassLoader
               logError(
                 "Could not deserialize TaskEndReason: ClassNotFound with classloader " + loader)
