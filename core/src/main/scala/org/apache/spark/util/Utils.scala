@@ -692,10 +692,10 @@ private[spark] object Utils extends Logging {
         .flatMap { root =>
           try {
             val rootDir = new File(root)
-            if (rootDir.exists){
+            if (rootDir.exists) {
               Some(rootDir.getAbsolutePath)
-            } else if(rootDir.mkdirs()) {
-              // we only chmod700 rootDir which created by Spark
+            } else if (rootDir.mkdirs()) {
+              // We only chmod700 rootDir which created by Spark
               chmod700(rootDir)
               Some(rootDir.getAbsolutePath)
             } else {
