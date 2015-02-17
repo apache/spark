@@ -159,8 +159,8 @@ you to construct DataFrames when the columns and their types are not known until
 
 <div data-lang="scala"  markdown="1">
 
-The Scala interaface for Spark SQL supports automatically converting an RDD containing case classes
-to a DataFrame.  The case class
+The Scala interface for Spark SQL supports automatically converting an RDD containing case classes
+to a SchemaRDD.  The case class
 defines the schema of the table.  The names of the arguments to the case class are read using
 reflection and become the names of the columns. Case classes can also be nested or contain complex
 types such as Sequences or Arrays. This RDD can be implicitly converted to a DataFrame and then be
