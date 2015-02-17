@@ -761,7 +761,7 @@ private[spark] class Master(
       val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
         appName + " (completed)", HistoryServer.UI_PATH_PREFIX + s"/${app.id}")
       try {
-        replayBus.replay(logInput, sparkVersion)
+        replayBus.replay(logInput, sparkVersion, eventLogFile)
       } finally {
         logInput.close()
       }

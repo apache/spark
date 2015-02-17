@@ -17,18 +17,17 @@
 
 package org.apache.spark.sql.columnar
 
-import org.apache.spark.sql.Dsl._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.{QueryTest, TestData}
 import org.apache.spark.storage.StorageLevel.MEMORY_ONLY
 
 class InMemoryColumnarQuerySuite extends QueryTest {
   // Make sure the tables are loaded.
   TestData
-
-  import org.apache.spark.sql.test.TestSQLContext.implicits._
 
   test("simple columnar query") {
     val plan = executePlan(testData.logicalPlan).executedPlan
@@ -39,7 +38,8 @@ class InMemoryColumnarQuerySuite extends QueryTest {
 
   test("default size avoids broadcast") {
     // TODO: Improve this test when we have better statistics
-    sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).registerTempTable("sizeTst")
+    sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString))
+      .toDF().registerTempTable("sizeTst")
     cacheTable("sizeTst")
     assert(
       table("sizeTst").queryExecution.logical.statistics.sizeInBytes >

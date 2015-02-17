@@ -90,7 +90,7 @@ object CrossValidatorExample {
     crossval.setNumFolds(2) // Use 3+ in practice
 
     // Run cross-validation, and choose the best set of parameters.
-    val cvModel = crossval.fit(training)
+    val cvModel = crossval.fit(training.toDF)
 
     // Prepare test documents, which are unlabeled.
     val test = sc.parallelize(Seq(
@@ -100,7 +100,7 @@ object CrossValidatorExample {
       Document(7L, "apache hadoop")))
 
     // Make predictions on test documents. cvModel uses the best model found (lrModel).
-    cvModel.transform(test)
+    cvModel.transform(test.toDF)
       .select("id", "text", "probability", "prediction")
       .collect()
       .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
