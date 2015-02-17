@@ -122,6 +122,9 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
   override def beforeAll(): Unit = {
     super.beforeAll()
 
+    val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
+    jsonRDD(rdd).registerTempTable("jt")
+
     sql(
       """
         |create table test_parquet
@@ -140,6 +143,7 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
 
   override def afterAll(): Unit = {
     super.afterAll()
+    sql("DROP TABLE IF EXISTS jt")
     sql("DROP TABLE IF EXISTS test_parquet")
 
     setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
@@ -153,14 +157,63 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
     checkAnswer(sql("SELECT count(INTFIELD) FROM TEST_parquet"), Row(0))
   }
 
-  test("scan a parquet table created through a CTAS statement") {
-    val originalConvertMetastore = getConf("spark.sql.hive.convertMetastoreParquet", "true")
-    val originalUseDataSource = getConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
-    setConf("spark.sql.hive.convertMetastoreParquet", "true")
-    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
+  test("insert into an empty parquet table") {
+    sql(
+      """
+        |create table test_insert_parquet
+        |(
+        |  intField INT,
+        |  stringField STRING
+        |)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        |STORED AS
+        |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+      """.stripMargin)
 
-    val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
-    jsonRDD(rdd).registerTempTable("jt")
+    // Insert into am empty table.
+    sql("insert into table test_insert_parquet select a, b from jt where jt.a > 5")
+    checkAnswer(
+      sql(s"SELECT intField, stringField FROM test_insert_parquet WHERE intField < 8"),
+      Row(6, "str6") :: Row(7, "str7") :: Nil
+    )
+    // Insert overwrite.
+    sql("insert overwrite table test_insert_parquet select a, b from jt where jt.a < 5")
+    checkAnswer(
+      sql(s"SELECT intField, stringField FROM test_insert_parquet WHERE intField > 2"),
+      Row(3, "str3") :: Row(4, "str4") :: Nil
+    )
+    sql("DROP TABLE IF EXISTS test_insert_parquet")
+
+    // Create it again.
+    sql(
+      """
+        |create table test_insert_parquet
+        |(
+        |  intField INT,
+        |  stringField STRING
+        |)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        |STORED AS
+        |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+      """.stripMargin)
+    // Insert overwrite an empty table.
+    sql("insert overwrite table test_insert_parquet select a, b from jt where jt.a < 5")
+    checkAnswer(
+      sql(s"SELECT intField, stringField FROM test_insert_parquet WHERE intField > 2"),
+      Row(3, "str3") :: Row(4, "str4") :: Nil
+    )
+    // Insert into the table.
+    sql("insert into table test_insert_parquet select a, b from jt")
+    checkAnswer(
+      sql(s"SELECT intField, stringField FROM test_insert_parquet"),
+      (1 to 10).map(i => Row(i, s"str$i")) ++ (1 to 4).map(i => Row(i, s"str$i"))
+    )
+    sql("DROP TABLE IF EXISTS test_insert_parquet")
+  }
+
+  test("scan a parquet table created through a CTAS statement") {
     sql(
       """
         |create table test_parquet_ctas ROW FORMAT
@@ -183,10 +236,7 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
           s"test_parquet_ctas should be converted to ${classOf[ParquetRelation2].getCanonicalName}")
     }
 
-    sql("DROP TABLE IF EXISTS jt")
     sql("DROP TABLE IF EXISTS test_parquet_ctas")
-    setConf("spark.sql.hive.convertMetastoreParquet", originalConvertMetastore)
-    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalUseDataSource)
   }
 }
 
