@@ -149,9 +149,19 @@ private[spark] class PythonRDD(
               if (reuse_worker) {
                 // Tt has a high possibility that the ending mark is already available,
                 // And current task should not be blocked by checking it
-                if (stream.available() >= 4 && stream.readInt() == SpecialLengths.END_OF_STREAM) {
-                  env.releasePythonWorker(pythonExec, envVars.toMap, worker)
-                  released = true
+
+                if (stream.available() >= 4) {
+                  val ending = stream.readInt()
+                  if (ending == SpecialLengths.END_OF_STREAM) {
+                    env.releasePythonWorker(pythonExec, envVars.toMap, worker)
+                    released = true
+                    logInfo(s"Socket is ended cleanly, reuse it: $worker")
+                  } else {
+                    logInfo(s"Socket is not ended cleanly (ending with $ending), " +
+                      s"close it: $worker")
+                  }
+                } else {
+                  logInfo(s"The ending mark is not available, close it: $worker")
                 }
               }
               null
