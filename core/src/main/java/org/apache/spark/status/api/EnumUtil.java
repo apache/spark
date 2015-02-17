@@ -14,19 +14,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.status.api;
 
 import com.google.common.base.Joiner;
 
 import java.util.Arrays;
 
-public enum ApplicationStatus {
-    COMPLETED,
-    RUNNING;
-
-    public static ApplicationStatus fromString(String str) {
-        return EnumUtil.parseIgnoreCase(ApplicationStatus.class, str);
+public class EnumUtil {
+    public static <E extends Enum<E>> E parseIgnoreCase(Class<E> clz, String str) {
+        E[] constants = clz.getEnumConstants();
+        if (str == null) {
+            return null;
+        }
+        for (E e: constants) {
+            if (e.name().equalsIgnoreCase(str))
+                return e;
+        }
+        throw new IllegalArgumentException(
+                String.format("Illegal type='%s'. Supported type values: %s",
+                        str, Joiner.on(", ").join(
+                                Arrays.asList(constants))));
     }
-
 }

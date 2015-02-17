@@ -17,29 +17,13 @@
 
 package org.apache.spark.status.api;
 
-import com.google.common.base.Joiner;
-
-import java.util.Arrays;
-
 public enum StageStatus {
     Active,
     Complete,
     Failed,
     Pending;
 
-    private static String VALID_VALUES = Joiner.on(", ").join(
-            Arrays.asList(values()));
-
     public static StageStatus fromString(String str) {
-        if (str == null) {
-            return null;
-        }
-        for (StageStatus status: values()) {
-            if (status.name().equalsIgnoreCase(str))
-                return status;
-        }
-        throw new IllegalArgumentException(
-                String.format("Illegal type='%s'. Supported type values: %s",
-                        str, VALID_VALUES));
+        return EnumUtil.parseIgnoreCase(StageStatus.class, str);
     }
 }
