@@ -199,7 +199,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   // https://github.com/apache/hive/blob/branch-0.13/data/scripts/q_test_init.sql
   val hiveQTestUtilTables = Seq(
     TestTable("src",
-      "CREATE TABLE src (key STRING, value STRING)".cmd,
+      "CREATE TABLE src (key INT, value STRING)".cmd,
       s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/kv1.txt")}' INTO TABLE src".cmd),
     TestTable("src1",
       "CREATE TABLE src1 (key INT, value STRING)".cmd,
