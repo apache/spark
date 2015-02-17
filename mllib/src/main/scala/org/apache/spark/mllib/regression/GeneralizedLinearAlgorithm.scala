@@ -195,9 +195,6 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    * of LabeledPoint entries starting from the initial weights provided.
    */
   def run(input: RDD[LabeledPoint], initialWeights: Vector): M = {
-    if (numFeatures < 0) {
-      numFeatures = input.map(_.features.size).first()
-    }
 
     if (input.getStorageLevel == StorageLevel.NONE) {
       logWarning("The input data is not directly cached, which may hurt performance if its"
