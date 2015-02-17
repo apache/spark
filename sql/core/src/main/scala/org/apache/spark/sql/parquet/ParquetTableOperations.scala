@@ -50,12 +50,19 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Row, _}
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan, UnaryNode}
 import org.apache.spark.{Logging, SerializableWritable, TaskContext}
 
+import scala.Some
+import org.json4s._
+import org.json4s.jackson.JsonMethods._
+import org.json4s.JsonAST.{JNothing, JObject, JField}
+import org.apache.spark.sql.types.StructType
+
 /**
  * :: DeveloperApi ::
  * Parquet table scan operator. Imports the file that backs the given
  * [[org.apache.spark.sql.parquet.ParquetRelation]] as a ``RDD[Row]``.
  */
 case class ParquetTableScan(
+    projectList: Seq[Expression],
     attributes: Seq[Attribute],
     relation: ParquetRelation,
     columnPruningPred: Seq[Expression])
@@ -64,7 +71,120 @@ case class ParquetTableScan(
   // The resolution of Parquet attributes is case sensitive, so we resolve the original attributes
   // by exprId. note: output cannot be transient, see
   // https://issues.apache.org/jira/browse/SPARK-1367
-  val output = attributes.map(relation.attributeMap)
+  val output = cutUnnecessaryColumns(attributes.map(relation.attributeMap))
+
+  def cutUnnecessaryColumns(output: Seq[Attribute]): Seq[Attribute] = {
+    try {
+      var fields = Set[Set[Long]]()
+      var child: Expression = null
+      var ids = Set[Long]()
+
+      def getDataTypeIdOfAttribute(project: Expression): Unit = {
+        child = project
+        while (child != null) {
+          child match {
+            case a: Alias =>
+              child = a.child
+            case ar: AttributeReference =>
+              ids += ar.dataType.id
+              child = null
+            case f: GetField =>
+              ids += f.dataType.id
+              child = f.child
+            case g: GetItem =>
+              ids += g.child.dataType.id
+              child = g.child
+            // filters
+            case bc: BinaryComparison =>
+              getDataTypeIdOfAttribute(bc.left)
+              getDataTypeIdOfAttribute(bc.right)
+              child = null
+            case not: Not =>
+              child = not.child
+            case in: In =>
+              in.children.foreach(e => getDataTypeIdOfAttribute(e))
+              child = null
+            case inset: InSet =>
+              child = inset.value
+            case _ =>
+              child = null
+          }
+        }
+      }
+
+      if(projectList != null) {
+        for (project <- projectList) {
+          getDataTypeIdOfAttribute(project)
+          if (!ids.isEmpty) {
+            fields += ids
+            ids = Set[Long]()
+          }
+        }
+      }
+
+      ids = fields.flatten
+      var headsInField = fields.map(f => f.head).toSeq
+      var implicitChilds = Set[Long]()
+      var schema = parse(StructType.fromAttributes(output).json)
+      var findResult: Option[JValue] = null
+
+      headsInField.distinct.foreach(id => {
+        findResult = schema.find({
+          case JObject(x) => if (x contains JField("id", JInt(id))) true else false
+          case _ => false
+        })
+        findResult.get.transformField {
+          case jf @ JField(name: String, JInt(id)) if name == "id" =>
+            if (!ids.contains(id.toLong)) implicitChilds += id.toLong
+            jf
+        }
+      })
+
+      var result = schema
+      var wantToRemove = true
+      result = result remove {
+        case JObject(x) =>
+          if (x.size == 0) {
+            false
+          }
+          else {
+            wantToRemove = false
+            for (field <- x if !wantToRemove) {
+              field match {
+                case JField(name: String, JInt(id)) if name == "id" =>
+                  if (!ids.contains(id) && !implicitChilds.contains(id)) wantToRemove = true
+                  JNothing
+                case _ =>
+                  JNothing
+              }
+            }
+            wantToRemove
+          }
+        case _ => false
+      }
+      result = result removeField {
+        case JField("id", _) => true
+        case _ => false
+      }
+      var resultSchema = compact(render(result))
+      var unbindAttributes = ParquetTypesConverter.convertFromString(resultSchema)
+
+      var bindAttributes = unbindAttributes.map(ua => {
+        var attr = relation.output.find(o => o.name == ua.name).get
+        if (attr.isInstanceOf[AttributeReference]) {
+          AttributeReference(ua.name, ua.dataType, ua.nullable)(attr.exprId, ua.qualifiers)
+        }
+        else {
+          attr
+        }
+      })
+      bindAttributes
+    } catch {
+      case e: Exception =>
+        sys.error(e.getMessage)
+        output
+    }
+  }
 
   // A mapping of ordinals partitionRow -> finalOutput.
   val requestedPartitionOrdinals = {
@@ -172,7 +292,7 @@ case class ParquetTableScan(
   def pruneColumns(prunedAttributes: Seq[Attribute]): ParquetTableScan = {
     val success = validateProjection(prunedAttributes)
     if (success) {
-      ParquetTableScan(prunedAttributes, relation, columnPruningPred)
+      ParquetTableScan(null, prunedAttributes, relation, columnPruningPred)
     } else {
       sys.error("Warning: Could not validate Parquet schema projection in pruneColumns")
     }

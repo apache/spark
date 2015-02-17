@@ -64,7 +64,7 @@ private[sql] object ParquetTestData {
       optional float myfloat;
       optional double mydouble;
       optional int96 mytimestamp;
-      }"""
+      }""".replaceAll("\r","")
 
   // field names for test assertion error messages
   val testSchemaFieldNames = Seq(
@@ -83,7 +83,7 @@ private[sql] object ParquetTestData {
       optional boolean myboolean;
       optional int64 mylong;
       }
-    """
+    """.replaceAll("\r","")
 
   val testFilterSchema =
     """
@@ -102,7 +102,7 @@ private[sql] object ParquetTestData {
       optional double myoptdouble;
       optional int96 mytimestamp;
       }
-    """
+    """.replaceAll("\r","")
 
   // field names for test assertion error messages
   val subTestSchemaFieldNames = Seq(
@@ -140,7 +140,7 @@ private[sql] object ParquetTestData {
           }
         }
       }
-    """
+    """.replaceAll("\r","")
 
 
   val testNestedSchema2 =
@@ -165,7 +165,7 @@ private[sql] object ParquetTestData {
           }
         }
       }
-    """
+    """.replaceAll("\r","")
 
   val testNestedSchema3 =
     """
@@ -183,7 +183,7 @@ private[sql] object ParquetTestData {
           }
         }
       }
-    """
+    """.replaceAll("\r","")
 
   val testNestedSchema4 =
     """
@@ -205,7 +205,7 @@ private[sql] object ParquetTestData {
           }
         }
       }
-    """
+    """.replaceAll("\r","")
 
   val testNestedDir1 = Utils.createTempDir()
   val testNestedDir2 = Utils.createTempDir()

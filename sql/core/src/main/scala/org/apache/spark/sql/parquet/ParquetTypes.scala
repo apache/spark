@@ -401,7 +401,8 @@ private[parquet] object ParquetTypesConverter extends Logging {
   }
 
   def convertToString(schema: Seq[Attribute]): String = {
-    StructType.fromAttributes(schema).json
+    var schemaJson = StructType.fromAttributes(schema).json
+    schemaJson.replaceAll(",\\\"id\\\":[0-9]+","")
   }
 
   def writeMetaData(attributes: Seq[Attribute], origPath: Path, conf: Configuration): Unit = {
