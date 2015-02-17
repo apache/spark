@@ -144,11 +144,24 @@ private[spark] class PythonRDD(
                 stream.readFully(update)
                 accumulator += Collections.singletonList(update)
               }
+
               // Check whether the worker is ready to be re-used.
-              if (stream.readInt() == SpecialLengths.END_OF_STREAM) {
-                if (reuse_worker) {
-                  env.releasePythonWorker(pythonExec, envVars.toMap, worker)
-                  released = true
+              if (reuse_worker) {
+                // It has a high possibility that the ending mark is already available,
+                // And current task should not be blocked by checking it
+
+                if (stream.available() >= 4) {
+                  val ending = stream.readInt()
+                  if (ending == SpecialLengths.END_OF_STREAM) {
+                    env.releasePythonWorker(pythonExec, envVars.toMap, worker)
+                    released = true
+                    logInfo(s"Communication with worker ended cleanly, re-use it: $worker")
+                  } else {
+                    logInfo(s"Communication with worker did not end cleanly (ending with $ending), " +
+                      s"close it: $worker")
+                  }
+                } else {
+                  logInfo(s"The ending mark from worker is not available, close it: $worker")
                 }
               }
               null
