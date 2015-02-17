@@ -64,6 +64,8 @@ class SparkContext(object):
     _lock = Lock()
     _python_includes = None  # zip and egg files that need to be added to PYTHONPATH
 
+    PACKAGE_EXTENSIONS = ('.zip', '.egg', '.jar')
+
     def __init__(self, master=None, appName=None, sparkHome=None, pyFiles=None,
                  environment=None, batchSize=0, serializer=PickleSerializer(), conf=None,
                  gateway=None, jsc=None, profiler_cls=BasicProfiler):
@@ -185,7 +187,7 @@ class SparkContext(object):
         for path in self._conf.get("spark.submit.pyFiles", "").split(","):
             if path != "":
                 (dirname, filename) = os.path.split(path)
-                if filename.lower().endswith("zip") or filename.lower().endswith("egg"):
+                if filename[-4:].lower() in self.PACKAGE_EXTENSIONS:
                     self._python_includes.append(filename)
                     sys.path.insert(1, os.path.join(SparkFiles.getRootDirectory(), filename))
 
@@ -705,7 +707,7 @@ class SparkContext(object):
         self.addFile(path)
         (dirname, filename) = os.path.split(path)  # dirname may be directory or HDFS/S3 prefix
 
-        if filename.endswith('.zip') or filename.endswith('.ZIP') or filename.endswith('.egg'):
+        if filename[-4:].lower() in self.PACKAGE_EXTENSIONS:
             self._python_includes.append(filename)
             # for tests in local mode
             sys.path.insert(1, os.path.join(SparkFiles.getRootDirectory(), filename))
