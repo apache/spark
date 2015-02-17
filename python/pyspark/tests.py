@@ -1435,26 +1435,26 @@ class SparkSubmitTests(unittest.TestCase):
         zip.writestr(name, content)
         zip.close()
         return path
-    
+
     def create_spark_package(self, artifact_name):
         group_id, artifact_id, version = artifact_name.split(":")
         self.createTempFile("%s-%s.pom" % (artifact_id, version), ("""
             |<?xml version="1.0" encoding="UTF-8"?>
             |<project xmlns="http://maven.apache.org/POM/4.0.0"
             |       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-            |       xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
+            |       xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
             |       http://maven.apache.org/xsd/maven-4.0.0.xsd">
             |   <modelVersion>4.0.0</modelVersion>
             |   <groupId>%s</groupId>
             |   <artifactId>%s</artifactId>
             |   <version>%s</version>
             |</project>
-            """ % (group_id, artifact_id, version)).lstrip(),
-                                  os.path.join(group_id, artifact_id, version))
+            """ % (group_id, artifact_id, version)).lstrip(), 
+                            os.path.join(group_id, artifact_id, version))
         self.createFileInZip("%s.py" % artifact_id, """
             |def myfunc(x):
             |    return x + 1
-            """, ".jar", os.path.join(group_id, artifact_id, version), 
+            """, ".jar", os.path.join(group_id, artifact_id, version),
                              "%s-%s" % (artifact_id, version))
 
     def test_single_script(self):
@@ -1537,7 +1537,6 @@ class SparkSubmitTests(unittest.TestCase):
         self.create_spark_package("a:mylib:0.1")
         proc = subprocess.Popen([self.sparkSubmit, "--packages", "a:mylib:0.1", "--repositories",
                                  "file:" + self.programDir, script], stdout=subprocess.PIPE)
-        
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
         self.assertIn("[2, 3, 4]", out)
@@ -1553,7 +1552,7 @@ class SparkSubmitTests(unittest.TestCase):
             """)
         self.create_spark_package("a:mylib:0.1")
         proc = subprocess.Popen([self.sparkSubmit, "--packages", "a:mylib:0.1", "--repositories",
-                                 "file:" + self.programDir, "--master", 
+                                 "file:" + self.programDir, "--master",
                                  "local-cluster[1,1,512]", script], stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
