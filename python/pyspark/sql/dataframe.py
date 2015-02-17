@@ -244,8 +244,25 @@ class DataFrame(object):
         debugging purpose.
 
         If extended is False, only prints the physical plan.
+
+        >>> df.explain()
+        PhysicalRDD [age#0,name#1], MapPartitionsRDD[...] at mapPartitions at SQLContext.scala:...
+
+        >>> df.explain(True)
+        == Parsed Logical Plan ==
+        ...
+        == Analyzed Logical Plan ==
+        ...
+        == Optimized Logical Plan ==
+        ...
+        == Physical Plan ==
+        ...
+        == RDD ==
         """
-        self._jdf.explain(extended)
+        if extended:
+            print self._jdf.queryExecution().toString()
+        else:
+            print self._jdf.queryExecution().executedPlan().toString()
 
     def isLocal(self):
         """
@@ -1034,7 +1051,7 @@ def _test():
                                   Row(name='Bob', age=5, height=85)]).toDF()
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.dataframe, globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
     globs['sc'].stop()
     if failure_count:
         exit(-1)
