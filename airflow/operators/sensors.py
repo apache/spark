@@ -4,7 +4,7 @@ from urlparse import urlparse
 from time import sleep
 
 from airflow import settings
-from airflow.hooks import HiveHook
+from airflow.hooks import HiveMetastoreHook
 from airflow.hooks import S3Hook
 from airflow.models import BaseOperator
 from airflow.models import Connection as DB
@@ -169,7 +169,7 @@ class HivePartitionSensor(BaseSensorOperator):
     def __init__(
             self,
             table, partition="ds='{{ ds }}'",
-            hive_conn_id='hive_default',
+            metastore_conn_id='metastore_default',
             schema='default',
             *args, **kwargs):
         super(HivePartitionSensor, self).__init__(*args, **kwargs)
@@ -177,8 +177,8 @@ class HivePartitionSensor(BaseSensorOperator):
             schema, table = table.split('.')
         if not partition:
             partition = "ds='{{ ds }}'"
-        self.hive_conn_id = hive_conn_id
-        self.hook = HiveHook(hive_conn_id=hive_conn_id)
+        self.metastore_conn_id = metastore_conn_id
+        self.hook = HiveMetastoreHook(metastore_conn_id=metastore_conn_id)
         self.table = table
         self.partition = partition
         self.schema = schema

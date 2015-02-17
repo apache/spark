@@ -1,7 +1,7 @@
 import logging
 import re
 
-from airflow.hooks import HiveHook
+from airflow.hooks import HiveCliHook
 from airflow.models import BaseOperator
 from airflow.utils import apply_defaults
 
@@ -32,15 +32,14 @@ class HiveOperator(BaseOperator):
     @apply_defaults
     def __init__(
             self, hql,
-            hive_conn_id='hive_default',
+            hive_cli_conn_id='hive_cli_default',
             hiveconf_jinja_translate=False,
             script_begin_tag=None,
             *args, **kwargs):
 
         super(HiveOperator, self).__init__(*args, **kwargs)
         self.hiveconf_jinja_translate = hiveconf_jinja_translate
-        self.hive_conn_id = hive_conn_id
-        self.hook = HiveHook(hive_conn_id=hive_conn_id)
+        self.hook = HiveCliHook(hive_cli_conn_id=hive_cli_conn_id)
         self.hql = hql
         self.script_begin_tag = script_begin_tag
 

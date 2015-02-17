@@ -37,7 +37,7 @@ class HivePrestoTest(unittest.TestCase):
         SELECT state, year, name, gender, num FROM static_babynames;
         """
         t = operators.HiveOperator(task_id='basic_hql', hql=hql, dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
     def test_presto(self):
         sql = """
@@ -45,14 +45,14 @@ class HivePrestoTest(unittest.TestCase):
         """
         t = operators.PrestoCheckOperator(
             task_id='presto_check', sql=sql, dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
     def test_hdfs_sensor(self):
         t = operators.HdfsSensor(
             task_id='hdfs_sensor_check',
             filepath='/user/hive/warehouse/airflow.db/static_babynames',
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
     def test_sql_sensor(self):
         t = operators.SqlSensor(
@@ -60,7 +60,23 @@ class HivePrestoTest(unittest.TestCase):
             conn_id='presto_default',
             sql="SELECT 'x' FROM airflow.static_babynames LIMIT 1;",
             dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
+    def test_hive_partition_sensor(self):
+        t = operators.HivePartitionSensor(
+            task_id='hive_partition_check',
+            table='airflow.static_babynames_partitioned',
+            dag=self.dag)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
+    def test_hive2samba(self):
+        t = operators.Hive2SambaOperator(
+            task_id='hive2samba_check',
+            samba_conn_id='tableau_samba',
+            hql="SELECT * FROM airflow.static_babynames LIMIT 1000",
+            destination_filepath='test_airflow3.csv',
+            dag=self.dag)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
 
 class CoreTest(unittest.TestCase):

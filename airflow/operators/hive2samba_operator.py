@@ -1,8 +1,7 @@
 import logging
 import tempfile
 
-from airflow.configuration import conf
-from airflow.hooks import HiveHook, SambaHook
+from airflow.hooks import HiveServer2Hook, SambaHook
 from airflow.models import BaseOperator
 from airflow.utils import apply_defaults
 
@@ -13,10 +12,10 @@ class Hive2SambaOperator(BaseOperator):
 
     :param hql: the hql to be exported
     :type hql: string
-    :param hive_dbid: reference to the Hive database
-    :type hive_dbid: string
-    :param samba_dbid: reference to the samba destination
-    :type samba_dbid: string
+    :param hiveserver2_conn_id: reference to the hiveserver2 service
+    :type hiveserver2_conn_id: string
+    :param samba_conn_id: reference to the samba destination
+    :type samba_conn_id: string
     """
 
     __mapper_args__ = {
@@ -28,33 +27,20 @@ class Hive2SambaOperator(BaseOperator):
     @apply_defaults
     def __init__(
             self, hql,
-            samba_dbid,
             destination_filepath,
-            hive_dbid='hive_default',
+            samba_conn_id='samba_default',
+            hiveserver2_conn_id='hiveserver2_default',
             *args, **kwargs):
         super(Hive2SambaOperator, self).__init__(*args, **kwargs)
 
-        self.hive_dbid = hive_dbid
-        self.samba_dbid = samba_dbid
+        self.hiveserver2_conn_id = hiveserver2_conn_id
+        self.samba_conn_id = samba_conn_id
         self.destination_filepath = destination_filepath
-        self.samba = SambaHook(samba_dbid=samba_dbid)
-        self.hook = HiveHook(hive_dbid=hive_dbid)
+        self.samba = SambaHook(samba_conn_id=samba_conn_id)
+        self.hook = HiveServer2Hook(hiveserver2_conn_id=hiveserver2_conn_id)
         self.hql = hql.strip().rstrip(';')
 
     def execute(self, context):
         tmpfile = tempfile.NamedTemporaryFile()
-        hql = """\
-        INSERT OVERWRITE LOCAL DIRECTORY '{tmpfile.name}'
-        ROW FORMAT DELIMITED
-        FIELDS TERMINATED BY ','
-        {self.hql};
-        """.format(**locals())
-        logging.info('Executing: ' + hql)
-        self.hook.run_cli(hql=hql)
-
+        self.hook.to_csv(hql=self.hql, csv_filepath=tmpfile.name)
         self.samba.push_from_local(self.destination_filepath, tmpfile.name)
-
-        # Cleaning up
-        hql = "DROP TABLE {table};"
-        self.hook.run_cli(hql=self.hql)
-        tmpfile.close()
