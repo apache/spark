@@ -19,6 +19,7 @@ BaseOperator documentation for more details.
         SqlSensor, 
         HivePartitionSensor, 
         HdfsSensor,
+        TimeSensor,
         PrestoCheckOperator,
         PrestoIntervalCheckOperator,
         PrestoValueCheckOperator,
