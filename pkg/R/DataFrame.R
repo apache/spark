@@ -1,6 +1,6 @@
 # DataFrame.R - DataFrame class and methods implemented in S4 OO classes
 
-#' @include jobj.R RDD.R
+#' @include jobj.R RDD.R pairRDD.R
 NULL
 
 setOldClass("jobj")
@@ -114,20 +114,189 @@ setMethod("count",
             callJMethod(sdf, "count")
           })
 
-#' Collect elements of a DataFrame
-#' 
-#' Returns a list of Row objects from a DataFrame
-#' 
-#' @param df A SparkSQL DataFrame
-#' 
+# Collect the rows of a Spark DataFrame and return a named list for each row.
+
 #' @rdname collect-methods
 #' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' collected <- collect(df)
+#' firstName <- collected[[1]]$name
+#' }
 
-# TODO: Collect() currently returns a list of Generic Row objects and is WIP.  This will eventually 
-# be part of the process to read a DataFrame into R and create a data.frame.
 setMethod("collect",
           signature(rdd = "DataFrame"),
-          function(rdd){
-            sdf <- rdd@sdf
-            listObj <- callJMethod(sdf, "collect")
+          function(rdd) {
+            rddIn <- toRDD(rdd)
+            collect(rddIn)
           })
+
+# Take the first NUM elements in a DataFrame and return a named list for each row.
+
+#' @rdname take
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' take(df, 2)
+#' }
+
+setMethod("take",
+          signature(rdd = "DataFrame", num = "numeric"),
+          function(rdd, num) {
+            rddIn <- toRDD(rdd)
+            take(rddIn, num)
+          })
+
+#' toRDD()
+#' 
+#' Converts a Spark DataFrame to an RDD while preserving column names.
+#' 
+#' @param df A Spark DataFrame
+#' 
+#' @rdname DataFrame
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' rdd <- toRDD(df)
+#' }
+
+setGeneric("toRDD", function(df) { standardGeneric("toRDD") })
+
+setMethod("toRDD",
+          signature(df = "DataFrame"),
+          function(df) {
+            jrdd <- SparkR:::callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "dfToRowRDD", df@sdf)
+            names <- SparkR:::callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "getColNames", df@sdf)
+            SparkR:::RDD(jrdd, serialized = "rows", colNames = names)
+          })
+
+############################## RDD Map Functions ##################################
+# All of the following functions mirror the existing RDD map functions,           #
+# but allow for use with DataFrames by first converting to an RRDD before calling #
+# the requested map function.                                                     #
+###################################################################################
+
+setMethod("lapply",
+          signature(X = "DataFrame", FUN = "function"),
+          function(X, FUN) {
+            rdd <- toRDD(X)
+            lapply(rdd, FUN)
+          })
+
+setMethod("map",
+          signature(X = "DataFrame", FUN = "function"),
+          function(X, FUN) {
+            lapply(X, FUN)
+          })
+
+setMethod("flatMap",
+          signature(X = "DataFrame", FUN = "function"),
+          function(X, FUN) {
+            rdd <- toRDD(X)
+            flatMap(rdd, FUN)
+          })
+
+setMethod("lapplyPartition",
+          signature(X = "DataFrame", FUN = "function"),
+          function(X, FUN) {
+            rdd <- toRDD(X)
+            lapplyPartition(rdd, FUN)
+          })
+
+setMethod("mapPartitions",
+          signature(X = "DataFrame", FUN = "function"),
+          function(X, FUN) {
+            lapplyPartition(X, FUN)
+          })
+
+setMethod("lapplyPartitionsWithIndex",
+          signature(X = "DataFrame", FUN = "function"),
+          function(X, FUN) {
+            rdd <- toRDD(X)
+            lapplyPartitionsWithIndex(rdd, FUN)
+          })
+
+setMethod("mapPartitionsWithIndex",
+          signature(X = "DataFrame", FUN = "function"),
+          function(X, FUN){
+            lapplyPartitionsWithIndex(X, FUN)
+          })
+
+setMethod("foreach",
+          signature(rdd = "DataFrame", func = "function"),
+          function(rdd, func) {
+            rddIn <- toRDD(rdd)
+            foreach(rddIn, func)
+          })
+
+setMethod("foreachPartition",
+          signature(rdd = "DataFrame", func = "function"),
+          function(rdd, func) {
+            rddIn <- toRDD(rdd)
+            foreachPartition(rddIn, func)
+          })
+
+#' Collect to DataFrame
+#' 
+#' Collects all the elements of a Spark DataFrame and coerces them into an R data.frame.
+#' 
+#' @param df A Spark DataFrame
+#' @return An R data.frame
+#' 
+#' @rdname collectToDF
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' converted <- collectToDF(df)
+#' is.data.frame(converted)
+#' }
+
+setGeneric("collectToDF", function(df) { standardGeneric("collectToDF") })
+
+setMethod("collectToDF",
+          signature(df = "DataFrame"),
+          function(df) {
+            listCols <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "dfToColRDD", df@sdf)
+            cols <- lapply(seq_along(listCols),
+                           function(colIdx) {
+                             rddCol <- listCols[[colIdx]]
+                             rddRaw <- callJMethod(rddCol, "collect") # Returns a list of byte arrays per partition
+                             colPartitions <- lapply(seq_along(rddRaw),
+                                                     function(partIdx) {
+                                                       objRaw <- rawConnection(rddRaw[[partIdx]])
+                                                       numRows <- readInt(objRaw)
+                                                       col <- readCol(objRaw, numRows) # List of deserialized values per partition
+                                                       close(objRaw)
+                                                       col
+                                                     })
+                             colOut <- unlist(colPartitions, recursive = FALSE) # Flatten column list into a vector
+                           })
+            colNames <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "getColNames", df@sdf)
+            names(cols) <- colNames
+            dfOut <- do.call(cbind.data.frame, cols)
+          })
+
+# Take a single column as Array[Byte] and deserialize it into an atomic vector
+readCol <- function(rawCon, numRows) {
+  sapply(1:numRows, function(x) {
+    value <- readObject(rawCon)
+    # Replace NULL with NA so we can coerce to vectors
+    if (is.null(value)) NA else value
+  }) # each column is an atomic vector now
+}

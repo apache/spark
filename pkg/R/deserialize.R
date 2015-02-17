@@ -101,3 +101,48 @@ readDeserialize <- function(con) {
   }
 }
 
+readDeserializeRows <- function(inputCon) {
+  # readDeserializeRows will deserialize a DataOutputStream composed of
+  # a list of lists. Since the DOS is one continuous stream and
+  # the number of rows varies, we put the readRow function in a while loop
+  # that termintates when the next row is empty.
+  colNames <- readList(inputCon)
+
+  data <- list()
+    numCols <- readInt(inputCon)
+    # We write a length for each row out
+    while(length(numCols) > 0 && numCols > 0) {
+      data[[length(data) + 1L]] <- readRow(inputCon, numCols)
+      numCols <- readInt(inputCon)
+    }
+  dataOut <- lapply(data, assignNames, colNames)
+  dataOut # this is a list of named lists now
+}
+
+readRowList <- function(obj) {
+  # readRowList is meant for use inside an lapply. As a result, it is
+  # necessary to open a standalone connection for the row and consume
+  # the numCols bytes inside the read function in order to correctly
+  # deserialize the row.
+  rawObj <- rawConnection(obj, "r+")
+  numCols <- SparkR:::readInt(rawObj)
+  rowOut <- SparkR:::readRow(rawObj, numCols)
+  close(rawObj)
+  rowOut
+}
+
+readRow <- function(inputCon, numCols) {
+  lapply(1:numCols, function(x) {
+    obj <- readObject(inputCon)
+    if (is.null(obj)) {
+      NA
+    } else {
+      obj
+    }
+  }) # each row is a list now
+}
+
+assignNames <- function(row, colNames) {
+  names(row) <- colNames
+  row
+}

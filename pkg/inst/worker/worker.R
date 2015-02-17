@@ -26,7 +26,7 @@ execLen <- SparkR:::readInt(inputCon)
 execFunctionName <- unserialize(SparkR:::readRawLen(inputCon, execLen))
 
 # read the isInputSerialized bit flag
-isInputSerialized <- SparkR:::readInt(inputCon)
+inputSerialization <- SparkR:::readString(inputCon)
 
 # read the isOutputSerialized bit flag
 isOutputSerialized <- SparkR:::readInt(inputCon)
@@ -68,11 +68,13 @@ isEmpty <- SparkR:::readInt(inputCon)
 if (isEmpty != 0) {
 
   if (numPartitions == -1) {
-    if (isInputSerialized) {
+    if (inputSerialization == "byte") {
       # Now read as many characters as described in funcLen
       data <- SparkR:::readDeserialize(inputCon)
-    } else {
+    } else if (inputSerialization == "string") {
       data <- readLines(inputCon)
+    } else {
+      data <- SparkR:::readDeserializeRows(inputCon)
     }
     output <- do.call(execFunctionName, list(splitIndex, data))
     if (isOutputSerialized) {
@@ -81,11 +83,13 @@ if (isEmpty != 0) {
       SparkR:::writeStrings(outputCon, output)
     }
   } else {
-    if (isInputSerialized) {
+    if (inputSerialization == "byte") {
       # Now read as many characters as described in funcLen
       data <- SparkR:::readDeserialize(inputCon)
-    } else {
+    } else if (inputSerialization == "string") {
       data <- readLines(inputCon)
+    } else {
+      data <- SparkR:::readDeserializeRows(inputCon)
     }
 
     res <- new.env()
