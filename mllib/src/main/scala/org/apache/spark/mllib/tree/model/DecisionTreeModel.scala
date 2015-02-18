@@ -197,7 +197,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] {
       val nodes = model.topNode.subtreeIterator.toSeq
       val dataRDD: DataFrame = sc.parallelize(nodes)
         .map(NodeData.apply(0, _))
-        .toDF
+        .toDF()
       dataRDD.saveAsParquetFile(Loader.dataPath(path))
     }
 

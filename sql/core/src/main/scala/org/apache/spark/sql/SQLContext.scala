@@ -887,8 +887,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Registers the given [[DataFrame]] as a temporary table in the catalog. Temporary tables exist
    * only during the lifetime of this instance of SQLContext.
    */
-  private[sql] def registerDataFrameAsTable(rdd: DataFrame, tableName: String): Unit = {
-    catalog.registerTable(Seq(tableName), rdd.logicalPlan)
+  private[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
+    catalog.registerTable(Seq(tableName), df.logicalPlan)
   }
 
   /**
