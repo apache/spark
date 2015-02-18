@@ -2,6 +2,7 @@ package edu.berkeley.cs.amplab.sparkr
 
 import java.io._
 import java.net.URI
+import java.util.concurrent.Semaphore
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
@@ -17,8 +18,12 @@ object SparkRRunner {
     val rFile = args(0)
 
     val otherArgs = args.slice(1, args.length)
+
+    // Pick a non-privileged port
+    val randomPort = scala.util.Random.nextInt(65536 - 1024) + 1024
+
     // TODO: Can we get this from SparkConf ?
-    val sparkRBackendPort = sys.env.getOrElse("SPARKR_BACKEND_PORT", "12345").toInt
+    val sparkRBackendPort = sys.env.getOrElse("SPARKR_BACKEND_PORT", randomPort.toString).toInt
     val rCommand = "Rscript"
 
     // Check if the file path exists.
@@ -35,8 +40,12 @@ object SparkRRunner {
     // Java system properties etc.
     val sparkRBackend = new SparkRBackend()
     val sparkRBackendThread = new Thread() {
+      val finishedInit = new Semaphore(1)
+      finishedInit.acquire()
+
       override def run() {
         sparkRBackend.init(sparkRBackendPort)
+        finishedInit.release()
         sparkRBackend.run()
       }
 
@@ -46,6 +55,8 @@ object SparkRRunner {
     }
 
     sparkRBackendThread.start()
+    // Wait for SparkRBackend initialization to finish
+    sparkRBackendThread.finishedInit.acquire()
 
     // Launch R
     val builder = new ProcessBuilder(Seq(rCommand, rFileNormalized) ++ otherArgs)
