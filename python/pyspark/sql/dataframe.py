@@ -803,7 +803,7 @@ class GroupedData(object):
         >>> df.groupBy().mean('age').collect()
         [Row(AVG(age#0)=3.5)]
         >>> df3.groupBy().mean('age', 'height').collect()
-        [Row(AVG(age#4)=3.5, AVG(height#5)=82.5)]
+        [Row(AVG(age#4L)=3.5, AVG(height#5L)=82.5)]
         """
 
     @df_varargs_api
@@ -814,7 +814,7 @@ class GroupedData(object):
         >>> df.groupBy().avg('age').collect()
         [Row(AVG(age#0)=3.5)]
         >>> df3.groupBy().avg('age', 'height').collect()
-        [Row(AVG(age#4)=3.5, AVG(height#5)=82.5)]
+        [Row(AVG(age#4L)=3.5, AVG(height#5L)=82.5)]
         """
 
     @df_varargs_api
@@ -825,7 +825,7 @@ class GroupedData(object):
         >>> df.groupBy().max('age').collect()
         [Row(MAX(age#0)=5)]
         >>> df3.groupBy().max('age', 'height').collect()
-        [Row(MAX(age#4)=5, MAX(height#5)=85)]
+        [Row(MAX(age#4L)=5, MAX(height#5L)=85)]
         """
 
     @df_varargs_api
@@ -836,7 +836,7 @@ class GroupedData(object):
         >>> df.groupBy().min('age').collect()
         [Row(MIN(age#0)=2)]
         >>> df3.groupBy().min('age', 'height').collect()
-        [Row(MIN(age#4)=2, MIN(height#5)=80)]
+        [Row(MIN(age#4L)=2, MIN(height#5L)=80)]
         """
 
     @df_varargs_api
@@ -847,7 +847,7 @@ class GroupedData(object):
         >>> df.groupBy().sum('age').collect()
         [Row(SUM(age#0)=7)]
         >>> df3.groupBy().sum('age', 'height').collect()
-        [Row(SUM(age#4)=7, SUM(height#5)=165)]
+        [Row(SUM(age#4L)=7, SUM(height#5L)=165)]
         """
 
 
@@ -1051,7 +1051,9 @@ def _test():
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
     globs['sqlCtx'] = SQLContext(sc)
-    globs['df'] = sc.parallelize([Row(name='Alice', age=2), Row(name='Bob', age=5)]).toDF()
+    globs['df'] = sc.parallelize([(2, 'Alice'), (5, 'Bob')])\
+        .toDF(StructType([StructField('age', IntegerType()),
+                          StructField('name', StringType())]))
     globs['df2'] = sc.parallelize([Row(name='Tom', height=80), Row(name='Bob', height=85)]).toDF()
     globs['df3'] = sc.parallelize([Row(name='Alice', age=2, height=80),
                                   Row(name='Bob', age=5, height=85)]).toDF()

@@ -1130,6 +1130,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     def needsConversion(dataType: DataType): Boolean = dataType match {
       case ByteType => true
       case ShortType => true
+      case LongType => true
       case FloatType => true
       case DateType => true
       case TimestampType => true
