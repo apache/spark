@@ -169,6 +169,7 @@ case $option in
       if [[ $(ps -p "$TARGET_ID" -o comm=) =~ "java" ]]; then
         echo "stopping $command"
         kill "$TARGET_ID"
+        rm -f $pid
       else
         echo "no $command to stop"
       fi
