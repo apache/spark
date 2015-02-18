@@ -341,6 +341,11 @@ test_that("pipeRDD() on RDDs", {
   expected <- as.list(as.character(1:10))
   expect_equal(actual, expected)
   
+  trailed.rdd <- parallelize(sc, c("1", "", "2\n", "3\n\r\n"))
+  actual <- collect(pipeRDD(trailed.rdd, "sort"))
+  expected <- list("", "1", "2", "3")
+  expect_equal(actual, expected)
+  
   rev.nums <- 9:0
   rev.rdd <- parallelize(sc, rev.nums, 2L)
   actual <- collect(pipeRDD(rev.rdd, "sort"))

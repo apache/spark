@@ -4,21 +4,21 @@
 \name{pipeRDD}
 \alias{pipeRDD}
 \alias{pipeRDD,RDD,character-method}
-\title{Pipes elements to a forked externel process.}
+\title{Pipes elements to a forked external process.}
 \usage{
 pipeRDD(rdd, command, env = list())
 
 \S4method{pipeRDD}{RDD,character}(rdd, command, env = list())
 }
 \arguments{
-\item{rdd}{The RDD whose elements are piped to the forked externel process.}
+\item{rdd}{The RDD whose elements are piped to the forked external process.}
 
-\item{command}{The command to fork an externel process.}
+\item{command}{The command to fork an external process.}
 
-\item{env}{A named list to set environment variables of the externel process.}
+\item{env}{A named list to set environment variables of the external process.}
 }
 \value{
-A new RDD created by piping all elements to a forked externel process.
+A new RDD created by piping all elements to a forked external process.
 }
 \description{
 The same as 'pipe()' in Spark.

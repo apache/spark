@@ -1275,14 +1275,14 @@ setMethod("aggregateRDD",
             Reduce(combOp, partitionList, zeroValue)
           })
 
-#' Pipes elements to a forked externel process.
+#' Pipes elements to a forked external process.
 #'
 #' The same as 'pipe()' in Spark.
 #'
-#' @param rdd The RDD whose elements are piped to the forked externel process.
-#' @param command The command to fork an externel process.
-#' @param env A named list to set environment variables of the externel process.
-#' @return A new RDD created by piping all elements to a forked externel process.
+#' @param rdd The RDD whose elements are piped to the forked external process.
+#' @param command The command to fork an external process.
+#' @param env A named list to set environment variables of the external process.
+#' @return A new RDD created by piping all elements to a forked external process.
 #' @rdname pipeRDD
 #' @export
 #' @examples
