@@ -55,6 +55,15 @@ case class DropTable(tableName: String, ifExists: Boolean) extends LeafNode with
 
   override protected lazy val sideEffectResult: Seq[Row] = {
     val ifExistsClause = if (ifExists) "IF EXISTS " else ""
+    try {
+      hiveContext.tryUncacheQuery(hiveContext.table(tableName))
+    } catch {
+      // This table's metadata is not in
+      case _: org.apache.hadoop.hive.ql.metadata.InvalidTableException =>
+      // Got an error during table lookup or uncache the query. We log the exception message.
+      // Users should be able to drop such kinds of tables regardless if there is an exception.
+      case e: Exception => log.warn(s"${e.getMessage}")
+    }
     hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
     hiveContext.catalog.unregisterTable(Seq(tableName))
     Seq.empty[Row]
