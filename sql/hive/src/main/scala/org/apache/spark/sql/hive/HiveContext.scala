@@ -74,7 +74,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    *     and no SerDe is specified (no ROW FORMAT SERDE clause).
    */
   protected[sql] def convertCTAS: Boolean =
-    getConf("spark.sql.hive.convertCTAS", "false") == "true"
+    getConf("spark.sql.hive.convertCTAS", "false").toBoolean
 
   override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution(plan)

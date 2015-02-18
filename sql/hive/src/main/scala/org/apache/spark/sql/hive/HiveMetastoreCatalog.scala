@@ -507,7 +507,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         }
 
         if (hive.convertCTAS && !hasStorageSpec) {
-          // Do the conversion when convertHiveCTASWithoutStorageSpec is true and the query
+          // Do the conversion when spark.sql.hive.convertCTAS is true and the query
           // does not specify any storage format (file format and storage handler).
           if (dbName.isDefined) {
             throw new AnalysisException(

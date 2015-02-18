@@ -71,7 +71,7 @@ class SQLQuerySuite extends QueryTest {
 
     sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
     sql("CREATE TABLE IF NOT EXISTS ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
-    var message = intercept[RuntimeException] {
+    var message = intercept[AnalysisException] {
       sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
     }.getMessage
     assert(message.contains("Table ctas1 already exists"))
@@ -105,10 +105,9 @@ class SQLQuerySuite extends QueryTest {
     checkRelation("ctas1", false)
     sql("DROP TABLE ctas1")
 
-    // Enable the following one after SPARK-5852 is fixed
-    // sql("CREATE TABLE ctas1 stored as parquet AS SELECT key k, value FROM src ORDER BY k, value")
-    // checkRelation("ctas1", false)
-    // sql("DROP TABLE ctas1")
+    sql("CREATE TABLE ctas1 stored as parquet AS SELECT key k, value FROM src ORDER BY k, value")
+    checkRelation("ctas1", false)
+    sql("DROP TABLE ctas1")
 
     setConf("spark.sql.hive.convertCTAS", originalConf)
   }
