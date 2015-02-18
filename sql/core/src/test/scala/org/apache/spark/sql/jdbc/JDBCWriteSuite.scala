@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.math.BigDecimal
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.types._
-import org.apache.spark.sql.test._
-import org.scalatest.{FunSuite, BeforeAndAfter}
 import java.sql.DriverManager
-import TestSQLContext._
+
+import org.scalatest.{BeforeAndAfter, FunSuite}
+
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.test._
+import org.apache.spark.sql.types._
 
 class JDBCWriteSuite extends FunSuite with BeforeAndAfter {
   val url = "jdbc:h2:mem:testdb2"
@@ -54,53 +54,53 @@ class JDBCWriteSuite extends FunSuite with BeforeAndAfter {
       StructField("seq", IntegerType) :: Nil)
 
   test("Basic CREATE") {
-    val srdd = TestSQLContext.createDataFrame(sc.parallelize(arr2x2), schema2)
+    val df = TestSQLContext.createDataFrame(sc.parallelize(arr2x2), schema2)
 
-    srdd.createJDBCTable(url, "TEST.BASICCREATETEST", false)
+    df.createJDBCTable(url, "TEST.BASICCREATETEST", false)
     assert(2 == TestSQLContext.jdbc(url, "TEST.BASICCREATETEST").count)
     assert(2 == TestSQLContext.jdbc(url, "TEST.BASICCREATETEST").collect()(0).length)
   }
 
   test("CREATE with overwrite") {
-    val srdd = TestSQLContext.createDataFrame(sc.parallelize(arr2x3), schema3)
-    val srdd2 = TestSQLContext.createDataFrame(sc.parallelize(arr1x2), schema2)
+    val df = TestSQLContext.createDataFrame(sc.parallelize(arr2x3), schema3)
+    val df2 = TestSQLContext.createDataFrame(sc.parallelize(arr1x2), schema2)
 
-    srdd.createJDBCTable(url, "TEST.DROPTEST", false)
+    df.createJDBCTable(url, "TEST.DROPTEST", false)
     assert(2 == TestSQLContext.jdbc(url, "TEST.DROPTEST").count)
     assert(3 == TestSQLContext.jdbc(url, "TEST.DROPTEST").collect()(0).length)
 
-    srdd2.createJDBCTable(url, "TEST.DROPTEST", true)
+    df2.createJDBCTable(url, "TEST.DROPTEST", true)
     assert(1 == TestSQLContext.jdbc(url, "TEST.DROPTEST").count)
     assert(2 == TestSQLContext.jdbc(url, "TEST.DROPTEST").collect()(0).length)
   }
 
   test("CREATE then INSERT to append") {
-    val srdd = TestSQLContext.createDataFrame(sc.parallelize(arr2x2), schema2)
-    val srdd2 = TestSQLContext.createDataFrame(sc.parallelize(arr1x2), schema2)
+    val df = TestSQLContext.createDataFrame(sc.parallelize(arr2x2), schema2)
+    val df2 = TestSQLContext.createDataFrame(sc.parallelize(arr1x2), schema2)
 
-    srdd.createJDBCTable(url, "TEST.APPENDTEST", false)
-    srdd2.insertIntoJDBC(url, "TEST.APPENDTEST", false)
+    df.createJDBCTable(url, "TEST.APPENDTEST", false)
+    df2.insertIntoJDBC(url, "TEST.APPENDTEST", false)
     assert(3 == TestSQLContext.jdbc(url, "TEST.APPENDTEST").count)
     assert(2 == TestSQLContext.jdbc(url, "TEST.APPENDTEST").collect()(0).length)
   }
 
   test("CREATE then INSERT to truncate") {
-    val srdd = TestSQLContext.createDataFrame(sc.parallelize(arr2x2), schema2)
-    val srdd2 = TestSQLContext.createDataFrame(sc.parallelize(arr1x2), schema2)
+    val df = TestSQLContext.createDataFrame(sc.parallelize(arr2x2), schema2)
+    val df2 = TestSQLContext.createDataFrame(sc.parallelize(arr1x2), schema2)
 
-    srdd.createJDBCTable(url, "TEST.TRUNCATETEST", false)
-    srdd2.insertIntoJDBC(url, "TEST.TRUNCATETEST", true)
+    df.createJDBCTable(url, "TEST.TRUNCATETEST", false)
+    df2.insertIntoJDBC(url, "TEST.TRUNCATETEST", true)
     assert(1 == TestSQLContext.jdbc(url, "TEST.TRUNCATETEST").count)
     assert(2 == TestSQLContext.jdbc(url, "TEST.TRUNCATETEST").collect()(0).length)
   }
 
   test("Incompatible INSERT to append") {
-    val srdd = TestSQLContext.createDataFrame(sc.parallelize(arr2x2), schema2)
-    val srdd2 = TestSQLContext.createDataFrame(sc.parallelize(arr2x3), schema3)
+    val df = TestSQLContext.createDataFrame(sc.parallelize(arr2x2), schema2)
+    val df2 = TestSQLContext.createDataFrame(sc.parallelize(arr2x3), schema3)
 
-    srdd.createJDBCTable(url, "TEST.INCOMPATIBLETEST", false)
+    df.createJDBCTable(url, "TEST.INCOMPATIBLETEST", false)
     intercept[org.apache.spark.SparkException] {
-      srdd2.insertIntoJDBC(url, "TEST.INCOMPATIBLETEST", true)
+      df2.insertIntoJDBC(url, "TEST.INCOMPATIBLETEST", true)
     }
   }
 

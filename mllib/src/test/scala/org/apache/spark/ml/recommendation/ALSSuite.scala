@@ -358,8 +358,8 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
       .setNumUserBlocks(numUserBlocks)
       .setNumItemBlocks(numItemBlocks)
     val alpha = als.getAlpha
-    val model = als.fit(training.toDF)
-    val predictions = model.transform(test.toDF)
+    val model = als.fit(training.toDF())
+    val predictions = model.transform(test.toDF())
       .select("rating", "prediction")
       .map { case Row(rating: Float, prediction: Float) =>
         (rating.toDouble, prediction.toDouble)

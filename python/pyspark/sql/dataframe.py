@@ -434,12 +434,18 @@ class DataFrame(object):
     def repartition(self, numPartitions):
         """ Return a new :class:`DataFrame` that has exactly `numPartitions`
         partitions.
+
+        >>> df.repartition(10).rdd.getNumPartitions()
+        10
         """
-        return DataFrame(self._jdf.repartition(numPartitions, None), self.sql_ctx)
+        return DataFrame(self._jdf.repartition(numPartitions), self.sql_ctx)
 
     def distinct(self):
         """
         Return a new :class:`DataFrame` containing the distinct rows in this DataFrame.
+
+        >>> df.distinct().count()
+        2L
         """
         return DataFrame(self._jdf.distinct(), self.sql_ctx)
 

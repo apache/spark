@@ -124,7 +124,7 @@ trait DataFrame extends RDDApi[Row] with Serializable {
    * from a RDD of tuples into a [[DataFrame]] with meaningful names. For example:
    * {{{
    *   val rdd: RDD[(Int, String)] = ...
-   *   rdd.toDF  // this implicit conversion creates a DataFrame with column name _1 and _2
+   *   rdd.toDF()  // this implicit conversion creates a DataFrame with column name _1 and _2
    *   rdd.toDF("id", "name")  // this creates a DataFrame with column name "id" and "name"
    * }}}
    * @group basic

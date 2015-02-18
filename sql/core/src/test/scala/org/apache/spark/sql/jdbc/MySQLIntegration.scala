@@ -18,18 +18,13 @@
 package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
-import java.sql.{Date, DriverManager, Timestamp}
-import com.spotify.docker.client.{DefaultDockerClient, DockerClient}
+import java.sql.{Date, Timestamp}
+
+import com.spotify.docker.client.DockerClient
 import com.spotify.docker.client.messages.ContainerConfig
-import org.scalatest.{FunSuite, BeforeAndAfterAll, Ignore}
+import org.scalatest.{BeforeAndAfterAll, FunSuite, Ignore}
 
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.SparkContext._
-import org.apache.spark.sql._
 import org.apache.spark.sql.test._
-import TestSQLContext._
-
-import org.apache.spark.sql.jdbc._
 
 class MySQLDatabase {
   val docker: DockerClient = DockerClientFactory.get()
@@ -37,9 +32,9 @@ class MySQLDatabase {
     println("Pulling mysql")
     docker.pull("mysql")
     println("Configuring container")
-    val config = (ContainerConfig.builder().image("mysql")
-        .env("MYSQL_ROOT_PASSWORD=rootpass")
-        .build())
+    val config = ContainerConfig.builder().image("mysql")
+      .env("MYSQL_ROOT_PASSWORD=rootpass")
+      .build()
     println("Creating container")
     val id = docker.createContainer(config).id
     println("Starting container " + id)
@@ -57,11 +52,10 @@ class MySQLDatabase {
       println("Closing docker client")
       DockerClientFactory.close(docker)
     } catch {
-      case e: Exception => {
+      case e: Exception =>
         println(e)
         println("You may need to clean this up manually.")
         throw e
-      }
     }
   }
 }
@@ -86,10 +80,9 @@ class MySQLDatabase {
         println("Database is up.")
         return;
       } catch {
-        case e: java.sql.SQLException => {
+        case e: java.sql.SQLException =>
           lastException = e
           java.lang.Thread.sleep(250)
-        }
       }
     }
   }
@@ -143,8 +136,8 @@ class MySQLDatabase {
   }
 
   test("Basic test") {
-    val rdd = TestSQLContext.jdbc(url(ip, "foo"), "tbl")
-    val rows = rdd.collect
+    val df = TestSQLContext.jdbc(url(ip, "foo"), "tbl")
+    val rows = df.collect()
     assert(rows.length == 2)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
     assert(types.length == 2)
@@ -153,8 +146,8 @@ class MySQLDatabase {
   }
 
   test("Numeric types") {
-    val rdd = TestSQLContext.jdbc(url(ip, "foo"), "numbers")
-    val rows = rdd.collect
+    val df = TestSQLContext.jdbc(url(ip, "foo"), "numbers")
+    val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
     assert(types.length == 9)
@@ -181,8 +174,8 @@ class MySQLDatabase {
   }
 
   test("Date types") {
-    val rdd = TestSQLContext.jdbc(url(ip, "foo"), "dates")
-    val rows = rdd.collect
+    val df = TestSQLContext.jdbc(url(ip, "foo"), "dates")
+    val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
     assert(types.length == 5)
@@ -199,8 +192,8 @@ class MySQLDatabase {
   }
 
   test("String types") {
-    val rdd = TestSQLContext.jdbc(url(ip, "foo"), "strings")
-    val rows = rdd.collect
+    val df = TestSQLContext.jdbc(url(ip, "foo"), "strings")
+    val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
     assert(types.length == 9)
@@ -225,11 +218,11 @@ class MySQLDatabase {
   }
 
   test("Basic write test") {
-    val rdd1 = TestSQLContext.jdbc(url(ip, "foo"), "numbers")
-    val rdd2 = TestSQLContext.jdbc(url(ip, "foo"), "dates")
-    val rdd3 = TestSQLContext.jdbc(url(ip, "foo"), "strings")
-    rdd1.createJDBCTable(url(ip, "foo"), "numberscopy", false)
-    rdd2.createJDBCTable(url(ip, "foo"), "datescopy", false)
-    rdd3.createJDBCTable(url(ip, "foo"), "stringscopy", false)
+    val df1 = TestSQLContext.jdbc(url(ip, "foo"), "numbers")
+    val df2 = TestSQLContext.jdbc(url(ip, "foo"), "dates")
+    val df3 = TestSQLContext.jdbc(url(ip, "foo"), "strings")
+    df1.createJDBCTable(url(ip, "foo"), "numberscopy", false)
+    df2.createJDBCTable(url(ip, "foo"), "datescopy", false)
+    df3.createJDBCTable(url(ip, "foo"), "stringscopy", false)
   }
 }

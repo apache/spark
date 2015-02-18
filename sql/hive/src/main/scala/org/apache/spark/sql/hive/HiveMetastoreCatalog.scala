@@ -31,7 +31,7 @@ import org.apache.hadoop.hive.serde2.{Deserializer, SerDeException}
 import org.apache.hadoop.util.ReflectionUtils
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.{AnalysisException, SQLContext}
+import org.apache.spark.sql.{SaveMode, AnalysisException, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, Catalog, OverrideCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.parquet.{ParquetRelation2, Partition => ParquetPartition, PartitionSpec}
-import org.apache.spark.sql.sources.{DDLParser, LogicalRelation, ResolvedDataSource}
+import org.apache.spark.sql.sources.{CreateTableUsingAsSelect, DDLParser, LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -502,24 +502,69 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
           Some(sa.getQB().getTableDesc)
         }
 
-        execution.CreateTableAsSelect(
-          databaseName,
-          tableName,
-          child,
-          allowExisting,
-          desc)
+        // Check if the query specifies file format or storage handler.
+        val hasStorageSpec = desc match {
+          case Some(crtTbl) =>
+            crtTbl != null && (crtTbl.getSerName != null || crtTbl.getStorageHandler != null)
+          case None => false
+        }
+
+        if (hive.convertCTAS && !hasStorageSpec) {
+          // Do the conversion when spark.sql.hive.convertCTAS is true and the query
+          // does not specify any storage format (file format and storage handler).
+          if (dbName.isDefined) {
+            throw new AnalysisException(
+              "Cannot specify database name in a CTAS statement " +
+              "when spark.sql.hive.convertCTAS is set to true.")
+          }
+
+          val mode = if (allowExisting) SaveMode.Ignore else SaveMode.ErrorIfExists
+          CreateTableUsingAsSelect(
+            tblName,
+            hive.conf.defaultDataSourceName,
+            temporary = false,
+            mode,
+            options = Map.empty[String, String],
+            child
+          )
+        } else {
+          execution.CreateTableAsSelect(
+            databaseName,
+            tableName,
+            child,
+            allowExisting,
+            desc)
+        }
 
       case p: LogicalPlan if p.resolved => p
 
       case p @ CreateTableAsSelect(db, tableName, child, allowExisting, None) =>
         val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
-        val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
-        execution.CreateTableAsSelect(
-          databaseName,
-          tableName,
-          child,
-          allowExisting,
-          None)
+        if (hive.convertCTAS) {
+          if (dbName.isDefined) {
+            throw new AnalysisException(
+              "Cannot specify database name in a CTAS statement " +
+              "when spark.sql.hive.convertCTAS is set to true.")
+          }
+
+          val mode = if (allowExisting) SaveMode.Ignore else SaveMode.ErrorIfExists
+          CreateTableUsingAsSelect(
+            tblName,
+            hive.conf.defaultDataSourceName,
+            temporary = false,
+            mode,
+            options = Map.empty[String, String],
+            child
+          )
+        } else {
+          val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
+          execution.CreateTableAsSelect(
+            databaseName,
+            tableName,
+            child,
+            allowExisting,
+            None)
+        }
     }
   }
 
