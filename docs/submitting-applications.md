@@ -174,6 +174,11 @@ This can use up a significant amount of space over time and will need to be clea
 is handled automatically, and with Spark standalone, automatic cleanup can be configured with the
 `spark.worker.cleanup.appDataTtl` property.
 
+Users may also include any other dependencies by supplying a comma-delimited list of maven coordinates 
+with `--packages`. All transitive dependencies will be handled when using this command. Additional 
+repositories (or resolvers in SBT) can be added in a comma-delimited fashion with the flag `--repositories`. 
+These commands can be used with `pyspark`, `spark-shell`, and `spark-submit` to include Spark Packages.
+
 For Python, the equivalent `--py-files` option can be used to distribute `.egg`, `.zip` and `.py` libraries
 to executors.
 
