@@ -222,22 +222,25 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    *    SQLConf.  Additionally, any properties set by set() or a SET command inside sql() will be
    *    set in the SQLConf *as well as* in the HiveConf.
    */
-  @transient protected[hive] lazy val (hiveconf, sessionState) =
-    Option(SessionState.get())
-      .orElse {
-        val newState = new SessionState(new HiveConf(classOf[SessionState]))
-        // Only starts newly created `SessionState` instance.  Any existing `SessionState` instance
-        // returned by `SessionState.get()` must be the most recently started one.
-        SessionState.start(newState)
-        Some(newState)
-      }
-      .map { state =>
-        setConf(state.getConf.getAllProperties)
-        if (state.out == null) state.out = new PrintStream(outputBuffer, true, "UTF-8")
-        if (state.err == null) state.err = new PrintStream(outputBuffer, true, "UTF-8")
-        (state.getConf, state)
-      }
-      .get
+  @transient protected[hive] lazy val sessionState: SessionState = {
+    var state = SessionState.get()
+    if (state == null) {
+      state = new SessionState(new HiveConf(classOf[SessionState]))
+      SessionState.start(state)
+    }
+    if (state.out == null) {
+      state.out = new PrintStream(outputBuffer, true, "UTF-8")
+    }
+    if (state.err == null) {
+      state.err = new PrintStream(outputBuffer, true, "UTF-8")
+    }
+    state
+  }
+
+  @transient protected[hive] lazy val hiveconf: HiveConf = {
+    setConf(sessionState.getConf.getAllProperties)
+    sessionState.getConf
+  }
 
   override def setConf(key: String, value: String): Unit = {
     super.setConf(key, value)
