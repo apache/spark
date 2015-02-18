@@ -495,6 +495,88 @@ setMethod("combineByKey",
             lapplyPartition(shuffled, mergeAfterShuffle)
           })
 
+#' Aggregate a pair RDD by each key.
+#' 
+#' Aggregate the values of each key in an RDD, using given combine functions
+#' and a neutral "zero value". This function can return a different result type,
+#' U, than the type of the values in this RDD, V. Thus, we need one operation
+#' for merging a V into a U and one operation for merging two U's, The former 
+#' operation is used for merging values within a partition, and the latter is 
+#' used for merging values between partitions. To avoid memory allocation, both 
+#' of these functions are allowed to modify and return their first argument 
+#' instead of creating a new U.
+#' 
+#' @param rdd An RDD.
+#' @param zeroValue A neutral "zero value".
+#' @param seqOp A function to aggregate the values of each key. It may return 
+#'              a different result type from the type of the values.
+#' @param combOp A function to aggregate results of seqOp.
+#' @return An RDD containing the aggregation result.
+#' @rdname aggregateByKey
+#' @seealso foldByKey, combineByKey
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, list(list(1, 1), list(1, 2), list(2, 3), list(2, 4)))
+#' zeroValue <- list(0, 0)
+#' seqOp <- function(x, y) { list(x[[1]] + y, x[[2]] + 1) }
+#' combOp <- function(x, y) { list(x[[1]] + y[[1]], x[[2]] + y[[2]]) }
+#' aggregateByKey(rdd, zeroValue, seqOp, combOp, 2L) 
+#'   # list(list(1, list(3, 2)), list(2, list(7, 2)))
+#'}
+setGeneric("aggregateByKey",
+           function(rdd, zeroValue, seqOp, combOp, numPartitions) {
+             standardGeneric("aggregateByKey")
+           })
+
+#' @rdname aggregateByKey
+#' @aliases aggregateByKey,RDD,ANY,ANY,ANY,integer-method
+setMethod("aggregateByKey",
+          signature(rdd = "RDD", zeroValue = "ANY", seqOp = "ANY",
+                    combOp = "ANY", numPartitions = "integer"),
+          function(rdd, zeroValue, seqOp, combOp, numPartitions) {
+            createCombiner <- function(v) {
+              do.call(seqOp, list(zeroValue, v))
+            }
+
+            combineByKey(rdd, createCombiner, seqOp, combOp, numPartitions)
+          })
+
+#' Fold a pair RDD by each key.
+#' 
+#' Aggregate the values of each key in an RDD, using an associative function "func"
+#' and a neutral "zero value" which may be added to the result an arbitrary 
+#' number of times, and must not change the result (e.g., 0 for addition, or 
+#' 1 for multiplication.).
+#' 
+#' @param rdd An RDD.
+#' @param zeroValue A neutral "zero value".
+#' @param func An associative function for folding values of each key.
+#' @return An RDD containing the aggregation result.
+#' @rdname foldByKey
+#' @seealso aggregateByKey, combineByKey
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, list(list(1, 1), list(1, 2), list(2, 3), list(2, 4)))
+#' foldByKey(rdd, 0, "+", 2L) # list(list(1, 3), list(2, 7))
+#'}
+setGeneric("foldByKey",
+           function(rdd, zeroValue, func, numPartitions) {
+             standardGeneric("foldByKey")
+           })
+
+#' @rdname foldByKey
+#' @aliases foldByKey,RDD,ANY,ANY,integer-method
+setMethod("foldByKey",
+          signature(rdd = "RDD", zeroValue = "ANY",
+                    func = "ANY", numPartitions = "integer"),
+          function(rdd, zeroValue, func, numPartitions) {
+            aggregateByKey(rdd, zeroValue, func, func, numPartitions)
+          })
+
 ############ Binary Functions #############
 
 #' Join two RDDs

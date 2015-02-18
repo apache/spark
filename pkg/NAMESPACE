@@ -2,6 +2,7 @@
 exportClasses("RDD")
 exportClasses("Broadcast")
 exportMethods(
+              "aggregateByKey",
               "aggregateRDD",
               "cache",
               "checkpoint",
@@ -19,6 +20,7 @@ exportMethods(
               "flatMap",
               "flatMapValues",
               "fold",
+              "foldByKey",
               "foreach",
               "foreachPartition",
               "fullOuterJoin",
