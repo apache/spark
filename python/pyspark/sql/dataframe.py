@@ -418,7 +418,7 @@ class DataFrame(object):
         """ Return a new :class:`DataFrame` that has exactly `numPartitions`
         partitions.
         """
-        return DataFrame(self._jdf.repartition(numPartitions, None), self.sql_ctx)
+        return DataFrame(self._jdf.repartition(numPartitions), self.sql_ctx)
 
     def distinct(self):
         """
