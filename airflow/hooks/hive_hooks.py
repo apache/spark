@@ -208,11 +208,11 @@ class HiveServer2Hook(BaseHook):
     def to_csv(self, hql, csv_filepath, schema='default'):
         schema = schema or 'default'
         with pyhs2.connect(
-            host=self.hiveserver2_conn.host,
-            port=self.hiveserver2_conn.port,
-            authMechanism="NOSASL",
-            user='airflow',
-            database=schema) as conn:
+                host=self.hiveserver2_conn.host,
+                port=self.hiveserver2_conn.port,
+                authMechanism="NOSASL",
+                user='airflow',
+                database=schema) as conn:
             with conn.cursor() as cur:
                 logging.info("Running query: " + hql)
                 cur.execute(hql)
@@ -227,7 +227,6 @@ class HiveServer2Hook(BaseHook):
                         i += len(rows)
                         logging.info("Written {0} rows so far.".format(i))
                     logging.info("Done. Loaded a total of {0} rows.".format(i))
-
 
     def get_records(self, hql, schema='default'):
         '''
