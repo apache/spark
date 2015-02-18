@@ -144,24 +144,11 @@ private[spark] class PythonRDD(
                 stream.readFully(update)
                 accumulator += Collections.singletonList(update)
               }
-
               // Check whether the worker is ready to be re-used.
-              if (reuse_worker) {
-                // It has a high possibility that the ending mark is already available,
-                // And current task should not be blocked by checking it
-
-                if (stream.available() >= 4) {
-                  val ending = stream.readInt()
-                  if (ending == SpecialLengths.END_OF_STREAM) {
-                    env.releasePythonWorker(pythonExec, envVars.toMap, worker)
-                    released = true
-                    logInfo(s"Communication with worker ended cleanly, re-use it: $worker")
-                  } else {
-                    logInfo(s"Communication with worker did not end cleanly " +
-                      s"(ending with $ending), close it: $worker")
-                  }
-                } else {
-                  logInfo(s"The ending mark from worker is not available, close it: $worker")
+              if (stream.readInt() == SpecialLengths.END_OF_STREAM) {
+                if (reuse_worker) {
+                  env.releasePythonWorker(pythonExec, envVars.toMap, worker)
+                  released = true
                 }
               }
               null
@@ -316,6 +303,7 @@ private class PythonException(msg: String, cause: Exception) extends RuntimeExce
 private class PairwiseRDD(prev: RDD[Array[Byte]]) extends
   RDD[(Long, Array[Byte])](prev) {
   override def getPartitions = prev.partitions
+  override val partitioner = prev.partitioner
   override def compute(split: Partition, context: TaskContext) =
     prev.iterator(split, context).grouped(2).map {
       case Seq(a, b) => (Utils.deserializeLongValue(a), b)
@@ -340,6 +328,15 @@ private[spark] object PythonRDD extends Logging {
     synchronized {
       workerBroadcasts.getOrElseUpdate(worker, new mutable.HashSet[Long]())
     }
+  }
+
+  /**
+   * Return an RDD of values from an RDD of (Long, Array[Byte]), with preservePartitions=true
+   *
+   * This is useful for PySpark to have the partitioner after partitionBy()
+   */
+  def valueOfPair(pair: JavaPairRDD[Long, Array[Byte]]): JavaRDD[Array[Byte]] = {
+    pair.rdd.mapPartitions(it => it.map(_._2), true)
   }
 
   /**

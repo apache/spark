@@ -19,6 +19,7 @@ fairscheduler.xml.template
 spark-defaults.conf.template
 log4j.properties
 log4j.properties.template
+metrics.properties
 metrics.properties.template
 slaves
 slaves.template

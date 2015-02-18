@@ -252,6 +252,26 @@ object SparkSubmit {
 
     val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
 
+    // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
+    // too for packages that include Python code
+    val resolvedMavenCoordinates =
+      SparkSubmitUtils.resolveMavenCoordinates(
+        args.packages, Option(args.repositories), Option(args.ivyRepoPath))
+    if (!resolvedMavenCoordinates.trim.isEmpty) {
+      if (args.jars == null || args.jars.trim.isEmpty) {
+        args.jars = resolvedMavenCoordinates
+      } else {
+        args.jars += s",$resolvedMavenCoordinates"
+      }
+      if (args.isPython) {
+        if (args.pyFiles == null || args.pyFiles.trim.isEmpty) {
+          args.pyFiles = resolvedMavenCoordinates
+        } else {
+          args.pyFiles += s",$resolvedMavenCoordinates"
+        }
+      }
+    }
+
     // Require all python files to be local, so we can add them to the PYTHONPATH
     // In YARN cluster mode, python files are distributed as regular files, which can be non-local
     if (args.isPython && !isYarnCluster) {
@@ -306,18 +326,6 @@ object SparkSubmit {
 
     // Special flag to avoid deprecation warnings at the client
     sysProps("SPARK_SUBMIT") = "true"
-
-    // Resolve maven dependencies if there are any and add classpath to jars
-    val resolvedMavenCoordinates =
-      SparkSubmitUtils.resolveMavenCoordinates(
-        args.packages, Option(args.repositories), Option(args.ivyRepoPath))
-    if (!resolvedMavenCoordinates.trim.isEmpty) {
-      if (args.jars == null || args.jars.trim.isEmpty) {
-        args.jars = resolvedMavenCoordinates
-      } else {
-        args.jars += s",$resolvedMavenCoordinates"
-      }
-    }
 
     // A list of rules to map each argument to system properties or command-line options in
     // each deploy mode; we iterate through these below
@@ -646,13 +654,15 @@ private[spark] object SparkSubmitUtils {
   private[spark] case class MavenCoordinate(groupId: String, artifactId: String, version: String)
 
 /**
- * Extracts maven coordinates from a comma-delimited string
+ * Extracts maven coordinates from a comma-delimited string. Coordinates should be provided
+ * in the format `groupId:artifactId:version` or `groupId/artifactId:version`. The latter provides
+ * simplicity for Spark Package users.
  * @param coordinates Comma-delimited string of maven coordinates
  * @return Sequence of Maven coordinates
  */
   private[spark] def extractMavenCoordinates(coordinates: String): Seq[MavenCoordinate] = {
     coordinates.split(",").map { p =>
-      val splits = p.split(":")
+      val splits = p.replace("/", ":").split(":")
       require(splits.length == 3, s"Provided Maven Coordinates must be in the form " +
         s"'groupId:artifactId:version'. The coordinate provided is: $p")
       require(splits(0) != null && splits(0).trim.nonEmpty, s"The groupId cannot be null or " +
@@ -681,6 +691,13 @@ private[spark] object SparkSubmitUtils {
     br.setUsepoms(true)
     br.setName("central")
     cr.add(br)
+
+    val sp: IBiblioResolver = new IBiblioResolver
+    sp.setM2compatible(true)
+    sp.setUsepoms(true)
+    sp.setRoot("http://dl.bintray.com/spark-packages/maven")
+    sp.setName("spark-packages")
+    cr.add(sp)
 
     val repositoryList = remoteRepos.getOrElse("")
     // add any other remote repositories other than maven central
@@ -794,14 +811,19 @@ private[spark] object SparkSubmitUtils {
       val md = getModuleDescriptor
       md.setDefaultConf(ivyConfName)
 
-      // Add an exclusion rule for Spark
+      // Add an exclusion rule for Spark and Scala Library
       val sparkArtifacts = new ArtifactId(new ModuleId("org.apache.spark", "*"), "*", "*", "*")
       val sparkDependencyExcludeRule =
         new DefaultExcludeRule(sparkArtifacts, ivySettings.getMatcher("glob"), null)
       sparkDependencyExcludeRule.addConfiguration(ivyConfName)
+      val scalaArtifacts = new ArtifactId(new ModuleId("*", "scala-library"), "*", "*", "*")
+      val scalaDependencyExcludeRule =
+        new DefaultExcludeRule(scalaArtifacts, ivySettings.getMatcher("glob"), null)
+      scalaDependencyExcludeRule.addConfiguration(ivyConfName)
 
       // Exclude any Spark dependencies, and add all supplied maven artifacts as dependencies
       md.addExcludeRule(sparkDependencyExcludeRule)
+      md.addExcludeRule(scalaDependencyExcludeRule)
       addDependenciesToIvy(md, artifacts, ivyConfName)
 
       // resolve dependencies

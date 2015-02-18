@@ -173,6 +173,10 @@ private[sql] class IncomputableColumn(protected[sql] val expr: Expression) exten
 
   override def insertInto(tableName: String, overwrite: Boolean): Unit = err()
 
+  def createJDBCTable(url: String, table: String, allowExisting: Boolean): Unit = err()
+
+  def insertIntoJDBC(url: String, table: String, overwrite: Boolean): Unit = err()
+
   override def toJSON: RDD[String] = err()
 
   protected[sql] override def javaToPython: JavaRDD[Array[Byte]] = err()

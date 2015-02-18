@@ -34,7 +34,7 @@ import org.apache.spark.util.Utils
  * convenient to use tuples rather than special case classes when writing test cases/suites.
  * Especially, `Tuple1.apply` can be used to easily wrap a single type/value.
  */
-trait ParquetTest {
+private[sql] trait ParquetTest {
   val sqlContext: SQLContext
 
   import sqlContext.implicits.{localSeqToDataFrameHolder, rddToDataFrameHolder}
@@ -99,7 +99,7 @@ trait ParquetTest {
    * Writes `data` to a Parquet file and reads it back as a [[DataFrame]],
    * which is then passed to `f`. The Parquet file will be deleted after `f` returns.
    */
-  protected def withParquetRDD[T <: Product: ClassTag: TypeTag]
+  protected def withParquetDataFrame[T <: Product: ClassTag: TypeTag]
       (data: Seq[T])
       (f: DataFrame => Unit): Unit = {
     withParquetFile(data)(path => f(sqlContext.parquetFile(path)))
@@ -120,8 +120,8 @@ trait ParquetTest {
   protected def withParquetTable[T <: Product: ClassTag: TypeTag]
       (data: Seq[T], tableName: String)
       (f: => Unit): Unit = {
-    withParquetRDD(data) { rdd =>
-      sqlContext.registerRDDAsTable(rdd, tableName)
+    withParquetDataFrame(data) { df =>
+      sqlContext.registerDataFrameAsTable(df, tableName)
       withTempTable(tableName)(f)
     }
   }

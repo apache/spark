@@ -238,6 +238,39 @@ class DataFrame(object):
         """
         print (self._jdf.schema().treeString())
 
+    def explain(self, extended=False):
+        """
+        Prints the plans (logical and physical) to the console for
+        debugging purpose.
+
+        If extended is False, only prints the physical plan.
+
+        >>> df.explain()
+        PhysicalRDD [age#0,name#1], MapPartitionsRDD[...] at mapPartitions at SQLContext.scala:...
+
+        >>> df.explain(True)
+        == Parsed Logical Plan ==
+        ...
+        == Analyzed Logical Plan ==
+        ...
+        == Optimized Logical Plan ==
+        ...
+        == Physical Plan ==
+        ...
+        == RDD ==
+        """
+        if extended:
+            print self._jdf.queryExecution().toString()
+        else:
+            print self._jdf.queryExecution().executedPlan().toString()
+
+    def isLocal(self):
+        """
+        Returns True if the `collect` and `take` methods can be run locally
+        (without any Spark executors).
+        """
+        return self._jdf.isLocal()
+
     def show(self):
         """
         Print the first 20 rows.
@@ -247,14 +280,12 @@ class DataFrame(object):
         2   Alice
         5   Bob
         >>> df
-        age name
-        2   Alice
-        5   Bob
+        DataFrame[age: int, name: string]
         """
-        print (self)
+        print self._jdf.showString().encode('utf8', 'ignore')
 
     def __repr__(self):
-        return self._jdf.showString()
+        return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
 
     def count(self):
         """Return the number of elements in this RDD.
@@ -336,12 +367,39 @@ class DataFrame(object):
         """
         Return a new RDD by applying a function to each partition.
 
+        It's a shorthand for df.rdd.mapPartitions()
+
         >>> rdd = sc.parallelize([1, 2, 3, 4], 4)
         >>> def f(iterator): yield 1
         >>> rdd.mapPartitions(f).sum()
         4
         """
         return self.rdd.mapPartitions(f, preservesPartitioning)
+
+    def foreach(self, f):
+        """
+        Applies a function to all rows of this DataFrame.
+
+        It's a shorthand for df.rdd.foreach()
+
+        >>> def f(person):
+        ...     print person.name
+        >>> df.foreach(f)
+        """
+        return self.rdd.foreach(f)
+
+    def foreachPartition(self, f):
+        """
+        Applies a function to each partition of this DataFrame.
+
+        It's a shorthand for df.rdd.foreachPartition()
+
+        >>> def f(people):
+        ...     for person in people:
+        ...         print person.name
+        >>> df.foreachPartition(f)
+        """
+        return self.rdd.foreachPartition(f)
 
     def cache(self):
         """ Persist with the default storage level (C{MEMORY_ONLY_SER}).
@@ -376,9 +434,20 @@ class DataFrame(object):
     def repartition(self, numPartitions):
         """ Return a new :class:`DataFrame` that has exactly `numPartitions`
         partitions.
+
+        >>> df.repartition(10).rdd.getNumPartitions()
+        10
         """
-        rdd = self._jdf.repartition(numPartitions, None)
-        return DataFrame(rdd, self.sql_ctx)
+        return DataFrame(self._jdf.repartition(numPartitions), self.sql_ctx)
+
+    def distinct(self):
+        """
+        Return a new :class:`DataFrame` containing the distinct rows in this DataFrame.
+
+        >>> df.distinct().count()
+        2L
+        """
+        return DataFrame(self._jdf.distinct(), self.sql_ctx)
 
     def sample(self, withReplacement, fraction, seed=None):
         """
@@ -957,10 +1026,7 @@ class Column(DataFrame):
         return Column(jc, self.sql_ctx)
 
     def __repr__(self):
-        if self._jdf.isComputable():
-            return self._jdf.samples()
-        else:
-            return 'Column<%s>' % self._jdf.toString()
+        return 'Column<%s>' % self._jdf.toString().encode('utf8')
 
     def toPandas(self):
         """
@@ -991,7 +1057,7 @@ def _test():
                                   Row(name='Bob', age=5, height=85)]).toDF()
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.dataframe, globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
     globs['sc'].stop()
     if failure_count:
         exit(-1)
