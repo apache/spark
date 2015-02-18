@@ -47,8 +47,49 @@ test_that("union on two RDDs created from DataFrames returns an RRDD", {
   RDD2 <- toRDD(df)
   unioned <- unionRDD(RDD1, RDD2)
   expect_true(inherits(unioned, "RDD"))
-  expect_true(unioned@env$serialized == "row")
+  expect_true(unioned@env$serializedMode == "row")
   expect_true(collect(unioned)[[2]]$name == "Andy")
+})
+
+test_that("union on mixed serialization types correctly returns a byte RRDD", {
+  # Byte RDD
+  nums <- 1:10
+  rdd <- parallelize(sc, nums, 2L)
+  
+  # String RDD
+  textLines <- c("Michael",
+                 "Andy, 30",
+                 "Justin, 19")
+  textPath <- tempfile(pattern="sparkr-textLines", fileext=".tmp")
+  writeLines(textLines, textPath)
+  textRDD <- textFile(sc, textPath)
+  
+  df <- jsonFile(sqlCtx, jsonPath)
+  dfRDD <- toRDD(df)
+  
+  unionByte <- unionRDD(rdd, dfRDD)
+  expect_true(inherits(unionByte, "RDD"))
+  expect_true(unionByte@env$serializedMode == "byte")
+  expect_true(collect(unionByte)[[1]] == 1)
+  expect_true(collect(unionByte)[[12]]$name == "Andy")
+  
+  unionString <- unionRDD(textRDD, dfRDD)
+  expect_true(inherits(unionString, "RDD"))
+  expect_true(unionString@env$serializedMode == "byte")
+  expect_true(collect(unionString)[[1]] == "Michael")
+  expect_true(collect(unionString)[[5]]$name == "Andy")
+})
+
+test_that("objectFile() works with row serialization", {
+  objectPath <- tempfile(pattern="spark-test", fileext=".tmp")
+  df <- jsonFile(sqlCtx, jsonPath)
+  dfRDD <- toRDD(df)
+  saveAsObjectFile(dfRDD, objectPath)
+  objectIn <- objectFile(sc, objectPath)
+  
+  expect_true(inherits(objectIn, "RDD"))
+  expect_true(objectIn@env$serializedMode == "byte")
+  expect_true(collect(objectIn)[[2]]$age == 30)
 })
 
 test_that("lapply() on a DataFrame returns an RDD with the correct columns", {
