@@ -109,12 +109,12 @@ readDeserializeRows <- function(inputCon) {
   colNames <- readList(inputCon)
 
   data <- list()
+  numCols <- readInt(inputCon)
+  # We write a length for each row out
+  while(length(numCols) > 0 && numCols > 0) {
+    data[[length(data) + 1L]] <- readRow(inputCon, numCols)
     numCols <- readInt(inputCon)
-    # We write a length for each row out
-    while(length(numCols) > 0 && numCols > 0) {
-      data[[length(data) + 1L]] <- readRow(inputCon, numCols)
-      numCols <- readInt(inputCon)
-    }
+  }
   dataOut <- lapply(data, assignNames, colNames)
   dataOut # this is a list of named lists now
 }

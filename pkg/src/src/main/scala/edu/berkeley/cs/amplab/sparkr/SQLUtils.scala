@@ -36,8 +36,8 @@ object SQLUtils {
     bos.toByteArray()
   }
 
-// We convert the DataFrame into an array of RDDs one for each column
-// Each RDD contains a serialized form of the column per partition.
+  // We convert the DataFrame into an array of RDDs one for each column
+  // Each RDD contains a serialized form of the column per partition.
   def dfToColRDD(df: DataFrame): Array[RDD[Array[Byte]]] = {
     val colRDDs = convertRowsToColumns(df)
     val dfOut = colRDDs.map { col =>
