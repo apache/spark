@@ -110,12 +110,10 @@ setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
             computeFunc <- function(split, part) {
               rdd@func(split, part)
             }
-            serializedFuncArr <- serialize("computeFunc", connection = NULL,
-                                           ascii = TRUE)
+            serializedFuncArr <- serialize("computeFunc", connection = NULL)
 
             packageNamesArr <- serialize(.sparkREnv[[".packages"]],
-                                         connection = NULL,
-                                         ascii = TRUE)
+                                         connection = NULL)
 
             broadcastArr <- lapply(ls(.broadcastNames),
                                    function(name) { get(name, .broadcastNames) })
