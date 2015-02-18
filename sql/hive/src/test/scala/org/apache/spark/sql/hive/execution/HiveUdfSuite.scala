@@ -47,7 +47,9 @@ case class ListStringCaseClass(l: Seq[String])
  * A test suite for Hive custom UDFs.
  */
 class HiveUdfSuite extends QueryTest {
-  import TestHive._
+
+  import TestHive.{udf, sql}
+  import TestHive.implicits._
 
   test("spark sql udf test that returns a struct") {
     udf.register("getStruct", (_: Int) => Fields(1, 2, 3, 4, 5))
@@ -109,7 +111,7 @@ class HiveUdfSuite extends QueryTest {
   
   test("UDFIntegerToString") {
     val testData = TestHive.sparkContext.parallelize(
-      IntegerCaseClass(1) :: IntegerCaseClass(2) :: Nil)
+      IntegerCaseClass(1) :: IntegerCaseClass(2) :: Nil).toDF
     testData.registerTempTable("integerTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFIntegerToString AS '${classOf[UDFIntegerToString].getName}'")
@@ -125,7 +127,7 @@ class HiveUdfSuite extends QueryTest {
     val testData = TestHive.sparkContext.parallelize(
       ListListIntCaseClass(Nil) ::
       ListListIntCaseClass(Seq((1, 2, 3))) ::
-      ListListIntCaseClass(Seq((4, 5, 6), (7, 8, 9))) :: Nil)
+      ListListIntCaseClass(Seq((4, 5, 6), (7, 8, 9))) :: Nil).toDF
     testData.registerTempTable("listListIntTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFListListInt AS '${classOf[UDFListListInt].getName}'")
@@ -140,7 +142,7 @@ class HiveUdfSuite extends QueryTest {
   test("UDFListString") {
     val testData = TestHive.sparkContext.parallelize(
       ListStringCaseClass(Seq("a", "b", "c")) ::
-      ListStringCaseClass(Seq("d", "e")) :: Nil)
+      ListStringCaseClass(Seq("d", "e")) :: Nil).toDF
     testData.registerTempTable("listStringTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFListString AS '${classOf[UDFListString].getName}'")
@@ -154,7 +156,7 @@ class HiveUdfSuite extends QueryTest {
 
   test("UDFStringString") {
     val testData = TestHive.sparkContext.parallelize(
-      StringCaseClass("world") :: StringCaseClass("goodbye") :: Nil)
+      StringCaseClass("world") :: StringCaseClass("goodbye") :: Nil).toDF
     testData.registerTempTable("stringTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testStringStringUdf AS '${classOf[UDFStringString].getName}'")
@@ -171,7 +173,7 @@ class HiveUdfSuite extends QueryTest {
       ListListIntCaseClass(Nil) ::
       ListListIntCaseClass(Seq((1, 2, 3))) ::
       ListListIntCaseClass(Seq((4, 5, 6), (7, 8, 9))) ::
-      Nil)
+      Nil).toDF
     testData.registerTempTable("TwoListTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFTwoListList AS '${classOf[UDFTwoListList].getName}'")

@@ -50,7 +50,7 @@ sealed trait Matrix extends Serializable {
   private[mllib] def toBreeze: BM[Double]
 
   /** Gets the (i, j)-th element. */
-  private[mllib] def apply(i: Int, j: Int): Double
+  def apply(i: Int, j: Int): Double
 
   /** Return the index for the (i, j)-th element in the backing array. */
   private[mllib] def index(i: Int, j: Int): Int
@@ -115,7 +115,7 @@ sealed trait Matrix extends Serializable {
  *
  * @param numRows number of rows
  * @param numCols number of columns
- * @param values matrix entries in column major
+ * @param values matrix entries in column major if not transposed or in row major otherwise
  * @param isTransposed whether the matrix is transposed. If true, `values` stores the matrix in
  *                     row major.
  */
@@ -163,7 +163,7 @@ class DenseMatrix(
 
   private[mllib] def apply(i: Int): Double = values(i)
 
-  private[mllib] def apply(i: Int, j: Int): Double = values(index(i, j))
+  override def apply(i: Int, j: Int): Double = values(index(i, j))
 
   private[mllib] def index(i: Int, j: Int): Int = {
     if (!isTransposed) i + numRows * j else j + numCols * i
@@ -187,7 +187,7 @@ class DenseMatrix(
     this
   }
 
-  override def transpose: Matrix = new DenseMatrix(numCols, numRows, values, !isTransposed)
+  override def transpose: DenseMatrix = new DenseMatrix(numCols, numRows, values, !isTransposed)
 
   private[spark] override def foreachActive(f: (Int, Int, Double) => Unit): Unit = {
     if (!isTransposed) {
@@ -217,9 +217,11 @@ class DenseMatrix(
     }
   }
 
-  /** Generate a `SparseMatrix` from the given `DenseMatrix`. The new matrix will have isTransposed
-    * set to false. */
-  def toSparse(): SparseMatrix = {
+  /**
+   * Generate a `SparseMatrix` from the given `DenseMatrix`. The new matrix will have isTransposed
+   * set to false.
+   */
+  def toSparse: SparseMatrix = {
     val spVals: MArrayBuilder[Double] = new MArrayBuilder.ofDouble
     val colPtrs: Array[Int] = new Array[Int](numCols + 1)
     val rowIndices: MArrayBuilder[Int] = new MArrayBuilder.ofInt
@@ -254,8 +256,11 @@ object DenseMatrix {
    * @param numCols number of columns of the matrix
    * @return `DenseMatrix` with size `numRows` x `numCols` and values of zeros
    */
-  def zeros(numRows: Int, numCols: Int): DenseMatrix =
+  def zeros(numRows: Int, numCols: Int): DenseMatrix = {
+    require(numRows.toLong * numCols <= Int.MaxValue,
+            s"$numRows x $numCols dense matrix is too large to allocate")
     new DenseMatrix(numRows, numCols, new Array[Double](numRows * numCols))
+  }
 
   /**
    * Generate a `DenseMatrix` consisting of ones.
@@ -263,8 +268,11 @@ object DenseMatrix {
    * @param numCols number of columns of the matrix
    * @return `DenseMatrix` with size `numRows` x `numCols` and values of ones
    */
-  def ones(numRows: Int, numCols: Int): DenseMatrix =
+  def ones(numRows: Int, numCols: Int): DenseMatrix = {
+    require(numRows.toLong * numCols <= Int.MaxValue,
+            s"$numRows x $numCols dense matrix is too large to allocate")
     new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(1.0))
+  }
 
   /**
    * Generate an Identity Matrix in `DenseMatrix` format.
@@ -282,24 +290,28 @@ object DenseMatrix {
   }
 
   /**
-   * Generate a `DenseMatrix` consisting of i.i.d. uniform random numbers.
+   * Generate a `DenseMatrix` consisting of `i.i.d.` uniform random numbers.
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param rng a random number generator
    * @return `DenseMatrix` with size `numRows` x `numCols` and values in U(0, 1)
    */
   def rand(numRows: Int, numCols: Int, rng: Random): DenseMatrix = {
+    require(numRows.toLong * numCols <= Int.MaxValue,
+            s"$numRows x $numCols dense matrix is too large to allocate")
     new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rng.nextDouble()))
   }
 
   /**
-   * Generate a `DenseMatrix` consisting of i.i.d. gaussian random numbers.
+   * Generate a `DenseMatrix` consisting of `i.i.d.` gaussian random numbers.
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param rng a random number generator
    * @return `DenseMatrix` with size `numRows` x `numCols` and values in N(0, 1)
    */
   def randn(numRows: Int, numCols: Int, rng: Random): DenseMatrix = {
+    require(numRows.toLong * numCols <= Int.MaxValue,
+            s"$numRows x $numCols dense matrix is too large to allocate")
     new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rng.nextGaussian()))
   }
 
@@ -336,10 +348,10 @@ object DenseMatrix {
  *
  * @param numRows number of rows
  * @param numCols number of columns
- * @param colPtrs the index corresponding to the start of a new column
- * @param rowIndices the row index of the entry. They must be in strictly increasing order for each
- *                   column
- * @param values non-zero matrix entries in column major
+ * @param colPtrs the index corresponding to the start of a new column (if not transposed)
+ * @param rowIndices the row index of the entry (if not transposed). They must be in strictly
+ *                   increasing order for each column
+ * @param values nonzero matrix entries in column major (if not transposed)
  * @param isTransposed whether the matrix is transposed. If true, the matrix can be considered
  *                     Compressed Sparse Row (CSR) format, where `colPtrs` behaves as rowPtrs,
  *                     and `rowIndices` behave as colIndices, and `values` are stored in row major.
@@ -396,7 +408,7 @@ class SparseMatrix(
      }
   }
 
-  private[mllib] def apply(i: Int, j: Int): Double = {
+  override def apply(i: Int, j: Int): Double = {
     val ind = index(i, j)
     if (ind < 0) 0.0 else values(ind)
   }
@@ -434,7 +446,7 @@ class SparseMatrix(
     this
   }
 
-  override def transpose: Matrix =
+  override def transpose: SparseMatrix =
     new SparseMatrix(numCols, numRows, colPtrs, rowIndices, values, !isTransposed)
 
   private[spark] override def foreachActive(f: (Int, Int, Double) => Unit): Unit = {
@@ -464,9 +476,11 @@ class SparseMatrix(
     }
   }
 
-  /** Generate a `DenseMatrix` from the given `SparseMatrix`. The new matrix will have isTransposed
-    * set to false. */
-  def toDense(): DenseMatrix = {
+  /**
+   * Generate a `DenseMatrix` from the given `SparseMatrix`. The new matrix will have isTransposed
+   * set to false.
+   */
+  def toDense: DenseMatrix = {
     new DenseMatrix(numRows, numCols, toArray)
   }
 }
@@ -593,7 +607,7 @@ object SparseMatrix {
   }
 
   /**
-   * Generate a `SparseMatrix` consisting of i.i.d. uniform random numbers. The number of non-zero
+   * Generate a `SparseMatrix` consisting of `i.i.d`. uniform random numbers. The number of non-zero
    * elements equal the ceiling of `numRows` x `numCols` x `density`
    *
    * @param numRows number of rows of the matrix
@@ -608,7 +622,7 @@ object SparseMatrix {
   }
 
   /**
-   * Generate a `SparseMatrix` consisting of i.i.d. gaussian random numbers.
+   * Generate a `SparseMatrix` consisting of `i.i.d`. gaussian random numbers.
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param density the desired density for the matrix
@@ -626,7 +640,7 @@ object SparseMatrix {
    * @return Square `SparseMatrix` with size `values.length` x `values.length` and non-zero
    *         `values` on the diagonal
    */
-  def diag(vector: Vector): SparseMatrix = {
+  def spdiag(vector: Vector): SparseMatrix = {
     val n = vector.size
     vector match {
       case sVec: SparseVector =>
@@ -722,7 +736,7 @@ object Matrices {
   def speye(n: Int): Matrix = SparseMatrix.speye(n)
 
   /**
-   * Generate a `DenseMatrix` consisting of i.i.d. uniform random numbers.
+   * Generate a `DenseMatrix` consisting of `i.i.d.` uniform random numbers.
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param rng a random number generator
@@ -732,7 +746,7 @@ object Matrices {
     DenseMatrix.rand(numRows, numCols, rng)
 
   /**
-   * Generate a `SparseMatrix` consisting of i.i.d. gaussian random numbers.
+   * Generate a `SparseMatrix` consisting of `i.i.d.` gaussian random numbers.
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param density the desired density for the matrix
@@ -743,7 +757,7 @@ object Matrices {
     SparseMatrix.sprand(numRows, numCols, density, rng)
 
   /**
-   * Generate a `DenseMatrix` consisting of i.i.d. gaussian random numbers.
+   * Generate a `DenseMatrix` consisting of `i.i.d.` gaussian random numbers.
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param rng a random number generator
@@ -753,7 +767,7 @@ object Matrices {
     DenseMatrix.randn(numRows, numCols, rng)
 
   /**
-   * Generate a `SparseMatrix` consisting of i.i.d. gaussian random numbers.
+   * Generate a `SparseMatrix` consisting of `i.i.d.` gaussian random numbers.
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param density the desired density for the matrix

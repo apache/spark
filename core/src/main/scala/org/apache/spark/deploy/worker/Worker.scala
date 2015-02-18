@@ -362,6 +362,7 @@ private[spark] class Worker(
             self,
             workerId,
             host,
+            webUiPort,
             sparkHome,
             executorDir,
             akkaUrl,

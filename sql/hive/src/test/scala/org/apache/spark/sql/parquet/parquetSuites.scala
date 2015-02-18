@@ -20,12 +20,15 @@ package org.apache.spark.sql.parquet
 
 import java.io.File
 
-import org.apache.spark.sql.catalyst.expressions.Row
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{SQLConf, QueryTest}
+import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.execution.PhysicalRDD
 import org.apache.spark.sql.hive.execution.HiveTableScan
 import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.hive.test.TestHive.implicits._
+import org.apache.spark.sql.sources.LogicalRelation
 
 // The data where the partitioning key exists only in the directory structure.
 case class ParquetData(intField: Int, stringField: String)
@@ -37,7 +40,7 @@ case class ParquetDataWithKey(p: Int, intField: Int, stringField: String)
  * A suite to test the automatic conversion of metastore tables with parquet data to use the
  * built in parquet support.
  */
-class ParquetMetastoreSuite extends ParquetPartitioningTest {
+class ParquetMetastoreSuiteBase extends ParquetPartitioningTest {
   override def beforeAll(): Unit = {
     super.beforeAll()
 
@@ -79,7 +82,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
        STORED AS
        INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
        OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-      location '${new File(partitionedTableDir, "p=1").getCanonicalPath}'
+      location '${new File(normalTableDir, "normal").getCanonicalPath}'
     """)
 
     (1 to 10).foreach { p =>
@@ -94,10 +97,13 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
   }
 
   override def afterAll(): Unit = {
+    sql("DROP TABLE partitioned_parquet")
+    sql("DROP TABLE partitioned_parquet_with_key")
+    sql("DROP TABLE normal_parquet")
     setConf("spark.sql.hive.convertMetastoreParquet", "false")
   }
 
-  test("conversion is working") {
+  test(s"conversion is working") {
     assert(
       sql("SELECT * FROM normal_parquet").queryExecution.executedPlan.collect {
         case _: HiveTableScan => true
@@ -105,14 +111,153 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
     assert(
       sql("SELECT * FROM normal_parquet").queryExecution.executedPlan.collect {
         case _: ParquetTableScan => true
+        case _: PhysicalRDD => true
       }.nonEmpty)
+  }
+}
+
+class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
+  val originalConf = conf.parquetUseDataSourceApi
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+
+    val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
+    jsonRDD(rdd).registerTempTable("jt")
+
+    sql(
+      """
+        |create table test_parquet
+        |(
+        |  intField INT,
+        |  stringField STRING
+        |)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        |STORED AS
+        |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+      """.stripMargin)
+
+    conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
+  }
+
+  override def afterAll(): Unit = {
+    super.afterAll()
+    sql("DROP TABLE IF EXISTS jt")
+    sql("DROP TABLE IF EXISTS test_parquet")
+
+    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
+  }
+
+  test("scan an empty parquet table") {
+    checkAnswer(sql("SELECT count(*) FROM test_parquet"), Row(0))
+  }
+
+  test("scan an empty parquet table with upper case") {
+    checkAnswer(sql("SELECT count(INTFIELD) FROM TEST_parquet"), Row(0))
+  }
+
+  test("insert into an empty parquet table") {
+    sql(
+      """
+        |create table test_insert_parquet
+        |(
+        |  intField INT,
+        |  stringField STRING
+        |)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        |STORED AS
+        |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+      """.stripMargin)
+
+    // Insert into am empty table.
+    sql("insert into table test_insert_parquet select a, b from jt where jt.a > 5")
+    checkAnswer(
+      sql(s"SELECT intField, stringField FROM test_insert_parquet WHERE intField < 8"),
+      Row(6, "str6") :: Row(7, "str7") :: Nil
+    )
+    // Insert overwrite.
+    sql("insert overwrite table test_insert_parquet select a, b from jt where jt.a < 5")
+    checkAnswer(
+      sql(s"SELECT intField, stringField FROM test_insert_parquet WHERE intField > 2"),
+      Row(3, "str3") :: Row(4, "str4") :: Nil
+    )
+    sql("DROP TABLE IF EXISTS test_insert_parquet")
+
+    // Create it again.
+    sql(
+      """
+        |create table test_insert_parquet
+        |(
+        |  intField INT,
+        |  stringField STRING
+        |)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        |STORED AS
+        |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+      """.stripMargin)
+    // Insert overwrite an empty table.
+    sql("insert overwrite table test_insert_parquet select a, b from jt where jt.a < 5")
+    checkAnswer(
+      sql(s"SELECT intField, stringField FROM test_insert_parquet WHERE intField > 2"),
+      Row(3, "str3") :: Row(4, "str4") :: Nil
+    )
+    // Insert into the table.
+    sql("insert into table test_insert_parquet select a, b from jt")
+    checkAnswer(
+      sql(s"SELECT intField, stringField FROM test_insert_parquet"),
+      (1 to 10).map(i => Row(i, s"str$i")) ++ (1 to 4).map(i => Row(i, s"str$i"))
+    )
+    sql("DROP TABLE IF EXISTS test_insert_parquet")
+  }
+
+  test("scan a parquet table created through a CTAS statement") {
+    sql(
+      """
+        |create table test_parquet_ctas ROW FORMAT
+        |SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        |STORED AS
+        |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+        |AS select * from jt
+      """.stripMargin)
+
+    checkAnswer(
+      sql(s"SELECT a, b FROM test_parquet_ctas WHERE a = 1"),
+      Seq(Row(1, "str1"))
+    )
+
+    table("test_parquet_ctas").queryExecution.analyzed match {
+      case LogicalRelation(p: ParquetRelation2) => // OK
+      case _ =>
+        fail(
+          s"test_parquet_ctas should be converted to ${classOf[ParquetRelation2].getCanonicalName}")
+    }
+
+    sql("DROP TABLE IF EXISTS test_parquet_ctas")
+  }
+}
+
+class ParquetDataSourceOffMetastoreSuite extends ParquetMetastoreSuiteBase {
+  val originalConf = conf.parquetUseDataSourceApi
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "false")
+  }
+
+  override def afterAll(): Unit = {
+    super.afterAll()
+    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
   }
 }
 
 /**
  * A suite of tests for the Parquet support through the data sources API.
  */
-class ParquetSourceSuite extends ParquetPartitioningTest {
+class ParquetSourceSuiteBase extends ParquetPartitioningTest {
   override def beforeAll(): Unit = {
     super.beforeAll()
 
@@ -142,24 +287,65 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
   }
 }
 
+class ParquetDataSourceOnSourceSuite extends ParquetSourceSuiteBase {
+  val originalConf = conf.parquetUseDataSourceApi
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
+  }
+
+  override def afterAll(): Unit = {
+    super.afterAll()
+    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
+  }
+}
+
+class ParquetDataSourceOffSourceSuite extends ParquetSourceSuiteBase {
+  val originalConf = conf.parquetUseDataSourceApi
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "false")
+  }
+
+  override def afterAll(): Unit = {
+    super.afterAll()
+    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
+  }
+}
+
 /**
  * A collection of tests for parquet data with various forms of partitioning.
  */
 abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll {
   var partitionedTableDir: File = null
+  var normalTableDir: File = null
   var partitionedTableDirWithKey: File = null
+
 
   override def beforeAll(): Unit = {
     partitionedTableDir = File.createTempFile("parquettests", "sparksql")
     partitionedTableDir.delete()
     partitionedTableDir.mkdir()
 
+    normalTableDir = File.createTempFile("parquettests", "sparksql")
+    normalTableDir.delete()
+    normalTableDir.mkdir()
+
     (1 to 10).foreach { p =>
       val partDir = new File(partitionedTableDir, s"p=$p")
       sparkContext.makeRDD(1 to 10)
         .map(i => ParquetData(i, s"part-$p"))
+        .toDF()
         .saveAsParquetFile(partDir.getCanonicalPath)
     }
+
+    sparkContext
+      .makeRDD(1 to 10)
+      .map(i => ParquetData(i, s"part-1"))
+      .toDF()
+      .saveAsParquetFile(new File(normalTableDir, "normal").getCanonicalPath)
 
     partitionedTableDirWithKey = File.createTempFile("parquettests", "sparksql")
     partitionedTableDirWithKey.delete()
@@ -169,6 +355,7 @@ abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll 
       val partDir = new File(partitionedTableDirWithKey, s"p=$p")
       sparkContext.makeRDD(1 to 10)
         .map(i => ParquetDataWithKey(p, i, s"part-$p"))
+        .toDF()
         .saveAsParquetFile(partDir.getCanonicalPath)
     }
   }
@@ -230,7 +417,7 @@ abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll 
         Row(10))
     }
 
-    test(s"non-existant partition $table") {
+    test(s"non-existent partition $table") {
       checkAnswer(
         sql(s"SELECT COUNT(*) FROM $table WHERE p = 1000"),
         Row(0))

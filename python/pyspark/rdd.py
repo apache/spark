@@ -111,6 +111,19 @@ def _parse_memory(s):
     return int(float(s[:-1]) * units[s[-1].lower()])
 
 
+class Partitioner(object):
+    def __init__(self, numPartitions, partitionFunc):
+        self.numPartitions = numPartitions
+        self.partitionFunc = partitionFunc
+
+    def __eq__(self, other):
+        return (isinstance(other, Partitioner) and self.numPartitions == other.numPartitions
+                and self.partitionFunc == other.partitionFunc)
+
+    def __call__(self, k):
+        return self.partitionFunc(k) % self.numPartitions
+
+
 class RDD(object):
 
     """
@@ -126,7 +139,7 @@ class RDD(object):
         self.ctx = ctx
         self._jrdd_deserializer = jrdd_deserializer
         self._id = jrdd.id()
-        self._partitionFunc = None
+        self.partitioner = None
 
     def _pickled(self):
         return self._reserialize(AutoBatchedSerializer(PickleSerializer()))
@@ -450,14 +463,17 @@ class RDD(object):
         if self._jrdd_deserializer == other._jrdd_deserializer:
             rdd = RDD(self._jrdd.union(other._jrdd), self.ctx,
                       self._jrdd_deserializer)
-            return rdd
         else:
             # These RDDs contain data in different serialized formats, so we
             # must normalize them to the default serializer.
             self_copy = self._reserialize()
             other_copy = other._reserialize()
-            return RDD(self_copy._jrdd.union(other_copy._jrdd), self.ctx,
-                       self.ctx.serializer)
+            rdd = RDD(self_copy._jrdd.union(other_copy._jrdd), self.ctx,
+                      self.ctx.serializer)
+        if (self.partitioner == other.partitioner and
+                self.getNumPartitions() == rdd.getNumPartitions()):
+            rdd.partitioner = self.partitioner
+        return rdd
 
     def intersection(self, other):
         """
@@ -1366,9 +1382,13 @@ class RDD(object):
             ser = BatchedSerializer(PickleSerializer(), batchSize)
         self._reserialize(ser)._jrdd.saveAsObjectFile(path)
 
-    def saveAsTextFile(self, path):
+    def saveAsTextFile(self, path, compressionCodecClass=None):
         """
         Save this RDD as a text file, using string representations of elements.
+
+        @param path: path to text file
+        @param compressionCodecClass: (None by default) string i.e.
+            "org.apache.hadoop.io.compress.GzipCodec"
 
         >>> tempFile = NamedTemporaryFile(delete=True)
         >>> tempFile.close()
@@ -1385,6 +1405,16 @@ class RDD(object):
         >>> sc.parallelize(['', 'foo', '', 'bar', '']).saveAsTextFile(tempFile2.name)
         >>> ''.join(sorted(input(glob(tempFile2.name + "/part-0000*"))))
         '\\n\\n\\nbar\\nfoo\\n'
+
+        Using compressionCodecClass
+
+        >>> tempFile3 = NamedTemporaryFile(delete=True)
+        >>> tempFile3.close()
+        >>> codec = "org.apache.hadoop.io.compress.GzipCodec"
+        >>> sc.parallelize(['foo', 'bar']).saveAsTextFile(tempFile3.name, codec)
+        >>> from fileinput import input, hook_compressed
+        >>> ''.join(sorted(input(glob(tempFile3.name + "/part*.gz"), openhook=hook_compressed)))
+        'bar\\nfoo\\n'
         """
         def func(split, iterator):
             for x in iterator:
@@ -1395,7 +1425,11 @@ class RDD(object):
                 yield x
         keyed = self.mapPartitionsWithIndex(func)
         keyed._bypass_serializer = True
-        keyed._jrdd.map(self.ctx._jvm.BytesToString()).saveAsTextFile(path)
+        if compressionCodecClass:
+            compressionCodec = self.ctx._jvm.java.lang.Class.forName(compressionCodecClass)
+            keyed._jrdd.map(self.ctx._jvm.BytesToString()).saveAsTextFile(path, compressionCodec)
+        else:
+            keyed._jrdd.map(self.ctx._jvm.BytesToString()).saveAsTextFile(path)
 
     # Pair functions
 
@@ -1570,6 +1604,9 @@ class RDD(object):
         """
         if numPartitions is None:
             numPartitions = self._defaultReducePartitions()
+        partitioner = Partitioner(numPartitions, partitionFunc)
+        if self.partitioner == partitioner:
+            return self
 
         # Transferring O(n) objects to Java is too expensive.
         # Instead, we'll form the hash buckets in Python,
@@ -1614,18 +1651,16 @@ class RDD(object):
                 yield pack_long(split)
                 yield outputSerializer.dumps(items)
 
-        keyed = self.mapPartitionsWithIndex(add_shuffle_key)
+        keyed = self.mapPartitionsWithIndex(add_shuffle_key, preservesPartitioning=True)
         keyed._bypass_serializer = True
         with SCCallSiteSync(self.context) as css:
             pairRDD = self.ctx._jvm.PairwiseRDD(
                 keyed._jrdd.rdd()).asJavaPairRDD()
-            partitioner = self.ctx._jvm.PythonPartitioner(numPartitions,
-                                                          id(partitionFunc))
-        jrdd = pairRDD.partitionBy(partitioner).values()
+            jpartitioner = self.ctx._jvm.PythonPartitioner(numPartitions,
+                                                           id(partitionFunc))
+        jrdd = self.ctx._jvm.PythonRDD.valueOfPair(pairRDD.partitionBy(jpartitioner))
         rdd = RDD(jrdd, self.ctx, BatchedSerializer(outputSerializer))
-        # This is required so that id(partitionFunc) remains unique,
-        # even if partitionFunc is a lambda:
-        rdd._partitionFunc = partitionFunc
+        rdd.partitioner = partitioner
         return rdd
 
     # TODO: add control over map-side aggregation
@@ -1671,7 +1706,7 @@ class RDD(object):
             merger.mergeValues(iterator)
             return merger.iteritems()
 
-        locally_combined = self.mapPartitions(combineLocally)
+        locally_combined = self.mapPartitions(combineLocally, preservesPartitioning=True)
         shuffled = locally_combined.partitionBy(numPartitions)
 
         def _mergeCombiners(iterator):
@@ -1680,7 +1715,7 @@ class RDD(object):
             merger.mergeCombiners(iterator)
             return merger.iteritems()
 
-        return shuffled.mapPartitions(_mergeCombiners, True)
+        return shuffled.mapPartitions(_mergeCombiners, preservesPartitioning=True)
 
     def aggregateByKey(self, zeroValue, seqFunc, combFunc, numPartitions=None):
         """
@@ -2059,8 +2094,8 @@ class RDD(object):
         """
         values = self.filter(lambda (k, v): k == key).values()
 
-        if self._partitionFunc is not None:
-            return self.ctx.runJob(values, lambda x: x, [self._partitionFunc(key)], False)
+        if self.partitioner is not None:
+            return self.ctx.runJob(values, lambda x: x, [self.partitioner(key)], False)
 
         return values.collect()
 
@@ -2162,6 +2197,25 @@ class RDD(object):
                 yield row
 
 
+def _prepare_for_python_RDD(sc, command, obj=None):
+    # the serialized command will be compressed by broadcast
+    ser = CloudPickleSerializer()
+    pickled_command = ser.dumps(command)
+    if len(pickled_command) > (1 << 20):  # 1M
+        broadcast = sc.broadcast(pickled_command)
+        pickled_command = ser.dumps(broadcast)
+        # tracking the life cycle by obj
+        if obj is not None:
+            obj._broadcast = broadcast
+    broadcast_vars = ListConverter().convert(
+        [x._jbroadcast for x in sc._pickled_broadcast_vars],
+        sc._gateway._gateway_client)
+    sc._pickled_broadcast_vars.clear()
+    env = MapConverter().convert(sc.environment, sc._gateway._gateway_client)
+    includes = ListConverter().convert(sc._python_includes, sc._gateway._gateway_client)
+    return pickled_command, broadcast_vars, env, includes
+
+
 class PipelinedRDD(RDD):
 
     """
@@ -2206,7 +2260,7 @@ class PipelinedRDD(RDD):
         self._id = None
         self._jrdd_deserializer = self.ctx.serializer
         self._bypass_serializer = False
-        self._partitionFunc = prev._partitionFunc if self.preservesPartitioning else None
+        self.partitioner = prev.partitioner if self.preservesPartitioning else None
         self._broadcast = None
 
     def __del__(self):
@@ -2228,25 +2282,12 @@ class PipelinedRDD(RDD):
 
         command = (self.func, profiler, self._prev_jrdd_deserializer,
                    self._jrdd_deserializer)
-        # the serialized command will be compressed by broadcast
-        ser = CloudPickleSerializer()
-        pickled_command = ser.dumps(command)
-        if len(pickled_command) > (1 << 20):  # 1M
-            self._broadcast = self.ctx.broadcast(pickled_command)
-            pickled_command = ser.dumps(self._broadcast)
-        broadcast_vars = ListConverter().convert(
-            [x._jbroadcast for x in self.ctx._pickled_broadcast_vars],
-            self.ctx._gateway._gateway_client)
-        self.ctx._pickled_broadcast_vars.clear()
-        env = MapConverter().convert(self.ctx.environment,
-                                     self.ctx._gateway._gateway_client)
-        includes = ListConverter().convert(self.ctx._python_includes,
-                                           self.ctx._gateway._gateway_client)
+        pickled_cmd, bvars, env, includes = _prepare_for_python_RDD(self.ctx, command, self)
         python_rdd = self.ctx._jvm.PythonRDD(self._prev_jrdd.rdd(),
-                                             bytearray(pickled_command),
+                                             bytearray(pickled_cmd),
                                              env, includes, self.preservesPartitioning,
                                              self.ctx.pythonExec,
-                                             broadcast_vars, self.ctx._javaAccumulator)
+                                             bvars, self.ctx._javaAccumulator)
         self._jrdd_val = python_rdd.asJavaRDD()
 
         if profiler:

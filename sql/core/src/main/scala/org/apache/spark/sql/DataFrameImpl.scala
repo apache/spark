@@ -17,8 +17,12 @@
 
 package org.apache.spark.sql
 
+import java.io.CharArrayWriter
+import java.sql.DriverManager
+
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
+import scala.reflect.runtime.universe.TypeTag
 import scala.collection.JavaConversions._
 
 import com.fasterxml.jackson.core.JsonFactory
@@ -27,34 +31,37 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.{expressions, SqlParser, ScalaReflection}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedStar, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.{LogicalRDD, EvaluatePython}
+import org.apache.spark.sql.execution.{ExplainCommand, LogicalRDD, EvaluatePython}
+import org.apache.spark.sql.jdbc.JDBCWriteDetails
 import org.apache.spark.sql.json.JsonRDD
-import org.apache.spark.sql.sources.{ResolvedDataSource, CreateTableUsingAsLogicalPlan}
+import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{NumericType, StructType}
-import org.apache.spark.util.Utils
-
 
 /**
  * Internal implementation of [[DataFrame]]. Users of the API should use [[DataFrame]] directly.
  */
 private[sql] class DataFrameImpl protected[sql](
-    override val sqlContext: SQLContext,
-    val queryExecution: SQLContext#QueryExecution)
+    @transient override val sqlContext: SQLContext,
+    @transient val queryExecution: SQLContext#QueryExecution)
   extends DataFrame {
 
   /**
-   * A constructor that automatically analyzes the logical plan. This reports error eagerly
-   * as the [[DataFrame]] is constructed.
+   * A constructor that automatically analyzes the logical plan.
+   *
+   * This reports error eagerly as the [[DataFrame]] is constructed, unless
+   * [[SQLConf.dataFrameEagerAnalysis]] is turned off.
    */
   def this(sqlContext: SQLContext, logicalPlan: LogicalPlan) = {
     this(sqlContext, {
       val qe = sqlContext.executePlan(logicalPlan)
-      qe.analyzed  // This should force analysis and throw errors if there are any
+      if (sqlContext.conf.dataFrameEagerAnalysis) {
+        qe.analyzed  // This should force analysis and throw errors if there are any
+      }
       qe
     })
   }
@@ -62,7 +69,11 @@ private[sql] class DataFrameImpl protected[sql](
   @transient protected[sql] override val logicalPlan: LogicalPlan = queryExecution.logical match {
     // For various commands (like DDL) and queries with side effects, we force query optimization to
     // happen right away to let these side effects take place eagerly.
-    case _: Command | _: InsertIntoTable | _: CreateTableAsSelect[_] |_: WriteToFile =>
+    case _: Command |
+         _: InsertIntoTable |
+         _: CreateTableAsSelect[_] |
+         _: CreateTableUsingAsSelect |
+         _: WriteToFile =>
       LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sqlContext)
     case _ =>
       queryExecution.logical
@@ -78,7 +89,7 @@ private[sql] class DataFrameImpl protected[sql](
 
   protected[sql] def resolve(colName: String): NamedExpression = {
     queryExecution.analyzed.resolve(colName, sqlContext.analyzer.resolver).getOrElse {
-      throw new RuntimeException(
+      throw new AnalysisException(
         s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""")
     }
   }
@@ -89,14 +100,13 @@ private[sql] class DataFrameImpl protected[sql](
     }
   }
 
-  override def toDataFrame(colName: String, colNames: String*): DataFrame = {
-    val newNames = colName +: colNames
-    require(schema.size == newNames.size,
+  override def toDF(colNames: String*): DataFrame = {
+    require(schema.size == colNames.size,
       "The number of columns doesn't match.\n" +
         "Old column names: " + schema.fields.map(_.name).mkString(", ") + "\n" +
-        "New column names: " + newNames.mkString(", "))
+        "New column names: " + colNames.mkString(", "))
 
-    val newCols = schema.fieldNames.zip(newNames).map { case (oldName, newName) =>
+    val newCols = schema.fieldNames.zip(colNames).map { case (oldName, newName) =>
       apply(oldName).as(newName)
     }
     select(newCols :_*)
@@ -112,6 +122,53 @@ private[sql] class DataFrameImpl protected[sql](
 
   override def printSchema(): Unit = println(schema.treeString)
 
+  override def explain(extended: Boolean): Unit = {
+    ExplainCommand(
+      logicalPlan,
+      extended = extended).queryExecution.executedPlan.executeCollect().map {
+      r => println(r.getString(0))
+    }
+  }
+
+  override def isLocal: Boolean = {
+    logicalPlan.isInstanceOf[LocalRelation]
+  }
+
+  /**
+   * Internal API for Python
+   */
+  private[sql] def showString(): String = {
+    val data = take(20)
+    val numCols = schema.fieldNames.length
+
+    // For cells that are beyond 20 characters, replace it with the first 17 and "..."
+    val rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: data.map { row =>
+      row.toSeq.map { cell =>
+        val str = if (cell == null) "null" else cell.toString
+        if (str.length > 20) str.substring(0, 17) + "..." else str
+      } : Seq[String]
+    }
+
+    // Compute the width of each column
+    val colWidths = Array.fill(numCols)(0)
+    for (row <- rows) {
+      for ((cell, i) <- row.zipWithIndex)  {
+        colWidths(i) = math.max(colWidths(i), cell.length)
+      }
+    }
+
+    // Pad the cells
+    rows.map { row =>
+      row.zipWithIndex.map { case (cell, i) =>
+        String.format(s"%-${colWidths(i)}s", cell)
+      }.mkString(" ")
+    }.mkString("\n")
+  }
+
+  override def show(): Unit = {
+    println(showString())
+  }
+
   override def join(right: DataFrame): DataFrame = {
     Join(logicalPlan, right.logicalPlan, joinType = Inner, None)
   }
@@ -125,11 +182,11 @@ private[sql] class DataFrameImpl protected[sql](
   }
 
   override def sort(sortCol: String, sortCols: String*): DataFrame = {
-    orderBy(apply(sortCol), sortCols.map(apply) :_*)
+    sort((sortCol +: sortCols).map(apply) :_*)
   }
 
-  override def sort(sortExpr: Column, sortExprs: Column*): DataFrame = {
-    val sortOrder: Seq[SortOrder] = (sortExpr +: sortExprs).map { col =>
+  override def sort(sortExprs: Column*): DataFrame = {
+    val sortOrder: Seq[SortOrder] = sortExprs.map { col =>
       col.expr match {
         case expr: SortOrder =>
           expr
@@ -144,11 +201,11 @@ private[sql] class DataFrameImpl protected[sql](
     sort(sortCol, sortCols :_*)
   }
 
-  override def orderBy(sortExpr: Column, sortExprs: Column*): DataFrame = {
-    sort(sortExpr, sortExprs :_*)
+  override def orderBy(sortExprs: Column*): DataFrame = {
+    sort(sortExprs :_*)
   }
 
-  override def apply(colName: String): Column = colName match {
+  override def col(colName: String): Column = colName match {
     case "*" =>
       Column(ResolvedStar(schema.fieldNames.map(resolve)))
     case _ =>
@@ -156,61 +213,60 @@ private[sql] class DataFrameImpl protected[sql](
       Column(sqlContext, Project(Seq(expr), logicalPlan), expr)
   }
 
-  override def apply(projection: Product): DataFrame = {
-    require(projection.productArity >= 1)
-    select(projection.productIterator.map {
-      case c: Column => c
-      case o: Any => Column(Literal(o))
-    }.toSeq :_*)
-  }
+  override def as(alias: String): DataFrame = Subquery(alias, logicalPlan)
 
-  override def as(name: String): DataFrame = Subquery(name, logicalPlan)
+  override def as(alias: Symbol): DataFrame = Subquery(alias.name, logicalPlan)
 
   override def select(cols: Column*): DataFrame = {
-    val exprs = cols.zipWithIndex.map {
-      case (Column(expr: NamedExpression), _) =>
-        expr
-      case (Column(expr: Expression), _) =>
-        Alias(expr, expr.toString)()
+    val namedExpressions = cols.map {
+      case Column(expr: NamedExpression) => expr
+      case Column(expr: Expression) => Alias(expr, expr.prettyString)()
     }
-    Project(exprs.toSeq, logicalPlan)
+    Project(namedExpressions.toSeq, logicalPlan)
   }
 
   override def select(col: String, cols: String*): DataFrame = {
     select((col +: cols).map(Column(_)) :_*)
   }
 
+  override def selectExpr(exprs: String*): DataFrame = {
+    select(exprs.map { expr =>
+      Column(new SqlParser().parseExpression(expr))
+    }: _*)
+  }
+
+  override def withColumn(colName: String, col: Column): DataFrame = {
+    select(Column("*"), col.as(colName))
+  }
+
+  override def withColumnRenamed(existingName: String, newName: String): DataFrame = {
+    val resolver = sqlContext.analyzer.resolver
+    val colNames = schema.map { field =>
+      val name = field.name
+      if (resolver(name, existingName)) Column(name).as(newName) else Column(name)
+    }
+    select(colNames :_*)
+  }
+
   override def filter(condition: Column): DataFrame = {
     Filter(condition.expr, logicalPlan)
+  }
+
+  override def filter(conditionExpr: String): DataFrame = {
+    filter(Column(new SqlParser().parseExpression(conditionExpr)))
   }
 
   override def where(condition: Column): DataFrame = {
     filter(condition)
   }
 
-  override def apply(condition: Column): DataFrame = {
-    filter(condition)
+  override def groupBy(cols: Column*): GroupedData = {
+    new GroupedData(this, cols.map(_.expr))
   }
 
-  override def groupBy(cols: Column*): GroupedDataFrame = {
-    new GroupedDataFrame(this, cols.map(_.expr))
-  }
-
-  override def groupBy(col1: String, cols: String*): GroupedDataFrame = {
+  override def groupBy(col1: String, cols: String*): GroupedData = {
     val colNames: Seq[String] = col1 +: cols
-    new GroupedDataFrame(this, colNames.map(colName => resolve(colName)))
-  }
-
-  override def agg(exprs: Map[String, String]): DataFrame = {
-    groupBy().agg(exprs)
-  }
-
-  override def agg(exprs: java.util.Map[String, String]): DataFrame = {
-    agg(exprs.toMap)
-  }
-
-  override def agg(expr: Column, exprs: Column*): DataFrame = {
-    groupBy().agg(expr, exprs :_*)
+    new GroupedData(this, colNames.map(colName => resolve(colName)))
   }
 
   override def limit(n: Int): DataFrame = {
@@ -233,15 +289,35 @@ private[sql] class DataFrameImpl protected[sql](
     Sample(fraction, withReplacement, seed, logicalPlan)
   }
 
-  override def sample(withReplacement: Boolean, fraction: Double): DataFrame = {
-    sample(withReplacement, fraction, Utils.random.nextLong)
+  override def explode[A <: Product : TypeTag]
+      (input: Column*)(f: Row => TraversableOnce[A]): DataFrame = {
+    val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
+    val attributes = schema.toAttributes
+    val rowFunction =
+      f.andThen(_.map(ScalaReflection.convertToCatalyst(_, schema).asInstanceOf[Row]))
+    val generator = UserDefinedGenerator(attributes, rowFunction, input.map(_.expr))
+
+    Generate(generator, join = true, outer = false, None, logicalPlan)
+  }
+
+  override def explode[A, B : TypeTag](
+      inputColumn: String,
+      outputColumn: String)(
+      f: A => TraversableOnce[B]): DataFrame = {
+    val dataType = ScalaReflection.schemaFor[B].dataType
+    val attributes = AttributeReference(outputColumn, dataType)() :: Nil
+    def rowFunction(row: Row) = {
+      f(row(0).asInstanceOf[A]).map(o => Row(ScalaReflection.convertToCatalyst(o, dataType)))
+    }
+    val generator = UserDefinedGenerator(attributes, rowFunction, apply(inputColumn).expr :: Nil)
+
+    Generate(generator, join = true, outer = false, None, logicalPlan)
+
   }
 
   /////////////////////////////////////////////////////////////////////////////
-
-  override def addColumn(colName: String, col: Column): DataFrame = {
-    select(Column("*"), col.as(colName))
-  }
+  // RDD API
+  /////////////////////////////////////////////////////////////////////////////
 
   override def head(n: Int): Array[Row] = limit(n).collect()
 
@@ -270,8 +346,10 @@ private[sql] class DataFrameImpl protected[sql](
   override def count(): Long = groupBy().count().rdd.collect().head.getLong(0)
 
   override def repartition(numPartitions: Int): DataFrame = {
-    sqlContext.applySchema(rdd.repartition(numPartitions), schema)
+    sqlContext.createDataFrame(rdd.repartition(numPartitions), schema)
   }
+
+  override def distinct: DataFrame = Distinct(logicalPlan)
 
   override def persist(): this.type = {
     sqlContext.cacheManager.cacheQuery(this)
@@ -293,74 +371,45 @@ private[sql] class DataFrameImpl protected[sql](
   /////////////////////////////////////////////////////////////////////////////
 
   override def rdd: RDD[Row] = {
+    // use a local variable to make sure the map closure doesn't capture the whole DataFrame
     val schema = this.schema
     queryExecution.executedPlan.execute().map(ScalaReflection.convertRowToScala(_, schema))
   }
 
   override def registerTempTable(tableName: String): Unit = {
-    sqlContext.registerRDDAsTable(this, tableName)
+    sqlContext.registerDataFrameAsTable(this, tableName)
   }
 
   override def saveAsParquetFile(path: String): Unit = {
-    sqlContext.executePlan(WriteToFile(path, logicalPlan)).toRdd
+    if (sqlContext.conf.parquetUseDataSourceApi) {
+      save("org.apache.spark.sql.parquet", SaveMode.ErrorIfExists, Map("path" -> path))
+    } else {
+      sqlContext.executePlan(WriteToFile(path, logicalPlan)).toRdd
+    }
   }
 
-  override def saveAsTable(tableName: String): Unit = {
-    val dataSourceName = sqlContext.conf.defaultDataSourceName
+  override def saveAsTable(
+      tableName: String,
+      source: String,
+      mode: SaveMode,
+      options: Map[String, String]): Unit = {
     val cmd =
-      CreateTableUsingAsLogicalPlan(
+      CreateTableUsingAsSelect(
         tableName,
-        dataSourceName,
+        source,
         temporary = false,
-        Map.empty,
-        allowExisting = false,
+        mode,
+        options,
         logicalPlan)
 
     sqlContext.executePlan(cmd).toRdd
   }
 
-  override def saveAsTable(
-      tableName: String,
-      dataSourceName: String,
-      option: (String, String),
-      options: (String, String)*): Unit = {
-    val cmd =
-      CreateTableUsingAsLogicalPlan(
-        tableName,
-        dataSourceName,
-        temporary = false,
-        (option +: options).toMap,
-        allowExisting = false,
-        logicalPlan)
-
-    sqlContext.executePlan(cmd).toRdd
-  }
-
-  override def saveAsTable(
-      tableName: String,
-      dataSourceName: String,
-      options: java.util.Map[String, String]): Unit = {
-    val opts = options.toSeq
-    saveAsTable(tableName, dataSourceName, opts.head, opts.tail:_*)
-  }
-
-  override def save(path: String): Unit = {
-    val dataSourceName = sqlContext.conf.defaultDataSourceName
-    save(dataSourceName, ("path" -> path))
-  }
-
   override def save(
-      dataSourceName: String,
-      option: (String, String),
-      options: (String, String)*): Unit = {
-    ResolvedDataSource(sqlContext, dataSourceName, (option +: options).toMap, this)
-  }
-
-  override def save(
-      dataSourceName: String,
-      options: java.util.Map[String, String]): Unit = {
-    val opts = options.toSeq
-    save(dataSourceName, opts.head, opts.tail:_*)
+      source: String,
+      mode: SaveMode,
+      options: Map[String, String]): Unit = {
+    ResolvedDataSource(sqlContext, source, mode, options, this)
   }
 
   override def insertInto(tableName: String, overwrite: Boolean): Unit = {
@@ -371,9 +420,56 @@ private[sql] class DataFrameImpl protected[sql](
   override def toJSON: RDD[String] = {
     val rowSchema = this.schema
     this.mapPartitions { iter =>
-      val jsonFactory = new JsonFactory()
-      iter.map(JsonRDD.rowToJSON(rowSchema, jsonFactory))
+      val writer = new CharArrayWriter()
+      // create the Generator without separator inserted between 2 records
+      val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
+
+      new Iterator[String] {
+        override def hasNext = iter.hasNext
+        override def next(): String = {
+          JsonRDD.rowToJSON(rowSchema, gen)(iter.next())
+          gen.flush()
+
+          val json = writer.toString
+          if (hasNext) {
+            writer.reset()
+          } else {
+            gen.close()
+          }
+
+          json
+        }
+      }
     }
+  }
+
+  def createJDBCTable(url: String, table: String, allowExisting: Boolean): Unit = {
+    val conn = DriverManager.getConnection(url)
+    try {
+      if (allowExisting) {
+        val sql = s"DROP TABLE IF EXISTS $table"
+        conn.prepareStatement(sql).executeUpdate()
+      }
+      val schema = JDBCWriteDetails.schemaString(this, url)
+      val sql = s"CREATE TABLE $table ($schema)"
+      conn.prepareStatement(sql).executeUpdate()
+    } finally {
+      conn.close()
+    }
+    JDBCWriteDetails.saveTable(this, url, table)
+  }
+
+  def insertIntoJDBC(url: String, table: String, overwrite: Boolean): Unit = {
+    if (overwrite) {
+      val conn = DriverManager.getConnection(url)
+      try {
+        val sql = s"TRUNCATE TABLE $table"
+        conn.prepareStatement(sql).executeUpdate()
+      } finally {
+        conn.close()
+      }
+    }
+    JDBCWriteDetails.saveTable(this, url, table)
   }
 
   ////////////////////////////////////////////////////////////////////////////

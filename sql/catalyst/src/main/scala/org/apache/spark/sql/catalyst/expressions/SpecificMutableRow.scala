@@ -220,13 +220,14 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
   override def isNullAt(i: Int): Boolean = values(i).isNull
 
   override def copy(): Row = {
-    val newValues = new Array[MutableValue](values.length)
+    val newValues = new Array[Any](values.length)
     var i = 0
     while (i < values.length) {
-      newValues(i) = values(i).copy()
+      newValues(i) = values(i).boxed
       i += 1
     }
-    new SpecificMutableRow(newValues)
+
+    new GenericRow(newValues)
   }
 
   override def update(ordinal: Int, value: Any): Unit = {

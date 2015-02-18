@@ -95,6 +95,57 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     }
   }
 
+  test("binary records stream") {
+    val testDir: File = null
+    try {
+      val batchDuration = Seconds(2)
+      val testDir = Utils.createTempDir()
+      // Create a file that exists before the StreamingContext is created:
+      val existingFile = new File(testDir, "0")
+      Files.write("0\n", existingFile, Charset.forName("UTF-8"))
+      assert(existingFile.setLastModified(10000) && existingFile.lastModified === 10000)
+
+      // Set up the streaming context and input streams
+      withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+        val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+        // This `setTime` call ensures that the clock is past the creation time of `existingFile`
+        clock.setTime(existingFile.lastModified + batchDuration.milliseconds)
+        val batchCounter = new BatchCounter(ssc)
+        val fileStream = ssc.binaryRecordsStream(testDir.toString, 1)
+        val outputBuffer = new ArrayBuffer[Seq[Array[Byte]]]
+          with SynchronizedBuffer[Seq[Array[Byte]]]
+        val outputStream = new TestOutputStream(fileStream, outputBuffer)
+        outputStream.register()
+        ssc.start()
+
+        // Advance the clock so that the files are created after StreamingContext starts, but
+        // not enough to trigger a batch
+        clock.addToTime(batchDuration.milliseconds / 2)
+
+        val input = Seq(1, 2, 3, 4, 5)
+        input.foreach { i =>
+          Thread.sleep(batchDuration.milliseconds)
+          val file = new File(testDir, i.toString)
+          Files.write(Array[Byte](i.toByte), file)
+          assert(file.setLastModified(clock.currentTime()))
+          assert(file.lastModified === clock.currentTime)
+          logInfo("Created file " + file)
+          // Advance the clock after creating the file to avoid a race when
+          // setting its modification time
+          clock.addToTime(batchDuration.milliseconds)
+          eventually(eventuallyTimeout) {
+            assert(batchCounter.getNumCompletedBatches === i)
+          }
+        }
+
+        val expectedOutput = input.map(i => i.toByte)
+        val obtainedOutput = outputBuffer.flatten.toList.map(i => i(0).toByte)
+        assert(obtainedOutput === expectedOutput)
+      }
+    } finally {
+      if (testDir != null) Utils.deleteRecursively(testDir)
+    }
+  }
 
   test("file input stream - newFilesOnly = true") {
     testFileStream(newFilesOnly = true)

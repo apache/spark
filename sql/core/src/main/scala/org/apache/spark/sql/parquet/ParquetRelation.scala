@@ -65,8 +65,8 @@ private[sql] case class ParquetRelation(
     ParquetTypesConverter.readSchemaFromFile(
       new Path(path.split(",").head),
       conf,
-      sqlContext.conf.isParquetBinaryAsString)
-
+      sqlContext.conf.isParquetBinaryAsString,
+      sqlContext.conf.isParquetINT96AsTimestamp)
   lazy val attributeMap = AttributeMap(output.map(o => o -> o))
 
   override def newInstance() = ParquetRelation(path, conf, sqlContext).asInstanceOf[this.type]

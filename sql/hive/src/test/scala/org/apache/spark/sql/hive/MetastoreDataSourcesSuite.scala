@@ -23,26 +23,29 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapred.InvalidInputException
 
 import org.apache.spark.sql.catalyst.util
 import org.apache.spark.sql._
 import org.apache.spark.util.Utils
 import org.apache.spark.sql.types._
-
-/* Implicits */
 import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.hive.test.TestHive.implicits._
+import org.apache.spark.sql.parquet.ParquetRelation2
+import org.apache.spark.sql.sources.LogicalRelation
 
 /**
  * Tests for persisting tables created though the data sources API into the metastore.
  */
 class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
+
   override def afterEach(): Unit = {
     reset()
-    if (ctasPath.exists()) Utils.deleteRecursively(ctasPath)
+    if (tempPath.exists()) Utils.deleteRecursively(tempPath)
   }
 
   val filePath = Utils.getSparkClassLoader.getResource("sample.json").getFile
-  var ctasPath: File = util.getTempFilePath("jsonCTAS").getCanonicalFile
+  var tempPath: File = util.getTempFilePath("jsonCTAS").getCanonicalFile
 
   test ("persistent JSON table") {
     sql(
@@ -151,7 +154,8 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
   test("check change without refresh") {
     val tempDir = File.createTempFile("sparksql", "json")
     tempDir.delete()
-    sparkContext.parallelize(("a", "b") :: Nil).toJSON.saveAsTextFile(tempDir.getCanonicalPath)
+    sparkContext.parallelize(("a", "b") :: Nil).toDF
+      .toJSON.saveAsTextFile(tempDir.getCanonicalPath)
 
     sql(
       s"""
@@ -167,7 +171,8 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       Row("a", "b"))
 
     FileUtils.deleteDirectory(tempDir)
-    sparkContext.parallelize(("a1", "b1", "c1") :: Nil).toJSON.saveAsTextFile(tempDir.getCanonicalPath)
+    sparkContext.parallelize(("a1", "b1", "c1") :: Nil).toDF
+      .toJSON.saveAsTextFile(tempDir.getCanonicalPath)
 
     // Schema is cached so the new column does not show. The updated values in existing columns
     // will show.
@@ -175,7 +180,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       sql("SELECT * FROM jsonTable"),
       Row("a1", "b1"))
 
-    refreshTable("jsonTable")
+    sql("REFRESH TABLE jsonTable")
 
     // Check that the refresh worked
     checkAnswer(
@@ -187,7 +192,8 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
   test("drop, change, recreate") {
     val tempDir = File.createTempFile("sparksql", "json")
     tempDir.delete()
-    sparkContext.parallelize(("a", "b") :: Nil).toJSON.saveAsTextFile(tempDir.getCanonicalPath)
+    sparkContext.parallelize(("a", "b") :: Nil).toDF
+      .toJSON.saveAsTextFile(tempDir.getCanonicalPath)
 
     sql(
       s"""
@@ -203,7 +209,8 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       Row("a", "b"))
 
     FileUtils.deleteDirectory(tempDir)
-    sparkContext.parallelize(("a", "b", "c") :: Nil).toJSON.saveAsTextFile(tempDir.getCanonicalPath)
+    sparkContext.parallelize(("a", "b", "c") :: Nil).toDF
+      .toJSON.saveAsTextFile(tempDir.getCanonicalPath)
 
     sql("DROP TABLE jsonTable")
 
@@ -267,7 +274,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
         |CREATE TABLE ctasJsonTable
         |USING org.apache.spark.sql.json.DefaultSource
         |OPTIONS (
-        |  path '${ctasPath}'
+        |  path '${tempPath}'
         |) AS
         |SELECT * FROM jsonTable
       """.stripMargin)
@@ -294,7 +301,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
         |CREATE TABLE ctasJsonTable
         |USING org.apache.spark.sql.json.DefaultSource
         |OPTIONS (
-        |  path '${ctasPath}'
+        |  path '${tempPath}'
         |) AS
         |SELECT * FROM jsonTable
       """.stripMargin)
@@ -306,7 +313,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
         |CREATE TABLE ctasJsonTable
         |USING org.apache.spark.sql.json.DefaultSource
         |OPTIONS (
-        |  path '${ctasPath}'
+        |  path '${tempPath}'
         |) AS
         |SELECT * FROM jsonTable
       """.stripMargin)
@@ -322,7 +329,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
         |CREATE TABLE IF NOT EXISTS ctasJsonTable
         |USING org.apache.spark.sql.json.DefaultSource
         |OPTIONS (
-        |  path '${ctasPath}'
+        |  path '${tempPath}'
         |) AS
         |SELECT a FROM jsonTable
       """.stripMargin)
@@ -348,9 +355,6 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
         |)
       """.stripMargin)
 
-    new Path("/Users/yhuai/Desktop/whatever")
-
-
     val expectedPath = catalog.hiveDefaultTableFilePath("ctasJsonTable")
     val filesystemPath = new Path(expectedPath)
     val fs = filesystemPath.getFileSystem(sparkContext.hadoopConfiguration)
@@ -361,9 +365,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       s"""
         |CREATE TABLE ctasJsonTable
         |USING org.apache.spark.sql.json.DefaultSource
-        |OPTIONS (
-        |
-        |) AS
+        |AS
         |SELECT * FROM jsonTable
       """.stripMargin)
 
@@ -402,38 +404,191 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     sql("DROP TABLE jsonTable").collect().foreach(println)
   }
 
-  test("save and load table") {
+  test("SPARK-5839 HiveMetastoreCatalog does not recognize table aliases of data source tables.") {
     val originalDefaultSource = conf.defaultDataSourceName
-    conf.setConf("spark.sql.default.datasource", "org.apache.spark.sql.json")
 
     val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
     val df = jsonRDD(rdd)
 
+    conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.json")
+    // Save the df as a managed table (by not specifiying the path).
+    df.saveAsTable("savedJsonTable")
+
+    checkAnswer(
+      sql("SELECT * FROM savedJsonTable where savedJsonTable.a < 5"),
+      (1 to 4).map(i => Row(i, s"str${i}")))
+
+    checkAnswer(
+      sql("SELECT * FROM savedJsonTable tmp where tmp.a > 5"),
+      (6 to 10).map(i => Row(i, s"str${i}")))
+
+    invalidateTable("savedJsonTable")
+
+    checkAnswer(
+      sql("SELECT * FROM savedJsonTable where savedJsonTable.a < 5"),
+      (1 to 4).map(i => Row(i, s"str${i}")))
+
+    checkAnswer(
+      sql("SELECT * FROM savedJsonTable tmp where tmp.a > 5"),
+      (6 to 10).map(i => Row(i, s"str${i}")))
+
+    // Drop table will also delete the data.
+    sql("DROP TABLE savedJsonTable")
+
+    conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, originalDefaultSource)
+  }
+
+  test("save table") {
+    val originalDefaultSource = conf.defaultDataSourceName
+
+    val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
+    val df = jsonRDD(rdd)
+
+    conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.json")
+    // Save the df as a managed table (by not specifiying the path).
     df.saveAsTable("savedJsonTable")
 
     checkAnswer(
       sql("SELECT * FROM savedJsonTable"),
       df.collect())
 
-    createTable("createdJsonTable", catalog.hiveDefaultTableFilePath("savedJsonTable"), false)
+    // Right now, we cannot append to an existing JSON table.
+    intercept[RuntimeException] {
+      df.saveAsTable("savedJsonTable", SaveMode.Append)
+    }
+
+    // We can overwrite it.
+    df.saveAsTable("savedJsonTable", SaveMode.Overwrite)
+    checkAnswer(
+      sql("SELECT * FROM savedJsonTable"),
+      df.collect())
+
+    // When the save mode is Ignore, we will do nothing when the table already exists.
+    df.select("b").saveAsTable("savedJsonTable", SaveMode.Ignore)
+    assert(df.schema === table("savedJsonTable").schema)
+    checkAnswer(
+      sql("SELECT * FROM savedJsonTable"),
+      df.collect())
+
+    // Drop table will also delete the data.
+    sql("DROP TABLE savedJsonTable")
+    intercept[InvalidInputException] {
+      jsonFile(catalog.hiveDefaultTableFilePath("savedJsonTable"))
+    }
+
+    // Create an external table by specifying the path.
+    conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "not a source name")
+    df.saveAsTable(
+      "savedJsonTable",
+      "org.apache.spark.sql.json",
+      SaveMode.Append,
+      Map("path" -> tempPath.toString))
+    checkAnswer(
+      sql("SELECT * FROM savedJsonTable"),
+      df.collect())
+
+    // Data should not be deleted after we drop the table.
+    sql("DROP TABLE savedJsonTable")
+    checkAnswer(
+      jsonFile(tempPath.toString),
+      df.collect())
+
+    conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, originalDefaultSource)
+  }
+
+  test("create external table") {
+    val originalDefaultSource = conf.defaultDataSourceName
+
+    val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
+    val df = jsonRDD(rdd)
+
+    conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "not a source name")
+    df.saveAsTable(
+      "savedJsonTable",
+      "org.apache.spark.sql.json",
+      SaveMode.Append,
+      Map("path" -> tempPath.toString))
+
+    conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.json")
+    createExternalTable("createdJsonTable", tempPath.toString)
     assert(table("createdJsonTable").schema === df.schema)
     checkAnswer(
       sql("SELECT * FROM createdJsonTable"),
       df.collect())
 
-    val message = intercept[RuntimeException] {
-      createTable("createdJsonTable", filePath.toString, false)
+    var message = intercept[RuntimeException] {
+      createExternalTable("createdJsonTable", filePath.toString)
     }.getMessage
     assert(message.contains("Table createdJsonTable already exists."),
       "We should complain that ctasJsonTable already exists")
 
-    createTable("createdJsonTable", filePath.toString, true)
-    // createdJsonTable should be not changed.
-    assert(table("createdJsonTable").schema === df.schema)
+    // Data should not be deleted.
+    sql("DROP TABLE createdJsonTable")
     checkAnswer(
-      sql("SELECT * FROM createdJsonTable"),
+      jsonFile(tempPath.toString),
       df.collect())
 
-    conf.setConf("spark.sql.default.datasource", originalDefaultSource)
+    // Try to specify the schema.
+    conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "not a source name")
+    val schema = StructType(StructField("b", StringType, true) :: Nil)
+    createExternalTable(
+      "createdJsonTable",
+      "org.apache.spark.sql.json",
+      schema,
+      Map("path" -> tempPath.toString))
+    checkAnswer(
+      sql("SELECT * FROM createdJsonTable"),
+      sql("SELECT b FROM savedJsonTable").collect())
+
+    sql("DROP TABLE createdJsonTable")
+
+    message = intercept[RuntimeException] {
+      createExternalTable(
+        "createdJsonTable",
+        "org.apache.spark.sql.json",
+        schema,
+        Map.empty[String, String])
+    }.getMessage
+    assert(
+      message.contains("'path' must be specified for json data."),
+      "We should complain that path is not specified.")
+
+    sql("DROP TABLE savedJsonTable")
+    conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, originalDefaultSource)
+  }
+
+  if (HiveShim.version == "0.13.1") {
+    test("scan a parquet table created through a CTAS statement") {
+      val originalConvertMetastore = getConf("spark.sql.hive.convertMetastoreParquet", "true")
+      val originalUseDataSource = getConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
+      setConf("spark.sql.hive.convertMetastoreParquet", "true")
+      setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
+
+      val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
+      jsonRDD(rdd).registerTempTable("jt")
+      sql(
+        """
+          |create table test_parquet_ctas STORED AS parquET
+          |AS select tmp.a from jt tmp where tmp.a < 5
+        """.stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT a FROM test_parquet_ctas WHERE a > 2 "),
+        Row(3) :: Row(4) :: Nil
+      )
+
+      table("test_parquet_ctas").queryExecution.analyzed match {
+        case LogicalRelation(p: ParquetRelation2) => // OK
+        case _ =>
+          fail(
+            s"test_parquet_ctas should be converted to ${classOf[ParquetRelation2].getCanonicalName}")
+      }
+
+      // Clenup and reset confs.
+      sql("DROP TABLE IF EXISTS jt")
+      sql("DROP TABLE IF EXISTS test_parquet_ctas")
+      setConf("spark.sql.hive.convertMetastoreParquet", originalConvertMetastore)
+      setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalUseDataSource)
+    }
   }
 }

@@ -22,7 +22,7 @@ import scala.collection.mutable.HashSet
 import org.apache.spark.{AccumulatorParam, Accumulator, SparkContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkContext._
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{SQLConf, SQLContext, DataFrame, Row}
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.types._
 
@@ -32,10 +32,21 @@ import org.apache.spark.sql.types._
  *
  * Usage:
  * {{{
- *   sql("SELECT key FROM src").debug
+ *   import org.apache.spark.sql.execution.debug._
+ *   sql("SELECT key FROM src").debug()
+ *   dataFrame.typeCheck()
  * }}}
  */
 package object debug {
+
+  /**
+   * Augments [[SQLContext]] with debug methods.
+   */
+  implicit class DebugSQLContext(sqlContext: SQLContext) {
+    def debug() = {
+      sqlContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, "false")
+    }
+  }
 
   /**
    * :: DeveloperApi ::
@@ -135,11 +146,9 @@ package object debug {
   }
 
   /**
-   * :: DeveloperApi ::
    * Helper functions for checking that runtime types match a given schema.
    */
-  @DeveloperApi
-  object TypeCheck {
+  private[sql] object TypeCheck {
     def typeCheck(data: Any, schema: DataType): Unit = (data, schema) match {
       case (null, _) =>
 
@@ -165,10 +174,8 @@ package object debug {
   }
 
   /**
-   * :: DeveloperApi ::
    * Augments [[DataFrame]]s with debug methods.
    */
-  @DeveloperApi
   private[sql] case class TypeCheck(child: SparkPlan) extends SparkPlan {
     import TypeCheck._
 

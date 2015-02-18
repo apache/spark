@@ -21,6 +21,9 @@ import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.scalatest.BeforeAndAfterAll
 import parquet.example.data.simple.SimpleGroup
 import parquet.example.data.{Group, GroupWriter}
 import parquet.hadoop.api.WriteSupport
@@ -30,15 +33,13 @@ import parquet.hadoop.{ParquetFileWriter, ParquetWriter}
 import parquet.io.api.RecordConsumer
 import parquet.schema.{MessageType, MessageTypeParser}
 
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.spark.sql.{DataFrame, QueryTest, SQLConf}
-import org.apache.spark.sql.Dsl._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.types.DecimalType
+import org.apache.spark.sql.{DataFrame, QueryTest, SQLConf, SaveMode}
 
 // Write support class for nested groups: ParquetWriter initializes GroupWriteSupport
 // with an empty configuration (it is after all not intended to be used in this way?)
@@ -63,8 +64,10 @@ private[parquet] class TestGroupWriteSupport(schema: MessageType) extends WriteS
 /**
  * A test suite that tests basic Parquet I/O.
  */
-class ParquetIOSuite extends QueryTest with ParquetTest {
+class ParquetIOSuiteBase extends QueryTest with ParquetTest {
   val sqlContext = TestSQLContext
+
+  import sqlContext.implicits.localSeqToDataFrameHolder
 
   /**
    * Writes `data` to a Parquet file, reads it back and check file contents.
@@ -98,11 +101,14 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
   }
 
   test("fixed-length decimals") {
+
     def makeDecimalRDD(decimal: DecimalType): DataFrame =
       sparkContext
         .parallelize(0 to 1000)
         .map(i => Tuple1(i / 100.0))
-        .select($"_1" cast decimal as "abcd")
+        .toDF
+        // Parquet doesn't allow column names with spaces, have to add an alias here
+        .select($"_1" cast decimal as "dec")
 
     for ((precision, scale) <- Seq((5, 2), (1, 0), (1, 1), (18, 10), (18, 17))) {
       withTempPath { dir =>
@@ -284,5 +290,67 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
       actualSchema.checkContains(expectedSchema)
       expectedSchema.checkContains(actualSchema)
     }
+  }
+
+  test("save - overwrite") {
+    withParquetFile((1 to 10).map(i => (i, i.toString))) { file =>
+      val newData = (11 to 20).map(i => (i, i.toString))
+      newData.toDF().save("org.apache.spark.sql.parquet", SaveMode.Overwrite, Map("path" -> file))
+      checkAnswer(parquetFile(file), newData.map(Row.fromTuple))
+    }
+  }
+
+  test("save - ignore") {
+    val data = (1 to 10).map(i => (i, i.toString))
+    withParquetFile(data) { file =>
+      val newData = (11 to 20).map(i => (i, i.toString))
+      newData.toDF().save("org.apache.spark.sql.parquet", SaveMode.Ignore, Map("path" -> file))
+      checkAnswer(parquetFile(file), data.map(Row.fromTuple))
+    }
+  }
+
+  test("save - throw") {
+    val data = (1 to 10).map(i => (i, i.toString))
+    withParquetFile(data) { file =>
+      val newData = (11 to 20).map(i => (i, i.toString))
+      val errorMessage = intercept[Throwable] {
+        newData.toDF().save(
+          "org.apache.spark.sql.parquet", SaveMode.ErrorIfExists, Map("path" -> file))
+      }.getMessage
+      assert(errorMessage.contains("already exists"))
+    }
+  }
+
+  test("save - append") {
+    val data = (1 to 10).map(i => (i, i.toString))
+    withParquetFile(data) { file =>
+      val newData = (11 to 20).map(i => (i, i.toString))
+      newData.toDF().save("org.apache.spark.sql.parquet", SaveMode.Append, Map("path" -> file))
+      checkAnswer(parquetFile(file), (data ++ newData).map(Row.fromTuple))
+    }
+  }
+}
+
+class ParquetDataSourceOnIOSuite extends ParquetIOSuiteBase with BeforeAndAfterAll {
+  val originalConf = sqlContext.conf.parquetUseDataSourceApi
+
+  override protected def beforeAll(): Unit = {
+    sqlContext.conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
+  }
+
+  override protected def afterAll(): Unit = {
+    sqlContext.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
+  }
+}
+
+class ParquetDataSourceOffIOSuite extends ParquetIOSuiteBase with BeforeAndAfterAll {
+  val originalConf = sqlContext.conf.parquetUseDataSourceApi
+
+  override protected def beforeAll(): Unit = {
+    sqlContext.conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "false")
+  }
+
+  override protected def afterAll(): Unit = {
+    sqlContext.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
   }
 }

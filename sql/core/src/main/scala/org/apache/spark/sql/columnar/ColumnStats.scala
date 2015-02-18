@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.columnar
 
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, Attribute, AttributeReference}
@@ -215,22 +215,7 @@ private[sql] class StringColumnStats extends ColumnStats {
   def collectedStatistics = Row(lower, upper, nullCount, count, sizeInBytes)
 }
 
-private[sql] class DateColumnStats extends ColumnStats {
-  protected var upper: Date = null
-  protected var lower: Date = null
-
-  override def gatherStats(row: Row, ordinal: Int) {
-    super.gatherStats(row, ordinal)
-    if (!row.isNullAt(ordinal)) {
-      val value = row(ordinal).asInstanceOf[Date]
-      if (upper == null || value.compareTo(upper) > 0) upper = value
-      if (lower == null || value.compareTo(lower) < 0) lower = value
-      sizeInBytes += DATE.defaultSize
-    }
-  }
-
-  def collectedStatistics = Row(lower, upper, nullCount, count, sizeInBytes)
-}
+private[sql] class DateColumnStats extends IntColumnStats
 
 private[sql] class TimestampColumnStats extends ColumnStats {
   protected var upper: Timestamp = null

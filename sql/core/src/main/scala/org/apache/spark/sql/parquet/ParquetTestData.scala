@@ -25,7 +25,7 @@ import org.apache.hadoop.mapreduce.Job
 import org.apache.spark.sql.test.TestSQLContext
 
 import parquet.example.data.{GroupWriter, Group}
-import parquet.example.data.simple.SimpleGroup
+import parquet.example.data.simple.{NanoTime, SimpleGroup}
 import parquet.hadoop.{ParquetReader, ParquetFileReader, ParquetWriter}
 import parquet.hadoop.api.WriteSupport
 import parquet.hadoop.api.WriteSupport.WriteContext
@@ -63,6 +63,7 @@ private[sql] object ParquetTestData {
       optional int64 mylong;
       optional float myfloat;
       optional double mydouble;
+      optional int96 mytimestamp;
       }"""
 
   // field names for test assertion error messages
@@ -72,7 +73,8 @@ private[sql] object ParquetTestData {
     "mystring:String",
     "mylong:Long",
     "myfloat:Float",
-    "mydouble:Double"
+    "mydouble:Double",
+    "mytimestamp:Timestamp"
   )
 
   val subTestSchema =
@@ -98,6 +100,7 @@ private[sql] object ParquetTestData {
       optional int64 myoptlong;
       optional float myoptfloat;
       optional double myoptdouble;
+      optional int96 mytimestamp;
       }
     """
 
@@ -236,6 +239,7 @@ private[sql] object ParquetTestData {
       record.add(3, i.toLong << 33)
       record.add(4, 2.5F)
       record.add(5, 4.5D)
+      record.add(6, new NanoTime(1,2))
       writer.write(record)
     }
     writer.close()

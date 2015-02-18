@@ -54,7 +54,7 @@ public class JavaSimpleTextClassificationPipeline {
       new LabeledDocument(1L, "b d", 0.0),
       new LabeledDocument(2L, "spark f g h", 1.0),
       new LabeledDocument(3L, "hadoop mapreduce", 0.0));
-    DataFrame training = jsql.applySchema(jsc.parallelize(localTraining), LabeledDocument.class);
+    DataFrame training = jsql.createDataFrame(jsc.parallelize(localTraining), LabeledDocument.class);
 
     // Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
     Tokenizer tokenizer = new Tokenizer()
@@ -79,14 +79,16 @@ public class JavaSimpleTextClassificationPipeline {
       new Document(5L, "l m n"),
       new Document(6L, "mapreduce spark"),
       new Document(7L, "apache hadoop"));
-    DataFrame test = jsql.applySchema(jsc.parallelize(localTest), Document.class);
+    DataFrame test = jsql.createDataFrame(jsc.parallelize(localTest), Document.class);
 
     // Make predictions on test documents.
     model.transform(test).registerTempTable("prediction");
     DataFrame predictions = jsql.sql("SELECT id, text, score, prediction FROM prediction");
     for (Row r: predictions.collect()) {
-      System.out.println("(" + r.get(0) + ", " + r.get(1) + ") --> score=" + r.get(2)
+      System.out.println("(" + r.get(0) + ", " + r.get(1) + ") --> prob=" + r.get(2)
           + ", prediction=" + r.get(3));
     }
+
+    jsc.stop();
   }
 }

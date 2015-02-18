@@ -17,18 +17,26 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.Dsl._
-import org.apache.spark.sql.types._
-
-/* Implicits */
-import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.TestData._
 
 import scala.language.postfixOps
+
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.test.TestSQLContext.logicalPlanToSparkQuery
+import org.apache.spark.sql.test.TestSQLContext.implicits._
+import org.apache.spark.sql.test.TestSQLContext.sql
+
 
 class DataFrameSuite extends QueryTest {
   import org.apache.spark.sql.TestData._
 
   test("analysis error should be eagerly reported") {
+    val oldSetting = TestSQLContext.conf.dataFrameEagerAnalysis
+    // Eager analysis.
+    TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, "true")
+
     intercept[Exception] { testData.select('nonExistentName) }
     intercept[Exception] {
       testData.groupBy('key).agg(Map("nonExistentName" -> "sum"))
@@ -39,6 +47,40 @@ class DataFrameSuite extends QueryTest {
     intercept[Exception] {
       testData.groupBy($"abcd").agg(Map("key" -> "sum"))
     }
+
+    // No more eager analysis once the flag is turned off
+    TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, "false")
+    testData.select('nonExistentName)
+
+    // Set the flag back to original value before this test.
+    TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, oldSetting.toString)
+  }
+
+  test("dataframe toString") {
+    assert(testData.toString === "[key: int, value: string]")
+    assert(testData("key").toString === "[key: int]")
+  }
+
+  test("incomputable toString") {
+    assert($"test".toString === "test")
+  }
+
+  test("invalid plan toString, debug mode") {
+    val oldSetting = TestSQLContext.conf.dataFrameEagerAnalysis
+    TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, "true")
+
+    // Turn on debug mode so we can see invalid query plans.
+    import org.apache.spark.sql.execution.debug._
+    TestSQLContext.debug()
+
+    val badPlan = testData.select('badColumn)
+
+    assert(badPlan.toString contains badPlan.queryExecution.toString,
+      "toString on bad query plans should include the query execution but was:\n" +
+        badPlan.toString)
+
+    // Set the flag back to original value before this test.
+    TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, oldSetting.toString)
   }
 
   test("table scan") {
@@ -47,21 +89,100 @@ class DataFrameSuite extends QueryTest {
       testData.collect().toSeq)
   }
 
+  test("head and take") {
+    assert(testData.take(2) === testData.collect().take(2))
+    assert(testData.head(2) === testData.collect().take(2))
+    assert(testData.head(2).head.schema === testData.schema)
+  }
+
+  test("self join") {
+    val df1 = testData.select(testData("key")).as('df1)
+    val df2 = testData.select(testData("key")).as('df2)
+
+    checkAnswer(
+      df1.join(df2, $"df1.key" === $"df2.key"),
+      sql("SELECT a.key, b.key FROM testData a JOIN testData b ON a.key = b.key").collect().toSeq)
+  }
+
+  test("simple explode") {
+    val df = Seq(Tuple1("a b c"), Tuple1("d e")).toDF("words")
+
+    checkAnswer(
+      df.explode("words", "word") { word: String => word.split(" ").toSeq }.select('word),
+      Row("a") :: Row("b") :: Row("c") :: Row("d") ::Row("e") :: Nil
+    )
+  }
+
+  test("explode") {
+    val df = Seq((1, "a b c"), (2, "a b"), (3, "a")).toDF("number", "letters")
+    val df2 =
+      df.explode('letters) {
+        case Row(letters: String) => letters.split(" ").map(Tuple1(_)).toSeq
+      }
+
+    checkAnswer(
+      df2
+        .select('_1 as 'letter, 'number)
+        .groupBy('letter)
+        .agg('letter, countDistinct('number)),
+      Row("a", 3) :: Row("b", 2) :: Row("c", 1) :: Nil
+    )
+  }
+
+  test("selectExpr") {
+    checkAnswer(
+      testData.selectExpr("abs(key)", "value"),
+      testData.collect().map(row => Row(math.abs(row.getInt(0)), row.getString(1))).toSeq)
+  }
+
+  test("filterExpr") {
+    checkAnswer(
+      testData.filter("key > 90"),
+      testData.collect().filter(_.getInt(0) > 90).toSeq)
+  }
+
   test("repartition") {
     checkAnswer(
       testData.select('key).repartition(10).select('key),
       testData.select('key).collect().toSeq)
   }
 
-  test("agg") {
+  test("groupBy") {
     checkAnswer(
       testData2.groupBy("a").agg($"a", sum($"b")),
-      Seq(Row(1,3), Row(2,3), Row(3,3))
+      Seq(Row(1, 3), Row(2, 3), Row(3, 3))
     )
     checkAnswer(
       testData2.groupBy("a").agg($"a", sum($"b").as("totB")).agg(sum('totB)),
       Row(9)
     )
+    checkAnswer(
+      testData2.groupBy("a").agg(col("a"), count("*")),
+      Row(1, 2) :: Row(2, 2) :: Row(3, 2) :: Nil
+    )
+    checkAnswer(
+      testData2.groupBy("a").agg(Map("*" -> "count")),
+      Row(1, 2) :: Row(2, 2) :: Row(3, 2) :: Nil
+    )
+    checkAnswer(
+      testData2.groupBy("a").agg(Map("b" -> "sum")),
+      Row(1, 3) :: Row(2, 3) :: Row(3, 3) :: Nil
+    )
+
+    val df1 = Seq(("a", 1, 0, "b"), ("b", 2, 4, "c"), ("a", 2, 3, "d"))
+      .toDF("key", "value1", "value2", "rest")
+
+    checkAnswer(
+      df1.groupBy("key").min(),
+      df1.groupBy("key").min("value1", "value2").collect()
+    )
+    checkAnswer(
+      df1.groupBy("key").min("value2"),
+      Seq(Row("a", 0), Row("b", 4))
+    )
+  }
+
+  test("agg without groups") {
     checkAnswer(
       testData2.agg(sum('b)),
       Row(9)
@@ -130,20 +251,20 @@ class DataFrameSuite extends QueryTest {
       Seq(Row(3,1), Row(3,2), Row(2,1), Row(2,2), Row(1,1), Row(1,2)))
 
     checkAnswer(
-      arrayData.orderBy('data.getItem(0).asc),
-      arrayData.toDataFrame.collect().sortBy(_.getAs[Seq[Int]](0)(0)).toSeq)
+      arrayData.toDF.orderBy('data.getItem(0).asc),
+      arrayData.toDF.collect().sortBy(_.getAs[Seq[Int]](0)(0)).toSeq)
 
     checkAnswer(
-      arrayData.orderBy('data.getItem(0).desc),
-      arrayData.toDataFrame.collect().sortBy(_.getAs[Seq[Int]](0)(0)).reverse.toSeq)
+      arrayData.toDF.orderBy('data.getItem(0).desc),
+      arrayData.toDF.collect().sortBy(_.getAs[Seq[Int]](0)(0)).reverse.toSeq)
 
     checkAnswer(
-      arrayData.orderBy('data.getItem(1).asc),
-      arrayData.toDataFrame.collect().sortBy(_.getAs[Seq[Int]](0)(1)).toSeq)
+      arrayData.toDF.orderBy('data.getItem(1).asc),
+      arrayData.toDF.collect().sortBy(_.getAs[Seq[Int]](0)(1)).toSeq)
 
     checkAnswer(
-      arrayData.orderBy('data.getItem(1).desc),
-      arrayData.toDataFrame.collect().sortBy(_.getAs[Seq[Int]](0)(1)).reverse.toSeq)
+      arrayData.toDF.orderBy('data.getItem(1).desc),
+      arrayData.toDF.collect().sortBy(_.getAs[Seq[Int]](0)(1)).reverse.toSeq)
   }
 
   test("limit") {
@@ -152,11 +273,11 @@ class DataFrameSuite extends QueryTest {
       testData.take(10).toSeq)
 
     checkAnswer(
-      arrayData.limit(1),
+      arrayData.toDF.limit(1),
       arrayData.take(1).map(r => Row.fromSeq(r.productIterator.toSeq)))
 
     checkAnswer(
-      mapData.limit(1),
+      mapData.toDF.limit(1),
       mapData.take(1).map(r => Row.fromSeq(r.productIterator.toSeq)))
   }
 
@@ -280,13 +401,34 @@ class DataFrameSuite extends QueryTest {
   }
 
   test("udf") {
-    val foo = (a: Int, b: String) => a.toString + b
+    val foo = udf((a: Int, b: String) => a.toString + b)
 
     checkAnswer(
       // SELECT *, foo(key, value) FROM testData
-      testData.select($"*", callUDF(foo, 'key, 'value)).limit(3),
+      testData.select($"*", foo('key, 'value)).limit(3),
       Row(1, "1", "11") :: Row(2, "2", "22") :: Row(3, "3", "33") :: Nil
     )
+  }
+
+  test("addColumn") {
+    val df = testData.toDF.withColumn("newCol", col("key") + 1)
+    checkAnswer(
+      df,
+      testData.collect().map { case Row(key: Int, value: String) =>
+        Row(key, value, key + 1)
+      }.toSeq)
+    assert(df.schema.map(_.name).toSeq === Seq("key", "value", "newCol"))
+  }
+
+  test("renameColumn") {
+    val df = testData.toDF.withColumn("newCol", col("key") + 1)
+      .withColumnRenamed("value", "valueRenamed")
+    checkAnswer(
+      df,
+      testData.collect().map { case Row(key: Int, value: String) =>
+        Row(key, value, key + 1)
+      }.toSeq)
+    assert(df.schema.map(_.name).toSeq === Seq("key", "valueRenamed", "newCol"))
   }
 
   test("apply on query results (SPARK-5462)") {

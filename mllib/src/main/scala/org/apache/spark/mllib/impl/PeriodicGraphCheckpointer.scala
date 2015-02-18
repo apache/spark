@@ -74,7 +74,6 @@ import org.apache.spark.storage.StorageLevel
  * }}}
  *
  * @param currentGraph  Initial graph
- * @param checkpointDir The directory for storing checkpoint files
  * @param checkpointInterval Graphs will be checkpointed at this interval
  * @tparam VD  Vertex descriptor type
  * @tparam ED  Edge descriptor type
@@ -83,7 +82,6 @@ import org.apache.spark.storage.StorageLevel
  */
 private[mllib] class PeriodicGraphCheckpointer[VD, ED](
     var currentGraph: Graph[VD, ED],
-    val checkpointDir: Option[String],
     val checkpointInterval: Int) extends Logging {
 
   /** FIFO queue of past checkpointed RDDs */
@@ -100,12 +98,6 @@ private[mllib] class PeriodicGraphCheckpointer[VD, ED](
    * NOTE: This code assumes that only one SparkContext is used for the given graphs.
    */
   private val sc = currentGraph.vertices.sparkContext
-
-  // If a checkpoint directory is given, and there's no prior checkpoint directory,
-  // then set the checkpoint directory with the given one.
-  if (checkpointDir.nonEmpty && sc.getCheckpointDir.isEmpty) {
-    sc.setCheckpointDir(checkpointDir.get)
-  }
 
   updateGraph(currentGraph)
 

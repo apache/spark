@@ -285,7 +285,7 @@ class ListTests(PySparkTestCase):
         self.assertTrue(dt_model.predict(features[3]) > 0)
 
         rf_model = RandomForest.trainRegressor(
-            rdd, categoricalFeaturesInfo=categoricalFeaturesInfo, numTrees=100)
+            rdd, categoricalFeaturesInfo=categoricalFeaturesInfo, numTrees=100, seed=1)
         self.assertTrue(rf_model.predict(features[0]) <= 0)
         self.assertTrue(rf_model.predict(features[1]) > 0)
         self.assertTrue(rf_model.predict(features[2]) <= 0)
@@ -335,7 +335,7 @@ class VectorUDTTests(PySparkTestCase):
         sqlCtx = SQLContext(self.sc)
         rdd = self.sc.parallelize([LabeledPoint(1.0, self.dv1), LabeledPoint(0.0, self.sv1)])
         srdd = sqlCtx.inferSchema(rdd)
-        schema = srdd.schema()
+        schema = srdd.schema
         field = [f for f in schema.fields if f.name == "features"][0]
         self.assertEqual(field.dataType, self.udt)
         vectors = srdd.map(lambda p: p.features).collect()
