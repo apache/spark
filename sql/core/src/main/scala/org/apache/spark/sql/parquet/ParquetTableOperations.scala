@@ -144,19 +144,30 @@ case class ParquetTableScan(
         new Iterator[Row] {
           def hasNext = iter.hasNext
           def next() = {
-            val row = iter.next()._2.asInstanceOf[SpecificMutableRow]
+            iter.next()._2 match {
+              case row: SpecificMutableRow => {
+            //val row = iter.next ()._2.asInstanceOf[SpecificMutableRow]
 
-            // Parquet will leave partitioning columns empty, so we fill them in here.
+              // Parquet will leave partitioning columns empty, so we fill them in here.
             var i = 0
             while (i < requestedPartitionOrdinals.size) {
-              row(requestedPartitionOrdinals(i)._2) =
-                partitionRowValues(requestedPartitionOrdinals(i)._1)
-              i += 1
+            row (requestedPartitionOrdinals (i)._2) =
+            partitionRowValues (requestedPartitionOrdinals (i)._1)
+            i += 1
             }
             row
+            }
+              case row : Row => {
+                val rVals = row.to[Array]
+                var i = 0
+                while (i < requestedPartitionOrdinals.size) {
+                  rVals.update(requestedPartitionOrdinals (i)._2,partitionRowValues (requestedPartitionOrdinals (i)._1))
+                }
+                Row.fromSeq(rVals)
+              }
           }
         }
-      }
+      }}
     } else {
       baseRDD.map(_._2)
     }
