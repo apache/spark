@@ -28,10 +28,10 @@ test_that("reserialize on RDD", {
   writeLines(mockFile, fileName)
   
   text.rdd <- textFile(sc, fileName)
-  expect_true(text.rdd@env$serialized == "string")
+  expect_true(text.rdd@env$serializedMode == "string")
   ser.rdd <- reserialize(text.rdd)
   expect_equal(collect(ser.rdd), as.list(mockFile))
-  expect_true(ser.rdd@env$serialized == "byte")
+  expect_true(ser.rdd@env$serializedMode == "byte")
   
   unlink(fileName)
 })

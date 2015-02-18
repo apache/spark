@@ -229,7 +229,7 @@ setMethod("partitionBy",
                                        callJMethod(jrdd, "rdd"),
                                        as.integer(numPartitions),
                                        serializedHashFuncBytes,
-                                       rdd@env$serialized,
+                                       rdd@env$serializedMode,
                                        depsBinArr,
                                        packageNamesArr,
                                        as.character(.sparkREnv$libname),
@@ -249,7 +249,7 @@ setMethod("partitionBy",
             # shuffled acutal content key-val pairs.
             r <- callJMethod(javaPairRDD, "values")
 
-            RDD(r, serialized = "byte")
+            RDD(r, serializedMode = "byte")
           })
 
 #' Group values by key
