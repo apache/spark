@@ -299,7 +299,7 @@ private[sql] case class InMemoryColumnarTableScan(
                 .zip(cachedBatch.stats.toSeq)
                 .map { case (a, s) => s"${a.name}: $s" }
                 .mkString(", ")
-              logInfo(s"Skipping partition based on stats $statsString")
+              logDebug(s"Skipping partition based on stats $statsString")
               false
             } else {
               readBatches += 1
