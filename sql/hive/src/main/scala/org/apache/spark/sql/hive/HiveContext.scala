@@ -228,17 +228,17 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       state = new SessionState(new HiveConf(classOf[SessionState]))
       SessionState.start(state)
     }
+    if (state.out == null) {
+      state.out = new PrintStream(outputBuffer, true, "UTF-8")
+    }
+    if (state.err == null) {
+      state.err = new PrintStream(outputBuffer, true, "UTF-8")
+    }
     state
   }
 
   @transient protected[hive] lazy val hiveconf: HiveConf = {
     setConf(sessionState.getConf.getAllProperties)
-    if (sessionState.out == null) {
-      sessionState.out = new PrintStream(outputBuffer, true, "UTF-8")
-    }
-    if (sessionState.err == null) {
-      sessionState.err = new PrintStream(outputBuffer, true, "UTF-8")
-    }
     sessionState.getConf
   }
 
