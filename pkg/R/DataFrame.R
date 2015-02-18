@@ -276,16 +276,19 @@ setMethod("collectToDF",
             cols <- lapply(seq_along(listCols),
                            function(colIdx) {
                              rddCol <- listCols[[colIdx]]
-                             rddRaw <- callJMethod(rddCol, "collect") # Returns a list of byte arrays per partition
+                             # Returns a list of byte arrays per partition
+                             rddRaw <- callJMethod(rddCol, "collect")
                              colPartitions <- lapply(seq_along(rddRaw),
                                                      function(partIdx) {
                                                        objRaw <- rawConnection(rddRaw[[partIdx]])
                                                        numRows <- readInt(objRaw)
-                                                       col <- readCol(objRaw, numRows) # List of deserialized values per partition
+                                                       # List of deserialized values per partition
+                                                       col <- readCol(objRaw, numRows)
                                                        close(objRaw)
                                                        col
                                                      })
-                             colOut <- unlist(colPartitions, recursive = FALSE) # Flatten column list into a vector
+                             # Flatten column list into a vector
+                             colOut <- unlist(colPartitions, recursive = FALSE)
                            })
             colNames <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "getColNames", df@sdf)
             names(cols) <- colNames
