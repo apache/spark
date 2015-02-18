@@ -35,7 +35,7 @@ abstract class PipelineStage extends Serializable with Logging {
   /**
    * Derives the output schema from the input schema and parameters.
    */
-  private[ml] def transformSchema(schema: StructType, paramMap: ParamMap): StructType
+  protected def transformSchema(schema: StructType, paramMap: ParamMap): StructType
 
   /**
    * Derives the output schema from the input schema and parameters, optionally with logging.
