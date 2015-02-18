@@ -36,7 +36,7 @@ private[spark] class SparkDeploySchedulerBackend(
   private var client: AppClient = null
   private var stopping = false
 
-  @volatile private var shutdownCallback: SparkDeploySchedulerBackend => Unit = _
+  @volatile var shutdownCallback: SparkDeploySchedulerBackend => Unit = _
   @volatile private var appId: String = _
 
   private val registrationBarrier = new Semaphore(0)
@@ -151,10 +151,6 @@ private[spark] class SparkDeploySchedulerBackend(
       logWarning("Application ID is not initialized yet.")
       super.applicationId
     }
-
-  def setShutdownCallback(f: SparkDeploySchedulerBackend => Unit) {
-    shutdownCallback = f
-  }
 
   private def waitForRegistration() = {
     registrationBarrier.acquire()
