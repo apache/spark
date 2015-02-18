@@ -18,7 +18,6 @@
 package org.apache.spark.scheduler.cluster
 
 import java.util.concurrent.Semaphore
-import java.util.concurrent.atomic.AtomicReference
 
 import org.apache.spark.{Logging, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
@@ -36,8 +35,8 @@ private[spark] class SparkDeploySchedulerBackend(
 
   private var client: AppClient = null
   private var stopping = false
-  private var shutdownCallback: SparkDeploySchedulerBackend => Unit = _
-    new AtomicReference
+
+  @volatile private var shutdownCallback: SparkDeploySchedulerBackend => Unit = _
   @volatile private var appId: String = _
 
   private val registrationBarrier = new Semaphore(0)
