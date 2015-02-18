@@ -47,7 +47,13 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   val clock = {
     val clockClass = ssc.sc.conf.get(
       "spark.streaming.clock", "org.apache.spark.util.SystemClock")
-    Class.forName(clockClass).newInstance().asInstanceOf[Clock]
+    try {
+      Class.forName(clockClass).newInstance().asInstanceOf[Clock]
+    } catch {
+      case e: ClassNotFoundException if clockClass.startsWith("org.apache.spark.streaming") =>
+        val newClockClass = clockClass.replace("org.apache.spark.streaming", "org.apache.spark")
+        Class.forName(newClockClass).newInstance().asInstanceOf[Clock]
+    }
   }
 
   private val timer = new RecurringTimer(clock, ssc.graph.batchDuration.milliseconds,
