@@ -20,6 +20,8 @@ package org.apache.spark.streaming.flume
 import java.net.{InetSocketAddress, ServerSocket}
 import java.nio.ByteBuffer
 
+import org.apache.commons.lang3.RandomUtils
+
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.concurrent.duration._
@@ -75,7 +77,8 @@ class FlumeStreamSuite extends FunSuite with BeforeAndAfter with Matchers with L
 
   /** Find a free port */
   private def findFreePort(): Int = {
-    Utils.startServiceOnPort((math.random * Int.MaxValue).toInt, (trialPort: Int) => {
+    val candidatePort = RandomUtils.nextInt(1024, 65536)
+    Utils.startServiceOnPort(candidatePort, (trialPort: Int) => {
       val socket = new ServerSocket(trialPort)
       socket.close()
       (null, trialPort)
