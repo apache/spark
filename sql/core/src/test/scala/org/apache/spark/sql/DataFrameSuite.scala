@@ -89,6 +89,12 @@ class DataFrameSuite extends QueryTest {
       testData.collect().toSeq)
   }
 
+  test("head and take") {
+    assert(testData.take(2) === testData.collect().take(2))
+    assert(testData.head(2) === testData.collect().take(2))
+    assert(testData.head(2).head.schema === testData.schema)
+  }
+
   test("self join") {
     val df1 = testData.select(testData("key")).as('df1)
     val df2 = testData.select(testData("key")).as('df2)

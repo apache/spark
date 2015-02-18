@@ -56,7 +56,9 @@ import org.apache.spark.sql.types.{Decimal, DecimalType}
  *
  * @param functionClassName UDF class name
  */
-case class HiveFunctionWrapper(var functionClassName: String) extends java.io.Externalizable {
+private[hive] case class HiveFunctionWrapper(var functionClassName: String)
+  extends java.io.Externalizable {
+
   // for Serialization
   def this() = this(null)
 
@@ -423,7 +425,10 @@ private[hive] object HiveShim {
  * Bug introduced in hive-0.13. FileSinkDesc is serilizable, but its member path is not.
  * Fix it through wrapper.
  */
-class ShimFileSinkDesc(var dir: String, var tableInfo: TableDesc, var compressed: Boolean)
+private[hive] class ShimFileSinkDesc(
+    var dir: String,
+    var tableInfo: TableDesc,
+    var compressed: Boolean)
   extends Serializable with Logging {
   var compressCodec: String = _
   var compressType: String = _

@@ -103,6 +103,10 @@ case class AddFile(path: String) extends RunnableCommand {
   }
 }
 
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 case class CreateMetastoreDataSource(
     tableName: String,
     userSpecifiedSchema: Option[StructType],
@@ -142,6 +146,10 @@ case class CreateMetastoreDataSource(
   }
 }
 
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 case class CreateMetastoreDataSourceAsSelect(
     tableName: String,
     provider: String,

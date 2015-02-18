@@ -113,7 +113,7 @@ class PostgresDatabase {
   }
 
   test("Type mapping for various types") {
-    val rdd = TestSQLContext.jdbcRDD(url(db.ip), "public.bar")
+    val rdd = TestSQLContext.jdbc(url(db.ip), "public.bar")
     val rows = rdd.collect
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -142,7 +142,7 @@ class PostgresDatabase {
   }
 
   test("Basic write test") {
-    val rdd = TestSQLContext.jdbcRDD(url(db.ip), "public.bar")
+    val rdd = TestSQLContext.jdbc(url(db.ip), "public.bar")
     rdd.createJDBCTable(url(db.ip), "public.barcopy", false)
     // Test only that it doesn't bomb out.
   }
