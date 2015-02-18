@@ -41,6 +41,16 @@ test_that("toRDD() returns an RRDD", {
   expect_true(count(testRDD) == 3)
 })
 
+test_that("union on two RDDs created from DataFrames returns an RRDD", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  RDD1 <- toRDD(df)
+  RDD2 <- toRDD(df)
+  unioned <- unionRDD(RDD1, RDD2)
+  expect_true(inherits(unioned, "RDD"))
+  expect_true(unioned@env$serialized == "row")
+  expect_true(collect(unioned)[[2]]$name == "Andy")
+})
+
 test_that("lapply() on a DataFrame returns an RDD with the correct columns", {
   df <- jsonFile(sqlCtx, jsonPath)
   testRDD <- lapply(df, function(row) {
