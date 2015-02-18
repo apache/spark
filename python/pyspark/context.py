@@ -184,7 +184,7 @@ class SparkContext(object):
             self.addPyFile(path)
 
         # Deplpoy code dependencies from requirements file in the constructor
-        if requirementsFIle:
+        if requirementsFile:
             self.addRequirementsFile(requirementsFile)
 
         # Deploy code dependencies set by spark-submit; these will already have been added
@@ -733,8 +733,9 @@ class SparkContext(object):
             mod = importlib.import_module(req.name) #throws ImportError
             mod_path = mod.__path__[0]
             tar_path = req.name+'.tar.gz'
-            with tarfile.open(tar_path, "w:gz") as tar:
-                tar.add(mod_path, arcname=os.path.basename(mod_path))
+            tar = tarfile.open(tar_path, "w:gz")
+            tar.add(mod_path, arcname=os.path.basename(mod_path))
+            tar.close()
             self.addPyFile(tar_path)
             os.remove(tar_path)
 
