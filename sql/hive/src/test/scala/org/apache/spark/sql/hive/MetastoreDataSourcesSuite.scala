@@ -306,8 +306,8 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
         |SELECT * FROM jsonTable
       """.stripMargin)
 
-    // Create the table again should trigger a AlreadyExistsException.
-    val message = intercept[RuntimeException] {
+    // Create the table again should trigger a AnalysisException.
+    val message = intercept[AnalysisException] {
       sql(
         s"""
         |CREATE TABLE ctasJsonTable
@@ -516,7 +516,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       sql("SELECT * FROM createdJsonTable"),
       df.collect())
 
-    var message = intercept[RuntimeException] {
+    var message = intercept[AnalysisException] {
       createExternalTable("createdJsonTable", filePath.toString)
     }.getMessage
     assert(message.contains("Table createdJsonTable already exists."),
