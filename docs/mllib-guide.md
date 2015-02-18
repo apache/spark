@@ -99,14 +99,10 @@ In the `spark.mllib` package:
 * *(Breaking change)* In [StreamingLinearRegressionWithSGD](api/scala/index.html#org.apache.spark.mllib.regression.StreamingLinearRegressionWithSGD), there were two changes:
     * The constructor taking arguments was removed in favor of a builder patten using the default constructor plus parameter setter methods.
     * Variable `model` is no longer public.
-* `PythonMLlibAPI` (the interface between Scala/Java and Python for MLlib) was a public API but is now private, declared `private[python]`.
 * *(Breaking change)* In [`DecisionTree`](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree) and its associated classes, there were several changes:
     * In `DecisionTree`, the deprecated class method `train` has been removed.  (The object/static `train` methods remain.)
     * In `Strategy`, the `checkpointDir` parameter has been removed.  Checkpointing is still supported, but the checkpoint directory must be set before calling tree and tree ensemble training.
-
-In `pyspark.mllib`:
-
-* *(Breaking change)* `mllib.stat.ChiSqTestResult` has been removed.
+* `PythonMLlibAPI` (the interface between Scala/Java and Python for MLlib) was a public API but is now private, declared `private[python]`.
 
 
 ## From 1.1 to 1.2
