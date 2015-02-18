@@ -54,7 +54,7 @@ object RDFLoader extends Logging {
   def loadNTriples(
       sc: SparkContext,
       path: String,
-      //numPartitions: Int = -1,
+      // numPartitions: Int = -1,
       edgeStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY,
       vertexStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY
       )
@@ -73,7 +73,7 @@ object RDFLoader extends Logging {
       }
     })
     .distinct()
-    //.repartition(numPartitions)
+    // .repartition(numPartitions)
     .map(name => 
       name match {
         case propvalregex(pre, value) => (gethash("<" + pre + "> " + value), value)
