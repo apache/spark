@@ -158,6 +158,30 @@ class GradientBoostedTreesSuite extends FunSuite with MLlibTestSparkContext {
       }
     }
   }
+
+  test("Early stopping when validation data is provided.") {
+    // Set numIterations large enough so that it early stops.
+    val numIterations = 20
+    val trainRdd = sc.parallelize(GradientBoostedTreesSuite.trainData, 2)
+    val validateRdd = sc.parallelize(GradientBoostedTreesSuite.validateData, 2)
+
+    val treeStrategy = new Strategy(algo = Regression, impurity = Variance, maxDepth = 2,
+      categoricalFeaturesInfo = Map.empty)
+    Array(SquaredError, AbsoluteError).foreach { error =>
+      val boostingStrategy =
+        new BoostingStrategy(treeStrategy, error, numIterations, validationTol = 0.0)
+
+      val gbtValidate = new GradientBoostedTrees(boostingStrategy).runWithValidation(
+        trainRdd, validateRdd)
+      assert(gbtValidate.numTrees != numIterations)
+
+      val gbt = GradientBoostedTrees.train(trainRdd, boostingStrategy)
+      val errorWithoutValidation = error.computeError(gbt, validateRdd)
+      val errorWithValidation = error.computeError(gbtValidate, validateRdd)
+      assert(errorWithValidation < errorWithoutValidation)
+    }
+
+  }
 }
 
 private object GradientBoostedTreesSuite {
@@ -166,4 +190,6 @@ private object GradientBoostedTreesSuite {
   val testCombinations = Array((10, 1.0, 1.0), (10, 0.1, 1.0), (10, 0.5, 0.75), (10, 0.1, 0.75))
 
   val data = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 10, 100)
+  val trainData = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 20, 120)
+  val validateData = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 20, 80)
 }

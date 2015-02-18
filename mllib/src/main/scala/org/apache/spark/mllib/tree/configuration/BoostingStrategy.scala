@@ -34,6 +34,12 @@ import org.apache.spark.mllib.tree.loss.{LogLoss, SquaredError, Loss}
  *                      weak hypotheses used in the final model.
  * @param learningRate Learning rate for shrinking the contribution of each estimator. The
  *                     learning rate should be between in the interval (0, 1]
+ * @param validationTol Useful when runWithValidation is used. If the error rate between two
+                        iterations is lesser than the validationTol, then stop. If run
+                        is used, then this parameter is ignored.
+
+ a pair of RDD's are supplied to run. If the error rate
+ *                      between two iterations is lesser than convergenceTol, then training stops.
  */
 @Experimental
 case class BoostingStrategy(
@@ -42,7 +48,8 @@ case class BoostingStrategy(
     @BeanProperty var loss: Loss,
     // Optional boosting parameters
     @BeanProperty var numIterations: Int = 100,
-    @BeanProperty var learningRate: Double = 0.1) extends Serializable {
+    @BeanProperty var learningRate: Double = 0.1,
+    @BeanProperty var validationTol: Double = 1e-5) extends Serializable {
 
   /**
    * Check validity of parameters.
@@ -62,6 +69,7 @@ case class BoostingStrategy(
     }
     require(learningRate > 0 && learningRate <= 1,
       "Learning rate should be in range (0, 1]. Provided learning rate is " + s"$learningRate.")
+    require(validationTol >= 0, s"validationTol $validationTol should be greater than zero.")
   }
 }
 
