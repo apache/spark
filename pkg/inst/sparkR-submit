@@ -7,7 +7,7 @@ FWDIR="$(cd `dirname $0`; pwd)"
 
 export PROJECT_HOME="$FWDIR"
 
-export SPARKR_JAR_FILE="$FWDIR/lib/SparkR/sparkr-assembly-0.1.jar"
+export SPARKR_JAR_FILE="$FWDIR/sparkr-assembly-0.1.jar"
 
 # Exit if the user hasn't set SPARK_HOME 
 if [ ! -f "$SPARK_HOME/bin/spark-submit" ]; then
@@ -26,12 +26,6 @@ function usage() {
 if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
   usage
 fi
-
-
-# Add SparkR to .libPaths
-# If we are running an R program, only set libPaths and use Rscript
-
-export R_PROFILE_USER="/tmp/sparkR.profile"
 
 # Build up arguments list manually to preserve quotes and backslashes.
 SUBMIT_USAGE_FUNCTION=usage
@@ -53,14 +47,6 @@ NUM_APPLICATION_OPTS=${#APPLICATION_OPTS[@]}
 # If a R file is provided, directly run spark-submit. 
 if [[ $NUM_APPLICATION_OPTS -gt 0 && "${APPLICATION_OPTS[0]}" =~ \.R$ ]]; then
 
-cat > /tmp/sparkR.profile << EOF
-  .First <- function() {
-  projecHome <- Sys.getenv("PROJECT_HOME")
-  .libPaths(c(paste(projecHome,"/lib", sep=""), .libPaths()))
-  Sys.setenv(NOAWT=1)
-}
-EOF
-
   primary="${APPLICATION_OPTS[0]}"
   shift
   # Set the main class to SparkRRunner and add the primary R file to --files to make sure its copied to the cluster
@@ -68,23 +54,7 @@ EOF
   exec "$SPARK_HOME"/bin/spark-submit --class edu.berkeley.cs.amplab.sparkr.SparkRRunner --files "$primary" "${SUBMISSION_OPTS[@]}" "$SPARKR_JAR_FILE" "$primary" "${APPLICATION_OPTS[@]:1}"
 else
 
-  # If we don't have an R file to run, initialize context and run R
-cat > /tmp/sparkR.profile << EOF
-.First <- function() {
-  projecHome <- Sys.getenv("PROJECT_HOME")
-  Sys.setenv(NOAWT=1)
-  .libPaths(c(paste(projecHome,"/lib", sep=""), .libPaths()))
-  require(SparkR)
-  sc <- sparkR.init(Sys.getenv("MASTER", unset = ""))
-  assign("sc", sc, envir=.GlobalEnv)
-  cat("\n Welcome to SparkR!")
-  cat("\n Spark context is available as sc\n")
-}
-EOF
-  
-  # Add SPARKR_JAR, main class etc. to SPARKR_SUBMIT_ARGS 
-  export SPARKR_SUBMIT_ARGS
-
+  # If we don't have an R file to run, run R shell
   R
 
 fi
