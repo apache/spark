@@ -161,7 +161,10 @@ case class ParquetTableScan(
                 val rVals = row.to[Array]
                 var i = 0
                 while (i < requestedPartitionOrdinals.size) {
-                  rVals.update(requestedPartitionOrdinals (i)._2,partitionRowValues (requestedPartitionOrdinals (i)._1))
+                  rVals
+                    .update(
+                      requestedPartitionOrdinals (i)._2,
+                      partitionRowValues (requestedPartitionOrdinals (i)._1))
                 }
                 Row.fromSeq(rVals)
               }
