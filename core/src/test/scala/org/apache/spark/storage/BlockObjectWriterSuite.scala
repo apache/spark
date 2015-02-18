@@ -31,6 +31,8 @@ class BlockObjectWriterSuite extends FunSuite {
       new JavaSerializer(new SparkConf()), 1024, os => os, true, writeMetrics)
 
     writer.write(Long.box(20))
+    // Record metrics update on every write
+    assert(writeMetrics.shuffleRecordsWritten === 1)
     // Metrics don't update on every write
     assert(writeMetrics.shuffleBytesWritten == 0)
     // After 32 writes, metrics should update
@@ -39,6 +41,7 @@ class BlockObjectWriterSuite extends FunSuite {
       writer.write(Long.box(i))
     }
     assert(writeMetrics.shuffleBytesWritten > 0)
+    assert(writeMetrics.shuffleRecordsWritten === 33)
     writer.commitAndClose()
     assert(file.length() == writeMetrics.shuffleBytesWritten)
   }
@@ -51,6 +54,8 @@ class BlockObjectWriterSuite extends FunSuite {
       new JavaSerializer(new SparkConf()), 1024, os => os, true, writeMetrics)
 
     writer.write(Long.box(20))
+    // Record metrics update on every write
+    assert(writeMetrics.shuffleRecordsWritten === 1)
     // Metrics don't update on every write
     assert(writeMetrics.shuffleBytesWritten == 0)
     // After 32 writes, metrics should update
@@ -59,7 +64,23 @@ class BlockObjectWriterSuite extends FunSuite {
       writer.write(Long.box(i))
     }
     assert(writeMetrics.shuffleBytesWritten > 0)
+    assert(writeMetrics.shuffleRecordsWritten === 33)
     writer.revertPartialWritesAndClose()
     assert(writeMetrics.shuffleBytesWritten == 0)
+    assert(writeMetrics.shuffleRecordsWritten == 0)
+  }
+
+  test("Reopening a closed block writer") {
+    val file = new File("somefile")
+    file.deleteOnExit()
+    val writeMetrics = new ShuffleWriteMetrics()
+    val writer = new DiskBlockObjectWriter(new TestBlockId("0"), file,
+      new JavaSerializer(new SparkConf()), 1024, os => os, true, writeMetrics)
+
+    writer.open()
+    writer.close()
+    intercept[IllegalStateException] {
+      writer.open()
+    }
   }
 }

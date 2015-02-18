@@ -1,6 +1,8 @@
 ---
 layout: global
-title: Spark Streaming Programming Guide
+displayTitle: Spark Streaming Programming Guide
+title: Spark Streaming
+description: Spark Streaming programming guide and tutorial for Spark SPARK_VERSION_SHORT
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -75,7 +77,7 @@ main entry point for all streaming functionality. We create a local StreamingCon
 {% highlight scala %}
 import org.apache.spark._
 import org.apache.spark.streaming._
-import org.apache.spark.streaming.StreamingContext._
+import org.apache.spark.streaming.StreamingContext._ // not necessary in Spark 1.3+
 
 // Create a local StreamingContext with two working thread and batch interval of 1 second.
 // The master requires 2 cores to prevent from a starvation scenario.
@@ -107,7 +109,7 @@ each line will be split into multiple words and the stream of words is represent
 `words` DStream.  Next, we want to count these words.
 
 {% highlight scala %}
-import org.apache.spark.streaming.StreamingContext._
+import org.apache.spark.streaming.StreamingContext._ // not necessary in Spark 1.3+
 // Count each word in each batch
 val pairs = words.map(word => (word, 1))
 val wordCounts = pairs.reduceByKey(_ + _)
@@ -876,6 +878,12 @@ This is applied on a DStream containing words (say, the `pairs` DStream containi
 val runningCounts = pairs.updateStateByKey[Int](updateFunction _)
 {% endhighlight %}
 
+The update function will be called for each word, with `newValues` having a sequence of 1's (from
+the `(word, 1)` pairs) and the `runningCount` having the previous count. For the complete
+Scala code, take a look at the example
+[StatefulNetworkWordCount.scala]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache
+/spark/examples/streaming/StatefulNetworkWordCount.scala).
+
 </div>
 <div data-lang="java" markdown="1">
 
@@ -897,6 +905,12 @@ This is applied on a DStream containing words (say, the `pairs` DStream containi
 JavaPairDStream<String, Integer> runningCounts = pairs.updateStateByKey(updateFunction);
 {% endhighlight %}
 
+The update function will be called for each word, with `newValues` having a sequence of 1's (from
+the `(word, 1)` pairs) and the `runningCount` having the previous count. For the complete
+Java code, take a look at the example
+[JavaStatefulNetworkWordCount.java]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/java/org/apache/spark/examples/streaming
+/JavaStatefulNetworkWordCount.java).
+
 </div>
 <div data-lang="python" markdown="1">
 
@@ -914,13 +928,13 @@ This is applied on a DStream containing words (say, the `pairs` DStream containi
 runningCounts = pairs.updateStateByKey(updateFunction)
 {% endhighlight %}
 
-</div>
-</div>
-
 The update function will be called for each word, with `newValues` having a sequence of 1's (from
 the `(word, 1)` pairs) and the `runningCount` having the previous count. For the complete
-Scala code, take a look at the example
+Python code, take a look at the example
 [stateful_network_wordcount.py]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/python/streaming/stateful_network_wordcount.py).
+
+</div>
+</div>
 
 Note that using `updateStateByKey` requires the checkpoint directory to be configured, which is
 discussed in detail in the [checkpointing](#checkpointing) section.
@@ -1574,7 +1588,7 @@ To run a Spark Streaming applications, you need to have the following.
   recovery, thus ensuring zero data loss (discussed in detail in the
   [Fault-tolerance Semantics](#fault-tolerance-semantics) section). This can be enabled by setting
   the [configuration parameter](configuration.html#spark-streaming)
-  `spark.streaming.receiver.writeAheadLogs.enable` to `true`. However, these stronger semantics may
+  `spark.streaming.receiver.writeAheadLog.enable` to `true`. However, these stronger semantics may
   come at the cost of the receiving throughput of individual receivers. This can be corrected by
   running [more receivers in parallel](#level-of-parallelism-in-data-receiving)
   to increase aggregate throughput. Additionally, it is recommended that the replication of the

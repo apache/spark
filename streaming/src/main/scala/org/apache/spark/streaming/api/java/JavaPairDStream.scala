@@ -36,7 +36,6 @@ import org.apache.spark.api.java.function.{Function => JFunction, Function2 => J
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
-import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.dstream.DStream
 
 /**
@@ -727,7 +726,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * Save each RDD in `this` DStream as a Hadoop file. The file name at each batch interval is
    * generated based on `prefix` and `suffix`: "prefix-TIME_IN_MS.suffix".
    */
-  def saveAsHadoopFiles[F <: OutputFormat[K, V]](prefix: String, suffix: String) {
+  def saveAsHadoopFiles(prefix: String, suffix: String) {
     dstream.saveAsHadoopFiles(prefix, suffix)
   }
 
@@ -735,12 +734,12 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * Save each RDD in `this` DStream as a Hadoop file. The file name at each batch interval is
    * generated based on `prefix` and `suffix`: "prefix-TIME_IN_MS.suffix".
    */
-  def saveAsHadoopFiles(
+  def saveAsHadoopFiles[F <: OutputFormat[_, _]](
       prefix: String,
       suffix: String,
       keyClass: Class[_],
       valueClass: Class[_],
-      outputFormatClass: Class[_ <: OutputFormat[_, _]]) {
+      outputFormatClass: Class[F]) {
     dstream.saveAsHadoopFiles(prefix, suffix, keyClass, valueClass, outputFormatClass)
   }
 
@@ -748,12 +747,12 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * Save each RDD in `this` DStream as a Hadoop file. The file name at each batch interval is
    * generated based on `prefix` and `suffix`: "prefix-TIME_IN_MS.suffix".
    */
-  def saveAsHadoopFiles(
+  def saveAsHadoopFiles[F <: OutputFormat[_, _]](
       prefix: String,
       suffix: String,
       keyClass: Class[_],
       valueClass: Class[_],
-      outputFormatClass: Class[_ <: OutputFormat[_, _]],
+      outputFormatClass: Class[F],
       conf: JobConf) {
     dstream.saveAsHadoopFiles(prefix, suffix, keyClass, valueClass, outputFormatClass, conf)
   }
@@ -762,7 +761,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * Save each RDD in `this` DStream as a Hadoop file. The file name at each batch interval is
    * generated based on `prefix` and `suffix`: "prefix-TIME_IN_MS.suffix".
    */
-  def saveAsNewAPIHadoopFiles[F <: NewOutputFormat[K, V]](prefix: String, suffix: String) {
+  def saveAsNewAPIHadoopFiles(prefix: String, suffix: String) {
     dstream.saveAsNewAPIHadoopFiles(prefix, suffix)
   }
 
@@ -770,12 +769,12 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * Save each RDD in `this` DStream as a Hadoop file. The file name at each batch interval is
    * generated based on `prefix` and `suffix`: "prefix-TIME_IN_MS.suffix".
    */
-  def saveAsNewAPIHadoopFiles(
+  def saveAsNewAPIHadoopFiles[F <: NewOutputFormat[_, _]](
       prefix: String,
       suffix: String,
       keyClass: Class[_],
       valueClass: Class[_],
-      outputFormatClass: Class[_ <: NewOutputFormat[_, _]]) {
+      outputFormatClass: Class[F]) {
     dstream.saveAsNewAPIHadoopFiles(prefix, suffix, keyClass, valueClass, outputFormatClass)
   }
 
@@ -783,12 +782,12 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * Save each RDD in `this` DStream as a Hadoop file. The file name at each batch interval is
    * generated based on `prefix` and `suffix`: "prefix-TIME_IN_MS.suffix".
    */
-  def saveAsNewAPIHadoopFiles(
+  def saveAsNewAPIHadoopFiles[F <: NewOutputFormat[_, _]](
       prefix: String,
       suffix: String,
       keyClass: Class[_],
       valueClass: Class[_],
-      outputFormatClass: Class[_ <: NewOutputFormat[_, _]],
+      outputFormatClass: Class[F],
       conf: Configuration = new Configuration) {
     dstream.saveAsNewAPIHadoopFiles(prefix, suffix, keyClass, valueClass, outputFormatClass, conf)
   }
@@ -815,6 +814,6 @@ object JavaPairDStream {
 
   def scalaToJavaLong[K: ClassTag](dstream: JavaPairDStream[K, Long])
   : JavaPairDStream[K, JLong] = {
-    StreamingContext.toPairDStreamFunctions(dstream.dstream).mapValues(new JLong(_))
+    DStream.toPairDStreamFunctions(dstream.dstream).mapValues(new JLong(_))
   }
 }

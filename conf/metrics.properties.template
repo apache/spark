@@ -87,6 +87,7 @@
 #   period    10            Poll period
 #   unit      seconds       Units of poll period
 #   prefix    EMPTY STRING  Prefix to prepend to metric name
+#   protocol  tcp           Protocol ("tcp" or "udp") to use
 
 ## Examples
 # Enable JmxSink for all instances by class name

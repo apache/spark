@@ -49,7 +49,9 @@ class InformationGainStats(
         gain == other.gain &&
         impurity == other.impurity &&
         leftImpurity == other.leftImpurity &&
-        rightImpurity == other.rightImpurity
+        rightImpurity == other.rightImpurity &&
+        leftPredict == other.leftPredict &&
+        rightPredict == other.rightPredict
       }
       case _ => false
     }

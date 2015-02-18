@@ -38,8 +38,8 @@ private[graphx] object VertexPartition {
    * Implicit conversion to allow invoking `VertexPartitionBase` operations directly on a
    * `VertexPartition`.
    */
-  implicit def partitionToOps[VD: ClassTag](partition: VertexPartition[VD]) =
-    new VertexPartitionOps(partition)
+  implicit def partitionToOps[VD: ClassTag](partition: VertexPartition[VD])
+    : VertexPartitionOps[VD] = new VertexPartitionOps(partition)
 
   /**
    * Implicit evidence that `VertexPartition` is a member of the `VertexPartitionBaseOpsConstructor`

@@ -34,7 +34,8 @@ import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.network.nio.NioBlockTransferService
-import org.apache.spark.scheduler.LiveListenerBus
+import org.apache.spark.scheduler.{OutputCommitCoordinator, LiveListenerBus}
+import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinatorActor
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleMemoryManager, ShuffleManager}
 import org.apache.spark.storage._
@@ -67,6 +68,7 @@ class SparkEnv (
     val sparkFilesDir: String,
     val metricsSystem: MetricsSystem,
     val shuffleMemoryManager: ShuffleMemoryManager,
+    val outputCommitCoordinator: OutputCommitCoordinator,
     val conf: SparkConf) extends Logging {
 
   private[spark] var isStopped = false
@@ -75,6 +77,8 @@ class SparkEnv (
   // A general, soft-reference map for metadata needed during HadoopRDD split computation
   // (e.g., HadoopFileRDD uses this to cache JobConfs and InputFormats).
   private[spark] val hadoopJobMetadata = new MapMaker().softValues().makeMap[String, Any]()
+
+  private var driverTmpDirToDelete: Option[String] = None
 
   private[spark] def stop() {
     isStopped = true
@@ -86,6 +90,7 @@ class SparkEnv (
     blockManager.stop()
     blockManager.master.stop()
     metricsSystem.stop()
+    outputCommitCoordinator.stop()
     actorSystem.shutdown()
     // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
     // down, but let's call it anyway in case it gets fixed in a later release
@@ -93,6 +98,22 @@ class SparkEnv (
     // actorSystem.awaitTermination()
 
     // Note that blockTransferService is stopped by BlockManager since it is started by it.
+    
+    // If we only stop sc, but the driver process still run as a services then we need to delete
+    // the tmp dir, if not, it will create too many tmp dirs.
+    // We only need to delete the tmp dir create by driver, because sparkFilesDir is point to the
+    // current working dir in executor which we do not need to delete.
+    driverTmpDirToDelete match {
+      case Some(path) => {
+        try {
+          Utils.deleteRecursively(new File(path))
+        } catch {
+          case e: Exception =>
+            logWarning(s"Exception while deleting Spark temp dir: $path", e)
+        }
+      }
+      case None => // We just need to delete tmp dir created by driver, so do nothing on executor
+    }
   }
 
   private[spark]
@@ -151,7 +172,8 @@ object SparkEnv extends Logging {
   private[spark] def createDriverEnv(
       conf: SparkConf,
       isLocal: Boolean,
-      listenerBus: LiveListenerBus): SparkEnv = {
+      listenerBus: LiveListenerBus,
+      mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
     assert(conf.contains("spark.driver.host"), "spark.driver.host is not set on the driver!")
     assert(conf.contains("spark.driver.port"), "spark.driver.port is not set on the driver!")
     val hostname = conf.get("spark.driver.host")
@@ -163,7 +185,8 @@ object SparkEnv extends Logging {
       port,
       isDriver = true,
       isLocal = isLocal,
-      listenerBus = listenerBus
+      listenerBus = listenerBus,
+      mockOutputCommitCoordinator = mockOutputCommitCoordinator
     )
   }
 
@@ -202,7 +225,8 @@ object SparkEnv extends Logging {
       isDriver: Boolean,
       isLocal: Boolean,
       listenerBus: LiveListenerBus = null,
-      numUsableCores: Int = 0): SparkEnv = {
+      numUsableCores: Int = 0,
+      mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
 
     // Listener bus is only used on the driver
     if (isDriver) {
@@ -312,7 +336,7 @@ object SparkEnv extends Logging {
     val httpFileServer =
       if (isDriver) {
         val fileServerPort = conf.getInt("spark.fileserver.port", 0)
-        val server = new HttpFileServer(securityManager, fileServerPort)
+        val server = new HttpFileServer(conf, securityManager, fileServerPort)
         server.initialize()
         conf.set("spark.fileserver.uri",  server.serverUri)
         server
@@ -326,6 +350,10 @@ object SparkEnv extends Logging {
       // Then we can start the metrics system.
       MetricsSystem.createMetricsSystem("driver", conf, securityManager)
     } else {
+      // We need to set the executor ID before the MetricsSystem is created because sources and
+      // sinks specified in the metrics configuration file will want to incorporate this executor's
+      // ID into the metrics they report.
+      conf.set("spark.executor.id", executorId)
       val ms = MetricsSystem.createMetricsSystem("executor", conf, securityManager)
       ms.start()
       ms
@@ -335,7 +363,7 @@ object SparkEnv extends Logging {
     // this is a temporary directory; in distributed mode, this is the executor's current working
     // directory.
     val sparkFilesDir: String = if (isDriver) {
-      Utils.createTempDir().getAbsolutePath
+      Utils.createTempDir(Utils.getLocalDir(conf), "userFiles").getAbsolutePath
     } else {
       "."
     }
@@ -346,7 +374,14 @@ object SparkEnv extends Logging {
         "levels using the RDD.persist() method instead.")
     }
 
-    new SparkEnv(
+    val outputCommitCoordinator = mockOutputCommitCoordinator.getOrElse {
+      new OutputCommitCoordinator(conf)
+    }
+    val outputCommitCoordinatorActor = registerOrLookup("OutputCommitCoordinator",
+      new OutputCommitCoordinatorActor(outputCommitCoordinator))
+    outputCommitCoordinator.coordinatorActor = Some(outputCommitCoordinatorActor)
+
+    val envInstance = new SparkEnv(
       executorId,
       actorSystem,
       serializer,
@@ -362,7 +397,17 @@ object SparkEnv extends Logging {
       sparkFilesDir,
       metricsSystem,
       shuffleMemoryManager,
+      outputCommitCoordinator,
       conf)
+      
+    // Add a reference to tmp dir created by driver, we will delete this tmp dir when stop() is
+    // called, and we only need to do it for driver. Because driver may run as a service, and if we
+    // don't delete this tmp dir when sc is stopped, then will create too many tmp dirs.
+    if (isDriver) {
+      envInstance.driverTmpDirToDelete = Some(sparkFilesDir)
+    }
+
+    envInstance
   }
 
   /**
@@ -395,7 +440,7 @@ object SparkEnv extends Logging {
     val sparkProperties = (conf.getAll ++ schedulerMode).sorted
 
     // System properties that are not java classpaths
-    val systemProperties = System.getProperties.iterator.toSeq
+    val systemProperties = Utils.getSystemProperties.toSeq
     val otherProperties = systemProperties.filter { case (k, _) =>
       k != "java.class.path" && !k.startsWith("spark.")
     }.sorted

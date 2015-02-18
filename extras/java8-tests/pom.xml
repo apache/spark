@@ -60,11 +60,6 @@
       <artifactId>junit-interface</artifactId>
       <scope>test</scope>
     </dependency>
-    <dependency>
-      <groupId>org.scalatest</groupId>
-      <artifactId>scalatest_${scala.binary.version}</artifactId>
-      <scope>test</scope>
-    </dependency>
   </dependencies>
 
   <profiles>
@@ -155,16 +150,6 @@
           </execution>
           <execution>
             <id>attach-scaladocs</id>
-            <phase>none</phase>
-          </execution>
-        </executions>
-      </plugin>
-      <plugin>
-        <groupId>org.scalatest</groupId>
-        <artifactId>scalatest-maven-plugin</artifactId>
-        <executions>
-          <execution>
-            <id>test</id>
             <phase>none</phase>
           </execution>
         </executions>

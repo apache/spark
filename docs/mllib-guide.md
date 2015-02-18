@@ -1,6 +1,8 @@
 ---
 layout: global
-title: Machine Learning Library (MLlib) Programming Guide
+title: MLlib
+displayTitle: Machine Learning Library (MLlib) Guide
+description: MLlib machine learning library overview for Spark SPARK_VERSION_SHORT
 ---
 
 MLlib is Spark's scalable machine learning library consisting of common learning algorithms and utilities,
@@ -19,10 +21,15 @@ filtering, dimensionality reduction, as well as underlying optimization primitiv
   * [naive Bayes](mllib-naive-bayes.html)
   * [decision trees](mllib-decision-tree.html)
   * [ensembles of trees](mllib-ensembles.html) (Random Forests and Gradient-Boosted Trees)
+  * [isotonic regression](mllib-isotonic-regression.html)
 * [Collaborative filtering](mllib-collaborative-filtering.html)
   * alternating least squares (ALS)
 * [Clustering](mllib-clustering.html)
-  * k-means
+  * [k-means](mllib-clustering.html#k-means)
+  * [Gaussian mixture](mllib-clustering.html#gaussian-mixture)
+  * [power iteration clustering (PIC)](mllib-clustering.html#power-iteration-clustering-pic)
+  * [latent Dirichlet allocation (LDA)](mllib-clustering.html#latent-dirichlet-allocation-lda)
+  * [streaming k-means](mllib-clustering.html#streaming-k-means)
 * [Dimensionality reduction](mllib-dimensionality-reduction.html)
   * singular value decomposition (SVD)
   * principal component analysis (PCA)
@@ -35,38 +42,49 @@ MLlib is under active development.
 The APIs marked `Experimental`/`DeveloperApi` may change in future releases, 
 and the migration guide below will explain all changes between releases.
 
-# spark.ml: The New ML Package
+# spark.ml: high-level APIs for ML pipelines
 
-Spark 1.2 includes a new machine learning package called `spark.ml`, currently an alpha component but potentially a successor to `spark.mllib`.  The `spark.ml` package aims to replace the old APIs with a cleaner, more uniform set of APIs which will help users create full machine learning pipelines.
+Spark 1.2 includes a new package called `spark.ml`, which aims to provide a uniform set of
+high-level APIs that help users create and tune practical machine learning pipelines.
+It is currently an alpha component, and we would like to hear back from the community about
+how it fits real-world use cases and how it could be improved.
+
+Note that we will keep supporting and adding features to `spark.mllib` along with the
+development of `spark.ml`.
+Users should be comfortable using `spark.mllib` features and expect more features coming.
+Developers should contribute new algorithms to `spark.mllib` and can optionally contribute
+to `spark.ml`.
 
 See the **[spark.ml programming guide](ml-guide.html)** for more information on this package.
 
-Users can use algorithms from either of the two packages, but APIs may differ.  Currently, `spark.ml` offers a subset of the algorithms from `spark.mllib`.
-
-Developers should contribute new algorithms to `spark.mllib` and can optionally contribute to `spark.ml`.
-See the `spark.ml` programming guide linked above for more details.
-
 # Dependencies
 
-MLlib uses the linear algebra package [Breeze](http://www.scalanlp.org/),
-which depends on [netlib-java](https://github.com/fommil/netlib-java),
-and [jblas](https://github.com/mikiobraun/jblas). 
-`netlib-java` and `jblas` depend on native Fortran routines.
-You need to install the
+MLlib uses the linear algebra package
+[Breeze](http://www.scalanlp.org/), which depends on
+[netlib-java](https://github.com/fommil/netlib-java) for optimised
+numerical processing. If natives are not available at runtime, you
+will see a warning message and a pure JVM implementation will be used
+instead.
+
+To learn more about the benefits and background of system optimised
+natives, you may wish to watch Sam Halliday's ScalaX talk on
+[High Performance Linear Algebra in Scala](http://fommil.github.io/scalax14/#/)).
+
+Due to licensing issues with runtime proprietary binaries, we do not
+include `netlib-java`'s native proxies by default. To configure
+`netlib-java` / Breeze to use system optimised binaries, include
+`com.github.fommil.netlib:all:1.1.2` (or build Spark with
+`-Pnetlib-lgpl`) as a dependency of your project and read the
+[netlib-java](https://github.com/fommil/netlib-java) documentation for
+your platform's additional installation instructions.
+
+MLlib also uses [jblas](https://github.com/mikiobraun/jblas) which
+will require you to install the
 [gfortran runtime library](https://github.com/mikiobraun/jblas/wiki/Missing-Libraries)
 if it is not already present on your nodes.
-MLlib will throw a linking error if it cannot detect these libraries automatically.
-Due to license issues, we do not include `netlib-java`'s native libraries in MLlib's
-dependency set under default settings.
-If no native library is available at runtime, you will see a warning message.
-To use native libraries from `netlib-java`, please build Spark with `-Pnetlib-lgpl` or
-include `com.github.fommil.netlib:all:1.1.2` as a dependency of your project.
-If you want to use optimized BLAS/LAPACK libraries such as
-[OpenBLAS](http://www.openblas.net/), please link its shared libraries to
-`/usr/lib/libblas.so.3` and `/usr/lib/liblapack.so.3`, respectively.
-BLAS/LAPACK libraries on worker nodes should be built without multithreading.
 
-To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 or newer.
+To use MLlib in Python, you will need [NumPy](http://www.numpy.org)
+version 1.4 or newer.
 
 ---
 

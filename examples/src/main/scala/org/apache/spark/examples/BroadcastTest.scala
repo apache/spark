@@ -28,11 +28,9 @@ object BroadcastTest {
     val bcName = if (args.length > 2) args(2) else "Http"
     val blockSize = if (args.length > 3) args(3) else "4096"
 
-    System.setProperty("spark.broadcast.factory", "org.apache.spark.broadcast." + bcName +
-      "BroadcastFactory")
-    System.setProperty("spark.broadcast.blockSize", blockSize)
     val sparkConf = new SparkConf().setAppName("Broadcast Test")
-
+      .set("spark.broadcast.factory", s"org.apache.spark.broadcast.${bcName}BroaddcastFactory")
+      .set("spark.broadcast.blockSize", blockSize)
     val sc = new SparkContext(sparkConf)
 
     val slices = if (args.length > 0) args(0).toInt else 2

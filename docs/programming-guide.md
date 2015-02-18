@@ -1,6 +1,7 @@
 ---
 layout: global
 title: Spark Programming Guide
+description: Spark SPARK_VERSION_SHORT programming guide in Java, Scala and Python
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -172,8 +173,11 @@ in-process.
 In the Spark shell, a special interpreter-aware SparkContext is already created for you, in the
 variable called `sc`. Making your own SparkContext will not work. You can set which master the
 context connects to using the `--master` argument, and you can add JARs to the classpath
-by passing a comma-separated list to the `--jars` argument.
-For example, to run `bin/spark-shell` on exactly four cores, use:
+by passing a comma-separated list to the `--jars` argument. You can also add dependencies 
+(e.g. Spark Packages) to your shell session by supplying a comma-separated list of maven coordinates 
+to the `--packages` argument. Any additional repositories where dependencies might exist (e.g. SonaType)
+can be passed to the `--repositories` argument. For example, to run `bin/spark-shell` on exactly
+four cores, use:
 
 {% highlight bash %}
 $ ./bin/spark-shell --master local[4]
@@ -183,6 +187,12 @@ Or, to also add `code.jar` to its classpath, use:
 
 {% highlight bash %}
 $ ./bin/spark-shell --master local[4] --jars code.jar
+{% endhighlight %}
+
+To include a dependency using maven coordinates:
+
+{% highlight bash %}
+$ ./bin/spark-shell --master local[4] --packages "org.example:example:0.1"
 {% endhighlight %}
 
 For a complete list of options, run `spark-shell --help`. Behind the scenes,
@@ -195,7 +205,11 @@ For a complete list of options, run `spark-shell --help`. Behind the scenes,
 In the PySpark shell, a special interpreter-aware SparkContext is already created for you, in the
 variable called `sc`. Making your own SparkContext will not work. You can set which master the
 context connects to using the `--master` argument, and you can add Python .zip, .egg or .py files
-to the runtime path by passing a comma-separated list to `--py-files`.
+to the runtime path by passing a comma-separated list to `--py-files`. You can also add dependencies
+(e.g. Spark Packages) to your shell session by supplying a comma-separated list of maven coordinates
+to the `--packages` argument. Any additional repositories where dependencies might exist (e.g. SonaType)
+can be passed to the `--repositories` argument. Any python dependencies a Spark Package has (listed in 
+the requirements.txt of that package) must be manually installed using pip when necessary.
 For example, to run `bin/pyspark` on exactly four cores, use:
 
 {% highlight bash %}
@@ -886,7 +900,7 @@ for details.
   <td> <b>groupByKey</b>([<i>numTasks</i>]) </td>
   <td> When called on a dataset of (K, V) pairs, returns a dataset of (K, Iterable&lt;V&gt;) pairs. <br />
     <b>Note:</b> If you are grouping in order to perform an aggregation (such as a sum or
-      average) over each key, using <code>reduceByKey</code> or <code>combineByKey</code> will yield much better 
+      average) over each key, using <code>reduceByKey</code> or <code>aggregateByKey</code> will yield much better 
       performance.
     <br />
     <b>Note:</b> By default, the level of parallelism in the output depends on the number of partitions of the parent RDD.
@@ -913,7 +927,7 @@ for details.
 </tr>
 <tr>
   <td> <b>cogroup</b>(<i>otherDataset</i>, [<i>numTasks</i>]) </td>
-  <td> When called on datasets of type (K, V) and (K, W), returns a dataset of (K, Iterable&lt;V&gt;, Iterable&lt;W&gt;) tuples. This operation is also called <code>groupWith</code>. </td>
+  <td> When called on datasets of type (K, V) and (K, W), returns a dataset of (K, (Iterable&lt;V&gt;, Iterable&lt;W&gt;)) tuples. This operation is also called <code>groupWith</code>. </td>
 </tr>
 <tr>
   <td> <b>cartesian</b>(<i>otherDataset</i>) </td>
@@ -974,7 +988,7 @@ for details.
 </tr>
 <tr>
   <td> <b>take</b>(<i>n</i>) </td>
-  <td> Return an array with the first <i>n</i> elements of the dataset. Note that this is currently not executed in parallel. Instead, the driver program computes all the elements. </td>
+  <td> Return an array with the first <i>n</i> elements of the dataset. </td>
 </tr>
 <tr>
   <td> <b>takeSample</b>(<i>withReplacement</i>, <i>num</i>, [<i>seed</i>]) </td>
@@ -1316,7 +1330,35 @@ For accumulator updates performed inside <b>actions only</b>, Spark guarantees t
 will only be applied once, i.e. restarted tasks will not update the value. In transformations, users should be aware 
 of that each task's update may be applied more than once if tasks or job stages are re-executed.
 
+Accumulators do not change the lazy evaluation model of Spark. If they are being updated within an operation on an RDD, their value is only updated once that RDD is computed as part of an action. Consequently, accumulator updates are not guaranteed to be executed when made within a lazy transformation like `map()`. The below code fragment demonstrates this property:
 
+<div class="codetabs">
+
+<div data-lang="scala"  markdown="1">
+{% highlight scala %}
+val acc = sc.accumulator(0)
+data.map(x => acc += x; f(x))
+// Here, acc is still 0 because no actions have cause the `map` to be computed.
+{% endhighlight %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% highlight java %}
+Accumulator<Integer> accum = sc.accumulator(0);
+data.map(x -> accum.add(x); f(x););
+// Here, accum is still 0 because no actions have cause the `map` to be computed.
+{% endhighlight %}
+</div>
+
+<div data-lang="python"  markdown="1">
+{% highlight python %}
+accum = sc.accumulator(0)
+data.map(lambda x => acc.add(x); f(x))
+# Here, acc is still 0 because no actions have cause the `map` to be computed.
+{% endhighlight %}
+</div>
+
+</div>
 
 # Deploying to a Cluster
 

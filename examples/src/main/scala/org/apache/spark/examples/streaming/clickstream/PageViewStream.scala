@@ -19,7 +19,6 @@ package org.apache.spark.examples.streaming.clickstream
 
 import org.apache.spark.SparkContext._
 import org.apache.spark.streaming.{Seconds, StreamingContext}
-import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.examples.streaming.StreamingExamples
 // scalastyle:off
 /** Analyses a streaming dataset of web page views. This class demonstrates several types of

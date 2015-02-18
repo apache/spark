@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 
 /**
  * A parent class for mutable container objects that are reused when the values are changed,
@@ -209,6 +209,8 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
 
   override def length: Int = values.length
 
+  override def toSeq: Seq[Any] = values.map(_.boxed).toSeq
+
   override def setNullAt(i: Int): Unit = {
     values(i).isNull = true
   }
@@ -218,20 +220,19 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
   override def isNullAt(i: Int): Boolean = values(i).isNull
 
   override def copy(): Row = {
-    val newValues = new Array[MutableValue](values.length)
+    val newValues = new Array[Any](values.length)
     var i = 0
     while (i < values.length) {
-      newValues(i) = values(i).copy()
+      newValues(i) = values(i).boxed
       i += 1
     }
-    new SpecificMutableRow(newValues)
+
+    new GenericRow(newValues)
   }
 
   override def update(ordinal: Int, value: Any): Unit = {
     if (value == null) setNullAt(ordinal) else values(ordinal).update(value)
   }
-
-  override def iterator: Iterator[Any] = values.map(_.boxed).iterator
 
   override def setString(ordinal: Int, value: String) = update(ordinal, value)
 
