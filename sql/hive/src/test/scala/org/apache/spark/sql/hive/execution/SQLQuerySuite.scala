@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.hive.{MetastoreRelation, HiveShim}
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
+import org.apache.spark.sql.parquet.ParquetRelation2
+import org.apache.spark.sql.sources.LogicalRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SQLConf}
 
@@ -40,6 +43,73 @@ class SQLQuerySuite extends QueryTest {
       sql("SELECT * FROM (SELECT key + key AS a FROM src SORT BY value) t ORDER BY t.a"),
       sql("SELECT key + key as a FROM src ORDER BY a").collect().toSeq
     )
+  }
+
+  test("CTAS without serde") {
+    def checkRelation(tableName: String, isDataSourceParquet: Boolean): Unit = {
+      val relation = EliminateSubQueries(catalog.lookupRelation(Seq(tableName)))
+      relation match {
+        case LogicalRelation(r: ParquetRelation2) =>
+          if (!isDataSourceParquet) {
+            fail(
+              s"${classOf[MetastoreRelation].getCanonicalName} is expected, but found " +
+              s"${ParquetRelation2.getClass.getCanonicalName}.")
+          }
+
+        case r: MetastoreRelation =>
+          if (isDataSourceParquet) {
+            fail(
+              s"${ParquetRelation2.getClass.getCanonicalName} is expected, but found " +
+              s"${classOf[MetastoreRelation].getCanonicalName}.")
+          }
+      }
+    }
+
+    val originalConf = getConf("spark.sql.hive.convertCTAS", "false")
+
+    setConf("spark.sql.hive.convertCTAS", "true")
+
+    sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
+    sql("CREATE TABLE IF NOT EXISTS ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
+    var message = intercept[AnalysisException] {
+      sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
+    }.getMessage
+    assert(message.contains("Table ctas1 already exists"))
+    checkRelation("ctas1", true)
+    sql("DROP TABLE ctas1")
+
+    // Specifying database name for query can be converted to data source write path
+    // is not allowed right now.
+    message = intercept[AnalysisException] {
+      sql("CREATE TABLE default.ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
+    }.getMessage
+    assert(
+      message.contains("Cannot specify database name in a CTAS statement"),
+      "When spark.sql.hive.convertCTAS is true, we should not allow " +
+      "database name specified.")
+
+    sql("CREATE TABLE ctas1 stored as textfile AS SELECT key k, value FROM src ORDER BY k, value")
+    checkRelation("ctas1", true)
+    sql("DROP TABLE ctas1")
+
+    sql(
+      "CREATE TABLE ctas1 stored as sequencefile AS SELECT key k, value FROM src ORDER BY k, value")
+    checkRelation("ctas1", true)
+    sql("DROP TABLE ctas1")
+
+    sql("CREATE TABLE ctas1 stored as rcfile AS SELECT key k, value FROM src ORDER BY k, value")
+    checkRelation("ctas1", false)
+    sql("DROP TABLE ctas1")
+
+    sql("CREATE TABLE ctas1 stored as orc AS SELECT key k, value FROM src ORDER BY k, value")
+    checkRelation("ctas1", false)
+    sql("DROP TABLE ctas1")
+
+    sql("CREATE TABLE ctas1 stored as parquet AS SELECT key k, value FROM src ORDER BY k, value")
+    checkRelation("ctas1", false)
+    sql("DROP TABLE ctas1")
+
+    setConf("spark.sql.hive.convertCTAS", originalConf)
   }
 
   test("CTAS with serde") {
