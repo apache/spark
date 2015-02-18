@@ -25,7 +25,7 @@ splitIndex <- SparkR:::readInt(inputCon)
 execLen <- SparkR:::readInt(inputCon)
 execFunctionName <- unserialize(SparkR:::readRawLen(inputCon, execLen))
 
-# read the isInputSerialized bit flag
+# read the inputSerialization bit value
 inputSerialization <- SparkR:::readString(inputCon)
 
 # read the isOutputSerialized bit flag
@@ -73,7 +73,7 @@ if (isEmpty != 0) {
       data <- SparkR:::readDeserialize(inputCon)
     } else if (inputSerialization == "string") {
       data <- readLines(inputCon)
-    } else {
+    } else if (inputSerialization == "row") {
       data <- SparkR:::readDeserializeRows(inputCon)
     }
     output <- do.call(execFunctionName, list(splitIndex, data))
@@ -88,7 +88,7 @@ if (isEmpty != 0) {
       data <- SparkR:::readDeserialize(inputCon)
     } else if (inputSerialization == "string") {
       data <- readLines(inputCon)
-    } else {
+    } else if (inputSerialization == "row") {
       data <- SparkR:::readDeserializeRows(inputCon)
     }
 
