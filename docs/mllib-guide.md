@@ -44,7 +44,7 @@ and the migration guide below will explain all changes between releases.
 
 # spark.ml: high-level APIs for ML pipelines
 
-Spark 1.2 includes a new package called `spark.ml`, which aims to provide a uniform set of
+Spark 1.2 introduced a new package called `spark.ml`, which aims to provide a uniform set of
 high-level APIs that help users create and tune practical machine learning pipelines.
 It is currently an alpha component, and we would like to hear back from the community about
 how it fits real-world use cases and how it could be improved.
@@ -89,6 +89,25 @@ version 1.4 or newer.
 ---
 
 # Migration Guide
+
+## From 1.2 to 1.3
+
+In the `spark.mllib` package:
+
+* *(Breaking change)* In [`ALS`](api/scala/index.html#org.apache.spark.mllib.recommendation.ALS), the extraneous method `solveLeastSquares` has been removed.  The `DeveloperApi` method `analyzeBlocks` was also removed.
+* *(Breaking change)* In [`StandardScalerModel`](api/scala/index.html#org.apache.spark.mllib.feature.StandardScalerModel), the `variance` method has been replaced with the `std` method.  To compute the column variance values returned by the original `variance` method, simply square the standard deviation values returned by `std`.
+* *(Breaking change)* In [StreamingLinearRegressionWithSGD](api/scala/index.html#org.apache.spark.mllib.regression.StreamingLinearRegressionWithSGD), there were two changes:
+    * The constructor taking arguments was removed in favor of a builder patten using the default constructor plus parameter setter methods.
+    * Variable `model` is no longer public.
+* `PythonMLlibAPI` (the interface between Scala/Java and Python for MLlib) was a public API but is now private, declared `private[python]`.
+* *(Breaking change)* In [`DecisionTree`](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree) and its associated classes, there were several changes:
+    * In `DecisionTree`, the deprecated class method `train` has been removed.  (The object/static `train` methods remain.)
+    * In `Strategy`, the `checkpointDir` parameter has been removed.  Checkpointing is still supported, but the checkpoint directory must be set before calling tree and tree ensemble training.
+
+In `pyspark.mllib`:
+
+* *(Breaking change)* `mllib.stat.ChiSqTestResult` has been removed.
+
 
 ## From 1.1 to 1.2
 
