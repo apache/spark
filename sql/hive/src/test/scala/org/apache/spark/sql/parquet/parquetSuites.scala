@@ -31,7 +31,7 @@ import org.apache.spark.sql.hive.test.TestHive._
 case class ParquetData(intField: Int, stringField: String)
 // The data that also includes the partitioning key
 case class ParquetDataWithKey(p: Int, intField: Int, stringField: String)
-
+case class ParquetDataWithKeyAndComplexTypes(p: Int, intField: Int, stringField: String)
 
 /**
  * A suite to test the automatic conversion of metastore tables with parquet data to use the
@@ -59,6 +59,22 @@ class ParquetMetastoreSuite extends ParquetTest {
       create external table partitioned_parquet_with_key
       (
         intField INT,
+        stringField STRING
+      )
+      PARTITIONED BY (p int)
+      ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+       STORED AS
+       INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+       OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+      location '${partitionedTableDirWithKey.getCanonicalPath}'
+    """)
+
+    sql(s"""
+      create external table partitioned_parquet_with_key_and_complextypes
+      (
+        intField INT,
+        structField STRUCT<intStructField INT, stringStructField STRING>,
+        arrayField ARRAY<INT>,
         stringField STRING
       )
       PARTITIONED BY (p int)
