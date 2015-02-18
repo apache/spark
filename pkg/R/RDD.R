@@ -1275,6 +1275,43 @@ setMethod("aggregateRDD",
             Reduce(combOp, partitionList, zeroValue)
           })
 
+#' Pipes elements to a forked external process.
+#'
+#' The same as 'pipe()' in Spark.
+#'
+#' @param rdd The RDD whose elements are piped to the forked external process.
+#' @param command The command to fork an external process.
+#' @param env A named list to set environment variables of the external process.
+#' @return A new RDD created by piping all elements to a forked external process.
+#' @rdname pipeRDD
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:10)
+#' collect(pipeRDD(rdd, "more")
+#' Output: c("1", "2", ..., "10")
+#'}
+setGeneric("pipeRDD", function(rdd, command, env = list()) { 
+  standardGeneric("pipeRDD") 
+})
+
+#' @rdname pipeRDD
+#' @aliases pipeRDD,RDD,character-method
+setMethod("pipeRDD",
+          signature(rdd = "RDD", command = "character"),
+          function(rdd, command, env = list()) {
+            func <- function(part) {
+              trim.trailing.func <- function(x) {
+                sub("[\r\n]*$", "", toString(x))
+              }
+              input <- unlist(lapply(part, trim.trailing.func))
+              res <- system2(command, stdout = TRUE, input = input, env = env)
+              lapply(res, trim.trailing.func)
+            }
+            lapplyPartition(rdd, func)
+          })
+
 # TODO: Consider caching the name in the RDD's environment
 #' Return an RDD's name.
 #'
