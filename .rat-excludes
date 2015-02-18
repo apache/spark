@@ -15,6 +15,7 @@ TAGS
 RELEASE
 control
 docs
+docker/spark-mesos
 docker.properties.template
 fairscheduler.xml.template
 spark-defaults.conf.template
