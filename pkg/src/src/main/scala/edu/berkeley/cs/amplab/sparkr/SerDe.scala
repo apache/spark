@@ -282,3 +282,9 @@ object SerDe {
     value.foreach(v => writeBytes(out, v))
   }
 }
+
+object SerializationFormats {
+  val BYTE = "byte"
+  val STRING = "string"
+  val ROW = "row"
+}

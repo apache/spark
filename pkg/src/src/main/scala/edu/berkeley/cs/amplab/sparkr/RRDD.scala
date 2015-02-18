@@ -158,7 +158,7 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
             dataOut.writeInt(1)
           }
 
-          if (parentSerialized == "rows") {
+          if (parentSerialized == SerializationFormats.ROW) {
             SerDe.writeStringArr(dataOut, colNames)
             for (row <- iter) {
               val rowArr = row.asInstanceOf[Array[Byte]]
@@ -166,7 +166,7 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
             }
           } else {
             for (elem <- iter) {
-              if (parentSerialized == "byte") {
+              if (parentSerialized == SerializationFormats.BYTE) {
                 val elemArr = elem.asInstanceOf[Array[Byte]]
                 dataOut.writeInt(elemArr.length)
                 dataOut.write(elemArr, 0, elemArr.length)

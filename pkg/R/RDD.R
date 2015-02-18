@@ -22,11 +22,15 @@ setClass("PipelinedRDD",
                       prev_jrdd = "jobj"),
          contains = "RDD")
 
-
 setMethod("initialize", "RDD", function(.Object, jrdd, serialized,
                                         isCached, isCheckpointed, colNames) {
   # Check that RDD constructor is using the correct version of serialized
-  stopifnot(class(serialized) == "character") 
+  stopifnot(class(serialized) == "character")
+  stopifnot(serialized %in% c("byte", "string", "row"))
+  # RDD has three serialization types:
+  # byte: The RDD stores data serialized in R.
+  # string: The RDD stores data as strings.
+  # row: The RDD stores the serialized rows of a DataFrame.
   
   # We use an environment to store mutable states inside an RDD object.
   # Note that R's call-by-value semantics makes modifying slots inside an
@@ -95,7 +99,7 @@ setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) 
 #'
 #' @param jrdd Java object reference to the backing JavaRDD
 #' @param serialized "byte" if the RDD stores data serialized in R, "string" if the RDD stores strings, 
-#'        and "rows" if the RDD stores the rows of a DataFrame
+#'        and "row" if the RDD stores the rows of a DataFrame
 #' @param isCached TRUE if the RDD is cached
 #' @param isCheckpointed TRUE if the RDD has been checkpointed
 RDD <- function(jrdd, serialized = "byte", isCached = FALSE,
