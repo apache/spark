@@ -637,15 +637,14 @@ def _infer_schema(row):
     if isinstance(row, dict):
         items = sorted(row.items())
 
-    elif isinstance(row, tuple):
+    elif isinstance(row, (tuple, list)):
         if hasattr(row, "_fields"):  # namedtuple
             items = zip(row._fields, tuple(row))
         elif hasattr(row, "__FIELDS__"):  # Row
             items = zip(row.__FIELDS__, tuple(row))
-        elif all(isinstance(x, tuple) and len(x) == 2 for x in row):
-            items = row
         else:
-            raise ValueError("Can't infer schema from tuple")
+            names = ['_%d' % i for i in range(1, len(row) + 1)]
+            items = zip(names, row)
 
     elif hasattr(row, "__dict__"):  # object
         items = sorted(row.__dict__.items())
@@ -812,17 +811,10 @@ def _create_converter(dataType):
         if obj is None:
             return
 
-        if isinstance(obj, tuple):
-            if hasattr(obj, "_fields"):
-                d = dict(zip(obj._fields, obj))
-            elif hasattr(obj, "__FIELDS__"):
-                d = dict(zip(obj.__FIELDS__, obj))
-            elif all(isinstance(x, tuple) and len(x) == 2 for x in obj):
-                d = dict(obj)
-            else:
-                raise ValueError("unexpected tuple: %s" % str(obj))
+        if isinstance(obj, (tuple, list)):
+            return tuple(conv(v) for v, conv in zip(obj, converters))
 
-        elif isinstance(obj, dict):
+        if isinstance(obj, dict):
             d = obj
         elif hasattr(obj, "__dict__"):  # object
             d = obj.__dict__

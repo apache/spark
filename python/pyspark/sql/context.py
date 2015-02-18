@@ -351,6 +351,8 @@ class SQLContext(object):
         :return: a DataFrame
 
         >>> l = [('Alice', 1)]
+        >>> sqlCtx.createDataFrame(l).collect()
+        [Row(_1=u'Alice', _2=1)]
         >>> sqlCtx.createDataFrame(l, ['name', 'age']).collect()
         [Row(name=u'Alice', age=1)]
 
@@ -359,6 +361,8 @@ class SQLContext(object):
         [Row(age=1, name=u'Alice')]
 
         >>> rdd = sc.parallelize(l)
+        >>> sqlCtx.createDataFrame(rdd).collect()
+        [Row(_1=u'Alice', _2=1)]
         >>> df = sqlCtx.createDataFrame(rdd, ['name', 'age'])
         >>> df.collect()
         [Row(name=u'Alice', age=1)]
@@ -377,14 +381,17 @@ class SQLContext(object):
         >>> df3 = sqlCtx.createDataFrame(rdd, schema)
         >>> df3.collect()
         [Row(name=u'Alice', age=1)]
+
+        >>> sqlCtx.createDataFrame(df.toPandas()).collect()  # doctest: +SKIP
+        [Row(name=u'Alice', age=1)]
         """
         if isinstance(data, DataFrame):
             raise TypeError("data is already a DataFrame")
 
         if has_pandas and isinstance(data, pandas.DataFrame):
-            data = self._sc.parallelize(data.to_records(index=False))
             if schema is None:
                 schema = list(data.columns)
+            data = [r.tolist() for r in data.to_records(index=False)]
 
         if not isinstance(data, RDD):
             try:
@@ -399,7 +406,8 @@ class SQLContext(object):
         if isinstance(schema, (list, tuple)):
             first = data.first()
             if not isinstance(first, (list, tuple)):
-                raise ValueError("each row in `rdd` should be list or tuple")
+                raise ValueError("each row in `rdd` should be list or tuple, "
+                                 "but got %r" % type(first))
             row_cls = Row(*schema)
             schema = self._inferSchema(data.map(lambda r: row_cls(*r)), samplingRatio)
 
