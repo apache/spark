@@ -18,9 +18,11 @@
 package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
+import java.sql.DriverManager
+import java.util.{Calendar, GregorianCalendar}
+
 import org.apache.spark.sql.test._
 import org.scalatest.{FunSuite, BeforeAndAfter}
-import java.sql.DriverManager
 import TestSQLContext._
 
 class JDBCSuite extends FunSuite with BeforeAndAfter {
@@ -206,20 +208,25 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
     assert(rows(0).getString(5).equals("I am a clob!"))
   }
 
+
   test("H2 time types") {
     val rows = sql("SELECT * FROM timetypes").collect()
-    assert(rows(0).getAs[java.sql.Timestamp](0).getHours == 12)
-    assert(rows(0).getAs[java.sql.Timestamp](0).getMinutes == 34)
-    assert(rows(0).getAs[java.sql.Timestamp](0).getSeconds == 56)
-    assert(rows(0).getAs[java.sql.Date](1).getYear == 96)
-    assert(rows(0).getAs[java.sql.Date](1).getMonth == 0)
-    assert(rows(0).getAs[java.sql.Date](1).getDate == 1)
-    assert(rows(0).getAs[java.sql.Timestamp](2).getYear == 102)
-    assert(rows(0).getAs[java.sql.Timestamp](2).getMonth == 1)
-    assert(rows(0).getAs[java.sql.Timestamp](2).getDate == 20)
-    assert(rows(0).getAs[java.sql.Timestamp](2).getHours == 11)
-    assert(rows(0).getAs[java.sql.Timestamp](2).getMinutes == 22)
-    assert(rows(0).getAs[java.sql.Timestamp](2).getSeconds == 33)
+    val cal = new GregorianCalendar(java.util.Locale.ROOT)
+    cal.setTime(rows(0).getAs[java.sql.Timestamp](0))
+    assert(cal.get(Calendar.HOUR_OF_DAY) == 12)
+    assert(cal.get(Calendar.MINUTE) == 34)
+    assert(cal.get(Calendar.SECOND) == 56)
+    cal.setTime(rows(0).getAs[java.sql.Timestamp](1))
+    assert(cal.get(Calendar.YEAR) == 1996)
+    assert(cal.get(Calendar.MONTH) == 0)
+    assert(cal.get(Calendar.DAY_OF_MONTH) == 1)
+    cal.setTime(rows(0).getAs[java.sql.Timestamp](2))
+    assert(cal.get(Calendar.YEAR) == 2002)
+    assert(cal.get(Calendar.MONTH) == 1)
+    assert(cal.get(Calendar.DAY_OF_MONTH) == 20)
+    assert(cal.get(Calendar.HOUR) == 11)
+    assert(cal.get(Calendar.MINUTE) == 22)
+    assert(cal.get(Calendar.SECOND) == 33)
     assert(rows(0).getAs[java.sql.Timestamp](2).getNanos == 543543543)
   }
 
