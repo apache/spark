@@ -212,12 +212,10 @@ setMethod("partitionBy",
             depsBinArr <- getDependencies(partitionFunc)
 
             serializedHashFuncBytes <- serialize(as.character(substitute(partitionFunc)),
-                                                 connection = NULL,
-                                                 ascii = TRUE)
+                                                 connection = NULL)
 
             packageNamesArr <- serialize(.sparkREnv$.packages,
-                                         connection = NULL,
-                                         ascii = TRUE)
+                                         connection = NULL)
             broadcastArr <- lapply(ls(.broadcastNames), function(name) {
                                    get(name, .broadcastNames) })
             jrdd <- getJRDD(rdd)
