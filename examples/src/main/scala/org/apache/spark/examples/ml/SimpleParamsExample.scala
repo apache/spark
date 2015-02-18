@@ -58,7 +58,7 @@ object SimpleParamsExample {
       .setRegParam(0.01)
 
     // Learn a LogisticRegression model.  This uses the parameters stored in lr.
-    val model1 = lr.fit(training.toDF)
+    val model1 = lr.fit(training.toDF())
     // Since model1 is a Model (i.e., a Transformer produced by an Estimator),
     // we can view the parameters it used during fit().
     // This prints the parameter (name: value) pairs, where names are unique IDs for this
@@ -77,7 +77,7 @@ object SimpleParamsExample {
 
     // Now learn a new model using the paramMapCombined parameters.
     // paramMapCombined overrides all parameters set earlier via lr.set* methods.
-    val model2 = lr.fit(training.toDF, paramMapCombined)
+    val model2 = lr.fit(training.toDF(), paramMapCombined)
     println("Model 2 was fit using parameters: " + model2.fittingParamMap)
 
     // Prepare test data.
@@ -90,7 +90,7 @@ object SimpleParamsExample {
     // LogisticRegression.transform will only use the 'features' column.
     // Note that model2.transform() outputs a 'myProbability' column instead of the usual
     // 'probability' column since we renamed the lr.probabilityCol parameter previously.
-    model2.transform(test.toDF)
+    model2.transform(test.toDF())
       .select("features", "label", "myProbability", "prediction")
       .collect()
       .foreach { case Row(features: Vector, label: Double, prob: Vector, prediction: Double) =>
