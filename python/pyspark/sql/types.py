@@ -687,6 +687,8 @@ def _need_python_to_sql_conversion(dataType):
             _need_python_to_sql_conversion(dataType.valueType)
     elif isinstance(dataType, UserDefinedType):
         return True
+    elif isinstance(dataType, LongType):
+        return True
     else:
         return False
 
@@ -740,6 +742,8 @@ def _python_to_sql_converter(dataType):
         return lambda m: dict([(key_converter(k), value_converter(v)) for k, v in m.items()])
     elif isinstance(dataType, UserDefinedType):
         return lambda obj: dataType.serialize(obj)
+    elif isinstance(dataType, LongType):
+        return lambda x: long(x)
     else:
         raise ValueError("Unexpected type %r" % dataType)
 
