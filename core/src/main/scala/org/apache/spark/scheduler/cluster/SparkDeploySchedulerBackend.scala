@@ -36,7 +36,7 @@ private[spark] class SparkDeploySchedulerBackend(
 
   private var client: AppClient = null
   private var stopping = false
-  private val shutdownCallback: AtomicReference[(SparkDeploySchedulerBackend) => Unit] =
+  private var shutdownCallback: SparkDeploySchedulerBackend => Unit = _
     new AtomicReference
   @volatile private var appId: String = _
 
@@ -99,7 +99,7 @@ private[spark] class SparkDeploySchedulerBackend(
     super.stop()
     client.stop()
 
-    val callback = shutdownCallback.get
+    val callback = shutdownCallback
     if (callback != null) {
       callback(this)
     }
@@ -154,7 +154,7 @@ private[spark] class SparkDeploySchedulerBackend(
     }
 
   def setShutdownCallback(f: SparkDeploySchedulerBackend => Unit) {
-    shutdownCallback.set(f)
+    shutdownCallback = f
   }
 
   private def waitForRegistration() = {
