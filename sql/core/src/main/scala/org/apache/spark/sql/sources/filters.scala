@@ -25,3 +25,8 @@ case class GreaterThanOrEqual(attribute: String, value: Any) extends Filter
 case class LessThan(attribute: String, value: Any) extends Filter
 case class LessThanOrEqual(attribute: String, value: Any) extends Filter
 case class In(attribute: String, values: Array[Any]) extends Filter
+case class IsNull(attribute: String) extends Filter
+case class IsNotNull(attribute: String) extends Filter
+case class And(left: Filter, right: Filter) extends Filter
+case class Or(left: Filter, right: Filter) extends Filter
+case class Not(child: Filter) extends Filter

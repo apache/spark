@@ -143,7 +143,7 @@ class MySQLDatabase {
   }
 
   test("Basic test") {
-    val rdd = TestSQLContext.jdbcRDD(url(ip, "foo"), "tbl")
+    val rdd = TestSQLContext.jdbc(url(ip, "foo"), "tbl")
     val rows = rdd.collect
     assert(rows.length == 2)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -153,7 +153,7 @@ class MySQLDatabase {
   }
 
   test("Numeric types") {
-    val rdd = TestSQLContext.jdbcRDD(url(ip, "foo"), "numbers")
+    val rdd = TestSQLContext.jdbc(url(ip, "foo"), "numbers")
     val rows = rdd.collect
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -181,7 +181,7 @@ class MySQLDatabase {
   }
 
   test("Date types") {
-    val rdd = TestSQLContext.jdbcRDD(url(ip, "foo"), "dates")
+    val rdd = TestSQLContext.jdbc(url(ip, "foo"), "dates")
     val rows = rdd.collect
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -199,7 +199,7 @@ class MySQLDatabase {
   }
 
   test("String types") {
-    val rdd = TestSQLContext.jdbcRDD(url(ip, "foo"), "strings")
+    val rdd = TestSQLContext.jdbc(url(ip, "foo"), "strings")
     val rows = rdd.collect
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -225,9 +225,9 @@ class MySQLDatabase {
   }
 
   test("Basic write test") {
-    val rdd1 = TestSQLContext.jdbcRDD(url(ip, "foo"), "numbers")
-    val rdd2 = TestSQLContext.jdbcRDD(url(ip, "foo"), "dates")
-    val rdd3 = TestSQLContext.jdbcRDD(url(ip, "foo"), "strings")
+    val rdd1 = TestSQLContext.jdbc(url(ip, "foo"), "numbers")
+    val rdd2 = TestSQLContext.jdbc(url(ip, "foo"), "dates")
+    val rdd3 = TestSQLContext.jdbc(url(ip, "foo"), "strings")
     rdd1.createJDBCTable(url(ip, "foo"), "numberscopy", false)
     rdd2.createJDBCTable(url(ip, "foo"), "datescopy", false)
     rdd3.createJDBCTable(url(ip, "foo"), "stringscopy", false)

@@ -67,7 +67,7 @@ class DirectKafkaStreamSuite extends KafkaStreamSuiteBase
   }
 
 
-  test("basic stream receiving with multiple topics and smallest starting offset") {
+  ignore("basic stream receiving with multiple topics and smallest starting offset") {
     val topics = Set("basic1", "basic2", "basic3")
     val data = Map("a" -> 7, "b" -> 9)
     topics.foreach { t =>
@@ -113,7 +113,7 @@ class DirectKafkaStreamSuite extends KafkaStreamSuiteBase
     ssc.stop()
   }
 
-  test("receiving from largest starting offset") {
+  ignore("receiving from largest starting offset") {
     val topic = "largest"
     val topicPartition = TopicAndPartition(topic, 0)
     val data = Map("a" -> 10)
@@ -158,7 +158,7 @@ class DirectKafkaStreamSuite extends KafkaStreamSuiteBase
   }
 
 
-  test("creating stream by offset") {
+  ignore("creating stream by offset") {
     val topic = "offset"
     val topicPartition = TopicAndPartition(topic, 0)
     val data = Map("a" -> 10)
@@ -204,7 +204,7 @@ class DirectKafkaStreamSuite extends KafkaStreamSuiteBase
   }
 
   // Test to verify the offset ranges can be recovered from the checkpoints
-  test("offset recovery") {
+  ignore("offset recovery") {
     val topic = "recovery"
     createTopic(topic)
     testDir = Utils.createTempDir()

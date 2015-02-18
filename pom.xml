@@ -404,7 +404,7 @@
       <dependency>
         <groupId>commons-codec</groupId>
         <artifactId>commons-codec</artifactId>
-        <version>1.5</version>
+        <version>1.10</version>
       </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
@@ -617,19 +617,6 @@
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
         <version>2.2.1</version>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.easymock</groupId>
-        <artifactId>easymockclassextension</artifactId>
-        <version>3.1</version>
-        <scope>test</scope>
-      </dependency>
-      <!-- Needed by cglib which is needed by easymock. -->
-      <dependency>
-        <groupId>asm</groupId>
-        <artifactId>asm</artifactId>
-        <version>3.3.1</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1096,6 +1083,12 @@
           <artifactId>scala-maven-plugin</artifactId>
           <version>3.2.0</version>
           <executions>
+            <execution>
+              <id>eclipse-add-source</id>
+              <goals>
+                <goal>add-source</goal>
+              </goals>
+            </execution>
             <execution>
               <id>scala-compile-first</id>
               <phase>process-resources</phase>

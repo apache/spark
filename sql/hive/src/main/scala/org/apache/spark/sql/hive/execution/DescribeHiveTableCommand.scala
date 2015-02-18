@@ -29,9 +29,9 @@ import org.apache.spark.sql.hive.HiveShim
 import org.apache.spark.sql.SQLContext
 
 /**
- * Implementation for "describe [extended] table".
- *
  * :: DeveloperApi ::
+ *
+ * Implementation for "describe [extended] table".
  */
 @DeveloperApi
 case class DescribeHiveTableCommand(

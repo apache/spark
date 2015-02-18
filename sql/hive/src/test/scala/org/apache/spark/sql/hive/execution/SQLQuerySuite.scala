@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.hive.HiveShim
+import org.apache.spark.sql.hive.{MetastoreRelation, HiveShim}
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{QueryTest, Row, SQLConf}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SQLConf}
 
 case class Nested1(f1: Nested2)
 case class Nested2(f2: Nested3)
@@ -33,9 +34,6 @@ case class Nested3(f3: Int)
  * valid, but Hive currently cannot execute it.
  */
 class SQLQuerySuite extends QueryTest {
-
-  import org.apache.spark.sql.hive.test.TestHive.implicits._
-  val sqlCtx = TestHive
 
   test("SPARK-4512 Fix attribute reference resolution error when using SORT BY") {
     checkAnswer(
@@ -176,7 +174,8 @@ class SQLQuerySuite extends QueryTest {
   }
 
   test("double nested data") {
-    sparkContext.parallelize(Nested1(Nested2(Nested3(1))) :: Nil).registerTempTable("nested")
+    sparkContext.parallelize(Nested1(Nested2(Nested3(1))) :: Nil)
+      .toDF().registerTempTable("nested")
     checkAnswer(
       sql("SELECT f1.f2.f3 FROM nested"),
       Row(1))
@@ -186,7 +185,7 @@ class SQLQuerySuite extends QueryTest {
       sql("SELECT * FROM test_ctas_1234"),
       sql("SELECT * FROM nested").collect().toSeq)
 
-    intercept[org.apache.hadoop.hive.ql.metadata.InvalidTableException] {
+    intercept[AnalysisException] {
       sql("CREATE TABLE test_ctas_12345 AS SELECT * from notexists").collect()
     }
   }
@@ -199,7 +198,7 @@ class SQLQuerySuite extends QueryTest {
   }
 
   test("SPARK-4825 save join to table") {
-    val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString))
+    val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).toDF()
     sql("CREATE TABLE test1 (key INT, value STRING)")
     testData.insertInto("test1")
     sql("CREATE TABLE test2 (key INT, value STRING)")
@@ -279,7 +278,7 @@ class SQLQuerySuite extends QueryTest {
 
     val rowRdd = sparkContext.parallelize(row :: Nil)
 
-    sqlCtx.createDataFrame(rowRdd, schema).registerTempTable("testTable")
+    TestHive.createDataFrame(rowRdd, schema).registerTempTable("testTable")
 
     sql(
       """CREATE TABLE nullValuesInInnerComplexTypes
@@ -316,5 +315,35 @@ class SQLQuerySuite extends QueryTest {
     checkAnswer(sql("SELECT year(c) + 1 FROM data GROUP BY year(c) + 1"), Row(1971))
 
     dropTempTable("data")
+  }
+
+  test("logical.Project should not be resolved if it contains aggregates or generators") {
+    // This test is used to test the fix of SPARK-5875.
+    // The original issue was that Project's resolved will be true when it contains
+    // AggregateExpressions or Generators. However, in this case, the Project
+    // is not in a valid state (cannot be executed). Because of this bug, the analysis rule of
+    // PreInsertionCasts will actually start to work before ImplicitGenerate and then
+    // generates an invalid query plan.
+    val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i+1}]}"""))
+    jsonRDD(rdd).registerTempTable("data")
+    val originalConf = getConf("spark.sql.hive.convertCTAS", "false")
+    setConf("spark.sql.hive.convertCTAS", "false")
+
+    sql("CREATE TABLE explodeTest (key bigInt)")
+    table("explodeTest").queryExecution.analyzed match {
+      case metastoreRelation: MetastoreRelation => // OK
+      case _ =>
+        fail("To correctly test the fix of SPARK-5875, explodeTest should be a MetastoreRelation")
+    }
+
+    sql(s"INSERT OVERWRITE TABLE explodeTest SELECT explode(a) AS val FROM data")
+    checkAnswer(
+      sql("SELECT key from explodeTest"),
+      (1 to 5).flatMap(i => Row(i) :: Row(i + 1) :: Nil)
+    )
+
+    sql("DROP TABLE explodeTest")
+    dropTempTable("data")
+    setConf("spark.sql.hive.convertCTAS", originalConf)
   }
 }

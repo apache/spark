@@ -18,8 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.types.{BinaryType, BooleanType}
+import org.apache.spark.sql.types.{BinaryType, BooleanType, NativeType}
 
 object InterpretedPredicate {
   def apply(expression: Expression, inputSchema: Seq[Attribute]): (Row => Boolean) =
@@ -201,22 +202,118 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
 
 case class LessThan(left: Expression, right: Expression) extends BinaryComparison {
   def symbol = "<"
-  override def eval(input: Row): Any = c2(input, left, right, _.lt(_, _))
+
+  lazy val ordering = {
+    if (left.dataType != right.dataType) {
+      throw new TreeNodeException(this,
+        s"Types do not match ${left.dataType} != ${right.dataType}")
+    }
+    left.dataType match {
+      case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
+      case other => sys.error(s"Type $other does not support ordered operations")
+    }
+  }
+
+  override def eval(input: Row): Any = {
+    val evalE1 = left.eval(input)
+    if(evalE1 == null) {
+      null
+    } else {
+      val evalE2 = right.eval(input)
+      if (evalE2 == null) {
+        null
+      } else {
+        ordering.lt(evalE1, evalE2)
+      }
+    }
+  }
 }
 
 case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
   def symbol = "<="
-  override def eval(input: Row): Any = c2(input, left, right, _.lteq(_, _))
+
+  lazy val ordering = {
+    if (left.dataType != right.dataType) {
+      throw new TreeNodeException(this,
+        s"Types do not match ${left.dataType} != ${right.dataType}")
+    }
+    left.dataType match {
+      case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
+      case other => sys.error(s"Type $other does not support ordered operations")
+    }
+  }
+
+  override def eval(input: Row): Any = {
+    val evalE1 = left.eval(input)
+    if(evalE1 == null) {
+      null
+    } else {
+      val evalE2 = right.eval(input)
+      if (evalE2 == null) {
+        null
+      } else {
+        ordering.lteq(evalE1, evalE2)
+      }
+    }
+  }
 }
 
 case class GreaterThan(left: Expression, right: Expression) extends BinaryComparison {
   def symbol = ">"
-  override def eval(input: Row): Any = c2(input, left, right, _.gt(_, _))
+
+  lazy val ordering = {
+    if (left.dataType != right.dataType) {
+      throw new TreeNodeException(this,
+        s"Types do not match ${left.dataType} != ${right.dataType}")
+    }
+    left.dataType match {
+      case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
+      case other => sys.error(s"Type $other does not support ordered operations")
+    }
+  }
+
+  override def eval(input: Row): Any = {
+    val evalE1 = left.eval(input)
+    if(evalE1 == null) {
+      null
+    } else {
+      val evalE2 = right.eval(input)
+      if (evalE2 == null) {
+        null
+      } else {
+        ordering.gt(evalE1, evalE2)
+      }
+    }
+  }
 }
 
 case class GreaterThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
   def symbol = ">="
-  override def eval(input: Row): Any = c2(input, left, right, _.gteq(_, _))
+
+  lazy val ordering = {
+    if (left.dataType != right.dataType) {
+      throw new TreeNodeException(this,
+        s"Types do not match ${left.dataType} != ${right.dataType}")
+    }
+    left.dataType match {
+      case i: NativeType => i.ordering.asInstanceOf[Ordering[Any]]
+      case other => sys.error(s"Type $other does not support ordered operations")
+    }
+  }
+
+  override def eval(input: Row): Any = {
+    val evalE1 = left.eval(input)
+    if(evalE1 == null) {
+      null
+    } else {
+      val evalE2 = right.eval(input)
+      if (evalE2 == null) {
+        null
+      } else {
+        ordering.gteq(evalE1, evalE2)
+      }
+    }
+  }
 }
 
 case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)

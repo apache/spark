@@ -40,21 +40,24 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
    *
    * @param logData Stream containing event log data.
    * @param version Spark version that generated the events.
+   * @param sourceName Filename (or other source identifier) from whence @logData is being read
    */
-  def replay(logData: InputStream, version: String) {
+  def replay(logData: InputStream, version: String, sourceName: String) {
     var currentLine: String = null
+    var lineNumber: Int = 1
     try {
       val lines = Source.fromInputStream(logData).getLines()
       lines.foreach { line =>
         currentLine = line
         postToAll(JsonProtocol.sparkEventFromJson(parse(line)))
+        lineNumber += 1
       }
     } catch {
       case ioe: IOException =>
         throw ioe
       case e: Exception =>
-        logError("Exception in parsing Spark event log.", e)
-        logError("Malformed line: %s\n".format(currentLine))
+        logError(s"Exception parsing Spark event log: $sourceName", e)
+        logError(s"Malformed line #$lineNumber: $currentLine\n")
     }
   }
 

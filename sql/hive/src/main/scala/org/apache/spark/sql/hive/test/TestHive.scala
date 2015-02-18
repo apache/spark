@@ -196,6 +196,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   // The test tables that are defined in the Hive QTestUtil.
   // /itests/util/src/main/java/org/apache/hadoop/hive/ql/QTestUtil.java
+  // https://github.com/apache/hive/blob/branch-0.13/data/scripts/q_test_init.sql
   val hiveQTestUtilTables = Seq(
     TestTable("src",
       "CREATE TABLE src (key INT, value STRING)".cmd,

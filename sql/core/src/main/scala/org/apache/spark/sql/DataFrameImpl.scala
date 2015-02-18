@@ -18,9 +18,11 @@
 package org.apache.spark.sql
 
 import java.io.CharArrayWriter
+import java.sql.DriverManager
 
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
+import scala.reflect.runtime.universe.TypeTag
 import scala.collection.JavaConversions._
 
 import com.fasterxml.jackson.core.JsonFactory
@@ -29,16 +31,16 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.sql.catalyst.{SqlParser, ScalaReflection}
+import org.apache.spark.sql.catalyst.{expressions, SqlParser, ScalaReflection}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedStar, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{ExplainCommand, LogicalRDD, EvaluatePython}
+import org.apache.spark.sql.jdbc.JDBCWriteDetails
 import org.apache.spark.sql.json.JsonRDD
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{NumericType, StructType}
-
 
 /**
  * Internal implementation of [[DataFrame]]. Users of the API should use [[DataFrame]] directly.
@@ -67,7 +69,11 @@ private[sql] class DataFrameImpl protected[sql](
   @transient protected[sql] override val logicalPlan: LogicalPlan = queryExecution.logical match {
     // For various commands (like DDL) and queries with side effects, we force query optimization to
     // happen right away to let these side effects take place eagerly.
-    case _: Command | _: InsertIntoTable | _: CreateTableAsSelect[_] |_: WriteToFile =>
+    case _: Command |
+         _: InsertIntoTable |
+         _: CreateTableAsSelect[_] |
+         _: CreateTableUsingAsSelect |
+         _: WriteToFile =>
       LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sqlContext)
     case _ =>
       queryExecution.logical
@@ -83,7 +89,7 @@ private[sql] class DataFrameImpl protected[sql](
 
   protected[sql] def resolve(colName: String): NamedExpression = {
     queryExecution.analyzed.resolve(colName, sqlContext.analyzer.resolver).getOrElse {
-      throw new RuntimeException(
+      throw new AnalysisException(
         s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""")
     }
   }
@@ -94,7 +100,7 @@ private[sql] class DataFrameImpl protected[sql](
     }
   }
 
-  override def toDataFrame(colNames: String*): DataFrame = {
+  override def toDF(colNames: String*): DataFrame = {
     require(schema.size == colNames.size,
       "The number of columns doesn't match.\n" +
         "Old column names: " + schema.fields.map(_.name).mkString(", ") + "\n" +
@@ -229,14 +235,15 @@ private[sql] class DataFrameImpl protected[sql](
     }: _*)
   }
 
-  override def addColumn(colName: String, col: Column): DataFrame = {
+  override def withColumn(colName: String, col: Column): DataFrame = {
     select(Column("*"), col.as(colName))
   }
 
-  override def renameColumn(existingName: String, newName: String): DataFrame = {
+  override def withColumnRenamed(existingName: String, newName: String): DataFrame = {
+    val resolver = sqlContext.analyzer.resolver
     val colNames = schema.map { field =>
       val name = field.name
-      if (name == existingName) Column(name).as(newName) else Column(name)
+      if (resolver(name, existingName)) Column(name).as(newName) else Column(name)
     }
     select(colNames :_*)
   }
@@ -280,6 +287,32 @@ private[sql] class DataFrameImpl protected[sql](
 
   override def sample(withReplacement: Boolean, fraction: Double, seed: Long): DataFrame = {
     Sample(fraction, withReplacement, seed, logicalPlan)
+  }
+
+  override def explode[A <: Product : TypeTag]
+      (input: Column*)(f: Row => TraversableOnce[A]): DataFrame = {
+    val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
+    val attributes = schema.toAttributes
+    val rowFunction =
+      f.andThen(_.map(ScalaReflection.convertToCatalyst(_, schema).asInstanceOf[Row]))
+    val generator = UserDefinedGenerator(attributes, rowFunction, input.map(_.expr))
+
+    Generate(generator, join = true, outer = false, None, logicalPlan)
+  }
+
+  override def explode[A, B : TypeTag](
+      inputColumn: String,
+      outputColumn: String)(
+      f: A => TraversableOnce[B]): DataFrame = {
+    val dataType = ScalaReflection.schemaFor[B].dataType
+    val attributes = AttributeReference(outputColumn, dataType)() :: Nil
+    def rowFunction(row: Row) = {
+      f(row(0).asInstanceOf[A]).map(o => Row(ScalaReflection.convertToCatalyst(o, dataType)))
+    }
+    val generator = UserDefinedGenerator(attributes, rowFunction, apply(inputColumn).expr :: Nil)
+
+    Generate(generator, join = true, outer = false, None, logicalPlan)
+
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -338,12 +371,13 @@ private[sql] class DataFrameImpl protected[sql](
   /////////////////////////////////////////////////////////////////////////////
 
   override def rdd: RDD[Row] = {
+    // use a local variable to make sure the map closure doesn't capture the whole DataFrame
     val schema = this.schema
     queryExecution.executedPlan.execute().map(ScalaReflection.convertRowToScala(_, schema))
   }
 
   override def registerTempTable(tableName: String): Unit = {
-    sqlContext.registerRDDAsTable(this, tableName)
+    sqlContext.registerDataFrameAsTable(this, tableName)
   }
 
   override def saveAsParquetFile(path: String): Unit = {
@@ -360,7 +394,7 @@ private[sql] class DataFrameImpl protected[sql](
       mode: SaveMode,
       options: Map[String, String]): Unit = {
     val cmd =
-      CreateTableUsingAsLogicalPlan(
+      CreateTableUsingAsSelect(
         tableName,
         source,
         temporary = false,
@@ -407,6 +441,35 @@ private[sql] class DataFrameImpl protected[sql](
         }
       }
     }
+  }
+
+  def createJDBCTable(url: String, table: String, allowExisting: Boolean): Unit = {
+    val conn = DriverManager.getConnection(url)
+    try {
+      if (allowExisting) {
+        val sql = s"DROP TABLE IF EXISTS $table"
+        conn.prepareStatement(sql).executeUpdate()
+      }
+      val schema = JDBCWriteDetails.schemaString(this, url)
+      val sql = s"CREATE TABLE $table ($schema)"
+      conn.prepareStatement(sql).executeUpdate()
+    } finally {
+      conn.close()
+    }
+    JDBCWriteDetails.saveTable(this, url, table)
+  }
+
+  def insertIntoJDBC(url: String, table: String, overwrite: Boolean): Unit = {
+    if (overwrite) {
+      val conn = DriverManager.getConnection(url)
+      try {
+        val sql = s"TRUNCATE TABLE $table"
+        conn.prepareStatement(sql).executeUpdate()
+      } finally {
+        conn.close()
+      }
+    }
+    JDBCWriteDetails.saveTable(this, url, table)
   }
 
   ////////////////////////////////////////////////////////////////////////////
