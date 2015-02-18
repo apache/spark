@@ -30,8 +30,8 @@ import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.ml.feature.HashingTF;
 import org.apache.spark.ml.feature.Tokenizer;
 import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SQLContext;
 
 /**
  * A simple text classification pipeline that recognizes "spark" from input text. It uses the Java

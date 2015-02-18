@@ -29,8 +29,8 @@ import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SQLContext;
 
 /**
  * A simple example demonstrating ways to specify parameters for Estimators and Transformers.
