@@ -30,10 +30,20 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 class AnalysisSuite extends FunSuite with BeforeAndAfter {
   val caseSensitiveCatalog = new SimpleCatalog(true)
   val caseInsensitiveCatalog = new SimpleCatalog(false)
-  val caseSensitiveAnalyze =
+
+  val caseSensitiveAnalyzer =
     new Analyzer(caseSensitiveCatalog, EmptyFunctionRegistry, caseSensitive = true)
-  val caseInsensitiveAnalyze =
+  val caseInsensitiveAnalyzer =
     new Analyzer(caseInsensitiveCatalog, EmptyFunctionRegistry, caseSensitive = false)
+
+  val checkAnalysis = new CheckAnalysis
+
+
+  def caseSensitiveAnalyze(plan: LogicalPlan) =
+    checkAnalysis(caseSensitiveAnalyzer(plan))
+
+  def caseInsensitiveAnalyze(plan: LogicalPlan) =
+    checkAnalysis(caseInsensitiveAnalyzer(plan))
 
   val testRelation = LocalRelation(AttributeReference("a", IntegerType, nullable = true)())
   val testRelation2 = LocalRelation(
@@ -55,7 +65,7 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
         a.select(UnresolvedStar(None)).select('a).unionAll(b.select(UnresolvedStar(None)))
       }
 
-    assert(caseInsensitiveAnalyze(plan).resolved)
+    assert(caseInsensitiveAnalyzer(plan).resolved)
   }
 
   test("check project's resolved") {

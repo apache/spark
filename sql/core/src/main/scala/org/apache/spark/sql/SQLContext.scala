@@ -1051,6 +1051,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       Batch("Add exchange", Once, AddExchange(self)) :: Nil
   }
 
+  @transient
   protected[sql] val checkAnalysis = new CheckAnalysis {
     override val extendedCheckRules = Seq(
       sources.PreWriteCheck(catalog)
