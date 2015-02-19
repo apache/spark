@@ -126,7 +126,7 @@ class Pipeline extends Estimator[PipelineModel] {
     new PipelineModel(this, map, transformers.toArray)
   }
 
-  private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
+  override protected def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     val map = this.paramMap ++ paramMap
     val theStages = map(stages)
     require(theStages.toSet.size == theStages.size,
@@ -171,7 +171,7 @@ class PipelineModel private[ml] (
     stages.foldLeft(dataset)((cur, transformer) => transformer.transform(cur, map))
   }
 
-  private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
+  override protected def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     // Precedence of ParamMaps: paramMap > this.paramMap > fittingParamMap
     val map = (fittingParamMap ++ this.paramMap) ++ paramMap
     stages.foldLeft(schema)((cur, transformer) => transformer.transformSchema(cur, map))

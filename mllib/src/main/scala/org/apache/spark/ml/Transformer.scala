@@ -85,7 +85,7 @@ private[ml] abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, O
    */
   protected def validateInputType(inputType: DataType): Unit = {}
 
-  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
+  override protected def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     val map = this.paramMap ++ paramMap
     val inputType = schema(map(inputCol)).dataType
     validateInputType(inputType)
