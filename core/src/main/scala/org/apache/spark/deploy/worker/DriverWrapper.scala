@@ -26,10 +26,17 @@ import org.apache.spark.util.{AkkaUtils, ChildFirstURLClassLoader, MutableURLCla
 
 /**
  * Utility object for launching driver programs such that they share fate with the Worker process.
+ * This is used in standalone cluster mode only.
  */
 object DriverWrapper {
   def main(args: Array[String]) {
     args.toList match {
+      /*
+       * IMPORTANT: Spark 1.3 provides a stable application submission gateway that is both
+       * backward and forward compatible across future Spark versions. Because this gateway
+       * uses this class to launch the driver, the ordering and semantics of the arguments
+       * here must also remain consistent across versions.
+       */
       case workerUrl :: userJar :: mainClass :: extraArgs =>
         val conf = new SparkConf()
         val (actorSystem, _) = AkkaUtils.createActorSystem("Driver",

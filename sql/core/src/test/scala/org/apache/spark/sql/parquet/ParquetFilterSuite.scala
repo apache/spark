@@ -45,7 +45,7 @@ class ParquetFilterSuiteBase extends QueryTest with ParquetTest {
   val sqlContext = TestSQLContext
 
   private def checkFilterPredicate(
-      rdd: DataFrame,
+      df: DataFrame,
       predicate: Predicate,
       filterClass: Class[_ <: FilterPredicate],
       checker: (DataFrame, Seq[Row]) => Unit,
@@ -53,7 +53,7 @@ class ParquetFilterSuiteBase extends QueryTest with ParquetTest {
     val output = predicate.collect { case a: Attribute => a }.distinct
 
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED -> "true") {
-      val query = rdd
+      val query = df
         .select(output.map(e => Column(e)): _*)
         .where(Column(predicate))
 
@@ -85,36 +85,36 @@ class ParquetFilterSuiteBase extends QueryTest with ParquetTest {
 
   private def checkFilterPredicate
       (predicate: Predicate, filterClass: Class[_ <: FilterPredicate], expected: Seq[Row])
-      (implicit rdd: DataFrame): Unit = {
-    checkFilterPredicate(rdd, predicate, filterClass, checkAnswer(_, _: Seq[Row]), expected)
+      (implicit df: DataFrame): Unit = {
+    checkFilterPredicate(df, predicate, filterClass, checkAnswer(_, _: Seq[Row]), expected)
   }
 
   private def checkFilterPredicate[T]
       (predicate: Predicate, filterClass: Class[_ <: FilterPredicate], expected: T)
-      (implicit rdd: DataFrame): Unit = {
-    checkFilterPredicate(predicate, filterClass, Seq(Row(expected)))(rdd)
+      (implicit df: DataFrame): Unit = {
+    checkFilterPredicate(predicate, filterClass, Seq(Row(expected)))(df)
   }
 
   private def checkBinaryFilterPredicate
       (predicate: Predicate, filterClass: Class[_ <: FilterPredicate], expected: Seq[Row])
-      (implicit rdd: DataFrame): Unit = {
-    def checkBinaryAnswer(rdd: DataFrame, expected: Seq[Row]) = {
+      (implicit df: DataFrame): Unit = {
+    def checkBinaryAnswer(df: DataFrame, expected: Seq[Row]) = {
       assertResult(expected.map(_.getAs[Array[Byte]](0).mkString(",")).toSeq.sorted) {
-        rdd.map(_.getAs[Array[Byte]](0).mkString(",")).collect().toSeq.sorted
+        df.map(_.getAs[Array[Byte]](0).mkString(",")).collect().toSeq.sorted
       }
     }
 
-    checkFilterPredicate(rdd, predicate, filterClass, checkBinaryAnswer _, expected)
+    checkFilterPredicate(df, predicate, filterClass, checkBinaryAnswer _, expected)
   }
 
   private def checkBinaryFilterPredicate
       (predicate: Predicate, filterClass: Class[_ <: FilterPredicate], expected: Array[Byte])
-      (implicit rdd: DataFrame): Unit = {
-    checkBinaryFilterPredicate(predicate, filterClass, Seq(Row(expected)))(rdd)
+      (implicit df: DataFrame): Unit = {
+    checkBinaryFilterPredicate(predicate, filterClass, Seq(Row(expected)))(df)
   }
 
   test("filter pushdown - boolean") {
-    withParquetRDD((true :: false :: Nil).map(b => Tuple1.apply(Option(b)))) { implicit rdd =>
+    withParquetDataFrame((true :: false :: Nil).map(b => Tuple1.apply(Option(b)))) { implicit df =>
       checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
       checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], Seq(Row(true), Row(false)))
 
@@ -124,7 +124,7 @@ class ParquetFilterSuiteBase extends QueryTest with ParquetTest {
   }
 
   test("filter pushdown - short") {
-    withParquetRDD((1 to 4).map(i => Tuple1(Option(i.toShort)))) { implicit rdd =>
+    withParquetDataFrame((1 to 4).map(i => Tuple1(Option(i.toShort)))) { implicit df =>
       checkFilterPredicate(Cast('_1, IntegerType) === 1, classOf[Eq[_]], 1)
       checkFilterPredicate(
         Cast('_1, IntegerType) !== 1, classOf[NotEq[_]], (2 to 4).map(Row.apply(_)))
@@ -151,7 +151,7 @@ class ParquetFilterSuiteBase extends QueryTest with ParquetTest {
   }
 
   test("filter pushdown - integer") {
-    withParquetRDD((1 to 4).map(i => Tuple1(Option(i)))) { implicit rdd =>
+    withParquetDataFrame((1 to 4).map(i => Tuple1(Option(i)))) { implicit df =>
       checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
       checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], (1 to 4).map(Row.apply(_)))
 
@@ -176,7 +176,7 @@ class ParquetFilterSuiteBase extends QueryTest with ParquetTest {
   }
 
   test("filter pushdown - long") {
-    withParquetRDD((1 to 4).map(i => Tuple1(Option(i.toLong)))) { implicit rdd =>
+    withParquetDataFrame((1 to 4).map(i => Tuple1(Option(i.toLong)))) { implicit df =>
       checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
       checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], (1 to 4).map(Row.apply(_)))
 
@@ -201,7 +201,7 @@ class ParquetFilterSuiteBase extends QueryTest with ParquetTest {
   }
 
   test("filter pushdown - float") {
-    withParquetRDD((1 to 4).map(i => Tuple1(Option(i.toFloat)))) { implicit rdd =>
+    withParquetDataFrame((1 to 4).map(i => Tuple1(Option(i.toFloat)))) { implicit df =>
       checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
       checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], (1 to 4).map(Row.apply(_)))
 
@@ -226,7 +226,7 @@ class ParquetFilterSuiteBase extends QueryTest with ParquetTest {
   }
 
   test("filter pushdown - double") {
-    withParquetRDD((1 to 4).map(i => Tuple1(Option(i.toDouble)))) { implicit rdd =>
+    withParquetDataFrame((1 to 4).map(i => Tuple1(Option(i.toDouble)))) { implicit df =>
       checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
       checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], (1 to 4).map(Row.apply(_)))
 
@@ -251,7 +251,7 @@ class ParquetFilterSuiteBase extends QueryTest with ParquetTest {
   }
 
   test("filter pushdown - string") {
-    withParquetRDD((1 to 4).map(i => Tuple1(i.toString))) { implicit rdd =>
+    withParquetDataFrame((1 to 4).map(i => Tuple1(i.toString))) { implicit df =>
       checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
       checkFilterPredicate(
         '_1.isNotNull, classOf[NotEq[_]], (1 to 4).map(i => Row.apply(i.toString)))
@@ -282,7 +282,7 @@ class ParquetFilterSuiteBase extends QueryTest with ParquetTest {
       def b: Array[Byte] = int.toString.getBytes("UTF-8")
     }
 
-    withParquetRDD((1 to 4).map(i => Tuple1(i.b))) { implicit rdd =>
+    withParquetDataFrame((1 to 4).map(i => Tuple1(i.b))) { implicit df =>
       checkBinaryFilterPredicate('_1 === 1.b, classOf[Eq[_]], 1.b)
 
       checkBinaryFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])

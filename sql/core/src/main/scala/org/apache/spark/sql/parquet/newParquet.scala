@@ -72,7 +72,7 @@ import org.apache.spark.{Logging, Partition => SparkPartition, SerializableWrita
  *    null or empty string. This is similar to the `hive.exec.default.partition.name` configuration
  *    in Hive.
  */
-class DefaultSource
+private[sql] class DefaultSource
     extends RelationProvider
     with SchemaRelationProvider
     with CreatableRelationProvider {
@@ -147,7 +147,7 @@ private[sql] case class PartitionSpec(partitionColumns: StructType, partitions: 
  *    discovery.
  */
 @DeveloperApi
-case class ParquetRelation2(
+private[sql] case class ParquetRelation2(
     paths: Seq[String],
     parameters: Map[String, String],
     maybeSchema: Option[StructType] = None,
@@ -287,7 +287,16 @@ case class ParquetRelation2(
         }
       }
 
-      parquetSchema = maybeSchema.getOrElse(readSchema())
+      // To get the schema. We first try to get the schema defined in maybeSchema.
+      // If maybeSchema is not defined, we will try to get the schema from existing parquet data
+      // (through readSchema). If data does not exist, we will try to get the schema defined in
+      // maybeMetastoreSchema (defined in the options of the data source).
+      // Finally, if we still could not get the schema. We throw an error.
+      parquetSchema =
+        maybeSchema
+          .orElse(readSchema())
+          .orElse(maybeMetastoreSchema)
+          .getOrElse(sys.error("Failed to get the schema."))
 
       partitionKeysIncludedInParquetSchema =
         isPartitioned &&
@@ -308,7 +317,7 @@ case class ParquetRelation2(
       }
     }
 
-    private def readSchema(): StructType = {
+    private def readSchema(): Option[StructType] = {
       // Sees which file(s) we need to touch in order to figure out the schema.
       val filesToTouch =
       // Always tries the summary files first if users don't require a merged schema.  In this case,
@@ -600,7 +609,7 @@ case class ParquetRelation2(
   }
 }
 
-object ParquetRelation2 {
+private[sql] object ParquetRelation2 {
   // Whether we should merge schemas collected from all Parquet part-files.
   val MERGE_SCHEMA = "mergeSchema"
 
@@ -611,7 +620,8 @@ object ParquetRelation2 {
   // internally.
   private[sql] val METASTORE_SCHEMA = "metastoreSchema"
 
-  private[parquet] def readSchema(footers: Seq[Footer], sqlContext: SQLContext): StructType = {
+  private[parquet] def readSchema(
+      footers: Seq[Footer], sqlContext: SQLContext): Option[StructType] = {
     footers.map { footer =>
       val metadata = footer.getParquetMetadata.getFileMetaData
       val parquetSchema = metadata.getSchema
@@ -630,7 +640,7 @@ object ParquetRelation2 {
             sqlContext.conf.isParquetBinaryAsString,
             sqlContext.conf.isParquetINT96AsTimestamp))
       }
-    }.reduce { (left, right) =>
+    }.reduceOption { (left, right) =>
       try left.merge(right) catch { case e: Throwable =>
         throw new SparkException(s"Failed to merge incompatible schemas $left and $right", e)
       }

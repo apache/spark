@@ -289,7 +289,7 @@ private[tree] object TreeEnsembleModel {
       // Create Parquet data.
       val dataRDD = sc.parallelize(model.trees.zipWithIndex).flatMap { case (tree, treeId) =>
         tree.topNode.subtreeIterator.toSeq.map(node => NodeData(treeId, node))
-      }.toDF
+      }.toDF()
       dataRDD.saveAsParquetFile(Loader.dataPath(path))
     }
 

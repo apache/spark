@@ -28,49 +28,10 @@ class ColumnExpressionSuite extends QueryTest {
 
   // TODO: Add test cases for bitwise operations.
 
-  test("computability check") {
-    def shouldBeComputable(c: Column): Unit = assert(c.isComputable === true)
-
-    def shouldNotBeComputable(c: Column): Unit = {
-      assert(c.isComputable === false)
-      intercept[UnsupportedOperationException] { c.head() }
-    }
-
-    shouldBeComputable(testData2("a"))
-    shouldBeComputable(testData2("b"))
-
-    shouldBeComputable(testData2("a") + testData2("b"))
-    shouldBeComputable(testData2("a") + testData2("b") + 1)
-
-    shouldBeComputable(-testData2("a"))
-    shouldBeComputable(!testData2("a"))
-
-    shouldNotBeComputable(testData2.select(($"a" + 1).as("c"))("c") + testData2("b"))
-    shouldNotBeComputable(
-      testData2.select(($"a" + 1).as("c"))("c") + testData2.select(($"b" / 2).as("d"))("d"))
-    shouldNotBeComputable(
-      testData2.select(($"a" + 1).as("c")).select(($"c" + 2).as("d"))("d") + testData2("b"))
-
-    // Literals and unresolved columns should not be computable.
-    shouldNotBeComputable(col("1"))
-    shouldNotBeComputable(col("1") + 2)
-    shouldNotBeComputable(lit(100))
-    shouldNotBeComputable(lit(100) + 10)
-    shouldNotBeComputable(-col("1"))
-    shouldNotBeComputable(!col("1"))
-
-    // Getting data from different frames should not be computable.
-    shouldNotBeComputable(testData2("a") + testData("key"))
-    shouldNotBeComputable(testData2("a") + 1 + testData("key"))
-
-    // Aggregate functions alone should not be computable.
-    shouldNotBeComputable(sum(testData2("a")))
-  }
-
   test("collect on column produced by a binary operator") {
     val df = Seq((1, 2, 3)).toDF("a", "b", "c")
-    checkAnswer(df("a") + df("b"), Seq(Row(3)))
-    checkAnswer(df("a") + df("b").as("c"), Seq(Row(3)))
+    checkAnswer(df.select(df("a") + df("b")), Seq(Row(3)))
+    checkAnswer(df.select(df("a") + df("b").as("c")), Seq(Row(3)))
   }
 
   test("star") {
@@ -78,7 +39,6 @@ class ColumnExpressionSuite extends QueryTest {
   }
 
   test("star qualified by data frame object") {
-    // This is not yet supported.
     val df = testData.toDF
     val goldAnswer = df.collect().toSeq
     checkAnswer(df.select(df("*")), goldAnswer)

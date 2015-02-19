@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
+
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.commons.io.FileUtils
@@ -30,6 +31,8 @@ import org.apache.spark.util.Utils
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
+import org.apache.spark.sql.parquet.ParquetRelation2
+import org.apache.spark.sql.sources.LogicalRelation
 
 /**
  * Tests for persisting tables created though the data sources API into the metastore.
@@ -151,7 +154,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
   test("check change without refresh") {
     val tempDir = File.createTempFile("sparksql", "json")
     tempDir.delete()
-    sparkContext.parallelize(("a", "b") :: Nil).toDF
+    sparkContext.parallelize(("a", "b") :: Nil).toDF()
       .toJSON.saveAsTextFile(tempDir.getCanonicalPath)
 
     sql(
@@ -168,7 +171,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       Row("a", "b"))
 
     FileUtils.deleteDirectory(tempDir)
-    sparkContext.parallelize(("a1", "b1", "c1") :: Nil).toDF
+    sparkContext.parallelize(("a1", "b1", "c1") :: Nil).toDF()
       .toJSON.saveAsTextFile(tempDir.getCanonicalPath)
 
     // Schema is cached so the new column does not show. The updated values in existing columns
@@ -189,7 +192,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
   test("drop, change, recreate") {
     val tempDir = File.createTempFile("sparksql", "json")
     tempDir.delete()
-    sparkContext.parallelize(("a", "b") :: Nil).toDF
+    sparkContext.parallelize(("a", "b") :: Nil).toDF()
       .toJSON.saveAsTextFile(tempDir.getCanonicalPath)
 
     sql(
@@ -206,7 +209,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       Row("a", "b"))
 
     FileUtils.deleteDirectory(tempDir)
-    sparkContext.parallelize(("a", "b", "c") :: Nil).toDF
+    sparkContext.parallelize(("a", "b", "c") :: Nil).toDF()
       .toJSON.saveAsTextFile(tempDir.getCanonicalPath)
 
     sql("DROP TABLE jsonTable")
@@ -303,8 +306,8 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
         |SELECT * FROM jsonTable
       """.stripMargin)
 
-    // Create the table again should trigger a AlreadyExistsException.
-    val message = intercept[RuntimeException] {
+    // Create the table again should trigger a AnalysisException.
+    val message = intercept[AnalysisException] {
       sql(
         s"""
         |CREATE TABLE ctasJsonTable
@@ -513,7 +516,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       sql("SELECT * FROM createdJsonTable"),
       df.collect())
 
-    var message = intercept[RuntimeException] {
+    var message = intercept[AnalysisException] {
       createExternalTable("createdJsonTable", filePath.toString)
     }.getMessage
     assert(message.contains("Table createdJsonTable already exists."),
@@ -547,10 +550,45 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
         Map.empty[String, String])
     }.getMessage
     assert(
-      message.contains("Option 'path' not specified"),
+      message.contains("'path' must be specified for json data."),
       "We should complain that path is not specified.")
 
     sql("DROP TABLE savedJsonTable")
     conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, originalDefaultSource)
+  }
+
+  if (HiveShim.version == "0.13.1") {
+    test("scan a parquet table created through a CTAS statement") {
+      val originalConvertMetastore = getConf("spark.sql.hive.convertMetastoreParquet", "true")
+      val originalUseDataSource = getConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
+      setConf("spark.sql.hive.convertMetastoreParquet", "true")
+      setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, "true")
+
+      val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
+      jsonRDD(rdd).registerTempTable("jt")
+      sql(
+        """
+          |create table test_parquet_ctas STORED AS parquET
+          |AS select tmp.a from jt tmp where tmp.a < 5
+        """.stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT a FROM test_parquet_ctas WHERE a > 2 "),
+        Row(3) :: Row(4) :: Nil
+      )
+
+      table("test_parquet_ctas").queryExecution.analyzed match {
+        case LogicalRelation(p: ParquetRelation2) => // OK
+        case _ =>
+          fail(
+            s"test_parquet_ctas should be converted to ${classOf[ParquetRelation2].getCanonicalName}")
+      }
+
+      // Clenup and reset confs.
+      sql("DROP TABLE IF EXISTS jt")
+      sql("DROP TABLE IF EXISTS test_parquet_ctas")
+      setConf("spark.sql.hive.convertMetastoreParquet", originalConvertMetastore)
+      setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalUseDataSource)
+    }
   }
 }

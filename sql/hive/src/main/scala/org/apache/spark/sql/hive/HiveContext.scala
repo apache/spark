@@ -61,6 +61,21 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   protected[sql] def convertMetastoreParquet: Boolean =
     getConf("spark.sql.hive.convertMetastoreParquet", "true") == "true"
 
+  /**
+   * When true, a table created by a Hive CTAS statement (no USING clause) will be
+   * converted to a data source table, using the data source set by spark.sql.sources.default.
+   * The table in CTAS statement will be converted when it meets any of the following conditions:
+   *   - The CTAS does not specify any of a SerDe (ROW FORMAT SERDE), a File Format (STORED AS), or
+   *     a Storage Hanlder (STORED BY), and the value of hive.default.fileformat in hive-site.xml
+   *     is either TextFile or SequenceFile.
+   *   - The CTAS statement specifies TextFile (STORED AS TEXTFILE) as the file format and no SerDe
+   *     is specified (no ROW FORMAT SERDE clause).
+   *   - The CTAS statement specifies SequenceFile (STORED AS SEQUENCEFILE) as the file format
+   *     and no SerDe is specified (no ROW FORMAT SERDE clause).
+   */
+  protected[sql] def convertCTAS: Boolean =
+    getConf("spark.sql.hive.convertCTAS", "false").toBoolean
+
   override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution(plan)
 
@@ -207,22 +222,25 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    *    SQLConf.  Additionally, any properties set by set() or a SET command inside sql() will be
    *    set in the SQLConf *as well as* in the HiveConf.
    */
-  @transient protected[hive] lazy val (hiveconf, sessionState) =
-    Option(SessionState.get())
-      .orElse {
-        val newState = new SessionState(new HiveConf(classOf[SessionState]))
-        // Only starts newly created `SessionState` instance.  Any existing `SessionState` instance
-        // returned by `SessionState.get()` must be the most recently started one.
-        SessionState.start(newState)
-        Some(newState)
-      }
-      .map { state =>
-        setConf(state.getConf.getAllProperties)
-        if (state.out == null) state.out = new PrintStream(outputBuffer, true, "UTF-8")
-        if (state.err == null) state.err = new PrintStream(outputBuffer, true, "UTF-8")
-        (state.getConf, state)
-      }
-      .get
+  @transient protected[hive] lazy val sessionState: SessionState = {
+    var state = SessionState.get()
+    if (state == null) {
+      state = new SessionState(new HiveConf(classOf[SessionState]))
+      SessionState.start(state)
+    }
+    if (state.out == null) {
+      state.out = new PrintStream(outputBuffer, true, "UTF-8")
+    }
+    if (state.err == null) {
+      state.err = new PrintStream(outputBuffer, true, "UTF-8")
+    }
+    state
+  }
+
+  @transient protected[hive] lazy val hiveconf: HiveConf = {
+    setConf(sessionState.getConf.getAllProperties)
+    sessionState.getConf
+  }
 
   override def setConf(key: String, value: String): Unit = {
     super.setConf(key, value)

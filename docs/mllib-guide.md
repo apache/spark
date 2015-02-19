@@ -34,6 +34,8 @@ filtering, dimensionality reduction, as well as underlying optimization primitiv
   * singular value decomposition (SVD)
   * principal component analysis (PCA)
 * [Feature extraction and transformation](mllib-feature-extraction.html)
+* [Frequent pattern mining](mllib-frequent-pattern-mining.html)
+  * FP-growth
 * [Optimization (developer)](mllib-optimization.html)
   * stochastic gradient descent
   * limited-memory BFGS (L-BFGS)

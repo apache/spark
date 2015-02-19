@@ -25,6 +25,8 @@ import pydoc
 import shutil
 import tempfile
 
+import py4j
+
 if sys.version_info[:2] <= (2, 6):
     try:
         import unittest2 as unittest
@@ -36,7 +38,7 @@ else:
 
 from pyspark.sql import SQLContext, HiveContext, Column
 from pyspark.sql.types import IntegerType, Row, ArrayType, StructType, StructField, \
-    UserDefinedType, DoubleType, LongType, StringType
+    UserDefinedType, DoubleType, LongType, StringType, _infer_type
 from pyspark.tests import ReusedPySparkTestCase
 
 
@@ -322,6 +324,26 @@ class SQLTests(ReusedPySparkTestCase):
         pydoc.render_doc(df.foo)
         pydoc.render_doc(df.take(1))
 
+    def test_infer_long_type(self):
+        longrow = [Row(f1='a', f2=100000000000000)]
+        df = self.sc.parallelize(longrow).toDF()
+        self.assertEqual(df.schema.fields[1].dataType, LongType())
+
+        # this saving as Parquet caused issues as well.
+        output_dir = os.path.join(self.tempdir.name, "infer_long_type")
+        df.saveAsParquetFile(output_dir)
+        df1 = self.sqlCtx.parquetFile(output_dir)
+        self.assertEquals('a', df1.first().f1)
+        self.assertEquals(100000000000000, df1.first().f2)
+
+        self.assertEqual(_infer_type(1), LongType())
+        self.assertEqual(_infer_type(2**10), LongType())
+        self.assertEqual(_infer_type(2**20), LongType())
+        self.assertEqual(_infer_type(2**31 - 1), LongType())
+        self.assertEqual(_infer_type(2**31), LongType())
+        self.assertEqual(_infer_type(2**61), LongType())
+        self.assertEqual(_infer_type(2**71), LongType())
+
 
 class HiveContextSQLTests(ReusedPySparkTestCase):
 
@@ -329,9 +351,12 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
     def setUpClass(cls):
         ReusedPySparkTestCase.setUpClass()
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
+        try:
+            cls.sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
+        except py4j.protocol.Py4JError:
+            cls.sqlCtx = None
+            return
         os.unlink(cls.tempdir.name)
-        print "type", type(cls.sc)
-        print "type", type(cls.sc._jsc)
         _scala_HiveContext =\
             cls.sc._jvm.org.apache.spark.sql.hive.test.TestHiveContext(cls.sc._jsc.sc())
         cls.sqlCtx = HiveContext(cls.sc, _scala_HiveContext)
@@ -344,6 +369,9 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         shutil.rmtree(cls.tempdir.name, ignore_errors=True)
 
     def test_save_and_load_table(self):
+        if self.sqlCtx is None:
+            return  # no hive available, skipped
+
         df = self.df
         tmpPath = tempfile.mkdtemp()
         shutil.rmtree(tmpPath)

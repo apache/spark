@@ -17,17 +17,7 @@
 
 package org.apache.spark.sql
 
-import scala.language.implicitConversions
-
-import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-
-
-private[sql] class ComputableColumn protected[sql](
-    sqlContext: SQLContext,
-    protected[sql] val plan: LogicalPlan,
-    protected[sql] val expr: Expression)
-  extends DataFrameImpl(sqlContext, plan) with Column  {
-
-  override def isComputable: Boolean = true
-}
+/**
+ * Contains API classes that are specific to a single language (i.e. Java).
+ */
+package object api

@@ -55,7 +55,7 @@ import org.apache.spark.{Logging, SerializableWritable, TaskContext}
  * Parquet table scan operator. Imports the file that backs the given
  * [[org.apache.spark.sql.parquet.ParquetRelation]] as a ``RDD[Row]``.
  */
-case class ParquetTableScan(
+private[sql] case class ParquetTableScan(
     attributes: Seq[Attribute],
     relation: ParquetRelation,
     columnPruningPred: Seq[Expression])
@@ -210,7 +210,7 @@ case class ParquetTableScan(
  * (only detected via filename pattern so will not catch all cases).
  */
 @DeveloperApi
-case class InsertIntoParquetTable(
+private[sql] case class InsertIntoParquetTable(
     relation: ParquetRelation,
     child: SparkPlan,
     overwrite: Boolean = false)
