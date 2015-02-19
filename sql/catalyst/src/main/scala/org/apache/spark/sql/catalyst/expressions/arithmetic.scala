@@ -55,7 +55,7 @@ case class Sqrt(child: Expression) extends UnaryExpression {
   override def toString = s"SQRT($child)"
 
   val numeric =
-    if (resolved) dataType.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
+    if (resolved) child.dataType.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
     else UnresolvedNumeric
 
   override def eval(input: Row): Any = {
