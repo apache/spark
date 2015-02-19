@@ -280,4 +280,43 @@ class CachedTableSuite extends QueryTest {
     assert(intercept[RuntimeException](table("t1")).getMessage.startsWith("Table Not Found"))
     assert(!isCached("t2"))
   }
+
+  test("Drop cached temporary table when the table gets overwritten") {
+    val query1 = "SELECT key FROM testData LIMIT 10"
+    val df1 = sql(query1)
+    df1.registerTempTable("t1")
+    sql(s"CACHE TABLE t2 AS $query1")
+    assert(isCached("t2"))
+    // t1 will be cached too because it has the same plan as t2.
+    assert(isCached("t1"))
+    assert(cacheManager.lookupCachedData(df1).isDefined)
+
+    val query2 = "SELECT key FROM testData LIMIT 5"
+    val df2 = sql(query2)
+    sql(s"CACHE TABLE t2 AS $query2")
+    // t1 will not be cached because it has not been explicitly cached.
+    assert(!isCached("t1"))
+    assert(isCached("t2"))
+    assert(cacheManager.lookupCachedData(df2).isDefined)
+    dropTempTable("t2")
+
+    assert(cacheManager.lookupCachedData(df1).isEmpty)
+    assert(cacheManager.lookupCachedData(df2).isEmpty)
+  }
+
+  test("Clear all cache") {
+    sql("SELECT key FROM testData LIMIT 10").registerTempTable("t1")
+    sql("SELECT key FROM testData LIMIT 5").registerTempTable("t2")
+    cacheTable("t1")
+    cacheTable("t1")
+    clearCache()
+    assert(cacheManager.isEmpty)
+
+    sql("SELECT key FROM testData LIMIT 10").registerTempTable("t1")
+    sql("SELECT key FROM testData LIMIT 5").registerTempTable("t2")
+    cacheTable("t1")
+    cacheTable("t1")
+    sql("Clear CACHE")
+    assert(cacheManager.isEmpty)
+  }
 }

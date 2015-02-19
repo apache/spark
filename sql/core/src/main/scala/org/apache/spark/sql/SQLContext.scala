@@ -893,6 +893,13 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * only during the lifetime of this instance of SQLContext.
    */
   private[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
+    if (catalog.tableExists(Seq(tableName)) && cacheManager.lookupCachedData(df).isEmpty) {
+      // If the table already exists and the data of df has not already been cached
+      // (we are trying to overwrite an existing temporary table),
+      // we will try to uncache the InMemoryRelation associated with the existing table.
+      cacheManager.tryUncacheQuery(table(tableName))
+    }
+
     catalog.registerTable(Seq(tableName), df.logicalPlan)
   }
 
