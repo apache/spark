@@ -157,6 +157,11 @@ private[hive] class SparkExecuteStatementOperation(
   def run(): Unit = {
     logInfo(s"Running query '$statement'")
     setState(OperationState.RUNNING)
+    val groupId = round(random * 1000000).toString
+    hiveContext.sparkContext.setJobGroup(groupId, statement)
+    sessionToActivePool.get(parentSession).foreach { pool =>
+      hiveContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
+    }
     try {
       result = hiveContext.sql(statement)
       logDebug(result.queryExecution.toString())
@@ -167,11 +172,6 @@ private[hive] class SparkExecuteStatementOperation(
         case _ =>
       }
 
-      val groupId = round(random * 1000000).toString
-      hiveContext.sparkContext.setJobGroup(groupId, statement)
-      sessionToActivePool.get(parentSession).foreach { pool =>
-        hiveContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
-      }
       iter = {
         val useIncrementalCollect =
           hiveContext.getConf("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
