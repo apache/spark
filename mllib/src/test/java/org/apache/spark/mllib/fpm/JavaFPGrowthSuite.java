@@ -67,7 +67,7 @@ public class JavaFPGrowthSuite implements Serializable {
 
     for (FreqItemset<String> itemset: freqItemsets) {
       // Test return types.
-      String[] items = itemset.items();
+      List<String> items = itemset.javaItems();
       long freq = itemset.freq();
     }
   }
