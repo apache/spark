@@ -92,6 +92,8 @@ version 1.4 or newer.
 
 # Migration Guide
 
+For the `spark.ml` package, please see the [spark.ml Migration Guide](ml-guide.html#migration-guide).
+
 ## From 1.2 to 1.3
 
 In the `spark.mllib` package, there were several breaking changes.  The first change (in `ALS`) is the only one in a component not marked as Alpha or Experimental.

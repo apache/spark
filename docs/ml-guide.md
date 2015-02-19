@@ -732,7 +732,7 @@ jsc.stop();
 # Dependencies
 
 Spark ML currently depends on MLlib and has the same dependencies.
-Please see the [MLlib Dependencies guide](mllib-guide.html#Dependencies) for more info.
+Please see the [MLlib Dependencies guide](mllib-guide.html#dependencies) for more info.
 
 Spark ML also depends upon Spark SQL, but the relevant parts of Spark SQL do not bring additional dependencies.
 
