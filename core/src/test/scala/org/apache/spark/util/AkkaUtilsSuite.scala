@@ -373,11 +373,11 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     val timeout = AkkaUtils.lookupTimeout(conf)
     val result = Try(Await.result(selection.resolveOne(timeout * 2), timeout))
 
-    assert(result.isFailure === true)
-    val exception = result match {
-      case Failure(ex) => ex
+    result match {
+      case Failure(ex: ActorNotFound) =>
+      case Failure(ex: TimeoutException) =>
+      case r => fail(s"$r is neither Failure(ActorNotFound) nor Failure(TimeoutException)")
     }
-    assert(exception.isInstanceOf[ActorNotFound] || exception.isInstanceOf[TimeoutException])
 
     actorSystem.shutdown()
     slaveSystem.shutdown()
