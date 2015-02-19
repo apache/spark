@@ -52,6 +52,9 @@ class DataType(object):
     def typeName(cls):
         return cls.__name__[:-4].lower()
 
+    def simpleString(self):
+        return self.typeName()
+
     def jsonValue(self):
         return self.typeName()
 
@@ -145,6 +148,12 @@ class DecimalType(DataType):
         self.scale = scale
         self.hasPrecisionInfo = precision is not None
 
+    def simpleString(self):
+        if self.hasPrecisionInfo:
+            return "decimal(%d,%d)" % (self.precision, self.scale)
+        else:
+            return "decimal(10,0)"
+
     def jsonValue(self):
         if self.hasPrecisionInfo:
             return "decimal(%d,%d)" % (self.precision, self.scale)
@@ -180,6 +189,8 @@ class ByteType(PrimitiveType):
 
     The data type representing int values with 1 singed byte.
     """
+    def simpleString(self):
+        return 'tinyint'
 
 
 class IntegerType(PrimitiveType):
@@ -188,6 +199,8 @@ class IntegerType(PrimitiveType):
 
     The data type representing int values.
     """
+    def simpleString(self):
+        return 'int'
 
 
 class LongType(PrimitiveType):
@@ -198,6 +211,8 @@ class LongType(PrimitiveType):
     beyond the range of [-9223372036854775808, 9223372036854775807],
     please use DecimalType.
     """
+    def simpleString(self):
+        return 'bigint'
 
 
 class ShortType(PrimitiveType):
@@ -206,6 +221,8 @@ class ShortType(PrimitiveType):
 
     The data type representing int values with 2 signed bytes.
     """
+    def simpleString(self):
+        return 'smallint'
 
 
 class ArrayType(DataType):
@@ -232,6 +249,9 @@ class ArrayType(DataType):
         """
         self.elementType = elementType
         self.containsNull = containsNull
+
+    def simpleString(self):
+        return 'array<%s>' % self.elementType.simpleString()
 
     def __repr__(self):
         return "ArrayType(%s,%s)" % (self.elementType,
@@ -282,6 +302,9 @@ class MapType(DataType):
         self.keyType = keyType
         self.valueType = valueType
         self.valueContainsNull = valueContainsNull
+
+    def simpleString(self):
+        return 'map<%s,%s>' % (self.keyType.simpleString(), self.valueType.simpleString())
 
     def __repr__(self):
         return "MapType(%s,%s,%s)" % (self.keyType, self.valueType,
@@ -337,6 +360,9 @@ class StructField(DataType):
         self.nullable = nullable
         self.metadata = metadata or {}
 
+    def simpleString(self):
+        return '%s:%s' % (self.name, self.dataType.simpleString())
+
     def __repr__(self):
         return "StructField(%s,%s,%s)" % (self.name, self.dataType,
                                           str(self.nullable).lower())
@@ -378,6 +404,9 @@ class StructType(DataType):
         False
         """
         self.fields = fields
+
+    def simpleString(self):
+        return 'struct<%s>' % (','.join(f.simpleString() for f in self.fields))
 
     def __repr__(self):
         return ("StructType(List(%s))" %
@@ -434,6 +463,9 @@ class UserDefinedType(DataType):
         Converts a SQL datum into a user-type object.
         """
         raise NotImplementedError("UDT must implement deserialize().")
+
+    def simpleString(self):
+        return 'null'
 
     def json(self):
         return json.dumps(self.jsonValue(), separators=(',', ':'), sort_keys=True)
@@ -551,7 +583,7 @@ def _parse_datatype_json_value(json_value):
 _type_mappings = {
     type(None): NullType,
     bool: BooleanType,
-    int: IntegerType,
+    int: LongType,
     long: LongType,
     float: DoubleType,
     str: StringType,
@@ -901,11 +933,11 @@ def _infer_schema_type(obj, dataType):
     >>> schema = _parse_schema_abstract("a b c d")
     >>> row = (1, 1.0, "str", datetime.date(2014, 10, 10))
     >>> _infer_schema_type(row, schema)
-    StructType...IntegerType...DoubleType...StringType...DateType...
+    StructType...LongType...DoubleType...StringType...DateType...
     >>> row = [[1], {"key": (1, 2.0)}]
     >>> schema = _parse_schema_abstract("a[] b{c d}")
     >>> _infer_schema_type(row, schema)
-    StructType...a,ArrayType...b,MapType(StringType,...c,IntegerType...
+    StructType...a,ArrayType...b,MapType(StringType,...c,LongType...
     """
     if dataType is None:
         return _infer_type(obj)
@@ -960,7 +992,7 @@ def _verify_type(obj, dataType):
 
     >>> _verify_type(None, StructType([]))
     >>> _verify_type("", StringType())
-    >>> _verify_type(0, IntegerType())
+    >>> _verify_type(0, LongType())
     >>> _verify_type(range(3), ArrayType(ShortType()))
     >>> _verify_type(set(), ArrayType(StringType())) # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):

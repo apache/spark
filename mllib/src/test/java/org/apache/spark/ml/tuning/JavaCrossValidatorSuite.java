@@ -45,7 +45,7 @@ public class JavaCrossValidatorSuite implements Serializable {
     jsc = new JavaSparkContext("local", "JavaCrossValidatorSuite");
     jsql = new SQLContext(jsc);
     List<LabeledPoint> points = generateLogisticInputAsList(1.0, 1.0, 100, 42);
-    dataset = jsql.applySchema(jsc.parallelize(points, 2), LabeledPoint.class);
+    dataset = jsql.createDataFrame(jsc.parallelize(points, 2), LabeledPoint.class);
   }
 
   @After

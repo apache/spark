@@ -114,7 +114,9 @@ class Pipeline extends Estimator[PipelineModel] {
             throw new IllegalArgumentException(
               s"Do not support stage $stage of type ${stage.getClass}")
         }
-        curDataset = transformer.transform(curDataset, paramMap)
+        if (index < indexOfLastEstimator) {
+          curDataset = transformer.transform(curDataset, paramMap)
+        }
         transformers += transformer
       } else {
         transformers += stage.asInstanceOf[Transformer]

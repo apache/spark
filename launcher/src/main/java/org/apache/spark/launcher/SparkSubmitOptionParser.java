@@ -50,6 +50,7 @@ public abstract class SparkSubmitOptionParser {
   protected static final String NAME = "--name";
   protected static final String PACKAGES = "--packages";
   protected static final String PROPERTIES_FILE = "--properties-file";
+  protected static final String PROXY_USER = "--proxy-user";
   protected static final String PY_FILES = "--py-files";
   protected static final String REPOSITORIES = "--repositories";
   protected static final String STATUS = "--status";
@@ -59,6 +60,7 @@ public abstract class SparkSubmitOptionParser {
   protected static final String HELP = "--help";
   protected static final String SUPERVISE = "--supervise";
   protected static final String VERBOSE = "--verbose";
+  protected static final String VERSION = "--version";
 
   // Standalone-only options.
 
@@ -98,6 +100,7 @@ public abstract class SparkSubmitOptionParser {
     { NUM_EXECUTORS },
     { PACKAGES },
     { PROPERTIES_FILE },
+    { PROXY_USER },
     { PY_FILES },
     { QUEUE },
     { REPOSITORIES },
@@ -112,6 +115,7 @@ public abstract class SparkSubmitOptionParser {
     { HELP, "-h" },
     { SUPERVISE },
     { VERBOSE, "-v" },
+    { VERSION },
   };
 
   /**

@@ -42,7 +42,7 @@ fi
 
 JAR_COUNT=0
 
-for f in ${JAR_PATH}/spark-examples-*hadoop*.jar; do
+for f in "${JAR_PATH}"/spark-examples-*hadoop*.jar; do
   if [[ ! -e "$f" ]]; then
     echo "Failed to find Spark examples assembly in $FWDIR/lib or $FWDIR/examples/target" 1>&2
     echo "You need to build Spark before running this program" 1>&2
@@ -54,7 +54,7 @@ done
 
 if [ "$JAR_COUNT" -gt "1" ]; then
   echo "Found multiple Spark examples assembly jars in ${JAR_PATH}" 1>&2
-  ls ${JAR_PATH}/spark-examples-*hadoop*.jar 1>&2
+  ls "${JAR_PATH}"/spark-examples-*hadoop*.jar 1>&2
   echo "Please remove all but one jar." 1>&2
   exit 1
 fi

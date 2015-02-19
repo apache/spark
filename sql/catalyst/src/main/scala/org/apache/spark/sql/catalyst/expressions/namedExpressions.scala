@@ -40,6 +40,17 @@ abstract class NamedExpression extends Expression {
 
   def name: String
   def exprId: ExprId
+
+  /**
+   * All possible qualifiers for the expression.
+   *
+   * For now, since we do not allow using original table name to qualify a column name once the
+   * table is aliased, this can only be:
+   *
+   * 1. Empty Seq: when an attribute doesn't have a qualifier,
+   *    e.g. top level attributes aliased in the SELECT clause, or column from a LocalRelation.
+   * 2. Single element: either the table name or the alias name of the table.
+   */
   def qualifiers: Seq[String]
 
   def toAttribute: Attribute
@@ -207,7 +218,7 @@ case class PrettyAttribute(name: String) extends Attribute with trees.LeafNode[E
   override def exprId: ExprId = ???
   override def eval(input: Row): EvaluatedType = ???
   override def nullable: Boolean = ???
-  override def dataType: DataType = ???
+  override def dataType: DataType = NullType
 }
 
 object VirtualColumn {

@@ -20,12 +20,13 @@ package org.apache.spark.sql.execution
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.{SQLConf, execution}
-import org.apache.spark.sql.Dsl._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, ShuffledHashJoin}
 import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.test.TestSQLContext.planner._
 import org.apache.spark.sql.types._
 
@@ -71,7 +72,7 @@ class PlannerSuite extends FunSuite {
       val schema = StructType(fields)
       val row = Row.fromSeq(Seq.fill(fields.size)(null))
       val rowRDD = org.apache.spark.sql.test.TestSQLContext.sparkContext.parallelize(row :: Nil)
-      applySchema(rowRDD, schema).registerTempTable("testLimit")
+      createDataFrame(rowRDD, schema).registerTempTable("testLimit")
 
       val planned = sql(
         """
