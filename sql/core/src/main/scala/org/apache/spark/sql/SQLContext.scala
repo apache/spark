@@ -217,6 +217,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   def uncacheTable(tableName: String): Unit = cacheManager.uncacheTable(tableName)
 
+  /**
+   * Removes all cached tables from the in-memory cache.
+   */
+  def clearCache(): Unit = cacheManager.clearCache()
+
   // scalastyle:off
   // Disable style checker so "implicits" object can start with lowercase i
   /**
@@ -888,6 +893,13 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * only during the lifetime of this instance of SQLContext.
    */
   private[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
+    if (catalog.tableExists(Seq(tableName)) && cacheManager.lookupCachedData(df).isEmpty) {
+      // If the table already exists and the data of df has not already been cached
+      // (we are trying to overwrite an existing temporary table),
+      // we will try to uncache the InMemoryRelation associated with the existing table.
+      cacheManager.tryUncacheQuery(table(tableName))
+    }
+
     catalog.registerTable(Seq(tableName), df.logicalPlan)
   }
 
