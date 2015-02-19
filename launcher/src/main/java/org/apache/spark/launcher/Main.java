@@ -59,7 +59,7 @@ class Main {
       if (className.equals("org.apache.spark.deploy.SparkSubmit")) {
         builder = new SparkSubmitCommandBuilder(args);
       } else {
-        builder = new SparkClassLauncher(className, args);
+        builder = new SparkClassCommandBuilder(className, args);
       }
       printLaunchCommand = !isEmpty(System.getenv("SPARK_PRINT_LAUNCH_COMMAND"));
     } catch (IllegalArgumentException e) {

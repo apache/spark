@@ -27,17 +27,17 @@ import java.util.regex.Pattern;
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
 
 /**
- * Launcher for internal Spark classes.
+ * Command builder for internal Spark classes.
  * <p/>
  * This class handles building the command to launch all internal Spark classes except for
- * SparkSubmit (which is handled by the public {@link SparkLauncher} class.
+ * SparkSubmit (which is handled by {@link SparkSubmitCommandBuilder} class.
  */
-class SparkClassLauncher extends SparkLauncher implements CommandBuilder {
+class SparkClassCommandBuilder extends SparkLauncher implements CommandBuilder {
 
   private final String className;
   private final List<String> classArgs;
 
-  SparkClassLauncher(String className, List<String> classArgs) {
+  SparkClassCommandBuilder(String className, List<String> classArgs) {
     this.className = className;
     this.classArgs = classArgs;
   }
