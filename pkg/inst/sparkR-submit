@@ -1,7 +1,7 @@
 #!/bin/bash
-# To use sparkR-submit, we assume the SparkR package in yarn-cluster mode
-# we assume that it has been installed to a standard location using
-# R CMD INSTALL pkg/
+# This script launches SparkR through spark-submit. This accepts
+# the same set of options as spark-submit and requires SPARK_HOME
+# to be set.
 
 FWDIR="$(cd `dirname $0`; pwd)"
 
