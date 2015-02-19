@@ -82,9 +82,8 @@ public class JavaSimpleTextClassificationPipeline {
     DataFrame test = jsql.createDataFrame(jsc.parallelize(localTest), Document.class);
 
     // Make predictions on test documents.
-    model.transform(test).registerTempTable("prediction");
-    DataFrame predictions = jsql.sql("SELECT id, text, score, prediction FROM prediction");
-    for (Row r: predictions.collect()) {
+    DataFrame predictions = model.transform(test);
+    for (Row r: predictions.select("id", "text", "probability", "prediction").collect()) {
       System.out.println("(" + r.get(0) + ", " + r.get(1) + ") --> prob=" + r.get(2)
           + ", prediction=" + r.get(3));
     }

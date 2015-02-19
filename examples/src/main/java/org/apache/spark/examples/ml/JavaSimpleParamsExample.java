@@ -100,10 +100,8 @@ public class JavaSimpleParamsExample {
     // LogisticRegression.transform will only use the 'features' column.
     // Note that model2.transform() outputs a 'myProbability' column instead of the usual
     // 'probability' column since we renamed the lr.probabilityCol parameter previously.
-    model2.transform(test).registerTempTable("results");
-    DataFrame results =
-        jsql.sql("SELECT features, label, myProbability, prediction FROM results");
-    for (Row r: results.collect()) {
+    DataFrame results = model2.transform(test);
+    for (Row r: results.select("features", "label", "myProbability", "prediction").collect()) {
       System.out.println("(" + r.get(0) + ", " + r.get(1) + ") -> prob=" + r.get(2)
           + ", prediction=" + r.get(3));
     }
