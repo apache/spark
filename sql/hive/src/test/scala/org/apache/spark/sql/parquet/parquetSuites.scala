@@ -31,7 +31,9 @@ import org.apache.spark.sql.hive.test.TestHive._
 case class ParquetData(intField: Int, stringField: String)
 // The data that also includes the partitioning key
 case class ParquetDataWithKey(p: Int, intField: Int, stringField: String)
-case class ParquetDataWithKeyAndComplexTypes(p: Int, intField: Int, stringField: String)
+case class StructContainer(intStructField :Int, stringStructField: String )
+case class ParquetDataWithComplexTypes(intField :Int, stringField: String ,structField: StructContainer, arrayField: Seq[Int])
+case class ParquetDataWithKeyAndComplexTypes(p: Int,intField :Int, stringField: String , structField: StructContainer, arrayField: Seq[Int])
 
 /**
  * A suite to test the automatic conversion of metastore tables with parquet data to use the
@@ -70,19 +72,35 @@ class ParquetMetastoreSuite extends ParquetTest {
     """)
 
     sql(s"""
-      create external table partitioned_parquet_with_key_and_complextypes
+      create external table partitioned_parquet_with_complextypes
       (
         intField INT,
-        structField STRUCT<intStructField INT, stringStructField STRING>,
-        arrayField ARRAY<INT>,
-        stringField STRING
+        stringField STRING,
+        structField STRUCT<intStructField :INT, stringStructField :STRING>,
+        arrayField ARRAY<INT>
       )
       PARTITIONED BY (p int)
       ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
        STORED AS
        INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
        OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-      location '${partitionedTableDirWithKey.getCanonicalPath}'
+      location '${partitionedTableDirWithComplexTypes.getCanonicalPath}'
+    """)
+    
+    sql(s"""
+      create external table partitioned_parquet_with_key_and_complextypes
+      (
+        intField INT,
+        stringField STRING,
+        structField STRUCT<intStructField :INT, stringStructField :STRING>,
+        arrayField ARRAY<INT>
+      )
+      PARTITIONED BY (p int)
+      ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+       STORED AS
+       INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+       OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+      location '${partitionedTableDirWithKeyAndComplexTypes.getCanonicalPath}'
     """)
 
     sql(s"""
@@ -104,6 +122,14 @@ class ParquetMetastoreSuite extends ParquetTest {
 
     (1 to 10).foreach { p =>
       sql(s"ALTER TABLE partitioned_parquet_with_key ADD PARTITION (p=$p)")
+    }
+
+    (1 to 10).foreach { p =>
+      sql(s"ALTER TABLE partitioned_parquet_with_key_and_complextypes ADD PARTITION (p=$p)")
+    }
+
+    (1 to 10).foreach { p =>
+      sql(s"ALTER TABLE partitioned_parquet_with_complextypes ADD PARTITION (p=$p)")
     }
 
     setConf("spark.sql.hive.convertMetastoreParquet", "true")
@@ -155,6 +181,22 @@ class ParquetSourceSuite extends ParquetTest {
         path '${new File(partitionedTableDir, "p=1").getCanonicalPath}'
       )
     """)
+
+    sql( s"""
+      create temporary table partitioned_parquet_with_key_and_complextypes
+      USING org.apache.spark.sql.parquet
+      OPTIONS (
+        path '${new File(partitionedTableDirWithKeyAndComplexTypes, "p=1").getCanonicalPath}'
+      )
+    """)
+
+    sql( s"""
+      create temporary table partitioned_parquet_with_complextypes
+      USING org.apache.spark.sql.parquet
+      OPTIONS (
+        path '${new File(partitionedTableDirWithComplexTypes, "p=1").getCanonicalPath}'
+      )
+    """)
   }
 }
 
@@ -164,6 +206,8 @@ class ParquetSourceSuite extends ParquetTest {
 abstract class ParquetTest extends QueryTest with BeforeAndAfterAll {
   var partitionedTableDir: File = null
   var partitionedTableDirWithKey: File = null
+  var partitionedTableDirWithKeyAndComplexTypes: File = null
+  var partitionedTableDirWithComplexTypes: File = null
 
   override def beforeAll(): Unit = {
     partitionedTableDir = File.createTempFile("parquettests", "sparksql")
@@ -187,9 +231,32 @@ abstract class ParquetTest extends QueryTest with BeforeAndAfterAll {
         .map(i => ParquetDataWithKey(p, i, s"part-$p"))
         .saveAsParquetFile(partDir.getCanonicalPath)
     }
+
+    partitionedTableDirWithKeyAndComplexTypes = File.createTempFile("parquettests", "sparksql")
+    partitionedTableDirWithKeyAndComplexTypes.delete()
+    partitionedTableDirWithKeyAndComplexTypes.mkdir()
+
+    (1 to 10).foreach { p =>
+      val partDir = new File(partitionedTableDirWithKeyAndComplexTypes, s"p=$p")
+      sparkContext.makeRDD(1 to 10)
+        .map(i => ParquetDataWithKeyAndComplexTypes(p, i,s"part-$p", StructContainer(i,f"${i}_string"), (1 to i)))
+        .saveAsParquetFile(partDir.getCanonicalPath)
+    }
+
+    partitionedTableDirWithComplexTypes = File.createTempFile("parquettests", "sparksql")
+    partitionedTableDirWithComplexTypes.delete()
+    partitionedTableDirWithComplexTypes.mkdir()
+
+    (1 to 10).foreach { p =>
+      val partDir = new File(partitionedTableDirWithComplexTypes, s"p=$p")
+      sparkContext.makeRDD(1 to 10)
+        .map(i => ParquetDataWithComplexTypes(i,s"part-$p", StructContainer(i,f"${i}_string"), (1 to i)))
+        .saveAsParquetFile(partDir.getCanonicalPath)
+    }
+
   }
 
-  Seq("partitioned_parquet", "partitioned_parquet_with_key").foreach { table =>
+  Seq("partitioned_parquet", "partitioned_parquet_with_key", "partitioned_parquet_with_key_and_complextypes","partitioned_parquet_with_complextypes").foreach { table =>
     test(s"ordering of the partitioning columns $table") {
       checkAnswer(
         sql(s"SELECT p, stringField FROM $table WHERE p = 1"),
@@ -201,6 +268,8 @@ abstract class ParquetTest extends QueryTest with BeforeAndAfterAll {
         Seq.fill(10)(("part-1", 1))
       )
     }
+
+
 
     test(s"project the partitioning column $table") {
       checkAnswer(
@@ -276,6 +345,22 @@ abstract class ParquetTest extends QueryTest with BeforeAndAfterAll {
         sql(s"SELECT stringField FROM $table").map {
           case Row(s: String) => Row(s + s)
         }.collect().toSeq)
+    }
+  }
+
+  Seq("partitioned_parquet_with_key_and_complextypes", "partitioned_parquet_with_complextypes").foreach { table =>
+    test(s"SPARK-5775 read struct from $table") {
+      checkAnswer(
+        sql(s"SELECT p,  structField.intStructField , structField.stringStructField FROM $table WHERE p = 1"),
+        (1 to 10).map { i => ((1, i, f"${i}_string"))}
+      )
+    }
+
+    test (s"SPARK-5775 read array from $table") {
+              checkAnswer(
+                sql(s"SELECT arrayField, p FROM $table WHERE p = 1"),
+                (1 to 10).map { i => ((1 to i,1))}
+              )
     }
   }
 
