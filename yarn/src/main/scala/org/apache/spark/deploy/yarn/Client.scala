@@ -70,7 +70,7 @@ private[spark] class Client(
   private val isClusterMode = args.isClusterMode
 
   private var loginFromKeytab = false
-  private var kerberosFileName: String = null
+  private var keytabFileName: String = null
 
 
   def stop(): Unit = yarnClient.stop()
@@ -89,6 +89,7 @@ private[spark] class Client(
    * available in the alpha API.
    */
   def submitApplication(): ApplicationId = {
+    // Setup the credentials before doing anything else, so we have don't have issues at any point.
     setupCredentials()
     yarnClient.init(yarnConf)
     yarnClient.start()
@@ -319,6 +320,21 @@ private[spark] class Client(
     env("SPARK_YARN_MODE") = "true"
     env("SPARK_YARN_STAGING_DIR") = stagingDir
     env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
+    // If we logged in from keytab, make sure we copy the keytab to the staging directory on
+    // HDFS, and setup the relevant environment vars, so the AM can login again.
+    if (loginFromKeytab) {
+      val fs = FileSystem.get(hadoopConf)
+      val stagingDirPath = new Path(fs.getHomeDirectory, stagingDir)
+      val localUri = new URI(args.keytab)
+      val localPath = getQualifiedLocalPath(localUri, hadoopConf)
+      val destinationPath = new Path(stagingDirPath, keytabFileName)
+      val replication = sparkConf.getInt("spark.yarn.submit.file.replication",
+        fs.getDefaultReplication(destinationPath)).toShort
+      copyFileToRemote(destinationPath, localPath, replication)
+      env("SPARK_PRINCIPAL") = args.principal
+      env("SPARK_KEYTAB") = keytabFileName
+    }
+
 
     // Set the environment variables to be passed on to the executors.
     distCacheMgr.setDistFilesEnv(env)
@@ -553,7 +569,7 @@ private[spark] class Client(
             // Generate a file name that can be used for the keytab file, that does not conflict
             // with any user file.
             val f = new File(keytabPath)
-            kerberosFileName = f.getName + "-" + System.currentTimeMillis()
+            keytabFileName = f.getName + "-" + System.currentTimeMillis()
             val ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytabPath)
             credentials = ugi.getCredentials
             loginFromKeytab = true
@@ -891,23 +907,11 @@ object Client extends Logging {
    * Get the list of namenodes the user may access.
    */
   private[yarn] def getNameNodesToAccess(sparkConf: SparkConf): Set[Path] = {
-    sparkConf.get("spark.yarn.access.namenodes", "")
-      .split(",")
-      .map(_.trim())
-      .filter(!_.isEmpty)
-      .map(new Path(_))
-      .toSet
+    SparkHadoopUtil.get.getNameNodesToAccess(sparkConf)
   }
 
   private[yarn] def getTokenRenewer(conf: Configuration): String = {
-    val delegTokenRenewer = Master.getMasterPrincipal(conf)
-    logDebug("delegation token renewer is: " + delegTokenRenewer)
-    if (delegTokenRenewer == null || delegTokenRenewer.length() == 0) {
-      val errorMessage = "Can't get Master Kerberos principal for use as renewer"
-      logError(errorMessage)
-      throw new SparkException(errorMessage)
-    }
-    delegTokenRenewer
+    SparkHadoopUtil.get.getTokenRenewer(conf)
   }
 
   /**
@@ -917,14 +921,7 @@ object Client extends Logging {
       paths: Set[Path],
       conf: Configuration,
       creds: Credentials): Unit = {
-    if (UserGroupInformation.isSecurityEnabled()) {
-      val delegTokenRenewer = getTokenRenewer(conf)
-      paths.foreach { dst =>
-        val dstFs = dst.getFileSystem(conf)
-        logDebug("getting token for namenode: " + dst)
-        dstFs.addDelegationTokens(delegTokenRenewer, creds)
-      }
-    }
+    SparkHadoopUtil.get.obtainTokensForNamenodes(paths, conf, creds)
   }
 
   /**

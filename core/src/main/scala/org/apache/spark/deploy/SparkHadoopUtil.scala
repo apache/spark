@@ -17,20 +17,26 @@
 
 package org.apache.spark.deploy
 
+import java.io.{ByteArrayInputStream, DataInputStream, DataOutputStream, ByteArrayOutputStream}
 import java.lang.reflect.Method
+import java.net.URI
+import java.nio.ByteBuffer
 import java.security.PrivilegedExceptionAction
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.{TimeUnit, ThreadFactory, Executors}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.fs.{FileUtil, FileStatus, FileSystem, Path}
 import org.apache.hadoop.fs.FileSystem.Statistics
-import org.apache.hadoop.mapred.JobConf
+import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
+import org.apache.hadoop.mapred.{Master, JobConf}
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.UserGroupInformation
 
-import org.apache.spark.{Logging, SparkContext, SparkConf, SparkException}
+import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SerializableBuffer, Utils}
 
 import scala.collection.JavaConversions._
 
@@ -40,8 +46,13 @@ import scala.collection.JavaConversions._
  */
 @DeveloperApi
 class SparkHadoopUtil extends Logging {
-  val conf: Configuration = newConfiguration(new SparkConf())
+  val sparkConf = new SparkConf()
+  val conf: Configuration = newConfiguration(sparkConf)
   UserGroupInformation.setConfiguration(conf)
+
+  private var keytabFile: Option[String] = None
+  private var loginPrincipal: Option[String] = None
+  private val loggedInViaKeytab = new AtomicBoolean(false)
 
   /**
    * Runs the given function with a Hadoop UserGroupInformation as a thread local variable
@@ -119,6 +130,100 @@ class SparkHadoopUtil extends Logging {
 
   def loginUserFromKeytab(principalName: String, keytabFilename: String) {
     UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
+  }
+
+  def setPrincipalAndKeytabForLogin(principal: String, keytab: String): Unit ={
+    loginPrincipal = Option(principal)
+    keytabFile = Option(keytab)
+  }
+
+  private[spark] def scheduleLoginFromKeytab(callback: (SerializableBuffer)  => Unit): Unit = {
+
+    loginPrincipal match {
+      case Some(principal) =>
+        val keytab = keytabFile.get
+        val remoteFs = FileSystem.get(conf)
+        val remoteKeytabPath = new Path(
+          remoteFs.getHomeDirectory, System.getenv("SPARK_STAGING_DIR") + Path.SEPARATOR + keytab)
+        val localFS = FileSystem.getLocal(conf)
+        // At this point, SparkEnv is likely no initialized, so create a dir, put the keytab there.
+        val tempDir = Utils.createTempDir()
+        val localURI = new URI(tempDir.getAbsolutePath + Path.SEPARATOR + keytab)
+        val qualifiedURI = new  URI(localFS.makeQualified(new Path(localURI)).toString)
+        FileUtil.copy(
+          remoteFs, remoteKeytabPath, localFS, new Path(qualifiedURI), false, false, conf)
+        // Get the current credentials, find out when they expire.
+        val creds = UserGroupInformation.getCurrentUser.getCredentials
+        val credStream = new ByteArrayOutputStream()
+        creds.writeTokenStorageToStream(new DataOutputStream(credStream))
+        val in = new DataInputStream(new ByteArrayInputStream(credStream.toByteArray))
+        val tokenIdentifier = new DelegationTokenIdentifier()
+        tokenIdentifier.readFields(in)
+        val timeToRenewal = (0.6 * (tokenIdentifier.getMaxDate - System.currentTimeMillis())).toLong
+        Executors.newSingleThreadScheduledExecutor(new ThreadFactory {
+          override def newThread(r: Runnable): Thread = {
+            val t = new Thread(r)
+            t.setName("Delegation Token Refresh Thread")
+            t.setDaemon(true)
+            t
+          }
+        }).scheduleWithFixedDelay(new Runnable {
+          override def run(): Unit = {
+            if (!loggedInViaKeytab.get()) {
+              loginUserFromKeytab(principal, tempDir.getAbsolutePath + Path.SEPARATOR + keytab)
+              loggedInViaKeytab.set(true)
+            }
+            val nns = getNameNodesToAccess(sparkConf) + remoteKeytabPath
+            val newCredentials = new Credentials()
+            obtainTokensForNamenodes(nns, conf, newCredentials)
+            // Now write this out via Akka to executors.
+            val outputStream = new ByteArrayOutputStream()
+            newCredentials.writeTokenStorageToStream(new DataOutputStream(outputStream))
+            callback(new SerializableBuffer(ByteBuffer.wrap(outputStream.toByteArray)))
+          }
+        }, timeToRenewal, timeToRenewal, TimeUnit.MILLISECONDS)
+
+    }
+  }
+
+  /**
+   * Get the list of namenodes the user may access.
+   */
+  def getNameNodesToAccess(sparkConf: SparkConf): Set[Path] = {
+    sparkConf.get("spark.yarn.access.namenodes", "")
+      .split(",")
+      .map(_.trim())
+      .filter(!_.isEmpty)
+      .map(new Path(_))
+      .toSet
+  }
+
+  def getTokenRenewer(conf: Configuration): String = {
+    val delegTokenRenewer = Master.getMasterPrincipal(conf)
+    logDebug("delegation token renewer is: " + delegTokenRenewer)
+    if (delegTokenRenewer == null || delegTokenRenewer.length() == 0) {
+      val errorMessage = "Can't get Master Kerberos principal for use as renewer"
+      logError(errorMessage)
+      throw new SparkException(errorMessage)
+    }
+    delegTokenRenewer
+  }
+
+  /**
+   * Obtains tokens for the namenodes passed in and adds them to the credentials.
+   */
+  def obtainTokensForNamenodes(
+    paths: Set[Path],
+    conf: Configuration,
+    creds: Credentials): Unit = {
+    if (UserGroupInformation.isSecurityEnabled()) {
+      val delegTokenRenewer = getTokenRenewer(conf)
+      paths.foreach { dst =>
+        val dstFs = dst.getFileSystem(conf)
+        logDebug("getting token for namenode: " + dst)
+        dstFs.addDelegationTokens(delegTokenRenewer, creds)
+      }
+    }
   }
 
   /**

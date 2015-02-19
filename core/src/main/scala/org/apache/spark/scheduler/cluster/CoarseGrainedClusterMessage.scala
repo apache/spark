@@ -51,6 +51,10 @@ private[spark] object CoarseGrainedClusterMessages {
   case class StatusUpdate(executorId: String, taskId: Long, state: TaskState,
     data: SerializableBuffer) extends CoarseGrainedClusterMessage
 
+  // Driver to all executors.
+  case class UpdateCredentials(newCredentials: SerializableBuffer)
+    extends CoarseGrainedClusterMessage
+
   object StatusUpdate {
     /** Alternate factory method that takes a ByteBuffer directly for the data field */
     def apply(executorId: String, taskId: Long, state: TaskState, data: ByteBuffer)

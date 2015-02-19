@@ -27,6 +27,7 @@ import akka.actor._
 import akka.pattern.ask
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.{ExecutorAllocationClient, Logging, SparkEnv, SparkException, TaskState}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -75,6 +76,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
     override protected def log = CoarseGrainedSchedulerBackend.this.log
     private val addressToExecutorId = new HashMap[Address, String]
 
+    // If a principal and keytab have been set, use that to create new credentials for executors
+    // periodically
+    SparkHadoopUtil.get.scheduleLoginFromKeytab(sendNewCredentialsToExecutors _)
+
     override def preStart() {
       // Listen for remote client disconnection events, since they don't go through Akka's watch()
       context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
@@ -83,6 +88,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
       val reviveInterval = conf.getLong("spark.scheduler.revive.interval", 1000)
       import context.dispatcher
       context.system.scheduler.schedule(0.millis, reviveInterval.millis, self, ReviveOffers)
+    }
+
+    def sendNewCredentialsToExecutors(credentials: SerializableBuffer): Unit = {
+      executorDataMap.values.foreach{ x =>
+        x.executorActor ! UpdateCredentials(credentials)
+      }
     }
 
     def receiveWithLogging = {

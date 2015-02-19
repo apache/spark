@@ -576,6 +576,11 @@ object ApplicationMaster extends Logging {
       master = new ApplicationMaster(amArgs, new YarnRMClient(amArgs))
       System.exit(master.run())
     }
+    // At this point, we have tokens that will expire only after a while, so we now schedule a
+    // login for some time before the tokens expire. Since the SparkContext has already started,
+    // we can now get access to the driver actor as well.
+    SparkHadoopUtil.get.setPrincipalAndKeytabForLogin(
+      System.getenv("SPARK_PRINCIPAL"), System.getenv("SPARK_KEYTAB"))
   }
 
   private[spark] def sparkContextInitialized(sc: SparkContext) = {

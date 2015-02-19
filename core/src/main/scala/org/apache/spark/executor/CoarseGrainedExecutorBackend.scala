@@ -18,6 +18,7 @@
 package org.apache.spark.executor
 
 import java.net.URL
+import java.io.{ByteArrayInputStream, DataInputStream}
 import java.nio.ByteBuffer
 
 import scala.collection.mutable
@@ -26,6 +27,7 @@ import scala.concurrent.Await
 import akka.actor.{Actor, ActorSelection, Props}
 import akka.pattern.Patterns
 import akka.remote.{RemotingLifecycleEvent, DisassociatedEvent}
+import org.apache.hadoop.security.Credentials
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv}
 import org.apache.spark.TaskState.TaskState
@@ -105,6 +107,12 @@ private[spark] class CoarseGrainedExecutorBackend(
       executor.stop()
       context.stop(self)
       context.system.shutdown()
+
+    case UpdateCredentials(newCredentials) =>
+      val credentials = new Credentials()
+      credentials.readTokenStorageStream(
+        new DataInputStream(new ByteArrayInputStream(newCredentials.value.array())))
+      SparkHadoopUtil.get.addCurrentUserCredentials(credentials)
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer) {
