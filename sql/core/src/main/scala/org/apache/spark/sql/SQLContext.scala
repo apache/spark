@@ -1052,7 +1052,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   @transient
-  protected[sql] val checkAnalysis = new CheckAnalysis {
+  protected[sql] lazy val checkAnalysis = new CheckAnalysis {
     override val extendedCheckRules = Seq(
       sources.PreWriteCheck(catalog)
     )
