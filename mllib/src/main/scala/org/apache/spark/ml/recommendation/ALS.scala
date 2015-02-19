@@ -188,7 +188,7 @@ class ALSModel private[ml] (
       .select(dataset("*"), predict(users("features"), items("features")).as(map(predictionCol)))
   }
 
-  override private[ml] def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
+  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     validateAndTransformSchema(schema, paramMap)
   }
 }
@@ -292,7 +292,7 @@ class ALS extends Estimator[ALSModel] with ALSParams {
     model
   }
 
-  override private[ml] def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
+  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     validateAndTransformSchema(schema, paramMap)
   }
 }

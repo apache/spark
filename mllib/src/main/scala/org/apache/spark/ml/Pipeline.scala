@@ -20,7 +20,7 @@ package org.apache.spark.ml
 import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
 import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
@@ -33,9 +33,17 @@ import org.apache.spark.sql.types.StructType
 abstract class PipelineStage extends Serializable with Logging {
 
   /**
+   * :: DeveloperAPI ::
+   *
    * Derives the output schema from the input schema and parameters.
+   * The schema describes the columns and types of the data.
+   *
+   * @param schema  Input schema to this stage
+   * @param paramMap  Parameters passed to this stage
+   * @return  Output schema from this stage
    */
-  private[ml] def transformSchema(schema: StructType, paramMap: ParamMap): StructType
+  @DeveloperApi
+  def transformSchema(schema: StructType, paramMap: ParamMap): StructType
 
   /**
    * Derives the output schema from the input schema and parameters, optionally with logging.
@@ -126,7 +134,7 @@ class Pipeline extends Estimator[PipelineModel] {
     new PipelineModel(this, map, transformers.toArray)
   }
 
-  private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
+  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     val map = this.paramMap ++ paramMap
     val theStages = map(stages)
     require(theStages.toSet.size == theStages.size,
@@ -171,7 +179,7 @@ class PipelineModel private[ml] (
     stages.foldLeft(dataset)((cur, transformer) => transformer.transform(cur, map))
   }
 
-  private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
+  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     // Precedence of ParamMaps: paramMap > this.paramMap > fittingParamMap
     val map = (fittingParamMap ++ this.paramMap) ++ paramMap
     stages.foldLeft(schema)((cur, transformer) => transformer.transformSchema(cur, map))

@@ -132,7 +132,7 @@ private[spark] abstract class Predictor[
   @DeveloperApi
   protected def featuresDataType: DataType = new VectorUDT
 
-  private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
+  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     validateAndTransformSchema(schema, paramMap, fitting = true, featuresDataType)
   }
 
@@ -184,7 +184,7 @@ private[spark] abstract class PredictionModel[FeaturesType, M <: PredictionModel
   @DeveloperApi
   protected def featuresDataType: DataType = new VectorUDT
 
-  private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
+  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     validateAndTransformSchema(schema, paramMap, fitting = false, featuresDataType)
   }
 
