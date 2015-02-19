@@ -75,8 +75,7 @@ class Main {
     }
 
     if (isWindows()) {
-      List<String> winCmd = prepareForWindows(cmd, env);
-      System.out.println(join(" ", cmd));
+      System.out.println(prepareForWindows(cmd, env));
     } else {
       List<String> bashCmd = prepareForBash(cmd, env);
       for (String c : bashCmd) {
@@ -101,23 +100,18 @@ class Main {
    * The command is executed using "cmd /c" and formatted as single line, since that's the
    * easiest way to consume this from a batch script (see spark-class2.cmd).
    */
-  private static List<String> prepareForWindows(List<String> cmd, Map<String, String> childEnv) {
+  private static String prepareForWindows(List<String> cmd, Map<String, String> childEnv) {
     StringBuilder cmdline = new StringBuilder("cmd /c \"");
     for (Map.Entry<String, String> e : childEnv.entrySet()) {
-      if (cmdline.length() > 0) {
-        cmdline.append(" ");
-      }
       cmdline.append(String.format("set %s=%s", e.getKey(), e.getValue()));
-      cmdline.append(" &&");
+      cmdline.append(" && ");
     }
     for (String arg : cmd) {
-      if (cmdline.length() > 0) {
-        cmdline.append(" ");
-      }
       cmdline.append(quoteForBatchScript(arg));
+      cmdline.append(" ");
     }
     cmdline.append("\"");
-    return Arrays.asList(cmdline.toString());
+    return cmdline.toString();
   }
 
   /**
