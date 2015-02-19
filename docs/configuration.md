@@ -139,10 +139,6 @@ of the most common options to set are:
     Having a high limit may cause out-of-memory errors in driver (depends on spark.driver.memory
     and memory overhead of objects in JVM). Setting a proper limit can protect the driver from
     out-of-memory errors.
-    
-	<br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
-	directly in your application, because the driver JVM has already started at that point.
-	Instead, please set this through the default properties file.</td>
   </td>
 </tr>
 <tr>
@@ -225,8 +221,8 @@ Apart from these, the following properties are also available, and may be useful
     
 	<br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
 	directly in your application, because the driver JVM has already started at that point.
-	Instead, please set this through the command line option (see Dynamically Loading Spark Properties) 
-	or in your default properties file.</td>
+	Instead, please set this through the <code>--driver-java-options</code> command line option or in 
+	your default properties file.</td>
   </td>
 </tr>
 <tr>
@@ -237,7 +233,9 @@ Apart from these, the following properties are also available, and may be useful
     
 	<br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
 	directly in your application, because the driver JVM has already started at that point.
-	Instead, please set this through the default properties file.</td>
+	Instead, please set this through the <code>--driver-class-path</code> command line option or in 
+	your default properties file.</td>
+
   </td>
 </tr>
 <tr>
@@ -248,7 +246,9 @@ Apart from these, the following properties are also available, and may be useful
     
 	<br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
 	directly in your application, because the driver JVM has already started at that point.
-	Instead, please set this through the default properties file.</td>
+	Instead, please set this through the <code>--driver-library-path</code> command line option or in 
+	your default properties file.</td>
+
   </td>
 </tr>
 <tr>
@@ -259,7 +259,7 @@ Apart from these, the following properties are also available, and may be useful
     classes in the the driver. This feature can be used to mitigate conflicts between Spark's
     dependencies and user dependencies. It is currently an experimental feature.
     
-  <br /><em>Note:</em> setting this with <code>conf.set(...)</code> only works in <code>cluster</code> mode (e.g. YARN deployment). For <code>client</code> driver memory should be configured in <code>conf/spark-defaults.conf</code> or via the run-time settings (See Dynamically Loading Spark Properties).
+	This is used in cluster mode only. 
   </td>
 </tr>
 <tr>
