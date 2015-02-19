@@ -109,35 +109,48 @@ class SparkClassCommandBuilder extends SparkLauncher implements CommandBuilder {
   }
 
   private List<String> createSparkSubmitCommand(Map<String, String> env) throws IOException {
-    List<String> sparkSubmitArgs = new ArrayList<String>(classArgs);
+    final List<String> sparkSubmitArgs = new ArrayList<String>();
+    final List<String> appArgs = new ArrayList<String>();
 
-    // This is a workaround for the fact that the constants in SparkSubmitOptionParser are not
-    // static. The parser itself is never used, we just don't want to hardcode the value of that
-    // option here.
+    // This parser exists for two reasons:
+    // - to expose the command line args constants, since they're not static
+    // - to special-case the HELP command line argument, and allow it to be propagated to
+    //   the app being launched.
     SparkSubmitOptionParser parser = new SparkSubmitOptionParser() {
 
       @Override
       protected boolean handle(String opt, String value) {
-        throw new UnsupportedOperationException();
+        if (opt.equals(HELP)) {
+          appArgs.add(opt);
+        } else {
+          sparkSubmitArgs.add(opt);
+          sparkSubmitArgs.add(value);
+        }
+        return true;
       }
 
       @Override
       protected boolean handleUnknown(String opt) {
-        throw new UnsupportedOperationException();
+        appArgs.add(opt);
+        return true;
       }
 
       @Override
       protected void handleExtraArgs(List<String> extra) {
-        throw new UnsupportedOperationException();
+        appArgs.addAll(extra);
       }
 
     };
 
+    parser.parse(classArgs);
     sparkSubmitArgs.add(parser.CLASS);
     sparkSubmitArgs.add(className);
 
     SparkSubmitCommandBuilder builder = new SparkSubmitCommandBuilder(true, sparkSubmitArgs);
     builder.setAppResource("spark-internal");
+    for (String arg: appArgs) {
+      builder.addAppArgs(arg);
+    }
     return builder.buildCommand(env);
   }
 
