@@ -687,6 +687,10 @@ class SQLContext(object):
         """Removes the specified table from the in-memory cache."""
         self._ssql_ctx.uncacheTable(tableName)
 
+    def clearCache(self):
+        """Removes all cached tables from the in-memory cache. """
+        self._ssql_ctx.clearCache()
+
 
 class HiveContext(SQLContext):
 
