@@ -25,12 +25,23 @@ private[spark] trait Clock {
   def waitTillTime(targetTime: Long): Long
 }
 
+/**
+ * A clock backed by the actual time from the OS as reported by the `System` API.
+ */
 private[spark] class SystemClock extends Clock {
 
   val minPollTime = 25L
 
+  /**
+   * @return the same time (milliseconds since the epoch)
+   *         as is reported by `System.currentTimeMillis()`
+   */
   def getTimeMillis(): Long = System.currentTimeMillis()
 
+  /**
+   * @param targetTime block until the current time is at least this value
+   * @return current system time when wait has completed
+   */
   def waitTillTime(targetTime: Long): Long = {
     var currentTime = 0L
     currentTime = System.currentTimeMillis()
