@@ -116,7 +116,7 @@ of the most common options to set are:
     Amount of memory to use for the driver process, i.e. where SparkContext is initialized.
     (e.g. <code>512m</code>, <code>2g</code>).
     
-    <br /><br />Note: this setting only works in <code>cluster</code> mode (e.g. YARN deployment). In <code>client</code> mode (e.g. spark-shell), this setting has no effect. In client mode, driver memory should be configured in the run-time settings ; i.e. --driver-memory 2g.
+    <br /><br />Note: setting this with <code>conf.set(...)</code> only works in <code>cluster</code> mode (e.g. YARN deployment). For <code>client</code> driver memory should be configured in the run-time settings ; i.e. --driver-memory 2g or within <code>conf/spark-defaults.conf</code>.
   </td>
 </tr>
 <tr>
@@ -137,6 +137,9 @@ of the most common options to set are:
     Having a high limit may cause out-of-memory errors in driver (depends on spark.driver.memory
     and memory overhead of objects in JVM). Setting a proper limit can protect the driver from
     out-of-memory errors.
+    
+    <br /><br />Note: setting this with <code>conf.set(...)</code> only works in <code>cluster</code> mode (e.g. YARN deployment). For <code>client</code> driver memory should be configured in <code>conf/spark-defaults.conf</code>.
+
   </td>
 </tr>
 <tr>
@@ -216,6 +219,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>(none)</td>
   <td>
     A string of extra JVM options to pass to the driver. For instance, GC settings or other logging.
+    
+    <br /><br />Note: setting this with <code>conf.set(...)</code> only works in <code>cluster</code> mode (e.g. YARN deployment). For <code>client</code> driver memory should be configured in <code>conf/spark-defaults.conf</code> or via the run-time settings (See Dynamically Loading Spark Properties).
+
   </td>
 </tr>
 <tr>
@@ -223,6 +229,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>(none)</td>
   <td>
     Extra classpath entries to append to the classpath of the driver.
+    
+        <br /><br />Note: setting this with <code>conf.set(...)</code> only works in <code>cluster</code> mode (e.g. YARN deployment). For <code>client</code> driver memory should be configured in <code>conf/spark-defaults.conf</code> or via the run-time settings (See Dynamically Loading Spark Properties).
   </td>
 </tr>
 <tr>
@@ -230,6 +238,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>(none)</td>
   <td>
     Set a special library path to use when launching the driver JVM.
+    
+        <br /><br />Note: setting this with <code>conf.set(...)</code> only works in <code>cluster</code> mode (e.g. YARN deployment). For <code>client</code> driver memory should be configured in <code>conf/spark-defaults.conf</code> or via the run-time settings (See Dynamically Loading Spark Properties).
   </td>
 </tr>
 <tr>
@@ -239,6 +249,8 @@ Apart from these, the following properties are also available, and may be useful
     (Experimental) Whether to give user-added jars precedence over Spark's own jars when loading
     classes in the the driver. This feature can be used to mitigate conflicts between Spark's
     dependencies and user dependencies. It is currently an experimental feature.
+    
+        <br /><br />Note: setting this with <code>conf.set(...)</code> only works in <code>cluster</code> mode (e.g. YARN deployment). For <code>client</code> driver memory should be configured in <code>conf/spark-defaults.conf</code> or via the run-time settings (See Dynamically Loading Spark Properties).
   </td>
 </tr>
 <tr>
