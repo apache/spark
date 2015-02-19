@@ -604,7 +604,7 @@ def _infer_type(obj):
     ExamplePointUDT
     """
     if obj is None:
-        raise ValueError("Can not infer type for None")
+        return NullType()
 
     if hasattr(obj, '__UDT__'):
         return obj.__UDT__
@@ -1014,7 +1014,7 @@ def _verify_type(obj, dataType):
         return
 
     _type = type(dataType)
-    assert _type in _acceptable_types, "unkown datatype: %s" % dataType
+    assert _type in _acceptable_types, "unknown datatype: %s" % dataType
 
     # subclass of them can not be deserialized in JVM
     if type(obj) not in _acceptable_types[_type]:
@@ -1032,7 +1032,7 @@ def _verify_type(obj, dataType):
 
     elif isinstance(dataType, StructType):
         if len(obj) != len(dataType.fields):
-            raise ValueError("Length of object (%d) does not match with"
+            raise ValueError("Length of object (%d) does not match with "
                              "length of fields (%d)" % (len(obj), len(dataType.fields)))
         for v, f in zip(obj, dataType.fields):
             _verify_type(v, f.dataType)

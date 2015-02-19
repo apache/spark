@@ -186,7 +186,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual("2", row.d)
 
     def test_infer_schema(self):
-        d = [Row(l=[], d={}),
+        d = [Row(l=[], d={}, s=None),
              Row(l=[Row(a=1, b='s')], d={"key": Row(c=1.0, d="2")}, s="")]
         rdd = self.sc.parallelize(d)
         df = self.sqlCtx.createDataFrame(rdd)
