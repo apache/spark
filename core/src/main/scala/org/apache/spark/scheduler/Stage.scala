@@ -127,9 +127,7 @@ private[spark] abstract class Stage(val id: Int,
   }
 
   def attemptId: Int = nextAttemptId
-
-  override def toString = "Stage " + id
-
+  
   override def hashCode(): Int = id
 
   override def equals(other: Any): Boolean = other match {
