@@ -50,6 +50,7 @@ object DefaultOptimizer extends Optimizer {
       CombineFilters,
       PushPredicateThroughProject,
       PushPredicateThroughJoin,
+      PushPredicateThroughGenerate,
       ColumnPruning) ::
     Batch("LocalRelation", FixedPoint(100),
       ConvertToLocalRelation) :: Nil
@@ -117,6 +118,15 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Eliminate attributes that are not needed to calculate the specified aggregates.
     case a @ Aggregate(_, _, child) if (child.outputSet -- a.references).nonEmpty =>
       a.copy(child = Project(a.references.toSeq, child))
+
+    case p @ Project(projectList, a @ Aggregate(groupingExpressions, aggregateExpressions, child))
+        if (a.outputSet -- p.references).nonEmpty =>
+      Project(
+        projectList,
+        Aggregate(
+          groupingExpressions,
+          aggregateExpressions.filter(e => p.references.contains(e)),
+          child))
 
     // Eliminate unneeded attributes from either side of a Join.
     case Project(projectList, Join(left, right, joinType, condition)) =>
@@ -208,7 +218,8 @@ object NullPropagation extends Rule[LogicalPlan] {
       case e @ IsNotNull(c) if !c.nullable => Literal(true, BooleanType)
       case e @ GetItem(Literal(null, _), _) => Literal(null, e.dataType)
       case e @ GetItem(_, Literal(null, _)) => Literal(null, e.dataType)
-      case e @ GetField(Literal(null, _), _, _) => Literal(null, e.dataType)
+      case e @ StructGetField(Literal(null, _), _, _) => Literal(null, e.dataType)
+      case e @ ArrayGetField(Literal(null, _), _, _, _) => Literal(null, e.dataType)
       case e @ EqualNullSafe(Literal(null, _), r) => IsNull(r)
       case e @ EqualNullSafe(l, Literal(null, _)) => IsNull(l)
       case e @ Count(expr) if !expr.nullable => Count(Literal(1))
@@ -452,6 +463,30 @@ object PushPredicateThroughProject extends Rule[LogicalPlan] {
     condition transform {
       case a: AttributeReference => sourceAliases.getOrElse(a, a)
     }
+  }
+}
+
+/**
+ * Push [[Filter]] operators through [[Generate]] operators. Parts of the predicate that reference
+ * attributes generated in [[Generate]] will remain above, and the rest should be pushed beneath.
+ */
+object PushPredicateThroughGenerate extends Rule[LogicalPlan] with PredicateHelper {
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case filter @ Filter(condition,
+    generate @ Generate(generator, join, outer, alias, grandChild)) =>
+      // Predicates that reference attributes produced by the `Generate` operator cannot
+      // be pushed below the operator.
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition {
+        conjunct => conjunct.references subsetOf grandChild.outputSet
+      }
+      if (pushDown.nonEmpty) {
+        val pushDownPredicate = pushDown.reduce(And)
+        val withPushdown = generate.copy(child = Filter(pushDownPredicate, grandChild))
+        stayUp.reduceOption(And).map(Filter(_, withPushdown)).getOrElse(withPushdown)
+      } else {
+        filter
+      }
   }
 }
 

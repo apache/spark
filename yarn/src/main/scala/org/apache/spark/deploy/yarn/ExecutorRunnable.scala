@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.io.File
 import java.net.URI
 import java.nio.ByteBuffer
 
@@ -37,7 +38,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
-import org.apache.spark.{SecurityManager, SparkConf, Logging}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.network.util.JavaUtils
 
 class ExecutorRunnable(
@@ -57,7 +58,7 @@ class ExecutorRunnable(
   var nmClient: NMClient = _
   val yarnConf: YarnConfiguration = new YarnConfiguration(conf)
   lazy val env = prepareEnvironment(container)
-  
+
   def run = {
     logInfo("Starting Executor Container")
     nmClient = NMClient.createNMClient()
@@ -108,7 +109,13 @@ class ExecutorRunnable(
     }
 
     // Send the start request to the ContainerManager
-    nmClient.startContainer(container, ctx)
+    try {
+      nmClient.startContainer(container, ctx)
+    } catch {
+      case ex: Exception =>
+        throw new SparkException(s"Exception while starting container ${container.getId}" +
+          s" on host $hostname", ex)
+    }
   }
 
   private def prepareCommand(
@@ -185,6 +192,16 @@ class ExecutorRunnable(
     // For log4j configuration to reference
     javaOpts += ("-Dspark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR)
 
+    val userClassPath = Client.getUserClasspath(sparkConf).flatMap { uri =>
+      val absPath =
+        if (new File(uri.getPath()).isAbsolute()) {
+          uri.getPath()
+        } else {
+          Client.buildPath(Environment.PWD.$(), uri.getPath())
+        }
+      Seq("--user-class-path", "file:" + absPath)
+    }.toSeq
+
     val commands = prefixEnv ++ Seq(
       YarnSparkHadoopUtil.expandEnvironment(Environment.JAVA_HOME) + "/bin/java",
       "-server",
@@ -196,11 +213,13 @@ class ExecutorRunnable(
       "-XX:OnOutOfMemoryError='kill %p'") ++
       javaOpts ++
       Seq("org.apache.spark.executor.CoarseGrainedExecutorBackend",
-        masterAddress.toString,
-        slaveId.toString,
-        hostname.toString,
-        executorCores.toString,
-        appId,
+        "--driver-url", masterAddress.toString,
+        "--executor-id", slaveId.toString,
+        "--hostname", hostname.toString,
+        "--cores", executorCores.toString,
+        "--app-id", appId) ++
+      userClassPath ++
+      Seq(
         "1>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout",
         "2>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr")
 

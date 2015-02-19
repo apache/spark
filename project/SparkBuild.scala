@@ -361,9 +361,16 @@ object Unidoc {
     publish := {},
 
     unidocProjectFilter in(ScalaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, catalyst, streamingFlumeSink, yarn),
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, streamingFlumeSink, yarn),
     unidocProjectFilter in(JavaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, bagel, examples, tools, catalyst, streamingFlumeSink, yarn),
+      inAnyProject -- inProjects(OldDeps.project, repl, bagel, examples, tools, streamingFlumeSink, yarn),
+
+    // Skip actual catalyst, but include the subproject.
+    // Catalyst is not public API and contains quasiquotes which break scaladoc.
+    unidocAllSources in (ScalaUnidoc, unidoc) := {
+      (unidocAllSources in (ScalaUnidoc, unidoc)).value
+        .map(_.filterNot(_.getCanonicalPath.contains("sql/catalyst")))
+    },
 
     // Skip class names containing $ and some internal packages in Javadocs
     unidocAllSources in (JavaUnidoc, unidoc) := {
@@ -376,6 +383,7 @@ object Unidoc {
         .map(_.filterNot(_.getCanonicalPath.contains("executor")))
         .map(_.filterNot(_.getCanonicalPath.contains("python")))
         .map(_.filterNot(_.getCanonicalPath.contains("collection")))
+        .map(_.filterNot(_.getCanonicalPath.contains("sql/catalyst")))
     },
 
     // Javadoc options: create a window title, and group key packages on index page
@@ -411,6 +419,10 @@ object TestSettings {
   lazy val settings = Seq (
     // Fork new JVMs for tests and set Java options for those
     fork := true,
+    // Setting SPARK_DIST_CLASSPATH is a simple way to make sure any child processes
+    // launched by the tests have access to the correct test-time classpath.
+    envVars in Test += ("SPARK_DIST_CLASSPATH" ->
+      (fullClasspath in Test).value.files.map(_.getAbsolutePath).mkString(":").stripSuffix(":")),
     javaOptions in Test += "-Dspark.test.home=" + sparkHome,
     javaOptions in Test += "-Dspark.testing=1",
     javaOptions in Test += "-Dspark.port.maxRetries=100",
@@ -423,10 +435,6 @@ object TestSettings {
     javaOptions in Test += "-ea",
     javaOptions in Test ++= "-Xmx3g -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g"
       .split(" ").toSeq,
-    // This places test scope jars on the classpath of executors during tests.
-    javaOptions in Test +=
-      "-Dspark.executor.extraClassPath=" + (fullClasspath in Test).value.files.
-      map(_.getAbsolutePath).mkString(":").stripSuffix(":"),
     javaOptions += "-Xmx3g",
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),

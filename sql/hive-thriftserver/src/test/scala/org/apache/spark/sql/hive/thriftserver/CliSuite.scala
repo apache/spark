@@ -121,6 +121,6 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
   }
 
   test("Single command with -e") {
-    runCliWithin(1.minute, Seq("-e", "SHOW TABLES;"))("" -> "OK")
+    runCliWithin(1.minute, Seq("-e", "SHOW DATABASES;"))("" -> "OK")
   }
 }

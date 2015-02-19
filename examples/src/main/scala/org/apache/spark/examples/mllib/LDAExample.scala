@@ -159,7 +159,7 @@ object LDAExample {
       }
       println()
     }
-
+    sc.stop()
   }
 
   /**

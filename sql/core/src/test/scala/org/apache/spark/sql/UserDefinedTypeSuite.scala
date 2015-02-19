@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import scala.beans.{BeanInfo, BeanProperty}
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Dsl._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.{sparkContext, sql}
 import org.apache.spark.sql.test.TestSQLContext.implicits._
@@ -66,7 +66,7 @@ class UserDefinedTypeSuite extends QueryTest {
   val points = Seq(
     MyLabeledPoint(1.0, new MyDenseVector(Array(0.1, 1.0))),
     MyLabeledPoint(0.0, new MyDenseVector(Array(0.2, 2.0))))
-  val pointsRDD: RDD[MyLabeledPoint] = sparkContext.parallelize(points)
+  val pointsRDD = sparkContext.parallelize(points).toDF()
 
 
   test("register user type: MyDenseVector for MyLabeledPoint") {

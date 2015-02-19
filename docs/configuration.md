@@ -231,6 +231,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.driver.userClassPathFirst</code></td>
+  <td>false</td>
+  <td>
+    (Experimental) Whether to give user-added jars precedence over Spark's own jars when loading
+    classes in the the driver. This feature can be used to mitigate conflicts between Spark's
+    dependencies and user dependencies. It is currently an experimental feature.
+  </td>
+</tr>
+<tr>
   <td><code>spark.executor.extraJavaOptions</code></td>
   <td>(none)</td>
   <td>
@@ -297,13 +306,11 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.files.userClassPathFirst</code></td>
+  <td><code>spark.executor.userClassPathFirst</code></td>
   <td>false</td>
   <td>
-    (Experimental) Whether to give user-added jars precedence over Spark's own jars when
-    loading classes in Executors. This feature can be used to mitigate conflicts between
-    Spark's dependencies and user dependencies. It is currently an experimental feature.
-    (Currently, this setting does not work for YARN, see <a href="https://issues.apache.org/jira/browse/SPARK-2996">SPARK-2996</a> for more details).
+    (Experimental) Same functionality as <code>spark.driver.userClassPathFirst</code>, but
+    applied to executor instances.
   </td>
 </tr>
 <tr>
@@ -865,8 +872,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.network.timeout</code></td>
   <td>120</td>
   <td>
-    Default timeout for all network interactions, in seconds. This config will be used in 
-    place of <code>spark.core.connection.ack.wait.timeout</code>, <code>spark.akka.timeout</code>, 
+    Default timeout for all network interactions, in seconds. This config will be used in
+    place of <code>spark.core.connection.ack.wait.timeout</code>, <code>spark.akka.timeout</code>,
     <code>spark.storage.blockManagerSlaveTimeoutMs</code> or
     <code>spark.shuffle.io.connectionTimeout</code>, if they are not configured.
   </td>
@@ -911,8 +918,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.shuffle.io.preferDirectBufs</code></td>
   <td>true</td>
   <td>
-    (Netty only) Off-heap buffers are used to reduce garbage collection during shuffle and cache 
-    block transfer. For environments where off-heap memory is tightly limited, users may wish to 
+    (Netty only) Off-heap buffers are used to reduce garbage collection during shuffle and cache
+    block transfer. For environments where off-heap memory is tightly limited, users may wish to
     turn this off to force all allocations from Netty to be on-heap.
   </td>
 </tr>
@@ -920,7 +927,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.shuffle.io.numConnectionsPerPeer</code></td>
   <td>1</td>
   <td>
-    (Netty only) Connections between hosts are reused in order to reduce connection buildup for 
+    (Netty only) Connections between hosts are reused in order to reduce connection buildup for
     large clusters. For clusters with many hard disks and few hosts, this may result in insufficient
     concurrency to saturate all disks, and so users may consider increasing this value.
   </td>
@@ -930,7 +937,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>3</td>
   <td>
     (Netty only) Fetches that fail due to IO-related exceptions are automatically retried if this is
-    set to a non-zero value. This retry logic helps stabilize large shuffles in the face of long GC 
+    set to a non-zero value. This retry logic helps stabilize large shuffles in the face of long GC
     pauses or transient network connectivity issues.
   </td>
 </tr>
@@ -939,7 +946,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>5</td>
   <td>
     (Netty only) Seconds to wait between retries of fetches. The maximum delay caused by retrying
-    is simply <code>maxRetries * retryWait</code>, by default 15 seconds. 
+    is simply <code>maxRetries * retryWait</code>, by default 15 seconds.
   </td>
 </tr>
 </table>

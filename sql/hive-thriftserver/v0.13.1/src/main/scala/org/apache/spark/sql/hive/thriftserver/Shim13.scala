@@ -156,6 +156,10 @@ private[hive] class SparkExecuteStatementOperation(
   def run(): Unit = {
     logInfo(s"Running query '$statement'")
     setState(OperationState.RUNNING)
+    hiveContext.sparkContext.setJobDescription(statement)
+    sessionToActivePool.get(parentSession.getSessionHandle).foreach { pool =>
+      hiveContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
+    }
     try {
       result = hiveContext.sql(statement)
       logDebug(result.queryExecution.toString())
@@ -164,10 +168,6 @@ private[hive] class SparkExecuteStatementOperation(
           sessionToActivePool(parentSession.getSessionHandle) = value
           logInfo(s"Setting spark.scheduler.pool=$value for future statements in this session.")
         case _ =>
-      }
-      hiveContext.sparkContext.setJobDescription(statement)
-      sessionToActivePool.get(parentSession.getSessionHandle).foreach { pool =>
-        hiveContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
       }
       iter = {
         val useIncrementalCollect =

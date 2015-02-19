@@ -462,7 +462,13 @@ abstract class RDD[T: ClassTag](
    * Return the union of this RDD and another one. Any identical elements will appear multiple
    * times (use `.distinct()` to eliminate them).
    */
-  def union(other: RDD[T]): RDD[T] = new UnionRDD(sc, Array(this, other))
+  def union(other: RDD[T]): RDD[T] = {
+    if (partitioner.isDefined && other.partitioner == partitioner) {
+      new PartitionerAwareUnionRDD(sc, Array(this, other))
+    } else {
+      new UnionRDD(sc, Array(this, other))
+    }
+  }
 
   /**
    * Return the union of this RDD and another one. Any identical elements will appear multiple

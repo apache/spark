@@ -99,21 +99,21 @@ class JdbcRDD[T: ClassTag](
 
     override def close() {
       try {
-        if (null != rs && ! rs.isClosed()) {
+        if (null != rs) {
           rs.close()
         }
       } catch {
         case e: Exception => logWarning("Exception closing resultset", e)
       }
       try {
-        if (null != stmt && ! stmt.isClosed()) {
+        if (null != stmt) {
           stmt.close()
         }
       } catch {
         case e: Exception => logWarning("Exception closing statement", e)
       }
       try {
-        if (null != conn && ! conn.isClosed()) {
+        if (null != conn) {
           conn.close()
         }
         logInfo("closed connection")
