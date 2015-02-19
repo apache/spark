@@ -90,7 +90,7 @@ sparkR.init <- function(
   sparkExecutorEnv = list(),
   sparkJars = "",
   sparkRLibDir = "",
-  sparkRBackendPort = 12345) {
+  sparkRBackendPort = as.integer(Sys.getenv("SPARKR_BACKEND_PORT", "12345"))) {
 
   if (exists(".sparkRjsc", envir = .sparkREnv)) {
     cat("Re-using existing Spark Context. Please stop SparkR with sparkR.stop() or restart R to create a new Spark Context\n")
@@ -106,7 +106,8 @@ sparkR.init <- function(
   if (yarn_conf_dir != "") {
     cp <- paste(cp, yarn_conf_dir, sep = ":")
   }
-  sparkRExistingPort <- Sys.getenv("SPARKR_BACKEND_PORT", "")
+
+  sparkRExistingPort <- Sys.getenv("EXISTING_SPARKR_BACKEND_PORT", "")
   if (sparkRExistingPort != "") {
     sparkRBackendPort <- sparkRExistingPort
   } else {

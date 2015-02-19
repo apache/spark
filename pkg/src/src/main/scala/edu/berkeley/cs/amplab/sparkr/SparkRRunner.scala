@@ -19,11 +19,8 @@ object SparkRRunner {
 
     val otherArgs = args.slice(1, args.length)
 
-    // Pick a non-privileged port
-    val randomPort = scala.util.Random.nextInt(65536 - 1024) + 1024
-
     // TODO: Can we get this from SparkConf ?
-    val sparkRBackendPort = sys.env.getOrElse("SPARKR_BACKEND_PORT", randomPort.toString).toInt
+    val sparkRBackendPort = sys.env.getOrElse("SPARKR_BACKEND_PORT", "12345").toInt
     val rCommand = "Rscript"
 
     // Check if the file path exists.
@@ -61,7 +58,7 @@ object SparkRRunner {
     // Launch R
     val builder = new ProcessBuilder(Seq(rCommand, rFileNormalized) ++ otherArgs)
     val env = builder.environment()
-    env.put("SPARKR_BACKEND_PORT", "" + sparkRBackendPort)
+    env.put("EXISTING_SPARKR_BACKEND_PORT", "" + sparkRBackendPort)
     builder.redirectErrorStream(true) // Ugly but needed for stdout and stderr to synchronize
     val process = builder.start()
 
