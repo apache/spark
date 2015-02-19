@@ -227,8 +227,7 @@ object GradientBoostedTrees extends Logging {
       // Note: A model of type regression is used since we require raw prediction
       val partialModel = new GradientBoostedTreesModel(
         Regression, baseLearners.slice(0, m + 1), baseLearnerWeights.slice(0, m + 1))
-      val errorModel = loss.computeError(partialModel, input)
-      logDebug("error of gbt = " + errorModel)
+      logDebug("error of gbt = " + loss.computeError(partialModel, input))
 
       if (validate) {
         // Stop training early if

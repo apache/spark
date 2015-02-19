@@ -159,7 +159,7 @@ class GradientBoostedTreesSuite extends FunSuite with MLlibTestSparkContext {
     }
   }
 
-  test("Early stopping when validation data is provided.") {
+  test("runWithValidation performs better on a validation dataset (Regression)") {
     // Set numIterations large enough so that it early stops.
     val numIterations = 20
     val trainRdd = sc.parallelize(GradientBoostedTreesSuite.trainData, 2)
@@ -180,8 +180,41 @@ class GradientBoostedTreesSuite extends FunSuite with MLlibTestSparkContext {
       val errorWithValidation = error.computeError(gbtValidate, validateRdd)
       assert(errorWithValidation < errorWithoutValidation)
     }
-
   }
+
+  test("runWithValidation performs better on a validation dataset (Classification)") {
+    // Set numIterations large enough so that it early stops.
+    val numIterations = 20
+    val trainRdd = sc.parallelize(GradientBoostedTreesSuite.trainData, 2)
+    val validateRdd = sc.parallelize(GradientBoostedTreesSuite.validateData, 2)
+
+    val treeStrategy = new Strategy(algo = Classification, impurity = Variance, maxDepth = 2,
+      categoricalFeaturesInfo = Map.empty)
+    val boostingStrategy =
+      new BoostingStrategy(treeStrategy, LogLoss, numIterations, validationTol = 0.0)
+
+    // Test that it stops early.
+    val gbtValidate = new GradientBoostedTrees(boostingStrategy).runWithValidation(
+      trainRdd, validateRdd)
+    assert(gbtValidate.numTrees != numIterations)
+
+    // Remap labels to {-1, 1}
+    val remappedInput = validateRdd.map(x => new LabeledPoint(2 * x.label - 1, x.features))
+
+    // The error checked for internally in the GradientBoostedTrees is based on Regression.
+    // Hence for the validation model, the Classification error need not be strictly less than
+    // that done with validation.
+    val gbtValidateRegressor = new GradientBoostedTreesModel(
+      Regression, gbtValidate.trees, gbtValidate.treeWeights)
+    val errorWithValidation = LogLoss.computeError(gbtValidateRegressor, remappedInput)
+
+    val gbt = GradientBoostedTrees.train(trainRdd, boostingStrategy)
+    val gbtRegressor = new GradientBoostedTreesModel(Regression, gbt.trees, gbt.treeWeights)
+    val errorWithoutValidation = LogLoss.computeError(gbtRegressor, remappedInput)
+
+    assert(errorWithValidation < errorWithoutValidation)
+    }
+
 }
 
 private object GradientBoostedTreesSuite {
