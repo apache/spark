@@ -1190,6 +1190,8 @@ class RDD(object):
         [2, 3, 4, 5, 6]
         >>> sc.parallelize(range(100), 100).filter(lambda x: x > 90).take(3)
         [91, 92, 93]
+        >>> sc.parallelize([]).take(1)
+        []
         """
         items = []
         totalParts = self._jrdd.partitions().size()
