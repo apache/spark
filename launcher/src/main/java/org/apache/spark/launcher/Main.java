@@ -19,13 +19,16 @@ package org.apache.spark.launcher;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import static org.apache.spark.launcher.CommandBuilderUtils.*;
 
 /**
  * Command line interface for the Spark launcher. Used internally by Spark scripts.
  */
-class Main extends LauncherCommon {
+class Main {
 
   /**
    * Usage: Main [class] [class args]
@@ -51,34 +54,117 @@ class Main extends LauncherCommon {
     String className = args.remove(0);
 
     boolean printLaunchCommand;
-    AbstractLauncher<?> launcher;
+    CommandBuilder builder;
     try {
       if (className.equals("org.apache.spark.deploy.SparkSubmit")) {
-        launcher = new SparkSubmitCliLauncher(args);
+        builder = new SparkSubmitCommandBuilder(args);
       } else {
-        launcher = new SparkClassLauncher(className, args);
+        builder = new SparkClassLauncher(className, args);
       }
       printLaunchCommand = !isEmpty(System.getenv("SPARK_PRINT_LAUNCH_COMMAND"));
     } catch (IllegalArgumentException e) {
-      launcher = new UsageLauncher();
+      builder = new UsageLauncher();
       printLaunchCommand = false;
     }
 
-    List<String> cmd = launcher.buildShellCommand();
+    Map<String, String> env = new HashMap<String, String>();
+    List<String> cmd = builder.buildCommand(env);
     if (printLaunchCommand) {
       System.err.println("Spark Command: " + join(" ", cmd));
       System.err.println("========================================");
     }
 
     if (isWindows()) {
-      String cmdLine = join(" ", cmd);
-      System.out.println(cmdLine);
+      List<String> winCmd = prepareForWindows(cmd, env);
+      System.out.println(join(" ", cmd));
     } else {
-      for (String c : cmd) {
+      List<String> bashCmd = prepareForBash(cmd, env);
+      for (String c : bashCmd) {
         System.out.print(c);
         System.out.print('\0');
       }
     }
+  }
+
+  /**
+   * Prepare a command line for execution from a Windows batch script.
+   *
+   * Two things need to be done:
+   *
+   * - If a custom library path is needed, extend PATH to add it. Based on:
+   *   http://superuser.com/questions/223104/setting-environment-variable-for-just-one-command-in-windows-cmd-exe
+   *
+   * - Quote all arguments so that spaces are handled as expected. Quotes within arguments are
+   *   "double quoted" (which is batch for escaping a quote). This page has more details about
+   *   quoting and other batch script fun stuff: http://ss64.com/nt/syntax-esc.html
+   *
+   * The command is executed using "cmd /c" and formatted as single line, since that's the
+   * easiest way to consume this from a batch script (see spark-class2.cmd).
+   */
+  private static List<String> prepareForWindows(List<String> cmd, Map<String, String> childEnv) {
+    StringBuilder cmdline = new StringBuilder("cmd /c \"");
+    for (Map.Entry<String, String> e : childEnv.entrySet()) {
+      if (cmdline.length() > 0) {
+        cmdline.append(" ");
+      }
+      cmdline.append(String.format("set %s=%s", e.getKey(), e.getValue()));
+      cmdline.append(" &&");
+    }
+    for (String arg : cmd) {
+      if (cmdline.length() > 0) {
+        cmdline.append(" ");
+      }
+      cmdline.append(quoteForBatchScript(arg));
+    }
+    cmdline.append("\"");
+    return Arrays.asList(cmdline.toString());
+  }
+
+  /**
+   * Prepare the command for execution from a bash script. The final command will have commands to
+   * set up any needed environment variables needed by the child process.
+   */
+  private static List<String> prepareForBash(List<String> cmd, Map<String, String> childEnv) {
+    if (childEnv.isEmpty()) {
+      return cmd;
+    }
+
+    List<String> newCmd = new ArrayList<String>();
+    newCmd.add("env");
+
+    for (Map.Entry<String, String> e : childEnv.entrySet()) {
+      newCmd.add(String.format("%s=%s", e.getKey(), e.getValue()));
+    }
+    newCmd.addAll(cmd);
+    return newCmd;
+  }
+
+  /**
+   * Quote a command argument for a command to be run by a Windows batch script, if the argument
+   * needs quoting. Arguments only seem to need quotes in batch scripts if they have whitespace.
+   */
+  private static String quoteForBatchScript(String arg) {
+    boolean needsQuotes = false;
+    for (int i = 0; i < arg.length(); i++) {
+      if (Character.isWhitespace(arg.codePointAt(i))) {
+        needsQuotes = true;
+        break;
+      }
+    }
+    if (!needsQuotes) {
+      return arg;
+    }
+    StringBuilder quoted = new StringBuilder();
+    quoted.append("\"");
+    for (int i = 0; i < arg.length(); i++) {
+      int cp = arg.codePointAt(i);
+      if (cp == '\"') {
+        quoted.append("\"");
+      }
+      quoted.appendCodePoint(cp);
+    }
+    quoted.append("\"");
+    return quoted.toString();
   }
 
   /**
@@ -94,10 +180,10 @@ class Main extends LauncherCommon {
    *   should check for this variable and print its usage, since batch scripts don't really support
    *   the "export -f" functionality used in bash.
    */
-  private static class UsageLauncher extends AbstractLauncher<UsageLauncher> {
+  private static class UsageLauncher implements CommandBuilder {
 
     @Override
-    List<String> buildLauncherCommand(Map<String, String> env) {
+    public List<String> buildCommand(Map<String, String> env) {
       if (isWindows()) {
         return Arrays.asList("set SPARK_LAUNCHER_USAGE_ERROR=1");
       } else {

@@ -25,7 +25,7 @@ import java.util.Map;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
-public class SparkSubmitCliLauncherSuite {
+public class SparkSubmitCommandBuilderSuite {
 
   @Test
   public void testShellCliParser() throws Exception {
@@ -42,7 +42,7 @@ public class SparkSubmitCliLauncherSuite {
       "--name",
       "appName");
 
-    List<String> args = new SparkSubmitCliLauncher(sparkSubmitArgs).buildSparkSubmitArgs();
+    List<String> args = new SparkSubmitCommandBuilder(sparkSubmitArgs).buildSparkSubmitArgs();
     List<String> expected = Arrays.asList("spark-shell", "--app-arg", "bar", "--app-switch");
     assertEquals(expected, args.subList(args.size() - expected.size(), args.size()));
   }
@@ -54,7 +54,7 @@ public class SparkSubmitCliLauncherSuite {
       "--master=foo",
       "--deploy-mode=bar");
 
-    List<String> cmd = new SparkSubmitCliLauncher(sparkSubmitArgs).buildSparkSubmitArgs();
+    List<String> cmd = new SparkSubmitCommandBuilder(sparkSubmitArgs).buildSparkSubmitArgs();
     assertEquals("org.my.Class", findArgValue(cmd, "--class"));
     assertEquals("foo", findArgValue(cmd, "--master"));
     assertEquals("bar", findArgValue(cmd, "--deploy-mode"));
@@ -63,14 +63,12 @@ public class SparkSubmitCliLauncherSuite {
   @Test
   public void testPySparkLauncher() throws Exception {
     List<String> sparkSubmitArgs = Arrays.asList(
-      SparkSubmitCliLauncher.PYSPARK_SHELL,
+      SparkSubmitCommandBuilder.PYSPARK_SHELL,
       "--master=foo",
       "--deploy-mode=bar");
 
     Map<String, String> env = new HashMap<String, String>();
-    List<String> cmd = new SparkSubmitCliLauncher(sparkSubmitArgs)
-      .setSparkHome(System.getProperty("spark.test.home"))
-      .buildLauncherCommand(env);
+    List<String> cmd = buildCommand(sparkSubmitArgs, env);
     assertEquals("python", cmd.get(cmd.size() - 1));
     assertEquals("\"--master\" \"foo\" \"--deploy-mode\" \"bar\"", env.get("PYSPARK_SUBMIT_ARGS"));
   }
@@ -84,9 +82,7 @@ public class SparkSubmitCliLauncherSuite {
       "arg1");
 
     Map<String, String> env = new HashMap<String, String>();
-    List<String> cmd = new SparkSubmitCliLauncher(sparkSubmitArgs)
-      .setSparkHome(System.getProperty("spark.test.home"))
-      .buildLauncherCommand(env);
+    List<String> cmd = buildCommand(sparkSubmitArgs, env);
 
     assertEquals("foo", findArgValue(cmd, "--master"));
     assertEquals("bar", findArgValue(cmd, "--deploy-mode"));
@@ -102,6 +98,12 @@ public class SparkSubmitCliLauncherSuite {
     }
     fail(String.format("arg '%s' not found", name));
     return null;
+  }
+
+  private List<String> buildCommand(List<String> args, Map<String, String> env) throws Exception {
+    SparkSubmitCommandBuilder builder = new SparkSubmitCommandBuilder(args);
+    builder.setSparkHome(System.getProperty("spark.test.home"));
+    return builder.buildCommand(env);
   }
 
 }

@@ -23,32 +23,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Configuration key definitions for Spark apps, and some helper methods.
+ * Helper methods for command builders.
  */
-public class LauncherCommon {
-
-  /** The Spark master. */
-  public static final String SPARK_MASTER = "spark.master";
-
-  /** Configuration key for the driver memory. */
-  public static final String DRIVER_MEMORY = "spark.driver.memory";
-  /** Configuration key for the driver class path. */
-  public static final String DRIVER_EXTRA_CLASSPATH = "spark.driver.extraClassPath";
-  /** Configuration key for the driver VM options. */
-  public static final String DRIVER_EXTRA_JAVA_OPTIONS = "spark.driver.extraJavaOptions";
-  /** Configuration key for the driver native library path. */
-  public static final String DRIVER_EXTRA_LIBRARY_PATH = "spark.driver.extraLibraryPath";
-
-  /** Configuration key for the executor memory. */
-  public static final String EXECUTOR_MEMORY = "spark.executor.memory";
-  /** Configuration key for the executor class path. */
-  public static final String EXECUTOR_EXTRA_CLASSPATH = "spark.executor.extraClassPath";
-  /** Configuration key for the executor VM options. */
-  public static final String EXECUTOR_EXTRA_JAVA_OPTIONS = "spark.executor.extraJavaOptions";
-  /** Configuration key for the executor native library path. */
-  public static final String EXECUTOR_EXTRA_LIBRARY_PATH = "spark.executor.extraLibraryOptions";
-  /** Configuration key for the number of executor CPU cores. */
-  public static final String EXECUTOR_CORES = "spark.executor.cores";
+class CommandBuilderUtils {
 
   /** Returns whether the given string is null or empty. */
   static boolean isEmpty(String s) {
@@ -243,8 +220,5 @@ public class LauncherCommon {
       throw new IllegalStateException(String.format(msg, args));
     }
   }
-
-  // To avoid subclassing outside this package.
-  LauncherCommon() { }
 
 }

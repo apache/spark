@@ -28,6 +28,8 @@ import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static org.apache.spark.launcher.CommandBuilderUtils.*;
+
 /**
  * Special launcher for handling a CLI invocation of SparkSubmit.
  * <p/>
@@ -37,7 +39,7 @@ import java.util.regex.Pattern;
  * <p/>
  * This class has also some special features to aid PySparkLauncher.
  */
-class SparkSubmitCliLauncher extends SparkLauncher {
+class SparkSubmitCommandBuilder extends SparkLauncher implements CommandBuilder {
 
   /**
    * Name of the app resource used to identify the PySpark shell. The command line parser expects
@@ -63,11 +65,11 @@ class SparkSubmitCliLauncher extends SparkLauncher {
   private final List<String> driverArgs;
   private boolean hasMixedArguments;
 
-  SparkSubmitCliLauncher(List<String> args) {
+  SparkSubmitCommandBuilder(List<String> args) {
     this(false, args);
   }
 
-  SparkSubmitCliLauncher(boolean hasMixedArguments, List<String> args) {
+  SparkSubmitCommandBuilder(boolean hasMixedArguments, List<String> args) {
     this.driverArgs = new ArrayList<String>();
 
     List<String> submitArgs = args;
@@ -83,11 +85,11 @@ class SparkSubmitCliLauncher extends SparkLauncher {
   }
 
   @Override
-  List<String> buildLauncherCommand(Map<String, String> env) throws IOException {
+  public List<String> buildCommand(Map<String, String> env) throws IOException {
     if (PYSPARK_SHELL.equals(appResource)) {
       return buildPySparkShellCommand(env);
     } else {
-      return super.buildLauncherCommand(env);
+      return super.buildSparkSubmitCommand(env);
     }
   }
 
@@ -100,7 +102,7 @@ class SparkSubmitCliLauncher extends SparkLauncher {
         "Use ./bin/spark-submit <python file>");
       setAppResource(appArgs.get(0));
       appArgs.remove(0);
-      return buildLauncherCommand(env);
+      return buildCommand(env);
     }
 
     // When launching the pyspark shell, the spark-submit arguments should be stored in the
@@ -170,19 +172,19 @@ class SparkSubmitCliLauncher extends SparkLauncher {
         driverArgs.add(opt);
         driverArgs.add(value);
       } else if (opt.equals(DRIVER_MEMORY)) {
-        setConf(LauncherCommon.DRIVER_MEMORY, value);
+        setConf(DRIVER_MEMORY, value);
         driverArgs.add(opt);
         driverArgs.add(value);
       } else if (opt.equals(DRIVER_JAVA_OPTIONS)) {
-        setConf(LauncherCommon.DRIVER_EXTRA_JAVA_OPTIONS, value);
+        setConf(DRIVER_EXTRA_JAVA_OPTIONS, value);
         driverArgs.add(opt);
         driverArgs.add(value);
       } else if (opt.equals(DRIVER_LIBRARY_PATH)) {
-        setConf(LauncherCommon.DRIVER_EXTRA_LIBRARY_PATH, value);
+        setConf(DRIVER_EXTRA_LIBRARY_PATH, value);
         driverArgs.add(opt);
         driverArgs.add(value);
       } else if (opt.equals(DRIVER_CLASS_PATH)) {
-        setConf(LauncherCommon.DRIVER_EXTRA_CLASSPATH, value);
+        setConf(DRIVER_EXTRA_CLASSPATH, value);
         driverArgs.add(opt);
         driverArgs.add(value);
       } else if (opt.equals(CLASS)) {

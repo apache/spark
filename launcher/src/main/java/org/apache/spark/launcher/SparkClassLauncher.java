@@ -24,13 +24,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+import static org.apache.spark.launcher.CommandBuilderUtils.*;
+
 /**
  * Launcher for internal Spark classes.
  * <p/>
  * This class handles building the command to launch all internal Spark classes except for
  * SparkSubmit (which is handled by the public {@link SparkLauncher} class.
  */
-class SparkClassLauncher extends AbstractLauncher<SparkClassLauncher> {
+class SparkClassLauncher extends SparkLauncher implements CommandBuilder {
 
   private final String className;
   private final List<String> classArgs;
@@ -41,7 +43,7 @@ class SparkClassLauncher extends AbstractLauncher<SparkClassLauncher> {
   }
 
   @Override
-  List<String> buildLauncherCommand(Map<String, String> env) throws IOException {
+  public List<String> buildCommand(Map<String, String> env) throws IOException {
     List<String> javaOptsKeys = new ArrayList<String>();
     String memKey = null;
     String extraClassPath = null;
@@ -89,7 +91,7 @@ class SparkClassLauncher extends AbstractLauncher<SparkClassLauncher> {
       javaOptsKeys.add("SPARK_JAVA_OPTS");
     } else {
       // Any classes not explicitly listed above are submitted using SparkSubmit.
-      return buildSparkSubmitCommand(env);
+      return createSparkSubmitCommand(env);
     }
 
     List<String> cmd = buildJavaCommand(extraClassPath);
@@ -106,14 +108,14 @@ class SparkClassLauncher extends AbstractLauncher<SparkClassLauncher> {
     return cmd;
   }
 
-  private List<String> buildSparkSubmitCommand(Map<String, String> env) throws IOException {
+  private List<String> createSparkSubmitCommand(Map<String, String> env) throws IOException {
     List<String> sparkSubmitArgs = new ArrayList<String>(classArgs);
     sparkSubmitArgs.add(SparkSubmitOptionParser.CLASS);
     sparkSubmitArgs.add(className);
 
-    SparkSubmitCliLauncher launcher = new SparkSubmitCliLauncher(true, sparkSubmitArgs);
-    launcher.setAppResource("spark-internal");
-    return launcher.buildLauncherCommand(env);
+    SparkSubmitCommandBuilder builder = new SparkSubmitCommandBuilder(true, sparkSubmitArgs);
+    builder.setAppResource("spark-internal");
+    return builder.buildCommand(env);
   }
 
 }

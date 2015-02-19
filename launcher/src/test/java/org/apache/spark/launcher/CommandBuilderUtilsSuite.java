@@ -24,9 +24,9 @@ import java.util.List;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
-import static org.apache.spark.launcher.LauncherCommon.*;
+import static org.apache.spark.launcher.CommandBuilderUtils.*;
 
-public class LauncherCommonSuite {
+public class CommandBuilderUtilsSuite {
 
   @Test
   public void testValidOptionStrings() {

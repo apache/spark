@@ -59,7 +59,6 @@ public class SparkLauncherSuite {
       .setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, System.getProperty("java.class.path"))
       .setMainClass(SparkLauncherTestApp.class.getName())
       .addAppArgs("proc");
-    printArgs(launcher.buildShellCommand());
     final Process app = launcher.launch();
     new Redirector("stdout", app.getInputStream()).start();
     new Redirector("stderr", app.getErrorStream()).start();
@@ -84,7 +83,7 @@ public class SparkLauncherSuite {
       .setConf("spark.foo", "foo");
 
     Map<String, String> env = new HashMap<String, String>();
-    List<String> cmd = launcher.buildLauncherCommand(env);
+    List<String> cmd = launcher.buildSparkSubmitCommand(env);
 
     // Checks below are different for driver and non-driver mode.
 
@@ -119,7 +118,7 @@ public class SparkLauncherSuite {
       assertFalse("Driver classpath should not be in command.", contains("/driver", cp));
     }
 
-    String libPath = env.get(launcher.getLibPathEnvName());
+    String libPath = env.get(CommandBuilderUtils.getLibPathEnvName());
     if (isDriver) {
       assertNotNull("Native library path should be set.", libPath);
       assertTrue("Native library path should contain provided entry.",
@@ -189,17 +188,6 @@ public class SparkLauncherSuite {
       }
     }
     return conf;
-  }
-
-  private void printArgs(List<String> cmd) {
-    StringBuilder cmdLine = new StringBuilder();
-    for (String arg : cmd) {
-      if (cmdLine.length() > 0) {
-        cmdLine.append(" ");
-      }
-      cmdLine.append("[").append(arg).append("]");
-    }
-    LOG.info("Launching SparkSubmit with args: {}", cmdLine.toString());
   }
 
   public static class SparkLauncherTestApp {
