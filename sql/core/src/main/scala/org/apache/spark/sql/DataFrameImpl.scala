@@ -210,7 +210,7 @@ private[sql] class DataFrameImpl protected[sql](
       Column(ResolvedStar(schema.fieldNames.map(resolve)))
     case _ =>
       val expr = resolve(colName)
-      Column(sqlContext, Project(Seq(expr), logicalPlan), expr)
+      Column(sqlContext, Project(Seq(expr), queryExecution.analyzed), expr)
   }
 
   override def as(alias: String): DataFrame = Subquery(alias, logicalPlan)
