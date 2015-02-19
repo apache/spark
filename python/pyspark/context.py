@@ -720,24 +720,30 @@ class SparkContext(object):
     def addRequirementsFile(self, path):
         """
         Add a pip requirements file to distribute dependencies for all tasks
-        on thie SparkContext int he future.
+        on thie SparkContext in the future. An ImportError will be thrown if
+        a module in the file can't be downloaded.
         See https://pip.pypa.io/en/latest/user_guide.html#requirements-files
         """
         import importlib
         import pip
         import tarfile
+        import tempfile
         import uuid
+        tar_dir = tempfile.mkdtemp()
         for req in pip.req.parse_requirements(path, session=uuid.uuid1()):
             if not req.check_if_exists():
                 pip.main(['install', req.req.__str__()])
-            mod = importlib.import_module(req.name) #throws ImportError
+            try:
+                mod = importlib.import_module(req.name)
+            finally:
+                shutil.rmtree(tar_dir)
             mod_path = mod.__path__[0]
-            tar_path = req.name+'.tar.gz'
+            tar_path = os.path.join(tar_dir, req.name+'.tar.gz')
             tar = tarfile.open(tar_path, "w:gz")
             tar.add(mod_path, arcname=os.path.basename(mod_path))
             tar.close()
             self.addPyFile(tar_path)
-            os.remove(tar_path)
+        shutil.rmtree(tar_dir)
 
     def setCheckpointDir(self, dirName):
         """
