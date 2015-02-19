@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.types.{BinaryType, BooleanType, NativeType}
+import org.apache.spark.sql.types.{NullType, BinaryType, BooleanType, NativeType}
 
 object InterpretedPredicate {
   def apply(expression: Expression, inputSchema: Seq[Attribute]): (Row => Boolean) =
@@ -165,8 +165,6 @@ case class Or(left: Expression, right: Expression) extends BinaryPredicate {
 
 abstract class BinaryComparison extends BinaryPredicate {
   self: Product =>
-
-  override lazy val resolved = left.resolved && right.resolved && left.dataType == right.dataType
 }
 
 case class EqualTo(left: Expression, right: Expression) extends BinaryComparison {
@@ -207,11 +205,17 @@ case class LessThan(left: Expression, right: Expression) extends BinaryCompariso
   override lazy val resolved =
     left.resolved && right.resolved &&
     left.dataType == right.dataType &&
-    left.dataType.isInstanceOf[NativeType]
+    (left.dataType.isInstanceOf[NativeType] || left.dataType.isInstanceOf[NullType])
 
   val ordering =
-    if (resolved) left.dataType.asInstanceOf[NativeType].ordering.asInstanceOf[Ordering[Any]]
-    else UnresolvedOrdering
+    if (resolved) {
+      left.dataType match {
+        case n: NativeType => n.ordering.asInstanceOf[Ordering[Any]]
+        case n: NullType => UnresolvedOrdering
+      }
+    } else {
+      UnresolvedOrdering
+    }
 
   override def eval(input: Row): Any = {
     val evalE1 = left.eval(input)
@@ -234,11 +238,17 @@ case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryCo
   override lazy val resolved =
     left.resolved && right.resolved &&
     left.dataType == right.dataType &&
-    left.dataType.isInstanceOf[NativeType]
+    (left.dataType.isInstanceOf[NativeType] || left.dataType.isInstanceOf[NullType])
 
   val ordering =
-    if (resolved) left.dataType.asInstanceOf[NativeType].ordering.asInstanceOf[Ordering[Any]]
-    else UnresolvedOrdering
+    if (resolved) {
+      left.dataType match {
+        case n: NativeType => n.ordering.asInstanceOf[Ordering[Any]]
+        case n: NullType => UnresolvedOrdering
+      }
+    } else {
+      UnresolvedOrdering
+    }
 
   override def eval(input: Row): Any = {
     val evalE1 = left.eval(input)
@@ -261,11 +271,17 @@ case class GreaterThan(left: Expression, right: Expression) extends BinaryCompar
   override lazy val resolved =
     left.resolved && right.resolved &&
     left.dataType == right.dataType &&
-    left.dataType.isInstanceOf[NativeType]
+    (left.dataType.isInstanceOf[NativeType] || left.dataType.isInstanceOf[NullType])
 
   val ordering =
-    if (resolved) left.dataType.asInstanceOf[NativeType].ordering.asInstanceOf[Ordering[Any]]
-    else UnresolvedOrdering
+    if (resolved) {
+      left.dataType match {
+        case n: NativeType => n.ordering.asInstanceOf[Ordering[Any]]
+        case n: NullType => UnresolvedOrdering
+      }
+    } else {
+      UnresolvedOrdering
+    }
 
   override def eval(input: Row): Any = {
     val evalE1 = left.eval(input)
@@ -288,11 +304,17 @@ case class GreaterThanOrEqual(left: Expression, right: Expression) extends Binar
   override lazy val resolved =
     left.resolved && right.resolved &&
     left.dataType == right.dataType &&
-    left.dataType.isInstanceOf[NativeType]
+    (left.dataType.isInstanceOf[NativeType] || left.dataType.isInstanceOf[NullType])
 
   val ordering =
-    if (resolved) left.dataType.asInstanceOf[NativeType].ordering.asInstanceOf[Ordering[Any]]
-    else UnresolvedOrdering
+    if (resolved) {
+      left.dataType match {
+        case n: NativeType => n.ordering.asInstanceOf[Ordering[Any]]
+        case n: NullType => UnresolvedOrdering
+      }
+    } else {
+      UnresolvedOrdering
+    }
 
   override def eval(input: Row): Any = {
     val evalE1 = left.eval(input)
