@@ -19,7 +19,7 @@ from abc import ABCMeta, abstractmethod
 
 from pyspark.ml.param import Param, Params
 from pyspark.ml.util import keyword_only
-from pyspark.mllib.__init__ import inherit_doc
+from pyspark.mllib.common import inherit_doc
 
 
 __all__ = ['Estimator', 'Transformer', 'Pipeline', 'PipelineModel']

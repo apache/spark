@@ -20,8 +20,7 @@ from __future__ import absolute_import
 import random
 
 from pyspark import SparkContext, RDD
-from pyspark.mllib.__init__ import inherit_doc
-from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
+from pyspark.mllib.common import callMLlibFunc, inherit_doc, JavaModelWrapper
 from pyspark.mllib.linalg import _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint
 

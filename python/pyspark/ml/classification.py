@@ -19,7 +19,7 @@ from pyspark.ml.util import keyword_only
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.param.shared import HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,\
     HasRegParam
-from pyspark.mllib.__init__ import inherit_doc
+from pyspark.mllib.common import inherit_doc
 
 
 __all__ = ['LogisticRegression', 'LogisticRegressionModel']

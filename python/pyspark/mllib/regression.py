@@ -18,9 +18,8 @@
 import numpy as np
 from numpy import array
 
-from pyspark.mllib.common import callMLlibFunc
+from pyspark.mllib.common import callMLlibFunc, inherit_doc
 from pyspark.mllib.linalg import SparseVector, _convert_to_vector
-from pyspark.mllib.__init__ import inherit_doc
 
 __all__ = ['LabeledPoint', 'LinearModel', 'LinearRegressionModel', 'RidgeRegressionModel',
            'LinearRegressionWithSGD', 'LassoWithSGD', 'RidgeRegressionWithSGD']
