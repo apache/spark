@@ -803,7 +803,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>(local hostname)</td>
   <td>
     Hostname or IP address for the driver to listen on.
-    This is used for communicating with the executors and the standalone Master.
+    This is used for communicating with the executors and the standalone Master.        
   </td>
 </tr>
 <tr>
