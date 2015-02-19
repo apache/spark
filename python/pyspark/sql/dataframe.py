@@ -908,7 +908,7 @@ def _reverse_op(name, doc="binary operator"):
     return _
 
 
-class Column(DataFrame):
+class Column(object):
 
     """
     A column in a DataFrame.
