@@ -21,10 +21,10 @@ import java.io.IOException
 import java.lang.{Integer => JavaInteger}
 
 import org.apache.hadoop.fs.Path
-import org.jblas.DoubleMatrix
 import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
+import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD}
@@ -70,9 +70,9 @@ class MatrixFactorizationModel(
 
   /** Predict the rating of one user for one product. */
   def predict(user: Int, product: Int): Double = {
-    val userVector = new DoubleMatrix(userFeatures.lookup(user).head)
-    val productVector = new DoubleMatrix(productFeatures.lookup(product).head)
-    userVector.dot(productVector)
+    val userVector = userFeatures.lookup(user).head
+    val productVector = productFeatures.lookup(product).head
+    blas.ddot(userVector.length, userVector, 1, productVector, 1)
   }
 
   /**
@@ -89,9 +89,7 @@ class MatrixFactorizationModel(
     }
     users.join(productFeatures).map {
       case (product, ((user, uFeatures), pFeatures)) =>
-        val userVector = new DoubleMatrix(uFeatures)
-        val productVector = new DoubleMatrix(pFeatures)
-        Rating(user, product, userVector.dot(productVector))
+        Rating(user, product, blas.ddot(uFeatures.length, uFeatures, 1, pFeatures, 1))
     }
   }
 
@@ -143,9 +141,8 @@ class MatrixFactorizationModel(
       recommendToFeatures: Array[Double],
       recommendableFeatures: RDD[(Int, Array[Double])],
       num: Int): Array[(Int, Double)] = {
-    val recommendToVector = new DoubleMatrix(recommendToFeatures)
     val scored = recommendableFeatures.map { case (id,features) =>
-      (id, recommendToVector.dot(new DoubleMatrix(features)))
+      (id, blas.ddot(features.length, recommendToFeatures, 1, features, 1))
     }
     scored.top(num)(Ordering.by(_._2))
   }
