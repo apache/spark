@@ -10,7 +10,7 @@ R.
 
 ### Requirements
 SparkR requires Scala 2.10 and Spark version >= 0.9.0. Current build by default uses
-Apache Spark 1.3.0. You can also build SparkR against a
+Apache Spark 1.1.0. You can also build SparkR against a
 different Spark version (>= 0.9.0) by modifying `pkg/src/build.sbt`.
 
 ### Package installation
@@ -23,11 +23,11 @@ If you wish to try out the package directly from github, you can use [`install_g
     library(devtools)
     install_github("amplab-extras/SparkR-pkg", subdir="pkg")
 
-SparkR by default uses Apache Spark 1.3.0. You can switch to a different Spark
+SparkR by default uses Apache Spark 1.1.0. You can switch to a different Spark
 version by setting the environment variable `SPARK_VERSION`. For example, to
-use Apache Spark 1.2.0, you can run
+use Apache Spark 1.3.0, you can run
 
-    SPARK_VERSION=1.2.0 ./install-dev.sh
+    SPARK_VERSION=1.3.0 ./install-dev.sh
 
 SparkR by default links to Hadoop 1.0.4. To use SparkR with other Hadoop
 versions, you will need to rebuild SparkR with the same version that [Spark is
@@ -91,8 +91,9 @@ To run one of them, use `./sparkR <filename> <args>`. For example:
 
     ./sparkR examples/pi.R local[2]
 
-You can also run the unit-tests for SparkR by running. You need to install the [testthat](http://cran.r-project.org/web/packages/testthat/index.html) package first.
+You can also run the unit-tests for SparkR by running (you need to install the [testthat](http://cran.r-project.org/web/packages/testthat/index.html) package first):
 
+    R -e 'install.packages("testthat", repos="http://cran.us.r-project.org")'
     ./run-tests.sh
 
 ## Running on EC2
