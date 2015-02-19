@@ -76,8 +76,6 @@ that stores the frequent itemsets with their frequencies.
 {% highlight java %}
 import java.util.List;
 
-import scala.Tuple2;
-
 import com.google.common.base.Joiner;
 
 import org.apache.spark.api.java.JavaRDD;
