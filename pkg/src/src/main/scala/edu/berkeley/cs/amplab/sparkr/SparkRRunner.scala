@@ -37,8 +37,7 @@ object SparkRRunner {
     // Java system properties etc.
     val sparkRBackend = new SparkRBackend()
     val sparkRBackendThread = new Thread() {
-      val finishedInit = new Semaphore(1)
-      finishedInit.acquire()
+      val finishedInit = new Semaphore(0)
 
       override def run() {
         sparkRBackend.init(sparkRBackendPort)
@@ -58,7 +57,7 @@ object SparkRRunner {
     // Launch R
     val builder = new ProcessBuilder(Seq(rCommand, rFileNormalized) ++ otherArgs)
     val env = builder.environment()
-    env.put("EXISTING_SPARKR_BACKEND_PORT", "" + sparkRBackendPort)
+    env.put("EXISTING_SPARKR_BACKEND_PORT", sparkRBackendPort.toString)
     builder.redirectErrorStream(true) // Ugly but needed for stdout and stderr to synchronize
     val process = builder.start()
 

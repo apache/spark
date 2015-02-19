@@ -47,15 +47,15 @@ launchBackendSparkSubmit <- function(
     sparkHome,
     sparkSubmitOpts) {
   if (.Platform$OS.type == "unix") {
-    spark_submit_bin_name = "spark-submit"
+    sparkSubmitBinName = "spark-submit"
   } else {
-    spark_submit_bin_name = "spark-submit.cmd"
+    sparkSubmitBinName = "spark-submit.cmd"
   }
 
   if (sparkHome != "") {
-    spark_submit_bin <- file.path(sparkHome, "bin", spark_submit_bin_name)
+    sparkSubmitBin <- file.path(sparkHome, "bin", sparkSubmitBinName)
   } else {
-    spark_submit_bin <- spark_submit_bin_name
+    sparkSubmitBin <- sparkSubmitBinName
   }
 
   # Since this function is only used while launching R shell using spark-submit,
@@ -63,6 +63,6 @@ launchBackendSparkSubmit <- function(
   # spark-submit --class <mainClass> <sparkSubmitOpts> <jarFile> <appOpts>
 
   combinedArgs <- paste("--class", mainClass, sparkSubmitOpts, appJar, args, sep = " ")
-  cat("Launching java with spark-submit command ", spark_submit_bin, " ", combinedArgs, "\n")
-  invisible(system2(spark_submit_bin, combinedArgs, wait = F))
+  cat("Launching java with spark-submit command ", sparkSubmitBin, " ", combinedArgs, "\n")
+  invisible(system2(sparkSubmitBin, combinedArgs, wait = F))
 }
