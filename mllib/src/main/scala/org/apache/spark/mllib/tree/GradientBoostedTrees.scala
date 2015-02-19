@@ -191,21 +191,12 @@ object GradientBoostedTrees extends Logging {
     baseLearners(0) = firstTreeModel
     baseLearnerWeights(0) = 1.0
     val startingModel = new GradientBoostedTreesModel(Regression, Array(firstTreeModel), Array(1.0))
-    val errorModel = loss.computeError(startingModel, input)
-    logDebug("error of gbt = " + errorModel)
+    logDebug("error of gbt = " + loss.computeError(startingModel, input))
 
     // Note: A model of type regression is used since we require raw prediction
     timer.stop("building tree 0")
 
-    // Just so that it can be accessed below. This error is ignored if validate is set to false.
-    var prevValidateError = {
-      if (validate) {
-        loss.computeError(startingModel, validateInput)
-      }
-      else {
-        errorModel
-      }
-    }
+    var prevValidateError = if (validate) loss.computeError(startingModel, validateInput) else 0.0
 
     // psuedo-residual for second iteration
     data = input.map(point => LabeledPoint(loss.gradient(startingModel, point),
