@@ -17,15 +17,16 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.streaming.StreamingContext
 import scala.reflect.ClassTag
+
+import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.receiver.Receiver
 
 private[streaming]
 class PluggableInputDStream[T: ClassTag](
   @transient ssc_ : StreamingContext,
   receiver: Receiver[T]) extends ReceiverInputDStream[T](ssc_) {
-
+  this.storageLevel = receiver.storageLevel
   def getReceiver(): Receiver[T] = {
     receiver
   }

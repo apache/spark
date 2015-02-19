@@ -429,7 +429,9 @@ object TestSettings {
     javaOptions in Test += "-Dspark.ui.enabled=false",
     javaOptions in Test += "-Dspark.ui.showConsoleProgress=false",
     javaOptions in Test += "-Dspark.driver.allowMultipleContexts=true",
-    javaOptions in Test += "-Dsun.io.serialization.extendedDebugInfo=true",
+    // Following java Option causes https://github.com/typesafehub/config/issues/176
+    // More details at SPARK-3872
+    // javaOptions in Test += "-Dsun.io.serialization.extendedDebugInfo=true",
     javaOptions in Test ++= System.getProperties.filter(_._1 startsWith "spark")
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
     javaOptions in Test += "-ea",

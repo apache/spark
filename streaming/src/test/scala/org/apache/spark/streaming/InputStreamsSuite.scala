@@ -17,12 +17,10 @@
 
 package org.apache.spark.streaming
 
-import akka.actor.Actor
-import akka.actor.Props
-import akka.util.ByteString
+import akka.actor.{Actor, Props}
 
 import java.io.{File, BufferedWriter, OutputStreamWriter}
-import java.net.{InetSocketAddress, SocketException, ServerSocket}
+import java.net.{SocketException, ServerSocket}
 import java.nio.charset.Charset
 import java.util.concurrent.{Executors, TimeUnit, ArrayBlockingQueue}
 import java.util.concurrent.atomic.AtomicInteger
@@ -283,6 +281,42 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     }
   }
 
+  test("actorStream") {
+    // Set up the streaming context and input streams
+    conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock")
+    val ssc = new StreamingContext(conf, batchDuration)
+    val input = Seq(1, 2, 3, 4, 5).map(_.toString)
+    val expectedOutput = input
+    val networkStream = ssc.actorStream[String](
+    Props(new FeederActor(input)), "Feeder", StorageLevel.MEMORY_AND_DISK)
+    val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
+    val outputStream = new TestOutputStream(networkStream, outputBuffer)
+    def output = outputBuffer.flatMap(x => x)
+    outputStream.register()
+    ssc.start()
+
+    Thread.sleep(1000) // This is a safe margin, test passes even with 500 ms.
+    logInfo("Stopping context")
+    ssc.stop()
+
+    // Verify whether data received was as expected
+    logInfo("--------------------------------")
+    logInfo("output.size = " + outputBuffer.size)
+    logInfo("output")
+    outputBuffer.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+    logInfo("expected output.size = " + expectedOutput.size)
+    logInfo("expected output")
+    expectedOutput.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+    logInfo("--------------------------------")
+
+    // Verify whether all the elements received are as expected
+    // (whether the elements were received one in each interval is not verified)
+    assert(output.size === expectedOutput.size)
+    for (i <- 0 until output.size) {
+      assert(output(i) === expectedOutput(i))
+    }
+  }
+
   def testFileStream(newFilesOnly: Boolean) {
     val testDir: File = null
     try {
@@ -339,7 +373,14 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     }
   }
 }
+class FeederActor(strings: Seq[String]) extends Actor with ActorHelper {
 
+  self ! "x"
+
+  def receive: Receive = {
+    case _ => strings.foreach(x => store[String](x))
+  }
+}
 
 /** This is a server to test the network input stream */
 class TestServer(portToBind: Int = 0) extends Logging {
