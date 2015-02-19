@@ -190,7 +190,7 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
     assert(splits.length === 2)
     assert(bins.length === 2)
     assert(splits(0).length === 3)
-    assert(bins(0).length === 6)
+    assert(bins(0).length === 0)
 
     // Expecting 2^2 - 1 = 3 bins/splits
     assert(splits(0)(0).feature === 0)
@@ -227,41 +227,6 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
     assert(splits(1)(2).categories.length === 2)
     assert(splits(1)(2).categories.contains(0.0))
     assert(splits(1)(2).categories.contains(1.0))
-
-    // Check bins.
-
-    assert(bins(0)(0).category === Double.MinValue)
-    assert(bins(0)(0).lowSplit.categories.length === 0)
-    assert(bins(0)(0).highSplit.categories.length === 1)
-    assert(bins(0)(0).highSplit.categories.contains(0.0))
-    assert(bins(1)(0).category === Double.MinValue)
-    assert(bins(1)(0).lowSplit.categories.length === 0)
-    assert(bins(1)(0).highSplit.categories.length === 1)
-    assert(bins(1)(0).highSplit.categories.contains(0.0))
-
-    assert(bins(0)(1).category === Double.MinValue)
-    assert(bins(0)(1).lowSplit.categories.length === 1)
-    assert(bins(0)(1).lowSplit.categories.contains(0.0))
-    assert(bins(0)(1).highSplit.categories.length === 1)
-    assert(bins(0)(1).highSplit.categories.contains(1.0))
-    assert(bins(1)(1).category === Double.MinValue)
-    assert(bins(1)(1).lowSplit.categories.length === 1)
-    assert(bins(1)(1).lowSplit.categories.contains(0.0))
-    assert(bins(1)(1).highSplit.categories.length === 1)
-    assert(bins(1)(1).highSplit.categories.contains(1.0))
-
-    assert(bins(0)(2).category === Double.MinValue)
-    assert(bins(0)(2).lowSplit.categories.length === 1)
-    assert(bins(0)(2).lowSplit.categories.contains(1.0))
-    assert(bins(0)(2).highSplit.categories.length === 2)
-    assert(bins(0)(2).highSplit.categories.contains(1.0))
-    assert(bins(0)(2).highSplit.categories.contains(0.0))
-    assert(bins(1)(2).category === Double.MinValue)
-    assert(bins(1)(2).lowSplit.categories.length === 1)
-    assert(bins(1)(2).lowSplit.categories.contains(1.0))
-    assert(bins(1)(2).highSplit.categories.length === 2)
-    assert(bins(1)(2).highSplit.categories.contains(1.0))
-    assert(bins(1)(2).highSplit.categories.contains(0.0))
 
   }
 

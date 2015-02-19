@@ -25,7 +25,7 @@ import java.util.Map;
 
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.spark.sql.sources.SaveMode;
+import org.apache.spark.sql.SaveMode;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;

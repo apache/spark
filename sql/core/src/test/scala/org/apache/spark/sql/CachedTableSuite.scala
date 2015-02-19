@@ -18,23 +18,20 @@
 package org.apache.spark.sql
 
 import scala.concurrent.duration._
-import scala.language.implicitConversions
-import scala.language.postfixOps
+import scala.language.{implicitConversions, postfixOps}
 
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.columnar._
-import org.apache.spark.sql.Dsl._
 import org.apache.spark.sql.test.TestSQLContext._
-import org.apache.spark.storage.{StorageLevel, RDDBlockId}
+import org.apache.spark.sql.test.TestSQLContext.implicits._
+import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 
 case class BigData(s: String)
 
 class CachedTableSuite extends QueryTest {
   TestData // Load test tables.
-
-  import org.apache.spark.sql.test.TestSQLContext.implicits._
 
   def rddIdOf(tableName: String): Int = {
     val executedPlan = table(tableName).queryExecution.executedPlan
@@ -60,15 +57,15 @@ class CachedTableSuite extends QueryTest {
 
   test("unpersist an uncached table will not raise exception") {
     assert(None == cacheManager.lookupCachedData(testData))
-    testData.unpersist(true)
+    testData.unpersist(blocking = true)
     assert(None == cacheManager.lookupCachedData(testData))
-    testData.unpersist(false)
+    testData.unpersist(blocking = false)
     assert(None == cacheManager.lookupCachedData(testData))
     testData.persist()
     assert(None != cacheManager.lookupCachedData(testData))
-    testData.unpersist(true)
+    testData.unpersist(blocking = true)
     assert(None == cacheManager.lookupCachedData(testData))
-    testData.unpersist(false)
+    testData.unpersist(blocking = false)
     assert(None == cacheManager.lookupCachedData(testData))
   }
 
@@ -95,7 +92,7 @@ class CachedTableSuite extends QueryTest {
 
   test("too big for memory") {
     val data = "*" * 10000
-    sparkContext.parallelize(1 to 200000, 1).map(_ => BigData(data)).registerTempTable("bigData")
+    sparkContext.parallelize(1 to 200000, 1).map(_ => BigData(data)).toDF().registerTempTable("bigData")
     table("bigData").persist(StorageLevel.MEMORY_AND_DISK)
     assert(table("bigData").count() === 200000L)
     table("bigData").unpersist(blocking = true)

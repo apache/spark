@@ -111,9 +111,9 @@ To produce a Spark package compiled with Scala 2.11, use the `-Dscala-2.11` prop
     dev/change-version-to-2.11.sh
     mvn -Pyarn -Phadoop-2.4 -Dscala-2.11 -DskipTests clean package
 
-Scala 2.11 support in Spark is experimental and does not support a few features.
-Specifically, Spark's external Kafka library and JDBC component are not yet
-supported in Scala 2.11 builds.
+Scala 2.11 support in Spark does not support a few features due to dependencies
+which are themselves not Scala 2.11 ready. Specifically, Spark's external 
+Kafka library and JDBC component are not yet supported in Scala 2.11 builds.
 
 # Spark Tests in Maven
 
@@ -158,16 +158,6 @@ Thus, the full flow for running continuous-compilation of the `core` submodule m
 
 For help in setting up IntelliJ IDEA or Eclipse for Spark development, and troubleshooting, refer to the
 [wiki page for IDE setup](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark#ContributingtoSpark-IDESetup).
-
-# Building Spark Debian Packages
-
-_NOTE: Debian packaging is deprecated and is scheduled to be removed in Spark 1.4._
-
-The Maven build includes support for building a Debian package containing the assembly 'fat-jar', PySpark, and the necessary scripts and configuration files. This can be created by specifying the following:
-
-    mvn -Pdeb -DskipTests clean package
-
-The debian package can then be found under assembly/target. We added the short commit hash to the file name so that we can distinguish individual packages built for SNAPSHOT versions.
 
 # Running Java 8 Test Suites
 

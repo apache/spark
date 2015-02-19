@@ -18,10 +18,11 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.analysis.EliminateAnalysisOperators
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{SaveMode, DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.RunnableCommand
@@ -102,6 +103,10 @@ case class AddFile(path: String) extends RunnableCommand {
   }
 }
 
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 case class CreateMetastoreDataSource(
     tableName: String,
     userSpecifiedSchema: Option[StructType],
@@ -117,7 +122,7 @@ case class CreateMetastoreDataSource(
       if (allowExisting) {
         return Seq.empty[Row]
       } else {
-        sys.error(s"Table $tableName already exists.")
+        throw new AnalysisException(s"Table $tableName already exists.")
       }
     }
 
@@ -141,6 +146,10 @@ case class CreateMetastoreDataSource(
   }
 }
 
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 case class CreateMetastoreDataSourceAsSelect(
     tableName: String,
     provider: String,
@@ -164,9 +173,11 @@ case class CreateMetastoreDataSourceAsSelect(
       // Check if we need to throw an exception or just return.
       mode match {
         case SaveMode.ErrorIfExists =>
-          sys.error(s"Table $tableName already exists. " +
-            s"If you want to append into it, please set mode to SaveMode.Append. " +
-            s"Or, if you want to overwrite it, please set mode to SaveMode.Overwrite.")
+          throw new AnalysisException(s"Table $tableName already exists. " +
+            s"If you are using saveAsTable, you can set SaveMode to SaveMode.Append to " +
+            s"insert data into the table or set SaveMode to SaveMode.Overwrite to overwrite" +
+            s"the existing data. " +
+            s"Or, if you are using SQL CREATE TABLE, you need to drop $tableName first.")
         case SaveMode.Ignore =>
           // Since the table already exists and the save mode is Ignore, we will just return.
           return Seq.empty[Row]
@@ -175,7 +186,7 @@ case class CreateMetastoreDataSourceAsSelect(
           val resolved =
             ResolvedDataSource(sqlContext, Some(query.schema), provider, optionsWithPath)
           val createdRelation = LogicalRelation(resolved.relation)
-          EliminateAnalysisOperators(sqlContext.table(tableName).logicalPlan) match {
+          EliminateSubQueries(sqlContext.table(tableName).logicalPlan) match {
             case l @ LogicalRelation(i: InsertableRelation) =>
               if (l.schema != createdRelation.schema) {
                 val errorDescription =
@@ -191,7 +202,7 @@ case class CreateMetastoreDataSourceAsSelect(
                 s"== Actual Schema ==" +:
                   createdRelation.schema.treeString.split("\\\n")).mkString("\n")}
               """.stripMargin
-                sys.error(errorMessage)
+                throw new AnalysisException(errorMessage)
               } else if (i != createdRelation.relation) {
                 val errorDescription =
                   s"Cannot append to table $tableName because the resolved relation does not " +
@@ -208,10 +219,10 @@ case class CreateMetastoreDataSourceAsSelect(
                 s"== Actual Relation ==" ::
                   createdRelation.toString :: Nil).mkString("\n")}
               """.stripMargin
-                sys.error(errorMessage)
+                throw new AnalysisException(errorMessage)
               }
             case o =>
-              sys.error(s"Saving data in ${o.toString} is not supported.")
+              throw new AnalysisException(s"Saving data in ${o.toString} is not supported.")
           }
         case SaveMode.Overwrite =>
           hiveContext.sql(s"DROP TABLE IF EXISTS $tableName")

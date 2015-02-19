@@ -21,16 +21,21 @@ filtering, dimensionality reduction, as well as underlying optimization primitiv
   * [naive Bayes](mllib-naive-bayes.html)
   * [decision trees](mllib-decision-tree.html)
   * [ensembles of trees](mllib-ensembles.html) (Random Forests and Gradient-Boosted Trees)
+  * [isotonic regression](mllib-isotonic-regression.html)
 * [Collaborative filtering](mllib-collaborative-filtering.html)
   * alternating least squares (ALS)
 * [Clustering](mllib-clustering.html)
-  * k-means
-  * Gaussian mixture
-  * power iteration
+  * [k-means](mllib-clustering.html#k-means)
+  * [Gaussian mixture](mllib-clustering.html#gaussian-mixture)
+  * [power iteration clustering (PIC)](mllib-clustering.html#power-iteration-clustering-pic)
+  * [latent Dirichlet allocation (LDA)](mllib-clustering.html#latent-dirichlet-allocation-lda)
+  * [streaming k-means](mllib-clustering.html#streaming-k-means)
 * [Dimensionality reduction](mllib-dimensionality-reduction.html)
   * singular value decomposition (SVD)
   * principal component analysis (PCA)
 * [Feature extraction and transformation](mllib-feature-extraction.html)
+* [Frequent pattern mining](mllib-frequent-pattern-mining.html)
+  * FP-growth
 * [Optimization (developer)](mllib-optimization.html)
   * stochastic gradient descent
   * limited-memory BFGS (L-BFGS)

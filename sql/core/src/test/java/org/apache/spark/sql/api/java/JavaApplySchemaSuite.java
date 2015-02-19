@@ -164,7 +164,7 @@ public class JavaApplySchemaSuite implements Serializable {
     fields.add(DataTypes.createStructField("bigInteger", DataTypes.createDecimalType(), true));
     fields.add(DataTypes.createStructField("boolean", DataTypes.BooleanType, true));
     fields.add(DataTypes.createStructField("double", DataTypes.DoubleType, true));
-    fields.add(DataTypes.createStructField("integer", DataTypes.IntegerType, true));
+    fields.add(DataTypes.createStructField("integer", DataTypes.LongType, true));
     fields.add(DataTypes.createStructField("long", DataTypes.LongType, true));
     fields.add(DataTypes.createStructField("null", DataTypes.StringType, true));
     fields.add(DataTypes.createStructField("string", DataTypes.StringType, true));

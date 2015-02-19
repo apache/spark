@@ -55,7 +55,7 @@ import org.apache.spark.{Logging, SerializableWritable, TaskContext}
  * Parquet table scan operator. Imports the file that backs the given
  * [[org.apache.spark.sql.parquet.ParquetRelation]] as a ``RDD[Row]``.
  */
-case class ParquetTableScan(
+private[sql] case class ParquetTableScan(
     attributes: Seq[Attribute],
     relation: ParquetRelation,
     columnPruningPred: Seq[Expression])
@@ -210,7 +210,7 @@ case class ParquetTableScan(
  * (only detected via filename pattern so will not catch all cases).
  */
 @DeveloperApi
-case class InsertIntoParquetTable(
+private[sql] case class InsertIntoParquetTable(
     relation: ParquetRelation,
     child: SparkPlan,
     overwrite: Boolean = false)
@@ -647,6 +647,6 @@ private[parquet] object FileSystemHelper {
         sys.error("ERROR: attempting to append to set of Parquet files and found file" +
           s"that does not match name pattern: $other")
       case _ => 0
-    }.reduceLeft((a, b) => if (a < b) b else a)
+    }.reduceOption(_ max _).getOrElse(0)
   }
 }
