@@ -23,7 +23,8 @@ import org.apache.spark.sql.types._
 case class UnaryMinus(child: Expression) extends UnaryExpression {
   type EvaluatedType = Any
 
-  override lazy val resolved = child.resolved && child.dataType.isInstanceOf[NumericType]
+  override lazy val resolved = child.resolved &&
+    (child.dataType.isInstanceOf[NumericType] || child.dataType.isInstanceOf[NullType])
 
   def dataType = child.dataType
   override def foldable = child.foldable
