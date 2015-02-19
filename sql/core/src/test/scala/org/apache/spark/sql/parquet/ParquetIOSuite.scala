@@ -73,7 +73,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
    * Writes `data` to a Parquet file, reads it back and check file contents.
    */
   protected def checkParquetFile[T <: Product : ClassTag: TypeTag](data: Seq[T]): Unit = {
-    withParquetRDD(data)(r => checkAnswer(r, data.map(Row.fromTuple)))
+    withParquetDataFrame(data)(r => checkAnswer(r, data.map(Row.fromTuple)))
   }
 
   test("basic data types (without binary)") {
@@ -85,9 +85,9 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
 
   test("raw binary") {
     val data = (1 to 4).map(i => Tuple1(Array.fill(3)(i.toByte)))
-    withParquetRDD(data) { rdd =>
+    withParquetDataFrame(data) { df =>
       assertResult(data.map(_._1.mkString(",")).sorted) {
-        rdd.collect().map(_.getAs[Array[Byte]](0).mkString(",")).sorted
+        df.collect().map(_.getAs[Array[Byte]](0).mkString(",")).sorted
       }
     }
   }
@@ -106,7 +106,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
       sparkContext
         .parallelize(0 to 1000)
         .map(i => Tuple1(i / 100.0))
-        .toDF
+        .toDF()
         // Parquet doesn't allow column names with spaces, have to add an alias here
         .select($"_1" cast decimal as "dec")
 
@@ -147,9 +147,9 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
 
   test("struct") {
     val data = (1 to 4).map(i => Tuple1((i, s"val_$i")))
-    withParquetRDD(data) { rdd =>
+    withParquetDataFrame(data) { df =>
       // Structs are converted to `Row`s
-      checkAnswer(rdd, data.map { case Tuple1(struct) =>
+      checkAnswer(df, data.map { case Tuple1(struct) =>
         Row(Row(struct.productIterator.toSeq: _*))
       })
     }
@@ -157,9 +157,9 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
 
   test("nested struct with array of array as field") {
     val data = (1 to 4).map(i => Tuple1((i, Seq(Seq(s"val_$i")))))
-    withParquetRDD(data) { rdd =>
+    withParquetDataFrame(data) { df =>
       // Structs are converted to `Row`s
-      checkAnswer(rdd, data.map { case Tuple1(struct) =>
+      checkAnswer(df, data.map { case Tuple1(struct) =>
         Row(Row(struct.productIterator.toSeq: _*))
       })
     }
@@ -167,8 +167,8 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
 
   test("nested map with struct as value type") {
     val data = (1 to 4).map(i => Tuple1(Map(i -> (i, s"val_$i"))))
-    withParquetRDD(data) { rdd =>
-      checkAnswer(rdd, data.map { case Tuple1(m) =>
+    withParquetDataFrame(data) { df =>
+      checkAnswer(df, data.map { case Tuple1(m) =>
         Row(m.mapValues(struct => Row(struct.productIterator.toSeq: _*)))
       })
     }
@@ -182,8 +182,8 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
       null.asInstanceOf[java.lang.Float],
       null.asInstanceOf[java.lang.Double])
 
-    withParquetRDD(allNulls :: Nil) { rdd =>
-      val rows = rdd.collect()
+    withParquetDataFrame(allNulls :: Nil) { df =>
+      val rows = df.collect()
       assert(rows.size === 1)
       assert(rows.head === Row(Seq.fill(5)(null): _*))
     }
@@ -195,8 +195,8 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
       None.asInstanceOf[Option[Long]],
       None.asInstanceOf[Option[String]])
 
-    withParquetRDD(allNones :: Nil) { rdd =>
-      val rows = rdd.collect()
+    withParquetDataFrame(allNones :: Nil) { df =>
+      val rows = df.collect()
       assert(rows.size === 1)
       assert(rows.head === Row(Seq.fill(3)(null): _*))
     }

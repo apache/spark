@@ -57,20 +57,23 @@ class SparkSubmitUtilsSuite extends FunSuite with BeforeAndAfterAll {
 
   test("create repo resolvers") {
     val resolver1 = SparkSubmitUtils.createRepoResolvers(None)
-    // should have central by default
-    assert(resolver1.getResolvers.size() === 1)
+    // should have central and spark-packages by default
+    assert(resolver1.getResolvers.size() === 2)
     assert(resolver1.getResolvers.get(0).asInstanceOf[IBiblioResolver].getName === "central")
+    assert(resolver1.getResolvers.get(1).asInstanceOf[IBiblioResolver].getName === "spark-packages")
 
     val repos = "a/1,b/2,c/3"
     val resolver2 = SparkSubmitUtils.createRepoResolvers(Option(repos))
-    assert(resolver2.getResolvers.size() === 4)
+    assert(resolver2.getResolvers.size() === 5)
     val expected = repos.split(",").map(r => s"$r/")
     resolver2.getResolvers.toArray.zipWithIndex.foreach { case (resolver: IBiblioResolver, i) =>
       if (i == 0) {
         assert(resolver.getName === "central")
+      } else if (i == 1) {
+        assert(resolver.getName === "spark-packages")
       } else {
-        assert(resolver.getName === s"repo-$i")
-        assert(resolver.getRoot === expected(i - 1))
+        assert(resolver.getName === s"repo-${i - 1}")
+        assert(resolver.getRoot === expected(i - 2))
       }
     }
   }

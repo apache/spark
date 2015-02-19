@@ -99,7 +99,7 @@ private[sql] trait ParquetTest {
    * Writes `data` to a Parquet file and reads it back as a [[DataFrame]],
    * which is then passed to `f`. The Parquet file will be deleted after `f` returns.
    */
-  protected def withParquetRDD[T <: Product: ClassTag: TypeTag]
+  protected def withParquetDataFrame[T <: Product: ClassTag: TypeTag]
       (data: Seq[T])
       (f: DataFrame => Unit): Unit = {
     withParquetFile(data)(path => f(sqlContext.parquetFile(path)))
@@ -120,8 +120,8 @@ private[sql] trait ParquetTest {
   protected def withParquetTable[T <: Product: ClassTag: TypeTag]
       (data: Seq[T], tableName: String)
       (f: => Unit): Unit = {
-    withParquetRDD(data) { rdd =>
-      sqlContext.registerDataFrameAsTable(rdd, tableName)
+    withParquetDataFrame(data) { df =>
+      sqlContext.registerDataFrameAsTable(df, tableName)
       withTempTable(tableName)(f)
     }
   }

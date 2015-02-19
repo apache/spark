@@ -102,7 +102,7 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
 
       // Create Parquet data.
-      val dataRDD: DataFrame = sc.parallelize(Seq(data), 1).toDF
+      val dataRDD: DataFrame = sc.parallelize(Seq(data), 1).toDF()
       dataRDD.saveAsParquetFile(dataPath(path))
     }
 

@@ -287,7 +287,16 @@ private[sql] case class ParquetRelation2(
         }
       }
 
-      parquetSchema = maybeSchema.getOrElse(readSchema())
+      // To get the schema. We first try to get the schema defined in maybeSchema.
+      // If maybeSchema is not defined, we will try to get the schema from existing parquet data
+      // (through readSchema). If data does not exist, we will try to get the schema defined in
+      // maybeMetastoreSchema (defined in the options of the data source).
+      // Finally, if we still could not get the schema. We throw an error.
+      parquetSchema =
+        maybeSchema
+          .orElse(readSchema())
+          .orElse(maybeMetastoreSchema)
+          .getOrElse(sys.error("Failed to get the schema."))
 
       partitionKeysIncludedInParquetSchema =
         isPartitioned &&
@@ -308,7 +317,7 @@ private[sql] case class ParquetRelation2(
       }
     }
 
-    private def readSchema(): StructType = {
+    private def readSchema(): Option[StructType] = {
       // Sees which file(s) we need to touch in order to figure out the schema.
       val filesToTouch =
       // Always tries the summary files first if users don't require a merged schema.  In this case,
@@ -611,7 +620,8 @@ private[sql] object ParquetRelation2 {
   // internally.
   private[sql] val METASTORE_SCHEMA = "metastoreSchema"
 
-  private[parquet] def readSchema(footers: Seq[Footer], sqlContext: SQLContext): StructType = {
+  private[parquet] def readSchema(
+      footers: Seq[Footer], sqlContext: SQLContext): Option[StructType] = {
     footers.map { footer =>
       val metadata = footer.getParquetMetadata.getFileMetaData
       val parquetSchema = metadata.getSchema
@@ -630,7 +640,7 @@ private[sql] object ParquetRelation2 {
             sqlContext.conf.isParquetBinaryAsString,
             sqlContext.conf.isParquetINT96AsTimestamp))
       }
-    }.reduce { (left, right) =>
+    }.reduceOption { (left, right) =>
       try left.merge(right) catch { case e: Throwable =>
         throw new SparkException(s"Failed to merge incompatible schemas $left and $right", e)
       }

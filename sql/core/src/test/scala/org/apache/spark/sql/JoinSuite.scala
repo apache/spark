@@ -40,8 +40,8 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   }
 
   def assertJoin(sqlString: String, c: Class[_]): Any = {
-    val rdd = sql(sqlString)
-    val physical = rdd.queryExecution.sparkPlan
+    val df = sql(sqlString)
+    val physical = df.queryExecution.sparkPlan
     val operators = physical.collect {
       case j: ShuffledHashJoin => j
       case j: HashOuterJoin => j
@@ -410,8 +410,8 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   }
 
   test("left semi join") {
-    val rdd = sql("SELECT * FROM testData2 LEFT SEMI JOIN testData ON key = a")
-    checkAnswer(rdd,
+    val df = sql("SELECT * FROM testData2 LEFT SEMI JOIN testData ON key = a")
+    checkAnswer(df,
       Row(1, 1) ::
         Row(1, 2) ::
         Row(2, 1) ::

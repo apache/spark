@@ -186,6 +186,7 @@ object EvaluatePython {
     case (c: Int, ShortType) => c.toShort
     case (c: Long, ShortType) => c.toShort
     case (c: Long, IntegerType) => c.toInt
+    case (c: Int, LongType) => c.toLong
     case (c: Double, FloatType) => c.toFloat
     case (c, StringType) if !c.isInstanceOf[String] => c.toString
 

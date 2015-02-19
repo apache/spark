@@ -886,8 +886,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Registers the given [[DataFrame]] as a temporary table in the catalog. Temporary tables exist
    * only during the lifetime of this instance of SQLContext.
    */
-  private[sql] def registerDataFrameAsTable(rdd: DataFrame, tableName: String): Unit = {
-    catalog.registerTable(Seq(tableName), rdd.logicalPlan)
+  private[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
+    catalog.registerTable(Seq(tableName), df.logicalPlan)
   }
 
   /**
@@ -1139,6 +1139,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     def needsConversion(dataType: DataType): Boolean = dataType match {
       case ByteType => true
       case ShortType => true
+      case LongType => true
       case FloatType => true
       case DateType => true
       case TimestampType => true
