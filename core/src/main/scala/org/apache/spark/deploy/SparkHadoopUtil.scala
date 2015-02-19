@@ -182,7 +182,7 @@ class SparkHadoopUtil extends Logging {
             callback(new SerializableBuffer(ByteBuffer.wrap(outputStream.toByteArray)))
           }
         }, timeToRenewal, timeToRenewal, TimeUnit.MILLISECONDS)
-
+      case None =>
     }
   }
 
