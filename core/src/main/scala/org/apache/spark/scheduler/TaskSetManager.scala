@@ -62,7 +62,7 @@ private[spark] class TaskSetManager(
    * this temporarily prevents a task from re-launching on an executor where
    * it just failed.
    */
-  private val EXECUTOR_TASK_BLACKLIST_TIMEOUT =
+  private val TASK_BLACKLIST_TIMEOUT =
     conf.getLong("spark.scheduler.executorTaskBlacklistTime", 0L)
 
   // Quantile of tasks at which to start speculation
@@ -81,8 +81,8 @@ private[spark] class TaskSetManager(
   val copiesRunning = new Array[Int](numTasks)
   val successful = new Array[Boolean](numTasks)
   private val numFailures = new Array[Int](numTasks)
-  // key is taskId, value is a Map of executor id to when it failed
-  private val failedExecutors = new HashMap[Int, HashMap[String, Long]]()
+  // key is taskId, value is a Map of host to when it failed
+  private val failedHostsPerTask = new HashMap[Int, HashMap[String, Long]]()
 
   val taskAttempts = Array.fill[List[TaskInfo]](numTasks)(Nil)
   var tasksSuccessful = 0
@@ -251,12 +251,12 @@ private[spark] class TaskSetManager(
    * This method also cleans up any tasks in the list that have already
    * been launched, since we want that to happen lazily.
    */
-  private def dequeueTaskFromList(execId: String, list: ArrayBuffer[Int]): Option[Int] = {
+  private def dequeueTaskFromList(host: String, list: ArrayBuffer[Int]): Option[Int] = {
     var indexOffset = list.size
     while (indexOffset > 0) {
       indexOffset -= 1
       val index = list(indexOffset)
-      if (!executorIsBlacklisted(execId, index)) {
+      if (!hostIsBlacklisted(host, index)) {
         // This should almost always be list.trimEnd(1) to remove tail
         list.remove(indexOffset)
         if (copiesRunning(index) == 0 && !successful(index)) {
@@ -273,18 +273,16 @@ private[spark] class TaskSetManager(
   }
 
   /**
-   * Is this re-execution of a failed task on an executor it already failed in before
-   * EXECUTOR_TASK_BLACKLIST_TIMEOUT has elapsed ?
+   * Is this re-execution of a failed task on an host it already failed in before
+   * TASK_BLACKLIST_TIMEOUT has elapsed ?
    */
-  private def executorIsBlacklisted(execId: String, taskId: Int): Boolean = {
-    if (failedExecutors.contains(taskId)) {
-      val failed = failedExecutors.get(taskId).get
-
-      return failed.contains(execId) &&
-        clock.getTime() - failed.get(execId).get < EXECUTOR_TASK_BLACKLIST_TIMEOUT
+  private def hostIsBlacklisted(host: String, taskId: Int): Boolean = {
+    if (failedHostsPerTask.contains(taskId)) {
+      val hosts = failedHostsPerTask(taskId)
+      hosts.contains(host) && (clock.getTime() - hosts(host) < TASK_BLACKLIST_TIMEOUT)
+    } else {
+      false
     }
-
-    false
   }
 
   /**
@@ -299,7 +297,7 @@ private[spark] class TaskSetManager(
     speculatableTasks.retain(index => !successful(index)) // Remove finished tasks from set
 
     def canRunOnHost(index: Int): Boolean =
-      !hasAttemptOnHost(index, host) && !executorIsBlacklisted(execId, index)
+      !hasAttemptOnHost(index, host) && !hostIsBlacklisted(host, index)
 
     if (!speculatableTasks.isEmpty) {
       // Check for process-local tasks; note that tasks can be process-local
@@ -372,19 +370,19 @@ private[spark] class TaskSetManager(
   private def dequeueTask(execId: String, host: String, maxLocality: TaskLocality.Value)
     : Option[(Int, TaskLocality.Value, Boolean)] =
   {
-    for (index <- dequeueTaskFromList(execId, getPendingTasksForExecutor(execId))) {
+    for (index <- dequeueTaskFromList(host, getPendingTasksForExecutor(execId))) {
       return Some((index, TaskLocality.PROCESS_LOCAL, false))
     }
 
     if (TaskLocality.isAllowed(maxLocality, TaskLocality.NODE_LOCAL)) {
-      for (index <- dequeueTaskFromList(execId, getPendingTasksForHost(host))) {
+      for (index <- dequeueTaskFromList(host, getPendingTasksForHost(host))) {
         return Some((index, TaskLocality.NODE_LOCAL, false))
       }
     }
 
     if (TaskLocality.isAllowed(maxLocality, TaskLocality.NO_PREF)) {
       // Look for noPref tasks after NODE_LOCAL for minimize cross-rack traffic
-      for (index <- dequeueTaskFromList(execId, pendingTasksWithNoPrefs)) {
+      for (index <- dequeueTaskFromList(host, pendingTasksWithNoPrefs)) {
         return Some((index, TaskLocality.PROCESS_LOCAL, false))
       }
     }
@@ -392,14 +390,14 @@ private[spark] class TaskSetManager(
     if (TaskLocality.isAllowed(maxLocality, TaskLocality.RACK_LOCAL)) {
       for {
         rack <- sched.getRackForHost(host)
-        index <- dequeueTaskFromList(execId, getPendingTasksForRack(rack))
+        index <- dequeueTaskFromList(host, getPendingTasksForRack(rack))
       } {
         return Some((index, TaskLocality.RACK_LOCAL, false))
       }
     }
 
     if (TaskLocality.isAllowed(maxLocality, TaskLocality.ANY)) {
-      for (index <- dequeueTaskFromList(execId, allPendingTasks)) {
+      for (index <- dequeueTaskFromList(host, allPendingTasks)) {
         return Some((index, TaskLocality.ANY, false))
       }
     }
@@ -632,7 +630,7 @@ private[spark] class TaskSetManager(
       logInfo("Ignoring task-finished event for " + info.id + " in stage " + taskSet.id +
         " because task " + index + " has already completed successfully")
     }
-    failedExecutors.remove(index)
+    failedHostsPerTask.remove(index)
     maybeFinishTaskSet()
   }
 
@@ -705,8 +703,8 @@ private[spark] class TaskSetManager(
         logError("Unknown TaskEndReason: " + e)
     }
     // always add to failed executors
-    failedExecutors.getOrElseUpdate(index, new HashMap[String, Long]()).
-      put(info.executorId, clock.getTime())
+    failedHostsPerTask.getOrElseUpdate(index, new HashMap[String, Long]()).
+      put(info.host, clock.getTime())
     sched.dagScheduler.taskEnded(tasks(index), reason, null, null, info, taskMetrics)
     addPendingTask(index)
     if (!isZombie && state != TaskState.KILLED && !reason.isInstanceOf[TaskCommitDenied]) {

@@ -389,7 +389,7 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     }
   }
 
-  test("executors should be blacklisted after task failure, in spite of locality preferences") {
+  test("host should be blacklisted after task failure, in spite of locality preferences") {
     val rescheduleDelay = 300L
     val conf = new SparkConf().
       set("spark.scheduler.executorTaskBlacklistTime", rescheduleDelay.toString).
@@ -421,23 +421,12 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
       assert(manager.resourceOffer("exec1", "host1", NODE_LOCAL).isEmpty)
       assert(manager.resourceOffer("exec1", "host1", RACK_LOCAL).isEmpty)
       assert(manager.resourceOffer("exec1", "host1", ANY).isEmpty)
-    }
 
-    // Run the task on exec1.1 - should work, and then fail it on exec1.1
-    {
-      val offerResult = manager.resourceOffer("exec1.1", "host1", NODE_LOCAL)
-      assert(offerResult.isDefined,
-        "Expect resource offer to return a task for exec1.1, offerResult = " + offerResult)
-
-      assert(offerResult.get.index === 0)
-      assert(offerResult.get.executorId === "exec1.1")
-
-      // Cause exec1.1 to fail : failure 2
-      manager.handleFailedTask(offerResult.get.taskId, TaskState.FINISHED, TaskResultLost)
-      assert(!sched.taskSetsFailed.contains(taskSet.id))
-
-      // Ensure scheduling on exec1.1 fails after failure 2 due to blacklist
+      // Ensure scheduling on exec1.1 fails after failure 1 due to blacklist
+      assert(manager.resourceOffer("exec1.1", "host1", PROCESS_LOCAL).isEmpty)
       assert(manager.resourceOffer("exec1.1", "host1", NODE_LOCAL).isEmpty)
+      assert(manager.resourceOffer("exec1.1", "host1", RACK_LOCAL).isEmpty)
+      assert(manager.resourceOffer("exec1.1", "host1", ANY).isEmpty)
     }
 
     // Run the task on exec2 - should work, and then fail it on exec2
@@ -448,11 +437,11 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
       assert(offerResult.get.index === 0)
       assert(offerResult.get.executorId === "exec2")
 
-      // Cause exec2 to fail : failure 3
+      // Cause exec2 to fail : failure 2
       manager.handleFailedTask(offerResult.get.taskId, TaskState.FINISHED, TaskResultLost)
       assert(!sched.taskSetsFailed.contains(taskSet.id))
 
-      // Ensure scheduling on exec2 fails after failure 3 due to blacklist
+      // Ensure scheduling on exec2 fails after failure 2 due to blacklist
       assert(manager.resourceOffer("exec2", "host2", ANY).isEmpty)
     }
 
@@ -468,7 +457,20 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
 
       assert(manager.resourceOffer("exec1", "host1", PROCESS_LOCAL).isEmpty)
 
-      // Cause exec1 to fail : failure 4
+      // Cause exec1 to fail : failure 3
+      manager.handleFailedTask(offerResult.get.taskId, TaskState.FINISHED, TaskResultLost)
+    }
+
+    {
+      val offerResult = manager.resourceOffer("exec2", "host2", ANY)
+      assert(offerResult.isDefined, "Expect resource offer to return a task")
+
+      assert(offerResult.get.index === 0)
+      assert(offerResult.get.executorId === "exec2")
+
+      assert(manager.resourceOffer("exec2", "host2", PROCESS_LOCAL).isEmpty)
+
+      // Cause exec2 to fail : failure 4
       manager.handleFailedTask(offerResult.get.taskId, TaskState.FINISHED, TaskResultLost)
     }
 
