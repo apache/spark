@@ -22,6 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.scalatest.FunSuite
 
 import org.apache.spark._
+import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.io.CompressionCodec
 
 class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
@@ -31,8 +32,9 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
   private def mergeCombiners[T](buf1: ArrayBuffer[T], buf2: ArrayBuffer[T]): ArrayBuffer[T] =
     buf1 ++= buf2
 
-  private def createExternalMap[T] = new ExternalAppendOnlyMap[T, T, ArrayBuffer[T]](
-    createCombiner[T], mergeValue[T], mergeCombiners[T])
+  private def createExternalMap[T](spillMetrics: ShuffleWriteMetrics = new ShuffleWriteMetrics) =
+    new ExternalAppendOnlyMap[T, T, ArrayBuffer[T]](
+      createCombiner[T], mergeValue[T], mergeCombiners[T], spillMetrics = spillMetrics)
 
   private def createSparkConf(loadDefaults: Boolean, codec: Option[String] = None): SparkConf = {
     val conf = new SparkConf(loadDefaults)
@@ -51,7 +53,8 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
   test("simple insert") {
     val conf = createSparkConf(loadDefaults = false)
     sc = new SparkContext("local", "test", conf)
-    val map = createExternalMap[Int]
+    val spillMetrics = new ShuffleWriteMetrics()
+    val map = createExternalMap[Int](spillMetrics)
 
     // Single insert
     map.insert(1, 10)
@@ -71,12 +74,15 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
       (2, ArrayBuffer[Int](20)),
       (3, ArrayBuffer[Int](30))))
     sc.stop()
+    assert(spillMetrics.shuffleRecordsWritten === 0)
+    assert(spillMetrics.shuffleBytesWritten === 0)
+    assert(spillMetrics.memorySize === 0)
   }
 
   test("insert with collision") {
     val conf = createSparkConf(loadDefaults = false)
     sc = new SparkContext("local", "test", conf)
-    val map = createExternalMap[Int]
+    val map = createExternalMap[Int]()
 
     map.insertAll(Seq(
       (1, 10),
@@ -99,17 +105,17 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     val conf = createSparkConf(loadDefaults = false)
     sc = new SparkContext("local", "test", conf)
 
-    val map1 = createExternalMap[Int]
+    val map1 = createExternalMap[Int]()
     map1.insert(1, 10)
     map1.insert(2, 20)
     map1.insert(3, 30)
 
-    val map2 = createExternalMap[Int]
+    val map2 = createExternalMap[Int]()
     map2.insert(2, 20)
     map2.insert(3, 30)
     map2.insert(1, 10)
 
-    val map3 = createExternalMap[Int]
+    val map3 = createExternalMap[Int]()
     map3.insert(3, 30)
     map3.insert(1, 10)
     map3.insert(2, 20)
@@ -142,7 +148,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     val conf = createSparkConf(loadDefaults = false)
     sc = new SparkContext("local", "test", conf)
 
-    val map = createExternalMap[Int]
+    val map = createExternalMap[Int]()
     map.insert(1, 5)
     map.insert(2, 6)
     map.insert(3, 7)
@@ -295,7 +301,8 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     val conf = createSparkConf(loadDefaults = true)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
-    val map = createExternalMap[String]
+    val spillMetrics = new ShuffleWriteMetrics()
+    val map = createExternalMap[String](spillMetrics)
 
     val collisionPairs = Seq(
       ("Aa", "BB"),                   // 2112
@@ -338,6 +345,10 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     }
     assert(count === 100000 + collisionPairs.size * 2)
     sc.stop()
+
+    assert(spillMetrics.shuffleRecordsWritten > 0)
+    assert(spillMetrics.shuffleBytesWritten > 0)
+    assert(spillMetrics.memorySize > 0)
   }
 
   test("spilling with many hash collisions") {
@@ -369,7 +380,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     val conf = createSparkConf(loadDefaults = true)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
-    val map = createExternalMap[Int]
+    val map = createExternalMap[Int]()
 
     (1 to 100000).foreach { i => map.insert(i, i) }
     map.insert(Int.MaxValue, Int.MaxValue)
@@ -386,7 +397,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     val conf = createSparkConf(loadDefaults = true)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
-    val map = createExternalMap[Int]
+    val map = createExternalMap[Int]()
 
     map.insertAll((1 to 100000).iterator.map(i => (i, i)))
     map.insert(null.asInstanceOf[Int], 1)

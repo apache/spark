@@ -84,11 +84,12 @@ private[spark] trait Spillable[C] extends Logging {
         _spillCount += 1
         logSpillage(currentMemory)
 
+        _memoryBytesSpilled += currentMemory
+
         spill(collection)
 
         _elementsRead = 0
-        // Keep track of spills, and release memory
-        _memoryBytesSpilled += currentMemory
+
         releaseMemoryForThisThread()
         return true
       }

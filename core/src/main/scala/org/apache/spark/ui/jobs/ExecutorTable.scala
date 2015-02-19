@@ -41,13 +41,15 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
     var hasOutput = false
     var hasShuffleWrite = false
     var hasShuffleRead = false
-    var hasBytesSpilled = false
+    var hasReadBytesSpilled = false
+    var hasWriteBytesSpilled = false
     stageData.foreach(data => {
         hasInput = data.hasInput
         hasOutput = data.hasOutput
         hasShuffleRead = data.hasShuffleRead
         hasShuffleWrite = data.hasShuffleWrite
-        hasBytesSpilled = data.hasBytesSpilled
+        hasReadBytesSpilled = data.hasReadBytesSpilled
+        hasWriteBytesSpilled = data.hasWriteBytesSpilled
     })
 
     <table class={UIUtils.TABLE_CLASS_STRIPED}>
@@ -80,9 +82,13 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
             Shuffle Write Size / Records</span>
           </th>
         }}
-        {if (hasBytesSpilled) {
-          <th>Shuffle Spill (Memory)</th>
-          <th>Shuffle Spill (Disk)</th>
+        {if (hasReadBytesSpilled) {
+          <th>Shuffle Read Spill (Memory)</th>
+          <th>Shuffle Read Spill (Disk)</th>
+        }}
+        {if (hasWriteBytesSpilled) {
+          <th>Shuffle Write Spill (Memory)</th>
+          <th>Shuffle Write Spill (Disk)</th>
         }}
       </thead>
       <tbody>
@@ -130,12 +136,20 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
                 {s"${Utils.bytesToString(v.shuffleWrite)} / ${v.shuffleWriteRecords}"}
               </td>
             }}
-            {if (stageData.hasBytesSpilled) {
-              <td sorttable_customkey={v.memoryBytesSpilled.toString}>
-                {Utils.bytesToString(v.memoryBytesSpilled)}
+            {if (stageData.hasReadBytesSpilled) {
+              <td sorttable_customkey={v.shuffleReadMemoryBytesSpilled.toString}>
+                {Utils.bytesToString(v.shuffleReadMemoryBytesSpilled)}
               </td>
-              <td sorttable_customkey={v.diskBytesSpilled.toString}>
-                {Utils.bytesToString(v.diskBytesSpilled)}
+              <td sorttable_customkey={v.shuffleReadDiskBytesSpilled.toString}>
+                {Utils.bytesToString(v.shuffleReadDiskBytesSpilled)}
+              </td>
+            }}
+            {if (stageData.hasWriteBytesSpilled) {
+              <td sorttable_customkey={v.shuffleWriteMemoryBytesSpilled.toString}>
+                {Utils.bytesToString(v.shuffleWriteMemoryBytesSpilled)}
+              </td>
+              <td sorttable_customkey={v.shuffleWriteDiskBytesSpilled.toString}>
+                {Utils.bytesToString(v.shuffleWriteDiskBytesSpilled)}
               </td>
             }}
           </tr>

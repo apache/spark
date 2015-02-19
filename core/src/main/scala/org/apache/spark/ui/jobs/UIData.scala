@@ -38,8 +38,10 @@ private[jobs] object UIData {
     var shuffleReadRecords : Long = 0
     var shuffleWrite : Long = 0
     var shuffleWriteRecords : Long = 0
-    var memoryBytesSpilled : Long = 0
-    var diskBytesSpilled : Long = 0
+    var shuffleReadMemoryBytesSpilled: Long = _
+    var shuffleReadDiskBytesSpilled: Long = _
+    var shuffleWriteMemoryBytesSpilled: Long = _
+    var shuffleWriteDiskBytesSpilled: Long = _
   }
 
   class JobUIData(
@@ -84,8 +86,10 @@ private[jobs] object UIData {
     var shuffleReadRecords : Long = _
     var shuffleWriteBytes: Long = _
     var shuffleWriteRecords: Long = _
-    var memoryBytesSpilled: Long = _
-    var diskBytesSpilled: Long = _
+    var shuffleReadMemorySpillBytes: Long = _
+    var shuffleReadDiskSpillBytes: Long = _
+    var shuffleWriteMemorySpillBytes: Long = _
+    var shuffleWriteDiskSpillBytes: Long = _
 
     var schedulingPool: String = ""
     var description: Option[String] = None
@@ -98,7 +102,8 @@ private[jobs] object UIData {
     def hasOutput = outputBytes > 0
     def hasShuffleRead = shuffleReadBytes > 0
     def hasShuffleWrite = shuffleWriteBytes > 0
-    def hasBytesSpilled = memoryBytesSpilled > 0 && diskBytesSpilled > 0
+    def hasReadBytesSpilled = shuffleReadMemorySpillBytes > 0 && shuffleReadDiskSpillBytes > 0
+    def hasWriteBytesSpilled = shuffleWriteMemorySpillBytes > 0 && shuffleWriteDiskSpillBytes > 0
   }
 
   /**

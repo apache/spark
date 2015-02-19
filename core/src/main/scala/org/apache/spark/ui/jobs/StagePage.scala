@@ -96,14 +96,24 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
                  s"${stageData.shuffleWriteRecords}"}
               </li>
             }}
-            {if (stageData.hasBytesSpilled) {
+            {if (stageData.hasReadBytesSpilled) {
               <li>
-                <strong>Shuffle spill (memory): </strong>
-                {Utils.bytesToString(stageData.memoryBytesSpilled)}
+                <strong>Shuffle read spill (memory): </strong>
+                {Utils.bytesToString(stageData.shuffleReadMemorySpillBytes)}
               </li>
               <li>
-                <strong>Shuffle spill (disk): </strong>
-                {Utils.bytesToString(stageData.diskBytesSpilled)}
+                <strong>Shuffle read spill (disk): </strong>
+                {Utils.bytesToString(stageData.shuffleReadDiskSpillBytes)}
+              </li>
+            }}
+            {if (stageData.hasWriteBytesSpilled) {
+              <li>
+                <strong>Shuffle write spill (memory): </strong>
+                {Utils.bytesToString(stageData.shuffleWriteMemorySpillBytes)}
+              </li>
+              <li>
+                <strong>Shuffle write spill (disk): </strong>
+                {Utils.bytesToString(stageData.shuffleWriteDiskSpillBytes)}
               </li>
             }}
           </ul>
@@ -190,19 +200,24 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         } else {
           Nil
         }} ++
-        {if (stageData.hasBytesSpilled) {
-          Seq(("Shuffle Spill (Memory)", ""), ("Shuffle Spill (Disk)", ""))
+        {if (stageData.hasReadBytesSpilled) {
+          Seq(("Shuffle Read Spill (Memory)", ""), ("Shuffle Read Spill (Disk)", ""))
         } else {
           Nil
         }} ++
-        Seq(("Errors", ""))
+        {if (stageData.hasWriteBytesSpilled) {
+          Seq(("Shuffle Write Spill (Memory)", ""), ("Shuffle Write Spill (Disk)", ""))
+        } else {
+          Nil
+        }} ++
+      Seq(("Errors", ""))
 
       val unzipped = taskHeadersAndCssClasses.unzip
 
       val taskTable = UIUtils.listingTable(
         unzipped._1,
-        taskRow(hasAccumulators, stageData.hasInput, stageData.hasOutput,
-          stageData.hasShuffleRead, stageData.hasShuffleWrite, stageData.hasBytesSpilled),
+        taskRow(hasAccumulators, stageData.hasInput, stageData.hasOutput, stageData.hasShuffleRead,
+          stageData.hasShuffleWrite, stageData.hasReadBytesSpilled, stageData.hasWriteBytesSpilled),
         tasks,
         headerClasses = unzipped._2)
       // Excludes tasks which failed and have incomplete metrics
@@ -345,17 +360,33 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           val shuffleWriteQuantiles = <td>Shuffle Write Size / Records</td> +:
             getFormattedSizeQuantilesWithRecords(shuffleWriteSizes, shuffleWriteRecords)
 
-          val memoryBytesSpilledSizes = validTasks.map { case TaskUIData(_, metrics, _) =>
-            metrics.get.memoryBytesSpilled.toDouble
+          val readMemorySpillSizes = validTasks.map { case TaskUIData(_, metrics, _) =>
+            metrics.get.shuffleReadSpillMetrics.map(_.memorySize).getOrElse(0L).toDouble
           }
-          val memoryBytesSpilledQuantiles = <td>Shuffle spill (memory)</td> +:
-            getFormattedSizeQuantiles(memoryBytesSpilledSizes)
 
-          val diskBytesSpilledSizes = validTasks.map { case TaskUIData(_, metrics, _) =>
-            metrics.get.diskBytesSpilled.toDouble
+          val readMemorySpillQuantiles = <td>Shuffle read spill (memory)</td> +:
+            getFormattedSizeQuantiles(readMemorySpillSizes)
+
+          val readDiskSpillSizes = validTasks.map { case TaskUIData(_, metrics, _) =>
+            metrics.get.shuffleReadSpillMetrics.map(_.shuffleBytesWritten).getOrElse(0L).toDouble
           }
-          val diskBytesSpilledQuantiles = <td>Shuffle spill (disk)</td> +:
-            getFormattedSizeQuantiles(diskBytesSpilledSizes)
+
+          val readDiskSpillQuantiles = <td>Shuffle read spill (disk)</td> +:
+            getFormattedSizeQuantiles(readDiskSpillSizes)
+
+          val writeMemorySpillSizes = validTasks.map { case TaskUIData(_, metrics, _) =>
+            metrics.get.shuffleWriteSpillMetrics.map(_.memorySize).getOrElse(0L).toDouble
+          }
+
+          val writeMemorySpillQuantiles = <td>Shuffle write spill (memory)</td> +:
+            getFormattedSizeQuantiles(writeMemorySpillSizes)
+
+          val writeDiskSpillSizes = validTasks.map { case TaskUIData(_, metrics, _) =>
+            metrics.get.shuffleWriteSpillMetrics.map(_.shuffleBytesWritten).getOrElse(0L).toDouble
+          }
+
+          val writeDiskSpillQuantiles = <td>Shuffle write spill (disk)</td> +:
+            getFormattedSizeQuantiles(writeDiskSpillSizes)
 
           val listings: Seq[Seq[Node]] = Seq(
             <tr>{serviceQuantiles}</tr>,
@@ -379,8 +410,10 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
               Nil
             },
             if (stageData.hasShuffleWrite) <tr>{shuffleWriteQuantiles}</tr> else Nil,
-            if (stageData.hasBytesSpilled) <tr>{memoryBytesSpilledQuantiles}</tr> else Nil,
-            if (stageData.hasBytesSpilled) <tr>{diskBytesSpilledQuantiles}</tr> else Nil)
+            if (stageData.hasReadBytesSpilled) <tr>{readMemorySpillQuantiles}</tr> else Nil,
+            if (stageData.hasReadBytesSpilled) <tr>{readDiskSpillQuantiles}</tr> else Nil,
+            if (stageData.hasWriteBytesSpilled) <tr>{writeMemorySpillQuantiles}</tr> else Nil,
+            if (stageData.hasWriteBytesSpilled) <tr>{writeDiskSpillQuantiles}</tr> else Nil)
 
           val quantileHeaders = Seq("Metric", "Min", "25th percentile",
             "Median", "75th percentile", "Max")
@@ -419,7 +452,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       hasOutput: Boolean,
       hasShuffleRead: Boolean,
       hasShuffleWrite: Boolean,
-      hasBytesSpilled: Boolean)(taskData: TaskUIData): Seq[Node] = {
+      hasReadBytesSpilled: Boolean,
+      hasWriteBytesSpilled: Boolean)(taskData: TaskUIData): Seq[Node] = {
     taskData match { case TaskUIData(info, metrics, errorMessage) =>
       val duration = if (info.status == "RUNNING") info.timeRunning(System.currentTimeMillis())
         else metrics.map(_.executorRunTime).getOrElse(1L)
@@ -472,14 +506,29 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         if (ms == 0) "" else UIUtils.formatDuration(ms)
       }.getOrElse("")
 
-      val maybeMemoryBytesSpilled = metrics.map(_.memoryBytesSpilled)
-      val memoryBytesSpilledSortable = maybeMemoryBytesSpilled.map(_.toString).getOrElse("")
-      val memoryBytesSpilledReadable =
-        maybeMemoryBytesSpilled.map(Utils.bytesToString).getOrElse("")
+      val maybeReadMemoryBytesSpilled = metrics.flatMap(_.shuffleReadSpillMetrics).map(_.memorySize)
+      val readMemoryBytesSpilledSortable = maybeReadMemoryBytesSpilled.map(_.toString).getOrElse("")
+      val readMemoryBytesSpilledReadable =
+        maybeReadMemoryBytesSpilled.map(Utils.bytesToString).getOrElse("")
 
-      val maybeDiskBytesSpilled = metrics.map(_.diskBytesSpilled)
-      val diskBytesSpilledSortable = maybeDiskBytesSpilled.map(_.toString).getOrElse("")
-      val diskBytesSpilledReadable = maybeDiskBytesSpilled.map(Utils.bytesToString).getOrElse("")
+      val maybeWriteMemoryBytesSpilled =
+        metrics.flatMap(_.shuffleWriteSpillMetrics).map(_.memorySize)
+      val writeMemoryBytesSpilledSortable =
+        maybeWriteMemoryBytesSpilled.map(_.toString).getOrElse("")
+      val writeMemoryBytesSpilledReadable =
+        maybeReadMemoryBytesSpilled.map(Utils.bytesToString).getOrElse("")
+
+      val maybeReadDiskBytesSpilled =
+        metrics.flatMap(_.shuffleReadSpillMetrics).map(_.shuffleBytesWritten)
+      val readDiskBytesSpilledSortable = maybeReadDiskBytesSpilled.map(_.toString).getOrElse("")
+      val readDiskBytesSpilledReadable =
+        maybeReadDiskBytesSpilled.map(Utils.bytesToString).getOrElse("")
+
+      val maybeWriteDiskBytesSpilled =
+        metrics.flatMap(_.shuffleWriteSpillMetrics).map(_.shuffleBytesWritten)
+      val writeDiskBytesSpilledSortable = maybeWriteDiskBytesSpilled.map(_.toString).getOrElse("")
+      val writeDiskBytesSpilledReadable =
+        maybeReadDiskBytesSpilled.map(Utils.bytesToString).getOrElse("")
 
       <tr>
         <td>{info.index}</td>
@@ -545,12 +594,20 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
              {s"$shuffleWriteReadable / $shuffleWriteRecords"}
            </td>
         }}
-        {if (hasBytesSpilled) {
-          <td sorttable_customkey={memoryBytesSpilledSortable}>
-            {memoryBytesSpilledReadable}
+        {if (hasReadBytesSpilled) {
+          <td sorttable_customkey={readMemoryBytesSpilledSortable}>
+            {readMemoryBytesSpilledReadable}
           </td>
-          <td sorttable_customkey={diskBytesSpilledSortable}>
-            {diskBytesSpilledReadable}
+          <td sorttable_customkey={readDiskBytesSpilledSortable}>
+            {readDiskBytesSpilledReadable}
+          </td>
+        }}
+        {if (hasWriteBytesSpilled) {
+        <td sorttable_customkey={writeMemoryBytesSpilledSortable}>
+          {writeMemoryBytesSpilledReadable}
+        </td>
+          <td sorttable_customkey={writeDiskBytesSpilledSortable}>
+            {writeDiskBytesSpilledReadable}
           </td>
         }}
         {errorMessageCell(errorMessage)}

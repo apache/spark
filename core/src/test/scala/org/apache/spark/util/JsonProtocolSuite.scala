@@ -681,7 +681,8 @@ class JsonProtocolSuite extends FunSuite {
     t.setResultSize(c)
     t.setJvmGCTime(d)
     t.setResultSerializationTime(a + b)
-    t.incMemoryBytesSpilled(a + c)
+    // TODO
+//    t.incMemoryBytesSpilled(a + c)
 
     if (hasHadoopInput) {
       val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)

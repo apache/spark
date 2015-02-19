@@ -84,7 +84,8 @@ private[spark] class ExternalSorter[K, V, C](
     aggregator: Option[Aggregator[K, V, C]] = None,
     partitioner: Option[Partitioner] = None,
     ordering: Option[Ordering[K]] = None,
-    serializer: Option[Serializer] = None)
+    serializer: Option[Serializer] = None,
+    val spillMetrics: ShuffleWriteMetrics = new ShuffleWriteMetrics)
   extends Logging with Spillable[SizeTrackingPairCollection[(Int, K), C]] {
 
   private val numPartitions = partitioner.map(_.numPartitions).getOrElse(1)
@@ -118,9 +119,6 @@ private[spark] class ExternalSorter[K, V, C](
   // store them in an array buffer.
   private var map = new SizeTrackingAppendOnlyMap[(Int, K), C]
   private var buffer = new SizeTrackingPairBuffer[(Int, K), C]
-
-  // Total spilling statistics
-  private var _diskBytesSpilled = 0L
 
   // Write metrics for current spill
   private var curWriteMetrics: ShuffleWriteMetrics = _
@@ -287,7 +285,8 @@ private[spark] class ExternalSorter[K, V, C](
       val w = writer
       writer = null
       w.commitAndClose()
-      _diskBytesSpilled += curWriteMetrics.shuffleBytesWritten
+      spillMetrics += curWriteMetrics
+      spillMetrics.setMemorySize(memoryBytesSpilled)
       batchSizes.append(curWriteMetrics.shuffleBytesWritten)
       objectsWritten = 0
     }
@@ -757,14 +756,8 @@ private[spark] class ExternalSorter[K, V, C](
       }
     }
 
-    context.taskMetrics.incMemoryBytesSpilled(memoryBytesSpilled)
-    context.taskMetrics.incDiskBytesSpilled(diskBytesSpilled)
-    context.taskMetrics.shuffleWriteMetrics.filter(_ => bypassMergeSort).foreach { m =>
-      if (curWriteMetrics != null) {
-        m.incShuffleBytesWritten(curWriteMetrics.shuffleBytesWritten)
-        m.incShuffleWriteTime(curWriteMetrics.shuffleWriteTime)
-        m.incShuffleRecordsWritten(curWriteMetrics.shuffleRecordsWritten)
-      }
+    if (bypassMergeSort && curWriteMetrics != null) {
+      context.taskMetrics.shuffleWriteMetrics.foreach(_ += curWriteMetrics)
     }
 
     lengths
@@ -791,8 +784,6 @@ private[spark] class ExternalSorter[K, V, C](
       partitionWriters = null
     }
   }
-
-  def diskBytesSpilled: Long = _diskBytesSpilled
 
   /**
    * Given a stream of ((partition, key), combiner) pairs *assumed to be sorted by partition ID*,

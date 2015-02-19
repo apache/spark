@@ -65,7 +65,8 @@ class ExternalAppendOnlyMap[K, V, C](
     mergeValue: (C, V) => C,
     mergeCombiners: (C, C) => C,
     serializer: Serializer = SparkEnv.get.serializer,
-    blockManager: BlockManager = SparkEnv.get.blockManager)
+    blockManager: BlockManager = SparkEnv.get.blockManager,
+    val spillMetrics: ShuffleWriteMetrics = new ShuffleWriteMetrics)
   extends Iterable[(K, C)]
   with Serializable
   with Logging
@@ -86,9 +87,6 @@ class ExternalAppendOnlyMap[K, V, C](
    * grow internal data structures by growing + copying every time the number of objects doubles.
    */
   private val serializerBatchSize = sparkConf.getLong("spark.shuffle.spill.batchSize", 10000)
-
-  // Number of bytes spilled in total
-  private var _diskBytesSpilled = 0L
 
   private val fileBufferSize = sparkConf.getInt("spark.shuffle.file.buffer.kb", 32) * 1024
 
@@ -163,7 +161,8 @@ class ExternalAppendOnlyMap[K, V, C](
       val w = writer
       writer = null
       w.commitAndClose()
-      _diskBytesSpilled += curWriteMetrics.shuffleBytesWritten
+      spillMetrics += curWriteMetrics
+      spillMetrics.setMemorySize(memoryBytesSpilled)
       batchSizes.append(curWriteMetrics.shuffleBytesWritten)
       objectsWritten = 0
     }
@@ -206,8 +205,6 @@ class ExternalAppendOnlyMap[K, V, C](
 
     spilledMaps.append(new DiskMapIterator(file, blockId, batchSizes))
   }
-
-  def diskBytesSpilled: Long = _diskBytesSpilled
 
   /**
    * Return an iterator that merges the in-memory map with the spilled maps.
