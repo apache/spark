@@ -1097,9 +1097,10 @@ class DAGScheduler(
       
       if (runningStages.contains(stage) && stage.pendingTasks.isEmpty) {
 
-        // TODO Won't this always be a ShuffleMapStage at this point? We can do some further 
-        // code cleanup if so.
-        
+        /**
+         * TODO Won't this always be a ShuffleMapStage at this point? We can do some further 
+         * cleanup. 
+         */
         completeStage
 
         clearCacheLocs()
