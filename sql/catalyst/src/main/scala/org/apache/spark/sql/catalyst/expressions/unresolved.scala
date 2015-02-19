@@ -42,8 +42,6 @@ object UnresolvedNumeric extends Numeric[Any] {
 
   override def compare(x: Any, y: Any): Int = UnresolvedOrdering.compare(x, y)
 
-  def div(x: Any, y: Any): Any = error
-
   private[this] def error = sys.error(s"Type does not support numeric operations")
 }
 
@@ -72,10 +70,14 @@ object UnresolvedIntegral extends Integral[Any] {
 
   override def compare(x: Any, y: Any): Int = UnresolvedOrdering.compare(x, y)
 
-  def bitwiseAnd(x: Any, y: Any): Any = ???
-  def bitwiseOr(x: Any, y: Any): Any = ???
-  def bitwiseXor(x: Any, y: Any): Any = ???
-  def bitwiseNot(x: Any): Any = ???
+  def bitwiseAnd(x: Any, y: Any): Any = error("&")
+
+  def bitwiseOr(x: Any, y: Any): Any = error("|")
+
+  def bitwiseXor(x: Any, y: Any): Any = error("^")
+
+  def bitwiseNot(x: Any): Any = error("~")
 
   private[this] def error = sys.error(s"Type does not support numeric operations")
+  private[this] def error(op: String) = sys.error(s"Type does not support bitwise $op operation")
 }

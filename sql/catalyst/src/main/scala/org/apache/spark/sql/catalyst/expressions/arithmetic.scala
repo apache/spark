@@ -217,10 +217,10 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
       dataType match {
         case ft: FractionalType => ft.fractional.asInstanceOf[Fractional[Any]].div
         case it: IntegralType => it.integral.asInstanceOf[Integral[Any]].quot
-        case NullType => UnresolvedNumeric.div
+        case NullType => UnresolvedIntegral.quot
       }
     } else {
-      UnresolvedNumeric.div
+      UnresolvedIntegral.quot
     }
   
   override def eval(input: Row): Any = {
