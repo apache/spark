@@ -99,7 +99,7 @@ public class NettyUtils {
     return new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 8, -8, 8);
   }
 
-  /** Returns the remote address on the channel or "<remote address>" if none exists. */
+  /** Returns the remote address on the channel or "&lt;remote address&gt;" if none exists. */
   public static String getRemoteAddress(Channel channel) {
     if (channel != null && channel.remoteAddress() != null) {
       return channel.remoteAddress().toString();
@@ -109,9 +109,9 @@ public class NettyUtils {
 
   /**
    * Create a pooled ByteBuf allocator but disables the thread-local cache. Thread-local caches
-   * are disabled because the ByteBufs are allocated by the event loop thread, but released by the
-   * executor thread rather than the event loop thread. Those thread-local caches actually delay
-   * the recycling of buffers, leading to larger memory usage.
+   * are disabled for TransportClients because the ByteBufs are allocated by the event loop thread,
+   * but released by the executor thread rather than the event loop thread. Those thread-local
+   * caches actually delay the recycling of buffers, leading to larger memory usage.
    */
   public static PooledByteBufAllocator createPooledByteBufAllocator(
       boolean allowDirectBufs,

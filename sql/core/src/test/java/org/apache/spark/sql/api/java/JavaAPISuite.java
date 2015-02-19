@@ -19,33 +19,31 @@ package org.apache.spark.sql.api.java;
 
 import java.io.Serializable;
 
-import org.apache.spark.sql.api.java.UDF1;
+import org.apache.spark.sql.test.TestSQLContext$;
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.runners.Suite;
-import org.junit.runner.RunWith;
 
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.types.DataTypes;
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
 // serialized, as an alternative to converting these anonymous classes to static inner classes;
 // see http://stackoverflow.com/questions/758570/.
 public class JavaAPISuite implements Serializable {
   private transient JavaSparkContext sc;
-  private transient JavaSQLContext sqlContext;
+  private transient SQLContext sqlContext;
 
   @Before
   public void setUp() {
-    sc = new JavaSparkContext("local", "JavaAPISuite");
-    sqlContext = new JavaSQLContext(sc);
+    sqlContext = TestSQLContext$.MODULE$;
+    sc = new JavaSparkContext(sqlContext.sparkContext());
   }
 
   @After
   public void tearDown() {
-    sc.stop();
-    sc = null;
   }
 
   @SuppressWarnings("unchecked")
@@ -55,15 +53,14 @@ public class JavaAPISuite implements Serializable {
     // sqlContext.registerFunction(
     //   "stringLengthTest", (String str) -> str.length(), DataType.IntegerType);
 
-    sqlContext.registerFunction("stringLengthTest", new UDF1<String, Integer>() {
+    sqlContext.udf().register("stringLengthTest", new UDF1<String, Integer>() {
       @Override
       public Integer call(String str) throws Exception {
         return str.length();
       }
-    }, DataType.IntegerType);
+    }, DataTypes.IntegerType);
 
-    // TODO: Why do we need this cast?
-    Row result = (Row) sqlContext.sql("SELECT stringLengthTest('test')").first();
+    Row result = sqlContext.sql("SELECT stringLengthTest('test')").head();
     assert(result.getInt(0) == 4);
   }
 
@@ -76,15 +73,14 @@ public class JavaAPISuite implements Serializable {
     //   (String str1, String str2) -> str1.length() + str2.length,
     //   DataType.IntegerType);
 
-    sqlContext.registerFunction("stringLengthTest", new UDF2<String, String, Integer>() {
+    sqlContext.udf().register("stringLengthTest", new UDF2<String, String, Integer>() {
       @Override
       public Integer call(String str1, String str2) throws Exception {
         return str1.length() + str2.length();
       }
-    }, DataType.IntegerType);
+    }, DataTypes.IntegerType);
 
-    // TODO: Why do we need this cast?
-    Row result = (Row) sqlContext.sql("SELECT stringLengthTest('test', 'test2')").first();
+    Row result = sqlContext.sql("SELECT stringLengthTest('test', 'test2')").head();
     assert(result.getInt(0) == 9);
   }
 }

@@ -18,7 +18,7 @@
 import numpy as np
 from numpy import array
 
-from pyspark.mllib.common import callMLlibFunc, _to_java_object_rdd
+from pyspark.mllib.common import callMLlibFunc
 from pyspark.mllib.linalg import SparseVector, _convert_to_vector
 
 __all__ = ['LabeledPoint', 'LinearModel', 'LinearRegressionModel', 'RidgeRegressionModel',
@@ -129,8 +129,7 @@ def _regression_train_wrapper(train_func, modelClass, data, initial_weights):
     if not isinstance(first, LabeledPoint):
         raise ValueError("data should be an RDD of LabeledPoint, but got %s" % first)
     initial_weights = initial_weights or [0.0] * len(data.first().features)
-    weights, intercept = train_func(_to_java_object_rdd(data, cache=True),
-                                    _convert_to_vector(initial_weights))
+    weights, intercept = train_func(data, _convert_to_vector(initial_weights))
     return modelClass(weights, intercept)
 
 

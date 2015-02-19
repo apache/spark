@@ -18,7 +18,7 @@
 import py4j.protocol
 from py4j.protocol import Py4JJavaError
 from py4j.java_gateway import JavaObject
-from py4j.java_collections import MapConverter, ListConverter, JavaArray, JavaList
+from py4j.java_collections import ListConverter, JavaArray, JavaList
 
 from pyspark import RDD, SparkContext
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
@@ -54,15 +54,13 @@ _picklable_classes = [
 
 
 # this will call the MLlib version of pythonToJava()
-def _to_java_object_rdd(rdd, cache=False):
+def _to_java_object_rdd(rdd):
     """ Return an JavaRDD of Object by unpickling
 
     It will convert each Python object into Java object by Pyrolite, whenever the
     RDD is serialized in batch or not.
     """
     rdd = rdd._reserialize(AutoBatchedSerializer(PickleSerializer()))
-    if cache:
-        rdd.cache()
     return rdd.ctx._jvm.SerDe.pythonToJava(rdd._jrdd, True)
 
 
@@ -72,9 +70,7 @@ def _py2java(sc, obj):
         obj = _to_java_object_rdd(obj)
     elif isinstance(obj, SparkContext):
         obj = obj._jsc
-    elif isinstance(obj, dict):
-        obj = MapConverter().convert(obj, sc._gateway._gateway_client)
-    elif isinstance(obj, (list, tuple)):
+    elif isinstance(obj, list) and (obj or isinstance(obj[0], JavaObject)):
         obj = ListConverter().convert(obj, sc._gateway._gateway_client)
     elif isinstance(obj, JavaObject):
         pass

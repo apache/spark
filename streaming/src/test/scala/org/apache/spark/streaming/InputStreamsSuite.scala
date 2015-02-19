@@ -28,9 +28,11 @@ import java.util.concurrent.{Executors, TimeUnit, ArrayBlockingQueue}
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer, SynchronizedQueue}
+import scala.language.postfixOps
 
 import com.google.common.io.Files
 import org.scalatest.BeforeAndAfter
+import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
@@ -38,6 +40,9 @@ import org.apache.spark.streaming.util.ManualClock
 import org.apache.spark.util.Utils
 import org.apache.spark.streaming.receiver.{ActorHelper, Receiver}
 import org.apache.spark.rdd.RDD
+import org.apache.hadoop.io.{Text, LongWritable}
+import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
+import org.apache.hadoop.fs.Path
 
 class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
@@ -90,55 +95,64 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     }
   }
 
+  test("binary records stream") {
+    val testDir: File = null
+    try {
+      val batchDuration = Seconds(2)
+      val testDir = Utils.createTempDir()
+      // Create a file that exists before the StreamingContext is created:
+      val existingFile = new File(testDir, "0")
+      Files.write("0\n", existingFile, Charset.forName("UTF-8"))
+      assert(existingFile.setLastModified(10000) && existingFile.lastModified === 10000)
 
-  test("file input stream") {
-    // Disable manual clock as FileInputDStream does not work with manual clock
-    conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock")
+      // Set up the streaming context and input streams
+      withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+        val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+        // This `setTime` call ensures that the clock is past the creation time of `existingFile`
+        clock.setTime(existingFile.lastModified + batchDuration.milliseconds)
+        val batchCounter = new BatchCounter(ssc)
+        val fileStream = ssc.binaryRecordsStream(testDir.toString, 1)
+        val outputBuffer = new ArrayBuffer[Seq[Array[Byte]]]
+          with SynchronizedBuffer[Seq[Array[Byte]]]
+        val outputStream = new TestOutputStream(fileStream, outputBuffer)
+        outputStream.register()
+        ssc.start()
 
-    // Set up the streaming context and input streams
-    val testDir = Utils.createTempDir()
-    val ssc = new StreamingContext(conf, batchDuration)
-    val fileStream = ssc.textFileStream(testDir.toString)
-    val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
-    def output = outputBuffer.flatMap(x => x)
-    val outputStream = new TestOutputStream(fileStream, outputBuffer)
-    outputStream.register()
-    ssc.start()
+        // Advance the clock so that the files are created after StreamingContext starts, but
+        // not enough to trigger a batch
+        clock.addToTime(batchDuration.milliseconds / 2)
 
-    // Create files in the temporary directory so that Spark Streaming can read data from it
-    val input = Seq(1, 2, 3, 4, 5)
-    val expectedOutput = input.map(_.toString)
-    Thread.sleep(1000)
-    for (i <- 0 until input.size) {
-      val file = new File(testDir, i.toString)
-      Files.write(input(i) + "\n", file, Charset.forName("UTF-8"))
-      logInfo("Created file " + file)
-      Thread.sleep(batchDuration.milliseconds)
-      Thread.sleep(1000)
+        val input = Seq(1, 2, 3, 4, 5)
+        input.foreach { i =>
+          Thread.sleep(batchDuration.milliseconds)
+          val file = new File(testDir, i.toString)
+          Files.write(Array[Byte](i.toByte), file)
+          assert(file.setLastModified(clock.currentTime()))
+          assert(file.lastModified === clock.currentTime)
+          logInfo("Created file " + file)
+          // Advance the clock after creating the file to avoid a race when
+          // setting its modification time
+          clock.addToTime(batchDuration.milliseconds)
+          eventually(eventuallyTimeout) {
+            assert(batchCounter.getNumCompletedBatches === i)
+          }
+        }
+
+        val expectedOutput = input.map(i => i.toByte)
+        val obtainedOutput = outputBuffer.flatten.toList.map(i => i(0).toByte)
+        assert(obtainedOutput === expectedOutput)
+      }
+    } finally {
+      if (testDir != null) Utils.deleteRecursively(testDir)
     }
-    val startTime = System.currentTimeMillis()
-    Thread.sleep(1000)
-    val timeTaken = System.currentTimeMillis() - startTime
-    assert(timeTaken < maxWaitTimeMillis, "Operation timed out after " + timeTaken + " ms")
-    logInfo("Stopping context")
-    ssc.stop()
+  }
 
-    // Verify whether data received by Spark Streaming was as expected
-    logInfo("--------------------------------")
-    logInfo("output, size = " + outputBuffer.size)
-    outputBuffer.foreach(x => logInfo("[" + x.mkString(",") + "]"))
-    logInfo("expected output, size = " + expectedOutput.size)
-    expectedOutput.foreach(x => logInfo("[" + x.mkString(",") + "]"))
-    logInfo("--------------------------------")
+  test("file input stream - newFilesOnly = true") {
+    testFileStream(newFilesOnly = true)
+  }
 
-    // Verify whether all the elements received are as expected
-    // (whether the elements were received one in each interval is not verified)
-    assert(output.toList === expectedOutput.toList)
-
-    Utils.deleteRecursively(testDir)
-
-    // Enable manual clock back again for other tests
-    conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
+  test("file input stream - newFilesOnly = false") {
+    testFileStream(newFilesOnly = false)
   }
 
   test("multi-thread receiver") {
@@ -180,7 +194,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     assert(output.sum === numTotalRecords)
   }
 
-  test("queue input stream - oneAtATime=true") {
+  test("queue input stream - oneAtATime = true") {
     // Set up the streaming context and input streams
     val ssc = new StreamingContext(conf, batchDuration)
     val queue = new SynchronizedQueue[RDD[String]]()
@@ -223,7 +237,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     }
   }
 
-  test("queue input stream - oneAtATime=false") {
+  test("queue input stream - oneAtATime = false") {
     // Set up the streaming context and input streams
     val ssc = new StreamingContext(conf, batchDuration)
     val queue = new SynchronizedQueue[RDD[String]]()
@@ -266,6 +280,62 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     assert(output.size === expectedOutput.size)
     for (i <- 0 until output.size) {
       assert(output(i) === expectedOutput(i))
+    }
+  }
+
+  def testFileStream(newFilesOnly: Boolean) {
+    val testDir: File = null
+    try {
+      val batchDuration = Seconds(2)
+      val testDir = Utils.createTempDir()
+      // Create a file that exists before the StreamingContext is created:
+      val existingFile = new File(testDir, "0")
+      Files.write("0\n", existingFile, Charset.forName("UTF-8"))
+      assert(existingFile.setLastModified(10000) && existingFile.lastModified === 10000)
+
+      // Set up the streaming context and input streams
+      withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+        val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+        // This `setTime` call ensures that the clock is past the creation time of `existingFile`
+        clock.setTime(existingFile.lastModified + batchDuration.milliseconds)
+        val batchCounter = new BatchCounter(ssc)
+        val fileStream = ssc.fileStream[LongWritable, Text, TextInputFormat](
+          testDir.toString, (x: Path) => true, newFilesOnly = newFilesOnly).map(_._2.toString)
+        val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
+        val outputStream = new TestOutputStream(fileStream, outputBuffer)
+        outputStream.register()
+        ssc.start()
+
+        // Advance the clock so that the files are created after StreamingContext starts, but
+        // not enough to trigger a batch
+        clock.addToTime(batchDuration.milliseconds / 2)
+
+        // Over time, create files in the directory
+        val input = Seq(1, 2, 3, 4, 5)
+        input.foreach { i =>
+          val file = new File(testDir, i.toString)
+          Files.write(i + "\n", file, Charset.forName("UTF-8"))
+          assert(file.setLastModified(clock.currentTime()))
+          assert(file.lastModified === clock.currentTime)
+          logInfo("Created file " + file)
+          // Advance the clock after creating the file to avoid a race when
+          // setting its modification time
+          clock.addToTime(batchDuration.milliseconds)
+          eventually(eventuallyTimeout) {
+            assert(batchCounter.getNumCompletedBatches === i)
+          }
+        }
+
+        // Verify that all the files have been read
+        val expectedOutput = if (newFilesOnly) {
+          input.map(_.toString).toSet
+        } else {
+          (Seq(0) ++ input).map(_.toString).toSet
+        }
+        assert(outputBuffer.flatten.toSet === expectedOutput)
+      }
+    } finally {
+      if (testDir != null) Utils.deleteRecursively(testDir)
     }
   }
 }

@@ -17,16 +17,18 @@
 
 package org.apache.spark.examples.mllib
 
+import scala.language.reflectiveCalls
+
 import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.{RandomForest, DecisionTree, impurity}
+import org.apache.spark.mllib.tree.{DecisionTree, RandomForest, impurity}
 import org.apache.spark.mllib.tree.configuration.{Algo, Strategy}
 import org.apache.spark.mllib.tree.configuration.Algo._
-import org.apache.spark.mllib.tree.model.{WeightedEnsembleModel, DecisionTreeModel}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
@@ -270,17 +272,18 @@ object DecisionTreeRunner {
       case Variance => impurity.Variance
     }
 
+    params.checkpointDir.foreach(sc.setCheckpointDir)
+
     val strategy
       = new Strategy(
           algo = params.algo,
           impurity = impurityCalculator,
           maxDepth = params.maxDepth,
           maxBins = params.maxBins,
-          numClassesForClassification = numClasses,
+          numClasses = numClasses,
           minInstancesPerNode = params.minInstancesPerNode,
           minInfoGain = params.minInfoGain,
           useNodeIdCache = params.useNodeIdCache,
-          checkpointDir = params.checkpointDir,
           checkpointInterval = params.checkpointInterval)
     if (params.numTrees == 1) {
       val startTime = System.nanoTime()
@@ -352,21 +355,11 @@ object DecisionTreeRunner {
   /**
    * Calculates the mean squared error for regression.
    */
-  private def meanSquaredError(tree: DecisionTreeModel, data: RDD[LabeledPoint]): Double = {
-    data.map { y =>
-      val err = tree.predict(y.features) - y.label
-      err * err
-    }.mean()
-  }
-
-  /**
-   * Calculates the mean squared error for regression.
-   */
   private[mllib] def meanSquaredError(
-      tree: WeightedEnsembleModel,
+      model: { def predict(features: Vector): Double },
       data: RDD[LabeledPoint]): Double = {
     data.map { y =>
-      val err = tree.predict(y.features) - y.label
+      val err = model.predict(y.features) - y.label
       err * err
     }.mean()
   }

@@ -17,10 +17,16 @@
 
 package org.apache.spark.sql
 
+import scala.concurrent.duration._
+import scala.language.{implicitConversions, postfixOps}
+
+import org.scalatest.concurrent.Eventually._
+
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.columnar._
 import org.apache.spark.sql.test.TestSQLContext._
-import org.apache.spark.storage.{StorageLevel, RDDBlockId}
+import org.apache.spark.sql.test.TestSQLContext.implicits._
+import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 
 case class BigData(s: String)
 
@@ -49,6 +55,20 @@ class CachedTableSuite extends QueryTest {
     uncacheTable("tempTable")
   }
 
+  test("unpersist an uncached table will not raise exception") {
+    assert(None == cacheManager.lookupCachedData(testData))
+    testData.unpersist(blocking = true)
+    assert(None == cacheManager.lookupCachedData(testData))
+    testData.unpersist(blocking = false)
+    assert(None == cacheManager.lookupCachedData(testData))
+    testData.persist()
+    assert(None != cacheManager.lookupCachedData(testData))
+    testData.unpersist(blocking = true)
+    assert(None == cacheManager.lookupCachedData(testData))
+    testData.unpersist(blocking = false)
+    assert(None == cacheManager.lookupCachedData(testData))
+  }
+
   test("cache table as select") {
     sql("CACHE TABLE tempTable AS SELECT key FROM testData")
     assertCached(sql("SELECT COUNT(*) FROM tempTable"))
@@ -72,7 +92,7 @@ class CachedTableSuite extends QueryTest {
 
   test("too big for memory") {
     val data = "*" * 10000
-    sparkContext.parallelize(1 to 200000, 1).map(_ => BigData(data)).registerTempTable("bigData")
+    sparkContext.parallelize(1 to 200000, 1).map(_ => BigData(data)).toDF().registerTempTable("bigData")
     table("bigData").persist(StorageLevel.MEMORY_AND_DISK)
     assert(table("bigData").count() === 200000L)
     table("bigData").unpersist(blocking = true)
@@ -123,7 +143,7 @@ class CachedTableSuite extends QueryTest {
     cacheTable("testData")
     assertResult(0, "Double InMemoryRelations found, cacheTable() is not idempotent") {
       table("testData").queryExecution.withCachedData.collect {
-        case r @ InMemoryRelation(_, _, _, _, _: InMemoryColumnarTableScan) => r
+        case r @ InMemoryRelation(_, _, _, _, _: InMemoryColumnarTableScan, _) => r
       }.size
     }
 
@@ -176,7 +196,10 @@ class CachedTableSuite extends QueryTest {
 
     sql("UNCACHE TABLE testData")
     assert(!isCached("testData"), "Table 'testData' should not be cached")
-    assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+
+    eventually(timeout(10 seconds)) {
+      assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+    }
   }
 
   test("CACHE TABLE tableName AS SELECT * FROM anotherTable") {
@@ -189,7 +212,9 @@ class CachedTableSuite extends QueryTest {
       "Eagerly cached in-memory table should have already been materialized")
 
     uncacheTable("testCacheTable")
-    assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+    eventually(timeout(10 seconds)) {
+      assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+    }
   }
 
   test("CACHE TABLE tableName AS SELECT ...") {
@@ -202,7 +227,9 @@ class CachedTableSuite extends QueryTest {
       "Eagerly cached in-memory table should have already been materialized")
 
     uncacheTable("testCacheTable")
-    assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+    eventually(timeout(10 seconds)) {
+      assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+    }
   }
 
   test("CACHE LAZY TABLE tableName") {
@@ -220,7 +247,9 @@ class CachedTableSuite extends QueryTest {
       "Lazily cached in-memory table should have been materialized")
 
     uncacheTable("testData")
-    assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+    eventually(timeout(10 seconds)) {
+      assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+    }
   }
 
   test("InMemoryRelation statistics") {

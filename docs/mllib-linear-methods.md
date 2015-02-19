@@ -110,12 +110,16 @@ However, L1 regularization can help promote sparsity in weights leading to small
 It is not recommended to train models without any regularization,
 especially when the number of training examples is small.
 
+### Optimization
+
+Under the hood, linear methods use convex optimization methods to optimize the objective functions.  MLlib uses two methods, SGD and L-BFGS, described in the [optimization section](mllib-optimization.html).  Currently, most algorithm APIs support Stochastic Gradient Descent (SGD), and a few support L-BFGS. Refer to [this optimization section](mllib-optimization.html#Choosing-an-Optimization-Method) for guidelines on choosing between optimization methods.
+
 ## Binary classification
 
 [Binary classification](http://en.wikipedia.org/wiki/Binary_classification)
 aims to divide items into two categories: positive and negative.  MLlib
-supports two linear methods for binary classification: linear support vector
-machines (SVMs) and logistic regression. For both methods, MLlib supports
+supports two linear methods for binary classification: linear Support Vector
+Machines (SVMs) and logistic regression. For both methods, MLlib supports
 L1 and L2 regularized variants. The training data set is represented by an RDD
 of [LabeledPoint](mllib-data-types.html) in MLlib.  Note that, in the
 mathematical formulation in this guide, a training label $y$ is denoted as
@@ -123,7 +127,7 @@ either $+1$ (positive) or $-1$ (negative), which is convenient for the
 formulation.  *However*, the negative label is represented by $0$ in MLlib
 instead of $-1$, to be consistent with multiclass labeling.
 
-### Linear support vector machines (SVMs)
+### Linear Support Vector Machines (SVMs)
 
 The [linear SVM](http://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM)
 is a standard method for large-scale classification tasks. It is a linear method as described above in equation `$\eqref{eq:regPrimal}$`, with the loss function in the formulation given by the hinge loss:

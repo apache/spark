@@ -21,8 +21,9 @@ import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.param.{Params, Param, ParamMap}
-import org.apache.spark.sql.{SchemaRDD, StructType}
+import org.apache.spark.ml.param.{Param, ParamMap}
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.types.StructType
 
 /**
  * :: AlphaComponent ::
@@ -57,11 +58,11 @@ abstract class PipelineStage extends Serializable with Logging {
 /**
  * :: AlphaComponent ::
  * A simple pipeline, which acts as an estimator. A Pipeline consists of a sequence of stages, each
- * of which is either an [[Estimator]] or a [[Transformer]]. When [[Pipeline.fit]] is called, the
- * stages are executed in order. If a stage is an [[Estimator]], its [[Estimator.fit]] method will
+ * of which is either an [[Estimator]] or a [[Transformer]]. When [[Pipeline#fit]] is called, the
+ * stages are executed in order. If a stage is an [[Estimator]], its [[Estimator#fit]] method will
  * be called on the input dataset to fit a model. Then the model, which is a transformer, will be
  * used to transform the dataset as the input to the next stage. If a stage is a [[Transformer]],
- * its [[Transformer.transform]] method will be called to produce the dataset for the next stage.
+ * its [[Transformer#transform]] method will be called to produce the dataset for the next stage.
  * The fitted model from a [[Pipeline]] is an [[PipelineModel]], which consists of fitted models and
  * transformers, corresponding to the pipeline stages. If there are no stages, the pipeline acts as
  * an identity transformer.
@@ -76,9 +77,9 @@ class Pipeline extends Estimator[PipelineModel] {
 
   /**
    * Fits the pipeline to the input dataset with additional parameters. If a stage is an
-   * [[Estimator]], its [[Estimator.fit]] method will be called on the input dataset to fit a model.
+   * [[Estimator]], its [[Estimator#fit]] method will be called on the input dataset to fit a model.
    * Then the model, which is a transformer, will be used to transform the dataset as the input to
-   * the next stage. If a stage is a [[Transformer]], its [[Transformer.transform]] method will be
+   * the next stage. If a stage is a [[Transformer]], its [[Transformer#transform]] method will be
    * called to produce the dataset for the next stage. The fitted model from a [[Pipeline]] is an
    * [[PipelineModel]], which consists of fitted models and transformers, corresponding to the
    * pipeline stages. If there are no stages, the output model acts as an identity transformer.
@@ -87,7 +88,7 @@ class Pipeline extends Estimator[PipelineModel] {
    * @param paramMap parameter map
    * @return fitted pipeline
    */
-  override def fit(dataset: SchemaRDD, paramMap: ParamMap): PipelineModel = {
+  override def fit(dataset: DataFrame, paramMap: ParamMap): PipelineModel = {
     transformSchema(dataset.schema, paramMap, logging = true)
     val map = this.paramMap ++ paramMap
     val theStages = map(stages)
@@ -113,7 +114,9 @@ class Pipeline extends Estimator[PipelineModel] {
             throw new IllegalArgumentException(
               s"Do not support stage $stage of type ${stage.getClass}")
         }
-        curDataset = transformer.transform(curDataset, paramMap)
+        if (index < indexOfLastEstimator) {
+          curDataset = transformer.transform(curDataset, paramMap)
+        }
         transformers += transformer
       } else {
         transformers += stage.asInstanceOf[Transformer]
@@ -161,12 +164,16 @@ class PipelineModel private[ml] (
     }
   }
 
-  override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
-    transformSchema(dataset.schema, paramMap, logging = true)
-    stages.foldLeft(dataset)((cur, transformer) => transformer.transform(cur, paramMap))
+  override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
+    // Precedence of ParamMaps: paramMap > this.paramMap > fittingParamMap
+    val map = (fittingParamMap ++ this.paramMap) ++ paramMap
+    transformSchema(dataset.schema, map, logging = true)
+    stages.foldLeft(dataset)((cur, transformer) => transformer.transform(cur, map))
   }
 
   private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    stages.foldLeft(schema)((cur, transformer) => transformer.transformSchema(cur, paramMap))
+    // Precedence of ParamMaps: paramMap > this.paramMap > fittingParamMap
+    val map = (fittingParamMap ++ this.paramMap) ++ paramMap
+    stages.foldLeft(schema)((cur, transformer) => transformer.transformSchema(cur, map))
   }
 }

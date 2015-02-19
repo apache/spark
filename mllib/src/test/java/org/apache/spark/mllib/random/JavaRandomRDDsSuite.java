@@ -70,6 +70,21 @@ public class JavaRandomRDDsSuite {
   }
 
   @Test
+  public void testLNormalRDD() {
+    double mean = 4.0;
+    double std = 2.0;
+    long m = 1000L;
+    int p = 2;
+    long seed = 1L;
+    JavaDoubleRDD rdd1 = logNormalJavaRDD(sc, mean, std, m);
+    JavaDoubleRDD rdd2 = logNormalJavaRDD(sc, mean, std, m, p);
+    JavaDoubleRDD rdd3 = logNormalJavaRDD(sc, mean, std, m, p, seed);
+    for (JavaDoubleRDD rdd: Lists.newArrayList(rdd1, rdd2, rdd3)) {
+      Assert.assertEquals(m, rdd.count());
+    }
+  }
+
+  @Test
   public void testPoissonRDD() {
     double mean = 2.0;
     long m = 1000L;
@@ -82,6 +97,36 @@ public class JavaRandomRDDsSuite {
       Assert.assertEquals(m, rdd.count());
     }
   }
+
+  @Test
+  public void testExponentialRDD() {
+    double mean = 2.0;
+    long m = 1000L;
+    int p = 2;
+    long seed = 1L;
+    JavaDoubleRDD rdd1 = exponentialJavaRDD(sc, mean, m);
+    JavaDoubleRDD rdd2 = exponentialJavaRDD(sc, mean, m, p);
+    JavaDoubleRDD rdd3 = exponentialJavaRDD(sc, mean, m, p, seed);
+    for (JavaDoubleRDD rdd: Lists.newArrayList(rdd1, rdd2, rdd3)) {
+      Assert.assertEquals(m, rdd.count());
+    }
+  }
+
+  @Test
+  public void testGammaRDD() {
+    double shape = 1.0;
+    double scale = 2.0;
+    long m = 1000L;
+    int p = 2;
+    long seed = 1L;
+    JavaDoubleRDD rdd1 = gammaJavaRDD(sc, shape, scale, m);
+    JavaDoubleRDD rdd2 = gammaJavaRDD(sc, shape, scale, m, p);
+    JavaDoubleRDD rdd3 = gammaJavaRDD(sc, shape, scale, m, p, seed);
+    for (JavaDoubleRDD rdd: Lists.newArrayList(rdd1, rdd2, rdd3)) {
+      Assert.assertEquals(m, rdd.count());
+    }
+  }
+
 
   @Test
   @SuppressWarnings("unchecked")
@@ -117,6 +162,24 @@ public class JavaRandomRDDsSuite {
 
   @Test
   @SuppressWarnings("unchecked")
+  public void testLogNormalVectorRDD() {
+    double mean = 4.0;
+    double std = 2.0;  
+    long m = 100L;
+    int n = 10;
+    int p = 2;
+    long seed = 1L;
+    JavaRDD<Vector> rdd1 = logNormalJavaVectorRDD(sc, mean, std, m, n);
+    JavaRDD<Vector> rdd2 = logNormalJavaVectorRDD(sc, mean, std, m, n, p);
+    JavaRDD<Vector> rdd3 = logNormalJavaVectorRDD(sc, mean, std, m, n, p, seed);
+    for (JavaRDD<Vector> rdd: Lists.newArrayList(rdd1, rdd2, rdd3)) {
+      Assert.assertEquals(m, rdd.count());
+      Assert.assertEquals(n, rdd.first().size());
+    }
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
   public void testPoissonVectorRDD() {
     double mean = 2.0;
     long m = 100L;
@@ -131,4 +194,40 @@ public class JavaRandomRDDsSuite {
       Assert.assertEquals(n, rdd.first().size());
     }
   }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void testExponentialVectorRDD() {
+    double mean = 2.0;
+    long m = 100L;
+    int n = 10;
+    int p = 2;
+    long seed = 1L;
+    JavaRDD<Vector> rdd1 = exponentialJavaVectorRDD(sc, mean, m, n);
+    JavaRDD<Vector> rdd2 = exponentialJavaVectorRDD(sc, mean, m, n, p);
+    JavaRDD<Vector> rdd3 = exponentialJavaVectorRDD(sc, mean, m, n, p, seed);
+    for (JavaRDD<Vector> rdd: Lists.newArrayList(rdd1, rdd2, rdd3)) {
+      Assert.assertEquals(m, rdd.count());
+      Assert.assertEquals(n, rdd.first().size());
+    }
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void testGammaVectorRDD() {
+    double shape = 1.0;
+    double scale = 2.0;
+    long m = 100L;
+    int n = 10;
+    int p = 2;
+    long seed = 1L;
+    JavaRDD<Vector> rdd1 = gammaJavaVectorRDD(sc, shape, scale, m, n);
+    JavaRDD<Vector> rdd2 = gammaJavaVectorRDD(sc, shape, scale, m, n, p);
+    JavaRDD<Vector> rdd3 = gammaJavaVectorRDD(sc, shape, scale, m, n, p, seed);
+    for (JavaRDD<Vector> rdd: Lists.newArrayList(rdd1, rdd2, rdd3)) {
+      Assert.assertEquals(m, rdd.count());
+      Assert.assertEquals(n, rdd.first().size());
+    }
+  }
+
 }

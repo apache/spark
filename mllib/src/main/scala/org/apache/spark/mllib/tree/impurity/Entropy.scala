@@ -94,6 +94,10 @@ private[tree] class EntropyAggregator(numClasses: Int)
       throw new IllegalArgumentException(s"EntropyAggregator given label $label" +
         s" but requires label < numClasses (= $statsSize).")
     }
+    if (label < 0) {
+      throw new IllegalArgumentException(s"EntropyAggregator given label $label" +
+        s"but requires label is non-negative.")
+    }
     allStats(offset + label.toInt) += instanceWeight
   }
 
@@ -147,6 +151,7 @@ private[tree] class EntropyCalculator(stats: Array[Double]) extends ImpurityCalc
     val lbl = label.toInt
     require(lbl < stats.length,
       s"EntropyCalculator.prob given invalid label: $lbl (should be < ${stats.length}")
+    require(lbl >= 0, "Entropy does not support negative labels")
     val cnt = count
     if (cnt == 0) {
       0

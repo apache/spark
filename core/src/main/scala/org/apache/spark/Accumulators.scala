@@ -18,6 +18,8 @@
 package org.apache.spark
 
 import java.io.{ObjectInputStream, Serializable}
+import java.util.concurrent.atomic.AtomicLong
+import java.lang.ThreadLocal
 
 import scala.collection.generic.Growable
 import scala.collection.mutable.Map
@@ -228,6 +230,7 @@ GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializa
  */
 class Accumulator[T](@transient initialValue: T, param: AccumulatorParam[T], name: Option[String])
     extends Accumulable[T,T](initialValue, param, name) {
+
   def this(initialValue: T, param: AccumulatorParam[T]) = this(initialValue, param, None)
 }
 
@@ -244,15 +247,47 @@ trait AccumulatorParam[T] extends AccumulableParam[T, T] {
   }
 }
 
+object AccumulatorParam {
+
+  // The following implicit objects were in SparkContext before 1.2 and users had to
+  // `import SparkContext._` to enable them. Now we move them here to make the compiler find
+  // them automatically. However, as there are duplicate codes in SparkContext for backward
+  // compatibility, please update them accordingly if you modify the following implicit objects.
+
+  implicit object DoubleAccumulatorParam extends AccumulatorParam[Double] {
+    def addInPlace(t1: Double, t2: Double): Double = t1 + t2
+    def zero(initialValue: Double) = 0.0
+  }
+
+  implicit object IntAccumulatorParam extends AccumulatorParam[Int] {
+    def addInPlace(t1: Int, t2: Int): Int = t1 + t2
+    def zero(initialValue: Int) = 0
+  }
+
+  implicit object LongAccumulatorParam extends AccumulatorParam[Long] {
+    def addInPlace(t1: Long, t2: Long) = t1 + t2
+    def zero(initialValue: Long) = 0L
+  }
+
+  implicit object FloatAccumulatorParam extends AccumulatorParam[Float] {
+    def addInPlace(t1: Float, t2: Float) = t1 + t2
+    def zero(initialValue: Float) = 0f
+  }
+
+  // TODO: Add AccumulatorParams for other types, e.g. lists and strings
+}
+
 // TODO: The multi-thread support in accumulators is kind of lame; check
 // if there's a more intuitive way of doing it right
-private object Accumulators {
+private[spark] object Accumulators {
   // TODO: Use soft references? => need to make readObject work properly then
   val originals = Map[Long, Accumulable[_, _]]()
-  val localAccums = Map[Thread, Map[Long, Accumulable[_, _]]]()
+  val localAccums = new ThreadLocal[Map[Long, Accumulable[_, _]]]() {
+    override protected def initialValue() = Map[Long, Accumulable[_, _]]()
+  }
   var lastId: Long = 0
 
-  def newId: Long = synchronized {
+  def newId(): Long = synchronized {
     lastId += 1
     lastId
   }
@@ -261,22 +296,21 @@ private object Accumulators {
     if (original) {
       originals(a.id) = a
     } else {
-      val accums = localAccums.getOrElseUpdate(Thread.currentThread, Map())
-      accums(a.id) = a
+      localAccums.get()(a.id) = a
     }
   }
 
   // Clear the local (non-original) accumulators for the current thread
   def clear() {
     synchronized {
-      localAccums.remove(Thread.currentThread)
+      localAccums.get.clear
     }
   }
 
   // Get the values of the local accumulators for the current thread (by ID)
   def values: Map[Long, Any] = synchronized {
     val ret = Map[Long, Any]()
-    for ((id, accum) <- localAccums.getOrElse(Thread.currentThread, Map())) {
+    for ((id, accum) <- localAccums.get) {
       ret(id) = accum.localValue
     }
     return ret

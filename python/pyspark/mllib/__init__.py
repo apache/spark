@@ -32,29 +32,4 @@ import sys
 import rand as random
 random.__name__ = 'random'
 random.RandomRDDs.__module__ = __name__ + '.random'
-
-
-class RandomModuleHook(object):
-    """
-    Hook to import pyspark.mllib.random
-    """
-    fullname = __name__ + '.random'
-
-    def find_module(self, name, path=None):
-        # skip all other modules
-        if not name.startswith(self.fullname):
-            return
-        return self
-
-    def load_module(self, name):
-        if name == self.fullname:
-            return random
-
-        cname = name.rsplit('.', 1)[-1]
-        try:
-            return getattr(random, cname)
-        except AttributeError:
-            raise ImportError
-
-
-sys.meta_path.append(RandomModuleHook())
+sys.modules[__name__ + '.random'] = random

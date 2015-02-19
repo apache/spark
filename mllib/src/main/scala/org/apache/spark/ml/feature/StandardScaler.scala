@@ -23,8 +23,8 @@ import org.apache.spark.ml.param._
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.Star
-import org.apache.spark.sql.catalyst.dsl._
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
  * Params for [[StandardScaler]] and [[StandardScalerModel]].
@@ -39,17 +39,16 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
 @AlphaComponent
 class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerParams {
 
+  /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
+
+  /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  override def fit(dataset: SchemaRDD, paramMap: ParamMap): StandardScalerModel = {
+  override def fit(dataset: DataFrame, paramMap: ParamMap): StandardScalerModel = {
     transformSchema(dataset.schema, paramMap, logging = true)
-    import dataset.sqlContext._
     val map = this.paramMap ++ paramMap
-    val input = dataset.select(map(inputCol).attr)
-      .map { case Row(v: Vector) =>
-        v
-      }
+    val input = dataset.select(map(inputCol)).map { case Row(v: Vector) => v }
     val scaler = new feature.StandardScaler().fit(input)
     val model = new StandardScalerModel(this, map, scaler)
     Params.inheritValues(map, this, model)
@@ -79,17 +78,17 @@ class StandardScalerModel private[ml] (
     scaler: feature.StandardScalerModel)
   extends Model[StandardScalerModel] with StandardScalerParams {
 
+  /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
+
+  /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
+  override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     transformSchema(dataset.schema, paramMap, logging = true)
-    import dataset.sqlContext._
     val map = this.paramMap ++ paramMap
-    val scale: (Vector) => Vector = (v) => {
-      scaler.transform(v)
-    }
-    dataset.select(Star(None), scale.call(map(inputCol).attr) as map(outputCol))
+    val scale = udf((v: Vector) => { scaler.transform(v) } : Vector)
+    dataset.withColumn(map(outputCol), scale(col(map(inputCol))))
   }
 
   private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {

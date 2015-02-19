@@ -1,6 +1,7 @@
 ---
 layout: global
 title: Monitoring and Instrumentation
+description: Monitoring, metrics, and instrumentation guide for Spark SPARK_VERSION_SHORT
 ---
 
 There are several ways to monitor Spark applications: web UIs, metrics, and external instrumentation.
@@ -79,7 +80,7 @@ follows:
   </tr>
   <tr>
     <td>spark.history.fs.logDirectory</td>
-    <td>(none)</td>
+    <td>file:/tmp/spark-events</td>
     <td>
      Directory that contains application event logs to be loaded by the history server
     </td>

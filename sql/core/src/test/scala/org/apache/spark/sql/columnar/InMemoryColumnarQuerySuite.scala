@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.columnar
 
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.{QueryTest, TestData}
 import org.apache.spark.storage.StorageLevel.MEMORY_ONLY
 
@@ -29,31 +31,33 @@ class InMemoryColumnarQuerySuite extends QueryTest {
 
   test("simple columnar query") {
     val plan = executePlan(testData.logicalPlan).executedPlan
-    val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan)
+    val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None)
 
     checkAnswer(scan, testData.collect().toSeq)
   }
 
   test("default size avoids broadcast") {
     // TODO: Improve this test when we have better statistics
-    sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).registerTempTable("sizeTst")
+    sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString))
+      .toDF().registerTempTable("sizeTst")
     cacheTable("sizeTst")
     assert(
-      table("sizeTst").queryExecution.logical.statistics.sizeInBytes > autoBroadcastJoinThreshold)
+      table("sizeTst").queryExecution.logical.statistics.sizeInBytes >
+        conf.autoBroadcastJoinThreshold)
   }
 
   test("projection") {
     val plan = executePlan(testData.select('value, 'key).logicalPlan).executedPlan
-    val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan)
+    val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None)
 
     checkAnswer(scan, testData.collect().map {
       case Row(key: Int, value: String) => value -> key
-    }.toSeq)
+    }.map(Row.fromTuple))
   }
 
   test("SPARK-1436 regression: in-memory columns must be able to be accessed multiple times") {
     val plan = executePlan(testData.logicalPlan).executedPlan
-    val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan)
+    val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None)
 
     checkAnswer(scan, testData.collect().toSeq)
     checkAnswer(scan, testData.collect().toSeq)
@@ -62,49 +66,49 @@ class InMemoryColumnarQuerySuite extends QueryTest {
   test("SPARK-1678 regression: compression must not lose repeated values") {
     checkAnswer(
       sql("SELECT * FROM repeatedData"),
-      repeatedData.collect().toSeq)
+      repeatedData.collect().toSeq.map(Row.fromTuple))
 
     cacheTable("repeatedData")
 
     checkAnswer(
       sql("SELECT * FROM repeatedData"),
-      repeatedData.collect().toSeq)
+      repeatedData.collect().toSeq.map(Row.fromTuple))
   }
 
   test("with null values") {
     checkAnswer(
       sql("SELECT * FROM nullableRepeatedData"),
-      nullableRepeatedData.collect().toSeq)
+      nullableRepeatedData.collect().toSeq.map(Row.fromTuple))
 
     cacheTable("nullableRepeatedData")
 
     checkAnswer(
       sql("SELECT * FROM nullableRepeatedData"),
-      nullableRepeatedData.collect().toSeq)
+      nullableRepeatedData.collect().toSeq.map(Row.fromTuple))
   }
 
   test("SPARK-2729 regression: timestamp data type") {
     checkAnswer(
       sql("SELECT time FROM timestamps"),
-      timestamps.collect().toSeq)
+      timestamps.collect().toSeq.map(Row.fromTuple))
 
     cacheTable("timestamps")
 
     checkAnswer(
       sql("SELECT time FROM timestamps"),
-      timestamps.collect().toSeq)
+      timestamps.collect().toSeq.map(Row.fromTuple))
   }
 
   test("SPARK-3320 regression: batched column buffer building should work with empty partitions") {
     checkAnswer(
       sql("SELECT * FROM withEmptyParts"),
-      withEmptyParts.collect().toSeq)
+      withEmptyParts.collect().toSeq.map(Row.fromTuple))
 
     cacheTable("withEmptyParts")
 
     checkAnswer(
       sql("SELECT * FROM withEmptyParts"),
-      withEmptyParts.collect().toSeq)
+      withEmptyParts.collect().toSeq.map(Row.fromTuple))
   }
 
   test("SPARK-4182 Caching complex types") {

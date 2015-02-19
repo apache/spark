@@ -1,5 +1,5 @@
 pyspark.streaming module
-==================
+========================
 
 Module contents
 ---------------
