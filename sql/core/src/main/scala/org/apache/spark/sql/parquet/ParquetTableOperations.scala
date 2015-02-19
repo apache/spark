@@ -146,7 +146,6 @@ case class ParquetTableScan(
           def next() = {
             iter.next()._2 match {
               case row: SpecificMutableRow => {
-            //val row = iter.next ()._2.asInstanceOf[SpecificMutableRow]
 
               // Parquet will leave partitioning columns empty, so we fill them in here.
             var i = 0
