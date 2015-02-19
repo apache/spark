@@ -152,8 +152,7 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
       try {
         Runtime.getRuntime.removeShutdownHook(shutdownHook)
       } catch {
-        case e: Exception =>
-          None
+        case e: Exception => None
       }
     }
     doStop()
