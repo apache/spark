@@ -84,7 +84,7 @@ class DAGScheduler(
 
   private[scheduler] val jobIdToStageIds = new HashMap[Int, HashSet[Int]]
   private[scheduler] val stageIdToStage = new HashMap[Int, Stage]
-  private[scheduler] val shuffleToMapStage = new HashMap[Int, Stage]
+  private[scheduler] val shuffleToMapStage = new HashMap[Int, ShuffleMapStage]
   private[scheduler] val jobIdToActiveJob = new HashMap[Int, ActiveJob]
 
   // Stages we need to run whose parents aren't done
@@ -210,14 +210,15 @@ class DAGScheduler(
    * The jobId value passed in will be used if the stage doesn't already exist with
    * a lower jobId (jobId always increases across jobs.)
    */
-  private def getShuffleMapStage(shuffleDep: ShuffleDependency[_, _, _], jobId: Int): Stage = {
+  private def getShuffleMapStage(shuffleDep: ShuffleDependency[_, _, _],
+                                 jobId: Int): ShuffleMapStage = {
     shuffleToMapStage.get(shuffleDep.shuffleId) match {
       case Some(stage) => stage
       case None =>
         // We are going to register ancestor shuffle dependencies
         registerShuffleDependencies(shuffleDep, jobId)
         // Then register current shuffleDep
-        val stage = newOrUsedStage(shuffleDep, jobId)
+        val stage = newOrUsedShuffleStage(shuffleDep, jobId)
         shuffleToMapStage(shuffleDep.shuffleId) = stage
  
         stage
@@ -226,8 +227,8 @@ class DAGScheduler(
 
   /**
    * Create a Stage -- either directly for use as a result stage, or as part of the (re)-creation
-   * of a shuffle map stage in newOrUsedStage.  The stage will be associated with the provided
-   * jobId. Production of shuffle map stages should always use newOrUsedStage, 
+   * of a shuffle map stage in newOrUsedShuffleStage.  The stage will be associated with the provided
+   * jobId. Production of shuffle map stages should always use newOrUsedShuffleStage, 
    * not getAndRegNewShuffleMap directly.
    */
   private def getAndRegNewShuffleMap(rdd: RDD[_],
@@ -247,8 +248,8 @@ class DAGScheduler(
 
   /**
    * Create a Stage -- either directly for use as a result stage, or as part of the (re)-creation
-   * of a shuffle map stage in newOrUsedStage.  The stage will be associated with the provided
-   * jobId. Production of shuffle map stages should always use newOrUsedStage, 
+   * of a shuffle map stage in newOrUsedShuffleStage.  The stage will be associated with the provided
+   * jobId. Production of shuffle map stages should always use newOrUsedShuffleStage, 
    * not getAndRegNewResults directly.
    */
   private def getAndRegNewResults(rdd: RDD[_],
@@ -270,7 +271,8 @@ class DAGScheduler(
    * present in the MapOutputTracker, then the number and location of available outputs are
    * recovered from the MapOutputTracker
    */
-  private def newOrUsedStage(shuffleDep: ShuffleDependency[_, _, _], jobId: Int): Stage =
+  private def newOrUsedShuffleStage(shuffleDep: ShuffleDependency[_, _, _], 
+                                    jobId: Int): ShuffleMapStage =
   {
     val rdd = shuffleDep.rdd
     val numTasks = rdd.partitions.size
@@ -332,7 +334,7 @@ class DAGScheduler(
     val parentsWithNoMapStage = getAncestorShuffleDependencies(shuffleDep.rdd)
     while (parentsWithNoMapStage.nonEmpty) {
       val currentShufDep = parentsWithNoMapStage.pop()
-      val stage = newOrUsedStage(currentShufDep, jobId)
+      val stage = newOrUsedShuffleStage(currentShufDep, jobId)
       shuffleToMapStage(currentShufDep.shuffleId) = stage
     }
   }
@@ -1026,7 +1028,7 @@ class DAGScheduler(
       logInfo("running: " + runningStages)
       logInfo("waiting: " + waitingStages)
       logInfo("failed: " + failedStages)
-
+      
       stage match {
         case a: ShuffleMapStage =>
           // We supply true to increment the epoch number here in case this is a
@@ -1043,15 +1045,16 @@ class DAGScheduler(
     }
 
     /**
-     * Helper function to handle task failures within the stage
+     * Helper function to handle task failures within the stage for a ShuffleMapStage
      */
-    def handleFailedTasks {
-      if (stage.outputLocs.contains(Nil)) {
+    def handleFailedTasks() {
+      val shuffleMapStage = stage.asInstanceOf[ShuffleMapStage]
+      if (shuffleMapStage.outputLocs.contains(Nil)) {
         // Some tasks had failed; let's resubmit this stage
         // TODO: Lower-level scheduler should also deal with this
         logInfo("Resubmitting " + stage + " (" + stage.name +
           ") because some of its tasks had failed: " +
-          stage.outputLocs.zipWithIndex.filter(_._1 == Nil).map(_._2).mkString(", "))
+          shuffleMapStage.outputLocs.zipWithIndex.filter(_._1 == Nil).map(_._2).mkString(", "))
         submitStage(stage)
       } else {
         val newlyRunnable = new ArrayBuffer[Stage]
@@ -1078,6 +1081,9 @@ class DAGScheduler(
      * @param smt
      */
     def handleShuffleMapTask(smt: ShuffleMapTask) {
+      // Here we know the stage is a shuffle map stage
+      val shuffleMapStage = stage.asInstanceOf[ShuffleMapStage]
+      
       updateAccumulators(event)
       val status = event.result.asInstanceOf[MapStatus]
       val execId = status.location.executorId
@@ -1086,10 +1092,14 @@ class DAGScheduler(
       if (failedEpoch.contains(execId) && smt.epoch <= failedEpoch(execId)) {
         logInfo("Ignoring possibly bogus ShuffleMapTask completion from " + execId)
       } else {
-        stage.addOutputLoc(smt.partitionId, status)
+        shuffleMapStage.addOutputLoc(smt.partitionId, status)
       }
       
       if (runningStages.contains(stage) && stage.pendingTasks.isEmpty) {
+
+        // TODO Won't this always be a ShuffleMapStage at this point? We can do some further 
+        // code cleanup if so.
+        
         completeStage
 
         clearCacheLocs()

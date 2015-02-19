@@ -17,4 +17,5 @@ private[spark] class ResultStage(override val id: Int,
   /** For stages that are the final (consists of only ResultTasks), link to the ActiveJob. */
   var resultOfJob: Option[ActiveJob] = None
 
+  override def toString = "ResultStage " + id
 }

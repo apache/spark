@@ -69,7 +69,7 @@ private[spark] abstract class Stage(val id: Int,
 
   /** Pointer to the latest [StageInfo] object, set by DAGScheduler. */
   var latestInfo: StageInfo = StageInfo.fromStage(this)
-  val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
+
   var numAvailableOutputs = 0
 
   def isAvailable: Boolean = {
@@ -79,46 +79,7 @@ private[spark] abstract class Stage(val id: Int,
       numAvailableOutputs == numPartitions
     }
   }
-
-  def addOutputLoc(partition: Int, status: MapStatus) {
-    val prevList = outputLocs(partition)
-    outputLocs(partition) = status :: prevList
-    if (prevList == Nil) {
-      numAvailableOutputs += 1
-    }
-  }
-
-  def removeOutputLoc(partition: Int, bmAddress: BlockManagerId) {
-    val prevList = outputLocs(partition)
-    val newList = prevList.filterNot(_.location == bmAddress)
-    outputLocs(partition) = newList
-    if (prevList != Nil && newList == Nil) {
-      numAvailableOutputs -= 1
-    }
-  }
-
-  /**
-   * Removes all shuffle outputs associated with this executor. Note that this will also remove
-   * outputs which are served by an external shuffle server (if one exists), as they are still
-   * registered with this execId.
-   */
-  def removeOutputsOnExecutor(execId: String) {
-    var becameUnavailable = false
-    for (partition <- 0 until numPartitions) {
-      val prevList = outputLocs(partition)
-      val newList = prevList.filterNot(_.location.executorId == execId)
-      outputLocs(partition) = newList
-      if (prevList != Nil && newList == Nil) {
-        becameUnavailable = true
-        numAvailableOutputs -= 1
-      }
-    }
-    if (becameUnavailable) {
-      logInfo("%s is now unavailable on executor %s (%d/%d, %s)".format(
-        this, execId, numAvailableOutputs, numPartitions, isAvailable))
-    }
-  }
-
+  
   /** Return a new attempt id, starting with 0. */
   def newAttemptId(): Int = {
     val id = nextAttemptId
