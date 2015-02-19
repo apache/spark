@@ -10,14 +10,8 @@ R.
 
 ### Requirements
 SparkR requires Scala 2.10 and Spark version >= 0.9.0. Current build by default uses
-Apache Spark 1.1.0. You can also build SparkR against a
+Apache Spark 1.3.0. You can also build SparkR against a
 different Spark version (>= 0.9.0) by modifying `pkg/src/build.sbt`.
-
-SparkR also requires the R package `rJava` to be installed. To install `rJava`,
-you can run the following command in R:
-
-    install.packages("rJava")
-
 
 ### Package installation
 To develop SparkR, you can build the scala package and the R package using
@@ -29,7 +23,7 @@ If you wish to try out the package directly from github, you can use [`install_g
     library(devtools)
     install_github("amplab-extras/SparkR-pkg", subdir="pkg")
 
-SparkR by default uses Apache Spark 1.1.0. You can switch to a different Spark
+SparkR by default uses Apache Spark 1.3.0. You can switch to a different Spark
 version by setting the environment variable `SPARK_VERSION`. For example, to
 use Apache Spark 1.2.0, you can run
 
@@ -97,7 +91,7 @@ To run one of them, use `./sparkR <filename> <args>`. For example:
 
     ./sparkR examples/pi.R local[2]
 
-You can also run the unit-tests for SparkR by running
+You can also run the unit-tests for SparkR by running. You need to install the [testthat](http://cran.r-project.org/web/packages/testthat/index.html) package first.
 
     ./run-tests.sh
 
@@ -110,7 +104,7 @@ Instructions for running SparkR on EC2 can be found in the
 Currently, SparkR supports running on YARN with the `yarn-client` mode. These steps show how to build SparkR with YARN support and run SparkR programs on a YARN cluster:
 
 ```
-# assumes Java, R, rJava, yarn, spark etc. are installed on the whole cluster.
+# assumes Java, R, yarn, spark etc. are installed on the whole cluster.
 cd SparkR-pkg/
 USE_YARN=1 SPARK_YARN_VERSION=2.4.0 SPARK_HADOOP_VERSION=2.4.0 ./install-dev.sh
 ```
