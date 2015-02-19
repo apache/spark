@@ -81,11 +81,11 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
 
   test("analyze project") {
     assert(
-      caseSensitiveAnalyze(Project(Seq(UnresolvedAttribute("a")), testRelation)) ===
+      caseSensitiveAnalyzer(Project(Seq(UnresolvedAttribute("a")), testRelation)) ===
         Project(testRelation.output, testRelation))
 
     assert(
-      caseSensitiveAnalyze(
+      caseSensitiveAnalyzer(
         Project(Seq(UnresolvedAttribute("TbL.a")),
           UnresolvedRelation(Seq("TaBlE"), Some("TbL")))) ===
         Project(testRelation.output, testRelation))
@@ -98,13 +98,13 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
     assert(e.getMessage().toLowerCase.contains("cannot resolve"))
 
     assert(
-      caseInsensitiveAnalyze(
+      caseInsensitiveAnalyzer(
         Project(Seq(UnresolvedAttribute("TbL.a")),
           UnresolvedRelation(Seq("TaBlE"), Some("TbL")))) ===
         Project(testRelation.output, testRelation))
 
     assert(
-      caseInsensitiveAnalyze(
+      caseInsensitiveAnalyzer(
         Project(Seq(UnresolvedAttribute("tBl.a")),
           UnresolvedRelation(Seq("TaBlE"), Some("TbL")))) ===
         Project(testRelation.output, testRelation))
@@ -117,16 +117,13 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
     assert(e.getMessage == "Table Not Found: tAbLe")
 
     assert(
-      caseSensitiveAnalyze(UnresolvedRelation(Seq("TaBlE"), None)) ===
-        testRelation)
+      caseSensitiveAnalyzer(UnresolvedRelation(Seq("TaBlE"), None)) === testRelation)
 
     assert(
-      caseInsensitiveAnalyze(UnresolvedRelation(Seq("tAbLe"), None)) ===
-        testRelation)
+      caseInsensitiveAnalyzer(UnresolvedRelation(Seq("tAbLe"), None)) === testRelation)
 
     assert(
-      caseInsensitiveAnalyze(UnresolvedRelation(Seq("TaBlE"), None)) ===
-        testRelation)
+      caseInsensitiveAnalyzer(UnresolvedRelation(Seq("TaBlE"), None)) === testRelation)
   }
 
   def errorTest(
@@ -187,7 +184,7 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
       AttributeReference("d", DecimalType.Unlimited)(),
       AttributeReference("e", ShortType)())
 
-    val plan = caseInsensitiveAnalyze(
+    val plan = caseInsensitiveAnalyzer(
       testRelation2.select(
         'a / Literal(2) as 'div1,
         'a / 'b as 'div2,
