@@ -47,7 +47,8 @@ case class UnaryMinus(child: Expression) extends UnaryExpression {
 case class Sqrt(child: Expression) extends UnaryExpression {
   type EvaluatedType = Any
 
-  override lazy val resolved = child.resolved && child.dataType.isInstanceOf[NumericType]
+  override lazy val resolved = child.resolved &&
+    (child.dataType.isInstanceOf[NumericType] || child.dataType.isInstanceOf[NullType])
 
   def dataType = DoubleType
   override def foldable = child.foldable
@@ -55,8 +56,14 @@ case class Sqrt(child: Expression) extends UnaryExpression {
   override def toString = s"SQRT($child)"
 
   val numeric =
-    if (resolved) child.dataType.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
-    else UnresolvedNumeric
+    if (resolved) {
+      child.dataType match {
+        case n: NumericType => n.numeric.asInstanceOf[Numeric[Any]]
+        case n: NullType => UnresolvedNumeric
+      }
+    } else {
+      UnresolvedNumeric
+    }
 
   override def eval(input: Row): Any = {
     val evalE = child.eval(input)
@@ -431,7 +438,8 @@ case class MaxOf(left: Expression, right: Expression) extends Expression {
 case class Abs(child: Expression) extends UnaryExpression  {
   type EvaluatedType = Any
 
-  override lazy val resolved = child.resolved && child.dataType.isInstanceOf[NumericType]
+  override lazy val resolved = child.resolved &&
+    (child.dataType.isInstanceOf[NumericType] || child.dataType.isInstanceOf[NullType])
 
   def dataType = child.dataType
   override def foldable = child.foldable
@@ -439,8 +447,14 @@ case class Abs(child: Expression) extends UnaryExpression  {
   override def toString = s"Abs($child)"
 
   val numeric =
-    if (resolved) dataType.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
-    else UnresolvedNumeric
+    if (resolved) {
+      dataType match {
+        case n: NumericType => n.numeric.asInstanceOf[Numeric[Any]]
+        case n: NullType => UnresolvedNumeric
+      }
+    } else {
+      UnresolvedNumeric
+    }
 
   override def eval(input: Row): Any = {
     val evalE = child.eval(input)
