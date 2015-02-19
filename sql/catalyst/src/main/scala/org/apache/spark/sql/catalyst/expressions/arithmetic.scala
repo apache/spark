@@ -251,13 +251,17 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
     if (resolved) {
       dataType match {
         case ByteType =>
-          ((evalE1: Byte, evalE2: Byte) => (evalE1 & evalE2).toByte).asInstanceOf[(Any, Any) => Any]
+          ((evalE1: Byte, evalE2: Byte) => (evalE1 & evalE2).toByte)
+            .asInstanceOf[(Any, Any) => Any]
         case ShortType =>
-          ((evalE1: Short, evalE2: Short) => (evalE1 & evalE2).toShort).asInstanceOf[(Any, Any) => Any]
+          ((evalE1: Short, evalE2: Short) => (evalE1 & evalE2).toShort)
+            .asInstanceOf[(Any, Any) => Any]
         case IntegerType =>
-          ((evalE1: Int, evalE2: Int) => evalE1 & evalE2).asInstanceOf[(Any, Any) => Any]
+          ((evalE1: Int, evalE2: Int) => evalE1 & evalE2)
+            .asInstanceOf[(Any, Any) => Any]
         case LongType =>
-          ((evalE1: Long, evalE2: Long) => evalE1 & evalE2).asInstanceOf[(Any, Any) => Any]
+          ((evalE1: Long, evalE2: Long) => evalE1 & evalE2)
+            .asInstanceOf[(Any, Any) => Any]
       }
     } else {
       UnresolvedIntegral.bitwiseAnd
@@ -282,13 +286,17 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
     if (resolved) {
       dataType match {
         case ByteType =>
-          ((evalE1: Byte, evalE2: Byte) => (evalE1 | evalE2).toByte).asInstanceOf[(Any, Any) => Any]
+          ((evalE1: Byte, evalE2: Byte) => (evalE1 | evalE2).toByte)
+            .asInstanceOf[(Any, Any) => Any]
         case ShortType =>
-          ((evalE1: Short, evalE2: Short) => (evalE1 | evalE2).toShort).asInstanceOf[(Any, Any) => Any]
+          ((evalE1: Short, evalE2: Short) => (evalE1 | evalE2).toShort)
+            .asInstanceOf[(Any, Any) => Any]
         case IntegerType =>
-          ((evalE1: Int, evalE2: Int) => evalE1 | evalE2).asInstanceOf[(Any, Any) => Any]
+          ((evalE1: Int, evalE2: Int) => evalE1 | evalE2)
+            .asInstanceOf[(Any, Any) => Any]
         case LongType =>
-          ((evalE1: Long, evalE2: Long) => evalE1 | evalE2).asInstanceOf[(Any, Any) => Any]
+          ((evalE1: Long, evalE2: Long) => evalE1 | evalE2)
+            .asInstanceOf[(Any, Any) => Any]
       }
     } else {
       UnresolvedIntegral.bitwiseOr
@@ -313,13 +321,17 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
     if (resolved) {
       dataType match {
         case ByteType =>
-          ((evalE1: Byte, evalE2: Byte) => (evalE1 ^ evalE2).toByte).asInstanceOf[(Any, Any) => Any]
+          ((evalE1: Byte, evalE2: Byte) => (evalE1 ^ evalE2).toByte)
+            .asInstanceOf[(Any, Any) => Any]
         case ShortType =>
-          ((evalE1: Short, evalE2: Short) => (evalE1 ^ evalE2).toShort).asInstanceOf[(Any, Any) => Any]
+          ((evalE1: Short, evalE2: Short) => (evalE1 ^ evalE2).toShort)
+            .asInstanceOf[(Any, Any) => Any]
         case IntegerType =>
-          ((evalE1: Int, evalE2: Int) => evalE1 ^ evalE2).asInstanceOf[(Any, Any) => Any]
+          ((evalE1: Int, evalE2: Int) => evalE1 ^ evalE2)
+            .asInstanceOf[(Any, Any) => Any]
         case LongType =>
-          ((evalE1: Long, evalE2: Long) => evalE1 ^ evalE2).asInstanceOf[(Any, Any) => Any]
+          ((evalE1: Long, evalE2: Long) => evalE1 ^ evalE2)
+            .asInstanceOf[(Any, Any) => Any]
       }
     } else {
       UnresolvedIntegral.bitwiseXor
