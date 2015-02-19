@@ -110,9 +110,19 @@ sparkR.init <- function(
                 mainClass = "edu.berkeley.cs.amplab.sparkr.SparkRBackend",
                 args = as.character(sparkRBackendPort),
                 javaOpts = paste("-Xmx", sparkMem, sep = ""))
-  Sys.sleep(2) # Wait for backend to come up
+
+  cat("Waiting JVM bring up ...\n")
+  while(TRUE) {
+    if(!connExists(.sparkREnv)) {
+      Sys.sleep(1)
+      cat(".")
+      connectBackend("localhost", sparkRBackendPort) # Connect to it
+    } else {
+      cat(" ok.\n")
+      break
+    }
+  }
   .sparkREnv$sparkRBackendPort <- sparkRBackendPort
-  connectBackend("localhost", sparkRBackendPort) # Connect to it
 
   if (nchar(sparkHome) != 0) {
     sparkHome <- normalizePath(sparkHome)
