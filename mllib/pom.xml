@@ -59,6 +59,7 @@
       <groupId>org.jblas</groupId>
       <artifactId>jblas</artifactId>
       <version>${jblas.version}</version>
+     <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.scalanlp</groupId>
