@@ -153,7 +153,6 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
         Runtime.getRuntime.removeShutdownHook(shutdownHook)
       } catch {
         case e: Exception =>
-          logError(s"Exception while removing shutdown hook.", e)
           None
       }
     }
