@@ -270,23 +270,92 @@ for i in range(2):
 
 ## Power iteration clustering (PIC)
 
-Power iteration clustering (PIC) is a scalable and efficient algorithm for clustering points given pointwise mutual affinity values.  Internally the algorithm:
+Power iteration clustering (PIC) is a scalable and efficient algorithm for clustering vertices of a
+graph given pairwise similarties as edge properties,
+described in [Lin and Cohen, Power Iteration Clustering](http://www.icml2010.org/papers/387.pdf).
+It computes a pseudo-eigenvector of the normalized affinity matrix of the graph via
+[power iteration](http://en.wikipedia.org/wiki/Power_iteration)  and uses it to cluster vertices.
+MLlib includes an implementation of PIC using GraphX as its backend.
+It takes an `RDD` of `(srcId, dstId, similarity)` tuples and outputs a model with the clustering assignments.
+The similarities must be nonnegative.
+PIC assumes that the similarity measure is symmetric.
+A pair `(srcId, dstId)` regardless of the ordering should appear at most once in the input data.
+If a pair is missing from input, their similarity is treated as zero.
+MLlib's PIC implementation takes the following (hyper-)parameters:
 
-* accepts a [Graph](api/graphx/index.html#org.apache.spark.graphx.Graph) that represents a  normalized pairwise affinity between all input points.
-* calculates the principal eigenvalue and eigenvector
-* Clusters each of the input points according to their principal eigenvector component value
+* `k`: number of clusters
+* `maxIterations`: maximum number of power iterations
+* `initializationMode`: initialization model. This can be either "random", which is the default,
+  to use a random vector as vertex properties, or "degree" to use normalized sum similarities.
 
-Details of this algorithm are found within [Power Iteration Clustering, Lin and Cohen]{www.icml2010.org/papers/387.pdf}
+**Examples**
 
-Example outputs for a dataset inspired by the paper - but with five clusters instead of three- have he following output from our implementation:
+In the following, we show code snippets to demonstrate how to use PIC in MLlib.
 
-<p style="text-align: center;">
-  <img src="img/PIClusteringFiveCirclesInputsAndOutputs.png"
-       title="The Property Graph"
-       alt="The Property Graph"
-       width="50%" />
-  <!-- Images are downsized intentionally to improve quality on retina displays -->
-</p>
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+[`PowerIterationClustering`](api/scala/index.html#org.apache.spark.mllib.clustering.PowerIterationClustering) 
+implements the PIC algorithm.
+It takes an `RDD` of `(srcId: Long, dstId: Long, similarity: Double)` tuples representing the
+affinity matrix.
+Calling `PowerIterationClustering.run` returns a
+[`PowerIterationClusteringModel`](api/scala/index.html#org.apache.spark.mllib.clustering.PowerIterationClusteringModel),
+which contains the computed clustering assignments.
+
+{% highlight scala %}
+import org.apache.spark.mllib.clustering.PowerIterationClustering
+import org.apache.spark.mllib.linalg.Vectors
+
+val similarities: RDD[(Long, Long, Double)] = ...
+
+val pic = new PowerIteartionClustering()
+  .setK(3)
+  .setMaxIterations(20)
+val model = pic.run(similarities)
+
+model.assignments.foreach { case (vertexId, clusterId) =>
+  println(s"$vertexId -> $clusterId")
+}
+{% endhighlight %}
+
+A full example that produces the experiment described in the PIC paper can be found under
+[`examples/`](https://github.com/apache/spark/blob/master/examples/src/main/scala/org/apache/spark/examples/mllib/PowerIterationClusteringExample.scala).
+
+</div>
+
+<div data-lang="java" markdown="1">
+
+[`PowerIterationClustering`](api/java/org/apache/spark/mllib/clustering/PowerIterationClustering.html)
+implements the PIC algorithm.
+It takes an `JavaRDD` of `(srcId: Long, dstId: Long, similarity: Double)` tuples representing the
+affinity matrix.
+Calling `PowerIterationClustering.run` returns a
+[`PowerIterationClusteringModel`](api/java/org/apache/spark/mllib/clustering/PowerIterationClusteringModel.html)
+which contains the computed clustering assignments.
+
+{% highlight java %}
+import scala.Tuple2;
+import scala.Tuple3;
+
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.mllib.clustering.PowerIterationClustering;
+import org.apache.spark.mllib.clustering.PowerIterationClusteringModel;
+
+JavaRDD<Tuple3<Long, Long, Double>> similarities = ...
+
+PowerIterationClustering pic = new PowerIterationClustering()
+  .setK(2)
+  .setMaxIterations(10);
+PowerIterationClusteringModel model = pic.run(similarities);
+
+for (Tuple2<Object, Object> assignment: model.assignments().toJavaRDD().collect()) {
+  System.out.println(assignment._1() + " -> " + assignment._2());
+}
+{% endhighlight %}
+</div>
+
+</div>
 
 ## Latent Dirichlet allocation (LDA)
 

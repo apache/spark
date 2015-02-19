@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.clustering
 
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.graphx._
@@ -113,6 +114,14 @@ class PowerIterationClustering private[clustering] (
       case "degree" => initDegreeVector(w)
     }
     pic(w0)
+  }
+
+  /**
+   * A Java-friendly version of [[PowerIterationClustering.run]].
+   */
+  def run(similarities: JavaRDD[(java.lang.Long, java.lang.Long, java.lang.Double)])
+    : PowerIterationClusteringModel = {
+    run(similarities.rdd.asInstanceOf[RDD[(Long, Long, Double)]])
   }
 
   /**
