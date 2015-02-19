@@ -75,14 +75,10 @@ private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends Abstr
     }
 
   private lazy val uncache: Parser[LogicalPlan] =
-    (
-      UNCACHE ~ TABLE ~> ident ^^ {
+    ( UNCACHE ~ TABLE ~> ident ^^ {
         case tableName => UncacheTableCommand(tableName)
       }
-    |
-      CLEAR ~ CACHE ^^ {
-        case _ ~ _ => ClearCacheCommand
-      }
+      | CLEAR ~ CACHE ^^^ ClearCacheCommand
     )
 
   private lazy val set: Parser[LogicalPlan] =
