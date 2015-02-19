@@ -434,7 +434,7 @@ class DAGScheduler(
     val registeredStages = jobIdToStageIds.get(job.jobId)
 
     // Clean data structures based on stage
-    def cleanupStages(stageId: Int) {
+    def removeStage(stageId: Int) {
       for (stage <- stageIdToStage.get(stageId)) {
         if (runningStages.contains(stage)) {
           logDebug("Removing running stage %d".format(stageId))
@@ -452,6 +452,11 @@ class DAGScheduler(
           failedStages -= stage
         }
       }
+
+      // data structures based on StageId
+      stageIdToStage -= stageId
+      logDebug("After removal of stage %d, remaining stages = %d"
+        .format(stageId, stageIdToStage.size))
     }
     
     if (registeredStages.isEmpty || registeredStages.get.isEmpty) {
@@ -467,15 +472,12 @@ class DAGScheduler(
           } else {
             jobSet -= job.jobId
             if (jobSet.isEmpty) { // no other job needs this stage
-              cleanupStages(stageId)
-              // data structures based on StageId
-              stageIdToStage -= stageId
-              logDebug("After removal of stage %d, remaining stages = %d"
-                .format(stageId, stageIdToStage.size))
+              removeStage(stageId)
             }
           }
       }
     }
+    
     jobIdToStageIds -= job.jobId
     jobIdToActiveJob -= job.jobId
     activeJobs -= job
@@ -551,7 +553,7 @@ class DAGScheduler(
     val listener = new ApproximateActionListener(rdd, func, evaluator, timeout)
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     val partitions = (0 until rdd.partitions.size).toArray
-    val jobId = nextJobId.getAndIncrement()
+    val jobId = nextJobId.getAndIncrement
     eventProcessLoop.post(JobSubmitted(
       jobId, rdd, func2, partitions, allowLocal = false, callSite, listener, properties))
     listener.awaitResult()    // Will throw an exception if the job fails

@@ -20,7 +20,6 @@ private[spark] class ShuffleMapStage(override val id: Int,
   override def toString = "ShuffleMapStage " + id
 
   val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
- 
 
   def addOutputLoc(partition: Int, status: MapStatus) {
     val prevList = outputLocs(partition)
