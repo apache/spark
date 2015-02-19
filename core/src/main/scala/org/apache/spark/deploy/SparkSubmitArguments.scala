@@ -25,7 +25,7 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import org.apache.spark.deploy.SparkSubmitAction._
-import org.apache.spark.launcher.SparkSubmitOptionParser
+import org.apache.spark.launcher.SparkSubmitArgumentsParser
 import org.apache.spark.util.Utils
 
 /**
@@ -33,7 +33,7 @@ import org.apache.spark.util.Utils
  * The env argument is used for testing.
  */
 private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, String] = sys.env)
-    extends SparkSubmitOptionParser {
+    extends SparkSubmitArgumentsParser {
   var master: String = null
   var deployMode: String = null
   var executorMemory: String = null
@@ -285,8 +285,6 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
     |${sparkProperties.mkString("  ", "\n  ", "\n")}
     """.stripMargin
   }
-
-  import SparkSubmitOptionParser._
 
   /** Fill in values by parsing user options. */
   override protected def handle(opt: String, value: String): Boolean = {

@@ -66,23 +66,23 @@ public class SparkSubmitOptionParserSuite {
 
   @Test
   public void testExtraOptions() {
-    List<String> args = Arrays.asList(MASTER, MASTER, "foo", "bar");
+    List<String> args = Arrays.asList(parser.MASTER, parser.MASTER, "foo", "bar");
     parser.parse(args);
-    verify(parser).handle(eq(MASTER), eq(MASTER));
+    verify(parser).handle(eq(parser.MASTER), eq(parser.MASTER));
     verify(parser).handleUnknown(eq("foo"));
     verify(parser).handleExtraArgs(eq(Arrays.asList("bar")));
   }
 
   @Test(expected=IllegalArgumentException.class)
   public void testMissingArg() {
-    parser.parse(Arrays.asList(MASTER));
+    parser.parse(Arrays.asList(parser.MASTER));
   }
 
   @Test
   public void testEqualSeparatedOption() {
-    List<String> args = Arrays.asList(MASTER + "=" + MASTER);
+    List<String> args = Arrays.asList(parser.MASTER + "=" + parser.MASTER);
     parser.parse(args);
-    verify(parser).handle(eq(MASTER), eq(MASTER));
+    verify(parser).handle(eq(parser.MASTER), eq(parser.MASTER));
     verify(parser).handleExtraArgs(eq(Collections.<String>emptyList()));
   }
 

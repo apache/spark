@@ -110,7 +110,30 @@ class SparkClassLauncher extends SparkLauncher implements CommandBuilder {
 
   private List<String> createSparkSubmitCommand(Map<String, String> env) throws IOException {
     List<String> sparkSubmitArgs = new ArrayList<String>(classArgs);
-    sparkSubmitArgs.add(SparkSubmitOptionParser.CLASS);
+
+    // This is a workaround for the fact that the constants in SparkSubmitOptionParser are not
+    // static. The parser itself is never used, we just don't want to hardcode the value of that
+    // option here.
+    SparkSubmitOptionParser parser = new SparkSubmitOptionParser() {
+
+      @Override
+      protected boolean handle(String opt, String value) {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      protected boolean handleUnknown(String opt) {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      protected void handleExtraArgs(List<String> extra) {
+        throw new UnsupportedOperationException();
+      }
+
+    };
+
+    sparkSubmitArgs.add(parser.CLASS);
     sparkSubmitArgs.add(className);
 
     SparkSubmitCommandBuilder builder = new SparkSubmitCommandBuilder(true, sparkSubmitArgs);

@@ -25,6 +25,7 @@ import java.io.InputStreamReader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -89,8 +90,12 @@ public class SparkLauncher {
   final Map<String, String> conf;
 
   public SparkLauncher() {
+    this(Collections.<String, String>emptyMap());
+  }
+
+  public SparkLauncher(Map<String, String> env) {
     this.appArgs = new ArrayList<String>();
-    this.childEnv = new HashMap<String, String>();
+    this.childEnv = new HashMap<String, String>(env);
     this.conf = new HashMap<String, String>();
     this.files = new ArrayList<String>();
     this.jars = new ArrayList<String>();
@@ -285,7 +290,7 @@ public class SparkLauncher {
     return pb.start();
   }
 
-  protected List<String> buildJavaCommand(String extraClassPath) throws IOException {
+  List<String> buildJavaCommand(String extraClassPath) throws IOException {
     List<String> cmd = new ArrayList<String>();
     if (javaHome == null) {
       cmd.add(join(File.separator, System.getProperty("java.home"), "bin", "java"));
@@ -317,7 +322,7 @@ public class SparkLauncher {
    * Adds the default perm gen size option for Spark if the VM requires it and the user hasn't
    * set it.
    */
-  protected void addPermGenSizeOpt(List<String> cmd) {
+  void addPermGenSizeOpt(List<String> cmd) {
     // Don't set MaxPermSize for Java 8 and later.
     String[] version = System.getProperty("java.version").split("\\.");
     if (Integer.parseInt(version[0]) > 1 || Integer.parseInt(version[1]) > 7) {
@@ -333,7 +338,7 @@ public class SparkLauncher {
     cmd.add("-XX:MaxPermSize=128m");
   }
 
-  protected void addOptionString(List<String> cmd, String options) {
+  void addOptionString(List<String> cmd, String options) {
     if (!isEmpty(options)) {
       for (String opt : parseOptionString(options)) {
         cmd.add(opt);
@@ -633,6 +638,10 @@ public class SparkLauncher {
     return props;
   }
 
+  String getenv(String key) {
+    return firstNonEmpty(childEnv.get(key), System.getenv(key));
+  }
+
   private boolean isClientMode(Properties userProps) {
     String userMaster = firstNonEmpty(master, (String) userProps.get(SPARK_MASTER));
     return userMaster == null ||
@@ -663,10 +672,6 @@ public class SparkLauncher {
     checkState(assemblies != null && assemblies.length > 0, "No assemblies found in '%s'.", libdir);
     checkState(assemblies.length == 1, "Multiple assemblies found in '%s'.", libdir);
     return assemblies[0].getAbsolutePath();
-  }
-
-  private String getenv(String key) {
-    return firstNonEmpty(childEnv.get(key), System.getenv(key));
   }
 
   private String getConfDir() {
