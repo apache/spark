@@ -278,10 +278,18 @@ case class ParquetRelation2(path: String)(@transient val sqlContext: SQLContext)
           }.toMap
 
         val currentValue = partValues.values.head.toInt
-        iter.map { pair =>
-          val res = pair._2.asInstanceOf[SpecificMutableRow]
-          res.setInt(partitionKeyLocation, currentValue)
-          res
+        iter.map { _._2 match {
+          case row: SpecificMutableRow => {
+            val res = row.asInstanceOf[SpecificMutableRow]
+            res.setInt(partitionKeyLocation, currentValue)
+            res
+          }
+          case row: Row => {
+            val rowContent = row.to[Array]
+            rowContent.update(partitionKeyLocation, currentValue)
+            Row.fromSeq(rowContent)
+          }
+        }
         }
       }
     } else {
