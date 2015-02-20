@@ -375,3 +375,28 @@ data2 = labels.zip(normalizer2.transform(features))
 {% endhighlight %}
 </div>
 </div>
+
+## Feature selection
+Feature selection allows selecting relevant features for use in model construction leaving out the redundant ones. The number of features to select can be determined using the validation set. Feature selection is usually applied on sparse data, for example in text classification. Feature selection reduces the size of the vector space and, in turn, the complexity of any subsequent operation with vectors. 
+
+### ChiSqSelector
+ChiSqSelector stands for Chi-Squared feature selection. It operates on the labeled data. ChiSqSelector orders categorical features based on their values of Chi-Squared test on independence from class and filters (selects) top given features.  
+
+#### Model Fitting
+
+[`ChiSqSelector`](api/scala/index.html#org.apache.spark.mllib.feature.ChiSqSelector) has the
+following parameters in the constructor:
+
+* `numTopFeatures` number of top features that selector will select (filter).
+
+We provide a [`fit`](api/scala/index.html#org.apache.spark.mllib.feature.ChiSqSelector) method in
+`ChiSqSelector` which can take an input of `RDD[LabeledPoint]` with categorical features, learn the summary statistics, and then
+return a model which can transform the input dataset into the reduced feature space.
+
+This model implements [`VectorTransformer`](api/scala/index.html#org.apache.spark.mllib.feature.VectorTransformer)
+which can apply the Chi-Squared feature selection on a `Vector` to produce a reduced `Vector` or on
+an `RDD[Vector]` to produce a reduced `RDD[Vector]`.
+
+Note that the model that performs actual feature filtering can be instantiated independently with array of feature indices that has to be sorted ascending.
+</div>
+</div>
