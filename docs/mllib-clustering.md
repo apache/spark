@@ -314,8 +314,8 @@ val pic = new PowerIteartionClustering()
   .setMaxIterations(20)
 val model = pic.run(similarities)
 
-model.assignments.foreach { case (vertexId, clusterId) =>
-  println(s"$vertexId -> $clusterId")
+model.assignments.foreach { a =>
+  println(s"${a.id} -> ${a.cluster}")
 }
 {% endhighlight %}
 
@@ -349,8 +349,8 @@ PowerIterationClustering pic = new PowerIterationClustering()
   .setMaxIterations(10);
 PowerIterationClusteringModel model = pic.run(similarities);
 
-for (Tuple2<Object, Object> assignment: model.assignments().toJavaRDD().collect()) {
-  System.out.println(assignment._1() + " -> " + assignment._2());
+for (PowerIterationClustering.Assignment a: model.assignments().toJavaRDD().collect()) {
+  System.out.println(a.id() + " -> " + a.cluster());
 }
 {% endhighlight %}
 </div>

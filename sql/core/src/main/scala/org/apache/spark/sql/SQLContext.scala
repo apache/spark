@@ -217,6 +217,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   def uncacheTable(tableName: String): Unit = cacheManager.uncacheTable(tableName)
 
+  /**
+   * Removes all cached tables from the in-memory cache.
+   */
+  def clearCache(): Unit = cacheManager.clearCache()
+
   // scalastyle:off
   // Disable style checker so "implicits" object can start with lowercase i
   /**

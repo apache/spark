@@ -16,10 +16,10 @@
 #
 
 from pyspark import SparkContext
-from pyspark.sql import SQLContext, Row
 from pyspark.ml import Pipeline
-from pyspark.ml.feature import HashingTF, Tokenizer
 from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.feature import HashingTF, Tokenizer
+from pyspark.sql import Row, SQLContext
 
 
 """

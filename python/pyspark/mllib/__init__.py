@@ -19,7 +19,7 @@
 Python bindings for MLlib.
 """
 
-# MLlib currently needs and NumPy 1.4+, so complain if lower
+# MLlib currently needs NumPy 1.4+, so complain if lower
 
 import numpy
 if numpy.version.version < '1.4':

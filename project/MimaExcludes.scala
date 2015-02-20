@@ -176,6 +176,11 @@ object MimaExcludes {
               "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$$implicitPrefs"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$$rank")
+          ) ++ Seq(
+            // SPARK-4682
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.RealClock"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.Clock"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.TestClock")
           )
 
         case v if v.startsWith("1.2") =>

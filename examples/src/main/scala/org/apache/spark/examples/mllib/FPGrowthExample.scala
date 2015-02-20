@@ -42,8 +42,8 @@ object FPGrowthExample {
       .setMinSupport(0.3)
     val model = fpg.run(transactions)
 
-    model.freqItemsets.collect().foreach { case (itemset, freq) =>
-      println(itemset.mkString("[", ",", "]") + ", " + freq)
+    model.freqItemsets.collect().foreach { itemset =>
+      println(itemset.items.mkString("[", ",", "]") + ", " + itemset.freq)
     }
 
     sc.stop()

@@ -17,9 +17,9 @@
 
 package org.apache.spark.mllib.clustering
 
-import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.GraphImpl
 import org.apache.spark.mllib.linalg.Vectors
@@ -33,12 +33,12 @@ import org.apache.spark.util.random.XORShiftRandom
  * Model produced by [[PowerIterationClustering]].
  *
  * @param k number of clusters
- * @param assignments an RDD of (vertexID, clusterID) pairs
+ * @param assignments an RDD of clustering [[PowerIterationClustering#Assignment]]s
  */
 @Experimental
 class PowerIterationClusteringModel(
     val k: Int,
-    val assignments: RDD[(Long, Int)]) extends Serializable
+    val assignments: RDD[PowerIterationClustering.Assignment]) extends Serializable
 
 /**
  * :: Experimental ::
@@ -133,16 +133,33 @@ class PowerIterationClustering private[clustering] (
    */
   private def pic(w: Graph[Double, Double]): PowerIterationClusteringModel = {
     val v = powerIter(w, maxIterations)
-    val assignments = kMeans(v, k)
+    val assignments = kMeans(v, k).mapPartitions({ iter =>
+      iter.map { case (id, cluster) =>
+        new Assignment(id, cluster)
+      }
+    }, preservesPartitioning = true)
     new PowerIterationClusteringModel(k, assignments)
   }
 }
 
-private[clustering] object PowerIterationClustering extends Logging {
+@Experimental
+object PowerIterationClustering extends Logging {
+
+  /**
+   * :: Experimental ::
+   * Cluster assignment.
+   * @param id node id
+   * @param cluster assigned cluster id
+   */
+  @Experimental
+  class Assignment(val id: Long, val cluster: Int) extends Serializable
+
   /**
    * Normalizes the affinity matrix (A) by row sums and returns the normalized affinity matrix (W).
    */
-  def normalize(similarities: RDD[(Long, Long, Double)]): Graph[Double, Double] = {
+  private[clustering]
+  def normalize(similarities: RDD[(Long, Long, Double)])
+    : Graph[Double, Double] = {
     val edges = similarities.flatMap { case (i, j, s) =>
       if (s < 0.0) {
         throw new SparkException("Similarity must be nonnegative but found s($i, $j) = $s.")
@@ -173,6 +190,7 @@ private[clustering] object PowerIterationClustering extends Logging {
    * @return a graph with edges representing W and vertices representing a random vector
    *         with unit 1-norm
    */
+  private[clustering]
   def randomInit(g: Graph[Double, Double]): Graph[Double, Double] = {
     val r = g.vertices.mapPartitionsWithIndex(
       (part, iter) => {
@@ -194,6 +212,7 @@ private[clustering] object PowerIterationClustering extends Logging {
    * @param g a graph representing the normalized affinity matrix (W)
    * @return a graph with edges representing W and vertices representing the degree vector
    */
+  private[clustering]
   def initDegreeVector(g: Graph[Double, Double]): Graph[Double, Double] = {
     val sum = g.vertices.values.sum()
     val v0 = g.vertices.mapValues(_ / sum)
@@ -207,6 +226,7 @@ private[clustering] object PowerIterationClustering extends Logging {
    * @param maxIterations maximum number of iterations
    * @return a [[VertexRDD]] representing the pseudo-eigenvector
    */
+  private[clustering]
   def powerIter(
       g: Graph[Double, Double],
       maxIterations: Int): VertexRDD[Double] = {
@@ -246,6 +266,7 @@ private[clustering] object PowerIterationClustering extends Logging {
    * @param k number of clusters
    * @return a [[VertexRDD]] representing the clustering assignments
    */
+  private[clustering]
   def kMeans(v: VertexRDD[Double], k: Int): VertexRDD[Int] = {
     val points = v.mapValues(x => Vectors.dense(x)).cache()
     val model = new KMeans()
