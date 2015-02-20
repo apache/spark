@@ -176,6 +176,21 @@ case class UncacheTableCommand(tableName: String) extends RunnableCommand {
 
 /**
  * :: DeveloperApi ::
+ * Clear all cached data from the in-memory cache.
+ */
+@DeveloperApi
+case object ClearCacheCommand extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext) = {
+    sqlContext.clearCache()
+    Seq.empty[Row]
+  }
+
+  override def output: Seq[Attribute] = Seq.empty
+}
+
+/**
+ * :: DeveloperApi ::
  */
 @DeveloperApi
 case class DescribeCommand(
