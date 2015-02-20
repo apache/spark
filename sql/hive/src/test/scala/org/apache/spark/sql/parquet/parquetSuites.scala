@@ -186,7 +186,7 @@ class ParquetSourceSuite extends ParquetTest {
       create temporary table partitioned_parquet_with_key_and_complextypes
       USING org.apache.spark.sql.parquet
       OPTIONS (
-        path '${new File(partitionedTableDirWithKeyAndComplexTypes, "p=1").getCanonicalPath}'
+        path '${partitionedTableDirWithKeyAndComplexTypes.getCanonicalPath}'
       )
     """)
 
@@ -194,7 +194,7 @@ class ParquetSourceSuite extends ParquetTest {
       create temporary table partitioned_parquet_with_complextypes
       USING org.apache.spark.sql.parquet
       OPTIONS (
-        path '${new File(partitionedTableDirWithComplexTypes, "p=1").getCanonicalPath}'
+        path '${partitionedTableDirWithComplexTypes.getCanonicalPath}'
       )
     """)
   }
