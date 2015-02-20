@@ -142,14 +142,17 @@ class PowerIterationClustering private[clustering] (
   }
 }
 
+@Experimental
 object PowerIterationClustering extends Logging {
 
   /**
+   * :: Experimental ::
    * Cluster assignment.
    * @param id node id
    * @param cluster assigned cluster id
    */
-  class Assignment(val id: Long, val cluster: Int)
+  @Experimental
+  class Assignment(val id: Long, val cluster: Int) extends Serializable
 
   /**
    * Normalizes the affinity matrix (A) by row sums and returns the normalized affinity matrix (W).
