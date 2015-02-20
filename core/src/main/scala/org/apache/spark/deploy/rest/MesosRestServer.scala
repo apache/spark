@@ -11,25 +11,27 @@
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
+ * See the License for the specific language governing permissions and
  * limitations under the License.
  */
 
 package org.apache.spark.deploy.rest
 
+import akka.actor.ActorRef
+
 import java.io.File
 import javax.servlet.http.HttpServletResponse
 
-import akka.actor.ActorRef
-
-import org.apache.spark.{Logging, SparkConf, SPARK_VERSION => sparkVersion}
-import org.apache.spark.util.{AkkaUtils, RpcUtils, Utils}
-import org.apache.spark.deploy.{Command, DeployMessages, DriverDescription}
+import org.apache.spark.deploy.{DriverDescription, DeployMessages}
 import org.apache.spark.deploy.ClientArguments._
+import org.apache.spark.deploy.Command
+
+import org.apache.spark.{SparkConf, SPARK_VERSION => sparkVersion}
+import org.apache.spark.util.{Utils, AkkaUtils}
 
 /**
  * A server that responds to requests submitted by the [[StandaloneRestClient]].
- * This is intended to be embedded in the standalone Master and used in cluster mode only.
+ * This is intended to be used in Mesos cluster mode only.
  *
  * This server responds with different HTTP codes depending on the situation:
  *   200 OK - Request was processed successfully
@@ -45,71 +47,26 @@ import org.apache.spark.deploy.ClientArguments._
  *
  * @param host the address this server should bind to
  * @param requestedPort the port this server will attempt to bind to
- * @param masterActor reference to the Master actor to which requests can be sent
+ * @param dispatcherActor reference to the Dispatcher actor to which requests can be sent
  * @param masterUrl the URL of the Master new drivers will attempt to connect to
  * @param masterConf the conf used by the Master
  */
-private[deploy] class StandaloneRestServer(
+private [spark] class MesosRestServer(
     host: String,
     requestedPort: Int,
-    masterActor: ActorRef,
-    masterUrl: String,
-    masterConf: SparkConf)
+    dispatcherActor: ActorRef,
+    masterConf: SparkConf,
+    masterUrl: String)
   extends RestServer(
     host,
     requestedPort,
     masterConf,
-    new StandaloneSubmitRequestServlet(masterActor, masterUrl, masterConf),
-    new StandaloneKillRequestServlet(masterActor, masterConf),
-    new StandaloneStatusRequestServlet(masterActor, masterConf)) {}
+    new MesosSubmitRequestServlet(dispatcherActor, masterUrl, masterConf),
+    new MesosKillRequestServlet(dispatcherActor, masterConf),
+    new MesosStatusRequestServlet(dispatcherActor, masterConf)) {}
 
-/**
- * A servlet for handling kill requests passed to the [[StandaloneRestServer]].
- */
-private[rest] class StandaloneKillRequestServlet(masterActor: ActorRef, conf: SparkConf)
-  extends KillRequestServlet {
-
-  protected def handleKill(submissionId: String): KillSubmissionResponse = {
-    val askTimeout = RpcUtils.askTimeout(conf)
-    val response = AkkaUtils.askWithReply[DeployMessages.KillDriverResponse](
-      DeployMessages.RequestKillDriver(submissionId), masterActor, askTimeout)
-    val k = new KillSubmissionResponse
-    k.serverSparkVersion = sparkVersion
-    k.message = response.message
-    k.submissionId = submissionId
-    k.success = response.success
-    k
-  }
-}
-
-/**
- * A servlet for handling status requests passed to the [[StandaloneRestServer]].
- */
-private[rest] class StandaloneStatusRequestServlet(masterActor: ActorRef, conf: SparkConf)
-  extends StatusRequestServlet {
-
-  protected def handleStatus(submissionId: String): SubmissionStatusResponse = {
-    val askTimeout = RpcUtils.askTimeout(conf)
-    val response = AkkaUtils.askWithReply[DeployMessages.DriverStatusResponse](
-      DeployMessages.RequestDriverStatus(submissionId), masterActor, askTimeout)
-    val message = response.exception.map { s"Exception from the cluster:\n" + formatException(_) }
-    val d = new SubmissionStatusResponse
-    d.serverSparkVersion = sparkVersion
-    d.submissionId = submissionId
-    d.success = response.found
-    d.driverState = response.state.map(_.toString).orNull
-    d.workerId = response.workerId.orNull
-    d.workerHostPort = response.workerHostPort.orNull
-    d.message = message.orNull
-    d
-  }
-}
-
-/**
- * A servlet for handling submit requests passed to the [[StandaloneRestServer]].
- */
-private[rest] class StandaloneSubmitRequestServlet(
-    masterActor: ActorRef,
+class MesosSubmitRequestServlet(
+    dispatcherActor: ActorRef,
     masterUrl: String,
     conf: SparkConf)
   extends SubmitRequestServlet {
@@ -117,10 +74,9 @@ private[rest] class StandaloneSubmitRequestServlet(
   /**
    * Build a driver description from the fields specified in the submit request.
    *
-   * This involves constructing a command that takes into account memory, java options,
-   * classpath and other settings to launch the driver. This does not currently consider
-   * fields used by python applications since python is not supported in standalone
-   * cluster mode yet.
+   * This involves constructing a command that launches a mesos framework for the job.
+   * This does not currently consider fields used by python applications since python
+   * is not supported in mesos cluster mode yet.
    */
   private def buildDriverDescription(request: CreateSubmissionRequest): DriverDescription = {
     // Required fields, including the main class because python is not yet supported
@@ -133,8 +89,6 @@ private[rest] class StandaloneSubmitRequestServlet(
 
     // Optional fields
     val sparkProperties = request.sparkProperties
-    val driverMemory = sparkProperties.get("spark.driver.memory")
-    val driverCores = sparkProperties.get("spark.driver.cores")
     val driverExtraJavaOptions = sparkProperties.get("spark.driver.extraJavaOptions")
     val driverExtraClassPath = sparkProperties.get("spark.driver.extraClassPath")
     val driverExtraLibraryPath = sparkProperties.get("spark.driver.extraLibraryPath")
@@ -152,22 +106,16 @@ private[rest] class StandaloneSubmitRequestServlet(
     val sparkJavaOpts = Utils.sparkJavaOpts(conf)
     val javaOpts = sparkJavaOpts ++ extraJavaOpts
     val command = new Command(
-      "org.apache.spark.deploy.worker.DriverWrapper",
-      Seq("{{WORKER_URL}}", "{{USER_JAR}}", mainClass) ++ appArgs, // args to the DriverWrapper
+      "org.apache.spark.deploy.SparkSubmit",
+      Seq("--master", masterUrl, mainClass) ++ appArgs, // args to the DriverWrapper
       environmentVariables, extraClassPath, extraLibraryPath, javaOpts)
-    val actualDriverMemory = driverMemory.map(Utils.memoryStringToMb).getOrElse(DEFAULT_MEMORY)
-    val actualDriverCores = driverCores.map(_.toInt).getOrElse(DEFAULT_CORES)
     val actualSuperviseDriver = superviseDriver.map(_.toBoolean).getOrElse(DEFAULT_SUPERVISE)
+
+    // Cores and memory are ignored in Mesos mode.
     new DriverDescription(
-      appResource, actualDriverMemory, actualDriverCores, actualSuperviseDriver, command)
+      appResource, 0, 0, actualSuperviseDriver, command)
   }
 
-  /**
-   * Handle the submit request and construct an appropriate response to return to the client.
-   *
-   * This assumes that the request message is already successfully validated.
-   * If the request message is not of the expected type, return error to the client.
-   */
   protected override def handleSubmit(
       requestMessageJson: String,
       requestMessage: SubmitRestProtocolMessage,
@@ -177,7 +125,7 @@ private[rest] class StandaloneSubmitRequestServlet(
         val askTimeout = AkkaUtils.askTimeout(conf)
         val driverDescription = buildDriverDescription(submitRequest)
         val response = AkkaUtils.askWithReply[DeployMessages.SubmitDriverResponse](
-          DeployMessages.RequestSubmitDriver(driverDescription), masterActor, askTimeout)
+          DeployMessages.RequestSubmitDriver(driverDescription), dispatcherActor, askTimeout)
         val submitResponse = new CreateSubmissionResponse
         submitResponse.serverSparkVersion = sparkVersion
         submitResponse.message = response.message
@@ -193,5 +141,39 @@ private[rest] class StandaloneSubmitRequestServlet(
         responseServlet.setStatus(HttpServletResponse.SC_BAD_REQUEST)
         handleError(s"Received message of unexpected type ${unexpected.messageType}.")
     }
+  }
+}
+
+class MesosKillRequestServlet(
+    dispatcherActor: ActorRef,
+    conf: SparkConf) extends KillRequestServlet {
+  protected override def handleKill(submissionId: String): KillSubmissionResponse = {
+    val askTimeout = AkkaUtils.askTimeout(conf)
+    val response = AkkaUtils.askWithReply[DeployMessages.KillDriverResponse](
+      DeployMessages.RequestKillDriver(submissionId), dispatcherActor, askTimeout)
+    val k = new KillSubmissionResponse
+    k.serverSparkVersion = sparkVersion
+    k.message = response.message
+    k.submissionId = submissionId
+    k.success = response.success
+    k
+  }
+}
+
+class MesosStatusRequestServlet(
+    dispatcherActor: ActorRef,
+    conf: SparkConf) extends StatusRequestServlet {
+  protected override def handleStatus(submissionId: String): SubmissionStatusResponse = {
+    val askTimeout = AkkaUtils.askTimeout(conf)
+    val response = AkkaUtils.askWithReply[DeployMessages.DriverStatusResponse](
+      DeployMessages.RequestDriverStatus(submissionId), dispatcherActor, askTimeout)
+    val message = response.exception.map { s"Exception from the cluster:\n" + formatException(_) }
+    val d = new SubmissionStatusResponse
+    d.serverSparkVersion = sparkVersion
+    d.submissionId = submissionId
+    d.success = response.found
+    d.driverState = response.state.map(_.toString).orNull
+    d.message = message.orNull
+    d
   }
 }
