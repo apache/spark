@@ -150,9 +150,9 @@ case class ParquetTableScan(
               // Parquet will leave partitioning columns empty, so we fill them in here.
             var i = 0
             while (i < requestedPartitionOrdinals.size) {
-            row (requestedPartitionOrdinals (i)._2) =
-            partitionRowValues (requestedPartitionOrdinals (i)._1)
-            i += 1
+              row (requestedPartitionOrdinals (i)._2) =
+              partitionRowValues (requestedPartitionOrdinals (i)._1)
+              i += 1
             }
             row
             }
@@ -164,6 +164,7 @@ case class ParquetTableScan(
                     .update(
                       requestedPartitionOrdinals (i)._2,
                       partitionRowValues (requestedPartitionOrdinals (i)._1))
+                  i += 1
                 }
                 Row.fromSeq(rVals)
               }
