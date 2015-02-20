@@ -47,13 +47,13 @@ import org.apache.spark.util.CallSite
  * be updated for each attempt.
  *
  */
-private[spark] abstract class Stage(val id: Int,
-                                    val rdd: RDD[_],
-                                    val numTasks: Int,
-                                    val parents: List[Stage],
-                                    val jobId: Int,
-                                    val callSite: CallSite)
-  extends Logging {
+private[spark] abstract class Stage(
+  val id: Int, 
+  val rdd: RDD[_],
+  val numTasks: Int,
+  val parents: List[Stage],
+  val jobId: Int, 
+  val callSite: CallSite) extends Logging {
 
   val numPartitions = rdd.partitions.size
 
@@ -71,14 +71,8 @@ private[spark] abstract class Stage(val id: Int,
   var latestInfo: StageInfo = StageInfo.fromStage(this)
 
   var numAvailableOutputs = 0
-
-  def isAvailable: Boolean = {
-    if (!this.isInstanceOf[ShuffleMapStage]) {
-      true
-    } else {
-      numAvailableOutputs == numPartitions
-    }
-  }
+  
+  def isAvailable: Boolean
   
   /** Return a new attempt id, starting with 0. */
   def newAttemptId(): Int = {
@@ -89,9 +83,9 @@ private[spark] abstract class Stage(val id: Int,
 
   def attemptId: Int = nextAttemptId
   
-  override def hashCode(): Int = id
+  override final def hashCode(): Int = id
 
-  override def equals(other: Any): Boolean = other match {
+  override final def equals(other: Any): Boolean = other match {
     case stage: Stage => stage != null && stage.id == id
     case _ => false
   }
