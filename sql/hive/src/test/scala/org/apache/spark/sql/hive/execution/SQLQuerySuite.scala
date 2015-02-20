@@ -394,11 +394,6 @@ class SQLQuerySuite extends QueryTest {
     val col = df("val")
   }
 
-  test("selected column from DataFrame should not re-analyze logical plan") {
-    val df = sql("SELECT explode(array(1, 2, 3)) AS val")
-    val col = df("val")
-  }
-
   test("logical.Project should not be resolved if it contains aggregates or generators") {
     // This test is used to test the fix of SPARK-5875.
     // The original issue was that Project's resolved will be true when it contains
