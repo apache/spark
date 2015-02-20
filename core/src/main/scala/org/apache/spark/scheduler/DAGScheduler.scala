@@ -79,9 +79,7 @@ class DAGScheduler(
   def this(sc: SparkContext) = this(sc, sc.taskScheduler)
 
   private[scheduler] val nextJobId = new AtomicInteger(0)
-
   private[scheduler] def numTotalJobs: Int = nextJobId.get()
-
   private val nextStageId = new AtomicInteger(0)
 
   private[scheduler] val jobIdToStageIds = new HashMap[Int, HashSet[Int]]
@@ -466,7 +464,7 @@ class DAGScheduler(
           if (!jobSet.contains(job.jobId)) {
             logError(
               "Job %d not registered for stage %d even though that stage was registered for the job"
-                .format(job.jobId, stageId))
+                  .format(job.jobId, stageId))
           } else {
             jobSet -= job.jobId
             if (jobSet.isEmpty) {

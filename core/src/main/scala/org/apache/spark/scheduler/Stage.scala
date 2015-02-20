@@ -49,7 +49,7 @@ import org.apache.spark.util.CallSite
  */
 private[spark] abstract class Stage(
     val id: Int, 
-    val rdd: RDD[_],
+    val rdd: RDD[_], 
     val numTasks: Int,
     val parents: List[Stage],
     val jobId: Int, 
