@@ -1394,7 +1394,7 @@ class Chart(Base):
 
     id = Column(Integer, primary_key=True)
     label = Column(String(200))
-    conn_id = Column(String(ID_LEN), ForeignKey('connection.conn_id'))
+    conn_id = Column(String(ID_LEN), ForeignKey('connection.conn_id'), nullable=False)
     user_id = Column(Integer(), ForeignKey('user.id'),)
     chart_type = Column(String(100), default="line")
     sql_layout = Column(String(50), default="series")
