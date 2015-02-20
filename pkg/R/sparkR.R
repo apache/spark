@@ -89,7 +89,8 @@ sparkR.init <- function(
   sparkExecutorEnv = list(),
   sparkJars = "",
   sparkRLibDir = "",
-  sparkRBackendPort = 12345) {
+  sparkRBackendPort = 12345,
+  sparkRRetryCount = 6) {
 
   if (exists(".sparkRjsc", envir = .sparkREnv)) {
     cat("Re-using existing Spark Context. Please stop SparkR with sparkR.stop() or restart R to create a new Spark Context\n")
@@ -119,9 +120,29 @@ sparkR.init <- function(
                 mainClass = "edu.berkeley.cs.amplab.sparkr.SparkRBackend",
                 args = as.character(sparkRBackendPort),
                 javaOpts = paste("-Xmx", sparkMem, sep = ""))
-  Sys.sleep(2) # Wait for backend to come up
+
   .sparkREnv$sparkRBackendPort <- sparkRBackendPort
-  connectBackend("localhost", sparkRBackendPort) # Connect to it
+  cat("Waiting for JVM to come up...\n")
+  tries <- 0
+  while(tries < sparkRRetryCount) {
+    if(!connExists(.sparkREnv)) {
+      Sys.sleep(2 ^ tries)
+      tryCatch({
+        connectBackend("localhost", .sparkREnv$sparkRBackendPort)
+      }, error = function(err) {
+        cat("Error in Connection, retrying...\n")
+      }, warning = function(war) {
+        cat("No Connection Found, retrying...\n")
+      })
+      tries <- tries + 1
+    } else {
+      cat("Connect ok.\n")
+      break
+    }
+  }
+  if (tries == sparkRRetryCount) {
+    stop(sprintf("Failed to connect JVM after %d tries.\n", sparkRRetryCount))
+  }
 
   if (nchar(sparkHome) != 0) {
     sparkHome <- normalizePath(sparkHome)
