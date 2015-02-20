@@ -115,7 +115,11 @@ of the most common options to set are:
   <td>
     Amount of memory to use for the driver process, i.e. where SparkContext is initialized.
     (e.g. <code>512m</code>, <code>2g</code>).
-  </td>
+    
+    <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
+    directly in your application, because the driver JVM has already started at that point.
+    Instead, please set this through the <code>--driver-memory</code> command line option
+    or in your default properties file.</td>
 </tr>
 <tr>
   <td><code>spark.executor.memory</code></td>
@@ -214,6 +218,11 @@ Apart from these, the following properties are also available, and may be useful
   <td>(none)</td>
   <td>
     A string of extra JVM options to pass to the driver. For instance, GC settings or other logging.
+    
+    <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
+    directly in your application, because the driver JVM has already started at that point.
+    Instead, please set this through the <code>--driver-java-options</code> command line option or in 
+    your default properties file.</td>
   </td>
 </tr>
 <tr>
@@ -221,6 +230,11 @@ Apart from these, the following properties are also available, and may be useful
   <td>(none)</td>
   <td>
     Extra classpath entries to append to the classpath of the driver.
+
+    <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
+    directly in your application, because the driver JVM has already started at that point.
+    Instead, please set this through the <code>--driver-class-path</code> command line option or in 
+    your default properties file.</td>
   </td>
 </tr>
 <tr>
@@ -228,6 +242,11 @@ Apart from these, the following properties are also available, and may be useful
   <td>(none)</td>
   <td>
     Set a special library path to use when launching the driver JVM.
+    
+    <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
+    directly in your application, because the driver JVM has already started at that point.
+    Instead, please set this through the <code>--driver-library-path</code> command line option or in 
+    your default properties file.</td>
   </td>
 </tr>
 <tr>
@@ -237,6 +256,8 @@ Apart from these, the following properties are also available, and may be useful
     (Experimental) Whether to give user-added jars precedence over Spark's own jars when loading
     classes in the the driver. This feature can be used to mitigate conflicts between Spark's
     dependencies and user dependencies. It is currently an experimental feature.
+    
+    This is used in cluster mode only.
   </td>
 </tr>
 <tr>

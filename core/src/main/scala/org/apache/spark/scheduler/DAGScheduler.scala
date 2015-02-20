@@ -63,7 +63,7 @@ class DAGScheduler(
     mapOutputTracker: MapOutputTrackerMaster,
     blockManagerMaster: BlockManagerMaster,
     env: SparkEnv,
-    clock: org.apache.spark.util.Clock = SystemClock)
+    clock: Clock = new SystemClock())
   extends Logging {
 
   def this(sc: SparkContext, taskScheduler: TaskScheduler) = {
@@ -670,7 +670,7 @@ class DAGScheduler(
       // completion events or stage abort
       stageIdToStage -= s.id
       jobIdToStageIds -= job.jobId
-      listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTime(), jobResult))
+      listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), jobResult))
     }
   }
 
@@ -721,7 +721,7 @@ class DAGScheduler(
         stage.latestInfo.stageFailed(stageFailedMessage)
         listenerBus.post(SparkListenerStageCompleted(stage.latestInfo))
       }
-      listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTime(), JobFailed(error)))
+      listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobFailed(error)))
     }
   }
 
@@ -762,7 +762,7 @@ class DAGScheduler(
 
       val shouldRunLocally =
         localExecutionEnabled && allowLocal && finalStage.parents.isEmpty && partitions.length == 1
-      val jobSubmissionTime = clock.getTime()
+      val jobSubmissionTime = clock.getTimeMillis()
       if (shouldRunLocally) {
         // Compute very short actions like first() or take() with no parent stages locally.
         listenerBus.post(
@@ -872,7 +872,7 @@ class DAGScheduler(
       logDebug("New pending tasks: " + stage.pendingTasks)
       taskScheduler.submitTasks(
         new TaskSet(tasks.toArray, stage.id, stage.newAttemptId(), stage.jobId, properties))
-      stage.latestInfo.submissionTime = Some(clock.getTime())
+      stage.latestInfo.submissionTime = Some(clock.getTimeMillis())
     } else {
       // Because we posted SparkListenerStageSubmitted earlier, we should post
       // SparkListenerStageCompleted here in case there are no tasks to run.
@@ -952,12 +952,12 @@ class DAGScheduler(
   /** Helper function to handle stage completion */
   private def markStageAsFinished(stage: Stage, errorMessage: Option[String] = None) = {
     val serviceTime = stage.latestInfo.submissionTime match {
-      case Some(t) => "%.03f".format((clock.getTime() - t) / 1000.0)
+      case Some(t) => "%.03f".format((clock.getTimeMillis() - t) / 1000.0)
       case _ => "Unknown"
     }
     if (errorMessage.isEmpty) {
       logInfo("%s (%s) finished in %s s".format(stage, stage.name, serviceTime))
-      stage.latestInfo.completionTime = Some(clock.getTime())
+      stage.latestInfo.completionTime = Some(clock.getTimeMillis())
     } else {
       stage.latestInfo.stageFailed(errorMessage.get)
       logInfo("%s (%s) failed in %s s".format(stage, stage.name, serviceTime))
@@ -982,7 +982,7 @@ class DAGScheduler(
             markStageAsFinished(stage)
             cleanupStateForJobAndIndependentStages(job)
             listenerBus.post(
-              SparkListenerJobEnd(job.jobId, clock.getTime(), JobSucceeded))
+              SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobSucceeded))
           }
 
           // taskSucceeded runs some user code that might throw an exception. Make sure
@@ -1144,7 +1144,7 @@ class DAGScheduler(
     }
 
     val stage = stageIdToStage(task.stageId)
-
+    
     // Process the completion event and update data stores appropriately
     event.reason match {
       case Success =>
@@ -1155,7 +1155,6 @@ class DAGScheduler(
         task match {
           case rt: ResultTask[_, _] =>
             handleResultTask(stage.asInstanceOf[ResultStage], event, rt)
-
           case smt: ShuffleMapTask =>
             handleShuffleMapTask(stage.asInstanceOf[ShuffleMapStage], event, smt)
         }
@@ -1267,7 +1266,7 @@ class DAGScheduler(
     }
     val dependentJobs: Seq[ActiveJob] =
       activeJobs.filter(job => stageDependsOn(job.finalStage, failedStage)).toSeq
-    failedStage.latestInfo.completionTime = Some(clock.getTime())
+    failedStage.latestInfo.completionTime = Some(clock.getTimeMillis())
     for (job <- dependentJobs) {
       failJobAndIndependentStages(job, s"Job aborted due to stage failure: $reason")
     }
@@ -1323,7 +1322,7 @@ class DAGScheduler(
     if (ableToCancelStages) {
       job.listener.jobFailed(error)
       cleanupStateForJobAndIndependentStages(job)
-      listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTime(), JobFailed(error)))
+      listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobFailed(error)))
     }
   }
 
