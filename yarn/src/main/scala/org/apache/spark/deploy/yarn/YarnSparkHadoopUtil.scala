@@ -17,15 +17,21 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.File
+import java.io._
+import java.net.URI
+import java.nio.ByteBuffer
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.{TimeUnit, ThreadFactory, Executors}
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 
 import scala.collection.mutable.HashMap
 import scala.util.Try
 
+import org.apache.hadoop.fs.{FileUtil, Path, FileSystem}
+import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.io.Text
-import org.apache.hadoop.mapred.JobConf
+import org.apache.hadoop.mapred.{Master, JobConf}
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.conf.YarnConfiguration
@@ -34,14 +40,18 @@ import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.records.{Priority, ApplicationAccessType}
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.{SparkException, SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SerializableBuffer, Utils}
 
 /**
  * Contains util methods to interact with Hadoop from spark.
  */
 class YarnSparkHadoopUtil extends SparkHadoopUtil {
+
+  private var keytabFile: Option[String] = None
+  private var loginPrincipal: Option[String] = None
+  private val loggedInViaKeytab = new AtomicBoolean(false)
 
   override def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
     dest.addCredentials(source.getCredentials())
@@ -80,6 +90,101 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   override def getSecretKeyFromUserCredentials(key: String): Array[Byte] = {
     val credentials = getCurrentUserCredentials()
     if (credentials != null) credentials.getSecretKey(new Text(key)) else null
+  }
+
+  override def setPrincipalAndKeytabForLogin(principal: String, keytab: String): Unit ={
+    loginPrincipal = Option(principal)
+    keytabFile = Option(keytab)
+  }
+
+  private[spark] override def scheduleLoginFromKeytab(
+    callback: (SerializableBuffer)  => Unit): Unit = {
+
+    loginPrincipal match {
+      case Some(principal) =>
+        val keytab = keytabFile.get
+        val remoteFs = FileSystem.get(conf)
+        val remoteKeytabPath = new Path(
+          remoteFs.getHomeDirectory, System.getenv("SPARK_STAGING_DIR") + Path.SEPARATOR + keytab)
+        val localFS = FileSystem.getLocal(conf)
+        // At this point, SparkEnv is likely no initialized, so create a dir, put the keytab there.
+        val tempDir = Utils.createTempDir()
+        val localURI = new URI(tempDir.getAbsolutePath + Path.SEPARATOR + keytab)
+        val qualifiedURI = new  URI(localFS.makeQualified(new Path(localURI)).toString)
+        FileUtil.copy(
+          remoteFs, remoteKeytabPath, localFS, new Path(qualifiedURI), false, false, conf)
+        // Get the current credentials, find out when they expire.
+        val creds = UserGroupInformation.getCurrentUser.getCredentials
+        val credStream = new ByteArrayOutputStream()
+        creds.writeTokenStorageToStream(new DataOutputStream(credStream))
+        val in = new DataInputStream(new ByteArrayInputStream(credStream.toByteArray))
+        val tokenIdentifier = new DelegationTokenIdentifier()
+        tokenIdentifier.readFields(in)
+        val timeToRenewal = (0.6 * (tokenIdentifier.getMaxDate - System.currentTimeMillis())).toLong
+        Executors.newSingleThreadScheduledExecutor(new ThreadFactory {
+          override def newThread(r: Runnable): Thread = {
+            val t = new Thread(r)
+            t.setName("Delegation Token Refresh Thread")
+            t.setDaemon(true)
+            t
+          }
+        }).scheduleWithFixedDelay(new Runnable {
+          override def run(): Unit = {
+            if (!loggedInViaKeytab.get()) {
+              loginUserFromKeytab(principal, tempDir.getAbsolutePath + Path.SEPARATOR + keytab)
+              loggedInViaKeytab.set(true)
+            }
+            val nns = getNameNodesToAccess(sparkConf) + remoteKeytabPath
+            val newCredentials = new Credentials()
+            obtainTokensForNamenodes(nns, conf, newCredentials)
+            // Now write this out via Akka to executors.
+            val outputStream = new ByteArrayOutputStream()
+            newCredentials.writeTokenStorageToStream(new DataOutputStream(outputStream))
+            callback(new SerializableBuffer(ByteBuffer.wrap(outputStream.toByteArray)))
+          }
+        }, timeToRenewal, timeToRenewal, TimeUnit.MILLISECONDS)
+      case None =>
+    }
+  }
+
+  /**
+   * Get the list of namenodes the user may access.
+   */
+  def getNameNodesToAccess(sparkConf: SparkConf): Set[Path] = {
+    sparkConf.get("spark.yarn.access.namenodes", "")
+      .split(",")
+      .map(_.trim())
+      .filter(!_.isEmpty)
+      .map(new Path(_))
+      .toSet
+  }
+
+  def getTokenRenewer(conf: Configuration): String = {
+    val delegTokenRenewer = Master.getMasterPrincipal(conf)
+    logDebug("delegation token renewer is: " + delegTokenRenewer)
+    if (delegTokenRenewer == null || delegTokenRenewer.length() == 0) {
+      val errorMessage = "Can't get Master Kerberos principal for use as renewer"
+      logError(errorMessage)
+      throw new SparkException(errorMessage)
+    }
+    delegTokenRenewer
+  }
+
+  /**
+   * Obtains tokens for the namenodes passed in and adds them to the credentials.
+   */
+  def obtainTokensForNamenodes(
+    paths: Set[Path],
+    conf: Configuration,
+    creds: Credentials): Unit = {
+    if (UserGroupInformation.isSecurityEnabled()) {
+      val delegTokenRenewer = getTokenRenewer(conf)
+      paths.foreach { dst =>
+        val dstFs = dst.getFileSystem(conf)
+        logDebug("getting token for namenode: " + dst)
+        dstFs.addDelegationTokens(delegTokenRenewer, creds)
+      }
+    }
   }
 
 }
@@ -211,4 +316,5 @@ object YarnSparkHadoopUtil {
   def getClassPathSeparator(): String = {
     classPathSeparatorField.get(null).asInstanceOf[String]
   }
+
 }

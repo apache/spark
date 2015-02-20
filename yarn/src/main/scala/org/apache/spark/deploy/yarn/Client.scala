@@ -907,11 +907,11 @@ object Client extends Logging {
    * Get the list of namenodes the user may access.
    */
   private[yarn] def getNameNodesToAccess(sparkConf: SparkConf): Set[Path] = {
-    SparkHadoopUtil.get.getNameNodesToAccess(sparkConf)
+    SparkHadoopUtil.get.asInstanceOf[YarnSparkHadoopUtil].getNameNodesToAccess(sparkConf)
   }
 
   private[yarn] def getTokenRenewer(conf: Configuration): String = {
-    SparkHadoopUtil.get.getTokenRenewer(conf)
+    SparkHadoopUtil.get.asInstanceOf[YarnSparkHadoopUtil].getTokenRenewer(conf)
   }
 
   /**
@@ -921,7 +921,8 @@ object Client extends Logging {
       paths: Set[Path],
       conf: Configuration,
       creds: Credentials): Unit = {
-    SparkHadoopUtil.get.obtainTokensForNamenodes(paths, conf, creds)
+    SparkHadoopUtil.get.asInstanceOf[YarnSparkHadoopUtil]
+      .obtainTokensForNamenodes(paths, conf, creds)
   }
 
   /**
