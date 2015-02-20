@@ -165,8 +165,8 @@ object MovieLensALS {
     //      the movies DataFrame does not have a column "userId."
     val movies = sc.textFile(params.movies).map(Movie.parseMovie).toDF()
     val falsePositives = predictions.join(movies)
-      .where(predictions("movieId") === movies("movieId"))
-      .where($"rating" <= 1).where($"prediction" >= 4)
+      .where((predictions("movieId") === movies("movieId"))
+        && ($"rating" <= 1) && ($"prediction" >= 4))
       .select($"userId", predictions("movieId"), $"title", $"rating", $"prediction")
     val numFalsePositives = falsePositives.count()
     println(s"Found $numFalsePositives false positives")
