@@ -270,11 +270,8 @@ class HadoopRDD[K, V](
             }
           }
         } catch {
-          case e: Exception => {
-            if (!Utils.inShutdown()) {
-              logWarning("Exception in RecordReader.close()", e)
-            }
-          }
+          case e: Exception => 
+            logWarning("Exception in RecordReader.close()", e)
         }
       }
     }
