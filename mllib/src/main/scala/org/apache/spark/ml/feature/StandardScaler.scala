@@ -29,7 +29,18 @@ import org.apache.spark.sql.types.{StructField, StructType}
 /**
  * Params for [[StandardScaler]] and [[StandardScalerModel]].
  */
-private[feature] trait StandardScalerParams extends Params with HasInputCol with HasOutputCol
+private[feature] trait StandardScalerParams extends Params with HasInputCol with HasOutputCol {
+  val withMean: BooleanParam = new BooleanParam(this, 
+    "withMean", 
+    "Center data with mean before scaling", 
+    defaultValue = Some(false)
+  )
+  val withStd: BooleanParam = new BooleanParam(this,
+    "withStd", 
+    "Scale to unit standard deviation", 
+    defaultValue = Some(true)
+  )
+}
 
 /**
  * :: AlphaComponent ::
@@ -44,12 +55,18 @@ class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerP
 
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
-
+  
+  /** @grour setParam */
+  def setWithMean(value: Boolean): this.type = set(withMean, value)
+  
+  /** @group setParam */
+  def setWithStd(value: Boolean): this.type = set(withStd, value)
+  
   override def fit(dataset: DataFrame, paramMap: ParamMap): StandardScalerModel = {
     transformSchema(dataset.schema, paramMap, logging = true)
     val map = this.paramMap ++ paramMap
     val input = dataset.select(map(inputCol)).map { case Row(v: Vector) => v }
-    val scaler = new feature.StandardScaler().fit(input)
+    val scaler = new feature.StandardScaler(withMean = map(withMean), withStd = map(withStd)).fit(input)
     val model = new StandardScalerModel(this, map, scaler)
     Params.inheritValues(map, this, model)
     model
