@@ -384,18 +384,6 @@ On each iteration, the algorithm uses the current ensemble to predict the label 
 
 The specific mechanism for re-labeling instances is defined by a loss function (discussed below).  With each iteration, GBTs further reduce this loss function on the training data.
 
-#### Validation while training
-
-Gradient boosting can overfit when trained with more number of trees. In order to prevent overfitting, it might
-be useful to validate while training. The method **`runWithValidation`** has been provided to make use of this
-option. It takes a pair of RDD's as arguments, the first one being the training dataset and the second being the validation dataset.
-
-The training is stopped when the improvement in the validation error is not more than a certain tolerance
-(supplied by the **`validationTol`** argument in **`BoostingStrategy`**). In practice, the validation error
-decreases with the increase in number of trees and then increases as the model starts to overfit. There might
-be cases, in which the validation error does not change monotonically, and the user is advised to set a large
-enough negative tolerance and examine the validation curve to make further inference.
-
 #### Losses
 
 The table below lists the losses currently supported by GBTs in MLlib.
@@ -438,6 +426,18 @@ We omit some decision tree parameters since those are covered in the [decision t
 * **`learningRate`**: This parameter should not need to be tuned.  If the algorithm behavior seems unstable, decreasing this value may improve stability.
 
 * **`algo`**: The algorithm or task (classification vs. regression) is set using the tree [Strategy] parameter.
+
+#### Validation while training
+
+Gradient boosting can overfit when trained with more number of trees. In order to prevent overfitting, it might
+be useful to validate while training. The method **`runWithValidation`** has been provided to make use of this
+option. It takes a pair of RDD's as arguments, the first one being the training dataset and the second being the validation dataset.
+
+The training is stopped when the improvement in the validation error is not more than a certain tolerance
+(supplied by the **`validationTol`** argument in **`BoostingStrategy`**). In practice, the validation error
+decreases with the increase in number of trees and then increases as the model starts to overfit. There might
+be cases, in which the validation error does not change monotonically, and the user is advised to set a large
+enough negative tolerance and examine the validation curve to make further inference.
 
 
 ### Examples
