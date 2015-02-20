@@ -190,6 +190,7 @@ def clear(args):
         upstream=args.upstream,
         downstream=args.downstream,
         only_failed=args.only_failed,
+        only_running=args.only_running,
         confirm_prompt=True)
 
 
@@ -221,10 +222,12 @@ def master(args):
     job = jobs.MasterJob(args.dag_id, args.subdir)
     job.run()
 
+
 def serve_logs(args):
     print("Starting flask")
     import flask
     flask_app = flask.Flask(__name__)
+
     @flask_app.route('/log/<path:filename>')
     def serve_logs(filename):
         conf.get('core', 'BASE_LOG_FOLDER')
@@ -290,6 +293,7 @@ def flower(args):
     sp = subprocess.Popen(['flower', '-b', broka, port, api])
     sp.wait()
 
+
 def get_parser():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(help='sub-command help')
@@ -340,6 +344,9 @@ def get_parser():
     ht = "Only failed jobs"
     parser_clear.add_argument(
         "-f", "--only_failed", help=ht, action="store_true")
+    ht = "Only running jobs"
+    parser_clear.add_argument(
+        "-r", "--only_running", help=ht, action="store_true")
     ht = "Include downstream tasks"
     parser_clear.add_argument(
         "-d", "--downstream", help=ht, action="store_true")
@@ -460,6 +467,5 @@ def get_parser():
 
     parser_version = subparsers.add_parser('version', help="Show version")
     parser_version.set_defaults(func=version)
-
 
     return parser

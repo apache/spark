@@ -1235,6 +1235,7 @@ class DAG(Base):
             self, start_date=None, end_date=None,
             upstream=False, downstream=False,
             only_failed=False,
+            only_running=False,
             confirm_prompt=False):
         session = settings.Session()
         """
@@ -1252,6 +1253,8 @@ class DAG(Base):
             tis = tis.filter(TI.execution_date <= end_date)
         if only_failed:
             tis = tis.filter(TI.state == State.FAILED)
+        if only_running:
+            tis = tis.filter(TI.state == State.RUNNING)
 
         count = tis.count()
         if count == 0:
