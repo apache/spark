@@ -21,7 +21,7 @@ from pyspark import SparkContext
 from pyspark.sql import DataFrame
 from pyspark.ml.param import Params
 from pyspark.ml.pipeline import Estimator, Transformer
-from pyspark.ml.util import inherit_doc
+from pyspark.mllib.common import inherit_doc
 
 
 def _jvm():
