@@ -1103,6 +1103,9 @@ def duration_f(v, c, m, p):
 
 class JobModelView(ModelViewOnly):
     column_default_sort = ('start_date', True)
+    column_filters = (
+        'job_type', 'dag_id', 'state',
+        'unixname', 'hostname', 'start_date', 'end_date', 'latest_heartbeat')
 mv = JobModelView(jobs.BaseJob, Session, name="Jobs", category="Browse")
 
 admin.add_view(mv)
