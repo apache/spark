@@ -105,7 +105,7 @@ class GradientBoostedTrees(private val boostingStrategy: BoostingStrategy)
   }
 
   /**
-   * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoostedTrees!#run]].
+   * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoostedTrees!#runWithValidation]].
    */
   def runWithValidation(
       trainInput: JavaRDD[LabeledPoint],
@@ -196,7 +196,8 @@ object GradientBoostedTrees extends Logging {
     // Note: A model of type regression is used since we require raw prediction
     timer.stop("building tree 0")
 
-    var prevValidateError = if (validate) loss.computeError(startingModel, validateInput) else 0.0
+    var bestValidateError = if (validate) loss.computeError(startingModel, validateInput) else 0.0
+    var bestM = 1
 
     // psuedo-residual for second iteration
     data = input.map(point => LabeledPoint(loss.gradient(startingModel, point),
@@ -224,15 +225,17 @@ object GradientBoostedTrees extends Logging {
         // Stop training early if
         // 1. Reduction in error is lesser than the validationTol or
         // 2. If the error increases, that is if the model is overfit.
+        // We want the model returned corresponding to the best validation error.
         val currentValidateError = loss.computeError(partialModel, validateInput)
-        if (prevValidateError - currentValidateError < validationTol) {
+        if (bestValidateError - currentValidateError < validationTol) {
           return new GradientBoostedTreesModel(
             boostingStrategy.treeStrategy.algo,
-            baseLearners.slice(0, m),
-            baseLearnerWeights.slice(0, m))
+            baseLearners.slice(0, bestM),
+            baseLearnerWeights.slice(0, bestM))
         }
-        else {
-          prevValidateError = currentValidateError
+        else if (currentValidateError < bestValidateError){
+          bestValidateError = currentValidateError
+          bestM = m + 1
         }
       }
       // Update data with pseudo-residuals

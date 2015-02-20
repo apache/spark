@@ -69,7 +69,6 @@ case class BoostingStrategy(
     }
     require(learningRate > 0 && learningRate <= 1,
       "Learning rate should be in range (0, 1]. Provided learning rate is " + s"$learningRate.")
-    require(validationTol >= 0, s"validationTol $validationTol should be greater than zero.")
   }
 }
 
