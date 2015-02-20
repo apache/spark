@@ -47,7 +47,7 @@ test_that("union on two RDDs created from DataFrames returns an RRDD", {
   RDD2 <- toRDD(df)
   unioned <- unionRDD(RDD1, RDD2)
   expect_true(inherits(unioned, "RDD"))
-  expect_true(unioned@env$serializedMode == "row")
+  expect_true(getSerializedMode(unioned) == "row")
   expect_true(collect(unioned)[[2]]$name == "Andy")
 })
 
@@ -69,13 +69,13 @@ test_that("union on mixed serialization types correctly returns a byte RRDD", {
   
   unionByte <- unionRDD(rdd, dfRDD)
   expect_true(inherits(unionByte, "RDD"))
-  expect_true(unionByte@env$serializedMode == "byte")
+  expect_true(getSerializedMode(unionByte) == "byte")
   expect_true(collect(unionByte)[[1]] == 1)
   expect_true(collect(unionByte)[[12]]$name == "Andy")
   
   unionString <- unionRDD(textRDD, dfRDD)
   expect_true(inherits(unionString, "RDD"))
-  expect_true(unionString@env$serializedMode == "byte")
+  expect_true(getSerializedMode(unionString) == "byte")
   expect_true(collect(unionString)[[1]] == "Michael")
   expect_true(collect(unionString)[[5]]$name == "Andy")
 })
@@ -88,7 +88,7 @@ test_that("objectFile() works with row serialization", {
   objectIn <- objectFile(sc, objectPath)
   
   expect_true(inherits(objectIn, "RDD"))
-  expect_true(objectIn@env$serializedMode == "byte")
+  expect_true(getSerializedMode(objectIn) == "byte")
   expect_true(collect(objectIn)[[2]]$age == 30)
 })
 
