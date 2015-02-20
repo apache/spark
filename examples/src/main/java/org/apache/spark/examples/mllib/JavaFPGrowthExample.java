@@ -18,10 +18,8 @@
 package org.apache.spark.examples.mllib;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 
-import scala.Tuple2;
-
+import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 
 import org.apache.spark.SparkConf;
@@ -54,8 +52,8 @@ public class JavaFPGrowthExample {
       .setMinSupport(0.3);
     FPGrowthModel<String> model = fpg.run(transactions);
 
-    for (Tuple2<Object, Long> s: model.javaFreqItemsets().collect()) {
-      System.out.println(Arrays.toString((Object[]) s._1()) + ", " + s._2());
+    for (FPGrowth.FreqItemset<String> s: model.freqItemsets().toJavaRDD().collect()) {
+      System.out.println("[" + Joiner.on(",").join(s.javaItems()) + "], " + s.freq());
     }
 
     sc.stop();

@@ -44,8 +44,7 @@ import org.apache.spark.{SparkConf, SparkContext}
  *
  * Here is a sample run and output:
  *
- * ./bin/run-example mllib.PowerIterationClusteringExample
- * -k 3 --n 30 --maxIterations 15
+ * ./bin/run-example mllib.PowerIterationClusteringExample -k 3 --n 30 --maxIterations 15
  *
  * Cluster assignments: 1 -> [0,1,2,3,4],2 -> [5,6,7,8,9,10,11,12,13,14],
  * 0 -> [15,16,17,18,19,20,21,22,23,24,25,26,27,28,29]
@@ -103,7 +102,7 @@ object PowerIterationClusteringExample {
       .setMaxIterations(params.maxIterations)
       .run(circlesRdd)
 
-    val clusters = model.assignments.collect.groupBy(_._2).mapValues(_.map(_._1))
+    val clusters = model.assignments.collect().groupBy(_.cluster).mapValues(_.map(_.id))
     val assignments = clusters.toList.sortBy { case (k, v) => v.length}
     val assignmentsStr = assignments
       .map { case (k, v) =>
@@ -153,8 +152,5 @@ object PowerIterationClusteringExample {
     val expCoeff = -1.0 / 2.0 * math.pow(sigma, 2.0)
     val ssquares = (p1._1 - p2._1) * (p1._1 - p2._1) + (p1._2 - p2._2) * (p1._2 - p2._2)
     coeff * math.exp(expCoeff * ssquares)
-    //    math.exp((p1._1 - p2._1) * (p1._1 - p2._1) + (p1._2 - p2._2) * (p1._2 - p2._2))
   }
-
-
 }
