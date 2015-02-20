@@ -123,7 +123,7 @@ class DataFrame protected[sql](
     })
   }
 
-  @transient protected[sql] val logicalPlan: LogicalPlan = queryExecution.logical match {
+  @transient protected[sql] lazy val logicalPlan: LogicalPlan = queryExecution.logical match {
     // For various commands (like DDL) and queries with side effects, we force query optimization to
     // happen right away to let these side effects take place eagerly.
     case _: Command |
@@ -264,7 +264,7 @@ class DataFrame protected[sql](
    */
   def explain(extended: Boolean): Unit = {
     ExplainCommand(
-      logicalPlan,
+      queryExecution.logical,
       extended = extended).queryExecution.executedPlan.executeCollect().map {
       r => println(r.getString(0))
     }
