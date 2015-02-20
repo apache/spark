@@ -58,8 +58,10 @@ setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) 
   .Object@env$isCached <- FALSE
   .Object@env$isCheckpointed <- FALSE
   .Object@env$jrdd_val <- jrdd_val
-   # This tracks the serialization mode for jrdd_val
-  .Object@env$serializedMode <- prev@env$serializedMode
+  if (!is.null(jrdd_val)) {
+     # This tracks the serialization mode for jrdd_val
+    .Object@env$serializedMode <- prev@env$serializedMode
+  }
   
   .Object@colNames <- prev@colNames
 
@@ -78,7 +80,7 @@ setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) 
     .Object@prev_jrdd <- getJRDD(prev)
     # Since this is the first step in the pipeline, the prev_serialized
     # is same as serialized here.
-    .Object@env$prev_serializedMode <- .Object@env$serializedMode
+    .Object@env$prev_serializedMode <- prev@env$serializedMode
 
     .Object@colNames <- prev@colNames
   } else {
@@ -112,6 +114,22 @@ RDD <- function(jrdd, serializedMode = "byte", isCached = FALSE,
 PipelinedRDD <- function(prev, func) {
   new("PipelinedRDD", prev, func, NULL)
 }
+
+# Return the serialization mode for an RDD.
+setGeneric("getSerializedMode", function(rdd, ...) { standardGeneric("getSerializedMode") })
+# For normal RDDs we can directly read the serializedMode
+setMethod("getSerializedMode", signature(rdd = "RDD"), function(rdd) rdd@env$serializedMode )
+# For pipelined RDDs if jrdd_val is set then serializedMode should exist
+# if not we return the defaultSerialization mode of "byte" as we don't know the serialization
+# mode at this point of time.
+setMethod("getSerializedMode", signature(rdd = "PipelinedRDD"),
+          function(rdd, defaultSerialization = "byte") {
+            if (!is.null(rdd@env$jrdd_val)) {
+              return(rdd@env$serializedMode)
+            } else {
+              return(defaultSerialization)
+            }
+          })
 
 # The jrdd accessor function.
 setGeneric("getJRDD", function(rdd, ...) { standardGeneric("getJRDD") })
@@ -374,7 +392,7 @@ setMethod("collect",
             # Assumes a pairwise RDD is backed by a JavaPairRDD.
             collected <- callJMethod(getJRDD(rdd), "collect")
             convertJListToRList(collected, flatten,
-              serializedMode = rdd@env$serializedMode, colNames = rdd@colNames)
+              serializedMode = getSerializedMode(rdd), colNames = rdd@colNames)
           })
 
 
@@ -400,7 +418,7 @@ setMethod("collectPartition",
 
             jList <- jPartitionsList[[1]]
             convertJListToRList(jList, flatten = TRUE,
-              serializedMode = rdd@env$serializedMode, colNames = rdd@colNames)
+              serializedMode = getSerializedMode(rdd), colNames = rdd@colNames)
           })
 
 #' @rdname collect-methods
@@ -856,7 +874,7 @@ setMethod("take",
               elems <- convertJListToRList(partition,
                                            flatten = TRUE,
                                            logicalUpperBound = size,
-                                           serializedMode = rdd@env$serializedMode,
+                                           serializedMode = getSerializedMode(rdd),
                                            colNames = rdd@colNames)
               # TODO: Check if this append is O(n^2)?
               resList <- append(resList, elems)
@@ -1084,7 +1102,7 @@ setMethod("saveAsObjectFile",
           function(rdd, path) {
             # If the RDD is in string format, need to serialize it before saving it because when
             # objectFile() is invoked to load the saved file, only serialized format is assumed.
-            if (rdd@env$serializedMode != "byte") {
+            if (getSerializedMode(rdd) != "byte") {
               rdd <- reserialize(rdd)
             }
             # Return nothing
@@ -1367,13 +1385,13 @@ setGeneric("unionRDD", function(x, y) { standardGeneric("unionRDD") })
 setMethod("unionRDD",
           signature(x = "RDD", y = "RDD"),
           function(x, y) {
-            if (x@env$serializedMode == y@env$serializedMode) {
+            if (getSerializedMode(x) == getSerializedMode(y)) {
               jrdd <- callJMethod(getJRDD(x), "union", getJRDD(y))
-              union.rdd <- RDD(jrdd, x@env$serializedMode, colNames = x@colNames)
+              union.rdd <- RDD(jrdd, getSerializedMode(x), colNames = x@colNames)
             } else {
               # One of the RDDs is not serialized, we need to serialize it first.
-              if (x@env$serializedMode != "byte") x <- reserialize(x)
-              if (y@env$serializedMode != "byte") y <- reserialize(y)
+              if (getSerializedMode(x) != "byte") x <- reserialize(x)
+              if (getSerializedMode(y) != "byte") y <- reserialize(y)
               jrdd <- callJMethod(getJRDD(x), "union", getJRDD(y))
               union.rdd <- RDD(jrdd, "byte")
             }

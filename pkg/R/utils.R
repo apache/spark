@@ -176,10 +176,7 @@ reserialize <- function(rdd) {
   if (!inherits(rdd, "RDD")) {
     stop("Argument 'rdd' is not an RDD type.")
   }
-  if (rdd@env$serializedMode != "byte") {
-    if (rdd@env$serializedMode == "row") {
-      rdd@env$serialzedMode == "byte"
-    }
+  if (getSerializedMode(rdd) != "byte") {
     ser.rdd <- lapply(rdd, function(x) { x })
     return(ser.rdd)
   } else {
