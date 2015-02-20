@@ -256,6 +256,14 @@ abstract class ParquetTest extends QueryTest with BeforeAndAfterAll {
 
   }
 
+  override def afterAll(): Unit = {
+    //delete temporary files
+    partitionedTableDir.delete()
+    partitionedTableDirWithKey.delete()
+    partitionedTableDirWithKeyAndComplexTypes.delete()
+    partitionedTableDirWithComplexTypes.delete()
+  }
+
   Seq("partitioned_parquet", "partitioned_parquet_with_key", "partitioned_parquet_with_key_and_complextypes","partitioned_parquet_with_complextypes").foreach { table =>
     test(s"ordering of the partitioning columns $table") {
       checkAnswer(
