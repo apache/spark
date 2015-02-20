@@ -56,10 +56,7 @@ class DataFrameSuite extends QueryTest {
 
   test("dataframe toString") {
     assert(testData.toString === "[key: int, value: string]")
-    assert(testData("key").toString === "[key: int]")
-  }
-
-  test("incomputable toString") {
+    assert(testData("key").toString === "key")
     assert($"test".toString === "test")
   }
 
@@ -431,7 +428,7 @@ class DataFrameSuite extends QueryTest {
 
   test("apply on query results (SPARK-5462)") {
     val df = testData.sqlContext.sql("select key from testData")
-    checkAnswer(df("key"), testData.select('key).collect().toSeq)
+    checkAnswer(df.select(df("key")), testData.select('key).collect().toSeq)
   }
 
 }

@@ -280,4 +280,20 @@ class CachedTableSuite extends QueryTest {
     assert(intercept[RuntimeException](table("t1")).getMessage.startsWith("Table Not Found"))
     assert(!isCached("t2"))
   }
+
+  test("Clear all cache") {
+    sql("SELECT key FROM testData LIMIT 10").registerTempTable("t1")
+    sql("SELECT key FROM testData LIMIT 5").registerTempTable("t2")
+    cacheTable("t1")
+    cacheTable("t2")
+    clearCache()
+    assert(cacheManager.isEmpty)
+
+    sql("SELECT key FROM testData LIMIT 10").registerTempTable("t1")
+    sql("SELECT key FROM testData LIMIT 5").registerTempTable("t2")
+    cacheTable("t1")
+    cacheTable("t2")
+    sql("Clear CACHE")
+    assert(cacheManager.isEmpty)
+  }
 }
