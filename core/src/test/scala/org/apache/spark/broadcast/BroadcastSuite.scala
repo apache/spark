@@ -179,6 +179,14 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     assert(thrown.getMessage.toLowerCase.contains("stopped"))
   }
 
+  test("large broadcast variable") {
+    //Note this currently fails by killing the whole test runner
+    sc = new SparkContext("local", "test", httpConf)
+    val bigArr = new Array[Long]((2.3e9 / 8).toInt)
+    val bcArr = sc.broadcast(bigArr)
+    sc.parallelize(1 to 1).map{x => bcArr.value.size}.count()
+  }
+
   /**
    * Verify the persistence of state associated with an HttpBroadcast in either local mode or
    * local-cluster mode (when distributed = true).
