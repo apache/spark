@@ -54,7 +54,21 @@ if [[ $NUM_APPLICATION_OPTS -gt 0 && "${APPLICATION_OPTS[0]}" =~ \.R$ ]]; then
   exec "$SPARK_HOME"/bin/spark-submit --class edu.berkeley.cs.amplab.sparkr.SparkRRunner --files "$primary" "${SUBMISSION_OPTS[@]}" "$SPARKR_JAR_FILE" "$primary" "${APPLICATION_OPTS[@]:1}"
 else
 
+  export R_PROFILE_USER="/tmp/sparkR.profile"
+
   # If we don't have an R file to run, run R shell
+cat > /tmp/sparkR.profile << EOF
+.First <- function() {
+  projecHome <- Sys.getenv("PROJECT_HOME")
+  Sys.setenv(NOAWT=1)
+  .libPaths(c(paste(projecHome,"/..", sep=""), .libPaths()))
+  require(SparkR)
+  sc <- sparkR.init()
+  assign("sc", sc, envir=.GlobalEnv)
+  cat("\n Welcome to SparkR!")
+  cat("\n Spark context is available as sc\n")
+}
+EOF
   R
 
 fi
