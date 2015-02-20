@@ -175,10 +175,10 @@ class NewHadoopRDD[K, V](
           }
         } catch {
           case e: Exception => {
--            if (!Utils.inShutdown()) {
--              logWarning("Exception in RecordReader.close()", e)
--            }
--         }
+            if (!Utils.inShutdown()) {
+              logWarning("Exception in RecordReader.close()", e)
+            }
+          }
         }
       }
     }
