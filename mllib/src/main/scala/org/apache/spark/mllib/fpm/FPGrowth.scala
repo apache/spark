@@ -153,7 +153,8 @@ class FPGrowth private (
       (tree, transaction) => tree.add(transaction, 1L),
       (tree1, tree2) => tree1.merge(tree2))
     .flatMap { case (part, tree) =>
-      tree.extract(minCount, x => partitioner.getPartition(x) == part)
+      tree.extract(minCount, x =>
+        partitioner.getPartition(x / (freqItems.size / partitioner.numPartitions + 1)) == part)
     }.map { case (ranks, count) =>
       new FreqItemset(ranks.map(i => freqItems(i)).toArray, count)
     }
@@ -178,7 +179,7 @@ class FPGrowth private (
     var i = n - 1
     while (i >= 0) {
       val item = filtered(i)
-      val part = partitioner.getPartition(item)
+      val part = partitioner.getPartition(item / (itemToRank.size / partitioner.numPartitions + 1))
       if (!output.contains(part)) {
         output(part) = filtered.slice(0, i + 1)
       }
