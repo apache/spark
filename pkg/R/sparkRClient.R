@@ -35,6 +35,8 @@ launchBackend <- function(
   } else {
     java_bin <- java_bin_name
   }
+  # Quote the classpath to make sure it handles spaces on Windows
+  classPath <- shQuote(classPath)
   combinedArgs <- paste(javaOpts, "-cp", classPath, mainClass, args, sep = " ")
   cat("Launching java with command ", java_bin, " ", combinedArgs, "\n")
   invisible(system2(java_bin, combinedArgs, wait = F))
