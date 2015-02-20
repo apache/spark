@@ -50,7 +50,7 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     val workers = state.workers.sortBy(_.id)
     val workerTable = UIUtils.listingTable(workerHeaders, workerRow, workers)
 
-    val activeAppHeaders = Seq("Application ID", "Name", "Cores Using",
+    val activeAppHeaders = Seq("Application ID", "Name", "Cores in Use",
       "Cores Requested", "Memory per Node", "Submitted Time", "User", "State", "Duration")
     val activeApps = state.activeApps.sortBy(_.startTime).reverse
     val activeAppsTable = UIUtils.listingTable(activeAppHeaders, activeAppRow, activeApps)
@@ -166,7 +166,7 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     </tr>
   }
 
-  private def activeAppRow(app: ApplicationInfo): Seq[Node] = {
+  private def appRow(app: ApplicationInfo, active: Boolean): Seq[Node] = {
     <tr>
       <td>
         <a href={"app?appId=" + app.id}>{app.id}</a>
@@ -174,9 +174,13 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <td>
         <a href={app.desc.appUiUrl}>{app.desc.name}</a>
       </td>
-      <td>
-        {app.coresGranted}
-      </td>
+      {
+        if (active) {
+          <td>
+            {app.coresGranted}
+          </td>
+        }
+      }
       <td>
         {app.requestedCores}
       </td>
@@ -190,25 +194,12 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     </tr>
   }
 
+  private def activeAppRow(app: ApplicationInfo): Seq[Node] = {
+    appRow(app, active = true)
+  }
+
   private def completeAppRow(app: ApplicationInfo): Seq[Node] = {
-    <tr>
-      <td>
-        <a href={"app?appId=" + app.id}>{app.id}</a>
-      </td>
-      <td>
-        <a href={app.desc.appUiUrl}>{app.desc.name}</a>
-      </td>
-      <td>
-        {app.requestedCores}
-      </td>
-      <td sorttable_customkey={app.desc.memoryPerSlave.toString}>
-        {Utils.megabytesToString(app.desc.memoryPerSlave)}
-      </td>
-      <td>{UIUtils.formatDate(app.submitDate)}</td>
-      <td>{app.desc.user}</td>
-      <td>{app.state.toString}</td>
-      <td>{UIUtils.formatDuration(app.duration)}</td>
-    </tr>
+    appRow(app, active = false)
   }
 
   private def driverRow(driver: DriverInfo): Seq[Node] = {
