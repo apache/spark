@@ -135,6 +135,7 @@ public class SparkLauncher {
    */
   public SparkLauncher setPropertiesFile(String path) {
     checkNotNull(path, "path");
+    this.propertiesFile = path;
     return this;
   }
 
@@ -504,53 +505,54 @@ public class SparkLauncher {
   // Visible for testing.
   List<String> buildSparkSubmitArgs() {
     List<String> args = new ArrayList<String>();
+    SparkSubmitOptionParser parser = new SparkSubmitOptionParser();
 
     if (verbose) {
-      args.add("--verbose");
+      args.add(parser.VERBOSE);
     }
 
     if (master != null) {
-      args.add("--master");
+      args.add(parser.MASTER);
       args.add(master);
     }
 
     if (deployMode != null) {
-      args.add("--deploy-mode");
+      args.add(parser.DEPLOY_MODE);
       args.add(deployMode);
     }
 
     if (appName != null) {
-      args.add("--name");
+      args.add(parser.NAME);
       args.add(appName);
     }
 
     for (Map.Entry<String, String> e : conf.entrySet()) {
-      args.add("--conf");
+      args.add(parser.CONF);
       args.add(String.format("%s=%s", e.getKey(), e.getValue()));
     }
 
     if (propertiesFile != null) {
-      args.add("--properties-file");
+      args.add(parser.PROPERTIES_FILE);
       args.add(propertiesFile);
     }
 
     if (!jars.isEmpty()) {
-      args.add("--jars");
+      args.add(parser.JARS);
       args.add(join(",", jars));
     }
 
     if (!files.isEmpty()) {
-      args.add("--files");
+      args.add(parser.FILES);
       args.add(join(",", files));
     }
 
     if (!pyFiles.isEmpty()) {
-      args.add("--py-files");
+      args.add(parser.PY_FILES);
       args.add(join(",", pyFiles));
     }
 
     if (mainClass != null) {
-      args.add("--class");
+      args.add(parser.CLASS);
       args.add(mainClass);
     }
 

@@ -26,6 +26,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,6 +39,18 @@ import static org.junit.Assert.*;
 public class SparkLauncherSuite {
 
   private static final Logger LOG = LoggerFactory.getLogger(SparkLauncherSuite.class);
+
+  private static File dummyPropsFile;
+
+  @BeforeClass
+  public static void setUp() throws Exception {
+    dummyPropsFile = File.createTempFile("spark", "properties");
+  }
+
+  @AfterClass
+  public static void cleanUp() throws Exception {
+    dummyPropsFile.delete();
+  }
 
   @Test
   public void testDriverCmdBuilder() throws Exception {
@@ -75,6 +89,7 @@ public class SparkLauncherSuite {
       .setAppResource("/foo")
       .setAppName("MyApp")
       .setMainClass("my.Class")
+      .setPropertiesFile(dummyPropsFile.getAbsolutePath())
       .addAppArgs("foo", "bar")
       .setConf(SparkLauncher.DRIVER_MEMORY, "1g")
       .setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, "/driver")
@@ -128,11 +143,13 @@ public class SparkLauncherSuite {
     }
 
     // Checks below are the same for both driver and non-driver mode.
+    SparkSubmitOptionParser parser = new SparkSubmitOptionParser();
 
-    assertEquals("yarn", findArgValue(cmd, "--master"));
-    assertEquals(deployMode, findArgValue(cmd, "--deploy-mode"));
-    assertEquals("my.Class", findArgValue(cmd, "--class"));
-    assertEquals("MyApp", findArgValue(cmd, "--name"));
+    assertEquals(dummyPropsFile.getAbsolutePath(), findArgValue(cmd, parser.PROPERTIES_FILE));
+    assertEquals("yarn", findArgValue(cmd, parser.MASTER));
+    assertEquals(deployMode, findArgValue(cmd, parser.DEPLOY_MODE));
+    assertEquals("my.Class", findArgValue(cmd, parser.CLASS));
+    assertEquals("MyApp", findArgValue(cmd, parser.NAME));
 
     boolean appArgsOk = false;
     for (int i = 0; i < cmd.size(); i++) {
@@ -146,7 +163,7 @@ public class SparkLauncherSuite {
     }
     assertTrue("App resource and args should be added to command.", appArgsOk);
 
-    Map<String, String> conf = parseConf(cmd);
+    Map<String, String> conf = parseConf(cmd, parser);
     assertEquals("foo", conf.get("spark.foo"));
   }
 
@@ -178,10 +195,10 @@ public class SparkLauncherSuite {
     return false;
   }
 
-  private Map<String, String> parseConf(List<String> cmd) {
+  private Map<String, String> parseConf(List<String> cmd, SparkSubmitOptionParser parser) {
     Map<String, String> conf = new HashMap<String, String>();
     for (int i = 0; i < cmd.size(); i++) {
-      if (cmd.get(i).equals("--conf")) {
+      if (cmd.get(i).equals(parser.CONF)) {
         String[] val = cmd.get(i + 1).split("=", 2);
         conf.put(val[0], val[1]);
         i += 1;

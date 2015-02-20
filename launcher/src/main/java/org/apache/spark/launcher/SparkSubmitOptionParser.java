@@ -30,13 +30,14 @@ import java.util.regex.Pattern;
  * is a single list of options that needs to be maintained (well, sort of, but it makes it harder
  * to break things).
  */
-abstract class SparkSubmitOptionParser {
+class SparkSubmitOptionParser {
 
   // The following constants define the "main" name for the available options. They're defined
   // to avoid copy & paste of the raw strings where they're needed.
   //
   // The fields are not static so that they're exposed to Scala code that uses this class. See
-  // SparkSubmitArguments.scala.
+  // SparkSubmitArguments.scala. That is also why this class is not abstract - to allow code to
+  // easily use these constants without having to create dummy implementations of this class.
   protected final String CLASS = "--class";
   protected final String CONF = "--conf";
   protected final String DEPLOY_MODE = "--deploy-mode";
@@ -186,7 +187,9 @@ abstract class SparkSubmitOptionParser {
    * @param value The value. This will be <i>null</i> if the option does not take a value.
    * @return Whether to continue parsing the argument list.
    */
-  protected abstract boolean handle(String opt, String value);
+  protected boolean handle(String opt, String value) {
+    throw new UnsupportedOperationException();
+  }
 
   /**
    * Callback for when an unrecognized option is parsed.
@@ -194,7 +197,9 @@ abstract class SparkSubmitOptionParser {
    * @param opt Unrecognized option from the command line.
    * @return Whether to continue parsing the argument list.
    */
-  protected abstract boolean handleUnknown(String opt);
+  protected boolean handleUnknown(String opt) {
+    throw new UnsupportedOperationException();
+  }
 
   /**
    * Callback for remaining command line arguments after either {@link #handle(String, String)} or
@@ -203,7 +208,9 @@ abstract class SparkSubmitOptionParser {
    *
    * @param extra List of remaining arguments.
    */
-  protected abstract void handleExtraArgs(List<String> extra);
+  protected void handleExtraArgs(List<String> extra) {
+    throw new UnsupportedOperationException();
+  }
 
   private String findCliOption(String name, String[][] available) {
     for (String[] candidates : available) {

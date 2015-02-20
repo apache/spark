@@ -112,10 +112,8 @@ class SparkClassCommandBuilder extends SparkLauncher implements CommandBuilder {
     final List<String> sparkSubmitArgs = new ArrayList<String>();
     final List<String> appArgs = new ArrayList<String>();
 
-    // This parser exists for two reasons:
-    // - to expose the command line args constants, since they're not static
-    // - to special-case the HELP command line argument, and allow it to be propagated to
-    //   the app being launched.
+    // Parse the command line and special-case the HELP command line argument, allowing it to be
+    // propagated to the app being launched.
     SparkSubmitOptionParser parser = new SparkSubmitOptionParser() {
 
       @Override
