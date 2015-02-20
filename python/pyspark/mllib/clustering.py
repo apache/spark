@@ -152,7 +152,7 @@ class GaussianMixtureModel(object):
 
 class GaussianMixture(object):
     """
-    Estimate model parameters with the expectation-maximization algorithm.
+    Learning algorithm for Gaussian Mixtures using the expectation-maximization algorithm.
 
     :param data:            RDD of data points
     :param k:               Number of components

@@ -20,12 +20,12 @@ from __future__ import absolute_import
 import random
 
 from pyspark import SparkContext, RDD
-from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
+from pyspark.mllib.common import callMLlibFunc, inherit_doc, JavaModelWrapper
 from pyspark.mllib.linalg import _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint
 
 __all__ = ['DecisionTreeModel', 'DecisionTree', 'RandomForestModel',
-           'RandomForest', 'GradientBoostedTrees']
+           'RandomForest', 'GradientBoostedTreesModel', 'GradientBoostedTrees']
 
 
 class TreeEnsembleModel(JavaModelWrapper):
@@ -216,6 +216,7 @@ class DecisionTree(object):
                           impurity, maxDepth, maxBins, minInstancesPerNode, minInfoGain)
 
 
+@inherit_doc
 class RandomForestModel(TreeEnsembleModel):
     """
     .. note:: Experimental
@@ -381,6 +382,7 @@ class RandomForest(object):
                           featureSubsetStrategy, impurity, maxDepth, maxBins, seed)
 
 
+@inherit_doc
 class GradientBoostedTreesModel(TreeEnsembleModel):
     """
     .. note:: Experimental

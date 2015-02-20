@@ -100,7 +100,7 @@ object CrossValidatorExample {
       Document(7L, "apache hadoop")))
 
     // Make predictions on test documents. cvModel uses the best model found (lrModel).
-    cvModel.transform(test.toDF)
+    cvModel.transform(test.toDF())
       .select("id", "text", "probability", "prediction")
       .collect()
       .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
