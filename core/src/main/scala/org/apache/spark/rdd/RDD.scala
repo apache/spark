@@ -1263,8 +1263,8 @@ abstract class RDD[T: ClassTag](
   /**
    * @note due to complications in the internal implementation, this method will raise an
    * exception if called on an RDD of `Nothing` or `Null`. This may be come up in practice
-   * because the type of `parallelize(Seq())` is, for example, `RDD[Nothing]`.
-   * This should be avoided.
+   * because, for example, the type of `parallelize(Seq())` is `RDD[Nothing]`.
+   * (`parallelize(Seq())` should be avoided anyway in favor of `parallelize(Seq[T]())`.)
    * @return true if and only if the RDD contains no elements at all. Note that an RDD
    *         may be empty even when it has at least 1 partition.
    */
