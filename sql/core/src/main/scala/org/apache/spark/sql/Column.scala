@@ -22,20 +22,15 @@ import scala.language.implicitConversions
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{Project, LogicalPlan}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedGetField
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedStar, UnresolvedGetField}
 import org.apache.spark.sql.types._
 
 
 private[sql] object Column {
 
-  def apply(colName: String): Column = new IncomputableColumn(colName)
+  def apply(colName: String): Column = new Column(colName)
 
-  def apply(expr: Expression): Column = new IncomputableColumn(expr)
-
-  def apply(sqlContext: SQLContext, plan: LogicalPlan, expr: Expression): Column = {
-    new ComputableColumn(sqlContext, plan, expr)
-  }
+  def apply(expr: Expression): Column = new Column(expr)
 
   def unapply(col: Column): Option[Expression] = Some(col.expr)
 }
@@ -51,68 +46,18 @@ private[sql] object Column {
  * @groupname Ungrouped Support functions for DataFrames.
  */
 @Experimental
-trait Column extends DataFrame {
+class Column(protected[sql] val expr: Expression) {
 
-  protected[sql] def expr: Expression
-
-  /**
-   * Returns true iff the [[Column]] is computable.
-   */
-  def isComputable: Boolean
-
-  /** Removes the top project so we can get to the underlying plan. */
-  private def stripProject(p: LogicalPlan): LogicalPlan = p match {
-    case Project(_, child) => child
-    case p => sys.error("Unexpected logical plan (expected Project): " + p)
-  }
-
-  private def computableCol(baseCol: ComputableColumn, expr: Expression) = {
-    val namedExpr = expr match {
-      case named: NamedExpression => named
-      case unnamed: Expression => Alias(unnamed, "col")()
-    }
-    val plan = Project(Seq(namedExpr), stripProject(baseCol.plan))
-    Column(baseCol.sqlContext, plan, expr)
-  }
-
-  /**
-   * Construct a new column based on the expression and the other column value.
-   *
-   * There are two cases that can happen here:
-   * If otherValue is a constant, it is first turned into a Column.
-   * If otherValue is a Column, then:
-   *   - If this column and otherValue are both computable and come from the same logical plan,
-   *     then we can construct a ComputableColumn by applying a Project on top of the base plan.
-   *   - If this column is not computable, but otherValue is computable, then we can construct
-   *     a ComputableColumn based on otherValue's base plan.
-   *   - If this column is computable, but otherValue is not, then we can construct a
-   *     ComputableColumn based on this column's base plan.
-   *   - If neither columns are computable, then we create an IncomputableColumn.
-   */
-  private def constructColumn(otherValue: Any)(newExpr: Column => Expression): Column = {
-    // lit(otherValue) returns a Column always.
-    (this, lit(otherValue)) match {
-      case (left: ComputableColumn, right: ComputableColumn) =>
-        if (stripProject(left.plan).sameResult(stripProject(right.plan))) {
-          computableCol(right, newExpr(right))
-        } else {
-          // We don't want to throw an exception here because "df1("a") === df2("b")" can be
-          // a valid expression for join conditions, even though standalone they are not valid.
-          Column(newExpr(right))
-        }
-      case (left: ComputableColumn, right) => computableCol(left, newExpr(right))
-      case (_, right: ComputableColumn) => computableCol(right, newExpr(right))
-      case (_, right) => Column(newExpr(right))
-    }
-  }
+  def this(name: String) = this(name match {
+    case "*" => UnresolvedStar(None)
+    case _ if name.endsWith(".*") => UnresolvedStar(Some(name.substring(0, name.length - 2)))
+    case _ => UnresolvedAttribute(name)
+  })
 
   /** Creates a column based on the given expression. */
-  private def exprToColumn(newExpr: Expression, computable: Boolean = true): Column = {
-    this match {
-      case c: ComputableColumn if computable => computableCol(c, newExpr)
-      case _ => Column(newExpr)
-    }
-  }
+  implicit private def exprToColumn(newExpr: Expression): Column = new Column(newExpr)
+
+  override def toString: String = expr.prettyString
 
   /**
    * Unary minus, i.e. negate the expression.
@@ -127,7 +72,7 @@ trait Column extends DataFrame {
    *
    * @group expr_ops
    */
-  def unary_- : Column = exprToColumn(UnaryMinus(expr))
+  def unary_- : Column = UnaryMinus(expr)
 
   /**
    * Inversion of boolean expression, i.e. NOT.
@@ -142,7 +87,7 @@ trait Column extends DataFrame {
    *
    * @group expr_ops
    */
-  def unary_! : Column = exprToColumn(Not(expr))
+  def unary_! : Column = Not(expr)
 
   /**
    * Equality test.
@@ -157,9 +102,7 @@ trait Column extends DataFrame {
    *
    * @group expr_ops
    */
-  def === (other: Any): Column = constructColumn(other) { o =>
-    EqualTo(expr, o.expr)
-  }
+  def === (other: Any): Column = EqualTo(expr, lit(other).expr)
 
   /**
    * Equality test.
@@ -190,9 +133,7 @@ trait Column extends DataFrame {
    *
    * @group expr_ops
    */
-  def !== (other: Any): Column = constructColumn(other) { o =>
-    Not(EqualTo(expr, o.expr))
-  }
+  def !== (other: Any): Column = Not(EqualTo(expr, lit(other).expr))
 
   /**
    * Inequality test.
@@ -208,9 +149,7 @@ trait Column extends DataFrame {
    *
    * @group java_expr_ops
    */
-  def notEqual(other: Any): Column = constructColumn(other) { o =>
-    Not(EqualTo(expr, o.expr))
-  }
+  def notEqual(other: Any): Column = Not(EqualTo(expr, lit(other).expr))
 
   /**
    * Greater than.
@@ -225,9 +164,7 @@ trait Column extends DataFrame {
    *
    * @group expr_ops
    */
-  def > (other: Any): Column = constructColumn(other) { o =>
-    GreaterThan(expr, o.expr)
-  }
+  def > (other: Any): Column = GreaterThan(expr, lit(other).expr)
 
   /**
    * Greater than.
@@ -256,9 +193,7 @@ trait Column extends DataFrame {
    *
    * @group expr_ops
    */
-  def < (other: Any): Column = constructColumn(other) { o =>
-    LessThan(expr, o.expr)
-  }
+  def < (other: Any): Column = LessThan(expr, lit(other).expr)
 
   /**
    * Less than.
@@ -286,9 +221,7 @@ trait Column extends DataFrame {
    *
    * @group expr_ops
    */
-  def <= (other: Any): Column = constructColumn(other) { o =>
-    LessThanOrEqual(expr, o.expr)
-  }
+  def <= (other: Any): Column = LessThanOrEqual(expr, lit(other).expr)
 
   /**
    * Less than or equal to.
@@ -316,9 +249,7 @@ trait Column extends DataFrame {
    *
    * @group expr_ops
    */
-  def >= (other: Any): Column = constructColumn(other) { o =>
-    GreaterThanOrEqual(expr, o.expr)
-  }
+  def >= (other: Any): Column = GreaterThanOrEqual(expr, lit(other).expr)
 
   /**
    * Greater than or equal to an expression.
@@ -339,9 +270,7 @@ trait Column extends DataFrame {
    *
    * @group expr_ops
    */
-  def <=> (other: Any): Column = constructColumn(other) { o =>
-    EqualNullSafe(expr, o.expr)
-  }
+  def <=> (other: Any): Column = EqualNullSafe(expr, lit(other).expr)
 
   /**
    * Equality test that is safe for null values.
@@ -355,14 +284,14 @@ trait Column extends DataFrame {
    *
    * @group expr_ops
    */
-  def isNull: Column = exprToColumn(IsNull(expr))
+  def isNull: Column = IsNull(expr)
 
   /**
    * True if the current expression is NOT null.
    *
    * @group expr_ops
    */
-  def isNotNull: Column = exprToColumn(IsNotNull(expr))
+  def isNotNull: Column = IsNotNull(expr)
 
   /**
    * Boolean OR.
@@ -376,9 +305,7 @@ trait Column extends DataFrame {
    *
    * @group expr_ops
    */
-  def || (other: Any): Column = constructColumn(other) { o =>
-    Or(expr, o.expr)
-  }
+  def || (other: Any): Column = Or(expr, lit(other).expr)
 
   /**
    * Boolean OR.
@@ -406,9 +333,7 @@ trait Column extends DataFrame {
    *
    * @group expr_ops
    */
-  def && (other: Any): Column = constructColumn(other) { o =>
-    And(expr, o.expr)
-  }
+  def && (other: Any): Column = And(expr, lit(other).expr)
 
   /**
    * Boolean AND.
@@ -436,9 +361,7 @@ trait Column extends DataFrame {
    *
    * @group expr_ops
    */
-  def + (other: Any): Column = constructColumn(other) { o =>
-    Add(expr, o.expr)
-  }
+  def + (other: Any): Column = Add(expr, lit(other).expr)
 
   /**
    * Sum of this expression and another expression.
@@ -466,9 +389,7 @@ trait Column extends DataFrame {
    *
    * @group expr_ops
    */
-  def - (other: Any): Column = constructColumn(other) { o =>
-    Subtract(expr, o.expr)
-  }
+  def - (other: Any): Column = Subtract(expr, lit(other).expr)
 
   /**
    * Subtraction. Subtract the other expression from this expression.
@@ -496,9 +417,7 @@ trait Column extends DataFrame {
    *
    * @group expr_ops
    */
-  def * (other: Any): Column = constructColumn(other) { o =>
-    Multiply(expr, o.expr)
-  }
+  def * (other: Any): Column = Multiply(expr, lit(other).expr)
 
   /**
    * Multiplication of this expression and another expression.
@@ -526,9 +445,7 @@ trait Column extends DataFrame {
    *
    * @group expr_ops
    */
-  def / (other: Any): Column = constructColumn(other) { o =>
-    Divide(expr, o.expr)
-  }
+  def / (other: Any): Column = Divide(expr, lit(other).expr)
 
   /**
    * Division this expression by another expression.
@@ -549,9 +466,7 @@ trait Column extends DataFrame {
    *
    * @group expr_ops
    */
-  def % (other: Any): Column = constructColumn(other) { o =>
-    Remainder(expr, o.expr)
-  }
+  def % (other: Any): Column = Remainder(expr, lit(other).expr)
 
   /**
    * Modulo (a.k.a. remainder) expression.
@@ -567,37 +482,35 @@ trait Column extends DataFrame {
    * @group expr_ops
    */
   @scala.annotation.varargs
-  def in(list: Column*): Column = {
-    new IncomputableColumn(In(expr, list.map(_.expr)))
-  }
+  def in(list: Column*): Column = In(expr, list.map(_.expr))
 
   /**
    * SQL like expression.
    *
    * @group expr_ops
    */
-  def like(literal: String): Column = exprToColumn(Like(expr, lit(literal).expr))
+  def like(literal: String): Column = Like(expr, lit(literal).expr)
 
   /**
    * SQL RLIKE expression (LIKE with Regex).
    *
    * @group expr_ops
    */
-  def rlike(literal: String): Column = exprToColumn(RLike(expr, lit(literal).expr))
+  def rlike(literal: String): Column = RLike(expr, lit(literal).expr)
 
   /**
    * An expression that gets an item at position `ordinal` out of an array.
    *
    * @group expr_ops
    */
-  def getItem(ordinal: Int): Column = exprToColumn(GetItem(expr, Literal(ordinal)))
+  def getItem(ordinal: Int): Column = GetItem(expr, Literal(ordinal))
 
   /**
    * An expression that gets a field by name in a [[StructField]].
    *
    * @group expr_ops
    */
-  def getField(fieldName: String): Column = exprToColumn(UnresolvedGetField(expr, fieldName))
+  def getField(fieldName: String): Column = UnresolvedGetField(expr, fieldName)
 
   /**
    * An expression that returns a substring.
@@ -606,8 +519,7 @@ trait Column extends DataFrame {
    *
    * @group expr_ops
    */
-  def substr(startPos: Column, len: Column): Column =
-    exprToColumn(Substring(expr, startPos.expr, len.expr), computable = false)
+  def substr(startPos: Column, len: Column): Column = Substring(expr, startPos.expr, len.expr)
 
   /**
    * An expression that returns a substring.
@@ -616,26 +528,21 @@ trait Column extends DataFrame {
    *
    * @group expr_ops
    */
-  def substr(startPos: Int, len: Int): Column =
-    exprToColumn(Substring(expr, lit(startPos).expr, lit(len).expr))
+  def substr(startPos: Int, len: Int): Column = Substring(expr, lit(startPos).expr, lit(len).expr)
 
   /**
    * Contains the other element.
    *
    * @group expr_ops
    */
-  def contains(other: Any): Column = constructColumn(other) { o =>
-    Contains(expr, o.expr)
-  }
+  def contains(other: Any): Column = Contains(expr, lit(other).expr)
 
   /**
    * String starts with.
    *
    * @group expr_ops
    */
-  def startsWith(other: Column): Column = constructColumn(other) { o =>
-    StartsWith(expr, o.expr)
-  }
+  def startsWith(other: Column): Column = StartsWith(expr, lit(other).expr)
 
   /**
    * String starts with another string literal.
@@ -649,9 +556,7 @@ trait Column extends DataFrame {
    *
    * @group expr_ops
    */
-  def endsWith(other: Column): Column = constructColumn(other) { o =>
-    EndsWith(expr, o.expr)
-  }
+  def endsWith(other: Column): Column = EndsWith(expr, lit(other).expr)
 
   /**
    * String ends with another string literal.
@@ -669,7 +574,7 @@ trait Column extends DataFrame {
    *
    * @group expr_ops
    */
-  override def as(alias: String): Column = exprToColumn(Alias(expr, alias)())
+  def as(alias: String): Column = Alias(expr, alias)()
 
   /**
    * Gives the column an alias.
@@ -680,7 +585,7 @@ trait Column extends DataFrame {
    *
    * @group expr_ops
    */
-  override def as(alias: Symbol): Column = exprToColumn(Alias(expr, alias.name)())
+  def as(alias: Symbol): Column = Alias(expr, alias.name)()
 
   /**
    * Casts the column to a different data type.
@@ -695,7 +600,7 @@ trait Column extends DataFrame {
    *
    * @group expr_ops
    */
-  def cast(to: DataType): Column = exprToColumn(Cast(expr, to))
+  def cast(to: DataType): Column = Cast(expr, to)
 
   /**
    * Casts the column to a different data type, using the canonical string representation
@@ -708,22 +613,20 @@ trait Column extends DataFrame {
    *
    * @group expr_ops
    */
-  def cast(to: String): Column = exprToColumn(
-    Cast(expr, to.toLowerCase match {
-      case "string" => StringType
-      case "boolean" => BooleanType
-      case "byte" => ByteType
-      case "short" => ShortType
-      case "int" => IntegerType
-      case "long" => LongType
-      case "float" => FloatType
-      case "double" => DoubleType
-      case "decimal" => DecimalType.Unlimited
-      case "date" => DateType
-      case "timestamp" => TimestampType
-      case _ => throw new RuntimeException(s"""Unsupported cast type: "$to"""")
-    })
-  )
+  def cast(to: String): Column = Cast(expr, to.toLowerCase match {
+    case "string" | "str" => StringType
+    case "boolean" => BooleanType
+    case "byte" => ByteType
+    case "short" => ShortType
+    case "int" => IntegerType
+    case "long" => LongType
+    case "float" => FloatType
+    case "double" => DoubleType
+    case "decimal" => DecimalType.Unlimited
+    case "date" => DateType
+    case "timestamp" => TimestampType
+    case _ => throw new RuntimeException(s"""Unsupported cast type: "$to"""")
+  })
 
   /**
    * Returns an ordering used in sorting.
@@ -737,7 +640,7 @@ trait Column extends DataFrame {
    *
    * @group expr_ops
    */
-  def desc: Column = exprToColumn(SortOrder(expr, Descending), computable = false)
+  def desc: Column = SortOrder(expr, Descending)
 
   /**
    * Returns an ordering used in sorting.
@@ -751,14 +654,14 @@ trait Column extends DataFrame {
    *
    * @group expr_ops
    */
-  def asc: Column = exprToColumn(SortOrder(expr, Ascending), computable = false)
+  def asc: Column = SortOrder(expr, Ascending)
 
   /**
-   * Prints the plans (logical and physical) to the console for debugging purpose.
+   * Prints the expression to the console for debugging purpose.
    *
    * @group df_ops
    */
-  override def explain(extended: Boolean): Unit = {
+  def explain(extended: Boolean): Unit = {
     if (extended) {
       println(expr)
     } else {
@@ -768,7 +671,7 @@ trait Column extends DataFrame {
 }
 
 
-class ColumnName(name: String) extends IncomputableColumn(name) {
+class ColumnName(name: String) extends Column(name) {
 
   /** Creates a new AttributeReference of type boolean */
   def boolean: StructField = StructField(name, BooleanType)
