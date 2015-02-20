@@ -285,14 +285,14 @@ class CachedTableSuite extends QueryTest {
     sql("SELECT key FROM testData LIMIT 10").registerTempTable("t1")
     sql("SELECT key FROM testData LIMIT 5").registerTempTable("t2")
     cacheTable("t1")
-    cacheTable("t1")
+    cacheTable("t2")
     clearCache()
     assert(cacheManager.isEmpty)
 
     sql("SELECT key FROM testData LIMIT 10").registerTempTable("t1")
     sql("SELECT key FROM testData LIMIT 5").registerTempTable("t2")
     cacheTable("t1")
-    cacheTable("t1")
+    cacheTable("t2")
     sql("Clear CACHE")
     assert(cacheManager.isEmpty)
   }
