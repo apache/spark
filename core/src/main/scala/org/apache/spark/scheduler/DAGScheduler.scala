@@ -1041,7 +1041,8 @@ class DAGScheduler(
               } else {
                 val newlyRunnable = new ArrayBuffer[Stage]
                 for (shuffleStage <- waitingStages) {
-                  logInfo("Missing parents for " + shuffleStage + ": " + getMissingParentStages(shuffleStage))
+                  logInfo("Missing parents for " + shuffleStage + ": " + 
+                      getMissingParentStages(shuffleStage))
                 }
                 for (shuffleStage <- waitingStages if getMissingParentStages(shuffleStage) == Nil) {
                   newlyRunnable += shuffleStage
@@ -1052,7 +1053,8 @@ class DAGScheduler(
                   shuffleStage <- newlyRunnable.sortBy(_.id)
                   jobId <- activeJobForStage(shuffleStage)
                 } {
-                  logInfo("Submitting " + shuffleStage + " (" + shuffleStage.rdd + "), which is now runnable")
+                  logInfo("Submitting " + shuffleStage + " (" + 
+                      shuffleStage.rdd + "), which is now runnable")
                   submitMissingTasks(shuffleStage, jobId)
                 }
               }
