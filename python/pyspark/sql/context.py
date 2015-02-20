@@ -267,20 +267,20 @@ class SQLContext(object):
         ...     StructField("byte2", ByteType(), False),
         ...     StructField("short1", ShortType(), False),
         ...     StructField("short2", ShortType(), False),
-        ...     StructField("int", IntegerType(), False),
-        ...     StructField("float", FloatType(), False),
-        ...     StructField("date", DateType(), False),
-        ...     StructField("time", TimestampType(), False),
-        ...     StructField("map",
+        ...     StructField("int1", IntegerType(), False),
+        ...     StructField("float1", FloatType(), False),
+        ...     StructField("date1", DateType(), False),
+        ...     StructField("time1", TimestampType(), False),
+        ...     StructField("map1",
         ...         MapType(StringType(), IntegerType(), False), False),
-        ...     StructField("struct",
+        ...     StructField("struct1",
         ...         StructType([StructField("b", ShortType(), False)]), False),
-        ...     StructField("list", ArrayType(ByteType(), False), False),
-        ...     StructField("null", DoubleType(), True)])
+        ...     StructField("list1", ArrayType(ByteType(), False), False),
+        ...     StructField("null1", DoubleType(), True)])
         >>> df = sqlCtx.applySchema(rdd, schema)
         >>> results = df.map(
-        ...     lambda x: (x.byte1, x.byte2, x.short1, x.short2, x.int, x.float, x.date,
-        ...         x.time, x.map["a"], x.struct.b, x.list, x.null))
+        ...     lambda x: (x.byte1, x.byte2, x.short1, x.short2, x.int1, x.float1, x.date1,
+        ...         x.time1, x.map1["a"], x.struct1.b, x.list1, x.null1))
         >>> results.collect()[0] # doctest: +NORMALIZE_WHITESPACE
         (127, -128, -32768, 32767, 2147483647, 1.0, datetime.date(2010, 1, 1),
              datetime.datetime(2010, 1, 1, 1, 1, 1), 1, 2, [1, 2, 3], None)
@@ -288,20 +288,20 @@ class SQLContext(object):
         >>> df.registerTempTable("table2")
         >>> sqlCtx.sql(
         ...   "SELECT byte1 - 1 AS byte1, byte2 + 1 AS byte2, " +
-        ...     "short1 + 1 AS short1, short2 - 1 AS short2, int - 1 AS int, " +
-        ...     "float + 1.5 as float FROM table2").collect()
-        [Row(byte1=126, byte2=-127, short1=-32767, short2=32766, int=2147483646, float=2.5)]
+        ...     "short1 + 1 AS short1, short2 - 1 AS short2, int1 - 1 AS int1, " +
+        ...     "float1 + 1.5 as float1 FROM table2").collect()
+        [Row(byte1=126, byte2=-127, short1=-32767, short2=32766, int1=2147483646, float1=2.5)]
 
         >>> from pyspark.sql.types import _parse_schema_abstract, _infer_schema_type
         >>> rdd = sc.parallelize([(127, -32768, 1.0,
         ...     datetime(2010, 1, 1, 1, 1, 1),
         ...     {"a": 1}, (2,), [1, 2, 3])])
-        >>> abstract = "byte short float time map{} struct(b) list[]"
+        >>> abstract = "byte1 short1 float1 time1 map1{} struct1(b) list1[]"
         >>> schema = _parse_schema_abstract(abstract)
         >>> typedSchema = _infer_schema_type(rdd.first(), schema)
         >>> df = sqlCtx.applySchema(rdd, typedSchema)
         >>> df.collect()
-        [Row(byte=127, short=-32768, float=1.0, time=..., list=[1, 2, 3])]
+        [Row(byte1=127, short1=-32768, float1=1.0, time1=..., list1=[1, 2, 3])]
         """
 
         if isinstance(rdd, DataFrame):
