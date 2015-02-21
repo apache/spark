@@ -32,7 +32,7 @@ import org.apache.spark.graphx.Edge
 object RDFLoader extends Logging {
   
   val relregex = "^<([^>]+)>\\s<([^>]+)>\\s<([^>]+)>\\s\\.$".r
-  val propregex = "^<([^>]+)>\\s<([^>]+)>\\s(.+)\\.$".r
+  val propregex = "^<([^>]+)>\\s<([^>]+)>\\s(.+)\\s\\.$".r
   val propvalregex = "^<([^>]+)>\\s(.+)$".r
 
   /**

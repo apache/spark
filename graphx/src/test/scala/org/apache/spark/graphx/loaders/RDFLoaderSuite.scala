@@ -22,43 +22,41 @@ import org.apache.spark.graphx.LocalSparkContext
 import scala.io.Source
 
 class RDFLoaderSuite extends FunSuite with LocalSparkContext {
-	test("RDFLoader.loadNTriples") {
-		withSpark { sc =>
-			val file = getClass.getResource("/graph.nt").getFile
-			val graph = RDFLoader.loadNTriples(sc, file)
-			val edges = graph.edges.collect()
-			assert(edges.length == 17)
-			val vertices = graph.vertices.collect()
-			assert(vertices.length == 19)
-			val triples = graph.mapTriplets(triplet => {
-					triplet.srcAttr + "<" + triplet.attr + ">" + triplet.dstAttr
-				}
-			).edges.collect
-			val propregex = "<([^>]+)>\\s<([^>]+)>\\s(.+)\\s\\.".r
-			val relregex = "<([^>]+)>\\s<([^>]+)>\\s<([^>]+)>\\s\\.".r
-			
-			
-			// for (triple <- triples) Console.println(triple.attr)
-			
-			def assertline(a:String, b:String, c:String) = {
-				// find corresponding line from triples from graph
-				var found = false;
-				for (triple <- triples) {
-					if (triple.attr == a + "<" + b + ">" + c) {
-						found = true
-					}
-				}
-				if (!found) Console.println(a,b,c)
-				assert(found)
-			}
-			
-			for (line <- Source.fromFile(file).getLines) {
-				line match {
-					case relregex(a,b,c) => assertline(a,b,c)
-					case propregex(a,b,c) => assertline(a,b,c)
-					case _ =>
-				}
-			}
-		}
-	}
+  test("RDFLoader.loadNTriples") {
+    withSpark { sc =>
+      val file = getClass.getResource("/graph.nt").getFile
+      val graph = RDFLoader.loadNTriples(sc, file)
+      val edges = graph.edges.collect()
+      assert(edges.length == 17)
+      val vertices = graph.vertices.collect()
+      assert(vertices.length == 19)
+      val triples = graph.mapTriplets(triplet => {
+        triplet.srcAttr + "<" + triplet.attr + ">" + triplet.dstAttr
+      }).edges.collect
+      val propregex = "<([^>]+)>\\s<([^>]+)>\\s(.+)\\s\\.".r
+      val relregex = "<([^>]+)>\\s<([^>]+)>\\s<([^>]+)>\\s\\.".r
+
+      // for (triple <- triples) Console.println(triple.attr)
+
+      def assertline(a: String, b: String, c: String) = {
+        // find corresponding line from triples from graph
+        var found = false;
+        for (triple <- triples) {
+          if (triple.attr == a + "<" + b + ">" + c) {
+            found = true
+          }
+        }
+        if (!found) Console.println(a, b, c)
+        assert(found)
+      }
+
+      for (line <- Source.fromFile(file).getLines) {
+        line match {
+          case relregex(a, b, c) => assertline(a, b, c)
+          case propregex(a, b, c) => assertline(a, b, c)
+          case _ =>
+        }
+      }
+    }
+  }
 }
