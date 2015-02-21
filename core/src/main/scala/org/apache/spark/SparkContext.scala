@@ -986,7 +986,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * values to using the `+=` method. Only the driver can access the accumulator's `value`.
    */
   def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]) =
-    new Accumulator(initialValue, param)
+  {
+    val acc = new Accumulator(initialValue, param)
+    cleaner.foreach(_.registerAccumulatorForCleanup(acc))
+    acc
+  }
 
   /**
    * Create an [[org.apache.spark.Accumulator]] variable of a given type, with a name for display
@@ -994,7 +998,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * driver can access the accumulator's `value`.
    */
   def accumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T]) = {
-    new Accumulator(initialValue, param, Some(name))
+    val acc = new Accumulator(initialValue, param, Some(name))
+    cleaner.foreach(_.registerAccumulatorForCleanup(acc))
+    acc
   }
 
   /**
@@ -1003,9 +1009,12 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @tparam R accumulator result type
    * @tparam T type that can be added to the accumulator
    */
-  def accumulable[R, T](initialValue: R)(implicit param: AccumulableParam[R, T]) =
-    new Accumulable(initialValue, param)
-
+  def accumulable[R, T](initialValue: R)(implicit param: AccumulableParam[R, T]) = {
+    val acc = new Accumulable(initialValue, param)
+    cleaner.foreach(_.registerAccumulatorForCleanup(acc))
+    acc
+  }
+  
   /**
    * Create an [[org.apache.spark.Accumulable]] shared variable, with a name for display in the
    * Spark UI. Tasks can add values to the accumuable using the `+=` operator. Only the driver can
@@ -1014,7 +1023,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @tparam T type that can be added to the accumulator
    */
   def accumulable[R, T](initialValue: R, name: String)(implicit param: AccumulableParam[R, T]) =
-    new Accumulable(initialValue, param, Some(name))
+  {
+    val acc = new Accumulable(initialValue, param, Some(name))
+    cleaner.foreach(_.registerAccumulatorForCleanup(acc))
+    acc
+  }
 
   /**
    * Create an accumulator from a "mutable collection" type.
@@ -1025,7 +1038,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   def accumulableCollection[R <% Growable[T] with TraversableOnce[T] with Serializable: ClassTag, T]
       (initialValue: R): Accumulable[R, T] = {
     val param = new GrowableAccumulableParam[R,T]
-    new Accumulable(initialValue, param)
+    val acc = new Accumulable(initialValue, param)
+    cleaner.foreach(_.registerAccumulatorForCleanup(acc))
+    acc
   }
 
   /**

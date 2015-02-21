@@ -296,6 +296,7 @@ private[spark] object Accumulators {
   }
 
   def register(a: Accumulable[_, _], original: Boolean): Unit = synchronized {
+    ContextCleaner
     if (original) {
       originals(a.id) = new WeakAcc(a)
     } else {
@@ -310,6 +311,12 @@ private[spark] object Accumulators {
     }
   }
 
+  def remove(accId : Long) {
+    synchronized {
+      originals.remove(accId)  
+    }
+  }
+  
   // Get the values of the local accumulators for the current thread (by ID)
   def values: Map[Long, Any] = synchronized {
     val ret = Map[Long, Any]()

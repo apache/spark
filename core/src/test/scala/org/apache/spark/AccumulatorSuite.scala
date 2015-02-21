@@ -152,7 +152,9 @@ class AccumulatorSuite extends FunSuite with Matchers with LocalSparkContext {
     acc = null
     System.gc()
     assert(ref.get.isEmpty)
-    assert(Accumulators.originals.get(accId).isDefined)
+    
+    Accumulators.remove(accId)
+    assert(!Accumulators.originals.get(accId).isDefined)
   }
 
 }
