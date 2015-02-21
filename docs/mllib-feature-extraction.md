@@ -377,7 +377,7 @@ data2 = labels.zip(normalizer2.transform(features))
 </div>
 
 ## Feature selection
-Feature selection allows selecting relevant features for use in model construction leaving out the redundant ones. The number of features to select can be determined using the validation set. Feature selection is usually applied on sparse data, for example in text classification. Feature selection reduces the size of the vector space and, in turn, the complexity of any subsequent operation with vectors. 
+(Feature selection)[http://en.wikipedia.org/wiki/Feature_selection] allows selecting the most relevant features for use in model construction. The number of features to select can be determined using the validation set. Feature selection is usually applied on sparse data, for example in text classification. Feature selection reduces the size of the vector space and, in turn, the complexity of any subsequent operation with vectors. 
 
 ### ChiSqSelector
 ChiSqSelector stands for Chi-Squared feature selection. It operates on the labeled data. ChiSqSelector orders categorical features based on their values of Chi-Squared test on independence from class and filters (selects) top given features.  
@@ -398,5 +398,29 @@ which can apply the Chi-Squared feature selection on a `Vector` to produce a red
 an `RDD[Vector]` to produce a reduced `RDD[Vector]`.
 
 Note that the model that performs actual feature filtering can be instantiated independently with array of feature indices that has to be sorted ascending.
+
+#### Example
+
+The following example shows the basic use of ChiSqSelector.
+
+<div class="codetabs">
+<div data-lang="scala">
+{% highlight scala %}
+import org.apache.spark.SparkContext._
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.util.MLUtils
+
+// load some data in libsvm format, each point is in the range 0..255
+val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
+// discretize data in 16 equal bins
+val disctetizedData = data.map { lp =>
+  LabeledPoint(lp.label, Vectors.dense(lp.features.toArray.map { x => x / 16 } ) )
+}
+// create ChiSqSelector that will select 50 features
+val selector = new ChiSqSelector(50)
+// filter top 50 features
+val filteredData = selector.fit(disctetizedData)
+{% endhighlight %}
 </div>
 </div>
+
