@@ -38,7 +38,9 @@ private[sql] object JsonRDD extends Logging {
       json: RDD[String],
       schema: StructType,
       columnNameOfCorruptRecords: String): RDD[Row] = {
-    parseJson(json, columnNameOfCorruptRecords).map(parsed => asRow(parsed, schema))
+    val schemaFuncs = prepareRowSchema(schema)
+    val row = new GenericMutableRow(schemaFuncs.size) 
+    parseJson(json, columnNameOfCorruptRecords).map(parsed => asRow(parsed, row, schemaFuncs))
   }
 
   private[sql] def inferSchema(
@@ -416,23 +418,32 @@ private[sql] object JsonRDD extends Logging {
         case NullType => null
         case ArrayType(elementType, _) =>
           value.asInstanceOf[Seq[Any]].map(enforceCorrectType(_, elementType))
-        case struct: StructType => asRow(value.asInstanceOf[Map[String, Any]], struct)
+        case struct: StructType =>
+          val schemaFuncs = prepareRowSchema(struct)
+          val row = new GenericMutableRow(schemaFuncs.size)
+          asRow(value.asInstanceOf[Map[String, Any]], row, schemaFuncs)
         case DateType => toDate(value)
         case TimestampType => toTimestamp(value)
       }
     }
   }
 
-  private def asRow(json: Map[String,Any], schema: StructType): Row = {
-    // TODO: Reuse the row instead of creating a new one for every record.
-    val row = new GenericMutableRow(schema.fields.length)
-    schema.fields.zipWithIndex.foreach {
-      case (StructField(name, dataType, _, _), i) =>
-        row.update(i, json.get(name).flatMap(v => Option(v)).map(
-          enforceCorrectType(_, dataType)).orNull)
+  private def prepareRowSchema(schema: StructType): Seq[(String, Any => Any)] = {
+    schema.fields.map {
+      case StructField(name, dataType, _, _) =>
+        (name, enforceCorrectType(_: Any, dataType))
+    }
+  }
+
+  private def asRow(json: Map[String, Any], row: GenericMutableRow
+      , schemaFuncs: Seq[(String, Any => Any)]): Row = {
+    var i = 0
+    while (i < schemaFuncs.size) {
+      row.update(i, json.get(schemaFuncs(i)._1).flatMap(v => Option(v)).map(schemaFuncs(i)._2).orNull)
+      i += 1
     }
 
-    row
+    row.copy()
   }
 
   /** Transforms a single Row to JSON using Jackson
