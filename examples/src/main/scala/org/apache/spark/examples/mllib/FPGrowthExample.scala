@@ -18,29 +18,58 @@
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.mllib.fpm.FPGrowth
-import org.apache.spark.{SparkContext, SparkConf}
+import org.apache.spark.{SparkConf, SparkContext}
+import scopt.OptionParser
 
 /**
  * Example for mining frequent itemsets using FP-growth.
+ * Example usage: ./bin/run-example org.apache.spark.examples.mllib.FPGrowthExample
+ * --minSupport 0.8 --numPartition 2 ./data/mllib/sample_fpgrowth.txt
  */
 object FPGrowthExample {
 
+  case class Params(
+    input: String = null,
+    minSupport: Double = 0.3,
+    numPartition: Int = -1) extends AbstractParams[Params]
+
   def main(args: Array[String]) {
-    val conf = new SparkConf().setAppName("FPGrowthExample")
+    val defaultParams = Params()
+
+    val parser = new OptionParser[Params]("FPGrowth") {
+      head("FPGrowth: an example FP-growth app.")
+      opt[Double]("minSupport")
+        .text(s"minimal support level, default: ${defaultParams.minSupport}")
+        .action((x, c) => c.copy(minSupport = x))
+      opt[Int]("numPartition")
+        .text(s"number of partition, default: ${defaultParams.numPartition}")
+        .action((x, c) => c.copy(numPartition = x))
+      arg[String]("<input>")
+        .text("input paths to input data set")
+        .required()
+        .action((x, c) => c.copy(input = x))
+    }
+
+    parser.parse(args, defaultParams).map { params =>
+      run(params)
+    }.getOrElse {
+      sys.exit(1)
+    }
+  }
+
+  def run(params: Params) {
+    val conf = new SparkConf().setAppName(s"FPGrowthExample with $params")
     val sc = new SparkContext(conf)
+    val transactions = sc.textFile(params.input).map(_.split(" ")).cache()
 
-    // TODO: Read a user-specified input file.
-    val transactions = sc.parallelize(Seq(
-      "r z h k p",
-      "z y x w v u t s",
-      "s x o n r",
-      "x z y m t s q e",
-      "z",
-      "x z y r q t p").map(_.split(" ")), numSlices = 2)
+    println(s"Number of transactions: ${transactions.count}")
 
-    val fpg = new FPGrowth()
-      .setMinSupport(0.3)
-    val model = fpg.run(transactions)
+    val model = new FPGrowth()
+      .setMinSupport(params.minSupport)
+      .setNumPartitions(params.numPartition)
+      .run(transactions)
+
+    println(s"Number of frequent itemsets: ${model.freqItemsets.count}")
 
     model.freqItemsets.collect().foreach { itemset =>
       println(itemset.items.mkString("[", ",", "]") + ", " + itemset.freq)
