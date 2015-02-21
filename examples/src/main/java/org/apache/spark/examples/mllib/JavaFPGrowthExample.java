@@ -31,8 +31,7 @@ import org.apache.spark.mllib.fpm.FPGrowthModel;
 
 /**
  * Java example for mining frequent itemsets using FP-growth.
- * Example usage:  ./bin/run-example org.apache.spark.examples.mllib.JavaFPGrowthExample
- * ./data/mllib/sample_fpgrowth.txt
+ * Example usage:  ./bin/run-example mllib.JavaFPGrowthExample ./data/mllib/sample_fpgrowth.txt
  */
 public class JavaFPGrowthExample {
 
@@ -42,7 +41,7 @@ public class JavaFPGrowthExample {
     int numPartition = -1;
     if (args.length < 1) {
       System.err.println(
-              "Usage: JavaKMeans <input_file> [minSupport] [numPartition]");
+        "Usage: JavaFPGrowth <input_file> [minSupport] [numPartition]");
       System.exit(1);
     }
     inputFile = args[0];
@@ -58,11 +57,12 @@ public class JavaFPGrowthExample {
 
     JavaRDD<ArrayList<String>> transactions = sc.textFile(inputFile).map(
       new Function<String, ArrayList<String>>() {
-      @Override
-      public ArrayList<String> call(String s) {
-        return Lists.newArrayList(s.split(" "));
+        @Override
+        public ArrayList<String> call(String s) {
+          return Lists.newArrayList(s.split(" "));
+        }
       }
-    });
+    );
 
     FPGrowthModel<String> model = new FPGrowth()
       .setMinSupport(minSupport)

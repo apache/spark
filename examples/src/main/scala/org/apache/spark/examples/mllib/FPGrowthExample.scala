@@ -17,14 +17,15 @@
 
 package org.apache.spark.examples.mllib
 
+import scopt.OptionParser
+
 import org.apache.spark.mllib.fpm.FPGrowth
 import org.apache.spark.{SparkConf, SparkContext}
-import scopt.OptionParser
 
 /**
  * Example for mining frequent itemsets using FP-growth.
- * Example usage: ./bin/run-example org.apache.spark.examples.mllib.FPGrowthExample
- * --minSupport 0.8 --numPartition 2 ./data/mllib/sample_fpgrowth.txt
+ * Example usage: ./bin/run-example mllib.FPGrowthExample \
+ *   --minSupport 0.8 --numPartition 2 ./data/mllib/sample_fpgrowth.txt
  */
 object FPGrowthExample {
 
@@ -36,7 +37,7 @@ object FPGrowthExample {
   def main(args: Array[String]) {
     val defaultParams = Params()
 
-    val parser = new OptionParser[Params]("FPGrowth") {
+    val parser = new OptionParser[Params]("FPGrowthExample") {
       head("FPGrowth: an example FP-growth app.")
       opt[Double]("minSupport")
         .text(s"minimal support level, default: ${defaultParams.minSupport}")
@@ -45,7 +46,8 @@ object FPGrowthExample {
         .text(s"number of partition, default: ${defaultParams.numPartition}")
         .action((x, c) => c.copy(numPartition = x))
       arg[String]("<input>")
-        .text("input paths to input data set")
+        .text("input paths to input data set, whose file format is that each line " +
+          "contains a transaction with each item in String and separated by a space")
         .required()
         .action((x, c) => c.copy(input = x))
     }
@@ -62,14 +64,14 @@ object FPGrowthExample {
     val sc = new SparkContext(conf)
     val transactions = sc.textFile(params.input).map(_.split(" ")).cache()
 
-    println(s"Number of transactions: ${transactions.count}")
+    println(s"Number of transactions: ${transactions.count()}")
 
     val model = new FPGrowth()
       .setMinSupport(params.minSupport)
       .setNumPartitions(params.numPartition)
       .run(transactions)
 
-    println(s"Number of frequent itemsets: ${model.freqItemsets.count}")
+    println(s"Number of frequent itemsets: ${model.freqItemsets.count()}")
 
     model.freqItemsets.collect().foreach { itemset =>
       println(itemset.items.mkString("[", ",", "]") + ", " + itemset.freq)
