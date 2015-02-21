@@ -736,7 +736,7 @@ class DAGSchedulerSuite extends FunSuiteLike  with BeforeAndAfter with LocalSpar
     completeWithAccumulator(accum.id, taskSets(0), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
 
-    val accVal = Accumulators.originals(accum.id).get.get 
+    val accVal = Accumulators.originals(accum.id).get.get.value 
     
     assert(accVal === 1)
     
