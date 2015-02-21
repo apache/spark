@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUdfs, QueryExecutionException, SetCommand}
 import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, HiveNativeCommand}
 import org.apache.spark.sql.sources.{DDLParser, DataSourceStrategy}
+import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.types._
 
 /**
@@ -52,6 +53,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   protected[sql] override lazy val conf: SQLConf = new SQLConf {
     override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
   }
+
+  /* By default it should be case insensitive to match Hive */
+  conf.setConf(CatalystConf.CASE_SENSITIVE, "false")
 
   /**
    * When true, enables an experimental feature where metastore tables that use the parquet SerDe
@@ -249,7 +253,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   /* A catalyst metadata catalog that points to the Hive Metastore. */
   @transient
-  override protected[sql] lazy val catalog = new HiveMetastoreCatalog(this) with OverrideCatalog
+  override protected[sql] lazy val catalog =
+    new HiveMetastoreCatalog(this, conf) with OverrideCatalog
 
   // Note that HiveUDFs will be overridden by functions registered in this context.
   @transient
@@ -261,7 +266,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   /* An analyzer that uses the Hive metastore. */
   @transient
   override protected[sql] lazy val analyzer =
-    new Analyzer(catalog, functionRegistry, caseSensitive = false) {
+    new Analyzer(catalog, functionRegistry, conf) {
       override val extendedResolutionRules =
         catalog.ParquetConversions ::
         catalog.CreateTables ::

@@ -104,14 +104,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def getAllConfs: immutable.Map[String, String] = conf.getAllConfs
 
   @transient
-  protected[sql] lazy val catalog: Catalog = new SimpleCatalog(true)
+  protected[sql] lazy val catalog: Catalog = new SimpleCatalog(conf)
 
   @transient
   protected[sql] lazy val functionRegistry: FunctionRegistry = new SimpleFunctionRegistry(true)
 
   @transient
   protected[sql] lazy val analyzer: Analyzer =
-    new Analyzer(catalog, functionRegistry, caseSensitive = true) {
+    new Analyzer(catalog, functionRegistry, conf) {
       override val extendedResolutionRules =
         ExtractPythonUdfs ::
         sources.PreWriteCheck(catalog) ::

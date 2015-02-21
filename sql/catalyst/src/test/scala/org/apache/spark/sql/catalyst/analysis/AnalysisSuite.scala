@@ -23,17 +23,22 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
-
+import org.apache.spark.sql.catalyst.CatalystConf
+import org.apache.spark.sql.catalyst.test.SimpleConf
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 
 class AnalysisSuite extends FunSuite with BeforeAndAfter {
-  val caseSensitiveCatalog = new SimpleCatalog(true)
-  val caseInsensitiveCatalog = new SimpleCatalog(false)
+  val caseSensitiveConf = new SimpleConf()
+  caseSensitiveConf.setConf(CatalystConf.CASE_SENSITIVE, "true")
+  val caseInsensitiveConf = new SimpleConf()
+  caseInsensitiveConf.setConf(CatalystConf.CASE_SENSITIVE, "false")
+  val caseSensitiveCatalog = new SimpleCatalog(caseSensitiveConf)
+  val caseInsensitiveCatalog = new SimpleCatalog(caseInsensitiveConf)
   val caseSensitiveAnalyze =
-    new Analyzer(caseSensitiveCatalog, EmptyFunctionRegistry, caseSensitive = true)
+    new Analyzer(caseSensitiveCatalog, EmptyFunctionRegistry, caseSensitiveConf)
   val caseInsensitiveAnalyze =
-    new Analyzer(caseInsensitiveCatalog, EmptyFunctionRegistry, caseSensitive = false)
+    new Analyzer(caseInsensitiveCatalog, EmptyFunctionRegistry, caseInsensitiveConf)
 
   val testRelation = LocalRelation(AttributeReference("a", IntegerType, nullable = true)())
   val testRelation2 = LocalRelation(

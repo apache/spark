@@ -41,12 +41,14 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.parquet.{ParquetRelation2, Partition => ParquetPartition, PartitionSpec}
 import org.apache.spark.sql.sources.{CreateTableUsingAsSelect, DDLParser, LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.util.Utils
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
 
-private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with Logging {
+private[hive] class HiveMetastoreCatalog(hive: HiveContext, val conf: CatalystConf)
+  extends Catalog with Logging {
   import org.apache.spark.sql.hive.HiveMetastoreTypes._
 
   /** Connection to hive metastore.  Usages should lock on `this`. */
