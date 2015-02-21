@@ -15,8 +15,7 @@
 * limitations under the License.
 */
 package org.apache.spark.graphx.loaders
-import java.io.{ File, OutputStreamWriter, FileOutputStream }
-import org.apache.spark.util.Utils
+
 import org.scalatest.FunSuite
 import org.apache.spark.graphx.LocalSparkContext
 import scala.io.Source
@@ -49,14 +48,15 @@ class RDFLoaderSuite extends FunSuite with LocalSparkContext {
         if (!found) Console.println(a, b, c)
         assert(found)
       }
-
-      for (line <- Source.fromFile(file).getLines) {
+      val original = Source.fromFile(file)
+      for (line <- original.getLines) {
         line match {
           case relregex(a, b, c) => assertline(a, b, c)
           case propregex(a, b, c) => assertline(a, b, c)
           case _ =>
         }
       }
+      original.close
     }
   }
 }
