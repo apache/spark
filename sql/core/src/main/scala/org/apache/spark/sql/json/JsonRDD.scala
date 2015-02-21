@@ -405,7 +405,6 @@ private[sql] object JsonRDD extends Logging {
     if (value == null) {
       null
     } else {
-      // TODO: Support all Spark SQL data types since we allow users to specify the schema.
       desiredType match {
         case StringType => toString(value)
         case _ if value == null || value == "" => null // guard the non string type
@@ -414,8 +413,6 @@ private[sql] object JsonRDD extends Logging {
         case DoubleType => toDouble(value)
         case DecimalType() => toDecimal(value)
         case BooleanType => value.asInstanceOf[BooleanType.JvmType]
-        case DateType => toDate(value)
-        case TimestampType => toTimestamp(value)
         case NullType => null
         case ArrayType(elementType, _) =>
           value.asInstanceOf[Seq[Any]].map(enforceCorrectType(_, elementType))
@@ -423,6 +420,8 @@ private[sql] object JsonRDD extends Logging {
           val map = value.asInstanceOf[Map[String, Any]]
           map.mapValues(enforceCorrectType(_, valueType)).map(identity)
         case struct: StructType => asRow(value.asInstanceOf[Map[String, Any]], struct)
+        case DateType => toDate(value)
+        case TimestampType => toTimestamp(value)
       }
     }
   }
