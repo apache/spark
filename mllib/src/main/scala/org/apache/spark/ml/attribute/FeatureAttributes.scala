@@ -20,11 +20,14 @@ package org.apache.spark.ml.attribute
 import org.apache.spark.sql.types.{MetadataBuilder, Metadata}
 
 /**
- * Wrapper around [[Metadata]] with specialized methods for accessing information about
- * data as machine learning features, and their associated attributes, like:
+ * Representation of specialized information in a [[Metadata]] concerning
+ * data as machine learning features, with methods to access their associated attributes, like:
  *
  * - type (continuous, categorical, etc.) as [[FeatureType]]
+ * - optional feature name
  * - for categorical features, the category values
+ * - for continuous values, maximum and minimum value
+ * - dimension for vector-valued features
  *
  * This information is stored as a [[Metadata]] under key "features", and contains an array of
  * [[Metadata]] inside that for each feature for which metadata is defined. Example:
@@ -44,6 +47,12 @@ import org.apache.spark.sql.types.{MetadataBuilder, Metadata}
  *         "name": "gender",
  *         "type": "CATEGORICAL",
  *         "categories" : [ "male", "female" ]
+ *       },
+ *       {
+ *         "index": 6,
+ *         "name": "customerType",
+ *         "type": "CATEGORICAL",
+ *         "cardinality": 10
  *       },
  *       {
  *         "index": 7,
@@ -66,7 +75,10 @@ class FeatureAttributes private (val attributes: Array[Attribute],
   private val indexToAttribute: Map[Int,Attribute] =
     attributes.map(att => (att.index, att)).toMap
   private val categoricalIndices: Array[Int] =
-    attributes.filter(_.featureType == FeatureType.CATEGORICAL).map(_.index)
+    attributes.filter(_.featureType match {
+      case c: CategoricalFeatureType  => true
+      case _ => false
+    }).map(_.index)
 
   def getFeatureAttribute(index: Int): Option[Attribute] = indexToAttribute.get(index)
 

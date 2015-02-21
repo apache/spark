@@ -17,7 +17,6 @@
 
 package org.apache.spark.ml.attribute
 
-import org.apache.spark.ml.attribute.FeatureType.FeatureType
 import org.apache.spark.sql.types.Metadata
 
 class ContinuousAttribute private (
@@ -31,7 +30,7 @@ class ContinuousAttribute private (
     require(min.get <= max.get)
   }
 
-  override def featureType(): FeatureType = FeatureType.CONTINUOUS
+  override def featureType(): FeatureType = Continuous
 
   override def toMetadata(): Metadata = {
     val builder = toBaseMetadata()

@@ -17,15 +17,22 @@
 
 package org.apache.spark.ml.attribute
 
-/**
- * Enumeration of machine learning feature types.
- */
-object FeatureType extends Enumeration {
+sealed trait FeatureType
 
-  type FeatureType = Value
+sealed trait ContinuousFeatureType extends FeatureType
+sealed trait CategoricalFeatureType extends FeatureType
+sealed trait DiscreteFeatureType extends ContinuousFeatureType
 
-  // CATEGORICAL = discrete, unordered value
-  // CONTINUOUS = ordered numeric value; also used for discrete numeric values now
-  val CATEGORICAL, CONTINUOUS = Value
+case object Continuous extends ContinuousFeatureType
+case object Categorical extends CategoricalFeatureType
+case object Discrete extends DiscreteFeatureType
+case object Binary extends DiscreteFeatureType with CategoricalFeatureType
 
+object FeatureTypes {
+  def withName(name: String): FeatureType = name match {
+    case "CONTINUOUS" => Continuous
+    case "CATEGORICAL" => Categorical
+    case "DISCRETE" => Discrete
+    case "BINARY" => Binary
+  }
 }

@@ -17,26 +17,27 @@
 
 package org.apache.spark.ml.attribute
 
-import org.apache.spark.ml.attribute.FeatureType.FeatureType
 import org.apache.spark.sql.types.Metadata
 
 class CategoricalAttribute private (
     override val index: Int,
     override val name: Option[String],
     override val dimension: Int,
-    val categories: Option[Array[String]]) extends Attribute(index, name, dimension) {
+    val categories: Option[Array[String]],
+    val cardinality: Option[Int]) extends Attribute(index, name, dimension) {
 
   require(!categories.isDefined || categories.get.nonEmpty)
+  require(!cardinality.isDefined || cardinality.get > 0)
 
-  override def featureType: FeatureType = FeatureType.CATEGORICAL
-
-  def numCategories: Option[Int] =
-    if (categories.isDefined) Some(categories.get.length) else None
+  override def featureType: FeatureType = Categorical
 
   override def toMetadata(): Metadata = {
     val builder = toBaseMetadata()
     if (categories.isDefined) {
       builder.putStringArray("categories", categories.get)
+    }
+    if (cardinality.isDefined) {
+      builder.putLong("cardinality", cardinality.get)
     }
     builder.build()
   }
@@ -47,13 +48,28 @@ private[attribute] object CategoricalAttribute {
 
   def fromMetadata(metadata: Metadata): CategoricalAttribute = {
     val (index, name, dimension) = Attribute.parseBaseMetadata(metadata)
-    val categories =
-      if (metadata.contains("categories")) {
-        Some(metadata.getStringArray("categories"))
+
+    var cardinality: Option[Int] =
+      if (metadata.contains("cardinality")) {
+        Some(metadata.getLong("cardinality").toInt)
       } else {
         None
       }
-    new CategoricalAttribute(index, name, dimension, categories)
+
+    val categories: Option[Array[String]] =
+      if (metadata.contains("categories")) {
+        val theCategories = Some(metadata.getStringArray("categories"))
+        if (cardinality.isDefined) {
+          require(theCategories.get.size <= cardinality.get)
+        } else {
+          cardinality = Some(theCategories.get.size)
+        }
+        theCategories
+      } else {
+        None
+      }
+
+    new CategoricalAttribute(index, name, dimension, categories, cardinality)
   }
 
 }

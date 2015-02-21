@@ -17,7 +17,6 @@
 
 package org.apache.spark.ml.attribute
 
-import org.apache.spark.ml.attribute.FeatureType.FeatureType
 import org.apache.spark.sql.types.{MetadataBuilder, Metadata}
 
 abstract class Attribute(val index: Int,
@@ -48,9 +47,9 @@ abstract class Attribute(val index: Int,
 object Attribute {
 
   def fromMetadata(metadata: Metadata): Attribute = {
-    FeatureType.withName(metadata.getString("type")) match {
-      case FeatureType.CATEGORICAL => CategoricalAttribute.fromMetadata(metadata)
-      case FeatureType.CONTINUOUS => ContinuousAttribute.fromMetadata(metadata)
+    FeatureTypes.withName(metadata.getString("type")) match {
+      case Categorical => CategoricalAttribute.fromMetadata(metadata)
+      case Continuous => ContinuousAttribute.fromMetadata(metadata)
     }
   }
 
