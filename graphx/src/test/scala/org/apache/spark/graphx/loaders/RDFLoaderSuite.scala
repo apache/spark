@@ -23,7 +23,7 @@ import scala.io.Source
 class RDFLoaderSuite extends FunSuite with LocalSparkContext {
   test("RDFLoader.loadNTriples") {
     withSpark { sc =>
-      val file = getClass.getResource("/graph.nt").getFile
+      val file = getClass.getResource("/graph_nt.data").getFile
       val graph = RDFLoader.loadNTriples(sc, file)
       val edges = graph.edges.collect()
       assert(edges.length == 17)
