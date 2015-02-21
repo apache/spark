@@ -467,14 +467,12 @@ class TaskInstance(Base):
                 TI.state == State.SUCCESS,
             ).first()
             if not previous_ti:
-                logging.info('depends_on_past not fulfilled')
                 return False
 
             # Applying wait_for_downstream
             previous_ti.task = self.task
             if task.wait_for_downstream and not \
                     previous_ti.are_dependents_done(session):
-                logging.info('wait_for_downstream not fulfilled')
                 return False
 
         # Checking that all upstream dependencies have succeeded
@@ -488,7 +486,6 @@ class TaskInstance(Base):
             )
             count = ti[0][0]
             if count < len(task._upstream_list):
-                logging.info('Direct dependencies not fulfilled')
                 return False
 
         if not main_session:
