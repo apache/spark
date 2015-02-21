@@ -18,6 +18,8 @@
 package org.apache.spark.sql.hive
 
 import java.sql.Date
+
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.hive.conf.HiveConf
@@ -26,14 +28,16 @@ import org.apache.hadoop.hive.ql.lib.Node
 import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.parse._
 import org.apache.hadoop.hive.ql.plan.PlanUtils
-import org.apache.spark.sql.SparkSQLParser
+import org.apache.spark.sql.{AnalysisException, SparkSQLParser}
 
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.execution.ExplainCommand
+import org.apache.spark.sql.sources.DescribeCommand
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, AnalyzeTable, HiveScriptIOSchema}
 import org.apache.spark.sql.types._
 
@@ -46,22 +50,6 @@ import scala.collection.JavaConversions._
  * cmd string.
  */
 private[hive] case object NativePlaceholder extends Command
-
-/**
- * Returned for the "DESCRIBE [EXTENDED] [dbName.]tableName" command.
- * @param table The table to be described.
- * @param isExtended True if "DESCRIBE EXTENDED" is used. Otherwise, false.
- *                   It is effective only when the table is a Hive table.
- */
-case class DescribeCommand(
-    table: LogicalPlan,
-    isExtended: Boolean) extends Command {
-  override def output = Seq(
-    // Column names are based on Hive.
-    AttributeReference("col_name", StringType, nullable = false)(),
-    AttributeReference("data_type", StringType, nullable = false)(),
-    AttributeReference("comment", StringType, nullable = false)())
-}
 
 /** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
 private[hive] object HiveQl {
@@ -76,13 +64,13 @@ private[hive] object HiveQl {
     "TOK_SHOWINDEXES",
     "TOK_SHOWINDEXES",
     "TOK_SHOWPARTITIONS",
-    "TOK_SHOWTABLES",
     "TOK_SHOW_TBLPROPERTIES",
 
     "TOK_LOCKTABLE",
     "TOK_SHOWLOCKS",
     "TOK_UNLOCKTABLE",
 
+    "TOK_SHOW_ROLES",
     "TOK_CREATEROLE",
     "TOK_DROPROLE",
     "TOK_GRANT",
@@ -90,6 +78,7 @@ private[hive] object HiveQl {
     "TOK_REVOKE",
     "TOK_SHOW_GRANT",
     "TOK_SHOW_ROLE_GRANT",
+    "TOK_SHOW_SET_ROLE",
 
     "TOK_CREATEFUNCTION",
     "TOK_DROPFUNCTION",
@@ -117,6 +106,7 @@ private[hive] object HiveQl {
     "TOK_CREATEINDEX",
     "TOK_DROPDATABASE",
     "TOK_DROPINDEX",
+    "TOK_DROPTABLE_PROPERTIES",
     "TOK_MSCK",
 
     "TOK_ALTERVIEW_ADDPARTS",
@@ -125,6 +115,7 @@ private[hive] object HiveQl {
     "TOK_ALTERVIEW_PROPERTIES",
     "TOK_ALTERVIEW_RENAME",
     "TOK_CREATEVIEW",
+    "TOK_DROPVIEW_PROPERTIES",
     "TOK_DROPVIEW",
 
     "TOK_EXPORT",
@@ -137,6 +128,7 @@ private[hive] object HiveQl {
   // Commands that we do not need to explain.
   protected val noExplainCommands = Seq(
     "TOK_DESCTABLE",
+    "TOK_SHOWTABLES",
     "TOK_TRUNCATETABLE"     // truncate table" is a NativeCommand, does not need to explain.
   ) ++ nativeCommands
 
@@ -221,12 +213,6 @@ private[hive] object HiveQl {
     }
   }
 
-  class ParseException(sql: String, cause: Throwable)
-    extends Exception(s"Failed to parse: $sql", cause)
-
-  class SemanticException(msg: String)
-    extends Exception(s"Error in semantic analysis: $msg")
-
   /**
    * Returns the AST for the given SQL string.
    */
@@ -246,8 +232,10 @@ private[hive] object HiveQl {
   /** Returns a LogicalPlan for a given HiveQL string. */
   def parseSql(sql: String): LogicalPlan = hqlParser(sql)
 
+  val errorRegEx = "line (\\d+):(\\d+) (.*)".r
+
   /** Creates LogicalPlan for a given HiveQL string. */
-  def createPlan(sql: String) = {
+  def createPlan(sql: String): LogicalPlan = {
     try {
       val tree = getAst(sql)
       if (nativeCommands contains tree.getText) {
@@ -259,14 +247,23 @@ private[hive] object HiveQl {
         }
       }
     } catch {
-      case e: Exception => throw new ParseException(sql, e)
-      case e: NotImplementedError => sys.error(
-        s"""
-          |Unsupported language features in query: $sql
-          |${dumpTree(getAst(sql))}
-          |$e
-          |${e.getStackTrace.head}
-        """.stripMargin)
+      case pe: org.apache.hadoop.hive.ql.parse.ParseException =>
+        pe.getMessage match {
+          case errorRegEx(line, start, message) =>
+            throw new AnalysisException(message, Some(line.toInt), Some(start.toInt))
+          case otherMessage =>
+            throw new AnalysisException(otherMessage)
+        }
+      case e: Exception =>
+        throw new AnalysisException(e.getMessage)
+      case e: NotImplementedError =>
+        throw new AnalysisException(
+          s"""
+            |Unsupported language features in query: $sql
+            |${dumpTree(getAst(sql))}
+            |$e
+            |${e.getStackTrace.head}
+          """.stripMargin)
     }
   }
 
@@ -302,6 +299,7 @@ private[hive] object HiveQl {
     /** @return matches of the form (tokenName, children). */
     def unapply(t: Any): Option[(String, Seq[ASTNode])] = t match {
       case t: ASTNode =>
+        CurrentOrigin.setPosition(t.getLine, t.getCharPositionInLine)
         Some((t.getText,
           Option(t.getChildren).map(_.toList).getOrElse(Nil).asInstanceOf[Seq[ASTNode]]))
       case _ => None
@@ -476,23 +474,21 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     // Just fake explain for any of the native commands.
     case Token("TOK_EXPLAIN", explainArgs)
       if noExplainCommands.contains(explainArgs.head.getText) =>
-      ExplainCommand(NoRelation, Seq(AttributeReference("plan", StringType, nullable = false)()))
+      ExplainCommand(NoRelation)
     case Token("TOK_EXPLAIN", explainArgs)
       if "TOK_CREATETABLE" == explainArgs.head.getText =>
       val Some(crtTbl) :: _ :: extended :: Nil =
         getClauses(Seq("TOK_CREATETABLE", "FORMATTED", "EXTENDED"), explainArgs)
       ExplainCommand(
         nodeToPlan(crtTbl),
-        Seq(AttributeReference("plan", StringType,nullable = false)()),
-        extended != None)
+        extended = extended.isDefined)
     case Token("TOK_EXPLAIN", explainArgs) =>
       // Ignore FORMATTED if present.
       val Some(query) :: _ :: extended :: Nil =
         getClauses(Seq("TOK_QUERY", "FORMATTED", "EXTENDED"), explainArgs)
       ExplainCommand(
         nodeToPlan(query),
-        Seq(AttributeReference("plan", StringType, nullable = false)()),
-        extended != None)
+        extended = extended.isDefined)
 
     case Token("TOK_DESCTABLE", describeArgs) =>
       // Reference: https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
@@ -511,15 +507,14 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                 // TODO: Actually, a user may mean tableName.columnName. Need to resolve this issue.
                 val tableIdent = extractTableIdent(nameParts.head)
                 DescribeCommand(
-                  UnresolvedRelation(tableIdent, None), extended.isDefined)
+                  UnresolvedRelation(tableIdent, None), isExtended = extended.isDefined)
               case Token(".", dbName :: tableName :: colName :: Nil) =>
                 // It is describing a column with the format like "describe db.table column".
                 NativePlaceholder
               case tableName =>
                 // It is describing a table with the format like "describe table".
                 DescribeCommand(
-                  UnresolvedRelation(Seq(tableName.getText), None),
-                  extended.isDefined)
+                  UnresolvedRelation(Seq(tableName.getText), None), isExtended = extended.isDefined)
             }
           }
           // All other cases.
@@ -571,9 +566,14 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case Token("TOK_TRUNCATETABLE",
           Token("TOK_TABLE_PARTITION",table)::Nil) =>  NativePlaceholder
 
-    case Token("TOK_QUERY",
-           Token("TOK_FROM", fromClause :: Nil) ::
-           insertClauses) =>
+    case Token("TOK_QUERY", queryArgs)
+        if Seq("TOK_FROM", "TOK_INSERT").contains(queryArgs.head.getText) =>
+
+      val (fromClause: Option[ASTNode], insertClauses) = queryArgs match {
+        case Token("TOK_FROM", args: Seq[ASTNode]) :: insertClauses =>
+          (Some(args.head), insertClauses)
+        case Token("TOK_INSERT", _) :: Nil => (None, queryArgs)
+      }
 
       // Return one query for each insert clause.
       val queries = insertClauses.map { case Token("TOK_INSERT", singleInsert) =>
@@ -614,8 +614,12 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
               "TOK_LATERAL_VIEW"),
             singleInsert)
         }
-
-        val relations = nodeToRelation(fromClause)
+ 
+        val relations = fromClause match {
+          case Some(f) => nodeToRelation(f)
+          case None => NoRelation
+        }
+ 
         val withWhere = whereClause.map { whereNode =>
           val Seq(whereExpr) = whereNode.getChildren.toSeq
           Filter(nodeToExpr(whereExpr), relations)
@@ -1044,7 +1048,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       nodeToExpr(qualifier) match {
         case UnresolvedAttribute(qualifierName) =>
           UnresolvedAttribute(qualifierName + "." + cleanIdentifier(attr))
-        case other => GetField(other, attr)
+        case other => UnresolvedGetField(other, attr)
       }
 
     /* Stars (*) */
@@ -1103,6 +1107,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       Cast(nodeToExpr(arg), DateType)
 
     /* Arithmetic */
+    case Token("+", child :: Nil) => nodeToExpr(child)
     case Token("-", child :: Nil) => UnaryMinus(nodeToExpr(child))
     case Token("~", child :: Nil) => BitwiseNot(nodeToExpr(child))
     case Token("+", left :: right:: Nil) => Add(nodeToExpr(left), nodeToExpr(right))
@@ -1240,6 +1245,9 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case ast: ASTNode if ast.getType == HiveParser.TOK_DATELITERAL =>
       Literal(Date.valueOf(ast.getText.substring(1, ast.getText.length - 1)))
 
+    case ast: ASTNode if ast.getType == HiveParser.TOK_CHARSETLITERAL =>
+      Literal(BaseSemanticAnalyzer.charSetString(ast.getChild(0).getText, ast.getChild(1).getText))
+
     case a: ASTNode =>
       throw new NotImplementedError(
         s"""No parse rules for ASTNode type: ${a.getType}, text: ${a.getText} :
@@ -1278,7 +1286,12 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   def dumpTree(node: Node, builder: StringBuilder = new StringBuilder, indent: Int = 0)
     : StringBuilder = {
     node match {
-      case a: ASTNode => builder.append(("  " * indent) + a.getText + "\n")
+      case a: ASTNode => builder.append(
+        ("  " * indent) + a.getText + " " +
+          a.getLine + ", " +
+          a.getTokenStartIndex + "," +
+          a.getTokenStopIndex + ", " +
+          a.getCharPositionInLine + "\n")
       case other => sys.error(s"Non ASTNode encountered: $other")
     }
 

@@ -19,24 +19,23 @@ package org.apache.spark.sql.parquet
 
 import java.io.IOException
 
+import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.Job
-
 import parquet.format.converter.ParquetMetadataConverter
-import parquet.hadoop.{ParquetFileReader, Footer, ParquetFileWriter}
-import parquet.hadoop.metadata.{ParquetMetadata, FileMetaData}
+import parquet.hadoop.metadata.{FileMetaData, ParquetMetadata}
 import parquet.hadoop.util.ContextUtil
-import parquet.schema.{Type => ParquetType, Types => ParquetTypes, PrimitiveType => ParquetPrimitiveType, MessageType}
-import parquet.schema.{GroupType => ParquetGroupType, OriginalType => ParquetOriginalType, ConversionPatterns, DecimalMetadata}
+import parquet.hadoop.{Footer, ParquetFileReader, ParquetFileWriter}
 import parquet.schema.PrimitiveType.{PrimitiveTypeName => ParquetPrimitiveTypeName}
 import parquet.schema.Type.Repetition
+import parquet.schema.{ConversionPatterns, DecimalMetadata, GroupType => ParquetGroupType, MessageType, OriginalType => ParquetOriginalType, PrimitiveType => ParquetPrimitiveType, Type => ParquetType, Types => ParquetTypes}
 
-import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.types._
+import org.apache.spark.{Logging, SparkException}
 
 // Implicits
 import scala.collection.JavaConversions._
@@ -285,13 +284,19 @@ private[parquet] object ParquetTypesConverter extends Logging {
       ctype: DataType,
       name: String,
       nullable: Boolean = true,
-      inArray: Boolean = false): ParquetType = {
+      inArray: Boolean = false,
+      toThriftSchemaNames: Boolean = false): ParquetType = {
     val repetition =
       if (inArray) {
         Repetition.REPEATED
       } else {
         if (nullable) Repetition.OPTIONAL else Repetition.REQUIRED
       }
+    val arraySchemaName = if (toThriftSchemaNames) {
+      name + CatalystConverter.THRIFT_ARRAY_ELEMENTS_SCHEMA_NAME_SUFFIX
+    } else {
+      CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME
+    }
     val typeInfo = fromPrimitiveDataType(ctype)
     typeInfo.map {
       case ParquetTypeInfo(primitiveType, originalType, decimalMetadata, length) =>
@@ -306,22 +311,24 @@ private[parquet] object ParquetTypesConverter extends Logging {
     }.getOrElse {
       ctype match {
         case udt: UserDefinedType[_] => {
-          fromDataType(udt.sqlType, name, nullable, inArray)
+          fromDataType(udt.sqlType, name, nullable, inArray, toThriftSchemaNames)
         }
         case ArrayType(elementType, false) => {
           val parquetElementType = fromDataType(
             elementType,
-            CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME,
+            arraySchemaName,
             nullable = false,
-            inArray = true)
+            inArray = true,
+            toThriftSchemaNames)
           ConversionPatterns.listType(repetition, name, parquetElementType)
         }
         case ArrayType(elementType, true) => {
           val parquetElementType = fromDataType(
             elementType,
-            CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME,
+            arraySchemaName,
             nullable = true,
-            inArray = false)
+            inArray = false,
+            toThriftSchemaNames)
           ConversionPatterns.listType(
             repetition,
             name,
@@ -332,7 +339,8 @@ private[parquet] object ParquetTypesConverter extends Logging {
         }
         case StructType(structFields) => {
           val fields = structFields.map {
-            field => fromDataType(field.dataType, field.name, field.nullable, inArray = false)
+            field => fromDataType(field.dataType, field.name, field.nullable,
+                                  inArray = false, toThriftSchemaNames)
           }
           new ParquetGroupType(repetition, name, fields.toSeq)
         }
@@ -342,13 +350,15 @@ private[parquet] object ParquetTypesConverter extends Logging {
               keyType,
               CatalystConverter.MAP_KEY_SCHEMA_NAME,
               nullable = false,
-              inArray = false)
+              inArray = false,
+              toThriftSchemaNames)
           val parquetValueType =
             fromDataType(
               valueType,
               CatalystConverter.MAP_VALUE_SCHEMA_NAME,
               nullable = valueContainsNull,
-              inArray = false)
+              inArray = false,
+              toThriftSchemaNames)
           ConversionPatterns.mapType(
             repetition,
             name,
@@ -374,10 +384,12 @@ private[parquet] object ParquetTypesConverter extends Logging {
             field.getRepetition != Repetition.REQUIRED)())
   }
 
-  def convertFromAttributes(attributes: Seq[Attribute]): MessageType = {
+  def convertFromAttributes(attributes: Seq[Attribute],
+                            toThriftSchemaNames: Boolean = false): MessageType = {
     val fields = attributes.map(
       attribute =>
-        fromDataType(attribute.dataType, attribute.name, attribute.nullable))
+        fromDataType(attribute.dataType, attribute.name, attribute.nullable,
+                     toThriftSchemaNames = toThriftSchemaNames))
     new MessageType("root", fields)
   }
 

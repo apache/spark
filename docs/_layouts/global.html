@@ -7,7 +7,9 @@
         <meta charset="utf-8">
         <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
         <title>{{ page.title }} - Spark {{site.SPARK_VERSION_SHORT}} Documentation</title>
-        <meta name="description" content="">
+        {% if page.description %}
+          <meta name="description" content="{{page.description | replace: 'SPARK_VERSION_SHORT', site.SPARK_VERSION_SHORT}}">
+        {% endif %}
 
         {% if page.redirect %}
           <meta http-equiv="refresh" content="0; url={{page.redirect}}">

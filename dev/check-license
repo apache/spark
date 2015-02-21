@@ -31,7 +31,7 @@ acquire_rat_jar () {
       printf "Attempting to fetch rat\n"
       JAR_DL="${JAR}.part"
       if [ $(command -v curl) ]; then
-        curl --silent "${URL}" > "$JAR_DL" && mv "$JAR_DL" "$JAR"
+        curl -L --silent "${URL}" > "$JAR_DL" && mv "$JAR_DL" "$JAR"
       elif [ $(command -v wget) ]; then
         wget --quiet ${URL} -O "$JAR_DL" && mv "$JAR_DL" "$JAR"
       else

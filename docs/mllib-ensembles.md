@@ -458,7 +458,7 @@ val (trainingData, testData) = (splits(0), splits(1))
 //  The defaultParams for Classification use LogLoss by default.
 val boostingStrategy = BoostingStrategy.defaultParams("Classification")
 boostingStrategy.numIterations = 3 // Note: Use more iterations in practice.
-boostingStrategy.treeStrategy.numClassesForClassification = 2
+boostingStrategy.treeStrategy.numClasses = 2
 boostingStrategy.treeStrategy.maxDepth = 5
 //  Empty categoricalFeaturesInfo indicates all features are continuous.
 boostingStrategy.treeStrategy.categoricalFeaturesInfo = Map[Int, Int]()

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst
 import java.sql.Timestamp
 
 import org.apache.spark.util.Utils
-import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute, AttributeReference, Row}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.types._
 
@@ -91,9 +91,9 @@ trait ScalaReflection {
 
   def convertRowToScala(r: Row, schema: StructType): Row = {
     // TODO: This is very slow!!!
-    new GenericRow(
+    new GenericRowWithSchema(
       r.toSeq.zip(schema.fields.map(_.dataType))
-        .map(r_dt => convertToScala(r_dt._1, r_dt._2)).toArray)
+        .map(r_dt => convertToScala(r_dt._1, r_dt._2)).toArray, schema)
   }
 
   /** Returns a Sequence of attributes for the given case class type. */
@@ -103,10 +103,11 @@ trait ScalaReflection {
   }
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
-  def schemaFor[T: TypeTag]: Schema = schemaFor(typeOf[T])
+  def schemaFor[T: TypeTag]: Schema =
+    ScalaReflectionLock.synchronized { schemaFor(typeOf[T]) }
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
-  def schemaFor(tpe: `Type`): Schema = {
+  def schemaFor(tpe: `Type`): Schema = ScalaReflectionLock.synchronized {
     val className: String = tpe.erasure.typeSymbol.asClass.fullName
     tpe match {
       case t if Utils.classIsLoadable(className) &&
@@ -121,6 +122,21 @@ trait ScalaReflection {
       case t if t <:< typeOf[Option[_]] =>
         val TypeRef(_, _, Seq(optType)) = t
         Schema(schemaFor(optType).dataType, nullable = true)
+      // Need to decide if we actually need a special type here.
+      case t if t <:< typeOf[Array[Byte]] => Schema(BinaryType, nullable = true)
+      case t if t <:< typeOf[Array[_]] =>
+        val TypeRef(_, _, Seq(elementType)) = t
+        val Schema(dataType, nullable) = schemaFor(elementType)
+        Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
+      case t if t <:< typeOf[Seq[_]] =>
+        val TypeRef(_, _, Seq(elementType)) = t
+        val Schema(dataType, nullable) = schemaFor(elementType)
+        Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
+      case t if t <:< typeOf[Map[_, _]] =>
+        val TypeRef(_, _, Seq(keyType, valueType)) = t
+        val Schema(valueDataType, valueNullable) = schemaFor(valueType)
+        Schema(MapType(schemaFor(keyType).dataType,
+          valueDataType, valueContainsNull = valueNullable), nullable = true)
       case t if t <:< typeOf[Product] =>
         val formalTypeArgs = t.typeSymbol.asClass.typeParams
         val TypeRef(_, _, actualTypeArgs) = t
@@ -143,21 +159,6 @@ trait ScalaReflection {
               schemaFor(p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs))
             StructField(p.name.toString, dataType, nullable)
           }), nullable = true)
-      // Need to decide if we actually need a special type here.
-      case t if t <:< typeOf[Array[Byte]] => Schema(BinaryType, nullable = true)
-      case t if t <:< typeOf[Array[_]] =>
-        val TypeRef(_, _, Seq(elementType)) = t
-        val Schema(dataType, nullable) = schemaFor(elementType)
-        Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
-      case t if t <:< typeOf[Seq[_]] =>
-        val TypeRef(_, _, Seq(elementType)) = t
-        val Schema(dataType, nullable) = schemaFor(elementType)
-        Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
-      case t if t <:< typeOf[Map[_, _]] =>
-        val TypeRef(_, _, Seq(keyType, valueType)) = t
-        val Schema(valueDataType, valueNullable) = schemaFor(valueType)
-        Schema(MapType(schemaFor(keyType).dataType,
-          valueDataType, valueContainsNull = valueNullable), nullable = true)
       case t if t <:< typeOf[String] => Schema(StringType, nullable = true)
       case t if t <:< typeOf[Timestamp] => Schema(TimestampType, nullable = true)
       case t if t <:< typeOf[java.sql.Date] => Schema(DateType, nullable = true)
@@ -211,7 +212,7 @@ trait ScalaReflection {
      */
     def asRelation: LocalRelation = {
       val output = attributesFor[A]
-      LocalRelation(output, data)
+      LocalRelation.fromProduct(output, data)
     }
   }
 }

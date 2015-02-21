@@ -1,6 +1,7 @@
 ---
 layout: global
-title: Spark Configuration
+displayTitle: Spark Configuration
+title: Configuration
 ---
 * This will become a table of contents (this text will be scraped).
 {:toc}
@@ -114,7 +115,11 @@ of the most common options to set are:
   <td>
     Amount of memory to use for the driver process, i.e. where SparkContext is initialized.
     (e.g. <code>512m</code>, <code>2g</code>).
-  </td>
+    
+    <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
+    directly in your application, because the driver JVM has already started at that point.
+    Instead, please set this through the <code>--driver-memory</code> command line option
+    or in your default properties file.</td>
 </tr>
 <tr>
   <td><code>spark.executor.memory</code></td>
@@ -190,6 +195,17 @@ of the most common options to set are:
     Logs the effective SparkConf as INFO when a SparkContext is started.
   </td>
 </tr>
+<tr>
+  <td><code>spark.extraListeners</code></td>
+  <td>(none)</td>
+  <td>
+    A comma-separated list of classes that implement <code>SparkListener</code>; when initializing
+    SparkContext, instances of these classes will be created and registered with Spark's listener
+    bus.  If a class has a single-argument constructor that accepts a SparkConf, that constructor
+    will be called; otherwise, a zero-argument constructor will be called. If no valid constructor
+    can be found, the SparkContext creation will fail with an exception.
+  </td>
+</tr>
 </table>
 
 Apart from these, the following properties are also available, and may be useful in some situations:
@@ -202,6 +218,11 @@ Apart from these, the following properties are also available, and may be useful
   <td>(none)</td>
   <td>
     A string of extra JVM options to pass to the driver. For instance, GC settings or other logging.
+    
+    <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
+    directly in your application, because the driver JVM has already started at that point.
+    Instead, please set this through the <code>--driver-java-options</code> command line option or in 
+    your default properties file.</td>
   </td>
 </tr>
 <tr>
@@ -209,6 +230,11 @@ Apart from these, the following properties are also available, and may be useful
   <td>(none)</td>
   <td>
     Extra classpath entries to append to the classpath of the driver.
+
+    <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
+    directly in your application, because the driver JVM has already started at that point.
+    Instead, please set this through the <code>--driver-class-path</code> command line option or in 
+    your default properties file.</td>
   </td>
 </tr>
 <tr>
@@ -216,6 +242,22 @@ Apart from these, the following properties are also available, and may be useful
   <td>(none)</td>
   <td>
     Set a special library path to use when launching the driver JVM.
+    
+    <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
+    directly in your application, because the driver JVM has already started at that point.
+    Instead, please set this through the <code>--driver-library-path</code> command line option or in 
+    your default properties file.</td>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.driver.userClassPathFirst</code></td>
+  <td>false</td>
+  <td>
+    (Experimental) Whether to give user-added jars precedence over Spark's own jars when loading
+    classes in the the driver. This feature can be used to mitigate conflicts between Spark's
+    dependencies and user dependencies. It is currently an experimental feature.
+    
+    This is used in cluster mode only.
   </td>
 </tr>
 <tr>
@@ -285,13 +327,11 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.files.userClassPathFirst</code></td>
+  <td><code>spark.executor.userClassPathFirst</code></td>
   <td>false</td>
   <td>
-    (Experimental) Whether to give user-added jars precedence over Spark's own jars when
-    loading classes in Executors. This feature can be used to mitigate conflicts between
-    Spark's dependencies and user dependencies. It is currently an experimental feature.
-    (Currently, this setting does not work for YARN, see <a href="https://issues.apache.org/jira/browse/SPARK-2996">SPARK-2996</a> for more details).
+    (Experimental) Same functionality as <code>spark.driver.userClassPathFirst</code>, but
+    applied to executor instances.
   </td>
 </tr>
 <tr>
@@ -853,8 +893,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.network.timeout</code></td>
   <td>120</td>
   <td>
-    Default timeout for all network interactions, in seconds. This config will be used in 
-    place of <code>spark.core.connection.ack.wait.timeout</code>, <code>spark.akka.timeout</code>, 
+    Default timeout for all network interactions, in seconds. This config will be used in
+    place of <code>spark.core.connection.ack.wait.timeout</code>, <code>spark.akka.timeout</code>,
     <code>spark.storage.blockManagerSlaveTimeoutMs</code> or
     <code>spark.shuffle.io.connectionTimeout</code>, if they are not configured.
   </td>
@@ -899,8 +939,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.shuffle.io.preferDirectBufs</code></td>
   <td>true</td>
   <td>
-    (Netty only) Off-heap buffers are used to reduce garbage collection during shuffle and cache 
-    block transfer. For environments where off-heap memory is tightly limited, users may wish to 
+    (Netty only) Off-heap buffers are used to reduce garbage collection during shuffle and cache
+    block transfer. For environments where off-heap memory is tightly limited, users may wish to
     turn this off to force all allocations from Netty to be on-heap.
   </td>
 </tr>
@@ -908,7 +948,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.shuffle.io.numConnectionsPerPeer</code></td>
   <td>1</td>
   <td>
-    (Netty only) Connections between hosts are reused in order to reduce connection buildup for 
+    (Netty only) Connections between hosts are reused in order to reduce connection buildup for
     large clusters. For clusters with many hard disks and few hosts, this may result in insufficient
     concurrency to saturate all disks, and so users may consider increasing this value.
   </td>
@@ -918,7 +958,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>3</td>
   <td>
     (Netty only) Fetches that fail due to IO-related exceptions are automatically retried if this is
-    set to a non-zero value. This retry logic helps stabilize large shuffles in the face of long GC 
+    set to a non-zero value. This retry logic helps stabilize large shuffles in the face of long GC
     pauses or transient network connectivity issues.
   </td>
 </tr>
@@ -927,7 +967,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>5</td>
   <td>
     (Netty only) Seconds to wait between retries of fetches. The maximum delay caused by retrying
-    is simply <code>maxRetries * retryWait</code>, by default 15 seconds. 
+    is simply <code>maxRetries * retryWait</code>, by default 15 seconds.
   </td>
 </tr>
 </table>
@@ -1128,7 +1168,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.dynamicAllocation.schedulerBacklogTimeout</code></td>
-  <td>60</td>
+  <td>5</td>
   <td>
     If dynamic allocation is enabled and there have been pending tasks backlogged for more than
     this duration (in seconds), new executors will be requested. For more detail, see this

@@ -135,6 +135,7 @@
     <parquet.version>1.6.0rc3</parquet.version>
     <jblas.version>1.2.3</jblas.version>
     <jetty.version>8.1.14.v20131031</jetty.version>
+    <orbit.version>3.0.0.v201112011016</orbit.version>
     <chill.version>0.5.0</chill.version>
     <ivy.version>2.4.0</ivy.version>
     <oro.version>2.0.8</oro.version>
@@ -153,6 +154,7 @@
     <jline.groupid>org.scala-lang</jline.groupid>
     <jodd.version>3.6.3</jodd.version>
     <codehaus.jackson.version>1.8.8</codehaus.jackson.version>
+    <fasterxml.jackson.version>2.4.4</fasterxml.jackson.version>
     <snappy.version>1.1.1.6</snappy.version>
 
     <!--
@@ -340,7 +342,7 @@
           </exclusion>
         </exclusions>
       </dependency>
- 
+
       <!-- Shaded deps marked as provided. These are promoted to compile scope
            in the modules where we want the shaded classes to appear in the
            associated jar. -->
@@ -393,7 +395,7 @@
         <scope>provided</scope>
       </dependency>
       <!-- End of shaded deps -->
- 
+
       <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-lang3</artifactId>
@@ -402,7 +404,7 @@
       <dependency>
         <groupId>commons-codec</groupId>
         <artifactId>commons-codec</artifactId>
-        <version>1.5</version>
+        <version>1.10</version>
       </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
@@ -577,6 +579,16 @@
         <version>${codahale.metrics.version}</version>
       </dependency>
       <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-databind</artifactId>
+        <version>${fasterxml.jackson.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.fasterxml.jackson.module</groupId>
+        <artifactId>jackson-module-scala_2.10</artifactId>
+        <version>${fasterxml.jackson.version}</version>
+      </dependency>
+      <dependency>
         <groupId>org.scala-lang</groupId>
         <artifactId>scala-compiler</artifactId>
         <version>${scala.version}</version>
@@ -605,19 +617,6 @@
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
         <version>2.2.1</version>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.easymock</groupId>
-        <artifactId>easymockclassextension</artifactId>
-        <version>3.1</version>
-        <scope>test</scope>
-      </dependency>
-      <!-- Needed by cglib which is needed by easymock. -->
-      <dependency>
-        <groupId>asm</groupId>
-        <artifactId>asm</artifactId>
-        <version>3.3.1</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -928,6 +927,16 @@
         <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
+        <groupId>org.codehaus.jackson</groupId>
+        <artifactId>jackson-xc</artifactId>
+        <version>${codehaus.jackson.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.codehaus.jackson</groupId>
+        <artifactId>jackson-jaxrs</artifactId>
+        <version>${codehaus.jackson.version}</version>
+      </dependency>
+      <dependency>
         <groupId>${hive.group}</groupId>
         <artifactId>hive-beeline</artifactId>
         <version>${hive.version}</version>
@@ -952,6 +961,10 @@
           <exclusion>
             <groupId>com.esotericsoftware.kryo</groupId>
             <artifactId>kryo</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.avro</groupId>
+            <artifactId>avro-mapred</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -1071,6 +1084,12 @@
           <version>3.2.0</version>
           <executions>
             <execution>
+              <id>eclipse-add-source</id>
+              <goals>
+                <goal>add-source</goal>
+              </goals>
+            </execution>
+            <execution>
               <id>scala-compile-first</id>
               <phase>process-resources</phase>
               <goals>
@@ -1152,13 +1171,19 @@
             </includes>
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
             <argLine>-Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=512m</argLine>
+            <environmentVariables>
+              <!--
+                Setting SPARK_DIST_CLASSPATH is a simple way to make sure any child processes
+                launched by the tests have access to the correct test-time classpath.
+              -->
+              <SPARK_DIST_CLASSPATH>${test_classpath}</SPARK_DIST_CLASSPATH>
+            </environmentVariables>
             <systemProperties>
               <java.awt.headless>true</java.awt.headless>
               <spark.test.home>${session.executionRootDirectory}</spark.test.home>
               <spark.testing>1</spark.testing>
               <spark.ui.enabled>false</spark.ui.enabled>
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
-              <spark.executor.extraClassPath>${test_classpath}</spark.executor.extraClassPath>
               <spark.driver.allowMultipleContexts>true</spark.driver.allowMultipleContexts>
             </systemProperties>
             <failIfNoTests>false</failIfNoTests>
@@ -1537,6 +1562,7 @@
         <protobuf.version>2.5.0</protobuf.version>
         <hbase.version>0.98.7-hadoop2</hbase.version>
         <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
+        <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
       </properties>
     </profile>
 
@@ -1545,10 +1571,11 @@
       <properties>
         <hadoop.version>2.3.0</hadoop.version>
         <protobuf.version>2.5.0</protobuf.version>
-        <jets3t.version>0.9.0</jets3t.version>
+        <jets3t.version>0.9.3</jets3t.version>
         <hbase.version>0.98.7-hadoop2</hbase.version>
         <commons.math3.version>3.1.1</commons.math3.version>
         <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
+        <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
       </properties>
     </profile>
 
@@ -1557,10 +1584,11 @@
       <properties>
         <hadoop.version>2.4.0</hadoop.version>
         <protobuf.version>2.5.0</protobuf.version>
-        <jets3t.version>0.9.0</jets3t.version>
+        <jets3t.version>0.9.3</jets3t.version>
         <hbase.version>0.98.7-hadoop2</hbase.version>
         <commons.math3.version>3.1.1</commons.math3.version>
         <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
+        <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
       </properties>
     </profile>
 

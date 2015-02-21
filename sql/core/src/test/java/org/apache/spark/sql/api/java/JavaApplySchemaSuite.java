@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import org.apache.spark.sql.test.TestSQLContext$;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -42,13 +43,12 @@ public class JavaApplySchemaSuite implements Serializable {
 
   @Before
   public void setUp() {
-    javaCtx = new JavaSparkContext("local", "JavaApplySchemaSuite");
-    javaSqlCtx = new SQLContext(javaCtx);
+    javaSqlCtx = TestSQLContext$.MODULE$;
+    javaCtx = new JavaSparkContext(javaSqlCtx.sparkContext());
   }
 
   @After
   public void tearDown() {
-    javaCtx.stop();
     javaCtx = null;
     javaSqlCtx = null;
   }
@@ -164,7 +164,7 @@ public class JavaApplySchemaSuite implements Serializable {
     fields.add(DataTypes.createStructField("bigInteger", DataTypes.createDecimalType(), true));
     fields.add(DataTypes.createStructField("boolean", DataTypes.BooleanType, true));
     fields.add(DataTypes.createStructField("double", DataTypes.DoubleType, true));
-    fields.add(DataTypes.createStructField("integer", DataTypes.IntegerType, true));
+    fields.add(DataTypes.createStructField("integer", DataTypes.LongType, true));
     fields.add(DataTypes.createStructField("long", DataTypes.LongType, true));
     fields.add(DataTypes.createStructField("null", DataTypes.StringType, true));
     fields.add(DataTypes.createStructField("string", DataTypes.StringType, true));

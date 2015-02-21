@@ -66,6 +66,11 @@ private[sql] object CatalystConverter {
   // Using a different value will result in Parquet silently dropping columns.
   val ARRAY_CONTAINS_NULL_BAG_SCHEMA_NAME = "bag"
   val ARRAY_ELEMENTS_SCHEMA_NAME = "array"
+  // SPARK-4520: Thrift generated parquet files have different array element
+  // schema names than avro. Thrift parquet uses array_schema_name + "_tuple"
+  // as opposed to "array" used by default. For more information, check
+  // TestThriftSchemaConverter.java in parquet.thrift.
+  val THRIFT_ARRAY_ELEMENTS_SCHEMA_NAME_SUFFIX = "_tuple"
   val MAP_KEY_SCHEMA_NAME = "key"
   val MAP_VALUE_SCHEMA_NAME = "value"
   val MAP_SCHEMA_NAME = "map"

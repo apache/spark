@@ -19,16 +19,20 @@ package org.apache.spark.sql.sources
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.RunnableCommand
+import org.apache.spark.sql.execution.{LogicalRDD, RunnableCommand}
 
-private[sql] case class InsertIntoRelation(
-    relation: InsertableRelation,
+private[sql] case class InsertIntoDataSource(
+    logicalRelation: LogicalRelation,
     query: LogicalPlan,
     overwrite: Boolean)
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext) = {
+    val relation = logicalRelation.relation.asInstanceOf[InsertableRelation]
     relation.insert(DataFrame(sqlContext, query), overwrite)
+
+    // Invalidate the cache.
+    sqlContext.cacheManager.invalidateCache(logicalRelation)
 
     Seq.empty[Row]
   }
