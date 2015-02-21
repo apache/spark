@@ -439,7 +439,8 @@ private[sql] object JsonRDD extends Logging {
       , schemaFuncs: Seq[(String, Any => Any)]): Row = {
     var i = 0
     while (i < schemaFuncs.size) {
-      row.update(i, json.get(schemaFuncs(i)._1).flatMap(v => Option(v)).map(schemaFuncs(i)._2).orNull)
+      row.update(i, json.get(schemaFuncs(i)._1).flatMap(v => Option(v)).map(
+        schemaFuncs(i)._2).orNull)
       i += 1
     }
 
