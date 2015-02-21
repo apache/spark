@@ -17,6 +17,23 @@
 
 package scala.tools.nsc
 
+import org.apache.spark.annotation.DeveloperApi
+
+// NOTE: Forced to be public (and in scala.tools.nsc package) to access the
+//       settings "explicitParentLoader" method
+
+/**
+ * Provides exposure for the explicitParentLoader method on settings instances.
+ */
+@DeveloperApi
 object SparkHelper {
+  /**
+   * Retrieves the explicit parent loader for the provided settings.
+   *
+   * @param settings The settings whose explicit parent loader to retrieve
+   *
+   * @return The Optional classloader representing the explicit parent loader
+   */
+  @DeveloperApi
   def explicitParentLoader(settings: Settings) = settings.explicitParentLoader
 }

@@ -20,7 +20,7 @@ package org.apache.spark.sql.sources
 import java.sql.{Timestamp, Date}
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.types.DecimalType
+import org.apache.spark.sql.types._
 
 class DefaultSource extends SimpleScanSource
 
@@ -70,8 +70,8 @@ case class AllDataTypesScan(
         i.toLong,
         i.toFloat,
         i.toDouble,
-        BigDecimal(i),
-        BigDecimal(i),
+        new java.math.BigDecimal(i),
+        new java.math.BigDecimal(i),
         new Date((i + 1) * 8640000),
         new Timestamp(20000 + i),
         s"varchar_$i",
@@ -99,8 +99,8 @@ class TableScanSuite extends DataSourceTest {
       i.toLong,
       i.toFloat,
       i.toDouble,
-      BigDecimal(i),
-      BigDecimal(i),
+      new java.math.BigDecimal(i),
+      new java.math.BigDecimal(i),
       new Date((i + 1) * 8640000),
       new Timestamp(20000 + i),
       s"varchar_$i",
@@ -244,7 +244,7 @@ class TableScanSuite extends DataSourceTest {
 
   sqlTest(
     "SELECT count(*) FROM tableWithSchema",
-    10)
+    Seq(Row(10)))
 
   sqlTest(
     "SELECT `string$%Field` FROM tableWithSchema",
@@ -260,7 +260,7 @@ class TableScanSuite extends DataSourceTest {
 
   sqlTest(
     "SELECT structFieldSimple.key, arrayFieldSimple[1] FROM tableWithSchema a where int_Field=1",
-    Seq(Seq(1, 2)))
+    Seq(Row(1, 2)))
 
   sqlTest(
     "SELECT structFieldComplex.Value.`value_(2)` FROM tableWithSchema",
@@ -313,5 +313,55 @@ class TableScanSuite extends DataSourceTest {
     checkAnswer(
       sql("SELECT * FROM oneToTenDef"),
       (1 to 10).map(Row(_)).toSeq)
+  }
+
+  test("exceptions") {
+    // Make sure we do throw correct exception when users use a relation provider that
+    // only implements the RelationProvier or the SchemaRelationProvider.
+    val schemaNotAllowed = intercept[Exception] {
+      sql(
+        """
+          |CREATE TEMPORARY TABLE relationProvierWithSchema (i int)
+          |USING org.apache.spark.sql.sources.SimpleScanSource
+          |OPTIONS (
+          |  From '1',
+          |  To '10'
+          |)
+        """.stripMargin)
+    }
+    assert(schemaNotAllowed.getMessage.contains("does not allow user-specified schemas"))
+
+    val schemaNeeded = intercept[Exception] {
+      sql(
+        """
+          |CREATE TEMPORARY TABLE schemaRelationProvierWithoutSchema
+          |USING org.apache.spark.sql.sources.AllDataTypesScanSource
+          |OPTIONS (
+          |  From '1',
+          |  To '10'
+          |)
+        """.stripMargin)
+    }
+    assert(schemaNeeded.getMessage.contains("A schema needs to be specified when using"))
+  }
+
+  test("SPARK-5196 schema field with comment") {
+    sql(
+      """
+       |CREATE TEMPORARY TABLE student(name string comment "SN", age int comment "SA", grade int)
+       |USING org.apache.spark.sql.sources.AllDataTypesScanSource
+       |OPTIONS (
+       |  from '1',
+       |  to '10'
+       |)
+       """.stripMargin)
+
+       val planned = sql("SELECT * FROM student").queryExecution.executedPlan
+       val comments = planned.schema.fields.map { field =>
+         if (field.metadata.contains("comment")) field.metadata.getString("comment")
+         else "NO_COMMENT"
+       }.mkString(",")
+
+    assert(comments === "SN,SA,NO_COMMENT")
   }
 }

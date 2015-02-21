@@ -35,12 +35,6 @@
   <url>http://spark.apache.org/</url>
 
   <dependencies>
-    <!-- Promote Guava to compile scope in this module so it's included while shading. -->
-    <dependency>
-      <groupId>com.google.guava</groupId>
-      <artifactId>guava</artifactId>
-      <scope>compile</scope>
-    </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scala.binary.version}</artifactId>
@@ -310,69 +304,40 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
-        <executions>
-          <execution>
-            <phase>package</phase>
-            <goals>
-              <goal>shade</goal>
-            </goals>
-            <configuration>
-            <shadedArtifactAttached>false</shadedArtifactAttached>
-            <outputFile>${project.build.directory}/scala-${scala.binary.version}/spark-examples-${project.version}-hadoop${hadoop.version}.jar</outputFile>
-            <artifactSet>
-              <includes>
-                <include>*:*</include>
-              </includes>
-            </artifactSet>
-            <filters>
-              <filter>
-                <artifact>com.google.guava:guava</artifact>
-                <excludes>
-                  <!--
-                    Exclude all Guava classes so they're picked up from the main assembly. The
-                    dependency still needs to be compile-scoped so that the relocation below
-                    works.
-                  -->
-                  <exclude>**</exclude>
-                </excludes>
-              </filter>
-              <filter>
-                <artifact>*:*</artifact>
-                <excludes>
-                  <exclude>META-INF/*.SF</exclude>
-                  <exclude>META-INF/*.DSA</exclude>
-                  <exclude>META-INF/*.RSA</exclude>
-                </excludes>
-              </filter>
-            </filters>
-              <relocations>
-                <relocation>
-                  <pattern>com.google</pattern>
-                  <shadedPattern>org.spark-project.guava</shadedPattern>
-                  <includes>
-                    <include>com.google.common.**</include>
-                  </includes>
-                  <excludes>
-                    <exclude>com.google.common.base.Optional**</exclude>
-                  </excludes>
-                </relocation>
-                <relocation>
-                  <pattern>org.apache.commons.math3</pattern>
-                  <shadedPattern>org.spark-project.commons.math3</shadedPattern>
-                </relocation>
-              </relocations>
-              <transformers>
-                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
-                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
-                  <resource>reference.conf</resource>
-                </transformer>
-                <transformer implementation="org.apache.maven.plugins.shade.resource.DontIncludeResourceTransformer">
-                  <resource>log4j.properties</resource>
-                </transformer>
-              </transformers>
-            </configuration>
-          </execution>
-        </executions>
+        <configuration>
+          <shadedArtifactAttached>false</shadedArtifactAttached>
+          <outputFile>${project.build.directory}/scala-${scala.binary.version}/spark-examples-${project.version}-hadoop${hadoop.version}.jar</outputFile>
+          <artifactSet>
+            <includes>
+              <include>*:*</include>
+            </includes>
+          </artifactSet>
+          <filters>
+            <filter>
+              <artifact>*:*</artifact>
+              <excludes>
+                <exclude>META-INF/*.SF</exclude>
+                <exclude>META-INF/*.DSA</exclude>
+                <exclude>META-INF/*.RSA</exclude>
+              </excludes>
+            </filter>
+          </filters>
+          <relocations combine.children="append">
+            <relocation>
+              <pattern>org.apache.commons.math3</pattern>
+              <shadedPattern>org.spark-project.commons.math3</shadedPattern>
+            </relocation>
+          </relocations>
+          <transformers>
+            <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
+            <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+              <resource>reference.conf</resource>
+            </transformer>
+            <transformer implementation="org.apache.maven.plugins.shade.resource.DontIncludeResourceTransformer">
+              <resource>log4j.properties</resource>
+            </transformer>
+          </transformers>
+        </configuration>
       </plugin>
     </plugins>
   </build>

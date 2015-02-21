@@ -28,8 +28,6 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.mockito.Matchers._
 import org.mockito.Mockito._
-
-
 import org.scalatest.FunSuite
 import org.scalatest.Matchers
 
@@ -84,12 +82,13 @@ class ClientSuite extends FunSuite with Matchers {
   test("Local jar URIs") {
     val conf = new Configuration()
     val sparkConf = new SparkConf().set(Client.CONF_SPARK_JAR, SPARK)
+      .set("spark.yarn.user.classpath.first", "true")
     val env = new MutableHashMap[String, String]()
     val args = new ClientArguments(Array("--jar", USER, "--addJars", ADDED), sparkConf)
 
     Client.populateClasspath(args, conf, sparkConf, env)
 
-    val cp = env("CLASSPATH").split(File.pathSeparator)
+    val cp = env("CLASSPATH").split(":|;|<CPS>")
     s"$SPARK,$USER,$ADDED".split(",").foreach({ entry =>
       val uri = new URI(entry)
       if (Client.LOCAL_SCHEME.equals(uri.getScheme())) {
@@ -98,8 +97,13 @@ class ClientSuite extends FunSuite with Matchers {
         cp should not contain (uri.getPath())
       }
     })
-    cp should contain (Environment.PWD.$())
-    cp should contain (s"${Environment.PWD.$()}${File.separator}*")
+    if (classOf[Environment].getMethods().exists(_.getName == "$$")) {
+      cp should contain("{{PWD}}")
+    } else if (Utils.isWindows) {
+      cp should contain("%PWD%")
+    } else {
+      cp should contain(Environment.PWD.$())
+    }
     cp should not contain (Client.SPARK_JAR)
     cp should not contain (Client.APP_JAR)
   }
@@ -111,7 +115,7 @@ class ClientSuite extends FunSuite with Matchers {
 
     val client = spy(new Client(args, conf, sparkConf))
     doReturn(new Path("/")).when(client).copyFileToRemote(any(classOf[Path]),
-      any(classOf[Path]), anyShort(), anyBoolean())
+      any(classOf[Path]), anyShort())
 
     val tempDir = Utils.createTempDir()
     try {
@@ -223,7 +227,7 @@ class ClientSuite extends FunSuite with Matchers {
 
   def newEnv = MutableHashMap[String, String]()
 
-  def classpath(env: MutableHashMap[String, String]) = env(Environment.CLASSPATH.name).split(":|;")
+  def classpath(env: MutableHashMap[String, String]) = env(Environment.CLASSPATH.name).split(":|;|<CPS>")
 
   def flatten(a: Option[Seq[String]], b: Option[Seq[String]]) = (a ++ b).flatten.toArray
 

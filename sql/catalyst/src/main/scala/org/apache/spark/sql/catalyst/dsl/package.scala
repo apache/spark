@@ -22,12 +22,11 @@ import java.sql.{Date, Timestamp}
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedGetField, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
+import org.apache.spark.sql.types._
 
 /**
  * A collection of implicit conversions that create a DSL for constructing catalyst data structures.
@@ -102,7 +101,7 @@ package object dsl {
     def isNotNull = IsNotNull(expr)
 
     def getItem(ordinal: Expression) = GetItem(expr, ordinal)
-    def getField(fieldName: String) = GetField(expr, fieldName)
+    def getField(fieldName: String) = UnresolvedGetField(expr, fieldName)
 
     def cast(to: DataType) = Cast(expr, to)
 
@@ -127,7 +126,8 @@ package object dsl {
     implicit def doubleToLiteral(d: Double): Literal = Literal(d)
     implicit def stringToLiteral(s: String): Literal = Literal(s)
     implicit def dateToLiteral(d: Date): Literal = Literal(d)
-    implicit def bigDecimalToLiteral(d: BigDecimal): Literal = Literal(d)
+    implicit def bigDecimalToLiteral(d: BigDecimal): Literal = Literal(d.underlying())
+    implicit def bigDecimalToLiteral(d: java.math.BigDecimal): Literal = Literal(d)
     implicit def decimalToLiteral(d: Decimal): Literal = Literal(d)
     implicit def timestampToLiteral(t: Timestamp): Literal = Literal(t)
     implicit def binaryToLiteral(a: Array[Byte]): Literal = Literal(a)
@@ -271,9 +271,6 @@ package object dsl {
 
     def sfilter[T1](arg1: Symbol)(udf: (T1) => Boolean) =
       Filter(ScalaUdf(udf, BooleanType, Seq(UnresolvedAttribute(arg1.name))), logicalPlan)
-
-    def sfilter(dynamicUdf: (DynamicRow) => Boolean) =
-      Filter(ScalaUdf(dynamicUdf, BooleanType, Seq(WrapDynamic(logicalPlan.output))), logicalPlan)
 
     def sample(
         fraction: Double,

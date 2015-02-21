@@ -50,8 +50,8 @@ fi
 if [ -n "$SPARK_PREPEND_CLASSES" ]; then
   echo "NOTE: SPARK_PREPEND_CLASSES is set, placing locally compiled Spark"\
     "classes ahead of assembly." >&2
+  # Spark classes
   CLASSPATH="$CLASSPATH:$FWDIR/core/target/scala-$SPARK_SCALA_VERSION/classes"
-  CLASSPATH="$CLASSPATH:$FWDIR/core/target/jars/*"
   CLASSPATH="$CLASSPATH:$FWDIR/repl/target/scala-$SPARK_SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$FWDIR/mllib/target/scala-$SPARK_SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$FWDIR/bagel/target/scala-$SPARK_SCALA_VERSION/classes"
@@ -63,6 +63,8 @@ if [ -n "$SPARK_PREPEND_CLASSES" ]; then
   CLASSPATH="$CLASSPATH:$FWDIR/sql/hive/target/scala-$SPARK_SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$FWDIR/sql/hive-thriftserver/target/scala-$SPARK_SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$FWDIR/yarn/stable/target/scala-$SPARK_SCALA_VERSION/classes"
+  # Jars for shaded deps in their original form (copied here during build)
+  CLASSPATH="$CLASSPATH:$FWDIR/core/target/jars/*"
 fi
 
 # Use spark-assembly jar from either RELEASE or assembly directory
@@ -72,21 +74,24 @@ else
   assembly_folder="$ASSEMBLY_DIR"
 fi
 
-num_jars="$(ls "$assembly_folder" | grep "spark-assembly.*hadoop.*\.jar$" | wc -l)"
-if [ "$num_jars" -eq "0" ]; then
-  echo "Failed to find Spark assembly in $assembly_folder"
-  echo "You need to build Spark before running this program."
-  exit 1
-fi
-if [ "$num_jars" -gt "1" ]; then
-  jars_list=$(ls "$assembly_folder" | grep "spark-assembly.*hadoop.*.jar$")
-  echo "Found multiple Spark assembly jars in $assembly_folder:"
-  echo "$jars_list"
-  echo "Please remove all but one jar."
-  exit 1
-fi
+num_jars=0
 
-ASSEMBLY_JAR="$(ls "$assembly_folder"/spark-assembly*hadoop*.jar 2>/dev/null)"
+for f in "${assembly_folder}"/spark-assembly*hadoop*.jar; do
+  if [[ ! -e "$f" ]]; then
+    echo "Failed to find Spark assembly in $assembly_folder" 1>&2
+    echo "You need to build Spark before running this program." 1>&2
+    exit 1
+  fi
+  ASSEMBLY_JAR="$f"
+  num_jars=$((num_jars+1))
+done
+
+if [ "$num_jars" -gt "1" ]; then
+  echo "Found multiple Spark assembly jars in $assembly_folder:" 1>&2
+  ls "${assembly_folder}"/spark-assembly*hadoop*.jar 1>&2
+  echo "Please remove all but one jar." 1>&2
+  exit 1
+fi
 
 # Verify that versions of java used to build the jars and run Spark are compatible
 jar_error_check=$("$JAR_CMD" -tf "$ASSEMBLY_JAR" nonexistent/class/path 2>&1)

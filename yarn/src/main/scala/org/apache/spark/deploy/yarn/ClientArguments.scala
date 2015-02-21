@@ -19,9 +19,9 @@ package org.apache.spark.deploy.yarn
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
-import org.apache.spark.util.{Utils, IntParam, MemoryParam}
+import org.apache.spark.util.{IntParam, MemoryParam, Utils}
 
 // TODO: Add code and support for ensuring that yarn resource 'tasks' are location aware !
 private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) {
@@ -30,20 +30,26 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var archives: String = null
   var userJar: String = null
   var userClass: String = null
-  var userArgs: Seq[String] = Seq[String]()
+  var pyFiles: String = null
+  var primaryPyFile: String = null
+  var userArgs: ArrayBuffer[String] = new ArrayBuffer[String]()
   var executorMemory = 1024 // MB
   var executorCores = 1
   var numExecutors = DEFAULT_NUMBER_EXECUTORS
   var amQueue = sparkConf.get("spark.yarn.queue", "default")
   var amMemory: Int = 512 // MB
+  var amCores: Int = 1
   var appName: String = "Spark"
   var priority = 0
   def isClusterMode: Boolean = userClass != null
 
   private var driverMemory: Int = 512 // MB
+  private var driverCores: Int = 1
   private val driverMemOverheadKey = "spark.yarn.driver.memoryOverhead"
   private val amMemKey = "spark.yarn.am.memory"
   private val amMemOverheadKey = "spark.yarn.am.memoryOverhead"
+  private val driverCoresKey = "spark.driver.cores"
+  private val amCoresKey = "spark.yarn.am.cores"
   private val isDynamicAllocationEnabled =
     sparkConf.getBoolean("spark.dynamicAllocation.enabled", false)
 
@@ -64,21 +70,30 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
     // For backward compatibility, SPARK_YARN_DIST_{ARCHIVES/FILES} should be resolved to hdfs://,
     // while spark.yarn.dist.{archives/files} should be resolved to file:// (SPARK-2051).
     files = Option(files)
-      .orElse(sys.env.get("SPARK_YARN_DIST_FILES"))
       .orElse(sparkConf.getOption("spark.yarn.dist.files").map(p => Utils.resolveURIs(p)))
+      .orElse(sys.env.get("SPARK_YARN_DIST_FILES"))
       .orNull
     archives = Option(archives)
-      .orElse(sys.env.get("SPARK_YARN_DIST_ARCHIVES"))
       .orElse(sparkConf.getOption("spark.yarn.dist.archives").map(p => Utils.resolveURIs(p)))
+      .orElse(sys.env.get("SPARK_YARN_DIST_ARCHIVES"))
       .orNull
-    // If dynamic allocation is enabled, start at the max number of executors
+    // If dynamic allocation is enabled, start at the configured initial number of executors.
+    // Default to minExecutors if no initialExecutors is set.
     if (isDynamicAllocationEnabled) {
+      val minExecutorsConf = "spark.dynamicAllocation.minExecutors"
+      val initialExecutorsConf = "spark.dynamicAllocation.initialExecutors"
       val maxExecutorsConf = "spark.dynamicAllocation.maxExecutors"
-      if (!sparkConf.contains(maxExecutorsConf)) {
+      val minNumExecutors = sparkConf.getInt(minExecutorsConf, 0)
+      val initialNumExecutors = sparkConf.getInt(initialExecutorsConf, minNumExecutors)
+      val maxNumExecutors = sparkConf.getInt(maxExecutorsConf, Integer.MAX_VALUE)
+
+      // If defined, initial executors must be between min and max
+      if (initialNumExecutors < minNumExecutors || initialNumExecutors > maxNumExecutors) {
         throw new IllegalArgumentException(
-          s"$maxExecutorsConf must be set if dynamic allocation is enabled!")
+          s"$initialExecutorsConf must be between $minExecutorsConf and $maxNumExecutors!")
       }
-      numExecutors = sparkConf.get(maxExecutorsConf).toInt
+
+      numExecutors = initialNumExecutors
     }
   }
 
@@ -91,25 +106,34 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
       throw new IllegalArgumentException(
         "You must specify at least 1 executor!\n" + getUsageMessage())
     }
+    if (executorCores < sparkConf.getInt("spark.task.cpus", 1)) {
+      throw new SparkException("Executor cores must not be less than " +
+        "spark.task.cpus.")
+    }
     if (isClusterMode) {
-      for (key <- Seq(amMemKey, amMemOverheadKey)) {
+      for (key <- Seq(amMemKey, amMemOverheadKey, amCoresKey)) {
         if (sparkConf.contains(key)) {
           println(s"$key is set but does not apply in cluster mode.")
         }
       }
       amMemory = driverMemory
+      amCores = driverCores
     } else {
-      if (sparkConf.contains(driverMemOverheadKey)) {
-        println(s"$driverMemOverheadKey is set but does not apply in client mode.")
+      for (key <- Seq(driverMemOverheadKey, driverCoresKey)) {
+        if (sparkConf.contains(key)) {
+          println(s"$key is set but does not apply in client mode.")
+        }
       }
       sparkConf.getOption(amMemKey)
         .map(Utils.memoryStringToMb)
         .foreach { mem => amMemory = mem }
+      sparkConf.getOption(amCoresKey)
+        .map(_.toInt)
+        .foreach { cores => amCores = cores }
     }
   }
 
   private def parseArgs(inputArgs: List[String]): Unit = {
-    val userArgsBuffer = new ArrayBuffer[String]()
     var args = inputArgs
 
     while (!args.isEmpty) {
@@ -122,11 +146,15 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
           userClass = value
           args = tail
 
+        case ("--primary-py-file") :: value :: tail =>
+          primaryPyFile = value
+          args = tail
+
         case ("--args" | "--arg") :: value :: tail =>
           if (args(0) == "--args") {
             println("--args is deprecated. Use --arg instead.")
           }
-          userArgsBuffer += value
+          userArgs += value
           args = tail
 
         case ("--master-class" | "--am-class") :: value :: tail =>
@@ -138,6 +166,10 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
             println("--master-memory is deprecated. Use --driver-memory instead.")
           }
           driverMemory = value
+          args = tail
+
+        case ("--driver-cores") :: IntParam(value) :: tail =>
+          driverCores = value
           args = tail
 
         case ("--num-workers" | "--num-executors") :: IntParam(value) :: tail =>
@@ -178,6 +210,10 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
           addJars = value
           args = tail
 
+        case ("--py-files") :: value :: tail =>
+          pyFiles = value
+          args = tail
+
         case ("--files") :: value :: tail =>
           files = value
           args = tail
@@ -192,29 +228,32 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
           throw new IllegalArgumentException(getUsageMessage(args))
       }
     }
-
-    userArgs = userArgsBuffer.readOnly
   }
 
   private def getUsageMessage(unknownParam: List[String] = null): String = {
     val message = if (unknownParam != null) s"Unknown/unsupported param $unknownParam\n" else ""
-    message + """
+    message +
+      """
       |Usage: org.apache.spark.deploy.yarn.Client [options]
       |Options:
       |  --jar JAR_PATH           Path to your application's JAR file (required in yarn-cluster
       |                           mode)
       |  --class CLASS_NAME       Name of your application's main class (required)
+      |  --primary-py-file        A main Python file
       |  --arg ARG                Argument to be passed to your application's main class.
       |                           Multiple invocations are possible, each will be passed in order.
       |  --num-executors NUM      Number of executors to start (Default: 2)
-      |  --executor-cores NUM     Number of cores for the executors (Default: 1).
+      |  --executor-cores NUM     Number of cores per executor (Default: 1).
       |  --driver-memory MEM      Memory for driver (e.g. 1000M, 2G) (Default: 512 Mb)
+      |  --driver-cores NUM       Number of cores used by the driver (Default: 1).
       |  --executor-memory MEM    Memory per executor (e.g. 1000M, 2G) (Default: 1G)
       |  --name NAME              The name of your application (Default: Spark)
       |  --queue QUEUE            The hadoop queue to use for allocation requests (Default:
       |                           'default')
       |  --addJars jars           Comma separated list of local jars that want SparkContext.addJar
       |                           to work with.
+      |  --py-files PY_FILES      Comma-separated list of .zip, .egg, or .py files to
+      |                           place on the PYTHONPATH for Python apps.
       |  --files files            Comma separated list of files to be distributed with the job.
       |  --archives archives      Comma separated list of archives to be distributed with the job.
       """.stripMargin

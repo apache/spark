@@ -33,8 +33,11 @@ import org.apache.hadoop.hive.ql.udf.generic.GenericUDF._
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.util.Utils.getContextOrSparkClassLoader
+import org.apache.spark.sql.catalyst.plans.logical.{Generate, Project, LogicalPlan}
+import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.analysis.MultiAlias
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -321,6 +324,20 @@ private[hive] case class HiveGenericUdtf(
   override def toString = s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
 }
 
+/**
+ * Resolve Udtfs Alias.
+ */
+private[spark] object ResolveUdtfsAlias extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan) = plan transform {
+    case p @ Project(projectList, _)
+      if projectList.exists(_.isInstanceOf[MultiAlias]) && projectList.size != 1 =>
+      throw new TreeNodeException(p, "only single Generator supported for SELECT clause")
+
+    case Project(Seq(MultiAlias(udtf @ HiveGenericUdtf(_, _, _), names)), child) =>
+        Generate(udtf.copy(aliasNames = names), join = false, outer = false, None, child)
+  }
+}
+
 private[hive] case class HiveUdafFunction(
     funcWrapper: HiveFunctionWrapper,
     exprs: Seq[Expression],
@@ -360,7 +377,7 @@ private[hive] case class HiveUdafFunction(
   protected lazy val cached = new Array[AnyRef](exprs.length)
   
   def update(input: Row): Unit = {
-    val inputs = inputProjection(input).asInstanceOf[Seq[AnyRef]].toArray
+    val inputs = inputProjection(input)
     function.iterate(buffer, wrap(inputs, inspectors, cached))
   }
 }
