@@ -296,7 +296,6 @@ private[spark] object Accumulators {
   }
 
   def register(a: Accumulable[_, _], original: Boolean): Unit = synchronized {
-    ContextCleaner
     if (original) {
       originals(a.id) = new WeakAcc(a)
     } else {
