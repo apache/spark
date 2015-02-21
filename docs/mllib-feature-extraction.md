@@ -413,7 +413,7 @@ import org.apache.spark.mllib.util.MLUtils
 // load some data in libsvm format, each point is in the range 0..255
 val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
 // discretize data in 16 equal bins
-val disctetizedData = data.map { lp =>
+val discretizedData = data.map { lp =>
   LabeledPoint(lp.label, Vectors.dense(lp.features.toArray.map { x => x / 16 } ) )
 }
 // create ChiSqSelector that will select 50 features
