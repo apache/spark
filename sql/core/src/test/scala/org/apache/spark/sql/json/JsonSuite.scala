@@ -666,20 +666,20 @@ class JsonSuite extends QueryTest {
 
     checkAnswer(
       sql("select map from jsonWithSimpleMap"),
-      Seq(Map("a" -> 1)) ::
-      Seq(Map("b" -> 2)) ::
-      Seq(Map("c" -> 3)) ::
-      Seq(Map("c" -> 1, "d" -> 4)) ::
-      Seq(Map("e" -> null)) :: Nil
+      Row(Map("a" -> 1)) ::
+      Row(Map("b" -> 2)) ::
+      Row(Map("c" -> 3)) ::
+      Row(Map("c" -> 1, "d" -> 4)) ::
+      Row(Map("e" -> null)) :: Nil
     )
 
     checkAnswer(
       sql("select map['c'] from jsonWithSimpleMap"),
-      Seq(null) ::
-      Seq(null) ::
-      Seq(3) ::
-      Seq(1) ::
-      Seq(null) :: Nil
+      Row(null) ::
+      Row(null) ::
+      Row(3) ::
+      Row(1) ::
+      Row(null) :: Nil
     )
 
     val innerStruct = StructType(
@@ -694,22 +694,22 @@ class JsonSuite extends QueryTest {
 
     checkAnswer(
       sql("select map from jsonWithComplexMap"),
-      Seq(Map("a" -> Seq(Seq(1, 2, 3, null), null))) ::
-      Seq(Map("b" -> Seq(null, 2))) ::
-      Seq(Map("c" -> Seq(Seq(), 4))) ::
-      Seq(Map("c" -> Seq(null, 3), "d" -> Seq(Seq(null), null))) ::
-      Seq(Map("e" -> null)) ::
-      Seq(Map("f" -> Seq(null, null))) :: Nil
+      Row(Map("a" -> Row(Seq(1, 2, 3, null), null))) ::
+      Row(Map("b" -> Row(null, 2))) ::
+      Row(Map("c" -> Row(Seq(), 4))) ::
+      Row(Map("c" -> Row(null, 3), "d" -> Row(Seq(null), null))) ::
+      Row(Map("e" -> null)) ::
+      Row(Map("f" -> Row(null, null))) :: Nil
     )
 
     checkAnswer(
       sql("select map['a'].field1, map['c'].field2 from jsonWithComplexMap"),
-      Seq(Seq(1, 2, 3, null), null) ::
-      Seq(null, null) ::
-      Seq(null, 4) ::
-      Seq(null, 3) ::
-      Seq(null, null) ::
-      Seq(null, null) :: Nil
+      Row(Seq(1, 2, 3, null), null) ::
+      Row(null, null) ::
+      Row(null, 4) ::
+      Row(null, 3) ::
+      Row(null, null) ::
+      Row(null, null) :: Nil
     )
   }
 
