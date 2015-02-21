@@ -45,7 +45,7 @@ class ClientSuite extends FunSuite with Matchers with BeforeAndAfterAll {
   }
 
   override def afterAll(): Unit = {
-    System.setProperty("SPARK_YARN_MODE", "")
+    System.clearProperty("SPARK_YARN_MODE")
   }
 
   test("default Yarn application classpath") {
