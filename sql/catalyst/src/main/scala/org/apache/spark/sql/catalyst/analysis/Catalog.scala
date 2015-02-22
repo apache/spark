@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery}
+import org.apache.spark.sql.catalyst.CatalystConf
+import org.apache.spark.sql.catalyst.EmptyConf
 
 /**
  * Thrown by a catalog when a table cannot be found.  The analzyer will rethrow the exception
@@ -32,7 +34,7 @@ class NoSuchTableException extends Exception
  */
 trait Catalog {
 
-  def caseSensitive: Boolean
+  val conf: CatalystConf
 
   def tableExists(tableIdentifier: Seq[String]): Boolean
 
@@ -55,7 +57,7 @@ trait Catalog {
   def unregisterAllTables(): Unit
 
   protected def processTableIdentifier(tableIdentifier: Seq[String]): Seq[String] = {
-    if (!caseSensitive) {
+    if (!conf.getConf(CatalystConf.CASE_SENSITIVE, "true").toBoolean) {
       tableIdentifier.map(_.toLowerCase)
     } else {
       tableIdentifier
@@ -76,7 +78,7 @@ trait Catalog {
   }
 }
 
-class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
+class SimpleCatalog(val conf: CatalystConf) extends Catalog {
   val tables = new mutable.HashMap[String, LogicalPlan]()
 
   override def registerTable(
@@ -162,7 +164,7 @@ trait OverrideCatalog extends Catalog {
   }
 
   abstract override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {
-    val dbName = if (!caseSensitive) {
+    val dbName = if (!conf.getConf(CatalystConf.CASE_SENSITIVE).toBoolean) {
       if (databaseName.isDefined) Some(databaseName.get.toLowerCase) else None
     } else {
       databaseName
@@ -205,7 +207,7 @@ trait OverrideCatalog extends Catalog {
  */
 object EmptyCatalog extends Catalog {
 
-  val caseSensitive: Boolean = true
+  override val conf: CatalystConf = EmptyConf
 
   def tableExists(tableIdentifier: Seq[String]): Boolean = {
     throw new UnsupportedOperationException
