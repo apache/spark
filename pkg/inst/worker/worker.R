@@ -41,11 +41,22 @@ for (pkg in packageNames) {
   suppressPackageStartupMessages(require(as.character(pkg), character.only=TRUE))
 }
 
-# Read the function lineage.
+# read function dependencies
 depsLen <- SparkR:::readInt(inputCon)
-if (depsLen > 0) {
-  # function lineage stored in an Accumulator
-  funcAccum <- unserialize(SparkR:::readRawLen(inputCon, depsLen))
+funcAccum <- unserialize(SparkR:::readRawLen(inputCon, depsLen))
+# testfilename <- "/home//ubuntu/Desktop/testfile"
+# cat(typeof(funcAccum), '\n', file = testfilename)
+# cat(funcAccum$size, '\n', file = testfilename, append = T)
+# cat(typeof(funcAccum$data[[1]]), '\n', file = testfilename, append = T)
+# cat(as.character(body(funcAccum$data[[1]])), file = testfilename, append = T)
+if (funcAccum$size > 0) {
+  computeFunc <- function(split, part) {
+    res <- part
+    for (i in 1:funcAccum$counter) {
+      res <- funcAccum$data[[i]](split, res)
+    }
+    res
+  }
 }
 
 # Read and set broadcast variables
@@ -61,25 +72,6 @@ if (numBroadcastVars > 0) {
 # If -1: read as normal RDD; if >= 0, treat as pairwise RDD and treat the int
 # as number of partitions to create.
 numPartitions <- SparkR:::readInt(inputCon)
-
-# Build up the execFunction from the Accumulator
-if (exists("funcAccum")) {
-  if (funcAccum$size > 0) {
-    if (numPartitions == -1) {
-      # Regular RDDs: build nested functions.
-      computeFunc <- function(split, part) {
-        res <- part
-        for (i in 1:funcAccum$counter) {
-          res <- funcAccum$data[[i]](split, res)
-        }
-        res
-      }
-    } else {
-      # Pairwise RDDs.
-      computeFunc <- funcAccum$data[[1]]
-    }
-  }
-}
 
 isEmpty <- SparkR:::readInt(inputCon)
 

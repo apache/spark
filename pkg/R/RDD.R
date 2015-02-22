@@ -18,8 +18,7 @@ setClass("RDD",
 setClass("PipelinedRDD",
          slots = list(prev = "RDD",
                       func = "function",
-                      # Accumulator to store function lineage
-                      funcAccum = "environment",  
+                      funcAccum = "environment",
                       prev_jrdd = "jobj"),
          contains = "RDD")
 
@@ -55,7 +54,6 @@ setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) 
   # prev_serialized is used during the delayed computation of JRDD in getJRDD
   .Object@prev <- prev
   
-  # We use funcAccum to store the lineage of function closures in a PipelinedRDD.
   .Object@funcAccum <- initAccumulator()
 
   isPipelinable <- function(rdd) {
@@ -127,9 +125,7 @@ setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
             broadcastArr <- lapply(ls(.broadcastNames),
                                    function(name) { get(name, .broadcastNames) })
 
-            # Sorry, I use "depsBin" to serialize the funcAccum for now.
-            # Instead of serializing the entire environment, we can serialize
-            # a sequence of functions (with its closure).
+            depsBin <- getDependencies(computeFunc)
             depsBin <- serialize(rdd@funcAccum, NULL, ascii = TRUE)
 
             prev_jrdd <- rdd@prev_jrdd
@@ -536,12 +532,9 @@ setMethod("countByKey",
 setMethod("lapply",
           signature(X = "RDD", FUN = "function"),
           function(X, FUN) {
-            # Creats a new the closure (environment) for the FUN to capture
-            # free variables.
             env.fun <- new.env(parent=.GlobalEnv)  
-            # need to add free variables to env.fun environment
             clean.closure(FUN, env.fun)
-            # FUN now have new environment env.fun, with all values it needs.
+            # need to add ref variables to en.fun environment
             environment(FUN) <- env.fun
             
             func <- function(split, iterator) {
@@ -1305,15 +1298,8 @@ setMethod("partitionBy",
             #}
 
             depsBinArr <- getDependencies(partitionFunc)
-            env.fun <- new.env(parent=.GlobalEnv)  
-            clean.closure(partitionFunc, env.fun)
-            # need to add ref variables to en.fun environment
-            environment(partitionFunc) <- env.fun
-            funcAccum <- initAccumulator()
-            addItemToAccumulator(funcAccum, partitionFunc)
-            depsBinArr <- serialize(funcAccum, NULL, ascii = TRUE)
 
-            serializedHashFuncBytes <- serialize("computeFunc", #as.character(substitute(partitionFunc)),
+            serializedHashFuncBytes <- serialize(as.character(substitute(partitionFunc)),
                                                  connection = NULL,
                                                  ascii = TRUE)
 
