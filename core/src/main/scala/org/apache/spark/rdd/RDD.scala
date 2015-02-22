@@ -1566,6 +1566,11 @@ object RDD {
     new OrderedRDDFunctions[K, V, (K, V)](rdd)
   }
 
+  implicit def rddToOrderedValueRDDFunctions[K : ClassTag, V: ClassTag : Ordering](rdd: RDD[(K, V)])
+    : OrderedValueRDDFunctions[K, V, (K, V)] = {
+    new OrderedValueRDDFunctions[K, V, (K, V)](rdd)
+  }
+
   implicit def doubleRDDToDoubleRDDFunctions(rdd: RDD[Double]): DoubleRDDFunctions = {
     new DoubleRDDFunctions(rdd)
   }

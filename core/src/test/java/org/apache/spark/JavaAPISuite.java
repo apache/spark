@@ -347,6 +347,74 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(5, Iterables.size(oddsAndEvens.lookup(false).get(0))); // Odds
   }
 
+  private static class CompForGroupByKeyAndSortValues implements Comparator<Tuple2<Integer, Double>>, Serializable {
+    @Override
+    public int compare(Tuple2<Integer, Double> o1, Tuple2<Integer, Double> o2) {
+      return o1._1.compareTo(o2._1);
+    }
+  }
+  
+  @Test
+  public void groupByKeyAndSortValues() {
+    JavaRDD<Integer> rdd1a = sc.parallelize(Arrays.asList(5, 1, 5, 1, 1));
+    JavaRDD<Integer> rdd1b = sc.parallelize(Arrays.asList(2, 1, 1, 2, 3));
+    JavaRDD<Double> rdd1c = sc.parallelize(Arrays.asList(0.5, 1.2, 1.0, 2.0, 3.0));
+    JavaPairRDD<Integer, Tuple2<Integer, Double>> rdd1 = rdd1a.zip(rdd1b.zip(rdd1c));
+    
+    Set<Tuple2<Integer, Double>> check = new HashSet<Tuple2<Integer, Double>>();
+    check.add(new Tuple2<Integer, Double>(1, 1.0736));
+    check.add(new Tuple2<Integer, Double>(5, 0.26));
+    
+    Comparator<Tuple2<Integer, Double>> comp = new CompForGroupByKeyAndSortValues();
+    JavaPairRDD<Integer, Double> rdd2 = rdd1
+      .groupByKeyAndSortValues(comp, 2)
+      .mapValues(new Function<Iterable<Tuple2<Integer, Double>>, Double>() {
+        @Override
+        public Double call(Iterable<Tuple2<Integer, Double>> iterable) {
+          double result = 0.0;
+          for (Tuple2<Integer, Double> item: iterable)
+            result = 0.8 * result + 0.2 * item._2;
+          return result;
+        }
+      });
+    
+    Set<Tuple2<Integer, Double>> result = new HashSet<Tuple2<Integer, Double>>();
+    for (Tuple2<Integer, Double> item: rdd2.collect())
+      result.add(item);
+    
+    Assert.assertEquals(check, result);
+  }
+
+  @Test
+  public void groupByKeyAndSortValuesUsingNaturalOrdering() {
+    JavaRDD<Integer> rdd1a = sc.parallelize(Arrays.asList(5, 1, 5, 1, 1));
+    JavaRDD<String> rdd1b = sc.parallelize(Arrays.asList("c", "a", "b", "c", "b"));
+    JavaPairRDD<Integer, String> rdd1 = rdd1a.zip(rdd1b);
+    
+    Set<Tuple2<Integer, String>> check = new HashSet<Tuple2<Integer, String>>();
+    check.add(new Tuple2<Integer, String>(1, "ab"));
+    check.add(new Tuple2<Integer, String>(5, "bc"));
+
+    JavaPairRDD<Integer, String> rdd2 = rdd1
+      .groupByKeyAndSortValues(2)
+      .mapValues(new Function<Iterable<String>, String>() {
+        @Override
+        public String call(Iterable<String> iterable) {
+          String result = "";
+          Iterator<String> limited = Iterators.limit(iterable.iterator(), 2);
+          while (limited.hasNext())
+            result = result + limited.next();
+          return result;
+        }
+      });
+      
+    Set<Tuple2<Integer, String>> result = new HashSet<Tuple2<Integer, String>>();
+    for (Tuple2<Integer, String> item: rdd2.collect())
+      result.add(item);
+    
+    Assert.assertEquals(check, result);
+  }
+
   @SuppressWarnings("unchecked")
   @Test
   public void keyByOnPairRDD() {

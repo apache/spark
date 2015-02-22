@@ -22,6 +22,10 @@ import org.scalatest.Matchers
 
 import org.apache.spark.{Logging, SharedSparkContext}
 
+object SortingSuite {
+  case class TimeValue(time: Int, value: Double)
+}
+
 class SortingSuite extends FunSuite with SharedSparkContext with Matchers with Logging {
 
   test("sortByKey") {
@@ -118,6 +122,28 @@ class SortingSuite extends FunSuite with SharedSparkContext with Matchers with L
     partitions(0).last should be > partitions(1).head
     partitions(1).last should be > partitions(2).head
     partitions(2).last should be > partitions(3).head
+  }
+
+  test("groupByKeyAndSortValues") {
+    import SortingSuite._
+    implicit val tvOrd = Ordering.by[TimeValue, Int](_.time)
+
+    val tseries = sc.parallelize(Array(
+      (5, TimeValue(2, 0.5)), (1, TimeValue(1, 1.2)), (5, TimeValue(1, 1.0)), 
+      (1, TimeValue(2, 2.0)), (1, TimeValue(3, 3.0))
+    ))
+    val emas = tseries.groupByKeyAndSortValues(2).mapValues(_
+      .foldLeft(0.0){ case (acc, TimeValue(time, value)) => 0.8 * acc + 0.2 * value }
+    )
+    assert(emas.collect.toSet === Set((1, 1.0736), (5, 0.26)))
+
+    val pairs = sc.parallelize(Array((5, "c"), (1, "a"), (5, "b"), (1, "c"), (1, "b")))
+    val top2 = pairs.groupByKeyAndSortValues(2).mapValues(_.toIterator.take(2).mkString(""))
+    assert(top2.collect.toSet === Set((1, "ab"), (5, "bc")))
+
+    val collusionPairs = sc.parallelize(Array(("Aa", 1), ("BB", 1), ("Aa", 2), ("BB", 2))) // Aa and BB have same hashCode
+    val sortedLists = collusionPairs.groupByKeyAndSortValues(2).mapValues(_.toList)
+    assert(sortedLists.collect.toSet === Set(("Aa", List(1, 2)), ("BB", List(1, 2))))
   }
 }
 
