@@ -164,8 +164,8 @@ private[spark] class SortShuffleReader[K, C](
       MergeUtil.mergeSort(finalItrGroup, keyComparator, dep.keyOrdering, dep.aggregator)
 
     // Update the spill metrics and do cleanup work when task is finished.
-    context.taskMetrics().memoryBytesSpilled += memoryBytesSpilled
-    context.taskMetrics().diskBytesSpilled += diskBytesSpilled
+    context.taskMetrics().incMemoryBytesSpilled(memoryBytesSpilled)
+    context.taskMetrics().incDiskBytesSpilled(diskBytesSpilled)
 
     def releaseFinalShuffleMemory(): Unit = {
       inMemoryBlocks.foreach { block =>

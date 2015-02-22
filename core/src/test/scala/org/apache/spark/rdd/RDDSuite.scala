@@ -23,9 +23,8 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
-import org.scalatest.FunSuite
-
 import com.esotericsoftware.kryo.KryoException
+import org.scalatest.FunSuite
 
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
