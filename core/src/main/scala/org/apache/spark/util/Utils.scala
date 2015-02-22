@@ -1740,6 +1740,11 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  /** Load properties in the given filenames. */
+  def getPropertiesFromFiles(filenames: Array[String]): Map[String, String] = {
+    filenames.map{name => getPropertiesFromFile(name)}.foldLeft[Map[String, String]](Map())(_ ++ _)
+  }
+
   /** Return the path of the default Spark properties file. */
   def getDefaultPropertiesFile(env: Map[String, String] = sys.env): String = {
     env.get("SPARK_CONF_DIR")

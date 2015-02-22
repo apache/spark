@@ -25,11 +25,16 @@ ORIG_ARGS=("$@")
 # Set COLUMNS for progress bar
 export COLUMNS=`tput cols`
 
+SPARK_SUBMIT_PROPERTIES_FILES=${SPARK_SUBMIT_PROPERTIES_FILE}
 while (($#)); do
   if [ "$1" = "--deploy-mode" ]; then
     SPARK_SUBMIT_DEPLOY_MODE=$2
   elif [ "$1" = "--properties-file" ]; then
-    SPARK_SUBMIT_PROPERTIES_FILE=$2
+    if [ -n "$SPARK_SUBMIT_PROPERTIES_FILES" ] ; then
+        SPARK_SUBMIT_PROPERTIES_FILES=${SPARK_SUBMIT_PROPERTIES_FILES},$2
+    else
+        SPARK_SUBMIT_PROPERTIES_FILES=$2
+    fi
   elif [ "$1" = "--driver-memory" ]; then
     export SPARK_SUBMIT_DRIVER_MEMORY=$2
   elif [ "$1" = "--driver-library-path" ]; then
@@ -52,23 +57,26 @@ if [ "$MASTER" == "yarn-cluster" ]; then
   SPARK_SUBMIT_DEPLOY_MODE=cluster
 fi
 export SPARK_SUBMIT_DEPLOY_MODE=${SPARK_SUBMIT_DEPLOY_MODE:-"client"}
-export SPARK_SUBMIT_PROPERTIES_FILE=${SPARK_SUBMIT_PROPERTIES_FILE:-"$DEFAULT_PROPERTIES_FILE"}
+export SPARK_SUBMIT_PROPERTIES_FILES=${DEFAULT_PROPERTIES_FILE},${SPARK_SUBMIT_PROPERTIES_FILES}
 
 # For client mode, the driver will be launched in the same JVM that launches
 # SparkSubmit, so we may need to read the properties file for any extra class
 # paths, library paths, java options and memory early on. Otherwise, it will
 # be too late by the time the driver JVM has started.
 
-if [[ "$SPARK_SUBMIT_DEPLOY_MODE" == "client" && -f "$SPARK_SUBMIT_PROPERTIES_FILE" ]]; then
-  # Parse the properties file only if the special configs exist
-  contains_special_configs=$(
-    grep -e "spark.driver.extra*\|spark.driver.memory" "$SPARK_SUBMIT_PROPERTIES_FILE" | \
-    grep -v "^[[:space:]]*#"
-  )
-  if [ -n "$contains_special_configs" ]; then
-    export SPARK_SUBMIT_BOOTSTRAP_DRIVER=1
+for prop_file in `echo ${SPARK_SUBMIT_PROPERTIES_FILES} | tr , \  `; do
+  if [[ "$SPARK_SUBMIT_DEPLOY_MODE" == "client" && -f "$prop_file" ]]; then
+    # Parse the properties file only if the special configs exist
+    contains_special_configs=$(
+      grep -e "spark.driver.extra*\|spark.driver.memory" "$prop_file" | \
+      grep -v "^[[:space:]]*#"
+    )
+    if [ -n "$contains_special_configs" ]; then
+      export SPARK_SUBMIT_BOOTSTRAP_DRIVER=1
+      break
+    fi
   fi
-fi
+done
 
 exec "$SPARK_HOME"/bin/spark-class org.apache.spark.deploy.SparkSubmit "${ORIG_ARGS[@]}"
 

@@ -35,7 +35,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   var executorMemory: String = null
   var executorCores: String = null
   var totalExecutorCores: String = null
-  var propertiesFile: String = null
+  var propertiesFiles: String = null
   var driverMemory: String = null
   var driverExtraClassPath: String = null
   var driverExtraLibraryPath: String = null
@@ -69,14 +69,16 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   /** Default properties present in the currently defined defaults file. */
   lazy val defaultSparkProperties: HashMap[String, String] = {
     val defaultProperties = new HashMap[String, String]()
-    if (verbose) SparkSubmit.printStream.println(s"Using properties file: $propertiesFile")
-    Option(propertiesFile).foreach { filename =>
-      Utils.getPropertiesFromFile(filename).foreach { case (k, v) =>
-        if (k.startsWith("spark.")) {
-          defaultProperties(k) = v
-          if (verbose) SparkSubmit.printStream.println(s"Adding default property: $k=$v")
-        } else {
-          SparkSubmit.printWarning(s"Ignoring non-spark config property: $k=$v")
+    if (verbose) SparkSubmit.printStream.println(s"Using properties file: $propertiesFiles")
+    Option(propertiesFiles).foreach { filenames =>
+      filenames.split(",").foreach { filename =>
+        Utils.getPropertiesFromFile(filename).foreach { case (k, v) =>
+          if (k.startsWith("spark.")) {
+            defaultProperties(k) = v
+            if (verbose) SparkSubmit.printStream.println(s"Adding default property: $k=$v")
+          } else {
+            SparkSubmit.printWarning(s"Ignoring non-spark config property: $k=$v")
+          }
         }
       }
     }
@@ -98,7 +100,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
    */
   private def mergeDefaultSparkProperties(): Unit = {
     // Use common defaults file, if not specified by user
-    propertiesFile = Option(propertiesFile).getOrElse(Utils.getDefaultPropertiesFile(env))
+    propertiesFiles = Option(propertiesFiles).getOrElse(Utils.getDefaultPropertiesFile(env))
     // Honor --conf before the defaults file
     defaultSparkProperties.foreach { case (k, v) =>
       if (!sparkProperties.contains(k)) {
@@ -250,7 +252,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
     |  executorMemory          $executorMemory
     |  executorCores           $executorCores
     |  totalExecutorCores      $totalExecutorCores
-    |  propertiesFile          $propertiesFile
+    |  propertiesFile          $propertiesFiles
     |  driverMemory            $driverMemory
     |  driverCores             $driverCores
     |  driverExtraClassPath    $driverExtraClassPath
@@ -272,7 +274,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
     |  verbose                 $verbose
     |
     |Spark properties used, including those specified through
-    | --conf and those from the properties file $propertiesFile:
+    | --conf and those from the properties file $propertiesFiles:
     |${sparkProperties.mkString("  ", "\n  ", "\n")}
     """.stripMargin
   }
@@ -348,7 +350,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         parse(tail)
 
       case ("--properties-file") :: value :: tail =>
-        propertiesFile = value
+        propertiesFiles = if (propertiesFiles == null) value else s"$propertiesFiles,$value"
         parse(tail)
 
       case ("--kill") :: value :: tail =>
@@ -474,6 +476,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         |  --conf PROP=VALUE           Arbitrary Spark configuration property.
         |  --properties-file FILE      Path to a file from which to load extra properties. If not
         |                              specified, this will look for conf/spark-defaults.conf.
+        |                              Multiple properties files will be merged sequentially.
         |
         |  --driver-memory MEM         Memory for driver (e.g. 1000M, 2G) (Default: 512M).
         |  --driver-java-options       Extra Java options to pass to the driver.
