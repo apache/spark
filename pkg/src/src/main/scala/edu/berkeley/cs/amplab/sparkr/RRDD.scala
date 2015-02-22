@@ -357,10 +357,19 @@ object RRDD {
       sparkEnvirMap: JMap[Object, Object],
       sparkExecutorEnvMap: JMap[Object, Object]): JavaSparkContext = {
 
-    val sparkConf = new SparkConf().setMaster(master)
-                                   .setAppName(appName)
+    val sparkConf = new SparkConf().setAppName(appName)
                                    .setSparkHome(sparkHome)
                                    .setJars(jars)
+
+    // Override `master` if we have a user-specified value
+    if (master != "") {
+      sparkConf.setMaster(master)
+    } else {
+      // If conf has no master set it to "local" to maintain
+      // backwards compatibility
+      sparkConf.setIfMissing("spark.master", "local")
+    }
+
     for ((name, value) <- sparkEnvirMap) {
       sparkConf.set(name.asInstanceOf[String], value.asInstanceOf[String])
     }

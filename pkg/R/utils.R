@@ -197,9 +197,9 @@ initAccumulator <- function() {
 
 # Utility function to sort a list of key value pairs
 # Used in unit tests
-sortKeyValueList <- function(kv_list) {
+sortKeyValueList <- function(kv_list, decreasing = FALSE) {
   keys <- sapply(kv_list, function(x) x[[1]])
-  kv_list[order(keys)]
+  kv_list[order(keys, decreasing = decreasing)]
 }
 
 # Utility function to generate compact R lists from grouped rdd
@@ -258,4 +258,33 @@ mergeCompactLists <- function(left, right) {
 joinTaggedList <- function(tagged_list, cnull) {
   lists <- genCompactLists(tagged_list, cnull)
   mergeCompactLists(lists[[1]], lists[[2]])
+}
+
+# Utility function to reduce a key-value list with predicate
+# Used in *ByKey functions
+# param
+#   pair key-value pair
+#   keys/vals env of key/value with hashes
+#   updateOrCreatePred predicate function
+#   updateFn update or merge function for existing pair, similar with `mergeVal` @combineByKey
+#   createFn create function for new pair, similar with `createCombiner` @combinebykey
+updateOrCreatePair <- function(pair, keys, vals, updateOrCreatePred, updateFn, createFn) {
+  # assume hashVal bind to `$hash`, key/val with index 1/2
+  hashVal <- pair$hash
+  key <- pair[[1]]
+  val <- pair[[2]]
+  if (updateOrCreatePred(pair)) {
+    assign(hashVal, do.call(updateFn, list(get(hashVal, envir = vals), val)), envir = vals)
+  } else {
+    assign(hashVal, do.call(createFn, list(val)), envir = vals)
+    assign(hashVal, key, envir=keys)
+  }
+}
+
+# Utility function to convert key&values envs into key-val list
+convertEnvsToList <- function(keys, vals) {
+  lapply(ls(keys),
+         function(name) {
+           list(keys[[name]], vals[[name]])
+         })
 }

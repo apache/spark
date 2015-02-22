@@ -13,12 +13,6 @@ SparkR requires Scala 2.10 and Spark version >= 0.9.0. Current build by default 
 Apache Spark 1.1.0. You can also build SparkR against a
 different Spark version (>= 0.9.0) by modifying `pkg/src/build.sbt`.
 
-SparkR also requires the R package `rJava` to be installed. To install `rJava`,
-you can run the following command in R:
-
-    install.packages("rJava")
-
-
 ### Package installation
 To develop SparkR, you can build the scala package and the R package using
 
@@ -31,9 +25,9 @@ If you wish to try out the package directly from github, you can use [`install_g
 
 SparkR by default uses Apache Spark 1.1.0. You can switch to a different Spark
 version by setting the environment variable `SPARK_VERSION`. For example, to
-use Apache Spark 1.2.0, you can run
+use Apache Spark 1.3.0, you can run
 
-    SPARK_VERSION=1.2.0 ./install-dev.sh
+    SPARK_VERSION=1.3.0 ./install-dev.sh
 
 SparkR by default links to Hadoop 1.0.4. To use SparkR with other Hadoop
 versions, you will need to rebuild SparkR with the same version that [Spark is
@@ -84,7 +78,12 @@ pass the variable `spark.executor.memory` to the SparkContext constructor.
     sc <- sparkR.init(master="spark://<master>:7077",
                       sparkEnvir=list(spark.executor.memory="1g"))
 
+Finally, to stop the cluster run
 
+    sparkR.stop()
+    
+sparkR.stop() can be invoked to terminate a SparkContext created previously via sparkR.init(). Then you can call sparR.init() again to create a new SparkContext that may have different configurations.
+    
 ## Examples, Unit tests
 
 SparkR comes with several sample programs in the `examples` directory.
@@ -92,8 +91,9 @@ To run one of them, use `./sparkR <filename> <args>`. For example:
 
     ./sparkR examples/pi.R local[2]
 
-You can also run the unit-tests for SparkR by running
+You can also run the unit-tests for SparkR by running (you need to install the [testthat](http://cran.r-project.org/web/packages/testthat/index.html) package first):
 
+    R -e 'install.packages("testthat", repos="http://cran.us.r-project.org")'
     ./run-tests.sh
 
 ## Running on EC2
@@ -105,7 +105,7 @@ Instructions for running SparkR on EC2 can be found in the
 Currently, SparkR supports running on YARN with the `yarn-client` mode. These steps show how to build SparkR with YARN support and run SparkR programs on a YARN cluster:
 
 ```
-# assumes Java, R, rJava, yarn, spark etc. are installed on the whole cluster.
+# assumes Java, R, yarn, spark etc. are installed on the whole cluster.
 cd SparkR-pkg/
 USE_YARN=1 SPARK_YARN_VERSION=2.4.0 SPARK_HADOOP_VERSION=2.4.0 ./install-dev.sh
 ```

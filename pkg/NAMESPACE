@@ -2,10 +2,13 @@
 exportClasses("RDD")
 exportClasses("Broadcast")
 exportMethods(
+              "aggregateByKey",
+              "aggregateRDD",
               "cache",
               "checkpoint",
               "cogroup",
               "collect",
+              "collectAsMap",
               "collectPartition",
               "combineByKey",
               "count",
@@ -16,6 +19,8 @@ exportMethods(
               "filterRDD",
               "flatMap",
               "flatMapValues",
+              "fold",
+              "foldByKey",
               "foreach",
               "foreachPartition",
               "fullOuterJoin",
@@ -38,14 +43,20 @@ exportMethods(
               "numPartitions",
               "partitionBy",
               "persist",
+              "pipeRDD",
               "reduce",
               "reduceByKey",
+              "reduceByKeyLocally",
               "rightOuterJoin",
               "sampleRDD",
               "saveAsTextFile",
               "saveAsObjectFile",
+              "sortBy",
+              "sortByKey",
               "take",
+              "takeOrdered",
               "takeSample",
+              "top",
               "unionRDD",
               "unpersist",
               "value",
@@ -64,6 +75,7 @@ export(
        "setCheckpointDir"
       )
 export("sparkR.init")
+export("sparkR.stop")
 export("print.jobj")
 useDynLib(SparkR, stringHashCode)
 importFrom(methods, setGeneric, setMethod, setOldClass)

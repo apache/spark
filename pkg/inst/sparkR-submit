@@ -1,0 +1,74 @@
+#!/bin/bash
+# This script launches SparkR through spark-submit. This accepts
+# the same set of options as spark-submit and requires SPARK_HOME
+# to be set.
+
+FWDIR="$(cd `dirname $0`; pwd)"
+
+export PROJECT_HOME="$FWDIR"
+
+export SPARKR_JAR_FILE="$FWDIR/sparkr-assembly-0.1.jar"
+
+# Exit if the user hasn't set SPARK_HOME 
+if [ ! -f "$SPARK_HOME/bin/spark-submit" ]; then
+  echo "SPARK_HOME must be set to use sparkR-submit"
+  exit 1
+fi
+
+source "$SPARK_HOME/bin/utils.sh"
+
+function usage() {
+  echo "Usage: ./sparkR-submit [options]" 1>&2
+  "$SPARK_HOME"/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
+  exit 0
+}
+
+if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
+  usage
+fi
+
+# Build up arguments list manually to preserve quotes and backslashes.
+SUBMIT_USAGE_FUNCTION=usage
+gatherSparkSubmitOpts "$@"
+
+SPARKR_SUBMIT_ARGS=""
+whitespace="[[:space:]]"
+for i in "${SUBMISSION_OPTS[@]}"
+do
+  if [[ $i =~ \" ]]; then i=$(echo $i | sed 's/\"/\\\"/g'); fi
+  if [[ $i =~ $whitespace ]]; then i=\"$i\"; fi
+  SPARKR_SUBMIT_ARGS="$SPARKR_SUBMIT_ARGS $i"
+done
+export SPARKR_SUBMIT_ARGS
+export SPARKR_USE_SPARK_SUBMIT=1
+
+NUM_APPLICATION_OPTS=${#APPLICATION_OPTS[@]}
+
+# If a R file is provided, directly run spark-submit. 
+if [[ $NUM_APPLICATION_OPTS -gt 0 && "${APPLICATION_OPTS[0]}" =~ \.R$ ]]; then
+
+  primary="${APPLICATION_OPTS[0]}"
+  shift
+  # Set the main class to SparkRRunner and add the primary R file to --files to make sure its copied to the cluster
+  echo "Running $SPARK_HOME/bin/spark-submit --class edu.berkeley.cs.amplab.sparkr.SparkRRunner --files $primary ${SUBMISSION_OPTS[@]} $SPARKR_JAR_FILE $primary" "${APPLICATION_OPTS[@]:1}"
+  exec "$SPARK_HOME"/bin/spark-submit --class edu.berkeley.cs.amplab.sparkr.SparkRRunner --files "$primary" "${SUBMISSION_OPTS[@]}" "$SPARKR_JAR_FILE" "$primary" "${APPLICATION_OPTS[@]:1}"
+else
+
+  export R_PROFILE_USER="/tmp/sparkR.profile"
+
+  # If we don't have an R file to run, run R shell
+cat > /tmp/sparkR.profile << EOF
+.First <- function() {
+  projecHome <- Sys.getenv("PROJECT_HOME")
+  Sys.setenv(NOAWT=1)
+  .libPaths(c(paste(projecHome,"/..", sep=""), .libPaths()))
+  require(SparkR)
+  sc <- sparkR.init()
+  assign("sc", sc, envir=.GlobalEnv)
+  cat("\n Welcome to SparkR!")
+  cat("\n Spark context is available as sc\n")
+}
+EOF
+  R
+
+fi

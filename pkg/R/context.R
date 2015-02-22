@@ -85,10 +85,16 @@ parallelize <- function(sc, coll, numSlices = 1) {
   # TODO: bound/safeguard numSlices
   # TODO: unit tests for if the split works for all primitives
   # TODO: support matrix, data frame, etc
-  if (!is.list(coll)) {
-    if (!is.vector(coll)) {
-      message(paste("context.R: parallelize() currently only supports lists and vectors.",
-                    "Calling as.list() to coerce coll into a list."))
+  if ((!is.list(coll) && !is.vector(coll)) || is.data.frame(coll)) {
+    if (is.data.frame(coll)) {
+      message(paste("context.R: A data frame is parallelized by columns."))
+    } else {
+      if (is.matrix(coll)) {
+        message(paste("context.R: A matrix is parallelized by elements."))
+      } else {
+        message(paste("context.R: parallelize() currently only supports lists and vectors.",
+                      "Calling as.list() to coerce coll into a list."))
+      }
     }
     coll <- as.list(coll)
   }
@@ -108,7 +114,6 @@ parallelize <- function(sc, coll, numSlices = 1) {
 
   RDD(jrdd, TRUE)
 }
-
 
 #' Include this specified package on all workers
 #'
@@ -174,7 +179,7 @@ includePackage <- function(sc, pkg) {
 #'}
 broadcast <- function(sc, object) {
   objName <- as.character(substitute(object))
-  serializedObj <- serialize(object, connection = NULL, ascii = TRUE)
+  serializedObj <- serialize(object, connection = NULL)
 
   jBroadcast <- callJMethod(sc, "broadcast", serializedObj)
   id <- as.character(callJMethod(jBroadcast, "id"))
