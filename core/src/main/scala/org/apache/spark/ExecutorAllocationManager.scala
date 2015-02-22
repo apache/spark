@@ -20,6 +20,7 @@ package org.apache.spark
 import scala.collection.mutable
 
 import org.apache.spark.scheduler._
+import org.apache.spark.util.{SystemClock, Clock}
 
 /**
  * An agent that dynamically allocates and removes executors based on the workload.
@@ -123,7 +124,7 @@ private[spark] class ExecutorAllocationManager(
   private val intervalMillis: Long = 100
 
   // Clock used to schedule when executors should be added and removed
-  private var clock: Clock = new RealClock
+  private var clock: Clock = new SystemClock()
 
   // Listener for Spark events that impact the allocation policy
   private val listener = new ExecutorAllocationListener
@@ -587,29 +588,4 @@ private[spark] class ExecutorAllocationManager(
 
 private object ExecutorAllocationManager {
   val NOT_SET = Long.MaxValue
-}
-
-/**
- * An abstract clock for measuring elapsed time.
- */
-private trait Clock {
-  def getTimeMillis: Long
-}
-
-/**
- * A clock backed by a monotonically increasing time source.
- * The time returned by this clock does not correspond to any notion of wall-clock time.
- */
-private class RealClock extends Clock {
-  override def getTimeMillis: Long = System.nanoTime / (1000 * 1000)
-}
-
-/**
- * A clock that allows the caller to customize the time.
- * This is used mainly for testing.
- */
-private class TestClock(startTimeMillis: Long) extends Clock {
-  private var time: Long = startTimeMillis
-  override def getTimeMillis: Long = time
-  def tick(ms: Long): Unit = { time += ms }
 }

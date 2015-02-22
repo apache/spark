@@ -148,7 +148,11 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
   /** Cleanup local dirs and stop shuffle sender. */
   private[spark] def stop() {
     // Remove the shutdown hook.  It causes memory leaks if we leave it around.
-    Runtime.getRuntime.removeShutdownHook(shutdownHook)
+    try {
+      Runtime.getRuntime.removeShutdownHook(shutdownHook)
+    } catch {
+      case e: IllegalStateException => None
+    }
     doStop()
   }
 

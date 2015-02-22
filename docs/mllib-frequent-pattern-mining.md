@@ -57,8 +57,8 @@ val fpg = new FPGrowth()
   .setNumPartitions(10)
 val model = fpg.run(transactions)
 
-model.freqItemsets.collect().foreach { case (itemset, freq) =>
-  println(itemset.mkString("[", ",", "]") + ", " + freq)
+model.freqItemsets.collect().foreach { itemset =>
+  println(itemset.items.mkString("[", ",", "]") + ", " + itemset.freq)
 }
 {% endhighlight %}
 
@@ -74,10 +74,9 @@ Calling `FPGrowth.run` with transactions returns an
 that stores the frequent itemsets with their frequencies.
 
 {% highlight java %}
-import java.util.Arrays;
 import java.util.List;
 
-import scala.Tuple2;
+import com.google.common.base.Joiner;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.mllib.fpm.FPGrowth;
@@ -88,11 +87,10 @@ JavaRDD<List<String>> transactions = ...
 FPGrowth fpg = new FPGrowth()
   .setMinSupport(0.2)
   .setNumPartitions(10);
-
 FPGrowthModel<String> model = fpg.run(transactions);
 
-for (Tuple2<Object, Long> s: model.javaFreqItemsets().collect()) {
-   System.out.println("(" + Arrays.toString((Object[]) s._1()) + "): " + s._2());
+for (FPGrowth.FreqItemset<String> itemset: model.freqItemsets().toJavaRDD().collect()) {
+   System.out.println("[" + Joiner.on(",").join(s.javaItems()) + "], " + s.freq());
 }
 {% endhighlight %}
 

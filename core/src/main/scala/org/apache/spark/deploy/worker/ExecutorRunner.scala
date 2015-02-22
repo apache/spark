@@ -105,7 +105,11 @@ private[spark] class ExecutorRunner(
       workerThread.interrupt()
       workerThread = null
       state = ExecutorState.KILLED
-      Runtime.getRuntime.removeShutdownHook(shutdownHook)
+      try {
+        Runtime.getRuntime.removeShutdownHook(shutdownHook)
+      } catch {
+        case e: IllegalStateException => None
+      }
     }
   }
 

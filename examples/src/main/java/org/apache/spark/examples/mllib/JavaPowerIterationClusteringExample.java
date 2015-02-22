@@ -17,7 +17,6 @@
 
 package org.apache.spark.examples.mllib;
 
-import scala.Tuple2;
 import scala.Tuple3;
 
 import com.google.common.collect.Lists;
@@ -49,8 +48,8 @@ public class JavaPowerIterationClusteringExample {
       .setMaxIterations(10);
     PowerIterationClusteringModel model = pic.run(similarities);
 
-    for (Tuple2<Object, Object> assignment: model.assignments().toJavaRDD().collect()) {
-      System.out.println(assignment._1() + " -> " + assignment._2());
+    for (PowerIterationClustering.Assignment a: model.assignments().toJavaRDD().collect()) {
+      System.out.println(a.id() + " -> " + a.cluster());
     }
 
     sc.stop();

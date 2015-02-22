@@ -28,7 +28,7 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.mockito.Matchers._
 import org.mockito.Mockito._
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfter, FunSuite, Matchers}
+import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ HashMap => MutableHashMap }
@@ -45,7 +45,7 @@ class ClientSuite extends FunSuite with Matchers with BeforeAndAfterAll {
   }
 
   override def afterAll(): Unit = {
-    System.setProperty("SPARK_YARN_MODE", "")
+    System.clearProperty("SPARK_YARN_MODE")
   }
 
   test("default Yarn application classpath") {
