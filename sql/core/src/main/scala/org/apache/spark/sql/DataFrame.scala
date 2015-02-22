@@ -138,7 +138,7 @@ class DataFrame protected[sql](
 
   /**
    * An implicit conversion function internal to this class for us to avoid doing
-   * "new DataFrameImpl(...)" everywhere.
+   * "new DataFrame(...)" everywhere.
    */
   @inline private implicit def logicalPlanToDataFrame(logicalPlan: LogicalPlan): DataFrame = {
     new DataFrame(sqlContext, logicalPlan)
