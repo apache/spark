@@ -195,14 +195,6 @@ initAccumulator <- function() {
   acc
 }
 
-cloneAccumulator <- function(acc) {
-  newAcc <- initAccumulator()
-  newAcc$size <- acc$size
-  newAcc$data <- acc$data
-  newAcc$counter <- acc$counter
-  newAcc
-}
-
 # Utility function to sort a list of key value pairs
 # Used in unit tests
 sortKeyValueList <- function(kv_list) {
@@ -266,38 +258,4 @@ mergeCompactLists <- function(left, right) {
 joinTaggedList <- function(tagged_list, cnull) {
   lists <- genCompactLists(tagged_list, cnull)
   mergeCompactLists(lists[[1]], lists[[2]])
-}
-
-closure.process <- function(
-  node,
-  func,
-  env
-) {
-  nlen <- length(node)
-  if(nlen > 1) {
-    for(i in 1:nlen) {
-      closure.process(node[[i]], func, env)
-    }
-  } else if(nlen == 1) {
-    if(mode(node) == 'name') {
-      cnode <- as.character(node)
-      if(!cnode %in% names(as.list(args(func)))) {
-        func.env <- environment(func)  
-        if(exists(cnode, envir=func.env, inherits=F)) {
-          assign(cnode, get(cnode, envir=func.env), envir=env)
-        }
-      }
-    }
-  }
-}
-
-clean.closure <- function(
-  func,
-  env
-) {
-  if(mode(func) != 'function' || mode(env) != 'environment')
-    stop('parameter type mismatch...')
-  func.body <- body(func)
-  
-  closure.process(func.body, func, env)
 }

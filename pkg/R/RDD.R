@@ -18,7 +18,6 @@ setClass("RDD",
 setClass("PipelinedRDD",
          slots = list(prev = "RDD",
                       func = "function",
-                      funcAccum = "environment",
                       prev_jrdd = "jobj"),
          contains = "RDD")
 
@@ -53,8 +52,6 @@ setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) 
   # NOTE: We use prev_serialized to track if prev_jrdd is serialized
   # prev_serialized is used during the delayed computation of JRDD in getJRDD
   .Object@prev <- prev
-  
-  .Object@funcAccum <- initAccumulator()
 
   isPipelinable <- function(rdd) {
     e <- rdd@env
@@ -73,12 +70,10 @@ setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) 
       func(split, prev@func(split, iterator))
     }
     .Object@func <- pipelinedFunc
-    .Object@funcAccum <- cloneAccumulator(prev@funcAccum)
     .Object@prev_jrdd <- prev@prev_jrdd # maintain the pipeline
     # Get if the prev_jrdd was serialized from the parent RDD
     .Object@env$prev_serialized <- prev@env$prev_serialized
   }
-  addItemToAccumulator(.Object@funcAccum, func)
 
   .Object
 })
@@ -126,7 +121,6 @@ setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
                                    function(name) { get(name, .broadcastNames) })
 
             depsBin <- getDependencies(computeFunc)
-            depsBin <- serialize(rdd@funcAccum, NULL, ascii = TRUE)
 
             prev_jrdd <- rdd@prev_jrdd
 
@@ -532,11 +526,6 @@ setMethod("countByKey",
 setMethod("lapply",
           signature(X = "RDD", FUN = "function"),
           function(X, FUN) {
-            env.fun <- new.env(parent=.GlobalEnv)  
-            clean.closure(FUN, env.fun)
-            # need to add ref variables to en.fun environment
-            environment(FUN) <- env.fun
-            
             func <- function(split, iterator) {
               lapply(iterator, FUN)
             }
@@ -657,12 +646,7 @@ setGeneric("lapplyPartitionsWithIndex", function(X, FUN) {
 setMethod("lapplyPartitionsWithIndex",
           signature(X = "RDD", FUN = "function"),
           function(X, FUN) {
-            env.fun <- new.env(parent=.GlobalEnv)  
-            clean.closure(FUN, env.fun)
-            # need to add ref variables to en.fun environment
-            environment(FUN) <- env.fun
-            
-            closureCapturingFunc <- function(split, part) {  
+            closureCapturingFunc <- function(split, part) {
               FUN(split, part)
             }
             PipelinedRDD(X, closureCapturingFunc)

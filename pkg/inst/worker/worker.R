@@ -43,20 +43,10 @@ for (pkg in packageNames) {
 
 # read function dependencies
 depsLen <- SparkR:::readInt(inputCon)
-funcAccum <- unserialize(SparkR:::readRawLen(inputCon, depsLen))
-# testfilename <- "/home//ubuntu/Desktop/testfile"
-# cat(typeof(funcAccum), '\n', file = testfilename)
-# cat(funcAccum$size, '\n', file = testfilename, append = T)
-# cat(typeof(funcAccum$data[[1]]), '\n', file = testfilename, append = T)
-# cat(as.character(body(funcAccum$data[[1]])), file = testfilename, append = T)
-if (funcAccum$size > 0) {
-  computeFunc <- function(split, part) {
-    res <- part
-    for (i in 1:funcAccum$counter) {
-      res <- funcAccum$data[[i]](split, res)
-    }
-    res
-  }
+if (depsLen > 0) {
+  execFunctionDeps <- SparkR:::readRawLen(inputCon, depsLen)
+  # load the dependencies into current environment
+  load(rawConnection(execFunctionDeps, open='rb'))
 }
 
 # Read and set broadcast variables
