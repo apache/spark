@@ -609,7 +609,9 @@ private[master] class Master(
         var leftExecutorNumToAssign = usableWorkers.map(_.memoryFree / memoryPerExecutor).sum
         var maxCoresLeft = app.coresLeft
         val numUsable = usableWorkers.length
-        // 2D array to track the number of cores of each executor assigned to each worker
+        // A 2D array that tracks the number of cores used by each executor launched on
+        // each worker. The first index refers to the usable worker, and the second index
+        // refers to the executor launched on that worker.
         val assigned = Array.fill[ListBuffer[Int]](numUsable)(new ListBuffer[Int])
         val assignedSum = Array.fill[Int](numUsable)(0)
         var pos = 0

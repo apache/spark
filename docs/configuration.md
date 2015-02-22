@@ -103,6 +103,7 @@ of the most common options to set are:
     Number of cores to use for the driver process, only in cluster mode.
   </td>
 </tr>
+<tr>
   <td><code>spark.driver.maxResultSize</code></td>
   <td>1g</td>
   <td>
@@ -125,6 +126,14 @@ of the most common options to set are:
     directly in your application, because the driver JVM has already started at that point.
     Instead, please set this through the <code>--driver-memory</code> command line option
     or in your default properties file.
+  </td>
+</tr>
+<tr>
+  <td>spark.executor.maxCoreNumPerExecutor</td>
+  <td>1</td>
+  <td>
+    set the max number of cores assigned to each executor; this property is only valid when
+    <code>spark.executor.multiPerWorker</code> is set to true.
   </td>
 </tr>
 <tr>
@@ -1255,25 +1264,6 @@ Apart from these, the following properties are also available, and may be useful
 <tr>
   <td><code>spark.ui.view.acls</code></td>
   <td>Empty</td>
-</tr>
-<tr>
-  <td>spark.executor.multiPerWorker</td>
-  <td>false</td>
-  <td>
-    enable user to run multiple executors in the same worker.
-  </td>
-</tr>
-<tr>
-  <td>spark.executor.maxCoreNumPerExecutor</td>
-  <td>1</td>
-  <td>
-    set the max number of cores assigned to each executor; this property is only valid when
-    <code>spark.executor.multiPerWorker</code> is set to true.
-  </td>
-</tr>
-<tr>
-  <td>spark.executor.extraClassPath</td>
-  <td>(none)</td>
   <td>
     Comma separated list of users that have view access to the Spark web ui. By default only the
     user that started the Spark job has view access.
