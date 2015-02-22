@@ -103,7 +103,6 @@ of the most common options to set are:
     Number of cores to use for the driver process, only in cluster mode.
   </td>
 </tr>
-<tr>
   <td><code>spark.driver.maxResultSize</code></td>
   <td>1g</td>
   <td>
@@ -129,11 +128,12 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
-  <td>spark.executor.maxCoreNumPerExecutor</td>
-  <td>1</td>
+  <td><code>spark.executor.cores</code></td>
+  <td>None (Standalone), 1 (YARN)</td>
   <td>
-    set the max number of cores assigned to each executor; this property is only valid when
-    <code>spark.executor.multiPerWorker</code> is set to true.
+    Number of cores per executor. In Standalone mode, Spark will try to run more
+    than 1 executors on each worker in standalone mode; otherwise, only one executor on each executor
+    is allowed (the executor will take all available cores of the worker at the moment.
   </td>
 </tr>
 <tr>

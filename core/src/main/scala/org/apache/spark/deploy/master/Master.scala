@@ -528,102 +528,57 @@ private[master] class Master(
    */
   private def canUse(app: ApplicationInfo, worker: WorkerInfo): Boolean = {
     val enoughResources = worker.memoryFree >= app.desc.memoryPerExecutorMB && worker.coresFree > 0
-    val allowMultipleExecutors = app.desc.maxCorePerExecutor.isDefined || !worker.hasExecutor(app)
-    allowMultipleExecutors && enoughResources
+    val allowToExecute = app.desc.maxCorePerExecutor.isDefined || !worker.hasExecutor(app)
+    allowToExecute && enoughResources
   }
 
   /**
-   * This functions starts only one executor on each worker.
-   * 
-   * It travers the available worker list. In spreadOutApps mode, it allocates at most
-   * 1 core and app.desc.memoryPerExecutorMB megabytes memory and tracks the resource allocation 
-   * in a 1-d array for each visit; Otherwise, it allocates 1 core and app.desc.memoryPerExecutorMB 
-   * megabytes to each executor but starts as many executors as possible (limited by the worker 
-   * resources) for each visit.
-   */
-  private def startSingleExecutorPerWorker() {
-    if (spreadOutApps) {
-      // Try to spread out each app among all the nodes, until it has all its cores
-      for (app <- waitingApps if app.coresLeft > 0) {
-        val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
-          .filter(canUse(app, _)).sortBy(_.coresFree).reverse
-        val numUsable = usableWorkers.length
-        val assigned = new Array[Int](numUsable) // Number of cores to give on each node
-        var toAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
-        var pos = 0
-        while (toAssign > 0) {
-          if (usableWorkers(pos).coresFree - assigned(pos) > 0) {
-            toAssign -= 1
-            assigned(pos) += 1
-          }
-          pos = (pos + 1) % numUsable
-        }
-        // Now that we've decided how many cores to give on each node, let's actually give them
-        for (pos <- 0 until numUsable) {
-          if (assigned(pos) > 0) {
-            val exec = app.addExecutor(usableWorkers(pos), assigned(pos))
-            launchExecutor(usableWorkers(pos), exec)
-            app.state = ApplicationState.RUNNING
-          }
-        }
-      }
-    } else {
-      // Pack each app into as few nodes as possible until we've assigned all its cores
-      for (worker <- workers if worker.coresFree > 0 && worker.state == WorkerState.ALIVE) {
-        for (app <- waitingApps if app.coresLeft > 0) {
-          if (canUse(app, worker)) {
-            val coresToUse = math.min(worker.coresFree, app.coresLeft)
-            if (coresToUse > 0) {
-              val exec = app.addExecutor(worker, coresToUse)
-              launchExecutor(worker, exec)
-              app.state = ApplicationState.RUNNING
-            }
-          }
-        }
-      }
-    }
-  }
-
-  /**
-   * This functions starts multiple executors on each worker.
-   * It first calculates the maximum number of executors we can allocate to the application in this 
-   * scheduling moment according to the free memory space on each worker, then tries to allocate 
-   * executors on each worker according to the user-specified spark.executor.maxCoreNumPerExecutor.
+   * This functions starts one or more executors on each worker.
    * 
    * It traverses the available worker list. In spreadOutApps mode, it allocates at most
-   * spark.executor.maxCoreNumPerExecutor cores (can be less than it when the worker does not have 
-   * enough cores or the demand is less than it) and app.desc.memoryPerExecutorMB megabytes memory 
-   * and tracks the resource allocation in a 2d array for each visit; Otherwise, it allocates at
-   * most spark.executor.maxCoreNumPerExecutor cores and app.desc.memoryPerExecutorMB megabytes 
-   * to each executor but starts as many executors as possible (limited by the worker resources) for
-   * each visit.
+   * spark.executor.cores (multiple executors per worker) or 1 core(s) (one executor per worker) 
+   * for each visit of the worker (can be less than it when the worker does not have enough cores 
+   * or the demand is less than it) and app.desc.memoryPerExecutorMB megabytes memory and tracks 
+   * the resource allocation in a 2d array for each visit; Otherwise, it allocates at most 
+   * spark.executor.cores (multiple executors per worker) or worker.freeCores (one executor per
+   * worker) cores and app.desc.memoryPerExecutorMB megabytes to each executor.
    */
-  private def startMultiExecutorsPerWorker() {
+  private def startExecutorsOnWorker() {
     if (spreadOutApps) {
       for (app <- waitingApps if app.coresLeft > 0) {
         val memoryPerExecutor = app.desc.memoryPerExecutorMB
         val usableWorkers = workers.filter(_.state == WorkerState.ALIVE).
           filter(canUse(app, _)).toArray.sortBy(_.memoryFree / memoryPerExecutor).reverse
-        val maxCoreNumPerExecutor = app.desc.maxCorePerExecutor.get
-        // get the maximum number of executors we can assign
-        var leftExecutorNumToAssign = usableWorkers.map(_.memoryFree / memoryPerExecutor).sum
-        var maxCoresLeft = app.coresLeft
+        // the maximum number of cores allocated on each executor per visit on the worker list
+        val maxCoreAllocationPerRound = app.desc.maxCorePerExecutor.getOrElse(1)
+        var maxCoresLeft = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
         val numUsable = usableWorkers.length
+        val maxExecutorPerWorker = {
+          if (app.desc.maxCorePerExecutor.isDefined) {
+            usableWorkers(0).memoryFree / memoryPerExecutor
+          } else {
+            1
+          }
+        }
         // A 2D array that tracks the number of cores used by each executor launched on
         // each worker. The first index refers to the usable worker, and the second index
         // refers to the executor launched on that worker.
-        val assigned = Array.fill[ListBuffer[Int]](numUsable)(new ListBuffer[Int])
+        val assigned = Array.fill[Array[Int]](numUsable)(Array.fill[Int](maxExecutorPerWorker)(0))
+        val workerPointer = Array.fill[Int](numUsable)(0)
         val assignedSum = Array.fill[Int](numUsable)(0)
         var pos = 0
-        while (leftExecutorNumToAssign > 0) {
-          if (usableWorkers(pos).coresFree - assignedSum(pos) > 0) {
+        while (maxCoresLeft > 0) {
+          if ((usableWorkers(pos).coresFree - assignedSum(pos) > 0) &&
+            (usableWorkers(pos).memoryFree >= memoryPerExecutor * (workerPointer(pos) + 1))) {
             val coreToAssign = math.min(math.min(usableWorkers(pos).coresFree - assignedSum(pos),
-              maxCoreNumPerExecutor), maxCoresLeft)
-            if (usableWorkers(pos).memoryFree >= memoryPerExecutor * (assigned(pos).length + 1)) {
-              leftExecutorNumToAssign -= 1
-              assigned(pos) += coreToAssign
-              assignedSum(pos) += coreToAssign
-              maxCoresLeft -= coreToAssign
+              maxCoreAllocationPerRound), maxCoresLeft)
+            val workerAllocationArray = assigned(pos)
+            workerAllocationArray(workerPointer(pos)) += coreToAssign
+            assignedSum(pos) += coreToAssign
+            maxCoresLeft -= coreToAssign
+            if (app.desc.maxCorePerExecutor.isDefined) {
+              // if starting multiple executors on the worker, we move to the next executor
+              workerPointer(pos) += 1     
             }
           }
           pos = (pos + 1) % numUsable
@@ -632,7 +587,7 @@ private[master] class Master(
         // Now that we've decided how many executors and the core number for each to
         // give on each node, let's actually give them
         for (pos <- 0 until numUsable) {
-          for (execIdx <- 0 until assigned(pos).length) {
+          for (execIdx <- 0 until workerPointer(pos)) {
             val exec = app.addExecutor(usableWorkers(pos), assigned(pos)(execIdx))
             launchExecutor(usableWorkers(pos), exec)
             app.state = ApplicationState.RUNNING
@@ -644,7 +599,7 @@ private[master] class Master(
       for (worker <- workers if worker.coresFree > 0 && worker.state == WorkerState.ALIVE) {
         for (app <- waitingApps if app.coresLeft > 0 &&
           app.desc.memoryPerExecutorMB <= worker.memoryFree) {
-          val coreNumPerExecutor = app.desc.maxCorePerExecutor.get
+          val coreNumPerExecutor = app.desc.maxCorePerExecutor.getOrElse(worker.coresFree)
           var coresLeft = math.min(worker.coresFree, app.coresLeft)
           while (coresLeft > 0 && app.desc.memoryPerExecutorMB <= worker.memoryFree) {
             val coreToAssign = math.min(coreNumPerExecutor, coresLeft)
@@ -677,11 +632,7 @@ private[master] class Master(
       }
     }
 
-    if (!conf.getBoolean("spark.executor.multiPerWorker", true)) {
-      startSingleExecutorPerWorker()
-    } else {
-      startMultiExecutorsPerWorker()
-    }
+    startExecutorsOnWorker()
   }
 
   def launchExecutor(worker: WorkerInfo, exec: ExecutorDesc) {

@@ -383,6 +383,8 @@ object SparkSubmit {
       OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, sysProp = "spark.jars.ivy"),
       OptionAssigner(args.driverMemory, STANDALONE, CLUSTER, sysProp = "spark.driver.memory"),
       OptionAssigner(args.driverCores, STANDALONE, CLUSTER, sysProp = "spark.driver.cores"),
+      OptionAssigner(args.executorCores, STANDALONE, ALL_DEPLOY_MODES, 
+        sysProp = "spark.executor.cores"),
       OptionAssigner(args.supervise.toString, STANDALONE, CLUSTER,
         sysProp = "spark.driver.supervise"),
 
