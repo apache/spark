@@ -268,8 +268,6 @@ joinTaggedList <- function(tagged_list, cnull) {
   mergeCompactLists(lists[[1]], lists[[2]])
 }
 
-# Recursively examine variables in functions to decide if their values should
-# be included in the new function environment.
 closure.process <- function(
   node,
   func,
@@ -283,7 +281,7 @@ closure.process <- function(
   } else if(nlen == 1) {
     if(mode(node) == 'name') {
       cnode <- as.character(node)
-      if(!cnode %in% names(as.list(args(func)))) { # Not a function argument
+      if(!cnode %in% names(as.list(args(func)))) {
         func.env <- environment(func)  
         if(exists(cnode, envir=func.env, inherits=F)) {
           assign(cnode, get(cnode, envir=func.env), envir=env)
@@ -293,7 +291,6 @@ closure.process <- function(
   }
 }
 
-# Get function dependencies.
 clean.closure <- function(
   func,
   env
