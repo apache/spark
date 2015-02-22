@@ -89,7 +89,7 @@ test_that("several transformations on RDD (a benchmark on PipelinedRDD)", {
   actual <- collect(rdd2)
   expected <- list(24, 24, 24, 24, 24,
                    168, 170, 172, 174, 176)
-  expect_equal(actual, expected)
+  expect_equal(actual, expected))
 })
 
 test_that("PipelinedRDD support actions: cache(), persist(), unpersist(), checkpoint()", {
