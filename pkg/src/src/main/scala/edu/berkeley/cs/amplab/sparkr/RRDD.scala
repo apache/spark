@@ -16,7 +16,7 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
     parent: RDD[T],
     numPartitions: Int,
     func: Array[Byte],
-    parentSerialized: String,
+    parentSerializedMode: String,
     dataSerialized: Boolean,
     functionDependencies: Array[Byte],
     packageNames: Array[Byte],
@@ -130,7 +130,7 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
           dataOut.write(func, 0, func.length)
 
           // R worker process input serialization flag
-          SerDe.writeString(dataOut, parentSerialized)
+          SerDe.writeString(dataOut, parentSerializedMode)
           // R worker process output serialization flag
           dataOut.writeInt(if (dataSerialized) 1 else 0)
 
@@ -158,7 +158,7 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
             dataOut.writeInt(1)
           }
 
-          if (parentSerialized == SerializationFormats.ROW) {
+          if (parentSerializedMode == SerializationFormats.ROW) {
             SerDe.writeStringArr(dataOut, colNames)
             for (row <- iter) {
               val rowArr = row.asInstanceOf[Array[Byte]]
@@ -166,7 +166,7 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
             }
           } else {
             for (elem <- iter) {
-              if (parentSerialized == SerializationFormats.BYTE) {
+              if (parentSerializedMode == SerializationFormats.BYTE) {
                 val elemArr = elem.asInstanceOf[Array[Byte]]
                 dataOut.writeInt(elemArr.length)
                 dataOut.write(elemArr, 0, elemArr.length)
@@ -215,13 +215,13 @@ private class PairwiseRRDD[T: ClassTag](
     parent: RDD[T],
     numPartitions: Int,
     hashFunc: Array[Byte],
-    parentSerialized: String,
+    parentSerializedMode: String,
     functionDependencies: Array[Byte],
     packageNames: Array[Byte],
     rLibDir: String,
     broadcastVars: Array[Object],
     colNames: Array[String])
-  extends BaseRRDD[T, (Int, Array[Byte])](parent, numPartitions, hashFunc, parentSerialized,
+  extends BaseRRDD[T, (Int, Array[Byte])](parent, numPartitions, hashFunc, parentSerializedMode,
                                           true, functionDependencies, packageNames, rLibDir,
                                           broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]]),
                                           colNames) {
@@ -262,13 +262,13 @@ private class PairwiseRRDD[T: ClassTag](
 private class RRDD[T: ClassTag](
     parent: RDD[T],
     func: Array[Byte],
-    parentSerialized: String,
+    parentSerializedMode: String,
     functionDependencies: Array[Byte],
     packageNames: Array[Byte],
     rLibDir: String,
     broadcastVars: Array[Object],
     colNames: Array[String])
-  extends BaseRRDD[T, Array[Byte]](parent, -1, func, parentSerialized,
+  extends BaseRRDD[T, Array[Byte]](parent, -1, func, parentSerializedMode,
                                 true, functionDependencies, packageNames, rLibDir,
                                 broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]]),
                                 colNames) {
@@ -307,13 +307,13 @@ private class RRDD[T: ClassTag](
 private class StringRRDD[T: ClassTag](
     parent: RDD[T],
     func: Array[Byte],
-    parentSerialized: String,
+    parentSerializedMode: String,
     functionDependencies: Array[Byte],
     packageNames: Array[Byte],
     rLibDir: String,
     broadcastVars: Array[Object],
     colNames: Array[String])
-  extends BaseRRDD[T, String](parent, -1, func, parentSerialized,
+  extends BaseRRDD[T, String](parent, -1, func, parentSerializedMode,
                            false, functionDependencies, packageNames, rLibDir,
                            broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]]),
                            colNames) {

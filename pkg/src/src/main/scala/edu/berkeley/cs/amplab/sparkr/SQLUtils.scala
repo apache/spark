@@ -24,7 +24,7 @@ object SQLUtils {
     df.map(r => rowToRBytes(r))
   }
 
-  def rowToRBytes(row: Row): Array[Byte] = {
+  private[this] def rowToRBytes(row: Row): Array[Byte] = {
     val bos = new ByteArrayOutputStream()
     val dos = new DataOutputStream(bos)
 

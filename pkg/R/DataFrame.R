@@ -114,7 +114,7 @@ setMethod("count",
             callJMethod(sdf, "count")
           })
 
-# Collect the rows of a Spark DataFrame and return a named list for each row.
+# Collects a Spark DataFrame and returns a list of named lists (each of which represents a row).
 
 #' @rdname collect-methods
 #' @export
