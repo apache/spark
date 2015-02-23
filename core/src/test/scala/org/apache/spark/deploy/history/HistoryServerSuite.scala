@@ -87,7 +87,12 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers {
         errOpt should be (None)
         val json = jsonOpt.get
         val exp = IOUtils.toString(new FileInputStream(new File(expRoot, path + "/json_expectation")))
-        json should be (exp)
+        //compare the ASTs so formatting differences don't cause failures
+        import org.json4s._
+        import org.json4s.jackson.JsonMethods._
+        val jsonAst = parse(json)
+        val expAst = parse(exp)
+        jsonAst should be (expAst)
       }
   }
 
