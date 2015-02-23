@@ -162,8 +162,12 @@ def parse_args():
     parser.add_option(
         "--deploy-root-dir",
         default=None,
-        help="A directory to deploy onto / on the first master. " +
-             "Must be absolute. (default: %default)")
+        help="A directory to copy into / on the first master. " +
+             "Must be absolute. Note that a trailing slash is handled as per rsync: " +
+             "If you omit it, the last directory of the --deploy-root-dir path will be created " +
+             "in / before copying its contents. If you append the trailing slash, " +
+             "the directory is not created and its contents are copied directly into /. " +
+             "(default: %default).")
     parser.add_option(
         "--hadoop-major-version", default="1",
         help="Major version of Hadoop (default: %default)")
@@ -944,17 +948,18 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
     shutil.rmtree(tmp_dir)
 
 
-# Deploy files in a given local directory to a cluster, WITHOUT parameter substitution.
+# Deploy a given local directory to a cluster, WITHOUT parameter substitution.
 # Note that unlike deploy_files, this works for binary files.
+# Also, it is up to the user to add (or not) the trailing slash in root_dir.
 # Files are only deployed to the first master instance in the cluster.
 #
-# root_dir should be an absolute path to the directory with the files we want to deploy.
+# root_dir should be an absolute path.
 def deploy_user_files(root_dir, opts, master_nodes):
     active_master = master_nodes[0].public_dns_name
     command = [
         'rsync', '-rv',
         '-e', stringify_command(ssh_command(opts)),
-        "%s/" % root_dir,
+        "%s" % root_dir,
         "%s@%s:/" % (opts.user, active_master)
     ]
     subprocess.check_call(command)
