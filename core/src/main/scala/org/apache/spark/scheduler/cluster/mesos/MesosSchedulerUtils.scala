@@ -21,7 +21,6 @@ import java.util.{List => JList}
 import java.util.concurrent.CountDownLatch
 
 import scala.collection.JavaConversions._
-import scala.util.control.NonFatal
 
 import com.google.common.base.Splitter
 import org.apache.mesos.{MesosSchedulerDriver, SchedulerDriver, Scheduler, Protos}
@@ -40,6 +39,36 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
 
   // Driver for talking to Mesos
   protected var mesosDriver: SchedulerDriver = null
+
+  def createSchedulerDriver(
+      scheduler: Scheduler,
+      sparkUser: String,
+      appName: String,
+      masterUrl: String,
+      conf: SparkConf): SchedulerDriver = {
+    val fwInfoBuilder = FrameworkInfo.newBuilder().setUser(sparkUser).setName(appName)
+    val credBuilder = Credential.newBuilder()
+    conf.getOption("spark.mesos.principal").foreach { principal =>
+      fwInfoBuilder.setPrincipal(principal)
+      credBuilder.setPrincipal(principal)
+    }
+    conf.getOption("spark.mesos.secret").foreach { secret =>
+      credBuilder.setSecret(ByteString.copyFromUtf8(secret))
+    }
+    if (credBuilder.hasSecret && !fwInfoBuilder.hasPrincipal) {
+      throw new SparkException(
+        "spark.mesos.principal must be configured when spark.mesos.secret is set")
+    }
+    conf.getOption("spark.mesos.role").foreach { role =>
+      fwInfoBuilder.setRole(role)
+    }
+    if (credBuilder.hasPrincipal) {
+      new MesosSchedulerDriver(
+        scheduler, fwInfoBuilder.build(), masterUrl, credBuilder.build())
+    } else {
+      new MesosSchedulerDriver(scheduler, fwInfoBuilder.build(), masterUrl)
+    }
+  }
 
   /**
    * Starts the MesosSchedulerDriver with the provided information. This method returns
@@ -82,18 +111,59 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   /**
    * Signal that the scheduler has registered with Mesos.
    */
+  def getResource(res: List[Resource], name: String): Double = {
+    // A resource can have multiple values in the offer since it can either be from
+    // a specific role or wildcard.
+    res.filter(_.getName == name).map(_.getScalar.getValue).sum
+  }
+
   protected def markRegistered(): Unit = {
     registerLatch.countDown()
   }
 
   /**
-   * Get the amount of resources for the specified type from the resource list
+   * Partition the existing set of resources into two groups, those remaining to be
+   * scheduled and those requested to be used for a new task.
+   * @param resources The full list of available resources
+   * @param resourceName The name of the resource to take from the available resources
+   * @param count The amount of resources to take from the available resources
+   * @return The remaining resources list and the used resources list.
    */
-  protected def getResource(res: JList[Resource], name: String): Double = {
-    for (r <- res if r.getName == name) {
-      return r.getScalar.getValue
+  def partitionResources(
+      resources: List[Resource],
+      resourceName: String,
+      count: Double): (List[Resource], List[Resource]) = {
+    var remain = count
+    var requestedResources = new ArrayBuffer[Resource]
+    val remainingResources = resources.collect {
+      case r => {
+        if (remain > 0 &&
+          r.getType == Type.SCALAR &&
+          r.getScalar.getValue > 0.0 &&
+          r.getName == resourceName) {
+          val usage = Math.min(remain, r.getScalar.getValue)
+          requestedResources += Resource.newBuilder()
+            .setName(resourceName)
+            .setRole(r.getRole)
+            .setType(Value.Type.SCALAR)
+            .setScalar(Value.Scalar.newBuilder().setValue(usage).build())
+            .build()
+          remain -= usage
+          Resource.newBuilder()
+            .setName(resourceName)
+            .setRole(r.getRole)
+            .setType(Value.Type.SCALAR)
+            .setScalar(Value.Scalar.newBuilder().setValue(r.getScalar.getValue - usage).build())
+            .build()
+        } else {
+          r
+        }
+      }
     }
-    0.0
+
+    // Filter any resource that has depleted.
+    (remainingResources.filter(r => r.getType != Type.SCALAR || r.getScalar.getValue > 0.0).toList,
+      requestedResources.toList)
   }
 
   /** Helper method to get the key,value-set pair for a Mesos Attribute protobuf */

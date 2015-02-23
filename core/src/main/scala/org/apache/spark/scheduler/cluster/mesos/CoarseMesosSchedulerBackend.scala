@@ -224,17 +224,22 @@ private[spark] class CoarseMesosSchedulerBackend(
           taskIdToSlaveId(taskId) = slaveId
           slaveIdsWithExecutors += slaveId
           coresByTaskId(taskId) = cpusToUse
-          val task = MesosTaskInfo.newBuilder()
+          // Gather cpu resources from the available resources and use them in the task.
+          val (remainingResources, taskResources) =
+            MesosSchedulerUtils.partitionResources(offer.getResourcesList, "cpus", cpusToUse)
+          val taskBuilder = MesosTaskInfo.newBuilder()
             .setTaskId(TaskID.newBuilder().setValue(taskId.toString).build())
             .setSlaveId(offer.getSlaveId)
             .setCommand(createCommand(offer, cpusToUse + extraCoresPerSlave, taskId))
             .setName("Task " + taskId)
-            .addResources(createResource("cpus", cpusToUse))
-            .addResources(createResource("mem", calculateTotalMemory(sc)))
+            .addAllResources(taskResources)
+            .addAllResources(
+              MesosSchedulerUtils.partitionResources(
+                remainingResources, "mem", MemoryUtils.calculateTotalMemory(sc))._2)
 
           sc.conf.getOption("spark.mesos.executor.docker.image").foreach { image =>
             MesosSchedulerBackendUtil
-              .setupContainerBuilderDockerInfo(image, sc.conf, task.getContainerBuilder)
+              .setupContainerBuilderDockerInfo(image, sc.conf, task.getContainerBuilder())
           }
 
           // accept the offer and launch the task
@@ -255,7 +260,7 @@ private[spark] class CoarseMesosSchedulerBackend(
   override def statusUpdate(d: SchedulerDriver, status: TaskStatus) {
     val taskId = status.getTaskId.getValue.toInt
     val state = status.getState
-    logInfo("Mesos task " + taskId + " is now " + state)
+    logInfo(s"Mesos task $taskId is now $state")
     stateLock.synchronized {
       if (TaskState.isFinished(TaskState.fromMesos(state))) {
         val slaveId = taskIdToSlaveId(taskId)
@@ -270,7 +275,7 @@ private[spark] class CoarseMesosSchedulerBackend(
         if (TaskState.isFailed(TaskState.fromMesos(state))) {
           failuresBySlaveId(slaveId) = failuresBySlaveId.getOrElse(slaveId, 0) + 1
           if (failuresBySlaveId(slaveId) >= MAX_SLAVE_FAILURES) {
-            logInfo("Blacklisting Mesos slave " + slaveId + " due to too many failures; " +
+            logInfo(s"Blacklisting Mesos slave $slaveId due to too many failures; " +
                 "is Spark installed on it?")
           }
         }
@@ -282,7 +287,7 @@ private[spark] class CoarseMesosSchedulerBackend(
   }
 
   override def error(d: SchedulerDriver, message: String) {
-    logError("Mesos error: " + message)
+    logError(s"Mesos error: $message")
     scheduler.error(message)
   }
 
@@ -323,7 +328,7 @@ private[spark] class CoarseMesosSchedulerBackend(
   }
 
   override def slaveLost(d: SchedulerDriver, slaveId: SlaveID): Unit = {
-    logInfo("Mesos slave lost: " + slaveId.getValue)
+    logInfo(s"Mesos slave lost: ${slaveId.getValue}")
     executorTerminated(d, slaveId.getValue, "Mesos slave lost: " + slaveId.getValue)
   }
 
