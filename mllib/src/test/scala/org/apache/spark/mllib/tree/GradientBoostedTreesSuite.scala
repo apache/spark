@@ -160,7 +160,7 @@ class GradientBoostedTreesSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("runWithValidation performs better on a validation dataset (Regression)") {
-    // Set numIterations large enough so that it early stops.
+    // Set numIterations large enough so that it stops early.
     val numIterations = 20
     val trainRdd = sc.parallelize(GradientBoostedTreesSuite.trainData, 2)
     val validateRdd = sc.parallelize(GradientBoostedTreesSuite.validateData, 2)
@@ -171,9 +171,9 @@ class GradientBoostedTreesSuite extends FunSuite with MLlibTestSparkContext {
       val boostingStrategy =
         new BoostingStrategy(treeStrategy, error, numIterations, validationTol = 0.0)
 
-      val gbtValidate = new GradientBoostedTrees(boostingStrategy).runWithValidation(
-        trainRdd, validateRdd)
-      assert(gbtValidate.numTrees != numIterations)
+      val gbtValidate = new GradientBoostedTrees(boostingStrategy).
+        runWithValidation(trainRdd, validateRdd)
+      assert(gbtValidate.numTrees !== numIterations)
 
       val gbt = GradientBoostedTrees.train(trainRdd, boostingStrategy)
       val errorWithoutValidation = error.computeError(gbt, validateRdd)
@@ -183,7 +183,7 @@ class GradientBoostedTreesSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("runWithValidation performs better on a validation dataset (Classification)") {
-    // Set numIterations large enough so that it early stops.
+    // Set numIterations large enough so that it stops early.
     val numIterations = 20
     val trainRdd = sc.parallelize(GradientBoostedTreesSuite.trainData, 2)
     val validateRdd = sc.parallelize(GradientBoostedTreesSuite.validateData, 2)
@@ -194,9 +194,9 @@ class GradientBoostedTreesSuite extends FunSuite with MLlibTestSparkContext {
       new BoostingStrategy(treeStrategy, LogLoss, numIterations, validationTol = 0.0)
 
     // Test that it stops early.
-    val gbtValidate = new GradientBoostedTrees(boostingStrategy).runWithValidation(
-      trainRdd, validateRdd)
-    assert(gbtValidate.numTrees != numIterations)
+    val gbtValidate = new GradientBoostedTrees(boostingStrategy).
+      runWithValidation(trainRdd, validateRdd)
+    assert(gbtValidate.numTrees !== numIterations)
 
     // Remap labels to {-1, 1}
     val remappedInput = validateRdd.map(x => new LabeledPoint(2 * x.label - 1, x.features))
@@ -213,7 +213,7 @@ class GradientBoostedTreesSuite extends FunSuite with MLlibTestSparkContext {
     val errorWithoutValidation = LogLoss.computeError(gbtRegressor, remappedInput)
 
     assert(errorWithValidation < errorWithoutValidation)
-    }
+  }
 
 }
 

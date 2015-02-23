@@ -429,16 +429,15 @@ We omit some decision tree parameters since those are covered in the [decision t
 
 #### Validation while training
 
-Gradient boosting can overfit when trained with more number of trees. In order to prevent overfitting, it might
-be useful to validate while training. The method **`runWithValidation`** has been provided to make use of this
-option. It takes a pair of RDD's as arguments, the first one being the training dataset and the second being the validation dataset.
+Gradient boosting can overfit when trained with more trees. In order to prevent overfitting, it is useful to validate while
+training. The method runWithValidation has been provided to make use of this option. It takes a pair of RDD's as arguments, the
+first one being the training dataset and the second being the validation dataset.
 
 The training is stopped when the improvement in the validation error is not more than a certain tolerance
-(supplied by the **`validationTol`** argument in **`BoostingStrategy`**). In practice, the validation error
-decreases with the increase in number of trees and then increases as the model starts to overfit. There might
-be cases, in which the validation error does not change monotonically, and the user is advised to set a large
-enough negative tolerance and examine the validation curve to make further inference.
-
+(supplied by the validationTol argument in BoostingStrategy). In practice, the validation error
+decreases initially and later increases. There might be cases in which the validation error does not change monotonically,
+and the user is advised to set a large enough negative tolerance and examine the validation curve to to tune the number of
+iterations.
 
 ### Examples
 
