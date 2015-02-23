@@ -17,21 +17,11 @@
 
 package org.apache.spark.launcher;
 
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileFilter;
-import java.io.FileInputStream;
-import java.io.InputStreamReader;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
-import java.util.jar.JarFile;
-import java.util.regex.Pattern;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
 
@@ -69,38 +59,22 @@ public class SparkLauncher {
   /** Configuration key for the number of executor CPU cores. */
   public static final String EXECUTOR_CORES = "spark.executor.cores";
 
-  private static final String ENV_SPARK_HOME = "SPARK_HOME";
-  private static final String DEFAULT_PROPERTIES_FILE = "spark-defaults.conf";
-  static final String DEFAULT_MEM = "512m";
-
-  boolean verbose;
-  String appName;
-  String appResource;
-  String deployMode;
-  String javaHome;
-  String mainClass;
-  String master;
-  String propertiesFile;
-  final List<String> sparkArgs;
-  final List<String> appArgs;
-  final List<String> jars;
-  final List<String> files;
-  final List<String> pyFiles;
-  final Map<String, String> childEnv;
-  final Map<String, String> conf;
+  private final SparkSubmitCommandBuilder builder;
 
   public SparkLauncher() {
-    this(Collections.<String, String>emptyMap());
+    this(null);
   }
 
+  /**
+   * Creates a launcher that will set the given environment variables in the child.
+   *
+   * @param env Environment variables to set.
+   */
   public SparkLauncher(Map<String, String> env) {
-    this.appArgs = new ArrayList<String>();
-    this.childEnv = new HashMap<String, String>(env);
-    this.conf = new HashMap<String, String>();
-    this.files = new ArrayList<String>();
-    this.jars = new ArrayList<String>();
-    this.pyFiles = new ArrayList<String>();
-    this.sparkArgs = new ArrayList<String>();
+    this.builder = new SparkSubmitCommandBuilder();
+    if (env != null) {
+      this.builder.childEnv.putAll(env);
+    }
   }
 
   /**
@@ -111,7 +85,7 @@ public class SparkLauncher {
    */
   public SparkLauncher setJavaHome(String javaHome) {
     checkNotNull(javaHome, "javaHome");
-    this.javaHome = javaHome;
+    builder.javaHome = javaHome;
     return this;
   }
 
@@ -123,7 +97,7 @@ public class SparkLauncher {
    */
   public SparkLauncher setSparkHome(String sparkHome) {
     checkNotNull(sparkHome, "sparkHome");
-    childEnv.put(ENV_SPARK_HOME, sparkHome);
+    builder.childEnv.put(ENV_SPARK_HOME, sparkHome);
     return this;
   }
 
@@ -135,7 +109,7 @@ public class SparkLauncher {
    */
   public SparkLauncher setPropertiesFile(String path) {
     checkNotNull(path, "path");
-    this.propertiesFile = path;
+    builder.propertiesFile = path;
     return this;
   }
 
@@ -150,7 +124,7 @@ public class SparkLauncher {
     checkNotNull(key, "key");
     checkNotNull(value, "value");
     checkArgument(key.startsWith("spark."), "'key' must start with 'spark.'");
-    conf.put(key, value);
+    builder.conf.put(key, value);
     return this;
   }
 
@@ -162,7 +136,7 @@ public class SparkLauncher {
    */
   public SparkLauncher setAppName(String appName) {
     checkNotNull(appName, "appName");
-    this.appName = appName;
+    builder.appName = appName;
     return this;
   }
 
@@ -174,7 +148,7 @@ public class SparkLauncher {
    */
   public SparkLauncher setMaster(String master) {
     checkNotNull(master, "master");
-    this.master = master;
+    builder.master = master;
     return this;
   }
 
@@ -186,7 +160,7 @@ public class SparkLauncher {
    */
   public SparkLauncher setDeployMode(String mode) {
     checkNotNull(mode, "mode");
-    this.deployMode = mode;
+    builder.deployMode = mode;
     return this;
   }
 
@@ -199,7 +173,7 @@ public class SparkLauncher {
    */
   public SparkLauncher setAppResource(String resource) {
     checkNotNull(resource, "resource");
-    this.appResource = resource;
+    builder.appResource = resource;
     return this;
   }
 
@@ -211,7 +185,7 @@ public class SparkLauncher {
    */
   public SparkLauncher setMainClass(String mainClass) {
     checkNotNull(mainClass, "mainClass");
-    this.mainClass = mainClass;
+    builder.mainClass = mainClass;
     return this;
   }
 
@@ -224,7 +198,7 @@ public class SparkLauncher {
   public SparkLauncher addAppArgs(String... args) {
     for (String arg : args) {
       checkNotNull(arg, "arg");
-      appArgs.add(arg);
+      builder.appArgs.add(arg);
     }
     return this;
   }
@@ -237,7 +211,7 @@ public class SparkLauncher {
    */
   public SparkLauncher addJar(String jar) {
     checkNotNull(jar, "jar");
-    jars.add(jar);
+    builder.jars.add(jar);
     return this;
   }
 
@@ -249,7 +223,7 @@ public class SparkLauncher {
    */
   public SparkLauncher addFile(String file) {
     checkNotNull(file, "file");
-    files.add(file);
+    builder.files.add(file);
     return this;
   }
 
@@ -261,7 +235,7 @@ public class SparkLauncher {
    */
   public SparkLauncher addPyFile(String file) {
     checkNotNull(file, "file");
-    pyFiles.add(file);
+    builder.pyFiles.add(file);
     return this;
   }
 
@@ -272,7 +246,7 @@ public class SparkLauncher {
    * @return This launcher.
    */
   public SparkLauncher setVerbose(boolean verbose) {
-    this.verbose = verbose;
+    builder.verbose = verbose;
     return this;
   }
 
@@ -283,362 +257,14 @@ public class SparkLauncher {
    */
   public Process launch() throws IOException {
     List<String> cmd = new ArrayList<String>();
-    cmd.add(join(File.separator, getSparkHome(), "bin", "spark-submit"));
-    cmd.addAll(buildSparkSubmitArgs());
+    cmd.add(join(File.separator, builder.getSparkHome(), "bin", "spark-submit"));
+    cmd.addAll(builder.buildSparkSubmitArgs());
 
     ProcessBuilder pb = new ProcessBuilder(cmd.toArray(new String[cmd.size()]));
-    for (Map.Entry<String, String> e : childEnv.entrySet()) {
+    for (Map.Entry<String, String> e : builder.childEnv.entrySet()) {
       pb.environment().put(e.getKey(), e.getValue());
     }
     return pb.start();
-  }
-
-  List<String> buildJavaCommand(String extraClassPath) throws IOException {
-    List<String> cmd = new ArrayList<String>();
-    if (javaHome == null) {
-      cmd.add(join(File.separator, System.getProperty("java.home"), "bin", "java"));
-    } else {
-      cmd.add(join(File.separator, javaHome, "bin", "java"));
-    }
-
-    // Load extra JAVA_OPTS from conf/java-opts, if it exists.
-    File javaOpts = new File(join(File.separator, getConfDir(), "java-opts"));
-    if (javaOpts.isFile()) {
-      BufferedReader br = new BufferedReader(new InputStreamReader(
-          new FileInputStream(javaOpts), "UTF-8"));
-      try {
-        String line;
-        while ((line = br.readLine()) != null) {
-          addOptionString(cmd, line);
-        }
-      } finally {
-        br.close();
-      }
-    }
-
-    cmd.add("-cp");
-    cmd.add(join(File.pathSeparator, buildClassPath(extraClassPath)));
-    return cmd;
-  }
-
-  /**
-   * Adds the default perm gen size option for Spark if the VM requires it and the user hasn't
-   * set it.
-   */
-  void addPermGenSizeOpt(List<String> cmd) {
-    // Don't set MaxPermSize for Java 8 and later.
-    String[] version = System.getProperty("java.version").split("\\.");
-    if (Integer.parseInt(version[0]) > 1 || Integer.parseInt(version[1]) > 7) {
-      return;
-    }
-
-    for (String arg : cmd) {
-      if (arg.startsWith("-XX:MaxPermSize=")) {
-        return;
-      }
-    }
-
-    cmd.add("-XX:MaxPermSize=128m");
-  }
-
-  void addOptionString(List<String> cmd, String options) {
-    if (!isEmpty(options)) {
-      for (String opt : parseOptionString(options)) {
-        cmd.add(opt);
-      }
-    }
-  }
-
-  /**
-   * Builds the classpath for the application. Returns a list with one classpath entry per element;
-   * each entry is formatted in the way expected by <i>java.net.URLClassLoader</i> (more
-   * specifically, with trailing slashes for directories).
-   */
-  List<String> buildClassPath(String appClassPath) throws IOException {
-    String sparkHome = getSparkHome();
-    String scala = getScalaVersion();
-
-    List<String> cp = new ArrayList<String>();
-    addToClassPath(cp, getenv("SPARK_CLASSPATH"));
-    addToClassPath(cp, appClassPath);
-
-    addToClassPath(cp, getConfDir());
-
-    boolean prependClasses = !isEmpty(getenv("SPARK_PREPEND_CLASSES"));
-    boolean isTesting = "1".equals(getenv("SPARK_TESTING"));
-    if (prependClasses || isTesting) {
-      List<String> projects = Arrays.asList("core", "repl", "mllib", "bagel", "graphx",
-        "streaming", "tools", "sql/catalyst", "sql/core", "sql/hive", "sql/hive-thriftserver",
-        "yarn", "launcher");
-      if (prependClasses) {
-        System.err.println(
-          "NOTE: SPARK_PREPEND_CLASSES is set, placing locally compiled Spark classes ahead of " +
-          "assembly.");
-        for (String project : projects) {
-          addToClassPath(cp, String.format("%s/%s/target/scala-%s/classes", sparkHome, project,
-            scala));
-        }
-      }
-      if (isTesting) {
-        for (String project : projects) {
-          addToClassPath(cp, String.format("%s/%s/target/scala-%s/test-classes", sparkHome,
-            project, scala));
-        }
-      }
-
-      // Add this path to include jars that are shaded in the final deliverable created during
-      // the maven build. These jars are copied to this directory during the build.
-      addToClassPath(cp, String.format("%s/core/target/jars/*", sparkHome));
-    }
-
-    String assembly = findAssembly(scala);
-    addToClassPath(cp, assembly);
-
-    // When Hive support is needed, Datanucleus jars must be included on the classpath. Datanucleus
-    // jars do not work if only included in the uber jar as plugin.xml metadata is lost. Both sbt
-    // and maven will populate "lib_managed/jars/" with the datanucleus jars when Spark is built
-    // with Hive, so first check if the datanucleus jars exist, and then ensure the current Spark
-    // assembly is built for Hive, before actually populating the CLASSPATH with the jars.
-    //
-    // This block also serves as a check for SPARK-1703, when the assembly jar is built with
-    // Java 7 and ends up with too many files, causing issues with other JDK versions.
-    boolean needsDataNucleus = false;
-    JarFile assemblyJar = null;
-    try {
-      assemblyJar = new JarFile(assembly);
-      needsDataNucleus = assemblyJar.getEntry("org/apache/hadoop/hive/ql/exec/") != null;
-    } catch (IOException ioe) {
-      if (ioe.getMessage().indexOf("invalid CEN header") >= 0) {
-        System.err.println(
-          "Loading Spark jar failed.\n" +
-          "This is likely because Spark was compiled with Java 7 and run\n" +
-          "with Java 6 (see SPARK-1703). Please use Java 7 to run Spark\n" +
-          "or build Spark with Java 6.");
-        System.exit(1);
-      } else {
-        throw ioe;
-      }
-    } finally {
-      if (assemblyJar != null) {
-        try {
-          assemblyJar.close();
-        } catch (IOException e) {
-          // Ignore.
-        }
-      }
-    }
-
-    if (needsDataNucleus) {
-      System.err.println("Spark assembly has been built with Hive, including Datanucleus jars " +
-        "in classpath.");
-      File libdir;
-      if (new File(sparkHome, "RELEASE").isFile()) {
-        libdir = new File(sparkHome, "lib");
-      } else {
-        libdir = new File(sparkHome, "lib_managed/jars");
-      }
-
-      checkState(libdir.isDirectory(), "Library directory '%s' does not exist.",
-        libdir.getAbsolutePath());
-      for (File jar : libdir.listFiles()) {
-        if (jar.getName().startsWith("datanucleus-")) {
-          addToClassPath(cp, jar.getAbsolutePath());
-        }
-      }
-    }
-
-    addToClassPath(cp, getenv("HADOOP_CONF_DIR"));
-    addToClassPath(cp, getenv("YARN_CONF_DIR"));
-    addToClassPath(cp, getenv("SPARK_DIST_CLASSPATH"));
-    return cp;
-  }
-
-  /**
-   * Adds entries to the classpath.
-   *
-   * @param cp List where to appended the new classpath entries.
-   * @param entries New classpath entries (separated by File.pathSeparator).
-   */
-  private void addToClassPath(List<String> cp, String entries) {
-    if (isEmpty(entries)) {
-      return;
-    }
-    String[] split = entries.split(Pattern.quote(File.pathSeparator));
-    for (String entry : split) {
-      if (!isEmpty(entry)) {
-        if (new File(entry).isDirectory() && !entry.endsWith(File.separator)) {
-          entry += File.separator;
-        }
-        cp.add(entry);
-      }
-    }
-  }
-
-  String getScalaVersion() {
-    String scala = getenv("SPARK_SCALA_VERSION");
-    if (scala != null) {
-      return scala;
-    }
-
-    String sparkHome = getSparkHome();
-    File scala210 = new File(sparkHome, "assembly/target/scala-2.10");
-    File scala211 = new File(sparkHome, "assembly/target/scala-2.11");
-    if (scala210.isDirectory() && scala211.isDirectory()) {
-      checkState(false,
-        "Presence of build for both scala versions (2.10 and 2.11) detected.\n" +
-        "Either clean one of them or set SPARK_SCALA_VERSION in your environment.");
-    } else if (scala210.isDirectory()) {
-      return "2.10";
-    } else {
-      checkState(scala211.isDirectory(), "Cannot find any assembly build directories.");
-      return "2.11";
-    }
-
-    throw new IllegalStateException("Should not reach here.");
-  }
-
-  SparkLauncher addSparkArgs(String... args) {
-    for (String arg : args) {
-      sparkArgs.add(arg);
-    }
-    return this;
-  }
-
-  // Visible for testing.
-  List<String> buildSparkSubmitArgs() {
-    List<String> args = new ArrayList<String>();
-    SparkSubmitOptionParser parser = new SparkSubmitOptionParser();
-
-    if (verbose) {
-      args.add(parser.VERBOSE);
-    }
-
-    if (master != null) {
-      args.add(parser.MASTER);
-      args.add(master);
-    }
-
-    if (deployMode != null) {
-      args.add(parser.DEPLOY_MODE);
-      args.add(deployMode);
-    }
-
-    if (appName != null) {
-      args.add(parser.NAME);
-      args.add(appName);
-    }
-
-    for (Map.Entry<String, String> e : conf.entrySet()) {
-      args.add(parser.CONF);
-      args.add(String.format("%s=%s", e.getKey(), e.getValue()));
-    }
-
-    if (propertiesFile != null) {
-      args.add(parser.PROPERTIES_FILE);
-      args.add(propertiesFile);
-    }
-
-    if (!jars.isEmpty()) {
-      args.add(parser.JARS);
-      args.add(join(",", jars));
-    }
-
-    if (!files.isEmpty()) {
-      args.add(parser.FILES);
-      args.add(join(",", files));
-    }
-
-    if (!pyFiles.isEmpty()) {
-      args.add(parser.PY_FILES);
-      args.add(join(",", pyFiles));
-    }
-
-    if (mainClass != null) {
-      args.add(parser.CLASS);
-      args.add(mainClass);
-    }
-
-    args.addAll(sparkArgs);
-    if (appResource != null) {
-      args.add(appResource);
-    }
-    args.addAll(appArgs);
-
-    return args;
-  }
-
-  String getSparkHome() {
-    String path = getenv(ENV_SPARK_HOME);
-    checkState(path != null,
-      "Spark home not found; set it explicitly or use the SPARK_HOME environment variable.");
-    return path;
-  }
-
-  /**
-   * Loads the configuration file for the application, if it exists. This is either the
-   * user-specified properties file, or the spark-defaults.conf file under the Spark configuration
-   * directory.
-   */
-  Properties loadPropertiesFile() throws IOException {
-    Properties props = new Properties();
-    File propsFile;
-    if (propertiesFile != null) {
-      propsFile = new File(propertiesFile);
-      checkArgument(propsFile.isFile(), "Invalid properties file '%s'.", propertiesFile);
-    } else {
-      propsFile = new File(getConfDir(), DEFAULT_PROPERTIES_FILE);
-    }
-
-    if (propsFile.isFile()) {
-      FileInputStream fd = null;
-      try {
-        fd = new FileInputStream(propsFile);
-        props.load(new InputStreamReader(fd, "UTF-8"));
-      } finally {
-        if (fd != null) {
-          try {
-            fd.close();
-          } catch (IOException e) {
-            // Ignore.
-          }
-        }
-      }
-    }
-
-    return props;
-  }
-
-  String getenv(String key) {
-    return firstNonEmpty(childEnv.get(key), System.getenv(key));
-  }
-
-  private String findAssembly(String scalaVersion) {
-    String sparkHome = getSparkHome();
-    File libdir;
-    if (new File(sparkHome, "RELEASE").isFile()) {
-      libdir = new File(sparkHome, "lib");
-      checkState(libdir.isDirectory(), "Library directory '%s' does not exist.",
-          libdir.getAbsolutePath());
-    } else {
-      libdir = new File(sparkHome, String.format("assembly/target/scala-%s", scalaVersion));
-    }
-
-    final Pattern re = Pattern.compile("spark-assembly.*hadoop.*\\.jar");
-    FileFilter filter = new FileFilter() {
-      @Override
-      public boolean accept(File file) {
-        return file.isFile() && re.matcher(file.getName()).matches();
-      }
-    };
-    File[] assemblies = libdir.listFiles(filter);
-    checkState(assemblies != null && assemblies.length > 0, "No assemblies found in '%s'.", libdir);
-    checkState(assemblies.length == 1, "Multiple assemblies found in '%s'.", libdir);
-    return assemblies[0].getAbsolutePath();
-  }
-
-  private String getConfDir() {
-    String confDir = getenv("SPARK_CONF_DIR");
-    return confDir != null ? confDir : join(File.separator, getSparkHome(), "conf");
   }
 
 }

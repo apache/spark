@@ -32,7 +32,7 @@ import static org.apache.spark.launcher.CommandBuilderUtils.*;
  * This class handles building the command to launch all internal Spark classes except for
  * SparkSubmit (which is handled by {@link SparkSubmitCommandBuilder} class.
  */
-class SparkClassCommandBuilder extends SparkLauncher implements CommandBuilder {
+class SparkClassCommandBuilder extends AbstractCommandBuilder {
 
   private final String className;
   private final List<String> classArgs;
@@ -145,9 +145,9 @@ class SparkClassCommandBuilder extends SparkLauncher implements CommandBuilder {
     sparkSubmitArgs.add(className);
 
     SparkSubmitCommandBuilder builder = new SparkSubmitCommandBuilder(true, sparkSubmitArgs);
-    builder.setAppResource("spark-internal");
+    builder.appResource = "spark-internal";
     for (String arg: appArgs) {
-      builder.addAppArgs(arg);
+      builder.appArgs.add(arg);
     }
     return builder.buildCommand(env);
   }

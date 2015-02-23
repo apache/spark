@@ -19,7 +19,6 @@ package org.apache.spark.deploy.worker
 
 import java.io.{File, FileOutputStream, InputStream, IOException}
 import java.lang.System._
-import java.util.{List => JList, Map => JMap}
 
 import scala.collection.JavaConversions._
 import scala.collection.Map

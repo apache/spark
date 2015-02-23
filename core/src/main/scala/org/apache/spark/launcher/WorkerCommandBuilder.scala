@@ -18,7 +18,7 @@
 package org.apache.spark.launcher
 
 import java.io.File
-import java.util.{List => JList}
+import java.util.{HashMap => JHashMap, List => JList, Map => JMap}
 
 import scala.collection.JavaConversions._
 
@@ -29,11 +29,12 @@ import org.apache.spark.deploy.Command
  * needs to live in the same package as the rest of the library.
  */
 private[spark] class WorkerCommandBuilder(sparkHome: String, memoryMb: Int, command: Command)
-    extends SparkLauncher(command.environment) {
+    extends AbstractCommandBuilder {
 
-  setSparkHome(sparkHome)
+  childEnv.putAll(command.environment)
+  childEnv.put(CommandBuilderUtils.ENV_SPARK_HOME, sparkHome)
 
-  def buildCommand(): JList[String] = {
+  override def buildCommand(env: JMap[String, String]): JList[String] = {
     val cmd = buildJavaCommand(command.classPathEntries.mkString(File.pathSeparator))
     cmd.add(s"-Xms${memoryMb}M")
     cmd.add(s"-Xmx${memoryMb}M")
@@ -42,5 +43,7 @@ private[spark] class WorkerCommandBuilder(sparkHome: String, memoryMb: Int, comm
     addOptionString(cmd, getenv("SPARK_JAVA_OPTS"))
     cmd
   }
+
+  def buildCommand(): JList[String] = buildCommand(new JHashMap[String, String]())
 
 }

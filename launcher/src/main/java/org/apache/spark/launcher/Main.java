@@ -54,7 +54,7 @@ class Main {
     String className = args.remove(0);
 
     boolean printLaunchCommand;
-    CommandBuilder builder;
+    AbstractCommandBuilder builder;
     try {
       if (className.equals("org.apache.spark.deploy.SparkSubmit")) {
         builder = new SparkSubmitCommandBuilder(args);
@@ -169,7 +169,7 @@ class Main {
    *   should check for this variable and print its usage, since batch scripts don't really support
    *   the "export -f" functionality used in bash.
    */
-  private static class UsageLauncher implements CommandBuilder {
+  private static class UsageLauncher extends AbstractCommandBuilder {
 
     @Override
     public List<String> buildCommand(Map<String, String> env) {

@@ -20,6 +20,7 @@ package org.apache.spark.launcher;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,7 +37,7 @@ import static org.apache.spark.launcher.CommandBuilderUtils.*;
  * <p/>
  * This class has also some special features to aid PySparkLauncher.
  */
-class SparkSubmitCommandBuilder extends SparkLauncher implements CommandBuilder {
+class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   /**
    * Name of the app resource used to identify the PySpark shell. The command line parser expects
@@ -62,6 +63,10 @@ class SparkSubmitCommandBuilder extends SparkLauncher implements CommandBuilder 
   private final List<String> driverArgs;
   private boolean hasMixedArguments;
 
+  SparkSubmitCommandBuilder() {
+    this.driverArgs = Collections.<String>emptyList();
+  }
+
   SparkSubmitCommandBuilder(List<String> args) {
     this(false, args);
   }
@@ -72,7 +77,7 @@ class SparkSubmitCommandBuilder extends SparkLauncher implements CommandBuilder 
     List<String> submitArgs = args;
     if (args.size() > 0 && args.get(0).equals(PYSPARK_SHELL)) {
       this.hasMixedArguments = true;
-      setAppResource(PYSPARK_SHELL);
+      appResource = PYSPARK_SHELL;
       submitArgs = args.subList(1, args.size());
     } else {
       this.hasMixedArguments = hasMixedArguments;
@@ -90,13 +95,76 @@ class SparkSubmitCommandBuilder extends SparkLauncher implements CommandBuilder 
     }
   }
 
+  List<String> buildSparkSubmitArgs() {
+    List<String> args = new ArrayList<String>();
+    SparkSubmitOptionParser parser = new SparkSubmitOptionParser();
+
+    if (verbose) {
+      args.add(parser.VERBOSE);
+    }
+
+    if (master != null) {
+      args.add(parser.MASTER);
+      args.add(master);
+    }
+
+    if (deployMode != null) {
+      args.add(parser.DEPLOY_MODE);
+      args.add(deployMode);
+    }
+
+    if (appName != null) {
+      args.add(parser.NAME);
+      args.add(appName);
+    }
+
+    for (Map.Entry<String, String> e : conf.entrySet()) {
+      args.add(parser.CONF);
+      args.add(String.format("%s=%s", e.getKey(), e.getValue()));
+    }
+
+    if (propertiesFile != null) {
+      args.add(parser.PROPERTIES_FILE);
+      args.add(propertiesFile);
+    }
+
+    if (!jars.isEmpty()) {
+      args.add(parser.JARS);
+      args.add(join(",", jars));
+    }
+
+    if (!files.isEmpty()) {
+      args.add(parser.FILES);
+      args.add(join(",", files));
+    }
+
+    if (!pyFiles.isEmpty()) {
+      args.add(parser.PY_FILES);
+      args.add(join(",", pyFiles));
+    }
+
+    if (mainClass != null) {
+      args.add(parser.CLASS);
+      args.add(mainClass);
+    }
+
+    args.addAll(sparkArgs);
+    if (appResource != null) {
+      args.add(appResource);
+    }
+    args.addAll(appArgs);
+
+    return args;
+  }
+
   private List<String> buildSparkSubmitCommand(Map<String, String> env) throws IOException {
     // Load the properties file and check whether spark-submit will be running the app's driver
     // or just launching a cluster app. When running the driver, the JVM's argument will be
     // modified to cover the driver's configuration.
     Properties props = loadPropertiesFile();
     boolean isClientMode = isClientMode(props);
-    String extraClassPath = isClientMode ? find(DRIVER_EXTRA_CLASSPATH, conf, props) : null;
+    String extraClassPath = isClientMode ?
+      find(SparkLauncher.DRIVER_EXTRA_CLASSPATH, conf, props) : null;
 
     List<String> cmd = buildJavaCommand(extraClassPath);
     addOptionString(cmd, System.getenv("SPARK_SUBMIT_OPTS"));
@@ -110,12 +178,13 @@ class SparkSubmitCommandBuilder extends SparkLauncher implements CommandBuilder 
       // - SPARK_DRIVER_MEMORY env variable
       // - SPARK_MEM env variable
       // - default value (512m)
-      String memory = firstNonEmpty(find(DRIVER_MEMORY, conf, props),
+      String memory = firstNonEmpty(find(SparkLauncher.DRIVER_MEMORY, conf, props),
         System.getenv("SPARK_DRIVER_MEMORY"), System.getenv("SPARK_MEM"), DEFAULT_MEM);
       cmd.add("-Xms" + memory);
       cmd.add("-Xmx" + memory);
-      addOptionString(cmd, find(DRIVER_EXTRA_JAVA_OPTIONS, conf, props));
-      mergeEnvPathList(env, getLibPathEnvName(), find(DRIVER_EXTRA_LIBRARY_PATH, conf, props));
+      addOptionString(cmd, find(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, conf, props));
+      mergeEnvPathList(env, getLibPathEnvName(),
+        find(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, conf, props));
     }
 
     addPermGenSizeOpt(cmd);
@@ -131,7 +200,7 @@ class SparkSubmitCommandBuilder extends SparkLauncher implements CommandBuilder 
       System.err.println(
         "WARNING: Running python applications through 'pyspark' is deprecated as of Spark 1.0.\n" +
         "Use ./bin/spark-submit <python file>");
-      setAppResource(appArgs.get(0));
+      appResource = appArgs.get(0);
       appArgs.remove(0);
       return buildCommand(env);
     }
@@ -142,7 +211,8 @@ class SparkSubmitCommandBuilder extends SparkLauncher implements CommandBuilder 
     checkArgument(appArgs.isEmpty(), "pyspark does not support any application options.");
 
     Properties props = loadPropertiesFile();
-    mergeEnvPathList(env, getLibPathEnvName(), find(DRIVER_EXTRA_LIBRARY_PATH, conf, props));
+    mergeEnvPathList(env, getLibPathEnvName(),
+      find(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, conf, props));
 
     StringBuilder submitArgs = new StringBuilder();
     for (String arg : sparkArgs) {
@@ -171,7 +241,7 @@ class SparkSubmitCommandBuilder extends SparkLauncher implements CommandBuilder 
   }
 
   private boolean isClientMode(Properties userProps) {
-    String userMaster = firstNonEmpty(master, (String) userProps.get(SPARK_MASTER));
+    String userMaster = firstNonEmpty(master, (String) userProps.get(SparkLauncher.SPARK_MASTER));
     return userMaster == null ||
       "client".equals(deployMode) ||
       "yarn-client".equals(userMaster) ||
@@ -196,40 +266,48 @@ class SparkSubmitCommandBuilder extends SparkLauncher implements CommandBuilder 
 
   private class OptionParser extends SparkSubmitOptionParser {
 
+    private final List<String> driverJvmKeys = Arrays.asList(
+      SparkLauncher.DRIVER_EXTRA_CLASSPATH,
+      SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS,
+      SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH,
+      SparkLauncher.DRIVER_MEMORY);
+
     @Override
     protected boolean handle(String opt, String value) {
       if (opt.equals(MASTER)) {
-        setMaster(value);
+        master = value;
         driverArgs.add(opt);
         driverArgs.add(value);
       } else if (opt.equals(DEPLOY_MODE)) {
-        setDeployMode(value);
+        deployMode = value;
         driverArgs.add(opt);
         driverArgs.add(value);
       } else if (opt.equals(PROPERTIES_FILE)) {
-        setPropertiesFile(value);
+        propertiesFile = value;
         driverArgs.add(opt);
         driverArgs.add(value);
       } else if (opt.equals(DRIVER_MEMORY)) {
-        setConf(SparkLauncher.DRIVER_MEMORY, value);
+        conf.put(SparkLauncher.DRIVER_MEMORY, value);
         driverArgs.add(opt);
         driverArgs.add(value);
       } else if (opt.equals(DRIVER_JAVA_OPTIONS)) {
-        setConf(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, value);
+        conf.put(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, value);
         driverArgs.add(opt);
         driverArgs.add(value);
       } else if (opt.equals(DRIVER_LIBRARY_PATH)) {
-        setConf(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, value);
+        conf.put(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, value);
         driverArgs.add(opt);
         driverArgs.add(value);
       } else if (opt.equals(DRIVER_CLASS_PATH)) {
-        setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, value);
+        conf.put(SparkLauncher.DRIVER_EXTRA_CLASSPATH, value);
         driverArgs.add(opt);
         driverArgs.add(value);
       } else if (opt.equals(CONF)) {
-        String[] conf = value.split("=", 2);
-        checkArgument(conf.length == 2, "Invalid argument to %s: %s", CONF, value);
-        handleConf(conf[0], conf[1]);
+        String[] setConf = value.split("=", 2);
+        checkArgument(setConf.length == 2, "Invalid argument to %s: %s", CONF, value);
+        if (driverJvmKeys.contains(setConf[0])) {
+          conf.put(setConf[0], setConf[1]);
+        }
         driverArgs.add(opt);
         driverArgs.add(value);
       } else if (opt.equals(CLASS)) {
@@ -237,14 +315,14 @@ class SparkSubmitCommandBuilder extends SparkLauncher implements CommandBuilder 
         // mixing spark-submit arguments with arguments that should be propagated to the shell
         // itself. Note that for this to work, the "--class" argument must come before any
         // non-spark-submit arguments.
-        setMainClass(value);
+        mainClass = value;
         if (specialClasses.containsKey(value)) {
           hasMixedArguments = true;
-          setAppResource(specialClasses.get(value));
+          appResource = specialClasses.get(value);
         }
       } else if (opt.equals(PYSPARK_SHELL)) {
         hasMixedArguments = true;
-        setAppResource(opt);
+        appResource = opt;
       } else {
         addSparkArgs(opt, value);
       }
@@ -257,7 +335,7 @@ class SparkSubmitCommandBuilder extends SparkLauncher implements CommandBuilder 
       // In normal mode, any unrecognized parameter triggers the end of command line parsing.
       // The remaining params will be appended to the list of SparkSubmit arguments.
       if (hasMixedArguments) {
-        addAppArgs(opt);
+        appArgs.add(opt);
         return true;
       } else {
         addSparkArgs(opt);
@@ -269,18 +347,6 @@ class SparkSubmitCommandBuilder extends SparkLauncher implements CommandBuilder 
     protected void handleExtraArgs(List<String> extra) {
       for (String arg : extra) {
         addSparkArgs(arg);
-      }
-    }
-
-    private void handleConf(String key, String value) {
-      List<String> driverJvmKeys = Arrays.asList(
-        SparkLauncher.DRIVER_EXTRA_CLASSPATH,
-        SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS,
-        SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH,
-        SparkLauncher.DRIVER_MEMORY);
-
-      if (driverJvmKeys.contains(key)) {
-        setConf(key, value);
       }
     }
 

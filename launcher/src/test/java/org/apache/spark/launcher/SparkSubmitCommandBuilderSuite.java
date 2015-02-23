@@ -149,19 +149,21 @@ public class SparkSubmitCommandBuilderSuite {
 
     SparkSubmitCommandBuilder launcher =
       new SparkSubmitCommandBuilder(Collections.<String>emptyList());
-    launcher.setSparkHome(System.getProperty("spark.test.home"))
-      .setMaster("yarn")
-      .setDeployMode(deployMode)
-      .setAppResource("/foo")
-      .setAppName("MyApp")
-      .setMainClass("my.Class")
-      .setPropertiesFile(dummyPropsFile.getAbsolutePath())
-      .addAppArgs("foo", "bar")
-      .setConf(SparkLauncher.DRIVER_MEMORY, "1g")
-      .setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, "/driver")
-      .setConf(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, "-Ddriver -XX:MaxPermSize=256m")
-      .setConf(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, "/native")
-      .setConf("spark.foo", "foo");
+    launcher.childEnv.put(CommandBuilderUtils.ENV_SPARK_HOME,
+      System.getProperty("spark.test.home"));
+    launcher.master = "yarn";
+    launcher.deployMode = deployMode;
+    launcher.appResource = "/foo";
+    launcher.appName = "MyApp";
+    launcher.mainClass = "my.Class";
+    launcher.propertiesFile = dummyPropsFile.getAbsolutePath();
+    launcher.appArgs.add("foo");
+    launcher.appArgs.add("bar");
+    launcher.conf.put(SparkLauncher.DRIVER_MEMORY, "1g");
+    launcher.conf.put(SparkLauncher.DRIVER_EXTRA_CLASSPATH, "/driver");
+    launcher.conf.put(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, "-Ddriver -XX:MaxPermSize=256m");
+    launcher.conf.put(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, "/native");
+    launcher.conf.put("spark.foo", "foo");
 
     Map<String, String> env = new HashMap<String, String>();
     List<String> cmd = launcher.buildCommand(env);
@@ -268,7 +270,7 @@ public class SparkSubmitCommandBuilderSuite {
 
   private List<String> buildCommand(List<String> args, Map<String, String> env) throws Exception {
     SparkSubmitCommandBuilder builder = new SparkSubmitCommandBuilder(args);
-    builder.setSparkHome(System.getProperty("spark.test.home"));
+    builder.childEnv.put(CommandBuilderUtils.ENV_SPARK_HOME, System.getProperty("spark.test.home"));
     return builder.buildCommand(env);
   }
 
