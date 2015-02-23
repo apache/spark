@@ -26,16 +26,16 @@ private[spark] class ResultStage(
     override val numTasks: Int,
     override val parents: List[Stage],
     override val jobId: Int,
-    override val callSite: CallSite) 
+    override val callSite: CallSite)
   extends Stage(id, rdd, numTasks, parents, jobId, callSite) {
 
-  /** 
+  /**
    * For stages that are the final (consists of only ResultTasks), links to the active job for
    * this results stage.
-   */ 
+   */
   var resultOfJob: Option[ActiveJob] = None
 
-  override def toString = "ResultStage " + id
+  override def toString : String = "ResultStage " + id
 
-  override def isAvailable = true
+  override def isAvailable : Boolean= true
 }

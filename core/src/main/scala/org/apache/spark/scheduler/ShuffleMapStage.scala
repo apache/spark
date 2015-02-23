@@ -29,10 +29,11 @@ private[spark] class ShuffleMapStage(
     override val parents: List[Stage],
     override val jobId: Int,
     override val callSite: CallSite,
-    val shuffleDep: ShuffleDependency[_, _, _]) 
+    val shuffleDep: ShuffleDependency[_, _, _])
   extends Stage(id, rdd, numTasks, parents, jobId, callSite) {
 
-  override def toString = "ShuffleMapStage " + id
+  override def toString : String = "ShuffleMapStage " + id
+  override def isAvailable : Boolean = numAvailableOutputs == numPartitions
 
   val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
 
@@ -75,6 +76,6 @@ private[spark] class ShuffleMapStage(
     }
   }
 
-  override def isAvailable = numAvailableOutputs == numPartitions
+
 }
 
