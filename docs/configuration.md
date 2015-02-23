@@ -903,36 +903,24 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.akka.heartbeat.pauses</code></td>
   <td>6000</td>
   <td>
-     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be
-     enabled again, if you plan to use this feature (Not recommended). Acceptable heart beat pause
-     in seconds for akka. This can be used to control sensitivity to gc pauses. Tune this in
-     combination of `spark.akka.heartbeat.interval` and `spark.akka.failure-detector.threshold`
-     if you need to.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.akka.failure-detector.threshold</code></td>
-  <td>300.0</td>
-  <td>
-     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be
-     enabled again, if you plan to use this feature (Not recommended). This maps to akka's
-     `akka.remote.transport-failure-detector.threshold`. Tune this in combination of
-     `spark.akka.heartbeat.pauses` and `spark.akka.heartbeat.interval` if you need to.
+     This is set to a larger value to disable the transport failure detector that comes built in to Akka.
+     It can be enabled again, if you plan to use this feature (Not recommended). Acceptable heart 
+     beat pause in seconds for Akka. This can be used to control sensitivity to GC pauses. Tune
+     this along with `spark.akka.heartbeat.interval` if you need to.
   </td>
 </tr>
 <tr>
   <td><code>spark.akka.heartbeat.interval</code></td>
   <td>1000</td>
   <td>
-    This is set to a larger value to disable failure detector that comes inbuilt akka. It can be
-    enabled again, if you plan to use this feature (Not recommended). A larger interval value in
-    seconds reduces network overhead and a smaller value ( ~ 1 s) might be more informative for
-    akka's failure detector. Tune this in combination of `spark.akka.heartbeat.pauses` and
-    `spark.akka.failure-detector.threshold` if you need to. Only positive use case for using
-    failure detector can be, a sensistive failure detector can help evict rogue executors really
-    quick. However this is usually not the case as gc pauses and network lags are expected in a
-    real Spark cluster. Apart from that enabling this leads to a lot of exchanges of heart beats
-    between nodes leading to flooding the network with those.
+    This is set to a larger value to disable the transport failure detector that comes built in to Akka.
+    It can be enabled again, if you plan to use this feature (Not recommended). A larger interval 
+    value in seconds reduces network overhead and a smaller value ( ~ 1 s) might be more informative 
+    for Akka's failure detector. Tune this in combination of `spark.akka.heartbeat.pauses` if you need
+    to. A likely positive use case for using failure detector would be: a sensistive failure detector
+    can help evict rogue executors quickly. However this is usually not the case as GC pauses
+    and network lags are expected in a real Spark cluster. Apart from that enabling this leads to 
+    a lot of exchanges of heart beats between nodes leading to flooding the network with those.
   </td>
 </tr>
 <tr>
