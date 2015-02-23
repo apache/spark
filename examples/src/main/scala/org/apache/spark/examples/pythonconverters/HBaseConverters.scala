@@ -18,7 +18,7 @@
 package org.apache.spark.examples.pythonconverters
 
 import scala.collection.JavaConversions._
-import scala.util.parsing.json._
+import scala.util.parsing.json.JSONObject
 
 import org.apache.spark.api.python.Converter
 import org.apache.hadoop.hbase.client.{Put, Result}
