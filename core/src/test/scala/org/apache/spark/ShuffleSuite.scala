@@ -17,7 +17,6 @@
 
 package org.apache.spark
 
-import org.apache.sparktest.tags.IntegrationTest
 import org.scalatest.FunSuite
 import org.scalatest.Matchers
 
@@ -26,6 +25,7 @@ import org.apache.spark.rdd.{CoGroupedRDD, OrderedRDDFunctions, RDD, ShuffledRDD
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.storage.{ShuffleDataBlockId, ShuffleBlockId}
 import org.apache.spark.util.MutablePair
+import org.apache.sparktest.TestTags.IntegrationTest
 
 abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
 

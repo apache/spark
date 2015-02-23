@@ -19,7 +19,6 @@ package org.apache.spark.scheduler
 
 import java.io.{File, PrintWriter}
 
-import org.apache.sparktest.tags.IntegrationTest
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
@@ -28,6 +27,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{JsonProtocol, Utils}
+import org.apache.sparktest.TestTags.IntegrationTest
 
 /**
  * Test whether ReplayListenerBus replays events from logs correctly.

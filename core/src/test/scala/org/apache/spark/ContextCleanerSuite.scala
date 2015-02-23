@@ -19,8 +19,6 @@ package org.apache.spark
 
 import java.lang.ref.WeakReference
 
-import org.apache.sparktest.tags.IntegrationTest
-
 import scala.collection.mutable.{HashSet, SynchronizedSet}
 import scala.language.existentials
 import scala.util.Random
@@ -38,6 +36,7 @@ import org.apache.spark.storage.BroadcastBlockId
 import org.apache.spark.storage.RDDBlockId
 import org.apache.spark.storage.ShuffleBlockId
 import org.apache.spark.storage.ShuffleIndexBlockId
+import org.apache.sparktest.TestTags.IntegrationTest
 
 /**
  * An abstract base class for context cleaner tests, which sets up a context with a config

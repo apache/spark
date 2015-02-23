@@ -19,13 +19,13 @@ package org.apache.spark
 
 import java.io.File
 
-import org.apache.sparktest.tags.IntegrationTest
 import org.scalatest.FunSuite
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.prop.TableDrivenPropertyChecks._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.util.Utils
+import org.apache.sparktest.TestTags.IntegrationTest
 
 class DriverSuite extends FunSuite with Timeouts {
 

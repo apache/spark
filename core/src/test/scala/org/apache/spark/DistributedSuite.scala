@@ -17,13 +17,14 @@
 
 package org.apache.spark
 
-import org.apache.sparktest.tags.IntegrationTest
+
 import org.scalatest.FunSuite
 import org.scalatest.concurrent.Timeouts._
 import org.scalatest.Matchers
 import org.scalatest.time.{Millis, Span}
 
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
+import org.apache.sparktest.TestTags.IntegrationTest
 
 class NotSerializableClass
 class NotSerializableExn(val notSer: NotSerializableClass) extends Throwable() {}

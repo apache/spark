@@ -17,13 +17,13 @@
 
 package org.apache.spark
 
-import org.apache.sparktest.tags.IntegrationTest
 import org.scalatest.{FunSuite, PrivateMethodTester}
 
 import org.apache.spark.scheduler.{SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.{SimrSchedulerBackend, SparkDeploySchedulerBackend}
 import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalBackend
+import org.apache.sparktest.TestTags.IntegrationTest
 
 class SparkContextSchedulerCreationSuite
   extends FunSuite with LocalSparkContext with PrivateMethodTester with Logging {

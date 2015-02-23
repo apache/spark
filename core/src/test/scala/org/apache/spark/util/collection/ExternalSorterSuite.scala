@@ -17,13 +17,12 @@
 
 package org.apache.spark.util.collection
 
-import org.apache.sparktest.tags.IntegrationTest
-
 import scala.collection.mutable.ArrayBuffer
 
 import org.scalatest.{PrivateMethodTester, FunSuite}
 
 import org.apache.spark._
+import org.apache.sparktest.TestTags.IntegrationTest
 
 import scala.util.Random
 

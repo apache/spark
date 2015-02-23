@@ -19,13 +19,13 @@ package org.apache.spark.deploy
 
 import java.io._
 
-import org.apache.sparktest.tags.IntegrationTest
-
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkSubmit._
 import org.apache.spark.util.{ResetSystemProperties, Utils}
+import org.apache.sparktest.TestTags.IntegrationTest
+
 import org.scalatest.FunSuite
 import org.scalatest.Matchers
 

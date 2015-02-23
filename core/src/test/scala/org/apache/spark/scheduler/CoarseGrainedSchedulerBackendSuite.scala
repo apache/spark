@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkException, SparkContext}
 import org.apache.spark.util.{SerializableBuffer, AkkaUtils}
-import org.apache.sparktest.tags.IntegrationTest
+import org.apache.sparktest.TestTags.IntegrationTest
 
 import org.scalatest.FunSuite
 

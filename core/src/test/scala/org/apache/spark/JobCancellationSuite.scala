@@ -19,8 +19,6 @@ package org.apache.spark
 
 import java.util.concurrent.Semaphore
 
-import org.apache.sparktest.tags.IntegrationTest
-
 import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
@@ -30,6 +28,7 @@ import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.Matchers
 
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
+import org.apache.sparktest.TestTags.IntegrationTest
 
 /**
  * Test suite for cancelling running jobs. We run the cancellation tasks for single job action

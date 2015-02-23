@@ -19,14 +19,13 @@ package org.apache.spark.deploy.worker
 
 import java.io.File
 
-import org.apache.sparktest.tags.IntegrationTest
-
 import scala.collection.JavaConversions._
 
 import org.scalatest.FunSuite
 
 import org.apache.spark.deploy.{ApplicationDescription, Command, ExecutorState}
 import org.apache.spark.SparkConf
+import org.apache.sparktest.TestTags.IntegrationTest
 
 class ExecutorRunnerTest extends FunSuite {
   test("command includes appId", IntegrationTest) {

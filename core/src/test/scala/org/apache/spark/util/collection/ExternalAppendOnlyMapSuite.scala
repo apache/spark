@@ -17,14 +17,14 @@
 
 package org.apache.spark.util.collection
 
-import org.apache.sparktest.tags.IntegrationTest
-
 import scala.collection.mutable.ArrayBuffer
 
 import org.scalatest.FunSuite
 
 import org.apache.spark._
 import org.apache.spark.io.CompressionCodec
+import org.apache.sparktest.TestTags.IntegrationTest
+
 
 class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
   private val allCompressionCodecs = CompressionCodec.ALL_COMPRESSION_CODECS

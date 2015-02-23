@@ -20,11 +20,11 @@ package org.apache.spark.serializer
 import org.apache.spark.util.Utils
 
 import com.esotericsoftware.kryo.Kryo
-import org.apache.sparktest.tags.IntegrationTest
 import org.scalatest.FunSuite
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkEnv, TestUtils}
 import org.apache.spark.serializer.KryoDistributedTest._
+import org.apache.sparktest.TestTags.IntegrationTest
 
 class KryoSerializerDistributedSuite extends FunSuite {
 

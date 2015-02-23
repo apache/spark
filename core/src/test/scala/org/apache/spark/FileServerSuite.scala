@@ -21,10 +21,10 @@ import java.io._
 import java.util.jar.{JarEntry, JarOutputStream}
 
 import com.google.common.io.ByteStreams
-import org.apache.sparktest.tags.IntegrationTest
 import org.scalatest.FunSuite
 
 import org.apache.spark.util.Utils
+import org.apache.sparktest.TestTags.IntegrationTest
 
 class FileServerSuite extends FunSuite with LocalSparkContext {
 

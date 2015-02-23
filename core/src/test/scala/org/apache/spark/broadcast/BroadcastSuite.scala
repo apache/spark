@@ -17,8 +17,6 @@
 
 package org.apache.spark.broadcast
 
-import org.apache.sparktest.tags.IntegrationTest
-
 import scala.util.Random
 
 import org.scalatest.{Assertions, FunSuite}
@@ -28,6 +26,7 @@ import org.apache.spark.io.SnappyCompressionCodec
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.storage._
+import org.apache.sparktest.TestTags.IntegrationTest
 
 // Dummy class that creates a broadcast variable but doesn't use it
 class DummyBroadcastClass(rdd: RDD[Int]) extends Serializable {

@@ -19,7 +19,7 @@ package org.apache.spark.deploy
 
 import org.apache.spark.deploy.worker.CommandUtils
 import org.apache.spark.util.Utils
-import org.apache.sparktest.tags.IntegrationTest
+import org.apache.sparktest.TestTags.IntegrationTest
 
 import org.scalatest.{FunSuite, Matchers}
 
