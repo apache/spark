@@ -124,8 +124,10 @@ abstract class VertexRDD[VD](
   /**
    * Hides vertices that are the same between `this` and `other`; for vertices that are different,
    * keeps the values from `other`.
+   *
+   * @param other the other VertexRDD with which to diff.
    */
-  def diff(other: VertexRDD[VD]): VertexRDD[VD]
+  def diff(other: RDD[(VertexId, VD)]): VertexRDD[VD]
 
   /**
    * Left joins this RDD with another VertexRDD with the same index. This function will fail if

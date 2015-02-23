@@ -103,9 +103,9 @@ class VertexRDDImpl[VD] private[graphx] (
   override def mapValues[VD2: ClassTag](f: (VertexId, VD) => VD2): VertexRDD[VD2] =
     this.mapVertexPartitions(_.map(f))
 
-  override def diff(other: VertexRDD[VD]): VertexRDD[VD] = {
+  override def diff(other: RDD[(VertexId, VD)]): VertexRDD[VD] = {
     val newPartitionsRDD = partitionsRDD.zipPartitions(
-      other.partitionsRDD, preservesPartitioning = true
+      VertexRDD(other).partitionsRDD, preservesPartitioning = true
     ) { (thisIter, otherIter) =>
       val thisPart = thisIter.next()
       val otherPart = otherIter.next()
