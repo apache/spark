@@ -105,6 +105,10 @@ function run_test() {
 }
 
 function run_core_tests() {
+    if [ $DO_CORE_TESTS == 0 ]; then
+        return 0
+    fi
+
     echo "Run core tests ..."
     run_test "pyspark.rdd"
     run_test "pyspark.context"
@@ -118,6 +122,10 @@ function run_core_tests() {
 }
 
 function run_sql_tests() {
+    if [ $DO_SQL_TESTS == 0 ]; then
+        return 0
+    fi
+
     echo "Run sql tests ..."
     run_test "pyspark.sql.types"
     run_test "pyspark.sql.context"
@@ -131,6 +139,10 @@ function run_sql_tests() {
 }
 
 function run_mllib_tests() {
+    if [ $DO_MLLIB_TESTS == 0 ]; then
+        return 0
+    fi
+
     echo "Run mllib tests ..."
     run_test "pyspark.mllib.classification"
     run_test "pyspark.mllib.clustering"
@@ -149,6 +161,10 @@ function run_mllib_tests() {
 }
 
 function run_ml_tests() {
+    if [ $DO_ML_TESTS == 0 ]; then
+        return 0
+    fi
+
     echo "Run ml tests ..."
     run_test "pyspark.ml.feature"
     run_test "pyspark.ml.classification"
@@ -160,6 +176,10 @@ function run_ml_tests() {
 }
 
 function run_streaming_tests() {
+    if [ $DO_STREAMING_TESTS == 0 ]; then
+        return 0
+    fi
+
     echo "Run streaming tests ..."
 
     KAFKA_ASSEMBLY_DIR="$FWDIR"/external/kafka-assembly
@@ -192,25 +212,11 @@ fi
 echo "Testing with Python version:"
 $PYSPARK_PYTHON --version
 
-if [ $DO_CORE_TESTS == 1 ]; then
-    run_core_tests
-fi
-
-if [ $DO_SQL_TESTS == 1 ]; then
-    run_sql_tests
-fi
-
-if [ $DO_MLLIB_TESTS == 1 ]; then
-    run_mllib_tests
-fi
-
-if [ $DO_ML_TESTS == 1 ]; then
-    run_ml_tests
-fi
-
-if [ $DO_STREAMING_TESTS == 1 ]; then
-    run_streaming_tests
-fi
+run_core_tests
+run_sql_tests
+run_mllib_tests
+run_ml_tests
+run_streaming_tests
 
 # Try to test with Python 3
 if [ $(which python3.4) ]; then
@@ -231,17 +237,9 @@ if [ $(which pypy) ]; then
     echo "Testing with PyPy version:"
     $PYSPARK_PYTHON --version
 
-    if [ $DO_CORE_TESTS == 1 ]; then
-        run_core_tests
-    fi
-
-    if [ $DO_SQL_TESTS == 1 ]; then
-        run_sql_tests
-    fi
-
-    if [ $DO_STREAMING_TESTS == 1 ]; then
-        run_streaming_tests
-    fi
+    run_core_tests
+    run_sql_tests
+    run_streaming_tests
 fi
 
 if [[ $FAILED == 0 ]]; then
