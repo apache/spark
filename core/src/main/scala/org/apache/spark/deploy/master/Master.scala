@@ -564,21 +564,28 @@ private[master] class Master(
         // each worker. The first index refers to the usable worker, and the second index
         // refers to the executor launched on that worker.
         val assigned = Array.fill[Array[Int]](numUsable)(Array.fill[Int](maxExecutorPerWorker)(0))
-        val workerPointer = Array.fill[Int](numUsable)(0)
+        val executorNumberOnWorker = Array.fill[Int](numUsable)(0)
         val assignedSum = Array.fill[Int](numUsable)(0)
         var pos = 0
         while (maxCoresLeft > 0) {
-          if ((usableWorkers(pos).coresFree - assignedSum(pos) > 0) &&
-            (usableWorkers(pos).memoryFree >= memoryPerExecutor * (workerPointer(pos) + 1))) {
+          val memoryDemand = {
+            if (app.desc.maxCorePerExecutor.isDefined) {
+              executorNumberOnWorker(pos) + 1
+            } else {
+              memoryPerExecutor  
+            }  
+          }
+          if ((usableWorkers(pos).coresFree - assignedSum(pos) > 0) && 
+            (usableWorkers(pos).memoryFree >= memoryDemand)) {
             val coreToAssign = math.min(math.min(usableWorkers(pos).coresFree - assignedSum(pos),
               maxCoreAllocationPerRound), maxCoresLeft)
             val workerAllocationArray = assigned(pos)
-            workerAllocationArray(workerPointer(pos)) += coreToAssign
+            workerAllocationArray(executorNumberOnWorker(pos)) += coreToAssign
             assignedSum(pos) += coreToAssign
             maxCoresLeft -= coreToAssign
-            if (app.desc.maxCorePerExecutor.isDefined) {
+            if (app.desc.maxCorePerExecutor.isDefined || executorNumberOnWorker(pos) == 0) {
               // if starting multiple executors on the worker, we move to the next executor
-              workerPointer(pos) += 1     
+              executorNumberOnWorker(pos) += 1     
             }
           }
           pos = (pos + 1) % numUsable
@@ -587,7 +594,7 @@ private[master] class Master(
         // Now that we've decided how many executors and the core number for each to
         // give on each node, let's actually give them
         for (pos <- 0 until numUsable) {
-          for (execIdx <- 0 until workerPointer(pos)) {
+          for (execIdx <- 0 until executorNumberOnWorker(pos)) {
             val exec = app.addExecutor(usableWorkers(pos), assigned(pos)(execIdx))
             launchExecutor(usableWorkers(pos), exec)
             app.state = ApplicationState.RUNNING
