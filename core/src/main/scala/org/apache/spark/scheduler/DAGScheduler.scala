@@ -211,7 +211,7 @@ class DAGScheduler(
    * a lower jobId (jobId always increases across jobs.)
    */
   private def getShuffleMapStage(
-      shuffleDep: ShuffleDependency[_, _, _], 
+      shuffleDep: ShuffleDependency[_, _, _],
       jobId: Int): ShuffleMapStage = {
     shuffleToMapStage.get(shuffleDep.shuffleId) match {
       case Some(stage) => stage
@@ -221,16 +221,16 @@ class DAGScheduler(
         // Then register current shuffleDep
         val stage = newOrUsedShuffleStage(shuffleDep, jobId)
         shuffleToMapStage(shuffleDep.shuffleId) = stage
- 
+
         stage
     }
   }
 
   /**
-   * Create a ShuffleMapStage as part of the (re)-creation of a shuffle map stage in 
-   * newOrUsedShuffleStage.  The stage will be associated with the provided
-   * jobId. Production of shuffle map stages should always use newOrUsedShuffleStage, 
-   * not newShuffleMapStage directly.
+   * Create a ShuffleMapStage as part of the (re)-creation of a shuffle map stage in
+   * newOrUsedShuffleStage.  The stage will be associated with the provide jobId.
+   * Production of shuffle map stages should always use newOrUsedShuffleStage,not
+   * newShuffleMapStage directly.
    */
   private def newShuffleMapStage(
       rdd: RDD[_],
@@ -249,8 +249,8 @@ class DAGScheduler(
   }
 
   /**
-   * Create a ResultStage -- either directly for use as a result stage, or as part of the 
-   * (re)-creation of a shuffle map stage in newOrUsedShuffleStage.  The stage will be associated 
+   * Create a ResultStage -- either directly for use as a result stage, or as part of the
+   * (re)-creation of a shuffle map stage in newOrUsedShuffleStage.  The stage will be associated
    * with the provided jobId.
    */
   private def newResultStage(
@@ -803,7 +803,7 @@ class DAGScheduler(
     // First figure out the indexes of partition ids to compute.
     val partitionsToCompute: Seq[Int] = {
       stage match {
-        case stage: ShuffleMapStage => (0 until stage.numPartitions).filter(id => 
+        case stage: ShuffleMapStage => (0 until stage.numPartitions).filter(id =>
           stage.outputLocs(id) == Nil)
         case stage: ResultStage =>
           val job = stage.resultOfJob.get
@@ -850,8 +850,8 @@ class DAGScheduler(
       case e: NotSerializableException =>
         abortStage(stage, "Task not serializable: " + e.toString)
         runningStages -= stage
-        
-        // Abort execution 
+
+        // Abort execution
         return
       case NonFatal(e) =>
         abortStage(stage, s"Task serialization failed: $e\n${e.getStackTraceString}")
@@ -1019,7 +1019,7 @@ class DAGScheduler(
               logInfo("running: " + runningStages)
               logInfo("waiting: " + waitingStages)
               logInfo("failed: " + failedStages)
-              
+
               // We supply true to increment the epoch number here in case this is a
               // recomputation of the map outputs. In that case, some nodes may have cached
               // locations with holes (from when we detected the error) and will need the
@@ -1030,7 +1030,7 @@ class DAGScheduler(
                 shuffleStage.shuffleDep.shuffleId,
                 shuffleStage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray,
                 changeEpoch = true)
-            
+
               clearCacheLocs()
               if (shuffleStage.outputLocs.contains(Nil)) {
                 // Some tasks had failed; let's resubmit this shuffleStage
@@ -1042,7 +1042,7 @@ class DAGScheduler(
               } else {
                 val newlyRunnable = new ArrayBuffer[Stage]
                 for (shuffleStage <- waitingStages) {
-                  logInfo("Missing parents for " + shuffleStage + ": " + 
+                  logInfo("Missing parents for " + shuffleStage + ": " +
                       getMissingParentStages(shuffleStage))
                 }
                 for (shuffleStage <- waitingStages if getMissingParentStages(shuffleStage) == Nil) {
@@ -1054,7 +1054,7 @@ class DAGScheduler(
                   shuffleStage <- newlyRunnable.sortBy(_.id)
                   jobId <- activeJobForStage(shuffleStage)
                 } {
-                  logInfo("Submitting " + shuffleStage + " (" + 
+                  logInfo("Submitting " + shuffleStage + " (" +
                       shuffleStage.rdd + "), which is now runnable")
                   submitMissingTasks(shuffleStage, jobId)
                 }
