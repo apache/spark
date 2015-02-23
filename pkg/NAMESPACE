@@ -81,8 +81,7 @@ importFrom(methods, setGeneric, setMethod, setOldClass)
 
 exportClasses("DataFrame")
 
-exportMethods("collectToDF",
-              "printSchema",
+exportMethods("printSchema",
               "registerTempTable",
               "toRDD")
 

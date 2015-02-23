@@ -104,10 +104,19 @@ test_that("lapply() on a DataFrame returns an RDD with the correct columns", {
   expect_true(collected[[2]]$newCol == "35")
 })
 
+test_that("collect() returns a data.frame", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  rdf <- collect(df)
+  expect_true(is.data.frame(rdf))
+  expect_true(names(rdf)[1] == "age")
+  expect_true(nrow(rdf) == 3)
+  expect_true(ncol(rdf) == 2)
+})
+
 test_that("collect() and take() on a DataFrame return the same number of rows and columns", {
   df <- jsonFile(sqlCtx, jsonPath)
-  expect_true(length(collect(df)) == length(take(df, 10)))
-  expect_true(length(collect(df)[[1]]) == length(take(df, 10)[[1]]))
+  expect_true(nrow(collect(df)) == length(take(df, 10)))
+  expect_true(ncol(collect(df)) == length(take(df, 10)[[1]]))
 })
 
 test_that("multiple pipeline transformations starting with a DataFrame result in an RDD with the correct values", {
@@ -125,15 +134,6 @@ test_that("multiple pipeline transformations starting with a DataFrame result in
   expect_true(collect(second)[[2]]$age == 35)
   expect_true(collect(second)[[2]]$testCol)
   expect_false(collect(second)[[3]]$testCol)
-})
-
-test_that("collectToDF() returns a data.frame", {
-  df <- jsonFile(sqlCtx, jsonPath)
-  rdf <- collectToDF(df)
-  expect_true(is.data.frame(rdf))
-  expect_true(names(rdf)[1] == "age")
-  expect_true(nrow(rdf) == 3)
-  expect_true(ncol(rdf) == 2)
 })
 
 unlink(jsonPath)

@@ -114,7 +114,7 @@ setMethod("count",
             callJMethod(sdf, "count")
           })
 
-# Collects a Spark DataFrame and returns a list of named lists (each of which represents a row).
+# Collects all the elements of a Spark DataFrame and coerces them into an R data.frame.
 
 #' @rdname collect-methods
 #' @export
@@ -131,8 +131,19 @@ setMethod("count",
 setMethod("collect",
           signature(rdd = "DataFrame"),
           function(rdd) {
-            rddIn <- toRDD(rdd)
-            collect(rddIn)
+            # listCols is a list of raw vectors, one per column
+            listCols <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "dfToCols", rdd@sdf)
+            cols <- lapply(listCols, function(col) {
+              objRaw <- rawConnection(col)
+              numRows <- readInt(objRaw)
+              col <- readCol(objRaw, numRows)
+              close(objRaw)
+              col
+            })
+            colNames <- callJMethod(rdd@sdf, "columns")
+            names(cols) <- colNames
+            dfOut <- do.call(cbind.data.frame, cols)
+            dfOut
           })
 
 # Take the first NUM elements in a DataFrame and return a named list for each row.
@@ -178,7 +189,7 @@ setMethod("toRDD",
           signature(df = "DataFrame"),
           function(df) {
             jrdd <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "dfToRowRDD", df@sdf)
-            names <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "getColNames", df@sdf)
+            names <- callJMethod(df@sdf, "columns")
             RDD(jrdd, serializedMode = "row", colNames = names)
           })
 
@@ -247,59 +258,3 @@ setMethod("foreachPartition",
             rddIn <- toRDD(rdd)
             foreachPartition(rddIn, func)
           })
-
-#' Collect to DataFrame
-#' 
-#' Collects all the elements of a Spark DataFrame and coerces them into an R data.frame.
-#' 
-#' @param df A Spark DataFrame
-#' @return An R data.frame
-#' 
-#' @rdname collectToDF
-#' @export
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' sqlCtx <- sparkRSQL.init(sc)
-#' path <- "path/to/file.json"
-#' df <- jsonFile(sqlCtx, path)
-#' converted <- collectToDF(df)
-#' is.data.frame(converted)
-#' }
-
-setGeneric("collectToDF", function(df) { standardGeneric("collectToDF") })
-
-setMethod("collectToDF",
-          signature(df = "DataFrame"),
-          function(df) {
-            listCols <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "dfToColRDD", df@sdf)
-            cols <- lapply(seq_along(listCols),
-                           function(colIdx) {
-                             rddCol <- listCols[[colIdx]]
-                             # Returns a list of byte arrays per partition
-                             rddRaw <- callJMethod(rddCol, "collect")
-                             colPartitions <- lapply(seq_along(rddRaw),
-                                                     function(partIdx) {
-                                                       objRaw <- rawConnection(rddRaw[[partIdx]])
-                                                       numRows <- readInt(objRaw)
-                                                       # List of deserialized values per partition
-                                                       col <- readCol(objRaw, numRows)
-                                                       close(objRaw)
-                                                       col
-                                                     })
-                             # Flatten column list into a vector
-                             colOut <- unlist(colPartitions, recursive = FALSE)
-                           })
-            colNames <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "getColNames", df@sdf)
-            names(cols) <- colNames
-            dfOut <- do.call(cbind.data.frame, cols)
-          })
-
-# Take a single column as Array[Byte] and deserialize it into an atomic vector
-readCol <- function(rawCon, numRows) {
-  sapply(1:numRows, function(x) {
-    value <- readObject(rawCon)
-    # Replace NULL with NA so we can coerce to vectors
-    if (is.null(value)) NA else value
-  }) # each column is an atomic vector now
-}

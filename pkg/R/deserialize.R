@@ -146,3 +146,12 @@ assignNames <- function(row, colNames) {
   names(row) <- colNames
   row
 }
+
+# Take a single column as Array[Byte] and deserialize it into an atomic vector
+readCol <- function(inputCon, numRows) {
+  sapply(1:numRows, function(x) {
+    value <- readObject(inputCon)
+    # Replace NULL with NA so we can coerce to vectors
+    if (is.null(value)) NA else value
+  }) # each column is an atomic vector now
+}
