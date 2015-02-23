@@ -282,10 +282,12 @@ public class SparkLauncher {
    * @return A process handle for the Spark app.
    */
   public Process launch() throws IOException {
-    Map<String, String> procEnv = new HashMap<String, String>(childEnv);
-    List<String> cmd = buildSparkSubmitCommand(procEnv);
+    List<String> cmd = new ArrayList<String>();
+    cmd.add(join(File.separator, getSparkHome(), "bin", "spark-submit"));
+    cmd.addAll(buildSparkSubmitArgs());
+
     ProcessBuilder pb = new ProcessBuilder(cmd.toArray(new String[cmd.size()]));
-    for (Map.Entry<String, String> e : procEnv.entrySet()) {
+    for (Map.Entry<String, String> e : childEnv.entrySet()) {
       pb.environment().put(e.getKey(), e.getValue());
     }
     return pb.start();
@@ -406,7 +408,7 @@ public class SparkLauncher {
       assemblyJar = new JarFile(assembly);
       needsDataNucleus = assemblyJar.getEntry("org/apache/hadoop/hive/ql/exec/") != null;
     } catch (IOException ioe) {
-      if (ioe.getMessage().indexOf("invalid CEN header") > 0) {
+      if (ioe.getMessage().indexOf("invalid CEN header") >= 0) {
         System.err.println(
           "Loading Spark jar failed.\n" +
           "This is likely because Spark was compiled with Java 7 and run\n" +
@@ -565,40 +567,6 @@ public class SparkLauncher {
     return args;
   }
 
-  List<String> buildSparkSubmitCommand(Map<String, String> env) throws IOException {
-    // Load the properties file and check whether spark-submit will be running the app's driver
-    // or just launching a cluster app. When running the driver, the JVM's argument will be
-    // modified to cover the driver's configuration.
-    Properties props = loadPropertiesFile();
-    boolean isClientMode = isClientMode(props);
-    String extraClassPath = isClientMode ? find(DRIVER_EXTRA_CLASSPATH, conf, props) : null;
-
-    List<String> cmd = buildJavaCommand(extraClassPath);
-    addOptionString(cmd, System.getenv("SPARK_SUBMIT_OPTS"));
-    addOptionString(cmd, System.getenv("SPARK_JAVA_OPTS"));
-
-    if (isClientMode) {
-      // Figuring out where the memory value come from is a little tricky due to precedence.
-      // Precedence is observed in the following order:
-      // - explicit configuration (setConf()), which also covers --driver-memory cli argument.
-      // - properties file.
-      // - SPARK_DRIVER_MEMORY env variable
-      // - SPARK_MEM env variable
-      // - default value (512m)
-      String memory = firstNonEmpty(find(DRIVER_MEMORY, conf, props),
-        System.getenv("SPARK_DRIVER_MEMORY"), System.getenv("SPARK_MEM"), DEFAULT_MEM);
-      cmd.add("-Xms" + memory);
-      cmd.add("-Xmx" + memory);
-      addOptionString(cmd, find(DRIVER_EXTRA_JAVA_OPTIONS, conf, props));
-      mergeEnvPathList(env, getLibPathEnvName(), find(DRIVER_EXTRA_LIBRARY_PATH, conf, props));
-    }
-
-    addPermGenSizeOpt(cmd);
-    cmd.add("org.apache.spark.deploy.SparkSubmit");
-    cmd.addAll(buildSparkSubmitArgs());
-    return cmd;
-  }
-
   String getSparkHome() {
     String path = getenv(ENV_SPARK_HOME);
     checkState(path != null,
@@ -642,14 +610,6 @@ public class SparkLauncher {
 
   String getenv(String key) {
     return firstNonEmpty(childEnv.get(key), System.getenv(key));
-  }
-
-  private boolean isClientMode(Properties userProps) {
-    String userMaster = firstNonEmpty(master, (String) userProps.get(SPARK_MASTER));
-    return userMaster == null ||
-      "client".equals(deployMode) ||
-      "yarn-client".equals(userMaster) ||
-      (deployMode == null && !userMaster.startsWith("yarn-"));
   }
 
   private String findAssembly(String scalaVersion) {

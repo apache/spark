@@ -17,29 +17,81 @@
 
 package org.apache.spark.launcher;
 
+import java.io.File;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class SparkSubmitCommandBuilderSuite {
 
+  private static File dummyPropsFile;
+  private static SparkSubmitOptionParser parser;
+
+  @BeforeClass
+  public static void setUp() throws Exception {
+    dummyPropsFile = File.createTempFile("spark", "properties");
+    parser = new SparkSubmitOptionParser();
+  }
+
+  @AfterClass
+  public static void cleanUp() throws Exception {
+    dummyPropsFile.delete();
+  }
+
+  @Test
+  public void testDriverCmdBuilder() throws Exception {
+    testCmdBuilder(true);
+  }
+
+  @Test
+  public void testClusterCmdBuilder() throws Exception {
+    testCmdBuilder(false);
+  }
+
+  @Test
+  public void testCliParser() throws Exception {
+    List<String> sparkSubmitArgs = Arrays.asList(
+      parser.MASTER,
+      "local",
+      parser.DRIVER_MEMORY,
+      "42g",
+      parser.DRIVER_CLASS_PATH,
+      "/driverCp",
+      parser.DRIVER_JAVA_OPTIONS,
+      "extraJavaOpt",
+      parser.CONF,
+      SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH + "=/driverLibPath");
+    Map<String, String> env = new HashMap<String, String>();
+    List<String> cmd = buildCommand(sparkSubmitArgs, env);
+
+    assertTrue(findInStringList(env.get(CommandBuilderUtils.getLibPathEnvName()),
+        File.pathSeparator, "/driverLibPath"));
+    assertTrue(findInStringList(findArgValue(cmd, "-cp"), File.pathSeparator, "/driverCp"));
+    assertTrue("Driver -Xms should be configured.", cmd.contains("-Xms42g"));
+    assertTrue("Driver -Xmx should be configured.", cmd.contains("-Xmx42g"));
+  }
+
   @Test
   public void testShellCliParser() throws Exception {
     List<String> sparkSubmitArgs = Arrays.asList(
-      "--class",
+      parser.CLASS,
       "org.apache.spark.repl.Main",
-      "--master",
+      parser.MASTER,
       "foo",
       "--app-arg",
       "bar",
       "--app-switch",
-      "--files",
+      parser.FILES,
       "baz",
-      "--name",
+      parser.NAME,
       "appName");
 
     List<String> args = new SparkSubmitCommandBuilder(sparkSubmitArgs).buildSparkSubmitArgs();
@@ -50,14 +102,14 @@ public class SparkSubmitCommandBuilderSuite {
   @Test
   public void testAlternateSyntaxParsing() throws Exception {
     List<String> sparkSubmitArgs = Arrays.asList(
-      "--class=org.my.Class",
-      "--master=foo",
-      "--deploy-mode=bar");
+      parser.CLASS + "=org.my.Class",
+      parser.MASTER + "=foo",
+      parser.DEPLOY_MODE + "=bar");
 
     List<String> cmd = new SparkSubmitCommandBuilder(sparkSubmitArgs).buildSparkSubmitArgs();
-    assertEquals("org.my.Class", findArgValue(cmd, "--class"));
-    assertEquals("foo", findArgValue(cmd, "--master"));
-    assertEquals("bar", findArgValue(cmd, "--deploy-mode"));
+    assertEquals("org.my.Class", findArgValue(cmd, parser.CLASS));
+    assertEquals("foo", findArgValue(cmd, parser.MASTER));
+    assertEquals("bar", findArgValue(cmd, parser.DEPLOY_MODE));
   }
 
   @Test
@@ -70,7 +122,9 @@ public class SparkSubmitCommandBuilderSuite {
     Map<String, String> env = new HashMap<String, String>();
     List<String> cmd = buildCommand(sparkSubmitArgs, env);
     assertEquals("python", cmd.get(cmd.size() - 1));
-    assertEquals("\"--master\" \"foo\" \"--deploy-mode\" \"bar\"", env.get("PYSPARK_SUBMIT_ARGS"));
+    assertEquals(
+      String.format("\"%s\" \"foo\" \"%s\" \"bar\"", parser.MASTER, parser.DEPLOY_MODE),
+      env.get("PYSPARK_SUBMIT_ARGS"));
   }
 
   @Test
@@ -90,6 +144,114 @@ public class SparkSubmitCommandBuilderSuite {
     assertEquals("arg1", cmd.get(cmd.size() - 1));
   }
 
+  private void testCmdBuilder(boolean isDriver) throws Exception {
+    String deployMode = isDriver ? "client" : "cluster";
+
+    SparkSubmitCommandBuilder launcher =
+      new SparkSubmitCommandBuilder(Collections.<String>emptyList());
+    launcher.setSparkHome(System.getProperty("spark.test.home"))
+      .setMaster("yarn")
+      .setDeployMode(deployMode)
+      .setAppResource("/foo")
+      .setAppName("MyApp")
+      .setMainClass("my.Class")
+      .setPropertiesFile(dummyPropsFile.getAbsolutePath())
+      .addAppArgs("foo", "bar")
+      .setConf(SparkLauncher.DRIVER_MEMORY, "1g")
+      .setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, "/driver")
+      .setConf(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, "-Ddriver -XX:MaxPermSize=256m")
+      .setConf(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, "/native")
+      .setConf("spark.foo", "foo");
+
+    Map<String, String> env = new HashMap<String, String>();
+    List<String> cmd = launcher.buildCommand(env);
+
+    // Checks below are different for driver and non-driver mode.
+
+    if (isDriver) {
+      assertTrue("Driver -Xms should be configured.", cmd.contains("-Xms1g"));
+      assertTrue("Driver -Xmx should be configured.", cmd.contains("-Xmx1g"));
+    } else {
+      boolean found = false;
+      for (String arg : cmd) {
+        if (arg.startsWith("-Xms") || arg.startsWith("-Xmx")) {
+          found = true;
+          break;
+        }
+      }
+      assertFalse("Memory arguments should not be set.", found);
+    }
+
+    for (String arg : cmd) {
+      if (arg.startsWith("-XX:MaxPermSize=")) {
+        if (isDriver) {
+          assertEquals("-XX:MaxPermSize=256m", arg);
+        } else {
+          assertEquals("-XX:MaxPermSize=128m", arg);
+        }
+      }
+    }
+
+    String[] cp = findArgValue(cmd, "-cp").split(Pattern.quote(File.pathSeparator));
+    if (isDriver) {
+      assertTrue("Driver classpath should contain provided entry.", contains("/driver", cp));
+    } else {
+      assertFalse("Driver classpath should not be in command.", contains("/driver", cp));
+    }
+
+    String libPath = env.get(CommandBuilderUtils.getLibPathEnvName());
+    if (isDriver) {
+      assertNotNull("Native library path should be set.", libPath);
+      assertTrue("Native library path should contain provided entry.",
+        contains("/native", libPath.split(Pattern.quote(File.pathSeparator))));
+    } else {
+      assertNull("Native library should not be set.", libPath);
+    }
+
+    // Checks below are the same for both driver and non-driver mode.
+    assertEquals(dummyPropsFile.getAbsolutePath(), findArgValue(cmd, parser.PROPERTIES_FILE));
+    assertEquals("yarn", findArgValue(cmd, parser.MASTER));
+    assertEquals(deployMode, findArgValue(cmd, parser.DEPLOY_MODE));
+    assertEquals("my.Class", findArgValue(cmd, parser.CLASS));
+    assertEquals("MyApp", findArgValue(cmd, parser.NAME));
+
+    boolean appArgsOk = false;
+    for (int i = 0; i < cmd.size(); i++) {
+      if (cmd.get(i).equals("/foo")) {
+        assertEquals("foo", cmd.get(i + 1));
+        assertEquals("bar", cmd.get(i + 2));
+        assertEquals(cmd.size(), i + 3);
+        appArgsOk = true;
+        break;
+      }
+    }
+    assertTrue("App resource and args should be added to command.", appArgsOk);
+
+    Map<String, String> conf = parseConf(cmd, parser);
+    assertEquals("foo", conf.get("spark.foo"));
+  }
+
+  private boolean contains(String needle, String[] haystack) {
+    for (String entry : haystack) {
+      if (entry.equals(needle)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private Map<String, String> parseConf(List<String> cmd, SparkSubmitOptionParser parser) {
+    Map<String, String> conf = new HashMap<String, String>();
+    for (int i = 0; i < cmd.size(); i++) {
+      if (cmd.get(i).equals(parser.CONF)) {
+        String[] val = cmd.get(i + 1).split("=", 2);
+        conf.put(val[0], val[1]);
+        i += 1;
+      }
+    }
+    return conf;
+  }
+
   private String findArgValue(List<String> cmd, String name) {
     for (int i = 0; i < cmd.size(); i++) {
       if (cmd.get(i).equals(name)) {
@@ -98,6 +260,10 @@ public class SparkSubmitCommandBuilderSuite {
     }
     fail(String.format("arg '%s' not found", name));
     return null;
+  }
+
+  private boolean findInStringList(String list, String sep, String needle) {
+    return contains(needle, list.split(sep));
   }
 
   private List<String> buildCommand(List<String> args, Map<String, String> env) throws Exception {

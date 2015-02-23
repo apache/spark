@@ -88,16 +88,11 @@ class Main {
   /**
    * Prepare a command line for execution from a Windows batch script.
    *
-   * Two things need to be done:
+   * The method quotes all arguments so that spaces are handled as expected. Quotes within arguments
+   * are "double quoted" (which is batch for escaping a quote). This page has more details about
+   * quoting and other batch script fun stuff: http://ss64.com/nt/syntax-esc.html
    *
-   * - If a custom library path is needed, extend PATH to add it. Based on:
-   *   http://superuser.com/questions/223104/setting-environment-variable-for-just-one-command-in-windows-cmd-exe
-   *
-   * - Quote all arguments so that spaces are handled as expected. Quotes within arguments are
-   *   "double quoted" (which is batch for escaping a quote). This page has more details about
-   *   quoting and other batch script fun stuff: http://ss64.com/nt/syntax-esc.html
-   *
-   * The command is executed using "cmd /c" and formatted as single line, since that's the
+   * The command is executed using "cmd /c" and formatted in single line, since that's the
    * easiest way to consume this from a batch script (see spark-class2.cmd).
    */
   private static String prepareForWindows(List<String> cmd, Map<String, String> childEnv) {
