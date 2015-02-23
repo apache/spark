@@ -579,11 +579,10 @@ private[master] class Master(
             (usableWorkers(pos).memoryFree >= memoryDemand)) {
             val coreToAssign = math.min(math.min(usableWorkers(pos).coresFree - assignedSum(pos),
               maxCoreAllocationPerRound), maxCoresLeft)
-            val workerAllocationArray = assigned(pos)
-            workerAllocationArray(executorNumberOnWorker(pos)) += coreToAssign
+            assigned(pos)(executorNumberOnWorker(pos)) += coreToAssign
             assignedSum(pos) += coreToAssign
             maxCoresLeft -= coreToAssign
-            if (app.desc.maxCorePerExecutor.isDefined || executorNumberOnWorker(pos) == 0) {
+            if (app.desc.maxCorePerExecutor.isDefined) {
               // if starting multiple executors on the worker, we move to the next executor
               executorNumberOnWorker(pos) += 1     
             }
@@ -593,12 +592,11 @@ private[master] class Master(
 
         // Now that we've decided how many executors and the core number for each to
         // give on each node, let's actually give them
-        for (pos <- 0 until numUsable) {
-          for (execIdx <- 0 until executorNumberOnWorker(pos)) {
-            val exec = app.addExecutor(usableWorkers(pos), assigned(pos)(execIdx))
-            launchExecutor(usableWorkers(pos), exec)
-            app.state = ApplicationState.RUNNING
-          }
+        for (pos <- 0 until numUsable; 
+             execIdx <- 0 until math.max(executorNumberOnWorker(pos), 1)) {
+          val exec = app.addExecutor(usableWorkers(pos), assigned(pos)(execIdx))
+          launchExecutor(usableWorkers(pos), exec)
+          app.state = ApplicationState.RUNNING
         }
       }
     } else {
