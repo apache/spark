@@ -93,12 +93,25 @@ ________________________________________________________________________________
         return stream.map(lambda k_v: (keyDecoder(k_v[0]), valueDecoder(k_v[1])))
 
     @staticmethod
-    def createDirectStream(ssc, topics, kafkaParams={},
+    def createDirectStream(ssc, brokerList, topics, kafkaParams={},
                            keyDecoder=utf8_decoder, valueDecoder=utf8_decoder):
         """
         Create an input stream that directly pulls messages from a Kafka Broker.
 
+        This is not a receiver based Kafka input stream, it directly pulls the message from Kafka
+        in each batch duration and processed without storing.
+
+        This does not use Zookeeper to store offsets. The consumed offsets are tracked
+        by the stream itself. For interoperability with Kafka monitoring tools that depend on
+        Zookeeper, you have to update Kafka/Zookeeper yourself from the streaming application.
+        You can access the offsets used in each batch from the generated RDDs (see
+
+        Failure Recovery: To recover from driver failures, you have to enable checkpointing
+        in the StreamingContext. The information on consumed offset can be
+        recovered from the checkpoint. See the programming guide for details (constraints, etc.).
+
         :param ssc:  StreamingContext object
+        :param brokerList: A String representing a list of seed Kafka brokers (hostname:port,...)
         :param topics:  list of topic_name to consume.
         :param kafkaParams: Additional params for Kafka
         :param keyDecoder:  A function used to decode key (default is utf8_decoder)
@@ -106,6 +119,8 @@ ________________________________________________________________________________
         :return: A DStream object
         """
         java_import(ssc._jvm, "org.apache.spark.streaming.kafka.KafkaUtils")
+
+        kafkaParams.update({"metadata.broker.list": brokerList})
 
         if not isinstance(topics, list):
             raise TypeError("topics should be list")
