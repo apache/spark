@@ -196,7 +196,7 @@ class Airflow(BaseView):
     @expose('/chart_data')
     @login_required
     @wwwutils.gzipped
-    @cache.cached(timeout=3600, key_prefix=wwwutils.make_cache_key)
+    #@cache.cached(timeout=3600, key_prefix=wwwutils.make_cache_key)
     def chart_data(self):
         session = settings.Session()
         chart_id = request.args.get('chart_id')
@@ -204,6 +204,8 @@ class Airflow(BaseView):
         db = session.query(
             models.Connection).filter_by(conn_id=chart.conn_id).all()[0]
         session.expunge_all()
+        session.commit()
+        session.close()
 
         payload = {}
         payload['state'] = 'ERROR'
@@ -282,7 +284,17 @@ class Airflow(BaseView):
 
             series = []
             colorAxis = None
-            if chart.chart_type == 'heatmap':
+            if chart.chart_type in ('para',):
+                df.rename(columns={
+                    df.columns[0]: 'name',
+                    df.columns[1]: 'group',
+                }, inplace=True)
+                return Response(
+                    response=df.to_csv(index=False),
+                    status=200,
+                    mimetype="application/text")
+
+            elif chart.chart_type == 'heatmap':
                 color_perc_lbound = float(
                     request.args.get('color_perc_lbound', 0))
                 color_perc_rbound = float(
@@ -437,14 +449,11 @@ class Airflow(BaseView):
         def date_handler(obj):
             return obj.isoformat() if hasattr(obj, 'isoformat') else obj
 
-        response = Response(
+        return Response(
             response=json.dumps(payload, indent=4, default=date_handler),
             status=200,
             mimetype="application/json")
 
-        session.commit()
-        session.close()
-        return response
 
     @expose('/chart')
     @login_required
@@ -453,6 +462,10 @@ class Airflow(BaseView):
         chart_id = request.args.get('chart_id')
         chart = session.query(models.Chart).filter_by(id=chart_id).all()[0]
         session.expunge_all()
+        session.commit()
+        session.close()
+        if chart.chart_type == 'para':
+            return self.render('airflow/para/para.html', chart=chart)
 
         if chart.show_sql:
             sql = Markup(highlight(
@@ -460,15 +473,12 @@ class Airflow(BaseView):
                 SqlLexer(),  # Lexer call
                 HtmlFormatter(noclasses=True))
             )
-        response = self.render(
+        return self.render(
             'airflow/highchart.html',
             chart=chart,
             title="Airflow - Chart",
             sql=sql,
             label=chart.label)
-        session.commit()
-        session.close()
-        return response
 
     @expose('/dag_stats')
     def dag_stats(self):
@@ -1262,6 +1272,7 @@ class ChartModelView(LoginMixin, ModelView):
             ('line', 'Line Chart'),
             ('spline', 'Spline Chart'),
             ('bar', 'Bar Chart'),
+            ('para', 'Parallel Coordinates'),
             ('column', 'Column Chart'),
             ('area', 'Overlapping Area Chart'),
             ('stacked_area', 'Stacked Area Chart'),
