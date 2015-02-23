@@ -106,9 +106,9 @@ ________________________________________________________________________________
         Zookeeper, you have to update Kafka/Zookeeper yourself from the streaming application.
         You can access the offsets used in each batch from the generated RDDs (see
 
-        Failure Recovery: To recover from driver failures, you have to enable checkpointing
-        in the StreamingContext. The information on consumed offset can be
-        recovered from the checkpoint. See the programming guide for details (constraints, etc.).
+        To recover from driver failures, you have to enable checkpointing in the StreamingContext.
+        The information on consumed offset can be recovered from the checkpoint.
+        See the programming guide for details (constraints, etc.).
 
         :param ssc:  StreamingContext object
         :param brokerList: A String representing a list of seed Kafka brokers (hostname:port,...)
