@@ -35,3 +35,38 @@ test_that("reserialize on RDD", {
   
   unlink(fileName)
 })
+
+test_that("clean.closure on R functions", {
+  y <- c(1, 2, 3)
+  g <- function(x) { x + 1 }
+  f <- function(x) { g(x) + y }
+  env <- new.env()
+  cleanClosure(f, env)
+  expect_equal(length(ls(env)), 2)  # y, g
+  actual <- get("y", envir = env)
+  expect_equal(actual, y)
+  actual <- get("g", envir = env)
+  expect_equal(actual, g)
+  
+  # Check for nested enclosures and package variables.
+  env2 <- new.env()
+  funcEnv <- new.env(parent = env2)
+  f <- function(x) { min(g(x) + y) }
+  environment(f) <- funcEnv  # enclosing relationship: f -> funcEnv -> env2 -> .GlobalEnv
+  env <- new.env()
+  SparkR:::cleanClosure(f, env)
+  expect_equal(length(ls(env)), 2)  # "min" should not be included
+  actual <- get("y", envir = env)
+  expect_equal(actual, y)
+  actual <- get("g", envir = env)
+  expect_equal(actual, g)
+  
+  # Test for function (and variable) definitions.
+  f <- function(x) {
+    g <- function(y) { y * 2 }
+    g(x)
+  }
+  env <- new.env()
+  SparkR:::cleanClosure(f, env)
+  expect_equal(length(ls(env)), 0)  # "y" and "g" should not be included.
+})

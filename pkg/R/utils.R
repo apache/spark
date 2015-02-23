@@ -288,3 +288,94 @@ convertEnvsToList <- function(keys, vals) {
            list(keys[[name]], vals[[name]])
          })
 }
+
+# Utility function to recursively traverse the Abstract Syntax Tree (AST) of a
+# user defined function (UDF), and to examine variables in the UDF to decide 
+# if their values should be included in the new function environment.
+# param
+#   node The current AST node in the traversal.
+#   oldEnv The original function environment.
+#   argNames The argument names of the function.
+#   newEnv A new function environment to store necessary function dependencies.
+processClosure <- function(node, oldEnv, argNames, newEnv) {
+  nodeLen <- length(node)
+  if (nodeLen == 0) {
+    return
+  }
+  if (nodeLen > 1 && typeof(node) == "language") {
+    # Recursive case: current AST node is an internal node, check for its children. 
+    nodeChar <- as.character(node[[1]])
+    switch(nodeChar, 
+           "{" = {  # Start of a function body.
+             for (i in 2:nodeLen) {
+               processClosure(node[[i]], oldEnv, argNames, newEnv)
+             }
+           },
+           "<-" = {  # Assignment.
+             defVar <- node[[2]]
+             if (length(defVar) == 1 && typeof(defVar) == "symbol") {
+               # Add the defined variable name into .defVars.
+               assign(".defVars", 
+                      c(get(".defVars", envir = .sparkREnv), as.character(defVar)), 
+                      envir = .sparkREnv)
+             }
+             for (i in 3:nodeLen) {
+               processClosure(node[[i]], oldEnv, argNames, newEnv)
+             }
+           },
+           "function" = {  # Function definition.
+             newArgs <- names(node[[2]])
+             argNames <- c(argNames, newArgs)  # Add parameter names.
+             for (i in 3:nodeLen) {
+               processClosure(node[[i]], oldEnv, argNames, newEnv)
+             }
+           },
+           {
+             for (i in 1:nodeLen) {
+               processClosure(node[[i]], oldEnv, argNames, newEnv)
+             }
+           })
+  } else if (nodeLen == 1 && typeof(node) == "symbol") {
+    # Base case: current AST node is a leaf node and a symbol.
+    nodeChar <- as.character(node)
+    if (!nodeChar %in% argNames && # Not a function parameter or function local variable.
+          !nodeChar %in% get(".defVars", envir = .sparkREnv)) {
+      func.env <- oldEnv
+      topEnv <- parent.env(.GlobalEnv)
+      # Search in function environment, and function's enclosing environments 
+      # up to global environment. There is no need to look into package environments
+      # above the global or namespace environment below the global, as they are
+      # assumed to be loaded on workers.
+      while (!identical(func.env, topEnv) && !isNamespace(func.env)) {
+        # Set parameter 'inherits' to FALSE since we do not need to search in
+        # attached package environments.
+        if (exists(nodeChar, envir=func.env, inherits = FALSE)) {
+          assign(nodeChar, get(nodeChar, envir=func.env), envir = newEnv)
+          break
+        } else {
+          # Continue to search in enclosure.
+          func.env <- parent.env(func.env)
+        }
+      }
+    }
+  }
+}
+
+# Utility function to get user defined function (UDF) dependencies (closure). 
+# More specifically, this function captures the values of free variables defined 
+# outside a UDF, and stores them in a new environment.
+# param
+#   func A function whose closure needs to be captured.
+#   newEnv A new function environment to store necessary function dependencies.
+cleanClosure <- function(func, newEnv) {
+  if (is.function(func) && is.environment(newEnv)) {
+    # .defVars is a character vector of variables names defined in the function.
+    assign(".defVars", c(), envir = .sparkREnv)
+    func.body <- body(func)
+    oldEnv <- environment(func)
+    argNames <- names(as.list(args(func)))
+    argsNames <- argNames[-length(argNames)]  # Remove the ending NULL in pairlist.
+    # Recursively examine variables in the function body.
+    processClosure(func.body, oldEnv, argNames, newEnv)
+  }
+}
