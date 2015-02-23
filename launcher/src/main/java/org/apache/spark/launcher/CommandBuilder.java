@@ -26,6 +26,14 @@ import java.util.Map;
  */
 interface CommandBuilder {
 
+  /**
+   * Builds the command like to execute.
+   *
+   * @param env A map containing environment variables for the child process. It may already contain
+   *            entries defined by the user (such as SPARK_HOME, or those defined by the
+   *            SparkLauncher constructor that takes an environment), and may be modified to
+   *            include other variables needed by the process to be executed.
+   */
   List<String> buildCommand(Map<String, String> env) throws IOException;
 
 }
