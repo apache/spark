@@ -48,11 +48,11 @@ import org.apache.spark.util.CallSite
  *
  */
 private[spark] abstract class Stage(
-    val id: Int, 
-    val rdd: RDD[_], 
+    val id: Int,
+    val rdd: RDD[_],
     val numTasks: Int,
     val parents: List[Stage],
-    val jobId: Int, 
+    val jobId: Int,
     val callSite: CallSite)
   extends Logging {
 
@@ -60,7 +60,7 @@ private[spark] abstract class Stage(
 
   /** Set of jobs that this stage belongs to. */
   val jobIds = new HashSet[Int]
-  
+
   var pendingTasks = new HashSet[Task[_]]
 
   private var nextAttemptId = 0
@@ -72,9 +72,9 @@ private[spark] abstract class Stage(
   var latestInfo: StageInfo = StageInfo.fromStage(this)
 
   var numAvailableOutputs = 0
-  
+
   def isAvailable: Boolean
-  
+
   /** Return a new attempt id, starting with 0. */
   def newAttemptId(): Int = {
     val id = nextAttemptId
@@ -83,7 +83,7 @@ private[spark] abstract class Stage(
   }
 
   def attemptId: Int = nextAttemptId
-  
+
   override final def hashCode(): Int = id
 
   override final def equals(other: Any): Boolean = other match {
