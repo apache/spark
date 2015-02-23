@@ -427,5 +427,53 @@ val filteredData = discretizedData.map { lp =>
 }
 {% endhighlight %}
 </div>
+
+<div data-lang="java">
+{% highlight java %}
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.function.Function;
+import org.apache.spark.mllib.feature.ChiSqSelector;
+import org.apache.spark.mllib.feature.ChiSqSelectorModel;
+import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.mllib.regression.LabeledPoint;
+import org.apache.spark.mllib.util.MLUtils;
+
+SparkConf sparkConf = new SparkConf().setAppName("JavaChiSqSelector");
+JavaSparkContext sc = new JavaSparkContext(sparkConf);
+JavaRDD<LabeledPoint> points = MLUtils.loadLibSVMFile(sc.sc(),
+    "data/mllib/sample_libsvm_data.txt").toJavaRDD().cache();
+
+// Discretize data in 16 equal bins since ChiSqSelector requires categorical features
+JavaRDD<LabeledPoint> discretizedData = points.map(
+    new Function<LabeledPoint, LabeledPoint>() {
+      @Override
+      public LabeledPoint call(LabeledPoint lp) {
+        final double[] discretizedFeatures = new double[lp.features().size()];
+        for (int i = 0; i < lp.features().size(); ++i) {
+          discretizedFeatures[i] = lp.features().apply(i) / 16;
+        }
+        return new LabeledPoint(lp.label(), Vectors.dense(discretizedFeatures));
+      }
+    });
+
+// Create ChiSqSelector that will select 50 features
+ChiSqSelector selector = new ChiSqSelector(50);
+// Create ChiSqSelector model (selecting features)
+final ChiSqSelectorModel transformer = selector.fit(discretizedData.rdd());
+// Filter the top 50 features from each feature vector
+JavaRDD<LabeledPoint> filteredData = discretizedData.map(
+    new Function<LabeledPoint, LabeledPoint>() {
+      @Override
+      public LabeledPoint call(LabeledPoint lp) {
+        return new LabeledPoint(lp.label(), transformer.transform(lp.features()));
+      }
+    }
+);
+
+sc.stop();
+{% endhighlight %}
+</div>
 </div>
 
