@@ -119,5 +119,33 @@ class SortingSuite extends FunSuite with SharedSparkContext with Matchers with L
     partitions(1).last should be > partitions(2).head
     partitions(2).last should be > partitions(3).head
   }
+
+  test("get a range of elements in a sorted RDD that is on one partition") {
+    val pairArr = (1 to 1000).map(x => (x, x)).toArray
+    val sorted = sc.parallelize(pairArr, 10).sortByKey()
+    val range = sorted.filterByRange(20, 40).collect()
+    assert((20 to 40).toArray === range.map(_._1))
+  }
+
+  test("get a range of elements over multiple partitions in a descendingly sorted RDD") {
+    val pairArr = (1000 to 1 by -1).map(x => (x, x)).toArray
+    val sorted = sc.parallelize(pairArr, 10).sortByKey(false)
+    val range = sorted.filterByRange(200, 800).collect()
+    assert((800 to 200 by -1).toArray === range.map(_._1))
+  }
+
+  test("get a range of elements in an array not partitioned by a range partitioner") {
+    val pairArr = util.Random.shuffle((1 to 1000).toList).map(x => (x, x))
+    val pairs = sc.parallelize(pairArr,10)
+    val range = pairs.filterByRange(200, 800).collect()
+    assert((800 to 200 by -1).toArray.sorted === range.map(_._1).sorted)
+  }
+
+  test("get a range of elements over multiple partitions but not taking up full partitions") {
+    val pairArr = (1000 to 1 by -1).map(x => (x, x)).toArray
+    val sorted = sc.parallelize(pairArr, 10).sortByKey(false)
+    val range = sorted.filterByRange(250, 850).collect()
+    assert((850 to 250 by -1).toArray === range.map(_._1))
+  }
 }
 

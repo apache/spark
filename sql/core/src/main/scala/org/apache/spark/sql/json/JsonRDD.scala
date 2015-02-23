@@ -17,14 +17,12 @@
 
 package org.apache.spark.sql.json
 
-import java.io.StringWriter
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 
 import scala.collection.Map
 import scala.collection.convert.Wrappers.{JMapWrapper, JListWrapper}
 
-import com.fasterxml.jackson.core.JsonProcessingException
-import com.fasterxml.jackson.core.JsonFactory
+import com.fasterxml.jackson.core.{JsonGenerator, JsonProcessingException}
 import com.fasterxml.jackson.databind.ObjectMapper
 
 import org.apache.spark.rdd.RDD
@@ -179,7 +177,12 @@ private[sql] object JsonRDD extends Logging {
   }
 
   private def typeOfPrimitiveValue: PartialFunction[Any, DataType] = {
-    ScalaReflection.typeOfObject orElse {
+    // For Integer values, use LongType by default.
+    val useLongType: PartialFunction[Any, DataType] = {
+      case value: IntegerType.JvmType => LongType
+    }
+
+    useLongType orElse ScalaReflection.typeOfObject orElse {
       // Since we do not have a data type backed by BigInteger,
       // when we see a Java BigInteger, we use DecimalType.
       case value: java.math.BigInteger => DecimalType.Unlimited
@@ -303,6 +306,10 @@ private[sql] object JsonRDD extends Logging {
           val parsed = mapper.readValue(record, classOf[Object]) match {
             case map: java.util.Map[_, _] => scalafy(map).asInstanceOf[Map[String, Any]] :: Nil
             case list: java.util.List[_] => scalafy(list).asInstanceOf[Seq[Map[String, Any]]]
+            case _ =>
+              sys.error(
+                s"Failed to parse record $record. Please make sure that each line of the file " +
+                "(or each string in the RDD) is a valid JSON object or an array of JSON objects.")
           }
 
           parsed
@@ -377,10 +384,12 @@ private[sql] object JsonRDD extends Logging {
     }
   }
 
-  private def toDate(value: Any): Date = {
+  private def toDate(value: Any): Int = {
     value match {
       // only support string as date
-      case value: java.lang.String => new Date(DataTypeConversions.stringToTime(value).getTime)
+      case value: java.lang.String =>
+        DateUtils.millisToDays(DataTypeConversions.stringToTime(value).getTime)
+      case value: java.sql.Date => DateUtils.fromJavaDate(value)
     }
   }
 
@@ -428,14 +437,11 @@ private[sql] object JsonRDD extends Logging {
 
   /** Transforms a single Row to JSON using Jackson
     *
-    * @param jsonFactory a JsonFactory object to construct a JsonGenerator
     * @param rowSchema the schema object used for conversion
+    * @param gen a JsonGenerator object
     * @param row The row to convert
     */
-  private[sql] def rowToJSON(rowSchema: StructType, jsonFactory: JsonFactory)(row: Row): String = {
-    val writer = new StringWriter()
-    val gen = jsonFactory.createGenerator(writer)
-
+  private[sql] def rowToJSON(rowSchema: StructType, gen: JsonGenerator)(row: Row) = {
     def valWriter: (DataType, Any) => Unit = {
       case (_, null) | (NullType, _)  => gen.writeNull()
       case (StringType, v: String) => gen.writeString(v)
@@ -477,8 +483,5 @@ private[sql] object JsonRDD extends Logging {
     }
 
     valWriter(rowSchema, row)
-    gen.close()
-    writer.toString
   }
-
 }

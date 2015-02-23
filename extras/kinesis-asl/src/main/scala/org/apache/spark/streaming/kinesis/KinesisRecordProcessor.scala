@@ -104,7 +104,7 @@ private[kinesis] class KinesisRecordProcessor(
           logDebug(s"Checkpoint:  WorkerId $workerId completed checkpoint of ${batch.size}" +
               s" records for shardId $shardId")
           logDebug(s"Checkpoint:  Next checkpoint is at " +
-              s" ${checkpointState.checkpointClock.currentTime()} for shardId $shardId")
+              s" ${checkpointState.checkpointClock.getTimeMillis()} for shardId $shardId")
         }
       } catch {
         case e: Throwable => {

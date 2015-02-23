@@ -26,8 +26,10 @@ import scala.collection.JavaConverters._
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
 
 import org.apache.spark.SparkException
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.util.NumericParser
-import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, Row}
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.types._
 
 /**
@@ -77,7 +79,7 @@ sealed trait Vector extends Serializable {
         result = 31 * result + (bits ^ (bits >>> 32)).toInt
       }
     }
-    return result
+    result
   }
 
   /**
@@ -109,9 +111,14 @@ sealed trait Vector extends Serializable {
 }
 
 /**
+ * :: DeveloperApi ::
+ *
  * User-defined type for [[Vector]] which allows easy interaction with SQL
- * via [[org.apache.spark.sql.SchemaRDD]].
+ * via [[org.apache.spark.sql.DataFrame]].
+ *
+ * NOTE: This is currently private[spark] but will be made public later once it is stabilized.
  */
+@DeveloperApi
 private[spark] class VectorUDT extends UserDefinedType[Vector] {
 
   override def sqlType: StructType = {
@@ -168,6 +175,13 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
   override def pyUDT: String = "pyspark.mllib.linalg.VectorUDT"
 
   override def userClass: Class[Vector] = classOf[Vector]
+
+  override def equals(o: Any): Boolean = {
+    o match {
+      case v: VectorUDT => true
+      case _ => false
+    }
+  }
 }
 
 /**
@@ -233,7 +247,7 @@ object Vectors {
   }
 
   /**
-   * Creates a dense vector of all zeros.
+   * Creates a vector of all zeros.
    *
    * @param size vector size
    * @return a zero vector
@@ -243,8 +257,7 @@ object Vectors {
   }
 
   /**
-   * Parses a string resulted from `Vector#toString` into
-   * an [[org.apache.spark.mllib.linalg.Vector]].
+   * Parses a string resulted from [[Vector.toString]] into a [[Vector]].
    */
   def parse(s: String): Vector = {
     parseNumeric(NumericParser.parse(s))
@@ -371,18 +384,23 @@ object Vectors {
           squaredDistance += score * score
         }
 
-      case (v1: SparseVector, v2: DenseVector) if v1.indices.length / v1.size < 0.5 =>
+      case (v1: SparseVector, v2: DenseVector) =>
         squaredDistance = sqdist(v1, v2)
 
-      case (v1: DenseVector, v2: SparseVector) if v2.indices.length / v2.size < 0.5 =>
+      case (v1: DenseVector, v2: SparseVector) =>
         squaredDistance = sqdist(v2, v1)
 
-      // When a SparseVector is approximately dense, we treat it as a DenseVector
-      case (v1, v2) =>
-        squaredDistance = v1.toArray.zip(v2.toArray).foldLeft(0.0){ (distance, elems) =>
-          val score = elems._1 - elems._2
-          distance + score * score
+      case (DenseVector(vv1), DenseVector(vv2)) =>
+        var kv = 0
+        val sz = vv1.size
+        while (kv < sz) {
+          val score = vv1(kv) - vv2(kv)
+          squaredDistance += score * score
+          kv += 1
         }
+      case _ =>
+        throw new IllegalArgumentException("Do not support vector type " + v1.getClass +
+          " and " + v2.getClass)
     }
     squaredDistance
   }
@@ -477,6 +495,7 @@ class DenseVector(val values: Array[Double]) extends Vector {
 }
 
 object DenseVector {
+  /** Extracts the value array from a dense vector. */
   def unapply(dv: DenseVector): Option[Array[Double]] = Some(dv.values)
 }
 

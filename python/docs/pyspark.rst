@@ -9,6 +9,7 @@ Subpackages
     
     pyspark.sql
     pyspark.streaming
+    pyspark.ml
     pyspark.mllib
 
 Contents

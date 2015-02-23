@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import scala.collection.mutable.ArrayBuffer
+import java.io.File
 
 import org.scalatest.FunSuite
 
@@ -125,6 +125,54 @@ class SecurityManagerSuite extends FunSuite {
 
   }
 
+  test("ssl on setup") {
+    val conf = SSLSampleConfigs.sparkSSLConfig()
+
+    val securityManager = new SecurityManager(conf)
+
+    assert(securityManager.fileServerSSLOptions.enabled === true)
+    assert(securityManager.akkaSSLOptions.enabled === true)
+
+    assert(securityManager.sslSocketFactory.isDefined === true)
+    assert(securityManager.hostnameVerifier.isDefined === true)
+
+    assert(securityManager.fileServerSSLOptions.trustStore.isDefined === true)
+    assert(securityManager.fileServerSSLOptions.trustStore.get.getName === "truststore")
+    assert(securityManager.fileServerSSLOptions.keyStore.isDefined === true)
+    assert(securityManager.fileServerSSLOptions.keyStore.get.getName === "keystore")
+    assert(securityManager.fileServerSSLOptions.trustStorePassword === Some("password"))
+    assert(securityManager.fileServerSSLOptions.keyStorePassword === Some("password"))
+    assert(securityManager.fileServerSSLOptions.keyPassword === Some("password"))
+    assert(securityManager.fileServerSSLOptions.protocol === Some("TLSv1"))
+    assert(securityManager.fileServerSSLOptions.enabledAlgorithms ===
+        Set("TLS_RSA_WITH_AES_128_CBC_SHA", "SSL_RSA_WITH_DES_CBC_SHA"))
+
+    assert(securityManager.akkaSSLOptions.trustStore.isDefined === true)
+    assert(securityManager.akkaSSLOptions.trustStore.get.getName === "truststore")
+    assert(securityManager.akkaSSLOptions.keyStore.isDefined === true)
+    assert(securityManager.akkaSSLOptions.keyStore.get.getName === "keystore")
+    assert(securityManager.akkaSSLOptions.trustStorePassword === Some("password"))
+    assert(securityManager.akkaSSLOptions.keyStorePassword === Some("password"))
+    assert(securityManager.akkaSSLOptions.keyPassword === Some("password"))
+    assert(securityManager.akkaSSLOptions.protocol === Some("TLSv1"))
+    assert(securityManager.akkaSSLOptions.enabledAlgorithms ===
+        Set("TLS_RSA_WITH_AES_128_CBC_SHA", "SSL_RSA_WITH_DES_CBC_SHA"))
+  }
+
+  test("ssl off setup") {
+    val file = File.createTempFile("SSLOptionsSuite", "conf")
+    file.deleteOnExit()
+
+    System.setProperty("spark.ssl.configFile", file.getAbsolutePath)
+    val conf = new SparkConf()
+
+    val securityManager = new SecurityManager(conf)
+
+    assert(securityManager.fileServerSSLOptions.enabled === false)
+    assert(securityManager.akkaSSLOptions.enabled === false)
+    assert(securityManager.sslSocketFactory.isDefined === false)
+    assert(securityManager.hostnameVerifier.isDefined === false)
+  }
 
 }
 

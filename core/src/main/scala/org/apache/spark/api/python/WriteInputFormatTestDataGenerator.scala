@@ -107,7 +107,6 @@ private[python] class WritableToDoubleArrayConverter extends Converter[Any, Arra
  * given directory (probably a temp directory)
  */
 object WriteInputFormatTestDataGenerator {
-  import SparkContext._
 
   def main(args: Array[String]) {
     val path = args(0)

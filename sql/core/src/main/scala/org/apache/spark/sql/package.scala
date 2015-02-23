@@ -37,5 +37,11 @@ package object sql {
    * Converts a logical plan into zero or more SparkPlans.
    */
   @DeveloperApi
-  type Strategy = org.apache.spark.sql.catalyst.planning.GenericStrategy[SparkPlan]
+  protected[sql] type Strategy = org.apache.spark.sql.catalyst.planning.GenericStrategy[SparkPlan]
+
+  /**
+   * Type alias for [[DataFrame]]. Kept here for backward source compatibility for Scala.
+   */
+  @deprecated("1.3.0", "use DataFrame")
+  type SchemaRDD = DataFrame
 }

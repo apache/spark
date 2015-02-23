@@ -27,7 +27,8 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.ByteBufferInputStream
 import org.apache.spark.util.Utils
 
-private[spark] class JavaSerializationStream(out: OutputStream, counterReset: Int)
+private[spark] class JavaSerializationStream(
+    out: OutputStream, counterReset: Int, extraDebugInfo: Boolean)
   extends SerializationStream {
   private val objOut = new ObjectOutputStream(out)
   private var counter = 0
@@ -39,7 +40,12 @@ private[spark] class JavaSerializationStream(out: OutputStream, counterReset: In
    * the stream 'resets' object class descriptions have to be re-written)
    */
   def writeObject[T: ClassTag](t: T): SerializationStream = {
-    objOut.writeObject(t)
+    try {
+      objOut.writeObject(t)
+    } catch {
+      case e: NotSerializableException if extraDebugInfo =>
+        throw SerializationDebugger.improveException(t, e)
+    }
     counter += 1
     if (counterReset > 0 && counter >= counterReset) {
       objOut.reset()
@@ -64,7 +70,8 @@ extends DeserializationStream {
 }
 
 
-private[spark] class JavaSerializerInstance(counterReset: Int, defaultClassLoader: ClassLoader)
+private[spark] class JavaSerializerInstance(
+    counterReset: Int, extraDebugInfo: Boolean, defaultClassLoader: ClassLoader)
   extends SerializerInstance {
 
   override def serialize[T: ClassTag](t: T): ByteBuffer = {
@@ -88,7 +95,7 @@ private[spark] class JavaSerializerInstance(counterReset: Int, defaultClassLoade
   }
 
   override def serializeStream(s: OutputStream): SerializationStream = {
-    new JavaSerializationStream(s, counterReset)
+    new JavaSerializationStream(s, counterReset, extraDebugInfo)
   }
 
   override def deserializeStream(s: InputStream): DeserializationStream = {
@@ -111,17 +118,20 @@ private[spark] class JavaSerializerInstance(counterReset: Int, defaultClassLoade
 @DeveloperApi
 class JavaSerializer(conf: SparkConf) extends Serializer with Externalizable {
   private var counterReset = conf.getInt("spark.serializer.objectStreamReset", 100)
+  private var extraDebugInfo = conf.getBoolean("spark.serializer.extraDebugInfo", true)
 
   override def newInstance(): SerializerInstance = {
     val classLoader = defaultClassLoader.getOrElse(Thread.currentThread.getContextClassLoader)
-    new JavaSerializerInstance(counterReset, classLoader)
+    new JavaSerializerInstance(counterReset, extraDebugInfo, classLoader)
   }
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     out.writeInt(counterReset)
+    out.writeBoolean(extraDebugInfo)
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
     counterReset = in.readInt()
+    extraDebugInfo = in.readBoolean()
   }
 }

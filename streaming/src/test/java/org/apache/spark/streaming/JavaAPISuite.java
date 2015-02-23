@@ -1769,7 +1769,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
   @SuppressWarnings("unchecked")
   @Test
   public void testTextFileStream() throws IOException {
-    File testDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"));
+    File testDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
     List<List<String>> expected = fileTestPrepare(testDir);
 
     JavaDStream<String> input = ssc.textFileStream(testDir.toString());
@@ -1782,7 +1782,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
   @SuppressWarnings("unchecked")
   @Test
   public void testFileStream() throws IOException {
-    File testDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"));
+    File testDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
     List<List<String>> expected = fileTestPrepare(testDir);
 
     JavaPairInputDStream<LongWritable, Text> inputStream = ssc.fileStream(
@@ -1828,4 +1828,22 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
     return expected;
   }
+
+  // SPARK-5795: no logic assertions, just testing that intended API invocations compile
+  private void compileSaveAsJavaAPI(JavaPairDStream<LongWritable,Text> pds) {
+    pds.saveAsNewAPIHadoopFiles(
+        "", "", LongWritable.class, Text.class,
+        org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat.class);
+    pds.saveAsHadoopFiles(
+        "", "", LongWritable.class, Text.class,
+        org.apache.hadoop.mapred.SequenceFileOutputFormat.class);
+    // Checks that a previous common workaround for this API still compiles
+    pds.saveAsNewAPIHadoopFiles(
+        "", "", LongWritable.class, Text.class,
+        (Class) org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat.class);
+    pds.saveAsHadoopFiles(
+        "", "", LongWritable.class, Text.class,
+        (Class) org.apache.hadoop.mapred.SequenceFileOutputFormat.class);
+  }
+
 }
