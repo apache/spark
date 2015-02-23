@@ -388,7 +388,7 @@ abstract class RDD[T: ClassTag](
       new PartitionwiseSampledRDD[T, T](this, new BernoulliSampler[T](fraction), true, seed)
     }
   }
-
+  
   /**
    * Randomly splits this RDD with the provided weights.
    *
