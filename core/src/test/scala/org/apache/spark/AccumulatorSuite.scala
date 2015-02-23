@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import scala.collection.mutable
+import scala.ref.WeakReference
 
 import org.scalatest.FunSuite
 import org.scalatest.Matchers
@@ -134,6 +135,25 @@ class AccumulatorSuite extends FunSuite with Matchers with LocalSparkContext {
       acc.value should be ( (0 to maxI).toSet)
       resetSparkContext()
     }
+  }
+
+  test ("garbage collection") {
+    // Create an accumulator and let it go out of scope to test that it's properly garbage collected
+    sc = new SparkContext("local", "test")
+    var acc: Accumulable[mutable.Set[Any], Any] = sc.accumulable(new mutable.HashSet[Any]())
+    val accId = acc.id
+    val ref = WeakReference(acc)
+
+    // Ensure the accumulator is present
+    assert(ref.get.isDefined)
+
+    // Remove the explicit reference to it and allow weak reference to get garbage collected
+    acc = null
+    System.gc()
+    assert(ref.get.isEmpty)
+
+    Accumulators.remove(accId)
+    assert(!Accumulators.originals.get(accId).isDefined)
   }
 
 }
