@@ -153,7 +153,12 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.RealClock"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.Clock"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.TestClock")
+          ) ++ Seq(
+            // SPARK-4655 - Making Stage an Abstract class broke binary compatility even though
+            // the stage class is defined as private[spark]
+            ProblemFilters.exclude[AbstractClassProblem]("org.apache.spark.scheduler.Stage")
           )
+          
 
         case v if v.startsWith("1.2") =>
           Seq(
