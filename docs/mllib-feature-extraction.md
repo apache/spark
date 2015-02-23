@@ -421,8 +421,10 @@ val discretizedData = data.map { lp =>
 val selector = new ChiSqSelector(50)
 // create ChiSqSelector model
 val transformer = selector.fit(disctetizedData)
-// filter top 50 features
-val filteredData = transformer.transform(discretizedData)
+// filter top 50 features from each feature vector
+val filteredData = disctetizedData.map { lp => 
+  LabeledPoint(lp.label, transformer.transform(lp.features)) 
+}
 {% endhighlight %}
 </div>
 </div>
