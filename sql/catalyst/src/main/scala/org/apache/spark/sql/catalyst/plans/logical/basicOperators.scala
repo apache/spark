@@ -23,6 +23,16 @@ import org.apache.spark.sql.types._
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
   def output = projectList.map(_.toAttribute)
+
+  override lazy val resolved: Boolean = {
+    val containsAggregatesOrGenerators = projectList.exists ( _.collect {
+        case agg: AggregateExpression => agg
+        case generator: Generator => generator
+      }.nonEmpty
+    )
+
+    !expressions.exists(!_.resolved) && childrenResolved && !containsAggregatesOrGenerators
+  }
 }
 
 /**

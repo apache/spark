@@ -37,6 +37,9 @@ class JsonProtocolSuite extends FunSuite {
   val jobSubmissionTime = 1421191042750L
   val jobCompletionTime = 1421191296660L
 
+  val executorAddedTime = 1421458410000L
+  val executorRemovedTime = 1421458922000L
+
   test("SparkListenerEvent") {
     val stageSubmitted =
       SparkListenerStageSubmitted(makeStageInfo(100, 200, 300, 400L, 500L), properties)
@@ -73,9 +76,10 @@ class JsonProtocolSuite extends FunSuite {
     val unpersistRdd = SparkListenerUnpersistRDD(12345)
     val applicationStart = SparkListenerApplicationStart("The winner of all", None, 42L, "Garfield")
     val applicationEnd = SparkListenerApplicationEnd(42L)
-    val executorAdded = SparkListenerExecutorAdded("exec1",
-      new ExecutorInfo("Hostee.awesome.com", 11))
-    val executorRemoved = SparkListenerExecutorRemoved("exec2")
+    val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
+    val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
+      new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap))
+    val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
 
     testEvent(stageSubmitted, stageSubmittedJsonString)
     testEvent(stageCompleted, stageCompletedJsonString)
@@ -97,13 +101,14 @@ class JsonProtocolSuite extends FunSuite {
   }
 
   test("Dependent Classes") {
+    val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
     testRDDInfo(makeRddInfo(2, 3, 4, 5L, 6L))
     testStageInfo(makeStageInfo(10, 20, 30, 40L, 50L))
     testTaskInfo(makeTaskInfo(999L, 888, 55, 777L, false))
     testTaskMetrics(makeTaskMetrics(
       33333L, 44444L, 55555L, 66666L, 7, 8, hasHadoopInput = false, hasOutput = false))
     testBlockManagerId(BlockManagerId("Hong", "Kong", 500))
-    testExecutorInfo(new ExecutorInfo("host", 43))
+    testExecutorInfo(new ExecutorInfo("host", 43, logUrlMap))
 
     // StorageLevel
     testStorageLevel(StorageLevel.NONE)
@@ -184,6 +189,34 @@ class JsonProtocolSuite extends FunSuite {
     assert(newMetrics.inputMetrics.isEmpty)
   }
 
+  test("Input/Output records backwards compatibility") {
+    // records read were added after 1.2
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6,
+      hasHadoopInput = true, hasOutput = true, hasRecords = false)
+    assert(metrics.inputMetrics.nonEmpty)
+    assert(metrics.outputMetrics.nonEmpty)
+    val newJson = JsonProtocol.taskMetricsToJson(metrics)
+    val oldJson = newJson.removeField { case (field, _) => field == "Records Read" }
+                         .removeField { case (field, _) => field == "Records Written" }
+    val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
+    assert(newMetrics.inputMetrics.get.recordsRead == 0)
+    assert(newMetrics.outputMetrics.get.recordsWritten == 0)
+  }
+
+  test("Shuffle Read/Write records backwards compatibility") {
+    // records read were added after 1.2
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6,
+      hasHadoopInput = false, hasOutput = false, hasRecords = false)
+    assert(metrics.shuffleReadMetrics.nonEmpty)
+    assert(metrics.shuffleWriteMetrics.nonEmpty)
+    val newJson = JsonProtocol.taskMetricsToJson(metrics)
+    val oldJson = newJson.removeField { case (field, _) => field == "Total Records Read" }
+                         .removeField { case (field, _) => field == "Shuffle Records Written" }
+    val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
+    assert(newMetrics.shuffleReadMetrics.get.recordsRead == 0)
+    assert(newMetrics.shuffleWriteMetrics.get.shuffleRecordsWritten == 0)
+  }
+
   test("OutputMetrics backward compatibility") {
     // OutputMetrics were added after 1.1
     val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHadoopInput = false, hasOutput = true)
@@ -225,6 +258,19 @@ class JsonProtocolSuite extends FunSuite {
     val expectedFetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19,
       "Unknown reason")
     assert(expectedFetchFailed === JsonProtocol.taskEndReasonFromJson(oldEvent))
+  }
+
+  test("ShuffleReadMetrics: Local bytes read and time taken backwards compatibility") {
+    // Metrics about local shuffle bytes read and local read time were added in 1.3.1.
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6,
+      hasHadoopInput = false, hasOutput = false, hasRecords = false)
+    assert(metrics.shuffleReadMetrics.nonEmpty)
+    val newJson = JsonProtocol.taskMetricsToJson(metrics)
+    val oldJson = newJson.removeField { case (field, _) => field == "Local Bytes Read" }
+      .removeField { case (field, _) => field == "Local Read Time" }
+    val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
+    assert(newMetrics.shuffleReadMetrics.get.localBytesRead == 0)
+    assert(newMetrics.shuffleReadMetrics.get.localReadTime == 0)
   }
 
   test("SparkListenerApplicationStart backwards compatibility") {
@@ -639,7 +685,8 @@ class JsonProtocolSuite extends FunSuite {
       e: Int,
       f: Int,
       hasHadoopInput: Boolean,
-      hasOutput: Boolean) = {
+      hasOutput: Boolean,
+      hasRecords: Boolean = true) = {
     val t = new TaskMetrics
     t.setHostname("localhost")
     t.setExecutorDeserializeTime(a)
@@ -651,7 +698,8 @@ class JsonProtocolSuite extends FunSuite {
 
     if (hasHadoopInput) {
       val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
-      inputMetrics.addBytesRead(d + e + f)
+      inputMetrics.incBytesRead(d + e + f)
+      inputMetrics.incRecordsRead(if (hasRecords) (d + e + f) / 100 else -1)
       t.setInputMetrics(Some(inputMetrics))
     } else {
       val sr = new ShuffleReadMetrics
@@ -659,16 +707,21 @@ class JsonProtocolSuite extends FunSuite {
       sr.incLocalBlocksFetched(e)
       sr.incFetchWaitTime(a + d)
       sr.incRemoteBlocksFetched(f)
+      sr.incRecordsRead(if (hasRecords) (b + d) / 100 else -1)
+      sr.incLocalReadTime(a + e)
+      sr.incLocalBytesRead(a + f)
       t.setShuffleReadMetrics(Some(sr))
     }
     if (hasOutput) {
       val outputMetrics = new OutputMetrics(DataWriteMethod.Hadoop)
       outputMetrics.setBytesWritten(a + b + c)
+      outputMetrics.setRecordsWritten(if (hasRecords) (a + b + c)/100 else -1)
       t.outputMetrics = Some(outputMetrics)
     } else {
       val sw = new ShuffleWriteMetrics
       sw.incShuffleBytesWritten(a + b + c)
       sw.incShuffleWriteTime(b + c + d)
+      sw.setShuffleRecordsWritten(if (hasRecords) (a + b + c) / 100 else -1)
       t.shuffleWriteMetrics = Some(sw)
     }
     // Make at most 6 blocks
@@ -902,11 +955,15 @@ class JsonProtocolSuite extends FunSuite {
       |      "Remote Blocks Fetched": 800,
       |      "Local Blocks Fetched": 700,
       |      "Fetch Wait Time": 900,
-      |      "Remote Bytes Read": 1000
+      |      "Remote Bytes Read": 1000,
+      |      "Local Read Time": 1000,
+      |      "Local Bytes Read": 1100,
+      |      "Total Records Read" : 10
       |    },
       |    "Shuffle Write Metrics": {
       |      "Shuffle Bytes Written": 1200,
-      |      "Shuffle Write Time": 1500
+      |      "Shuffle Write Time": 1500,
+      |      "Shuffle Records Written": 12
       |    },
       |    "Updated Blocks": [
       |      {
@@ -983,11 +1040,13 @@ class JsonProtocolSuite extends FunSuite {
       |    "Disk Bytes Spilled": 0,
       |    "Shuffle Write Metrics": {
       |      "Shuffle Bytes Written": 1200,
-      |      "Shuffle Write Time": 1500
+      |      "Shuffle Write Time": 1500,
+      |      "Shuffle Records Written": 12
       |    },
       |    "Input Metrics": {
       |      "Data Read Method": "Hadoop",
-      |      "Bytes Read": 2100
+      |      "Bytes Read": 2100,
+      |      "Records Read": 21
       |    },
       |    "Updated Blocks": [
       |      {
@@ -1064,11 +1123,13 @@ class JsonProtocolSuite extends FunSuite {
       |    "Disk Bytes Spilled": 0,
       |    "Input Metrics": {
       |      "Data Read Method": "Hadoop",
-      |      "Bytes Read": 2100
+      |      "Bytes Read": 2100,
+      |      "Records Read": 21
       |    },
       |    "Output Metrics": {
       |      "Data Write Method": "Hadoop",
-      |      "Bytes Written": 1200
+      |      "Bytes Written": 1200,
+      |      "Records Written": 12
       |    },
       |    "Updated Blocks": [
       |      {
@@ -1453,22 +1514,29 @@ class JsonProtocolSuite extends FunSuite {
     """
 
   private val executorAddedJsonString =
-    """
+    s"""
       |{
       |  "Event": "SparkListenerExecutorAdded",
+      |  "Timestamp": ${executorAddedTime},
       |  "Executor ID": "exec1",
       |  "Executor Info": {
       |    "Host": "Hostee.awesome.com",
-      |    "Total Cores": 11
+      |    "Total Cores": 11,
+      |    "Log Urls" : {
+      |      "stderr" : "mystderr",
+      |      "stdout" : "mystdout"
+      |    }
       |  }
       |}
     """
 
   private val executorRemovedJsonString =
-    """
+    s"""
       |{
       |  "Event": "SparkListenerExecutorRemoved",
-      |  "Executor ID": "exec2"
+      |  "Timestamp": ${executorRemovedTime},
+      |  "Executor ID": "exec2",
+      |  "Removed Reason": "test reason"
       |}
     """
 }

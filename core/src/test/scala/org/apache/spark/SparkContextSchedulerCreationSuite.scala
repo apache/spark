@@ -149,7 +149,7 @@ class SparkContextSchedulerCreationSuite
   }
 
   test("yarn-client") {
-    testYarn("yarn-client", "org.apache.spark.scheduler.cluster.YarnClientClusterScheduler")
+    testYarn("yarn-client", "org.apache.spark.scheduler.cluster.YarnScheduler")
   }
 
   def testMesos(master: String, expectedClass: Class[_], coarse: Boolean) {

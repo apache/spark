@@ -30,7 +30,7 @@ import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator;
 import org.apache.spark.ml.param.ParamMap;
 import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.sql.SchemaRDD;
+import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.SQLContext;
 import static org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInputAsList;
 
@@ -38,14 +38,14 @@ public class JavaCrossValidatorSuite implements Serializable {
 
   private transient JavaSparkContext jsc;
   private transient SQLContext jsql;
-  private transient SchemaRDD dataset;
+  private transient DataFrame dataset;
 
   @Before
   public void setUp() {
     jsc = new JavaSparkContext("local", "JavaCrossValidatorSuite");
     jsql = new SQLContext(jsc);
     List<LabeledPoint> points = generateLogisticInputAsList(1.0, 1.0, 100, 42);
-    dataset = jsql.applySchema(jsc.parallelize(points, 2), LabeledPoint.class);
+    dataset = jsql.createDataFrame(jsc.parallelize(points, 2), LabeledPoint.class);
   }
 
   @After

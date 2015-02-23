@@ -30,7 +30,7 @@ import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.{Row => SparkRow, SQLConf, SchemaRDD}
+import org.apache.spark.sql.{DataFrame, Row => SparkRow, SQLConf}
 import org.apache.spark.sql.execution.SetCommand
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
@@ -72,7 +72,7 @@ private[hive] class SparkExecuteStatementOperation(
   // NOTE: `runInBackground` is set to `false` intentionally to disable asynchronous execution
   extends ExecuteStatementOperation(parentSession, statement, confOverlay, false) with Logging {
 
-  private var result: SchemaRDD = _
+  private var result: DataFrame = _
   private var iter: Iterator[SparkRow] = _
   private var dataTypes: Array[DataType] = _
 
@@ -156,6 +156,10 @@ private[hive] class SparkExecuteStatementOperation(
   def run(): Unit = {
     logInfo(s"Running query '$statement'")
     setState(OperationState.RUNNING)
+    hiveContext.sparkContext.setJobDescription(statement)
+    sessionToActivePool.get(parentSession.getSessionHandle).foreach { pool =>
+      hiveContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
+    }
     try {
       result = hiveContext.sql(statement)
       logDebug(result.queryExecution.toString())
@@ -165,15 +169,11 @@ private[hive] class SparkExecuteStatementOperation(
           logInfo(s"Setting spark.scheduler.pool=$value for future statements in this session.")
         case _ =>
       }
-      hiveContext.sparkContext.setJobDescription(statement)
-      sessionToActivePool.get(parentSession.getSessionHandle).foreach { pool =>
-        hiveContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
-      }
       iter = {
         val useIncrementalCollect =
           hiveContext.getConf("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
         if (useIncrementalCollect) {
-          result.toLocalIterator
+          result.rdd.toLocalIterator
         } else {
           result.collect().iterator
         }

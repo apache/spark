@@ -61,9 +61,10 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
             // page, `...` will be displayed.
             if (allApps.size > 0) {
               val leftSideIndices =
-                rangeIndices(actualPage - plusOrMinus until actualPage, 1 < _)
+                rangeIndices(actualPage - plusOrMinus until actualPage, 1 < _, requestedIncomplete)
               val rightSideIndices =
-                rangeIndices(actualPage + 1 to actualPage + plusOrMinus, _ < pageCount)
+                rangeIndices(actualPage + 1 to actualPage + plusOrMinus, _ < pageCount,
+                  requestedIncomplete)
 
               <h4>
                 Showing {actualFirst + 1}-{last + 1} of {allApps.size}
@@ -122,8 +123,10 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
     "Spark User",
     "Last Updated")
 
-  private def rangeIndices(range: Seq[Int], condition: Int => Boolean): Seq[Node] = {
-    range.filter(condition).map(nextPage => <a href={"/?page=" + nextPage}> {nextPage} </a>)
+  private def rangeIndices(range: Seq[Int], condition: Int => Boolean, showIncomplete: Boolean):
+  Seq[Node] = {
+    range.filter(condition).map(nextPage =>
+      <a href={makePageLink(nextPage, showIncomplete)}> {nextPage} </a>)
   }
 
   private def appRow(info: ApplicationHistoryInfo): Seq[Node] = {

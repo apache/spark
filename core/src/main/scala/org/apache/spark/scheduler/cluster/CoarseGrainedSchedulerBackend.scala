@@ -86,7 +86,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
     }
 
     def receiveWithLogging = {
-      case RegisterExecutor(executorId, hostPort, cores) =>
+      case RegisterExecutor(executorId, hostPort, cores, logUrls) =>
         Utils.checkHostPort(hostPort, "Host port expected " + hostPort)
         if (executorDataMap.contains(executorId)) {
           sender ! RegisterExecutorFailed("Duplicate executor ID: " + executorId)
@@ -98,7 +98,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
           totalCoreCount.addAndGet(cores)
           totalRegisteredExecutors.addAndGet(1)
           val (host, _) = Utils.parseHostPort(hostPort)
-          val data = new ExecutorData(sender, sender.path.address, host, cores, cores)
+          val data = new ExecutorData(sender, sender.path.address, host, cores, cores, logUrls)
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
           CoarseGrainedSchedulerBackend.this.synchronized {
@@ -108,7 +108,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
               logDebug(s"Decremented number of pending executors ($numPendingExecutors left)")
             }
           }
-          listenerBus.post(SparkListenerExecutorAdded(executorId, data))
+          listenerBus.post(
+            SparkListenerExecutorAdded(System.currentTimeMillis(), executorId, data))
           makeOffers()
         }
 
@@ -216,7 +217,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
           totalCoreCount.addAndGet(-executorInfo.totalCores)
           totalRegisteredExecutors.addAndGet(-1)
           scheduler.executorLost(executorId, SlaveLost(reason))
-          listenerBus.post(SparkListenerExecutorRemoved(executorId))
+          listenerBus.post(
+            SparkListenerExecutorRemoved(System.currentTimeMillis(), executorId, reason))
         case None => logError(s"Asked to remove non-existent executor $executorId")
       }
     }
@@ -309,15 +311,36 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
 
   /**
    * Request an additional number of executors from the cluster manager.
-   * Return whether the request is acknowledged.
+   * @return whether the request is acknowledged.
    */
   final override def requestExecutors(numAdditionalExecutors: Int): Boolean = synchronized {
+    if (numAdditionalExecutors < 0) {
+      throw new IllegalArgumentException(
+        "Attempted to request a negative number of additional executor(s) " +
+        s"$numAdditionalExecutors from the cluster manager. Please specify a positive number!")
+    }
     logInfo(s"Requesting $numAdditionalExecutors additional executor(s) from the cluster manager")
     logDebug(s"Number of pending executors is now $numPendingExecutors")
     numPendingExecutors += numAdditionalExecutors
     // Account for executors pending to be added or removed
     val newTotal = numExistingExecutors + numPendingExecutors - executorsPendingToRemove.size
     doRequestTotalExecutors(newTotal)
+  }
+
+  /**
+   * Express a preference to the cluster manager for a given total number of executors. This can
+   * result in canceling pending requests or filing additional requests.
+   * @return whether the request is acknowledged.
+   */
+  final override def requestTotalExecutors(numExecutors: Int): Boolean = synchronized {
+    if (numExecutors < 0) {
+      throw new IllegalArgumentException(
+        "Attempted to request a negative number of executor(s) " +
+          s"$numExecutors from the cluster manager. Please specify a positive number!")
+    }
+    numPendingExecutors =
+      math.max(numExecutors - numExistingExecutors + executorsPendingToRemove.size, 0)
+    doRequestTotalExecutors(numExecutors)
   }
 
   /**
@@ -330,7 +353,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
    * insufficient resources to satisfy the first request. We make the assumption here that the
    * cluster manager will eventually fulfill all requests when resources free up.
    *
-   * Return whether the request is acknowledged.
+   * @return whether the request is acknowledged.
    */
   protected def doRequestTotalExecutors(requestedTotal: Int): Boolean = false
 

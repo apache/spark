@@ -91,11 +91,11 @@ case class SparkListenerBlockManagerRemoved(time: Long, blockManagerId: BlockMan
 case class SparkListenerUnpersistRDD(rddId: Int) extends SparkListenerEvent
 
 @DeveloperApi
-case class SparkListenerExecutorAdded(executorId: String, executorInfo: ExecutorInfo)
+case class SparkListenerExecutorAdded(time: Long, executorId: String, executorInfo: ExecutorInfo)
   extends SparkListenerEvent
 
 @DeveloperApi
-case class SparkListenerExecutorRemoved(executorId: String)
+case class SparkListenerExecutorRemoved(time: Long, executorId: String, reason: String)
   extends SparkListenerEvent
 
 /**
@@ -115,9 +115,6 @@ case class SparkListenerApplicationStart(appName: String, appId: Option[String],
 
 @DeveloperApi
 case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
-
-/** An event used in the listener to shutdown the listener daemon thread. */
-private[spark] case object SparkListenerShutdown extends SparkListenerEvent
 
 
 /**

@@ -18,7 +18,6 @@
 package org.apache.spark.examples.ml
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.SparkContext._
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -38,12 +37,12 @@ object SimpleParamsExample {
     val conf = new SparkConf().setAppName("SimpleParamsExample")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
-    import sqlContext._
+    import sqlContext.implicits._
 
     // Prepare training data.
-    // We use LabeledPoint, which is a case class.  Spark SQL can convert RDDs of Java Beans
-    // into SchemaRDDs, where it uses the bean metadata to infer the schema.
-    val training = sparkContext.parallelize(Seq(
+    // We use LabeledPoint, which is a case class.  Spark SQL can convert RDDs of case classes
+    // into DataFrames, where it uses the case class metadata to infer the schema.
+    val training = sc.parallelize(Seq(
       LabeledPoint(1.0, Vectors.dense(0.0, 1.1, 0.1)),
       LabeledPoint(0.0, Vectors.dense(2.0, 1.0, -1.0)),
       LabeledPoint(0.0, Vectors.dense(2.0, 1.3, 1.0)),
@@ -59,7 +58,7 @@ object SimpleParamsExample {
       .setRegParam(0.01)
 
     // Learn a LogisticRegression model.  This uses the parameters stored in lr.
-    val model1 = lr.fit(training)
+    val model1 = lr.fit(training.toDF())
     // Since model1 is a Model (i.e., a Transformer produced by an Estimator),
     // we can view the parameters it used during fit().
     // This prints the parameter (name: value) pairs, where names are unique IDs for this
@@ -73,29 +72,29 @@ object SimpleParamsExample {
     paramMap.put(lr.regParam -> 0.1, lr.threshold -> 0.55) // Specify multiple Params.
 
     // One can also combine ParamMaps.
-    val paramMap2 = ParamMap(lr.scoreCol -> "probability") // Change output column name
+    val paramMap2 = ParamMap(lr.probabilityCol -> "myProbability") // Change output column name
     val paramMapCombined = paramMap ++ paramMap2
 
     // Now learn a new model using the paramMapCombined parameters.
     // paramMapCombined overrides all parameters set earlier via lr.set* methods.
-    val model2 = lr.fit(training, paramMapCombined)
+    val model2 = lr.fit(training.toDF(), paramMapCombined)
     println("Model 2 was fit using parameters: " + model2.fittingParamMap)
 
-    // Prepare test documents.
-    val test = sparkContext.parallelize(Seq(
+    // Prepare test data.
+    val test = sc.parallelize(Seq(
       LabeledPoint(1.0, Vectors.dense(-1.0, 1.5, 1.3)),
       LabeledPoint(0.0, Vectors.dense(3.0, 2.0, -0.1)),
       LabeledPoint(1.0, Vectors.dense(0.0, 2.2, -1.5))))
 
-    // Make predictions on test documents using the Transformer.transform() method.
+    // Make predictions on test data using the Transformer.transform() method.
     // LogisticRegression.transform will only use the 'features' column.
-    // Note that model2.transform() outputs a 'probability' column instead of the usual 'score'
-    // column since we renamed the lr.scoreCol parameter previously.
-    model2.transform(test)
-      .select('features, 'label, 'probability, 'prediction)
+    // Note that model2.transform() outputs a 'myProbability' column instead of the usual
+    // 'probability' column since we renamed the lr.probabilityCol parameter previously.
+    model2.transform(test.toDF())
+      .select("features", "label", "myProbability", "prediction")
       .collect()
-      .foreach { case Row(features: Vector, label: Double, prob: Double, prediction: Double) =>
-        println("(" + features + ", " + label + ") -> prob=" + prob + ", prediction=" + prediction)
+      .foreach { case Row(features: Vector, label: Double, prob: Vector, prediction: Double) =>
+        println(s"($features, $label) -> prob=$prob, prediction=$prediction")
       }
 
     sc.stop()
