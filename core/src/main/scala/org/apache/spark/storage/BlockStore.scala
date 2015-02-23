@@ -17,18 +17,24 @@
 
 package org.apache.spark.storage
 
-import java.nio.ByteBuffer
-
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Logging
+import org.apache.spark.io.LargeByteBuffer
 
 /**
  * Abstract class to store blocks.
  */
 private[spark] abstract class BlockStore(val blockManager: BlockManager) extends Logging {
-
-  def putBytes(blockId: BlockId, bytes: ByteBuffer, level: StorageLevel): PutResult
+  // TODO: We have inconsistent usage of the bytes in spark.
+  // In DiskStore, we simply emit bytes to the file without a rewind
+  // While in memory and tachyon store, we do a rewind.
+  // Not sure which is correct - since both seem to be working fine in the tests !
+  // There is some underlying assumption which is probably unspecified and incorrect
+  // in a general case.
+  // Change: consistently modified to do a rewind before calling this method.
+  // Now, it validates that position == 0 (and so remaining == limit obviously)
+  def putBytes(blockId: BlockId, bytes: LargeByteBuffer, level: StorageLevel) : PutResult
 
   /**
    * Put in a block and, possibly, also return its content as either bytes or another Iterator.
@@ -37,15 +43,15 @@ private[spark] abstract class BlockStore(val blockManager: BlockManager) extends
    * @return a PutResult that contains the size of the data, as well as the values put if
    *         returnValues is true (if not, the result's data field can be null)
    */
-  def putIterator(
+  def putValues(
     blockId: BlockId,
     values: Iterator[Any],
     level: StorageLevel,
     returnValues: Boolean): PutResult
 
-  def putArray(
+  def putValues(
     blockId: BlockId,
-    values: Array[Any],
+    values: ArrayBuffer[Any],
     level: StorageLevel,
     returnValues: Boolean): PutResult
 
@@ -54,7 +60,7 @@ private[spark] abstract class BlockStore(val blockManager: BlockManager) extends
    */
   def getSize(blockId: BlockId): Long
 
-  def getBytes(blockId: BlockId): Option[ByteBuffer]
+  def getBytes(blockId: BlockId): Option[LargeByteBuffer]
 
   def getValues(blockId: BlockId): Option[Iterator[Any]]
 
