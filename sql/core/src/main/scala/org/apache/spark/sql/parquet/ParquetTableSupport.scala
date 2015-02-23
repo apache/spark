@@ -28,7 +28,7 @@ import parquet.io.api._
 import parquet.schema.MessageType
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Row}
 import org.apache.spark.sql.types._
 
 /**
@@ -381,7 +381,14 @@ private[parquet] object RowWriteSupport {
   }
 
   def setSchema(schema: Seq[Attribute], configuration: Configuration) {
-    val encoded = ParquetTypesConverter.convertToString(schema)
+    val updatedSchama = schema.map {
+      case a if a.dataType.isInstanceOf[ArrayType] =>
+        val newArray = ArrayType(a.dataType.asInstanceOf[ArrayType].elementType)
+        val newAttr = AttributeReference(a.name, newArray, a.nullable, a.metadata)()
+        newAttr
+      case other => other
+    }
+    val encoded = ParquetTypesConverter.convertToString(updatedSchama)
     configuration.set(SPARK_ROW_SCHEMA, encoded)
     configuration.set(
       ParquetOutputFormat.WRITER_VERSION,

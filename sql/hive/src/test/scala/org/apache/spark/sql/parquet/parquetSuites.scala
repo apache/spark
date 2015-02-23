@@ -20,6 +20,8 @@ package org.apache.spark.sql.parquet
 
 import java.io.File
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.{SQLConf, QueryTest}
@@ -298,6 +300,37 @@ class ParquetDataSourceOnSourceSuite extends ParquetSourceSuiteBase {
   override def afterAll(): Unit = {
     super.afterAll()
     setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
+  }
+
+  test("insert array into parquet hive table using data source api") {
+    val data1="""{ "timestamp": 1422435598, "data_array": [ { "field0": null, "field1": 1, "field2": 2} ] }"""
+    val data2="""{ "timestamp": 1422435599, "data_array": [ { "field0": 0, "field1": null, "field2": 3} ] }"""
+
+    val json = sparkContext.makeRDD(data1 :: data2 :: Nil)
+    val rdd = jsonRDD(json)
+    rdd.registerTempTable("tmp_table")
+
+    val partitionedTableDir = File.createTempFile("persisted_table", "sparksql")
+    partitionedTableDir.delete()
+    partitionedTableDir.mkdir()
+
+    sql(
+      s"""
+        |create external table persisted_table
+        |(
+        |  data_array ARRAY <STRUCT<field0: BIGINT, field1: BIGINT, field2: BIGINT>>,
+        |  timestamp BIGINT
+        |)
+        |STORED AS PARQUET Location '${partitionedTableDir.getCanonicalPath}'
+      """.stripMargin)
+
+    sql("insert into table persisted_table select * from tmp_table").collect
+
+    checkAnswer(
+      sql("select data_array.field0, data_array.field1, data_array.field2 from persisted_table"),
+      Row(ArrayBuffer(null), ArrayBuffer(1), ArrayBuffer(2)) ::
+      Row (ArrayBuffer(0), ArrayBuffer(null), ArrayBuffer(3)) :: Nil
+    )
   }
 }
 

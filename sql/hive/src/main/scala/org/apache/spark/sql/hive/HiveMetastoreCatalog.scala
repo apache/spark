@@ -424,7 +424,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       // Collects all `MetastoreRelation`s which should be replaced
       val toBeReplaced = plan.collect {
         // Write path
-        case InsertIntoTable(relation: MetastoreRelation, _, _, _)
+        case InsertIntoHiveTable(relation: MetastoreRelation, _, _, _)
             // Inserting into partitioned table is not supported in Parquet data source (yet).
             if !relation.hiveQlTable.isPartitioned &&
               hive.convertMetastoreParquet &&
@@ -458,6 +458,9 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
           withAlias
         }
+        case InsertIntoHiveTable(r: MetastoreRelation, p, c, o) if relationMap.contains(r) =>
+          val parquetRelation = relationMap(r)
+          InsertIntoHiveTable(parquetRelation, p, c, o) 
         case other => other.transformExpressions {
           case a: Attribute if a.resolved => attributedRewrites.getOrElse(a, a)
         }
