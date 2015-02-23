@@ -570,7 +570,7 @@ private[master] class Master(
         while (maxCoresLeft > 0) {
           val memoryDemand = {
             if (app.desc.maxCorePerExecutor.isDefined) {
-              executorNumberOnWorker(pos) + 1
+              (executorNumberOnWorker(pos) + 1) * memoryPerExecutor
             } else {
               memoryPerExecutor  
             }  
