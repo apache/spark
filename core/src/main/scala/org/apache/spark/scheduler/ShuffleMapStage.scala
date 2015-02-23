@@ -22,9 +22,6 @@ import org.apache.spark.ShuffleDependency
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.CallSite
 
-/**
- * Define a class that represents the ShuffleMapStage to help clean up the DAGScheduler class 
- */
 private[spark] class ShuffleMapStage(
     override val id: Int,
     override val rdd: RDD[_],

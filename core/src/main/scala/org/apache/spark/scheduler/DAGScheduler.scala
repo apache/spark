@@ -803,9 +803,10 @@ class DAGScheduler(
     // First figure out the indexes of partition ids to compute.
     val partitionsToCompute: Seq[Int] = {
       stage match {
-        case a: ShuffleMapStage => (0 until a.numPartitions).filter(id => a.outputLocs(id) == Nil)
-        case b: ResultStage =>
-          val job = b.resultOfJob.get
+        case stage: ShuffleMapStage => (0 until stage.numPartitions).filter(id => 
+          stage.outputLocs(id) == Nil)
+        case stage: ResultStage =>
+          val job = stage.resultOfJob.get
           (0 until job.numPartitions).filter(id => !job.finished(id))
       }
     }
@@ -837,10 +838,10 @@ class DAGScheduler(
       // For ShuffleMapTask, serialize and broadcast (rdd, shuffleDep).
       // For ResultTask, serialize and broadcast (rdd, func).
       val taskBinaryBytes: Array[Byte] = stage match {
-        case a: ShuffleMapStage =>
-          closureSerializer.serialize((a.rdd, a.shuffleDep): AnyRef).array()
-        case b: ResultStage =>
-          closureSerializer.serialize((b.rdd, b.resultOfJob.get.func): AnyRef).array()
+        case stage: ShuffleMapStage =>
+          closureSerializer.serialize((stage.rdd, stage.shuffleDep): AnyRef).array()
+        case stage: ResultStage =>
+          closureSerializer.serialize((stage.rdd, stage.resultOfJob.get.func): AnyRef).array()
       }
 
       taskBinary = sc.broadcast(taskBinaryBytes)
@@ -849,25 +850,29 @@ class DAGScheduler(
       case e: NotSerializableException =>
         abortStage(stage, "Task not serializable: " + e.toString)
         runningStages -= stage
+        
+        // Abort execution 
+        return
       case NonFatal(e) =>
         abortStage(stage, s"Task serialization failed: $e\n${e.getStackTraceString}")
         runningStages -= stage
+        return
     }
 
     val tasks: Seq[Task[_]] = stage match {
-      case a: ShuffleMapStage =>
+      case stage: ShuffleMapStage =>
         partitionsToCompute.map { id =>
-          val locs = getPreferredLocs(a.rdd, id)
-          val part = a.rdd.partitions(id)
-          new ShuffleMapTask(a.id, taskBinary, part, locs)
+          val locs = getPreferredLocs(stage.rdd, id)
+          val part = stage.rdd.partitions(id)
+          new ShuffleMapTask(stage.id, taskBinary, part, locs)
         }
-      case b: ResultStage =>
-        val job = b.resultOfJob.get
+      case stage: ResultStage =>
+        val job = stage.resultOfJob.get
         partitionsToCompute.map { id =>
           val p: Int = job.partitions(id)
-          val part = b.rdd.partitions(p)
-          val locs = getPreferredLocs(b.rdd, p)
-          new ResultTask(b.id, taskBinary, part, locs, id)
+          val part = stage.rdd.partitions(p)
+          val locs = getPreferredLocs(stage.rdd, p)
+          new ResultTask(stage.id, taskBinary, part, locs, id)
         }
     }
 
@@ -1010,7 +1015,7 @@ class DAGScheduler(
             }
             if (runningStages.contains(shuffleStage) && shuffleStage.pendingTasks.isEmpty) {
               markStageAsFinished(shuffleStage)
-              logInfo("looking for newly runnable shuffleStages")
+              logInfo("looking for newly runnable stages")
               logInfo("running: " + runningStages)
               logInfo("waiting: " + waitingStages)
               logInfo("failed: " + failedStages)
