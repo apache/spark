@@ -16,6 +16,7 @@
  */
 package org.apache.spark.status.api.v1
 
+import java.util.Date
 import javax.ws.rs._
 import javax.ws.rs.core.MediaType
 
@@ -75,8 +76,8 @@ object AllJobsResource {
         jobId = job.jobId,
         name = lastStageName,
         description = lastStageDescription,
-        submissionTime = job.submissionTime,
-        completionTime = job.completionTime,
+        submissionTime = job.submissionTime.map{new Date(_)},
+        completionTime = job.completionTime.map{new Date(_)},
         stageIds = job.stageIds,
         jobGroup = job.jobGroup,
         status = job.status,

@@ -17,6 +17,8 @@
 
 package org.apache.spark.ui
 
+import java.util.Date
+
 import org.apache.spark.status.api.v1.{ApplicationInfo, JsonRootResource}
 import org.apache.spark.status.api.v1.UIRoot
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext}
@@ -96,8 +98,8 @@ private[spark] class SparkUI private (
       id = appName,
       name = appName,
       //TODO
-      startTime = -1,
-      endTime = -1,
+      startTime = new Date(-1),
+      endTime = new Date(-1),
       sparkUser = "",
       completed = false
     ))

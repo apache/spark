@@ -1,22 +1,22 @@
 [ {
   "id" : "local-1425081759269",
   "name" : "Spark shell",
-  "startTime" : 1425081758277,
-  "endTime" : 1425081766912,
+  "startTime" : "2015-02-28T00:02:38.277GMT",
+  "endTime" : "2015-02-28T00:02:46.912GMT",
   "sparkUser" : "irashid",
   "completed" : true
 }, {
   "id" : "local-1422981780767",
   "name" : "Spark shell",
-  "startTime" : 1422981779720,
-  "endTime" : 1422981788731,
+  "startTime" : "2015-02-03T16:42:59.720GMT",
+  "endTime" : "2015-02-03T16:43:08.731GMT",
   "sparkUser" : "irashid",
   "completed" : true
 }, {
   "id" : "local-1422981759269",
   "name" : "Spark shell",
-  "startTime" : 1422981758277,
-  "endTime" : 1422981766912,
+  "startTime" : "2015-02-03T16:42:38.277GMT",
+  "endTime" : "2015-02-03T16:42:46.912GMT",
   "sparkUser" : "irashid",
   "completed" : true
 } ]

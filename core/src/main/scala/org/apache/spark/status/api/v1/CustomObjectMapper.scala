@@ -16,6 +16,8 @@
  */
 package org.apache.spark.status.api.v1
 
+import java.text.SimpleDateFormat
+import java.util.{SimpleTimeZone, Calendar}
 import javax.ws.rs.Produces
 import javax.ws.rs.core.MediaType
 import javax.ws.rs.ext.{ContextResolver, Provider}
@@ -34,9 +36,20 @@ class CustomObjectMapper extends ContextResolver[ObjectMapper]{
   mapper.registerModule(com.fasterxml.jackson.module.scala.DefaultScalaModule)
   mapper.enable(SerializationFeature.INDENT_OUTPUT)
   mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL)
+  mapper.setDateFormat(CustomObjectMapper.makeISODateFormat)
 
   override def getContext(tpe: Class[_]): ObjectMapper = {
     mapper
+  }
+
+}
+
+object CustomObjectMapper {
+  def makeISODateFormat: SimpleDateFormat = {
+    val iso8601 = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'GMT'");
+    val cal = Calendar.getInstance(new SimpleTimeZone(0, "GMT"));
+    iso8601.setCalendar(cal);
+    iso8601;
   }
 
 }

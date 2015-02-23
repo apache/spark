@@ -63,7 +63,7 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers {
     "running app list json" -> "applications?status=running",
     "minDate app list json" -> "applications?minDate=2015-02-10",
     "maxDate app list json" -> "applications?maxDate=2015-02-10",
-    "maxDate2 app list json" -> "applications?maxDate=2015-02-03T10:42:40CST",
+    "maxDate2 app list json" -> "applications?maxDate=2015-02-03T10:42:40.000CST",
     "one app json" -> "applications/local-1422981780767",
     "job list json" -> "applications/local-1422981780767/jobs",
     "succeeded job list json" -> "applications/local-1422981780767/jobs?status=succeeded",

@@ -17,10 +17,12 @@
 
 package org.apache.spark.status.api.v1
 
+import java.util.Date
+
 case class ApplicationInfo(
   id: String,
   name: String,
-  startTime: Long,
-  endTime: Long,
+  startTime: Date,
+  endTime: Date,
   sparkUser: String,
   completed: Boolean = false)

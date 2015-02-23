@@ -41,7 +41,7 @@ private[api] class SimpleDateParam(val originalValue: String) {
 
 private[api] object SimpleDateParam {
   val formats = Seq(
-    "yyyy-MM-dd'T'HH:mm:ssz",
+    "yyyy-MM-dd'T'HH:mm:ss.SSSz",
     "yyyy-MM-dd"
   ).map{new SimpleDateFormat(_)}
 }

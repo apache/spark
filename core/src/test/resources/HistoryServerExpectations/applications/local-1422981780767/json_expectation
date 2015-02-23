@@ -1,8 +1,8 @@
 {
   "id" : "local-1422981780767",
   "name" : "Spark shell",
-  "startTime" : 1422981779720,
-  "endTime" : 1422981788731,
+  "startTime" : "2015-02-03T16:42:59.720GMT",
+  "endTime" : "2015-02-03T16:43:08.731GMT",
   "sparkUser" : "irashid",
   "completed" : true
 }

@@ -16,6 +16,7 @@
  */
 package org.apache.spark.status.api.v1
 
+import java.util.Date
 import javax.ws.rs.{QueryParam, PathParam, GET, Produces}
 import javax.ws.rs.core.MediaType
 
@@ -135,7 +136,7 @@ object AllStagesResource {
       taskId = uiData.taskInfo.taskId,
       index = uiData.taskInfo.index,
       attempt = uiData.taskInfo.attempt,
-      launchTime = uiData.taskInfo.launchTime,
+      launchTime = new Date(uiData.taskInfo.launchTime),
       executorId = uiData.taskInfo.executorId,
       host = uiData.taskInfo.host,
       taskLocality = uiData.taskInfo.taskLocality.toString(),

@@ -17,11 +17,13 @@
 
 package org.apache.spark.status.api.v1
 
+import java.util.Date
+
 case class TaskData(
   taskId: Long,
   index: Int,
   attempt: Int,
-  launchTime: Long,
+  launchTime: Date,
   executorId: String,
   host: String,
   taskLocality: String,

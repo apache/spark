@@ -16,26 +16,15 @@
  */
 package org.apache.spark.status.api.v1
 
-import java.util.Date
+import org.scalatest.{Matchers, FunSuite}
 
-import org.apache.spark.JobExecutionStatus
+class SimpleDateParamTest extends FunSuite with Matchers {
 
-case class JobData(
-  jobId: Int,
-  name: String,
-  description: Option[String],
-  submissionTime: Option[Date],
-  completionTime: Option[Date],
-  stageIds: Seq[Int],
-  jobGroup: Option[String],
-  status: JobExecutionStatus,
-  numTasks: Int,
-  numActiveTasks: Int,
-  numCompletedTasks: Int,
-  numSkippedTasks: Int,
-  numFailedTasks: Int,
-  numActiveStages: Int,
-  numCompletedStages: Int,
-  numSkippedStages: Int,
-  numFailedStages: Int
-)
+  test("date parsing") {
+    new SimpleDateParam("2015-02-20T23:21:17.190GMT").timestamp should be (1424474477190l)
+    new SimpleDateParam("2015-02-20T17:21:17.190CST").timestamp should be (1424474477190l)
+    new SimpleDateParam("2015-02-20").timestamp should be (1424412000000l)
+
+  }
+
+}

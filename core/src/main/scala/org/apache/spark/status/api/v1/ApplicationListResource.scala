@@ -16,6 +16,7 @@
  */
 package org.apache.spark.status.api.v1
 
+import java.util.Date
 import javax.ws.rs.core.MediaType
 import javax.ws.rs.{DefaultValue, QueryParam, Produces, GET}
 
@@ -45,7 +46,7 @@ class ApplicationListResource(uiRoot: UIRoot) {
     allApps.filter{app =>
       val statusOk = (app.completed && includeCompleted) ||
         (!app.completed && includeRunning)
-      val dateOk = app.startTime >= minDate.timestamp && app.startTime <= maxDate.timestamp
+      val dateOk = app.startTime.getTime >= minDate.timestamp && app.startTime.getTime <= maxDate.timestamp
       statusOk && dateOk
     }
   }
@@ -56,8 +57,8 @@ object ApplicationsListResource {
     ApplicationInfo(
       id = app.id,
       name = app.name,
-      startTime = app.startTime,
-      endTime = app.endTime,
+      startTime = new Date(app.startTime),
+      endTime = new Date(app.endTime),
       sparkUser = app.sparkUser,
       completed = app.completed
     )
@@ -67,8 +68,8 @@ object ApplicationsListResource {
     ApplicationInfo(
       id = internal.id,
       name = internal.desc.name,
-      startTime = internal.startTime,
-      endTime = internal.endTime,
+      startTime = new Date(internal.startTime),
+      endTime = new Date(internal.endTime),
       sparkUser = internal.desc.user,
       completed = completed
     )
