@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from py4j.java_collections import MapConverter, ListConverter
+from py4j.java_collections import MapConverter, SetConverter
 from py4j.java_gateway import java_import, Py4JError, Py4JJavaError
 
 from pyspark.storagelevel import StorageLevel
@@ -109,15 +109,12 @@ ________________________________________________________________________________
 
         if not isinstance(topics, list):
             raise TypeError("topics should be list")
-        jtopics = ListConverter().convert(topics, ssc.sparkContext._gateway._gateway_client)
+        jtopics = SetConverter().convert(topics, ssc.sparkContext._gateway._gateway_client)
         jparam = MapConverter().convert(kafkaParams, ssc.sparkContext._gateway._gateway_client)
 
-        def getClassByName(name):
-            return ssc._jvm.org.apache.spark.util.Utils.classForName(name)
-
         try:
-            array = getClassByName("[B")
-            decoder = getClassByName("kafka.serializer.DefaultDecoder")
+            array = KafkaUtils._getClassByName(ssc, "[B")
+            decoder = KafkaUtils._getClassByName(ssc, "kafka.serializer.DefaultDecoder")
             jstream = ssc._jvm.KafkaUtils.createDirectStream(ssc._jssc, array, array, decoder,
                                                             decoder, jparam, jtopics)
         except Py4JError, e:
@@ -130,3 +127,7 @@ ________________________________________________________________________________
         ser = PairDeserializer(NoOpSerializer(), NoOpSerializer())
         stream = DStream(jstream, ssc, ser)
         return stream.map(lambda (k, v): (keyDecoder(k), valueDecoder(v)))
+
+    @staticmethod
+    def _getClassByName(ssc, name):
+        return ssc._jvm.org.apache.spark.util.Utils.classForName(name)

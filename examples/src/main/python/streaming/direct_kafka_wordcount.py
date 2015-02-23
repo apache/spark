@@ -17,14 +17,15 @@
 
 """
  Counts words in UTF8 encoded, '\n' delimited text directly received from Kafka in every 2 seconds.
- Usage: network_wordcount.py <broker_list> <topic>
+ Usage: direct_kafka_wordcount.py <broker_list> <topic>
 
  To run this on your local machine, you need to setup Kafka and create a producer first, see
  http://kafka.apache.org/documentation.html#quickstart
 
  and then run the example
     `$ bin/spark-submit --driver-class-path external/kafka-assembly/target/scala-*/\
-      spark-streaming-kafka-assembly-*.jar examples/src/main/python/streaming/direct_kafka_wordcount.py \
+      spark-streaming-kafka-assembly-*.jar \
+      examples/src/main/python/streaming/direct_kafka_wordcount.py \
       localhost:9092 test`
 """
 
@@ -43,7 +44,7 @@ if __name__ == "__main__":
     ssc = StreamingContext(sc, 2)
 
     brokers, topic = sys.argv[1:]
-    kvs = KafkaUtils.createStream(ssc, [topic], {"metadata.broker.list": brokers})
+    kvs = KafkaUtils.createDirectStream(ssc, [topic], {"metadata.broker.list": brokers})
     lines = kvs.map(lambda x: x[1])
     counts = lines.flatMap(lambda line: line.split(" ")) \
         .map(lambda word: (word, 1)) \
