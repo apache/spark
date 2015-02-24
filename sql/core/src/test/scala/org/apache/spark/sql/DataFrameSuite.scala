@@ -45,10 +45,17 @@ class DataFrameSuite extends QueryTest {
     intercept[Exception] {
       testData.groupBy($"abcd").agg(Map("key" -> "sum"))
     }
-
+ 
+    testData.registerTempTable("testDataTemp")
+    intercept[Exception] {
+      sql("INSERT OVERWRITE TABLE testDataTemp SELECT nonExistentName, value FROM testData")
+    }
+ 
     // No more eager analysis once the flag is turned off
     TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, "false")
     testData.select('nonExistentName)
+
+    sql("INSERT OVERWRITE TABLE testDataTemp SELECT nonExistentName, value FROM testData")
 
     // Set the flag back to original value before this test.
     TestSQLContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, oldSetting.toString)
