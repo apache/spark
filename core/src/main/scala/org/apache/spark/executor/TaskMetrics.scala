@@ -203,7 +203,6 @@ class TaskMetrics extends Serializable {
         merged.incRemoteBlocksFetched(depMetrics.remoteBlocksFetched)
         merged.incRemoteBytesRead(depMetrics.remoteBytesRead)
         merged.incLocalBytesRead(depMetrics.localBytesRead)
-        merged.incLocalReadTime(depMetrics.localReadTime)
         merged.incRecordsRead(depMetrics.recordsRead)
       }
       _shuffleReadMetrics = Some(merged)
