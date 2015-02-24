@@ -174,4 +174,56 @@ object PageRank extends Logging {
       vertexProgram, sendMessage, messageCombiner)
       .mapVertices((vid, attr) => attr._1)
   } // end of deltaPageRank
+
+  def runPersonalized[VD: ClassTag, ED: ClassTag](
+      graph: Graph[VD, ED], srcId: VertexId, tol: Double,
+      resetProb: Double = 0.15): Graph[Double, Double] =
+  {
+
+    // Initialize the pagerankGraph with each edge attribute
+    // having weight 1/outDegree and each vertex with attribute 1.0.
+    val pagerankGraph: Graph[(Double, Double, VertexId), Double] = graph
+      // Associate the degree with each vertex
+      .outerJoinVertices(graph.outDegrees) {
+        (vid, vdata, deg) => deg.getOrElse(0)
+      }
+      // Set the weight on the edges based on the degree
+      .mapTriplets( e => 1.0 / e.srcAttr )
+      // Set the vertex attributes to (initalPR, delta = 0, srcId)
+      .mapVertices( (id, attr) => (0.0, 0.0, srcId) )
+      .cache()
+
+    // Define the three functions needed to implement PageRank in the GraphX
+    // version of Pregel
+    def vertexProgram(id: VertexId, attr: (Double, Double, VertexId),
+      msgSum: (Double, VertexId)): (Double, Double, VertexId) = {
+      //unpack the vertex attribute
+      val (oldPR, lastDelta, src) = attr
+      val delta = if (src==id) 1.0 else 0.0
+      val newPR = delta*oldPR + (1.0 - resetProb) * msgSum._1
+      //send the message to all edges, repacking the personalization
+      (newPR, newPR - oldPR, src)
+    }
+
+    def sendMessage(edge: EdgeTriplet[(Double, Double, VertexId), Double]) = {
+      if (edge.srcAttr._2 > tol) {
+        //iterate over all messages
+        Iterator((edge.dstId, (edge.srcAttr._2 * edge.attr, edge.srcAttr._3)))
+      } else {
+        Iterator.empty
+      }
+    }
+
+    def messageCombiner(a: (Double, VertexId),
+      b: (Double, VertexId)): (Double, VertexId) = (a._1 + b._1, a._2)
+
+    // The initial message received by all vertices in PageRank
+    val initialMessage = (resetProb / (1.0 - resetProb), srcId)
+
+    // Execute a dynamic version of Pregel.
+    Pregel(pagerankGraph, initialMessage, activeDirection = EdgeDirection.Out)(
+      vertexProgram, sendMessage, messageCombiner)
+      .mapVertices((vid, attr) => attr._1)
+  }
+
 }

@@ -372,6 +372,11 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
     PageRank.runUntilConvergence(graph, tol, resetProb)
   }
 
+  def personalizedPageRank(src: VertexId, tol: Double,
+    resetProb: Double = 0.15) : Graph[Double, Double] = {
+    PageRank.runPersonalized(graph, src, tol, resetProb)
+  }
+
   /**
    * Run PageRank for a fixed number of iterations returning a graph with vertex attributes
    * containing the PageRank and edge attributes the normalized edge weight.
