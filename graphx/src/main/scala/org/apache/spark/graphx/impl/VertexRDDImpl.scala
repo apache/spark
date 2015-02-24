@@ -114,6 +114,17 @@ class VertexRDDImpl[VD] private[graphx] (
     this.withPartitionsRDD(newPartitionsRDD)
   }
 
+  override def diff(other: VertexRDD[VD]): VertexRDD[VD] = {
+    val newPartitionsRDD = partitionsRDD.zipPartitions(
+      VertexRDD(other).partitionsRDD, preservesPartitioning = true
+    ) { (thisIter, otherIter) =>
+      val thisPart = thisIter.next()
+      val otherPart = otherIter.next()
+      Iterator(thisPart.diff(otherPart))
+    }
+    this.withPartitionsRDD(newPartitionsRDD)
+  }
+
   override def leftZipJoin[VD2: ClassTag, VD3: ClassTag]
       (other: VertexRDD[VD2])(f: (VertexId, VD, Option[VD2]) => VD3): VertexRDD[VD3] = {
     val newPartitionsRDD = partitionsRDD.zipPartitions(
