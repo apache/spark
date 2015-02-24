@@ -439,7 +439,14 @@ private[spark] object Utils extends Logging {
       executeAndGetOutput(Seq("tar", "-xf", fileName), targetDir)
     }
     // Make the file executable - That's necessary for scripts
-    FileUtil.chmod(targetFile.getAbsolutePath, "a+x")
+    if(isWindows){
+      // Windows does not grant read permission by default to non-admin users
+      // Add read permission to owner explicitly
+      FileUtil.chmod(targetFile.getAbsolutePath, "u+r")
+      FileUtil.chmod(targetFile.getAbsolutePath, "a+x")
+    } else {
+      FileUtil.chmod(targetFile.getAbsolutePath, "a+x")
+    }
   }
 
   /**
