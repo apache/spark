@@ -35,7 +35,7 @@ private[spark] class ResultStage(
    */
   var resultOfJob: Option[ActiveJob] = None
 
-  override def toString: String = "ResultStage " + id
+  override def toString : String = "ResultStage " + id
 
-  override def isAvailable: Boolean= true
+  override def isAvailable : Boolean= true
 }
