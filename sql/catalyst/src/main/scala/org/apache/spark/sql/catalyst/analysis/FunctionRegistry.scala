@@ -27,23 +27,25 @@ trait FunctionRegistry {
   def registerFunction(name: String, builder: FunctionBuilder): Unit
 
   def lookupFunction(name: String, children: Seq[Expression]): Expression
+
+  def caseSensitive: Boolean
 }
 
 trait OverrideFunctionRegistry extends FunctionRegistry {
 
-  val functionBuilders = new mutable.HashMap[String, FunctionBuilder]()
+  val functionBuilders = StringKeyHashMap[FunctionBuilder](caseSensitive)
 
   def registerFunction(name: String, builder: FunctionBuilder) = {
     functionBuilders.put(name, builder)
   }
 
   abstract override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
-    functionBuilders.get(name).map(_(children)).getOrElse(super.lookupFunction(name,children))
+    functionBuilders.get(name).map(_(children)).getOrElse(super.lookupFunction(name, children))
   }
 }
 
-class SimpleFunctionRegistry extends FunctionRegistry {
-  val functionBuilders = new mutable.HashMap[String, FunctionBuilder]()
+class SimpleFunctionRegistry(val caseSensitive: Boolean) extends FunctionRegistry {
+  val functionBuilders = StringKeyHashMap[FunctionBuilder](caseSensitive)
 
   def registerFunction(name: String, builder: FunctionBuilder) = {
     functionBuilders.put(name, builder)
@@ -64,4 +66,30 @@ object EmptyFunctionRegistry extends FunctionRegistry {
   def lookupFunction(name: String, children: Seq[Expression]): Expression = {
     throw new UnsupportedOperationException
   }
+
+  def caseSensitive: Boolean = ???
 }
+
+/**
+ * Build a map with String type of key, and it also supports either key case
+ * sensitive or insensitive.
+ * TODO move this into util folder?
+ */
+object StringKeyHashMap {
+  def apply[T](caseSensitive: Boolean) = caseSensitive match {
+    case false => new StringKeyHashMap[T](_.toLowerCase)
+    case true => new StringKeyHashMap[T](identity)
+  }
+}
+
+class StringKeyHashMap[T](normalizer: (String) => String) {
+  private val base = new collection.mutable.HashMap[String, T]()
+
+  def apply(key: String): T = base(normalizer(key))
+
+  def get(key: String): Option[T] = base.get(normalizer(key))
+  def put(key: String, value: T): Option[T] = base.put(normalizer(key), value)
+  def remove(key: String): Option[T] = base.remove(normalizer(key))
+  def iterator: Iterator[(String, T)] = base.toIterator
+}
+

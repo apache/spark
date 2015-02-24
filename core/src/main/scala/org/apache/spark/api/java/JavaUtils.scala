@@ -80,7 +80,7 @@ private[spark] object JavaUtils {
           prev match {
             case Some(k) =>
               underlying match {
-                case mm: mutable.Map[a, _] =>
+                case mm: mutable.Map[A, _] =>
                   mm remove k
                   prev = None
                 case _ =>

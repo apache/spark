@@ -59,8 +59,8 @@ private[spark] class HashShuffleReader[K, C](
         // the ExternalSorter won't spill to disk.
         val sorter = new ExternalSorter[K, C, C](ordering = Some(keyOrd), serializer = Some(ser))
         sorter.insertAll(aggregatedIter)
-        context.taskMetrics.memoryBytesSpilled += sorter.memoryBytesSpilled
-        context.taskMetrics.diskBytesSpilled += sorter.diskBytesSpilled
+        context.taskMetrics.incMemoryBytesSpilled(sorter.memoryBytesSpilled)
+        context.taskMetrics.incDiskBytesSpilled(sorter.diskBytesSpilled)
         sorter.iterator
       case None =>
         aggregatedIter

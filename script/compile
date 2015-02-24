@@ -12,7 +12,7 @@ GIT_HUMAN=$(git log --pretty=format:"%s (%an)" HEAD...HEAD~1)
 # Compile spark jars into dist folder
 export LOCAL_SBT_DIR=1
 export SBT_HOME=$FWDIR/sbt
-export SCALA_HOME=$HOME/.sbt/boot/scala-2.10.3
+export SCALA_HOME=$HOME/.sbt/boot/scala-2.10.4
 
 # Find JAVA_HOME on OS X and Linux
 uname=$(uname)

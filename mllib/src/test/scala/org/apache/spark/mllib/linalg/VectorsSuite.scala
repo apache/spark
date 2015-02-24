@@ -17,7 +17,9 @@
 
 package org.apache.spark.mllib.linalg
 
-import breeze.linalg.{DenseMatrix => BDM}
+import scala.util.Random
+
+import breeze.linalg.{DenseMatrix => BDM, squaredDistance => breezeSquaredDistance}
 import org.scalatest.FunSuite
 
 import org.apache.spark.SparkException
@@ -81,6 +83,24 @@ class VectorsSuite extends FunSuite {
 
     val another = Vectors.dense(0.1, 0.2, 0.3, 0.4)
 
+    for (v <- vectors) {
+      assert(v != another)
+      assert(v.## != another.##)
+    }
+  }
+
+  test("vectors equals with explicit 0") {
+    val dv1 = Vectors.dense(Array(0, 0.9, 0, 0.8, 0))
+    val sv1 = Vectors.sparse(5, Array(1, 3), Array(0.9, 0.8))
+    val sv2 = Vectors.sparse(5, Array(0, 1, 2, 3, 4), Array(0, 0.9, 0, 0.8, 0))
+
+    val vectors = Seq(dv1, sv1, sv2)
+    for (v <- vectors; u <- vectors) {
+      assert(v === u)
+      assert(v.## === u.##)
+    }
+
+    val another = Vectors.sparse(5, Array(0, 1, 3), Array(0, 0.9, 0.2))
     for (v <- vectors) {
       assert(v != another)
       assert(v.## != another.##)
@@ -173,6 +193,33 @@ class VectorsSuite extends FunSuite {
     val x = BDM.zeros[Double](10, 10)
     val v = Vectors.fromBreeze(x(::, 0))
     assert(v.size === x.rows)
+  }
+
+  test("sqdist") {
+    val random = new Random()
+    for (m <- 1 until 1000 by 100) {
+      val nnz = random.nextInt(m)
+
+      val indices1 = random.shuffle(0 to m - 1).slice(0, nnz).sorted.toArray
+      val values1 = Array.fill(nnz)(random.nextDouble)
+      val sparseVector1 = Vectors.sparse(m, indices1, values1)
+
+      val indices2 = random.shuffle(0 to m - 1).slice(0, nnz).sorted.toArray
+      val values2 = Array.fill(nnz)(random.nextDouble)
+      val sparseVector2 = Vectors.sparse(m, indices2, values2)
+
+      val denseVector1 = Vectors.dense(sparseVector1.toArray)
+      val denseVector2 = Vectors.dense(sparseVector2.toArray)
+
+      val squaredDist = breezeSquaredDistance(sparseVector1.toBreeze, sparseVector2.toBreeze)
+
+      // SparseVector vs. SparseVector 
+      assert(Vectors.sqdist(sparseVector1, sparseVector2) ~== squaredDist relTol 1E-8) 
+      // DenseVector  vs. SparseVector
+      assert(Vectors.sqdist(denseVector1, sparseVector2) ~== squaredDist relTol 1E-8)
+      // DenseVector  vs. DenseVector
+      assert(Vectors.sqdist(denseVector1, denseVector2) ~== squaredDist relTol 1E-8)
+    }    
   }
 
   test("foreachActive") {

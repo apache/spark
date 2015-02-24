@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.tree
 
+import java.io.IOException
+
 import scala.collection.mutable
 import scala.collection.JavaConverters._
 
@@ -140,6 +142,7 @@ private class RandomForest (
     logDebug("maxBins = " + metadata.maxBins)
     logDebug("featureSubsetStrategy = " + featureSubsetStrategy)
     logDebug("numFeaturesPerNode = " + metadata.numFeaturesPerNode)
+    logDebug("subsamplingRate = " + strategy.subsamplingRate)
 
     // Find the splits and the corresponding bins (interval between the splits) using a sample
     // of the input data.
@@ -155,19 +158,12 @@ private class RandomForest (
     // Cache input RDD for speedup during multiple passes.
     val treeInput = TreePoint.convertToTreeRDD(retaggedInput, bins, metadata)
 
-    val (subsample, withReplacement) = {
-      // TODO: Have a stricter check for RF in the strategy
-      val isRandomForest = numTrees > 1
-      if (isRandomForest) {
-        (1.0, true)
-      } else {
-        (strategy.subsamplingRate, false)
-      }
-    }
+    val withReplacement = if (numTrees > 1) true else false
 
     val baggedInput
-      = BaggedPoint.convertToBaggedRDD(treeInput, subsample, numTrees, withReplacement, seed)
-        .persist(StorageLevel.MEMORY_AND_DISK)
+      = BaggedPoint.convertToBaggedRDD(treeInput,
+          strategy.subsamplingRate, numTrees,
+          withReplacement, seed).persist(StorageLevel.MEMORY_AND_DISK)
 
     // depth of the decision tree
     val maxDepth = strategy.maxDepth
@@ -208,7 +204,6 @@ private class RandomForest (
       Some(NodeIdCache.init(
         data = baggedInput,
         numTrees = numTrees,
-        checkpointDir = strategy.checkpointDir,
         checkpointInterval = strategy.checkpointInterval,
         initVal = 1))
     } else {
@@ -250,7 +245,12 @@ private class RandomForest (
 
     // Delete any remaining checkpoints used for node Id cache.
     if (nodeIdCache.nonEmpty) {
-      nodeIdCache.get.deleteAllCheckpoints()
+      try {
+        nodeIdCache.get.deleteAllCheckpoints()
+      } catch {
+        case e:IOException =>
+          logWarning(s"delete all chackpoints failed. Error reason: ${e.getMessage}")
+      }
     }
 
     val trees = topNodes.map(topNode => new DecisionTreeModel(topNode, strategy.algo))

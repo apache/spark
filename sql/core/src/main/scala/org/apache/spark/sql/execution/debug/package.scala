@@ -22,9 +22,9 @@ import scala.collection.mutable.HashSet
 import org.apache.spark.{AccumulatorParam, Accumulator, SparkContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkContext._
-import org.apache.spark.sql.{SchemaRDD, Row}
+import org.apache.spark.sql.{SQLConf, SQLContext, DataFrame, Row}
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 
 /**
  * :: DeveloperApi ::
@@ -32,17 +32,28 @@ import org.apache.spark.sql.catalyst.types._
  *
  * Usage:
  * {{{
- *   sql("SELECT key FROM src").debug
+ *   import org.apache.spark.sql.execution.debug._
+ *   sql("SELECT key FROM src").debug()
+ *   dataFrame.typeCheck()
  * }}}
  */
 package object debug {
 
   /**
+   * Augments [[SQLContext]] with debug methods.
+   */
+  implicit class DebugSQLContext(sqlContext: SQLContext) {
+    def debug() = {
+      sqlContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, "false")
+    }
+  }
+
+  /**
    * :: DeveloperApi ::
-   * Augments SchemaRDDs with debug methods.
+   * Augments [[DataFrame]]s with debug methods.
    */
   @DeveloperApi
-  implicit class DebugQuery(query: SchemaRDD) {
+  implicit class DebugQuery(query: DataFrame) {
     def debug(): Unit = {
       val plan = query.queryExecution.executedPlan
       val visited = new collection.mutable.HashSet[TreeNodeRef]()
@@ -135,16 +146,14 @@ package object debug {
   }
 
   /**
-   * :: DeveloperApi ::
    * Helper functions for checking that runtime types match a given schema.
    */
-  @DeveloperApi
-  object TypeCheck {
+  private[sql] object TypeCheck {
     def typeCheck(data: Any, schema: DataType): Unit = (data, schema) match {
       case (null, _) =>
 
       case (row: Row, StructType(fields)) =>
-        row.zip(fields.map(_.dataType)).foreach { case(d,t) => typeCheck(d,t) }
+        row.toSeq.zip(fields.map(_.dataType)).foreach { case(d, t) => typeCheck(d, t) }
       case (s: Seq[_], ArrayType(elemType, _)) =>
         s.foreach(typeCheck(_, elemType))
       case (m: Map[_, _], MapType(keyType, valueType, _)) =>
@@ -165,10 +174,8 @@ package object debug {
   }
 
   /**
-   * :: DeveloperApi ::
-   * Augments SchemaRDDs with debug methods.
+   * Augments [[DataFrame]]s with debug methods.
    */
-  @DeveloperApi
   private[sql] case class TypeCheck(child: SparkPlan) extends SparkPlan {
     import TypeCheck._
 

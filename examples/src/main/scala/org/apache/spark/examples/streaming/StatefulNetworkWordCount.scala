@@ -20,7 +20,6 @@ package org.apache.spark.examples.streaming
 import org.apache.spark.SparkConf
 import org.apache.spark.HashPartitioner
 import org.apache.spark.streaming._
-import org.apache.spark.streaming.StreamingContext._
 
 /**
  * Counts words cumulatively in UTF8 encoded, '\n' delimited text received from the network every

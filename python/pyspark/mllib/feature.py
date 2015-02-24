@@ -28,7 +28,7 @@ from py4j.protocol import Py4JJavaError
 
 from pyspark import RDD, SparkContext
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
-from pyspark.mllib.linalg import Vectors, _convert_to_vector
+from pyspark.mllib.linalg import Vectors, Vector, _convert_to_vector
 
 __all__ = ['Normalizer', 'StandardScalerModel', 'StandardScaler',
            'HashingTF', 'IDFModel', 'IDF', 'Word2Vec', 'Word2VecModel']
@@ -36,7 +36,7 @@ __all__ = ['Normalizer', 'StandardScalerModel', 'StandardScaler',
 
 class VectorTransformer(object):
     """
-    :: DeveloperApi ::
+    .. note:: DeveloperApi
 
     Base class for transformation of a vector or RDD of vector
     """
@@ -51,12 +51,12 @@ class VectorTransformer(object):
 
 class Normalizer(VectorTransformer):
     """
-    :: Experimental ::
+    .. note:: Experimental
 
-    Normalizes samples individually to unit L\ :sup:`p`\ norm
+    Normalizes samples individually to unit L\ :sup:`p`\  norm
 
-    For any 1 <= `p` <= float('inf'), normalizes samples using
-    sum(abs(vector). :sup:`p`) :sup:`(1/p)` as norm.
+    For any 1 <= `p` < float('inf'), normalizes samples using
+    sum(abs(vector) :sup:`p`) :sup:`(1/p)` as norm.
 
     For `p` = float('inf'), max(abs(vector)) will be used as norm for normalization.
 
@@ -112,7 +112,7 @@ class JavaVectorTransformer(JavaModelWrapper, VectorTransformer):
 
 class StandardScalerModel(JavaVectorTransformer):
     """
-    :: Experimental ::
+    .. note:: Experimental
 
     Represents a StandardScaler model that can transform vectors.
     """
@@ -129,7 +129,7 @@ class StandardScalerModel(JavaVectorTransformer):
 
 class StandardScaler(object):
     """
-    :: Experimental ::
+    .. note:: Experimental
 
     Standardizes features by removing the mean and scaling to unit
     variance using column summary statistics on the samples in the
@@ -172,7 +172,7 @@ class StandardScaler(object):
 
 class HashingTF(object):
     """
-    :: Experimental ::
+    .. note:: Experimental
 
     Maps a sequence of terms to their term frequencies using the hashing trick.
 
@@ -212,7 +212,7 @@ class IDFModel(JavaVectorTransformer):
     """
     Represents an IDF model that can transform term frequency vectors.
     """
-    def transform(self, dataset):
+    def transform(self, x):
         """
         Transforms term frequency (TF) vectors to TF-IDF vectors.
 
@@ -220,17 +220,19 @@ class IDFModel(JavaVectorTransformer):
         the terms which occur in fewer than `minDocFreq`
         documents will have an entry of 0.
 
-        :param dataset: an RDD of term frequency vectors
-        :return: an RDD of TF-IDF vectors
+        :param x: an RDD of term frequency vectors or a term frequency vector
+        :return: an RDD of TF-IDF vectors or a TF-IDF vector
         """
-        if not isinstance(dataset, RDD):
-            raise TypeError("dataset should be an RDD of term frequency vectors")
-        return JavaVectorTransformer.transform(self, dataset)
+        if isinstance(x, RDD):
+            return JavaVectorTransformer.transform(self, x)
+
+        x = _convert_to_vector(x)
+        return JavaVectorTransformer.transform(self, x)
 
 
 class IDF(object):
     """
-    :: Experimental ::
+    .. note:: Experimental
 
     Inverse document frequency (IDF).
 
@@ -255,6 +257,12 @@ class IDF(object):
     SparseVector(4, {1: 0.0, 3: 0.5754})
     DenseVector([0.0, 0.0, 1.3863, 0.863])
     SparseVector(4, {1: 0.0})
+    >>> model.transform(Vectors.dense([0.0, 1.0, 2.0, 3.0]))
+    DenseVector([0.0, 0.0, 1.3863, 0.863])
+    >>> model.transform([0.0, 1.0, 2.0, 3.0])
+    DenseVector([0.0, 0.0, 1.3863, 0.863])
+    >>> model.transform(Vectors.sparse(n, (1, 3), (1.0, 2.0)))
+    SparseVector(4, {1: 0.0, 3: 0.5754})
     """
     def __init__(self, minDocFreq=0):
         """

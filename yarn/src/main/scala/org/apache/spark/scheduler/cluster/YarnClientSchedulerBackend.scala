@@ -20,6 +20,7 @@ package org.apache.spark.scheduler.cluster
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.yarn.api.records.{ApplicationId, YarnApplicationState}
+import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 
 import org.apache.spark.{SparkException, Logging, SparkContext}
 import org.apache.spark.deploy.yarn.{Client, ClientArguments}
@@ -65,26 +66,42 @@ private[spark] class YarnClientSchedulerBackend(
    */
   private def getExtraClientArguments: Seq[String] = {
     val extraArgs = new ArrayBuffer[String]
-    val optionTuples = // List of (target Client argument, environment variable, Spark property)
+    // List of (target Client argument, environment variable, Spark property)
+    val optionTuples =
       List(
-        ("--driver-memory", "SPARK_MASTER_MEMORY", "spark.master.memory"),
-        ("--driver-memory", "SPARK_DRIVER_MEMORY", "spark.driver.memory"),
         ("--num-executors", "SPARK_WORKER_INSTANCES", "spark.executor.instances"),
         ("--num-executors", "SPARK_EXECUTOR_INSTANCES", "spark.executor.instances"),
         ("--executor-memory", "SPARK_WORKER_MEMORY", "spark.executor.memory"),
         ("--executor-memory", "SPARK_EXECUTOR_MEMORY", "spark.executor.memory"),
         ("--executor-cores", "SPARK_WORKER_CORES", "spark.executor.cores"),
         ("--executor-cores", "SPARK_EXECUTOR_CORES", "spark.executor.cores"),
-        ("--queue", "SPARK_YARN_QUEUE", "spark.yarn.queue"),
-        ("--name", "SPARK_YARN_APP_NAME", "spark.app.name")
+        ("--queue", "SPARK_YARN_QUEUE", "spark.yarn.queue")
       )
+    // Warn against the following deprecated environment variables: env var -> suggestion
+    val deprecatedEnvVars = Map(
+      "SPARK_MASTER_MEMORY" -> "SPARK_DRIVER_MEMORY or --driver-memory through spark-submit",
+      "SPARK_WORKER_INSTANCES" -> "SPARK_WORKER_INSTANCES or --num-executors through spark-submit",
+      "SPARK_WORKER_MEMORY" -> "SPARK_EXECUTOR_MEMORY or --executor-memory through spark-submit",
+      "SPARK_WORKER_CORES" -> "SPARK_EXECUTOR_CORES or --executor-cores through spark-submit")
+    // Do the same for deprecated properties: property -> suggestion
+    val deprecatedProps = Map("spark.master.memory" -> "--driver-memory through spark-submit")
     optionTuples.foreach { case (optionName, envVar, sparkProp) =>
-      if (System.getenv(envVar) != null) {
-        extraArgs += (optionName, System.getenv(envVar))
-      } else if (sc.getConf.contains(sparkProp)) {
+      if (sc.getConf.contains(sparkProp)) {
         extraArgs += (optionName, sc.getConf.get(sparkProp))
+        if (deprecatedProps.contains(sparkProp)) {
+          logWarning(s"NOTE: $sparkProp is deprecated. Use ${deprecatedProps(sparkProp)} instead.")
+        }
+      } else if (System.getenv(envVar) != null) {
+        extraArgs += (optionName, System.getenv(envVar))
+        if (deprecatedEnvVars.contains(envVar)) {
+          logWarning(s"NOTE: $envVar is deprecated. Use ${deprecatedEnvVars(envVar)} instead.")
+        }
       }
     }
+    // The app name is a special case because "spark.app.name" is required of all applications.
+    // As a result, the corresponding "SPARK_YARN_APP_NAME" is already handled preemptively in
+    // SparkSubmitArguments if "spark.app.name" is not explicitly set by the user. (SPARK-5222)
+    sc.getConf.getOption("spark.app.name").foreach(v => extraArgs += ("--name", v))
     extraArgs
   }
 
@@ -117,8 +134,14 @@ private[spark] class YarnClientSchedulerBackend(
     val t = new Thread {
       override def run() {
         while (!stopping) {
-          val report = client.getApplicationReport(appId)
-          val state = report.getYarnApplicationState()
+          var state: YarnApplicationState = null
+          try {
+            val report = client.getApplicationReport(appId)
+            state = report.getYarnApplicationState()
+          } catch {
+            case e: ApplicationNotFoundException =>
+              state = YarnApplicationState.KILLED
+          }
           if (state == YarnApplicationState.FINISHED ||
             state == YarnApplicationState.KILLED ||
             state == YarnApplicationState.FAILED) {
