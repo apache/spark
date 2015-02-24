@@ -130,6 +130,10 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       stages.take(toRemove).foreach { s =>
         stageIdToData.remove((s.stageId, s.attemptId))
         stageIdToInfo.remove(s.stageId)
+        stageIdToActiveJobIds.get(s.stageId).map(_.size) match {
+          case Some(0) => stageIdToActiveJobIds.remove(s.stageId)
+          case _ =>
+        }
       }
       stages.trimStart(toRemove)
     }
