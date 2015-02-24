@@ -346,13 +346,6 @@ class ShuffleReadMetrics extends Serializable {
   private[spark] def decRemoteBytesRead(value: Long) = _remoteBytesRead -= value
 
   /**
-   * Time the task spent (in milliseconds) reading local shuffle blocks (from the local disk).
-   */
-  private var _localReadTime: Long = _
-  def localReadTime = _localReadTime
-  private[spark] def incLocalReadTime(value: Long) = _localReadTime += value
-
-  /**
    * Shuffle data that was read from the local disk (as opposed to from a remote executor).
    */
   private var _localBytesRead: Long = _
