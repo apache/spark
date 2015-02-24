@@ -3,9 +3,9 @@
 set -x
 set -e
 
-if [ -Z '$CI' ]; then
+if [ "$CI" = "" ]; then
   ./script/get_config
-fi 
+fi
 
 FWDIR="$(cd `dirname $0`/..; pwd)"
 export HADOOP_OPTIONS="$(cat $FWDIR/SHOPIFY_HADOOP_OPTIONS)"
