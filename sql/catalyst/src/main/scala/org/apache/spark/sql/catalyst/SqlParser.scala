@@ -78,6 +78,7 @@ class SqlParser extends AbstractSparkSQLParser {
   protected val IF = Keyword("IF")
   protected val IN = Keyword("IN")
   protected val INNER = Keyword("INNER")
+  protected val INT = Keyword("INT")
   protected val INSERT = Keyword("INSERT")
   protected val INTERSECT = Keyword("INTERSECT")
   protected val INTO = Keyword("INTO")
@@ -394,6 +395,7 @@ class SqlParser extends AbstractSparkSQLParser {
     | fixedDecimalType
     | DECIMAL ^^^ DecimalType.Unlimited
     | DATE ^^^ DateType
+    | INT ^^^ IntegerType
     )
 
   protected lazy val fixedDecimalType: Parser[DataType] =
