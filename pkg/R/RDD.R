@@ -1102,7 +1102,7 @@ setMethod("saveAsObjectFile",
             # If serializedMode == "string" we need to serialize the data before saving it since
             # objectFile() assumes serializedMode == "byte".
             if (getSerializedMode(rdd) != "byte") {
-              rdd <- reserialize(rdd)
+              rdd <- serializeToBytes(rdd)
             }
             # Return nothing
             invisible(callJMethod(getJRDD(rdd), "saveAsObjectFile", path))
@@ -1389,8 +1389,8 @@ setMethod("unionRDD",
               union.rdd <- RDD(jrdd, getSerializedMode(x), colNames = x@colNames)
             } else {
               # One of the RDDs is not serialized, we need to serialize it first.
-              if (getSerializedMode(x) != "byte") x <- reserialize(x)
-              if (getSerializedMode(y) != "byte") y <- reserialize(y)
+              if (getSerializedMode(x) != "byte") x <- serializeToBytes(x)
+              if (getSerializedMode(y) != "byte") y <- serializeToBytes(y)
               jrdd <- callJMethod(getJRDD(x), "union", getJRDD(y))
               union.rdd <- RDD(jrdd, "byte")
             }

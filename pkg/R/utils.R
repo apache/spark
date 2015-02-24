@@ -172,7 +172,7 @@ hashCode <- function(key) {
 
 # Create a new RDD with serializedMode == "byte".
 # Return itself if already in "byte" format.
-reserialize <- function(rdd) {
+serializeToBytes <- function(rdd) {
   if (!inherits(rdd, "RDD")) {
     stop("Argument 'rdd' is not an RDD type.")
   }
