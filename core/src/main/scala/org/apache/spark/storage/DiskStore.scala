@@ -22,6 +22,7 @@ import java.nio.ByteBuffer
 import java.nio.channels.FileChannel.MapMode
 
 import org.apache.spark.Logging
+import org.apache.spark.io.LargeByteBuffer
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.Utils
 
@@ -104,7 +105,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     }
   }
 
-  private def getBytes(file: File, offset: Long, length: Long): Option[ByteBuffer] = {
+  private def getBytes(file: File, offset: Long, length: Long): Option[LargeByteBuffer] = {
     val channel = new RandomAccessFile(file, "r").getChannel
 
     try {
@@ -128,12 +129,12 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     }
   }
 
-  override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
+  override def getBytes(blockId: BlockId): Option[LargeByteBuffer] = {
     val file = diskManager.getFile(blockId.name)
     getBytes(file, 0, file.length)
   }
 
-  def getBytes(segment: FileSegment): Option[ByteBuffer] = {
+  def getBytes(segment: FileSegment): Option[LargeByteBuffer] = {
     getBytes(segment.file, segment.offset, segment.length)
   }
 

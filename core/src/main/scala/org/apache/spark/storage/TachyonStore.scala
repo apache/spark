@@ -21,6 +21,7 @@ import java.io.IOException
 import java.nio.ByteBuffer
 
 import com.google.common.io.ByteStreams
+import org.apache.spark.io.LargeByteBuffer
 import tachyon.client.{ReadType, WriteType}
 
 import org.apache.spark.Logging
@@ -64,7 +65,7 @@ private[spark] class TachyonStore(
 
   private def putIntoTachyonStore(
       blockId: BlockId,
-      bytes: ByteBuffer,
+      bytes: LargeByteBuffer,
       returnValues: Boolean): PutResult = {
     // So that we do not modify the input offsets !
     // duplicate does not copy buffer, so inexpensive
@@ -100,7 +101,7 @@ private[spark] class TachyonStore(
     getBytes(blockId).map(buffer => blockManager.dataDeserialize(blockId, buffer))
   }
 
-  override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
+  override def getBytes(blockId: BlockId): Option[LargeByteBuffer] = {
     val file = tachyonManager.getFile(blockId)
     if (file == null || file.getLocationHosts.size == 0) {
       return None

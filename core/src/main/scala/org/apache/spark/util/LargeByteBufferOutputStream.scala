@@ -15,18 +15,31 @@
  * limitations under the License.
  */
 
-package org.apache.spark.storage
+package org.apache.spark.util
 
-import org.apache.spark.io.LargeByteBuffer
+import java.io.OutputStream
 
-/**
- * Result of adding a block into a BlockStore. This case class contains a few things:
- *   (1) The estimated size of the put,
- *   (2) The values put if the caller asked for them to be returned (e.g. for chaining
- *       replication), and
- *   (3) A list of blocks dropped as a result of this put. This is always empty for DiskStore.
- */
-private[spark] case class PutResult(
-    size: Long,
-    data: Either[Iterator[_], LargeByteBuffer],
-    droppedBlocks: Seq[(BlockId, BlockStatus)] = Seq.empty)
+import org.apache.spark.io.{ChainedLargeByteBuffer, LargeByteBuffer}
+import org.apache.spark.util.collection.ChainedBuffer
+
+private[spark]
+class LargeByteBufferOutputStream(chunkSize: Int = 65536)
+  extends OutputStream {
+
+  val buffer = new ChainedBuffer(chunkSize)
+
+  private var _pos = 0
+
+  override def write(b: Int): Unit = {
+    throw new UnsupportedOperationException()
+  }
+
+  override def write(bytes: Array[Byte], offs: Int, len: Int): Unit = {
+    buffer.write(_pos, bytes, offs, len)
+    _pos += len
+  }
+
+  def pos: Int = _pos
+
+  def largeBuffer: LargeByteBuffer = new ChainedLargeByteBuffer(buffer)
+}

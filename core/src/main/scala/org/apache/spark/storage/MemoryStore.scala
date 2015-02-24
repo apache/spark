@@ -20,6 +20,8 @@ package org.apache.spark.storage
 import java.nio.ByteBuffer
 import java.util.LinkedHashMap
 
+import org.apache.spark.io.LargeByteBuffer
+
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -77,7 +79,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     }
   }
 
-  override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): PutResult = {
+  override def putBytes(blockId: BlockId, _bytes: LargeByteBuffer, level: StorageLevel): PutResult = {
     // Work on a duplicate - since the original input might be used elsewhere.
     val bytes = _bytes.duplicate()
     bytes.rewind()
