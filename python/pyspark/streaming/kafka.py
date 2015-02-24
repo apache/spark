@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from py4j.java_collections import ListConverter, MapConverter, SetConverter
+from py4j.java_collections import MapConverter, SetConverter
 from py4j.java_gateway import java_import, Py4JError, Py4JJavaError
 
 from pyspark.storagelevel import StorageLevel
@@ -152,15 +152,19 @@ ________________________________________________________________________________
         """
         """
         java_import(sc._jvm, "org.apache.spark.streaming.kafka.KafkaUtils")
+        java_import(sc._jvm, "org.apache.spark.streaming.kafka.OffsetRange")
 
         kafkaParams.update({"metadata.broker.list": brokerList})
 
-        joffsetRanges = ListConverter().convert([o._joffsetRange for o in offsetRanges],
-                                                sc._gateway._gateway_client)
+        if not isinstance(offsetRanges, list):
+            raise TypeError("offsetRanges should be list")
         jparam = MapConverter().convert(kafkaParams, sc._gateway._gateway_client)
         try:
             array = KafkaUtils._getClassByName(sc._jvm, "[B")
             decoder = KafkaUtils._getClassByName(sc._jvm, "kafka.serializer.DefaultDecoder")
+            joffsetRanges = sc._gateway.new_array(sc._jvm.OffsetRange, len(offsetRanges))
+            for idx, o in enumerate(offsetRanges):
+                joffsetRanges[idx] = o._joffsetRange(sc)
             jrdd = sc._jvm.KafkaUtils.createRDD(sc._jsc, array, array, decoder, decoder,
                                                        jparam, joffsetRanges)
         except Py4JError, e:
@@ -197,7 +201,7 @@ class OffsetRange(object):
         self._fromOffset = fromOffset
         self._untilOffset = untilOffset
 
-    def _joffsetRange(self, ssc):
-        java_import(ssc._jvm, "org.apache.spark.streaming.kafka.OffsetRange")
-        return ssc._jvm.OffsetRange.create(self._topic, self._partition, self._fromOffset,
-                                           self._untilOffset)
+    def _joffsetRange(self, sc):
+        java_import(sc._jvm, "org.apache.spark.streaming.kafka.OffsetRange")
+        return sc._jvm.OffsetRange.create(self._topic, self._partition, self._fromOffset,
+                                          self._untilOffset)
