@@ -267,6 +267,20 @@ test_that("keyBy on RDDs", {
   expect_equal(actual, lapply(nums, function(x) { list(func(x), x) }))
 })
 
+test_that("repartition/coalesce on RDDs", {
+  rdd <- parallelize(sc, 1:10, 3L)
+  expect_equal(numPartitions(rdd), 3L)
+
+  nrdd <- repartition(rdd, 2L)
+  expect_equal(numPartitions(nrdd), 2L)
+
+  nrdd2 <- repartition(rdd, 5L)
+  expect_equal(numPartitions(nrdd2), 5L)
+
+  nrdd3 <- coalesce(rdd, 1L)
+  expect_equal(numPartitions(nrdd3), 1L)
+})
+
 test_that("sortBy() on RDDs", {
   sortedRdd <- sortBy(rdd, function(x) { x * x }, ascending = FALSE)
   actual <- collect(sortedRdd)
