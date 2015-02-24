@@ -18,12 +18,12 @@
 from py4j.java_collections import MapConverter, SetConverter
 from py4j.java_gateway import java_import, Py4JError, Py4JJavaError
 
+from pyspark.rdd import RDD
 from pyspark.storagelevel import StorageLevel
 from pyspark.serializers import PairDeserializer, NoOpSerializer
 from pyspark.streaming import DStream
-from pyspark.rdd import RDD
 
-__all__ = ['OffsetRange', 'KafkaUtils', 'utf8_decoder']
+__all__ = ['KafkaUtils', 'OffsetRange', 'utf8_decoder']
 
 
 def utf8_decoder(s):
@@ -193,6 +193,7 @@ ________________________________________________________________________________
     @staticmethod
     def _getClassByName(jvm, name):
         return jvm.org.apache.spark.util.Utils.classForName(name)
+
 
 class OffsetRange(object):
     """
