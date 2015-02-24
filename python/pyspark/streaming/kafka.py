@@ -150,6 +150,17 @@ ________________________________________________________________________________
     def createRDD(sc, brokerList, offsetRanges, kafkaParams={},
                   keyDecoder=utf8_decoder, valueDecoder=utf8_decoder):
         """
+        ..note:: experimental
+
+        Create a RDD from Kafka using offset ranges for each topic and partition.
+        :param sc:  SparkContext object
+        :param brokerList: A String representing a list of seed Kafka brokers (hostname:port,...)
+        :param offsetRanges:  list of offsetRange to specify topic:partition [start,
+        end) to consume.
+        :param kafkaParams: Additional params for Kafka
+        :param keyDecoder:  A function used to decode key (default is utf8_decoder)
+        :param valueDecoder:  A function used to decode value (default is utf8_decoder)
+        :return: A RDD object
         """
         java_import(sc._jvm, "org.apache.spark.streaming.kafka.KafkaUtils")
         java_import(sc._jvm, "org.apache.spark.streaming.kafka.OffsetRange")
@@ -159,6 +170,7 @@ ________________________________________________________________________________
         if not isinstance(offsetRanges, list):
             raise TypeError("offsetRanges should be list")
         jparam = MapConverter().convert(kafkaParams, sc._gateway._gateway_client)
+
         try:
             array = KafkaUtils._getClassByName(sc._jvm, "[B")
             decoder = KafkaUtils._getClassByName(sc._jvm, "kafka.serializer.DefaultDecoder")
@@ -166,7 +178,7 @@ ________________________________________________________________________________
             for idx, o in enumerate(offsetRanges):
                 joffsetRanges[idx] = o._joffsetRange(sc)
             jrdd = sc._jvm.KafkaUtils.createRDD(sc._jsc, array, array, decoder, decoder,
-                                                       jparam, joffsetRanges)
+                                                jparam, joffsetRanges)
         except Py4JError, e:
             # TODO: use --jar once it also work on driver
             if not e.message or 'call a package' in e.message:
@@ -177,7 +189,6 @@ ________________________________________________________________________________
         ser = PairDeserializer(NoOpSerializer(), NoOpSerializer())
         rdd = RDD(jrdd, sc, ser)
         return rdd.map(lambda (k, v): (keyDecoder(k), valueDecoder(v)))
-
 
     @staticmethod
     def _getClassByName(jvm, name):
