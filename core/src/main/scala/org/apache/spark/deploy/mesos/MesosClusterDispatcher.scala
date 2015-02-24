@@ -22,7 +22,7 @@ import akka.actor.{Props, ActorSystem, Actor}
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.Some
 
-import org.apache.spark.deploy.rest.{ErrorResponse, SubmitRestProtocolResponse, MesosRestServer}
+import org.apache.spark.deploy.rest.MesosRestServer
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.util.{ActorLogReceive, AkkaUtils, IntParam, Utils}
 
@@ -195,7 +195,8 @@ object MesosClusterDispatcher {
         systemName,
         actorName,
         conf,
-        args.masterUrl),
+        args.masterUrl,
+        None),
       name = actorName)
     actorSystem
   }

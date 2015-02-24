@@ -39,7 +39,7 @@ import org.apache.spark.deploy.master.DriverState._
  * Tests for the REST application submission protocol used in standalone cluster mode.
  */
 class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
-  private val client = new StandaloneRestClient
+  private val client = new RestClient
   private var actorSystem: Option[ActorSystem] = None
   private var server: Option[StandaloneRestServer] = None
 
@@ -89,7 +89,7 @@ class StandaloneRestSubmitSuite extends FunSuite with BeforeAndAfterEach {
     conf.set("spark.app.name", "dreamer")
     val appArgs = Array("one", "two", "six")
     // main method calls this
-    val response = StandaloneRestClient.run("app-resource", "main-class", appArgs, conf)
+    val response = RestClient.run("app-resource", "main-class", appArgs, conf)
     val submitResponse = getSubmitResponse(response)
     assert(submitResponse.action === Utils.getFormattedClassName(submitResponse))
     assert(submitResponse.serverSparkVersion === SPARK_VERSION)

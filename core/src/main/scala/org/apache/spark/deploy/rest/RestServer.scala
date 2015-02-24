@@ -32,7 +32,7 @@ import org.apache.spark.{Logging, SparkConf, SPARK_VERSION => sparkVersion}
 import org.apache.spark.util.Utils
 
 /**
- * A server that responds to requests submitted by the [[StandaloneRestClient]].
+ * A server that responds to requests submitted by the [[RestClient]].
  *
  * This server responds with different HTTP codes depending on the situation:
  *   200 OK - Request was processed successfully
@@ -105,7 +105,7 @@ private[spark] abstract class RestServer(
 }
 
 private[rest] object RestServer {
-  val PROTOCOL_VERSION = StandaloneRestClient.PROTOCOL_VERSION
+  val PROTOCOL_VERSION = RestClient.PROTOCOL_VERSION
   val SC_UNKNOWN_PROTOCOL_VERSION = 468
 }
 

@@ -28,7 +28,7 @@ import org.apache.spark.deploy.{Command, DeployMessages, DriverDescription}
 import org.apache.spark.deploy.ClientArguments._
 
 /**
- * A server that responds to requests submitted by the [[StandaloneRestClient]].
+ * A server that responds to requests submitted by the [[RestClient]].
  * This is intended to be embedded in the standalone Master and used in cluster mode only.
  *
  * This server responds with different HTTP codes depending on the situation:

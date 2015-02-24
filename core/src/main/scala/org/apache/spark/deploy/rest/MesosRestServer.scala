@@ -30,7 +30,7 @@ import org.apache.spark.{SparkConf, SPARK_VERSION => sparkVersion}
 import org.apache.spark.util.{Utils, AkkaUtils}
 
 /**
- * A server that responds to requests submitted by the [[StandaloneRestClient]].
+ * A server that responds to requests submitted by the [[RestClient]].
  * This is intended to be used in Mesos cluster mode only.
  *
  * This server responds with different HTTP codes depending on the situation:
@@ -93,6 +93,7 @@ class MesosSubmitRequestServlet(
     val driverExtraClassPath = sparkProperties.get("spark.driver.extraClassPath")
     val driverExtraLibraryPath = sparkProperties.get("spark.driver.extraLibraryPath")
     val superviseDriver = sparkProperties.get("spark.driver.supervise")
+    val driverMemory = sparkProperties.get("spark.driver.memory")
     val appArgs = request.appArgs
     val environmentVariables = request.environmentVariables
 
@@ -107,13 +108,15 @@ class MesosSubmitRequestServlet(
     val javaOpts = sparkJavaOpts ++ extraJavaOpts
     val command = new Command(
       "org.apache.spark.deploy.SparkSubmit",
-      Seq("--master", masterUrl, mainClass) ++ appArgs, // args to the DriverWrapper
+      Seq("--master", masterUrl, "--class", mainClass, appResource) ++ appArgs,
       environmentVariables, extraClassPath, extraLibraryPath, javaOpts)
     val actualSuperviseDriver = superviseDriver.map(_.toBoolean).getOrElse(DEFAULT_SUPERVISE)
+    val actualDriverMemory = driverMemory.map(Utils.memoryStringToMb).getOrElse(DEFAULT_MEMORY)
 
-    // Cores and memory are ignored in Mesos mode.
+    // Cores and memory are ignored in Mesos mode. We override the memory to be driver memory
+    // as the memory is used for JVM heap size of the driver later.
     new DriverDescription(
-      appResource, 0, 0, actualSuperviseDriver, command)
+      appResource, actualDriverMemory, 0, actualSuperviseDriver, command)
   }
 
   protected override def handleSubmit(

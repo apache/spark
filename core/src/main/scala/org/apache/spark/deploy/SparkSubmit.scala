@@ -116,7 +116,7 @@ object SparkSubmit {
 
   /** Kill an existing submission using the REST protocol. Standalone cluster mode only. */
   private def kill(args: SparkSubmitArguments): Unit = {
-    new StandaloneRestClient()
+    new RestClient()
       .killSubmission(args.master, args.submissionToKill)
   }
 
@@ -125,7 +125,7 @@ object SparkSubmit {
    * Standalone cluster mode only.
    */
   private def requestStatus(args: SparkSubmitArguments): Unit = {
-    new StandaloneRestClient()
+    new RestClient()
       .requestSubmissionStatus(args.master, args.submissionToRequestStatusFor)
   }
 
@@ -252,6 +252,7 @@ object SparkSubmit {
     }
 
     val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
+    val isMesosCluster = clusterManager == MESOS && deployMode == CLUSTER
 
     // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
     // too for packages that include Python code
@@ -294,8 +295,9 @@ object SparkSubmit {
 
     // The following modes are not supported or applicable
     (clusterManager, deployMode) match {
-      case (MESOS, CLUSTER) =>
-        printErrorAndExit("Cluster deploy mode is currently not supported for Mesos clusters.")
+      case (MESOS, CLUSTER) if args.isPython =>
+        printErrorAndExit("Cluster deploy mode is currently not supported for python " +
+          "on Mesos clusters.")
       case (STANDALONE, CLUSTER) if args.isPython =>
         printErrorAndExit("Cluster deploy mode is currently not supported for python " +
           "applications on standalone clusters.")
@@ -452,7 +454,7 @@ object SparkSubmit {
     // All Spark parameters are expected to be passed to the client through system properties.
     if (args.isStandaloneCluster) {
       if (args.useRest) {
-        childMainClass = "org.apache.spark.deploy.rest.StandaloneRestClient"
+        childMainClass = "org.apache.spark.deploy.rest.RestClient"
         childArgs += (args.primaryResource, args.mainClass)
       } else {
         // In legacy standalone cluster mode, use Client as a wrapper around the user class
@@ -493,6 +495,15 @@ object SparkSubmit {
       }
       if (args.childArgs != null) {
         args.childArgs.foreach { arg => childArgs += ("--arg", arg) }
+      }
+    }
+
+    if (isMesosCluster) {
+      // Mesos cluster dispatcher only supports the REST interface
+      childMainClass = "org.apache.spark.deploy.rest.RestClient"
+      childArgs += (args.primaryResource, args.mainClass)
+      if (args.childArgs != null) {
+        childArgs ++= args.childArgs
       }
     }
 
