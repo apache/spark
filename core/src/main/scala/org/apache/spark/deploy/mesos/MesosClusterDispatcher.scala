@@ -34,16 +34,17 @@ import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.worker.DriverRunner
 
-import java.io.File
+import java.io.{IOException, File}
 import java.util.Date
 import java.text.SimpleDateFormat
+import scala.collection.mutable
 
- /*
-  * A dispatcher actor that is responsible for managing drivers, that is intended to
-  * used for Mesos cluster mode.
-  * This class is needed since Mesos doesn't manage frameworks, so the dispatcher acts as
-  * a daemon to launch drivers as Mesos frameworks upon request.
-  */
+/*
+ * A dispatcher actor that is responsible for managing drivers, that is intended to
+ * used for Mesos cluster mode.
+ * This class is needed since Mesos doesn't manage frameworks, so the dispatcher acts as
+ * a daemon to launch drivers as Mesos frameworks upon request.
+ */
 class MesosClusterDispatcher(
     host: String,
     serverPort: Int,
@@ -67,6 +68,21 @@ class MesosClusterDispatcher(
 
   def createWorkDir() {
     workDir = workDirPath.map(new File(_)).getOrElse(new File(sparkHome, "work"))
+
+    // Attempt to remove the work directory if it exists on startup.
+    // This is to avoid unbounded growing the work directory as drivers
+    // are only deleted when it is over the retained count while it's running.
+    // We don't fail startup if we are not able to remove, as this is
+    // a short-term solution.
+    try {
+      if (workDir.exists()) {
+        workDir.delete()
+      }
+    } catch {
+      case e: IOException =>
+        logError("Unable to remove work directory " + workDir, e)
+    }
+
     try {
       // This sporadically fails - not sure why ... !workDir.exists() && !workDir.mkdirs()
       // So attempting to create and then check if directory was created or not.
@@ -112,6 +128,7 @@ class MesosClusterDispatcher(
 
   override def postStop() {
     server.stop()
+    runners.values.foreach(_.kill())
   }
 
   override def receiveWithLogging = {
@@ -161,6 +178,15 @@ class MesosClusterDispatcher(
   def removeDriver(driverId: String, state: DriverState, exception: Option[Exception]) {
     if (completedDrivers.size >= RETAINED_DRIVERS) {
       val toRemove = math.max(RETAINED_DRIVERS / 10, 1)
+      for (i <- 0 to (toRemove - 1)) {
+        val driverId = completedDrivers(i).id
+        try {
+          new File(workDir, driverId).delete()
+        } catch {
+          case e: Exception =>
+            logWarning("Unable to remove work dir for completed driver " + driverId, e)
+        }
+      }
       completedDrivers.trimStart(toRemove)
     }
     val driverInfo = drivers.remove(driverId).get
@@ -175,6 +201,13 @@ object MesosClusterDispatcher {
     val conf = new SparkConf
     val clusterArgs = new ClusterDispatcherArguments(args, conf)
     val actorSystem = startSystemAndActor(clusterArgs)
+    Runtime.getRuntime().addShutdownHook(new Thread("MesosClusterDispatcherShutdownHook") {
+      override def run() = {
+        // Makes sure we shut down the actor, which will kill all the drivers.
+        actorSystem.shutdown()
+        actorSystem.awaitTermination()
+      }
+    })
     actorSystem.awaitTermination()
   }
 
