@@ -48,7 +48,6 @@ abstract class AbstractCommandBuilder {
   String mainClass;
   String master;
   String propertiesFile;
-  final List<String> sparkArgs;
   final List<String> appArgs;
   final List<String> jars;
   final List<String> files;
@@ -67,7 +66,6 @@ abstract class AbstractCommandBuilder {
     this.files = new ArrayList<String>();
     this.jars = new ArrayList<String>();
     this.pyFiles = new ArrayList<String>();
-    this.sparkArgs = new ArrayList<String>();
   }
 
   /**
@@ -282,12 +280,6 @@ abstract class AbstractCommandBuilder {
     }
 
     throw new IllegalStateException("Should not reach here.");
-  }
-
-  void addSparkArgs(String... args) {
-    for (String arg : args) {
-      sparkArgs.add(arg);
-    }
   }
 
   String getSparkHome() {

@@ -49,6 +49,11 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   static final String PYSPARK_SHELL = "pyspark-shell-main";
 
   /**
+   * This is the actual resource name that identifies the PySpark shell to SparkSubmit.
+   */
+  static final String PYSPARK_SHELL_RESOURCE = "pyspark-shell";
+
+  /**
    * This map must match the class names for available special classes, since this modifies the way
    * command line parsing works. This maps the class name to the resource to use when calling
    * spark-submit.
@@ -60,11 +65,11 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       "spark-internal");
   }
 
-  private final List<String> driverArgs;
+  private final List<String> sparkArgs;
   private boolean hasMixedArguments;
 
   SparkSubmitCommandBuilder() {
-    this.driverArgs = Collections.<String>emptyList();
+    this.sparkArgs = new ArrayList<String>();
   }
 
   SparkSubmitCommandBuilder(List<String> args) {
@@ -72,12 +77,11 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   }
 
   SparkSubmitCommandBuilder(boolean hasMixedArguments, List<String> args) {
-    this.driverArgs = new ArrayList<String>();
-
+    this();
     List<String> submitArgs = args;
     if (args.size() > 0 && args.get(0).equals(PYSPARK_SHELL)) {
       this.hasMixedArguments = true;
-      appResource = PYSPARK_SHELL;
+      appResource = PYSPARK_SHELL_RESOURCE;
       submitArgs = args.subList(1, args.size());
     } else {
       this.hasMixedArguments = hasMixedArguments;
@@ -88,7 +92,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   @Override
   public List<String> buildCommand(Map<String, String> env) throws IOException {
-    if (PYSPARK_SHELL.equals(appResource)) {
+    if (PYSPARK_SHELL_RESOURCE.equals(appResource)) {
       return buildPySparkShellCommand(env);
     } else {
       return buildSparkSubmitCommand(env);
@@ -215,13 +219,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       find(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, conf, props));
 
     StringBuilder submitArgs = new StringBuilder();
-    for (String arg : sparkArgs) {
-      if (submitArgs.length() > 0) {
-        submitArgs.append(" ");
-      }
-      submitArgs.append(quote(arg));
-    }
-    for (String arg : driverArgs) {
+    for (String arg : buildSparkSubmitArgs()) {
       if (submitArgs.length() > 0) {
         submitArgs.append(" ");
       }
@@ -276,40 +274,24 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     protected boolean handle(String opt, String value) {
       if (opt.equals(MASTER)) {
         master = value;
-        driverArgs.add(opt);
-        driverArgs.add(value);
       } else if (opt.equals(DEPLOY_MODE)) {
         deployMode = value;
-        driverArgs.add(opt);
-        driverArgs.add(value);
       } else if (opt.equals(PROPERTIES_FILE)) {
         propertiesFile = value;
-        driverArgs.add(opt);
-        driverArgs.add(value);
       } else if (opt.equals(DRIVER_MEMORY)) {
         conf.put(SparkLauncher.DRIVER_MEMORY, value);
-        driverArgs.add(opt);
-        driverArgs.add(value);
       } else if (opt.equals(DRIVER_JAVA_OPTIONS)) {
         conf.put(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, value);
-        driverArgs.add(opt);
-        driverArgs.add(value);
       } else if (opt.equals(DRIVER_LIBRARY_PATH)) {
         conf.put(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, value);
-        driverArgs.add(opt);
-        driverArgs.add(value);
       } else if (opt.equals(DRIVER_CLASS_PATH)) {
         conf.put(SparkLauncher.DRIVER_EXTRA_CLASSPATH, value);
-        driverArgs.add(opt);
-        driverArgs.add(value);
       } else if (opt.equals(CONF)) {
         String[] setConf = value.split("=", 2);
         checkArgument(setConf.length == 2, "Invalid argument to %s: %s", CONF, value);
         if (driverJvmKeys.contains(setConf[0])) {
           conf.put(setConf[0], setConf[1]);
         }
-        driverArgs.add(opt);
-        driverArgs.add(value);
       } else if (opt.equals(CLASS)) {
         // The special classes require some special command line handling, since they allow
         // mixing spark-submit arguments with arguments that should be propagated to the shell
@@ -320,11 +302,9 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
           hasMixedArguments = true;
           appResource = specialClasses.get(value);
         }
-      } else if (opt.equals(PYSPARK_SHELL)) {
-        hasMixedArguments = true;
-        appResource = opt;
       } else {
-        addSparkArgs(opt, value);
+        sparkArgs.add(opt);
+        sparkArgs.add(value);
       }
       return true;
     }
@@ -338,7 +318,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         appArgs.add(opt);
         return true;
       } else {
-        addSparkArgs(opt);
+        sparkArgs.add(opt);
         return false;
       }
     }
@@ -346,7 +326,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     @Override
     protected void handleExtraArgs(List<String> extra) {
       for (String arg : extra) {
-        addSparkArgs(arg);
+        sparkArgs.add(arg);
       }
     }
 

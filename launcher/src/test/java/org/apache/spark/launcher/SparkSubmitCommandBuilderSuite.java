@@ -123,7 +123,8 @@ public class SparkSubmitCommandBuilderSuite {
     List<String> cmd = buildCommand(sparkSubmitArgs, env);
     assertEquals("python", cmd.get(cmd.size() - 1));
     assertEquals(
-      String.format("\"%s\" \"foo\" \"%s\" \"bar\"", parser.MASTER, parser.DEPLOY_MODE),
+      String.format("\"%s\" \"foo\" \"%s\" \"bar\" \"%s\"",
+        parser.MASTER, parser.DEPLOY_MODE, SparkSubmitCommandBuilder.PYSPARK_SHELL_RESOURCE),
       env.get("PYSPARK_SUBMIT_ARGS"));
   }
 
