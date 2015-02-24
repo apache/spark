@@ -120,6 +120,9 @@ class StandardScalerModel(JavaVectorTransformer):
         """
         Applies standardization transformation on a vector.
 
+        Note: In Python, transform cannot currently be used within an RDD
+              transformation or action.  Call transform directly on the RDD instead.
+
         :param vector: Vector or RDD of Vector to be standardized.
         :return: Standardized vector. If the variance of a column is zero,
                 it will return default `0.0` for the column with zero variance.
@@ -219,6 +222,9 @@ class IDFModel(JavaVectorTransformer):
         If `minDocFreq` was set for the IDF calculation,
         the terms which occur in fewer than `minDocFreq`
         documents will have an entry of 0.
+
+        Note: In Python, transform cannot currently be used within an RDD
+              transformation or action.  Call transform directly on the RDD instead.
 
         :param x: an RDD of term frequency vectors or a term frequency vector
         :return: an RDD of TF-IDF vectors or a TF-IDF vector
