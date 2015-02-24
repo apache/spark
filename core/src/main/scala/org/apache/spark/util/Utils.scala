@@ -678,6 +678,10 @@ private[spark] object Utils extends Logging {
    * and returns only the directories that exist / could be created.
    *
    * If no directories could be created, this will return an empty list.
+   *
+   * This method will cache the local directories for the application when it's first invoked.
+   * So calling it multiple times with a different configuration will always return the same
+   * set of directories.
    */
   private[spark] def getOrCreateLocalRootDirs(conf: SparkConf): Array[String] = {
     if (localRootDirs == null) {
@@ -740,6 +744,11 @@ private[spark] object Utils extends Logging {
       throw new Exception("Yarn Local dirs can't be empty")
     }
     localDirs
+  }
+
+  /** Used by unit tests. Do not call from other places. */
+  private[spark] def clearLocalRootDirs(): Unit = {
+    localRootDirs = null
   }
 
   /**
