@@ -341,7 +341,7 @@ abstract class HiveThriftServer2Test extends FunSuite with BeforeAndAfterAll wit
           }
         }))
 
-    Await.result(serverStarted.future, 1.minute)
+    Await.result(serverStarted.future, 2.minute)
   }
 
   private def stopThriftServer(): Unit = {
