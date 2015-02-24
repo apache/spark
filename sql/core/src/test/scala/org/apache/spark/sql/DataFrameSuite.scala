@@ -130,6 +130,12 @@ class DataFrameSuite extends QueryTest {
       testData.collect().map(row => Row(math.abs(row.getInt(0)), row.getString(1))).toSeq)
   }
 
+  test("selectExpr with alias") {
+    checkAnswer(
+      testData.selectExpr("key as k").select("k"),
+      testData.select("key").collect().toSeq)
+  }
+
   test("filterExpr") {
     checkAnswer(
       testData.filter("key > 90"),
