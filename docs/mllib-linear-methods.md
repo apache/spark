@@ -222,6 +222,9 @@ val metrics = new BinaryClassificationMetrics(scoreAndLabels)
 val auROC = metrics.areaUnderROC()
 
 println("Area under ROC = " + auROC)
+
+model.save("myModelPath")
+val sameModel = SVMModel.load("myModelPath")
 {% endhighlight %}
 
 The `SVMWithSGD.train()` method by default performs L2 regularization with the
@@ -304,6 +307,9 @@ public class SVMClassifier {
     double auROC = metrics.areaUnderROC();
     
     System.out.println("Area under ROC = " + auROC);
+
+    model.save("myModelPath");
+    SVMModel sameModel = SVMModel.load("myModelPath");
   }
 }
 {% endhighlight %}
@@ -337,6 +343,8 @@ a dependency.
 <div data-lang="python" markdown="1">
 The following example shows how to load a sample dataset, build Logistic Regression model,
 and make predictions with the resulting model to compute the training error.
+
+Note that the Python API does not yet support model save/load but will in the future.
 
 {% highlight python %}
 from pyspark.mllib.classification import LogisticRegressionWithSGD
@@ -413,6 +421,9 @@ val valuesAndPreds = parsedData.map { point =>
 }
 val MSE = valuesAndPreds.map{case(v, p) => math.pow((v - p), 2)}.mean()
 println("training Mean Squared Error = " + MSE)
+
+model.save("myModelPath")
+val sameModel = LinearRegressionModel.load("myModelPath")
 {% endhighlight %}
 
 [`RidgeRegressionWithSGD`](api/scala/index.html#org.apache.spark.mllib.regression.RidgeRegressionWithSGD)
@@ -483,6 +494,9 @@ public class LinearRegression {
       }
     ).rdd()).mean();
     System.out.println("training Mean Squared Error = " + MSE);
+
+    model.save("myModelPath");
+    LinearRegressionModel sameModel = LinearRegressionModel.load("myModelPath");
   }
 }
 {% endhighlight %}
@@ -493,6 +507,8 @@ The following example demonstrate how to load training data, parse it as an RDD 
 The example then uses LinearRegressionWithSGD to build a simple linear model to predict label 
 values. We compute the mean squared error at the end to evaluate
 [goodness of fit](http://en.wikipedia.org/wiki/Goodness_of_fit).
+
+Note that the Python API does not yet support model save/load but will in the future.
 
 {% highlight python %}
 from pyspark.mllib.regression import LabeledPoint, LinearRegressionWithSGD

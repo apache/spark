@@ -221,6 +221,9 @@ val labelAndPreds = testData.map { point =>
 val testErr = labelAndPreds.filter(r => r._1 != r._2).count.toDouble / testData.count()
 println("Test Error = " + testErr)
 println("Learned classification tree model:\n" + model.toDebugString)
+
+model.save("myModelPath")
+val sameModel = DecisionTreeModel.load("myModelPath")
 {% endhighlight %}
 </div>
 
@@ -279,10 +282,16 @@ Double testErr =
   }).count() / testData.count();
 System.out.println("Test Error: " + testErr);
 System.out.println("Learned classification tree model:\n" + model.toDebugString());
+
+model.save("myModelPath");
+DecisionTreeModel sameModel = DecisionTreeModel.load("myModelPath");
 {% endhighlight %}
 </div>
 
 <div data-lang="python">
+
+Note that the Python API does not yet support model save/load but will in the future.
+
 {% highlight python %}
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.tree import DecisionTree
@@ -350,6 +359,9 @@ val labelsAndPredictions = testData.map { point =>
 val testMSE = labelsAndPredictions.map{ case(v, p) => math.pow((v - p), 2)}.mean()
 println("Test Mean Squared Error = " + testMSE)
 println("Learned regression tree model:\n" + model.toDebugString)
+
+model.save("myModelPath")
+val sameModel = DecisionTreeModel.load("myModelPath")
 {% endhighlight %}
 </div>
 
@@ -414,10 +426,16 @@ Double testMSE =
   }) / data.count();
 System.out.println("Test Mean Squared Error: " + testMSE);
 System.out.println("Learned regression tree model:\n" + model.toDebugString());
+
+model.save("myModelPath");
+DecisionTreeModel sameModel = DecisionTreeModel.load("myModelPath");
 {% endhighlight %}
 </div>
 
 <div data-lang="python">
+
+Note that the Python API does not yet support model save/load but will in the future.
+
 {% highlight python %}
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.tree import DecisionTree

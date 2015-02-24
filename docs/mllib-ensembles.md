@@ -127,6 +127,9 @@ val labelAndPreds = testData.map { point =>
 val testErr = labelAndPreds.filter(r => r._1 != r._2).count.toDouble / testData.count()
 println("Test Error = " + testErr)
 println("Learned classification forest model:\n" + model.toDebugString)
+
+model.save("myModelPath")
+val sameModel = RandomForestModel.load("myModelPath")
 {% endhighlight %}
 </div>
 
@@ -188,10 +191,16 @@ Double testErr =
   }).count() / testData.count();
 System.out.println("Test Error: " + testErr);
 System.out.println("Learned classification forest model:\n" + model.toDebugString());
+
+model.save("myModelPath");
+RandomForestModel sameModel = RandomForestModel.load("myModelPath");
 {% endhighlight %}
 </div>
 
 <div data-lang="python">
+
+Note that the Python API does not yet support model save/load but will in the future.
+
 {% highlight python %}
 from pyspark.mllib.tree import RandomForest
 from pyspark.mllib.util import MLUtils
@@ -264,6 +273,9 @@ val labelsAndPredictions = testData.map { point =>
 val testMSE = labelsAndPredictions.map{ case(v, p) => math.pow((v - p), 2)}.mean()
 println("Test Mean Squared Error = " + testMSE)
 println("Learned regression forest model:\n" + model.toDebugString)
+
+model.save("myModelPath")
+val sameModel = RandomForestModel.load("myModelPath")
 {% endhighlight %}
 </div>
 
@@ -328,10 +340,16 @@ Double testMSE =
   }) / testData.count();
 System.out.println("Test Mean Squared Error: " + testMSE);
 System.out.println("Learned regression forest model:\n" + model.toDebugString());
+
+model.save("myModelPath");
+RandomForestModel sameModel = RandomForestModel.load("myModelPath");
 {% endhighlight %}
 </div>
 
 <div data-lang="python">
+
+Note that the Python API does not yet support model save/load but will in the future.
+
 {% highlight python %}
 from pyspark.mllib.tree import RandomForest
 from pyspark.mllib.util import MLUtils
@@ -430,8 +448,6 @@ We omit some decision tree parameters since those are covered in the [decision t
 
 ### Examples
 
-GBTs currently have APIs in Scala and Java.  Examples in both languages are shown below.
-
 #### Classification
 
 The example below demonstrates how to load a
@@ -473,6 +489,9 @@ val labelAndPreds = testData.map { point =>
 val testErr = labelAndPreds.filter(r => r._1 != r._2).count.toDouble / testData.count()
 println("Test Error = " + testErr)
 println("Learned classification GBT model:\n" + model.toDebugString)
+
+model.save("myModelPath")
+val sameModel = GradientBoostedTreesModel.load("myModelPath")
 {% endhighlight %}
 </div>
 
@@ -534,6 +553,37 @@ Double testErr =
   }).count() / testData.count();
 System.out.println("Test Error: " + testErr);
 System.out.println("Learned classification GBT model:\n" + model.toDebugString());
+
+model.save("myModelPath");
+GradientBoostedTreesModel sameModel = GradientBoostedTreesModel.load("myModelPath");
+{% endhighlight %}
+</div>
+
+<div data-lang="python">
+
+Note that the Python API does not yet support model save/load but will in the future.
+
+{% highlight python %}
+from pyspark.mllib.tree import GradientBoostedTrees
+from pyspark.mllib.util import MLUtils
+
+# Load and parse the data file.
+data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
+# Split the data into training and test sets (30% held out for testing)
+(trainingData, testData) = data.randomSplit([0.7, 0.3])
+
+# Train a GradientBoostedTrees model.
+#  Notes: (a) Empty categoricalFeaturesInfo indicates all features are continuous.
+#         (b) Use more iterations in practice.
+model = GradientBoostedTrees.trainClassifier(trainingData,
+    categoricalFeaturesInfo={}, numIterations=3)
+
+# Evaluate model on test instances and compute test error
+labelAndPreds =\
+    testData.map(lambda point: (point.label, model.predict(point.features)))
+testErr = labelAndPreds.filter(lambda r: r._1 != r._2).count() / float(testData.count())
+print "Test Error = %g" % testErr
+print "Learned classification GBT model:\n" + model.toDebugString()
 {% endhighlight %}
 </div>
 
@@ -580,6 +630,9 @@ val labelsAndPredictions = testData.map { point =>
 val testMSE = labelsAndPredictions.map{ case(v, p) => math.pow((v - p), 2)}.mean()
 println("Test Mean Squared Error = " + testMSE)
 println("Learned regression GBT model:\n" + model.toDebugString)
+
+model.save("myModelPath")
+val sameModel = GradientBoostedTreesModel.load("myModelPath")
 {% endhighlight %}
 </div>
 
@@ -647,6 +700,20 @@ Double testMSE =
   }) / data.count();
 System.out.println("Test Mean Squared Error: " + testMSE);
 System.out.println("Learned regression GBT model:\n" + model.toDebugString());
+
+model.save("myModelPath");
+GradientBoostedTreesModel sameModel = GradientBoostedTreesModel.load("myModelPath");
+{% endhighlight %}
+</div>
+
+<div data-lang="python">
+
+Note that the Python API does not yet support model save/load but will in the future.
+
+{% highlight python %}
+
+TODO
+
 {% endhighlight %}
 </div>
 
