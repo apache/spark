@@ -117,7 +117,7 @@ class DataFrame protected[sql](
     this(sqlContext, {
       val qe = sqlContext.executePlan(logicalPlan)
       if (sqlContext.conf.dataFrameEagerAnalysis) {
-        qe.analyzed  // This should force analysis and throw errors if there are any
+        qe.assertAnalyzed()  // This should force analysis and throw errors if there are any
       }
       qe
     })
