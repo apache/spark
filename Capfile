@@ -14,7 +14,7 @@ set :branch, fetch(:branch, `git symbolic-ref --short HEAD`.gsub("\s",""))
 set :local_sha, `git rev-parse HEAD`.rstrip
 
 DATANODES = (2..47).map {|i| "dn%02d.chi.shopify.com" % i }
-OTHERNODES = ["hadoop-etl1.chi.shopify.com", "spark-etl1.chi.shopify.com", "reports-reportify-etl3.chi.shopify.com", "reports-reportify-skydb4.chi.shopify.com", "platfora2.chi.shopify.com"]
+OTHERNODES = ["hadoop-etl1.chi.shopify.com", "spark-etl1.chi.shopify.com", "reportify-etl4.chi.shopify.com", "platfora2.chi.shopify.com"]
 BROKEN = ["dn09.chi.shopify.com", "dn16.chi.shopify.com"] # Node is down don't try to send code
 
 task :production do
