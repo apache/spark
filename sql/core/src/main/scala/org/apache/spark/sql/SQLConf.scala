@@ -52,8 +52,9 @@ private[spark] object SQLConf {
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = "spark.sql.sources.default"
 
-  // Whether to perform eager analysis on a DataFrame.
-  val DATAFRAME_EAGER_ANALYSIS = "spark.sql.dataframe.eagerAnalysis"
+  // Whether to perform eager analysis when constructing a dataframe.
+  // Set to false when debugging requires the ability to look at invalid query plans.
+  val DATAFRAME_EAGER_ANALYSIS = "spark.sql.eagerAnalysis"
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"

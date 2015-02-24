@@ -418,6 +418,9 @@ private[sql] object JsonRDD extends Logging {
         case NullType => null
         case ArrayType(elementType, _) =>
           value.asInstanceOf[Seq[Any]].map(enforceCorrectType(_, elementType))
+        case MapType(StringType, valueType, _) =>
+          val map = value.asInstanceOf[Map[String, Any]]
+          map.mapValues(enforceCorrectType(_, valueType)).map(identity)
         case struct: StructType =>
           val schemaFuncs = prepareRowSchema(struct)
           val row = new GenericMutableRow(schemaFuncs.size)

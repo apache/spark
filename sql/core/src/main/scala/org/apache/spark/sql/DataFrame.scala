@@ -117,7 +117,7 @@ class DataFrame protected[sql](
     this(sqlContext, {
       val qe = sqlContext.executePlan(logicalPlan)
       if (sqlContext.conf.dataFrameEagerAnalysis) {
-        qe.analyzed  // This should force analysis and throw errors if there are any
+        qe.assertAnalyzed()  // This should force analysis and throw errors if there are any
       }
       qe
     })
@@ -138,7 +138,7 @@ class DataFrame protected[sql](
 
   /**
    * An implicit conversion function internal to this class for us to avoid doing
-   * "new DataFrameImpl(...)" everywhere.
+   * "new DataFrame(...)" everywhere.
    */
   @inline private implicit def logicalPlanToDataFrame(logicalPlan: LogicalPlan): DataFrame = {
     new DataFrame(sqlContext, logicalPlan)
