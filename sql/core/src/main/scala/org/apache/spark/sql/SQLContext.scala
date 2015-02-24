@@ -479,6 +479,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       case ByteType => true
       case ShortType => true
       case FloatType => true
+      case LongType => true
       case DateType => true
       case TimestampType => true
       case ArrayType(_, _) => true

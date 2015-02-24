@@ -51,7 +51,7 @@ from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, 
     CloudPickleSerializer, CompressedSerializer
 from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, ExternalSorter
 from pyspark.sql import SQLContext, IntegerType, Row, ArrayType, StructType, StructField, \
-    UserDefinedType, DoubleType
+    UserDefinedType, DoubleType, LongType, _infer_type
 from pyspark import shuffle
 
 _have_scipy = False
@@ -984,6 +984,27 @@ class SQLTests(ReusedPySparkTestCase):
         srdd1 = self.sqlCtx.parquetFile(output_dir)
         point = srdd1.first().point
         self.assertEquals(point, ExamplePoint(1.0, 2.0))
+
+    def test_infer_long_type(self):
+        longrow = [Row(f1='a', f2=100000000000000)]
+        rdd = self.sc.parallelize(longrow)
+        srdd = self.sqlCtx.inferSchema(rdd)
+        self.assertEqual(srdd.schema().fields[1].dataType, LongType())
+
+        # this saving as Parquet caused issues as well.
+        output_dir = os.path.join(self.tempdir.name, "infer_long_type")
+        srdd.saveAsParquetFile(output_dir)
+        df1 = self.sqlCtx.parquetFile(output_dir)
+        self.assertEquals('a', df1.first().f1)
+        self.assertEquals(100000000000000, df1.first().f2)
+
+        self.assertEqual(_infer_type(1), LongType())
+        self.assertEqual(_infer_type(2**10), LongType())
+        self.assertEqual(_infer_type(2**20), LongType())
+        self.assertEqual(_infer_type(2**31 - 1), LongType())
+        self.assertEqual(_infer_type(2**31), LongType())
+        self.assertEqual(_infer_type(2**61), LongType())
+        self.assertEqual(_infer_type(2**71), LongType())
 
 
 class InputFormatTests(ReusedPySparkTestCase):
