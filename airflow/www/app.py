@@ -573,6 +573,32 @@ class Airflow(BaseView):
     def noaccess(self):
         return self.render('airflow/noaccess.html')
 
+    @expose('/health_checks')
+    def health_checks(self):
+        J = jobs.BaseJob
+
+        session = settings.Session()
+        latest_heartbeat = session.query(
+            sqla.func.max(J.latest_heartbeat)).filter(
+                J.job_type=='MasterJob').first()[0]
+        session.commit()
+        session.close()
+        ago = (datetime.now() - latest_heartbeat).total_seconds()
+        fail = False
+        if (
+                ago > (2.5 * conf.getint('misc', "MASTER_HEARTBEAT_SEC"))
+        ):
+            fail = True
+        d = {
+            'master_latest_heartbeat': latest_heartbeat.isoformat(),
+            'master_latest_heartbeat_sec_ago': ago,
+            'fail': fail,
+        }
+
+        return Response(
+            response=json.dumps(d, indent=4),
+            status=200, mimetype="application/json")
+
     @expose('/headers')
     def headers(self):
         d = {k: v for k, v in request.headers}

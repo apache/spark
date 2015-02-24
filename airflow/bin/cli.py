@@ -245,7 +245,6 @@ def serve_logs(args):
 
 
 def worker(args):
-    import subprocess
     # Worker to serve static log files through this simple flask app
     sp = subprocess.Popen("airflow serve_logs", shell=True)
 
