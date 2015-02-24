@@ -78,10 +78,10 @@ private[sql] object PreInsertCastAndRename extends Rule[LogicalPlan] {
 /**
  * A rule to do various checks before inserting into or writing to a data source table.
  */
-private[sql] case class PreWriteCheck(catalog: Catalog) extends Rule[LogicalPlan] {
+private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => Unit) {
   def failAnalysis(msg: String) = { throw new AnalysisException(msg) }
 
-  def apply(plan: LogicalPlan): LogicalPlan = {
+  def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
       case i @ logical.InsertIntoTable(
         l @ LogicalRelation(t: InsertableRelation), partition, query, overwrite) =>
@@ -93,7 +93,7 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends Rule[LogicalPlan
           val srcRelations = query.collect {
             case LogicalRelation(src: BaseRelation) => src
           }
-          if (srcRelations.exists(src => src == t)) {
+          if (srcRelations.contains(t)) {
             failAnalysis(
               "Cannot insert overwrite into table that is also being read from.")
           } else {
@@ -119,7 +119,7 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends Rule[LogicalPlan
               val srcRelations = query.collect {
                 case LogicalRelation(src: BaseRelation) => src
               }
-              if (srcRelations.exists(src => src == dest)) {
+              if (srcRelations.contains(dest)) {
                 failAnalysis(
                   s"Cannot overwrite table $tableName that is also being read from.")
               } else {
@@ -134,7 +134,5 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends Rule[LogicalPlan
 
       case _ => // OK
     }
-
-    plan
   }
 }
