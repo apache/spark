@@ -72,6 +72,16 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
   // Executors we have requested the cluster manager to kill that have not died yet
   private val executorsPendingToRemove = new HashSet[String]
 
+  /**
+   * Send new credentials to executors. This is the method that is called when the scheduled
+   * login completes, so the new credentials can be sent to the executors.
+   * @param credentials
+   */
+  def sendNewCredentialsToExecutors(credentials: SerializableBuffer): Unit = {
+    // We don't care about the reply, so going to deadLetters is fine.
+    executorDataMap.values.foreach(_.executorActor ! UpdateCredentials(credentials))
+  }
+
   class DriverActor(sparkProperties: Seq[(String, String)]) extends Actor with ActorLogReceive {
     override protected def log = CoarseGrainedSchedulerBackend.this.log
     private val addressToExecutorId = new HashMap[Address, String]
@@ -84,17 +94,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
       val reviveInterval = conf.getLong("spark.scheduler.revive.interval", 1000)
       import context.dispatcher
       context.system.scheduler.schedule(0.millis, reviveInterval.millis, self, ReviveOffers)
-    }
-
-    /**
-     * Send new credentials to executors. This is the method that is called when the scheduled
-     * login completes, so the new credentials can be sent to the executors.
-     * @param credentials
-     */
-    def sendNewCredentialsToExecutors(credentials: SerializableBuffer): Unit = {
-      executorDataMap.values.foreach{ x =>
-        x.executorActor ! UpdateCredentials(credentials)
-      }
     }
 
     def receiveWithLogging = {
@@ -247,14 +246,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
       }
     }
 
-    val driver = new DriverActor(properties)
     // TODO (prashant) send conf instead of properties
     driverActor = actorSystem.actorOf(
-      Props(driver), name = CoarseGrainedSchedulerBackend.ACTOR_NAME)
+      Props(new DriverActor(properties)), name = CoarseGrainedSchedulerBackend.ACTOR_NAME)
 
     // If a principal and keytab have been set, use that to create new credentials for executors
     // periodically
-    SparkHadoopUtil.get.scheduleLoginFromKeytab(driver.sendNewCredentialsToExecutors _)
+    SparkHadoopUtil.get.scheduleLoginFromKeytab(sendNewCredentialsToExecutors _)
   }
 
   def stopExecutors() {
