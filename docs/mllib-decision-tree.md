@@ -54,8 +54,8 @@ impurity measure for regression (variance).
     <tr>
       <td>Variance</td>
 	  <td>Regression</td>
-     <td>$\frac{1}{N} \sum_{i=1}^{N} (x_i - \mu)^2$</td><td>$y_i$ is label for an instance,
-	  $N$ is the number of instances and $\mu$ is the mean given by $\frac{1}{N} \sum_{i=1}^N x_i$.</td>
+     <td>$\frac{1}{N} \sum_{i=1}^{N} (y_i - \mu)^2$</td><td>$y_i$ is label for an instance,
+	  $N$ is the number of instances and $\mu$ is the mean given by $\frac{1}{N} \sum_{i=1}^N y_i$.</td>
     </tr>
   </tbody>
 </table>
