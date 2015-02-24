@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql
 
+import java.io.File
+
 import scala.beans.{BeanInfo, BeanProperty}
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.{sparkContext, sql}
 import org.apache.spark.sql.test.TestSQLContext.implicits._
@@ -90,5 +91,18 @@ class UserDefinedTypeSuite extends QueryTest {
     checkAnswer(
       sql("SELECT testType(features) from points"),
       Seq(Row(true), Row(true)))
+  }
+
+
+  test("UDTs with Parquet") {
+    val tempDir = File.createTempFile("parquet", "test")
+    tempDir.delete()
+    pointsRDD.saveAsParquetFile(tempDir.getCanonicalPath)
+  }
+
+  test("Repartition UDTs with Parquet") {
+    val tempDir = File.createTempFile("parquet", "test")
+    tempDir.delete()
+    pointsRDD.repartition(1).saveAsParquetFile(tempDir.getCanonicalPath)
   }
 }
