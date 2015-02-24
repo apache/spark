@@ -20,7 +20,7 @@ package org.apache.spark.deploy.yarn
 import java.io._
 import java.net.URI
 import java.nio.ByteBuffer
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.{AtomicReference, AtomicBoolean}
 import java.util.concurrent.{TimeUnit, ThreadFactory, Executors}
 import java.util.regex.Matcher
 import java.util.regex.Pattern
@@ -52,6 +52,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   private var keytabFile: Option[String] = None
   private var loginPrincipal: Option[String] = None
   private val loggedInViaKeytab = new AtomicBoolean(false)
+  private val loggedInUGI = new AtomicReference[UserGroupInformation](null)
 
   override def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
     dest.addCredentials(source.getCredentials())
@@ -131,11 +132,12 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
         }).scheduleWithFixedDelay(new Runnable {
           override def run(): Unit = {
             if (!loggedInViaKeytab.get()) {
-              loginUserFromKeytab(principal, tempDir.getAbsolutePath + Path.SEPARATOR + keytab)
+              loggedInUGI.set(UserGroupInformation.loginUserFromKeytabAndReturnUGI(
+                principal, tempDir.getAbsolutePath + Path.SEPARATOR + keytab))
               loggedInViaKeytab.set(true)
             }
             val nns = getNameNodesToAccess(sparkConf) + remoteKeytabPath
-            val newCredentials = new Credentials()
+            val newCredentials = loggedInUGI.get().getCredentials
             obtainTokensForNamenodes(nns, conf, newCredentials)
             // Now write this out via Akka to executors.
             val outputStream = new ByteArrayOutputStream()
