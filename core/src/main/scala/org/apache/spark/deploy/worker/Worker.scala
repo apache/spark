@@ -345,11 +345,11 @@ private[spark] class Worker(
           }
 
           // Create local dirs for the executor. These are passed to the executor via the
-          // SPARK_LOCAL_DIRS environment variable, and deleted by the Worker when the
+          // SPARK_EXECUTOR_DIRS environment variable, and deleted by the Worker when the
           // application finishes.
           val appLocalDirs = appDirectories.get(appId).getOrElse {
             Utils.getOrCreateLocalRootDirs(conf).map { dir =>
-              Utils.createDirectory(dir).getAbsolutePath()
+              Utils.createDirectory(dir, namePrefix = "executor").getAbsolutePath()
             }.toSeq
           }
           appDirectories(appId) = appLocalDirs
