@@ -23,6 +23,8 @@ import sys
 import time
 import socket
 import traceback
+import cProfile
+import pstats
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
@@ -88,16 +90,19 @@ def main(infile, outfile):
         command = pickleSer._read_with_length(infile)
         if isinstance(command, Broadcast):
             command = pickleSer.loads(command.value)
-        (func, profiler, deserializer, serializer) = command
+        (func, stats, deserializer, serializer) = command
         init_time = time.time()
 
         def process():
             iterator = deserializer.load_stream(infile)
             serializer.dump_stream(func(split_index, iterator), outfile)
 
-        if profiler:
-            st = profiler.profile(process)
-            profiler.add(st)
+        if stats:
+            p = cProfile.Profile()
+            p.runcall(process)
+            st = pstats.Stats(p)
+            st.stream = None  # make it picklable
+            stats.add(st.strip_dirs())
         else:
             process()
     except Exception:

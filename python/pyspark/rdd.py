@@ -31,6 +31,7 @@ import bisect
 import random
 from math import sqrt, log, isinf, isnan
 
+from pyspark.accumulators import PStatsParam
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, \
     PickleSerializer, pack_long, AutoBatchedSerializer
@@ -2105,13 +2106,9 @@ class PipelinedRDD(RDD):
             return self._jrdd_val
         if self._bypass_serializer:
             self._jrdd_deserializer = NoOpSerializer()
-
-        if self.ctx.profiler_collector:
-            profiler = self.ctx.profiler_collector.new_profiler(self.ctx)
-        else:
-            profiler = None
-
-        command = (self.func, profiler, self._prev_jrdd_deserializer,
+        enable_profile = self.ctx._conf.get("spark.python.profile", "false") == "true"
+        profileStats = self.ctx.accumulator(None, PStatsParam) if enable_profile else None
+        command = (self.func, profileStats, self._prev_jrdd_deserializer,
                    self._jrdd_deserializer)
         # the serialized command will be compressed by broadcast
         ser = CloudPickleSerializer()
@@ -2134,9 +2131,9 @@ class PipelinedRDD(RDD):
                                              broadcast_vars, self.ctx._javaAccumulator)
         self._jrdd_val = python_rdd.asJavaRDD()
 
-        if profiler:
+        if enable_profile:
             self._id = self._jrdd_val.id()
-            self.ctx.profiler_collector.add_profiler(self._id, profiler)
+            self.ctx._add_profile(self._id, profileStats)
         return self._jrdd_val
 
     def id(self):
