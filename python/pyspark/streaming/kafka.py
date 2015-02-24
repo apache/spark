@@ -15,14 +15,15 @@
 # limitations under the License.
 #
 
-from py4j.java_collections import MapConverter, SetConverter
+from py4j.java_collections import ListConverter, MapConverter, SetConverter
 from py4j.java_gateway import java_import, Py4JError, Py4JJavaError
 
 from pyspark.storagelevel import StorageLevel
 from pyspark.serializers import PairDeserializer, NoOpSerializer
 from pyspark.streaming import DStream
+from pyspark.rdd import RDD
 
-__all__ = ['KafkaUtils', 'utf8_decoder']
+__all__ = ['OffsetRange', 'KafkaUtils', 'utf8_decoder']
 
 
 def utf8_decoder(s):
@@ -96,6 +97,8 @@ ________________________________________________________________________________
     def createDirectStream(ssc, brokerList, topics, kafkaParams={},
                            keyDecoder=utf8_decoder, valueDecoder=utf8_decoder):
         """
+        ..note:: experimental
+
         Create an input stream that directly pulls messages from a Kafka Broker.
 
         This is not a receiver based Kafka input stream, it directly pulls the message from Kafka
@@ -128,8 +131,8 @@ ________________________________________________________________________________
         jparam = MapConverter().convert(kafkaParams, ssc.sparkContext._gateway._gateway_client)
 
         try:
-            array = KafkaUtils._getClassByName(ssc, "[B")
-            decoder = KafkaUtils._getClassByName(ssc, "kafka.serializer.DefaultDecoder")
+            array = KafkaUtils._getClassByName(ssc._jvm, "[B")
+            decoder = KafkaUtils._getClassByName(ssc._jvm, "kafka.serializer.DefaultDecoder")
             jstream = ssc._jvm.KafkaUtils.createDirectStream(ssc._jssc, array, array, decoder,
                                                              decoder, jparam, jtopics)
         except Py4JError, e:
@@ -144,5 +147,57 @@ ________________________________________________________________________________
         return stream.map(lambda (k, v): (keyDecoder(k), valueDecoder(v)))
 
     @staticmethod
-    def _getClassByName(ssc, name):
-        return ssc._jvm.org.apache.spark.util.Utils.classForName(name)
+    def createRDD(sc, brokerList, offsetRanges, kafkaParams={},
+                  keyDecoder=utf8_decoder, valueDecoder=utf8_decoder):
+        """
+        """
+        java_import(sc._jvm, "org.apache.spark.streaming.kafka.KafkaUtils")
+
+        kafkaParams.update({"metadata.broker.list": brokerList})
+
+        joffsetRanges = ListConverter().convert([o._joffsetRange for o in offsetRanges],
+                                                sc._gateway._gateway_client)
+        jparam = MapConverter().convert(kafkaParams, sc._gateway._gateway_client)
+        try:
+            array = KafkaUtils._getClassByName(sc._jvm, "[B")
+            decoder = KafkaUtils._getClassByName(sc._jvm, "kafka.serializer.DefaultDecoder")
+            jrdd = sc._jvm.KafkaUtils.createRDD(sc._jsc, array, array, decoder, decoder,
+                                                       jparam, joffsetRanges)
+        except Py4JError, e:
+            # TODO: use --jar once it also work on driver
+            if not e.message or 'call a package' in e.message:
+                print "No kafka package, please put the assembly jar into classpath:"
+                print " $ bin/spark-submit --driver-class-path external/kafka-assembly/target/" + \
+                      "scala-*/spark-streaming-kafka-assembly-*.jar"
+            raise e
+        ser = PairDeserializer(NoOpSerializer(), NoOpSerializer())
+        rdd = RDD(jrdd, sc, ser)
+        return rdd.map(lambda (k, v): (keyDecoder(k), valueDecoder(v)))
+
+
+    @staticmethod
+    def _getClassByName(jvm, name):
+        return jvm.org.apache.spark.util.Utils.classForName(name)
+
+class OffsetRange(object):
+    """
+    Represents a range of offsets from a single Kafka TopicAndPartition.
+    """
+
+    def __init__(self, topic, partition, fromOffset, untilOffset):
+        """
+        Create a OffsetRange to represent  range of offsets
+        :param topic: Kafka topic name.
+        :param partition: Kafka partition id.
+        :param fromOffset: Inclusive starting offset.
+        :param untilOffset: Exclusive ending offset.
+        """
+        self._topic = topic
+        self._partition = partition
+        self._fromOffset = fromOffset
+        self._untilOffset = untilOffset
+
+    def _joffsetRange(self, ssc):
+        java_import(ssc._jvm, "org.apache.spark.streaming.kafka.OffsetRange")
+        return ssc._jvm.OffsetRange.create(self._topic, self._partition, self._fromOffset,
+                                           self._untilOffset)
