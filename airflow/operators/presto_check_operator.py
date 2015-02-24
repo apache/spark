@@ -1,6 +1,5 @@
 import logging
 
-from airflow.configuration import conf
 from airflow.hooks import PrestoHook
 from airflow.models import BaseOperator
 from airflow.utils import apply_defaults

@@ -2,9 +2,14 @@ from airflow import settings
 from airflow.models import Connection
 from airflow.hooks.base_hook import BaseHook
 from pyhive import presto
+from pyhive.exc import DatabaseError
 
 import logging
 logging.getLogger("pyhive").setLevel(logging.INFO)
+
+
+class PrestoException(Exception):
+    pass
 
 
 class PrestoHook(BaseHook):
@@ -56,16 +61,26 @@ class PrestoHook(BaseHook):
         '''
         Get a set of records from Presto
         '''
-        self.cursor.execute(self._strip_sql(hql), parameters)
-        return self.cursor.fetchall()
+        try:
+            self.cursor.execute(self._strip_sql(hql), parameters)
+            records = self.cursor.fetchall()
+        except DatabaseError as e:
+            obj = eval(str(e))
+            raise PrestoException(obj['message'])
+        return records
 
     def get_first(self, hql, parameters=None):
         '''
         Returns only the first row, regardless of how many rows the query
         returns.
         '''
-        self.cursor.execute(self._strip_sql(hql), parameters)
-        return self.cursor.fetchone()
+        try:
+            self.cursor.execute(self._strip_sql(hql), parameters)
+            record = self.cursor.fetchone()
+        except DatabaseError as e:
+            obj = eval(str(e))
+            raise PrestoException(obj['message'])
+        return record
 
     def get_pandas_df(self, hql, parameters=None):
         '''
