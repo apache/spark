@@ -227,40 +227,23 @@ class DAGScheduler(
   }
 
   /**
-   * Create a ShuffleMapStage as part of the (re)-creation of a shuffle map stage in
-   * newOrUsedShuffleStage.  The stage will be associated with the provide jobId.
-   * Production of shuffle map stages should always use newOrUsedShuffleStage,not
-   * newShuffleMapStage directly.
-   */
-  private def newShuffleMapStage(
-      rdd: RDD[_],
-      numTasks: Int,
-      shuffleDep: ShuffleDependency[_, _, _],
-      jobId: Int,
-      callSite: CallSite): ShuffleMapStage = {
-    val parentStages = getParentStages(rdd, jobId)
-    val id = nextStageId.getAndIncrement()
-    val stage: ShuffleMapStage = new ShuffleMapStage(id, rdd, numTasks, parentStages,
-      jobId, callSite, shuffleDep)
-
-    stageIdToStage(id) = stage
-    updateJobIdStageIdMaps(jobId, stage)
-    stage
-  }
-
-  /**
-   * Create a ResultStage -- either directly for use as a result stage, or as part of the
+   * Create a new stage -- either directly for use as a result stage, or as part of the
    * (re)-creation of a shuffle map stage in newOrUsedShuffleStage.  The stage will be associated
    * with the provided jobId.
+   * Production of shuffle map stages should always use newOrUsedShuffleStage, not newStage
+   * directly.
    */
-  private def newResultStage(
+  private def newStage[T <: Stage](
       rdd: RDD[_],
       numTasks: Int,
+      shuffleDep: Option[ShuffleDependency[_, _, _]],
       jobId: Int,
-      callSite: CallSite): ResultStage = {
+      callSite: CallSite): T = {
     val parentStages = getParentStages(rdd, jobId)
     val id = nextStageId.getAndIncrement()
-    val stage: ResultStage = new ResultStage(id, rdd, numTasks, parentStages, jobId, callSite)
+    val stage = shuffleDep.map { shufDep =>
+      new ShuffleMapStage(id, rdd, numTasks, parentStages, jobId, callSite, shufDep)
+    }.getOrElse(new ResultStage(id, rdd, numTasks, parentStages, jobId, callSite)).asInstanceOf[T]
 
     stageIdToStage(id) = stage
     updateJobIdStageIdMaps(jobId, stage)
@@ -278,7 +261,7 @@ class DAGScheduler(
       jobId: Int): ShuffleMapStage = {
     val rdd = shuffleDep.rdd
     val numTasks = rdd.partitions.size
-    val stage = newShuffleMapStage(rdd, numTasks, shuffleDep, jobId, rdd.creationSite)
+    val stage = newStage[ShuffleMapStage](rdd, numTasks, Some(shuffleDep), jobId, rdd.creationSite)
     if (mapOutputTracker.containsShuffle(shuffleDep.shuffleId)) {
       val serLocs = mapOutputTracker.getSerializedMapOutputStatuses(shuffleDep.shuffleId)
       val locs = MapOutputTracker.deserializeMapStatuses(serLocs)
@@ -734,7 +717,7 @@ class DAGScheduler(
     try {
       // New stage creation may throw an exception if, for example, jobs are run on a
       // HadoopRDD whose underlying HDFS files have been deleted.
-      finalStage = newResultStage(finalRDD, partitions.size, jobId, callSite)
+      finalStage = newStage[ResultStage](finalRDD, partitions.size,None, jobId, callSite)
     } catch {
       case e: Exception =>
         logWarning("Creating new stage failed due to exception - job: " + jobId, e)

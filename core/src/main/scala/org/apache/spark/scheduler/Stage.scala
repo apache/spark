@@ -62,7 +62,7 @@ private[spark] abstract class Stage(
 
   var pendingTasks = new HashSet[Task[_]]
 
-  private var nextAttemptId : Int = 0
+  private var nextAttemptId: Int = 0
 
   val name = callSite.shortForm
   val details = callSite.longForm
@@ -70,7 +70,7 @@ private[spark] abstract class Stage(
   /** Pointer to the latest [StageInfo] object, set by DAGScheduler. */
   var latestInfo: StageInfo = StageInfo.fromStage(this)
 
-  var numAvailableOutputs : Long = 0
+  var numAvailableOutputs: Long = 0
 
   def isAvailable: Boolean
 
