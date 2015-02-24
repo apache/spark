@@ -579,11 +579,12 @@ model = GradientBoostedTrees.trainClassifier(trainingData,
     categoricalFeaturesInfo={}, numIterations=3)
 
 # Evaluate model on test instances and compute test error
-labelAndPreds =\
-    testData.map(lambda point: (point.label, model.predict(point.features)))
-testErr = labelAndPreds.filter(lambda r: r._1 != r._2).count() / float(testData.count())
-print "Test Error = %g" % testErr
-print "Learned classification GBT model:\n" + model.toDebugString()
+predictions = model.predict(testData.map(lambda x: x.features))
+labelsAndPredictions = testData.map(lambda lp: lp.label).zip(predictions)
+testErr = labelsAndPredictions.filter(lambda (v, p): v != p).count() / float(testData.count())
+print('Test Error = ' + str(testErr))
+print('Learned classification GBT model:')
+print(model.toDebugString())
 {% endhighlight %}
 </div>
 
@@ -711,9 +712,27 @@ GradientBoostedTreesModel sameModel = GradientBoostedTreesModel.load("myModelPat
 Note that the Python API does not yet support model save/load but will in the future.
 
 {% highlight python %}
+from pyspark.mllib.tree import GradientBoostedTrees
+from pyspark.mllib.util import MLUtils
 
-TODO
+# Load and parse the data file.
+data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
+# Split the data into training and test sets (30% held out for testing)
+(trainingData, testData) = data.randomSplit([0.7, 0.3])
 
+# Train a GradientBoostedTrees model.
+#  Notes: (a) Empty categoricalFeaturesInfo indicates all features are continuous.
+#         (b) Use more iterations in practice.
+model = GradientBoostedTrees.trainRegressor(trainingData,
+    categoricalFeaturesInfo={}, numIterations=3)
+
+# Evaluate model on test instances and compute test error
+predictions = model.predict(testData.map(lambda x: x.features))
+labelsAndPredictions = testData.map(lambda lp: lp.label).zip(predictions)
+testMSE = labelsAndPredictions.map(lambda (v, p): (v - p) * (v - p)).sum() / float(testData.count())
+print('Test Mean Squared Error = ' + str(testMSE))
+print('Learned regression GBT model:')
+print(model.toDebugString())
 {% endhighlight %}
 </div>
 
