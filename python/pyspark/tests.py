@@ -547,7 +547,7 @@ class RDDTests(ReusedPySparkTestCase):
         # regress test for SPARK-5973
         a = self.sc.parallelize(range(10000)).map(lambda i: '*' * i)
         b = self.sc.parallelize(range(10000, 20000)).map(lambda i: '*' * i)
-        self.assertEqual(1000, a.zip(b).count())
+        self.assertEqual(10000, a.zip(b).count())
 
     def test_zip_with_different_number_of_items(self):
         a = self.sc.parallelize(range(5), 2)
