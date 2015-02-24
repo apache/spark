@@ -77,7 +77,8 @@ trait Catalog {
 }
 
 class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
-  val tables = new mutable.HashMap[String, LogicalPlan]()
+  import scala.collection.mutable.SynchronizedMap
+  val tables = new mutable.HashMap[String, LogicalPlan]() with SynchronizedMap[String, LogicalPlan]
 
   override def registerTable(
       tableIdentifier: Seq[String],
@@ -134,9 +135,11 @@ class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
  * lost when the JVM exits.
  */
 trait OverrideCatalog extends Catalog {
+  import scala.collection.mutable.SynchronizedMap
 
   // TODO: This doesn't work when the database changes...
   val overrides = new mutable.HashMap[(Option[String],String), LogicalPlan]()
+                    with SynchronizedMap[(Option[String],String), LogicalPlan]
 
   abstract override def tableExists(tableIdentifier: Seq[String]): Boolean = {
     val tableIdent = processTableIdentifier(tableIdentifier)
@@ -235,3 +238,5 @@ object EmptyCatalog extends Catalog {
     throw new UnsupportedOperationException
   }
 }
+
+object SimpleCaseSensitiveCatalog extends SimpleCatalog(true)

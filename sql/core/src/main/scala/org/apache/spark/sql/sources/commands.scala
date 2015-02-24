@@ -16,10 +16,10 @@
  */
 package org.apache.spark.sql.sources
 
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{CacheManager, DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.{LogicalRDD, RunnableCommand}
+import org.apache.spark.sql.execution.RunnableCommand
 
 private[sql] case class InsertIntoDataSource(
     logicalRelation: LogicalRelation,
@@ -32,7 +32,7 @@ private[sql] case class InsertIntoDataSource(
     relation.insert(DataFrame(sqlContext, query), overwrite)
 
     // Invalidate the cache.
-    sqlContext.cacheManager.invalidateCache(logicalRelation)
+    CacheManager.invalidateCache(logicalRelation)
 
     Seq.empty[Row]
   }

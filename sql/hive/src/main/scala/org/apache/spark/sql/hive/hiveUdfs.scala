@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, Project, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.catalyst.analysis.MultiAlias
+import org.apache.spark.sql.catalyst.analysis.{OverrideFunctionRegistry, MultiAlias}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 
 /* Implicit conversions */
@@ -71,6 +71,12 @@ private[hive] abstract class HiveFunctionRegistry
       sys.error(s"No handler for udf ${functionInfo.getFunctionClass}")
     }
   }
+}
+
+private[hive] object HiveCaseInsensitiveFunctionRegistry
+    extends HiveFunctionRegistry
+    with OverrideFunctionRegistry {
+  def caseSensitive = false
 }
 
 private[hive] case class HiveSimpleUdf(funcWrapper: HiveFunctionWrapper, children: Seq[Expression])

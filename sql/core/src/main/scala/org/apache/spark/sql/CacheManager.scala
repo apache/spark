@@ -34,24 +34,30 @@ private case class CachedData(plan: LogicalPlan, cachedRepresentation: InMemoryR
  * InMemoryRelation.  This relation is automatically substituted query plans that return the
  * `sameResult` as the originally cached query.
  *
+ * TODO Cached Data (Global wide V.S. Catalog Instance wide)
  * Internal to Spark SQL.
  */
-private[sql] class CacheManager(sqlContext: SQLContext) extends Logging {
+private[sql] object CacheManager extends Logging {
+  @transient
+  private[this] val cachedData = new scala.collection.mutable.ArrayBuffer[CachedData]
 
   @transient
-  private val cachedData = new scala.collection.mutable.ArrayBuffer[CachedData]
-
-  @transient
-  private val cacheLock = new ReentrantReadWriteLock
+  private[this] val cacheLock = new ReentrantReadWriteLock
 
   /** Returns true if the table is currently cached in-memory. */
-  def isCached(tableName: String): Boolean = lookupCachedData(sqlContext.table(tableName)).nonEmpty
+  private[sql] def isCached(sqlContext: SQLContext, tableName: String): Boolean = {
+    lookupCachedData(sqlContext.table(tableName)).nonEmpty
+  }
 
   /** Caches the specified table in-memory. */
-  def cacheTable(tableName: String): Unit = cacheQuery(sqlContext.table(tableName), Some(tableName))
+  private[sql] def cacheTable(sqlContext: SQLContext, tableName: String): Unit = {
+    cacheQuery(sqlContext.table(tableName), Some(tableName))
+  }
 
   /** Removes the specified table from the in-memory cache. */
-  def uncacheTable(tableName: String): Unit = uncacheQuery(sqlContext.table(tableName))
+  private[sql] def uncacheTable(sqlContext: SQLContext, tableName: String): Unit = {
+    uncacheQuery(sqlContext.table(tableName))
+  }
 
   /** Acquires a read lock on the cache for the duration of `f`. */
   private def readLock[A](f: => A): A = {
@@ -99,8 +105,8 @@ private[sql] class CacheManager(sqlContext: SQLContext) extends Logging {
         CachedData(
           planToCache,
           InMemoryRelation(
-            sqlContext.conf.useCompression,
-            sqlContext.conf.columnBatchSize,
+            query.sqlContext.conf.useCompression,
+            query.sqlContext.conf.columnBatchSize,
             storageLevel,
             query.queryExecution.executedPlan,
             tableName))
@@ -162,3 +168,4 @@ private[sql] class CacheManager(sqlContext: SQLContext) extends Logging {
     }
   }
 }
+

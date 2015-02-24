@@ -56,17 +56,17 @@ class CachedTableSuite extends QueryTest {
   }
 
   test("unpersist an uncached table will not raise exception") {
-    assert(None == cacheManager.lookupCachedData(testData))
-    testData.unpersist(blocking = true)
-    assert(None == cacheManager.lookupCachedData(testData))
-    testData.unpersist(blocking = false)
-    assert(None == cacheManager.lookupCachedData(testData))
+    assert(None == CacheManager.lookupCachedData(testData))
+    testData.unpersist(true)
+    assert(None == CacheManager.lookupCachedData(testData))
+    testData.unpersist(false)
+    assert(None == CacheManager.lookupCachedData(testData))
     testData.persist()
-    assert(None != cacheManager.lookupCachedData(testData))
-    testData.unpersist(blocking = true)
-    assert(None == cacheManager.lookupCachedData(testData))
-    testData.unpersist(blocking = false)
-    assert(None == cacheManager.lookupCachedData(testData))
+    assert(None != CacheManager.lookupCachedData(testData))
+    testData.unpersist(true)
+    assert(None == CacheManager.lookupCachedData(testData))
+    testData.unpersist(false)
+    assert(None == CacheManager.lookupCachedData(testData))
   }
 
   test("cache table as select") {
@@ -287,13 +287,13 @@ class CachedTableSuite extends QueryTest {
     cacheTable("t1")
     cacheTable("t2")
     clearCache()
-    assert(cacheManager.isEmpty)
+    assert(CacheManager.isEmpty)
 
     sql("SELECT key FROM testData LIMIT 10").registerTempTable("t1")
     sql("SELECT key FROM testData LIMIT 5").registerTempTable("t2")
     cacheTable("t1")
     cacheTable("t2")
     sql("Clear CACHE")
-    assert(cacheManager.isEmpty)
+    assert(CacheManager.isEmpty)
   }
 }

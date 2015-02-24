@@ -104,10 +104,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def getAllConfs: immutable.Map[String, String] = conf.getAllConfs
 
   @transient
-  protected[sql] lazy val catalog: Catalog = new SimpleCatalog(true)
+  protected[sql] lazy val catalog: Catalog = SimpleCaseSensitiveCatalog
 
   @transient
-  protected[sql] lazy val functionRegistry: FunctionRegistry = new SimpleFunctionRegistry(true)
+  protected[sql] lazy val functionRegistry: FunctionRegistry = SimpleCaseSentiveFunctionRegistry
 
   @transient
   protected[sql] lazy val analyzer: Analyzer =
@@ -143,9 +143,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
     case (key, value) if key.startsWith("spark.sql") => setConf(key, value)
     case _ =>
   }
-
-  @transient
-  protected[sql] val cacheManager = new CacheManager(this)
 
   /**
    * :: Experimental ::
@@ -203,24 +200,24 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Returns true if the table is currently cached in-memory.
    * @group cachemgmt
    */
-  def isCached(tableName: String): Boolean = cacheManager.isCached(tableName)
+  def isCached(tableName: String): Boolean = CacheManager.isCached(this, tableName)
 
   /**
    * Caches the specified table in-memory.
    * @group cachemgmt
    */
-  def cacheTable(tableName: String): Unit = cacheManager.cacheTable(tableName)
+  def cacheTable(tableName: String): Unit = CacheManager.cacheTable(this, tableName)
 
   /**
    * Removes the specified table from the in-memory cache.
    * @group cachemgmt
    */
-  def uncacheTable(tableName: String): Unit = cacheManager.uncacheTable(tableName)
+  def uncacheTable(tableName: String): Unit = CacheManager.uncacheTable(this, tableName)
 
   /**
    * Removes all cached tables from the in-memory cache.
    */
-  def clearCache(): Unit = cacheManager.clearCache()
+  def clearCache(): Unit = CacheManager.clearCache()
 
   // scalastyle:off
   // Disable style checker so "implicits" object can start with lowercase i
@@ -905,7 +902,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group basic
    */
   def dropTempTable(tableName: String): Unit = {
-    cacheManager.tryUncacheQuery(table(tableName))
+    CacheManager.tryUncacheQuery(table(tableName))
     catalog.unregisterTable(Seq(tableName))
   }
 
@@ -1066,7 +1063,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] class QueryExecution(val logical: LogicalPlan) {
 
     lazy val analyzed: LogicalPlan = analyzer(logical)
-    lazy val withCachedData: LogicalPlan = cacheManager.useCachedData(analyzed)
+    lazy val withCachedData: LogicalPlan = CacheManager.useCachedData(analyzed)
     lazy val optimizedPlan: LogicalPlan = optimizer(withCachedData)
 
     // TODO: Don't just pick the first one...

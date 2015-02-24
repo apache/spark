@@ -70,10 +70,10 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
     port
   }
 
-  def withJdbcStatement(
+  def withMultipleConnectionJdbcStatement(
       serverStartTimeout: FiniteDuration = 1.minute,
       httpMode: Boolean = false)(
-      f: Statement => Unit) {
+      fs: Seq[Statement => Unit]) {
     val port = randomListeningPort
 
     startThriftServer(port, serverStartTimeout, httpMode) {
@@ -85,16 +85,23 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
       }
 
       val user = System.getProperty("user.name")
-      val connection = DriverManager.getConnection(jdbcUri, user, "")
-      val statement = connection.createStatement()
+      val connections = fs.map { _ => DriverManager.getConnection(jdbcUri, user, "") }
+      val statements = connections.map(_.createStatement())
 
       try {
-        f(statement)
+        statements.zip(fs).map { case (s, f) => f(s) }
       } finally {
-        statement.close()
-        connection.close()
+        statements.map(_.close())
+        connections.map(_.close())
       }
     }
+  }
+
+  def withJdbcStatement(
+      serverStartTimeout: FiniteDuration = 1.minute,
+      httpMode: Boolean = false)(
+      f: Statement => Unit) {
+    withMultipleConnectionJdbcStatement(serverStartTimeout, httpMode)(Seq(f))
   }
 
   def withCLIServiceClient(
@@ -383,5 +390,138 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
         resultSet.getString(1)
       }
     }
+  }
+
+  test("test multiple session") {
+    import org.apache.spark.sql.SQLConf
+
+    var defaultV1: String = null
+    var defaultV2: String = null
+
+    withMultipleConnectionJdbcStatement() (Seq(
+    // create table
+    { statement =>
+      val queries = Seq(
+        "DROP TABLE IF EXISTS test_map",
+        "CREATE TABLE test_map(key INT, value STRING)",
+        s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test_map",
+        "CACHE TABLE test_table AS SELECT key FROM test_map ORDER BY key DESC")
+
+      queries.foreach(statement.execute)
+
+      val rs1 = statement.executeQuery("SELECT key FROM test_table ORDER BY KEY DESC")
+      val buf1 = new collection.mutable.ArrayBuffer[Int]()
+      while (rs1.next()) {
+        buf1 += rs1.getInt(1)
+      }
+      rs1.close()
+
+      val rs2 = statement.executeQuery("SELECT key FROM test_map ORDER BY KEY DESC")
+      val buf2 = new collection.mutable.ArrayBuffer[Int]()
+      while (rs2.next()) {
+        buf2 += rs2.getInt(1)
+      }
+      rs2.close()
+
+      assert(buf1 === buf2)
+    },
+
+    // first session, we get the default value of the session status
+    { statement =>
+      val rs1 = statement.executeQuery(s"SET ${SQLConf.SHUFFLE_PARTITIONS}")
+      rs1.next()
+      defaultV1 = rs1.getString(1)
+      assert(defaultV1 != "200")
+      rs1.close()
+
+      val rs2 = statement.executeQuery("SET hive.cli.print.header")
+      rs2.next()
+      defaultV2 = rs2.getString(1)
+      assert(defaultV1 != "true")
+      rs2.close()
+    },
+
+    // second session, we update the session status
+    { statement =>
+      val queries = Seq(
+        s"SET ${SQLConf.SHUFFLE_PARTITIONS}=291",
+        "SET hive.cli.print.header=true"
+      )
+
+      queries.map(statement.execute)
+      val rs1 = statement.executeQuery(s"SET ${SQLConf.SHUFFLE_PARTITIONS}")
+      rs1.next()
+      assert("spark.sql.shuffle.partitions=291" === rs1.getString(1))
+      rs1.close()
+
+      val rs2 = statement.executeQuery("SET hive.cli.print.header")
+      rs2.next()
+      assert("hive.cli.print.header=true" === rs2.getString(1))
+      rs2.close()
+    },
+
+    // third session, we get the latest session status, supposed to be the
+    // default value
+    { statement =>
+      val rs1 = statement.executeQuery(s"SET ${SQLConf.SHUFFLE_PARTITIONS}")
+      rs1.next()
+      assert(defaultV1 === rs1.getString(1))
+      rs1.close()
+
+      val rs2 = statement.executeQuery("SET hive.cli.print.header")
+      rs2.next()
+      assert(defaultV2 === rs2.getString(1))
+      rs2.close()
+    },
+
+    // accessing the cached data in another session
+    { statement =>
+      val rs1 = statement.executeQuery("SELECT key FROM test_table ORDER BY KEY DESC")
+      val buf1 = new collection.mutable.ArrayBuffer[Int]()
+      while (rs1.next()) {
+        buf1 += rs1.getInt(1)
+      }
+      rs1.close()
+
+      val rs2 = statement.executeQuery("SELECT key FROM test_map ORDER BY KEY DESC")
+      val buf2 = new collection.mutable.ArrayBuffer[Int]()
+      while (rs2.next()) {
+        buf2 += rs2.getInt(1)
+      }
+      rs2.close()
+
+      assert(buf1 === buf2)
+      statement.executeQuery("UNCACHE TABLE test_table")
+
+      // TODO need to figure out how to determine if the data loaded from cache
+      val rs3 = statement.executeQuery("SELECT key FROM test_map ORDER BY KEY DESC")
+      val buf3 = new collection.mutable.ArrayBuffer[Int]()
+      while (rs3.next()) {
+        buf3 += rs3.getInt(1)
+      }
+      rs3.close()
+
+      assert(buf1 === buf3)
+    },
+
+    // accessing the uncached table
+    { statement =>
+      // TODO need to figure out how to determine if the data loaded from cache
+      val rs1 = statement.executeQuery("SELECT key FROM test_table ORDER BY KEY DESC")
+      val buf1 = new collection.mutable.ArrayBuffer[Int]()
+      while (rs1.next()) {
+        buf1 += rs1.getInt(1)
+      }
+      rs1.close()
+
+      val rs2 = statement.executeQuery("SELECT key FROM test_map ORDER BY KEY DESC")
+      val buf2 = new collection.mutable.ArrayBuffer[Int]()
+      while (rs2.next()) {
+        buf2 += rs2.getInt(1)
+      }
+      rs2.close()
+
+      assert(buf1 === buf2)
+    }))
   }
 }
