@@ -568,11 +568,14 @@ private[spark] class Client(
           case Some(keytabPath) =>
             // Generate a file name that can be used for the keytab file, that does not conflict
             // with any user file.
+            logInfo("Attempting to login to the Kerberos" +
+              s" using principal: $principal and keytab: $keytabPath")
             val f = new File(keytabPath)
             keytabFileName = f.getName + "-" + System.currentTimeMillis()
             val ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytabPath)
             credentials = ugi.getCredentials
             loginFromKeytab = true
+            logInfo("Successfully logged into Kerberos.")
           case None =>
             throw new SparkException("Keytab must be specified when principal is specified.")
         }

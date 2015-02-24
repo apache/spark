@@ -76,10 +76,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
     override protected def log = CoarseGrainedSchedulerBackend.this.log
     private val addressToExecutorId = new HashMap[Address, String]
 
-    // If a principal and keytab have been set, use that to create new credentials for executors
-    // periodically
-    SparkHadoopUtil.get.scheduleLoginFromKeytab(sendNewCredentialsToExecutors _)
-
     override def preStart() {
       // Listen for remote client disconnection events, since they don't go through Akka's watch()
       context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
@@ -90,6 +86,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
       context.system.scheduler.schedule(0.millis, reviveInterval.millis, self, ReviveOffers)
     }
 
+    /**
+     * Send new credentials to executors. This is the method that is called when the scheduled
+     * login completes, so the new credentials can be sent to the executors.
+     * @param credentials
+     */
     def sendNewCredentialsToExecutors(credentials: SerializableBuffer): Unit = {
       executorDataMap.values.foreach{ x =>
         x.executorActor ! UpdateCredentials(credentials)
@@ -245,9 +246,15 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
         properties += ((key, value))
       }
     }
+
+    val driver = new DriverActor(properties)
     // TODO (prashant) send conf instead of properties
     driverActor = actorSystem.actorOf(
-      Props(new DriverActor(properties)), name = CoarseGrainedSchedulerBackend.ACTOR_NAME)
+      Props(driver), name = CoarseGrainedSchedulerBackend.ACTOR_NAME)
+
+    // If a principal and keytab have been set, use that to create new credentials for executors
+    // periodically
+    SparkHadoopUtil.get.scheduleLoginFromKeytab(driver.sendNewCredentialsToExecutors _)
   }
 
   def stopExecutors() {

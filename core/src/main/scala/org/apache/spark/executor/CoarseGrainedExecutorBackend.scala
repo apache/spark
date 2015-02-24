@@ -108,7 +108,9 @@ private[spark] class CoarseGrainedExecutorBackend(
       context.stop(self)
       context.system.shutdown()
 
+    // Add new credentials received from the driver to the current user.
     case UpdateCredentials(newCredentials) =>
+      logInfo("New credentials received from driver, adding the credentials to the current user")
       val credentials = new Credentials()
       credentials.readTokenStorageStream(
         new DataInputStream(new ByteArrayInputStream(newCredentials.value.array())))

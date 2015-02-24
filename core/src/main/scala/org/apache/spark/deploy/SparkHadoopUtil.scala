@@ -17,20 +17,14 @@
 
 package org.apache.spark.deploy
 
-import java.io.{ByteArrayInputStream, DataInputStream, DataOutputStream, ByteArrayOutputStream}
 import java.lang.reflect.Method
-import java.net.URI
-import java.nio.ByteBuffer
 import java.security.PrivilegedExceptionAction
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.{TimeUnit, ThreadFactory, Executors}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileUtil, FileStatus, FileSystem, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.fs.FileSystem.Statistics
-import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.mapred.JobConf
-import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
+import org.apache.hadoop.mapreduce.JobContext
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.UserGroupInformation
 

@@ -256,6 +256,12 @@ private[spark] class ApplicationMaster(
 
   private def runDriver(securityMgr: SecurityManager): Unit = {
     addAmIpFilter()
+
+    // This must be done before SparkContext is initialized, since the CoarseGrainedSchedulerBackend
+    // is started at that time. That is what schedules the re-logins. It is scheduled only if the
+    // principal is actually setup. So we make sure it is available.
+    SparkHadoopUtil.get.setPrincipalAndKeytabForLogin(
+      System.getenv("SPARK_PRINCIPAL"), System.getenv("SPARK_KEYTAB"))
     userClassThread = startUserApplication()
 
     // This a bit hacky, but we need to wait until the spark.driver.port property has
@@ -576,11 +582,6 @@ object ApplicationMaster extends Logging {
       master = new ApplicationMaster(amArgs, new YarnRMClient(amArgs))
       System.exit(master.run())
     }
-    // At this point, we have tokens that will expire only after a while, so we now schedule a
-    // login for some time before the tokens expire. Since the SparkContext has already started,
-    // we can now get access to the driver actor as well.
-    SparkHadoopUtil.get.setPrincipalAndKeytabForLogin(
-      System.getenv("SPARK_PRINCIPAL"), System.getenv("SPARK_KEYTAB"))
   }
 
   private[spark] def sparkContextInitialized(sc: SparkContext) = {

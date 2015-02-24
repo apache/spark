@@ -92,7 +92,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     if (credentials != null) credentials.getSecretKey(new Text(key)) else null
   }
 
-  override def setPrincipalAndKeytabForLogin(principal: String, keytab: String): Unit ={
+  override def setPrincipalAndKeytabForLogin(principal: String, keytab: String): Unit = {
     loginPrincipal = Option(principal)
     keytabFile = Option(keytab)
   }
