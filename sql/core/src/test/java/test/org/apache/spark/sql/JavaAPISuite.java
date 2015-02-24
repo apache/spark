@@ -15,10 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.api.java;
+package test.org.apache.spark.sql;
 
 import java.io.Serializable;
 
+import org.apache.spark.sql.api.java.UDF1;
+import org.apache.spark.sql.api.java.UDF2;
 import org.apache.spark.sql.test.TestSQLContext$;
 import org.junit.After;
 import org.junit.Before;
