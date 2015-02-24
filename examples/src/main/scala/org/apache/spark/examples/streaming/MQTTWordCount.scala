@@ -59,7 +59,8 @@ object MQTTPublisher {
           println(s"Published data. topic: {msgtopic.getName()}; Message: {message}")
         } catch {
           case e: MqttException if e.getReasonCode == MqttException.REASON_CODE_MAX_INFLIGHT =>
-            Thread.sleep(10) // wait for Spark streaming to consume something from the message queue
+            Thread.sleep(10) 
+            println("Queue is full, wait for to consume data from the message queue")
         }  
       }      
     } catch {
