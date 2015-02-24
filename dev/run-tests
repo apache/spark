@@ -150,7 +150,7 @@ CURRENT_BLOCK=$BLOCK_BUILD
   echo "[info] Building Spark with these arguments: $HIVE_12_BUILD_ARGS"
 
   if [ "${AMPLAB_JENKINS_BUILD_TOOL}" == "maven" ]; then
-    build/mvn $HIVE_12_BUILD_ARGS clean compile
+    build/mvn $HIVE_12_BUILD_ARGS clean package -DskipTests
   else
     # NOTE: echo "q" is needed because sbt on encountering a build file with failure
     # (either resolution or compilation) prompts the user for input either q, r, etc
@@ -170,7 +170,7 @@ CURRENT_BLOCK=$BLOCK_BUILD
   echo "[info] Building Spark with these arguments: $HIVE_BUILD_ARGS"
 
   if [ "${AMPLAB_JENKINS_BUILD_TOOL}" == "maven" ]; then
-    build/mvn $HIVE_BUILD_ARGS clean compile
+    build/mvn $HIVE_BUILD_ARGS clean package -DskipTests
   else
     echo -e "q\n" \
       | build/sbt $HIVE_BUILD_ARGS package assembly/assembly  \
