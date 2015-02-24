@@ -543,6 +543,12 @@ class RDDTests(ReusedPySparkTestCase):
         # regression test for bug in _reserializer()
         self.assertEqual(cnt, t.zip(rdd).count())
 
+    def test_zip_with_different_object_sizes(self):
+        # regress test for SPARK-5973
+        a = self.sc.parallelize(range(10000)).map(lambda i: '*' * i)
+        b = self.sc.parallelize(range(10000, 20000)).map(lambda i: '*' * i)
+        self.assertEqual(10000, a.zip(b).count())
+
     def test_zip_with_different_number_of_items(self):
         a = self.sc.parallelize(range(5), 2)
         # different number of partitions
