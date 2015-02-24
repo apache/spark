@@ -147,6 +147,7 @@ class Airflow(BaseView):
             models.Connection.conn_id)
         db_choices = [(db.conn_id, db.conn_id) for db in dbs]
         conn_id_str = request.args.get('conn_id')
+        csv = request.args.get('csv') == "true"
         sql = request.args.get('sql')
 
         class QueryForm(Form):
@@ -184,6 +185,12 @@ class Airflow(BaseView):
         if not has_data and error:
             flash('No data', 'error')
 
+        if csv:
+            return Response(
+                response=df.to_csv(index=False),
+                status=200,
+                mimetype="application/text")
+
         form = QueryForm(request.form, data=data)
         session.commit()
         session.close()
@@ -196,10 +203,11 @@ class Airflow(BaseView):
     @expose('/chart_data')
     @login_required
     @wwwutils.gzipped
-    #@cache.cached(timeout=3600, key_prefix=wwwutils.make_cache_key)
+    @cache.cached(timeout=3600, key_prefix=wwwutils.make_cache_key)
     def chart_data(self):
         session = settings.Session()
         chart_id = request.args.get('chart_id')
+        csv = request.args.get('csv') == "true"
         chart = session.query(models.Chart).filter_by(id=chart_id).all()[0]
         db = session.query(
             models.Connection).filter_by(conn_id=chart.conn_id).all()[0]
@@ -242,6 +250,12 @@ class Airflow(BaseView):
             df = hook.get_pandas_df(wwwutils.limit_sql(sql, CHART_LIMIT))
         except Exception as e:
             payload['error'] += "SQL execution failed. Details: " + str(e)
+
+        if csv:
+            return Response(
+                response=df.to_csv(index=False),
+                status=200,
+                mimetype="application/text")
 
         if not payload['error'] and len(df) == CHART_LIMIT:
             payload['warning'] = (
@@ -610,7 +624,10 @@ class Airflow(BaseView):
         dag = dagbag.dags[dag_id]
         task = copy.copy(dag.get_task(task_id))
         ti = models.TaskInstance(task=task, execution_date=dttm)
-        ti.render_templates()
+        try:
+            ti.render_templates()
+        except Exception as e:
+            flash("Error rendering template: " + str(e), "error")
         title = "{dag_id}.{task_id} [{execution_date}] rendered"
         html_dict = {}
         for template_field in task.__class__.template_fields:

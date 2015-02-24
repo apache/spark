@@ -612,19 +612,24 @@ class TaskInstance(Base):
             session.add(Log(State.FAILED, self))
 
         # Let's go deeper
-        try:
-            if self.try_number <= task.retries:
-                self.state = State.UP_FOR_RETRY
-                if task.email_on_retry and task.email:
-                    self.email_alert(error, is_retry=True)
-            else:
-                self.state = State.FAILED
-                if task.email_on_failure and task.email:
-                    self.email_alert(error, is_retry=False)
+        #try:
+        if self.try_number <= task.retries:
+            self.state = State.UP_FOR_RETRY
+            if task.email_on_retry and task.email:
+                self.email_alert(error, is_retry=True)
+        else:
+            self.state = State.FAILED
+            if task.email_on_failure and task.email:
+                self.email_alert(error, is_retry=False)
+        '''
         except Exception as e2:
             logging.error(
                 'Failed to send email to: ' + str(task.email))
             logging.error(str(e2))
+
+
+
+        '''
 
         if not test_mode:
             session.merge(self)
@@ -675,17 +680,14 @@ class TaskInstance(Base):
 
         for attr in task.__class__.template_fields:
             result = getattr(task, attr)
-            try:
-                template = self.task.get_template(attr)
-                result = template.render(**jinja_context)
-            except Exception as e:
-                logging.exception(e)
+            template = self.task.get_template(attr)
+            result = template.render(**jinja_context)
             setattr(task, attr, result)
 
     def email_alert(self, exception, is_retry=False):
         task = self.task
         title = "Airflow alert: {self}".format(**locals())
-        exception = exception.replace('\n', '<br>')
+        exception = str(exception).replace('\n', '<br>')
         try_ = task.retries + 1
         body = (
             "Try {self.try_number} out of {try_}<br>"
@@ -880,7 +882,7 @@ class BaseOperator(Base):
         if hasattr(self, 'dag'):
             env = self.dag.get_template_env()
         else:
-            env = jinja2.Environment()
+            env = jinja2.Environment(cache_size=0)
 
         exts = self.__class__.template_ext
         if any([content.endswith(ext) for ext in exts]):
