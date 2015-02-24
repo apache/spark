@@ -41,8 +41,7 @@ else
 fi
 
 # Look for the launcher. In non-release mode, add the compiled classes directly to the classpath
-# instead of looking for a jar file, since it's very common for people using sbt to use the
-# "assembly" target instead of "package".
+# instead of looking for a jar file.
 SPARK_LAUNCHER_CP=
 if [ -f $SPARK_HOME/RELEASE ]; then
   LAUNCHER_DIR="$SPARK_HOME/lib"
@@ -72,8 +71,9 @@ else
   SPARK_LAUNCHER_CP="$LAUNCHER_DIR/classes"
 fi
 
-# The launcher library will print arguments separated by a NULL character. Read that in a while
-# loop, populating an array that will be used to exec the final command.
+# The launcher library will print arguments separated by a NULL character, to allow arguments with
+# characters that would be otherwise interpreted by the shell. Read that in a while loop, populating
+# an array that will be used to exec the final command.
 CMD=()
 while IFS= read -d '' -r ARG; do
   CMD+=("$ARG")
