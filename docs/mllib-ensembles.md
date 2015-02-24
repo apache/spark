@@ -434,7 +434,7 @@ training. The method runWithValidation has been provided to make use of this opt
 first one being the training dataset and the second being the validation dataset.
 
 The training is stopped when the improvement in the validation error is not more than a certain tolerance
-(supplied by the validationTol argument in BoostingStrategy). In practice, the validation error
+(supplied by the `validationTol` argument in `BoostingStrategy`). In practice, the validation error
 decreases initially and later increases. There might be cases in which the validation error does not change monotonically,
 and the user is advised to set a large enough negative tolerance and examine the validation curve to to tune the number of
 iterations.

@@ -236,7 +236,7 @@ object GradientBoostedTrees extends Logging {
             boostingStrategy.treeStrategy.algo,
             baseLearners.slice(0, bestM),
             baseLearnerWeights.slice(0, bestM))
-        } else if (currentValidateError < bestValidateError){
+        } else if (currentValidateError < bestValidateError) {
             bestValidateError = currentValidateError
             bestM = m + 1
         }

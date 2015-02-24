@@ -38,7 +38,6 @@ import org.apache.spark.mllib.tree.loss.{LogLoss, SquaredError, Loss}
  *                      validation input between two iterations is less than the validationTol
  *                      then stop. Ignored when [[run]] is used.
  */
-
 @Experimental
 case class BoostingStrategy(
     // Required boosting parameters
