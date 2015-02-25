@@ -1062,10 +1062,9 @@ setGeneric("repartition", function(rdd, numPartitions) { standardGeneric("repart
 #' @rdname repartition
 #' @aliases repartition,RDD
 setMethod("repartition",
-          signature(rdd = "RDD", numPartitions = "integer"),
+          signature(rdd = "RDD", numPartitions = "numeric"),
           function(rdd, numPartitions) {
-            jrdd <- callJMethod(getJRDD(rdd), "repartition", numPartitions)
-            RDD(jrdd)
+            coalesce(rdd, numPartitions, TRUE)
           })
 
 #' Return a new RDD that is reduced into numPartitions partitions.
@@ -1087,10 +1086,28 @@ setGeneric("coalesce", function(rdd, numPartitions, ...) { standardGeneric("coal
 #' @rdname coalesce
 #' @aliases coalesce,RDD
 setMethod("coalesce",
-           signature(rdd = "RDD", numPartitions = "integer"),
+           signature(rdd = "RDD", numPartitions = "numeric"),
            function(rdd, numPartitions, shuffle = FALSE) {
-             jrdd <- callJMethod(getJRDD(rdd), "coalesce", numPartitions, shuffle)
-             RDD(jrdd)
+             if(as.integer(numPartitions) != numPartitions) {
+              warning("Number of partitions should be an integer. Coercing it to integer.")
+             }
+             numPartitionsm <- as.integer(numPartitions)
+             if (shuffle || numPartitions > SparkR::numPartitions(rdd)) {
+                func <- function(s, part) {
+                 set.seed(s)  # split as seed
+                 lapply(part,
+                        function(v) {
+                          k <- as.integer(runif(1, 0, numPartitions))
+                          list(k, v)
+                        })
+               }
+               shuffled <- lapplyPartitionsWithIndex(rdd, func)
+               reparted <- partitionBy(shuffled, numPartitions)
+               values(reparted)
+             } else {
+               jrdd <- callJMethod(getJRDD(rdd), "coalesce", numPartitions, shuffle)
+               RDD(jrdd)
+             }
            })
 
 #' Save this RDD as a SequenceFile of serialized objects.
