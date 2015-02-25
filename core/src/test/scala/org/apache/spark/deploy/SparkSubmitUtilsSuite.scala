@@ -19,12 +19,16 @@ package org.apache.spark.deploy
 
 import java.io.{PrintStream, OutputStream, File}
 
+import org.apache.spark.util.Utils
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 import org.apache.ivy.core.module.descriptor.MDArtifact
 import org.apache.ivy.plugins.resolver.IBiblioResolver
+
+import org.apache.spark.TestUtils
 
 class SparkSubmitUtilsSuite extends FunSuite with BeforeAndAfterAll {
 
@@ -117,8 +121,19 @@ class SparkSubmitUtilsSuite extends FunSuite with BeforeAndAfterAll {
   }
 
   test("neglects Spark and Spark's dependencies") {
+    val components = Seq("bagel_", "catalyst_", "core_", "graphx_", "hive_", "mllib_", "repl_",
+      "sql_", "streaming_", "yarn_", "network-common_", "network-shuffle_", "network-yarn_")
+    
+    val coordinates = 
+      components.map(comp => s"org.apache.spark:spark-${comp}2.10:1.2.0").mkString(",")
     val path = SparkSubmitUtils.resolveMavenCoordinates(
-      "org.apache.spark:spark-core_2.10:1.2.0", None, None, true)
+      coordinates, None, None, true)
     assert(path === "", "should return empty path")
+    // Should not exclude the following dependency. Will throw an error, because it doesn't exist, 
+    // but the fact that it is checking means that it wasn't excluded.
+    intercept[RuntimeException] {
+      SparkSubmitUtils.resolveMavenCoordinates(coordinates + 
+        ",org.apache.spark:spark-streaming-kafka-assembly_2.10:1.2.0", None, None, true)
+    }
   }
 }
