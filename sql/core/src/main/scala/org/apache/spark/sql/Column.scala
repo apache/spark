@@ -600,7 +600,11 @@ class Column(protected[sql] val expr: Expression) {
    *
    * @group expr_ops
    */
-  def cast(to: DataType): Column = Cast(expr, to)
+  def cast(to: DataType): Column = expr match {
+    // Lift alias out of cast so we can support col.as("name").cast(IntegerType)
+    case Alias(childExpr, name) => Alias(Cast(childExpr, to), name)()
+    case _ => Cast(expr, to)
+  }
 
   /**
    * Casts the column to a different data type, using the canonical string representation
@@ -613,7 +617,7 @@ class Column(protected[sql] val expr: Expression) {
    *
    * @group expr_ops
    */
-  def cast(to: String): Column = Cast(expr, to.toLowerCase match {
+  def cast(to: String): Column = cast(to.toLowerCase match {
     case "string" | "str" => StringType
     case "boolean" => BooleanType
     case "byte" => ByteType
@@ -671,6 +675,11 @@ class Column(protected[sql] val expr: Expression) {
 }
 
 
+/**
+ * :: Experimental ::
+ * A convenient class used for constructing schema.
+ */
+@Experimental
 class ColumnName(name: String) extends Column(name) {
 
   /** Creates a new AttributeReference of type boolean */

@@ -240,6 +240,10 @@ class DataFrameSuite extends QueryTest {
       Seq(Row(1,1), Row(1,2), Row(2,1), Row(2,2), Row(3,1), Row(3,2)))
 
     checkAnswer(
+      testData2.orderBy(asc("a"), desc("b")),
+      Seq(Row(1,2), Row(1,1), Row(2,2), Row(2,1), Row(3,2), Row(3,1)))
+
+    checkAnswer(
       testData2.orderBy('a.asc, 'b.desc),
       Seq(Row(1,2), Row(1,1), Row(2,2), Row(2,1), Row(3,2), Row(3,1)))
 
