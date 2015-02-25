@@ -75,7 +75,6 @@ d3.csv(url, function(raw_data) {
   // Populating field list
   fields = Object.keys(raw_data[0]).slice(2);
   fields.push("group");
-  console.log(fields);
   d3.select("#fields")
     .on("change", function(){
         var sel = document.getElementById('fields');
@@ -394,8 +393,6 @@ function set_color_scaler(field) {
     med = d3.median(selected, function(d){return d[color_column]});
     arr = [ext[0], med, ext[1]];
     color_scaler = d3.scale.linear().range(['#FF5A5F', 'grey', '#007A87']).domain(arr);
-    console.log(color_column);
-    console.log(color_scaler);
 }
 
 function color(d, a){
@@ -419,7 +416,6 @@ function color_cat(cat,a) {
   }
   var c = colors[cat];
   col = ["rgba(",c[0],",",c[1],",",c[2],",",a,")"].join("")
-  console.log(col);
 
   return col;
 }
