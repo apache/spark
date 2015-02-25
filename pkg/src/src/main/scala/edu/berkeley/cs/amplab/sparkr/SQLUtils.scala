@@ -16,6 +16,10 @@ object SQLUtils {
     new SQLContext(sc)
   }
 
+  def toSeq[T](arr: Array[T]): Seq[T] = {
+    arr.toSeq
+  }
+
   def dfToRowRDD(df: DataFrame): JavaRDD[Array[Byte]] = {
     df.map(r => rowToRBytes(r))
   }

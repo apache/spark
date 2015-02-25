@@ -143,4 +143,21 @@ test_that("multiple pipeline transformations starting with a DataFrame result in
   expect_false(collect(second)[[3]]$testCol)
 })
 
+test_that("group by", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  df1 <- agg(df, name="max", age="sum")
+  expect_true(1 == count(df1))
+
+  gd <- groupBy(df, "name")
+  expect_true(inherits(gd, "GroupedData"))
+  df2 <- count(gd)
+  expect_true(inherits(df2, "DataFrame"))
+  expect_true(3 == count(df2))
+
+  df3 <- agg(gd, age = "sum")
+  expect_true(inherits(df2, "DataFrame"))
+  expect_true(3 == count(df2))
+})
+
+
 unlink(jsonPath)

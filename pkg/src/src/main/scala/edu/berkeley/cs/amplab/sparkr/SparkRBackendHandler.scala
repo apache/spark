@@ -1,5 +1,7 @@
 package edu.berkeley.cs.amplab.sparkr
 
+import org.apache.spark.Logging
+
 import scala.collection.mutable.HashMap
 
 import java.io.ByteArrayInputStream
@@ -19,7 +21,8 @@ import edu.berkeley.cs.amplab.sparkr.SerDe._
  * this across connections ?
  */
 @Sharable
-class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHandler[Array[Byte]] {
+class SparkRBackendHandler(server: SparkRBackend)
+  extends SimpleChannelInboundHandler[Array[Byte]] with Logging {
 
   override def channelRead0(ctx: ChannelHandlerContext, msg: Array[Byte]) {
     val bis = new ByteArrayInputStream(msg)
@@ -100,11 +103,13 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
       val methods = cls.get.getMethods
       val selectedMethods = methods.filter(m => m.getName == methodName)
       if (selectedMethods.length > 0) {
-        val selectedMethod = selectedMethods.filter { x => 
+        val methods = selectedMethods.filter { x =>
           matchMethod(numArgs, args, x.getParameterTypes)
-        }.head
-
-        val ret = selectedMethod.invoke(obj, args:_*)
+        }
+        if (methods.isEmpty) {
+          throw new Exception(s"No matched method found for $methodName")
+        }
+        val ret = methods.head.invoke(obj, args:_*)
 
         // Write status bit
         writeInt(dos, 0)
@@ -160,6 +165,7 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
         }
       }
       if (!parameterWrapperType.isInstance(args(i))) {
+        logInfo(s"type $parameterWrapperType not match with ${args(i)}")
         return false
       }
     }

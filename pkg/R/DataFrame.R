@@ -224,6 +224,28 @@ setMethod("toRDD",
             })
           })
 
+setGeneric("groupBy", function(df, ...) { standardGeneric("groupBy") })
+
+setMethod("groupBy",
+           signature(df = "DataFrame"),
+           function(df, col, ...) {
+             jseq <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "toSeq", list(...))
+             sgd <- callJMethod(df@sdf, "groupBy", col, jseq)
+             groupedData(sgd)
+           })
+
+
+setGeneric("agg", function (df, ...) { standardGeneric("agg") })
+
+setMethod("agg",
+          signature(df = "DataFrame"),
+          function(df, ...) {
+            cols <- varargsToEnv(...)
+            sdf <- callJMethod(df@sdf, "agg", cols)
+            dataFrame(sdf)
+          })
+
+
 ############################## RDD Map Functions ##################################
 # All of the following functions mirror the existing RDD map functions,           #
 # but allow for use with DataFrames by first converting to an RRDD before calling #
@@ -276,3 +298,37 @@ setMethod("foreachPartition",
             rddIn <- toRDD(rdd)
             foreachPartition(rddIn, func)
           })
+
+
+############################## GroupedData ########################################
+
+setClass("GroupedData",
+         slots = list(env = "environment",
+                      sgd = "jobj"))
+
+setMethod("initialize", "GroupedData", function(.Object, sgd) {
+  .Object@env <- new.env()
+  .Object@sgd <- sgd
+  .Object
+})
+
+groupedData <- function(sgd) {
+  new("GroupedData", sgd)
+}
+
+setMethod("count",
+          signature(x = "GroupedData"),
+          function(x) {
+            dataFrame(callJMethod(x@sgd, "count"))
+          })
+
+setMethod("agg",
+          signature(df = "GroupedData"),
+          function(df, ...) {
+            cols <- varargsToEnv(...)
+            sdf <- callJMethod(df@sgd, "agg", cols)
+            dataFrame(sdf)
+          })
+
+
+
