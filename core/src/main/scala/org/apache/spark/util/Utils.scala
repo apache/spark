@@ -686,19 +686,17 @@ private[spark] object Utils extends Logging {
       // user has access to them.
       getYarnLocalDirs(conf).split(",")
     } else {
-      // In non-Yarn mode (or for the driver in yarn-client mode), we cannot trust the user
-      // configuration to point to a secure directory. So create a subdirectory with restricted
-      // permissions under each listed directory.
       Option(conf.getenv("SPARK_LOCAL_DIRS"))
         .getOrElse(conf.get("spark.local.dir", System.getProperty("java.io.tmpdir")))
         .split(",")
         .flatMap { root =>
           try {
             val rootDir = new File(root)
-            if (rootDir.exists || rootDir.mkdirs()) {
-              val dir = createDirectory(root)
-              chmod700(dir)
-              Some(dir.getAbsolutePath)
+            if (rootDir.exists) {
+              Some(rootDir.getAbsolutePath)
+            } else if (rootDir.mkdirs()) {
+              chmod700(rootDir)
+              Some(rootDir.getAbsolutePath)
             } else {
               logError(s"Failed to create dir in $root. Ignoring this directory.")
               None
