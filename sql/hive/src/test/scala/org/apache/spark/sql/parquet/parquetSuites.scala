@@ -411,7 +411,7 @@ class ParquetSourceSuiteBase extends ParquetPartitioningTest {
     """)
   }
 
-  test("SPARK-6016 make sure to use the latest footers are used") {
+  test("SPARK-6016 make sure to use the latest footers") {
     sql("drop table if exists spark_6016_fix")
 
     // Create a DataFrame with two partitions. So, the created table will have two parquet files.

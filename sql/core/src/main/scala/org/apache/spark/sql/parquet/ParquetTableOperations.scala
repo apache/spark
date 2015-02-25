@@ -374,8 +374,6 @@ private[parquet] class AppendingParquetOutputFormat(offset: Int)
 private[parquet] class FilteringParquetRowInputFormat
   extends parquet.hadoop.ParquetInputFormat[Row] with Logging {
 
-  private var footers: JList[Footer] = _
-
   private var fileStatuses = Map.empty[Path, FileStatus]
 
   override def createRecordReader(
@@ -396,46 +394,15 @@ private[parquet] class FilteringParquetRowInputFormat
     }
   }
 
-  override def getFooters(jobContext: JobContext): JList[Footer] = {
-    import org.apache.spark.sql.parquet.FilteringParquetRowInputFormat.footerCache
+  // This is only a temporary solution sicne we need to use fileStatuses in
+  // both getClientSideSplits and getTaskSideSplits. It can be removed once we get rid of these
+  // two methods.
+  override def getSplits(jobContext: JobContext): JList[InputSplit] = {
+    // First set fileStatuses.
+    val statuses = listStatus(jobContext)
+    fileStatuses = statuses.map(file => file.getPath -> file).toMap
 
-    if (footers eq null) {
-      val conf = ContextUtil.getConfiguration(jobContext)
-      val cacheMetadata = conf.getBoolean(SQLConf.PARQUET_CACHE_METADATA, true)
-      val statuses = listStatus(jobContext)
-      fileStatuses = statuses.map(file => file.getPath -> file).toMap
-      if (statuses.isEmpty) {
-        footers = Collections.emptyList[Footer]
-      } else if (!cacheMetadata) {
-        // Read the footers from HDFS
-        footers = getFooters(conf, statuses)
-      } else {
-        // Read only the footers that are not in the footerCache
-        val foundFooters = footerCache.getAllPresent(statuses)
-        val toFetch = new ArrayList[FileStatus]
-        for (s <- statuses) {
-          if (!foundFooters.containsKey(s)) {
-            toFetch.add(s)
-          }
-        }
-        val newFooters = new mutable.HashMap[FileStatus, Footer]
-        if (toFetch.size > 0) {
-          val startFetch = System.currentTimeMillis
-          val fetched = getFooters(conf, toFetch)
-          logInfo(s"Fetched $toFetch footers in ${System.currentTimeMillis - startFetch} ms")
-          for ((status, i) <- toFetch.zipWithIndex) {
-            newFooters(status) = fetched.get(i)
-          }
-          footerCache.putAll(newFooters)
-        }
-        footers = new ArrayList[Footer](statuses.size)
-        for (status <- statuses) {
-          footers.add(newFooters.getOrElse(status, foundFooters.get(status)))
-        }
-      }
-    }
-
-    footers
+    super.getSplits(jobContext)
   }
 
   // TODO Remove this method and related code once PARQUET-16 is fixed
