@@ -84,7 +84,13 @@ exportClasses("DataFrame")
 exportMethods("printSchema",
               "registerTempTable",
               "toRDD",
+              "groupBy",
+              "agg",
               "limit")
+
+exportClasses("GroupedData")
+exportMethods("count", "agg")
+
 
 export("jsonFile",
        "parquetFile",
