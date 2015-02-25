@@ -45,14 +45,16 @@ private[spark] class MasterArguments(args: Array[String], conf: SparkConf) {
       .orElse(Option(conf.getenv("SPARK_MASTER_HOST")))
       .getOrElse(Utils.localHostName())
     if (port < 0) {
-      port = conf.getOption("spark.master.port").map(_.toInt)
-        .orElse(Option(conf.getenv("SPARK_MASTER_PORT")).map(_.toInt))
-        .getOrElse(7077)
+      port = conf.getOption("spark.master.port")
+        .orElse(Option(conf.getenv("SPARK_MASTER_PORT")))
+        .getOrElse("7077")
+        .toInt
     }
     if (webUiPort < 0) {
-      webUiPort = conf.getOption("spark.master.ui.port").map(_.toInt)
-        .orElse(Option(conf.getenv("SPARK_MASTER_WEBUI_PORT")).map(_.toInt))
-        .getOrElse(8080)
+      webUiPort = conf.getOption("spark.master.ui.port")
+        .orElse(Option(conf.getenv("SPARK_MASTER_WEBUI_PORT")))
+        .getOrElse("8080")
+        .toInt
     }
   }
 

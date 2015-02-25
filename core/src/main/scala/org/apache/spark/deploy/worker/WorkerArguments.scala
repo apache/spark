@@ -51,14 +51,16 @@ private[spark] class WorkerArguments(args: Array[String], conf: SparkConf) {
       .orElse(conf.getOption("spark.worker.host"))
       .getOrElse(Utils.localHostName())
     if (port < 0) {
-      port = conf.getOption("spark.worker.port").map(_.toInt)
-        .orElse(Option(conf.getenv("SPARK_WORKER_PORT")).map(_.toInt))
-        .getOrElse(0)
+      port = conf.getOption("spark.worker.port")
+        .orElse(Option(conf.getenv("SPARK_WORKER_PORT")))
+        .getOrElse("0")
+        .toInt
     }
     if (webUiPort < 0) {
-      webUiPort = conf.getOption("spark.worker.ui.port").map(_.toInt)
-        .orElse(Option(conf.getenv("SPARK_WORKER_WEBUI_PORT")).map(_.toInt))
-        .getOrElse(8081)
+      webUiPort = conf.getOption("spark.worker.ui.port")
+        .orElse(Option(conf.getenv("SPARK_WORKER_WEBUI_PORT")))
+        .getOrElse("8081")
+        .toInt
     }
     if (cores < 0) {
       cores = Option(conf.getenv("SPARK_WORKER_CORES")).map(_.toInt)
