@@ -315,7 +315,14 @@ abstract class HiveThriftServer2Test extends FunSuite with BeforeAndAfterAll wit
 
     logInfo(s"Trying to start HiveThriftServer2: port=$port, mode=$mode, attempt=$attempt")
 
-    logPath = Process(command, None, "SPARK_TESTING" -> "0").lines.collectFirst {
+    val env = Seq(
+      // Disables SPARK_TESTING to exclude log4j.properties in test directories.
+      "SPARK_TESTING" -> "0",
+      // Points SPARK_PID_DIR to SPARK_HOME, otherwise only 1 Thrift server instance can be started
+      // at a time, which is not Jenkins friendly.
+      "SPARK_PID_DIR" -> "../../")
+
+    logPath = Process(command, None, env: _*).lines.collectFirst {
       case line if line.contains(LOG_FILE_MARK) => new File(line.drop(LOG_FILE_MARK.length))
     }.getOrElse {
       throw new RuntimeException("Failed to find HiveThriftServer2 log file.")
@@ -346,7 +353,7 @@ abstract class HiveThriftServer2Test extends FunSuite with BeforeAndAfterAll wit
 
   private def stopThriftServer(): Unit = {
     // The `spark-daemon.sh' script uses kill, which is not synchronous, have to wait for a while.
-    Process(stopScript, None).run().exitValue()
+    Process(stopScript, None, "SPARK_PID_DIR" -> "../../").run().exitValue()
     Thread.sleep(3.seconds.toMillis)
 
     warehousePath.delete()
