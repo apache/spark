@@ -150,7 +150,7 @@ class PageRankSuite extends FunSuite with LocalSparkContext {
       val resetProb = 0.15
       val tol = 0.0001
       val numIter = 10
-      val errorTol = 1.0e-1
+      val errorTol = 1.0e-5
 
       val staticRanks = chain.staticPageRank(numIter, resetProb).vertices
       val dynamicRanks = chain.pageRank(tol, resetProb).vertices
@@ -166,8 +166,8 @@ class PageRankSuite extends FunSuite with LocalSparkContext {
       val chain = Graph.fromEdgeTuples(rawEdges, 1.0).cache()
       val resetProb = 0.15
       val tol = 0.0001
-      val numIter = 5
-      val errorTol = 1.0e-5
+      val numIter = 10
+      val errorTol = 1.0e-1
 
       val staticRanks = chain.staticPersonalizedPageRank(4, numIter, resetProb).vertices
       val dynamicRanks = chain.personalizedPageRank(4, tol, resetProb).vertices
