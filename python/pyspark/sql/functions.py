@@ -48,6 +48,9 @@ _functions = {
     'lit': 'Creates a :class:`Column` of literal value.',
     'col': 'Returns a :class:`Column` based on the given column name.',
     'column': 'Returns a :class:`Column` based on the given column name.',
+    'asc': 'Returns a sort expression based on the ascending order of the given column name.',
+    'desc': 'Returns a sort expression based on the descending order of the given column name.',
+
     'upper': 'Converts a string expression to upper case.',
     'lower': 'Converts a string expression to upper case.',
     'sqrt': 'Computes the square root of the specified float value.',
