@@ -715,12 +715,8 @@ private[spark] object Utils extends Logging {
 
   /** Get the Yarn approved local directories. */
   private def getYarnLocalDirs(conf: SparkConf): String = {
-    // Hadoop 0.23 and 2.x have different Environment variable names for the
-    // local dirs, so lets check both. We assume one of the 2 is set.
-    // LOCAL_DIRS => 2.X, YARN_LOCAL_DIRS => 0.23.X
-    val localDirs = Option(conf.getenv("YARN_LOCAL_DIRS"))
-      .getOrElse(Option(conf.getenv("LOCAL_DIRS"))
-      .getOrElse(""))
+    //YarnLocalDirs must be inside container directory. Since it will be automatically deleted when container shut downs.
+    val localDirs = Option(System.getProperty("user.dir")).getOrElse(""))
 
     if (localDirs.isEmpty) {
       throw new Exception("Yarn Local dirs can't be empty")
