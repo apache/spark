@@ -132,7 +132,9 @@ private[spark] class EventLoggingListener(
     writer.foreach(_.println(compact(render(eventJson))))
     if (flushLogger) {
       writer.foreach(_.flush())
-      hadoopDataStream.foreach(hadoopFlushMethod.invoke(_))
+      if (!Utils.inShutdown()) {
+        hadoopDataStream.foreach(hadoopFlushMethod.invoke(_))
+      }
     }
     if (testing) {
       loggedEvents += eventJson
@@ -183,16 +185,18 @@ private[spark] class EventLoggingListener(
   def stop() = {
     writer.foreach(_.close())
 
-    val target = new Path(logPath)
-    if (fileSystem.exists(target)) {
-      if (shouldOverwrite) {
-        logWarning(s"Event log $target already exists. Overwriting...")
-        fileSystem.delete(target, true)
-      } else {
-        throw new IOException("Target log file already exists (%s)".format(logPath))
+    if (!Utils.inShutdown()) {
+      val target = new Path(logPath)
+      if (fileSystem.exists(target)) {
+        if (shouldOverwrite) {
+          logWarning(s"Event log $target already exists. Overwriting...")
+          fileSystem.delete(target, true)
+        } else {
+          throw new IOException("Target log file already exists (%s)".format(logPath))
+        }
       }
+      fileSystem.rename(new Path(logPath + IN_PROGRESS), target)
     }
-    fileSystem.rename(new Path(logPath + IN_PROGRESS), target)
   }
 
 }
