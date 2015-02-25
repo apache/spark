@@ -106,8 +106,6 @@ readDeserializeRows <- function(inputCon) {
   # a list of lists. Since the DOS is one continuous stream and
   # the number of rows varies, we put the readRow function in a while loop
   # that termintates when the next row is empty.
-  colNames <- readList(inputCon)
-
   data <- list()
   numCols <- readInt(inputCon)
   # We write a length for each row out
@@ -115,8 +113,7 @@ readDeserializeRows <- function(inputCon) {
     data[[length(data) + 1L]] <- readRow(inputCon, numCols)
     numCols <- readInt(inputCon)
   }
-  dataOut <- lapply(data, assignNames, colNames)
-  dataOut # this is a list of named lists now
+  data # this is a list of named lists now
 }
 
 readRowList <- function(obj) {
@@ -140,11 +137,6 @@ readRow <- function(inputCon, numCols) {
       obj
     }
   }) # each row is a list now
-}
-
-assignNames <- function(row, colNames) {
-  names(row) <- colNames
-  row
 }
 
 # Take a single column as Array[Byte] and deserialize it into an atomic vector

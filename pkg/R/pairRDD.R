@@ -234,7 +234,6 @@ setMethod("partitionBy",
                                        packageNamesArr,
                                        as.character(.sparkREnv$libname),
                                        broadcastArr,
-                                       rdd@colNames,
                                        callJMethod(jrdd, "classTag"))
 
             # Create a corresponding partitioner.

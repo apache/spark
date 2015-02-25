@@ -10,13 +10,11 @@ setOldClass("jobj")
 #'
 #' @slot env An R environment that stores bookkeeping states of the RDD
 #' @slot jrdd Java object reference to the backing JavaRDD
-#' @slot colNames A list of column names used when converting a DataFrame
 #' to an RDD
 #' @export
 setClass("RDD",
          slots = list(env = "environment",
-                      jrdd = "jobj",
-                      colNames = "list"))
+                      jrdd = "jobj"))
 
 setClass("PipelinedRDD",
          slots = list(prev = "RDD",
@@ -25,7 +23,7 @@ setClass("PipelinedRDD",
          contains = "RDD")
 
 setMethod("initialize", "RDD", function(.Object, jrdd, serializedMode,
-                                        isCached, isCheckpointed, colNames) {
+                                        isCached, isCheckpointed) {
   # Check that RDD constructor is using the correct version of serializedMode
   stopifnot(class(serializedMode) == "character")
   stopifnot(serializedMode %in% c("byte", "string", "row"))
@@ -47,8 +45,6 @@ setMethod("initialize", "RDD", function(.Object, jrdd, serializedMode,
   .Object@env$isCheckpointed <- isCheckpointed
   .Object@env$serializedMode <- serializedMode
 
-  .Object@colNames <- colNames
-
   .Object@jrdd <- jrdd
   .Object
 })
@@ -59,11 +55,9 @@ setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) 
   .Object@env$isCheckpointed <- FALSE
   .Object@env$jrdd_val <- jrdd_val
   if (!is.null(jrdd_val)) {
-     # This tracks the serialization mode for jrdd_val
+    # This tracks the serialization mode for jrdd_val
     .Object@env$serializedMode <- prev@env$serializedMode
   }
-  
-  .Object@colNames <- prev@colNames
 
   .Object@prev <- prev
 
@@ -79,8 +73,6 @@ setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) 
     .Object@env$prev_serializedMode <- prev@env$serializedMode
     # NOTE: We use prev_serializedMode to track the serialization mode of prev_JRDD
     # prev_serializedMode is used during the delayed computation of JRDD in getJRDD
-
-    .Object@colNames <- prev@colNames
   } else {
     pipelinedFunc <- function(split, iterator) {
       func(split, prev@func(split, iterator))
@@ -90,7 +82,6 @@ setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) 
     # Get the serialization mode of the parent RDD
     .Object@env$prev_serializedMode <- prev@env$prev_serializedMode
     
-    .Object@colNames <- prev@colNames
   }
 
   .Object
@@ -104,10 +95,9 @@ setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) 
 #' stores strings, and "row" if the RDD stores the rows of a DataFrame
 #' @param isCached TRUE if the RDD is cached
 #' @param isCheckpointed TRUE if the RDD has been checkpointed
-#' @param colNames A list of column names to be used with serializedMode == "row"
 RDD <- function(jrdd, serializedMode = "byte", isCached = FALSE,
-                isCheckpointed = FALSE, colNames = list()) {
-  new("RDD", jrdd, serializedMode, isCached, isCheckpointed, colNames)
+                isCheckpointed = FALSE) {
+  new("RDD", jrdd, serializedMode, isCached, isCheckpointed)
 }
 
 PipelinedRDD <- function(prev, func) {
@@ -167,7 +157,6 @@ setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
                                    packageNamesArr,
                                    as.character(.sparkREnv[["libname"]]),
                                    broadcastArr,
-                                   rdd@colNames,
                                    callJMethod(prev_jrdd, "classTag"))
             } else {
               rddRef <- newJObject("edu.berkeley.cs.amplab.sparkr.RRDD",
@@ -178,7 +167,6 @@ setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
                                    packageNamesArr,
                                    as.character(.sparkREnv[["libname"]]),
                                    broadcastArr,
-                                   rdd@colNames,
                                    callJMethod(prev_jrdd, "classTag"))
             }
             # Save the serialization flag after we create a RRDD
@@ -391,7 +379,7 @@ setMethod("collect",
             # Assumes a pairwise RDD is backed by a JavaPairRDD.
             collected <- callJMethod(getJRDD(rdd), "collect")
             convertJListToRList(collected, flatten,
-              serializedMode = getSerializedMode(rdd), colNames = rdd@colNames)
+              serializedMode = getSerializedMode(rdd))
           })
 
 
@@ -417,7 +405,7 @@ setMethod("collectPartition",
 
             jList <- jPartitionsList[[1]]
             convertJListToRList(jList, flatten = TRUE,
-              serializedMode = getSerializedMode(rdd), colNames = rdd@colNames)
+              serializedMode = getSerializedMode(rdd))
           })
 
 #' @rdname collect-methods
@@ -873,8 +861,7 @@ setMethod("take",
               elems <- convertJListToRList(partition,
                                            flatten = TRUE,
                                            logicalUpperBound = size,
-                                           serializedMode = getSerializedMode(rdd),
-                                           colNames = rdd@colNames)
+                                           serializedMode = getSerializedMode(rdd))
               # TODO: Check if this append is O(n^2)?
               resList <- append(resList, elems)
             }
@@ -1386,7 +1373,7 @@ setMethod("unionRDD",
           function(x, y) {
             if (getSerializedMode(x) == getSerializedMode(y)) {
               jrdd <- callJMethod(getJRDD(x), "union", getJRDD(y))
-              union.rdd <- RDD(jrdd, getSerializedMode(x), colNames = x@colNames)
+              union.rdd <- RDD(jrdd, getSerializedMode(x))
             } else {
               # One of the RDDs is not serialized, we need to serialize it first.
               if (getSerializedMode(x) != "byte") x <- serializeToBytes(x)

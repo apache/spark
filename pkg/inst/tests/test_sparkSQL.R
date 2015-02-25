@@ -47,7 +47,7 @@ test_that("union on two RDDs created from DataFrames returns an RRDD", {
   RDD2 <- toRDD(df)
   unioned <- unionRDD(RDD1, RDD2)
   expect_true(inherits(unioned, "RDD"))
-  expect_true(getSerializedMode(unioned) == "row")
+  expect_true(getSerializedMode(unioned) == "byte")
   expect_true(collect(unioned)[[2]]$name == "Andy")
 })
 
