@@ -675,6 +675,11 @@ class Column(protected[sql] val expr: Expression) {
 }
 
 
+/**
+ * :: Experimental ::
+ * A convenient class used for constructing schema.
+ */
+@Experimental
 class ColumnName(name: String) extends Column(name) {
 
   /** Creates a new AttributeReference of type boolean */
