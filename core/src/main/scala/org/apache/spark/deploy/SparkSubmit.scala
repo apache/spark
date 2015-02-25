@@ -796,6 +796,9 @@ private[spark] object SparkSubmitUtils {
     if (coordinates == null || coordinates.trim.isEmpty) {
       ""
     } else {
+      val sysOut = System.out
+      // To prevent ivy from logging to system out
+      System.setOut(printStream)
       val artifacts = extractMavenCoordinates(coordinates)
       // Default configuration name for ivy
       val ivyConfName = "default"
@@ -854,6 +857,7 @@ private[spark] object SparkSubmitUtils {
         packagesDirectory.getAbsolutePath + File.separator + "[artifact](-[classifier]).[ext]",
         retrieveOptions.setConfs(Array(ivyConfName)))
 
+      System.setOut(sysOut)
       resolveDependencyPaths(rr.getArtifacts.toArray, packagesDirectory)
     }
   }
