@@ -1092,7 +1092,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
-#### Dynamic allocation
+#### Dynamic Allocation
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
