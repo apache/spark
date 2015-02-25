@@ -18,6 +18,7 @@ package org.apache.spark.network.netty
 
 import java.util.concurrent.TimeUnit
 
+import org.apache.commons.io.IOUtils
 import org.apache.spark.network.BlockDataManager
 import org.apache.spark.network.buffer.{ManagedBuffer, LargeByteBufferHelper, NioManagedBuffer}
 import org.apache.spark.network.shuffle.BlockFetchingListener
@@ -42,14 +43,16 @@ class NettyBlockTransferSuite extends FunSuite with Matchers with MockitoSugar {
 
     val blockManager = mock[BlockDataManager]
     val blockId = ShuffleBlockId(0, 1, 2)
-    val blockString = "Hello, world!"
-    val blockBuffer = new NioManagedBuffer(LargeByteBufferHelper.asLargeByteBuffer(blockString.getBytes))
+    val buf = LargeByteBufferHelper.allocate(Integer.MAX_VALUE.toLong + 100l)
+    val blockBuffer = new NioManagedBuffer(buf)
     when(blockManager.getBlockData(blockId)).thenReturn(blockBuffer)
 
     val from = new NettyBlockTransferService(conf, securityManager, numCores = 1)
     from.init(blockManager)
+    println("from: " + from.hostName + ":" + from.port)
     val to = new NettyBlockTransferService(conf, securityManager, numCores = 1)
     to.init(blockManager)
+    println("to: " + to.hostName + ":" + to.port)
 
     try {
       val promise = Promise[ManagedBuffer]()
@@ -65,7 +68,10 @@ class NettyBlockTransferSuite extends FunSuite with Matchers with MockitoSugar {
           }
         })
 
-      Await.ready(promise.future, FiniteDuration(1000, TimeUnit.MILLISECONDS))
+      Await.ready(promise.future, FiniteDuration(100, TimeUnit.SECONDS))
+      val v = promise.future.value.get.get
+//      IOUtils.toString(v.createInputStream()) should equal(blockString)
+      println(v.nioByteBuffer().limit())
     } finally {
       from.close()
       to.close()
