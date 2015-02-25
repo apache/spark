@@ -72,6 +72,7 @@ for _name, _doc in _functions.items():
     globals()[_name] = _create_function(_name, _doc)
 del _name, _doc
 __all__ += _functions.keys()
+__all__.sort()
 
 
 def countDistinct(col, *cols):
