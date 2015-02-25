@@ -133,8 +133,6 @@ abstract class VertexRDD[VD](
    * Hides vertices that are the same between `this` and `other`; for vertices that are different,
    * keeps the values from `other`.
    *
-   * SPARK-5922: Deprecates this method call in place of diff(other: RDD[(VertexID, VD)])
-   *
    * @param other the other VertexRDD with which to diff.
    */
   def diff(other: VertexRDD[VD]): VertexRDD[VD]
