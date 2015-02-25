@@ -1950,7 +1950,7 @@ class RDD(object):
 
         my_batch = get_batch_size(self._jrdd_deserializer)
         other_batch = get_batch_size(other._jrdd_deserializer)
-        if my_batch != other_batch:
+        if my_batch != other_batch or not my_batch:
             # use the smallest batchSize for both of them
             batchSize = min(my_batch, other_batch)
             if batchSize <= 0:
