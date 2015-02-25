@@ -247,7 +247,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       val now = System.currentTimeMillis()
       val appsToRetain = new mutable.LinkedHashMap[String, FsApplicationHistoryInfo]()
 
-      applications.values.foreach {
+      applications.values.foreach { info =>
         if (now - info.lastUpdated <= maxAge) {
           appsToRetain += (info.id -> info)
         }
