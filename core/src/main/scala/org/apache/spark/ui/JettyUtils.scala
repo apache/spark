@@ -26,6 +26,7 @@ import scala.xml.Node
 
 import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.server.handler._
+import org.eclipse.jetty.server.session._
 import org.eclipse.jetty.servlet._
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 import org.json4s.JValue
@@ -33,6 +34,7 @@ import org.json4s.jackson.JsonMethods.{pretty, render}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.util.Utils
+
 
 /**
  * Utilities for launching a web server using Jetty's HTTP Server class
@@ -102,6 +104,8 @@ private[spark] object JettyUtils extends Logging {
     val holder = new ServletHolder(servlet)
     contextHandler.setContextPath(prefixedPath)
     contextHandler.addServlet(holder, "/")
+    val sessionHandler = new SessionHandler(new HashSessionManager())
+    contextHandler.setSessionHandler(sessionHandler)
     contextHandler
   }
 
@@ -137,6 +141,8 @@ private[spark] object JettyUtils extends Logging {
     }
     contextHandler.setContextPath(path)
     contextHandler.addServlet(holder, "/")
+    val sessionHandler = new SessionHandler(new HashSessionManager())
+    contextHandler.setSessionHandler(sessionHandler)
     contextHandler
   }
 

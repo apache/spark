@@ -22,6 +22,7 @@ import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import com.google.common.cache._
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
+import org.eclipse.jetty.server.session.{HashSessionManager, SessionHandler}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -113,6 +114,8 @@ class HistoryServer(
     val contextHandler = new ServletContextHandler
     contextHandler.setContextPath(HistoryServer.UI_PATH_PREFIX)
     contextHandler.addServlet(new ServletHolder(loaderServlet), "/*")
+    val sessionHandler = new SessionHandler(new HashSessionManager())
+    contextHandler.setSessionHandler(sessionHandler)
     attachHandler(contextHandler)
   }
 
