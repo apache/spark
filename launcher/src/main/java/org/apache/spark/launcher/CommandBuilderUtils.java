@@ -64,8 +64,10 @@ class CommandBuilderUtils {
     return sb.toString();
   }
 
-  /** Returns the first value mapped to the given key in the given maps. */
-  static String find(String key, Map<?, ?>... maps) {
+  /**
+   * Returns the first non-empty value mapped to the given key in the given maps, or null otherwise.
+   */
+  static String firstNonEmptyValue(String key, Map<?, ?>... maps) {
     for (Map<?, ?> map : maps) {
       String value = (String) map.get(key);
       if (!isEmpty(value)) {
@@ -75,7 +77,7 @@ class CommandBuilderUtils {
     return null;
   }
 
-  /** Returns the first non-empty, non-null string in the given list. */
+  /** Returns the first non-empty, non-null string in the given list, or null otherwise. */
   static String firstNonEmpty(String... candidates) {
     for (String s : candidates) {
       if (!isEmpty(s)) {
@@ -106,8 +108,8 @@ class CommandBuilderUtils {
   }
 
   /**
-   * Updates the user environment to contain the merged value of "envKey" after appending
-   * the given path list.
+   * Updates the user environment, appending the given pathList to the existing value of the given
+   * environment variable (or setting it if it hasn't yet been set).
    */
   static void mergeEnvPathList(Map<String, String> userEnv, String envKey, String pathList) {
     if (!isEmpty(pathList)) {
@@ -117,8 +119,8 @@ class CommandBuilderUtils {
   }
 
   /**
-   * Parse a string as if it were a list of arguments, in the way that a shell would.
-   * This tries to follow the way bash parses strings. For example:
+   * Parse a string as if it were a list of arguments, following bash semantics.
+   * For example:
    *
    * Input: "\"ab cd\" efgh 'i \" j'"
    * Output: [ "ab cd", "efgh", "i \" j" ]
@@ -130,6 +132,8 @@ class CommandBuilderUtils {
     boolean inSingleQuote = false;
     boolean inDoubleQuote = false;
     boolean escapeNext = false;
+
+    // This is needed to detect when a quoted empty string is used as an argument ("" or '').
     boolean hasData = false;
 
     for (int i = 0; i < s.length(); i++) {
@@ -161,7 +165,7 @@ class CommandBuilderUtils {
           }
           break;
         default:
-          if (inSingleQuote || inDoubleQuote || !Character.isWhitespace(c)) {
+          if (!Character.isWhitespace(c) || inSingleQuote || inDoubleQuote) {
             opt.appendCodePoint(c);
           } else {
             opts.add(opt.toString());
@@ -223,6 +227,58 @@ class CommandBuilderUtils {
     if (!check) {
       throw new IllegalStateException(String.format(msg, args));
     }
+  }
+
+  /**
+   * Quote a command argument for a command to be run by a Windows batch script, if the argument
+   * needs quoting. Arguments only seem to need quotes in batch scripts if they have whitespace.
+   *
+   *  For example:
+   *    original single argument: ab "cde" fgh
+   *    quoted: "ab ""cde"" fgh"
+   */
+  static String quoteForBatchScript(String arg) {
+    boolean needsQuotes = false;
+    for (int i = 0; i < arg.length(); i++) {
+      if (Character.isWhitespace(arg.codePointAt(i)) || arg.codePointAt(i) == '"') {
+        needsQuotes = true;
+        break;
+      }
+    }
+    if (!needsQuotes) {
+      return arg;
+    }
+    StringBuilder quoted = new StringBuilder();
+    quoted.append("\"");
+    for (int i = 0; i < arg.length(); i++) {
+      int cp = arg.codePointAt(i);
+      if (cp == '\"') {
+        quoted.append("\"");
+      }
+      quoted.appendCodePoint(cp);
+    }
+    quoted.append("\"");
+    return quoted.toString();
+  }
+
+  /**
+   * Quotes a string so that it can be used in a command string and be parsed back into a single
+   * argument by python's "shlex.split()" function.
+   *
+   * Basically, just add simple escapes. E.g.:
+   *    original single argument : ab "cd" ef
+   *    after: "ab \"cd\" ef"
+   */
+  static String quoteForPython(String s) {
+    StringBuilder quoted = new StringBuilder().append('"');
+    for (int i = 0; i < s.length(); i++) {
+      int cp = s.codePointAt(i);
+      if (cp == '"' || cp == '\\') {
+        quoted.appendCodePoint('\\');
+      }
+      quoted.appendCodePoint(cp);
+    }
+    return quoted.append('"').toString();
   }
 
 }

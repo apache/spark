@@ -63,28 +63,32 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     specialClasses.put("org.apache.spark.repl.Main", "spark-shell");
     specialClasses.put("org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver",
       "spark-internal");
+    specialClasses.put("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2",
+      "spark-internal");
   }
 
   private final List<String> sparkArgs;
-  private boolean hasMixedArguments;
+
+  /**
+   * Controls whether mixing spark-submit arguments with app arguments is allowed. This is needed
+   * to parse the command lines for things like bin/spark-shell, which allows users to mix and
+   * match arguments (e.g. "bin/spark-shell SparkShellArg --master foo").
+   */
+  private boolean isSpecialClass;
 
   SparkSubmitCommandBuilder() {
     this.sparkArgs = new ArrayList<String>();
   }
 
   SparkSubmitCommandBuilder(List<String> args) {
-    this(false, args);
-  }
-
-  SparkSubmitCommandBuilder(boolean hasMixedArguments, List<String> args) {
     this();
     List<String> submitArgs = args;
     if (args.size() > 0 && args.get(0).equals(PYSPARK_SHELL)) {
-      this.hasMixedArguments = true;
+      this.isSpecialClass = true;
       appResource = PYSPARK_SHELL_RESOURCE;
       submitArgs = args.subList(1, args.size());
     } else {
-      this.hasMixedArguments = hasMixedArguments;
+      this.isSpecialClass = false;
     }
 
     new OptionParser().parse(submitArgs);
@@ -168,7 +172,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     Properties props = loadPropertiesFile();
     boolean isClientMode = isClientMode(props);
     String extraClassPath = isClientMode ?
-      find(SparkLauncher.DRIVER_EXTRA_CLASSPATH, conf, props) : null;
+      firstNonEmptyValue(SparkLauncher.DRIVER_EXTRA_CLASSPATH, conf, props) : null;
 
     List<String> cmd = buildJavaCommand(extraClassPath);
     addOptionString(cmd, System.getenv("SPARK_SUBMIT_OPTS"));
@@ -182,13 +186,13 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       // - SPARK_DRIVER_MEMORY env variable
       // - SPARK_MEM env variable
       // - default value (512m)
-      String memory = firstNonEmpty(find(SparkLauncher.DRIVER_MEMORY, conf, props),
+      String memory = firstNonEmpty(firstNonEmptyValue(SparkLauncher.DRIVER_MEMORY, conf, props),
         System.getenv("SPARK_DRIVER_MEMORY"), System.getenv("SPARK_MEM"), DEFAULT_MEM);
       cmd.add("-Xms" + memory);
       cmd.add("-Xmx" + memory);
-      addOptionString(cmd, find(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, conf, props));
+      addOptionString(cmd, firstNonEmptyValue(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, conf, props));
       mergeEnvPathList(env, getLibPathEnvName(),
-        find(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, conf, props));
+        firstNonEmptyValue(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, conf, props));
     }
 
     addPermGenSizeOpt(cmd);
@@ -216,16 +220,17 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
     Properties props = loadPropertiesFile();
     mergeEnvPathList(env, getLibPathEnvName(),
-      find(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, conf, props));
+      firstNonEmptyValue(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, conf, props));
 
+    // Store spark-submit arguments in an environment variable, since there's no way to pass
+    // them to shell.py on the comand line.
     StringBuilder submitArgs = new StringBuilder();
     for (String arg : buildSparkSubmitArgs()) {
       if (submitArgs.length() > 0) {
         submitArgs.append(" ");
       }
-      submitArgs.append(quote(arg));
+      submitArgs.append(quoteForPython(arg));
     }
-
     env.put("PYSPARK_SUBMIT_ARGS", submitArgs.toString());
 
     List<String> pyargs = new ArrayList<String>();
@@ -242,24 +247,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     String userMaster = firstNonEmpty(master, (String) userProps.get(SparkLauncher.SPARK_MASTER));
     return userMaster == null ||
       "client".equals(deployMode) ||
-      "yarn-client".equals(userMaster) ||
-      (deployMode == null && !userMaster.startsWith("yarn-"));
-  }
-
-  /**
-   * Quotes a string so that it can be used in a command string and be parsed back into a single
-   * argument by python's "shlex.split()" function.
-   */
-  private String quote(String s) {
-    StringBuilder quoted = new StringBuilder().append('"');
-    for (int i = 0; i < s.length(); i++) {
-      int cp = s.codePointAt(i);
-      if (cp == '"' || cp == '\\') {
-        quoted.appendCodePoint('\\');
-      }
-      quoted.appendCodePoint(cp);
-    }
-    return quoted.append('"').toString();
+      (!userMaster.equals("yarn-cluster") && deployMode == null);
   }
 
   private class OptionParser extends SparkSubmitOptionParser {
@@ -299,7 +287,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         // non-spark-submit arguments.
         mainClass = value;
         if (specialClasses.containsKey(value)) {
-          hasMixedArguments = true;
+          isSpecialClass = true;
           appResource = specialClasses.get(value);
         }
       } else {
@@ -311,10 +299,11 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
     @Override
     protected boolean handleUnknown(String opt) {
-      // When mixing arguments, add unrecognized parameters directly to the user arguments list.
-      // In normal mode, any unrecognized parameter triggers the end of command line parsing.
-      // The remaining params will be appended to the list of SparkSubmit arguments.
-      if (hasMixedArguments) {
+      // When mixing arguments, add unrecognized parameters directly to the user arguments list. In
+      // normal mode, any unrecognized parameter triggers the end of command line parsing, and the
+      // parameter itself will be interpreted by SparkSubmit as the application resource. The
+      // remaining params will be appended to the list of SparkSubmit arguments.
+      if (isSpecialClass) {
         appArgs.add(opt);
         return true;
       } else {

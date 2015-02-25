@@ -75,9 +75,10 @@ class Main {
     }
 
     if (isWindows()) {
-      System.out.println(prepareForWindows(cmd, env));
+      System.out.println(prepareWindowsCommand(cmd, env));
     } else {
-      List<String> bashCmd = prepareForBash(cmd, env);
+      // In bash, use NULL as the arg separator since it cannot be used in an argument.
+      List<String> bashCmd = prepareBashCommand(cmd, env);
       for (String c : bashCmd) {
         System.out.print(c);
         System.out.print('\0');
@@ -95,7 +96,7 @@ class Main {
    * The command is executed using "cmd /c" and formatted in single line, since that's the
    * easiest way to consume this from a batch script (see spark-class2.cmd).
    */
-  private static String prepareForWindows(List<String> cmd, Map<String, String> childEnv) {
+  private static String prepareWindowsCommand(List<String> cmd, Map<String, String> childEnv) {
     StringBuilder cmdline = new StringBuilder("cmd /c \"");
     for (Map.Entry<String, String> e : childEnv.entrySet()) {
       cmdline.append(String.format("set %s=%s", e.getKey(), e.getValue()));
@@ -113,7 +114,7 @@ class Main {
    * Prepare the command for execution from a bash script. The final command will have commands to
    * set up any needed environment variables needed by the child process.
    */
-  private static List<String> prepareForBash(List<String> cmd, Map<String, String> childEnv) {
+  private static List<String> prepareBashCommand(List<String> cmd, Map<String, String> childEnv) {
     if (childEnv.isEmpty()) {
       return cmd;
     }
@@ -126,34 +127,6 @@ class Main {
     }
     newCmd.addAll(cmd);
     return newCmd;
-  }
-
-  /**
-   * Quote a command argument for a command to be run by a Windows batch script, if the argument
-   * needs quoting. Arguments only seem to need quotes in batch scripts if they have whitespace.
-   */
-  private static String quoteForBatchScript(String arg) {
-    boolean needsQuotes = false;
-    for (int i = 0; i < arg.length(); i++) {
-      if (Character.isWhitespace(arg.codePointAt(i))) {
-        needsQuotes = true;
-        break;
-      }
-    }
-    if (!needsQuotes) {
-      return arg;
-    }
-    StringBuilder quoted = new StringBuilder();
-    quoted.append("\"");
-    for (int i = 0; i < arg.length(); i++) {
-      int cp = arg.codePointAt(i);
-      if (cp == '\"') {
-        quoted.append("\"");
-      }
-      quoted.appendCodePoint(cp);
-    }
-    quoted.append("\"");
-    return quoted.toString();
   }
 
   /**

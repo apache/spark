@@ -68,6 +68,21 @@ public class CommandBuilderUtilsSuite {
     testInvalidOpt("'abcde");
   }
 
+  @Test
+  public void testWindowsBatchQuoting() {
+    assertEquals("abc", quoteForBatchScript("abc"));
+    assertEquals("\"a b c\"", quoteForBatchScript("a b c"));
+    assertEquals("\"a \"\"b\"\" c\"", quoteForBatchScript("a \"b\" c"));
+    assertEquals("\"a\"\"b\"\"c\"", quoteForBatchScript("a\"b\"c"));
+  }
+
+  @Test
+  public void testPythonArgQuoting() {
+    assertEquals("\"abc\"", quoteForPython("abc"));
+    assertEquals("\"a b c\"", quoteForPython("a b c"));
+    assertEquals("\"a \\\"b\\\" c\"", quoteForPython("a \"b\" c"));
+  }
+
   private void testOpt(String opts, List<String> expected) {
     assertEquals(String.format("test string failed to parse: [[ %s ]]", opts),
         expected, parseOptionString(opts));

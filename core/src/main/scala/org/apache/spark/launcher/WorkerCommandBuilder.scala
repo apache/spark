@@ -25,8 +25,9 @@ import scala.collection.JavaConversions._
 import org.apache.spark.deploy.Command
 
 /**
- * This class is used by CommandUtils. It uses some package-private APIs in SparkLauncher and so
- * needs to live in the same package as the rest of the library.
+ * This class is used by CommandUtils. It uses some package-private APIs in SparkLauncher, and since
+ * Java doesn't have a feature similar to `private[spark]`, and we don't want that class to be
+ * public, needs to live in the same package as the rest of the library.
  */
 private[spark] class WorkerCommandBuilder(sparkHome: String, memoryMb: Int, command: Command)
     extends AbstractCommandBuilder {
@@ -38,7 +39,7 @@ private[spark] class WorkerCommandBuilder(sparkHome: String, memoryMb: Int, comm
     val cmd = buildJavaCommand(command.classPathEntries.mkString(File.pathSeparator))
     cmd.add(s"-Xms${memoryMb}M")
     cmd.add(s"-Xmx${memoryMb}M")
-    command.javaOpts.foreach { cmd.add }
+    command.javaOpts.foreach(cmd.add)
     addPermGenSizeOpt(cmd)
     addOptionString(cmd, getenv("SPARK_JAVA_OPTS"))
     cmd

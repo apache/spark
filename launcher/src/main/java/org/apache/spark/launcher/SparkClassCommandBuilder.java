@@ -89,9 +89,6 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
         toolsDir.getAbsolutePath(), className);
 
       javaOptsKeys.add("SPARK_JAVA_OPTS");
-    } else {
-      // Any classes not explicitly listed above are submitted using SparkSubmit.
-      return createSparkSubmitCommand(env);
     }
 
     List<String> cmd = buildJavaCommand(extraClassPath);
@@ -106,50 +103,6 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
     cmd.add(className);
     cmd.addAll(classArgs);
     return cmd;
-  }
-
-  private List<String> createSparkSubmitCommand(Map<String, String> env) throws IOException {
-    final List<String> sparkSubmitArgs = new ArrayList<String>();
-    final List<String> appArgs = new ArrayList<String>();
-
-    // Parse the command line and special-case the HELP command line argument, allowing it to be
-    // propagated to the app being launched.
-    SparkSubmitOptionParser parser = new SparkSubmitOptionParser() {
-
-      @Override
-      protected boolean handle(String opt, String value) {
-        if (opt.equals(HELP)) {
-          appArgs.add(opt);
-        } else {
-          sparkSubmitArgs.add(opt);
-          sparkSubmitArgs.add(value);
-        }
-        return true;
-      }
-
-      @Override
-      protected boolean handleUnknown(String opt) {
-        appArgs.add(opt);
-        return true;
-      }
-
-      @Override
-      protected void handleExtraArgs(List<String> extra) {
-        appArgs.addAll(extra);
-      }
-
-    };
-
-    parser.parse(classArgs);
-    sparkSubmitArgs.add(parser.CLASS);
-    sparkSubmitArgs.add(className);
-
-    SparkSubmitCommandBuilder builder = new SparkSubmitCommandBuilder(true, sparkSubmitArgs);
-    builder.appResource = "spark-internal";
-    for (String arg: appArgs) {
-      builder.appArgs.add(arg);
-    }
-    return builder.buildCommand(env);
   }
 
 }

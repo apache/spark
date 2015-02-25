@@ -36,7 +36,7 @@ import java.util.regex.Pattern;
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
 
 /**
- * Abstract command builder that defines common functionality for all builders.
+ * Abstract Spark command builder that defines common functionality.
  */
 abstract class AbstractCommandBuilder {
 
@@ -56,12 +56,8 @@ abstract class AbstractCommandBuilder {
   final Map<String, String> conf;
 
   public AbstractCommandBuilder() {
-    this(Collections.<String, String>emptyMap());
-  }
-
-  public AbstractCommandBuilder(Map<String, String> env) {
     this.appArgs = new ArrayList<String>();
-    this.childEnv = new HashMap<String, String>(env);
+    this.childEnv = new HashMap<String, String>();
     this.conf = new HashMap<String, String>();
     this.files = new ArrayList<String>();
     this.jars = new ArrayList<String>();
@@ -69,7 +65,7 @@ abstract class AbstractCommandBuilder {
   }
 
   /**
-   * Builds the command like to execute.
+   * Builds the command to execute.
    *
    * @param env A map containing environment variables for the child process. It may already contain
    *            entries defined by the user (such as SPARK_HOME, or those defined by the
@@ -78,6 +74,16 @@ abstract class AbstractCommandBuilder {
    */
   abstract List<String> buildCommand(Map<String, String> env) throws IOException;
 
+  /**
+   * Builds a list of arguments to run java.
+   *
+   * This method finds the java executable to use and appends JVM-specific options for running a
+   * class with Spark in the classpath. It also loads options from the "java-opts" file in the
+   * configuration directory being used.
+   *
+   * Callers should still add at least the class to run, as well as any arguments to pass to the
+   * class.
+   */
   List<String> buildJavaCommand(String extraClassPath) throws IOException {
     List<String> cmd = new ArrayList<String>();
     if (javaHome == null) {
@@ -241,7 +247,7 @@ abstract class AbstractCommandBuilder {
   /**
    * Adds entries to the classpath.
    *
-   * @param cp List where to appended the new classpath entries.
+   * @param cp List to which the new entries are appended.
    * @param entries New classpath entries (separated by File.pathSeparator).
    */
   private void addToClassPath(List<String> cp, String entries) {
@@ -268,18 +274,15 @@ abstract class AbstractCommandBuilder {
     String sparkHome = getSparkHome();
     File scala210 = new File(sparkHome, "assembly/target/scala-2.10");
     File scala211 = new File(sparkHome, "assembly/target/scala-2.11");
-    if (scala210.isDirectory() && scala211.isDirectory()) {
-      checkState(false,
-        "Presence of build for both scala versions (2.10 and 2.11) detected.\n" +
-        "Either clean one of them or set SPARK_SCALA_VERSION in your environment.");
-    } else if (scala210.isDirectory()) {
+    checkState(!scala210.isDirectory() || !scala211.isDirectory(),
+      "Presence of build for both scala versions (2.10 and 2.11) detected.\n" +
+      "Either clean one of them or set SPARK_SCALA_VERSION in your environment.");
+    if (scala210.isDirectory()) {
       return "2.10";
     } else {
       checkState(scala211.isDirectory(), "Cannot find any assembly build directories.");
       return "2.11";
     }
-
-    throw new IllegalStateException("Should not reach here.");
   }
 
   String getSparkHome() {

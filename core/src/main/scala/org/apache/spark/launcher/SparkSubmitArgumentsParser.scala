@@ -19,8 +19,7 @@ package org.apache.spark.launcher
 
 /**
  * This class makes SparkSubmitOptionParser visible for Spark code outside of the `launcher`
- * package.
+ * package, since Java doesn't have a feature similar to `private[spark]`, and we don't want
+ * that class to be public.
  */
-private[spark] abstract class SparkSubmitArgumentsParser extends SparkSubmitOptionParser {
-
-}
+private[spark] abstract class SparkSubmitArgumentsParser extends SparkSubmitOptionParser

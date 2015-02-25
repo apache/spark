@@ -33,7 +33,7 @@ import org.apache.spark.util.Utils
  * The env argument is used for testing.
  */
 private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, String] = sys.env)
-    extends SparkSubmitArgumentsParser {
+  extends SparkSubmitArgumentsParser {
   var master: String = null
   var deployMode: String = null
   var executorMemory: String = null
@@ -397,6 +397,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   }
 
   /**
+   * Handle unrecognized command line options.
+   *
    * The first unrecognized option is treated as the "primary resource". Everything else is
    * treated as application arguments.
    */
@@ -418,7 +420,6 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   override protected def handleExtraArgs(extra: JList[String]): Unit = {
     childArgs ++= extra
   }
-
 
   private def printUsageAndExit(exitCode: Int, unknownParam: Any = null): Unit = {
     val outStream = SparkSubmit.printStream
