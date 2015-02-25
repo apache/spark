@@ -372,9 +372,30 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
     PageRank.runUntilConvergence(graph, tol, resetProb)
   }
 
+
+  /**
+   * Run personalized PageRank for a given vertex, such that all random walks
+   * are started relative to the source node.
+   *
+   * @see [[org.apache.spark.graphx.lib.PageRank$#runUntilConvergence]]
+   */
   def personalizedPageRank(src: VertexId, tol: Double,
     resetProb: Double = 0.15) : Graph[Double, Double] = {
-    PageRank.runPersonalized(graph, src, tol, resetProb)
+    PageRank.runUntilConvergence(graph, tol, resetProb, Some(src))
+  }
+
+  /**
+   * Run Personalized PageRank for a fixed number of iterations with
+   * with all iterations originating at the source node
+   * returning a graph with vertex attributes
+   * containing the PageRank and edge attributes the normalized edge weight.
+   *
+   * @see [[org.apache.spark.graphx.lib.PageRank$#run]]
+   */
+
+  def staticPersonalizedPageRank(src: VertexId, numIter: Int,
+    resetProb: Double = 0.15) : Graph[Double, Double] = {
+    PageRank.run(graph, numIter, resetProb, Some(src))
   }
 
   /**

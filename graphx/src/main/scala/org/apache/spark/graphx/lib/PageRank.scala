@@ -18,6 +18,7 @@
 package org.apache.spark.graphx.lib
 
 import scala.reflect.ClassTag
+import scala.language.postfixOps
 
 import org.apache.spark.Logging
 import org.apache.spark.graphx._
@@ -71,13 +72,15 @@ object PageRank extends Logging {
    * @param graph the graph on which to compute PageRank
    * @param numIter the number of iterations of PageRank to run
    * @param resetProb the random reset probability (alpha)
+   * @param srcId the source vertex for a Personalized Page Rank (optional)
    *
    * @return the graph containing with each vertex containing the PageRank and each edge
    *         containing the normalized weight.
    *
    */
   def run[VD: ClassTag, ED: ClassTag](
-      graph: Graph[VD, ED], numIter: Int, resetProb: Double = 0.15): Graph[Double, Double] =
+      graph: Graph[VD, ED], numIter: Int, resetProb: Double = 0.15,
+      srcId: Option[VertexId] = None): Graph[Double, Double] =
   {
     // Initialize the PageRank graph with each edge attribute having
     // weight 1/outDegree and each vertex with attribute 1.0.
@@ -88,6 +91,10 @@ object PageRank extends Logging {
       .mapTriplets( e => 1.0 / e.srcAttr, TripletFields.Src )
       // Set the vertex attributes to the initial pagerank values
       .mapVertices( (id, attr) => resetProb )
+
+    val personalized = if (srcId isDefined) true else false
+    val src:VertexId = srcId.getOrElse(-1L)
+    def delta(u:VertexId, v:VertexId):Double = { if (u == v) 1.0 else 0.0 }
 
     var iteration = 0
     var prevRankGraph: Graph[Double, Double] = null
@@ -104,7 +111,12 @@ object PageRank extends Logging {
       // edge partitions.
       prevRankGraph = rankGraph
       rankGraph = rankGraph.joinVertices(rankUpdates) {
+        if (personalized) {
+          (id, oldRank, msgSum) => resetProb*delta(src,id) + (1.0 - resetProb) * msgSum
+        }
+        else {
         (id, oldRank, msgSum) => resetProb + (1.0 - resetProb) * msgSum
+        }
       }.cache()
 
       rankGraph.edges.foreachPartition(x => {}) // also materializes rankGraph.vertices
@@ -128,12 +140,14 @@ object PageRank extends Logging {
    * @param graph the graph on which to compute PageRank
    * @param tol the tolerance allowed at convergence (smaller => more accurate).
    * @param resetProb the random reset probability (alpha)
+   * @param srcId the source vertex for a Personalized Page Rank (optional)
    *
    * @return the graph containing with each vertex containing the PageRank and each edge
    *         containing the normalized weight.
    */
   def runUntilConvergence[VD: ClassTag, ED: ClassTag](
-      graph: Graph[VD, ED], tol: Double, resetProb: Double = 0.15): Graph[Double, Double] =
+      graph: Graph[VD, ED], tol: Double, resetProb: Double = 0.15,
+       srcId: Option[VertexId] = None): Graph[Double, Double] =
   {
     // Initialize the pagerankGraph with each edge attribute
     // having weight 1/outDegree and each vertex with attribute 1.0.
@@ -148,11 +162,20 @@ object PageRank extends Logging {
       .mapVertices( (id, attr) => (0.0, 0.0) )
       .cache()
 
+    val personalized = if (srcId isDefined) true else false
+    val src:VertexId = srcId.getOrElse(-1L)
+
     // Define the three functions needed to implement PageRank in the GraphX
     // version of Pregel
     def vertexProgram(id: VertexId, attr: (Double, Double), msgSum: Double): (Double, Double) = {
       val (oldPR, lastDelta) = attr
-      val newPR = oldPR + (1.0 - resetProb) * msgSum
+      var teleport = oldPR
+      if (personalized) {
+        val delta = if (src==id) 1.0 else 0.0
+        teleport = oldPR*delta
+      }
+
+      val newPR = teleport + (1.0 - resetProb) * msgSum
       (newPR, newPR - oldPR)
     }
 
@@ -174,56 +197,5 @@ object PageRank extends Logging {
       vertexProgram, sendMessage, messageCombiner)
       .mapVertices((vid, attr) => attr._1)
   } // end of deltaPageRank
-
-  def runPersonalized[VD: ClassTag, ED: ClassTag](
-      graph: Graph[VD, ED], srcId: VertexId, tol: Double,
-      resetProb: Double = 0.15): Graph[Double, Double] =
-  {
-
-    // Initialize the pagerankGraph with each edge attribute
-    // having weight 1/outDegree and each vertex with attribute 1.0.
-    val pagerankGraph: Graph[(Double, Double, VertexId), Double] = graph
-      // Associate the degree with each vertex
-      .outerJoinVertices(graph.outDegrees) {
-        (vid, vdata, deg) => deg.getOrElse(0)
-      }
-      // Set the weight on the edges based on the degree
-      .mapTriplets( e => 1.0 / e.srcAttr )
-      // Set the vertex attributes to (initalPR, delta = 0, srcId)
-      .mapVertices( (id, attr) => (0.0, 0.0, srcId) )
-      .cache()
-
-    // Define the three functions needed to implement PageRank in the GraphX
-    // version of Pregel
-    def vertexProgram(id: VertexId, attr: (Double, Double, VertexId),
-      msgSum: (Double, VertexId)): (Double, Double, VertexId) = {
-      //unpack the vertex attribute
-      val (oldPR, lastDelta, src) = attr
-      val delta = if (src==id) 1.0 else 0.0
-      val newPR = delta*oldPR + (1.0 - resetProb) * msgSum._1
-      //send the message to all edges, repacking the personalization
-      (newPR, newPR - oldPR, src)
-    }
-
-    def sendMessage(edge: EdgeTriplet[(Double, Double, VertexId), Double]) = {
-      if (edge.srcAttr._2 > tol) {
-        //iterate over all messages
-        Iterator((edge.dstId, (edge.srcAttr._2 * edge.attr, edge.srcAttr._3)))
-      } else {
-        Iterator.empty
-      }
-    }
-
-    def messageCombiner(a: (Double, VertexId),
-      b: (Double, VertexId)): (Double, VertexId) = (a._1 + b._1, a._2)
-
-    // The initial message received by all vertices in PageRank
-    val initialMessage = (resetProb / (1.0 - resetProb), srcId)
-
-    // Execute a dynamic version of Pregel.
-    Pregel(pagerankGraph, initialMessage, activeDirection = EdgeDirection.Out)(
-      vertexProgram, sendMessage, messageCombiner)
-      .mapVertices((vid, attr) => attr._1)
-  }
 
 }
