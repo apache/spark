@@ -1091,7 +1091,7 @@ setMethod("coalesce",
              if(as.integer(numPartitions) != numPartitions) {
               warning("Number of partitions should be an integer. Coercing it to integer.")
              }
-             numPartitionsm <- as.integer(numPartitions)
+             numPartitions <- as.integer(numPartitions)
              if (shuffle || numPartitions > SparkR::numPartitions(rdd)) {
                 func <- function(s, part) {
                  set.seed(s)  # split as seed
