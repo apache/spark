@@ -27,14 +27,12 @@ import org.apache.spark.util.Utils
 
 /** Page showing list of RDD's currently stored in the cluster */
 private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
-  private val appName = parent.appName
-  private val basePath = parent.basePath
   private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val rdds = listener.rddInfoList
-    val content = UIUtils.listingTable(rddHeader, rddRow, rdds)
-    UIUtils.headerSparkPage(content, basePath, appName, "Storage ", parent.headerTabs, parent)
+    val content = UIUtils.listingTable(rddHeader, rddRow, rdds, id = Some("storage-by-rdd-table"))
+    UIUtils.headerSparkPage("Storage", content, parent)
   }
 
   /** Header fields for the RDD table */
@@ -49,9 +47,10 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
 
   /** Render an HTML row representing an RDD */
   private def rddRow(rdd: RDDInfo): Seq[Node] = {
+    // scalastyle:off
     <tr>
       <td>
-        <a href={"%s/storage/rdd?id=%s".format(UIUtils.prependBaseUri(basePath), rdd.id)}>
+        <a href={"%s/storage/rdd?id=%s".format(UIUtils.prependBaseUri(parent.basePath), rdd.id)}>
           {rdd.name}
         </a>
       </td>
@@ -59,9 +58,10 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
       </td>
       <td>{rdd.numCachedPartitions}</td>
       <td>{"%.0f%%".format(rdd.numCachedPartitions * 100.0 / rdd.numPartitions)}</td>
-      <td>{Utils.bytesToString(rdd.memSize)}</td>
-      <td>{Utils.bytesToString(rdd.tachyonSize)}</td>
-      <td>{Utils.bytesToString(rdd.diskSize)}</td>
+      <td sorttable_customkey={rdd.memSize.toString}>{Utils.bytesToString(rdd.memSize)}</td>
+      <td sorttable_customkey={rdd.tachyonSize.toString}>{Utils.bytesToString(rdd.tachyonSize)}</td>
+      <td sorttable_customkey={rdd.diskSize.toString} >{Utils.bytesToString(rdd.diskSize)}</td>
     </tr>
+    // scalastyle:on
   }
 }

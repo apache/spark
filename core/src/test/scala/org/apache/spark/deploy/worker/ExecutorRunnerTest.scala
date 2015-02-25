@@ -19,21 +19,23 @@ package org.apache.spark.deploy.worker
 
 import java.io.File
 
+import scala.collection.JavaConversions._
+
 import org.scalatest.FunSuite
 
 import org.apache.spark.deploy.{ApplicationDescription, Command, ExecutorState}
+import org.apache.spark.SparkConf
 
 class ExecutorRunnerTest extends FunSuite {
   test("command includes appId") {
-    def f(s:String) = new File(s)
-    val sparkHome = sys.env.get("SPARK_HOME").orElse(sys.props.get("spark.home"))
-    val appDesc = new ApplicationDescription("app name", Some(8), 500,
-      Command("foo", Seq(), Map(), Seq(), Seq()),
-      sparkHome, "appUiUrl")
     val appId = "12345-worker321-9876"
-    val er = new ExecutorRunner(appId, 1, appDesc, 8, 500, null, "blah", "worker321", f(sparkHome.getOrElse(".")),
-      f("ooga"), "blah", ExecutorState.RUNNING)
-
-    assert(er.getCommandSeq.last === appId)
+    val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
+    val appDesc = new ApplicationDescription("app name", Some(8), 500,
+      Command("foo", Seq(appId), Map(), Seq(), Seq(), Seq()), "appUiUrl")
+    val er = new ExecutorRunner(appId, 1, appDesc, 8, 500, null, "blah", "worker321", 123,
+      new File(sparkHome), new File("ooga"), "blah", new SparkConf, Seq("localDir"),
+      ExecutorState.RUNNING)
+    val builder = CommandUtils.buildProcessBuilder(appDesc.command, 512, sparkHome, er.substituteVariables)
+    assert(builder.command().last === appId)
   }
 }

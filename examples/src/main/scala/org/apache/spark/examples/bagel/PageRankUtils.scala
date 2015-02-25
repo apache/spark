@@ -18,17 +18,7 @@
 package org.apache.spark.examples.bagel
 
 import org.apache.spark._
-import org.apache.spark.SparkContext._
-import org.apache.spark.serializer.KryoRegistrator
-
 import org.apache.spark.bagel._
-import org.apache.spark.bagel.Bagel._
-
-import scala.collection.mutable.ArrayBuffer
-
-import java.io.{InputStream, OutputStream, DataInputStream, DataOutputStream}
-
-import com.esotericsoftware.kryo._
 
 class PageRankUtils extends Serializable {
   def computeWithCombiner(numVertices: Long, epsilon: Double)(
@@ -99,13 +89,6 @@ class PRMessage() extends Message[String] with Serializable {
   }
 }
 
-class PRKryoRegistrator extends KryoRegistrator {
-  def registerClasses(kryo: Kryo) {
-    kryo.register(classOf[PRVertex])
-    kryo.register(classOf[PRMessage])
-  }
-}
-
 class CustomPartitioner(partitions: Int) extends Partitioner {
   def numPartitions = partitions
 
@@ -124,4 +107,6 @@ class CustomPartitioner(partitions: Int) extends Partitioner {
       c.numPartitions == numPartitions
     case _ => false
   }
+
+  override def hashCode: Int = numPartitions
 }

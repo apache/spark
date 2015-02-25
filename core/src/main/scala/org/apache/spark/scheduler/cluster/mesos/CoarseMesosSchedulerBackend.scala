@@ -28,9 +28,10 @@ import org.apache.mesos.{Scheduler => MScheduler}
 import org.apache.mesos._
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, TaskState => MesosTaskState, _}
 
-import org.apache.spark.{Logging, SparkContext, SparkException}
+import org.apache.spark.{Logging, SparkContext, SparkEnv, SparkException}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
+import org.apache.spark.util.{Utils, AkkaUtils}
 
 /**
  * A SchedulerBackend that runs tasks on Mesos, but uses "coarse-grained" tasks, where it holds
@@ -71,13 +72,12 @@ private[spark] class CoarseMesosSchedulerBackend(
   val taskIdToSlaveId = new HashMap[Int, String]
   val failuresBySlaveId = new HashMap[String, Int] // How many times tasks on each slave failed
 
-  val sparkHome = sc.getSparkHome().getOrElse(throw new SparkException(
-    "Spark home is not set; set it through the spark.home system " +
-    "property, the SPARK_HOME environment variable or the SparkContext constructor"))
 
   val extraCoresPerSlave = conf.getInt("spark.mesos.extra.cores", 0)
 
   var nextMesosTaskId = 0
+
+  @volatile var appId: String = _
 
   def newMesosTaskId(): Int = {
     val id = nextMesosTaskId
@@ -93,7 +93,7 @@ private[spark] class CoarseMesosSchedulerBackend(
         setDaemon(true)
         override def run() {
           val scheduler = CoarseMesosSchedulerBackend.this
-          val fwInfo = FrameworkInfo.newBuilder().setUser("").setName(sc.appName).build()
+          val fwInfo = FrameworkInfo.newBuilder().setUser(sc.sparkUser).setName(sc.appName).build()
           driver = new MesosSchedulerDriver(scheduler, fwInfo, master)
           try { {
             val ret = driver.run()
@@ -110,17 +110,30 @@ private[spark] class CoarseMesosSchedulerBackend(
   }
 
   def createCommand(offer: Offer, numCores: Int): CommandInfo = {
+    val executorSparkHome = conf.getOption("spark.mesos.executor.home")
+      .orElse(sc.getSparkHome())
+      .getOrElse {
+        throw new SparkException("Executor Spark home `spark.mesos.executor.home` is not set!")
+      }
     val environment = Environment.newBuilder()
     val extraClassPath = conf.getOption("spark.executor.extraClassPath")
     extraClassPath.foreach { cp =>
       environment.addVariables(
         Environment.Variable.newBuilder().setName("SPARK_CLASSPATH").setValue(cp).build())
     }
-    val extraJavaOpts = conf.getOption("spark.executor.extraJavaOptions")
+    val extraJavaOpts = conf.get("spark.executor.extraJavaOptions", "")
 
-    val libraryPathOption = "spark.executor.extraLibraryPath"
-    val extraLibraryPath = conf.getOption(libraryPathOption).map(p => s"-Djava.library.path=$p")
-    val extraOpts = Seq(extraJavaOpts, extraLibraryPath).flatten.mkString(" ")
+    // Set the environment variable through a command prefix
+    // to append to the existing value of the variable
+    val prefixEnv = conf.getOption("spark.executor.extraLibraryPath").map { p =>
+      Utils.libraryPathEnvPrefix(Seq(p))
+    }.getOrElse("")
+
+    environment.addVariables(
+      Environment.Variable.newBuilder()
+        .setName("SPARK_EXECUTOR_OPTS")
+        .setValue(extraJavaOpts)
+        .build())
 
     sc.executorEnvs.foreach { case (key, value) =>
       environment.addVariables(Environment.Variable.newBuilder()
@@ -130,26 +143,36 @@ private[spark] class CoarseMesosSchedulerBackend(
     }
     val command = CommandInfo.newBuilder()
       .setEnvironment(environment)
-    val driverUrl = "akka.tcp://spark@%s:%s/user/%s".format(
+    val driverUrl = AkkaUtils.address(
+      AkkaUtils.protocol(sc.env.actorSystem),
+      SparkEnv.driverActorSystemName,
       conf.get("spark.driver.host"),
       conf.get("spark.driver.port"),
       CoarseGrainedSchedulerBackend.ACTOR_NAME)
 
     val uri = conf.get("spark.executor.uri", null)
     if (uri == null) {
-      val runScript = new File(sparkHome, "./bin/spark-class").getCanonicalPath
+      val runScript = new File(executorSparkHome, "./bin/spark-class").getCanonicalPath
       command.setValue(
-        "\"%s\" org.apache.spark.executor.CoarseGrainedExecutorBackend %s %s %s %s %d".format(
-          runScript, extraOpts, driverUrl, offer.getSlaveId.getValue, offer.getHostname, numCores))
+        "%s \"%s\" org.apache.spark.executor.CoarseGrainedExecutorBackend"
+          .format(prefixEnv, runScript) +
+        s" --driver-url $driverUrl" +
+        s" --executor-id ${offer.getSlaveId.getValue}" +
+        s" --hostname ${offer.getHostname}" +
+        s" --cores $numCores" +
+        s" --app-id $appId")
     } else {
       // Grab everything to the first '.'. We'll use that and '*' to
       // glob the directory "correctly".
       val basename = uri.split('/').last.split('.').head
       command.setValue(
-        ("cd %s*; " +
-          "./bin/spark-class org.apache.spark.executor.CoarseGrainedExecutorBackend %s %s %s %s %d")
-          .format(basename, extraOpts, driverUrl, offer.getSlaveId.getValue,
-            offer.getHostname, numCores))
+        s"cd $basename*; $prefixEnv " +
+         "./bin/spark-class org.apache.spark.executor.CoarseGrainedExecutorBackend" +
+        s" --driver-url $driverUrl" +
+        s" --executor-id ${offer.getSlaveId.getValue}" +
+        s" --hostname ${offer.getHostname}" +
+        s" --cores $numCores" +
+        s" --app-id $appId")
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri))
     }
     command.build()
@@ -158,7 +181,8 @@ private[spark] class CoarseMesosSchedulerBackend(
   override def offerRescinded(d: SchedulerDriver, o: OfferID) {}
 
   override def registered(d: SchedulerDriver, frameworkId: FrameworkID, masterInfo: MasterInfo) {
-    logInfo("Registered as framework ID " + frameworkId.getValue)
+    appId = frameworkId.getValue
+    logInfo("Registered as framework ID " + appId)
     registeredLock.synchronized {
       isRegistered = true
       registeredLock.notifyAll()
@@ -189,7 +213,9 @@ private[spark] class CoarseMesosSchedulerBackend(
         val slaveId = offer.getSlaveId.toString
         val mem = getResource(offer.getResourcesList, "mem")
         val cpus = getResource(offer.getResourcesList, "cpus").toInt
-        if (totalCoresAcquired < maxCores && mem >= sc.executorMemory && cpus >= 1 &&
+        if (totalCoresAcquired < maxCores &&
+            mem >= MemoryUtils.calculateTotalMemory(sc) &&
+            cpus >= 1 &&
             failuresBySlaveId.getOrElse(slaveId, 0) < MAX_SLAVE_FAILURES &&
             !slaveIdsWithExecutors.contains(slaveId)) {
           // Launch an executor on the slave
@@ -205,12 +231,15 @@ private[spark] class CoarseMesosSchedulerBackend(
             .setCommand(createCommand(offer, cpusToUse + extraCoresPerSlave))
             .setName("Task " + taskId)
             .addResources(createResource("cpus", cpusToUse))
-            .addResources(createResource("mem", sc.executorMemory))
+            .addResources(createResource("mem",
+              MemoryUtils.calculateTotalMemory(sc)))
             .build()
-          d.launchTasks(offer.getId, Collections.singletonList(task), filters)
+          d.launchTasks(
+            Collections.singleton(offer.getId),  Collections.singletonList(task), filters)
         } else {
           // Filter it out
-          d.launchTasks(offer.getId, Collections.emptyList[MesosTaskInfo](), filters)
+          d.launchTasks(
+            Collections.singleton(offer.getId), Collections.emptyList[MesosTaskInfo](), filters)
         }
       }
     }
@@ -221,8 +250,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     for (r <- res if r.getName == name) {
       return r.getScalar.getValue
     }
-    // If we reached here, no resource with the required name was present
-    throw new IllegalArgumentException("No resource called " + name + " in " + res)
+    0
   }
 
   /** Build a Mesos resource protobuf object */
@@ -298,4 +326,11 @@ private[spark] class CoarseMesosSchedulerBackend(
     logInfo("Executor lost: %s, marking slave %s as lost".format(e.getValue, s.getValue))
     slaveLost(d, s)
   }
+
+  override def applicationId(): String =
+    Option(appId).getOrElse {
+      logWarning("Application ID is not initialized yet.")
+      super.applicationId
+    }
+
 }

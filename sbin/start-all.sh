@@ -21,8 +21,8 @@
 # Starts the master on this node.
 # Starts a worker on each node specified in conf/slaves
 
-sbin=`dirname "$0"`
-sbin=`cd "$sbin"; pwd`
+sbin="`dirname "$0"`"
+sbin="`cd "$sbin"; pwd`"
 
 TACHYON_STR=""
 

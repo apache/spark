@@ -17,13 +17,23 @@
 
 package org.apache.spark.mllib.regression
 
-import org.scalatest.FunSuite
+import scala.util.Random
 
 import org.jblas.DoubleMatrix
+import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.util.{LinearDataGenerator, LocalSparkContext}
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.util.{LocalClusterSparkContext, LinearDataGenerator,
+  MLlibTestSparkContext}
+import org.apache.spark.util.Utils
 
-class RidgeRegressionSuite extends FunSuite with LocalSparkContext {
+private object RidgeRegressionSuite {
+
+  /** 3 features */
+  val model = new RidgeRegressionModel(weights = Vectors.dense(0.1, 0.2, 0.3), intercept = 0.5)
+}
+
+class RidgeRegressionSuite extends FunSuite with MLlibTestSparkContext {
 
   def predictionError(predictions: Seq[Double], input: Seq[LabeledPoint]) = {
     predictions.zip(input).map { case (prediction, expected) =>
@@ -71,5 +81,38 @@ class RidgeRegressionSuite extends FunSuite with LocalSparkContext {
     // Ridge validation error should be lower than linear regression.
     assert(ridgeErr < linearErr,
       "ridgeError (" + ridgeErr + ") was not less than linearError(" + linearErr + ")")
+  }
+
+  test("model save/load") {
+    val model = RidgeRegressionSuite.model
+
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+
+    // Save model, load it back, and compare.
+    try {
+      model.save(sc, path)
+      val sameModel = RidgeRegressionModel.load(sc, path)
+      assert(model.weights == sameModel.weights)
+      assert(model.intercept == sameModel.intercept)
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
+  }
+}
+
+class RidgeRegressionClusterSuite extends FunSuite with LocalClusterSparkContext {
+
+  test("task size should be small in both training and prediction") {
+    val m = 4
+    val n = 200000
+    val points = sc.parallelize(0 until m, 2).mapPartitionsWithIndex { (idx, iter) =>
+      val random = new Random(idx)
+      iter.map(i => LabeledPoint(1.0, Vectors.dense(Array.fill(n)(random.nextDouble()))))
+    }.cache()
+    // If we serialize data directly in the task closure, the size of the serialized task would be
+    // greater than 1MB and hence Spark would throw an error.
+    val model = RidgeRegressionWithSGD.train(points, 2)
+    val predictions = model.predict(points.map(_.features))
   }
 }

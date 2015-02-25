@@ -54,6 +54,13 @@ from copy_reg import _extension_registry, _inverted_registry, _extension_cache
 import new
 import dis
 import traceback
+import platform
+
+PyImp = platform.python_implementation()
+
+
+import logging
+cloudLog = logging.getLogger("Cloud.Transport")
 
 #relevant opcodes
 STORE_GLOBAL = chr(dis.opname.index('STORE_GLOBAL'))
@@ -64,23 +71,9 @@ GLOBAL_OPS = [STORE_GLOBAL, DELETE_GLOBAL, LOAD_GLOBAL]
 HAVE_ARGUMENT = chr(dis.HAVE_ARGUMENT)
 EXTENDED_ARG = chr(dis.EXTENDED_ARG)
 
-import logging
-cloudLog = logging.getLogger("Cloud.Transport")
-
-try:
-    import ctypes
-except (MemoryError, ImportError):
-    logging.warning('Exception raised on importing ctypes. Likely python bug.. some functionality will be disabled', exc_info = True)
-    ctypes = None
-    PyObject_HEAD = None
-else:
-
-    # for reading internal structures
-    PyObject_HEAD = [
-        ('ob_refcnt', ctypes.c_size_t),
-        ('ob_type', ctypes.c_void_p),
-    ]
-
+if PyImp == "PyPy":
+    # register builtin type in `new`
+    new.method = types.MethodType
 
 try:
     from cStringIO import StringIO
@@ -225,6 +218,8 @@ class CloudPickler(pickle.Pickler):
 
         if themodule:
             self.modules.add(themodule)
+            if getattr(themodule, name, None) is obj:
+                return self.save_global(obj, name)
 
         if not self.savedDjangoEnv:
             #hack for django - if we detect the settings module, we transport it
@@ -243,10 +238,10 @@ class CloudPickler(pickle.Pickler):
         # if func is lambda, def'ed at prompt, is in main, or is nested, then
         # we'll pickle the actual function object rather than simply saving a
         # reference (as is done in default pickler), via save_function_tuple.
-        if islambda(obj) or obj.func_code.co_filename == '<stdin>' or themodule == None:
+        if islambda(obj) or obj.func_code.co_filename == '<stdin>' or themodule is None:
             #Force server to import modules that have been imported in main
             modList = None
-            if themodule == None and not self.savedForceImports:
+            if themodule is None and not self.savedForceImports:
                 mainmod = sys.modules['__main__']
                 if useForcedImports and hasattr(mainmod,'___pyc_forcedImports__'):
                     modList = list(mainmod.___pyc_forcedImports__)
@@ -306,14 +301,13 @@ class CloudPickler(pickle.Pickler):
 
         # create a skeleton function object and memoize it
         save(_make_skel_func)
-        save((code, len(closure), base_globals))
+        save((code, closure, base_globals))
         write(pickle.REDUCE)
         self.memoize(func)
 
         # save the rest of the func data needed by _fill_function
         save(f_globals)
         save(defaults)
-        save(closure)
         save(dct)
         write(pickle.TUPLE)
         write(pickle.REDUCE)  # applies _fill_function on the tuple
@@ -343,6 +337,12 @@ class CloudPickler(pickle.Pickler):
                 if op in GLOBAL_OPS:
                     out_names.add(names[oparg])
         #print 'extracted', out_names, ' from ', names
+
+        if co.co_consts:   # see if nested function have any global refs
+            for const in co.co_consts:
+                if type(const) is types.CodeType:
+                    out_names |= CloudPickler.extract_code_globals(const)
+
         return out_names
 
     def extract_func_data(self, func):
@@ -354,10 +354,7 @@ class CloudPickler(pickle.Pickler):
 
         # extract all global ref's
         func_global_refs = CloudPickler.extract_code_globals(code)
-        if code.co_consts:   # see if nested function have any global refs
-            for const in code.co_consts:
-                if type(const) is types.CodeType and const.co_names:
-                    func_global_refs = func_global_refs.union( CloudPickler.extract_code_globals(const))
+
         # process all variables referenced by global environment
         f_globals = {}
         for var in func_global_refs:
@@ -395,6 +392,12 @@ class CloudPickler(pickle.Pickler):
         self.globals_ref[id(func.func_globals)] = base_globals
 
         return (code, f_globals, defaults, closure, dct, base_globals)
+
+    def save_builtin_function(self, obj):
+        if obj.__module__ is "__builtin__":
+            return self.save_global(obj)
+        return self.save_function(obj)
+    dispatch[types.BuiltinFunctionType] = save_builtin_function
 
     def save_global(self, obj, name=None, pack=struct.pack):
         write = self.write
@@ -435,7 +438,7 @@ class CloudPickler(pickle.Pickler):
                     try:
                         klass = getattr(themodule, name)
                     except AttributeError, a:
-                        #print themodule, name, obj, type(obj)
+                        # print themodule, name, obj, type(obj)
                         raise pickle.PicklingError("Can't pickle builtin %s" % obj)
                 else:
                     raise
@@ -480,7 +483,6 @@ class CloudPickler(pickle.Pickler):
         write(pickle.GLOBAL + modname + '\n' + name + '\n')
         self.memoize(obj)
     dispatch[types.ClassType] = save_global
-    dispatch[types.BuiltinFunctionType] = save_global
     dispatch[types.TypeType] = save_global
 
     def save_instancemethod(self, obj):
@@ -551,22 +553,39 @@ class CloudPickler(pickle.Pickler):
     dispatch[property] = save_property
 
     def save_itemgetter(self, obj):
-        """itemgetter serializer (needed for namedtuple support)
-        a bit of a pain as we need to read ctypes internals"""
-        class ItemGetterType(ctypes.Structure):
-            _fields_ = PyObject_HEAD + [
-                ('nitems', ctypes.c_size_t),
-                ('item', ctypes.py_object)
-            ]
+        """itemgetter serializer (needed for namedtuple support)"""
+        class Dummy:
+            def __getitem__(self, item):
+                return item
+        items = obj(Dummy())
+        if not isinstance(items, tuple):
+            items = (items, )
+        return self.save_reduce(operator.itemgetter, items)
 
-
-        itemgetter_obj = ctypes.cast(ctypes.c_void_p(id(obj)), ctypes.POINTER(ItemGetterType)).contents
-        return self.save_reduce(operator.itemgetter, (itemgetter_obj.item,))
-
-    if PyObject_HEAD:
+    if type(operator.itemgetter) is type:
         dispatch[operator.itemgetter] = save_itemgetter
 
+    def save_attrgetter(self, obj):
+        """attrgetter serializer"""
+        class Dummy(object):
+            def __init__(self, attrs, index=None):
+                self.attrs = attrs
+                self.index = index
+            def __getattribute__(self, item):
+                attrs = object.__getattribute__(self, "attrs")
+                index = object.__getattribute__(self, "index")
+                if index is None:
+                    index = len(attrs)
+                    attrs.append(item)
+                else:
+                    attrs[index] = ".".join([attrs[index], item])
+                return type(self)(attrs, index)
+        attrs = []
+        obj(Dummy(attrs))
+        return self.save_reduce(operator.attrgetter, tuple(attrs))
 
+    if type(operator.attrgetter) is type:
+        dispatch[operator.attrgetter] = save_attrgetter
 
     def save_reduce(self, func, args, state=None,
                     listitems=None, dictitems=None, obj=None):
@@ -656,15 +675,14 @@ class CloudPickler(pickle.Pickler):
     def save_file(self, obj):
         """Save a file"""
         import StringIO as pystringIO #we can't use cStringIO as it lacks the name attribute
-        from ..transport.adapter import SerializingAdapter
 
         if not hasattr(obj, 'name') or  not hasattr(obj, 'mode'):
             raise pickle.PicklingError("Cannot pickle files that do not map to an actual file")
-        if obj.name == '<stdout>':
+        if obj is sys.stdout:
             return self.save_reduce(getattr, (sys,'stdout'), obj=obj)
-        if obj.name == '<stderr>':
+        if obj is sys.stderr:
             return self.save_reduce(getattr, (sys,'stderr'), obj=obj)
-        if obj.name == '<stdin>':
+        if obj is sys.stdin:
             raise pickle.PicklingError("Cannot pickle standard input")
         if  hasattr(obj, 'isatty') and obj.isatty():
             raise pickle.PicklingError("Cannot pickle files that map to tty objects")
@@ -690,13 +708,10 @@ class CloudPickler(pickle.Pickler):
             tmpfile.close()
             if tst != '':
                 raise pickle.PicklingError("Cannot pickle file %s as it does not appear to map to a physical, real file" % name)
-        elif fsize > SerializingAdapter.max_transmit_data:
-            raise pickle.PicklingError("Cannot pickle file %s as it exceeds cloudconf.py's max_transmit_data of %d" %
-                                       (name,SerializingAdapter.max_transmit_data))
         else:
             try:
                 tmpfile = file(name)
-                contents = tmpfile.read(SerializingAdapter.max_transmit_data)
+                contents = tmpfile.read()
                 tmpfile.close()
             except IOError:
                 raise pickle.PicklingError("Cannot pickle file %s as it cannot be read" % name)
@@ -876,8 +891,7 @@ def _genpartial(func, args, kwds):
         kwds = {}
     return partial(func, *args, **kwds)
 
-
-def _fill_function(func, globals, defaults, closure, dict):
+def _fill_function(func, globals, defaults, dict):
     """ Fills in the rest of function data into the skeleton function object
         that were created via _make_skel_func().
          """
@@ -885,55 +899,34 @@ def _fill_function(func, globals, defaults, closure, dict):
     func.func_defaults = defaults
     func.func_dict = dict
 
-    if len(closure) != len(func.func_closure):
-        raise pickle.UnpicklingError("closure lengths don't match up")
-    for i in range(len(closure)):
-        _change_cell_value(func.func_closure[i], closure[i])
-
     return func
 
-def _make_skel_func(code, num_closures, base_globals = None):
+def _make_cell(value):
+    return (lambda: value).func_closure[0]
+
+def _reconstruct_closure(values):
+    return tuple([_make_cell(v) for v in values])
+
+def _make_skel_func(code, closures, base_globals = None):
     """ Creates a skeleton function object that contains just the provided
         code and the correct number of cells in func_closure.  All other
         func attributes (e.g. func_globals) are empty.
     """
-    #build closure (cells):
-    if not ctypes:
-        raise Exception('ctypes failed to import; cannot build function')
-
-    cellnew = ctypes.pythonapi.PyCell_New
-    cellnew.restype = ctypes.py_object
-    cellnew.argtypes = (ctypes.py_object,)
-    dummy_closure = tuple(map(lambda i: cellnew(None), range(num_closures)))
+    closure = _reconstruct_closure(closures) if closures else None
 
     if base_globals is None:
         base_globals = {}
     base_globals['__builtins__'] = __builtins__
 
     return types.FunctionType(code, base_globals,
-                              None, None, dummy_closure)
+                              None, None, closure)
 
-# this piece of opaque code is needed below to modify 'cell' contents
-cell_changer_code = new.code(
-    1, 1, 2, 0,
-    ''.join([
-        chr(dis.opmap['LOAD_FAST']), '\x00\x00',
-        chr(dis.opmap['DUP_TOP']),
-        chr(dis.opmap['STORE_DEREF']), '\x00\x00',
-        chr(dis.opmap['RETURN_VALUE'])
-    ]),
-    (), (), ('newval',), '<nowhere>', 'cell_changer', 1, '', ('c',), ()
-)
-
-def _change_cell_value(cell, newval):
-    """ Changes the contents of 'cell' object to newval """
-    return new.function(cell_changer_code, {}, None, (), (cell,))(newval)
 
 """Constructors for 3rd party libraries
 Note: These can never be renamed due to client compatibility issues"""
 
 def _getobject(modname, attribute):
-    mod = __import__(modname)
+    mod = __import__(modname, fromlist=[attribute])
     return mod.__dict__[attribute]
 
 def _generateImage(size, mode, str_rep):

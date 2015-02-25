@@ -17,72 +17,45 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.trees
+import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.errors.attachTree
-import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.Logging
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.trees
 
 /**
  * A bound reference points to a specific slot in the input tuple, allowing the actual value
  * to be retrieved more efficiently.  However, since operations like column pruning can change
  * the layout of intermediate tuples, BindReferences should be run after all such transformations.
  */
-case class BoundReference(ordinal: Int, baseReference: Attribute)
-  extends Attribute with trees.LeafNode[Expression] {
+case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
+  extends Expression with trees.LeafNode[Expression] {
 
   type EvaluatedType = Any
 
-  def nullable = baseReference.nullable
-  def dataType = baseReference.dataType
-  def exprId = baseReference.exprId
-  def qualifiers = baseReference.qualifiers
-  def name = baseReference.name
-
-  def newInstance = BoundReference(ordinal, baseReference.newInstance)
-  def withQualifiers(newQualifiers: Seq[String]) =
-    BoundReference(ordinal, baseReference.withQualifiers(newQualifiers))
-
-  override def toString = s"$baseReference:$ordinal"
+  override def toString = s"input[$ordinal]"
 
   override def eval(input: Row): Any = input(ordinal)
 }
 
-/**
- * Used to denote operators that do their own binding of attributes internally.
- */
-trait NoBind { self: trees.TreeNode[_] => }
-
-class BindReferences[TreeNode <: QueryPlan[TreeNode]] extends Rule[TreeNode] {
-  import BindReferences._
-
-  def apply(plan: TreeNode): TreeNode = {
-    plan.transform {
-      case n: NoBind => n.asInstanceOf[TreeNode]
-      case leafNode if leafNode.children.isEmpty => leafNode
-      case unaryNode if unaryNode.children.size == 1 => unaryNode.transformExpressions { case e =>
-        bindReference(e, unaryNode.children.head.output)
-      }
-    }
-  }
-}
-
 object BindReferences extends Logging {
-  def bindReference(expression: Expression, input: Seq[Attribute]): Expression = {
+
+  def bindReference[A <: Expression](
+      expression: A,
+      input: Seq[Attribute],
+      allowFailures: Boolean = false): A = {
     expression.transform { case a: AttributeReference =>
       attachTree(a, "Binding attribute") {
         val ordinal = input.indexWhere(_.exprId == a.exprId)
         if (ordinal == -1) {
-          // TODO: This fallback is required because some operators (such as ScriptTransform)
-          // produce new attributes that can't be bound.  Likely the right thing to do is remove
-          // this rule and require all operators to explicitly bind to the input schema that
-          // they specify.
-          logger.debug(s"Couldn't find $a in ${input.mkString("[", ",", "]")}")
-          a
+          if (allowFailures) {
+            a
+          } else {
+            sys.error(s"Couldn't find $a in ${input.mkString("[", ",", "]")}")
+          }
         } else {
-          BoundReference(ordinal, a)
+          BoundReference(ordinal, a.dataType, a.nullable)
         }
       }
-    }
+    }.asInstanceOf[A] // Kind of a hack, but safe.  TODO: Tighten return type when possible.
   }
 }

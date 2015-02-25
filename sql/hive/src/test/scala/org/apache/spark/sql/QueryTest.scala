@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.FunSuite
+import scala.collection.JavaConversions._
 
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
@@ -29,36 +29,89 @@ import org.apache.spark.sql.catalyst.util._
  * It is hard to have maven allow one subproject depend on another subprojects test code.
  * So, we duplicate this code here.
  */
-class QueryTest extends FunSuite {
+class QueryTest extends PlanTest {
+
+  /**
+   * Runs the plan and makes sure the answer contains all of the keywords, or the
+   * none of keywords are listed in the answer
+   * @param rdd the [[DataFrame]] to be executed
+   * @param exists true for make sure the keywords are listed in the output, otherwise
+   *               to make sure none of the keyword are not listed in the output
+   * @param keywords keyword in string array
+   */
+  def checkExistence(rdd: DataFrame, exists: Boolean, keywords: String*) {
+    val outputs = rdd.collect().map(_.mkString).mkString
+    for (key <- keywords) {
+      if (exists) {
+        assert(outputs.contains(key), s"Failed for $rdd ($key doens't exist in result)")
+      } else {
+        assert(!outputs.contains(key), s"Failed for $rdd ($key existed in the result)")
+      }
+    }
+  }
+
   /**
    * Runs the plan and makes sure the answer matches the expected result.
-   * @param rdd the [[SchemaRDD]] to be executed
-   * @param expectedAnswer the expected result, can either be an Any, Seq[Product], or Seq[ Seq[Any] ].
+   * @param rdd the [[DataFrame]] to be executed
+   * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
    */
-  protected def checkAnswer(rdd: SchemaRDD, expectedAnswer: Any): Unit = {
-    val convertedAnswer = expectedAnswer match {
-      case s: Seq[_] if s.isEmpty => s
-      case s: Seq[_] if s.head.isInstanceOf[Product] &&
-        !s.head.isInstanceOf[Seq[_]] => s.map(_.asInstanceOf[Product].productIterator.toIndexedSeq)
-      case s: Seq[_] => s
-      case singleItem => Seq(Seq(singleItem))
+  protected def checkAnswer(rdd: DataFrame, expectedAnswer: Seq[Row]): Unit = {
+    QueryTest.checkAnswer(rdd, expectedAnswer) match {
+      case Some(errorMessage) => fail(errorMessage)
+      case None =>
     }
+  }
 
-    val isSorted = rdd.logicalPlan.collect { case s: logical.Sort => s}.nonEmpty
-    def prepareAnswer(answer: Seq[Any]) = if (!isSorted) answer.sortBy(_.toString) else answer
+  protected def checkAnswer(rdd: DataFrame, expectedAnswer: Row): Unit = {
+    checkAnswer(rdd, Seq(expectedAnswer))
+  }
+
+  def sqlTest(sqlString: String, expectedAnswer: Seq[Row])(implicit sqlContext: SQLContext): Unit = {
+    test(sqlString) {
+      checkAnswer(sqlContext.sql(sqlString), expectedAnswer)
+    }
+  }
+}
+
+object QueryTest {
+  /**
+   * Runs the plan and makes sure the answer matches the expected result.
+   * If there was exception during the execution or the contents of the DataFrame does not
+   * match the expected result, an error message will be returned. Otherwise, a [[None]] will
+   * be returned.
+   * @param rdd the [[DataFrame]] to be executed
+   * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
+   */
+  def checkAnswer(rdd: DataFrame, expectedAnswer: Seq[Row]): Option[String] = {
+    val isSorted = rdd.logicalPlan.collect { case s: logical.Sort => s }.nonEmpty
+    def prepareAnswer(answer: Seq[Row]): Seq[Row] = {
+      // Converts data to types that we can do equality comparison using Scala collections.
+      // For BigDecimal type, the Scala type has a better definition of equality test (similar to
+      // Java's java.math.BigDecimal.compareTo).
+      val converted: Seq[Row] = answer.map { s =>
+        Row.fromSeq(s.toSeq.map {
+          case d: java.math.BigDecimal => BigDecimal(d)
+          case o => o
+        })
+      }
+      if (!isSorted) converted.sortBy(_.toString) else converted
+    }
     val sparkAnswer = try rdd.collect().toSeq catch {
       case e: Exception =>
-        fail(
+        val errorMessage =
           s"""
             |Exception thrown while executing query:
-            |${rdd.logicalPlan}
+            |${rdd.queryExecution}
             |== Exception ==
             |$e
-          """.stripMargin)
+            |${org.apache.spark.sql.catalyst.util.stackTraceToString(e)}
+          """.stripMargin
+        return Some(errorMessage)
     }
 
-    if(prepareAnswer(convertedAnswer) != prepareAnswer(sparkAnswer)) {
-      fail(s"""
+    if (prepareAnswer(expectedAnswer) != prepareAnswer(sparkAnswer)) {
+      val errorMessage =
+        s"""
         |Results do not match for query:
         |${rdd.logicalPlan}
         |== Analyzed Plan ==
@@ -67,11 +120,21 @@ class QueryTest extends FunSuite {
         |${rdd.queryExecution.executedPlan}
         |== Results ==
         |${sideBySide(
-            s"== Correct Answer - ${convertedAnswer.size} ==" +:
-              prepareAnswer(convertedAnswer).map(_.toString),
-            s"== Spark Answer - ${sparkAnswer.size} ==" +:
-              prepareAnswer(sparkAnswer).map(_.toString)).mkString("\n")}
-      """.stripMargin)
+          s"== Correct Answer - ${expectedAnswer.size} ==" +:
+            prepareAnswer(expectedAnswer).map(_.toString),
+          s"== Spark Answer - ${sparkAnswer.size} ==" +:
+            prepareAnswer(sparkAnswer).map(_.toString)).mkString("\n")}
+      """.stripMargin
+      return Some(errorMessage)
+    }
+
+    return None
+  }
+
+  def checkAnswer(rdd: DataFrame, expectedAnswer: java.util.List[Row]): String = {
+    checkAnswer(rdd, expectedAnswer.toSeq) match {
+      case Some(errorMessage) => errorMessage
+      case None => null
     }
   }
 }

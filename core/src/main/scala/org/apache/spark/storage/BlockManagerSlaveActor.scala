@@ -21,8 +21,9 @@ import scala.concurrent.Future
 
 import akka.actor.{ActorRef, Actor}
 
-import org.apache.spark.{Logging, MapOutputTracker}
+import org.apache.spark.{Logging, MapOutputTracker, SparkEnv}
 import org.apache.spark.storage.BlockManagerMessages._
+import org.apache.spark.util.ActorLogReceive
 
 /**
  * An actor to take commands from the master to execute options. For example,
@@ -32,12 +33,12 @@ private[storage]
 class BlockManagerSlaveActor(
     blockManager: BlockManager,
     mapOutputTracker: MapOutputTracker)
-  extends Actor with Logging {
+  extends Actor with ActorLogReceive with Logging {
 
   import context.dispatcher
 
   // Operations that involve removing blocks may be slow and should be done asynchronously
-  override def receive = {
+  override def receiveWithLogging = {
     case RemoveBlock(blockId) =>
       doAsync[Boolean]("removing block " + blockId, sender) {
         blockManager.removeBlock(blockId)
@@ -54,12 +55,12 @@ class BlockManagerSlaveActor(
         if (mapOutputTracker != null) {
           mapOutputTracker.unregisterShuffle(shuffleId)
         }
-        blockManager.shuffleBlockManager.removeShuffle(shuffleId)
+        SparkEnv.get.shuffleManager.unregisterShuffle(shuffleId)
       }
 
-    case RemoveBroadcast(broadcastId, tellMaster) =>
+    case RemoveBroadcast(broadcastId, _) =>
       doAsync[Int]("removing broadcast " + broadcastId, sender) {
-        blockManager.removeBroadcast(broadcastId, tellMaster)
+        blockManager.removeBroadcast(broadcastId, tellMaster = true)
       }
 
     case GetBlockStatus(blockId, _) =>

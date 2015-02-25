@@ -106,7 +106,6 @@ private[spark] class RDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
       cpRDD = Some(newRDD)
       rdd.markCheckpointed(newRDD)   // Update the RDD's dependencies and partitions
       cpState = Checkpointed
-      RDDCheckpointData.clearTaskCaches()
     }
     logInfo("Done checkpointing RDD " + rdd.id + " to " + path + ", new parent is RDD " + newRDD.id)
   }
@@ -131,9 +130,5 @@ private[spark] class RDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
   }
 }
 
-private[spark] object RDDCheckpointData {
-  def clearTaskCaches() {
-    ShuffleMapTask.clearCache()
-    ResultTask.clearCache()
-  }
-}
+// Used for synchronization
+private[spark] object RDDCheckpointData

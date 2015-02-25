@@ -17,8 +17,13 @@
 
 package org.apache.spark.graphx.impl
 
-import org.apache.spark.graphx._
 import org.scalatest.FunSuite
+
+import org.apache.spark.SparkConf
+import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.serializer.KryoSerializer
+
+import org.apache.spark.graphx._
 
 class VertexPartitionSuite extends FunSuite {
 
@@ -116,4 +121,17 @@ class VertexPartitionSuite extends FunSuite {
     assert(vp3.index.getPos(2) === -1)
   }
 
+  test("serialization") {
+    val verts = Set((0L, 1), (1L, 1), (2L, 1))
+    val vp = VertexPartition(verts.iterator)
+    val javaSer = new JavaSerializer(new SparkConf())
+    val conf = new SparkConf()
+    GraphXUtils.registerKryoClasses(conf)
+    val kryoSer = new KryoSerializer(conf)
+
+    for (ser <- List(javaSer, kryoSer); s = ser.newInstance()) {
+      val vpSer: VertexPartition[Int] = s.deserialize(s.serialize(vp))
+      assert(vpSer.iterator.toSet === verts)
+    }
+  }
 }

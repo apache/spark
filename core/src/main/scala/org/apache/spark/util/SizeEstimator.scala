@@ -180,7 +180,7 @@ private[spark] object SizeEstimator extends Logging {
     }
   }
 
-  // Estimat the size of arrays larger than ARRAY_SIZE_FOR_SAMPLING by sampling.
+  // Estimate the size of arrays larger than ARRAY_SIZE_FOR_SAMPLING by sampling.
   private val ARRAY_SIZE_FOR_SAMPLING = 200
   private val ARRAY_SAMPLE_SIZE = 100 // should be lower than ARRAY_SIZE_FOR_SAMPLING
 

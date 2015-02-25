@@ -18,13 +18,13 @@
 package org.apache.spark
 
 import scala.collection.mutable
+import scala.ref.WeakReference
 
 import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 
-import org.apache.spark.SparkContext._
 
-class AccumulatorSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
+class AccumulatorSuite extends FunSuite with Matchers with LocalSparkContext {
 
 
   implicit def setAccum[A] = new AccumulableParam[mutable.Set[A], A] {
@@ -61,7 +61,7 @@ class AccumulatorSuite extends FunSuite with ShouldMatchers with LocalSparkConte
     val acc : Accumulator[Int] = sc.accumulator(0)
 
     val d = sc.parallelize(1 to 20)
-    evaluating {d.foreach{x => acc.value = x}} should produce [Exception]
+    an [Exception] should be thrownBy {d.foreach{x => acc.value = x}}
   }
 
   test ("add value to collection accumulators") {
@@ -87,11 +87,11 @@ class AccumulatorSuite extends FunSuite with ShouldMatchers with LocalSparkConte
       sc = new SparkContext("local[" + nThreads + "]", "test")
       val acc: Accumulable[mutable.Set[Any], Any] = sc.accumulable(new mutable.HashSet[Any]())
       val d = sc.parallelize(1 to maxI)
-      evaluating {
+      an [SparkException] should be thrownBy {
         d.foreach {
           x => acc.value += x
         }
-      } should produce [SparkException]
+      }
       resetSparkContext()
     }
   }
@@ -135,6 +135,25 @@ class AccumulatorSuite extends FunSuite with ShouldMatchers with LocalSparkConte
       acc.value should be ( (0 to maxI).toSet)
       resetSparkContext()
     }
+  }
+
+  test ("garbage collection") {
+    // Create an accumulator and let it go out of scope to test that it's properly garbage collected
+    sc = new SparkContext("local", "test")
+    var acc: Accumulable[mutable.Set[Any], Any] = sc.accumulable(new mutable.HashSet[Any]())
+    val accId = acc.id
+    val ref = WeakReference(acc)
+
+    // Ensure the accumulator is present
+    assert(ref.get.isDefined)
+
+    // Remove the explicit reference to it and allow weak reference to get garbage collected
+    acc = null
+    System.gc()
+    assert(ref.get.isEmpty)
+
+    Accumulators.remove(accId)
+    assert(!Accumulators.originals.get(accId).isDefined)
   }
 
 }

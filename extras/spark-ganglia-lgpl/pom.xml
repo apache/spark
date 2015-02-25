@@ -20,7 +20,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>1.3.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
@@ -29,7 +29,11 @@
   <artifactId>spark-ganglia-lgpl_2.10</artifactId>
   <packaging>jar</packaging>
   <name>Spark Ganglia Integration</name>
-  
+
+  <properties>
+    <sbt.project.name>ganglia-lgpl</sbt.project.name>
+  </properties>
+
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -38,7 +42,7 @@
     </dependency>
 
     <dependency>
-      <groupId>com.codahale.metrics</groupId>
+      <groupId>io.dropwizard.metrics</groupId>
       <artifactId>metrics-ganglia</artifactId>
     </dependency>
   </dependencies>

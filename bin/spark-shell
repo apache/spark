@@ -22,36 +22,51 @@
 
 cygwin=false
 case "`uname`" in
-    CYGWIN*) cygwin=true;;
+  CYGWIN*) cygwin=true;;
 esac
 
 # Enter posix mode for bash
 set -o posix
 
 ## Global script variables
-FWDIR="$(cd `dirname $0`/..; pwd)"
+FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
+
+function usage() {
+  echo "Usage: ./bin/spark-shell [options]"
+  "$FWDIR"/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
+  exit 0
+}
 
 if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
-  echo "Usage: ./bin/spark-shell [options]"
-  $FWDIR/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
-  exit 0
+  usage
 fi
 
-function main(){
-    if $cygwin; then
-        # Workaround for issue involving JLine and Cygwin
-        # (see http://sourceforge.net/p/jline/bugs/40/).
-        # If you're using the Mintty terminal emulator in Cygwin, may need to set the
-        # "Backspace sends ^H" setting in "Keys" section of the Mintty options
-        # (see https://github.com/sbt/sbt/issues/562).
-        stty -icanon min 1 -echo > /dev/null 2>&1
-        export SPARK_SUBMIT_OPTS="$SPARK_SUBMIT_OPTS -Djline.terminal=unix"
-        $FWDIR/bin/spark-submit spark-shell "$@" --class org.apache.spark.repl.Main
-        stty icanon echo > /dev/null 2>&1
-    else
-        export SPARK_SUBMIT_OPTS
-        $FWDIR/bin/spark-submit spark-shell "$@" --class org.apache.spark.repl.Main
-    fi
+source "$FWDIR"/bin/utils.sh
+SUBMIT_USAGE_FUNCTION=usage
+gatherSparkSubmitOpts "$@"
+
+# SPARK-4161: scala does not assume use of the java classpath,
+# so we need to add the "-Dscala.usejavacp=true" flag mnually. We
+# do this specifically for the Spark shell because the scala REPL
+# has its own class loader, and any additional classpath specified
+# through spark.driver.extraClassPath is not automatically propagated.
+SPARK_SUBMIT_OPTS="$SPARK_SUBMIT_OPTS -Dscala.usejavacp=true"
+
+function main() {
+  if $cygwin; then
+    # Workaround for issue involving JLine and Cygwin
+    # (see http://sourceforge.net/p/jline/bugs/40/).
+    # If you're using the Mintty terminal emulator in Cygwin, may need to set the
+    # "Backspace sends ^H" setting in "Keys" section of the Mintty options
+    # (see https://github.com/sbt/sbt/issues/562).
+    stty -icanon min 1 -echo > /dev/null 2>&1
+    export SPARK_SUBMIT_OPTS="$SPARK_SUBMIT_OPTS -Djline.terminal=unix"
+    "$FWDIR"/bin/spark-submit --class org.apache.spark.repl.Main "${SUBMISSION_OPTS[@]}" spark-shell "${APPLICATION_OPTS[@]}"
+    stty icanon echo > /dev/null 2>&1
+  else
+    export SPARK_SUBMIT_OPTS
+    "$FWDIR"/bin/spark-submit --class org.apache.spark.repl.Main "${SUBMISSION_OPTS[@]}" spark-shell "${APPLICATION_OPTS[@]}"
+  fi
 }
 
 # Copy restore-TTY-on-exit functions from Scala script so spark-shell exits properly even in

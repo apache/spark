@@ -35,7 +35,7 @@ import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
 private[graphx] abstract class VertexPartitionBaseOps
     [VD: ClassTag, Self[X] <: VertexPartitionBase[X] : VertexPartitionBaseOpsConstructor]
     (self: Self[VD])
-    extends Logging {
+  extends Serializable with Logging {
 
   def withIndex(index: VertexIdToIndexMap): Self[VD]
   def withValues[VD2: ClassTag](values: Array[VD2]): Self[VD2]
@@ -238,8 +238,8 @@ private[graphx] abstract class VertexPartitionBaseOps
    * because these methods return a `Self` and this implicit conversion re-wraps that in a
    * `VertexPartitionBaseOps`. This relies on the context bound on `Self`.
    */
-  private implicit def toOps[VD2: ClassTag](
-      partition: Self[VD2]): VertexPartitionBaseOps[VD2, Self] = {
+  private implicit def toOps[VD2: ClassTag](partition: Self[VD2])
+    : VertexPartitionBaseOps[VD2, Self] = {
     implicitly[VertexPartitionBaseOpsConstructor[Self]].toOps(partition)
   }
 }

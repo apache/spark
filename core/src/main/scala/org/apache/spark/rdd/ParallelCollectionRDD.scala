@@ -48,7 +48,7 @@ private[spark] class ParallelCollectionPartition[T: ClassTag](
   override def index: Int = slice
 
   @throws(classOf[IOException])
-  private def writeObject(out: ObjectOutputStream): Unit = {
+  private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
 
     val sfactory = SparkEnv.get.serializer
 
@@ -67,7 +67,7 @@ private[spark] class ParallelCollectionPartition[T: ClassTag](
   }
 
   @throws(classOf[IOException])
-  private def readObject(in: ObjectInputStream): Unit = {
+  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
 
     val sfactory = SparkEnv.get.serializer
     sfactory match {
@@ -111,35 +111,40 @@ private object ParallelCollectionRDD {
   /**
    * Slice a collection into numSlices sub-collections. One extra thing we do here is to treat Range
    * collections specially, encoding the slices as other Ranges to minimize memory cost. This makes
-   * it efficient to run Spark over RDDs representing large sets of numbers.
+   * it efficient to run Spark over RDDs representing large sets of numbers. And if the collection
+   * is an inclusive Range, we use inclusive range for the last slice.
    */
   def slice[T: ClassTag](seq: Seq[T], numSlices: Int): Seq[Seq[T]] = {
     if (numSlices < 1) {
       throw new IllegalArgumentException("Positive number of slices required")
     }
+    // Sequences need to be sliced at the same set of index positions for operations
+    // like RDD.zip() to behave as expected
+    def positions(length: Long, numSlices: Int): Iterator[(Int, Int)] = {
+      (0 until numSlices).iterator.map(i => {
+        val start = ((i * length) / numSlices).toInt
+        val end = (((i + 1) * length) / numSlices).toInt
+        (start, end)
+      })
+    }
     seq match {
-      case r: Range.Inclusive => {
-        val sign = if (r.step < 0) {
-          -1
-        } else {
-          1
-        }
-        slice(new Range(
-          r.start, r.end + sign, r.step).asInstanceOf[Seq[T]], numSlices)
-      }
       case r: Range => {
-        (0 until numSlices).map(i => {
-          val start = ((i * r.length.toLong) / numSlices).toInt
-          val end = (((i + 1) * r.length.toLong) / numSlices).toInt
-          new Range(r.start + start * r.step, r.start + end * r.step, r.step)
-        }).asInstanceOf[Seq[Seq[T]]]
+        positions(r.length, numSlices).zipWithIndex.map({ case ((start, end), index) =>
+          // If the range is inclusive, use inclusive range for the last slice
+          if (r.isInclusive && index == numSlices - 1) {
+            new Range.Inclusive(r.start + start * r.step, r.end, r.step)
+          }
+          else {
+            new Range(r.start + start * r.step, r.start + end * r.step, r.step)
+          }
+        }).toSeq.asInstanceOf[Seq[Seq[T]]]
       }
       case nr: NumericRange[_] => {
         // For ranges of Long, Double, BigInteger, etc
         val slices = new ArrayBuffer[Seq[T]](numSlices)
-        val sliceSize = (nr.size + numSlices - 1) / numSlices // Round up to catch everything
         var r = nr
-        for (i <- 0 until numSlices) {
+        for ((start, end) <- positions(nr.length, numSlices)) {
+          val sliceSize = end - start
           slices += r.take(sliceSize).asInstanceOf[Seq[T]]
           r = r.drop(sliceSize)
         }
@@ -147,11 +152,10 @@ private object ParallelCollectionRDD {
       }
       case _ => {
         val array = seq.toArray // To prevent O(n^2) operations for List etc
-        (0 until numSlices).map(i => {
-          val start = ((i * array.length.toLong) / numSlices).toInt
-          val end = (((i + 1) * array.length.toLong) / numSlices).toInt
-          array.slice(start, end).toSeq
-        })
+        positions(array.length, numSlices).map({
+          case (start, end) =>
+            array.slice(start, end).toSeq
+        }).toSeq
       }
     }
   }

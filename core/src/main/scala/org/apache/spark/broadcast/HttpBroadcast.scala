@@ -40,9 +40,9 @@ private[spark] class HttpBroadcast[T: ClassTag](
     @transient var value_ : T, isLocal: Boolean, id: Long)
   extends Broadcast[T](id) with Logging with Serializable {
 
-  def getValue = value_
+  override protected def getValue() = value_
 
-  val blockId = BroadcastBlockId(id)
+  private val blockId = BroadcastBlockId(id)
 
   /*
    * Broadcasted data is also stored in the BlockManager of the driver. The BlockManagerMaster
@@ -60,25 +60,25 @@ private[spark] class HttpBroadcast[T: ClassTag](
   /**
    * Remove all persisted state associated with this HTTP broadcast on the executors.
    */
-  def doUnpersist(blocking: Boolean) {
+  override protected def doUnpersist(blocking: Boolean) {
     HttpBroadcast.unpersist(id, removeFromDriver = false, blocking)
   }
 
   /**
    * Remove all persisted state associated with this HTTP broadcast on the executors and driver.
    */
-  def doDestroy(blocking: Boolean) {
+  override protected def doDestroy(blocking: Boolean) {
     HttpBroadcast.unpersist(id, removeFromDriver = true, blocking)
   }
 
   /** Used by the JVM when serializing this object. */
-  private def writeObject(out: ObjectOutputStream) {
+  private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
     assertValid()
     out.defaultWriteObject()
   }
 
   /** Used by the JVM when deserializing this object. */
-  private def readObject(in: ObjectInputStream) {
+  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
     HttpBroadcast.synchronized {
       SparkEnv.get.blockManager.getSingle(blockId) match {
@@ -102,7 +102,7 @@ private[spark] class HttpBroadcast[T: ClassTag](
   }
 }
 
-private[spark] object HttpBroadcast extends Logging {
+private[broadcast] object HttpBroadcast extends Logging {
   private var initialized = false
   private var broadcastDir: File = null
   private var compress: Boolean = false
@@ -151,8 +151,10 @@ private[spark] object HttpBroadcast extends Logging {
   }
 
   private def createServer(conf: SparkConf) {
-    broadcastDir = Utils.createTempDir(Utils.getLocalDir(conf))
-    server = new HttpServer(broadcastDir, securityManager)
+    broadcastDir = Utils.createTempDir(Utils.getLocalDir(conf), "broadcast")
+    val broadcastPort = conf.getInt("spark.broadcast.port", 0)
+    server =
+      new HttpServer(conf, broadcastDir, securityManager, broadcastPort, "HTTP broadcast server")
     server.start()
     serverUri = server.uri
     logInfo("Broadcast server started at " + serverUri)
@@ -160,23 +162,28 @@ private[spark] object HttpBroadcast extends Logging {
 
   def getFile(id: Long) = new File(broadcastDir, BroadcastBlockId(id).name)
 
-  def write(id: Long, value: Any) {
+  private def write(id: Long, value: Any) {
     val file = getFile(id)
-    val out: OutputStream = {
-      if (compress) {
-        compressionCodec.compressedOutputStream(new FileOutputStream(file))
-      } else {
-        new BufferedOutputStream(new FileOutputStream(file), bufferSize)
+    val fileOutputStream = new FileOutputStream(file)
+    try {
+      val out: OutputStream = {
+        if (compress) {
+          compressionCodec.compressedOutputStream(fileOutputStream)
+        } else {
+          new BufferedOutputStream(fileOutputStream, bufferSize)
+        }
       }
+      val ser = SparkEnv.get.serializer.newInstance()
+      val serOut = ser.serializeStream(out)
+      serOut.writeObject(value)
+      serOut.close()
+      files += file
+    } finally {
+      fileOutputStream.close()
     }
-    val ser = SparkEnv.get.serializer.newInstance()
-    val serOut = ser.serializeStream(out)
-    serOut.writeObject(value)
-    serOut.close()
-    files += file
   }
 
-  def read[T: ClassTag](id: Long): T = {
+  private def read[T: ClassTag](id: Long): T = {
     logDebug("broadcast read server: " +  serverUri + " id: broadcast-" + id)
     val url = serverUri + "/" + BroadcastBlockId(id).name
 
@@ -185,11 +192,14 @@ private[spark] object HttpBroadcast extends Logging {
       logDebug("broadcast security enabled")
       val newuri = Utils.constructURIForAuthentication(new URI(url), securityManager)
       uc = newuri.toURL.openConnection()
+      uc.setConnectTimeout(httpReadTimeout)
       uc.setAllowUserInteraction(false)
     } else {
       logDebug("broadcast not using security")
       uc = new URL(url).openConnection()
+      uc.setConnectTimeout(httpReadTimeout)
     }
+    Utils.setupSecureURLConnection(uc, securityManager)
 
     val in = {
       uc.setReadTimeout(httpReadTimeout)

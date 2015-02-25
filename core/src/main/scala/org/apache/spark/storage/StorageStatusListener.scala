@@ -19,6 +19,7 @@ package org.apache.spark.storage
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 
@@ -28,26 +29,29 @@ import org.apache.spark.scheduler._
  */
 @DeveloperApi
 class StorageStatusListener extends SparkListener {
-  private val executorIdToStorageStatus = mutable.Map[String, StorageStatus]()
+  // This maintains only blocks that are cached (i.e. storage level is not StorageLevel.NONE)
+  private[storage] val executorIdToStorageStatus = mutable.Map[String, StorageStatus]()
 
   def storageStatusList = executorIdToStorageStatus.values.toSeq
 
   /** Update storage status list to reflect updated block statuses */
-  def updateStorageStatus(execId: String, updatedBlocks: Seq[(BlockId, BlockStatus)]) {
-    val filteredStatus = storageStatusList.find(_.blockManagerId.executorId == execId)
-    filteredStatus.foreach { storageStatus =>
+  private def updateStorageStatus(execId: String, updatedBlocks: Seq[(BlockId, BlockStatus)]) {
+    executorIdToStorageStatus.get(execId).foreach { storageStatus =>
       updatedBlocks.foreach { case (blockId, updatedStatus) =>
-        storageStatus.blocks(blockId) = updatedStatus
+        if (updatedStatus.storageLevel == StorageLevel.NONE) {
+          storageStatus.removeBlock(blockId)
+        } else {
+          storageStatus.updateBlock(blockId, updatedStatus)
+        }
       }
     }
   }
 
   /** Update storage status list to reflect the removal of an RDD from the cache */
-  def updateStorageStatus(unpersistedRDDId: Int) {
+  private def updateStorageStatus(unpersistedRDDId: Int) {
     storageStatusList.foreach { storageStatus =>
-      val unpersistedBlocksIds = storageStatus.rddBlocks.keys.filter(_.rddId == unpersistedRDDId)
-      unpersistedBlocksIds.foreach { blockId =>
-        storageStatus.blocks(blockId) = BlockStatus(StorageLevel.NONE, 0L, 0L, 0L)
+      storageStatus.rddBlocksById(unpersistedRDDId).foreach { case (blockId, _) =>
+        storageStatus.removeBlock(blockId)
       }
     }
   }
@@ -56,10 +60,9 @@ class StorageStatusListener extends SparkListener {
     val info = taskEnd.taskInfo
     val metrics = taskEnd.taskMetrics
     if (info != null && metrics != null) {
-      val execId = formatExecutorId(info.executorId)
       val updatedBlocks = metrics.updatedBlocks.getOrElse(Seq[(BlockId, BlockStatus)]())
       if (updatedBlocks.length > 0) {
-        updateStorageStatus(execId, updatedBlocks)
+        updateStorageStatus(info.executorId, updatedBlocks)
       }
     }
   }
@@ -85,13 +88,4 @@ class StorageStatusListener extends SparkListener {
     }
   }
 
-  /**
-   * In the local mode, there is a discrepancy between the executor ID according to the
-   * task ("localhost") and that according to SparkEnv ("<driver>"). In the UI, this
-   * results in duplicate rows for the same executor. Thus, in this mode, we aggregate
-   * these two rows and use the executor ID of "<driver>" to be consistent.
-   */
-  def formatExecutorId(execId: String): String = {
-    if (execId == "localhost") "<driver>" else execId
-  }
 }

@@ -21,8 +21,13 @@ import java.nio.ByteBuffer
 
 import org.apache.spark.util.SerializableBuffer
 
+/**
+ * Description of a task that gets passed onto executors to be executed, usually created by
+ * [[TaskSetManager.resourceOffer]].
+ */
 private[spark] class TaskDescription(
     val taskId: Long,
+    val attemptNumber: Int,
     val executorId: String,
     val name: String,
     val index: Int,    // Index within this task's TaskSet

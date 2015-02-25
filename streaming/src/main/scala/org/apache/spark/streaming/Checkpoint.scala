@@ -35,7 +35,6 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
   extends Logging with Serializable {
   val master = ssc.sc.master
   val framework = ssc.sc.appName
-  val sparkHome = ssc.sc.getSparkHome.getOrElse(null)
   val jars = ssc.sc.jars
   val graph = ssc.graph
   val checkpointDir = ssc.checkpointDir
@@ -153,7 +152,7 @@ class CheckpointWriter(
 
           // Delete old checkpoint files
           val allCheckpointFiles = Checkpoint.getCheckpointFiles(checkpointDir, fs)
-          if (allCheckpointFiles.size > 4) {
+          if (allCheckpointFiles.size > 10) {
             allCheckpointFiles.take(allCheckpointFiles.size - 10).foreach(file => {
               logInfo("Deleting " + file)
               fs.delete(file, true)

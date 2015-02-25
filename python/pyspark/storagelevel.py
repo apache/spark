@@ -17,7 +17,9 @@
 
 __all__ = ["StorageLevel"]
 
-class StorageLevel:
+
+class StorageLevel(object):
+
     """
     Flags for controlling the storage of an RDD. Each StorageLevel records whether to use memory,
     whether to drop the RDD to disk if it falls out of memory, whether to keep the data in memory
@@ -25,7 +27,7 @@ class StorageLevel:
     Also contains static constants for some commonly used storage levels, such as MEMORY_ONLY.
     """
 
-    def __init__(self, useDisk, useMemory, useOffHeap, deserialized, replication = 1):
+    def __init__(self, useDisk, useMemory, useOffHeap, deserialized, replication=1):
         self.useDisk = useDisk
         self.useMemory = useMemory
         self.useOffHeap = useOffHeap
@@ -35,6 +37,15 @@ class StorageLevel:
     def __repr__(self):
         return "StorageLevel(%s, %s, %s, %s, %s)" % (
             self.useDisk, self.useMemory, self.useOffHeap, self.deserialized, self.replication)
+
+    def __str__(self):
+        result = ""
+        result += "Disk " if self.useDisk else ""
+        result += "Memory " if self.useMemory else ""
+        result += "Tachyon " if self.useOffHeap else ""
+        result += "Deserialized " if self.deserialized else "Serialized "
+        result += "%sx Replicated" % self.replication
+        return result
 
 StorageLevel.DISK_ONLY = StorageLevel(True, False, False, False)
 StorageLevel.DISK_ONLY_2 = StorageLevel(True, False, False, False, 2)

@@ -26,11 +26,11 @@ import akka.actor._
 import akka.pattern.ask
 import akka.remote.{AssociationErrorEvent, DisassociatedEvent, RemotingLifecycleEvent}
 
-import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
-import org.apache.spark.util.{Utils, AkkaUtils}
+import org.apache.spark.util.{ActorLogReceive, Utils, AkkaUtils}
 
 /**
  * Interface allowing applications to speak with a Spark deploy cluster. Takes a master URL,
@@ -47,6 +47,8 @@ private[spark] class AppClient(
     conf: SparkConf)
   extends Logging {
 
+  val masterAkkaUrls = masterUrls.map(Master.toAkkaUrl(_, AkkaUtils.protocol(actorSystem)))
+
   val REGISTRATION_TIMEOUT = 20.seconds
   val REGISTRATION_RETRIES = 3
 
@@ -56,7 +58,7 @@ private[spark] class AppClient(
   var registered = false
   var activeMasterUrl: String = null
 
-  class ClientActor extends Actor with Logging {
+  class ClientActor extends Actor with ActorLogReceive with Logging {
     var master: ActorSelection = null
     var alreadyDisconnected = false  // To avoid calling listener.disconnected() multiple times
     var alreadyDead = false  // To avoid calling listener.dead() multiple times
@@ -75,9 +77,9 @@ private[spark] class AppClient(
     }
 
     def tryRegisterAllMasters() {
-      for (masterUrl <- masterUrls) {
-        logInfo("Connecting to master " + masterUrl + "...")
-        val actor = context.actorSelection(Master.toAkkaUrl(masterUrl))
+      for (masterAkkaUrl <- masterAkkaUrls) {
+        logInfo("Connecting to master " + masterAkkaUrl + "...")
+        val actor = context.actorSelection(masterAkkaUrl)
         actor ! RegisterApplication(appDescription)
       }
     }
@@ -103,23 +105,18 @@ private[spark] class AppClient(
     }
 
     def changeMaster(url: String) {
+      // activeMasterUrl is a valid Spark url since we receive it from master.
       activeMasterUrl = url
-      master = context.actorSelection(Master.toAkkaUrl(activeMasterUrl))
-      masterAddress = activeMasterUrl match {
-        case Master.sparkUrlRegex(host, port) =>
-          Address("akka.tcp", Master.systemName, host, port.toInt)
-        case x =>
-          throw new SparkException("Invalid spark URL: " + x)
-      }
+      master = context.actorSelection(
+        Master.toAkkaUrl(activeMasterUrl, AkkaUtils.protocol(actorSystem)))
+      masterAddress = Master.toAkkaAddress(activeMasterUrl, AkkaUtils.protocol(actorSystem))
     }
 
     private def isPossibleMaster(remoteUrl: Address) = {
-      masterUrls.map(s => Master.toAkkaUrl(s))
-        .map(u => AddressFromURIString(u).hostPort)
-        .contains(remoteUrl.hostPort)
+      masterAkkaUrls.map(AddressFromURIString(_).hostPort).contains(remoteUrl.hostPort)
     }
 
-    override def receive = {
+    override def receiveWithLogging = {
       case RegisteredApplication(appId_, masterUrl) =>
         appId = appId_
         registered = true
@@ -134,6 +131,7 @@ private[spark] class AppClient(
         val fullId = appId + "/" + id
         logInfo("Executor added: %s on %s (%s) with %d cores".format(fullId, workerId, hostPort,
           cores))
+        master ! ExecutorStateChanged(appId, id, ExecutorState.RUNNING, None, None)
         listener.executorAdded(fullId, workerId, hostPort, cores, memory)
 
       case ExecutorUpdated(id, state, message, exitStatus) =>
@@ -154,7 +152,7 @@ private[spark] class AppClient(
         logWarning(s"Connection to $address failed; waiting for master to reconnect...")
         markDisconnected()
 
-      case AssociationErrorEvent(cause, _, address, _) if isPossibleMaster(address) =>
+      case AssociationErrorEvent(cause, _, address, _, _) if isPossibleMaster(address) =>
         logWarning(s"Could not connect to $address: $cause")
 
       case StopAppClient =>

@@ -38,6 +38,7 @@ class ForEachDStream[T: ClassTag] (
     parent.getOrCompute(time) match {
       case Some(rdd) =>
         val jobFunc = () => {
+          ssc.sparkContext.setCallSite(creationSite)
           foreachFunc(rdd, time)
         }
         Some(new Job(time, jobFunc))

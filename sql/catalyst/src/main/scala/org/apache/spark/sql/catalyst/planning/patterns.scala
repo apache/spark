@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.planning
 
 import scala.annotation.tailrec
 
-import org.apache.spark.sql.Logging
-
+import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -105,52 +105,118 @@ object PhysicalOperation extends PredicateHelper {
 }
 
 /**
- * A pattern that finds joins with equality conditions that can be evaluated using hashing
- * techniques.  For inner joins, any filters on top of the join operator are also matched.
+ * Matches a logical aggregation that can be performed on distributed data in two steps.  The first
+ * operates on the data in each partition performing partial aggregation for each group.  The second
+ * occurs after the shuffle and completes the aggregation.
+ *
+ * This pattern will only match if all aggregate expressions can be computed partially and will
+ * return the rewritten aggregation expressions for both phases.
+ *
+ * The returned values for this match are as follows:
+ *  - Grouping attributes for the final aggregation.
+ *  - Aggregates for the final aggregation.
+ *  - Grouping expressions for the partial aggregation.
+ *  - Partial aggregate expressions.
+ *  - Input to the aggregation.
  */
-object HashFilteredJoin extends Logging with PredicateHelper {
+object PartialAggregation {
+  type ReturnType =
+    (Seq[Attribute], Seq[NamedExpression], Seq[Expression], Seq[NamedExpression], LogicalPlan)
+
+  def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
+    case logical.Aggregate(groupingExpressions, aggregateExpressions, child) =>
+      // Collect all aggregate expressions.
+      val allAggregates =
+        aggregateExpressions.flatMap(_ collect { case a: AggregateExpression => a})
+      // Collect all aggregate expressions that can be computed partially.
+      val partialAggregates =
+        aggregateExpressions.flatMap(_ collect { case p: PartialAggregate => p})
+
+      // Only do partial aggregation if supported by all aggregate expressions.
+      if (allAggregates.size == partialAggregates.size) {
+        // Create a map of expressions to their partial evaluations for all aggregate expressions.
+        val partialEvaluations: Map[TreeNodeRef, SplitEvaluation] =
+          partialAggregates.map(a => (new TreeNodeRef(a), a.asPartial)).toMap
+
+        // We need to pass all grouping expressions though so the grouping can happen a second
+        // time. However some of them might be unnamed so we alias them allowing them to be
+        // referenced in the second aggregation.
+        val namedGroupingExpressions: Map[Expression, NamedExpression] =
+          groupingExpressions.filter(!_.isInstanceOf[Literal]).map {
+            case n: NamedExpression => (n, n)
+            case other => (other, Alias(other, "PartialGroup")())
+          }.toMap
+
+        // Replace aggregations with a new expression that computes the result from the already
+        // computed partial evaluations and grouping values.
+        val rewrittenAggregateExpressions = aggregateExpressions.map(_.transformUp {
+          case e: Expression if partialEvaluations.contains(new TreeNodeRef(e)) =>
+            partialEvaluations(new TreeNodeRef(e)).finalEvaluation
+
+          case e: Expression =>
+            // Should trim aliases around `GetField`s. These aliases are introduced while
+            // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
+            // (Should we just turn `GetField` into a `NamedExpression`?)
+            namedGroupingExpressions
+              .get(e.transform { case Alias(g: GetField, _) => g })
+              .map(_.toAttribute)
+              .getOrElse(e)
+        }).asInstanceOf[Seq[NamedExpression]]
+
+        val partialComputation =
+          (namedGroupingExpressions.values ++
+            partialEvaluations.values.flatMap(_.partialEvaluations)).toSeq
+
+        val namedGroupingAttributes = namedGroupingExpressions.values.map(_.toAttribute).toSeq
+
+        Some(
+          (namedGroupingAttributes,
+           rewrittenAggregateExpressions,
+           groupingExpressions,
+           partialComputation,
+           child))
+      } else {
+        None
+      }
+    case _ => None
+  }
+}
+
+
+/**
+ * A pattern that finds joins with equality conditions that can be evaluated using equi-join.
+ */
+object ExtractEquiJoinKeys extends Logging with PredicateHelper {
   /** (joinType, rightKeys, leftKeys, condition, leftChild, rightChild) */
   type ReturnType =
     (JoinType, Seq[Expression], Seq[Expression], Option[Expression], LogicalPlan, LogicalPlan)
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
-    // All predicates can be evaluated for inner join (i.e., those that are in the ON
-    // clause and WHERE clause.)
-    case FilteredOperation(predicates, join @ Join(left, right, Inner, condition)) =>
-      logger.debug(s"Considering hash inner join on: ${predicates ++ condition}")
-      splitPredicates(predicates ++ condition, join)
     case join @ Join(left, right, joinType, condition) =>
-      logger.debug(s"Considering hash join on: $condition")
-      splitPredicates(condition.toSeq, join)
-    case _ => None
-  }
+      logDebug(s"Considering join on: $condition")
+      // Find equi-join predicates that can be evaluated before the join, and thus can be used
+      // as join keys.
+      val (joinPredicates, otherPredicates) =
+        condition.map(splitConjunctivePredicates).getOrElse(Nil).partition {
+          case EqualTo(l, r) if (canEvaluate(l, left) && canEvaluate(r, right)) ||
+            (canEvaluate(l, right) && canEvaluate(r, left)) => true
+          case _ => false
+        }
 
-  // Find equi-join predicates that can be evaluated before the join, and thus can be used
-  // as join keys.
-  def splitPredicates(allPredicates: Seq[Expression], join: Join): Option[ReturnType] = {
-    val Join(left, right, joinType, _) = join
-    val (joinPredicates, otherPredicates) =
-      allPredicates.flatMap(splitConjunctivePredicates).partition {
-        case Equals(l, r) if (canEvaluate(l, left) && canEvaluate(r, right)) ||
-          (canEvaluate(l, right) && canEvaluate(r, left)) => true
-        case _ => false
+      val joinKeys = joinPredicates.map {
+        case EqualTo(l, r) if canEvaluate(l, left) && canEvaluate(r, right) => (l, r)
+        case EqualTo(l, r) if canEvaluate(l, right) && canEvaluate(r, left) => (r, l)
       }
-
-    val joinKeys = joinPredicates.map {
-      case Equals(l, r) if canEvaluate(l, left) && canEvaluate(r, right) => (l, r)
-      case Equals(l, r) if canEvaluate(l, right) && canEvaluate(r, left) => (r, l)
-    }
-
-    // Do not consider this strategy if there are no join keys.
-    if (joinKeys.nonEmpty) {
       val leftKeys = joinKeys.map(_._1)
       val rightKeys = joinKeys.map(_._2)
 
-      Some((joinType, leftKeys, rightKeys, otherPredicates.reduceOption(And), left, right))
-    } else {
-      logger.debug(s"Avoiding hash join with no join keys.")
-      None
-    }
+      if (joinKeys.nonEmpty) {
+        logDebug(s"leftKeys:$leftKeys | rightKeys:$rightKeys")
+        Some((joinType, leftKeys, rightKeys, otherPredicates.reduceOption(And), left, right))
+      } else {
+        None
+      }
+    case _ => None
   }
 }
 

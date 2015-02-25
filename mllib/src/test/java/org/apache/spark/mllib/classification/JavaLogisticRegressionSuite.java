@@ -42,7 +42,6 @@ public class JavaLogisticRegressionSuite implements Serializable {
   public void tearDown() {
     sc.stop();
     sc = null;
-    System.clearProperty("spark.driver.port");
   }
 
   int validatePrediction(List<LabeledPoint> validationData, LogisticRegressionModel model) {
@@ -93,8 +92,6 @@ public class JavaLogisticRegressionSuite implements Serializable {
         testRDD.rdd(), 100, 1.0, 1.0);
 
     int numAccurate = validatePrediction(validationData, model);
-      System.out.println(numAccurate);
     Assert.assertTrue(numAccurate > nPoints * 4.0 / 5.0);
   }
-
 }

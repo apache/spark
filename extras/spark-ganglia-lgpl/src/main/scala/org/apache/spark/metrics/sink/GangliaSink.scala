@@ -82,5 +82,9 @@ class GangliaSink(val property: Properties, val registry: MetricRegistry,
   override def stop() {
     reporter.stop()
   }
+
+  override def report() {
+    reporter.report()
+  }
 }
 

@@ -17,8 +17,6 @@
 
 package org.apache.spark.deploy
 
-import scala.collection.JavaConversions._
-import scala.collection.mutable.Map
 import scala.concurrent._
 
 import akka.actor._
@@ -29,17 +27,20 @@ import org.apache.log4j.{Level, Logger}
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.{ActorLogReceive, AkkaUtils, Utils}
 
 /**
  * Proxy that relays messages to the driver.
  */
-private class ClientActor(driverArgs: ClientArguments, conf: SparkConf) extends Actor with Logging {
+private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
+  extends Actor with ActorLogReceive with Logging {
+
   var masterActor: ActorSelection = _
   val timeout = AkkaUtils.askTimeout(conf)
 
   override def preStart() = {
-    masterActor = context.actorSelection(Master.toAkkaUrl(driverArgs.master))
+    masterActor = context.actorSelection(
+      Master.toAkkaUrl(driverArgs.master, AkkaUtils.protocol(context.system)))
 
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
 
@@ -50,9 +51,6 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf) extends 
         // TODO: We could add an env variable here and intercept it in `sc.addJar` that would
         //       truncate filesystem paths similar to what YARN does. For now, we just require
         //       people call `addJar` assuming the jar is in the same directory.
-        val env = Map[String, String]()
-        System.getenv().foreach{case (k, v) => env(k) = v}
-
         val mainClass = "org.apache.spark.deploy.worker.DriverWrapper"
 
         val classPathConf = "spark.driver.extraClassPath"
@@ -65,10 +63,14 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf) extends 
           cp.split(java.io.File.pathSeparator)
         }
 
-        val javaOptionsConf = "spark.driver.extraJavaOptions"
-        val javaOpts = sys.props.get(javaOptionsConf)
-        val command = new Command(mainClass, Seq("{{WORKER_URL}}", driverArgs.mainClass) ++
-          driverArgs.driverOptions, env, classPathEntries, libraryPathEntries, javaOpts)
+        val extraJavaOptsConf = "spark.driver.extraJavaOptions"
+        val extraJavaOpts = sys.props.get(extraJavaOptsConf)
+          .map(Utils.splitCommandString).getOrElse(Seq.empty)
+        val sparkJavaOpts = Utils.sparkJavaOpts(conf)
+        val javaOpts = sparkJavaOpts ++ extraJavaOpts
+        val command = new Command(mainClass,
+          Seq("{{WORKER_URL}}", "{{USER_JAR}}", driverArgs.mainClass) ++ driverArgs.driverOptions,
+          sys.env, classPathEntries, libraryPathEntries, javaOpts)
 
         val driverDescription = new DriverDescription(
           driverArgs.jarUrl,
@@ -81,7 +83,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf) extends 
 
       case "kill" =>
         val driverId = driverArgs.driverId
-        val killFuture = masterActor ! RequestKillDriver(driverId)
+        masterActor ! RequestKillDriver(driverId)
     }
   }
 
@@ -109,13 +111,14 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf) extends 
         // Exception, if present
         statusResponse.exception.map { e =>
           println(s"Exception from cluster was: $e")
+          e.printStackTrace()
           System.exit(-1)
         }
         System.exit(0)
     }
   }
 
-  override def receive = {
+  override def receiveWithLogging = {
 
     case SubmitDriverResponse(success, driverId, message) =>
       println(message)
@@ -129,7 +132,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf) extends 
       println(s"Error connecting to master ${driverArgs.master} ($remoteAddress), exiting.")
       System.exit(-1)
 
-    case AssociationErrorEvent(cause, _, remoteAddress, _) =>
+    case AssociationErrorEvent(cause, _, remoteAddress, _, _) =>
       println(s"Error connecting to master ${driverArgs.master} ($remoteAddress), exiting.")
       println(s"Cause was: $cause")
       System.exit(-1)
@@ -141,8 +144,10 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf) extends 
  */
 object Client {
   def main(args: Array[String]) {
-    println("WARNING: This client is deprecated and will be removed in a future version of Spark.")
-    println("Use ./bin/spark-submit with \"--master spark://host:port\"")
+    if (!sys.props.contains("SPARK_SUBMIT")) {
+      println("WARNING: This client is deprecated and will be removed in a future version of Spark")
+      println("Use ./bin/spark-submit with \"--master spark://host:port\"")
+    }
 
     val conf = new SparkConf()
     val driverArgs = new ClientArguments(args)
@@ -154,11 +159,11 @@ object Client {
     conf.set("akka.loglevel", driverArgs.logLevel.toString.replace("WARN", "WARNING"))
     Logger.getRootLogger.setLevel(driverArgs.logLevel)
 
-    // TODO: See if we can initialize akka so return messages are sent back using the same TCP
-    //       flow. Else, this (sadly) requires the DriverClient be routable from the Master.
     val (actorSystem, _) = AkkaUtils.createActorSystem(
       "driverClient", Utils.localHostName(), 0, conf, new SecurityManager(conf))
 
+    // Verify driverArgs.master is a valid url so that we can use it in ClientActor safely
+    Master.toAkkaUrl(driverArgs.master, AkkaUtils.protocol(actorSystem))
     actorSystem.actorOf(Props(classOf[ClientActor], driverArgs, conf))
 
     actorSystem.awaitTermination()

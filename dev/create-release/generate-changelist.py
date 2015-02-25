@@ -125,8 +125,8 @@ for h in hashes:
             pr_num = [line.split()[1].lstrip("#") for line in body_lines if "Closes #" in line][0]
             github_url = "github.com/apache/spark/pull/%s" % pr_num
             day = time.strptime(date.split()[0], "%Y-%m-%d")
-            if day < SPARK_REPO_CHANGE_DATE1 or
-            (day < SPARK_REPO_CHANGE_DATE2 and pr_num < SPARK_REPO_PR_NUM_THRESH):
+            if (day < SPARK_REPO_CHANGE_DATE1 or
+                (day < SPARK_REPO_CHANGE_DATE2 and pr_num < SPARK_REPO_PR_NUM_THRESH)):
                 github_url = "github.com/apache/incubator-spark/pull/%s" % pr_num
 
         append_to_changelist("  %s" % subject)

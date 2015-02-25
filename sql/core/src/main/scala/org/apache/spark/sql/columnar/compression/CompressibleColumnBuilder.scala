@@ -19,9 +19,10 @@ package org.apache.spark.sql.columnar.compression
 
 import java.nio.{ByteBuffer, ByteOrder}
 
-import org.apache.spark.sql.{Logging, Row}
-import org.apache.spark.sql.catalyst.types.NativeType
+import org.apache.spark.Logging
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.columnar.{ColumnBuilder, NativeColumnBuilder}
+import org.apache.spark.sql.types.NativeType
 
 /**
  * A stackable trait that builds optionally compressed byte buffer for a column.  Memory layout of
@@ -45,16 +46,18 @@ private[sql] trait CompressibleColumnBuilder[T <: NativeType]
 
   this: NativeColumnBuilder[T] with WithCompressionSchemes =>
 
-  import CompressionScheme._
-
   var compressionEncoders: Seq[Encoder[T]] = _
 
-  abstract override def initialize(initialSize: Int, columnName: String, useCompression: Boolean) {
+  abstract override def initialize(
+      initialSize: Int,
+      columnName: String,
+      useCompression: Boolean): Unit = {
+
     compressionEncoders =
       if (useCompression) {
-        schemes.filter(_.supports(columnType)).map(_.encoder[T])
+        schemes.filter(_.supports(columnType)).map(_.encoder[T](columnType))
       } else {
-        Seq(PassThrough.encoder)
+        Seq(PassThrough.encoder(columnType))
       }
     super.initialize(initialSize, columnName, useCompression)
   }
@@ -63,45 +66,47 @@ private[sql] trait CompressibleColumnBuilder[T <: NativeType]
     encoder.compressionRatio < 0.8
   }
 
-  private def gatherCompressibilityStats(row: Row, ordinal: Int) {
-    val field = columnType.getField(row, ordinal)
-
+  private def gatherCompressibilityStats(row: Row, ordinal: Int): Unit = {
     var i = 0
     while (i < compressionEncoders.length) {
-      compressionEncoders(i).gatherCompressibilityStats(field, columnType)
+      compressionEncoders(i).gatherCompressibilityStats(row, ordinal)
       i += 1
     }
   }
 
-  abstract override def appendFrom(row: Row, ordinal: Int) {
+  abstract override def appendFrom(row: Row, ordinal: Int): Unit = {
     super.appendFrom(row, ordinal)
     if (!row.isNullAt(ordinal)) {
       gatherCompressibilityStats(row, ordinal)
     }
   }
 
-  abstract override def build() = {
-    val rawBuffer = super.build()
+  override def build() = {
+    val nonNullBuffer = buildNonNulls()
+    val typeId = nonNullBuffer.getInt()
     val encoder: Encoder[T] = {
       val candidate = compressionEncoders.minBy(_.compressionRatio)
-      if (isWorthCompressing(candidate)) candidate else PassThrough.encoder
+      if (isWorthCompressing(candidate)) candidate else PassThrough.encoder(columnType)
     }
 
-    val headerSize = columnHeaderSize(rawBuffer)
+    // Header = column type ID + null count + null positions
+    val headerSize = 4 + 4 + nulls.limit()
     val compressedSize = if (encoder.compressedSize == 0) {
-      rawBuffer.limit - headerSize
+      nonNullBuffer.remaining()
     } else {
       encoder.compressedSize
     }
 
-    // Reserves 4 bytes for compression scheme ID
     val compressedBuffer = ByteBuffer
+      // Reserves 4 bytes for compression scheme ID
       .allocate(headerSize + 4 + compressedSize)
       .order(ByteOrder.nativeOrder)
+      // Write the header
+      .putInt(typeId)
+      .putInt(nullCount)
+      .put(nulls)
 
-    copyColumnHeader(rawBuffer, compressedBuffer)
-
-    logger.info(s"Compressor for [$columnName]: $encoder, ratio: ${encoder.compressionRatio}")
-    encoder.compress(rawBuffer, compressedBuffer, columnType)
+    logDebug(s"Compressor for [$columnName]: $encoder, ratio: ${encoder.compressionRatio}")
+    encoder.compress(nonNullBuffer, compressedBuffer)
   }
 }

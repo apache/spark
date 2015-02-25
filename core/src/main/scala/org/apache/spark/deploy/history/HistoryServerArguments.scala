@@ -17,60 +17,73 @@
 
 package org.apache.spark.deploy.history
 
-import java.net.URI
-
-import org.apache.hadoop.fs.Path
-
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.util.Utils
 
 /**
  * Command-line parser for the master.
  */
-private[spark] class HistoryServerArguments(args: Array[String]) {
-  var logDir = ""
+private[spark] class HistoryServerArguments(conf: SparkConf, args: Array[String]) extends Logging {
+  private var propertiesFile: String = null
 
   parse(args.toList)
 
   private def parse(args: List[String]): Unit = {
     args match {
       case ("--dir" | "-d") :: value :: tail =>
-        logDir = value
+        logWarning("Setting log directory through the command line is deprecated as of " +
+          "Spark 1.1.0. Please set this through spark.history.fs.logDirectory instead.")
+        conf.set("spark.history.fs.logDirectory", value)
+        System.setProperty("spark.history.fs.logDirectory", value)
         parse(tail)
 
       case ("--help" | "-h") :: tail =>
         printUsageAndExit(0)
+
+      case ("--properties-file") :: value :: tail =>
+        propertiesFile = value
+        parse(tail)
 
       case Nil =>
 
       case _ =>
         printUsageAndExit(1)
     }
-    validateLogDir()
   }
 
-  private def validateLogDir() {
-    if (logDir == "") {
-      System.err.println("Logging directory must be specified.")
-      printUsageAndExit(1)
-    }
-    val fileSystem = Utils.getHadoopFileSystem(new URI(logDir))
-    val path = new Path(logDir)
-    if (!fileSystem.exists(path)) {
-      System.err.println("Logging directory specified does not exist: %s".format(logDir))
-      printUsageAndExit(1)
-    }
-    if (!fileSystem.getFileStatus(path).isDir) {
-      System.err.println("Logging directory specified is not a directory: %s".format(logDir))
-      printUsageAndExit(1)
-    }
-  }
+   // This mutates the SparkConf, so all accesses to it must be made after this line
+   Utils.loadDefaultSparkProperties(conf, propertiesFile)
 
   private def printUsageAndExit(exitCode: Int) {
     System.err.println(
-      "Usage: HistoryServer [options]\n" +
-      "\n" +
-      "Options:\n" +
-      "  -d DIR,  --dir DIR     Location of event log files")
+      """
+      |Usage: HistoryServer [options]
+      |
+      |Options:
+      |  --properties-file FILE      Path to a custom Spark properties file.
+      |                              Default is conf/spark-defaults.conf.
+      |
+      |Configuration options can be set by setting the corresponding JVM system property.
+      |History Server options are always available; additional options depend on the provider.
+      |
+      |History Server options:
+      |
+      |  spark.history.ui.port              Port where server will listen for connections
+      |                                     (default 18080)
+      |  spark.history.acls.enable          Whether to enable view acls for all applications
+      |                                     (default false)
+      |  spark.history.provider             Name of history provider class (defaults to
+      |                                     file system-based provider)
+      |  spark.history.retainedApplications Max number of application UIs to keep loaded in memory
+      |                                     (default 50)
+      |FsHistoryProvider options:
+      |
+      |  spark.history.fs.logDirectory      Directory where app logs are stored
+      |                                     (default: file:/tmp/spark-events)
+      |  spark.history.fs.updateInterval    How often to reload log data from storage
+      |                                     (in seconds, default: 10)
+      |""".stripMargin)
     System.exit(exitCode)
   }
+
 }

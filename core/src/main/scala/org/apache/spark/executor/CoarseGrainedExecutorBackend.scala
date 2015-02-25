@@ -17,27 +17,32 @@
 
 package org.apache.spark.executor
 
+import java.net.URL
 import java.nio.ByteBuffer
 
-import akka.actor._
-import akka.remote._
+import scala.collection.mutable
+import scala.concurrent.Await
 
-import org.apache.spark.{SparkEnv, Logging, SecurityManager, SparkConf}
+import akka.actor.{Actor, ActorSelection, Props}
+import akka.pattern.Patterns
+import akka.remote.{RemotingLifecycleEvent, DisassociatedEvent}
+
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.TaskDescription
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
+import org.apache.spark.util.{ActorLogReceive, AkkaUtils, SignalLogger, Utils}
 
 private[spark] class CoarseGrainedExecutorBackend(
     driverUrl: String,
     executorId: String,
     hostPort: String,
-    cores: Int)
-  extends Actor
-  with ExecutorBackend
-  with Logging {
+    cores: Int,
+    userClassPath: Seq[URL],
+    env: SparkEnv)
+  extends Actor with ActorLogReceive with ExecutorBackend with Logging {
 
   Utils.checkHostPort(hostPort, "Expected hostport")
 
@@ -47,16 +52,21 @@ private[spark] class CoarseGrainedExecutorBackend(
   override def preStart() {
     logInfo("Connecting to driver: " + driverUrl)
     driver = context.actorSelection(driverUrl)
-    driver ! RegisterExecutor(executorId, hostPort, cores)
+    driver ! RegisterExecutor(executorId, hostPort, cores, extractLogUrls)
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
   }
 
-  override def receive = {
-    case RegisteredExecutor(sparkProperties) =>
+  def extractLogUrls: Map[String, String] = {
+    val prefix = "SPARK_LOG_URL_"
+    sys.env.filterKeys(_.startsWith(prefix))
+      .map(e => (e._1.substring(prefix.length).toLowerCase, e._2))
+  }
+
+  override def receiveWithLogging = {
+    case RegisteredExecutor =>
       logInfo("Successfully registered with driver")
-      // Make this host instead of hostPort ?
-      executor = new Executor(executorId, Utils.parseHostPort(hostPort)._1, sparkProperties,
-        false)
+      val (hostname, _) = Utils.parseHostPort(hostPort)
+      executor = new Executor(executorId, hostname, env, userClassPath, isLocal = false)
 
     case RegisterExecutorFailed(message) =>
       logError("Slave registration failed: " + message)
@@ -67,10 +77,11 @@ private[spark] class CoarseGrainedExecutorBackend(
         logError("Received LaunchTask command but executor was null")
         System.exit(1)
       } else {
-        val ser = SparkEnv.get.closureSerializer.newInstance()
+        val ser = env.closureSerializer.newInstance()
         val taskDesc = ser.deserialize[TaskDescription](data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
-        executor.launchTask(this, taskDesc.taskId, taskDesc.serializedTask)
+        executor.launchTask(this, taskId = taskDesc.taskId, attemptNumber = taskDesc.attemptNumber,
+          taskDesc.name, taskDesc.serializedTask)
       }
 
     case KillTask(taskId, _, interruptThread) =>
@@ -82,11 +93,16 @@ private[spark] class CoarseGrainedExecutorBackend(
       }
 
     case x: DisassociatedEvent =>
-      logError(s"Driver $x disassociated! Shutting down.")
-      System.exit(1)
+      if (x.remoteAddress == driver.anchorPath.address) {
+        logError(s"Driver $x disassociated! Shutting down.")
+        System.exit(1)
+      } else {
+        logWarning(s"Received irrelevant DisassociatedEvent $x")
+      }
 
     case StopExecutor =>
       logInfo("Driver commanded a shutdown")
+      executor.stop()
       context.stop(self)
       context.system.shutdown()
   }
@@ -96,46 +112,133 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 }
 
-private[spark] object CoarseGrainedExecutorBackend {
-  def run(driverUrl: String, executorId: String, hostname: String, cores: Int,
-    workerUrl: Option[String]) {
+private[spark] object CoarseGrainedExecutorBackend extends Logging {
+
+  private def run(
+      driverUrl: String,
+      executorId: String,
+      hostname: String,
+      cores: Int,
+      appId: String,
+      workerUrl: Option[String],
+      userClassPath: Seq[URL]) {
+
+    SignalLogger.register(log)
 
     SparkHadoopUtil.get.runAsSparkUser { () =>
-        // Debug code
-        Utils.checkHost(hostname)
+      // Debug code
+      Utils.checkHost(hostname)
 
-        val conf = new SparkConf
-        // Create a new ActorSystem to run the backend, because we can't create a
-        // SparkEnv / Executor before getting started with all our system properties, etc
-        val (actorSystem, boundPort) = AkkaUtils.createActorSystem("sparkExecutor", hostname, 0,
-          conf, new SecurityManager(conf))
-        // set it
-        val sparkHostPort = hostname + ":" + boundPort
-        actorSystem.actorOf(
-          Props(classOf[CoarseGrainedExecutorBackend], driverUrl, executorId,
-            sparkHostPort, cores),
-          name = "Executor")
-        workerUrl.foreach {
-          url =>
-            actorSystem.actorOf(Props(classOf[WorkerWatcher], url), name = "WorkerWatcher")
+      // Bootstrap to fetch the driver's Spark properties.
+      val executorConf = new SparkConf
+      val port = executorConf.getInt("spark.executor.port", 0)
+      val (fetcher, _) = AkkaUtils.createActorSystem(
+        "driverPropsFetcher",
+        hostname,
+        port,
+        executorConf,
+        new SecurityManager(executorConf))
+      val driver = fetcher.actorSelection(driverUrl)
+      val timeout = AkkaUtils.askTimeout(executorConf)
+      val fut = Patterns.ask(driver, RetrieveSparkProps, timeout)
+      val props = Await.result(fut, timeout).asInstanceOf[Seq[(String, String)]] ++
+        Seq[(String, String)](("spark.app.id", appId))
+      fetcher.shutdown()
+
+      // Create SparkEnv using properties we fetched from the driver.
+      val driverConf = new SparkConf()
+      for ((key, value) <- props) {
+        // this is required for SSL in standalone mode
+        if (SparkConf.isExecutorStartupConf(key)) {
+          driverConf.setIfMissing(key, value)
+        } else {
+          driverConf.set(key, value)
         }
-        actorSystem.awaitTermination()
+      }
+      val env = SparkEnv.createExecutorEnv(
+        driverConf, executorId, hostname, port, cores, isLocal = false)
 
+      // SparkEnv sets spark.driver.port so it shouldn't be 0 anymore.
+      val boundPort = env.conf.getInt("spark.executor.port", 0)
+      assert(boundPort != 0)
+
+      // Start the CoarseGrainedExecutorBackend actor.
+      val sparkHostPort = hostname + ":" + boundPort
+      env.actorSystem.actorOf(
+        Props(classOf[CoarseGrainedExecutorBackend],
+          driverUrl, executorId, sparkHostPort, cores, userClassPath, env),
+        name = "Executor")
+      workerUrl.foreach { url =>
+        env.actorSystem.actorOf(Props(classOf[WorkerWatcher], url), name = "WorkerWatcher")
+      }
+      env.actorSystem.awaitTermination()
     }
   }
 
   def main(args: Array[String]) {
-    args.length match {
-      case x if x < 4 =>
-        System.err.println(
+    var driverUrl: String = null
+    var executorId: String = null
+    var hostname: String = null
+    var cores: Int = 0
+    var appId: String = null
+    var workerUrl: Option[String] = None
+    val userClassPath = new mutable.ListBuffer[URL]()
+
+    var argv = args.toList
+    while (!argv.isEmpty) {
+      argv match {
+        case ("--driver-url") :: value :: tail =>
+          driverUrl = value
+          argv = tail
+        case ("--executor-id") :: value :: tail =>
+          executorId = value
+          argv = tail
+        case ("--hostname") :: value :: tail =>
+          hostname = value
+          argv = tail
+        case ("--cores") :: value :: tail =>
+          cores = value.toInt
+          argv = tail
+        case ("--app-id") :: value :: tail =>
+          appId = value
+          argv = tail
+        case ("--worker-url") :: value :: tail =>
           // Worker url is used in spark standalone mode to enforce fate-sharing with worker
-          "Usage: CoarseGrainedExecutorBackend <driverUrl> <executorId> <hostname> " +
-          "<cores> [<workerUrl>]")
-        System.exit(1)
-      case 4 =>
-        run(args(0), args(1), args(2), args(3).toInt, None)
-      case x if x > 4 =>
-        run(args(0), args(1), args(2), args(3).toInt, Some(args(4)))
+          workerUrl = Some(value)
+          argv = tail
+        case ("--user-class-path") :: value :: tail =>
+          userClassPath += new URL(value)
+          argv = tail
+        case Nil =>
+        case tail =>
+          System.err.println(s"Unrecognized options: ${tail.mkString(" ")}")
+          printUsageAndExit()
+      }
     }
+
+    if (driverUrl == null || executorId == null || hostname == null || cores <= 0 ||
+      appId == null) {
+      printUsageAndExit()
+    }
+
+    run(driverUrl, executorId, hostname, cores, appId, workerUrl, userClassPath)
   }
+
+  private def printUsageAndExit() = {
+    System.err.println(
+      """
+      |"Usage: CoarseGrainedExecutorBackend [options]
+      |
+      | Options are:
+      |   --driver-url <driverUrl>
+      |   --executor-id <executorId>
+      |   --hostname <hostname>
+      |   --cores <cores>
+      |   --app-id <appid>
+      |   --worker-url <workerUrl>
+      |   --user-class-path <url>
+      |""".stripMargin)
+    System.exit(1)
+  }
+
 }

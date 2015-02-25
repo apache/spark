@@ -32,9 +32,9 @@ trait PartitionStrategy extends Serializable {
 object PartitionStrategy {
   /**
    * Assigns edges to partitions using a 2D partitioning of the sparse edge adjacency matrix,
-   * guaranteeing a `2 * sqrt(numParts)` bound on vertex replication.
+   * guaranteeing a `2 * sqrt(numParts) - 1` bound on vertex replication.
    *
-   * Suppose we have a graph with 11 vertices that we want to partition
+   * Suppose we have a graph with 12 vertices that we want to partition
    * over 9 machines.  We can use the following sparse matrix representation:
    *
    * <pre>
@@ -61,7 +61,7 @@ object PartitionStrategy {
    * that edges adjacent to `v11` can only be in the first column of blocks `(P0, P3,
    * P6)` or the last
    * row of blocks `(P6, P7, P8)`.  As a consequence we can guarantee that `v11` will need to be
-   * replicated to at most `2 * sqrt(numParts)` machines.
+   * replicated to at most `2 * sqrt(numParts) - 1` machines.
    *
    * Notice that `P0` has many edges and as a consequence this partitioning would lead to poor work
    * balance.  To improve balance we first multiply each vertex id by a large prime to shuffle the
@@ -91,7 +91,7 @@ object PartitionStrategy {
   case object EdgePartition1D extends PartitionStrategy {
     override def getPartition(src: VertexId, dst: VertexId, numParts: PartitionID): PartitionID = {
       val mixingPrime: VertexId = 1125899906842597L
-      (math.abs(src) * mixingPrime).toInt % numParts
+      (math.abs(src * mixingPrime) % numParts).toInt
     }
   }
 
@@ -114,9 +114,20 @@ object PartitionStrategy {
    */
   case object CanonicalRandomVertexCut extends PartitionStrategy {
     override def getPartition(src: VertexId, dst: VertexId, numParts: PartitionID): PartitionID = {
-      val lower = math.min(src, dst)
-      val higher = math.max(src, dst)
-      math.abs((lower, higher).hashCode()) % numParts
+      if (src < dst) {
+        math.abs((src, dst).hashCode()) % numParts
+      } else {
+        math.abs((dst, src).hashCode()) % numParts
+      }
     }
+  }
+
+  /** Returns the PartitionStrategy with the specified name. */
+  def fromString(s: String): PartitionStrategy = s match {
+    case "RandomVertexCut" => RandomVertexCut
+    case "EdgePartition1D" => EdgePartition1D
+    case "EdgePartition2D" => EdgePartition2D
+    case "CanonicalRandomVertexCut" => CanonicalRandomVertexCut
+    case _ => throw new IllegalArgumentException("Invalid PartitionStrategy: " + s)
   }
 }

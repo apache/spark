@@ -43,7 +43,6 @@ public class JavaRidgeRegressionSuite implements Serializable {
   public void tearDown() {
       sc.stop();
       sc = null;
-      System.clearProperty("spark.driver.port");
   }
 
   double predictionError(List<LabeledPoint> validationData, RidgeRegressionModel model) {

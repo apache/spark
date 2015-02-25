@@ -1,1 +1,0 @@
-coalesce(a1, a2, ...) - Returns the first non-null argument

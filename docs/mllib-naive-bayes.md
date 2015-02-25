@@ -4,23 +4,24 @@ title: Naive Bayes - MLlib
 displayTitle: <a href="mllib-guide.html">MLlib</a> - Naive Bayes
 ---
 
-Naive Bayes is a simple multiclass classification algorithm with the assumption of independence
-between every pair of features. Naive Bayes can be trained very efficiently. Within a single pass to
-the training data, it computes the conditional probability distribution of each feature given label,
-and then it applies Bayes' theorem to compute the conditional probability distribution of label
-given an observation and use it for prediction. For more details, please visit the Wikipedia page
-[Naive Bayes classifier](http://en.wikipedia.org/wiki/Naive_Bayes_classifier).
+[Naive Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier) is a simple
+multiclass classification algorithm with the assumption of independence between
+every pair of features. Naive Bayes can be trained very efficiently. Within a
+single pass to the training data, it computes the conditional probability
+distribution of each feature given label, and then it applies Bayes' theorem to
+compute the conditional probability distribution of label given an observation
+and use it for prediction.
 
-In MLlib, we implemented multinomial naive Bayes, which is typically used for document
-classification. Within that context, each observation is a document, each feature represents a term,
-whose value is the frequency of the term. For its formulation, please visit the Wikipedia page
-[Multinomial Naive Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier#Multinomial_naive_Bayes)
-or the section
-[Naive Bayes text classification](http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html)
-from the book Introduction to Information
-Retrieval. [Additive smoothing](http://en.wikipedia.org/wiki/Lidstone_smoothing) can be used by
+MLlib supports [multinomial naive
+Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier#Multinomial_naive_Bayes),
+which is typically used for [document
+classification](http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html).
+Within that context, each observation is a document and each
+feature represents a term whose value is the frequency of the term.
+Feature values must be nonnegative to represent term frequencies.
+[Additive smoothing](http://en.wikipedia.org/wiki/Lidstone_smoothing) can be used by
 setting the parameter $\lambda$ (default to $1.0$). For document classification, the input feature
-vectors are usually sparse. Please supply sparse vectors as input to take advantage of
+vectors are usually sparse, and sparse vectors should be supplied as input to take advantage of
 sparsity. Since the training data is only used once, it is not necessary to cache it.
 
 ## Examples
@@ -40,7 +41,7 @@ import org.apache.spark.mllib.classification.NaiveBayes
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 
-val data = sc.textFile("mllib/data/sample_naive_bayes_data.txt")
+val data = sc.textFile("data/mllib/sample_naive_bayes_data.txt")
 val parsedData = data.map { line =>
   val parts = line.split(',')
   LabeledPoint(parts(0).toDouble, Vectors.dense(parts(1).split(' ').map(_.toDouble)))
@@ -51,9 +52,8 @@ val training = splits(0)
 val test = splits(1)
 
 val model = NaiveBayes.train(training, lambda = 1.0)
-val prediction = model.predict(test.map(_.features))
 
-val predictionAndLabel = prediction.zip(test.map(_.label))
+val predictionAndLabel = test.map(p => (model.predict(p.features), p.label))
 val accuracy = 1.0 * predictionAndLabel.filter(x => x._1 == x._2).count() / test.count()
 {% endhighlight %}
 </div>
@@ -71,6 +71,7 @@ can be used for evaluation and prediction.
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.Function;
+import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.mllib.classification.NaiveBayes;
 import org.apache.spark.mllib.classification.NaiveBayesModel;
 import org.apache.spark.mllib.regression.LabeledPoint;
@@ -81,23 +82,17 @@ JavaRDD<LabeledPoint> test = ... // test set
 
 final NaiveBayesModel model = NaiveBayes.train(training.rdd(), 1.0);
 
-JavaRDD<Double> prediction =
-  test.map(new Function<LabeledPoint, Double>() {
-    @Override public Double call(LabeledPoint p) {
-      return model.predict(p.features());
+JavaPairRDD<Double, Double> predictionAndLabel = 
+  test.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
+    @Override public Tuple2<Double, Double> call(LabeledPoint p) {
+      return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
     }
   });
-JavaPairRDD<Double, Double> predictionAndLabel = 
-  prediction.zip(test.map(new Function<LabeledPoint, Double>() {
-    @Override public Double call(LabeledPoint p) {
-      return p.label();
-    }
-  }));
-double accuracy = 1.0 * predictionAndLabel.filter(new Function<Tuple2<Double, Double>, Boolean>() {
+double accuracy = predictionAndLabel.filter(new Function<Tuple2<Double, Double>, Boolean>() {
     @Override public Boolean call(Tuple2<Double, Double> pl) {
-      return pl._1() == pl._2();
+      return pl._1().equals(pl._2());
     }
-  }).count() / test.count();
+  }).count() / (double) test.count();
 {% endhighlight %}
 </div>
 

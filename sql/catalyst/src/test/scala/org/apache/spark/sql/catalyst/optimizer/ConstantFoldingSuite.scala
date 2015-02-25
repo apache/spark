@@ -17,22 +17,23 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.analysis.EliminateAnalysisOperators
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedGetField, EliminateSubQueries}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.catalyst.types.{DoubleType, IntegerType}
+import org.apache.spark.sql.types._
 
 // For implicit conversions
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 
-class ConstantFoldingSuite extends OptimizerTest {
+class ConstantFoldingSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("AnalysisNodes", Once,
-        EliminateAnalysisOperators) ::
+        EliminateSubQueries) ::
       Batch("ConstantFolding", Once,
         ConstantFolding,
         BooleanSimplification) :: Nil
@@ -82,7 +83,7 @@ class ConstantFoldingSuite extends OptimizerTest {
           Literal(10) as Symbol("2*3+4"),
           Literal(14) as Symbol("2*(3+4)"))
         .where(Literal(true))
-        .groupBy(Literal(3))(Literal(3) as Symbol("9/3"))
+        .groupBy(Literal(3.0))(Literal(3.0) as Symbol("9/3"))
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -170,6 +171,80 @@ class ConstantFoldingSuite extends OptimizerTest {
           Rand + Literal(1.0) as Symbol("c1"),
           Sum('a) as Symbol("c2"))
         .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("Constant folding test: expressions have null literals") {
+    val originalQuery =
+      testRelation
+        .select(
+          IsNull(Literal(null)) as 'c1,
+          IsNotNull(Literal(null)) as 'c2,
+
+          GetItem(Literal(null, ArrayType(IntegerType)), 1) as 'c3,
+          GetItem(Literal(Seq(1), ArrayType(IntegerType)), Literal(null, IntegerType)) as 'c4,
+          UnresolvedGetField(
+            Literal(null, StructType(Seq(StructField("a", IntegerType, true)))),
+            "a") as 'c5,
+
+          UnaryMinus(Literal(null, IntegerType)) as 'c6,
+          Cast(Literal(null), IntegerType) as 'c7,
+          Not(Literal(null, BooleanType)) as 'c8,
+
+          Add(Literal(null, IntegerType), 1) as 'c9,
+          Add(1, Literal(null, IntegerType)) as 'c10,
+
+          EqualTo(Literal(null, IntegerType), 1) as 'c11,
+          EqualTo(1, Literal(null, IntegerType)) as 'c12,
+
+          Like(Literal(null, StringType), "abc") as 'c13,
+          Like("abc", Literal(null, StringType)) as 'c14,
+
+          Upper(Literal(null, StringType)) as 'c15,
+
+          Substring(Literal(null, StringType), 0, 1) as 'c16,
+          Substring("abc", Literal(null, IntegerType), 1) as 'c17,
+          Substring("abc", 0, Literal(null, IntegerType)) as 'c18,
+
+          Contains(Literal(null, StringType), "abc") as 'c19,
+          Contains("abc", Literal(null, StringType)) as 'c20
+        )
+
+    val optimized = Optimize(originalQuery.analyze)
+
+    val correctAnswer =
+      testRelation
+        .select(
+          Literal(true) as 'c1,
+          Literal(false) as 'c2,
+
+          Literal(null, IntegerType) as 'c3,
+          Literal(null, IntegerType) as 'c4,
+          Literal(null, IntegerType) as 'c5,
+
+          Literal(null, IntegerType) as 'c6,
+          Literal(null, IntegerType) as 'c7,
+          Literal(null, BooleanType) as 'c8,
+
+          Literal(null, IntegerType) as 'c9,
+          Literal(null, IntegerType) as 'c10,
+
+          Literal(null, BooleanType) as 'c11,
+          Literal(null, BooleanType) as 'c12,
+
+          Literal(null, BooleanType) as 'c13,
+          Literal(null, BooleanType) as 'c14,
+
+          Literal(null, StringType) as 'c15,
+
+          Literal(null, StringType) as 'c16,
+          Literal(null, StringType) as 'c17,
+          Literal(null, StringType) as 'c18,
+
+          Literal(null, BooleanType) as 'c19,
+          Literal(null, BooleanType) as 'c20
+        ).analyze
 
     comparePlans(optimized, correctAnswer)
   }

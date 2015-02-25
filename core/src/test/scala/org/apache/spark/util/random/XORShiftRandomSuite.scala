@@ -18,13 +18,15 @@
 package org.apache.spark.util.random
 
 import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
+
+import org.apache.commons.math3.stat.inference.ChiSquareTest
 
 import org.apache.spark.util.Utils.times
 
 import scala.language.reflectiveCalls
 
-class XORShiftRandomSuite extends FunSuite with ShouldMatchers {
+class XORShiftRandomSuite extends FunSuite with Matchers {
 
   def fixture = new {
     val seed = 1L
@@ -33,45 +35,30 @@ class XORShiftRandomSuite extends FunSuite with ShouldMatchers {
   }
 
   /*
-   * This test is based on a chi-squared test for randomness. The values are hard-coded
-   * so as not to create Spark's dependency on apache.commons.math3 just to call one
-   * method for calculating the exact p-value for a given number of random numbers
-   * and bins. In case one would want to move to a full-fledged test based on
-   * apache.commons.math3, the relevant class is here:
-   * org.apache.commons.math3.stat.inference.ChiSquareTest
+   * This test is based on a chi-squared test for randomness.
    */
   test ("XORShift generates valid random numbers") {
 
     val f = fixture
 
-    val numBins = 10
-    // create 10 bins
-    val bins = Array.fill(numBins)(0)
+    val numBins = 10 // create 10 bins
+    val numRows = 5 // create 5 rows
+    val bins = Array.ofDim[Long](numRows, numBins)
 
-    // populate bins based on modulus of the random number
-    times(f.hundMil) {bins(math.abs(f.xorRand.nextInt) % 10) += 1}
+    // populate bins based on modulus of the random number for each row
+    for (r <- 0 to numRows-1) {
+      times(f.hundMil) {bins(r)(math.abs(f.xorRand.nextInt) % numBins) += 1}
+    }
 
-    /* since the seed is deterministic, until the algorithm is changed, we know the result will be
-     * exactly this: Array(10004908, 9993136, 9994600, 10000744, 10000091, 10002474, 10002272,
-     * 10000790, 10002286, 9998699), so the test will never fail at the prespecified (5%)
-     * significance level. However, should the RNG implementation change, the test should still
-     * pass at the same significance level. The chi-squared test done in R gave the following
-     * results:
-     *   > chisq.test(c(10004908, 9993136, 9994600, 10000744, 10000091, 10002474, 10002272,
-     *     10000790, 10002286, 9998699))
-     *     Chi-squared test for given probabilities
-     *     data:  c(10004908, 9993136, 9994600, 10000744, 10000091, 10002474, 10002272, 10000790,
-     *            10002286, 9998699)
-     *     X-squared = 11.975, df = 9, p-value = 0.2147
-     * Note that the p-value was ~0.22. The test will fail if alpha < 0.05, which for 100 million
-     * random numbers
-     * and 10 bins will happen at X-squared of ~16.9196. So, the test will fail if X-squared
-     * is greater than or equal to that number.
+    /*
+     * Perform the chi square test on the 5 rows of randomly generated numbers evenly divided into
+     * 10 bins. chiSquareTest returns true iff the null hypothesis (that the classifications
+     * represented by the counts in the columns of the input 2-way table are independent of the
+     * rows) can be rejected with 100 * (1 - alpha) percent confidence, where alpha is prespeficied
+     * as 0.05
      */
-    val binSize = f.hundMil/numBins
-    val xSquared = bins.map(x => math.pow((binSize - x), 2)/binSize).sum
-    xSquared should be <  (16.9196)
-
+    val chiTest = new ChiSquareTest
+    assert(chiTest.chiSquareTest(bins, 0.05) === false)
   }
 
   test ("XORShift with zero seed") {

@@ -1,0 +1,20 @@
+CREATE  TABLE `tmp_showcrt1`(
+  `key` int, 
+  `value` string, 
+  `newvalue` bigint)
+COMMENT 'temporary table'
+ROW FORMAT SERDE 
+  'org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe' 
+STORED AS INPUTFORMAT 
+  'org.apache.hadoop.hive.ql.io.RCFileInputFormat' 
+OUTPUTFORMAT 
+  'org.apache.hadoop.hive.ql.io.RCFileOutputFormat'
+LOCATION
+  'file:/private/var/folders/36/cjkbrr953xg2p_krwrmn8h_r0000gn/T/sparkHiveWarehouse1201055597819413730/tmp_showcrt1'
+TBLPROPERTIES (
+  'numFiles'='0', 
+  'transient_lastDdlTime'='1413891332', 
+  'COLUMN_STATS_ACCURATE'='false', 
+  'totalSize'='0', 
+  'numRows'='-1', 
+  'rawDataSize'='-1')

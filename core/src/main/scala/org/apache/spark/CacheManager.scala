@@ -17,104 +17,70 @@
 
 package org.apache.spark
 
-import scala.collection.mutable.{ArrayBuffer, HashSet}
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.{BlockId, BlockManager, BlockStatus, RDDBlockId, StorageLevel}
+import org.apache.spark.storage._
 
 /**
- * Spark class responsible for passing RDDs split contents to the BlockManager and making
+ * Spark class responsible for passing RDDs partition contents to the BlockManager and making
  * sure a node doesn't load two copies of an RDD at once.
  */
 private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
 
-  /** Keys of RDD splits that are being computed/loaded. */
-  private val loading = new HashSet[RDDBlockId]()
+  /** Keys of RDD partitions that are being computed/loaded. */
+  private val loading = new mutable.HashSet[RDDBlockId]
 
-  /** Gets or computes an RDD split. Used by RDD.iterator() when an RDD is cached. */
-  def getOrCompute[T](rdd: RDD[T], split: Partition, context: TaskContext,
+  /** Gets or computes an RDD partition. Used by RDD.iterator() when an RDD is cached. */
+  def getOrCompute[T](
+      rdd: RDD[T],
+      partition: Partition,
+      context: TaskContext,
       storageLevel: StorageLevel): Iterator[T] = {
-    val key = RDDBlockId(rdd.id, split.index)
-    logDebug("Looking for partition " + key)
-    blockManager.get(key) match {
-      case Some(values) =>
-        // Partition is already materialized, so just return its values
-        new InterruptibleIterator(context, values.asInstanceOf[Iterator[T]])
 
-      case None =>
-        // Mark the split as loading (unless someone else marks it first)
-        loading.synchronized {
-          if (loading.contains(key)) {
-            logInfo("Another thread is loading %s, waiting for it to finish...".format(key))
-            while (loading.contains(key)) {
-              try {
-                loading.wait()
-              } catch {
-                case e: Exception =>
-                  logWarning(s"Got an exception while waiting for another thread to load $key", e)
-              }
-            }
-            logInfo("Finished waiting for %s".format(key))
-            /* See whether someone else has successfully loaded it. The main way this would fail
-             * is for the RDD-level cache eviction policy if someone else has loaded the same RDD
-             * partition but we didn't want to make space for it. However, that case is unlikely
-             * because it's unlikely that two threads would work on the same RDD partition. One
-             * downside of the current code is that threads wait serially if this does happen. */
-            blockManager.get(key) match {
-              case Some(values) =>
-                return new InterruptibleIterator(context, values.asInstanceOf[Iterator[T]])
-              case None =>
-                logInfo("Whoever was loading %s failed; we'll try it ourselves".format(key))
-                loading.add(key)
-            }
-          } else {
-            loading.add(key)
+    val key = RDDBlockId(rdd.id, partition.index)
+    logDebug(s"Looking for partition $key")
+    blockManager.get(key) match {
+      case Some(blockResult) =>
+        // Partition is already materialized, so just return its values
+        val inputMetrics = blockResult.inputMetrics
+        val existingMetrics = context.taskMetrics
+          .getInputMetricsForReadMethod(inputMetrics.readMethod)
+        existingMetrics.incBytesRead(inputMetrics.bytesRead)
+
+        val iter = blockResult.data.asInstanceOf[Iterator[T]]
+        new InterruptibleIterator[T](context, iter) {
+          override def next(): T = {
+            existingMetrics.incRecordsRead(1)
+            delegate.next()
           }
         }
-        try {
-          // If we got here, we have to load the split
-          logInfo("Partition %s not found, computing it".format(key))
-          val computedValues = rdd.computeOrReadCheckpoint(split, context)
+      case None =>
+        // Acquire a lock for loading this partition
+        // If another thread already holds the lock, wait for it to finish return its results
+        val storedValues = acquireLockForPartition[T](key)
+        if (storedValues.isDefined) {
+          return new InterruptibleIterator[T](context, storedValues.get)
+        }
 
-          // Persist the result, so long as the task is not running locally
-          if (context.runningLocally) {
+        // Otherwise, we have to load the partition ourselves
+        try {
+          logInfo(s"Partition $key not found, computing it")
+          val computedValues = rdd.computeOrReadCheckpoint(partition, context)
+
+          // If the task is running locally, do not persist the result
+          if (context.isRunningLocally) {
             return computedValues
           }
 
-          // Keep track of blocks with updated statuses
-          var updatedBlocks = Seq[(BlockId, BlockStatus)]()
-          val returnValue: Iterator[T] = {
-            if (storageLevel.useDisk && !storageLevel.useMemory) {
-              /* In the case that this RDD is to be persisted using DISK_ONLY
-               * the iterator will be passed directly to the blockManager (rather then
-               * caching it to an ArrayBuffer first), then the resulting block data iterator
-               * will be passed back to the user. If the iterator generates a lot of data,
-               * this means that it doesn't all have to be held in memory at one time.
-               * This could also apply to MEMORY_ONLY_SER storage, but we need to make sure
-               * blocks aren't dropped by the block store before enabling that. */
-              updatedBlocks = blockManager.put(key, computedValues, storageLevel, tellMaster = true)
-              blockManager.get(key) match {
-                case Some(values) =>
-                  values.asInstanceOf[Iterator[T]]
-                case None =>
-                  logInfo("Failure to store %s".format(key))
-                  throw new Exception("Block manager failed to return persisted valued")
-              }
-            } else {
-              // In this case the RDD is cached to an array buffer. This will save the results
-              // if we're dealing with a 'one-time' iterator
-              val elements = new ArrayBuffer[Any]
-              elements ++= computedValues
-              updatedBlocks = blockManager.put(key, elements, storageLevel, tellMaster = true)
-              elements.iterator.asInstanceOf[Iterator[T]]
-            }
-          }
-
-          // Update task metrics to include any blocks whose storage status is updated
+          // Otherwise, cache the values and keep track of any updates in block statuses
+          val updatedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
+          val cachedValues = putInBlockManager(key, computedValues, storageLevel, updatedBlocks)
           val metrics = context.taskMetrics
-          metrics.updatedBlocks = Some(updatedBlocks)
-
-          new InterruptibleIterator(context, returnValue)
+          val lastUpdatedBlocks = metrics.updatedBlocks.getOrElse(Seq[(BlockId, BlockStatus)]())
+          metrics.updatedBlocks = Some(lastUpdatedBlocks ++ updatedBlocks.toSeq)
+          new InterruptibleIterator(context, cachedValues)
 
         } finally {
           loading.synchronized {
@@ -124,4 +90,104 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
         }
     }
   }
+
+  /**
+   * Acquire a loading lock for the partition identified by the given block ID.
+   *
+   * If the lock is free, just acquire it and return None. Otherwise, another thread is already
+   * loading the partition, so we wait for it to finish and return the values loaded by the thread.
+   */
+  private def acquireLockForPartition[T](id: RDDBlockId): Option[Iterator[T]] = {
+    loading.synchronized {
+      if (!loading.contains(id)) {
+        // If the partition is free, acquire its lock to compute its value
+        loading.add(id)
+        None
+      } else {
+        // Otherwise, wait for another thread to finish and return its result
+        logInfo(s"Another thread is loading $id, waiting for it to finish...")
+        while (loading.contains(id)) {
+          try {
+            loading.wait()
+          } catch {
+            case e: Exception =>
+              logWarning(s"Exception while waiting for another thread to load $id", e)
+          }
+        }
+        logInfo(s"Finished waiting for $id")
+        val values = blockManager.get(id)
+        if (!values.isDefined) {
+          /* The block is not guaranteed to exist even after the other thread has finished.
+           * For instance, the block could be evicted after it was put, but before our get.
+           * In this case, we still need to load the partition ourselves. */
+          logInfo(s"Whoever was loading $id failed; we'll try it ourselves")
+          loading.add(id)
+        }
+        values.map(_.data.asInstanceOf[Iterator[T]])
+      }
+    }
+  }
+
+  /**
+   * Cache the values of a partition, keeping track of any updates in the storage statuses of
+   * other blocks along the way.
+   *
+   * The effective storage level refers to the level that actually specifies BlockManager put
+   * behavior, not the level originally specified by the user. This is mainly for forcing a
+   * MEMORY_AND_DISK partition to disk if there is not enough room to unroll the partition,
+   * while preserving the the original semantics of the RDD as specified by the application.
+   */
+  private def putInBlockManager[T](
+      key: BlockId,
+      values: Iterator[T],
+      level: StorageLevel,
+      updatedBlocks: ArrayBuffer[(BlockId, BlockStatus)],
+      effectiveStorageLevel: Option[StorageLevel] = None): Iterator[T] = {
+
+    val putLevel = effectiveStorageLevel.getOrElse(level)
+    if (!putLevel.useMemory) {
+      /*
+       * This RDD is not to be cached in memory, so we can just pass the computed values as an
+       * iterator directly to the BlockManager rather than first fully unrolling it in memory.
+       */
+      updatedBlocks ++=
+        blockManager.putIterator(key, values, level, tellMaster = true, effectiveStorageLevel)
+      blockManager.get(key) match {
+        case Some(v) => v.data.asInstanceOf[Iterator[T]]
+        case None =>
+          logInfo(s"Failure to store $key")
+          throw new BlockException(key, s"Block manager failed to return cached value for $key!")
+      }
+    } else {
+      /*
+       * This RDD is to be cached in memory. In this case we cannot pass the computed values
+       * to the BlockManager as an iterator and expect to read it back later. This is because
+       * we may end up dropping a partition from memory store before getting it back.
+       *
+       * In addition, we must be careful to not unroll the entire partition in memory at once.
+       * Otherwise, we may cause an OOM exception if the JVM does not have enough space for this
+       * single partition. Instead, we unroll the values cautiously, potentially aborting and
+       * dropping the partition to disk if applicable.
+       */
+      blockManager.memoryStore.unrollSafely(key, values, updatedBlocks) match {
+        case Left(arr) =>
+          // We have successfully unrolled the entire partition, so cache it in memory
+          updatedBlocks ++=
+            blockManager.putArray(key, arr, level, tellMaster = true, effectiveStorageLevel)
+          arr.iterator.asInstanceOf[Iterator[T]]
+        case Right(it) =>
+          // There is not enough space to cache this partition in memory
+          val returnValues = it.asInstanceOf[Iterator[T]]
+          if (putLevel.useDisk) {
+            logWarning(s"Persisting partition $key to disk instead.")
+            val diskOnlyLevel = StorageLevel(useDisk = true, useMemory = false,
+              useOffHeap = false, deserialized = false, putLevel.replication)
+            putInBlockManager[T](key, returnValues, level, updatedBlocks, Some(diskOnlyLevel))
+          } else {
+            returnValues
+          }
+      }
+    }
+  }
+
 }

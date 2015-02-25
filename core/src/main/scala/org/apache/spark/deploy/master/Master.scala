@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy.master
 
+import java.io.FileNotFoundException
+import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
 
@@ -29,36 +31,41 @@ import scala.util.Random
 import akka.actor._
 import akka.pattern.ask
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
+import akka.serialization.Serialization
 import akka.serialization.SerializationExtension
-import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
-import org.apache.spark.deploy.{ApplicationDescription, DriverDescription, ExecutorState}
+import org.apache.spark.deploy.{ApplicationDescription, DriverDescription,
+  ExecutorState, SparkHadoopUtil}
 import org.apache.spark.deploy.DeployMessages._
+import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
+import org.apache.spark.deploy.rest.StandaloneRestServer
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.{ActorLogReceive, AkkaUtils, SignalLogger, Utils}
 
 private[spark] class Master(
     host: String,
     port: Int,
     webUiPort: Int,
-    val securityMgr: SecurityManager)
-  extends Actor with Logging {
+    val securityMgr: SecurityManager,
+    val conf: SparkConf)
+  extends Actor with ActorLogReceive with Logging with LeaderElectable {
 
   import context.dispatcher   // to use Akka's scheduler.schedule()
 
-  val conf = new SparkConf
+  val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
 
   def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")  // For application IDs
   val WORKER_TIMEOUT = conf.getLong("spark.worker.timeout", 60) * 1000
   val RETAINED_APPLICATIONS = conf.getInt("spark.deploy.retainedApplications", 200)
+  val RETAINED_DRIVERS = conf.getInt("spark.deploy.retainedDrivers", 200)
   val REAPER_ITERATIONS = conf.getInt("spark.dead.worker.persistence", 15)
-  val RECOVERY_DIR = conf.get("spark.deploy.recoveryDirectory", "")
   val RECOVERY_MODE = conf.get("spark.deploy.recoveryMode", "NONE")
 
   val workers = new HashSet[WorkerInfo]
@@ -72,9 +79,7 @@ private[spark] class Master(
   val waitingApps = new ArrayBuffer[ApplicationInfo]
   val completedApps = new ArrayBuffer[ApplicationInfo]
   var nextAppNumber = 0
-
   val appIdToUI = new HashMap[String, SparkUI]
-  val fileSystemsUsed = new HashSet[FileSystem]
 
   val drivers = new HashSet[DriverInfo]
   val completedDrivers = new ArrayBuffer[DriverInfo]
@@ -102,7 +107,7 @@ private[spark] class Master(
 
   var persistenceEngine: PersistenceEngine = _
 
-  var leaderElectionAgent: ActorRef = _
+  var leaderElectionAgent: LeaderElectionAgent = _
 
   private var recoveryCompletionTask: Cancellable = _
 
@@ -117,8 +122,20 @@ private[spark] class Master(
     throw new SparkException("spark.deploy.defaultCores must be positive")
   }
 
+  // Alternative application submission gateway that is stable across Spark versions
+  private val restServerEnabled = conf.getBoolean("spark.master.rest.enabled", true)
+  private val restServer =
+    if (restServerEnabled) {
+      val port = conf.getInt("spark.master.rest.port", 6066)
+      Some(new StandaloneRestServer(host, port, self, masterUrl, conf))
+    } else {
+      None
+    }
+  private val restServerBoundPort = restServer.map(_.start())
+
   override def preStart() {
     logInfo("Starting Spark master at " + masterUrl)
+    logInfo(s"Running Spark version ${org.apache.spark.SPARK_VERSION}")
     // Listen for remote client disconnection events, since they don't go through Akka's watch()
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
     webUi.bind()
@@ -128,24 +145,32 @@ private[spark] class Master(
     masterMetricsSystem.registerSource(masterSource)
     masterMetricsSystem.start()
     applicationMetricsSystem.start()
+    // Attach the master and app metrics servlet handler to the web ui after the metrics systems are
+    // started.
+    masterMetricsSystem.getServletHandlers.foreach(webUi.attachHandler)
+    applicationMetricsSystem.getServletHandlers.foreach(webUi.attachHandler)
 
-    persistenceEngine = RECOVERY_MODE match {
+    val (persistenceEngine_, leaderElectionAgent_) = RECOVERY_MODE match {
       case "ZOOKEEPER" =>
         logInfo("Persisting recovery state to ZooKeeper")
-        new ZooKeeperPersistenceEngine(SerializationExtension(context.system), conf)
+        val zkFactory =
+          new ZooKeeperRecoveryModeFactory(conf, SerializationExtension(context.system))
+        (zkFactory.createPersistenceEngine(), zkFactory.createLeaderElectionAgent(this))
       case "FILESYSTEM" =>
-        logInfo("Persisting recovery state to directory: " + RECOVERY_DIR)
-        new FileSystemPersistenceEngine(RECOVERY_DIR, SerializationExtension(context.system))
+        val fsFactory =
+          new FileSystemRecoveryModeFactory(conf, SerializationExtension(context.system))
+        (fsFactory.createPersistenceEngine(), fsFactory.createLeaderElectionAgent(this))
+      case "CUSTOM" =>
+        val clazz = Class.forName(conf.get("spark.deploy.recoveryMode.factory"))
+        val factory = clazz.getConstructor(conf.getClass, Serialization.getClass)
+          .newInstance(conf, SerializationExtension(context.system))
+          .asInstanceOf[StandaloneRecoveryModeFactory]
+        (factory.createPersistenceEngine(), factory.createLeaderElectionAgent(this))
       case _ =>
-        new BlackHolePersistenceEngine()
+        (new BlackHolePersistenceEngine(), new MonarchyLeaderAgent(this))
     }
-
-    leaderElectionAgent = RECOVERY_MODE match {
-        case "ZOOKEEPER" =>
-          context.actorOf(Props(classOf[ZooKeeperLeaderElectionAgent], self, masterUrl, conf))
-        case _ =>
-          context.actorOf(Props(classOf[MonarchyLeaderAgent], self))
-      }
+    persistenceEngine = persistenceEngine_
+    leaderElectionAgent = leaderElectionAgent_
   }
 
   override def preRestart(reason: Throwable, message: Option[Any]) {
@@ -154,19 +179,29 @@ private[spark] class Master(
   }
 
   override def postStop() {
+    masterMetricsSystem.report()
+    applicationMetricsSystem.report()
     // prevent the CompleteRecovery message sending to restarted master
     if (recoveryCompletionTask != null) {
       recoveryCompletionTask.cancel()
     }
     webUi.stop()
-    fileSystemsUsed.foreach(_.close())
+    restServer.foreach(_.stop())
     masterMetricsSystem.stop()
     applicationMetricsSystem.stop()
     persistenceEngine.close()
-    context.stop(leaderElectionAgent)
+    leaderElectionAgent.stop()
   }
 
-  override def receive = {
+  override def electedLeader() {
+    self ! ElectedLeader
+  }
+
+  override def revokedLeadership() {
+    self ! RevokedLeadership
+  }
+
+  override def receiveWithLogging = {
     case ElectedLeader => {
       val (storedApps, storedDrivers, storedWorkers) = persistenceEngine.readPersistedData()
       state = if (storedApps.isEmpty && storedDrivers.isEmpty && storedWorkers.isEmpty) {
@@ -294,27 +329,34 @@ private[spark] class Master(
       val execOption = idToApp.get(appId).flatMap(app => app.executors.get(execId))
       execOption match {
         case Some(exec) => {
+          val appInfo = idToApp(appId)
           exec.state = state
+          if (state == ExecutorState.RUNNING) { appInfo.resetRetryCount() }
           exec.application.driver ! ExecutorUpdated(execId, state, message, exitStatus)
           if (ExecutorState.isFinished(state)) {
-            val appInfo = idToApp(appId)
             // Remove this executor from the worker and app
-            logInfo("Removing executor " + exec.fullId + " because it is " + state)
+            logInfo(s"Removing executor ${exec.fullId} because it is $state")
             appInfo.removeExecutor(exec)
             exec.worker.removeExecutor(exec)
 
+            val normalExit = exitStatus == Some(0)
             // Only retry certain number of times so we don't go into an infinite loop.
-            if (appInfo.incrementRetryCount < ApplicationState.MAX_NUM_RETRY) {
-              schedule()
-            } else {
-              logError("Application %s with ID %s failed %d times, removing it".format(
-                appInfo.desc.name, appInfo.id, appInfo.retryCount))
-              removeApplication(appInfo, ApplicationState.FAILED)
+            if (!normalExit) {
+              if (appInfo.incrementRetryCount() < ApplicationState.MAX_NUM_RETRY) {
+                schedule()
+              } else {
+                val execs = appInfo.executors.values
+                if (!execs.exists(_.state == ExecutorState.RUNNING)) {
+                  logError(s"Application ${appInfo.desc.name} with ID ${appInfo.id} failed " +
+                    s"${appInfo.retryCount} times; removing it")
+                  removeApplication(appInfo, ApplicationState.FAILED)
+                }
+              }
             }
           }
         }
         case None =>
-          logWarning("Got status update for unknown executor " + appId + "/" + execId)
+          logWarning(s"Got status update for unknown executor $appId/$execId")
       }
     }
 
@@ -332,7 +374,14 @@ private[spark] class Master(
         case Some(workerInfo) =>
           workerInfo.lastHeartbeat = System.currentTimeMillis()
         case None =>
-          logWarning("Got heartbeat from unregistered worker " + workerId)
+          if (workers.map(_.id).contains(workerId)) {
+            logWarning(s"Got heartbeat from unregistered worker $workerId." +
+              " Asking it to re-register.")
+            sender ! ReconnectWorker(masterUrl)
+          } else {
+            logWarning(s"Got heartbeat from unregistered worker $workerId." +
+              " This worker was never registered, so ignoring the heartbeat.")
+          }
       }
     }
 
@@ -385,7 +434,9 @@ private[spark] class Master(
     }
 
     case RequestMasterState => {
-      sender ! MasterStateResponse(host, port, workers.toArray, apps.toArray, completedApps.toArray,
+      sender ! MasterStateResponse(
+        host, port, restServerBoundPort,
+        workers.toArray, apps.toArray, completedApps.toArray,
         drivers.toArray, completedDrivers.toArray, state)
     }
 
@@ -393,8 +444,8 @@ private[spark] class Master(
       timeOutDeadWorkers()
     }
 
-    case RequestWebUIPort => {
-      sender ! WebUIPortResponse(webUi.boundPort)
+    case BoundPortsRequest => {
+      sender ! BoundPortsResponse(port, webUi.boundPort, restServerBoundPort)
     }
   }
 
@@ -478,13 +529,26 @@ private[spark] class Master(
     if (state != RecoveryState.ALIVE) { return }
 
     // First schedule drivers, they take strict precedence over applications
-    val shuffledWorkers = Random.shuffle(workers) // Randomization helps balance drivers
-    for (worker <- shuffledWorkers if worker.state == WorkerState.ALIVE) {
-      for (driver <- waitingDrivers) {
+    // Randomization helps balance drivers
+    val shuffledAliveWorkers = Random.shuffle(workers.toSeq.filter(_.state == WorkerState.ALIVE))
+    val numWorkersAlive = shuffledAliveWorkers.size
+    var curPos = 0
+
+    for (driver <- waitingDrivers.toList) { // iterate over a copy of waitingDrivers
+      // We assign workers to each waiting driver in a round-robin fashion. For each driver, we
+      // start from the last worker that was assigned a driver, and continue onwards until we have
+      // explored all alive workers.
+      var launched = false
+      var numWorkersVisited = 0
+      while (numWorkersVisited < numWorkersAlive && !launched) {
+        val worker = shuffledAliveWorkers(curPos)
+        numWorkersVisited += 1
         if (worker.memoryFree >= driver.desc.mem && worker.coresFree >= driver.desc.cores) {
           launchDriver(worker, driver)
           waitingDrivers -= driver
+          launched = true
         }
+        curPos = (curPos + 1) % numWorkersAlive
       }
     }
 
@@ -532,7 +596,7 @@ private[spark] class Master(
     }
   }
 
-  def launchExecutor(worker: WorkerInfo, exec: ExecutorInfo) {
+  def launchExecutor(worker: WorkerInfo, exec: ExecutorDesc) {
     logInfo("Launching executor " + exec.fullId + " on worker " + worker.id)
     worker.addExecutor(exec)
     worker.actor ! LaunchExecutor(masterUrl,
@@ -607,7 +671,7 @@ private[spark] class Master(
 
   def registerApplication(app: ApplicationInfo): Unit = {
     val appAddress = app.driver.path.address
-    if (addressToWorker.contains(appAddress)) {
+    if (addressToApp.contains(appAddress)) {
       logInfo("Attempted to re-register application at same address: " + appAddress)
       return
     }
@@ -643,10 +707,7 @@ private[spark] class Master(
       waitingApps -= app
 
       // If application events are logged, use them to rebuild the UI
-      if (!rebuildSparkUI(app)) {
-        // Avoid broken links if the UI is not reconstructed
-        app.desc.appUiUrl = ""
-      }
+      rebuildSparkUI(app)
 
       for (exec <- app.executors.values) {
         exec.worker.removeExecutor(exec)
@@ -659,6 +720,11 @@ private[spark] class Master(
       }
       persistenceEngine.removeApplication(app)
       schedule()
+
+      // Tell all workers that the application has finished, so they can clean up any app state.
+      workers.foreach { w =>
+        w.actor ! ApplicationFinished(app.id)
+      }
     }
   }
 
@@ -668,29 +734,62 @@ private[spark] class Master(
    */
   def rebuildSparkUI(app: ApplicationInfo): Boolean = {
     val appName = app.desc.name
-    val eventLogDir = app.desc.eventLogDir.getOrElse { return false }
-    val fileSystem = Utils.getHadoopFileSystem(eventLogDir)
-    val eventLogInfo = EventLoggingListener.parseLoggingInfo(eventLogDir, fileSystem)
-    val eventLogPaths = eventLogInfo.logPaths
-    val compressionCodec = eventLogInfo.compressionCodec
-    if (!eventLogPaths.isEmpty) {
-      try {
-        val replayBus = new ReplayListenerBus(eventLogPaths, fileSystem, compressionCodec)
-        val ui = new SparkUI(
-          new SparkConf, replayBus, appName + " (completed)", "/history/" + app.id)
-        replayBus.replay()
-        app.desc.appUiUrl = ui.basePath
-        appIdToUI(app.id) = ui
-        webUi.attachSparkUI(ui)
-        return true
-      } catch {
-        case e: Exception =>
-          logError("Exception in replaying log for application %s (%s)".format(appName, app.id), e)
+    val notFoundBasePath = HistoryServer.UI_PATH_PREFIX + "/not-found"
+    try {
+      val eventLogFile = app.desc.eventLogDir
+        .map { dir => EventLoggingListener.getLogPath(dir, app.id) }
+        .getOrElse {
+          // Event logging is not enabled for this application
+          app.desc.appUiUrl = notFoundBasePath
+          return false
+        }
+        
+      val fs = Utils.getHadoopFileSystem(eventLogFile, hadoopConf)
+
+      if (fs.exists(new Path(eventLogFile + EventLoggingListener.IN_PROGRESS))) {
+        // Event logging is enabled for this application, but the application is still in progress
+        val title = s"Application history not found (${app.id})"
+        var msg = s"Application $appName is still in progress."
+        logWarning(msg)
+        msg = URLEncoder.encode(msg, "UTF-8")
+        app.desc.appUiUrl = notFoundBasePath + s"?msg=$msg&title=$title"
+        return false
       }
-    } else {
-      logWarning("Application %s (%s) has no valid logs: %s".format(appName, app.id, eventLogDir))
+
+      val (logInput, sparkVersion) = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
+      val replayBus = new ReplayListenerBus()
+      val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
+        appName + " (completed)", HistoryServer.UI_PATH_PREFIX + s"/${app.id}")
+      try {
+        replayBus.replay(logInput, sparkVersion, eventLogFile)
+      } finally {
+        logInput.close()
+      }
+      appIdToUI(app.id) = ui
+      webUi.attachSparkUI(ui)
+      // Application UI is successfully rebuilt, so link the Master UI to it
+      app.desc.appUiUrl = ui.basePath
+      true
+    } catch {
+      case fnf: FileNotFoundException =>
+        // Event logging is enabled for this application, but no event logs are found
+        val title = s"Application history not found (${app.id})"
+        var msg = s"No event logs found for application $appName in ${app.desc.eventLogDir}."
+        logWarning(msg)
+        msg += " Did you specify the correct logging directory?"
+        msg = URLEncoder.encode(msg, "UTF-8")
+        app.desc.appUiUrl = notFoundBasePath + s"?msg=$msg&title=$title"
+        false
+      case e: Exception =>
+        // Relay exception message to application UI page
+        val title = s"Application history load error (${app.id})"
+        val exception = URLEncoder.encode(Utils.exceptionString(e), "UTF-8")
+        var msg = s"Exception in replaying log for application $appName!"
+        logError(msg, e)
+        msg = URLEncoder.encode(msg, "UTF-8")
+        app.desc.appUiUrl = notFoundBasePath + s"?msg=$msg&exception=$exception&title=$title"
+        false
     }
-    false
   }
 
   /** Generate a new app ID given a app's submission date */
@@ -743,52 +842,74 @@ private[spark] class Master(
       case Some(driver) =>
         logInfo(s"Removing driver: $driverId")
         drivers -= driver
+        if (completedDrivers.size >= RETAINED_DRIVERS) {
+          val toRemove = math.max(RETAINED_DRIVERS / 10, 1)
+          completedDrivers.trimStart(toRemove)
+        }
         completedDrivers += driver
         persistenceEngine.removeDriver(driver)
         driver.state = finalState
         driver.exception = exception
         driver.worker.foreach(w => w.removeDriver(driver))
+        schedule()
       case None =>
         logWarning(s"Asked to remove unknown driver: $driverId")
     }
   }
 }
 
-private[spark] object Master {
+private[spark] object Master extends Logging {
   val systemName = "sparkMaster"
   private val actorName = "Master"
-  val sparkUrlRegex = "spark://([^:]+):([0-9]+)".r
 
   def main(argStrings: Array[String]) {
+    SignalLogger.register(log)
     val conf = new SparkConf
     val args = new MasterArguments(argStrings, conf)
-    val (actorSystem, _, _) = startSystemAndActor(args.host, args.port, args.webUiPort, conf)
+    val (actorSystem, _, _, _) = startSystemAndActor(args.host, args.port, args.webUiPort, conf)
     actorSystem.awaitTermination()
   }
 
-  /** Returns an `akka.tcp://...` URL for the Master actor given a sparkUrl `spark://host:ip`. */
-  def toAkkaUrl(sparkUrl: String): String = {
-    sparkUrl match {
-      case sparkUrlRegex(host, port) =>
-        "akka.tcp://%s@%s:%s/user/%s".format(systemName, host, port, actorName)
-      case _ =>
-        throw new SparkException("Invalid master URL: " + sparkUrl)
-    }
+  /**
+   * Returns an `akka.tcp://...` URL for the Master actor given a sparkUrl `spark://host:port`.
+   *
+   * @throws SparkException if the url is invalid
+   */
+  def toAkkaUrl(sparkUrl: String, protocol: String): String = {
+    val (host, port) = Utils.extractHostPortFromSparkUrl(sparkUrl)
+    AkkaUtils.address(protocol, systemName, host, port, actorName)
   }
 
+  /**
+   * Returns an akka `Address` for the Master actor given a sparkUrl `spark://host:port`.
+   *
+   * @throws SparkException if the url is invalid
+   */
+  def toAkkaAddress(sparkUrl: String, protocol: String): Address = {
+    val (host, port) = Utils.extractHostPortFromSparkUrl(sparkUrl)
+    Address(protocol, systemName, host, port)
+  }
+
+  /**
+   * Start the Master and return a four tuple of:
+   *   (1) The Master actor system
+   *   (2) The bound port
+   *   (3) The web UI bound port
+   *   (4) The REST server bound port, if any
+   */
   def startSystemAndActor(
       host: String,
       port: Int,
       webUiPort: Int,
-      conf: SparkConf): (ActorSystem, Int, Int) = {
+      conf: SparkConf): (ActorSystem, Int, Int, Option[Int]) = {
     val securityMgr = new SecurityManager(conf)
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port, conf = conf,
       securityManager = securityMgr)
-    val actor = actorSystem.actorOf(Props(classOf[Master], host, boundPort, webUiPort,
-      securityMgr), actorName)
+    val actor = actorSystem.actorOf(
+      Props(classOf[Master], host, boundPort, webUiPort, securityMgr, conf), actorName)
     val timeout = AkkaUtils.askTimeout(conf)
-    val respFuture = actor.ask(RequestWebUIPort)(timeout)
-    val resp = Await.result(respFuture, timeout).asInstanceOf[WebUIPortResponse]
-    (actorSystem, boundPort, resp.webUIBoundPort)
+    val portsRequest = actor.ask(BoundPortsRequest)(timeout)
+    val portsResponse = Await.result(portsRequest, timeout).asInstanceOf[BoundPortsResponse]
+    (actorSystem, boundPort, portsResponse.webUIPort, portsResponse.restPort)
   }
 }

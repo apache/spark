@@ -10,7 +10,7 @@ In addition to running on the Mesos or YARN cluster managers, Spark also provide
 
 # Installing Spark Standalone to a Cluster
 
-To install Spark Standalone mode, you simply place a compiled version of Spark on each node on the cluster. You can obtain pre-built versions of Spark with each release or [build it yourself](index.html#building).
+To install Spark Standalone mode, you simply place a compiled version of Spark on each node on the cluster. You can obtain pre-built versions of Spark with each release or [build it yourself](building-spark.html).
 
 # Starting a Cluster Manually
 
@@ -34,8 +34,12 @@ Finally, the following configuration options can be passed to the master and wor
 <table class="table">
   <tr><th style="width:21%">Argument</th><th>Meaning</th></tr>
   <tr>
-    <td><code>-i IP</code>, <code>--ip IP</code></td>
-    <td>IP address or DNS name to listen on</td>
+    <td><code>-h HOST</code>, <code>--host HOST</code></td>
+    <td>Hostname to listen on</td>
+  </tr>
+  <tr>
+    <td><code>-i HOST</code>, <code>--ip HOST</code></td>
+    <td>Hostname to listen on (deprecated, use -h or --host)</td>
   </tr>
   <tr>
     <td><code>-p PORT</code>, <code>--port PORT</code></td>
@@ -57,12 +61,21 @@ Finally, the following configuration options can be passed to the master and wor
     <td><code>-d DIR</code>, <code>--work-dir DIR</code></td>
     <td>Directory to use for scratch space and job output logs (default: SPARK_HOME/work); only on worker</td>
   </tr>
+  <tr>
+    <td><code>--properties-file FILE</code></td>
+    <td>Path to a custom Spark properties file to load (default: conf/spark-defaults.conf)</td>
+  </tr>
 </table>
 
 
 # Cluster Launch Scripts
 
-To launch a Spark standalone cluster with the launch scripts, you need to create a file called `conf/slaves` in your Spark directory, which should contain the hostnames of all the machines where you would like to start Spark workers, one per line. The master machine must be able to access each of the slave machines via password-less `ssh` (using a private key). For testing, you can just put `localhost` in this file.
+To launch a Spark standalone cluster with the launch scripts, you should create a file called conf/slaves in your Spark directory,
+which must contain the hostnames of all the machines where you intend to start Spark workers, one per line.
+If conf/slaves does not exist, the launch scripts defaults to a single machine (localhost), which is useful for testing.
+Note, the master machine accesses each of the worker machines via ssh. By default, ssh is run in parallel and requires password-less (using a private key) access to be setup.
+If you do not have a password-less setup, you can set the environment variable SPARK_SSH_FOREGROUND and serially provide a password for each worker.
+
 
 Once you've set up this file, you can launch or stop your cluster with the following shell scripts, based on Hadoop's deploy scripts, and available in `SPARK_HOME/bin`:
 
@@ -157,6 +170,20 @@ SPARK_MASTER_OPTS supports the following system properties:
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
+  <td><code>spark.deploy.retainedApplications</code></td>
+  <td>200</td>
+  <td>
+    The maximum number of completed applications to display. Older applications will be dropped from the UI to maintain this limit.<br/>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.deploy.retainedDrivers</code></td>
+  <td>200</td>
+  <td>
+   The maximum number of completed drivers to display. Older drivers will be dropped from the UI to maintain this limit.<br/>
+  </td>
+</tr>
+<tr>
   <td><code>spark.deploy.spreadOut</code></td>
   <td>true</td>
   <td>
@@ -228,24 +255,31 @@ To run an interactive Spark shell against the cluster, run the following command
 
     ./bin/spark-shell --master spark://IP:PORT
 
-Note that if you are running spark-shell from one of the spark cluster machines, the `bin/spark-shell` script will
-automatically set MASTER from the `SPARK_MASTER_IP` and `SPARK_MASTER_PORT` variables in `conf/spark-env.sh`.
+You can also pass an option `--total-executor-cores <numCores>` to control the number of cores that spark-shell uses on the cluster.
 
-You can also pass an option `--cores <numCores>` to control the number of cores that spark-shell uses on the cluster.
+# Launching Spark Applications
 
-# Launching Compiled Spark Applications
-
-Spark supports two deploy modes: applications may run with the driver inside the client process or
-entirely inside the cluster. The
-[`spark-submit` script](submitting-applications.html) provides the
-most straightforward way to submit a compiled Spark application to the cluster in either deploy
-mode.
+The [`spark-submit` script](submitting-applications.html) provides the most straightforward way to
+submit a compiled Spark application to the cluster. For standalone clusters, Spark currently
+supports two deploy modes. In `client` mode, the driver is launched in the same process as the
+client that submits the application. In `cluster` mode, however, the driver is launched from one
+of the Worker processes inside the cluster, and the client process exits as soon as it fulfills
+its responsibility of submitting the application without waiting for the application to finish.
 
 If your application is launched through Spark submit, then the application jar is automatically
 distributed to all worker nodes. For any additional jars that your application depends on, you
 should specify them through the `--jars` flag using comma as a delimiter (e.g. `--jars jar1,jar2`).
 To control the application's configuration or execution environment, see
 [Spark Configuration](configuration.html).
+
+Additionally, standalone `cluster` mode supports restarting your application automatically if it
+exited with non-zero exit code. To use this feature, you may pass in the `--supervise` flag to
+`spark-submit` when launching your application. Then, if you wish to kill an application that is
+failing repeatedly, you may do so through:
+
+    ./bin/spark-class org.apache.spark.deploy.Client kill <master url> <driver ID>
+
+You can find the driver ID through the standalone Master web UI at `http://<master url>:8080`.
 
 # Resource Scheduling
 
@@ -289,91 +323,9 @@ You can run Spark alongside your existing Hadoop cluster by just launching it as
 
 # Configuring Ports for Network Security
 
-Spark makes heavy use of the network, and some environments have strict requirements for using tight
-firewall settings.  Below are the primary ports that Spark uses for its communication and how to
-configure those ports.
-
-<table class="table">
-  <tr>
-    <th>From</th><th>To</th><th>Default Port</th><th>Purpose</th><th>Configuration
-    Setting</th><th>Notes</th>
-  </tr>
-  <!-- Web UIs -->
-  <tr>
-    <td>Browser</td>
-    <td>Standalone Cluster Master</td>
-    <td>8080</td>
-    <td>Web UI</td>
-    <td><code>master.ui.port</code></td>
-    <td>Jetty-based</td>
-  </tr>
-  <tr>
-    <td>Browser</td>
-    <td>Driver</td>
-    <td>4040</td>
-    <td>Web UI</td>
-    <td><code>spark.ui.port</code></td>
-    <td>Jetty-based</td>
-  </tr>
-  <tr>
-    <td>Browser</td>
-    <td>History Server</td>
-    <td>18080</td>
-    <td>Web UI</td>
-    <td><code>spark.history.ui.port</code></td>
-    <td>Jetty-based</td>
-  </tr>
-  <tr>
-    <td>Browser</td>
-    <td>Worker</td>
-    <td>8081</td>
-    <td>Web UI</td>
-    <td><code>worker.ui.port</code></td>
-    <td>Jetty-based</td>
-  </tr>
-  <!-- Cluster interactions -->
-  <tr>
-    <td>Application</td>
-    <td>Standalone Cluster Master</td>
-    <td>7077</td>
-    <td>Submit job to cluster</td>
-    <td><code>spark.driver.port</code></td>
-    <td>Akka-based.  Set to "0" to choose a port randomly</td>
-  </tr>
-  <tr>
-    <td>Worker</td>
-    <td>Standalone Cluster Master</td>
-    <td>7077</td>
-    <td>Join cluster</td>
-    <td><code>spark.driver.port</code></td>
-    <td>Akka-based.  Set to "0" to choose a port randomly</td>
-  </tr>
-  <tr>
-    <td>Application</td>
-    <td>Worker</td>
-    <td>(random)</td>
-    <td>Join cluster</td>
-    <td><code>SPARK_WORKER_PORT</code> (standalone cluster)</td>
-    <td>Akka-based</td>
-  </tr>
-
-  <!-- Other misc stuff -->
-  <tr>
-    <td>Driver and other Workers</td>
-    <td>Worker</td>
-    <td>(random)</td>
-    <td>
-      <ul>
-        <li>File server for file and jars</li>
-        <li>Http Broadcast</li>
-        <li>Class file server (Spark Shell only)</li>
-      </ul>
-    </td>
-    <td>None</td>
-    <td>Jetty-based.  Each of these services starts on a random port that cannot be configured</td>
-  </tr>
-
-</table>
+Spark makes heavy use of the network, and some environments have strict requirements for using
+tight firewall settings. For a complete list of ports to configure, see the
+[security page](security.html#configuring-ports-for-network-security).
 
 # High Availability
 

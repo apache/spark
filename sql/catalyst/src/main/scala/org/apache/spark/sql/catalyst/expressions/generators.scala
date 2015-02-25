@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.collection.Map
+
 import org.apache.spark.sql.catalyst.trees
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 
 /**
  * An expression that produces zero or more rows given a single input row.
@@ -41,11 +43,9 @@ abstract class Generator extends Expression {
   override type EvaluatedType = TraversableOnce[Row]
 
   override lazy val dataType =
-    ArrayType(StructType(output.map(a => StructField(a.name, a.dataType, a.nullable))))
+    ArrayType(StructType(output.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata))))
 
   override def nullable = false
-
-  override def references = children.flatMap(_.references).toSet
 
   /**
    * Should be overridden by specific generators.  Called only once for each instance to ensure
@@ -74,6 +74,25 @@ abstract class Generator extends Expression {
 }
 
 /**
+ * A generator that produces its output using the provided lambda function.
+ */
+case class UserDefinedGenerator(
+    schema: Seq[Attribute],
+    function: Row => TraversableOnce[Row],
+    children: Seq[Expression])
+  extends Generator{
+
+  override protected def makeOutput(): Seq[Attribute] = schema
+
+  override def eval(input: Row): TraversableOnce[Row] = {
+    val inputRow = new InterpretedProjection(children)
+    function(inputRow(input))
+  }
+
+  override def toString = s"UserDefinedGenerator(${children.mkString(",")})"
+}
+
+/**
  * Given an input array produces a sequence of rows for each value in the array.
  */
 case class Explode(attributeNames: Seq[String], child: Expression)
@@ -84,28 +103,28 @@ case class Explode(attributeNames: Seq[String], child: Expression)
     (child.dataType.isInstanceOf[ArrayType] || child.dataType.isInstanceOf[MapType])
 
   private lazy val elementTypes = child.dataType match {
-    case ArrayType(et) => et :: Nil
-    case MapType(kt,vt) => kt :: vt :: Nil
+    case ArrayType(et, containsNull) => (et, containsNull) :: Nil
+    case MapType(kt, vt, valueContainsNull) => (kt, false) :: (vt, valueContainsNull) :: Nil
   }
 
   // TODO: Move this pattern into Generator.
   protected def makeOutput() =
     if (attributeNames.size == elementTypes.size) {
       attributeNames.zip(elementTypes).map {
-        case (n, t) => AttributeReference(n, t, nullable = true)()
+        case (n, (t, nullable)) => AttributeReference(n, t, nullable)()
       }
     } else {
       elementTypes.zipWithIndex.map {
-        case (t, i) => AttributeReference(s"c_$i", t, nullable = true)()
+        case ((t, nullable), i) => AttributeReference(s"c_$i", t, nullable)()
       }
     }
 
   override def eval(input: Row): TraversableOnce[Row] = {
     child.dataType match {
-      case ArrayType(_) =>
+      case ArrayType(_, _) =>
         val inputArray = child.eval(input).asInstanceOf[Seq[Any]]
         if (inputArray == null) Nil else inputArray.map(v => new GenericRow(Array(v)))
-      case MapType(_, _) =>
+      case MapType(_, _, _) =>
         val inputMap = child.eval(input).asInstanceOf[Map[Any,Any]]
         if (inputMap == null) Nil else inputMap.map { case (k,v) => new GenericRow(Array(k,v)) }
     }

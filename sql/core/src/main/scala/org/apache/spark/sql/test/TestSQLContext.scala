@@ -17,9 +17,31 @@
 
 package org.apache.spark.sql.test
 
+import scala.language.implicitConversions
+
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{DataFrame, SQLConf, SQLContext}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /** A SQLContext that can be used for local testing. */
 object TestSQLContext
-  extends SQLContext(new SparkContext("local", "TestSQLContext", new SparkConf()))
+  extends SQLContext(
+    new SparkContext(
+      "local[2]",
+      "TestSQLContext",
+      new SparkConf().set("spark.sql.testkey", "true"))) {
+
+  /** Fewer partitions to speed up testing. */
+  protected[sql] override lazy val conf: SQLConf = new SQLConf {
+    override def numShufflePartitions: Int = this.getConf(SQLConf.SHUFFLE_PARTITIONS, "5").toInt
+  }
+
+  /**
+   * Turn a logical plan into a [[DataFrame]]. This should be removed once we have an easier way to
+   * construct [[DataFrame]] directly out of local data without relying on implicits.
+   */
+  protected[sql] implicit def logicalPlanToSparkQuery(plan: LogicalPlan): DataFrame = {
+    DataFrame(this, plan)
+  }
+
+}

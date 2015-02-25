@@ -28,9 +28,30 @@ import org.apache.spark.rdd.{RDD, UnionRDD}
  * Evaluator for binary classification.
  *
  * @param scoreAndLabels an RDD of (score, label) pairs.
+ * @param numBins if greater than 0, then the curves (ROC curve, PR curve) computed internally
+ *                will be down-sampled to this many "bins". If 0, no down-sampling will occur.
+ *                This is useful because the curve contains a point for each distinct score
+ *                in the input, and this could be as large as the input itself -- millions of
+ *                points or more, when thousands may be entirely sufficient to summarize
+ *                the curve. After down-sampling, the curves will instead be made of approximately
+ *                `numBins` points instead. Points are made from bins of equal numbers of
+ *                consecutive points. The size of each bin is
+ *                `floor(scoreAndLabels.count() / numBins)`, which means the resulting number
+ *                of bins may not exactly equal numBins. The last bin in each partition may
+ *                be smaller as a result, meaning there may be an extra sample at
+ *                partition boundaries.
  */
 @Experimental
-class BinaryClassificationMetrics(scoreAndLabels: RDD[(Double, Double)]) extends Logging {
+class BinaryClassificationMetrics(
+    val scoreAndLabels: RDD[(Double, Double)],
+    val numBins: Int) extends Logging {
+
+  require(numBins >= 0, "numBins must be nonnegative")
+
+  /**
+   * Defaults `numBins` to 0.
+   */
+  def this(scoreAndLabels: RDD[(Double, Double)]) = this(scoreAndLabels, 0)
 
   /** Unpersist intermediate RDDs used in the computation. */
   def unpersist() {
@@ -103,17 +124,49 @@ class BinaryClassificationMetrics(scoreAndLabels: RDD[(Double, Double)]) extends
       mergeValue = (c: BinaryLabelCounter, label: Double) => c += label,
       mergeCombiners = (c1: BinaryLabelCounter, c2: BinaryLabelCounter) => c1 += c2
     ).sortByKey(ascending = false)
-    val agg = counts.values.mapPartitions({ iter =>
+
+    val binnedCounts =
+      // Only down-sample if bins is > 0
+      if (numBins == 0) {
+        // Use original directly
+        counts
+      } else {
+        val countsSize = counts.count()
+        // Group the iterator into chunks of about countsSize / numBins points,
+        // so that the resulting number of bins is about numBins
+        var grouping = countsSize / numBins
+        if (grouping < 2) {
+          // numBins was more than half of the size; no real point in down-sampling to bins
+          logInfo(s"Curve is too small ($countsSize) for $numBins bins to be useful")
+          counts
+        } else {
+          if (grouping >= Int.MaxValue) {
+            logWarning(
+              s"Curve too large ($countsSize) for $numBins bins; capping at ${Int.MaxValue}")
+            grouping = Int.MaxValue
+          }
+          counts.mapPartitions(_.grouped(grouping.toInt).map { pairs =>
+            // The score of the combined point will be just the first one's score
+            val firstScore = pairs.head._1
+            // The point will contain all counts in this chunk
+            val agg = new BinaryLabelCounter()
+            pairs.foreach(pair => agg += pair._2)
+            (firstScore, agg)
+          })
+        }
+      }
+
+    val agg = binnedCounts.values.mapPartitions { iter =>
       val agg = new BinaryLabelCounter()
       iter.foreach(agg += _)
       Iterator(agg)
-    }, preservesPartitioning = true).collect()
+    }.collect()
     val partitionwiseCumulativeCounts =
       agg.scanLeft(new BinaryLabelCounter())(
         (agg: BinaryLabelCounter, c: BinaryLabelCounter) => agg.clone() += c)
     val totalCount = partitionwiseCumulativeCounts.last
     logInfo(s"Total counts: $totalCount")
-    val cumulativeCounts = counts.mapPartitionsWithIndex(
+    val cumulativeCounts = binnedCounts.mapPartitionsWithIndex(
       (index: Int, iter: Iterator[(Double, BinaryLabelCounter)]) => {
         val cumCount = partitionwiseCumulativeCounts(index)
         iter.map { case (score, c) =>

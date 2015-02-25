@@ -24,14 +24,10 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.reflect.ClassTag
 
 import org.apache.spark.{ComplexFutureAction, FutureAction, Logging}
-import org.apache.spark.annotation.Experimental
 
 /**
- * :: Experimental ::
  * A set of asynchronous RDD actions available through an implicit conversion.
- * Import `org.apache.spark.SparkContext._` at the top of your program to use these functions.
  */
-@Experimental
 class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Logging {
 
   /**
@@ -78,16 +74,18 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
         // greater than totalParts because we actually cap it at totalParts in runJob.
         var numPartsToTry = 1
         if (partsScanned > 0) {
-          // If we didn't find any rows after the first iteration, just try all partitions next.
+          // If we didn't find any rows after the previous iteration, quadruple and retry.
           // Otherwise, interpolate the number of partitions we need to try, but overestimate it
-          // by 50%.
+          // by 50%. We also cap the estimation in the end.
           if (results.size == 0) {
-            numPartsToTry = totalParts - 1
+            numPartsToTry = partsScanned * 4
           } else {
-            numPartsToTry = (1.5 * num * partsScanned / results.size).toInt
+            // the left side of max is >=1 whenever partsScanned >= 2
+            numPartsToTry = Math.max(1, 
+              (1.5 * num * partsScanned / results.size).toInt - partsScanned)
+            numPartsToTry = Math.min(numPartsToTry, partsScanned * 4) 
           }
         }
-        numPartsToTry = math.max(0, numPartsToTry)  // guard against negative num of partitions
 
         val left = num - results.size
         val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
@@ -112,7 +110,8 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
    * Applies a function f to all elements of this RDD.
    */
   def foreachAsync(f: T => Unit): FutureAction[Unit] = {
-    self.context.submitJob[T, Unit, Unit](self, _.foreach(f), Range(0, self.partitions.size),
+    val cleanF = self.context.clean(f)
+    self.context.submitJob[T, Unit, Unit](self, _.foreach(cleanF), Range(0, self.partitions.size),
       (index, data) => Unit, Unit)
   }
 

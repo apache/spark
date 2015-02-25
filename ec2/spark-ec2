@@ -18,5 +18,8 @@
 # limitations under the License.
 #
 
-cd "`dirname $0`"
-PYTHONPATH="./third_party/boto-2.4.1.zip/boto-2.4.1:$PYTHONPATH" python ./spark_ec2.py $@
+# Preserve the user's CWD so that relative paths are passed correctly to 
+#+ the underlying Python script.
+SPARK_EC2_DIR="$(dirname "$0")"
+
+python -Wdefault "${SPARK_EC2_DIR}/spark_ec2.py" "$@"

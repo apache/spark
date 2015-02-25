@@ -19,10 +19,13 @@ package org.apache.spark.graphx
 
 import org.scalatest.FunSuite
 
+import com.google.common.io.Files
+
 import org.apache.spark.SparkContext
 import org.apache.spark.graphx.Graph._
 import org.apache.spark.graphx.PartitionStrategy._
 import org.apache.spark.rdd._
+import org.apache.spark.storage.StorageLevel
 
 class GraphSuite extends FunSuite with LocalSparkContext {
 
@@ -118,7 +121,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       // Each vertex should be replicated to at most 2 * sqrt(p) partitions
       val partitionSets = partitionedGraph.edges.partitionsRDD.mapPartitions { iter =>
         val part = iter.next()._2
-        Iterator((part.srcIds ++ part.dstIds).toSet)
+        Iterator((part.iterator.flatMap(e => Iterator(e.srcId, e.dstId))).toSet)
       }.collect
       if (!verts.forall(id => partitionSets.count(_.contains(id)) <= bound)) {
         val numFailures = verts.count(id => partitionSets.count(_.contains(id)) > bound)
@@ -130,7 +133,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       // This should not be true for the default hash partitioning
       val partitionSetsUnpartitioned = graph.edges.partitionsRDD.mapPartitions { iter =>
         val part = iter.next()._2
-        Iterator((part.srcIds ++ part.dstIds).toSet)
+        Iterator((part.iterator.flatMap(e => Iterator(e.srcId, e.dstId))).toSet)
       }.collect
       assert(verts.exists(id => partitionSetsUnpartitioned.count(_.contains(id)) > bound))
 
@@ -156,6 +159,31 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       // mapVertices changing type
       val mappedVAttrs2 = star.mapVertices((vid, attr) => attr.length)
       assert(mappedVAttrs2.vertices.collect.toSet === (0 to n).map(x => (x: VertexId, 1)).toSet)
+    }
+  }
+
+  test("mapVertices changing type with same erased type") {
+    withSpark { sc =>
+      val vertices = sc.parallelize(Array[(Long, Option[java.lang.Integer])](
+        (1L, Some(1)),
+        (2L, Some(2)),
+        (3L, Some(3))
+      ))
+      val edges = sc.parallelize(Array(
+        Edge(1L, 2L, 0),
+        Edge(2L, 3L, 0),
+        Edge(3L, 1L, 0)
+      ))
+      val graph0 = Graph(vertices, edges)
+      // Trigger initial vertex replication
+      graph0.triplets.foreach(x => {})
+      // Change type of replicated vertices, but preserve erased type
+      val graph1 = graph0.mapVertices {
+        case (vid, integerOpt) => integerOpt.map((x: java.lang.Integer) => (x.toDouble): java.lang.Double)
+      }
+      // Access replicated vertices, exposing the erased type
+      val graph2 = graph1.mapTriplets(t => t.srcAttr.get)
+      assert(graph2.edges.map(_.attr).collect.toSet === Set[java.lang.Double](1.0, 2.0, 3.0))
     }
   }
 
@@ -293,6 +321,21 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("aggregateMessages") {
+    withSpark { sc =>
+      val n = 5
+      val agg = starGraph(sc, n).aggregateMessages[String](
+        ctx => {
+          if (ctx.dstAttr != null) {
+            throw new Exception(
+              "expected ctx.dstAttr to be null due to TripletFields, but it was " + ctx.dstAttr)
+          }
+          ctx.sendToDst(ctx.srcAttr)
+        }, _ + _, TripletFields.Src)
+      assert(agg.collect().toSet === (1 to n).map(x => (x: VertexId, "v")).toSet)
+    }
+  }
+
   test("outerJoinVertices") {
     withSpark { sc =>
       val n = 5
@@ -322,6 +365,63 @@ class GraphSuite extends FunSuite with LocalSparkContext {
         .collect.toSet
       assert(triplets ===
         Set((1: VertexId, 2: VertexId, "a", "b"), (2: VertexId, 1: VertexId, "b", "a")))
+    }
+  }
+
+  test("checkpoint") {
+    val checkpointDir = Files.createTempDir()
+    checkpointDir.deleteOnExit()
+    withSpark { sc =>
+      sc.setCheckpointDir(checkpointDir.getAbsolutePath)
+      val ring = (0L to 100L).zip((1L to 99L) :+ 0L).map { case (a, b) => Edge(a, b, 1)}
+      val rdd = sc.parallelize(ring)
+      val graph = Graph.fromEdges(rdd, 1.0F)
+      assert(!graph.isCheckpointed)
+      assert(graph.getCheckpointFiles.size === 0)
+      graph.checkpoint()
+      graph.edges.map(_.attr).count()
+      graph.vertices.map(_._2).count()
+
+      val edgesDependencies = graph.edges.partitionsRDD.dependencies
+      val verticesDependencies = graph.vertices.partitionsRDD.dependencies
+      assert(edgesDependencies.forall(_.rdd.isInstanceOf[CheckpointRDD[_]]))
+      assert(verticesDependencies.forall(_.rdd.isInstanceOf[CheckpointRDD[_]]))
+      assert(graph.isCheckpointed)
+      assert(graph.getCheckpointFiles.size === 2)
+    }
+  }
+
+  test("cache, getStorageLevel") {
+    // test to see if getStorageLevel returns correct value
+    withSpark { sc =>
+      val verts = sc.parallelize(List((1: VertexId, "a"), (2: VertexId, "b")), 1)
+      val edges = sc.parallelize(List(Edge(1, 2, 0), Edge(2, 1, 0)), 2)
+      val graph = Graph(verts, edges, "", StorageLevel.MEMORY_ONLY, StorageLevel.MEMORY_ONLY)
+      // Note: Before caching, graph.vertices is cached, but graph.edges is not (but graph.edges'
+      //       parent RDD is cached).
+      graph.cache()
+      assert(graph.vertices.getStorageLevel == StorageLevel.MEMORY_ONLY)
+      assert(graph.edges.getStorageLevel == StorageLevel.MEMORY_ONLY)
+    }
+  }
+
+  test("non-default number of edge partitions") {
+    val n = 10
+    val defaultParallelism = 3
+    val numEdgePartitions = 4
+    assert(defaultParallelism != numEdgePartitions)
+    val conf = new org.apache.spark.SparkConf()
+      .set("spark.default.parallelism", defaultParallelism.toString)
+    val sc = new SparkContext("local", "test", conf)
+    try {
+      val edges = sc.parallelize((1 to n).map(x => (x: VertexId, 0: VertexId)),
+        numEdgePartitions)
+      val graph = Graph.fromEdgeTuples(edges, 1)
+      val neighborAttrSums = graph.mapReduceTriplets[Int](
+        et => Iterator((et.dstId, et.srcAttr)), _ + _)
+      assert(neighborAttrSums.collect.toSet === Set((0: VertexId, n)))
+    } finally {
+      sc.stop()
     }
   }
 

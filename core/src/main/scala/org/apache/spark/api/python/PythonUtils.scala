@@ -17,11 +17,14 @@
 
 package org.apache.spark.api.python
 
-import java.io.{File, InputStream, IOException, OutputStream}
+import java.io.{File}
+import java.util.{List => JList}
 
+import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkContext
+import org.apache.spark.api.java.{JavaSparkContext, JavaRDD}
 
 private[spark] object PythonUtils {
   /** Get the PYTHONPATH for PySpark, either from SPARK_HOME, if it is set, or from our JAR */
@@ -29,7 +32,7 @@ private[spark] object PythonUtils {
     val pythonPath = new ArrayBuffer[String]
     for (sparkHome <- sys.env.get("SPARK_HOME")) {
       pythonPath += Seq(sparkHome, "python").mkString(File.separator)
-      pythonPath += Seq(sparkHome, "python", "lib", "py4j-0.8.1-src.zip").mkString(File.separator)
+      pythonPath += Seq(sparkHome, "python", "lib", "py4j-0.8.2.1-src.zip").mkString(File.separator)
     }
     pythonPath ++= SparkContext.jarOfObject(this)
     pythonPath.mkString(File.pathSeparator)
@@ -39,29 +42,15 @@ private[spark] object PythonUtils {
   def mergePythonPaths(paths: String*): String = {
     paths.filter(_ != "").mkString(File.pathSeparator)
   }
-}
 
+  def generateRDDWithNull(sc: JavaSparkContext): JavaRDD[String] = {
+    sc.parallelize(List("a", null, "b"))
+  }
 
-/**
- * A utility class to redirect the child process's stdout or stderr.
- */
-private[spark] class RedirectThread(
-    in: InputStream,
-    out: OutputStream,
-    name: String)
-  extends Thread(name) {
-
-  setDaemon(true)
-  override def run() {
-    scala.util.control.Exception.ignoring(classOf[IOException]) {
-      // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
-      val buf = new Array[Byte](1024)
-      var len = in.read(buf)
-      while (len != -1) {
-        out.write(buf, 0, len)
-        out.flush()
-        len = in.read(buf)
-      }
-    }
+  /**
+   * Convert list of T into seq of T (for calling API with varargs)
+   */
+  def toSeq[T](cols: JList[T]): Seq[T] = {
+    cols.toList.toSeq
   }
 }

@@ -20,22 +20,19 @@ package org.apache.spark.streaming.receiver
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Await
 
 import akka.actor.{Actor, Props}
 import akka.pattern.ask
-
-import org.apache.spark.{Logging, SparkEnv}
-import org.apache.spark.storage.StreamBlockId
-import org.apache.spark.streaming.scheduler._
-import org.apache.spark.util.{Utils, AkkaUtils}
-import org.apache.spark.storage.StreamBlockId
-import org.apache.spark.streaming.scheduler.DeregisterReceiver
-import org.apache.spark.streaming.scheduler.AddBlock
-import scala.Some
-import org.apache.spark.streaming.scheduler.RegisterReceiver
 import com.google.common.base.Throwables
+import org.apache.hadoop.conf.Configuration
+
+import org.apache.spark.{Logging, SparkEnv, SparkException}
+import org.apache.spark.storage.StreamBlockId
+import org.apache.spark.streaming.Time
+import org.apache.spark.streaming.scheduler._
+import org.apache.spark.util.{AkkaUtils, Utils}
 
 /**
  * Concrete implementation of [[org.apache.spark.streaming.receiver.ReceiverSupervisor]]
@@ -45,18 +42,37 @@ import com.google.common.base.Throwables
  */
 private[streaming] class ReceiverSupervisorImpl(
     receiver: Receiver[_],
-    env: SparkEnv
+    env: SparkEnv,
+    hadoopConf: Configuration,
+    checkpointDirOption: Option[String]
   ) extends ReceiverSupervisor(receiver, env.conf) with Logging {
 
-  private val blockManager = env.blockManager
+  private val receivedBlockHandler: ReceivedBlockHandler = {
+    if (env.conf.getBoolean("spark.streaming.receiver.writeAheadLog.enable", false)) {
+      if (checkpointDirOption.isEmpty) {
+        throw new SparkException(
+          "Cannot enable receiver write-ahead log without checkpoint directory set. " +
+            "Please use streamingContext.checkpoint() to set the checkpoint directory. " +
+            "See documentation for more details.")
+      }
+      new WriteAheadLogBasedBlockHandler(env.blockManager, receiver.streamId,
+        receiver.storageLevel, env.conf, hadoopConf, checkpointDirOption.get)
+    } else {
+      new BlockManagerBasedBlockHandler(env.blockManager, receiver.storageLevel)
+    }
+  }
 
-  private val storageLevel = receiver.storageLevel
 
   /** Remote Akka actor for the ReceiverTracker */
   private val trackerActor = {
     val ip = env.conf.get("spark.driver.host", "localhost")
     val port = env.conf.getInt("spark.driver.port", 7077)
-    val url = "akka.tcp://spark@%s:%s/user/ReceiverTracker".format(ip, port)
+    val url = AkkaUtils.address(
+      AkkaUtils.protocol(env.actorSystem),
+      SparkEnv.driverActorSystemName,
+      ip,
+      port,
+      "ReceiverTracker")
     env.actorSystem.actorSelection(url)
   }
 
@@ -66,18 +82,14 @@ private[streaming] class ReceiverSupervisorImpl(
   /** Akka actor for receiving messages from the ReceiverTracker in the driver */
   private val actor = env.actorSystem.actorOf(
     Props(new Actor {
-      override def preStart() {
-        logInfo("Registered receiver " + streamId)
-        val msg = RegisterReceiver(
-          streamId, receiver.getClass.getSimpleName, Utils.localHostName(), self)
-        val future = trackerActor.ask(msg)(askTimeout)
-        Await.result(future, askTimeout)
-      }
 
       override def receive() = {
         case StopReceiver =>
           logInfo("Received stop signal")
           stop("Stopped by driver", None)
+        case CleanupOldBlocks(threshTime) =>
+          logDebug("Received delete old batch signal")
+          cleanupOldBlocks(threshTime)
       }
 
       def ref = self
@@ -88,6 +100,10 @@ private[streaming] class ReceiverSupervisorImpl(
 
   /** Divides received data records into data blocks for pushing in BlockManager. */
   private val blockGenerator = new BlockGenerator(new BlockGeneratorListener {
+    def onAddData(data: Any, metadata: Any): Unit = { }
+
+    def onGenerateBlock(blockId: StreamBlockId): Unit = { }
+
     def onError(message: String, throwable: Throwable) {
       reportError(message, throwable)
     }
@@ -99,54 +115,56 @@ private[streaming] class ReceiverSupervisorImpl(
 
   /** Push a single record of received data into block generator. */
   def pushSingle(data: Any) {
-    blockGenerator += (data)
+    blockGenerator.addData(data)
   }
 
   /** Store an ArrayBuffer of received data as a data block into Spark's memory. */
   def pushArrayBuffer(
       arrayBuffer: ArrayBuffer[_],
-      optionalMetadata: Option[Any],
-      optionalBlockId: Option[StreamBlockId]
+      metadataOption: Option[Any],
+      blockIdOption: Option[StreamBlockId]
     ) {
-    val blockId = optionalBlockId.getOrElse(nextBlockId)
-    val time = System.currentTimeMillis
-    blockManager.put(blockId, arrayBuffer.asInstanceOf[ArrayBuffer[Any]],
-      storageLevel, tellMaster = true)
-    logDebug("Pushed block " + blockId + " in " + (System.currentTimeMillis - time)  + " ms")
-    reportPushedBlock(blockId, arrayBuffer.size, optionalMetadata)
+    pushAndReportBlock(ArrayBufferBlock(arrayBuffer), metadataOption, blockIdOption)
   }
 
   /** Store a iterator of received data as a data block into Spark's memory. */
   def pushIterator(
       iterator: Iterator[_],
-      optionalMetadata: Option[Any],
-      optionalBlockId: Option[StreamBlockId]
+      metadataOption: Option[Any],
+      blockIdOption: Option[StreamBlockId]
     ) {
-    val blockId = optionalBlockId.getOrElse(nextBlockId)
-    val time = System.currentTimeMillis
-    blockManager.put(blockId, iterator, storageLevel, tellMaster = true)
-    logDebug("Pushed block " + blockId + " in " + (System.currentTimeMillis - time)  + " ms")
-    reportPushedBlock(blockId, -1, optionalMetadata)
+    pushAndReportBlock(IteratorBlock(iterator), metadataOption, blockIdOption)
   }
 
   /** Store the bytes of received data as a data block into Spark's memory. */
   def pushBytes(
       bytes: ByteBuffer,
-      optionalMetadata: Option[Any],
-      optionalBlockId: Option[StreamBlockId]
+      metadataOption: Option[Any],
+      blockIdOption: Option[StreamBlockId]
     ) {
-    val blockId = optionalBlockId.getOrElse(nextBlockId)
-    val time = System.currentTimeMillis
-    blockManager.putBytes(blockId, bytes, storageLevel, tellMaster = true)
-    logDebug("Pushed block " + blockId + " in " + (System.currentTimeMillis - time)  + " ms")
-    reportPushedBlock(blockId, -1, optionalMetadata)
+    pushAndReportBlock(ByteBufferBlock(bytes), metadataOption, blockIdOption)
   }
 
-  /** Report pushed block */
-  def reportPushedBlock(blockId: StreamBlockId, numRecords: Long, optionalMetadata: Option[Any]) {
-    val blockInfo = ReceivedBlockInfo(streamId, blockId, numRecords, optionalMetadata.orNull)
-    trackerActor ! AddBlock(blockInfo)
-    logDebug("Reported block " + blockId)
+  /** Store block and report it to driver */
+  def pushAndReportBlock(
+      receivedBlock: ReceivedBlock,
+      metadataOption: Option[Any],
+      blockIdOption: Option[StreamBlockId]
+    ) {
+    val blockId = blockIdOption.getOrElse(nextBlockId)
+    val numRecords = receivedBlock match {
+      case ArrayBufferBlock(arrayBuffer) => arrayBuffer.size
+      case _ => -1
+    }
+
+    val time = System.currentTimeMillis
+    val blockStoreResult = receivedBlockHandler.storeBlock(blockId, receivedBlock)
+    logDebug(s"Pushed block $blockId in ${(System.currentTimeMillis - time)} ms")
+
+    val blockInfo = ReceivedBlockInfo(streamId, numRecords, blockStoreResult)
+    val future = trackerActor.ask(AddBlock(blockInfo))(askTimeout)
+    Await.result(future, askTimeout)
+    logDebug(s"Reported block $blockId")
   }
 
   /** Report error to the receiver tracker */
@@ -183,4 +201,9 @@ private[streaming] class ReceiverSupervisorImpl(
 
   /** Generate new block ID */
   private def nextBlockId = StreamBlockId(streamId, newBlockId.getAndIncrement)
+
+  private def cleanupOldBlocks(cleanupThreshTime: Time): Unit = {
+    logDebug(s"Cleaning up blocks older then $cleanupThreshTime")
+    receivedBlockHandler.cleanupOldBlocks(cleanupThreshTime.milliseconds)
+  }
 }

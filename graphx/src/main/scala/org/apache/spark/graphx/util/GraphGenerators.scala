@@ -38,20 +38,46 @@ object GraphGenerators {
   val RMATa = 0.45
   val RMATb = 0.15
   val RMATd = 0.25
-  /**
-   * Generate a graph whose vertex out degree is log normal.
-   */
-  def logNormalGraph(sc: SparkContext, numVertices: Int): Graph[Int, Int] = {
-    // based on Pregel settings
-    val mu = 4
-    val sigma = 1.3
 
-    val vertices: RDD[(VertexId, Int)] = sc.parallelize(0 until numVertices).map{
-      src => (src, sampleLogNormal(mu, sigma, numVertices))
+  /**
+   * Generate a graph whose vertex out degree distribution is log normal.
+   *
+   * The default values for mu and sigma are taken from the Pregel paper:
+   *
+   * Grzegorz Malewicz, Matthew H. Austern, Aart J.C Bik, James C. Dehnert,
+   * Ilan Horn, Naty Leiser, and Grzegorz Czajkowski. 2010.
+   * Pregel: a system for large-scale graph processing. SIGMOD '10.
+   *
+   * If the seed is -1 (default), a random seed is chosen. Otherwise, use
+   * the user-specified seed.
+   *
+   * @param sc Spark Context
+   * @param numVertices number of vertices in generated graph
+   * @param numEParts (optional) number of partitions
+   * @param mu (optional, default: 4.0) mean of out-degree distribution
+   * @param sigma (optional, default: 1.3) standard deviation of out-degree distribution
+   * @param seed (optional, default: -1) seed for RNGs, -1 causes a random seed to be chosen
+   * @return Graph object
+   */
+  def logNormalGraph(
+      sc: SparkContext, numVertices: Int, numEParts: Int = 0, mu: Double = 4.0,
+      sigma: Double = 1.3, seed: Long = -1): Graph[Long, Int] = {
+
+    val evalNumEParts = if (numEParts == 0) sc.defaultParallelism else numEParts
+
+    // Enable deterministic seeding
+    val seedRand = if (seed == -1) new Random() else new Random(seed)
+    val seed1 = seedRand.nextInt()
+    val seed2 = seedRand.nextInt()
+
+    val vertices: RDD[(VertexId, Long)] = sc.parallelize(0 until numVertices, evalNumEParts).map {
+      src => (src, sampleLogNormal(mu, sigma, numVertices, seed = (seed1 ^ src)))
     }
-    val edges = vertices.flatMap { v =>
-      generateRandomEdges(v._1.toInt, v._2, numVertices)
+
+    val edges = vertices.flatMap { case (src, degree) =>
+      generateRandomEdges(src.toInt, degree.toInt, numVertices, seed = (seed2 ^ src))
     }
+
     Graph(vertices, edges, 0)
   }
 
@@ -59,9 +85,10 @@ object GraphGenerators {
   // the edge data is the weight (default 1)
   val RMATc = 0.15
 
-  def generateRandomEdges(src: Int, numEdges: Int, maxVertexId: Int): Array[Edge[Int]] = {
-    val rand = new Random()
-    Array.fill(maxVertexId) { Edge[Int](src, rand.nextInt(maxVertexId), 1) }
+  def generateRandomEdges(
+      src: Int, numEdges: Int, maxVertexId: Int, seed: Long = -1): Array[Edge[Int]] = {
+    val rand = if (seed == -1) new Random() else new Random(seed)
+    Array.fill(numEdges) { Edge[Int](src, rand.nextInt(maxVertexId), 1) }
   }
 
   /**
@@ -74,11 +101,16 @@ object GraphGenerators {
    * @param mu the mean of the normal distribution
    * @param sigma the standard deviation of the normal distribution
    * @param maxVal exclusive upper bound on the value of the sample
+   * @param seed optional seed
    */
-  private def sampleLogNormal(mu: Double, sigma: Double, maxVal: Int): Int = {
-    val rand = new Random()
-    val m = math.exp(mu + (sigma * sigma) / 2.0)
-    val s = math.sqrt((math.exp(sigma*sigma) - 1) * math.exp(2*mu + sigma*sigma))
+  private[spark] def sampleLogNormal(
+      mu: Double, sigma: Double, maxVal: Int, seed: Long = -1): Int = {
+    val rand = if (seed == -1) new Random() else new Random(seed)
+
+    val sigmaSq = sigma * sigma
+    val m = math.exp(mu + sigmaSq / 2.0)
+    // expm1 is exp(m)-1 with better accuracy for tiny m
+    val s = math.sqrt(math.expm1(sigmaSq) * math.exp(2*mu + sigmaSq))
     // Z ~ N(0, 1)
     var X: Double = maxVal
 
@@ -86,7 +118,7 @@ object GraphGenerators {
       val Z = rand.nextGaussian()
       X = math.exp(mu + sigma*Z)
     }
-    math.round(X.toFloat)
+    math.floor(X).toInt
   }
 
   /**
@@ -101,6 +133,12 @@ object GraphGenerators {
     // This ensures that the 4 quadrants are the same size at all recursion levels
     val numVertices = math.round(
       math.pow(2.0, math.ceil(math.log(requestedNumVertices) / math.log(2.0)))).toInt
+    val numEdgesUpperBound =
+      math.pow(2.0, 2 * ((math.log(numVertices) / math.log(2.0)) - 1)).toInt
+    if (numEdgesUpperBound < numEdges) {
+      throw new IllegalArgumentException(
+        s"numEdges must be <= $numEdgesUpperBound but was $numEdges")
+    }
     var edges: Set[Edge[Int]] = Set()
     while (edges.size < numEdges) {
       if (edges.size % 100 == 0) {

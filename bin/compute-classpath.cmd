@@ -36,7 +36,14 @@ rem Load environment variables from conf\spark-env.cmd, if it exists
 if exist "%FWDIR%conf\spark-env.cmd" call "%FWDIR%conf\spark-env.cmd"
 
 rem Build up classpath
-set CLASSPATH=%FWDIR%conf
+set CLASSPATH=%SPARK_CLASSPATH%;%SPARK_SUBMIT_CLASSPATH%
+
+if not "x%SPARK_CONF_DIR%"=="x" (
+  set CLASSPATH=%CLASSPATH%;%SPARK_CONF_DIR%
+) else (
+  set CLASSPATH=%CLASSPATH%;%FWDIR%conf
+)
+
 if exist "%FWDIR%RELEASE" (
   for %%d in ("%FWDIR%lib\spark-assembly*.jar") do (
     set ASSEMBLY_JAR=%%d
@@ -101,6 +108,13 @@ if "x%HADOOP_CONF_DIR%"=="x" goto no_hadoop_conf_dir
 if "x%YARN_CONF_DIR%"=="x" goto no_yarn_conf_dir
   set CLASSPATH=%CLASSPATH%;%YARN_CONF_DIR%
 :no_yarn_conf_dir
+
+rem To allow for distributions to append needed libraries to the classpath (e.g. when
+rem using the "hadoop-provided" profile to build Spark), check SPARK_DIST_CLASSPATH and
+rem append it to tbe final classpath.
+if not "x%$SPARK_DIST_CLASSPATH%"=="x" (
+  set CLASSPATH=%CLASSPATH%;%SPARK_DIST_CLASSPATH%
+)
 
 rem A bit of a hack to allow calling this script within run2.cmd without seeing output
 if "%DONT_PRINT_CLASSPATH%"=="1" goto exit

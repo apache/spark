@@ -27,5 +27,4 @@ libraryDependencies += "org.apache.spark" %% "spark-ganglia-lgpl" % System.geten
 
 resolvers ++= Seq(
   "Spark Release Repository" at System.getenv.get("SPARK_RELEASE_REPOSITORY"),
-  "Akka Repository" at "http://repo.akka.io/releases/",
   "Spray Repository" at "http://repo.spray.cc/")

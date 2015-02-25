@@ -18,68 +18,205 @@
 #
 
 # Go to the Spark project root directory
-FWDIR="$(cd `dirname $0`/..; pwd)"
-cd $FWDIR
+FWDIR="$(cd "`dirname $0`"/..; pwd)"
+cd "$FWDIR"
 
-# Remove work directory
+# Clean up work directory and caches
 rm -rf ./work
+rm -rf ~/.ivy2/local/org.apache.spark
+rm -rf ~/.ivy2/cache/org.apache.spark
 
-if test -x "$JAVA_HOME/bin/java"; then
-    declare java_cmd="$JAVA_HOME/bin/java"
-else 
-    declare java_cmd=java
-fi
-JAVA_VERSION=$($java_cmd -version 2>&1 | sed 's/java version "\(.*\)\.\(.*\)\..*"/\1\2/; 1q')
-[ "$JAVA_VERSION" -ge 18 ] && echo "" || echo "[Warn] Java 8 tests will not run because JDK version is < 1.8."
+source "$FWDIR/dev/run-tests-codes.sh"
 
-# Partial solution for SPARK-1455. Only run Hive tests if there are sql changes.
+CURRENT_BLOCK=$BLOCK_GENERAL
+
+function handle_error () {
+  echo "[error] Got a return code of $? on line $1 of the run-tests script."
+  exit $CURRENT_BLOCK
+}
+
+
+# Build against the right version of Hadoop.
+{
+  if [ -n "$AMPLAB_JENKINS_BUILD_PROFILE" ]; then
+    if [ "$AMPLAB_JENKINS_BUILD_PROFILE" = "hadoop1.0" ]; then
+      export SBT_MAVEN_PROFILES_ARGS="-Dhadoop.version=1.0.4"
+    elif [ "$AMPLAB_JENKINS_BUILD_PROFILE" = "hadoop2.0" ]; then
+      export SBT_MAVEN_PROFILES_ARGS="-Dhadoop.version=2.0.0-mr1-cdh4.1.1"
+    elif [ "$AMPLAB_JENKINS_BUILD_PROFILE" = "hadoop2.2" ]; then
+      export SBT_MAVEN_PROFILES_ARGS="-Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0"
+    elif [ "$AMPLAB_JENKINS_BUILD_PROFILE" = "hadoop2.3" ]; then
+      export SBT_MAVEN_PROFILES_ARGS="-Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0"
+    fi
+  fi
+
+  if [ -z "$SBT_MAVEN_PROFILES_ARGS" ]; then
+    export SBT_MAVEN_PROFILES_ARGS="-Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0"
+  fi
+}
+
+export SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Pkinesis-asl"
+
+# Determine Java path and version.
+{
+  if test -x "$JAVA_HOME/bin/java"; then
+      declare java_cmd="$JAVA_HOME/bin/java"
+  else
+      declare java_cmd=java
+  fi
+
+  # We can't use sed -r -e due to OS X / BSD compatibility; hence, all the parentheses.
+  JAVA_VERSION=$(
+    $java_cmd -version 2>&1 \
+    | grep -e "^java version" --max-count=1 \
+    | sed "s/java version \"\(.*\)\.\(.*\)\.\(.*\)\"/\1\2/"
+  )
+
+  if [ "$JAVA_VERSION" -lt 18 ]; then
+    echo "[warn] Java 8 tests will not run because JDK version is < 1.8."
+  fi
+}
+
+# Only run Hive tests if there are SQL changes.
+# Partial solution for SPARK-1455.
 if [ -n "$AMPLAB_JENKINS" ]; then
   git fetch origin master:master
-  diffs=`git diff --dirstat master | awk '{ print $2; }' | grep "^sql/"`
-  if [ -n "$diffs" ]; then
-    echo "Detected changes in SQL. Will run Hive test suite."
-    export _RUN_SQL_TESTS=true # exported for PySpark tests
+
+  sql_diffs=$(
+    git diff --name-only master \
+    | grep -e "^sql/" -e "^bin/spark-sql" -e "^sbin/start-thriftserver.sh"
+  )
+
+  non_sql_diffs=$(
+    git diff --name-only master \
+    | grep -v -e "^sql/" -e "^bin/spark-sql" -e "^sbin/start-thriftserver.sh"
+  )
+
+  if [ -n "$sql_diffs" ]; then
+    echo "[info] Detected changes in SQL. Will run Hive test suite."
+    _RUN_SQL_TESTS=true
+
+    if [ -z "$non_sql_diffs" ]; then
+      echo "[info] Detected no changes except in SQL. Will only run SQL tests."
+      _SQL_TESTS_ONLY=true
+    fi
   fi
 fi
 
-# Fail fast
-set -e
 set -o pipefail
+trap 'handle_error $LINENO' ERR
 
+echo ""
 echo "========================================================================="
 echo "Running Apache RAT checks"
 echo "========================================================================="
-dev/check-license
 
+CURRENT_BLOCK=$BLOCK_RAT
+
+./dev/check-license
+
+echo ""
 echo "========================================================================="
 echo "Running Scala style checks"
 echo "========================================================================="
-dev/scalastyle
 
+CURRENT_BLOCK=$BLOCK_SCALA_STYLE
+
+./dev/lint-scala
+
+echo ""
+echo "========================================================================="
+echo "Running Python style checks"
+echo "========================================================================="
+
+CURRENT_BLOCK=$BLOCK_PYTHON_STYLE
+
+./dev/lint-python
+
+echo ""
+echo "========================================================================="
+echo "Building Spark"
+echo "========================================================================="
+
+CURRENT_BLOCK=$BLOCK_BUILD
+
+{
+
+  # NOTE: echo "q" is needed because sbt on encountering a build file with failure
+  # (either resolution or compilation) prompts the user for input either q, r, etc
+  # to quit or retry. This echo is there to make it not block.
+  # NOTE: Do not quote $BUILD_MVN_PROFILE_ARGS or else it will be interpreted as a
+  # single argument!
+  # QUESTION: Why doesn't 'yes "q"' work?
+  # QUESTION: Why doesn't 'grep -v -e "^\[info\] Resolving"' work?
+  # First build with Hive 0.12.0 to ensure patches do not break the Hive 0.12.0 build
+  HIVE_12_BUILD_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-thriftserver -Phive-0.12.0"
+  echo "[info] Compile with Hive 0.12.0"
+  echo -e "q\n" \
+    | build/sbt $HIVE_12_BUILD_ARGS clean hive/compile hive-thriftserver/compile \
+    | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
+
+  # Then build with default Hive version (0.13.1) because tests are based on this version
+  echo "[info] Compile with Hive 0.13.1"
+  rm -rf lib_managed
+  echo "[info] Building Spark with these arguments: $SBT_MAVEN_PROFILES_ARGS"\
+    " -Phive -Phive-thriftserver"
+  echo -e "q\n" \
+    | build/sbt $SBT_MAVEN_PROFILES_ARGS -Phive -Phive-thriftserver package assembly/assembly  \
+    | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
+}
+
+echo ""
 echo "========================================================================="
 echo "Running Spark unit tests"
 echo "========================================================================="
-# echo "q" is needed because sbt on encountering a build file with failure 
-# (either resolution or compilation) prompts the user for input either q, r, 
-# etc to quit or retry. This echo is there to make it not block.
-if [ -n "$_RUN_SQL_TESTS" ]; then
-  echo -e "q\n" | SPARK_HIVE=true sbt/sbt clean assembly test | \
-    grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
-else
-  echo -e "q\n" | sbt/sbt clean assembly test | \
-    grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
-fi
 
+CURRENT_BLOCK=$BLOCK_SPARK_UNIT_TESTS
+
+{
+  # If the Spark SQL tests are enabled, run the tests with the Hive profiles enabled.
+  # This must be a single argument, as it is.
+  if [ -n "$_RUN_SQL_TESTS" ]; then
+    SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-thriftserver"
+  fi
+
+  if [ -n "$_SQL_TESTS_ONLY" ]; then
+    # This must be an array of individual arguments. Otherwise, having one long string
+    # will be interpreted as a single test, which doesn't work.
+    SBT_MAVEN_TEST_ARGS=("catalyst/test" "sql/test" "hive/test" "hive-thriftserver/test" "mllib/test")
+  else
+    SBT_MAVEN_TEST_ARGS=("test")
+  fi
+
+  echo "[info] Running Spark tests with these arguments: $SBT_MAVEN_PROFILES_ARGS ${SBT_MAVEN_TEST_ARGS[@]}"
+
+  # NOTE: echo "q" is needed because sbt on encountering a build file with failure
+  # (either resolution or compilation) prompts the user for input either q, r, etc
+  # to quit or retry. This echo is there to make it not block.
+  # NOTE: Do not quote $SBT_MAVEN_PROFILES_ARGS or else it will be interpreted as a
+  # single argument!
+  # "${SBT_MAVEN_TEST_ARGS[@]}" is cool because it's an array.
+  # QUESTION: Why doesn't 'yes "q"' work?
+  # QUESTION: Why doesn't 'grep -v -e "^\[info\] Resolving"' work?
+  echo -e "q\n" \
+    | build/sbt $SBT_MAVEN_PROFILES_ARGS "${SBT_MAVEN_TEST_ARGS[@]}" \
+    | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
+}
+
+echo ""
 echo "========================================================================="
 echo "Running PySpark tests"
 echo "========================================================================="
-if [ -z "$PYSPARK_PYTHON" ]; then
-  export PYSPARK_PYTHON=/usr/local/bin/python2.7
-fi
+
+CURRENT_BLOCK=$BLOCK_PYSPARK_UNIT_TESTS
+
 ./python/run-tests
 
+echo ""
 echo "========================================================================="
-echo "Detecting binary incompatibilites with MiMa"
+echo "Detecting binary incompatibilities with MiMa"
 echo "========================================================================="
-./bin/spark-class org.apache.spark.tools.GenerateMIMAIgnore
-echo -e "q\n" | sbt/sbt mima-report-binary-issues | grep -v -e "info.*Resolving" 
+
+CURRENT_BLOCK=$BLOCK_MIMA
+
+./dev/mima

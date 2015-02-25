@@ -22,12 +22,20 @@ private[spark] class ApplicationDescription(
     val maxCores: Option[Int],
     val memoryPerSlave: Int,
     val command: Command,
-    val sparkHome: Option[String],
     var appUiUrl: String,
     val eventLogDir: Option[String] = None)
   extends Serializable {
 
   val user = System.getProperty("user.name", "<unknown>")
+
+  def copy(
+      name: String = name,
+      maxCores: Option[Int] = maxCores,
+      memoryPerSlave: Int = memoryPerSlave,
+      command: Command = command,
+      appUiUrl: String = appUiUrl,
+      eventLogDir: Option[String] = eventLogDir): ApplicationDescription =
+    new ApplicationDescription(name, maxCores, memoryPerSlave, command, appUiUrl, eventLogDir)
 
   override def toString: String = "ApplicationDescription(" + name + ")"
 }

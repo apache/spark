@@ -33,7 +33,7 @@ import org.apache.spark.graphx._
  */
 private[impl]
 class ReplicatedVertexView[VD: ClassTag, ED: ClassTag](
-    var edges: EdgeRDD[ED, VD],
+    var edges: EdgeRDDImpl[ED, VD],
     var hasSrcId: Boolean = false,
     var hasDstId: Boolean = false) {
 
@@ -42,7 +42,7 @@ class ReplicatedVertexView[VD: ClassTag, ED: ClassTag](
    * shipping level.
    */
   def withEdges[VD2: ClassTag, ED2: ClassTag](
-      edges_ : EdgeRDD[ED2, VD2]): ReplicatedVertexView[VD2, ED2] = {
+      edges_ : EdgeRDDImpl[ED2, VD2]): ReplicatedVertexView[VD2, ED2] = {
     new ReplicatedVertexView(edges_, hasSrcId, hasDstId)
   }
 
@@ -69,7 +69,7 @@ class ReplicatedVertexView[VD: ClassTag, ED: ClassTag](
           .setName("ReplicatedVertexView.upgrade(%s, %s) - shippedVerts %s %s (broadcast)".format(
             includeSrc, includeDst, shipSrc, shipDst))
           .partitionBy(edges.partitioner.get)
-      val newEdges = new EdgeRDD(edges.partitionsRDD.zipPartitions(shippedVerts) {
+      val newEdges = edges.withPartitionsRDD(edges.partitionsRDD.zipPartitions(shippedVerts) {
         (ePartIter, shippedVertsIter) => ePartIter.map {
           case (pid, edgePartition) =>
             (pid, edgePartition.updateVertices(shippedVertsIter.flatMap(_._2.iterator)))
@@ -91,7 +91,7 @@ class ReplicatedVertexView[VD: ClassTag, ED: ClassTag](
       .setName("ReplicatedVertexView.withActiveSet - shippedActives (broadcast)")
       .partitionBy(edges.partitioner.get)
 
-    val newEdges = new EdgeRDD(edges.partitionsRDD.zipPartitions(shippedActives) {
+    val newEdges = edges.withPartitionsRDD(edges.partitionsRDD.zipPartitions(shippedActives) {
       (ePartIter, shippedActivesIter) => ePartIter.map {
         case (pid, edgePartition) =>
           (pid, edgePartition.withActiveSet(shippedActivesIter.flatMap(_._2.iterator)))
@@ -111,7 +111,7 @@ class ReplicatedVertexView[VD: ClassTag, ED: ClassTag](
         hasSrcId, hasDstId))
       .partitionBy(edges.partitioner.get)
 
-    val newEdges = new EdgeRDD(edges.partitionsRDD.zipPartitions(shippedVerts) {
+    val newEdges = edges.withPartitionsRDD(edges.partitionsRDD.zipPartitions(shippedVerts) {
       (ePartIter, shippedVertsIter) => ePartIter.map {
         case (pid, edgePartition) =>
           (pid, edgePartition.updateVertices(shippedVertsIter.flatMap(_._2.iterator)))

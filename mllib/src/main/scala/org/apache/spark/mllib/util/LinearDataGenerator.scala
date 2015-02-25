@@ -62,7 +62,7 @@ object LinearDataGenerator {
    * @param nPoints Number of points in sample.
    * @param seed Random seed
    * @param eps Epsilon scaling factor.
-   * @return
+   * @return Seq of input.
    */
   def generateLinearInput(
       intercept: Double,
@@ -129,7 +129,8 @@ object LinearDataGenerator {
     val sc = new SparkContext(sparkMaster, "LinearDataGenerator")
     val data = generateLinearRDD(sc, nexamples, nfeatures, eps, nparts = parts)
 
-    MLUtils.saveLabeledData(data, outputPath)
+    data.saveAsTextFile(outputPath)
+
     sc.stop()
   }
 }

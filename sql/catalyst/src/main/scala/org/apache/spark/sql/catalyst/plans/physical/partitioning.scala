@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.physical
 
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Expression, Row, SortOrder}
-import org.apache.spark.sql.catalyst.types.IntegerType
+import org.apache.spark.sql.types.IntegerType
 
 /**
  * Specifies how tuples that share common expressions will be distributed when a query is executed
@@ -46,7 +46,7 @@ case object AllTuples extends Distribution
 
 /**
  * Represents data where tuples that share the same values for the `clustering`
- * [[catalyst.expressions.Expression Expressions]] will be co-located. Based on the context, this
+ * [[Expression Expressions]] will be co-located. Based on the context, this
  * can mean such tuples are either co-located in the same partition or they will be contiguous
  * within a single partition.
  */
@@ -60,7 +60,7 @@ case class ClusteredDistribution(clustering: Seq[Expression]) extends Distributi
 
 /**
  * Represents data where tuples have been ordered according to the `ordering`
- * [[catalyst.expressions.Expression Expressions]].  This is a strictly stronger guarantee than
+ * [[Expression Expressions]].  This is a strictly stronger guarantee than
  * [[ClusteredDistribution]] as an ordering will ensure that tuples that share the same value for
  * the ordering expressions are contiguous and will never be split across partitions.
  */
@@ -71,6 +71,7 @@ case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
       "An AllTuples should be used to represent a distribution that only has " +
       "a single partition.")
 
+  // TODO: This is not really valid...
   def clustering = ordering.map(_.child).toSet
 }
 
@@ -79,19 +80,17 @@ sealed trait Partitioning {
   val numPartitions: Int
 
   /**
-   * Returns true iff the guarantees made by this
-   * [[catalyst.plans.physical.Partitioning Partitioning]] are sufficient to satisfy
-   * the partitioning scheme mandated by the `required`
-   * [[catalyst.plans.physical.Distribution Distribution]], i.e. the current dataset does not
-   * need to be re-partitioned for the `required` Distribution (it is possible that tuples within
-   * a partition need to be reorganized).
+   * Returns true iff the guarantees made by this [[Partitioning]] are sufficient
+   * to satisfy the partitioning scheme mandated by the `required` [[Distribution]],
+   * i.e. the current dataset does not need to be re-partitioned for the `required`
+   * Distribution (it is possible that tuples within a partition need to be reorganized).
    */
   def satisfies(required: Distribution): Boolean
 
   /**
    * Returns true iff all distribution guarantees made by this partitioning can also be made
    * for the `other` specified partitioning.
-   * For example, two [[catalyst.plans.physical.HashPartitioning HashPartitioning]]s are
+   * For example, two [[HashPartitioning HashPartitioning]]s are
    * only compatible if the `numPartitions` of them is the same.
    */
   def compatibleWith(other: Partitioning): Boolean
@@ -141,7 +140,6 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
   with Partitioning {
 
   override def children = expressions
-  override def references = expressions.flatMap(_.references).toSet
   override def nullable = false
   override def dataType = IntegerType
 
@@ -181,7 +179,6 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
   with Partitioning {
 
   override def children = ordering
-  override def references = ordering.flatMap(_.references).toSet
   override def nullable = false
   override def dataType = IntegerType
 

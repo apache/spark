@@ -18,14 +18,18 @@
 package org.apache.spark
 
 import java.io._
+import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
 import scala.collection.mutable.{HashSet, HashMap, Map}
 import scala.concurrent.Await
+import scala.collection.JavaConversions._
 
 import akka.actor._
 import akka.pattern.ask
+
 import org.apache.spark.scheduler.MapStatus
+import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util._
 
@@ -36,10 +40,10 @@ private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage
 
 /** Actor class for MapOutputTrackerMaster */
 private[spark] class MapOutputTrackerMasterActor(tracker: MapOutputTrackerMaster, conf: SparkConf)
-  extends Actor with Logging {
+  extends Actor with ActorLogReceive with Logging {
   val maxAkkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
 
-  def receive = {
+  override def receiveWithLogging = {
     case GetMapOutputStatuses(shuffleId: Int) =>
       val hostPort = sender.path.address.hostPort
       logInfo("Asked to send map output locations for shuffle " + shuffleId + " to " + hostPort)
@@ -68,20 +72,25 @@ private[spark] class MapOutputTrackerMasterActor(tracker: MapOutputTrackerMaster
 /**
  * Class that keeps track of the location of the map output of
  * a stage. This is abstract because different versions of MapOutputTracker
- * (driver and worker) use different HashMap to store its metadata.
+ * (driver and executor) use different HashMap to store its metadata.
  */
 private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging {
   private val timeout = AkkaUtils.askTimeout(conf)
+  private val retryAttempts = AkkaUtils.numRetries(conf)
+  private val retryIntervalMs = AkkaUtils.retryWaitMs(conf)
 
   /** Set to the MapOutputTrackerActor living on the driver. */
   var trackerActor: ActorRef = _
 
   /**
-   * This HashMap has different behavior for the master and the workers.
+   * This HashMap has different behavior for the driver and the executors.
    *
-   * On the master, it serves as the source of map outputs recorded from ShuffleMapTasks.
-   * On the workers, it simply serves as a cache, in which a miss triggers a fetch from the
-   * master's corresponding HashMap.
+   * On the driver, it serves as the source of map outputs recorded from ShuffleMapTasks.
+   * On the executors, it simply serves as a cache, in which a miss triggers a fetch from the
+   * driver's corresponding HashMap.
+   *
+   * Note: because mapStatuses is accessed concurrently, subclasses should make sure it's a
+   * thread-safe map.
    */
   protected val mapStatuses: Map[Int, Array[MapStatus]]
 
@@ -92,7 +101,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   protected var epoch: Long = 0
   protected val epochLock = new AnyRef
 
-  /** Remembers which map output locations are currently being fetched on a worker. */
+  /** Remembers which map output locations are currently being fetched on an executor. */
   private val fetching = new HashSet[Int]
 
   /**
@@ -101,18 +110,20 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    */
   protected def askTracker(message: Any): Any = {
     try {
-      val future = trackerActor.ask(message)(timeout)
-      Await.result(future, timeout)
+      AkkaUtils.askWithReply(message, trackerActor, retryAttempts, retryIntervalMs, timeout)
     } catch {
       case e: Exception =>
+        logError("Error communicating with MapOutputTracker", e)
         throw new SparkException("Error communicating with MapOutputTracker", e)
     }
   }
 
   /** Send a one-way message to the trackerActor, to which we expect it to reply with true. */
   protected def sendTracker(message: Any) {
-    if (askTracker(message) != true) {
-      throw new SparkException("Error reply received from MapOutputTracker")
+    val response = askTracker(message)
+    if (response != true) {
+      throw new SparkException(
+        "Error reply received from MapOutputTracker. Expecting true, got " + response.toString)
     }
   }
 
@@ -126,14 +137,12 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
       logInfo("Don't have map outputs for shuffle " + shuffleId + ", fetching them")
       var fetchedStatuses: Array[MapStatus] = null
       fetching.synchronized {
-        if (fetching.contains(shuffleId)) {
-          // Someone else is fetching it; wait for them to be done
-          while (fetching.contains(shuffleId)) {
-            try {
-              fetching.wait()
-            } catch {
-              case e: InterruptedException =>
-            }
+        // Someone else is fetching it; wait for them to be done
+        while (fetching.contains(shuffleId)) {
+          try {
+            fetching.wait()
+          } catch {
+            case e: InterruptedException =>
           }
         }
 
@@ -168,8 +177,9 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
           return MapOutputTracker.convertMapStatuses(shuffleId, reduceId, fetchedStatuses)
         }
       } else {
-        throw new FetchFailedException(null, shuffleId, -1, reduceId,
-          new Exception("Missing all output locations for shuffle " + shuffleId))
+        logError("Missing all output locations for shuffle " + shuffleId)
+        throw new MetadataFetchFailedException(
+          shuffleId, reduceId, "Missing all output locations for shuffle " + shuffleId)
       }
     } else {
       statuses.synchronized {
@@ -187,8 +197,8 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
 
   /**
    * Called from executors to update the epoch number, potentially clearing old outputs
-   * because of a fetch failure. Each worker task calls this with the latest epoch
-   * number on the master at the time it was created.
+   * because of a fetch failure. Each executor task calls this with the latest epoch
+   * number on the driver at the time it was created.
    */
   def updateEpoch(newEpoch: Long) {
     epochLock.synchronized {
@@ -220,7 +230,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   private var cacheEpoch = epoch
 
   /**
-   * Timestamp based HashMap for storing mapStatuses and cached serialized statuses in the master,
+   * Timestamp based HashMap for storing mapStatuses and cached serialized statuses in the driver,
    * so that statuses are dropped only by explicit de-registering or by TTL-based cleaning (if set).
    * Other than these two scenarios, nothing should be dropped from this HashMap.
    */
@@ -330,15 +340,15 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
 }
 
 /**
- * MapOutputTracker for the workers, which fetches map output information from the driver's
+ * MapOutputTracker for the executors, which fetches map output information from the driver's
  * MapOutputTrackerMaster.
  */
 private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTracker(conf) {
-  protected val mapStatuses = new HashMap[Int, Array[MapStatus]]
+  protected val mapStatuses: Map[Int, Array[MapStatus]] =
+    new ConcurrentHashMap[Int, Array[MapStatus]]
 }
 
-private[spark] object MapOutputTracker {
-  private val LOG_BASE = 1.1
+private[spark] object MapOutputTracker extends Logging {
 
   // Serialize an array of map output locations into an efficient byte format so that we can send
   // it to reduce tasks. We do this by compressing the serialized bytes using GZIP. They will
@@ -364,44 +374,19 @@ private[spark] object MapOutputTracker {
   // any of the statuses is null (indicating a missing location due to a failed mapper),
   // throw a FetchFailedException.
   private def convertMapStatuses(
-        shuffleId: Int,
-        reduceId: Int,
-        statuses: Array[MapStatus]): Array[(BlockManagerId, Long)] = {
+      shuffleId: Int,
+      reduceId: Int,
+      statuses: Array[MapStatus]): Array[(BlockManagerId, Long)] = {
     assert (statuses != null)
     statuses.map {
       status =>
         if (status == null) {
-          throw new FetchFailedException(null, shuffleId, -1, reduceId,
-            new Exception("Missing an output location for shuffle " + shuffleId))
+          logError("Missing an output location for shuffle " + shuffleId)
+          throw new MetadataFetchFailedException(
+            shuffleId, reduceId, "Missing an output location for shuffle " + shuffleId)
         } else {
-          (status.location, decompressSize(status.compressedSizes(reduceId)))
+          (status.location, status.getSizeForBlock(reduceId))
         }
-    }
-  }
-
-  /**
-   * Compress a size in bytes to 8 bits for efficient reporting of map output sizes.
-   * We do this by encoding the log base 1.1 of the size as an integer, which can support
-   * sizes up to 35 GB with at most 10% error.
-   */
-  def compressSize(size: Long): Byte = {
-    if (size == 0) {
-      0
-    } else if (size <= 1L) {
-      1
-    } else {
-      math.min(255, math.ceil(math.log(size) / math.log(LOG_BASE)).toInt).toByte
-    }
-  }
-
-  /**
-   * Decompress an 8-bit encoded block size, using the reverse operation of compressSize.
-   */
-  def decompressSize(compressedSize: Byte): Long = {
-    if (compressedSize == 0) {
-      0
-    } else {
-      math.pow(LOG_BASE, (compressedSize & 0xFF)).toLong
     }
   }
 }

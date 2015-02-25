@@ -19,9 +19,10 @@ package org.apache.spark
 
 import java.io.File
 
+import org.eclipse.jetty.server.ssl.SslSocketConnector
 import org.eclipse.jetty.util.security.{Constraint, Password}
 import org.eclipse.jetty.security.authentication.DigestAuthenticator
-import org.eclipse.jetty.security.{ConstraintMapping, ConstraintSecurityHandler, HashLoginService, SecurityHandler}
+import org.eclipse.jetty.security.{ConstraintMapping, ConstraintSecurityHandler, HashLoginService}
 
 import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.server.bio.SocketConnector
@@ -41,46 +42,70 @@ private[spark] class ServerStateException(message: String) extends Exception(mes
  * as well as classes created by the interpreter when the user types in code. This is just a wrapper
  * around a Jetty server.
  */
-private[spark] class HttpServer(resourceBase: File, securityManager: SecurityManager)
-    extends Logging {
+private[spark] class HttpServer(
+    conf: SparkConf,
+    resourceBase: File,
+    securityManager: SecurityManager,
+    requestedPort: Int = 0,
+    serverName: String = "HTTP server")
+  extends Logging {
+
   private var server: Server = null
-  private var port: Int = -1
+  private var port: Int = requestedPort
 
   def start() {
     if (server != null) {
       throw new ServerStateException("Server is already started")
     } else {
       logInfo("Starting HTTP Server")
-      server = new Server()
-      val connector = new SocketConnector
-      connector.setMaxIdleTime(60*1000)
-      connector.setSoLingerTime(-1)
-      connector.setPort(0)
-      server.addConnector(connector)
-
-      val threadPool = new QueuedThreadPool
-      threadPool.setDaemon(true)
-      server.setThreadPool(threadPool)
-      val resHandler = new ResourceHandler
-      resHandler.setResourceBase(resourceBase.getAbsolutePath)
-
-      val handlerList = new HandlerList
-      handlerList.setHandlers(Array(resHandler, new DefaultHandler))
-
-      if (securityManager.isAuthenticationEnabled()) {
-        logDebug("HttpServer is using security")
-        val sh = setupSecurityHandler(securityManager)
-        // make sure we go through security handler to get resources
-        sh.setHandler(handlerList)
-        server.setHandler(sh)
-      } else {
-        logDebug("HttpServer is not using security")
-        server.setHandler(handlerList)
-      }
-
-      server.start()
-      port = server.getConnectors()(0).getLocalPort()
+      val (actualServer, actualPort) =
+        Utils.startServiceOnPort[Server](requestedPort, doStart, conf, serverName)
+      server = actualServer
+      port = actualPort
     }
+  }
+
+  /**
+   * Actually start the HTTP server on the given port.
+   *
+   * Note that this is only best effort in the sense that we may end up binding to a nearby port
+   * in the event of port collision. Return the bound server and the actual port used.
+   */
+  private def doStart(startPort: Int): (Server, Int) = {
+    val server = new Server()
+
+    val connector = securityManager.fileServerSSLOptions.createJettySslContextFactory()
+      .map(new SslSocketConnector(_)).getOrElse(new SocketConnector)
+
+    connector.setMaxIdleTime(60 * 1000)
+    connector.setSoLingerTime(-1)
+    connector.setPort(startPort)
+    server.addConnector(connector)
+
+    val threadPool = new QueuedThreadPool
+    threadPool.setDaemon(true)
+    server.setThreadPool(threadPool)
+    val resHandler = new ResourceHandler
+    resHandler.setResourceBase(resourceBase.getAbsolutePath)
+
+    val handlerList = new HandlerList
+    handlerList.setHandlers(Array(resHandler, new DefaultHandler))
+
+    if (securityManager.isAuthenticationEnabled()) {
+      logDebug("HttpServer is using security")
+      val sh = setupSecurityHandler(securityManager)
+      // make sure we go through security handler to get resources
+      sh.setHandler(handlerList)
+      server.setHandler(sh)
+    } else {
+      logDebug("HttpServer is not using security")
+      server.setHandler(handlerList)
+    }
+
+    server.start()
+    val actualPort = server.getConnectors()(0).getLocalPort
+
+    (server, actualPort)
   }
 
   /**
@@ -128,13 +153,14 @@ private[spark] class HttpServer(resourceBase: File, securityManager: SecurityMan
   }
 
   /**
-   * Get the URI of this HTTP server (http://host:port)
+   * Get the URI of this HTTP server (http://host:port or https://host:port)
    */
   def uri: String = {
     if (server == null) {
       throw new ServerStateException("Server is not started")
     } else {
-      return "http://" + Utils.localIpAddress + ":" + port
+      val scheme = if (securityManager.fileServerSSLOptions.enabled) "https" else "http"
+      s"$scheme://${Utils.localIpAddress}:$port"
     }
   }
 }

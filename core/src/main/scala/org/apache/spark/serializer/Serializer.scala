@@ -17,14 +17,14 @@
 
 package org.apache.spark.serializer
 
-import java.io.{ByteArrayOutputStream, EOFException, InputStream, OutputStream}
+import java.io._
 import java.nio.ByteBuffer
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.util.{ByteBufferInputStream, NextIterator}
+import org.apache.spark.util.{Utils, ByteBufferInputStream, NextIterator}
 
 /**
  * :: DeveloperApi ::
@@ -43,14 +43,37 @@ import org.apache.spark.util.{ByteBufferInputStream, NextIterator}
  * They are intended to be used to serialize/de-serialize data within a single Spark application.
  */
 @DeveloperApi
-trait Serializer {
+abstract class Serializer {
+
+  /**
+   * Default ClassLoader to use in deserialization. Implementations of [[Serializer]] should
+   * make sure it is using this when set.
+   */
+  @volatile protected var defaultClassLoader: Option[ClassLoader] = None
+
+  /**
+   * Sets a class loader for the serializer to use in deserialization.
+   *
+   * @return this Serializer object
+   */
+  def setDefaultClassLoader(classLoader: ClassLoader): Serializer = {
+    defaultClassLoader = Some(classLoader)
+    this
+  }
+
+  /** Creates a new [[SerializerInstance]]. */
   def newInstance(): SerializerInstance
 }
 
 
+@DeveloperApi
 object Serializer {
   def getSerializer(serializer: Serializer): Serializer = {
     if (serializer == null) SparkEnv.get.serializer else serializer
+  }
+
+  def getSerializer(serializer: Option[Serializer]): Serializer = {
+    serializer.getOrElse(SparkEnv.get.serializer)
   }
 }
 
@@ -60,7 +83,7 @@ object Serializer {
  * An instance of a serializer, for use by one thread at a time.
  */
 @DeveloperApi
-trait SerializerInstance {
+abstract class SerializerInstance {
   def serialize[T: ClassTag](t: T): ByteBuffer
 
   def deserialize[T: ClassTag](bytes: ByteBuffer): T
@@ -70,21 +93,6 @@ trait SerializerInstance {
   def serializeStream(s: OutputStream): SerializationStream
 
   def deserializeStream(s: InputStream): DeserializationStream
-
-  def serializeMany[T: ClassTag](iterator: Iterator[T]): ByteBuffer = {
-    // Default implementation uses serializeStream
-    val stream = new ByteArrayOutputStream()
-    serializeStream(stream).writeAll(iterator)
-    val buffer = ByteBuffer.wrap(stream.toByteArray)
-    buffer.flip()
-    buffer
-  }
-
-  def deserializeMany(buffer: ByteBuffer): Iterator[Any] = {
-    // Default implementation uses deserializeStream
-    buffer.rewind()
-    deserializeStream(new ByteBufferInputStream(buffer)).asIterator
-  }
 }
 
 /**
@@ -92,7 +100,7 @@ trait SerializerInstance {
  * A stream for writing serialized objects.
  */
 @DeveloperApi
-trait SerializationStream {
+abstract class SerializationStream {
   def writeObject[T: ClassTag](t: T): SerializationStream
   def flush(): Unit
   def close(): Unit
@@ -111,7 +119,7 @@ trait SerializationStream {
  * A stream for reading serialized objects.
  */
 @DeveloperApi
-trait DeserializationStream {
+abstract class DeserializationStream {
   def readObject[T: ClassTag](): T
   def close(): Unit
 

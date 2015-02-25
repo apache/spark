@@ -22,6 +22,16 @@ import scala.collection.mutable.ArrayBuffer
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.types.{StringType, NullType}
+
+case class Dummy(optKey: Option[Expression]) extends Expression {
+  def children = optKey.toSeq
+  def nullable = true
+  def dataType = NullType
+  override lazy val resolved = true
+  type EvaluatedType = Any
+  def eval(input: Row) = null.asInstanceOf[Any]
+}
 
 class TreeNodeSuite extends FunSuite {
   test("top node changed") {
@@ -41,7 +51,10 @@ class TreeNodeSuite extends FunSuite {
     val after = before transform { case Literal(5, _) => Literal(1)}
 
     assert(before === after)
-    assert(before.map(_.id) === after.map(_.id))
+    // Ensure that the objects after are the same objects before the transformation.
+    before.map(identity[Expression]).zip(after.map(identity[Expression])).foreach {
+      case (b, a) => assert(b eq a)
+    }
   }
 
   test("collect") {
@@ -75,4 +88,34 @@ class TreeNodeSuite extends FunSuite {
 
     assert(expected === actual)
   }
+
+  test("transform works on nodes with Option children") {
+    val dummy1 = Dummy(Some(Literal("1", StringType)))
+    val dummy2 = Dummy(None)
+    val toZero: PartialFunction[Expression, Expression] =  { case Literal(_, _) => Literal(0) }
+
+    var actual = dummy1 transformDown toZero
+    assert(actual === Dummy(Some(Literal(0))))
+
+    actual = dummy1 transformUp toZero
+    assert(actual === Dummy(Some(Literal(0))))
+
+    actual = dummy2 transform toZero
+    assert(actual === Dummy(None))
+  }
+
+  test("preserves origin") {
+    CurrentOrigin.setPosition(1,1)
+    val add = Add(Literal(1), Literal(1))
+    CurrentOrigin.reset()
+
+    val transformed = add transform {
+      case Literal(1, _) => Literal(2)
+    }
+
+    assert(transformed.origin.line.isDefined)
+    assert(transformed.origin.startPosition.isDefined)
+  }
+
+
 }

@@ -30,7 +30,7 @@ import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
 
 /**
- * Example using MLLib KMeans from Java.
+ * Example using MLlib KMeans from Java.
  */
 public final class JavaKMeans {
 

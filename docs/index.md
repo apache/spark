@@ -1,18 +1,20 @@
 ---
 layout: global
-title: Spark Overview
+displayTitle: Spark Overview
+title: Overview
+description: Apache Spark SPARK_VERSION_SHORT documentation homepage
 ---
 
 Apache Spark is a fast and general-purpose cluster computing system.
 It provides high-level APIs in Java, Scala and Python,
 and an optimized engine that supports general execution graphs.
-It also supports a rich set of higher-level tools including [Shark](http://shark.cs.berkeley.edu) (Hive on Spark), [Spark SQL](sql-programming-guide.html) for structured data, [MLlib](mllib-guide.html) for machine learning, [GraphX](graphx-programming-guide.html) for graph processing, and [Spark Streaming](streaming-programming-guide.html).
+It also supports a rich set of higher-level tools including [Spark SQL](sql-programming-guide.html) for SQL and structured data processing, [MLlib](mllib-guide.html) for machine learning, [GraphX](graphx-programming-guide.html) for graph processing, and [Spark Streaming](streaming-programming-guide.html).
 
 # Downloading
 
 Get Spark from the [downloads page](http://spark.apache.org/downloads.html) of the project website. This documentation is for Spark version {{site.SPARK_VERSION}}. The downloads page 
 contains Spark packages for many popular HDFS versions. If you'd like to build Spark from 
-scratch, visit [building Spark with Maven](building-with-maven.html).
+scratch, visit [Building Spark](building-spark.html).
 
 Spark runs on both Windows and UNIX-like systems (e.g. Linux, Mac OS). It's easy to run
 locally on one machine --- all you need is to have `java` installed on your system `PATH`,
@@ -103,16 +105,19 @@ options for deployment:
 * [Security](security.html): Spark security support
 * [Hardware Provisioning](hardware-provisioning.html): recommendations for cluster hardware
 * [3<sup>rd</sup> Party Hadoop Distributions](hadoop-third-party-distributions.html): using common Hadoop distributions
-* [Building Spark with Maven](building-with-maven.html): build Spark using the Maven system
+* Integration with other storage systems:
+  * [OpenStack Swift](storage-openstack-swift.html)
+* [Building Spark](building-spark.html): build Spark using the Maven system
 * [Contributing to Spark](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark)
+* [Supplemental Projects](https://cwiki.apache.org/confluence/display/SPARK/Supplemental+Spark+Projects): related third party Spark projects
 
 **External Resources:**
 
 * [Spark Homepage](http://spark.apache.org)
-* [Shark](http://shark.cs.berkeley.edu): Apache Hive over Spark
+* [Spark Wiki](https://cwiki.apache.org/confluence/display/SPARK)
 * [Mailing Lists](http://spark.apache.org/mailing-lists.html): ask questions about Spark here
 * [AMP Camps](http://ampcamp.berkeley.edu/): a series of training camps at UC Berkeley that featured talks and
-  exercises about Spark, Shark, Spark Streaming, Mesos, and more. [Videos](http://ampcamp.berkeley.edu/3/),
+  exercises about Spark, Spark Streaming, Mesos, and more. [Videos](http://ampcamp.berkeley.edu/3/),
   [slides](http://ampcamp.berkeley.edu/3/) and [exercises](http://ampcamp.berkeley.edu/3/exercises/) are
   available online for free.
 * [Code Examples](http://spark.apache.org/examples.html): more are also available in the `examples` subfolder of Spark ([Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),

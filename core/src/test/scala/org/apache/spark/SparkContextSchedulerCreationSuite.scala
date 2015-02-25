@@ -19,20 +19,24 @@ package org.apache.spark
 
 import org.scalatest.{FunSuite, PrivateMethodTester}
 
-import org.apache.spark.scheduler.{TaskScheduler, TaskSchedulerImpl}
+import org.apache.spark.scheduler.{SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.{SimrSchedulerBackend, SparkDeploySchedulerBackend}
 import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalBackend
 
 class SparkContextSchedulerCreationSuite
-  extends FunSuite with PrivateMethodTester with LocalSparkContext with Logging {
+  extends FunSuite with LocalSparkContext with PrivateMethodTester with Logging {
 
-  def createTaskScheduler(master: String): TaskSchedulerImpl = {
+  def createTaskScheduler(master: String): TaskSchedulerImpl =
+    createTaskScheduler(master, new SparkConf())
+
+  def createTaskScheduler(master: String, conf: SparkConf): TaskSchedulerImpl = {
     // Create local SparkContext to setup a SparkEnv. We don't actually want to start() the
     // real schedulers, so we don't want to create a full SparkContext with the desired scheduler.
-    sc = new SparkContext("local", "test")
-    val createTaskSchedulerMethod = PrivateMethod[TaskScheduler]('createTaskScheduler)
-    val sched = SparkContext invokePrivate createTaskSchedulerMethod(sc, master)
+    sc = new SparkContext("local", "test", conf)
+    val createTaskSchedulerMethod =
+      PrivateMethod[Tuple2[SchedulerBackend, TaskScheduler]]('createTaskScheduler)
+    val (_, sched) = SparkContext invokePrivate createTaskSchedulerMethod(sc, master)
     sched.asInstanceOf[TaskSchedulerImpl]
   }
 
@@ -68,11 +72,44 @@ class SparkContextSchedulerCreationSuite
     }
   }
 
+  test("local-*-n-failures") {
+    val sched = createTaskScheduler("local[* ,2]")
+    assert(sched.maxTaskFailures === 2)
+    sched.backend match {
+      case s: LocalBackend => assert(s.totalCores === Runtime.getRuntime.availableProcessors())
+      case _ => fail()
+    }
+  }
+
   test("local-n-failures") {
     val sched = createTaskScheduler("local[4, 2]")
     assert(sched.maxTaskFailures === 2)
     sched.backend match {
       case s: LocalBackend => assert(s.totalCores === 4)
+      case _ => fail()
+    }
+  }
+
+  test("bad-local-n") {
+    val e = intercept[SparkException] {
+      createTaskScheduler("local[2*]")
+    }
+    assert(e.getMessage.contains("Could not parse Master URL"))
+  }
+
+  test("bad-local-n-failures") {
+    val e = intercept[SparkException] {
+      createTaskScheduler("local[2*,4]")
+    }
+    assert(e.getMessage.contains("Could not parse Master URL"))
+  }
+
+  test("local-default-parallelism") {
+    val conf = new SparkConf().set("spark.default.parallelism", "16")
+    val sched = createTaskScheduler("local", conf)
+
+    sched.backend match {
+      case s: LocalBackend => assert(s.defaultParallelism() === 16)
       case _ => fail()
     }
   }
@@ -112,12 +149,13 @@ class SparkContextSchedulerCreationSuite
   }
 
   test("yarn-client") {
-    testYarn("yarn-client", "org.apache.spark.scheduler.cluster.YarnClientClusterScheduler")
+    testYarn("yarn-client", "org.apache.spark.scheduler.cluster.YarnScheduler")
   }
 
-  def testMesos(master: String, expectedClass: Class[_]) {
+  def testMesos(master: String, expectedClass: Class[_], coarse: Boolean) {
+    val conf = new SparkConf().set("spark.mesos.coarse", coarse.toString)
     try {
-      val sched = createTaskScheduler(master)
+      val sched = createTaskScheduler(master, conf)
       assert(sched.backend.getClass === expectedClass)
     } catch {
       case e: UnsatisfiedLinkError =>
@@ -128,17 +166,14 @@ class SparkContextSchedulerCreationSuite
   }
 
   test("mesos fine-grained") {
-    System.setProperty("spark.mesos.coarse", "false")
-    testMesos("mesos://localhost:1234", classOf[MesosSchedulerBackend])
+    testMesos("mesos://localhost:1234", classOf[MesosSchedulerBackend], coarse = false)
   }
 
   test("mesos coarse-grained") {
-    System.setProperty("spark.mesos.coarse", "true")
-    testMesos("mesos://localhost:1234", classOf[CoarseMesosSchedulerBackend])
+    testMesos("mesos://localhost:1234", classOf[CoarseMesosSchedulerBackend], coarse = true)
   }
 
   test("mesos with zookeeper") {
-    System.setProperty("spark.mesos.coarse", "false")
-    testMesos("zk://localhost:1234,localhost:2345", classOf[MesosSchedulerBackend])
+    testMesos("zk://localhost:1234,localhost:2345", classOf[MesosSchedulerBackend], coarse = false)
   }
 }

@@ -21,21 +21,27 @@ import java.util.{Comparator, List => JList, Iterator => JIterator}
 import java.lang.{Iterable => JIterable, Long => JLong}
 
 import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import com.google.common.base.Optional
 import org.apache.hadoop.io.compress.CompressionCodec
 
-import org.apache.spark.{Partition, SparkContext, TaskContext}
+import org.apache.spark._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaPairRDD._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
+import org.apache.spark.api.java.JavaUtils.mapAsSerializableJavaMap
 import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2, _}
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
+/**
+ * Defines operations common to several Java RDD implementations.
+ * Note that this trait is not intended to be implemented by user code.
+ */
 trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def wrapRDD(rdd: RDD[T]): This
 
@@ -43,8 +49,11 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   def rdd: RDD[T]
 
-  /** Set of partitions in this RDD. */
+  @deprecated("Use partitions() instead.", "1.1.0")
   def splits: JList[Partition] = new java.util.ArrayList(rdd.partitions.toSeq)
+  
+  /** Set of partitions in this RDD. */
+  def partitions: JList[Partition] = new java.util.ArrayList(rdd.partitions.toSeq)
 
   /** The [[org.apache.spark.SparkContext]] that this RDD was created on. */
   def context: SparkContext = rdd.context
@@ -206,8 +215,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Return an RDD of grouped elements. Each group consists of a key and a sequence of elements
    * mapping to that key.
    */
-  def groupBy[K](f: JFunction[T, K]): JavaPairRDD[K, JIterable[T]] = {
-    implicit val ctagK: ClassTag[K] = fakeClassTag
+  def groupBy[U](f: JFunction[T, U]): JavaPairRDD[U, JIterable[T]] = {
+    // The type parameter is U instead of K in order to work around a compiler bug; see SPARK-4459
+    implicit val ctagK: ClassTag[U] = fakeClassTag
     implicit val ctagV: ClassTag[JList[T]] = fakeClassTag
     JavaPairRDD.fromRDD(groupByResultToJava(rdd.groupBy(f)(fakeClassTag)))
   }
@@ -216,10 +226,11 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Return an RDD of grouped elements. Each group consists of a key and a sequence of elements
    * mapping to that key.
    */
-  def groupBy[K](f: JFunction[T, K], numPartitions: Int): JavaPairRDD[K, JIterable[T]] = {
-    implicit val ctagK: ClassTag[K] = fakeClassTag
+  def groupBy[U](f: JFunction[T, U], numPartitions: Int): JavaPairRDD[U, JIterable[T]] = {
+    // The type parameter is U instead of K in order to work around a compiler bug; see SPARK-4459
+    implicit val ctagK: ClassTag[U] = fakeClassTag
     implicit val ctagV: ClassTag[JList[T]] = fakeClassTag
-    JavaPairRDD.fromRDD(groupByResultToJava(rdd.groupBy(f, numPartitions)(fakeClassTag[K])))
+    JavaPairRDD.fromRDD(groupByResultToJava(rdd.groupBy(f, numPartitions)(fakeClassTag[U])))
   }
 
   /**
@@ -290,8 +301,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Applies a function f to all elements of this RDD.
    */
   def foreach(f: VoidFunction[T]) {
-    val cleanF = rdd.context.clean((x: T) => f.call(x))
-    rdd.foreach(cleanF)
+    rdd.foreach(x => f.call(x))
   }
 
   /**
@@ -339,6 +349,19 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def reduce(f: JFunction2[T, T, T]): T = rdd.reduce(f)
 
   /**
+   * Reduces the elements of this RDD in a multi-level tree pattern.
+   *
+   * @param depth suggested depth of the tree
+   * @see [[org.apache.spark.api.java.JavaRDDLike#reduce]]
+   */
+  def treeReduce(f: JFunction2[T, T, T], depth: Int): T = rdd.treeReduce(f, depth)
+
+  /**
+   * [[org.apache.spark.api.java.JavaRDDLike#treeReduce]] with suggested depth 2.
+   */
+  def treeReduce(f: JFunction2[T, T, T]): T = treeReduce(f, 2)
+
+  /**
    * Aggregate the elements of each partition, and then the results for all the partitions, using a
    * given associative function and a neutral "zero value". The function op(t1, t2) is allowed to
    * modify t1 and return it as its result value to avoid object allocation; however, it should not
@@ -358,6 +381,30 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def aggregate[U](zeroValue: U)(seqOp: JFunction2[U, T, U],
     combOp: JFunction2[U, U, U]): U =
     rdd.aggregate(zeroValue)(seqOp, combOp)(fakeClassTag[U])
+
+  /**
+   * Aggregates the elements of this RDD in a multi-level tree pattern.
+   *
+   * @param depth suggested depth of the tree
+   * @see [[org.apache.spark.api.java.JavaRDDLike#aggregate]]
+   */
+  def treeAggregate[U](
+      zeroValue: U,
+      seqOp: JFunction2[U, T, U],
+      combOp: JFunction2[U, U, U],
+      depth: Int): U = {
+    rdd.treeAggregate(zeroValue)(seqOp, combOp, depth)(fakeClassTag[U])
+  }
+
+  /**
+   * [[org.apache.spark.api.java.JavaRDDLike#treeAggregate]] with suggested depth 2.
+   */
+  def treeAggregate[U](
+      zeroValue: U,
+      seqOp: JFunction2[U, T, U],
+      combOp: JFunction2[U, U, U]): U = {
+    treeAggregate(zeroValue, seqOp, combOp, 2)
+  }
 
   /**
    * Return the number of elements in the RDD.
@@ -387,7 +434,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * combine step happens locally on the master, equivalent to running a single reduce task.
    */
   def countByValue(): java.util.Map[T, java.lang.Long] =
-    mapAsJavaMap(rdd.countByValue().map((x => (x._1, new java.lang.Long(x._2)))))
+    mapAsSerializableJavaMap(rdd.countByValue().map((x => (x._1, new java.lang.Long(x._2)))))
 
   /**
    * (Experimental) Approximate version of countByValue().
@@ -396,13 +443,13 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     timeout: Long,
     confidence: Double
     ): PartialResult[java.util.Map[T, BoundedDouble]] =
-    rdd.countByValueApprox(timeout, confidence).map(mapAsJavaMap)
+    rdd.countByValueApprox(timeout, confidence).map(mapAsSerializableJavaMap)
 
   /**
    * (Experimental) Approximate version of countByValue().
    */
   def countByValueApprox(timeout: Long): PartialResult[java.util.Map[T, BoundedDouble]] =
-    rdd.countByValueApprox(timeout).map(mapAsJavaMap)
+    rdd.countByValueApprox(timeout).map(mapAsSerializableJavaMap)
 
   /**
    * Take the first num elements of the RDD. This currently scans the partitions *one by one*, so
@@ -430,6 +477,12 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def first(): T = rdd.first()
 
   /**
+   * @return true if and only if the RDD contains no elements at all. Note that an RDD
+   *         may be empty even when it has at least 1 partition.
+   */
+  def isEmpty(): Boolean = rdd.isEmpty()
+
+  /**
    * Save this RDD as a text file, using string representations of elements.
    */
   def saveAsTextFile(path: String): Unit = {
@@ -454,8 +507,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   /**
    * Creates tuples of the elements in this RDD by applying `f`.
    */
-  def keyBy[K](f: JFunction[T, K]): JavaPairRDD[K, T] = {
-    implicit val ctag: ClassTag[K] = fakeClassTag
+  def keyBy[U](f: JFunction[T, U]): JavaPairRDD[U, T] = {
+    // The type parameter is U instead of K in order to work around a compiler bug; see SPARK-4459
+    implicit val ctag: ClassTag[U] = fakeClassTag
     JavaPairRDD.fromRDD(rdd.keyBy(f))
   }
 
@@ -488,9 +542,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   }
 
   /**
-   * Returns the top K elements from this RDD as defined by
+   * Returns the top k (largest) elements from this RDD as defined by
    * the specified Comparator[T].
-   * @param num the number of top elements to return
+   * @param num k, the number of top elements to return
    * @param comp the comparator that defines the order
    * @return an array of top elements
    */
@@ -502,9 +556,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   }
 
   /**
-   * Returns the top K elements from this RDD using the
+   * Returns the top k (largest) elements from this RDD using the
    * natural ordering for T.
-   * @param num the number of top elements to return
+   * @param num k, the number of top elements to return
    * @return an array of top elements
    */
   def top(num: Int): JList[T] = {
@@ -513,9 +567,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   }
 
   /**
-   * Returns the first K elements from this RDD as defined by
+   * Returns the first k (smallest) elements from this RDD as defined by
    * the specified Comparator[T] and maintains the order.
-   * @param num the number of top elements to return
+   * @param num k, the number of elements to return
    * @param comp the comparator that defines the order
    * @return an array of top elements
    */
@@ -547,9 +601,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   }
 
   /**
-   * Returns the first K elements from this RDD using the
+   * Returns the first k (smallest) elements from this RDD using the
    * natural ordering for T while maintain the order.
-   * @param num the number of top elements to return
+   * @param num k, the number of top elements to return
    * @return an array of top elements
    */
   def takeOrdered(num: Int): JList[T] = {
@@ -560,13 +614,56 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   /**
    * Return approximate number of distinct elements in the RDD.
    *
-   * The accuracy of approximation can be controlled through the relative standard deviation
-   * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
-   * more accurate counts but increase the memory footprint and vise versa. The default value of
-   * relativeSD is 0.05.
+   * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
+   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
+   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   *
+   * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
+   *                   It must be greater than 0.000017.
    */
-  def countApproxDistinct(relativeSD: Double = 0.05): Long = rdd.countApproxDistinct(relativeSD)
+  def countApproxDistinct(relativeSD: Double): Long = rdd.countApproxDistinct(relativeSD)
 
   def name(): String = rdd.name
 
+  /**
+   * The asynchronous version of `count`, which returns a
+   * future for counting the number of elements in this RDD.
+   */
+  def countAsync(): JavaFutureAction[JLong] = {
+    new JavaFutureActionWrapper[Long, JLong](rdd.countAsync(), JLong.valueOf)
+  }
+
+  /**
+   * The asynchronous version of `collect`, which returns a future for
+   * retrieving an array containing all of the elements in this RDD.
+   */
+  def collectAsync(): JavaFutureAction[JList[T]] = {
+    new JavaFutureActionWrapper(rdd.collectAsync(), (x: Seq[T]) => x.asJava)
+  }
+
+  /**
+   * The asynchronous version of the `take` action, which returns a
+   * future for retrieving the first `num` elements of this RDD.
+   */
+  def takeAsync(num: Int): JavaFutureAction[JList[T]] = {
+    new JavaFutureActionWrapper(rdd.takeAsync(num), (x: Seq[T]) => x.asJava)
+  }
+
+  /**
+   * The asynchronous version of the `foreach` action, which
+   * applies a function f to all the elements of this RDD.
+   */
+  def foreachAsync(f: VoidFunction[T]): JavaFutureAction[Void] = {
+    new JavaFutureActionWrapper[Unit, Void](rdd.foreachAsync(x => f.call(x)),
+      { x => null.asInstanceOf[Void] })
+  }
+
+  /**
+   * The asynchronous version of the `foreachPartition` action, which
+   * applies a function f to each partition of this RDD.
+   */
+  def foreachPartitionAsync(f: VoidFunction[java.util.Iterator[T]]): JavaFutureAction[Void] = {
+    new JavaFutureActionWrapper[Unit, Void](rdd.foreachPartitionAsync(x => f.call(x)),
+      { x => null.asInstanceOf[Void] })
+  }
 }

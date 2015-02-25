@@ -46,19 +46,23 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterStateResponse]
     val state = Await.result(stateFuture, timeout)
 
-    val workerHeaders = Seq("Id", "Address", "State", "Cores", "Memory")
+    val workerHeaders = Seq("Worker Id", "Address", "State", "Cores", "Memory")
     val workers = state.workers.sortBy(_.id)
     val workerTable = UIUtils.listingTable(workerHeaders, workerRow, workers)
 
-    val appHeaders = Seq("ID", "Name", "Cores", "Memory per Node", "Submitted Time", "User",
-      "State", "Duration")
+    val activeAppHeaders = Seq("Application ID", "Name", "Cores in Use",
+      "Cores Requested", "Memory per Node", "Submitted Time", "User", "State", "Duration")
     val activeApps = state.activeApps.sortBy(_.startTime).reverse
-    val activeAppsTable = UIUtils.listingTable(appHeaders, appRow, activeApps)
-    val completedApps = state.completedApps.sortBy(_.endTime).reverse
-    val completedAppsTable = UIUtils.listingTable(appHeaders, appRow, completedApps)
+    val activeAppsTable = UIUtils.listingTable(activeAppHeaders, activeAppRow, activeApps)
 
-    val driverHeaders = Seq("ID", "Submitted Time", "Worker", "State", "Cores", "Memory",
-      "Main Class")
+    val completedAppHeaders = Seq("Application ID", "Name", "Cores Requested", "Memory per Node",
+      "Submitted Time", "User", "State", "Duration")
+    val completedApps = state.completedApps.sortBy(_.endTime).reverse
+    val completedAppsTable = UIUtils.listingTable(completedAppHeaders, completeAppRow,
+      completedApps)
+
+    val driverHeaders = Seq("Submission ID", "Submitted Time", "Worker", "State", "Cores",
+      "Memory", "Main Class")
     val activeDrivers = state.activeDrivers.sortBy(_.startTime).reverse
     val activeDriversTable = UIUtils.listingTable(driverHeaders, driverRow, activeDrivers)
     val completedDrivers = state.completedDrivers.sortBy(_.startTime).reverse
@@ -73,6 +77,14 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
           <div class="span12">
             <ul class="unstyled">
               <li><strong>URL:</strong> {state.uri}</li>
+              {
+                state.restUri.map { uri =>
+                  <li>
+                    <strong>REST URL:</strong> {uri}
+                    <span class="rest-uri"> (cluster mode)</span>
+                  </li>
+                }.getOrElse { Seq.empty }
+              }
               <li><strong>Workers:</strong> {state.workers.size}</li>
               <li><strong>Cores:</strong> {state.workers.map(_.cores).sum} Total,
                 {state.workers.map(_.coresUsed).sum} Used</li>
@@ -154,7 +166,7 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     </tr>
   }
 
-  private def appRow(app: ApplicationInfo): Seq[Node] = {
+  private def appRow(app: ApplicationInfo, active: Boolean): Seq[Node] = {
     <tr>
       <td>
         <a href={"app?appId=" + app.id}>{app.id}</a>
@@ -162,8 +174,15 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <td>
         <a href={app.desc.appUiUrl}>{app.desc.name}</a>
       </td>
+      {
+        if (active) {
+          <td>
+            {app.coresGranted}
+          </td>
+        }
+      }
       <td>
-        {app.coresGranted}
+        {app.requestedCores}
       </td>
       <td sorttable_customkey={app.desc.memoryPerSlave.toString}>
         {Utils.megabytesToString(app.desc.memoryPerSlave)}
@@ -173,6 +192,14 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <td>{app.state.toString}</td>
       <td>{UIUtils.formatDuration(app.duration)}</td>
     </tr>
+  }
+
+  private def activeAppRow(app: ApplicationInfo): Seq[Node] = {
+    appRow(app, active = true)
+  }
+
+  private def completeAppRow(app: ApplicationInfo): Seq[Node] = {
+    appRow(app, active = false)
   }
 
   private def driverRow(driver: DriverInfo): Seq[Node] = {
@@ -188,7 +215,7 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <td sorttable_customkey={driver.desc.mem.toString}>
         {Utils.megabytesToString(driver.desc.mem.toLong)}
       </td>
-      <td>{driver.desc.command.arguments(1)}</td>
+      <td>{driver.desc.command.arguments(2)}</td>
     </tr>
   }
 }

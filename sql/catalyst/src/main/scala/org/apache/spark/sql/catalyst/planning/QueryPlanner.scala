@@ -17,9 +17,18 @@
 
 package org.apache.spark.sql.catalyst.planning
 
-import org.apache.spark.sql.Logging
+import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
+
+/**
+ * Given a [[plans.logical.LogicalPlan LogicalPlan]], returns a list of `PhysicalPlan`s that can
+ * be used for execution. If this strategy does not apply to the give logical operation then an
+ * empty list should be returned.
+ */
+abstract class GenericStrategy[PhysicalPlan <: TreeNode[PhysicalPlan]] extends Logging {
+  def apply(plan: LogicalPlan): Seq[PhysicalPlan]
+}
 
 /**
  * Abstract class for transforming [[plans.logical.LogicalPlan LogicalPlan]]s into physical plans.
@@ -35,16 +44,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNode
  */
 abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
   /** A list of execution strategies that can be used by the planner */
-  def strategies: Seq[Strategy]
-
-  /**
-   * Given a [[plans.logical.LogicalPlan LogicalPlan]], returns a list of `PhysicalPlan`s that can
-   * be used for execution. If this strategy does not apply to the give logical operation then an
-   * empty list should be returned.
-   */
-  abstract protected class Strategy extends Logging {
-    def apply(plan: LogicalPlan): Seq[PhysicalPlan]
-  }
+  def strategies: Seq[GenericStrategy[PhysicalPlan]]
 
   /**
    * Returns a placeholder for a physical plan that executes `plan`. This placeholder will be

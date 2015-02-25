@@ -25,9 +25,8 @@ import scala.concurrent.duration._
 import scala.concurrent.future
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
 
 /**
@@ -35,18 +34,17 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
  * (e.g. count) as well as multi-job action (e.g. take). We test the local and cluster schedulers
  * in both FIFO and fair scheduling modes.
  */
-class JobCancellationSuite extends FunSuite with ShouldMatchers with BeforeAndAfter
+class JobCancellationSuite extends FunSuite with Matchers with BeforeAndAfter
   with LocalSparkContext {
 
   override def afterEach() {
     super.afterEach()
     resetSparkContext()
-    System.clearProperty("spark.scheduler.mode")
   }
 
   test("local mode, FIFO scheduler") {
-    System.setProperty("spark.scheduler.mode", "FIFO")
-    sc = new SparkContext("local[2]", "test")
+    val conf = new SparkConf().set("spark.scheduler.mode", "FIFO")
+    sc = new SparkContext("local[2]", "test", conf)
     testCount()
     testTake()
     // Make sure we can still launch tasks.
@@ -54,10 +52,10 @@ class JobCancellationSuite extends FunSuite with ShouldMatchers with BeforeAndAf
   }
 
   test("local mode, fair scheduler") {
-    System.setProperty("spark.scheduler.mode", "FAIR")
+    val conf = new SparkConf().set("spark.scheduler.mode", "FAIR")
     val xmlPath = getClass.getClassLoader.getResource("fairscheduler.xml").getFile()
-    System.setProperty("spark.scheduler.allocation.file", xmlPath)
-    sc = new SparkContext("local[2]", "test")
+    conf.set("spark.scheduler.allocation.file", xmlPath)
+    sc = new SparkContext("local[2]", "test", conf)
     testCount()
     testTake()
     // Make sure we can still launch tasks.
@@ -65,8 +63,8 @@ class JobCancellationSuite extends FunSuite with ShouldMatchers with BeforeAndAf
   }
 
   test("cluster mode, FIFO scheduler") {
-    System.setProperty("spark.scheduler.mode", "FIFO")
-    sc = new SparkContext("local-cluster[2,1,512]", "test")
+    val conf = new SparkConf().set("spark.scheduler.mode", "FIFO")
+    sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
     testCount()
     testTake()
     // Make sure we can still launch tasks.
@@ -74,10 +72,10 @@ class JobCancellationSuite extends FunSuite with ShouldMatchers with BeforeAndAf
   }
 
   test("cluster mode, fair scheduler") {
-    System.setProperty("spark.scheduler.mode", "FAIR")
+    val conf = new SparkConf().set("spark.scheduler.mode", "FAIR")
     val xmlPath = getClass.getClassLoader.getResource("fairscheduler.xml").getFile()
-    System.setProperty("spark.scheduler.allocation.file", xmlPath)
-    sc = new SparkContext("local-cluster[2,1,512]", "test")
+    conf.set("spark.scheduler.allocation.file", xmlPath)
+    sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
     testCount()
     testTake()
     // Make sure we can still launch tasks.
@@ -173,11 +171,11 @@ class JobCancellationSuite extends FunSuite with ShouldMatchers with BeforeAndAf
     assert(jobB.get() === 100)
   }
 
-  ignore("two jobs sharing the same stage") {
+  test("two jobs sharing the same stage") {
     // sem1: make sure cancel is issued after some tasks are launched
-    // sem2: make sure the first stage is not finished until cancel is issued
+    // twoJobsSharingStageSemaphore:
+    //   make sure the first stage is not finished until cancel is issued
     val sem1 = new Semaphore(0)
-    val sem2 = new Semaphore(0)
 
     sc = new SparkContext("local[2]", "test")
     sc.addSparkListener(new SparkListener {
@@ -188,7 +186,7 @@ class JobCancellationSuite extends FunSuite with ShouldMatchers with BeforeAndAf
 
     // Create two actions that would share the some stages.
     val rdd = sc.parallelize(1 to 10, 2).map { i =>
-      sem2.acquire()
+      JobCancellationSuite.twoJobsSharingStageSemaphore.acquire()
       (i, i)
     }.reduceByKey(_+_)
     val f1 = rdd.collectAsync()
@@ -198,13 +196,13 @@ class JobCancellationSuite extends FunSuite with ShouldMatchers with BeforeAndAf
     future {
       sem1.acquire()
       f1.cancel()
-      sem2.release(10)
+      JobCancellationSuite.twoJobsSharingStageSemaphore.release(10)
     }
 
-    // Expect both to fail now.
-    // TODO: update this test when we change Spark so cancelling f1 wouldn't affect f2.
+    // Expect f1 to fail due to cancellation,
     intercept[SparkException] { f1.get() }
-    intercept[SparkException] { f2.get() }
+    // but f2 should not be affected
+    f2.get()
   }
 
   def testCount() {
@@ -270,4 +268,5 @@ class JobCancellationSuite extends FunSuite with ShouldMatchers with BeforeAndAf
 object JobCancellationSuite {
   val taskStartedSemaphore = new Semaphore(0)
   val taskCancelledSemaphore = new Semaphore(0)
+  val twoJobsSharingStageSemaphore = new Semaphore(0)
 }

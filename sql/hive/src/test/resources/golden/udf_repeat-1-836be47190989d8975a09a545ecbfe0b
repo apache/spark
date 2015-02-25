@@ -1,4 +1,0 @@
-repeat(str, n) - repeat str n times 
-Example:
-  > SELECT repeat('123', 2) FROM src LIMIT 1;
-  '123123'

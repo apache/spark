@@ -17,11 +17,9 @@
 
 package org.apache.spark.storage
 
-import java.io.{FileOutputStream, RandomAccessFile}
+import java.io.{IOException, File, FileOutputStream, RandomAccessFile}
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel.MapMode
-
-import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Logging
 import org.apache.spark.serializer.Serializer
@@ -30,54 +28,67 @@ import org.apache.spark.util.Utils
 /**
  * Stores BlockManager blocks on disk.
  */
-private class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManager)
+private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManager)
   extends BlockStore(blockManager) with Logging {
 
-  val minMemoryMapBytes = blockManager.conf.getLong("spark.storage.memoryMapThreshold", 2 * 4096L)
+  val minMemoryMapBytes = blockManager.conf.getLong(
+    "spark.storage.memoryMapThreshold", 2 * 1024L * 1024L)
 
   override def getSize(blockId: BlockId): Long = {
-    diskManager.getBlockLocation(blockId).length
+    diskManager.getFile(blockId.name).length
   }
 
-  override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel) : PutResult = {
+  override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): PutResult = {
     // So that we do not modify the input offsets !
     // duplicate does not copy buffer, so inexpensive
     val bytes = _bytes.duplicate()
-    logDebug("Attempting to put block " + blockId)
+    logDebug(s"Attempting to put block $blockId")
     val startTime = System.currentTimeMillis
     val file = diskManager.getFile(blockId)
-    val channel = new FileOutputStream(file).getChannel()
+    val channel = new FileOutputStream(file).getChannel
     while (bytes.remaining > 0) {
       channel.write(bytes)
     }
     channel.close()
     val finishTime = System.currentTimeMillis
     logDebug("Block %s stored as %s file on disk in %d ms".format(
-      file.getName, Utils.bytesToString(bytes.limit), (finishTime - startTime)))
-    return PutResult(bytes.limit(), Right(bytes.duplicate()))
+      file.getName, Utils.bytesToString(bytes.limit), finishTime - startTime))
+    PutResult(bytes.limit(), Right(bytes.duplicate()))
   }
 
-  override def putValues(
+  override def putArray(
       blockId: BlockId,
-      values: ArrayBuffer[Any],
+      values: Array[Any],
       level: StorageLevel,
-      returnValues: Boolean)
-  : PutResult = {
-    return putValues(blockId, values.toIterator, level, returnValues)
+      returnValues: Boolean): PutResult = {
+    putIterator(blockId, values.toIterator, level, returnValues)
   }
 
-  override def putValues(
+  override def putIterator(
       blockId: BlockId,
       values: Iterator[Any],
       level: StorageLevel,
-      returnValues: Boolean)
-    : PutResult = {
+      returnValues: Boolean): PutResult = {
 
-    logDebug("Attempting to write values for block " + blockId)
+    logDebug(s"Attempting to write values for block $blockId")
     val startTime = System.currentTimeMillis
     val file = diskManager.getFile(blockId)
     val outputStream = new FileOutputStream(file)
-    blockManager.dataSerializeStream(blockId, outputStream, values)
+    try {
+      try {
+        blockManager.dataSerializeStream(blockId, outputStream, values)
+      } finally {
+        // Close outputStream here because it should be closed before file is deleted.
+        outputStream.close()
+      }
+    } catch {
+      case e: Throwable =>
+        if (file.exists()) {
+          file.delete()
+        }
+        throw e
+    }
+
     val length = file.length
 
     val timeTaken = System.currentTimeMillis - startTime
@@ -93,23 +104,37 @@ private class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManage
     }
   }
 
-  override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
-    val segment = diskManager.getBlockLocation(blockId)
-    val channel = new RandomAccessFile(segment.file, "r").getChannel()
+  private def getBytes(file: File, offset: Long, length: Long): Option[ByteBuffer] = {
+    val channel = new RandomAccessFile(file, "r").getChannel
 
     try {
       // For small files, directly read rather than memory map
-      if (segment.length < minMemoryMapBytes) {
-        val buf = ByteBuffer.allocate(segment.length.toInt)
-        channel.read(buf, segment.offset)
+      if (length < minMemoryMapBytes) {
+        val buf = ByteBuffer.allocate(length.toInt)
+        channel.position(offset)
+        while (buf.remaining() != 0) {
+          if (channel.read(buf) == -1) {
+            throw new IOException("Reached EOF before filling buffer\n" +
+              s"offset=$offset\nfile=${file.getAbsolutePath}\nbuf.remaining=${buf.remaining}")
+          }
+        }
         buf.flip()
         Some(buf)
       } else {
-        Some(channel.map(MapMode.READ_ONLY, segment.offset, segment.length))
+        Some(channel.map(MapMode.READ_ONLY, offset, length))
       }
     } finally {
       channel.close()
     }
+  }
+
+  override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
+    val file = diskManager.getFile(blockId.name)
+    getBytes(file, 0, file.length)
+  }
+
+  def getBytes(segment: FileSegment): Option[ByteBuffer] = {
+    getBytes(segment.file, segment.offset, segment.length)
   }
 
   override def getValues(blockId: BlockId): Option[Iterator[Any]] = {
@@ -121,24 +146,25 @@ private class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManage
    * shuffle short-circuit code.
    */
   def getValues(blockId: BlockId, serializer: Serializer): Option[Iterator[Any]] = {
+    // TODO: Should bypass getBytes and use a stream based implementation, so that
+    // we won't use a lot of memory during e.g. external sort merge.
     getBytes(blockId).map(bytes => blockManager.dataDeserialize(blockId, bytes, serializer))
   }
 
   override def remove(blockId: BlockId): Boolean = {
-    val fileSegment = diskManager.getBlockLocation(blockId)
-    val file = fileSegment.file
-    if (file.exists() && file.length() == fileSegment.length) {
+    val file = diskManager.getFile(blockId.name)
+    // If consolidation mode is used With HashShuffleMananger, the physical filename for the block
+    // is different from blockId.name. So the file returns here will not be exist, thus we avoid to
+    // delete the whole consolidated file by mistake.
+    if (file.exists()) {
       file.delete()
     } else {
-      if (fileSegment.length < file.length()) {
-        logWarning("Could not delete block associated with only a part of a file: " + blockId)
-      }
       false
     }
   }
 
   override def contains(blockId: BlockId): Boolean = {
-    val file = diskManager.getBlockLocation(blockId).file
+    val file = diskManager.getFile(blockId.name)
     file.exists()
   }
 }

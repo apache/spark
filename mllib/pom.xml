@@ -21,12 +21,15 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>1.3.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-mllib_2.10</artifactId>
+  <properties>
+    <sbt.project.name>mllib</sbt.project.name>
+  </properties>
   <packaging>jar</packaging>
   <name>Spark Project ML Library</name>
   <url>http://spark.apache.org/</url>
@@ -38,8 +41,19 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.eclipse.jetty</groupId>
-      <artifactId>jetty-server</artifactId>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-streaming_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-sql_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-graphx_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.jblas</groupId>
@@ -49,12 +63,23 @@
     <dependency>
       <groupId>org.scalanlp</groupId>
       <artifactId>breeze_${scala.binary.version}</artifactId>
-      <version>0.7</version>
+      <version>0.10</version>
+      <exclusions>
+        <!-- This is included as a compile-scoped dependency by jtransforms, which is
+             a dependency of breeze. -->
+        <exclusion>
+          <groupId>junit</groupId>
+          <artifactId>junit</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.commons</groupId>
+          <artifactId>commons-math3</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
-      <groupId>org.scalatest</groupId>
-      <artifactId>scalatest_${scala.binary.version}</artifactId>
-      <scope>test</scope>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-math3</artifactId>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
@@ -62,19 +87,54 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>com.novocode</groupId>
       <artifactId>junit-interface</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-all</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-streaming_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
+  <profiles>
+    <profile>
+      <id>netlib-lgpl</id>
+      <dependencies>
+        <dependency>
+          <groupId>com.github.fommil.netlib</groupId>
+          <artifactId>all</artifactId>
+          <version>1.1.2</version>
+          <type>pom</type>
+        </dependency>
+      </dependencies>
+    </profile>
+  </profiles>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
-    <plugins>
-      <plugin>
-        <groupId>org.scalatest</groupId>
-        <artifactId>scalatest-maven-plugin</artifactId>
-      </plugin>
-    </plugins>
+    <resources>
+      <resource>
+        <directory>../python</directory>
+        <includes>
+          <include>pyspark/mllib/*.py</include>
+          <include>pyspark/mllib/stat/*.py</include>
+          <include>pyspark/ml/*.py</include>
+          <include>pyspark/ml/param/*.py</include>
+        </includes>
+      </resource>
+    </resources>
   </build>
 </project>
