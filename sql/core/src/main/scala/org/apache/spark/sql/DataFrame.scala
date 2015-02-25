@@ -264,7 +264,7 @@ class DataFrame protected[sql](
    */
   def explain(extended: Boolean): Unit = {
     ExplainCommand(
-      logicalPlan,
+      queryExecution.logical,
       extended = extended).queryExecution.executedPlan.executeCollect().map {
       r => println(r.getString(0))
     }
