@@ -66,6 +66,7 @@ recommendation model by measuring the Mean Squared Error of rating prediction.
 
 {% highlight scala %}
 import org.apache.spark.mllib.recommendation.ALS
+import org.apache.spark.mllib.recommendation.MatrixFactorizationModel
 import org.apache.spark.mllib.recommendation.Rating
 
 // Load and parse the data

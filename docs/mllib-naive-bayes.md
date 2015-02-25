@@ -37,7 +37,7 @@ smoothing parameter `lambda` as input, and output a
 can be used for evaluation and prediction.
 
 {% highlight scala %}
-import org.apache.spark.mllib.classification.NaiveBayes
+import org.apache.spark.mllib.classification.{NaiveBayes, NaiveBayesModel}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 

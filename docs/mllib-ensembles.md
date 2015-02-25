@@ -98,6 +98,7 @@ The test error is calculated to measure the algorithm accuracy.
 <div data-lang="scala">
 {% highlight scala %}
 import org.apache.spark.mllib.tree.RandomForest
+import org.apache.spark.mllib.tree.model.RandomForestModel
 import org.apache.spark.mllib.util.MLUtils
 
 // Load and parse the data file.
@@ -244,6 +245,7 @@ The Mean Squared Error (MSE) is computed at the end to evaluate
 <div data-lang="scala">
 {% highlight scala %}
 import org.apache.spark.mllib.tree.RandomForest
+import org.apache.spark.mllib.tree.model.RandomForestModel
 import org.apache.spark.mllib.util.MLUtils
 
 // Load and parse the data file.
@@ -462,6 +464,7 @@ The test error is calculated to measure the algorithm accuracy.
 {% highlight scala %}
 import org.apache.spark.mllib.tree.GradientBoostedTrees
 import org.apache.spark.mllib.tree.configuration.BoostingStrategy
+import org.apache.spark.mllib.tree.model.GradientBoostedTreesModel
 import org.apache.spark.mllib.util.MLUtils
 
 // Load and parse the data file.
@@ -605,6 +608,7 @@ The Mean Squared Error (MSE) is computed at the end to evaluate
 {% highlight scala %}
 import org.apache.spark.mllib.tree.GradientBoostedTrees
 import org.apache.spark.mllib.tree.configuration.BoostingStrategy
+import org.apache.spark.mllib.tree.model.GradientBoostedTreesModel
 import org.apache.spark.mllib.util.MLUtils
 
 // Load and parse the data file.

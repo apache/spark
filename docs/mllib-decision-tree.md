@@ -194,6 +194,7 @@ maximum tree depth of 5. The test error is calculated to measure the algorithm a
 <div data-lang="scala">
 {% highlight scala %}
 import org.apache.spark.mllib.tree.DecisionTree
+import org.apache.spark.mllib.tree.model.DecisionTreeModel
 import org.apache.spark.mllib.util.MLUtils
 
 // Load and parse the data file.
@@ -333,6 +334,7 @@ depth of 5. The Mean Squared Error (MSE) is computed at the end to evaluate
 <div data-lang="scala">
 {% highlight scala %}
 import org.apache.spark.mllib.tree.DecisionTree
+import org.apache.spark.mllib.tree.model.DecisionTreeModel
 import org.apache.spark.mllib.util.MLUtils
 
 // Load and parse the data file.

@@ -190,7 +190,7 @@ error.
 
 {% highlight scala %}
 import org.apache.spark.SparkContext
-import org.apache.spark.mllib.classification.SVMWithSGD
+import org.apache.spark.mllib.classification.{SVMModel, SVMWithSGD}
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.linalg.Vectors
@@ -399,8 +399,9 @@ values. We compute the mean squared error at the end to evaluate
 [goodness of fit](http://en.wikipedia.org/wiki/Goodness_of_fit).
 
 {% highlight scala %}
-import org.apache.spark.mllib.regression.LinearRegressionWithSGD
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.regression.LinearRegressionModel
+import org.apache.spark.mllib.regression.LinearRegressionWithSGD
 import org.apache.spark.mllib.linalg.Vectors
 
 // Load and parse the data
