@@ -17,38 +17,34 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.security.PrivilegedExceptionAction
-import java.sql.Timestamp
-import java.util.concurrent.Future
+import java.sql.{Date, Timestamp}
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, Map => SMap}
-import scala.math._
 
-import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.api.FieldSchema
-import org.apache.hadoop.hive.ql.metadata.Hive
-import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.hadoop.hive.shims.ShimLoader
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.{DataFrame, Row => SparkRow, SQLConf}
+import org.apache.spark.sql.execution.SetCommand
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
-import org.apache.spark.sql.{SchemaRDD, Row => SparkRow}
+import org.apache.spark.sql.types._
 
 /**
- * A compatibility layer for interacting with Hive version 0.12.0.
+ * A compatibility layer for interacting with Hive version 0.13.1.
  */
 private[thriftserver] object HiveThriftServerShim {
   val version = "0.13.1"
 
-  def setServerUserName(sparkServiceUGI: UserGroupInformation, sparkCliService:SparkSQLCLIService) = {
+  def setServerUserName(
+      sparkServiceUGI: UserGroupInformation,
+      sparkCliService:SparkSQLCLIService) = {
     setSuperField(sparkCliService, "serviceUGI", sparkServiceUGI)
   }
 }
@@ -72,38 +68,13 @@ private[hive] class SparkExecuteStatementOperation(
     confOverlay: JMap[String, String],
     runInBackground: Boolean = true)(
     hiveContext: HiveContext,
-    sessionToActivePool: SMap[HiveSession, String]) extends ExecuteStatementOperation(
-  parentSession, statement, confOverlay, runInBackground) with Logging {
+    sessionToActivePool: SMap[SessionHandle, String])
+  // NOTE: `runInBackground` is set to `false` intentionally to disable asynchronous execution
+  extends ExecuteStatementOperation(parentSession, statement, confOverlay, false) with Logging {
 
-  private var result: SchemaRDD = _
+  private var result: DataFrame = _
   private var iter: Iterator[SparkRow] = _
   private var dataTypes: Array[DataType] = _
-
-  private def runInternal(cmd: String) = {
-    try {
-      result = hiveContext.sql(cmd)
-      logDebug(result.queryExecution.toString())
-      val groupId = round(random * 1000000).toString
-      hiveContext.sparkContext.setJobGroup(groupId, statement)
-      iter = {
-        val useIncrementalCollect =
-          hiveContext.getConf("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
-        if (useIncrementalCollect) {
-          result.toLocalIterator
-        } else {
-          result.collect().iterator
-        }
-      }
-      dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
-    } catch {
-      // Actually do need to catch Throwable as some failures don't inherit from Exception and
-      // HiveServer will silently swallow them.
-      case e: Throwable =>
-        setState(OperationState.ERROR)
-        logError("Error executing query:",e)
-        throw new HiveSQLException(e.toString)
-    }
-  }
 
   def close(): Unit = {
     // RDDs will be cleaned automatically upon garbage collection.
@@ -113,7 +84,7 @@ private[hive] class SparkExecuteStatementOperation(
   def addNonNullColumnValue(from: SparkRow, to: ArrayBuffer[Any],  ordinal: Int) {
     dataTypes(ordinal) match {
       case StringType =>
-        to += from.get(ordinal).asInstanceOf[String]
+        to += from.getString(ordinal)
       case IntegerType =>
         to += from.getInt(ordinal)
       case BooleanType =>
@@ -123,23 +94,20 @@ private[hive] class SparkExecuteStatementOperation(
       case FloatType =>
         to += from.getFloat(ordinal)
       case DecimalType() =>
-        to += from.get(ordinal).asInstanceOf[BigDecimal].bigDecimal
+        to += from.getDecimal(ordinal)
       case LongType =>
         to += from.getLong(ordinal)
       case ByteType =>
         to += from.getByte(ordinal)
       case ShortType =>
         to += from.getShort(ordinal)
+      case DateType =>
+        to += from.getAs[Date](ordinal)
       case TimestampType =>
-        to +=  from.get(ordinal).asInstanceOf[Timestamp]
-      case BinaryType =>
-        to += from.get(ordinal).asInstanceOf[String]
-      case _: ArrayType =>
-        to += from.get(ordinal).asInstanceOf[String]
-      case _: StructType =>
-        to += from.get(ordinal).asInstanceOf[String]
-      case _: MapType =>
-        to += from.get(ordinal).asInstanceOf[String]
+        to +=  from.getAs[Timestamp](ordinal)
+      case BinaryType | _: ArrayType | _: StructType | _: MapType =>
+        val hiveString = HiveContext.toHiveString((from.get(ordinal), dataTypes(ordinal)))
+        to += hiveString
     }
   }
 
@@ -147,9 +115,9 @@ private[hive] class SparkExecuteStatementOperation(
     validateDefaultFetchOrientation(order)
     assertState(OperationState.FINISHED)
     setHasResultSet(true)
-    val reultRowSet: RowSet = RowSetFactory.create(getResultSetSchema, getProtocolVersion)
+    val resultRowSet: RowSet = RowSetFactory.create(getResultSetSchema, getProtocolVersion)
     if (!iter.hasNext) {
-      reultRowSet
+      resultRowSet
     } else {
       // maxRowsL here typically maps to java.sql.Statement.getFetchSize, which is an int
       val maxRows = maxRowsL.toInt
@@ -166,10 +134,10 @@ private[hive] class SparkExecuteStatementOperation(
           }
           curCol += 1
         }
-        reultRowSet.addRow(row.toArray.asInstanceOf[Array[Object]])
+        resultRowSet.addRow(row.toArray.asInstanceOf[Array[Object]])
         curRow += 1
       }
-      reultRowSet
+      resultRowSet
     }
   }
 
@@ -185,76 +153,41 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  private def getConfigForOperation: HiveConf = {
-    var sqlOperationConf: HiveConf = getParentSession.getHiveConf
-    if (!getConfOverlay.isEmpty || shouldRunAsync) {
-      sqlOperationConf = new HiveConf(sqlOperationConf)
-      import scala.collection.JavaConversions._
-      for (confEntry <- getConfOverlay.entrySet) {
-        try {
-          sqlOperationConf.verifyAndSet(confEntry.getKey, confEntry.getValue)
-        }
-        catch { case e: IllegalArgumentException =>
-          throw new HiveSQLException("Error applying statement specific settings", e)
-        }
-      }
-    }
-    sqlOperationConf
-  }
-
   def run(): Unit = {
     logInfo(s"Running query '$statement'")
-    val opConfig: HiveConf = getConfigForOperation
     setState(OperationState.RUNNING)
-    setHasResultSet(true)
-
-    if (!shouldRunAsync) {
-      runInternal(statement)
-      setState(OperationState.FINISHED)
-    } else {
-      val parentSessionState = SessionState.get
-      val sessionHive: Hive = Hive.get
-      val currentUGI: UserGroupInformation = ShimLoader.getHadoopShims.getUGIForConf(opConfig)
-
-      val backgroundOperation: Runnable = new Runnable {
-        def run() {
-          val doAsAction: PrivilegedExceptionAction[AnyRef] =
-            new PrivilegedExceptionAction[AnyRef] {
-              def run: AnyRef = {
-                Hive.set(sessionHive)
-                SessionState.setCurrentSessionState(parentSessionState)
-                try {
-                  runInternal(statement)
-                }
-                catch { case e: HiveSQLException =>
-                  setOperationException(e)
-                  logError("Error running hive query: ", e)
-                }
-                null
-              }
-            }
-          try {
-            ShimLoader.getHadoopShims.doAs(currentUGI, doAsAction)
-          }
-          catch { case e: Exception =>
-            setOperationException(new HiveSQLException(e))
-            logError("Error running hive query as user : " + currentUGI.getShortUserName, e)
-          }
-          setState(OperationState.FINISHED)
+    hiveContext.sparkContext.setJobDescription(statement)
+    sessionToActivePool.get(parentSession.getSessionHandle).foreach { pool =>
+      hiveContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
+    }
+    try {
+      result = hiveContext.sql(statement)
+      logDebug(result.queryExecution.toString())
+      result.queryExecution.logical match {
+        case SetCommand(Some((SQLConf.THRIFTSERVER_POOL, Some(value))), _) =>
+          sessionToActivePool(parentSession.getSessionHandle) = value
+          logInfo(s"Setting spark.scheduler.pool=$value for future statements in this session.")
+        case _ =>
+      }
+      iter = {
+        val useIncrementalCollect =
+          hiveContext.getConf("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
+        if (useIncrementalCollect) {
+          result.rdd.toLocalIterator
+        } else {
+          result.collect().iterator
         }
       }
-
-      try {
-        val backgroundHandle: Future[_] = getParentSession.getSessionManager.
-          submitBackgroundOperation(backgroundOperation)
-        setBackgroundHandle(backgroundHandle)
-      } catch {
-        // Actually do need to catch Throwable as some failures don't inherit from Exception and
-        // HiveServer will silently swallow them.
-        case e: Throwable =>
-          logError("Error executing query:",e)
-          throw new HiveSQLException(e.toString)
-      }
+      dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
+      setHasResultSet(true)
+    } catch {
+      // Actually do need to catch Throwable as some failures don't inherit from Exception and
+      // HiveServer will silently swallow them.
+      case e: Throwable =>
+        setState(OperationState.ERROR)
+        logError("Error executing query:", e)
+        throw new HiveSQLException(e.toString)
     }
+    setState(OperationState.FINISHED)
   }
 }

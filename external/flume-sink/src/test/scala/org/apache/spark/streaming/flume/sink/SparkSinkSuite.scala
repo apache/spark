@@ -159,6 +159,7 @@ class SparkSinkSuite extends FunSuite {
     channelContext.put("transactionCapacity", 1000.toString)
     channelContext.put("keep-alive", 0.toString)
     channelContext.putAll(overrides)
+    channel.setName(scala.util.Random.nextString(10))
     channel.configure(channelContext)
 
     val sink = new SparkSink()

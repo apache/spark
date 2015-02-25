@@ -19,21 +19,19 @@ package org.apache.spark.sql.execution
 
 import java.util.{List => JList, Map => JMap}
 
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
-
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 
 import net.razorvine.pickle.{Pickler, Unpickler}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.api.python.PythonRDD
+import org.apache.spark.api.python.{PythonBroadcast, PythonRDD}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 import org.apache.spark.{Accumulator, Logging => SparkLogging}
 
 /**
@@ -45,7 +43,7 @@ private[spark] case class PythonUDF(
     envVars: JMap[String, String],
     pythonIncludes: JList[String],
     pythonExec: String,
-    broadcastVars: JList[Broadcast[Array[Byte]]],
+    broadcastVars: JList[Broadcast[PythonBroadcast]],
     accumulator: Accumulator[JList[Array[Byte]]],
     dataType: DataType,
     children: Seq[Expression]) extends Expression with SparkLogging {
@@ -118,9 +116,9 @@ object EvaluatePython {
   def toJava(obj: Any, dataType: DataType): Any = (obj, dataType) match {
     case (null, _) => null
 
-    case (row: Seq[Any], struct: StructType) =>
+    case (row: Row, struct: StructType) =>
       val fields = struct.fields.map(field => field.dataType)
-      row.zip(fields).map {
+      row.toSeq.zip(fields).map {
         case (obj, dataType) => toJava(obj, dataType)
       }.toArray
 
@@ -132,14 +130,14 @@ object EvaluatePython {
       arr.asInstanceOf[Array[Any]].map(x => toJava(x, array.elementType))
 
     case (obj: Map[_, _], mt: MapType) => obj.map {
-      case (k, v) => (k, toJava(v, mt.valueType)) // key should be primitive type
+      case (k, v) => (toJava(k, mt.keyType), toJava(v, mt.valueType))
     }.asJava
 
     case (ud, udt: UserDefinedType[_]) => toJava(udt.serialize(ud), udt.sqlType)
 
-    case (dec: BigDecimal, dt: DecimalType) => dec.underlying()  // Pyrolite can handle BigDecimal
+    case (date: Int, DateType) => DateUtils.toJavaDate(date)
 
-    // Pyrolite can handle Timestamp
+    // Pyrolite can handle Timestamp and Decimal
     case (other, _) => other
   }
 
@@ -147,7 +145,8 @@ object EvaluatePython {
    * Convert Row into Java Array (for pickled into Python)
    */
   def rowToArray(row: Row, fields: Seq[DataType]): Array[Any] = {
-    row.zip(fields).map {case (obj, dt) => toJava(obj, dt)}.toArray
+    // TODO: this is slow!
+    row.toSeq.zip(fields).map {case (obj, dt) => toJava(obj, dt)}.toArray
   }
 
   // Converts value to the type specified by the data type.
@@ -174,7 +173,7 @@ object EvaluatePython {
       }): Row
 
     case (c: java.util.Calendar, DateType) =>
-      new java.sql.Date(c.getTime().getTime())
+      DateUtils.fromJavaDate(new java.sql.Date(c.getTime().getTime()))
 
     case (c: java.util.Calendar, TimestampType) =>
       new java.sql.Timestamp(c.getTime().getTime())
@@ -187,6 +186,7 @@ object EvaluatePython {
     case (c: Int, ShortType) => c.toShort
     case (c: Long, ShortType) => c.toShort
     case (c: Long, IntegerType) => c.toInt
+    case (c: Int, LongType) => c.toLong
     case (c: Double, FloatType) => c.toFloat
     case (c, StringType) if !c.isInstanceOf[String] => c.toString
 
@@ -206,6 +206,9 @@ case class EvaluatePython(
   extends logical.UnaryNode {
 
   def output = child.output :+ resultAttribute
+
+  // References should not include the produced attribute.
+  override def references = udf.references
 }
 
 /**

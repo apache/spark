@@ -18,9 +18,12 @@
 package org.apache.spark
 
 import java.io.{ObjectInputStream, Serializable}
+import java.util.concurrent.atomic.AtomicLong
+import java.lang.ThreadLocal
 
 import scala.collection.generic.Growable
 import scala.collection.mutable.Map
+import scala.ref.WeakReference
 import scala.reflect.ClassTag
 
 import org.apache.spark.serializer.JavaSerializer
@@ -228,6 +231,7 @@ GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializa
  */
 class Accumulator[T](@transient initialValue: T, param: AccumulatorParam[T], name: Option[String])
     extends Accumulable[T,T](initialValue, param, name) {
+
   def this(initialValue: T, param: AccumulatorParam[T]) = this(initialValue, param, None)
 }
 
@@ -244,40 +248,84 @@ trait AccumulatorParam[T] extends AccumulableParam[T, T] {
   }
 }
 
+object AccumulatorParam {
+
+  // The following implicit objects were in SparkContext before 1.2 and users had to
+  // `import SparkContext._` to enable them. Now we move them here to make the compiler find
+  // them automatically. However, as there are duplicate codes in SparkContext for backward
+  // compatibility, please update them accordingly if you modify the following implicit objects.
+
+  implicit object DoubleAccumulatorParam extends AccumulatorParam[Double] {
+    def addInPlace(t1: Double, t2: Double): Double = t1 + t2
+    def zero(initialValue: Double) = 0.0
+  }
+
+  implicit object IntAccumulatorParam extends AccumulatorParam[Int] {
+    def addInPlace(t1: Int, t2: Int): Int = t1 + t2
+    def zero(initialValue: Int) = 0
+  }
+
+  implicit object LongAccumulatorParam extends AccumulatorParam[Long] {
+    def addInPlace(t1: Long, t2: Long) = t1 + t2
+    def zero(initialValue: Long) = 0L
+  }
+
+  implicit object FloatAccumulatorParam extends AccumulatorParam[Float] {
+    def addInPlace(t1: Float, t2: Float) = t1 + t2
+    def zero(initialValue: Float) = 0f
+  }
+
+  // TODO: Add AccumulatorParams for other types, e.g. lists and strings
+}
+
 // TODO: The multi-thread support in accumulators is kind of lame; check
 // if there's a more intuitive way of doing it right
-private object Accumulators {
-  // TODO: Use soft references? => need to make readObject work properly then
-  val originals = Map[Long, Accumulable[_, _]]()
-  val localAccums = Map[Thread, Map[Long, Accumulable[_, _]]]()
+private[spark] object Accumulators {
+  // Store a WeakReference instead of a StrongReference because this way accumulators can be
+  // appropriately garbage collected during long-running jobs and release memory
+  type WeakAcc = WeakReference[Accumulable[_, _]]
+  val originals = Map[Long, WeakAcc]()
+  val localAccums = new ThreadLocal[Map[Long, WeakAcc]]() {
+    override protected def initialValue() = Map[Long, WeakAcc]()
+  }
   var lastId: Long = 0
 
-  def newId: Long = synchronized {
+  def newId(): Long = synchronized {
     lastId += 1
     lastId
   }
 
   def register(a: Accumulable[_, _], original: Boolean): Unit = synchronized {
     if (original) {
-      originals(a.id) = a
+      originals(a.id) = new WeakAcc(a)
     } else {
-      val accums = localAccums.getOrElseUpdate(Thread.currentThread, Map())
-      accums(a.id) = a
+      localAccums.get()(a.id) = new WeakAcc(a)
     }
   }
 
   // Clear the local (non-original) accumulators for the current thread
   def clear() {
     synchronized {
-      localAccums.remove(Thread.currentThread)
+      localAccums.get.clear
+    }
+  }
+
+  def remove(accId: Long) {
+    synchronized {
+      originals.remove(accId)
     }
   }
 
   // Get the values of the local accumulators for the current thread (by ID)
   def values: Map[Long, Any] = synchronized {
     val ret = Map[Long, Any]()
-    for ((id, accum) <- localAccums.getOrElse(Thread.currentThread, Map())) {
-      ret(id) = accum.localValue
+    for ((id, accum) <- localAccums.get) {
+      // Since we are now storing weak references, we must check whether the underlying data
+      // is valid.
+      ret(id) = accum.get match {
+        case Some(values) => values.localValue
+        case None => None
+      }
     }
     return ret
   }
@@ -286,7 +334,13 @@ private object Accumulators {
   def add(values: Map[Long, Any]): Unit = synchronized {
     for ((id, value) <- values) {
       if (originals.contains(id)) {
-        originals(id).asInstanceOf[Accumulable[Any, Any]] ++= value
+        // Since we are now storing weak references, we must check whether the underlying data
+        // is valid.
+        originals(id).get match {
+          case Some(accum) => accum.asInstanceOf[Accumulable[Any, Any]] ++= value
+          case None =>
+            throw new IllegalAccessError("Attempted to access garbage collected Accumulator.")
+        }
       }
     }
   }

@@ -15,24 +15,28 @@
 # limitations under the License.
 #
 
+from collections import namedtuple
+
 from pyspark import SparkContext
 from pyspark.rdd import RDD
-from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc, _to_java_object_rdd
+from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc
 
-__all__ = ['MatrixFactorizationModel', 'ALS']
+__all__ = ['MatrixFactorizationModel', 'ALS', 'Rating']
 
 
-class Rating(object):
-    def __init__(self, user, product, rating):
-        self.user = int(user)
-        self.product = int(product)
-        self.rating = float(rating)
+class Rating(namedtuple("Rating", ["user", "product", "rating"])):
+    """
+    Represents a (user, product, rating) tuple.
+
+    >>> r = Rating(1, 2, 5.0)
+    >>> (r.user, r.product, r.rating)
+    (1, 2, 5.0)
+    >>> (r[0], r[1], r[2])
+    (1, 2, 5.0)
+    """
 
     def __reduce__(self):
-        return Rating, (self.user, self.product, self.rating)
-
-    def __repr__(self):
-        return "Rating(%d, %d, %d)" % (self.user, self.product, self.rating)
+        return Rating, (int(self.user), int(self.product), float(self.rating))
 
 
 class MatrixFactorizationModel(JavaModelWrapper):
@@ -45,17 +49,17 @@ class MatrixFactorizationModel(JavaModelWrapper):
     >>> r3 = (2, 1, 2.0)
     >>> ratings = sc.parallelize([r1, r2, r3])
     >>> model = ALS.trainImplicit(ratings, 1, seed=10)
-    >>> model.predict(2,2)
-    0.4473...
+    >>> model.predict(2, 2)
+    0.43...
 
     >>> testset = sc.parallelize([(1, 2), (1, 1)])
-    >>> model = ALS.train(ratings, 1, seed=10)
+    >>> model = ALS.train(ratings, 2, seed=0)
     >>> model.predictAll(testset).collect()
-    [Rating(1, 1, 1), Rating(1, 2, 1)]
+    [Rating(user=1, product=1, rating=1.0...), Rating(user=1, product=2, rating=1.9...)]
 
     >>> model = ALS.train(ratings, 4, seed=10)
     >>> model.userFeatures().collect()
-    [(2, array('d', [...])), (1, array('d', [...]))]
+    [(1, array('d', [...])), (2, array('d', [...]))]
 
     >>> first_user = model.userFeatures().take(1)[0]
     >>> latents = first_user[1]
@@ -63,7 +67,7 @@ class MatrixFactorizationModel(JavaModelWrapper):
     True
 
     >>> model.productFeatures().collect()
-    [(2, array('d', [...])), (1, array('d', [...]))]
+    [(1, array('d', [...])), (2, array('d', [...]))]
 
     >>> first_product = model.productFeatures().take(1)[0]
     >>> latents = first_product[1]
@@ -72,14 +76,14 @@ class MatrixFactorizationModel(JavaModelWrapper):
 
     >>> model = ALS.train(ratings, 1, nonnegative=True, seed=10)
     >>> model.predict(2,2)
-    3.735...
+    3.8...
 
     >>> model = ALS.trainImplicit(ratings, 1, nonnegative=True, seed=10)
     >>> model.predict(2,2)
-    0.4473...
+    0.43...
     """
     def predict(self, user, product):
-        return self._java_model.predict(user, product)
+        return self._java_model.predict(int(user), int(product))
 
     def predictAll(self, user_product):
         assert isinstance(user_product, RDD), "user_product should be RDD of (user, product)"
@@ -106,7 +110,7 @@ class ALS(object):
                 ratings = ratings.map(lambda x: Rating(*x))
             else:
                 raise ValueError("rating should be RDD of Rating or tuple/list")
-        return _to_java_object_rdd(ratings, True)
+        return ratings
 
     @classmethod
     def train(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, nonnegative=False,

@@ -148,6 +148,20 @@ case object TaskKilled extends TaskFailedReason {
 
 /**
  * :: DeveloperApi ::
+ * Task requested the driver to commit, but was denied.
+ */
+@DeveloperApi
+case class TaskCommitDenied(
+    jobID: Int,
+    partitionID: Int,
+    attemptID: Int)
+  extends TaskFailedReason {
+  override def toErrorString: String = s"TaskCommitDenied (Driver denied task commit)" +
+    s" for job: $jobID, partition: $partitionID, attempt: $attemptID"
+}
+
+/**
+ * :: DeveloperApi ::
  * The task failed because the executor that it was running on was lost. This may happen because
  * the task crashed the JVM.
  */

@@ -43,6 +43,13 @@ object TestJsonData {
       """{"num_num_1":21474836570, "num_num_2":1.1, "num_num_3": 21474836470,
           "num_bool":null, "num_str":92233720368547758070, "str_bool":null}""" :: Nil)
 
+  val jsonNullStruct =
+    TestSQLContext.sparkContext.parallelize(
+      """{"nullstr":"","ip":"27.31.100.29","headers":{"Host":"1.abc.com","Charset":"UTF-8"}}""" ::
+        """{"nullstr":"","ip":"27.31.100.29","headers":{}}""" ::
+        """{"nullstr":"","ip":"27.31.100.29","headers":""}""" ::
+        """{"nullstr":null,"ip":"27.31.100.29","headers":null}""" :: Nil)
+
   val complexFieldValueTypeConflict =
     TestSQLContext.sparkContext.parallelize(
       """{"num_struct":11, "str_array":[1, 2, 3],
@@ -138,6 +145,23 @@ object TestJsonData {
             ]
           ]]
       }""" :: Nil)
+
+  val mapType1 =
+    TestSQLContext.sparkContext.parallelize(
+      """{"map": {"a": 1}}""" ::
+      """{"map": {"b": 2}}""" ::
+      """{"map": {"c": 3}}""" ::
+      """{"map": {"c": 1, "d": 4}}""" ::
+      """{"map": {"e": null}}""" :: Nil)
+
+  val mapType2 =
+    TestSQLContext.sparkContext.parallelize(
+      """{"map": {"a": {"field1": [1, 2, 3, null]}}}""" ::
+      """{"map": {"b": {"field2": 2}}}""" ::
+      """{"map": {"c": {"field1": [], "field2": 4}}}""" ::
+      """{"map": {"c": {"field2": 3}, "d": {"field1": [null]}}}""" ::
+      """{"map": {"e": null}}""" ::
+      """{"map": {"f": {"field1": null}}}""" :: Nil)
 
   val nullsInArrays =
     TestSQLContext.sparkContext.parallelize(

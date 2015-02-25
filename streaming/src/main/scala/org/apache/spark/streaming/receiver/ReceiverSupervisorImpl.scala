@@ -27,10 +27,11 @@ import akka.actor.{Actor, Props}
 import akka.pattern.ask
 import com.google.common.base.Throwables
 import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.{Logging, SparkEnv, SparkException}
 import org.apache.spark.storage.StreamBlockId
+import org.apache.spark.streaming.Time
 import org.apache.spark.streaming.scheduler._
-import org.apache.spark.streaming.util.WriteAheadLogFileSegment
 import org.apache.spark.util.{AkkaUtils, Utils}
 
 /**
@@ -66,8 +67,12 @@ private[streaming] class ReceiverSupervisorImpl(
   private val trackerActor = {
     val ip = env.conf.get("spark.driver.host", "localhost")
     val port = env.conf.getInt("spark.driver.port", 7077)
-    val url = "akka.tcp://%s@%s:%s/user/ReceiverTracker".format(
-      SparkEnv.driverActorSystemName, ip, port)
+    val url = AkkaUtils.address(
+      AkkaUtils.protocol(env.actorSystem),
+      SparkEnv.driverActorSystemName,
+      ip,
+      port,
+      "ReceiverTracker")
     env.actorSystem.actorSelection(url)
   }
 
@@ -77,18 +82,14 @@ private[streaming] class ReceiverSupervisorImpl(
   /** Akka actor for receiving messages from the ReceiverTracker in the driver */
   private val actor = env.actorSystem.actorOf(
     Props(new Actor {
-      override def preStart() {
-        logInfo("Registered receiver " + streamId)
-        val msg = RegisterReceiver(
-          streamId, receiver.getClass.getSimpleName, Utils.localHostName(), self)
-        val future = trackerActor.ask(msg)(askTimeout)
-        Await.result(future, askTimeout)
-      }
 
       override def receive() = {
         case StopReceiver =>
           logInfo("Received stop signal")
           stop("Stopped by driver", None)
+        case CleanupOldBlocks(threshTime) =>
+          logDebug("Received delete old batch signal")
+          cleanupOldBlocks(threshTime)
       }
 
       def ref = self
@@ -99,6 +100,10 @@ private[streaming] class ReceiverSupervisorImpl(
 
   /** Divides received data records into data blocks for pushing in BlockManager. */
   private val blockGenerator = new BlockGenerator(new BlockGeneratorListener {
+    def onAddData(data: Any, metadata: Any): Unit = { }
+
+    def onGenerateBlock(blockId: StreamBlockId): Unit = { }
+
     def onError(message: String, throwable: Throwable) {
       reportError(message, throwable)
     }
@@ -110,7 +115,7 @@ private[streaming] class ReceiverSupervisorImpl(
 
   /** Push a single record of received data into block generator. */
   def pushSingle(data: Any) {
-    blockGenerator += (data)
+    blockGenerator.addData(data)
   }
 
   /** Store an ArrayBuffer of received data as a data block into Spark's memory. */
@@ -196,4 +201,9 @@ private[streaming] class ReceiverSupervisorImpl(
 
   /** Generate new block ID */
   private def nextBlockId = StreamBlockId(streamId, newBlockId.getAndIncrement)
+
+  private def cleanupOldBlocks(cleanupThreshTime: Time): Unit = {
+    logDebug(s"Cleaning up blocks older then $cleanupThreshTime")
+    receivedBlockHandler.cleanupOldBlocks(cleanupThreshTime.milliseconds)
+  }
 }

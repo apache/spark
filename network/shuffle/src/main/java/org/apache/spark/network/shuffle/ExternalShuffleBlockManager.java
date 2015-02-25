@@ -37,6 +37,8 @@ import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.util.JavaUtils;
+import org.apache.spark.network.util.NettyUtils;
+import org.apache.spark.network.util.TransportConf;
 
 /**
  * Manages converting shuffle BlockIds into physical segments of local files, from a process outside
@@ -48,7 +50,7 @@ import org.apache.spark.network.util.JavaUtils;
  * the Executor's memory, unlike the IndexShuffleBlockManager.
  */
 public class ExternalShuffleBlockManager {
-  private final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockManager.class);
+  private static final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockManager.class);
 
   // Map containing all registered executors' metadata.
   private final ConcurrentMap<AppExecId, ExecutorShuffleInfo> executors;
@@ -56,14 +58,18 @@ public class ExternalShuffleBlockManager {
   // Single-threaded Java executor used to perform expensive recursive directory deletion.
   private final Executor directoryCleaner;
 
-  public ExternalShuffleBlockManager() {
-    // TODO: Give this thread a name.
-    this(Executors.newSingleThreadExecutor());
+  private final TransportConf conf;
+
+  public ExternalShuffleBlockManager(TransportConf conf) {
+    this(conf, Executors.newSingleThreadExecutor(
+        // Add `spark` prefix because it will run in NM in Yarn mode.
+        NettyUtils.createThreadFactory("spark-shuffle-directory-cleaner")));
   }
 
   // Allows tests to have more control over when directories are cleaned up.
   @VisibleForTesting
-  ExternalShuffleBlockManager(Executor directoryCleaner) {
+  ExternalShuffleBlockManager(TransportConf conf, Executor directoryCleaner) {
+    this.conf = conf;
     this.executors = Maps.newConcurrentMap();
     this.directoryCleaner = directoryCleaner;
   }
@@ -167,7 +173,7 @@ public class ExternalShuffleBlockManager {
   // TODO: Support consolidated hash shuffle files
   private ManagedBuffer getHashBasedShuffleBlockData(ExecutorShuffleInfo executor, String blockId) {
     File shuffleFile = getFile(executor.localDirs, executor.subDirsPerLocalDir, blockId);
-    return new FileSegmentManagedBuffer(shuffleFile, 0, shuffleFile.length());
+    return new FileSegmentManagedBuffer(conf, shuffleFile, 0, shuffleFile.length());
   }
 
   /**
@@ -187,6 +193,7 @@ public class ExternalShuffleBlockManager {
       long offset = in.readLong();
       long nextOffset = in.readLong();
       return new FileSegmentManagedBuffer(
+        conf,
         getFile(executor.localDirs, executor.subDirsPerLocalDir,
           "shuffle_" + shuffleId + "_" + mapId + "_0.data"),
         offset,

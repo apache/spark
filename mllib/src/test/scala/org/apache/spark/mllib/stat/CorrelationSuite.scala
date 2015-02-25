@@ -24,9 +24,9 @@ import breeze.linalg.{DenseMatrix => BDM, Matrix => BM}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.stat.correlation.{Correlations, PearsonCorrelation,
   SpearmanCorrelation}
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-class CorrelationSuite extends FunSuite with LocalSparkContext {
+class CorrelationSuite extends FunSuite with MLlibTestSparkContext {
 
   // test input data
   val xData = Array(1.0, 0.0, -2.0)

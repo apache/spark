@@ -19,12 +19,11 @@ package org.apache.spark.mllib.tree
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.ArrayBuilder
 
-
+import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.Logging
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.RandomForest.NodeIndexInfo
 import org.apache.spark.mllib.tree.configuration.Strategy
@@ -32,13 +31,10 @@ import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.FeatureType._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 import org.apache.spark.mllib.tree.impl._
-import org.apache.spark.mllib.tree.impurity.{Impurities, Impurity}
 import org.apache.spark.mllib.tree.impurity._
 import org.apache.spark.mllib.tree.model._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
-import org.apache.spark.SparkContext._
-
 
 /**
  * :: Experimental ::
@@ -58,13 +54,12 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
    * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
    * @return DecisionTreeModel that can be used for prediction
    */
-  def train(input: RDD[LabeledPoint]): DecisionTreeModel = {
+  def run(input: RDD[LabeledPoint]): DecisionTreeModel = {
     // Note: random seed will not be used since numTrees = 1.
     val rf = new RandomForest(strategy, numTrees = 1, featureSubsetStrategy = "all", seed = 0)
-    val rfModel = rf.train(input)
-    rfModel.weakHypotheses(0)
+    val rfModel = rf.run(input)
+    rfModel.trees(0)
   }
-
 }
 
 object DecisionTree extends Serializable with Logging {
@@ -86,7 +81,7 @@ object DecisionTree extends Serializable with Logging {
    * @return DecisionTreeModel that can be used for prediction
   */
   def train(input: RDD[LabeledPoint], strategy: Strategy): DecisionTreeModel = {
-    new DecisionTree(strategy).train(input)
+    new DecisionTree(strategy).run(input)
   }
 
   /**
@@ -112,7 +107,7 @@ object DecisionTree extends Serializable with Logging {
       impurity: Impurity,
       maxDepth: Int): DecisionTreeModel = {
     val strategy = new Strategy(algo, impurity, maxDepth)
-    new DecisionTree(strategy).train(input)
+    new DecisionTree(strategy).run(input)
   }
 
   /**
@@ -130,7 +125,7 @@ object DecisionTree extends Serializable with Logging {
    * @param impurity impurity criterion used for information gain calculation
    * @param maxDepth Maximum depth of the tree.
    *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
-   * @param numClassesForClassification number of classes for classification. Default value of 2.
+   * @param numClasses number of classes for classification. Default value of 2.
    * @return DecisionTreeModel that can be used for prediction
    */
   def train(
@@ -138,9 +133,9 @@ object DecisionTree extends Serializable with Logging {
       algo: Algo,
       impurity: Impurity,
       maxDepth: Int,
-      numClassesForClassification: Int): DecisionTreeModel = {
-    val strategy = new Strategy(algo, impurity, maxDepth, numClassesForClassification)
-    new DecisionTree(strategy).train(input)
+      numClasses: Int): DecisionTreeModel = {
+    val strategy = new Strategy(algo, impurity, maxDepth, numClasses)
+    new DecisionTree(strategy).run(input)
   }
 
   /**
@@ -158,7 +153,7 @@ object DecisionTree extends Serializable with Logging {
    * @param impurity criterion used for information gain calculation
    * @param maxDepth Maximum depth of the tree.
    *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
-   * @param numClassesForClassification number of classes for classification. Default value of 2.
+   * @param numClasses number of classes for classification. Default value of 2.
    * @param maxBins maximum number of bins used for splitting features
    * @param quantileCalculationStrategy  algorithm for calculating quantiles
    * @param categoricalFeaturesInfo Map storing arity of categorical features.
@@ -171,13 +166,13 @@ object DecisionTree extends Serializable with Logging {
       algo: Algo,
       impurity: Impurity,
       maxDepth: Int,
-      numClassesForClassification: Int,
+      numClasses: Int,
       maxBins: Int,
       quantileCalculationStrategy: QuantileStrategy,
       categoricalFeaturesInfo: Map[Int,Int]): DecisionTreeModel = {
-    val strategy = new Strategy(algo, impurity, maxDepth, numClassesForClassification, maxBins,
+    val strategy = new Strategy(algo, impurity, maxDepth, numClasses, maxBins,
       quantileCalculationStrategy, categoricalFeaturesInfo)
-    new DecisionTree(strategy).train(input)
+    new DecisionTree(strategy).run(input)
   }
 
   /**
@@ -185,7 +180,7 @@ object DecisionTree extends Serializable with Logging {
    *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              Labels should take values {0, 1, ..., numClasses-1}.
-   * @param numClassesForClassification number of classes for classification.
+   * @param numClasses number of classes for classification.
    * @param categoricalFeaturesInfo Map storing arity of categorical features.
    *                                E.g., an entry (n -> k) indicates that feature n is categorical
    *                                with k categories indexed from 0: {0, 1, ..., k-1}.
@@ -200,13 +195,13 @@ object DecisionTree extends Serializable with Logging {
    */
   def trainClassifier(
       input: RDD[LabeledPoint],
-      numClassesForClassification: Int,
+      numClasses: Int,
       categoricalFeaturesInfo: Map[Int, Int],
       impurity: String,
       maxDepth: Int,
       maxBins: Int): DecisionTreeModel = {
     val impurityType = Impurities.fromString(impurity)
-    train(input, Classification, impurityType, maxDepth, numClassesForClassification, maxBins, Sort,
+    train(input, Classification, impurityType, maxDepth, numClasses, maxBins, Sort,
       categoricalFeaturesInfo)
   }
 
@@ -215,12 +210,12 @@ object DecisionTree extends Serializable with Logging {
    */
   def trainClassifier(
       input: JavaRDD[LabeledPoint],
-      numClassesForClassification: Int,
+      numClasses: Int,
       categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer],
       impurity: String,
       maxDepth: Int,
       maxBins: Int): DecisionTreeModel = {
-    trainClassifier(input.rdd, numClassesForClassification,
+    trainClassifier(input.rdd, numClasses,
       categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
       impurity, maxDepth, maxBins)
   }
@@ -332,14 +327,14 @@ object DecisionTree extends Serializable with Logging {
    * @param agg  Array storing aggregate calculation, with a set of sufficient statistics for
    *             each (feature, bin).
    * @param treePoint  Data point being aggregated.
-   * @param bins possible bins for all features, indexed (numFeatures)(numBins)
+   * @param splits possible splits indexed (numFeatures)(numSplits)
    * @param unorderedFeatures  Set of indices of unordered features.
    * @param instanceWeight  Weight (importance) of instance in dataset.
    */
   private def mixedBinSeqOp(
       agg: DTStatsAggregator,
       treePoint: TreePoint,
-      bins: Array[Array[Bin]],
+      splits: Array[Array[Split]],
       unorderedFeatures: Set[Int],
       instanceWeight: Double,
       featuresForNode: Option[Array[Int]]): Unit = {
@@ -367,7 +362,7 @@ object DecisionTree extends Serializable with Logging {
         val numSplits = agg.metadata.numSplits(featureIndex)
         var splitIndex = 0
         while (splitIndex < numSplits) {
-          if (bins(featureIndex)(splitIndex).highSplit.categories.contains(featureValue)) {
+          if (splits(featureIndex)(splitIndex).categories.contains(featureValue)) {
             agg.featureUpdate(leftNodeFeatureOffset, splitIndex, treePoint.label,
               instanceWeight)
           } else {
@@ -511,8 +506,8 @@ object DecisionTree extends Serializable with Logging {
         if (metadata.unorderedFeatures.isEmpty) {
           orderedBinSeqOp(agg(aggNodeIndex), baggedPoint.datum, instanceWeight, featuresForNode)
         } else {
-          mixedBinSeqOp(agg(aggNodeIndex), baggedPoint.datum, bins, metadata.unorderedFeatures,
-            instanceWeight, featuresForNode)
+          mixedBinSeqOp(agg(aggNodeIndex), baggedPoint.datum, splits,
+            metadata.unorderedFeatures, instanceWeight, featuresForNode)
         }
       }
     }
@@ -1029,35 +1024,15 @@ object DecisionTree extends Serializable with Logging {
             // Categorical feature
             val featureArity = metadata.featureArity(featureIndex)
             if (metadata.isUnordered(featureIndex)) {
-              // TODO: The second half of the bins are unused.  Actually, we could just use
-              //       splits and not build bins for unordered features.  That should be part of
-              //       a later PR since it will require changing other code (using splits instead
-              //       of bins in a few places).
               // Unordered features
-              //   2^(maxFeatureValue - 1) - 1 combinations
+              // 2^(maxFeatureValue - 1) - 1 combinations
               splits(featureIndex) = new Array[Split](numSplits)
-              bins(featureIndex) = new Array[Bin](numBins)
               var splitIndex = 0
               while (splitIndex < numSplits) {
                 val categories: List[Double] =
                   extractMultiClassCategories(splitIndex + 1, featureArity)
                 splits(featureIndex)(splitIndex) =
                   new Split(featureIndex, Double.MinValue, Categorical, categories)
-                bins(featureIndex)(splitIndex) = {
-                  if (splitIndex == 0) {
-                    new Bin(
-                      new DummyCategoricalSplit(featureIndex, Categorical),
-                      splits(featureIndex)(0),
-                      Categorical,
-                      Double.MinValue)
-                  } else {
-                    new Bin(
-                      splits(featureIndex)(splitIndex - 1),
-                      splits(featureIndex)(splitIndex),
-                      Categorical,
-                      Double.MinValue)
-                  }
-                }
                 splitIndex += 1
               }
             } else {
@@ -1065,8 +1040,11 @@ object DecisionTree extends Serializable with Logging {
               //   Bins correspond to feature values, so we do not need to compute splits or bins
               //   beforehand.  Splits are constructed as needed during training.
               splits(featureIndex) = new Array[Split](0)
-              bins(featureIndex) = new Array[Bin](0)
             }
+            // For ordered features, bins correspond to feature values.
+            // For unordered categorical features, there is no need to construct the bins.
+            // since there is a one-to-one correspondence between the splits and the bins.
+            bins(featureIndex) = new Array[Bin](0)
           }
           featureIndex += 1
         }
@@ -1141,7 +1119,7 @@ object DecisionTree extends Serializable with Logging {
         logDebug("stride = " + stride)
 
         // iterate `valueCount` to find splits
-        val splits = new ArrayBuffer[Double]
+        val splitsBuilder = ArrayBuilder.make[Double]
         var index = 1
         // currentCount: sum of counts of values that have been visited
         var currentCount = valueCounts(0)._2
@@ -1159,13 +1137,13 @@ object DecisionTree extends Serializable with Logging {
           // makes the gap between currentCount and targetCount smaller,
           // previous value is a split threshold.
           if (previousGap < currentGap) {
-            splits.append(valueCounts(index - 1)._1)
+            splitsBuilder += valueCounts(index - 1)._1
             targetCount += stride
           }
           index += 1
         }
 
-        splits.toArray
+        splitsBuilder.result()
       }
     }
 

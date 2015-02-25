@@ -22,10 +22,10 @@ import org.scalatest.FunSuite
 import breeze.linalg.{norm => brzNorm}
 
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vectors}
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
-class NormalizerSuite extends FunSuite with LocalSparkContext {
+class NormalizerSuite extends FunSuite with MLlibTestSparkContext {
 
   val data = Array(
     Vectors.sparse(3, Seq((0, -2.0), (1, 2.3))),

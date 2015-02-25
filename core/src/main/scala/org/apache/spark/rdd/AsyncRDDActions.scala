@@ -27,7 +27,6 @@ import org.apache.spark.{ComplexFutureAction, FutureAction, Logging}
 
 /**
  * A set of asynchronous RDD actions available through an implicit conversion.
- * Import `org.apache.spark.SparkContext._` at the top of your program to use these functions.
  */
 class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Logging {
 

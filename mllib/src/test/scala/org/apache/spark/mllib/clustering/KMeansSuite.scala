@@ -22,10 +22,10 @@ import scala.util.Random
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
-import org.apache.spark.mllib.util.{LocalClusterSparkContext, LocalSparkContext}
+import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
 
-class KMeansSuite extends FunSuite with LocalSparkContext {
+class KMeansSuite extends FunSuite with MLlibTestSparkContext {
 
   import org.apache.spark.mllib.clustering.KMeans.{K_MEANS_PARALLEL, RANDOM}
 
@@ -88,6 +88,27 @@ class KMeansSuite extends FunSuite with LocalSparkContext {
     // Make sure code runs.
     var model = KMeans.train(data, k=3, maxIterations=1)
     assert(model.clusterCenters.size === 3)
+  }
+
+  test("deterministic initialization") {
+    // Create a large-ish set of points for clustering
+    val points = List.tabulate(1000)(n => Vectors.dense(n, n))
+    val rdd = sc.parallelize(points, 3)
+
+    for (initMode <- Seq(RANDOM, K_MEANS_PARALLEL)) {
+      // Create three deterministic models and compare cluster means
+      val model1 = KMeans.train(rdd, k = 10, maxIterations = 2, runs = 1,
+        initializationMode = initMode, seed = 42)
+      val centers1 = model1.clusterCenters
+
+      val model2 = KMeans.train(rdd, k = 10, maxIterations = 2, runs = 1,
+        initializationMode = initMode, seed = 42)
+      val centers2 = model2.clusterCenters
+
+      centers1.zip(centers2).foreach { case (c1, c2) =>
+        assert(c1 ~== c2 absTol 1E-14)
+      }
+    }
   }
 
   test("single cluster with big dataset") {
