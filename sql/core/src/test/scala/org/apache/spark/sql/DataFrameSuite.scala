@@ -411,7 +411,7 @@ class DataFrameSuite extends QueryTest {
     )
   }
 
-  test("addColumn") {
+  test("withColumn") {
     val df = testData.toDF().withColumn("newCol", col("key") + 1)
     checkAnswer(
       df,
@@ -421,7 +421,7 @@ class DataFrameSuite extends QueryTest {
     assert(df.schema.map(_.name).toSeq === Seq("key", "value", "newCol"))
   }
 
-  test("renameColumn") {
+  test("withColumnRenamed") {
     val df = testData.toDF().withColumn("newCol", col("key") + 1)
       .withColumnRenamed("value", "valueRenamed")
     checkAnswer(
