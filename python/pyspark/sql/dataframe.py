@@ -913,7 +913,7 @@ class Column(object):
 
     :class:`Column` instances can be created by::
 
-        # 1. Select a column out of a :class:`DataFrame`
+        # 1. Select a column out of a DataFrame
 
         df.colName
         df["colName"]
