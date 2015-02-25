@@ -58,6 +58,17 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("diff functionality with small concrete values") {
+    withSpark { sc =>
+      val setA: VertexRDD[Int] = VertexRDD(sc.parallelize(0L until 2L).map(id => (id, id.toInt)))
+      // setA := Set((0L, 0), (1L, 1))
+      val setB: VertexRDD[Int] = VertexRDD(sc.parallelize(1L until 3L).map(id => (id, id.toInt+2)))
+      // setB := Set((1L, 3), (2L, 4))
+      val diff = setA.diff(setB)
+      assert(diff.collect.toSet == Set((2L, 4)))
+    }
+  }
+
   test("leftJoin") {
     withSpark { sc =>
       val n = 100
