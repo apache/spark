@@ -955,7 +955,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>5</td>
   <td>
     (Netty only) Seconds to wait between retries of fetches. The maximum delay caused by retrying
-    is simply <code>maxRetries * retryWait</code>, by default 15 seconds.
+    is simply <code>maxRetries * retryWait</code>. The default maximum delay is therefore 
+    15 seconds, because the default value of <code>maxRetries</code> is 3, and the default
+    <code>retryWait</code> here is 5 seconds.
   </td>
 </tr>
 </table>

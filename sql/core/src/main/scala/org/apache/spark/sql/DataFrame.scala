@@ -117,7 +117,7 @@ class DataFrame protected[sql](
     this(sqlContext, {
       val qe = sqlContext.executePlan(logicalPlan)
       if (sqlContext.conf.dataFrameEagerAnalysis) {
-        qe.analyzed  // This should force analysis and throw errors if there are any
+        qe.assertAnalyzed()  // This should force analysis and throw errors if there are any
       }
       qe
     })
@@ -799,14 +799,15 @@ class DataFrame protected[sql](
    * Returns the number of rows in the [[DataFrame]].
    * @group action
    */
-  override def count(): Long = groupBy().count().rdd.collect().head.getLong(0)
+  override def count(): Long = groupBy().count().collect().head.getLong(0)
 
   /**
    * Returns a new [[DataFrame]] that has exactly `numPartitions` partitions.
    * @group rdd
    */
   override def repartition(numPartitions: Int): DataFrame = {
-    sqlContext.createDataFrame(rdd.repartition(numPartitions), schema)
+    sqlContext.createDataFrame(
+      queryExecution.toRdd.map(_.copy()).repartition(numPartitions), schema)
   }
 
   /**
