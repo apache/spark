@@ -326,19 +326,19 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.executorEnv.[EnvironmentVariableName]</code></td>
-  <td>(none)</td>
-  <td>
-    Add the environment variable specified by <code>EnvironmentVariableName</code> to the Executor
-    process. The user can specify multiple of these to set multiple environment variables.
-  </td>
-</tr>
-<tr>
   <td><code>spark.executor.userClassPathFirst</code></td>
   <td>false</td>
   <td>
     (Experimental) Same functionality as <code>spark.driver.userClassPathFirst</code>, but
     applied to executor instances.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executorEnv.[EnvironmentVariableName]</code></td>
+  <td>(none)</td>
+  <td>
+    Add the environment variable specified by <code>EnvironmentVariableName</code> to the Executor
+    process. The user can specify multiple of these to set multiple environment variables.
   </td>
 </tr>
 <tr>
