@@ -1153,17 +1153,17 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.dynamicAllocation.maxExecutors</code></td>
-  <td>Integer.MAX_VALUE</td>
-  <td>
-    Upper bound for the number of executors if dynamic allocation is enabled.
-  </td>
-</tr>
-<tr>
   <td><code>spark.dynamicAllocation.initialExecutors</code></td>
   <td><code>spark.dynamicAllocation.minExecutors</code></td>
   <td>
     Initial number of executors to run if dynamic allocation is enabled.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.maxExecutors</code></td>
+  <td>Integer.MAX_VALUE</td>
+  <td>
+    Upper bound for the number of executors if dynamic allocation is enabled.
   </td>
 </tr>
 <tr>
