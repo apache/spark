@@ -145,28 +145,6 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
-  <td><code>spark.kryo.classesToRegister</code></td>
-  <td>(none)</td>
-  <td>
-    If you use Kryo serialization, give a comma-separated list of custom class names to register
-    with Kryo.
-    See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.kryo.registrator</code></td>
-  <td>(none)</td>
-  <td>
-    If you use Kryo serialization, set this class to register your custom classes with Kryo. This
-    property is useful if you need to register your classes in a custom way, e.g. to specify a custom
-    field serializer. Otherwise <code>spark.kryo.classesToRegister</code> is simpler. It should be
-    set to a class that extends
-    <a href="api/scala/index.html#org.apache.spark.serializer.KryoRegistrator">
-    <code>KryoRegistrator</code></a>.
-    See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
-  </td>
-</tr>
-<tr>
   <td><code>spark.local.dir</code></td>
   <td>/tmp</td>
   <td>
@@ -191,19 +169,6 @@ of the most common options to set are:
   <td>
     The cluster manager to connect to. See the list of
     <a href="submitting-applications.html#master-urls"> allowed master URL's</a>.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.serializer</code></td>
-  <td>org.apache.spark.serializer.<br />JavaSerializer</td>
-  <td>
-    Class to use for serializing objects that will be sent over the network or need to be cached
-    in serialized form. The default of Java serialization works with any Serializable Java object
-    but is quite slow, so we recommend <a href="tuning.html">using
-    <code>org.apache.spark.serializer.KryoSerializer</code> and configuring Kryo serialization</a>
-    when speed is necessary. Can be any subclass of
-    <a href="api/scala/index.html#org.apache.spark.serializer.Serializer">
-    <code>org.apache.spark.Serializer</code></a>.
   </td>
 </tr>
 </table>
@@ -642,6 +607,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.kryo.classesToRegister</code></td>
+  <td>(none)</td>
+  <td>
+    If you use Kryo serialization, give a comma-separated list of custom class names to register
+    with Kryo.
+    See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
+  </td>
+</tr>
+<tr>
   <td><code>spark.kryo.referenceTracking</code></td>
   <td>true</td>
   <td>
@@ -660,6 +634,19 @@ Apart from these, the following properties are also available, and may be useful
     unregistered class names along with each object. Writing class names can cause
     significant performance overhead, so enabling this option can enforce strictly that a
     user has not omitted classes from registration.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kryo.registrator</code></td>
+  <td>(none)</td>
+  <td>
+    If you use Kryo serialization, set this class to register your custom classes with Kryo. This
+    property is useful if you need to register your classes in a custom way, e.g. to specify a custom
+    field serializer. Otherwise <code>spark.kryo.classesToRegister</code> is simpler. It should be
+    set to a class that extends
+    <a href="api/scala/index.html#org.apache.spark.serializer.KryoRegistrator">
+    <code>KryoRegistrator</code></a>.
+    See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
   </td>
 </tr>
 <tr>
@@ -687,6 +674,19 @@ Apart from these, the following properties are also available, and may be useful
     Whether to compress serialized RDD partitions (e.g. for
     <code>StorageLevel.MEMORY_ONLY_SER</code>). Can save substantial space at the cost of some
     extra CPU time.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.serializer</code></td>
+  <td>org.apache.spark.serializer.<br />JavaSerializer</td>
+  <td>
+    Class to use for serializing objects that will be sent over the network or need to be cached
+    in serialized form. The default of Java serialization works with any Serializable Java object
+    but is quite slow, so we recommend <a href="tuning.html">using
+    <code>org.apache.spark.serializer.KryoSerializer</code> and configuring Kryo serialization</a>
+    when speed is necessary. Can be any subclass of
+    <a href="api/scala/index.html#org.apache.spark.serializer.Serializer">
+    <code>org.apache.spark.Serializer</code></a>.
   </td>
 </tr>
 <tr>
