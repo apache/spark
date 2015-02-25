@@ -232,19 +232,6 @@ setMethod("mapPartitions",
             lapplyPartition(X, FUN)
           })
 
-setMethod("lapplyPartitionsWithIndex",
-          signature(X = "DataFrame", FUN = "function"),
-          function(X, FUN) {
-            rdd <- toRDD(X)
-            lapplyPartitionsWithIndex(rdd, FUN)
-          })
-
-setMethod("mapPartitionsWithIndex",
-          signature(X = "DataFrame", FUN = "function"),
-          function(X, FUN){
-            lapplyPartitionsWithIndex(X, FUN)
-          })
-
 setMethod("foreach",
           signature(rdd = "DataFrame", func = "function"),
           function(rdd, func) {
