@@ -258,17 +258,17 @@ object SparkSubmit {
       SparkSubmitUtils.resolveMavenCoordinates(
         args.packages, Option(args.repositories), Option(args.ivyRepoPath))
     if (!resolvedMavenCoordinates.trim.isEmpty) {
-      if (args.jars == null || args.jars.trim.isEmpty) {
-        args.jars = resolvedMavenCoordinates
-      } else {
-        args.jars += s",$resolvedMavenCoordinates"
-      }
-      if (args.isPython) {
-        if (args.pyFiles == null || args.pyFiles.trim.isEmpty) {
-          args.pyFiles = resolvedMavenCoordinates
+      def addMavenDependenciesToOption(option: String): String = {
+        if (option == null || option.trim.isEmpty) {
+          resolvedMavenCoordinates
         } else {
-          args.pyFiles += s",$resolvedMavenCoordinates"
+          option + s",$resolvedMavenCoordinates"
         }
+      }
+      args.jars = addMavenDependenciesToOption(args.jars)
+      args.driverExtraClassPath = addMavenDependenciesToOption(args.driverExtraClassPath)
+      if (args.isPython) {
+        args.pyFiles = addMavenDependenciesToOption(args.pyFiles)
       }
     }
 
