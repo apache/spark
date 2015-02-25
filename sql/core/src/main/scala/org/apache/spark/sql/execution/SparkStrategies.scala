@@ -29,6 +29,8 @@ import org.apache.spark.sql.sources.{CreateTableUsing, CreateTempTableUsing, Des
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{SQLContext, Strategy, execution}
 
+import scala.collection.mutable.ArrayBuffer
+
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SQLContext#SparkPlanner =>
 
@@ -141,15 +143,35 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
              groupingExpressions,
              partialComputation,
              child) =>
-        execution.Aggregate(
-          partial = false,
-          namedGroupingAttributes,
-          rewrittenAggregateExpressions,
+        val cdExpression: NamedExpression = rewrittenAggregateExpressions match {
+          case ArrayBuffer(pname@Alias(CombineSetsAndCount(_), _)) => pname
+          case _ => null
+        }
+        
+        if (cdExpression != null) {
+          execution.Aggregate(partial = false,
+          Nil,
+          Alias(Sum(cdExpression.toAttribute), "totalCount")()::Nil,
+           execution.Aggregate(
+            partial = false,
+            namedGroupingAttributes,
+            rewrittenAggregateExpressions,
+            execution.Aggregate(
+              partial = true,
+              groupingExpressions,
+              partialComputation,
+              planLater(child)))) :: Nil 
+        } else {
           execution.Aggregate(
-            partial = true,
-            groupingExpressions,
-            partialComputation,
-            planLater(child))) :: Nil
+            partial = false,
+            namedGroupingAttributes,
+            rewrittenAggregateExpressions,
+            execution.Aggregate(
+              partial = true,
+              groupingExpressions,
+              partialComputation,
+              planLater(child))) :: Nil
+        }
 
       case _ => Nil
     }

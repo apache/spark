@@ -445,7 +445,16 @@ class Analyzer(
   object GlobalAggregates extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case Project(projectList, child) if containsAggregates(projectList) =>
-        Aggregate(Nil, projectList, child)
+        var op: Seq[Expression] = Nil
+        projectList.foreach(_.foreach {
+          case CountDistinct(exp) => op = op ++ exp
+          case _ =>
+        })
+        if(op.size > 0) {
+          Aggregate(op, projectList, child)
+        } else {
+          Aggregate(Nil, projectList, child)
+        }
     }
 
     def containsAggregates(exprs: Seq[Expression]): Boolean = {
