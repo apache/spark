@@ -504,13 +504,18 @@ class DataFrame(object):
         return DataFrame(jdf, self.sql_ctx)
 
     def sort(self, *cols):
-        """ Return a new :class:`DataFrame` sorted by the specified column.
+        """ Return a new :class:`DataFrame` sorted by the specified column(s).
 
         :param cols: The columns or expressions used for sorting
 
         >>> df.sort(df.age.desc()).collect()
         [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
-        >>> df.sortBy(df.age.desc()).collect()
+        >>> df.orderBy(df.age.desc()).collect()
+        [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
+        >>> from pyspark.sql.functions import *
+        >>> df.sort(asc("age")).collect()
+        [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
+        >>> df.orderBy(desc("age"), "name").collect()
         [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
         """
         if not cols:
@@ -520,7 +525,7 @@ class DataFrame(object):
         jdf = self._jdf.sort(self._sc._jvm.PythonUtils.toSeq(jcols))
         return DataFrame(jdf, self.sql_ctx)
 
-    sortBy = sort
+    orderBy = sort
 
     def head(self, n=None):
         """ Return the first `n` rows or the first row if n is None.
