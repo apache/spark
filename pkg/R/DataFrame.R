@@ -224,24 +224,25 @@ setMethod("toRDD",
             })
           })
 
-setGeneric("groupBy", function(df, ...) { standardGeneric("groupBy") })
+
+setGeneric("groupBy", function(x, ...) { standardGeneric("groupBy") })
 
 setMethod("groupBy",
-           signature(df = "DataFrame"),
-           function(df, col, ...) {
+           signature(x = "DataFrame"),
+           function(x, col, ...) {
              jseq <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "toSeq", list(...))
-             sgd <- callJMethod(df@sdf, "groupBy", col, jseq)
+             sgd <- callJMethod(x@sdf, "groupBy", col, jseq)
              groupedData(sgd)
            })
 
 
-setGeneric("agg", function (df, ...) { standardGeneric("agg") })
+setGeneric("agg", function (x, ...) { standardGeneric("agg") })
 
 setMethod("agg",
-          signature(df = "DataFrame"),
-          function(df, ...) {
+          signature(x = "DataFrame"),
+          function(x, ...) {
             cols <- varargsToEnv(...)
-            sdf <- callJMethod(df@sdf, "agg", cols)
+            sdf <- callJMethod(x@sdf, "agg", cols)
             dataFrame(sdf)
           })
 
@@ -323,10 +324,10 @@ setMethod("count",
           })
 
 setMethod("agg",
-          signature(df = "GroupedData"),
-          function(df, ...) {
+          signature(x = "GroupedData"),
+          function(x, ...) {
             cols <- varargsToEnv(...)
-            sdf <- callJMethod(df@sgd, "agg", cols)
+            sdf <- callJMethod(x@sgd, "agg", cols)
             dataFrame(sdf)
           })
 
