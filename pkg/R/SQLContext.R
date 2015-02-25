@@ -62,17 +62,15 @@ jsonRDD <- function(sqlCtx, rdd, schema = NULL, samplingRatio = 1.0) {
 #' Loads a Parquet file, returning the result as a DataFrame.
 #'
 #' @param sqlCtx SQLContext to use
-#' @param path Path of file to read. A vector of multiple paths is allowed.
+#' @param ... Path(s) of parquet file(s) to read.
 #' @return DataFrame
 #' @export
 
 # TODO: Implement saveasParquetFile and write examples for both
-parquetFile <- function(sqlCtx, path) {
+parquetFile <- function(sqlCtx, ...) {
   # Allow the user to have a more flexible definiton of the text file path
-  path <- normalizePath(path)
-  # Convert a string vector of paths to a string containing comma separated paths
-  path <- paste(path, collapse = ",")
-  sdf <- callJMethod(sqlCtx, "parquetFile", path)
+  paths <- lapply(list(...), normalizePath)
+  sdf <- callJMethod(sqlCtx, "parquetFile", paths)
   dataFrame(sdf)
 }
 
