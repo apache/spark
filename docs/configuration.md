@@ -261,6 +261,32 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.executor.extraClassPath</code></td>
+  <td>(none)</td>
+  <td>
+    Extra classpath entries to append to the classpath of executors. This exists primarily for 
+    backwards-compatibility with older versions of Spark. Users typically should not need to set 
+    this option.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.extraJavaOptions</code></td>
+  <td>(none)</td>
+  <td>
+    A string of extra JVM options to pass to executors. For instance, GC settings or other logging. 
+    Note that it is illegal to set Spark properties or heap size settings with this option. Spark 
+    properties should be set using a SparkConf object or the spark-defaults.conf file used with the 
+    spark-submit script. Heap size settings can be set with spark.executor.memory.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.extraLibraryPath</code></td>
+  <td>(none)</td>
+  <td>
+    Set a special library path to use when launching executor JVM's.
+  </td>
+</tr>
+<tr>
   <td><code>spark.executor.logs.rolling.maxRetainedFiles</code></td>
   <td>(none)</td>
   <td>
