@@ -149,18 +149,19 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
         
         if (cdExpression != null) {
-          execution.Aggregate(partial = false,
-          Nil,
-          Alias(Sum(cdExpression.toAttribute), "totalCount")()::Nil,
-           execution.Aggregate(
+          execution.Aggregate(
             partial = false,
-            namedGroupingAttributes,
-            rewrittenAggregateExpressions,
+            Nil,
+            Alias(Sum(cdExpression.toAttribute), "totalCount")()::Nil,
             execution.Aggregate(
-              partial = true,
-              groupingExpressions,
-              partialComputation,
-              planLater(child)))) :: Nil 
+              partial = false,
+              namedGroupingAttributes,
+              rewrittenAggregateExpressions,
+              execution.Aggregate(
+                partial = true,
+                groupingExpressions,
+                partialComputation,
+                planLater(child)))) :: Nil 
         } else {
           execution.Aggregate(
             partial = false,
