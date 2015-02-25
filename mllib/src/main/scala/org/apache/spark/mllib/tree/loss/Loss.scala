@@ -45,7 +45,7 @@ trait Loss extends Serializable {
    * purposes.
    * @param model Model of the weak learner.
    * @param data Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
-   * @return
+   * @return Measure of model error on data
    */
   def computeError(model: TreeEnsembleModel, data: RDD[LabeledPoint]): Double
 

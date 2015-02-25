@@ -55,7 +55,7 @@ import org.apache.spark.{Logging, SerializableWritable, TaskContext}
  * Parquet table scan operator. Imports the file that backs the given
  * [[org.apache.spark.sql.parquet.ParquetRelation]] as a ``RDD[Row]``.
  */
-case class ParquetTableScan(
+private[sql] case class ParquetTableScan(
     attributes: Seq[Attribute],
     relation: ParquetRelation,
     columnPruningPred: Seq[Expression])
@@ -64,18 +64,17 @@ case class ParquetTableScan(
   // The resolution of Parquet attributes is case sensitive, so we resolve the original attributes
   // by exprId. note: output cannot be transient, see
   // https://issues.apache.org/jira/browse/SPARK-1367
-  val normalOutput =
-    attributes
-      .filterNot(a => relation.partitioningAttributes.map(_.exprId).contains(a.exprId))
-      .flatMap(a => relation.output.find(o => o.exprId == a.exprId))
+  val output = attributes.map(relation.attributeMap)
 
-  val partOutput =
-    attributes.flatMap(a => relation.partitioningAttributes.find(o => o.exprId == a.exprId))
+  // A mapping of ordinals partitionRow -> finalOutput.
+  val requestedPartitionOrdinals = {
+    val partitionAttributeOrdinals = AttributeMap(relation.partitioningAttributes.zipWithIndex)
 
-  def output = partOutput ++ normalOutput
-
-  assert(normalOutput.size + partOutput.size == attributes.size,
-    s"$normalOutput + $partOutput != $attributes, ${relation.output}")
+    attributes.zipWithIndex.flatMap {
+      case (attribute, finalOrdinal) =>
+        partitionAttributeOrdinals.get(attribute).map(_ -> finalOrdinal)
+    }
+  }.toArray
 
   override def execute(): RDD[Row] = {
     import parquet.filter2.compat.FilterCompat.FilterPredicateCompat
@@ -97,7 +96,7 @@ case class ParquetTableScan(
     // Store both requested and original schema in `Configuration`
     conf.set(
       RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
-      ParquetTypesConverter.convertToString(normalOutput))
+      ParquetTypesConverter.convertToString(output))
     conf.set(
       RowWriteSupport.SPARK_ROW_SCHEMA,
       ParquetTypesConverter.convertToString(relation.output))
@@ -125,7 +124,7 @@ case class ParquetTableScan(
         classOf[Row],
         conf)
 
-    if (partOutput.nonEmpty) {
+    if (requestedPartitionOrdinals.nonEmpty) {
       baseRDD.mapPartitionsWithInputSplit { case (split, iter) =>
         val partValue = "([^=]+)=([^=]+)".r
         val partValues =
@@ -138,15 +137,25 @@ case class ParquetTableScan(
               case _ => None
             }.toMap
 
+        // Convert the partitioning attributes into the correct types
         val partitionRowValues =
-          partOutput.map(a => Cast(Literal(partValues(a.name)), a.dataType).eval(EmptyRow))
+          relation.partitioningAttributes
+            .map(a => Cast(Literal(partValues(a.name)), a.dataType).eval(EmptyRow))
 
         new Iterator[Row] {
-          private[this] val joinedRow = new JoinedRow5(Row(partitionRowValues:_*), null)
-
           def hasNext = iter.hasNext
+          def next() = {
+            val row = iter.next()._2.asInstanceOf[SpecificMutableRow]
 
-          def next() = joinedRow.withRight(iter.next()._2)
+            // Parquet will leave partitioning columns empty, so we fill them in here.
+            var i = 0
+            while (i < requestedPartitionOrdinals.size) {
+              row(requestedPartitionOrdinals(i)._2) =
+                partitionRowValues(requestedPartitionOrdinals(i)._1)
+              i += 1
+            }
+            row
+          }
         }
       }
     } else {
@@ -201,7 +210,7 @@ case class ParquetTableScan(
  * (only detected via filename pattern so will not catch all cases).
  */
 @DeveloperApi
-case class InsertIntoParquetTable(
+private[sql] case class InsertIntoParquetTable(
     relation: ParquetRelation,
     child: SparkPlan,
     overwrite: Boolean = false)
@@ -292,12 +301,9 @@ case class InsertIntoParquetTable(
       }
 
     def writeShard(context: TaskContext, iter: Iterator[Row]): Int = {
-      // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
-      // around by taking a mod. We expect that no task will be attempted 2 billion times.
-      val attemptNumber = (context.attemptId % Int.MaxValue).toInt
       /* "reduce task" <split #> <attempt # = spark task #> */
       val attemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = false, context.partitionId,
-        attemptNumber)
+        context.attemptNumber)
       val hadoopContext = newTaskAttemptContext(wrappedConf.value, attemptId)
       val format = new AppendingParquetOutputFormat(taskIdOffset)
       val committer = format.getOutputCommitter(hadoopContext)
@@ -641,6 +647,6 @@ private[parquet] object FileSystemHelper {
         sys.error("ERROR: attempting to append to set of Parquet files and found file" +
           s"that does not match name pattern: $other")
       case _ => 0
-    }.reduceLeft((a, b) => if (a < b) b else a)
+    }.reduceOption(_ max _).getOrElse(0)
   }
 }

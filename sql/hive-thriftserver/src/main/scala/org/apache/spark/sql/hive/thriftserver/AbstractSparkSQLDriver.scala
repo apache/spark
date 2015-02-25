@@ -53,6 +53,7 @@ private[hive] abstract class AbstractSparkSQLDriver(
   override def run(command: String): CommandProcessorResponse = {
     // TODO unify the error code
     try {
+      context.sparkContext.setJobDescription(command)
       val execution = context.executePlan(context.sql(command).logicalPlan)
       hiveResponse = execution.stringResult()
       tableSchema = getResultSetSchema(execution)

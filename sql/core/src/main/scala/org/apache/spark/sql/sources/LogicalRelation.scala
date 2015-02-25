@@ -17,7 +17,7 @@
 package org.apache.spark.sql.sources
 
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.AttributeMap
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{Statistics, LeafNode, LogicalPlan}
 
 /**
@@ -27,7 +27,7 @@ private[sql] case class LogicalRelation(relation: BaseRelation)
   extends LeafNode
   with MultiInstanceRelation {
 
-  override val output = relation.schema.toAttributes
+  override val output: Seq[AttributeReference] = relation.schema.toAttributes
 
   // Logical Relations are distinct if they have different output for the sake of transformations.
   override def equals(other: Any) = other match {

@@ -23,11 +23,22 @@ import org.scalatest.FunSuite
 
 class PythonRDDSuite extends FunSuite {
 
-    test("Writing large strings to the worker") {
-        val input: List[String] = List("a"*100000)
-        val buffer = new DataOutputStream(new ByteArrayOutputStream)
-        PythonRDD.writeIteratorToStream(input.iterator, buffer)
-    }
+  test("Writing large strings to the worker") {
+    val input: List[String] = List("a"*100000)
+    val buffer = new DataOutputStream(new ByteArrayOutputStream)
+    PythonRDD.writeIteratorToStream(input.iterator, buffer)
+  }
 
+  test("Handle nulls gracefully") {
+    val buffer = new DataOutputStream(new ByteArrayOutputStream)
+    // Should not have NPE when write an Iterator with null in it
+    // The correctness will be tested in Python
+    PythonRDD.writeIteratorToStream(Iterator("a", null), buffer)
+    PythonRDD.writeIteratorToStream(Iterator(null, "a"), buffer)
+    PythonRDD.writeIteratorToStream(Iterator("a".getBytes, null), buffer)
+    PythonRDD.writeIteratorToStream(Iterator(null, "a".getBytes), buffer)
+    PythonRDD.writeIteratorToStream(Iterator((null, null), ("a", null), (null, "b")), buffer)
+    PythonRDD.writeIteratorToStream(
+      Iterator((null, null), ("a".getBytes, null), (null, "b".getBytes)), buffer)
+  }
 }
-

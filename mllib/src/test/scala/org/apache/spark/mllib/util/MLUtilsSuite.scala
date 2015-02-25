@@ -20,18 +20,17 @@ package org.apache.spark.mllib.util
 import java.io.File
 
 import scala.io.Source
-import scala.math
 
 import org.scalatest.FunSuite
 
-import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, norm => breezeNorm,
-  squaredDistance => breezeSquaredDistance}
+import breeze.linalg.{squaredDistance => breezeSquaredDistance}
 import com.google.common.base.Charsets
 import com.google.common.io.Files
 
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils._
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.Utils
 
 class MLUtilsSuite extends FunSuite with MLlibTestSparkContext {
@@ -203,5 +202,13 @@ class MLUtilsSuite extends FunSuite with MLlibTestSparkContext {
     val loaded = loadLabeledPoints(sc, path)
     assert(points.collect().toSet === loaded.collect().toSet)
     Utils.deleteRecursively(tempDir)
+  }
+
+  test("log1pExp") {
+    assert(log1pExp(76.3) ~== math.log1p(math.exp(76.3)) relTol 1E-10)
+    assert(log1pExp(87296763.234) ~== 87296763.234 relTol 1E-10)
+
+    assert(log1pExp(-13.8) ~== math.log1p(math.exp(-13.8)) absTol 1E-10)
+    assert(log1pExp(-238423789.865) ~== math.log1p(math.exp(-238423789.865)) absTol 1E-10)
   }
 }
