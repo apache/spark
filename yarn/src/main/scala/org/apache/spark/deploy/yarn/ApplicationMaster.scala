@@ -483,14 +483,14 @@ private[spark] class ApplicationMaster(
         } catch {
           case e: InvocationTargetException =>
             e.getCause match {
-              case e: InterruptedException =>
+              case _: InterruptedException =>
                 // Reporter thread can interrupt to stop user class
-              case _ =>
+              case e: Throwable =>
                 finish(FinalApplicationStatus.FAILED,
                   ApplicationMaster.EXIT_EXCEPTION_USER_CLASS,
-                  "User class threw exception: " + e.getCause.getMessage)
+                  "User class threw exception: " + e.getMessage)
                 // re-throw to get it logged
-                throw e.getCause
+                throw e
             }
         }
       }
