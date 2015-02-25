@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import org.apache.spark.io.LargeByteBuffer
+import org.apache.spark.network.buffer.LargeByteBuffer
 
 /**
  * Result of adding a block into a BlockStore. This case class contains a few things:

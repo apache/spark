@@ -15,17 +15,13 @@
 // * limitations under the License.
 // */
 //
-//package org.apache.spark.io
+//package org.apache.spark.network.buffer
 //
-//import java.io.{RandomAccessFile, DataInput, InputStream, OutputStream}
+//import java.nio.ByteBuffer
 //import java.nio.channels.FileChannel.MapMode
-//import java.nio.{ByteBuffer, BufferUnderflowException, BufferOverflowException}
-//import java.nio.channels.{FileChannel, WritableByteChannel, ReadableByteChannel}
+//import java.nio.channels.{FileChannel, WritableByteChannel}
 //
-//import org.apache.spark.util.collection.ChainedBuffer
-//
-//import scala.collection.mutable.{ArrayBuffer, HashSet}
-//
+//import scala.collection.mutable.ArrayBuffer
 //
 //
 //
@@ -117,64 +113,64 @@
 //   */
 //  def remaining(): Long
 //}
-//
-//class ChainedLargeByteBuffer(private[io] val underlying: ChainedBuffer) extends LargeByteBuffer {
-//
-//  def capacity = underlying.capacity
-//
-//  var _pos = 0l
-//
-//  def get(dst: Array[Byte],offset: Int,length: Int): Unit = {
-//    underlying.read(_pos, dst, offset, length)
-//    _pos += length
-//  }
-//
-//  def get(): Byte = {
-//    val b = underlying.read(_pos)
-//    _pos += 1
-//    b
-//  }
-//
-//  def put(bytes: LargeByteBuffer): Unit = {
-//    ???
-//  }
-//
-//  def position: Long = _pos
-//  def position(position: Long): Unit = {
-//    _pos = position
-//  }
-//  def remaining(): Long = {
-//    underlying.size - position
-//  }
-//
-//  def duplicate(): ChainedLargeByteBuffer = {
-//    new ChainedLargeByteBuffer(underlying)
-//  }
-//
-//  def rewind(): Unit = {
-//    _pos = 0
-//  }
-//
-//  def limit(): Long = {
-//    capacity
-//  }
-//
-//  def limit(newLimit: Long): Unit = {
-//    ???
-//  }
-//
-//  def writeTo(channel:WritableByteChannel): Long = {
-//    var written = 0l
-//    underlying.chunks.foreach{bytes =>
-//      //TODO test this
-//      val buffer = ByteBuffer.wrap(bytes)
-//      while (buffer.hasRemaining)
-//        channel.write(buffer)
-//      written += bytes.length
-//    }
-//    written
-//  }
-//}
+////
+////class ChainedLargeByteBuffer(private[network] val underlying: ChainedBuffer) extends LargeByteBuffer {
+////
+////  def capacity = underlying.capacity
+////
+////  var _pos = 0l
+////
+////  def get(dst: Array[Byte],offset: Int,length: Int): Unit = {
+////    underlying.read(_pos, dst, offset, length)
+////    _pos += length
+////  }
+////
+////  def get(): Byte = {
+////    val b = underlying.read(_pos)
+////    _pos += 1
+////    b
+////  }
+////
+////  def put(bytes: LargeByteBuffer): Unit = {
+////    ???
+////  }
+////
+////  def position: Long = _pos
+////  def position(position: Long): Unit = {
+////    _pos = position
+////  }
+////  def remaining(): Long = {
+////    underlying.size - position
+////  }
+////
+////  def duplicate(): ChainedLargeByteBuffer = {
+////    new ChainedLargeByteBuffer(underlying)
+////  }
+////
+////  def rewind(): Unit = {
+////    _pos = 0
+////  }
+////
+////  def limit(): Long = {
+////    capacity
+////  }
+////
+////  def limit(newLimit: Long): Unit = {
+////    ???
+////  }
+////
+////  def writeTo(channel:WritableByteChannel): Long = {
+////    var written = 0l
+////    underlying.chunks.foreach{bytes =>
+////      //TODO test this
+////      val buffer = ByteBuffer.wrap(bytes)
+////      while (buffer.hasRemaining)
+////        channel.write(buffer)
+////      written += bytes.length
+////    }
+////    written
+////  }
+////}
 //
 //class WrappedLargeByteBuffer(private[spark] val underlying: Array[ByteBuffer]) extends LargeByteBuffer {
 //
@@ -275,11 +271,11 @@
 //    new WrappedLargeByteBuffer(Array(ByteBuffer.wrap(bytes)))
 //  }
 //
-//
-//  def allocateOnHeap(size: Long, maxChunk: Int): LargeByteBuffer = {
-//    val buffer = ChainedBuffer.withInitialSize(maxChunk, size)
-//    new ChainedLargeByteBuffer(buffer)
-//  }
+////
+////  def allocateOnHeap(size: Long, maxChunk: Int): LargeByteBuffer = {
+////    val buffer = ChainedBuffer.withInitialSize(maxChunk, size)
+////    new ChainedLargeByteBuffer(buffer)
+////  }
 //
 //  def mapFile(
 //    channel: FileChannel,

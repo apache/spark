@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 import java.nio.channels.FileChannel.MapMode
 
 import org.apache.spark.Logging
-import org.apache.spark.io.{WrappedLargeByteBuffer, LargeByteBuffer}
+import org.apache.spark.network.buffer.{LargeByteBufferHelper, LargeByteBuffer}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.Utils
 
@@ -118,9 +118,9 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
           }
         }
         buf.flip()
-        Some(LargeByteBuffer.asLargeByteBuffer(buf))
+        Some(LargeByteBufferHelper.asLargeByteBuffer(buf))
       } else {
-        Some(LargeByteBuffer.mapFile(channel, MapMode.READ_ONLY, offset, length))
+        Some(LargeByteBufferHelper.mapFile(channel, MapMode.READ_ONLY, offset, length))
       }
     } finally {
       channel.close()

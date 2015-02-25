@@ -18,17 +18,18 @@
 package org.apache.spark.broadcast
 
 import java.io._
-import java.nio.ByteBuffer
+
+import org.apache.spark.network.buffer.{LargeByteBufferHelper, LargeByteBuffer}
 
 import scala.collection.JavaConversions.asJavaEnumeration
 import scala.reflect.ClassTag
 import scala.util.Random
 
 import org.apache.spark.{Logging, SparkConf, SparkEnv, SparkException}
-import org.apache.spark.io.{LargeByteBuffer, CompressionCodec}
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
-import org.apache.spark.util.{LargeByteBufferInputStream, ByteBufferInputStream, Utils}
+import org.apache.spark.util.{LargeByteBufferInputStream, Utils}
 import org.apache.spark.util.io.ByteArrayChunkOutputStream
 
 /**
@@ -200,7 +201,7 @@ private object TorrentBroadcast extends Logging {
     val ser = serializer.newInstance()
     val serOut = ser.serializeStream(out)
     serOut.writeObject[T](obj).close()
-    bos.toArrays.map(LargeByteBuffer.asLargeByteBuffer)
+    bos.toArrays.map(LargeByteBufferHelper.asLargeByteBuffer)
   }
 
   def unBlockifyObject[T: ClassTag](

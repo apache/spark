@@ -21,7 +21,7 @@ import java.io.IOException
 import java.nio.ByteBuffer
 
 import com.google.common.io.ByteStreams
-import org.apache.spark.io.LargeByteBuffer
+import org.apache.spark.network.buffer.{LargeByteBufferHelper, LargeByteBuffer}
 import tachyon.client.{ReadType, WriteType}
 
 import org.apache.spark.Logging
@@ -70,7 +70,7 @@ private[spark] class TachyonStore(
     // So that we do not modify the input offsets !
     // duplicate does not copy buffer, so inexpensive
     val byteBuffer = bytes.duplicate()
-    byteBuffer.rewind()
+    byteBuffer.position(0l)
     logDebug(s"Attempting to put block $blockId into Tachyon")
     val startTime = System.currentTimeMillis
     val file = tachyonManager.getFile(blockId)
@@ -114,7 +114,7 @@ private[spark] class TachyonStore(
       //TODO
       val bs = new Array[Byte](size.asInstanceOf[Int])
       ByteStreams.readFully(is, bs)
-      Some(LargeByteBuffer.asLargeByteBuffer(ByteBuffer.wrap(bs)))
+      Some(LargeByteBufferHelper.asLargeByteBuffer(bs))
     } catch {
       case ioe: IOException =>
         logWarning(s"Failed to fetch the block $blockId from Tachyon", ioe)

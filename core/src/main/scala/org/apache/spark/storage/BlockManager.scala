@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.{BufferedOutputStream, ByteArrayOutputStream, File, InputStream, OutputStream}
+import java.io.{BufferedOutputStream, File, InputStream, OutputStream}
 import java.nio.{ByteBuffer, MappedByteBuffer}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
@@ -31,9 +31,9 @@ import sun.nio.ch.DirectBuffer
 
 import org.apache.spark._
 import org.apache.spark.executor._
-import org.apache.spark.io.{WrappedLargeByteBuffer, ChainedLargeByteBuffer, LargeByteBuffer, CompressionCodec}
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network._
-import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
+import org.apache.spark.network.buffer.{LargeByteBufferHelper, LargeByteBuffer, ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.ExternalShuffleClient
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
@@ -307,7 +307,7 @@ private[spark] class BlockManager(
       shuffleManager.shuffleBlockManager.getBlockData(blockId.asInstanceOf[ShuffleBlockId])
     } else {
       val blockBytesOpt = doGetLocal(blockId, asBlockResult = false)
-        .asInstanceOf[Option[ByteBuffer]]
+        .asInstanceOf[Option[LargeByteBuffer]]
       if (blockBytesOpt.isDefined) {
         val buffer = blockBytesOpt.get
         new NioManagedBuffer(buffer)
@@ -321,7 +321,7 @@ private[spark] class BlockManager(
    * Put the block locally, using the given storage level.
    */
   override def putBlockData(blockId: BlockId, data: ManagedBuffer, level: StorageLevel): Unit = {
-    putBytes(blockId, LargeByteBuffer.asLargeByteBuffer(data.nioByteBuffer()), level)
+    putBytes(blockId, data.nioByteBuffer(), level)
   }
 
   /**
@@ -538,10 +538,10 @@ private[spark] class BlockManager(
               /* We'll store the bytes in memory if the block's storage level includes
                * "memory serialized", or if it should be cached as objects in memory
                * but we only requested its serialized bytes. */
-              val copyForMemory = LargeByteBuffer.allocateOnHeap(bytes.limit, largeByteBufferChunkSize)
+              val copyForMemory = LargeByteBufferHelper.allocate(bytes.limit)
               copyForMemory.put(bytes)
               memoryStore.putBytes(blockId, copyForMemory, level)
-              bytes.rewind()
+              bytes.position(0l)
             }
             if (!asBlockResult) {
               return Some(bytes)
@@ -595,8 +595,8 @@ private[spark] class BlockManager(
     for (loc <- locations) {
       logDebug(s"Getting remote block $blockId from $loc")
       //TODO the fetch will always be one byte buffer till we fix SPARK-5928
-      val data: LargeByteBuffer = LargeByteBuffer.asLargeByteBuffer(blockTransferService.fetchBlockSync(
-        loc.host, loc.port, loc.executorId, blockId.toString).nioByteBuffer())
+      val data: LargeByteBuffer = blockTransferService.fetchBlockSync(
+        loc.host, loc.port, loc.executorId, blockId.toString).nioByteBuffer()
 
       if (data != null) {
         if (asBlockResult) {
@@ -791,7 +791,7 @@ private[spark] class BlockManager(
           case ArrayValues(array) =>
             blockStore.putArray(blockId, array, putLevel, returnValues)
           case ByteBufferValues(bytes) =>
-            bytes.rewind()
+            bytes.position(0l)
             blockStore.putBytes(blockId, bytes, putLevel)
         }
         size = result.size
@@ -942,7 +942,7 @@ private[spark] class BlockManager(
         case Some(peer) =>
           try {
             val onePeerStartTime = System.currentTimeMillis
-            data.rewind()
+            data.position(0l)
             logTrace(s"Trying to replicate $blockId of ${data.limit()} bytes to $peer")
             //TODO
             //ACK!  here we're stuck -- we can't replicate a large block until we figure out
@@ -1201,7 +1201,7 @@ private[spark] class BlockManager(
       blockId: BlockId,
       bytes: LargeByteBuffer,
       serializer: Serializer = defaultSerializer): Iterator[Any] = {
-    bytes.rewind()
+    bytes.position(0);
     val stream = wrapForCompression(blockId, new LargeByteBufferInputStream(bytes, true))
     serializer.newInstance().deserializeStream(stream).asIterator
   }

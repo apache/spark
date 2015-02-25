@@ -17,8 +17,7 @@
 
 package org.apache.spark.shuffle
 
-import org.apache.spark.io.LargeByteBuffer
-import org.apache.spark.network.buffer.ManagedBuffer
+import org.apache.spark.network.buffer.{LargeByteBuffer, ManagedBuffer}
 import org.apache.spark.storage.ShuffleBlockId
 
 private[spark]

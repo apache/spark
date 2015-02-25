@@ -22,7 +22,7 @@ import java.nio.channels.WritableByteChannel;
 
 public class WrappedLargeByteBuffer implements LargeByteBuffer {
 
-    private final ByteBuffer[] underlying;
+    final ByteBuffer[] underlying;
     private final Long totalCapacity;
     private final long[] chunkOffsets;
 
@@ -92,6 +92,11 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
     }
 
     @Override
+    public long remaining() {
+        return limit - _pos;
+    }
+
+    @Override
     public WrappedLargeByteBuffer duplicate() {
         ByteBuffer[] duplicates = new ByteBuffer[underlying.length];
         for (int i = 0; i < underlying.length; i++) {
@@ -131,5 +136,10 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
                 channel.write(buffer);
         }
         return written;
+    }
+
+    @Override
+    public ByteBuffer firstByteBuffer() {
+        return underlying[0];
     }
 }

@@ -18,13 +18,11 @@
 package org.apache.spark.shuffle
 
 import java.io._
-import java.nio.ByteBuffer
 
 import com.google.common.io.ByteStreams
-import org.apache.spark.io.LargeByteBuffer
 
 import org.apache.spark.{SparkConf, SparkEnv}
-import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
+import org.apache.spark.network.buffer.{LargeByteBuffer, FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.storage._
 
@@ -99,7 +97,7 @@ class IndexShuffleBlockManager(conf: SparkConf) extends ShuffleBlockManager {
   }
 
   override def getBytes(blockId: ShuffleBlockId): Option[LargeByteBuffer] = {
-    Some(LargeByteBuffer.asLargeByteBuffer(getBlockData(blockId).nioByteBuffer()))
+    Some(getBlockData(blockId).nioByteBuffer())
   }
 
   override def getBlockData(blockId: ShuffleBlockId): ManagedBuffer = {

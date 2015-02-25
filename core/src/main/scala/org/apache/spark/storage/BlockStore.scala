@@ -17,12 +17,8 @@
 
 package org.apache.spark.storage
 
-import java.nio.ByteBuffer
-
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.Logging
-import org.apache.spark.io.LargeByteBuffer
+import org.apache.spark.network.buffer.LargeByteBuffer
 
 /**
  * Abstract class to store blocks.

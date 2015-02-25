@@ -19,7 +19,8 @@ package org.apache.spark.util
 
 import java.io.OutputStream
 
-import org.apache.spark.io.{ChainedLargeByteBuffer, LargeByteBuffer}
+import org.apache.spark.io.ChainedLargeByteBuffer
+import org.apache.spark.network.buffer.LargeByteBuffer
 import org.apache.spark.util.collection.ChainedBuffer
 
 private[spark]

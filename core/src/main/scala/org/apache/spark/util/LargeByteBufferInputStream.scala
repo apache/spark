@@ -18,9 +18,8 @@
 package org.apache.spark.util
 
 import java.io.InputStream
-import java.nio.ByteBuffer
 
-import org.apache.spark.io.LargeByteBuffer
+import org.apache.spark.network.buffer.LargeByteBuffer
 import org.apache.spark.storage.BlockManager
 
 /**

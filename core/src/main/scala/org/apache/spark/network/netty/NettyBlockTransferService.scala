@@ -115,13 +115,10 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
 
     // Convert or copy nio buffer into array in order to serialize it.
     val nioBuffer = blockData.nioByteBuffer()
-    val array = if (nioBuffer.hasArray) {
-      nioBuffer.array()
-    } else {
-      val data = new Array[Byte](nioBuffer.remaining())
-      nioBuffer.get(data)
-      data
-    }
+    //TODO key change -- multiple uploads here
+    // this stub is not even efficient when the buffer actually is small
+    val array =  new Array[Byte](nioBuffer.remaining().toInt)
+    nioBuffer.get(array, 0, nioBuffer.remaining().toInt)
 
     client.sendRpc(new UploadBlock(appId, execId, blockId.toString, levelBytes, array).toByteArray,
       new RpcResponseCallback {

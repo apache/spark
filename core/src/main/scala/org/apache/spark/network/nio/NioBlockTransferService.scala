@@ -20,7 +20,7 @@ package org.apache.spark.network.nio
 import java.nio.ByteBuffer
 
 import org.apache.spark.network._
-import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
+import org.apache.spark.network.buffer.{LargeByteBuffer, LargeByteBufferHelper, ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.shuffle.BlockFetchingListener
 import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.util.Utils
@@ -116,7 +116,7 @@ final class NioBlockTransferService(conf: SparkConf, securityManager: SecurityMa
             val blockId = blockMessage.getId
             val networkSize = blockMessage.getData.limit()
             listener.onBlockFetchSuccess(
-              blockId.toString, new NioManagedBuffer(blockMessage.getData))
+              blockId.toString, new NioManagedBuffer(LargeByteBufferHelper.asLargeByteBuffer(blockMessage.getData)))
           }
         }
       }
@@ -143,7 +143,7 @@ final class NioBlockTransferService(conf: SparkConf, securityManager: SecurityMa
       level: StorageLevel)
     : Future[Unit] = {
     checkInit()
-    val msg = PutBlock(blockId, blockData.nioByteBuffer(), level)
+    val msg = PutBlock(blockId, blockData.nioByteBuffer().firstByteBuffer(), level)
     val blockMessageArray = new BlockMessageArray(BlockMessage.fromPutBlock(msg))
     val remoteCmId = new ConnectionManagerId(hostName, port)
     val reply = cm.sendMessageReliably(remoteCmId, blockMessageArray.toBufferMessage)
@@ -192,7 +192,7 @@ final class NioBlockTransferService(conf: SparkConf, securityManager: SecurityMa
         if (buffer == null) {
           return None
         }
-        Some(BlockMessage.fromGotBlock(GotBlock(msg.id, buffer)))
+        Some(BlockMessage.fromGotBlock(GotBlock(msg.id, buffer.firstByteBuffer())))
 
       case _ => None
     }
@@ -201,12 +201,12 @@ final class NioBlockTransferService(conf: SparkConf, securityManager: SecurityMa
   private def putBlock(blockId: BlockId, bytes: ByteBuffer, level: StorageLevel) {
     val startTimeMs = System.currentTimeMillis()
     logDebug("PutBlock " + blockId + " started from " + startTimeMs + " with data: " + bytes)
-    blockDataManager.putBlockData(blockId, new NioManagedBuffer(bytes), level)
+    blockDataManager.putBlockData(blockId, new NioManagedBuffer(LargeByteBufferHelper.asLargeByteBuffer(bytes)), level)
     logDebug("PutBlock " + blockId + " used " + Utils.getUsedTimeMs(startTimeMs)
       + " with data size: " + bytes.limit)
   }
 
-  private def getBlock(blockId: BlockId): ByteBuffer = {
+  private def getBlock(blockId: BlockId): LargeByteBuffer = {
     val startTimeMs = System.currentTimeMillis()
     logDebug("GetBlock " + blockId + " started from " + startTimeMs)
     val buffer = blockDataManager.getBlockData(blockId)

@@ -20,7 +20,7 @@ package org.apache.spark.scheduler
 import java.nio.ByteBuffer
 import java.util.concurrent.RejectedExecutionException
 
-import org.apache.spark.io.WrappedLargeByteBuffer
+import org.apache.spark.network.buffer.WrappedLargeByteBuffer
 
 import scala.language.existentials
 import scala.util.control.NonFatal
@@ -76,7 +76,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
               }
               //TODO either change serializer interface, or ...
               val deserializedResult = serializer.get().deserialize[DirectTaskResult[_]](
-                serializedTaskResult.get.asInstanceOf[WrappedLargeByteBuffer].underlying(0))
+                serializedTaskResult.get.firstByteBuffer())
               sparkEnv.blockManager.master.removeBlock(blockId)
               (deserializedResult, size)
           }

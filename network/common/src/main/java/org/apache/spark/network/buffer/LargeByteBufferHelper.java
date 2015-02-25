@@ -29,6 +29,23 @@ public class LargeByteBufferHelper {
         return new WrappedLargeByteBuffer(new ByteBuffer[]{buffer});
     }
 
+    public static LargeByteBuffer asLargeByteBuffer(byte[] bytes) {
+        return new WrappedLargeByteBuffer(new ByteBuffer[]{ByteBuffer.wrap(bytes)});
+    }
+
+    public static LargeByteBuffer allocate(long size) {
+        ArrayList<ByteBuffer> chunks = new ArrayList<ByteBuffer>();
+        long remaining = size;
+        while (remaining > 0) {
+            int nextSize = (int)Math.min(remaining, DEFAULT_MAX_CHUNK);
+            ByteBuffer next = ByteBuffer.allocate(nextSize);
+            remaining -= nextSize;
+            chunks.add(next);
+        }
+        return new WrappedLargeByteBuffer(chunks.toArray(new ByteBuffer[chunks.size()]));
+    }
+
+
     public static LargeByteBuffer mapFile(
             FileChannel channel,
             FileChannel.MapMode mode,

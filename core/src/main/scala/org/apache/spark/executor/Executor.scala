@@ -23,7 +23,7 @@ import java.net.URL
 import java.nio.ByteBuffer
 import java.util.concurrent._
 
-import org.apache.spark.io.LargeByteBuffer
+import org.apache.spark.network.buffer.LargeByteBufferHelper
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
@@ -233,7 +233,7 @@ private[spark] class Executor(
           } else if (resultSize >= akkaFrameSize - AkkaUtils.reservedSizeBytes) {
             val blockId = TaskResultBlockId(taskId)
             env.blockManager.putBytes(
-              blockId, LargeByteBuffer.asLargeByteBuffer(serializedDirectResult), StorageLevel.MEMORY_AND_DISK_SER)
+              blockId, LargeByteBufferHelper.asLargeByteBuffer(serializedDirectResult), StorageLevel.MEMORY_AND_DISK_SER)
             logInfo(
               s"Finished $taskName (TID $taskId). $resultSize bytes result sent via BlockManager)")
             ser.serialize(new IndirectTaskResult[Any](blockId, resultSize))
