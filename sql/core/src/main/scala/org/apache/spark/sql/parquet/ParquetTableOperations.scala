@@ -48,6 +48,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Row, _}
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan, UnaryNode}
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.{Logging, SerializableWritable, TaskContext}
 
 /**
@@ -459,11 +460,28 @@ private[parquet] class FilteringParquetRowInputFormat
     val getGlobalMetaData =
       classOf[ParquetFileWriter].getDeclaredMethod("getGlobalMetaData", classOf[JList[Footer]])
     getGlobalMetaData.setAccessible(true)
-    val globalMetaData = getGlobalMetaData.invoke(null, footers).asInstanceOf[GlobalMetaData]
+    var globalMetaData = getGlobalMetaData.invoke(null, footers).asInstanceOf[GlobalMetaData]
 
     if (globalMetaData == null) {
      val splits = mutable.ArrayBuffer.empty[ParquetInputSplit]
      return splits
+    }
+
+    Option(globalMetaData.getKeyValueMetaData.get(RowReadSupport.SPARK_METADATA_KEY)).foreach {
+      schemas =>
+        val mergedSchema = schemas
+          .map(DataType.fromJson(_).asInstanceOf[StructType])
+          .reduce(_ merge _)
+          .json
+
+        val mergedMetadata = globalMetaData
+          .getKeyValueMetaData
+          .updated(RowReadSupport.SPARK_METADATA_KEY, setAsJavaSet(Set(mergedSchema)))
+
+        globalMetaData = new GlobalMetaData(
+          globalMetaData.getSchema,
+          mergedMetadata,
+          globalMetaData.getCreatedBy)
     }
 
     val readContext = getReadSupport(configuration).init(

@@ -237,7 +237,7 @@ if [[ ! "$@" =~ --skip-package ]]; then
   sbt/sbt clean
   cd docs
   # Compile docs with Java 7 to use nicer format
-  JAVA_HOME=$JAVA_7_HOME PRODUCTION=1 jekyll build
+  JAVA_HOME="$JAVA_7_HOME" PRODUCTION=1 RELEASE_VERSION="$RELEASE_VERSION" jekyll build
   echo "Copying release documentation"
   rc_docs_folder=${rc_folder}-docs
   ssh $ASF_USERNAME@people.apache.org \
