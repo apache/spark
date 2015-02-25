@@ -97,7 +97,7 @@ ________________________________________________________________________________
     def createDirectStream(ssc, brokerList, topics, kafkaParams={},
                            keyDecoder=utf8_decoder, valueDecoder=utf8_decoder):
         """
-        ..note:: experimental
+        .. note:: Experimental
 
         Create an input stream that directly pulls messages from a Kafka Broker.
 
@@ -136,11 +136,8 @@ ________________________________________________________________________________
             jstream = ssc._jvm.KafkaUtils.createDirectStream(ssc._jssc, array, array, decoder,
                                                              decoder, jparam, jtopics)
         except Py4JError, e:
-            # TODO: use --jar once it also work on driver
             if not e.message or 'call a package' in e.message:
-                print "No kafka package, please put the assembly jar into classpath:"
-                print " $ bin/spark-submit --driver-class-path external/kafka-assembly/target/" + \
-                      "scala-*/spark-streaming-kafka-assembly-*.jar"
+                KafkaUtils._printErrorMsg()
             raise e
         ser = PairDeserializer(NoOpSerializer(), NoOpSerializer())
         stream = DStream(jstream, ssc, ser)
@@ -150,13 +147,12 @@ ________________________________________________________________________________
     def createRDD(sc, brokerList, offsetRanges, kafkaParams={},
                   keyDecoder=utf8_decoder, valueDecoder=utf8_decoder):
         """
-        ..note:: experimental
+        .. note:: Experimental
 
         Create a RDD from Kafka using offset ranges for each topic and partition.
         :param sc:  SparkContext object
         :param brokerList: A String representing a list of seed Kafka brokers (hostname:port,...)
-        :param offsetRanges:  list of offsetRange to specify topic:partition [start,
-        end) to consume.
+        :param offsetRanges:  list of offsetRange to specify topic:partition:[start, end) to consume
         :param kafkaParams: Additional params for Kafka
         :param keyDecoder:  A function used to decode key (default is utf8_decoder)
         :param valueDecoder:  A function used to decode value (default is utf8_decoder)
@@ -180,11 +176,8 @@ ________________________________________________________________________________
             jrdd = sc._jvm.KafkaUtils.createRDD(sc._jsc, array, array, decoder, decoder,
                                                 jparam, joffsetRanges)
         except Py4JError, e:
-            # TODO: use --jar once it also work on driver
             if not e.message or 'call a package' in e.message:
-                print "No kafka package, please put the assembly jar into classpath:"
-                print " $ bin/spark-submit --driver-class-path external/kafka-assembly/target/" + \
-                      "scala-*/spark-streaming-kafka-assembly-*.jar"
+                KafkaUtils._printErrorMsg()
             raise e
         ser = PairDeserializer(NoOpSerializer(), NoOpSerializer())
         rdd = RDD(jrdd, sc, ser)
@@ -193,6 +186,14 @@ ________________________________________________________________________________
     @staticmethod
     def _getClassByName(jvm, name):
         return jvm.org.apache.spark.util.Utils.classForName(name)
+
+    @staticmethod
+    def _printErrorMsg():
+        # TODO: use --jar once it also work on driver
+        print "No kafka package, please put the assembly jar into classpath:"
+        print " $ bin/spark-submit --driver-class-path external/kafka-assembly/target/" + \
+              "scala-*/spark-streaming-kafka-assembly-*.jar"
+
 
 
 class OffsetRange(object):
@@ -214,6 +215,5 @@ class OffsetRange(object):
         self._untilOffset = untilOffset
 
     def _joffsetRange(self, sc):
-        java_import(sc._jvm, "org.apache.spark.streaming.kafka.OffsetRange")
         return sc._jvm.OffsetRange.create(self._topic, self._partition, self._fromOffset,
                                           self._untilOffset)
