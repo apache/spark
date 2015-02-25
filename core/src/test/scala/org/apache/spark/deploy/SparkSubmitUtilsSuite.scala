@@ -125,7 +125,8 @@ class SparkSubmitUtilsSuite extends FunSuite with BeforeAndAfterAll {
       "sql_", "streaming_", "yarn_", "network-common_", "network-shuffle_", "network-yarn_")
     
     val coordinates = 
-      components.map(comp => s"org.apache.spark:spark-${comp}2.10:1.2.0").mkString(",")
+      components.map(comp => s"org.apache.spark:spark-${comp}2.10:1.2.0").mkString(",") + 
+      ",org.apache.spark:spark-core_fake:1.2.0"
     val path = SparkSubmitUtils.resolveMavenCoordinates(
       coordinates, None, None, true)
     assert(path === "", "should return empty path")
