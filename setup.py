@@ -41,6 +41,7 @@ setup(
         'sphinx-rtd-theme>=0.1.6',
         'Sphinx-PyPI-upload>=0.2.1',
         'sqlalchemy>=0.9.8',
+        'statsd>=3.0.1',
         'thrift>=0.9.2',
         'tornado>=4.0.2',
     ],

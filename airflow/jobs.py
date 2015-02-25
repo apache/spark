@@ -8,7 +8,7 @@ from time import sleep
 
 from sqlalchemy import (
     Column, Integer, String, DateTime)
-from sqlalchemy import func
+from sqlalchemy import func, Index
 from sqlalchemy.orm.session import make_transient
 
 from airflow import executors
@@ -22,6 +22,15 @@ from airflow.utils import State
 
 Base = models.Base
 ID_LEN = conf.getint('misc', 'ID_LEN')
+
+# Setting up a statsd client if needed
+statsd = None
+if conf.get('misc', 'statsd_on'):
+    from statsd import StatsClient
+    statsd = StatsClient(
+        host=conf.get('misc', 'statsd_host'),
+        port=conf.getint('misc', 'statsd_port'),
+        prefix='airflow')
 
 
 class BaseJob(Base):
@@ -89,6 +98,9 @@ class BaseJob(Base):
         '''
         pass
 
+    def heartbeat_callback(self):
+        pass
+
     def heartbeat(self):
         '''
         Heartbeats update the job's entry in the the database with a timestamp
@@ -125,9 +137,13 @@ class BaseJob(Base):
         session.merge(job)
         session.commit()
         session.close()
+
+        self.heartbeat_callback()
         logging.debug('[heart] Boom.')
 
     def run(self):
+        if statsd:
+            statsd.incr(self.__class__.__name__.lower()+'_start', 1, 1)
         # Adding an entry in the DB
         session = settings.Session()
         self.state = State.RUNNING
@@ -147,8 +163,12 @@ class BaseJob(Base):
         session.commit()
         session.close()
 
+        if statsd:
+            statsd.incr(self.__class__.__name__.lower()+'_end', 1, 1)
+
     def _execute(self):
         raise NotImplemented("This method needs to be overriden")
+Index('job_type_heart', BaseJob.job_type, BaseJob.latest_heartbeat)
 
 
 class MasterJob(BaseJob):
@@ -167,6 +187,8 @@ class MasterJob(BaseJob):
         self.subdir = subdir
         self.test_mode = test_mode
         super(MasterJob, self).__init__(*args, **kwargs)
+
+        heartrate=conf.getint('misc', 'MASTER_HEARTBEAT_SEC'),
 
     def _execute(self):
         dag_id = self.dag_id
@@ -259,6 +281,10 @@ class MasterJob(BaseJob):
                     executor.heartbeat()
                 session.close()
         executor.end()
+
+    def heartbeat_callback(self):
+        if statsd:
+            statsd.incr('master_heartbeat', 1, 1)
 
 
 class BackfillJob(BaseJob):

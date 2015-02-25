@@ -24,6 +24,7 @@ python-dateutil
 pyhs2
 requests
 setproctitle
+statsd
 snakebite
 sphinx
 sphinx-argparse

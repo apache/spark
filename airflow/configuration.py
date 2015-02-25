@@ -3,6 +3,14 @@ import errno
 import logging
 import os
 
+defaults = {
+    'misc': {
+        'statsd_on': False,
+        'statsd_host': 'localhost',
+        'statsd_port': 8125,
+    },
+}
+
 DEFAULT_CONFIG = """\
 [core]
 airflow_home = {AIRFLOW_HOME}
@@ -35,7 +43,11 @@ flower_port = 5555
 
 [misc]
 job_heartbeat_sec = 5
+master_heartbeat_sec = 60
 id_len = 250
+statsd_on = false
+statsd_host = localhost
+statsd_port = port
 """
 
 TEST_CONFIG = """\
@@ -70,8 +82,31 @@ flower_port = 5555
 
 [misc]
 job_heartbeat_sec = 1
+master_heartbeat_sec = 30
 id_len = 250
+
+[statsd]
+statsd_on = false
+statsd_host = localhost
+statsd_port = port
 """
+
+
+class ConfigParserWithDefaults(ConfigParser):
+
+    def __init__(self, defaults, *args, **kwargs):
+        self.defaults = defaults
+        ConfigParser.__init__(self, *args, **kwargs)
+
+    def get(self, section, key):
+        d = self.defaults
+        try:
+            return ConfigParser.get(self, section, key)
+        except:
+            if section not in d or key not in d[section]:
+                raise Exception("section/key not found in config")
+            else:
+                return d[section][key]
 
 
 def mkdir_p(path):
@@ -122,8 +157,8 @@ logging.info("Reading the config from " + AIRFLOW_CONFIG)
 
 
 def test_mode():
-    conf = ConfigParser()
+    conf = ConfigParserWithDefaults(defaults)
     conf.read(TEST_CONFIG)
 
-conf = ConfigParser()
+conf = ConfigParserWithDefaults(defaults)
 conf.read(AIRFLOW_CONFIG)
