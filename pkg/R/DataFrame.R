@@ -110,11 +110,10 @@ setMethod("registerTempTable",
 setMethod("count",
           signature(x = "DataFrame"),
           function(x) {
-            sdf <- x@sdf
-            callJMethod(sdf, "count")
+            callJMethod(x@sdf, "count")
           })
 
-# Collects all the elements of a Spark DataFrame and coerces them into an R data.frame.
+#' Collects all the elements of a Spark DataFrame and coerces them into an R data.frame.
 
 #' @rdname collect-methods
 #' @export
@@ -146,7 +145,35 @@ setMethod("collect",
             dfOut
           })
 
-# Take the first NUM elements in a DataFrame and return a named list for each row.
+#' Limit
+#' 
+#' Limit the resulting DataFrame to the number of rows specified.
+#' 
+#' @param df A SparkSQL DataFrame
+#' @param num The number of rows to return
+#' @return A new DataFrame containing the number of rows specified.
+#' 
+#' @rdname limit
+#' @export
+#' @examples
+#' \dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' limitedDF <- limit(df, 10)
+#' }
+
+setGeneric("limit", function(df, num) {standardGeneric("limit") })
+
+setMethod("limit",
+          signature(df = "DataFrame", num = "numeric"),
+          function(df, num) {
+            res <- callJMethod(df@sdf, "limit", as.integer(num))
+            dataFrame(res)
+            })
+
+# Take the first NUM elements in a DataFrame and return a the results as a data.frame
 
 #' @rdname take
 #' @export
@@ -162,8 +189,8 @@ setMethod("collect",
 setMethod("take",
           signature(rdd = "DataFrame", num = "numeric"),
           function(rdd, num) {
-            rddIn <- toRDD(rdd)
-            take(rddIn, num)
+            limited <- limit(rdd, num)
+            collect(limited)
           })
 
 #' toRDD()
@@ -189,8 +216,12 @@ setMethod("toRDD",
           signature(df = "DataFrame"),
           function(df) {
             jrdd <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "dfToRowRDD", df@sdf)
-            names <- callJMethod(df@sdf, "columns")
-            RDD(jrdd, serializedMode = "row", colNames = names)
+            colNames <- callJMethod(df@sdf, "columns")
+            rdd <- RDD(jrdd, serializedMode = "row")
+            lapply(rdd, function(row) {
+              names(row) <- colNames
+              row
+            })
           })
 
 ############################## RDD Map Functions ##################################

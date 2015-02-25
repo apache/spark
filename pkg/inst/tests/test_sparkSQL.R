@@ -113,10 +113,17 @@ test_that("collect() returns a data.frame", {
   expect_true(ncol(rdf) == 2)
 })
 
+test_that("limit() returns DataFrame with the correct number of rows", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  dfLimited <- limit(df, 2)
+  expect_true(inherits(dfLimited, "DataFrame"))
+  expect_true(count(dfLimited) == 2)
+})
+
 test_that("collect() and take() on a DataFrame return the same number of rows and columns", {
   df <- jsonFile(sqlCtx, jsonPath)
-  expect_true(nrow(collect(df)) == length(take(df, 10)))
-  expect_true(ncol(collect(df)) == length(take(df, 10)[[1]]))
+  expect_true(nrow(collect(df)) == nrow(take(df, 10)))
+  expect_true(ncol(collect(df)) == ncol(take(df, 10)))
 })
 
 test_that("multiple pipeline transformations starting with a DataFrame result in an RDD with the correct values", {

@@ -83,7 +83,8 @@ exportClasses("DataFrame")
 
 exportMethods("printSchema",
               "registerTempTable",
-              "toRDD")
+              "toRDD",
+              "limit")
 
 export("jsonFile",
        "parquetFile",
