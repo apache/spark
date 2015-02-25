@@ -21,14 +21,18 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.json.JsonRDD.{compatibleType, enforceCorrectType}
+import org.apache.spark.sql.sources.LogicalRelation
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{QueryTest, Row, SQLConf}
 
 class JsonSuite extends QueryTest {
   import org.apache.spark.sql.json.TestJsonData._
+
   TestJsonData
 
   test("Type promotion") {
@@ -65,14 +69,15 @@ class JsonSuite extends QueryTest {
     checkTypePromotion(Timestamp.valueOf(strTime), enforceCorrectType(strTime, TimestampType))
 
     val strDate = "2014-10-15"
-    checkTypePromotion(Date.valueOf(strDate), enforceCorrectType(strDate, DateType))
+    checkTypePromotion(
+      DateUtils.fromJavaDate(Date.valueOf(strDate)), enforceCorrectType(strDate, DateType))
 
     val ISO8601Time1 = "1970-01-01T01:00:01.0Z"
     checkTypePromotion(new Timestamp(3601000), enforceCorrectType(ISO8601Time1, TimestampType))
-    checkTypePromotion(new Date(3601000), enforceCorrectType(ISO8601Time1, DateType))
+    checkTypePromotion(DateUtils.millisToDays(3601000), enforceCorrectType(ISO8601Time1, DateType))
     val ISO8601Time2 = "1970-01-01T02:00:01-01:00"
     checkTypePromotion(new Timestamp(10801000), enforceCorrectType(ISO8601Time2, TimestampType))
-    checkTypePromotion(new Date(10801000), enforceCorrectType(ISO8601Time2, DateType))
+    checkTypePromotion(DateUtils.millisToDays(10801000), enforceCorrectType(ISO8601Time2, DateType))
   }
 
   test("Get compatible type") {
@@ -193,7 +198,7 @@ class JsonSuite extends QueryTest {
   }
 
   test("Complex field and type inferring with null in sampling") {
-    val jsonSchemaRDD = jsonRDD(jsonNullStruct)
+    val jsonDF = jsonRDD(jsonNullStruct)
     val expectedSchema = StructType(
       StructField("headers", StructType(
         StructField("Charset", StringType, true) ::
@@ -202,8 +207,8 @@ class JsonSuite extends QueryTest {
         StructField("ip", StringType, true) ::
         StructField("nullstr", StringType, true):: Nil)
 
-    assert(expectedSchema === jsonSchemaRDD.schema)
-    jsonSchemaRDD.registerTempTable("jsonTable")
+    assert(expectedSchema === jsonDF.schema)
+    jsonDF.registerTempTable("jsonTable")
 
     checkAnswer(
       sql("select nullstr, headers.Host from jsonTable"),
@@ -212,20 +217,20 @@ class JsonSuite extends QueryTest {
   }
 
   test("Primitive field and type inferring") {
-    val jsonSchemaRDD = jsonRDD(primitiveFieldAndType)
+    val jsonDF = jsonRDD(primitiveFieldAndType)
 
     val expectedSchema = StructType(
       StructField("bigInteger", DecimalType.Unlimited, true) ::
       StructField("boolean", BooleanType, true) ::
       StructField("double", DoubleType, true) ::
-      StructField("integer", IntegerType, true) ::
+      StructField("integer", LongType, true) ::
       StructField("long", LongType, true) ::
       StructField("null", StringType, true) ::
       StructField("string", StringType, true) :: Nil)
 
-    assert(expectedSchema === jsonSchemaRDD.schema)
+    assert(expectedSchema === jsonDF.schema)
 
-    jsonSchemaRDD.registerTempTable("jsonTable")
+    jsonDF.registerTempTable("jsonTable")
 
     checkAnswer(
       sql("select * from jsonTable"),
@@ -240,7 +245,7 @@ class JsonSuite extends QueryTest {
   }
 
   test("Complex field and type inferring") {
-    val jsonSchemaRDD = jsonRDD(complexFieldAndType1)
+    val jsonDF = jsonRDD(complexFieldAndType1)
 
     val expectedSchema = StructType(
       StructField("arrayOfArray1", ArrayType(ArrayType(StringType, false), false), true) ::
@@ -248,7 +253,7 @@ class JsonSuite extends QueryTest {
       StructField("arrayOfBigInteger", ArrayType(DecimalType.Unlimited, false), true) ::
       StructField("arrayOfBoolean", ArrayType(BooleanType, false), true) ::
       StructField("arrayOfDouble", ArrayType(DoubleType, false), true) ::
-      StructField("arrayOfInteger", ArrayType(IntegerType, false), true) ::
+      StructField("arrayOfInteger", ArrayType(LongType, false), true) ::
       StructField("arrayOfLong", ArrayType(LongType, false), true) ::
       StructField("arrayOfNull", ArrayType(StringType, true), true) ::
       StructField("arrayOfString", ArrayType(StringType, false), true) ::
@@ -261,12 +266,12 @@ class JsonSuite extends QueryTest {
         StructField("field1", BooleanType, true) ::
         StructField("field2", DecimalType.Unlimited, true) :: Nil), true) ::
       StructField("structWithArrayFields", StructType(
-        StructField("field1", ArrayType(IntegerType, false), true) ::
+        StructField("field1", ArrayType(LongType, false), true) ::
         StructField("field2", ArrayType(StringType, false), true) :: Nil), true) :: Nil)
 
-    assert(expectedSchema === jsonSchemaRDD.schema)
+    assert(expectedSchema === jsonDF.schema)
 
-    jsonSchemaRDD.registerTempTable("jsonTable")
+    jsonDF.registerTempTable("jsonTable")
 
     // Access elements of a primitive array.
     checkAnswer(
@@ -338,26 +343,24 @@ class JsonSuite extends QueryTest {
     )
   }
 
-  ignore("Complex field and type inferring (Ignored)") {
-    val jsonSchemaRDD = jsonRDD(complexFieldAndType1)
-    jsonSchemaRDD.registerTempTable("jsonTable")
+  test("GetField operation on complex data type") {
+    val jsonDF = jsonRDD(complexFieldAndType1)
+    jsonDF.registerTempTable("jsonTable")
 
-    // Right now, "field1" and "field2" are treated as aliases. We should fix it.
     checkAnswer(
       sql("select arrayOfStruct[0].field1, arrayOfStruct[0].field2 from jsonTable"),
       Row(true, "str1")
     )
 
-    // Right now, the analyzer cannot resolve arrayOfStruct.field1 and arrayOfStruct.field2.
     // Getting all values of a specific field from an array of structs.
     checkAnswer(
       sql("select arrayOfStruct.field1, arrayOfStruct.field2 from jsonTable"),
-      Row(Seq(true, false), Seq("str1", null))
+      Row(Seq(true, false, null), Seq("str1", null, null))
     )
   }
 
   test("Type conflict in primitive field values") {
-    val jsonSchemaRDD = jsonRDD(primitiveFieldValueTypeConflict)
+    val jsonDF = jsonRDD(primitiveFieldValueTypeConflict)
 
     val expectedSchema = StructType(
       StructField("num_bool", StringType, true) ::
@@ -367,9 +370,9 @@ class JsonSuite extends QueryTest {
       StructField("num_str", StringType, true) ::
       StructField("str_bool", StringType, true) :: Nil)
 
-    assert(expectedSchema === jsonSchemaRDD.schema)
+    assert(expectedSchema === jsonDF.schema)
 
-    jsonSchemaRDD.registerTempTable("jsonTable")
+    jsonDF.registerTempTable("jsonTable")
 
     checkAnswer(
       sql("select * from jsonTable"),
@@ -428,8 +431,8 @@ class JsonSuite extends QueryTest {
   }
 
   ignore("Type conflict in primitive field values (Ignored)") {
-    val jsonSchemaRDD = jsonRDD(primitiveFieldValueTypeConflict)
-    jsonSchemaRDD.registerTempTable("jsonTable")
+    val jsonDF = jsonRDD(primitiveFieldValueTypeConflict)
+    jsonDF.registerTempTable("jsonTable")
 
     // Right now, the analyzer does not promote strings in a boolean expreesion.
     // Number and Boolean conflict: resolve the type as boolean in this query.
@@ -462,9 +465,9 @@ class JsonSuite extends QueryTest {
     // We should directly cast num_str to DecimalType and also need to do the right type promotion
     // in the Project.
     checkAnswer(
-      jsonSchemaRDD.
+      jsonDF.
         where('num_str > BigDecimal("92233720368547758060")).
-        select('num_str + 1.2 as Symbol("num")),
+        select(('num_str + 1.2).as("num")),
       Row(new java.math.BigDecimal("92233720368547758061.2"))
     )
 
@@ -481,19 +484,19 @@ class JsonSuite extends QueryTest {
   }
 
   test("Type conflict in complex field values") {
-    val jsonSchemaRDD = jsonRDD(complexFieldValueTypeConflict)
+    val jsonDF = jsonRDD(complexFieldValueTypeConflict)
 
     val expectedSchema = StructType(
-      StructField("array", ArrayType(IntegerType, false), true) ::
+      StructField("array", ArrayType(LongType, false), true) ::
       StructField("num_struct", StringType, true) ::
       StructField("str_array", StringType, true) ::
       StructField("struct", StructType(
         StructField("field", StringType, true) :: Nil), true) ::
       StructField("struct_array", StringType, true) :: Nil)
 
-    assert(expectedSchema === jsonSchemaRDD.schema)
+    assert(expectedSchema === jsonDF.schema)
 
-    jsonSchemaRDD.registerTempTable("jsonTable")
+    jsonDF.registerTempTable("jsonTable")
 
     checkAnswer(
       sql("select * from jsonTable"),
@@ -505,7 +508,7 @@ class JsonSuite extends QueryTest {
   }
 
   test("Type conflict in array elements") {
-    val jsonSchemaRDD = jsonRDD(arrayElementTypeConflict)
+    val jsonDF = jsonRDD(arrayElementTypeConflict)
 
     val expectedSchema = StructType(
       StructField("array1", ArrayType(StringType, true), true) ::
@@ -513,9 +516,9 @@ class JsonSuite extends QueryTest {
         StructField("field", LongType, true) :: Nil), false), true) ::
       StructField("array3", ArrayType(StringType, false), true) :: Nil)
 
-    assert(expectedSchema === jsonSchemaRDD.schema)
+    assert(expectedSchema === jsonDF.schema)
 
-    jsonSchemaRDD.registerTempTable("jsonTable")
+    jsonDF.registerTempTable("jsonTable")
 
     checkAnswer(
       sql("select * from jsonTable"),
@@ -533,39 +536,39 @@ class JsonSuite extends QueryTest {
   }
 
   test("Handling missing fields") {
-    val jsonSchemaRDD = jsonRDD(missingFields)
+    val jsonDF = jsonRDD(missingFields)
 
     val expectedSchema = StructType(
       StructField("a", BooleanType, true) ::
       StructField("b", LongType, true) ::
-      StructField("c", ArrayType(IntegerType, false), true) ::
+      StructField("c", ArrayType(LongType, false), true) ::
       StructField("d", StructType(
         StructField("field", BooleanType, true) :: Nil), true) ::
       StructField("e", StringType, true) :: Nil)
 
-    assert(expectedSchema === jsonSchemaRDD.schema)
+    assert(expectedSchema === jsonDF.schema)
 
-    jsonSchemaRDD.registerTempTable("jsonTable")
+    jsonDF.registerTempTable("jsonTable")
   }
 
   test("Loading a JSON dataset from a text file") {
     val file = getTempFilePath("json")
     val path = file.toString
     primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
-    val jsonSchemaRDD = jsonFile(path)
+    val jsonDF = jsonFile(path)
 
     val expectedSchema = StructType(
       StructField("bigInteger", DecimalType.Unlimited, true) ::
       StructField("boolean", BooleanType, true) ::
       StructField("double", DoubleType, true) ::
-      StructField("integer", IntegerType, true) ::
+      StructField("integer", LongType, true) ::
       StructField("long", LongType, true) ::
       StructField("null", StringType, true) ::
       StructField("string", StringType, true) :: Nil)
 
-    assert(expectedSchema === jsonSchemaRDD.schema)
+    assert(expectedSchema === jsonDF.schema)
 
-    jsonSchemaRDD.registerTempTable("jsonTable")
+    jsonDF.registerTempTable("jsonTable")
 
     checkAnswer(
       sql("select * from jsonTable"),
@@ -619,11 +622,11 @@ class JsonSuite extends QueryTest {
       StructField("null", StringType, true) ::
       StructField("string", StringType, true) :: Nil)
 
-    val jsonSchemaRDD1 = jsonFile(path, schema)
+    val jsonDF1 = jsonFile(path, schema)
 
-    assert(schema === jsonSchemaRDD1.schema)
+    assert(schema === jsonDF1.schema)
 
-    jsonSchemaRDD1.registerTempTable("jsonTable1")
+    jsonDF1.registerTempTable("jsonTable1")
 
     checkAnswer(
       sql("select * from jsonTable1"),
@@ -636,11 +639,11 @@ class JsonSuite extends QueryTest {
       "this is a simple string.")
     )
 
-    val jsonSchemaRDD2 = jsonRDD(primitiveFieldAndType, schema)
+    val jsonDF2 = jsonRDD(primitiveFieldAndType, schema)
 
-    assert(schema === jsonSchemaRDD2.schema)
+    assert(schema === jsonDF2.schema)
 
-    jsonSchemaRDD2.registerTempTable("jsonTable2")
+    jsonDF2.registerTempTable("jsonTable2")
 
     checkAnswer(
       sql("select * from jsonTable2"),
@@ -654,9 +657,65 @@ class JsonSuite extends QueryTest {
     )
   }
 
+  test("Applying schemas with MapType") {
+    val schemaWithSimpleMap = StructType(
+      StructField("map", MapType(StringType, IntegerType, true), false) :: Nil)
+    val jsonWithSimpleMap = jsonRDD(mapType1, schemaWithSimpleMap)
+
+    jsonWithSimpleMap.registerTempTable("jsonWithSimpleMap")
+
+    checkAnswer(
+      sql("select map from jsonWithSimpleMap"),
+      Row(Map("a" -> 1)) ::
+      Row(Map("b" -> 2)) ::
+      Row(Map("c" -> 3)) ::
+      Row(Map("c" -> 1, "d" -> 4)) ::
+      Row(Map("e" -> null)) :: Nil
+    )
+
+    checkAnswer(
+      sql("select map['c'] from jsonWithSimpleMap"),
+      Row(null) ::
+      Row(null) ::
+      Row(3) ::
+      Row(1) ::
+      Row(null) :: Nil
+    )
+
+    val innerStruct = StructType(
+      StructField("field1", ArrayType(IntegerType, true), true) ::
+      StructField("field2", IntegerType, true) :: Nil)
+    val schemaWithComplexMap = StructType(
+      StructField("map", MapType(StringType, innerStruct, true), false) :: Nil)
+
+    val jsonWithComplexMap = jsonRDD(mapType2, schemaWithComplexMap)
+
+    jsonWithComplexMap.registerTempTable("jsonWithComplexMap")
+
+    checkAnswer(
+      sql("select map from jsonWithComplexMap"),
+      Row(Map("a" -> Row(Seq(1, 2, 3, null), null))) ::
+      Row(Map("b" -> Row(null, 2))) ::
+      Row(Map("c" -> Row(Seq(), 4))) ::
+      Row(Map("c" -> Row(null, 3), "d" -> Row(Seq(null), null))) ::
+      Row(Map("e" -> null)) ::
+      Row(Map("f" -> Row(null, null))) :: Nil
+    )
+
+    checkAnswer(
+      sql("select map['a'].field1, map['c'].field2 from jsonWithComplexMap"),
+      Row(Seq(1, 2, 3, null), null) ::
+      Row(null, null) ::
+      Row(null, 4) ::
+      Row(null, 3) ::
+      Row(null, null) ::
+      Row(null, null) :: Nil
+    )
+  }
+
   test("SPARK-2096 Correctly parse dot notations") {
-    val jsonSchemaRDD = jsonRDD(complexFieldAndType2)
-    jsonSchemaRDD.registerTempTable("jsonTable")
+    val jsonDF = jsonRDD(complexFieldAndType2)
+    jsonDF.registerTempTable("jsonTable")
 
     checkAnswer(
       sql("select arrayOfStruct[0].field1, arrayOfStruct[0].field2 from jsonTable"),
@@ -673,8 +732,8 @@ class JsonSuite extends QueryTest {
   }
 
   test("SPARK-3390 Complex arrays") {
-    val jsonSchemaRDD = jsonRDD(complexFieldAndType2)
-    jsonSchemaRDD.registerTempTable("jsonTable")
+    val jsonDF = jsonRDD(complexFieldAndType2)
+    jsonDF.registerTempTable("jsonTable")
 
     checkAnswer(
       sql(
@@ -696,8 +755,8 @@ class JsonSuite extends QueryTest {
   }
 
   test("SPARK-3308 Read top level JSON arrays") {
-    val jsonSchemaRDD = jsonRDD(jsonArray)
-    jsonSchemaRDD.registerTempTable("jsonTable")
+    val jsonDF = jsonRDD(jsonArray)
+    jsonDF.registerTempTable("jsonTable")
 
     checkAnswer(
       sql(
@@ -717,8 +776,8 @@ class JsonSuite extends QueryTest {
     val oldColumnNameOfCorruptRecord = TestSQLContext.conf.columnNameOfCorruptRecord
     TestSQLContext.setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD, "_unparsed")
 
-    val jsonSchemaRDD = jsonRDD(corruptRecords)
-    jsonSchemaRDD.registerTempTable("jsonTable")
+    val jsonDF = jsonRDD(corruptRecords)
+    jsonDF.registerTempTable("jsonTable")
 
     val schema = StructType(
       StructField("_unparsed", StringType, true) ::
@@ -726,7 +785,7 @@ class JsonSuite extends QueryTest {
       StructField("b", StringType, true) ::
       StructField("c", StringType, true) :: Nil)
 
-    assert(schema === jsonSchemaRDD.schema)
+    assert(schema === jsonDF.schema)
 
     // In HiveContext, backticks should be used to access columns starting with a underscore.
     checkAnswer(
@@ -771,22 +830,22 @@ class JsonSuite extends QueryTest {
   }
 
   test("SPARK-4068: nulls in arrays") {
-    val jsonSchemaRDD = jsonRDD(nullsInArrays)
-    jsonSchemaRDD.registerTempTable("jsonTable")
+    val jsonDF = jsonRDD(nullsInArrays)
+    jsonDF.registerTempTable("jsonTable")
 
     val schema = StructType(
       StructField("field1",
         ArrayType(ArrayType(ArrayType(ArrayType(StringType, false), false), true), false), true) ::
       StructField("field2",
         ArrayType(ArrayType(
-          StructType(StructField("Test", IntegerType, true) :: Nil), false), true), true) ::
+          StructType(StructField("Test", LongType, true) :: Nil), false), true), true) ::
       StructField("field3",
         ArrayType(ArrayType(
           StructType(StructField("Test", StringType, true) :: Nil), true), false), true) ::
       StructField("field4",
-        ArrayType(ArrayType(ArrayType(IntegerType, false), true), false), true) :: Nil)
+        ArrayType(ArrayType(ArrayType(LongType, false), true), false), true) :: Nil)
 
-    assert(schema === jsonSchemaRDD.schema)
+    assert(schema === jsonDF.schema)
 
     checkAnswer(
       sql(
@@ -801,7 +860,7 @@ class JsonSuite extends QueryTest {
     )
   }
 
-  test("SPARK-4228 SchemaRDD to JSON")
+  test("SPARK-4228 DataFrame to JSON")
   {
     val schema1 = StructType(
       StructField("f1", IntegerType, false) ::
@@ -818,12 +877,12 @@ class JsonSuite extends QueryTest {
       Row(values(0).toInt, values(1), values(2).toBoolean, r.split(",").toList, v5)
     }
 
-    val schemaRDD1 = applySchema(rowRDD1, schema1)
-    schemaRDD1.registerTempTable("applySchema1")
-    val schemaRDD2 = schemaRDD1.toSchemaRDD
-    val result = schemaRDD2.toJSON.collect()
-    assert(result(0) == "{\"f1\":1,\"f2\":\"A1\",\"f3\":true,\"f4\":[\"1\",\" A1\",\" true\",\" null\"]}")
-    assert(result(3) == "{\"f1\":4,\"f2\":\"D4\",\"f3\":true,\"f4\":[\"4\",\" D4\",\" true\",\" 2147483644\"],\"f5\":2147483644}")
+    val df1 = createDataFrame(rowRDD1, schema1)
+    df1.registerTempTable("applySchema1")
+    val df2 = df1.toDF
+    val result = df2.toJSON.collect()
+    assert(result(0) === "{\"f1\":1,\"f2\":\"A1\",\"f3\":true,\"f4\":[\"1\",\" A1\",\" true\",\" null\"]}")
+    assert(result(3) === "{\"f1\":4,\"f2\":\"D4\",\"f3\":true,\"f4\":[\"4\",\" D4\",\" true\",\" 2147483644\"],\"f5\":2147483644}")
 
     val schema2 = StructType(
       StructField("f1", StructType(
@@ -839,16 +898,16 @@ class JsonSuite extends QueryTest {
       Row(Row(values(0).toInt, values(2).toBoolean), Map(values(1) -> v4))
     }
 
-    val schemaRDD3 = applySchema(rowRDD2, schema2)
-    schemaRDD3.registerTempTable("applySchema2")
-    val schemaRDD4 = schemaRDD3.toSchemaRDD
-    val result2 = schemaRDD4.toJSON.collect()
+    val df3 = createDataFrame(rowRDD2, schema2)
+    df3.registerTempTable("applySchema2")
+    val df4 = df3.toDF
+    val result2 = df4.toJSON.collect()
 
-    assert(result2(1) == "{\"f1\":{\"f11\":2,\"f12\":false},\"f2\":{\"B2\":null}}")
-    assert(result2(3) == "{\"f1\":{\"f11\":4,\"f12\":true},\"f2\":{\"D4\":2147483644}}")
+    assert(result2(1) === "{\"f1\":{\"f11\":2,\"f12\":false},\"f2\":{\"B2\":null}}")
+    assert(result2(3) === "{\"f1\":{\"f11\":4,\"f12\":true},\"f2\":{\"D4\":2147483644}}")
 
-    val jsonSchemaRDD = jsonRDD(primitiveFieldAndType)
-    val primTable = jsonRDD(jsonSchemaRDD.toJSON)
+    val jsonDF = jsonRDD(primitiveFieldAndType)
+    val primTable = jsonRDD(jsonDF.toJSON)
     primTable.registerTempTable("primativeTable")
     checkAnswer(
         sql("select * from primativeTable"),
@@ -860,8 +919,8 @@ class JsonSuite extends QueryTest {
         "this is a simple string.")
       )
 
-    val complexJsonSchemaRDD = jsonRDD(complexFieldAndType1)
-    val compTable = jsonRDD(complexJsonSchemaRDD.toJSON)
+    val complexJsonDF = jsonRDD(complexFieldAndType1)
+    val compTable = jsonRDD(complexJsonDF.toJSON)
     compTable.registerTempTable("complexTable")
     // Access elements of a primitive array.
     checkAnswer(
@@ -920,6 +979,30 @@ class JsonSuite extends QueryTest {
       sql("select structWithArrayFields.field1[1], structWithArrayFields.field2[3] from complexTable"),
       Row(5, null)
     )
+  }
 
+  test("JSONRelation equality test") {
+    val relation1 =
+      JSONRelation("path", 1.0, Some(StructType(StructField("a", IntegerType, true) :: Nil)))(null)
+    val logicalRelation1 = LogicalRelation(relation1)
+    val relation2 =
+      JSONRelation("path", 0.5, Some(StructType(StructField("a", IntegerType, true) :: Nil)))(
+        org.apache.spark.sql.test.TestSQLContext)
+    val logicalRelation2 = LogicalRelation(relation2)
+    val relation3 =
+      JSONRelation("path", 1.0, Some(StructType(StructField("b", StringType, true) :: Nil)))(null)
+    val logicalRelation3 = LogicalRelation(relation3)
+
+    assert(relation1 === relation2)
+    assert(logicalRelation1.sameResult(logicalRelation2),
+      s"$logicalRelation1 and $logicalRelation2 should be considered having the same result.")
+
+    assert(relation1 !== relation3)
+    assert(!logicalRelation1.sameResult(logicalRelation3),
+      s"$logicalRelation1 and $logicalRelation3 should be considered not having the same result.")
+
+    assert(relation2 !== relation3)
+    assert(!logicalRelation2.sameResult(logicalRelation3),
+      s"$logicalRelation2 and $logicalRelation3 should be considered not having the same result.")
   }
 }

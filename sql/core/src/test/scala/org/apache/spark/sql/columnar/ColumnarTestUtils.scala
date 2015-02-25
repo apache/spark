@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.columnar
 
+import java.sql.Timestamp
+
 import scala.collection.immutable.HashSet
 import scala.util.Random
-
-import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
@@ -50,7 +50,7 @@ object ColumnarTestUtils {
       case STRING    => Random.nextString(Random.nextInt(32))
       case BOOLEAN   => Random.nextBoolean()
       case BINARY    => randomBytes(Random.nextInt(32))
-      case DATE      => new Date(Random.nextLong())
+      case DATE      => Random.nextInt()
       case TIMESTAMP =>
         val timestamp = new Timestamp(Random.nextLong())
         timestamp.setNanos(Random.nextInt(999999999))

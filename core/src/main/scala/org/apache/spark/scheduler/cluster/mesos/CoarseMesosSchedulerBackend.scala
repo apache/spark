@@ -31,7 +31,7 @@ import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, TaskState => MesosTas
 import org.apache.spark.{Logging, SparkContext, SparkEnv, SparkException}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Utils, AkkaUtils}
 
 /**
  * A SchedulerBackend that runs tasks on Mesos, but uses "coarse-grained" tasks, where it holds
@@ -143,7 +143,8 @@ private[spark] class CoarseMesosSchedulerBackend(
     }
     val command = CommandInfo.newBuilder()
       .setEnvironment(environment)
-    val driverUrl = "akka.tcp://%s@%s:%s/user/%s".format(
+    val driverUrl = AkkaUtils.address(
+      AkkaUtils.protocol(sc.env.actorSystem),
       SparkEnv.driverActorSystemName,
       conf.get("spark.driver.host"),
       conf.get("spark.driver.port"),
@@ -153,18 +154,25 @@ private[spark] class CoarseMesosSchedulerBackend(
     if (uri == null) {
       val runScript = new File(executorSparkHome, "./bin/spark-class").getCanonicalPath
       command.setValue(
-        "%s \"%s\" org.apache.spark.executor.CoarseGrainedExecutorBackend %s %s %s %d %s".format(
-          prefixEnv, runScript, driverUrl, offer.getSlaveId.getValue,
-          offer.getHostname, numCores, appId))
+        "%s \"%s\" org.apache.spark.executor.CoarseGrainedExecutorBackend"
+          .format(prefixEnv, runScript) +
+        s" --driver-url $driverUrl" +
+        s" --executor-id ${offer.getSlaveId.getValue}" +
+        s" --hostname ${offer.getHostname}" +
+        s" --cores $numCores" +
+        s" --app-id $appId")
     } else {
       // Grab everything to the first '.'. We'll use that and '*' to
       // glob the directory "correctly".
       val basename = uri.split('/').last.split('.').head
       command.setValue(
-        ("cd %s*; %s " +
-          "./bin/spark-class org.apache.spark.executor.CoarseGrainedExecutorBackend %s %s %s %d %s")
-          .format(basename, prefixEnv, driverUrl, offer.getSlaveId.getValue,
-            offer.getHostname, numCores, appId))
+        s"cd $basename*; $prefixEnv " +
+         "./bin/spark-class org.apache.spark.executor.CoarseGrainedExecutorBackend" +
+        s" --driver-url $driverUrl" +
+        s" --executor-id ${offer.getSlaveId.getValue}" +
+        s" --hostname ${offer.getHostname}" +
+        s" --cores $numCores" +
+        s" --app-id $appId")
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri))
     }
     command.build()

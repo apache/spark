@@ -152,6 +152,11 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   /** Prints out the schema in the tree format */
   def printSchema(): Unit = println(schemaString)
 
+  /**
+   * A prefix string used when printing the plan.
+   *
+   * We use "!" to indicate an invalid plan, and "'" to indicate an unresolved plan.
+   */
   protected def statePrefix = if (missingInput.nonEmpty && children.nonEmpty) "!" else ""
 
   override def simpleString = statePrefix + super.simpleString

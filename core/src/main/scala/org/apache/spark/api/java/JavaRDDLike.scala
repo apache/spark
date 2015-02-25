@@ -349,6 +349,19 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def reduce(f: JFunction2[T, T, T]): T = rdd.reduce(f)
 
   /**
+   * Reduces the elements of this RDD in a multi-level tree pattern.
+   *
+   * @param depth suggested depth of the tree
+   * @see [[org.apache.spark.api.java.JavaRDDLike#reduce]]
+   */
+  def treeReduce(f: JFunction2[T, T, T], depth: Int): T = rdd.treeReduce(f, depth)
+
+  /**
+   * [[org.apache.spark.api.java.JavaRDDLike#treeReduce]] with suggested depth 2.
+   */
+  def treeReduce(f: JFunction2[T, T, T]): T = treeReduce(f, 2)
+
+  /**
    * Aggregate the elements of each partition, and then the results for all the partitions, using a
    * given associative function and a neutral "zero value". The function op(t1, t2) is allowed to
    * modify t1 and return it as its result value to avoid object allocation; however, it should not
@@ -368,6 +381,30 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def aggregate[U](zeroValue: U)(seqOp: JFunction2[U, T, U],
     combOp: JFunction2[U, U, U]): U =
     rdd.aggregate(zeroValue)(seqOp, combOp)(fakeClassTag[U])
+
+  /**
+   * Aggregates the elements of this RDD in a multi-level tree pattern.
+   *
+   * @param depth suggested depth of the tree
+   * @see [[org.apache.spark.api.java.JavaRDDLike#aggregate]]
+   */
+  def treeAggregate[U](
+      zeroValue: U,
+      seqOp: JFunction2[U, T, U],
+      combOp: JFunction2[U, U, U],
+      depth: Int): U = {
+    rdd.treeAggregate(zeroValue)(seqOp, combOp, depth)(fakeClassTag[U])
+  }
+
+  /**
+   * [[org.apache.spark.api.java.JavaRDDLike#treeAggregate]] with suggested depth 2.
+   */
+  def treeAggregate[U](
+      zeroValue: U,
+      seqOp: JFunction2[U, T, U],
+      combOp: JFunction2[U, U, U]): U = {
+    treeAggregate(zeroValue, seqOp, combOp, 2)
+  }
 
   /**
    * Return the number of elements in the RDD.

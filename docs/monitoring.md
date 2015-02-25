@@ -1,6 +1,7 @@
 ---
 layout: global
 title: Monitoring and Instrumentation
+description: Monitoring, metrics, and instrumentation guide for Spark SPARK_VERSION_SHORT
 ---
 
 There are several ways to monitor Spark applications: web UIs, metrics, and external instrumentation.
@@ -175,6 +176,7 @@ Each instance can report to zero or more _sinks_. Sinks are contained in the
 * `JmxSink`: Registers metrics for viewing in a JMX console.
 * `MetricsServlet`: Adds a servlet within the existing Spark UI to serve metrics data as JSON data.
 * `GraphiteSink`: Sends metrics to a Graphite node.
+* `Slf4jSink`: Sends metrics to slf4j as log entries.
 
 Spark also supports a Ganglia sink which is not included in the default build due to
 licensing restrictions:

@@ -35,16 +35,18 @@ import org.apache.hadoop.mapred.Reporter
 import org.apache.hadoop.mapred.JobID
 import org.apache.hadoop.mapred.TaskAttemptID
 import org.apache.hadoop.mapred.TaskID
+import org.apache.hadoop.mapred.lib.CombineFileSplit
 import org.apache.hadoop.util.ReflectionUtils
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.executor.{DataReadMethod, InputMetrics}
+import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.rdd.HadoopRDD.HadoopMapPartitionsWithSplitRDD
 import org.apache.spark.util.{NextIterator, Utils}
 import org.apache.spark.scheduler.{HostTaskLocation, HDFSCacheTaskLocation}
+import org.apache.spark.storage.StorageLevel
 
 /**
  * A Spark split class that wraps around a Hadoop InputSplit.
@@ -218,13 +220,13 @@ class HadoopRDD[K, V](
 
       // Find a function that will return the FileSystem bytes read by this thread. Do this before
       // creating RecordReader, because RecordReader's constructor might read some bytes
-      val bytesReadCallback = inputMetrics.bytesReadCallback.orElse(
+      val bytesReadCallback = inputMetrics.bytesReadCallback.orElse {
         split.inputSplit.value match {
-          case split: FileSplit =>
-            SparkHadoopUtil.get.getFSBytesReadOnThreadCallback(split.getPath, jobConf)
+          case _: FileSplit | _: CombineFileSplit =>
+            SparkHadoopUtil.get.getFSBytesReadOnThreadCallback()
           case _ => None
         }
-      )
+      }
       inputMetrics.setBytesReadCallback(bytesReadCallback)
 
       var reader: RecordReader[K, V] = null
@@ -245,7 +247,9 @@ class HadoopRDD[K, V](
           case eof: EOFException =>
             finished = true
         }
-
+        if (!finished) {
+          inputMetrics.incRecordsRead(1)
+        }
         (key, value)
       }
 
@@ -254,11 +258,12 @@ class HadoopRDD[K, V](
           reader.close()
           if (bytesReadCallback.isDefined) {
             inputMetrics.updateBytesRead()
-          } else if (split.inputSplit.value.isInstanceOf[FileSplit]) {
+          } else if (split.inputSplit.value.isInstanceOf[FileSplit] ||
+                     split.inputSplit.value.isInstanceOf[CombineFileSplit]) {
             // If we can't get the bytes read from the FS stats, fall back to the split size,
             // which may be inaccurate.
             try {
-              inputMetrics.addBytesRead(split.inputSplit.value.getLength)
+              inputMetrics.incBytesRead(split.inputSplit.value.getLength)
             } catch {
               case e: java.io.IOException =>
                 logWarning("Unable to get input size to set InputMetrics for task", e)
@@ -304,6 +309,15 @@ class HadoopRDD[K, V](
 
   override def checkpoint() {
     // Do nothing. Hadoop RDD should not be checkpointed.
+  }
+
+  override def persist(storageLevel: StorageLevel): this.type = {
+    if (storageLevel.deserialized) {
+      logWarning("Caching NewHadoopRDDs as deserialized objects usually leads to undesired" +
+        " behavior because Hadoop's RecordReader reuses the same Writable object for all records." +
+        " Use a map transformation to make copies of the records.")
+    }
+    super.persist(storageLevel)
   }
 
   def getConf: Configuration = getJobConf()

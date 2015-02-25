@@ -28,7 +28,6 @@ import org.apache.spark._
  * of them will be combined together, showed in one line.
  */
 private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
-
   // Carrige return
   val CR = '\r'
   // Update period of progress bar, in milliseconds
@@ -121,4 +120,10 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
     clear()
     lastFinishTime = System.currentTimeMillis()
   }
+
+  /**
+   * Tear down the timer thread.  The timer thread is a GC root, and it retains the entire
+   * SparkContext if it's not terminated.
+   */
+  def stop(): Unit = timer.cancel()
 }

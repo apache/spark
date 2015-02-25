@@ -47,16 +47,22 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sqlContext: SQL
 
     FiltersPushed.list = filters
 
-    val filterFunctions = filters.collect {
+    def translateFilter(filter: Filter): Int => Boolean = filter match {
       case EqualTo("a", v) => (a: Int) => a == v
       case LessThan("a", v: Int) => (a: Int) => a < v
       case LessThanOrEqual("a", v: Int) => (a: Int) => a <= v
       case GreaterThan("a", v: Int) => (a: Int) => a > v
       case GreaterThanOrEqual("a", v: Int) => (a: Int) => a >= v
       case In("a", values) => (a: Int) => values.map(_.asInstanceOf[Int]).toSet.contains(a)
+      case IsNull("a") => (a: Int) => false // Int can't be null
+      case IsNotNull("a") => (a: Int) => true
+      case Not(pred) => (a: Int) => !translateFilter(pred)(a)
+      case And(left, right) => (a: Int) => translateFilter(left)(a) && translateFilter(right)(a)
+      case Or(left, right) => (a: Int) => translateFilter(left)(a) || translateFilter(right)(a)
+      case _ => (a: Int) => true
     }
 
-    def eval(a: Int) = !filterFunctions.map(_(a)).contains(false)
+    def eval(a: Int) = !filters.map(translateFilter(_)(a)).contains(false)
 
     sqlContext.sparkContext.parallelize(from to to).filter(eval).map(i =>
       Row.fromSeq(rowBuilders.map(_(i)).reduceOption(_ ++ _).getOrElse(Seq.empty)))
@@ -136,6 +142,26 @@ class FilteredScanSuite extends DataSourceTest {
     "SELECT * FROM oneToTenFiltered WHERE b = 2",
     Seq(1).map(i => Row(i, i * 2)).toSeq)
 
+  sqlTest(
+    "SELECT * FROM oneToTenFiltered WHERE a IS NULL",
+    Seq.empty[Row])
+
+  sqlTest(
+    "SELECT * FROM oneToTenFiltered WHERE a IS NOT NULL",
+    (1 to 10).map(i => Row(i, i * 2)).toSeq)
+
+  sqlTest(
+    "SELECT * FROM oneToTenFiltered WHERE a < 5 AND a > 1",
+    (2 to 4).map(i => Row(i, i * 2)).toSeq)
+
+  sqlTest(
+    "SELECT * FROM oneToTenFiltered WHERE a < 3 OR a > 8",
+    Seq(1, 2, 9, 10).map(i => Row(i, i * 2)).toSeq)
+
+  sqlTest(
+    "SELECT * FROM oneToTenFiltered WHERE NOT (a < 6)",
+    (6 to 10).map(i => Row(i, i * 2)).toSeq)
+
   testPushDown("SELECT * FROM oneToTenFiltered WHERE A = 1", 1)
   testPushDown("SELECT a FROM oneToTenFiltered WHERE A = 1", 1)
   testPushDown("SELECT b FROM oneToTenFiltered WHERE A = 1", 1)
@@ -161,6 +187,10 @@ class FilteredScanSuite extends DataSourceTest {
 
   testPushDown("SELECT * FROM oneToTenFiltered WHERE a = 20", 0)
   testPushDown("SELECT * FROM oneToTenFiltered WHERE b = 1", 10)
+
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE a < 5 AND a > 1", 3)
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE a < 3 OR a > 8", 4)
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE NOT (a < 6)", 5)
 
   def testPushDown(sqlString: String, expectedCount: Int): Unit = {
     test(s"PushDown Returns $expectedCount: $sqlString") {

@@ -45,6 +45,7 @@ import scala.reflect.api.{Mirror, TypeCreator, Universe => ApiUniverse}
 import org.apache.spark.Logging
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.util.Utils
 
 /** The Scala interactive shell.  It provides a read-eval-print loop
@@ -130,6 +131,7 @@ class SparkILoop(
   // NOTE: Must be public for visibility
   @DeveloperApi
   var sparkContext: SparkContext = _
+  var sqlContext: SQLContext = _
 
   override def echoCommandMessage(msg: String) {
     intp.reporter printMessage msg
@@ -1016,6 +1018,23 @@ class SparkILoop(
     sparkContext
   }
 
+  @DeveloperApi
+  def createSQLContext(): SQLContext = {
+    val name = "org.apache.spark.sql.hive.HiveContext"
+    val loader = Utils.getContextOrSparkClassLoader
+    try {
+      sqlContext = loader.loadClass(name).getConstructor(classOf[SparkContext])
+        .newInstance(sparkContext).asInstanceOf[SQLContext] 
+      logInfo("Created sql context (with Hive support)..")
+    }
+    catch {
+      case cnf: java.lang.ClassNotFoundException =>
+        sqlContext = new SQLContext(sparkContext)
+        logInfo("Created sql context..")
+    }
+    sqlContext
+  }
+
   private def getMaster(): String = {
     val master = this.master match {
       case Some(m) => m
@@ -1045,15 +1064,16 @@ class SparkILoop(
   private def main(settings: Settings): Unit = process(settings)
 }
 
-object SparkILoop {
+object SparkILoop extends Logging {
   implicit def loopToInterpreter(repl: SparkILoop): SparkIMain = repl.intp
   private def echo(msg: String) = Console println msg
 
   def getAddedJars: Array[String] = {
     val envJars = sys.env.get("ADD_JARS")
-    val propJars = sys.props.get("spark.jars").flatMap { p =>
-      if (p == "") None else Some(p)
+    if (envJars.isDefined) {
+      logWarning("ADD_JARS environment variable is deprecated, use --jar spark submit argument instead")
     }
+    val propJars = sys.props.get("spark.jars").flatMap { p => if (p == "") None else Some(p) }
     val jars = propJars.orElse(envJars).getOrElse("")
     Utils.resolveURIs(jars).split(",").filter(_.nonEmpty)
   }

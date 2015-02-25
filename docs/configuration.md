@@ -1,6 +1,7 @@
 ---
 layout: global
-title: Spark Configuration
+displayTitle: Spark Configuration
+title: Configuration
 ---
 * This will become a table of contents (this text will be scraped).
 {:toc}
@@ -114,7 +115,11 @@ of the most common options to set are:
   <td>
     Amount of memory to use for the driver process, i.e. where SparkContext is initialized.
     (e.g. <code>512m</code>, <code>2g</code>).
-  </td>
+    
+    <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
+    directly in your application, because the driver JVM has already started at that point.
+    Instead, please set this through the <code>--driver-memory</code> command line option
+    or in your default properties file.</td>
 </tr>
 <tr>
   <td><code>spark.executor.memory</code></td>
@@ -190,6 +195,17 @@ of the most common options to set are:
     Logs the effective SparkConf as INFO when a SparkContext is started.
   </td>
 </tr>
+<tr>
+  <td><code>spark.extraListeners</code></td>
+  <td>(none)</td>
+  <td>
+    A comma-separated list of classes that implement <code>SparkListener</code>; when initializing
+    SparkContext, instances of these classes will be created and registered with Spark's listener
+    bus.  If a class has a single-argument constructor that accepts a SparkConf, that constructor
+    will be called; otherwise, a zero-argument constructor will be called. If no valid constructor
+    can be found, the SparkContext creation will fail with an exception.
+  </td>
+</tr>
 </table>
 
 Apart from these, the following properties are also available, and may be useful in some situations:
@@ -202,6 +218,11 @@ Apart from these, the following properties are also available, and may be useful
   <td>(none)</td>
   <td>
     A string of extra JVM options to pass to the driver. For instance, GC settings or other logging.
+    
+    <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
+    directly in your application, because the driver JVM has already started at that point.
+    Instead, please set this through the <code>--driver-java-options</code> command line option or in 
+    your default properties file.</td>
   </td>
 </tr>
 <tr>
@@ -209,6 +230,11 @@ Apart from these, the following properties are also available, and may be useful
   <td>(none)</td>
   <td>
     Extra classpath entries to append to the classpath of the driver.
+
+    <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
+    directly in your application, because the driver JVM has already started at that point.
+    Instead, please set this through the <code>--driver-class-path</code> command line option or in 
+    your default properties file.</td>
   </td>
 </tr>
 <tr>
@@ -216,6 +242,22 @@ Apart from these, the following properties are also available, and may be useful
   <td>(none)</td>
   <td>
     Set a special library path to use when launching the driver JVM.
+    
+    <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
+    directly in your application, because the driver JVM has already started at that point.
+    Instead, please set this through the <code>--driver-library-path</code> command line option or in 
+    your default properties file.</td>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.driver.userClassPathFirst</code></td>
+  <td>false</td>
+  <td>
+    (Experimental) Whether to give user-added jars precedence over Spark's own jars when loading
+    classes in the the driver. This feature can be used to mitigate conflicts between Spark's
+    dependencies and user dependencies. It is currently an experimental feature.
+    
+    This is used in cluster mode only.
   </td>
 </tr>
 <tr>
@@ -285,13 +327,11 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.files.userClassPathFirst</code></td>
+  <td><code>spark.executor.userClassPathFirst</code></td>
   <td>false</td>
   <td>
-    (Experimental) Whether to give user-added jars precedence over Spark's own jars when
-    loading classes in Executors. This feature can be used to mitigate conflicts between
-    Spark's dependencies and user dependencies. It is currently an experimental feature.
-    (Currently, this setting does not work for YARN, see <a href="https://issues.apache.org/jira/browse/SPARK-2996">SPARK-2996</a> for more details).
+    (Experimental) Same functionality as <code>spark.driver.userClassPathFirst</code>, but
+    applied to executor instances.
   </td>
 </tr>
 <tr>
@@ -311,6 +351,9 @@ Apart from these, the following properties are also available, and may be useful
     or it will be displayed before the driver exiting. It also can be dumped into disk by
     `sc.dump_profiles(path)`. If some of the profile results had been displayed maually,
     they will not be displayed automatically before driver exiting.
+
+    By default the `pyspark.profiler.BasicProfiler` will be used, but this can be overridden by
+    passing a profiler class in as a parameter to the `SparkContext` constructor.
   </td>
 </tr>
 <tr>
@@ -850,8 +893,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.network.timeout</code></td>
   <td>120</td>
   <td>
-    Default timeout for all network interactions, in seconds. This config will be used in 
-    place of <code>spark.core.connection.ack.wait.timeout</code>, <code>spark.akka.timeout</code>, 
+    Default timeout for all network interactions, in seconds. This config will be used in
+    place of <code>spark.core.connection.ack.wait.timeout</code>, <code>spark.akka.timeout</code>,
     <code>spark.storage.blockManagerSlaveTimeoutMs</code> or
     <code>spark.shuffle.io.connectionTimeout</code>, if they are not configured.
   </td>
@@ -860,44 +903,32 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.akka.heartbeat.pauses</code></td>
   <td>6000</td>
   <td>
-     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be
-     enabled again, if you plan to use this feature (Not recommended). Acceptable heart beat pause
-     in seconds for akka. This can be used to control sensitivity to gc pauses. Tune this in
-     combination of `spark.akka.heartbeat.interval` and `spark.akka.failure-detector.threshold`
-     if you need to.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.akka.failure-detector.threshold</code></td>
-  <td>300.0</td>
-  <td>
-     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be
-     enabled again, if you plan to use this feature (Not recommended). This maps to akka's
-     `akka.remote.transport-failure-detector.threshold`. Tune this in combination of
-     `spark.akka.heartbeat.pauses` and `spark.akka.heartbeat.interval` if you need to.
+     This is set to a larger value to disable the transport failure detector that comes built in to Akka.
+     It can be enabled again, if you plan to use this feature (Not recommended). Acceptable heart 
+     beat pause in seconds for Akka. This can be used to control sensitivity to GC pauses. Tune
+     this along with `spark.akka.heartbeat.interval` if you need to.
   </td>
 </tr>
 <tr>
   <td><code>spark.akka.heartbeat.interval</code></td>
   <td>1000</td>
   <td>
-    This is set to a larger value to disable failure detector that comes inbuilt akka. It can be
-    enabled again, if you plan to use this feature (Not recommended). A larger interval value in
-    seconds reduces network overhead and a smaller value ( ~ 1 s) might be more informative for
-    akka's failure detector. Tune this in combination of `spark.akka.heartbeat.pauses` and
-    `spark.akka.failure-detector.threshold` if you need to. Only positive use case for using
-    failure detector can be, a sensistive failure detector can help evict rogue executors really
-    quick. However this is usually not the case as gc pauses and network lags are expected in a
-    real Spark cluster. Apart from that enabling this leads to a lot of exchanges of heart beats
-    between nodes leading to flooding the network with those.
+    This is set to a larger value to disable the transport failure detector that comes built in to Akka.
+    It can be enabled again, if you plan to use this feature (Not recommended). A larger interval 
+    value in seconds reduces network overhead and a smaller value ( ~ 1 s) might be more informative 
+    for Akka's failure detector. Tune this in combination of `spark.akka.heartbeat.pauses` if you need
+    to. A likely positive use case for using failure detector would be: a sensistive failure detector
+    can help evict rogue executors quickly. However this is usually not the case as GC pauses
+    and network lags are expected in a real Spark cluster. Apart from that enabling this leads to 
+    a lot of exchanges of heart beats between nodes leading to flooding the network with those.
   </td>
 </tr>
 <tr>
   <td><code>spark.shuffle.io.preferDirectBufs</code></td>
   <td>true</td>
   <td>
-    (Netty only) Off-heap buffers are used to reduce garbage collection during shuffle and cache 
-    block transfer. For environments where off-heap memory is tightly limited, users may wish to 
+    (Netty only) Off-heap buffers are used to reduce garbage collection during shuffle and cache
+    block transfer. For environments where off-heap memory is tightly limited, users may wish to
     turn this off to force all allocations from Netty to be on-heap.
   </td>
 </tr>
@@ -905,7 +936,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.shuffle.io.numConnectionsPerPeer</code></td>
   <td>1</td>
   <td>
-    (Netty only) Connections between hosts are reused in order to reduce connection buildup for 
+    (Netty only) Connections between hosts are reused in order to reduce connection buildup for
     large clusters. For clusters with many hard disks and few hosts, this may result in insufficient
     concurrency to saturate all disks, and so users may consider increasing this value.
   </td>
@@ -915,7 +946,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>3</td>
   <td>
     (Netty only) Fetches that fail due to IO-related exceptions are automatically retried if this is
-    set to a non-zero value. This retry logic helps stabilize large shuffles in the face of long GC 
+    set to a non-zero value. This retry logic helps stabilize large shuffles in the face of long GC
     pauses or transient network connectivity issues.
   </td>
 </tr>
@@ -924,7 +955,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>5</td>
   <td>
     (Netty only) Seconds to wait between retries of fetches. The maximum delay caused by retrying
-    is simply <code>maxRetries * retryWait</code>, by default 15 seconds. 
+    is simply <code>maxRetries * retryWait</code>. The default maximum delay is therefore 
+    15 seconds, because the default value of <code>maxRetries</code> is 3, and the default
+    <code>retryWait</code> here is 5 seconds.
   </td>
 </tr>
 </table>
@@ -1095,29 +1128,37 @@ Apart from these, the following properties are also available, and may be useful
     available on YARN mode. For more detail, see the description
     <a href="job-scheduling.html#dynamic-resource-allocation">here</a>.
     <br><br>
-    This requires the following configurations to be set:
+    This requires <code>spark.shuffle.service.enabled</code> to be set.
+    The following configurations are also relevant:
     <code>spark.dynamicAllocation.minExecutors</code>,
     <code>spark.dynamicAllocation.maxExecutors</code>, and
-    <code>spark.shuffle.service.enabled</code>
+    <code>spark.dynamicAllocation.initialExecutors</code>
   </td>
 </tr>
 <tr>
   <td><code>spark.dynamicAllocation.minExecutors</code></td>
-  <td>(none)</td>
+  <td>0</td>
   <td>
-    Lower bound for the number of executors if dynamic allocation is enabled (required).
+    Lower bound for the number of executors if dynamic allocation is enabled.
   </td>
 </tr>
 <tr>
   <td><code>spark.dynamicAllocation.maxExecutors</code></td>
-  <td>(none)</td>
+  <td>Integer.MAX_VALUE</td>
   <td>
-    Upper bound for the number of executors if dynamic allocation is enabled (required).
+    Upper bound for the number of executors if dynamic allocation is enabled.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.maxExecutors</code></td>
+  <td><code>spark.dynamicAllocation.minExecutors</code></td>
+  <td>
+    Initial number of executors to run if dynamic allocation is enabled.
   </td>
 </tr>
 <tr>
   <td><code>spark.dynamicAllocation.schedulerBacklogTimeout</code></td>
-  <td>60</td>
+  <td>5</td>
   <td>
     If dynamic allocation is enabled and there have been pending tasks backlogged for more than
     this duration (in seconds), new executors will be requested. For more detail, see this
@@ -1230,6 +1271,86 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 </table>
+
+#### Encryption
+
+<table class="table">
+    <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+    <tr>
+        <td><code>spark.ssl.enabled</code></td>
+        <td>false</td>
+        <td>
+            <p>Whether to enable SSL connections on all supported protocols.</p>
+
+            <p>All the SSL settings like <code>spark.ssl.xxx</code> where <code>xxx</code> is a
+            particular configuration property, denote the global configuration for all the supported
+            protocols. In order to override the global configuration for the particular protocol,
+            the properties must be overwritten in the protocol-specific namespace.</p>
+
+            <p>Use <code>spark.ssl.YYY.XXX</code> settings to overwrite the global configuration for
+            particular protocol denoted by <code>YYY</code>. Currently <code>YYY</code> can be
+            either <code>akka</code> for Akka based connections or <code>fs</code> for broadcast and
+            file server.</p>
+        </td>
+    </tr>
+    <tr>
+        <td><code>spark.ssl.keyStore</code></td>
+        <td>None</td>
+        <td>
+            A path to a key-store file. The path can be absolute or relative to the directory where
+            the component is started in.
+        </td>
+    </tr>
+    <tr>
+        <td><code>spark.ssl.keyStorePassword</code></td>
+        <td>None</td>
+        <td>
+            A password to the key-store.
+        </td>
+    </tr>
+    <tr>
+        <td><code>spark.ssl.keyPassword</code></td>
+        <td>None</td>
+        <td>
+            A password to the private key in key-store.
+        </td>
+    </tr>
+    <tr>
+        <td><code>spark.ssl.trustStore</code></td>
+        <td>None</td>
+        <td>
+            A path to a trust-store file. The path can be absolute or relative to the directory
+            where the component is started in.
+        </td>
+    </tr>
+    <tr>
+        <td><code>spark.ssl.trustStorePassword</code></td>
+        <td>None</td>
+        <td>
+            A password to the trust-store.
+        </td>
+    </tr>
+    <tr>
+        <td><code>spark.ssl.protocol</code></td>
+        <td>None</td>
+        <td>
+            A protocol name. The protocol must be supported by JVM. The reference list of protocols
+            one can find on <a href="https://blogs.oracle.com/java-platform-group/entry/diagnosing_tls_ssl_and_https">this</a>
+            page.
+        </td>
+    </tr>
+    <tr>
+        <td><code>spark.ssl.enabledAlgorithms</code></td>
+        <td>Empty</td>
+        <td>
+            A comma separated list of ciphers. The specified ciphers must be supported by JVM.
+            The reference list of protocols one can find on
+            <a href="https://blogs.oracle.com/java-platform-group/entry/diagnosing_tls_ssl_and_https">this</a>
+            page.
+        </td>
+    </tr>
+</table>
+
 
 #### Spark Streaming
 <table class="table">

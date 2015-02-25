@@ -20,6 +20,7 @@ package org.apache.spark.scheduler.cluster
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.yarn.api.records.{ApplicationId, YarnApplicationState}
+import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 
 import org.apache.spark.{SparkException, Logging, SparkContext}
 import org.apache.spark.deploy.yarn.{Client, ClientArguments}
@@ -133,8 +134,14 @@ private[spark] class YarnClientSchedulerBackend(
     val t = new Thread {
       override def run() {
         while (!stopping) {
-          val report = client.getApplicationReport(appId)
-          val state = report.getYarnApplicationState()
+          var state: YarnApplicationState = null
+          try {
+            val report = client.getApplicationReport(appId)
+            state = report.getYarnApplicationState()
+          } catch {
+            case e: ApplicationNotFoundException =>
+              state = YarnApplicationState.KILLED
+          }
           if (state == YarnApplicationState.FINISHED ||
             state == YarnApplicationState.KILLED ||
             state == YarnApplicationState.FAILED) {

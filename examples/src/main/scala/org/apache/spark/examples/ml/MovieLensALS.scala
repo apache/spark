@@ -93,8 +93,8 @@ object MovieLensALS {
           | bin/spark-submit --class org.apache.spark.examples.ml.MovieLensALS \
           |  examples/target/scala-*/spark-examples-*.jar \
           |  --rank 10 --maxIter 15 --regParam 0.1 \
-          |  --movies path/to/movielens/movies.dat \
-          |  --ratings path/to/movielens/ratings.dat
+          |  --movies data/mllib/als/sample_movielens_movies.txt \
+          |  --ratings data/mllib/als/sample_movielens_ratings.txt
         """.stripMargin)
     }
 
@@ -109,7 +109,7 @@ object MovieLensALS {
     val conf = new SparkConf().setAppName(s"MovieLensALS with $params")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
-    import sqlContext._
+    import sqlContext.implicits._
 
     val ratings = sc.textFile(params.ratings).map(Rating.parseRating).cache()
 
@@ -137,13 +137,13 @@ object MovieLensALS {
       .setRegParam(params.regParam)
       .setNumBlocks(params.numBlocks)
 
-    val model = als.fit(training)
+    val model = als.fit(training.toDF())
 
-    val predictions = model.transform(test).cache()
+    val predictions = model.transform(test.toDF()).cache()
 
     // Evaluate the model.
     // TODO: Create an evaluator to compute RMSE.
-    val mse = predictions.select('rating, 'prediction)
+    val mse = predictions.select("rating", "prediction").rdd
       .flatMap { case Row(rating: Float, prediction: Float) =>
         val err = rating.toDouble - prediction
         val err2 = err * err
@@ -157,17 +157,23 @@ object MovieLensALS {
     println(s"Test RMSE = $rmse.")
 
     // Inspect false positives.
-    predictions.registerTempTable("prediction")
-    sc.textFile(params.movies).map(Movie.parseMovie).registerTempTable("movie")
-    sqlContext.sql(
-      """
-        |SELECT userId, prediction.movieId, title, rating, prediction
-        |  FROM prediction JOIN movie ON prediction.movieId = movie.movieId
-        |  WHERE rating <= 1 AND prediction >= 4
-        |  LIMIT 100
-      """.stripMargin)
-      .collect()
-      .foreach(println)
+    // Note: We reference columns in 2 ways:
+    //  (1) predictions("movieId") lets us specify the movieId column in the predictions
+    //      DataFrame, rather than the movieId column in the movies DataFrame.
+    //  (2) $"userId" specifies the userId column in the predictions DataFrame.
+    //      We could also write predictions("userId") but do not have to since
+    //      the movies DataFrame does not have a column "userId."
+    val movies = sc.textFile(params.movies).map(Movie.parseMovie).toDF()
+    val falsePositives = predictions.join(movies)
+      .where((predictions("movieId") === movies("movieId"))
+        && ($"rating" <= 1) && ($"prediction" >= 4))
+      .select($"userId", predictions("movieId"), $"title", $"rating", $"prediction")
+    val numFalsePositives = falsePositives.count()
+    println(s"Found $numFalsePositives false positives")
+    if (numFalsePositives > 0) {
+      println(s"Example false positives:")
+      falsePositives.limit(100).collect().foreach(println)
+    }
 
     sc.stop()
   }

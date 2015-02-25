@@ -19,10 +19,26 @@ package org.apache.spark.sql.types
 
 import java.text.SimpleDateFormat
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 
 
 protected[sql] object DataTypeConversions {
+
+  def productToRow(product: Product, schema: StructType): Row = {
+    val mutableRow = new GenericMutableRow(product.productArity)
+    val schemaFields = schema.fields.toArray
+
+    var i = 0
+    while (i < mutableRow.length) {
+      mutableRow(i) =
+        ScalaReflection.convertToCatalyst(product.productElement(i), schemaFields(i).dataType)
+      i += 1
+    }
+
+    mutableRow
+  }
 
   def stringToTime(s: String): java.util.Date = {
     if (!s.contains('T')) {
