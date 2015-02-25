@@ -277,7 +277,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       // Only directories older than now maxAge milliseconds mill will be deleted
       statusList.foreach { dir =>
         try {
-          if (now - getModificationTime(dir) > maxAge) {
+          if (now - dir.getModificationTime() > maxAge) {
             fs.delete(dir.getPath, true)
           }
         } catch {
