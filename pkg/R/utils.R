@@ -299,3 +299,13 @@ convertEnvsToList <- function(keys, vals) {
            list(keys[[name]], vals[[name]])
          })
 }
+
+# Utility function to capture the varargs into environment object
+varargsToEnv <- function(...) {
+  pairs <- as.list(substitute(list(...)))[-1L]
+  env <- new.env()
+  for (name in names(pairs)) {
+    env[[name]] <- pairs[[name]]
+  }
+  env
+}

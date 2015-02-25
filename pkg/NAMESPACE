@@ -84,13 +84,17 @@ exportClasses("DataFrame")
 exportMethods("printSchema",
               "registerTempTable",
               "toRDD",
-              "limit")
+              "limit",
+              "saveDF",
+              "saveAsTable")
 
 export("jsonFile",
        "parquetFile",
        "sql",
        "table",
        "cacheTable",
-       "uncacheTable")
+       "uncacheTable",
+       "loadDF",
+       "createExternalTable")
 
 export("sparkRSQL.init")

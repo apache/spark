@@ -93,6 +93,7 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
     val ERR_BUFFER_SIZE = 100
     val errThread = new BufferedStreamThread(proc.getErrorStream, "stderr reader for R",
       ERR_BUFFER_SIZE)
+    errThread.setDaemon(true)
     errThread.start()
     errThread
   }

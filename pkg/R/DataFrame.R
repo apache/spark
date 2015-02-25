@@ -276,3 +276,121 @@ setMethod("foreachPartition",
             rddIn <- toRDD(rdd)
             foreachPartition(rddIn, func)
           })
+
+
+#' Return the SaveMode by name
+toJMode <- function(name) {
+    jcls <- 'org.apache.spark.sql.SaveMode'
+    if (name == 'append') {
+        callJStatic(jcls, 'Append')
+    } else if (name == 'overwrite') {
+        callJStatic(jcls, 'Overwrite')
+    } else if (name == 'ignore') {
+        callJStatic(jcls, 'Ignore')
+    } else if (name == 'error') {
+        callJStatic(jcls, 'ErrorIfExists')
+    } else {
+        stop("invalid save mode")
+    }
+}
+
+#' Save the contents of the DataFrame to a data source
+#'
+#' The data source is specified by the `source` and a set of options (...).
+#' If `source` is not specified, the default data source configured by
+#' spark.sql.sources.default will be used.
+#'
+#' Additionally, mode is used to specify the behavior of the save operation when
+#' data already exists in the data source. There are four modes:
+#'  append: Contents of this DataFrame are expected to be appended to existing data.
+#'  overwrite: Existing data is expected to be overwritten by the contents of
+#     this DataFrame.
+#'  error: An exception is expected to be thrown.
+#'  ignore: The save operation is expected to not save the contents of the DataFrame
+#     and to not change the existing data.
+#'
+#' @param df A SparkSQL DataFrame
+#' @param path A name for the table
+#' @param source A name for external data source
+#' @param mode One of 'append', 'overwrite', 'error', 'ignore'
+#'
+#' @rdname saveAsTable
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' saveAsTable(df, "myfile")
+#' }
+
+setGeneric("saveDF", function(df, path, source, mode, ...) { standardGeneric("saveDF") })
+
+setMethod("saveDF",
+          signature(df = "DataFrame", path = 'character', source = 'character',
+                    mode = 'character'),
+          function(df, path=NULL, source=NULL, mode="append", ...){
+            if (is.null(source)) {
+              # TODO: read from conf
+              source = 'parquet'
+            }
+            mode <- toJMode(mode)
+            options <- varargToEnv(...)
+            if (!is.null(path)) {
+                options[['path']] = path
+            }
+            callJMethod(df@sdf, "save", source, mode, options)
+          })
+
+
+#' saveAsTable
+#'
+#' Save the contents of the DataFrame to a data source as a table
+#'
+#' The data source is specified by the `source` and a set of options (...).
+#' If `source` is not specified, the default data source configured by
+#' spark.sql.sources.default will be used.
+#'
+#' Additionally, mode is used to specify the behavior of the save operation when
+#' data already exists in the data source. There are four modes:
+#'  append: Contents of this DataFrame are expected to be appended to existing data.
+#'  overwrite: Existing data is expected to be overwritten by the contents of
+#     this DataFrame.
+#'  error: An exception is expected to be thrown.
+#'  ignore: The save operation is expected to not save the contents of the DataFrame
+#     and to not change the existing data.
+#'
+#' @param df A SparkSQL DataFrame
+#' @param tableName A name for the table
+#' @param source A name for external data source
+#' @param mode One of 'append', 'overwrite', 'error', 'ignore'
+#'
+#' @rdname saveAsTable
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' saveAsTable(df, "myfile")
+#' }
+
+setGeneric("saveAsTable", function(df, tableName, source, mode, ...) {
+  standardGeneric("saveAsTable")
+})
+
+setMethod("saveAsTable",
+          signature(df = "DataFrame", tableName = 'character', source = 'character',
+                    mode = 'character'),
+          function(df, tableName, source=NULL, mode="append", ...){
+            if (is.null(source)) {
+              #' TODO: getConf('spark.sql.sources.default')
+              source <- 'parquet'
+            }
+            mode <- toJMode(mode)
+            options <- varargToEnv(...)
+            callJMethod(df@sdf, "saveAsTable", tableName, source, mode, options)
+          })
+

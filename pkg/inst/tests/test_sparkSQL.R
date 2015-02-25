@@ -1,4 +1,6 @@
 library(testthat)
+library(devtools)
+library(SparkR)
 
 context("SparkSQL functions")
 
@@ -12,6 +14,7 @@ mockLines <- c("{\"name\":\"Michael\"}",
                "{\"name\":\"Andy\", \"age\":30}",
                "{\"name\":\"Justin\", \"age\":19}")
 jsonPath <- tempfile(pattern="sparkr-test", fileext=".tmp")
+parquetPath <- tempfile(pattern="sparkr-test", fileext=".parquet")
 writeLines(mockLines, jsonPath)
 
 test_that("jsonFile() on a local file returns a DataFrame", {
@@ -141,6 +144,20 @@ test_that("multiple pipeline transformations starting with a DataFrame result in
   expect_true(collect(second)[[2]]$age == 35)
   expect_true(collect(second)[[2]]$testCol)
   expect_false(collect(second)[[3]]$testCol)
+})
+
+test_that("load() from json file", {
+  df <- loadDF(sqlCtx, jsonPath, "json")
+  expect_true(inherits(df, "DataFrame"))
+  expect_true(count(df) == 3)
+})
+
+test_that("save() as parquet file", {
+  df <- loadDF(sqlCtx, jsonPath, "json")
+  saveDF(df, parquetPath, "parquet", mode="overwrite")
+  df2 <- loadDF(sqlCtx, parquetPath, "parquet")
+  expect_true(inherits(df2, "DataFrame"))
+  expect_true(count(df2) == 3)
 })
 
 unlink(jsonPath)
