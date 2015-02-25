@@ -21,17 +21,17 @@ test_that("convertJListToRList() gives back (deserializes) the original JLists
   expect_equal(rList, strs)
 })
 
-test_that("reserialize on RDD", {
+test_that("serializeToBytes on RDD", {
   # File content
   mockFile <- c("Spark is pretty.", "Spark is awesome.")
   fileName <- tempfile(pattern="spark-test", fileext=".tmp")
   writeLines(mockFile, fileName)
   
   text.rdd <- textFile(sc, fileName)
-  expect_false(text.rdd@env$serialized)
-  ser.rdd <- reserialize(text.rdd)
+  expect_true(getSerializedMode(text.rdd) == "string")
+  ser.rdd <- serializeToBytes(text.rdd)
   expect_equal(collect(ser.rdd), as.list(mockFile))
-  expect_true(ser.rdd@env$serialized)
+  expect_true(getSerializedMode(ser.rdd) == "byte")
   
   unlink(fileName)
 })

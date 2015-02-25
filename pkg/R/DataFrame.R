@@ -1,6 +1,6 @@
 # DataFrame.R - DataFrame class and methods implemented in S4 OO classes
 
-#' @include jobj.R RDD.R
+#' @include jobj.R RDD.R pairRDD.R
 NULL
 
 setOldClass("jobj")
@@ -110,24 +110,169 @@ setMethod("registerTempTable",
 setMethod("count",
           signature(x = "DataFrame"),
           function(x) {
-            sdf <- x@sdf
-            callJMethod(sdf, "count")
+            callJMethod(x@sdf, "count")
           })
 
-#' Collect elements of a DataFrame
-#' 
-#' Returns a list of Row objects from a DataFrame
-#' 
-#' @param df A SparkSQL DataFrame
-#' 
+#' Collects all the elements of a Spark DataFrame and coerces them into an R data.frame.
+
 #' @rdname collect-methods
 #' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' collected <- collect(df)
+#' firstName <- collected[[1]]$name
+#' }
 
-# TODO: Collect() currently returns a list of Generic Row objects and is WIP.  This will eventually 
-# be part of the process to read a DataFrame into R and create a data.frame.
 setMethod("collect",
           signature(rdd = "DataFrame"),
-          function(rdd){
-            sdf <- rdd@sdf
-            listObj <- callJMethod(sdf, "collect")
+          function(rdd) {
+            # listCols is a list of raw vectors, one per column
+            listCols <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "dfToCols", rdd@sdf)
+            cols <- lapply(listCols, function(col) {
+              objRaw <- rawConnection(col)
+              numRows <- readInt(objRaw)
+              col <- readCol(objRaw, numRows)
+              close(objRaw)
+              col
+            })
+            colNames <- callJMethod(rdd@sdf, "columns")
+            names(cols) <- colNames
+            dfOut <- do.call(cbind.data.frame, cols)
+            dfOut
+          })
+
+#' Limit
+#' 
+#' Limit the resulting DataFrame to the number of rows specified.
+#' 
+#' @param df A SparkSQL DataFrame
+#' @param num The number of rows to return
+#' @return A new DataFrame containing the number of rows specified.
+#' 
+#' @rdname limit
+#' @export
+#' @examples
+#' \dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' limitedDF <- limit(df, 10)
+#' }
+
+setGeneric("limit", function(df, num) {standardGeneric("limit") })
+
+setMethod("limit",
+          signature(df = "DataFrame", num = "numeric"),
+          function(df, num) {
+            res <- callJMethod(df@sdf, "limit", as.integer(num))
+            dataFrame(res)
+            })
+
+# Take the first NUM elements in a DataFrame and return a the results as a data.frame
+
+#' @rdname take
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' take(df, 2)
+#' }
+
+setMethod("take",
+          signature(rdd = "DataFrame", num = "numeric"),
+          function(rdd, num) {
+            limited <- limit(rdd, num)
+            collect(limited)
+          })
+
+#' toRDD()
+#' 
+#' Converts a Spark DataFrame to an RDD while preserving column names.
+#' 
+#' @param df A Spark DataFrame
+#' 
+#' @rdname DataFrame
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' rdd <- toRDD(df)
+#' }
+
+setGeneric("toRDD", function(df) { standardGeneric("toRDD") })
+
+setMethod("toRDD",
+          signature(df = "DataFrame"),
+          function(df) {
+            jrdd <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "dfToRowRDD", df@sdf)
+            colNames <- callJMethod(df@sdf, "columns")
+            rdd <- RDD(jrdd, serializedMode = "row")
+            lapply(rdd, function(row) {
+              names(row) <- colNames
+              row
+            })
+          })
+
+############################## RDD Map Functions ##################################
+# All of the following functions mirror the existing RDD map functions,           #
+# but allow for use with DataFrames by first converting to an RRDD before calling #
+# the requested map function.                                                     #
+###################################################################################
+
+setMethod("lapply",
+          signature(X = "DataFrame", FUN = "function"),
+          function(X, FUN) {
+            rdd <- toRDD(X)
+            lapply(rdd, FUN)
+          })
+
+setMethod("map",
+          signature(X = "DataFrame", FUN = "function"),
+          function(X, FUN) {
+            lapply(X, FUN)
+          })
+
+setMethod("flatMap",
+          signature(X = "DataFrame", FUN = "function"),
+          function(X, FUN) {
+            rdd <- toRDD(X)
+            flatMap(rdd, FUN)
+          })
+
+setMethod("lapplyPartition",
+          signature(X = "DataFrame", FUN = "function"),
+          function(X, FUN) {
+            rdd <- toRDD(X)
+            lapplyPartition(rdd, FUN)
+          })
+
+setMethod("mapPartitions",
+          signature(X = "DataFrame", FUN = "function"),
+          function(X, FUN) {
+            lapplyPartition(X, FUN)
+          })
+
+setMethod("foreach",
+          signature(rdd = "DataFrame", func = "function"),
+          function(rdd, func) {
+            rddIn <- toRDD(rdd)
+            foreach(rddIn, func)
+          })
+
+setMethod("foreachPartition",
+          signature(rdd = "DataFrame", func = "function"),
+          function(rdd, func) {
+            rddIn <- toRDD(rdd)
+            foreachPartition(rddIn, func)
           })
