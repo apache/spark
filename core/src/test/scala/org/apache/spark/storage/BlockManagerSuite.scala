@@ -21,7 +21,7 @@ import java.nio.{ByteBuffer, MappedByteBuffer}
 import java.util.Arrays
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.io.LargeByteBuffer
+import org.apache.spark.network.buffer.{LargeByteBufferHelper, LargeByteBuffer}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Await
@@ -811,7 +811,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     var counter = 0.toByte
     def incr = {counter = (counter + 1).toByte; counter;}
     val bytes = Array.fill[Byte](1000)(incr)
-    val byteBuffer = LargeByteBuffer.asLargeByteBuffer(bytes)
+    val byteBuffer = LargeByteBufferHelper.asLargeByteBuffer(bytes)
 
     val blockId = BlockId("rdd_1_2")
 
