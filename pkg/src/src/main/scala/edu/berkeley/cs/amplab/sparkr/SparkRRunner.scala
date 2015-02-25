@@ -22,8 +22,6 @@ object SparkRRunner {
 
     // Time to wait for SparkR backend to initialize in seconds
     val backendTimeout = sys.env.getOrElse("SPARKR_BACKEND_TIMEOUT", "120").toInt
-    // TODO: Can we get this from SparkConf ?
-    val sparkRBackendPort = sys.env.getOrElse("SPARKR_BACKEND_PORT", "12345").toInt
     val rCommand = "Rscript"
 
     // Check if the file path exists.
@@ -39,23 +37,19 @@ object SparkRRunner {
     // Launch a SparkR backend server for the R process to connect to; this will let it see our
     // Java system properties etc.
     val sparkRBackend = new SparkRBackend()
-    val sparkRBackendThread = new Thread() {
-      val finishedInit = new Semaphore(0)
-
+    @volatile var sparkRBackendPort = 0
+    val initialized = new Semaphore(0)
+    val sparkRBackendThread = new Thread("SparkR backend") {
       override def run() {
-        sparkRBackend.init(sparkRBackendPort)
-        finishedInit.release()
+        sparkRBackendPort = sparkRBackend.init()
+        initialized.release()
         sparkRBackend.run()
-      }
-
-      def stopBackend() {
-        sparkRBackend.close()
       }
     }
 
     sparkRBackendThread.start()
     // Wait for SparkRBackend initialization to finish
-    if (sparkRBackendThread.finishedInit.tryAcquire(backendTimeout, TimeUnit.SECONDS)) {
+    if (initialized.tryAcquire(backendTimeout, TimeUnit.SECONDS)) {
       // Launch R
       val returnCode = try {
         val builder = new ProcessBuilder(Seq(rCommand, rFileNormalized) ++ otherArgs)
@@ -68,7 +62,7 @@ object SparkRRunner {
 
         process.waitFor()
       } finally {
-        sparkRBackendThread.stopBackend()
+        sparkRBackend.close()
       }
       System.exit(returnCode)
     } else {

@@ -1,7 +1,7 @@
 package edu.berkeley.cs.amplab.sparkr
 
-import java.io.IOException
-import java.net.InetSocketAddress
+import java.io.{DataOutputStream, IOException}
+import java.net.{InetSocketAddress, Socket}
 import java.util.concurrent.TimeUnit
 
 import io.netty.bootstrap.ServerBootstrap
@@ -24,9 +24,7 @@ class SparkRBackend {
   var bootstrap: ServerBootstrap = null
   var bossGroup: EventLoopGroup = null
 
-  def init(port: Int) {
-    val socketAddr = new InetSocketAddress(port)
-
+  def init(): Int = {
     bossGroup = new NioEventLoopGroup(SparkRConf.numServerThreads)
     val workerGroup = bossGroup
     val handler = new SparkRBackendHandler(this)
@@ -51,9 +49,9 @@ class SparkRBackend {
       }
     })
 
-    channelFuture = bootstrap.bind(socketAddr)
+    channelFuture = bootstrap.bind(new InetSocketAddress(0))
     channelFuture.syncUninterruptibly()
-    println("SparkR Backend server started on port :" + port)
+    channelFuture.channel().localAddress().asInstanceOf[InetSocketAddress].getPort()
   }
 
   def run() = {
@@ -85,13 +83,21 @@ object SparkRBackend {
     }
     val sparkRBackend = new SparkRBackend()
     try {
-      sparkRBackend.init(args(0).toInt)
+      // bind to random port
+      val boundPort = sparkRBackend.init()
+      val callbackPort = args(0).toInt
+      val callbackSocket = new Socket("localhost", callbackPort)
+      val dos = new DataOutputStream(callbackSocket.getOutputStream)
+      dos.writeInt(boundPort)
+      dos.close()
+      callbackSocket.close()
+
       sparkRBackend.run()
     } catch {
       case e: IOException =>
         System.err.println("Server shutting down: failed with exception ", e)
         sparkRBackend.close()
-        System.exit(0)
+        System.exit(1)
     }
     System.exit(0)
   }

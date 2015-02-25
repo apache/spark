@@ -88,9 +88,7 @@ sparkR.init <- function(
   sparkEnvir = list(),
   sparkExecutorEnv = list(),
   sparkJars = "",
-  sparkRLibDir = "",
-  sparkRBackendPort = as.integer(Sys.getenv("SPARKR_BACKEND_PORT", "12345")),
-  sparkRRetryCount = 6) {
+  sparkRLibDir = "") {
 
   if (exists(".sparkRjsc", envir = .sparkREnv)) {
     cat("Re-using existing Spark Context. Please stop SparkR with sparkR.stop() or restart R to create a new Spark Context\n")
@@ -121,45 +119,38 @@ sparkR.init <- function(
   if (sparkRExistingPort != "") {
     sparkRBackendPort <- sparkRExistingPort
   } else {
+    # TODO: test the random port and retry, or use httpuv:::startServer
+    callbackPort = sample(40000, 1) + 10000
     if (Sys.getenv("SPARKR_USE_SPARK_SUBMIT", "") == "") {
       launchBackend(classPath = cp,
                     mainClass = "edu.berkeley.cs.amplab.sparkr.SparkRBackend",
-                    args = as.character(sparkRBackendPort),
+                    args = as.character(callbackPort),
                     javaOpts = paste("-Xmx", sparkMem, sep = ""))
     } else {
       # TODO: We should deprecate sparkJars and ask users to add it to the
       # command line (using --jars) which is picked up by SparkSubmit
       launchBackendSparkSubmit(
           mainClass = "edu.berkeley.cs.amplab.sparkr.SparkRBackend",
-          args = as.character(sparkRBackendPort),
+          args = as.character(callbackPort),
           appJar = .sparkREnv$assemblyJarPath,
           sparkHome = sparkHome,
           sparkSubmitOpts = Sys.getenv("SPARKR_SUBMIT_ARGS", ""))
     }
+    sock <- socketConnection(port = callbackPort, server = TRUE, open = 'rb',
+        blocking = TRUE, timeout = 10)
+    sparkRBackendPort <- readInt(sock)
+    if (length(sparkRBackendPort) == 0) {
+      stop("JVM failed to launch")
+    }
+    close(sock)
   }
 
   .sparkREnv$sparkRBackendPort <- sparkRBackendPort
-  cat("Waiting for JVM to come up...\n")
-  tries <- 0
-  while (tries < sparkRRetryCount) {
-    if (!connExists(.sparkREnv)) {
-      Sys.sleep(2 ^ tries)
-      tryCatch({
-        connectBackend("localhost", .sparkREnv$sparkRBackendPort)
-      }, error = function(err) {
-        cat("Error in Connection, retrying...\n")
-      }, warning = function(war) {
-        cat("No Connection Found, retrying...\n")
-      })
-      tries <- tries + 1
-    } else {
-      cat("Connection ok.\n")
-      break
-    }
-  }
-  if (tries == sparkRRetryCount) {
-    stop(sprintf("Failed to connect JVM after %d tries.\n", sparkRRetryCount))
-  }
+  tryCatch({
+    connectBackend("localhost", sparkRBackendPort)
+  }, error = function(err) {
+    stop("Failed to connect JVM\n")
+  })
 
   if (nchar(sparkHome) != 0) {
     sparkHome <- normalizePath(sparkHome)
