@@ -257,20 +257,9 @@ object SparkSubmit {
     val resolvedMavenCoordinates =
       SparkSubmitUtils.resolveMavenCoordinates(
         args.packages, Option(args.repositories), Option(args.ivyRepoPath))
-    if (!resolvedMavenCoordinates.trim.isEmpty) {
-      def addMavenDependenciesToOption(option: String): String = {
-        if (option == null || option.trim.isEmpty) {
-          resolvedMavenCoordinates
-        } else {
-          option + s",$resolvedMavenCoordinates"
-        }
-      }
-      args.jars = addMavenDependenciesToOption(args.jars)
-      args.driverExtraClassPath = addMavenDependenciesToOption(args.driverExtraClassPath)
-      if (args.isPython) {
-        args.pyFiles = addMavenDependenciesToOption(args.pyFiles)
-      }
-    }
+    args.jars = mergeFileLists(args.jars, resolvedMavenCoordinates)
+    if (args.isPython) args.pyFiles = mergeFileLists(args.pyFiles, resolvedMavenCoordinates)
+
 
     // Require all python files to be local, so we can add them to the PYTHONPATH
     // In YARN cluster mode, python files are distributed as regular files, which can be non-local
