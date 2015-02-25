@@ -171,8 +171,7 @@ class PageRankSuite extends FunSuite with LocalSparkContext {
 
       val staticRanks = chain.staticPersonalizedPageRank(4, numIter, resetProb).vertices
       val dynamicRanks = chain.personalizedPageRank(4, tol, resetProb).vertices
-      staticRanks.collect.foreach(println)
-      dynamicRanks.collect.foreach(println)
+
       assert(compareRanks(staticRanks, dynamicRanks) < errorTol)
     }
   }
