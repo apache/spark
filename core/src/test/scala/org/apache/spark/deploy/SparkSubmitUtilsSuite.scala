@@ -19,16 +19,12 @@ package org.apache.spark.deploy
 
 import java.io.{PrintStream, OutputStream, File}
 
-import org.apache.spark.util.Utils
-
 import scala.collection.mutable.ArrayBuffer
 
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 import org.apache.ivy.core.module.descriptor.MDArtifact
 import org.apache.ivy.plugins.resolver.IBiblioResolver
-
-import org.apache.spark.TestUtils
 
 class SparkSubmitUtilsSuite extends FunSuite with BeforeAndAfterAll {
 
