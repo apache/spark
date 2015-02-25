@@ -280,18 +280,7 @@ setMethod("foreachPartition",
 
 #' Return the SaveMode by name
 toJMode <- function(name) {
-    jcls <- 'org.apache.spark.sql.SaveMode'
-    if (name == 'append') {
-        callJStatic(jcls, 'Append')
-    } else if (name == 'overwrite') {
-        callJStatic(jcls, 'Overwrite')
-    } else if (name == 'ignore') {
-        callJStatic(jcls, 'Ignore')
-    } else if (name == 'error') {
-        callJStatic(jcls, 'ErrorIfExists')
-    } else {
-        stop("invalid save mode")
-    }
+
 }
 
 #' Save the contents of the DataFrame to a data source
@@ -335,12 +324,12 @@ setMethod("saveDF",
               # TODO: read from conf
               source = 'parquet'
             }
-            mode <- toJMode(mode)
+            jmode <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "saveMode", mode)
             options <- varargToEnv(...)
             if (!is.null(path)) {
                 options[['path']] = path
             }
-            callJMethod(df@sdf, "save", source, mode, options)
+            callJMethod(df@sdf, "save", source, jmode, options)
           })
 
 
@@ -389,8 +378,8 @@ setMethod("saveAsTable",
               #' TODO: getConf('spark.sql.sources.default')
               source <- 'parquet'
             }
-            mode <- toJMode(mode)
+            jmode <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "saveMode", mode)
             options <- varargToEnv(...)
-            callJMethod(df@sdf, "saveAsTable", tableName, source, mode, options)
+            callJMethod(df@sdf, "saveAsTable", tableName, source, jmode, options)
           })
 

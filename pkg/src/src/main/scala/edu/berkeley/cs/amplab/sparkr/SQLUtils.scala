@@ -3,7 +3,7 @@ package edu.berkeley.cs.amplab.sparkr
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.sql.{SQLContext, DataFrame, Row}
+import org.apache.spark.sql.{SQLContext, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.types.{StructType}
 
 import edu.berkeley.cs.amplab.sparkr.SerDe._
@@ -64,5 +64,14 @@ object SQLUtils {
       SerDe.writeObject(dos, obj)
     }
     bos.toByteArray()
+  }
+
+  def saveMode(mode: String): SaveMode = {
+    mode match {
+      case "append" => SaveMode.Append
+      case "overwrite" => SaveMode.Overwrite
+      case "error" => SaveMode.ErrorIfExists
+      case "ignore" => SaveMode.Ignore
+    }
   }
 }
