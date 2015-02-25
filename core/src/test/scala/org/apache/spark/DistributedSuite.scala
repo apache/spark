@@ -17,6 +17,7 @@
 
 package org.apache.spark
 
+import org.apache.spark.io.LargeByteBuffer
 import org.scalatest.FunSuite
 import org.scalatest.concurrent.Timeouts._
 import org.scalatest.Matchers
@@ -195,7 +196,7 @@ class DistributedSuite extends FunSuite with Matchers with LocalSparkContext {
     blockManager.master.getLocations(blockId).foreach { cmId =>
       val bytes = blockTransfer.fetchBlockSync(cmId.host, cmId.port, cmId.executorId,
         blockId.toString)
-      val deserialized = blockManager.dataDeserialize(blockId, bytes.nioByteBuffer())
+      val deserialized = blockManager.dataDeserialize(blockId, LargeByteBuffer.asLargeByteBuffer(bytes.nioByteBuffer()))
         .asInstanceOf[Iterator[Int]].toList
       assert(deserialized === (1 to 100).toList)
     }

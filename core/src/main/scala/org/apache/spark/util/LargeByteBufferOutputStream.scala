@@ -26,7 +26,7 @@ private[spark]
 class LargeByteBufferOutputStream(chunkSize: Int = 65536)
   extends OutputStream {
 
-  val buffer = new ChainedBuffer(chunkSize)
+  val buffer = ChainedBuffer.withInitialSize(chunkSize)
 
   private var _pos = 0
 

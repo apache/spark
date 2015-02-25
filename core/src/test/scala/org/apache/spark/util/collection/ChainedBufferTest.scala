@@ -25,7 +25,7 @@ import org.scalatest.Matchers._
 class ChainedBufferSuite extends FunSuite {
   test("write and read at start") {
     // write from start of source array
-    val buffer = new ChainedBuffer(8)
+    val buffer = ChainedBuffer.withInitialSize(8)
     buffer.capacity should be (0)
     verifyWriteAndRead(buffer, 0, 0, 0, 4)
     buffer.capacity should be (8)
@@ -53,7 +53,7 @@ class ChainedBufferSuite extends FunSuite {
 
   test("write and read at middle") {
     // write from start of source array
-    val buffer = new ChainedBuffer(8)
+    val buffer = ChainedBuffer.withInitialSize(8)
     verifyWriteAndRead(buffer, 3, 0, 0, 4)
     buffer.capacity should be (8)
 
@@ -80,7 +80,7 @@ class ChainedBufferSuite extends FunSuite {
 
   test("write and read at later buffer") {
     // write from start of source array
-    val buffer = new ChainedBuffer(8)
+    val buffer = ChainedBuffer.withInitialSize(8)
     verifyWriteAndRead(buffer, 11, 0, 0, 4)
     buffer.capacity should be (16)
 

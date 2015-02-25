@@ -22,6 +22,8 @@ import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
+import org.apache.spark.io.LargeByteBuffer
+
 import scala.collection.JavaConversions._
 
 import org.apache.spark.{Logging, SparkConf, SparkEnv}
@@ -171,9 +173,10 @@ class FileShuffleBlockManager(conf: SparkConf)
     }
   }
 
-  override def getBytes(blockId: ShuffleBlockId): Option[ByteBuffer] = {
+  override def getBytes(blockId: ShuffleBlockId): Option[LargeByteBuffer] = {
+    //TODO
     val segment = getBlockData(blockId)
-    Some(segment.nioByteBuffer())
+    Some(LargeByteBuffer.asLargeByteBuffer(segment.nioByteBuffer()))
   }
 
   override def getBlockData(blockId: ShuffleBlockId): ManagedBuffer = {

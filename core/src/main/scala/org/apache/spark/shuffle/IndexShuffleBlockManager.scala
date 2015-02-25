@@ -21,6 +21,7 @@ import java.io._
 import java.nio.ByteBuffer
 
 import com.google.common.io.ByteStreams
+import org.apache.spark.io.LargeByteBuffer
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
@@ -97,8 +98,8 @@ class IndexShuffleBlockManager(conf: SparkConf) extends ShuffleBlockManager {
     }
   }
 
-  override def getBytes(blockId: ShuffleBlockId): Option[ByteBuffer] = {
-    Some(getBlockData(blockId).nioByteBuffer())
+  override def getBytes(blockId: ShuffleBlockId): Option[LargeByteBuffer] = {
+    Some(LargeByteBuffer.asLargeByteBuffer(getBlockData(blockId).nioByteBuffer()))
   }
 
   override def getBlockData(blockId: ShuffleBlockId): ManagedBuffer = {

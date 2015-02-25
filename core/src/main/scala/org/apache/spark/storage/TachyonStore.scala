@@ -41,7 +41,7 @@ private[spark] class TachyonStore(
     tachyonManager.getFile(blockId.name).length
   }
 
-  override def putBytes(blockId: BlockId, bytes: ByteBuffer, level: StorageLevel): PutResult = {
+  override def putBytes(blockId: BlockId, bytes: LargeByteBuffer, level: StorageLevel): PutResult = {
     putIntoTachyonStore(blockId, bytes, returnValues = true)
   }
 
@@ -75,7 +75,8 @@ private[spark] class TachyonStore(
     val startTime = System.currentTimeMillis
     val file = tachyonManager.getFile(blockId)
     val os = file.getOutStream(WriteType.TRY_CACHE)
-    os.write(byteBuffer.array())
+    // TODO need a better fix here for tachyon
+//    os.write(byteBuffer.array())
     os.close()
     val finishTime = System.currentTimeMillis
     logDebug("Block %s stored as %s file in Tachyon in %d ms".format(
@@ -110,9 +111,10 @@ private[spark] class TachyonStore(
     assert (is != null)
     try {
       val size = file.length
+      //TODO
       val bs = new Array[Byte](size.asInstanceOf[Int])
       ByteStreams.readFully(is, bs)
-      Some(ByteBuffer.wrap(bs))
+      Some(LargeByteBuffer.asLargeByteBuffer(ByteBuffer.wrap(bs)))
     } catch {
       case ioe: IOException =>
         logWarning(s"Failed to fetch the block $blockId from Tachyon", ioe)

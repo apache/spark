@@ -21,6 +21,8 @@ import java.nio.{ByteBuffer, MappedByteBuffer}
 import java.util.Arrays
 import java.util.concurrent.TimeUnit
 
+import org.apache.spark.io.LargeByteBuffer
+
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -809,7 +811,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     var counter = 0.toByte
     def incr = {counter = (counter + 1).toByte; counter;}
     val bytes = Array.fill[Byte](1000)(incr)
-    val byteBuffer = ByteBuffer.wrap(bytes)
+    val byteBuffer = LargeByteBuffer.asLargeByteBuffer(bytes)
 
     val blockId = BlockId("rdd_1_2")
 
@@ -834,9 +836,9 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
       "Expected HeapByteBuffer for un-mapped read")
     assert(mapped.isInstanceOf[MappedByteBuffer], "Expected MappedByteBuffer for mapped read")
 
-    def arrayFromByteBuffer(in: ByteBuffer): Array[Byte] = {
-      val array = new Array[Byte](in.remaining())
-      in.get(array)
+    def arrayFromByteBuffer(in: LargeByteBuffer): Array[Byte] = {
+      val array = new Array[Byte](in.remaining().toInt)
+      in.get(array, 0, in.remaining().toInt)
       array
     }
 

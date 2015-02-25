@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 import java.nio.channels.FileChannel.MapMode
 
 import org.apache.spark.Logging
-import org.apache.spark.io.LargeByteBuffer
+import org.apache.spark.io.{WrappedLargeByteBuffer, LargeByteBuffer}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.Utils
 
@@ -39,7 +39,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     diskManager.getFile(blockId.name).length
   }
 
-  override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): PutResult = {
+  override def putBytes(blockId: BlockId, _bytes: LargeByteBuffer, level: StorageLevel): PutResult = {
     // So that we do not modify the input offsets !
     // duplicate does not copy buffer, so inexpensive
     val bytes = _bytes.duplicate()
@@ -47,9 +47,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     val startTime = System.currentTimeMillis
     val file = diskManager.getFile(blockId)
     val channel = new FileOutputStream(file).getChannel
-    while (bytes.remaining > 0) {
-      channel.write(bytes)
-    }
+    bytes.writeTo(channel)
     channel.close()
     val finishTime = System.currentTimeMillis
     logDebug("Block %s stored as %s file on disk in %d ms".format(
@@ -120,9 +118,9 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
           }
         }
         buf.flip()
-        Some(buf)
+        Some(LargeByteBuffer.asLargeByteBuffer(buf))
       } else {
-        Some(channel.map(MapMode.READ_ONLY, offset, length))
+        Some(LargeByteBuffer.mapFile(channel, MapMode.READ_ONLY, offset, length))
       }
     } finally {
       channel.close()

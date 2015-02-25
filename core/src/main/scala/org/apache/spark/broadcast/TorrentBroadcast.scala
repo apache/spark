@@ -25,10 +25,10 @@ import scala.reflect.ClassTag
 import scala.util.Random
 
 import org.apache.spark.{Logging, SparkConf, SparkEnv, SparkException}
-import org.apache.spark.io.CompressionCodec
+import org.apache.spark.io.{LargeByteBuffer, CompressionCodec}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
-import org.apache.spark.util.{ByteBufferInputStream, Utils}
+import org.apache.spark.util.{LargeByteBufferInputStream, ByteBufferInputStream, Utils}
 import org.apache.spark.util.io.ByteArrayChunkOutputStream
 
 /**
@@ -110,10 +110,10 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   }
 
   /** Fetch torrent blocks from the driver and/or other executors. */
-  private def readBlocks(): Array[ByteBuffer] = {
+  private def readBlocks(): Array[LargeByteBuffer] = {
     // Fetch chunks of data. Note that all these chunks are stored in the BlockManager and reported
     // to the driver, so other executors can pull these chunks from this executor as well.
-    val blocks = new Array[ByteBuffer](numBlocks)
+    val blocks = new Array[LargeByteBuffer](numBlocks)
     val bm = SparkEnv.get.blockManager
 
     for (pid <- Random.shuffle(Seq.range(0, numBlocks))) {
@@ -122,8 +122,8 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
       // First try getLocalBytes because there is a chance that previous attempts to fetch the
       // broadcast blocks have already fetched some of the blocks. In that case, some blocks
       // would be available locally (on this executor).
-      def getLocal: Option[ByteBuffer] = bm.getLocalBytes(pieceId)
-      def getRemote: Option[ByteBuffer] = bm.getRemoteBytes(pieceId).map { block =>
+      def getLocal: Option[LargeByteBuffer] = bm.getLocalBytes(pieceId)
+      def getRemote: Option[LargeByteBuffer] = bm.getRemoteBytes(pieceId).map { block =>
         // If we found the block from remote executors/driver's BlockManager, put the block
         // in this executor's BlockManager.
         SparkEnv.get.blockManager.putBytes(
@@ -133,7 +133,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
           tellMaster = true)
         block
       }
-      val block: ByteBuffer = getLocal.orElse(getRemote).getOrElse(
+      val block: LargeByteBuffer = getLocal.orElse(getRemote).getOrElse(
         throw new SparkException(s"Failed to get $pieceId of $broadcastId"))
       blocks(pid) = block
     }
@@ -194,22 +194,22 @@ private object TorrentBroadcast extends Logging {
       obj: T,
       blockSize: Int,
       serializer: Serializer,
-      compressionCodec: Option[CompressionCodec]): Array[ByteBuffer] = {
+      compressionCodec: Option[CompressionCodec]): Array[LargeByteBuffer] = {
     val bos = new ByteArrayChunkOutputStream(blockSize)
     val out: OutputStream = compressionCodec.map(c => c.compressedOutputStream(bos)).getOrElse(bos)
     val ser = serializer.newInstance()
     val serOut = ser.serializeStream(out)
     serOut.writeObject[T](obj).close()
-    bos.toArrays.map(ByteBuffer.wrap)
+    bos.toArrays.map(LargeByteBuffer.asLargeByteBuffer)
   }
 
   def unBlockifyObject[T: ClassTag](
-      blocks: Array[ByteBuffer],
+      blocks: Array[LargeByteBuffer],
       serializer: Serializer,
       compressionCodec: Option[CompressionCodec]): T = {
     require(blocks.nonEmpty, "Cannot unblockify an empty array of blocks")
     val is = new SequenceInputStream(
-      asJavaEnumeration(blocks.iterator.map(block => new ByteBufferInputStream(block))))
+      asJavaEnumeration(blocks.iterator.map(block => new LargeByteBufferInputStream(block))))
     val in: InputStream = compressionCodec.map(c => c.compressedInputStream(is)).getOrElse(is)
     val ser = serializer.newInstance()
     val serIn = ser.deserializeStream(in)

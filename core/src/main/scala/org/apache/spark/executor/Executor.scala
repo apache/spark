@@ -23,6 +23,8 @@ import java.net.URL
 import java.nio.ByteBuffer
 import java.util.concurrent._
 
+import org.apache.spark.io.LargeByteBuffer
+
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.util.control.NonFatal
@@ -217,6 +219,7 @@ private[spark] class Executor(
         val accumUpdates = Accumulators.values
 
         val directResult = new DirectTaskResult(valueBytes, accumUpdates, task.metrics.orNull)
+        //TODO should we allow task results over 2gb?
         val serializedDirectResult = ser.serialize(directResult)
         val resultSize = serializedDirectResult.limit
 
@@ -230,7 +233,7 @@ private[spark] class Executor(
           } else if (resultSize >= akkaFrameSize - AkkaUtils.reservedSizeBytes) {
             val blockId = TaskResultBlockId(taskId)
             env.blockManager.putBytes(
-              blockId, serializedDirectResult, StorageLevel.MEMORY_AND_DISK_SER)
+              blockId, LargeByteBuffer.asLargeByteBuffer(serializedDirectResult), StorageLevel.MEMORY_AND_DISK_SER)
             logInfo(
               s"Finished $taskName (TID $taskId). $resultSize bytes result sent via BlockManager)")
             ser.serialize(new IndirectTaskResult[Any](blockId, resultSize))

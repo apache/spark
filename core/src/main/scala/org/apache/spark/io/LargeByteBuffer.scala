@@ -18,15 +18,14 @@
 package org.apache.spark.io
 
 import java.io.{RandomAccessFile, DataInput, InputStream, OutputStream}
+import java.nio.channels.FileChannel.MapMode
 import java.nio.{ByteBuffer, BufferUnderflowException, BufferOverflowException}
-import java.nio.channels.{WritableByteChannel, ReadableByteChannel}
+import java.nio.channels.{FileChannel, WritableByteChannel, ReadableByteChannel}
 
 import org.apache.spark.util.collection.ChainedBuffer
 
 import scala.collection.mutable.{ArrayBuffer, HashSet}
 
-import org.apache.spark.Logging
-import org.apache.spark.storage.{FileSegment, BlockManager}
 
 
 
@@ -66,6 +65,10 @@ trait LargeByteBuffer {
    * @return
    */
   def limit(): Long
+
+
+  //an alternative to having this method would be having a foreachBuffer(f: Buffer => T)
+  def writeTo(channel: WritableByteChannel): Long
 
 //
 //  def skip(skipBy: Long): Unit
@@ -159,51 +162,146 @@ class ChainedLargeByteBuffer(private[io] val underlying: ChainedBuffer) extends 
   def limit(newLimit: Long): Unit = {
     ???
   }
+
+  def writeTo(channel:WritableByteChannel): Long = {
+    var written = 0l
+    underlying.chunks.foreach{bytes =>
+      //TODO test this
+      val buffer = ByteBuffer.wrap(bytes)
+      while (buffer.hasRemaining)
+        channel.write(buffer)
+      written += bytes.length
+    }
+    written
+  }
 }
 
-class WrappedLargeByteBuffer(private val underlying: ByteBuffer) extends LargeByteBuffer {
-  def capacity = underlying.capacity
+class WrappedLargeByteBuffer(private[spark] val underlying: Array[ByteBuffer]) extends LargeByteBuffer {
+
+  val (totalCapacity, chunkOffsets) = {
+    var sum = 0l
+    val offsets = new Array[Long](underlying.size)
+    (0 until underlying.size).foreach{idx =>
+      offsets(idx) = sum
+      sum += underlying(idx).capacity()
+    }
+    (sum, offsets)
+  }
+
+  private var _pos = 0l
+  private var currentBufferIdx = 0
+  private var currentBuffer = underlying(0)
+  private var _limit = totalCapacity
+
+  def capacity = totalCapacity
 
   def get(dst: Array[Byte], offset: Int, length: Int): Unit = {
-    underlying.get(dst, offset, length)
+    var moved = 0
+    while (moved < length) {
+      val toRead = math.min(length - moved, currentBuffer.remaining())
+      currentBuffer.get(dst, offset, toRead)
+      moved += toRead
+      updateCurrentBuffer()
+    }
   }
 
   def get(): Byte = {
-    underlying.get()
+    val r = currentBuffer.get()
+    _pos += 1
+    updateCurrentBuffer()
+    r
   }
 
-  def position: Long = underlying.position
+  private def updateCurrentBuffer(): Unit = {
+    //TODO fix end condition
+    while(!currentBuffer.hasRemaining()) {
+      currentBufferIdx += 1
+      currentBuffer = underlying(currentBufferIdx)
+    }
+  }
+
+  def put(bytes: LargeByteBuffer): Unit = {
+    ???
+  }
+
+  def position: Long = _pos
   def position(position: Long): Unit = {
     //XXX check range?
-    underlying.position(position.toInt)
+    _pos = position
   }
   def remaining(): Long = {
-    underlying.remaining()
+    totalCapacity - _pos
   }
 
   def duplicate(): WrappedLargeByteBuffer = {
-    new WrappedLargeByteBuffer(underlying.duplicate())
+    new WrappedLargeByteBuffer(underlying.map{_.duplicate()})
   }
 
   def rewind(): Unit = {
-    underlying.duplicate()
+    _pos = 0
+    underlying.foreach{_.rewind()}
   }
 
   def limit(): Long = {
-    underlying.limit()
+    totalCapacity
   }
 
   def limit(newLimit: Long) = {
-    //XXX check range?
-    underlying.limit(newLimit.toInt)
+    //XXX check range?  set limits in sub buffers?
+    _limit = newLimit
+  }
+
+  def writeTo(channel: WritableByteChannel): Long = {
+    var written = 0l
+    underlying.foreach{buffer =>
+      //TODO test this
+      //XXX do we care about respecting the limit here?
+      written += buffer.remaining()
+      while (buffer.hasRemaining)
+        channel.write(buffer)
+    }
+    written
   }
 
 }
 
 object LargeByteBuffer {
+
+  def asLargeByteBuffer(byteBuffer: ByteBuffer): LargeByteBuffer = {
+    new WrappedLargeByteBuffer(Array(byteBuffer))
+  }
+
+  def asLargeByteBuffer(bytes: Array[Byte]): LargeByteBuffer = {
+    new WrappedLargeByteBuffer(Array(ByteBuffer.wrap(bytes)))
+  }
+
+
   def allocateOnHeap(size: Long, maxChunk: Int): LargeByteBuffer = {
     val buffer = ChainedBuffer.withInitialSize(maxChunk, size)
     new ChainedLargeByteBuffer(buffer)
+  }
+
+  def mapFile(
+    channel: FileChannel,
+    mode: MapMode,
+    offset: Long,
+    length: Long,
+    maxChunk: Int = Integer.MAX_VALUE - 1e6.toInt
+  ): LargeByteBuffer = {
+    val offsets = new ArrayBuffer[Long]()
+    var curOffset = offset
+    val end = offset + length
+    while (curOffset < end) {
+      offsets += curOffset
+      val length = math.min(end - curOffset, maxChunk)
+      curOffset += length
+    }
+    offsets += end
+    val chunks = new Array[ByteBuffer](offsets.size - 1)
+    (0 until offsets.size - 1).foreach{idx =>
+      chunks(idx) = channel.map(mode, offsets(idx), offsets(idx + 1) - offsets(idx))
+    }
+    new WrappedLargeByteBuffer(chunks)
   }
 }
 

@@ -321,7 +321,7 @@ private[spark] class BlockManager(
    * Put the block locally, using the given storage level.
    */
   override def putBlockData(blockId: BlockId, data: ManagedBuffer, level: StorageLevel): Unit = {
-    putBytes(blockId, new WrappedLargeByteBuffer(data.nioByteBuffer()), level)
+    putBytes(blockId, LargeByteBuffer.asLargeByteBuffer(data.nioByteBuffer()), level)
   }
 
   /**
@@ -437,7 +437,7 @@ private[spark] class BlockManager(
   /**
    * Get block from the local block manager as serialized bytes.
    */
-  def getLocalBytes(blockId: BlockId): Option[ByteBuffer] = {
+  def getLocalBytes(blockId: BlockId): Option[LargeByteBuffer] = {
     logDebug(s"Getting local block $blockId as bytes")
     // As an optimization for map output fetches, if the block is for a shuffle, return it
     // without acquiring a lock; the disk store never deletes (recent) items so this should work
@@ -451,7 +451,7 @@ private[spark] class BlockManager(
             blockId, s"Block $blockId not found on disk, though it should be")
       }
     } else {
-      doGetLocal(blockId, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
+      doGetLocal(blockId, asBlockResult = false).asInstanceOf[Option[LargeByteBuffer]]
     }
   }
 
@@ -584,9 +584,9 @@ private[spark] class BlockManager(
   /**
    * Get block from remote block managers as serialized bytes.
    */
-  def getRemoteBytes(blockId: BlockId): Option[ByteBuffer] = {
+  def getRemoteBytes(blockId: BlockId): Option[LargeByteBuffer] = {
     logDebug(s"Getting remote block $blockId as bytes")
-    doGetRemote(blockId, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
+    doGetRemote(blockId, asBlockResult = false).asInstanceOf[Option[LargeByteBuffer]]
   }
 
   private def doGetRemote(blockId: BlockId, asBlockResult: Boolean): Option[Any] = {
@@ -594,8 +594,8 @@ private[spark] class BlockManager(
     val locations = Random.shuffle(master.getLocations(blockId))
     for (loc <- locations) {
       logDebug(s"Getting remote block $blockId from $loc")
-      //the fetch will always be one byte buffer till we fix SPARK-5928
-      val data: LargeByteBuffer = new WrappedLargeByteBuffer(blockTransferService.fetchBlockSync(
+      //TODO the fetch will always be one byte buffer till we fix SPARK-5928
+      val data: LargeByteBuffer = LargeByteBuffer.asLargeByteBuffer(blockTransferService.fetchBlockSync(
         loc.host, loc.port, loc.executorId, blockId.toString).nioByteBuffer())
 
       if (data != null) {
@@ -1006,7 +1006,7 @@ private[spark] class BlockManager(
    */
   def dropFromMemory(
       blockId: BlockId,
-      data: Either[Array[Any], ByteBuffer]): Option[BlockStatus] = {
+      data: Either[Array[Any], LargeByteBuffer]): Option[BlockStatus] = {
 
     logInfo(s"Dropping block $blockId from memory")
     val info = blockInfo.get(blockId).orNull
