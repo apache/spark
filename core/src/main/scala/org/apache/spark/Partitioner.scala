@@ -49,8 +49,8 @@ object Partitioner {
    * defaultParallelism, otherwise we'll use the max number of upstream partitions.
    *
    * Unless spark.default.parallelism is set, the number of partitions will be the
-   * same as the number of partitions in the largest upstream RDD, as this should
-   * be least likely to cause out-of-memory errors.
+   * same as {number of partitions in the largest upstream RDD * spark.default.parallelismRatio},
+   * as this should be least likely to cause out-of-memory errors.
    *
    * We use two method parameters (rdd, others) to enforce callers passing at least 1 RDD.
    */
@@ -62,7 +62,10 @@ object Partitioner {
     if (rdd.context.conf.contains("spark.default.parallelism")) {
       new HashPartitioner(rdd.context.defaultParallelism)
     } else {
-      new HashPartitioner(bySize.head.partitions.size)
+      val ratio = rdd.context.conf.getDouble("spark.default.parallelismRatio", 1)
+      require(ratio > 0, "spark.default.parallelismRatio must be greater than 0!")
+      val numPartitons = (ratio * bySize.head.partitions.size).toInt
+      new HashPartitioner(Math.max(1, numPartitons))
     }
   }
 }

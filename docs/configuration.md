@@ -689,6 +689,17 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.default.parallelismRatio</code></td>
+  <td>1.0</td>
+  <td>
+    Default ratio to control the number of partitions in RDDs returned by transformations like
+    <code>join</code>, <code>reduceByKey</code>, and <code>parallelize</code> when not set by user,
+    which has lower priority than <code>spark.default.parallelism</code>. For examples, if it is
+    configured as 0.5, it means the number of partitions in these RDDs will be
+    Max(1, 0.5 * number of partitions in the largest upstream RDD).
+  </td>
+</tr>
+<tr>
   <td><code>spark.broadcast.factory</code></td>
   <td>org.apache.spark.broadcast.<br />TorrentBroadcastFactory</td>
   <td>
