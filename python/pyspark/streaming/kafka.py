@@ -195,7 +195,6 @@ ________________________________________________________________________________
               "scala-*/spark-streaming-kafka-assembly-*.jar"
 
 
-
 class OffsetRange(object):
     """
     Represents a range of offsets from a single Kafka TopicAndPartition.
