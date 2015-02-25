@@ -41,8 +41,8 @@ public final class NioManagedBuffer extends ManagedBuffer {
   }
 
   @Override
-  public ByteBuffer nioByteBuffer() throws IOException {
-    return buf.duplicate();
+  public LargeByteBuffer nioByteBuffer() throws IOException {
+    return LargeByteBufferHelper.asLargeByteBuffer(buf.duplicate());
   }
 
   @Override
