@@ -20,13 +20,16 @@ package org.apache.spark.sql.execution
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.{SQLConf, execution}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, ShuffledHashJoin}
 import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.test.TestSQLContext.planner._
 import org.apache.spark.sql.types._
+
 
 class PlannerSuite extends FunSuite {
   test("unions are collapsed") {
@@ -40,7 +43,7 @@ class PlannerSuite extends FunSuite {
   }
 
   test("count is partially aggregated") {
-    val query = testData.groupBy('value)(Count('key)).queryExecution.analyzed
+    val query = testData.groupBy('value).agg(count('key)).queryExecution.analyzed
     val planned = HashAggregation(query).head
     val aggregations = planned.collect { case n if n.nodeName contains "Aggregate" => n }
 
@@ -48,14 +51,14 @@ class PlannerSuite extends FunSuite {
   }
 
   test("count distinct is partially aggregated") {
-    val query = testData.groupBy('value)(CountDistinct('key :: Nil)).queryExecution.analyzed
+    val query = testData.groupBy('value).agg(countDistinct('key)).queryExecution.analyzed
     val planned = HashAggregation(query)
     assert(planned.nonEmpty)
   }
 
   test("mixed aggregates are partially aggregated") {
     val query =
-      testData.groupBy('value)(Count('value), CountDistinct('key :: Nil)).queryExecution.analyzed
+      testData.groupBy('value).agg(count('value), countDistinct('key)).queryExecution.analyzed
     val planned = HashAggregation(query)
     assert(planned.nonEmpty)
   }
@@ -69,7 +72,7 @@ class PlannerSuite extends FunSuite {
       val schema = StructType(fields)
       val row = Row.fromSeq(Seq.fill(fields.size)(null))
       val rowRDD = org.apache.spark.sql.test.TestSQLContext.sparkContext.parallelize(row :: Nil)
-      applySchema(rowRDD, schema).registerTempTable("testLimit")
+      createDataFrame(rowRDD, schema).registerTempTable("testLimit")
 
       val planned = sql(
         """
@@ -128,9 +131,9 @@ class PlannerSuite extends FunSuite {
     testData.limit(3).registerTempTable("tiny")
     sql("CACHE TABLE tiny")
 
-    val a = testData.as('a)
-    val b = table("tiny").as('b)
-    val planned = a.join(b, Inner, Some("a.key".attr === "b.key".attr)).queryExecution.executedPlan
+    val a = testData.as("a")
+    val b = table("tiny").as("b")
+    val planned = a.join(b, $"a.key" === $"b.key").queryExecution.executedPlan
 
     val broadcastHashJoins = planned.collect { case join: BroadcastHashJoin => join }
     val shuffledHashJoins = planned.collect { case join: ShuffledHashJoin => join }

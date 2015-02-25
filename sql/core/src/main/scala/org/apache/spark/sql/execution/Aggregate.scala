@@ -56,10 +56,6 @@ case class Aggregate(
       }
     }
 
-  // HACK: Generators don't correctly preserve their output through serializations so we grab
-  // out child's output attributes statically here.
-  private[this] val childOutput = child.output
-
   override def output = aggregateExpressions.map(_.toAttribute)
 
   /**
@@ -81,7 +77,7 @@ case class Aggregate(
       case a: AggregateExpression =>
         ComputedAggregate(
           a,
-          BindReferences.bindReference(a, childOutput),
+          BindReferences.bindReference(a, child.output),
           AttributeReference(s"aggResult:$a", a.dataType, a.nullable)())
     }
   }.toArray
@@ -150,7 +146,7 @@ case class Aggregate(
     } else {
       child.execute().mapPartitions { iter =>
         val hashTable = new HashMap[Row, Array[AggregateFunction]]
-        val groupingProjection = new InterpretedMutableProjection(groupingExpressions, childOutput)
+        val groupingProjection = new InterpretedMutableProjection(groupingExpressions, child.output)
 
         var currentRow: Row = null
         while (iter.hasNext) {

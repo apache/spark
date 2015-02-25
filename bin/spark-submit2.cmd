@@ -25,7 +25,7 @@ set ORIG_ARGS=%*
 rem Reset the values of all variables used
 set SPARK_SUBMIT_DEPLOY_MODE=client
 
-if not defined %SPARK_CONF_DIR% (
+if [%SPARK_CONF_DIR%] == [] (
   set SPARK_CONF_DIR=%SPARK_HOME%\conf
 )
 set SPARK_SUBMIT_PROPERTIES_FILE=%SPARK_CONF_DIR%\spark-defaults.conf

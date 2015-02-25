@@ -24,9 +24,7 @@ import scala.util.Random
 import org.scalatest.FunSuite
 import org.jblas.DoubleMatrix
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.recommendation.ALS.BlockStats
 import org.apache.spark.storage.StorageLevel
 
 object ALSSuite {
@@ -188,22 +186,6 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext {
   test("NNALS, rank 2") {
     testALS(100, 200, 2, 15, 0.7, 0.4, false, false, false, -1, -1, false)
   }
-
-  test("analyze one user block and one product block") {
-    val localRatings = Seq(
-      Rating(0, 100, 1.0),
-      Rating(0, 101, 2.0),
-      Rating(0, 102, 3.0),
-      Rating(1, 102, 4.0),
-      Rating(2, 103, 5.0))
-    val ratings = sc.makeRDD(localRatings, 2)
-    val stats = ALS.analyzeBlocks(ratings, 1, 1)
-    assert(stats.size === 2)
-    assert(stats(0) === BlockStats("user", 0, 3, 5, 4, 3))
-    assert(stats(1) === BlockStats("product", 0, 4, 5, 3, 4))
-  }
-
-  // TODO: add tests for analyzing multiple user/product blocks
 
   /**
    * Test if we can correctly factorize R = U * P where U and P are of known rank.

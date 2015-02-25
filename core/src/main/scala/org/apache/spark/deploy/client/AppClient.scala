@@ -47,7 +47,7 @@ private[spark] class AppClient(
     conf: SparkConf)
   extends Logging {
 
-  val masterAkkaUrls = masterUrls.map(Master.toAkkaUrl)
+  val masterAkkaUrls = masterUrls.map(Master.toAkkaUrl(_, AkkaUtils.protocol(actorSystem)))
 
   val REGISTRATION_TIMEOUT = 20.seconds
   val REGISTRATION_RETRIES = 3
@@ -107,8 +107,9 @@ private[spark] class AppClient(
     def changeMaster(url: String) {
       // activeMasterUrl is a valid Spark url since we receive it from master.
       activeMasterUrl = url
-      master = context.actorSelection(Master.toAkkaUrl(activeMasterUrl))
-      masterAddress = Master.toAkkaAddress(activeMasterUrl)
+      master = context.actorSelection(
+        Master.toAkkaUrl(activeMasterUrl, AkkaUtils.protocol(actorSystem)))
+      masterAddress = Master.toAkkaAddress(activeMasterUrl, AkkaUtils.protocol(actorSystem))
     }
 
     private def isPossibleMaster(remoteUrl: Address) = {
