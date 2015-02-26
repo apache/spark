@@ -100,7 +100,8 @@ private[spark] object SparkSubmitDriverBootstrapper {
     if (resolvedMavenCoordinates.head.length > 0) {
       newClasspath += sys.props("path.separator") + 
         resolvedMavenCoordinates.mkString(sys.props("path.separator"))
-      submitArgs ++= Seq("--packages-resolved", resolvedMavenCoordinates.mkString(","))
+      submitArgs = 
+        Array("--packages-resolved", resolvedMavenCoordinates.mkString(",")) ++ submitArgs
     }
 
     val newJavaOpts =
