@@ -350,7 +350,11 @@ processClosure <- function(node, oldEnv, argNames, newEnv) {
         # Set parameter 'inherits' to FALSE since we do not need to search in
         # attached package environments.
         if (exists(nodeChar, envir=func.env, inherits = FALSE)) {
-          assign(nodeChar, get(nodeChar, envir=func.env), envir = newEnv)
+          obj <- get(nodeChar, envir=func.env)
+          if (is.function(obj)) {
+            obj <- cleanClosure(obj)
+          }
+          assign(nodeChar, obj, envir = newEnv)
           break
         } else {
           # Continue to search in enclosure.
@@ -366,9 +370,11 @@ processClosure <- function(node, oldEnv, argNames, newEnv) {
 # outside a UDF, and stores them in a new environment.
 # param
 #   func A function whose closure needs to be captured.
-#   newEnv A new function environment to store necessary function dependencies.
-cleanClosure <- function(func, newEnv) {
-  if (is.function(func) && is.environment(newEnv)) {
+# return value
+#   a new function that has an correct environment (closure).
+cleanClosure <- function(func) {
+  if (is.function(func) {
+    newEnv <- new.env(parent = .GlobalEnv)
     # .defVars is a character vector of variables names defined in the function.
     assign(".defVars", c(), envir = .sparkREnv)
     func.body <- body(func)
@@ -377,5 +383,7 @@ cleanClosure <- function(func, newEnv) {
     argsNames <- argNames[-length(argNames)]  # Remove the ending NULL in pairlist.
     # Recursively examine variables in the function body.
     processClosure(func.body, oldEnv, argNames, newEnv)
+    environment(func) <- newEnv
   }
+  func
 }

@@ -36,12 +36,12 @@ test_that("reserialize on RDD", {
   unlink(fileName)
 })
 
-test_that("clean.closure on R functions", {
+test_that("cleanClosure on R functions", {
   y <- c(1, 2, 3)
   g <- function(x) { x + 1 }
   f <- function(x) { g(x) + y }
-  env <- new.env()
-  cleanClosure(f, env)
+  newF <- cleanClosure(f)
+  env <- environment(newF)
   expect_equal(length(ls(env)), 2)  # y, g
   actual <- get("y", envir = env)
   expect_equal(actual, y)
@@ -53,20 +53,32 @@ test_that("clean.closure on R functions", {
   funcEnv <- new.env(parent = env2)
   f <- function(x) { min(g(x) + y) }
   environment(f) <- funcEnv  # enclosing relationship: f -> funcEnv -> env2 -> .GlobalEnv
-  env <- new.env()
-  SparkR:::cleanClosure(f, env)
+  newF <- SparkR:::cleanClosure(f)
+  env <- environment(newF)
   expect_equal(length(ls(env)), 2)  # "min" should not be included
   actual <- get("y", envir = env)
   expect_equal(actual, y)
   actual <- get("g", envir = env)
   expect_equal(actual, g)
+
+  g <- function(x) { x + y }
+  f <- function(x) { lapply(x, g) + 1 }
+  newF <- SparkR:::cleanClosure(f)
+  env <- environment(newF)
+  expect_equal(length(ls(env)), 1)  # Only "g", "y" should be in the environemnt of g.
+  expect_equal(ls(env), "g")
+  newG <- get("g", envir = env)
+  env <- environment(newG)
+  expect_equal(length(ls(env)), 1)
+  actual <- get("y", envir = env)
+  expect_equal(actual, y)
   
   # Test for function (and variable) definitions.
   f <- function(x) {
     g <- function(y) { y * 2 }
     g(x)
   }
-  env <- new.env()
-  SparkR:::cleanClosure(f, env)
+  newF <- SparkR:::cleanClosure(f)
+  env <- environment(newF)
   expect_equal(length(ls(env)), 0)  # "y" and "g" should not be included.
 })
