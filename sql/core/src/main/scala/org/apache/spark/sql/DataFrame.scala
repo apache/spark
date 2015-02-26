@@ -297,12 +297,12 @@ class DataFrame protected[sql](
    * @param numRows Number of rows to show
    * @group basic
    */
-  def show(numRows: Int = 20): Unit = println(showString(numRows))
+  def show(numRows: Int): Unit = println(showString(numRows))
 
   /**
-   * Displays the [[DataFrame]] in a tabular form. (For Java compatibility)
+   * Displays the top 20 rows of [[DataFrame]] in a tabular form.
    */
-  def show(): Unit = println(showString(20))
+  def show(): Unit = show(20)
 
   /**
    * Cartesian join with another [[DataFrame]].
