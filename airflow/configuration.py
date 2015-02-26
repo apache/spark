@@ -47,7 +47,7 @@ master_heartbeat_sec = 60
 id_len = 250
 statsd_on = false
 statsd_host = localhost
-statsd_port = port
+statsd_port = 8125
 """
 
 TEST_CONFIG = """\
@@ -88,7 +88,7 @@ id_len = 250
 [statsd]
 statsd_on = false
 statsd_host = localhost
-statsd_port = port
+statsd_port = 8125
 """
 
 

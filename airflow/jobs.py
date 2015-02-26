@@ -284,7 +284,8 @@ class MasterJob(BaseJob):
 
     def heartbeat_callback(self):
         if statsd:
-            statsd.incr('master_heartbeat', 1, 1)
+            statsd.gauge('master_heartbeat', 1, 1)
+
 
 
 class BackfillJob(BaseJob):
