@@ -593,7 +593,8 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
   }
 
   test("SPARK-6024 wide schema support") {
-    val schema = StructType((1 to 1000).map(i => StructField(s"c_${i}", StringType, true)))
+    // We will need 80 splits for this schema if the threshold is 4000.
+    val schema = StructType((1 to 5000).map(i => StructField(s"c_${i}", StringType, true)))
     assert(
       schema.json.size > conf.schemaStringLengthThreshold,
       "To correctly test the fix of SPARK-6024, the value of " +
