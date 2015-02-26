@@ -471,13 +471,6 @@
         <groupId>com.clearspring.analytics</groupId>
         <artifactId>stream</artifactId>
         <version>2.7.0</version>
-        <exclusions>
-          <!-- Only HyperLogLogPlus is used, which doesn't depend on fastutil -->
-          <exclusion>
-            <groupId>it.unimi.dsi</groupId>
-            <artifactId>fastutil</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <!-- In theory we need not directly depend on protobuf since Spark does not directly
            use it. However, when building with Hadoop/YARN 2.2 Maven doesn't correctly bump
