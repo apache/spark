@@ -155,8 +155,14 @@ test_that("group by", {
   expect_true(3 == count(df2))
 
   df3 <- agg(gd, age = "sum")
-  expect_true(inherits(df2, "DataFrame"))
-  expect_true(3 == count(df2))
+  expect_true(inherits(df3, "DataFrame"))
+  expect_true(3 == count(df3))
+
+  df4 <- sum(gd, "age")
+  expect_true(inherits(df4, "DataFrame"))
+  expect_true(3 == count(df4))
+  expect_true(3 == count(mean(gd, "age")))
+  expect_true(3 == count(max(gd, "age")))
 })
 
 

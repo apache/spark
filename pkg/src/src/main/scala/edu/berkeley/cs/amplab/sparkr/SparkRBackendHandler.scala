@@ -107,7 +107,7 @@ class SparkRBackendHandler(server: SparkRBackend)
           matchMethod(numArgs, args, x.getParameterTypes)
         }
         if (methods.isEmpty) {
-          throw new Exception(s"No matched method found for $methodName")
+          throw new Exception(s"No matched method found for $cls.$methodName")
         }
         val ret = methods.head.invoke(obj, args:_*)
 
@@ -149,6 +149,7 @@ class SparkRBackendHandler(server: SparkRBackend)
       args: Array[java.lang.Object],
       parameterTypes: Array[Class[_]]): Boolean = {
     if (parameterTypes.length != numArgs) {
+      logInfo(s"num of arguments numArgs not match with ${parameterTypes.length}")
       return false
     }
 
@@ -165,7 +166,7 @@ class SparkRBackendHandler(server: SparkRBackend)
         }
       }
       if (!parameterWrapperType.isInstance(args(i))) {
-        logInfo(s"type $parameterWrapperType not match with ${args(i)}")
+        logInfo(s"arg $i not match: type $parameterWrapperType != ${args(i)}")
         return false
       }
     }

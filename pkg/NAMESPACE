@@ -89,7 +89,7 @@ exportMethods("printSchema",
               "limit")
 
 exportClasses("GroupedData")
-exportMethods("count", "agg")
+exportMethods("count", "agg", "avg")
 
 
 export("jsonFile",

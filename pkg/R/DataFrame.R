@@ -331,5 +331,26 @@ setMethod("agg",
             dataFrame(sdf)
           })
 
+#' sum/mean/avg/min/max
+
+metheds <- c("sum", "mean", "avg", "min", "max")
+
+setGeneric("avg", function(x, ...) { standardGeneric("avg") })
+
+createMethod <- function(name) {
+  setMethod(name,
+            signature(x = "GroupedData"),
+            function(x, ...) {
+              jseq <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "toSeq", list(...))
+              sdf <- callJMethod(x@sgd, name, jseq)
+              dataFrame(sdf)
+            })
+}
+
+for (name in metheds) {
+  createMethod(name)
+}
+
+
 
 
