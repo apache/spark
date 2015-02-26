@@ -29,8 +29,6 @@ import org.apache.spark.sql.sources.{CreateTableUsing, CreateTempTableUsing, Des
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{SQLContext, Strategy, execution}
 
-import scala.collection.mutable.ArrayBuffer
-
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SQLContext#SparkPlanner =>
 
@@ -144,7 +142,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
              partialComputation,
              child) =>
         val cdExpression: NamedExpression = rewrittenAggregateExpressions match {
-          case ArrayBuffer(pname@Alias(CombineSetsAndCount(_), _)) => pname
+          case Seq(pname@Alias(CombineSetsAndCount(_), _)) => pname
           case _ => null
         }
         
