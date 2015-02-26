@@ -17,7 +17,7 @@
 package org.apache.spark.deploy.history
 
 import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 import org.scalatest.mock.MockitoSugar
 import javax.servlet.http.HttpServletRequest
 import org.mockito.Mockito.{when}
@@ -25,28 +25,29 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.ui.SparkUI
 import scala.collection.mutable
 
-class HistoryServerSuite extends FunSuite with ShouldMatchers with MockitoSugar {
+class HistoryServerSuite extends FunSuite with Matchers with MockitoSugar {
 	
   val historyServer = mock[HistoryServer]
   val request = mock[HttpServletRequest]
   
   test("generate history page with relative links") { 
     val ui = mock[SparkUI]
-    val link = "/history/app1.html"
-    val info = new ApplicationHistoryInfo("1", "app1", 0, 2, 1, "xxx", new Path("/tmp"), ui )
-    val sampleHistory = mutable.HashMap("app1" -&gt; info)
-    when(historyServer.appIdToInfo).thenReturn(sampleHistory)
+    val link = "/history/app1"
+    val info = new ApplicationHistoryInfo("app1", "app1", 0, 2, 1, "xxx", true )
+    when(historyServer.getApplicationList()).thenReturn(Seq(info))
     when(ui.basePath).thenReturn(link)
-    when(historyServer.getAddress).thenReturn("http://localhost:123")
+    when(historyServer.getProviderConfig()).thenReturn(Map[String, String]())
     val page = new HistoryPage(historyServer)
     
     //when
     val response = page.render(request)
     
     //then
-   val expectedLink = response \\ "a"
-   expectedLink.size should equal(1)
-   val hrefAttr = expectedLink(0).attribute("href")
-   hrefAttr.get.toString should equal(link)
+   val links = response \\ "a"
+   val justHrefs = for {
+     l <- links
+     attrs <- l.attribute("href")
+   } yield (attrs.toString)
+   justHrefs should contain(link)
   }
 }
