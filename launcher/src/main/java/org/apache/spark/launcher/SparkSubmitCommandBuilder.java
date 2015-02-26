@@ -74,7 +74,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
    * to parse the command lines for things like bin/spark-shell, which allows users to mix and
    * match arguments (e.g. "bin/spark-shell SparkShellArg --master foo").
    */
-  private boolean isSpecialClass;
+  private boolean allowsMixedArguments;
 
   SparkSubmitCommandBuilder() {
     this.sparkArgs = new ArrayList<String>();
@@ -84,11 +84,11 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     this();
     List<String> submitArgs = args;
     if (args.size() > 0 && args.get(0).equals(PYSPARK_SHELL)) {
-      this.isSpecialClass = true;
+      this.allowsMixedArguments = true;
       appResource = PYSPARK_SHELL_RESOURCE;
       submitArgs = args.subList(1, args.size());
     } else {
-      this.isSpecialClass = false;
+      this.allowsMixedArguments = false;
     }
 
     new OptionParser().parse(submitArgs);
@@ -287,7 +287,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         // non-spark-submit arguments.
         mainClass = value;
         if (specialClasses.containsKey(value)) {
-          isSpecialClass = true;
+          allowsMixedArguments = true;
           appResource = specialClasses.get(value);
         }
       } else {
@@ -303,7 +303,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       // normal mode, any unrecognized parameter triggers the end of command line parsing, and the
       // parameter itself will be interpreted by SparkSubmit as the application resource. The
       // remaining params will be appended to the list of SparkSubmit arguments.
-      if (isSpecialClass) {
+      if (allowsMixedArguments) {
         appArgs.add(opt);
         return true;
       } else {
