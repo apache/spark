@@ -31,8 +31,11 @@ class LabeledPoint(object):
     The features and labels of a data point.
 
     :param label: Label for this data point.
-    :param features: Vector of features for this point (NumPy array, list,
-        pyspark.mllib.linalg.SparseVector, or scipy.sparse column matrix)
+    :param features: Vector of features for this point (NumPy array,
+             list, pyspark.mllib.linalg.SparseVector, or scipy.sparse
+             column matrix)
+
+    Note: 'label' and 'features' are accessible as class attributes.
     """
 
     def __init__(self, label, features):
