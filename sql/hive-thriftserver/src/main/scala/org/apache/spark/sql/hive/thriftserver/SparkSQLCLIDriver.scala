@@ -103,17 +103,16 @@ private[hive] object SparkSQLCLIDriver {
 
     SessionState.start(sessionState)
 
-    // Clean up after we exit
-    val cleanupHook = new Runnable {
-      override def run() {
-        SparkSQLEnv.stop()
-      }
-    }
-
-    // Use higher priority than FileSystem.
-    assert(SparkSQLCLIDriver.SHUTDOWN_HOOK_PRIORITY > FileSystem.SHUTDOWN_HOOK_PRIORITY)
-    ShutdownHookManager
-      .get().addShutdownHook(cleanupHook, SparkSQLCLIDriver.SHUTDOWN_HOOK_PRIORITY)
+    // Clean up after we exit. Use higher priority than FileSystem.
+    assert(SHUTDOWN_HOOK_PRIORITY > FileSystem.SHUTDOWN_HOOK_PRIORITY)
+    ShutdownHookManager.get().addShutdownHook(
+      new Runnable {
+        override def run() {
+          SparkSQLEnv.stop()
+        }
+      },
+      SHUTDOWN_HOOK_PRIORITY
+    )
 
     // "-h" option has been passed, so connect to Hive thrift server.
     if (sessionState.getHost != null) {
