@@ -63,6 +63,8 @@ private[spark] class CoarseMesosSchedulerBackend(
   // Maximum number of cores to acquire (TODO: we'll need more flexible controls here)
   val maxCores = conf.get("spark.cores.max",  Int.MaxValue.toString).toInt
 
+  val totalExpectedCores = conf.getInt("spark.cores.max", 0)
+
   // Cores we have acquired with each Mesos task ID
   val coresByTaskId = new HashMap[Int, Int]
   var totalCoresAcquired = 0
@@ -333,4 +335,7 @@ private[spark] class CoarseMesosSchedulerBackend(
       super.applicationId
     }
 
+  override def sufficientResourcesRegistered(): Boolean = {
+    totalCoreCount.get() >= totalExpectedCores * minRegisteredRatio
+  }
 }
