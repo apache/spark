@@ -18,4 +18,11 @@
 #
 
 SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+
+usage() {
+  "$SPARK_HOME"/bin/spark-class org.apache.spark.deploy.SparkSubmit --help
+  exit $1
+}
+export -f usage
+
 exec "$SPARK_HOME"/bin/spark-class org.apache.spark.deploy.SparkSubmit "$@"

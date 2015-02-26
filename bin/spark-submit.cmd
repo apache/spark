@@ -20,4 +20,15 @@ rem
 rem This is the entry point for running Spark submit. To avoid polluting the
 rem environment, it just launches a new cmd to do the real work.
 
-cmd /V /E /C %~dp0spark-class2.cmd org.apache.spark.deploy.SparkSubmit %*
+set CLASS=org.apache.spark.deploy.SparkSubmit
+call %~dp0spark-class2.cmd  %CLASS% %*
+set SPARK_ERROR_LEVEL=%ERRORLEVEL%
+if "%SPARK_LAUNCHER_USAGE_ERROR%"=="1" (
+  call :usage
+  exit /b 1
+)
+exit /b %SPARK_ERROR_LEVEL%
+
+:usage
+call %SPARK_HOME%\bin\spark-class2.cmd %CLASS% --help
+goto :eof

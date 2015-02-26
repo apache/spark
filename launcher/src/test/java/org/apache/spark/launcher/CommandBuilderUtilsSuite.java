@@ -74,6 +74,7 @@ public class CommandBuilderUtilsSuite {
     assertEquals("\"a b c\"", quoteForBatchScript("a b c"));
     assertEquals("\"a \"\"b\"\" c\"", quoteForBatchScript("a \"b\" c"));
     assertEquals("\"a\"\"b\"\"c\"", quoteForBatchScript("a\"b\"c"));
+    assertEquals("\"ab^=\"\"cd\"\"\"", quoteForBatchScript("ab=\"cd\""));
   }
 
   @Test

@@ -231,16 +231,19 @@ class CommandBuilderUtils {
 
   /**
    * Quote a command argument for a command to be run by a Windows batch script, if the argument
-   * needs quoting. Arguments only seem to need quotes in batch scripts if they have whitespace.
+   * needs quoting. Arguments only seem to need quotes in batch scripts if they have certain
+   * special characters, some of which need extra (and different) escaping.
    *
    *  For example:
-   *    original single argument: ab "cde" fgh
-   *    quoted: "ab ""cde"" fgh"
+   *    original single argument: ab="cde fgh"
+   *    quoted: "ab^=""cde fgh"""
    */
   static String quoteForBatchScript(String arg) {
+
     boolean needsQuotes = false;
     for (int i = 0; i < arg.length(); i++) {
-      if (Character.isWhitespace(arg.codePointAt(i)) || arg.codePointAt(i) == '"') {
+      int c = arg.codePointAt(i);
+      if (Character.isWhitespace(c) || c == '"' || c == '=') {
         needsQuotes = true;
         break;
       }
@@ -252,8 +255,17 @@ class CommandBuilderUtils {
     quoted.append("\"");
     for (int i = 0; i < arg.length(); i++) {
       int cp = arg.codePointAt(i);
-      if (cp == '\"') {
-        quoted.append("\"");
+      switch (cp) {
+      case '"':
+        quoted.append('"');
+        break;
+
+      case '=':
+        quoted.append('^');
+        break;
+
+      default:
+        break;
       }
       quoted.appendCodePoint(cp);
     }

@@ -147,9 +147,9 @@ class Main {
     @Override
     public List<String> buildCommand(Map<String, String> env) {
       if (isWindows()) {
-        return Arrays.asList("set SPARK_LAUNCHER_USAGE_ERROR=1");
+        return Arrays.asList("set", "SPARK_LAUNCHER_USAGE_ERROR=1");
       } else {
-        return Arrays.asList("usage 1");
+        return Arrays.asList("usage", "1");
       }
     }
 

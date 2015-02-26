@@ -257,8 +257,20 @@ public class SparkLauncher {
    */
   public Process launch() throws IOException {
     List<String> cmd = new ArrayList<String>();
-    cmd.add(join(File.separator, builder.getSparkHome(), "bin", "spark-submit"));
+    String script = isWindows() ? "spark-submit.cmd" : "spark-submit";
+    cmd.add(join(File.separator, builder.getSparkHome(), "bin", script));
     cmd.addAll(builder.buildSparkSubmitArgs());
+
+    // Since the child process is a batch script, let's quote things so that special characters are
+    // preserved, otherwise the batch interpreter will mess up the arguments. Batch scripts are
+    // weird.
+    if (isWindows()) {
+      List<String> winCmd = new ArrayList<String>();
+      for (String arg : cmd) {
+        winCmd.add(quoteForBatchScript(arg));
+      }
+      cmd = winCmd;
+    }
 
     ProcessBuilder pb = new ProcessBuilder(cmd.toArray(new String[cmd.size()]));
     for (Map.Entry<String, String> e : builder.childEnv.entrySet()) {
