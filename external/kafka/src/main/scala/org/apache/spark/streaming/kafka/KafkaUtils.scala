@@ -27,7 +27,7 @@ import scala.collection.JavaConversions._
 
 import kafka.common.TopicAndPartition
 import kafka.message.MessageAndMetadata
-import kafka.serializer.{Decoder, StringDecoder}
+import kafka.serializer.{DefaultDecoder, Decoder, StringDecoder}
 
 import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.{SparkContext, SparkException}
@@ -530,5 +530,24 @@ object KafkaUtils {
       Map(kafkaParams.toSeq: _*),
       Set(topics.toSeq: _*)
     )
+  }
+}
+
+private[kafka]
+class KafkaUtilsPythonHelper {
+  def createStream(
+      jssc: JavaStreamingContext,
+      kafkaParams: JMap[String, String],
+      topics: JMap[String, JInt],
+      storageLevel: StorageLevel): JavaPairReceiverInputDStream[Array[Byte], Array[Byte]] = {
+    KafkaUtils.createStream[Array[Byte], Array[Byte], DefaultDecoder, DefaultDecoder](
+      jssc,
+      classOf[Array[Byte]],
+      classOf[Array[Byte]],
+      classOf[DefaultDecoder],
+      classOf[DefaultDecoder],
+      kafkaParams,
+      topics,
+      storageLevel)
   }
 }
