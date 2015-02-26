@@ -45,5 +45,26 @@ class ShortestPathsSuite extends FunSuite with LocalSparkContext {
       assert(results.toSet === shortestPaths)
     }
   }
-
+ 
+  test("Shortest Path Computations With Distances") {
+    withSpark { sc =>
+      val shortestPaths = Set(
+        (1, Map(1 -> 0, 4 -> 3)), (2, Map(1 -> 2, 4 -> 3)), (3, Map(1 -> 5, 4 -> 4)),
+        (4, Map(1 -> 3, 4 -> 0)), (5, Map(1 -> 1, 4 -> 2)), (6, Map(1 -> 8, 4 -> 5)))
+      val edgeSeq = Seq(((1, 2), 2), ((1, 5), 1), ((2, 3), 3), ((2, 5), 1), ((3, 4), 4), ((4, 5), 2)
+        , ((4, 6), 5)).flatMap {
+        case e => Seq(e, (e._1.swap, e._2))
+      }
+      val edges = sc.parallelize(edgeSeq).map {
+        case (v1, v2) => Edge(v1._1.toLong, v1._2.toLong, v2.toInt)
+      }
+      val graph = Graph.fromEdges(edges, 0)
+      val landmarks = Seq(1, 4).map(_.toLong)
+      val results = ShortestPaths.runWithDist(graph, landmarks).vertices.collect.map {
+        case (v, spMap) => (v, spMap.mapValues(i => i))
+      }
+      assert(results.toSet === shortestPaths)
+    }
+  }
+ 
 }
