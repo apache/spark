@@ -249,7 +249,7 @@ private[hive] object HadoopTableReader extends HiveInspectors {
    * instantiate a HadoopRDD.
    */
   def initializeLocalJobConfFunc(path: String, tableDesc: TableDesc)(jobConf: JobConf) {
-    jobConf.set("mapred.input.dir", StringUtils.escapeString(path.toString()))
+    FileInputFormat.setInputPaths(jobConf, Seq[Path](path): _*)
     if (tableDesc != null) {
       PlanUtils.configureInputJobPropertiesForStorageHandler(tableDesc)
       Utilities.copyTableJobPropertiesToConf(tableDesc, jobConf)
