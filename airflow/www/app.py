@@ -1345,8 +1345,8 @@ admin.add_view(mv)
 admin.add_link(
     base.MenuLink(
         category='Docs',
-        name='@readthedocs.org',
-        url='http://airflow.readthedocs.org/en/latest/'))
+        name='Documentation',
+        url='http://pythonhosted.org/airflow/'))
 admin.add_link(
     base.MenuLink(
         category='Docs',
