@@ -591,4 +591,22 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalUseDataSource)
     }
   }
+
+  test("SPARK-6024 wide schema support") {
+    val schema = StructType((1 to 1000).map(i => StructField(s"c_${i}", StringType, true)))
+    assert(
+      schema.json.size > conf.schemaStringLengthThreshold,
+      "To correctly test the fix of SPARK-6024, the value of " +
+      s"spark.sql.sources.schemaStringLengthThreshold needs to be less than ${schema.json.size}")
+    // Manually create a metastore data source table.
+    catalog.createDataSourceTable(
+      tableName = "wide_schema",
+      userSpecifiedSchema = Some(schema),
+      provider = "json",
+      options = Map("path" -> "just a dummy path"),
+      isExternal = false)
+
+    val actualSchema = table("wide_schema").schema
+    assert(schema === actualSchema)
+  }
 }
