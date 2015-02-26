@@ -73,13 +73,9 @@ private[spark] trait Cancellable {
   def cancel(): Unit
 }
 
-private[rpc] object NopCancellable extends Cancellable {
-  override def cancel(): Unit = {}
-}
-
 private[rpc] class SettableCancellable extends Cancellable {
 
-  @volatile private var underlying: Cancellable = NopCancellable
+  @volatile private var underlying: Cancellable = SettableCancellable.NOP
 
   @volatile private var isCancelled = false
 
@@ -94,6 +90,12 @@ private[rpc] class SettableCancellable extends Cancellable {
   override def cancel(): Unit = {
     isCancelled = true
     underlying.cancel()
+  }
+}
+
+private[rpc] object SettableCancellable {
+  val NOP = new Cancellable {
+    override def cancel(): Unit = {}
   }
 }
 
