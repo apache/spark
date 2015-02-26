@@ -183,6 +183,21 @@ serializeToBytes <- function(rdd) {
   }
 }
 
+# Create a new RDD with serializedMode == "string".
+# Return itself if already in "string" format.
+serializeToString <- function(rdd) {
+  if (!inherits(rdd, "RDD")) {
+    stop("Argument 'rdd' is not an RDD type.")
+  }
+  if (getSerializedMode(rdd) != "string") {
+    ser.rdd <- lapply(rdd, function(x) { x })
+    ser.rdd@env$jrdd_val <- getJRDD(rdd, "string")
+    return(ser.rdd)
+  } else {
+    return(rdd)
+  }
+}
+
 # Fast append to list by using an accumulator.
 # http://stackoverflow.com/questions/17046336/here-we-go-again-append-an-element-to-a-list-in-r
 #

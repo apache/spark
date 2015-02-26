@@ -87,10 +87,14 @@ exportMethods("printSchema",
               "limit")
 
 export("jsonFile",
+       "jsonRDD",
        "parquetFile",
        "sql",
        "table",
+       "tables",
+       "tableNames",
        "cacheTable",
-       "uncacheTable")
+       "uncacheTable",
+       "clearCache)
 
 export("sparkRSQL.init")
