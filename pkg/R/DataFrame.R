@@ -128,10 +128,10 @@ setMethod("count",
 #' }
 
 setMethod("collect",
-          signature(rdd = "DataFrame"),
-          function(rdd) {
+          signature(x = "DataFrame"),
+          function(x) {
             # listCols is a list of raw vectors, one per column
-            listCols <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "dfToCols", rdd@sdf)
+            listCols <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "dfToCols", x@sdf)
             cols <- lapply(listCols, function(col) {
               objRaw <- rawConnection(col)
               numRows <- readInt(objRaw)
@@ -139,7 +139,7 @@ setMethod("collect",
               close(objRaw)
               col
             })
-            colNames <- callJMethod(rdd@sdf, "columns")
+            colNames <- callJMethod(x@sdf, "columns")
             names(cols) <- colNames
             dfOut <- do.call(cbind.data.frame, cols)
             dfOut
@@ -187,9 +187,9 @@ setMethod("limit",
 #' }
 
 setMethod("take",
-          signature(rdd = "DataFrame", num = "numeric"),
-          function(rdd, num) {
-            limited <- limit(rdd, num)
+          signature(x = "DataFrame", num = "numeric"),
+          function(x, num) {
+            limited <- limit(x, num)
             collect(limited)
           })
 
@@ -264,15 +264,15 @@ setMethod("mapPartitions",
           })
 
 setMethod("foreach",
-          signature(rdd = "DataFrame", func = "function"),
-          function(rdd, func) {
-            rddIn <- toRDD(rdd)
-            foreach(rddIn, func)
+          signature(x = "DataFrame", func = "function"),
+          function(x, func) {
+            rdd <- toRDD(x)
+            foreach(rdd, func)
           })
 
 setMethod("foreachPartition",
-          signature(rdd = "DataFrame", func = "function"),
-          function(rdd, func) {
-            rddIn <- toRDD(rdd)
-            foreachPartition(rddIn, func)
+          signature(x = "DataFrame", func = "function"),
+          function(x, func) {
+            rdd <- toRDD(x)
+            foreachPartition(rdd, func)
           })
