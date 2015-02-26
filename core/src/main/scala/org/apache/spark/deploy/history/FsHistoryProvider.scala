@@ -49,8 +49,8 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 
   // Interval between each check for event log updates
   private val UPDATE_INTERVAL_MS = conf.getOption("spark.history.fs.update.interval.seconds")
-    .orElse(conf.getOption(SparkConf.translateConfKey("spark.history.fs.updateInterval", true)))
-    .orElse(conf.getOption(SparkConf.translateConfKey("spark.history.updateInterval", true)))
+    .orElse(conf.getOption("spark.history.fs.updateInterval"))
+    .orElse(conf.getOption("spark.history.updateInterval"))
     .map(_.toInt)
     .getOrElse(10) * 1000
 
