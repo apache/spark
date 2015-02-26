@@ -440,6 +440,17 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
           val attributedRewrites = relation.output.zip(parquetRelation.output)
           (relation, parquetRelation, attributedRewrites)
 
+        // Write path
+        case InsertIntoHiveTable(relation: MetastoreRelation, _, _, _)
+          // Inserting into partitioned table is not supported in Parquet data source (yet).
+          if !relation.hiveQlTable.isPartitioned &&
+            hive.convertMetastoreParquet &&
+            hive.conf.parquetUseDataSourceApi &&
+            relation.tableDesc.getSerdeClassName.toLowerCase.contains("parquet") =>
+          val parquetRelation = convertToParquetRelation(relation)
+          val attributedRewrites = relation.output.zip(parquetRelation.output)
+          (relation, parquetRelation, attributedRewrites)
+
         // Read path
         case p @ PhysicalOperation(_, _, relation: MetastoreRelation)
             if hive.convertMetastoreParquet &&
@@ -463,6 +474,16 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
               Subquery(r.tableName, parquetRelation))
 
           withAlias
+        }
+        case InsertIntoTable(r: MetastoreRelation, partition, child, overwrite)
+          if relationMap.contains(r) => {
+          val parquetRelation = relationMap(r)
+          InsertIntoTable(parquetRelation, partition, child, overwrite)
+        }
+        case InsertIntoHiveTable(r: MetastoreRelation, partition, child, overwrite)
+          if relationMap.contains(r) => {
+          val parquetRelation = relationMap(r)
+          InsertIntoTable(parquetRelation, partition, child, overwrite)
         }
         case other => other.transformExpressions {
           case a: Attribute if a.resolved => attributedRewrites.getOrElse(a, a)
