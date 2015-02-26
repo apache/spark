@@ -37,7 +37,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
 
   override def beforeAll(): Unit = {
     val conf = new SparkConf()
-    env = createRpcEnv(conf, 12345)
+    env = createRpcEnv(conf, "local", 12345)
   }
 
   override def afterAll(): Unit = {
@@ -46,7 +46,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     }
   }
 
-  def createRpcEnv(conf: SparkConf, port: Int): RpcEnv
+  def createRpcEnv(conf: SparkConf, name: String, port: Int): RpcEnv
 
   test("send a message locally") {
     @volatile var message: String = null
@@ -74,9 +74,9 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
       }
     })
 
-    val anotherEnv = createRpcEnv(new SparkConf(), 13345)
+    val anotherEnv = createRpcEnv(new SparkConf(), "remote" ,13345)
     // Use anotherEnv to find out the RpcEndpointRef
-    val rpcEndpointRef = anotherEnv.setupEndpointRef(env.systemName, env.address, "send-remotely")
+    val rpcEndpointRef = anotherEnv.setupEndpointRef("local", env.address, "send-remotely")
     try {
       rpcEndpointRef.send("hello")
       eventually(timeout(5 seconds), interval(10 millis)) {
@@ -128,9 +128,9 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
       }
     })
 
-    val anotherEnv = createRpcEnv(new SparkConf(), 13345)
+    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 13345)
     // Use anotherEnv to find out the RpcEndpointRef
-    val rpcEndpointRef = anotherEnv.setupEndpointRef(env.systemName, env.address, "ask-remotely")
+    val rpcEndpointRef = anotherEnv.setupEndpointRef("local", env.address, "ask-remotely")
     try {
       val reply = rpcEndpointRef.askWithReply[String]("hello")
       assert("hello" === reply)
@@ -154,9 +154,9 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     val conf = new SparkConf()
     conf.set("spark.akka.retry.wait", "0")
     conf.set("spark.akka.num.retries", "1")
-    val anotherEnv = createRpcEnv(conf, 13345)
+    val anotherEnv = createRpcEnv(conf, "remote", 13345)
     // Use anotherEnv to find out the RpcEndpointRef
-    val rpcEndpointRef = anotherEnv.setupEndpointRef(env.systemName, env.address, "ask-timeout")
+    val rpcEndpointRef = anotherEnv.setupEndpointRef("local", env.address, "ask-timeout")
     try {
       val e = intercept[Exception] {
         rpcEndpointRef.askWithReply[String]("hello", 1 millis)

@@ -55,8 +55,6 @@ private[spark] class AkkaRpcEnv private (
     RpcAddress(address.host.getOrElse("localhost"), address.port.getOrElse(boundPort))
   }
 
-  override val systemName: String = actorSystem.name
-
   override val address: RpcAddress = defaultAddress
 
   /**

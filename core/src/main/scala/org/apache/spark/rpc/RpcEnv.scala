@@ -35,8 +35,6 @@ private[spark] trait RpcEnv {
 
   def scheduler: ActionScheduler
 
-  def systemName: String
-
   /**
    * Return the address that [[RpcEnv]] is listening to.
    */

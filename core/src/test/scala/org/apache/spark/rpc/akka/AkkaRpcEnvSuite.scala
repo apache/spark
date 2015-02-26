@@ -22,8 +22,8 @@ import org.apache.spark.{SecurityManager, SparkConf}
 
 class AkkaRpcEnvSuite extends RpcEnvSuite {
 
-  override def createRpcEnv(conf: SparkConf, port: Int): RpcEnv = {
-    AkkaRpcEnv(RpcEnvConfig(conf, s"test-$port", "localhost", port, new SecurityManager(conf)))
+  override def createRpcEnv(conf: SparkConf, name: String, port: Int): RpcEnv = {
+    AkkaRpcEnv(RpcEnvConfig(conf, name, "localhost", port, new SecurityManager(conf)))
   }
 
   test("setupEndpointRef: systemName, address, endpointName") {
@@ -38,8 +38,8 @@ class AkkaRpcEnvSuite extends RpcEnvSuite {
     val newRpcEnv =
       AkkaRpcEnv(RpcEnvConfig(conf, "test", "localhost", 12346, new SecurityManager(conf)))
     try {
-      val newRef = newRpcEnv.setupEndpointRef(s"test-${env.address.port}", ref.address, "test_endpoint")
-      assert(s"akka.tcp://test-${env.address.port}@localhost:12345/user/test_endpoint" ===
+      val newRef = newRpcEnv.setupEndpointRef("local", ref.address, "test_endpoint")
+      assert(s"akka.tcp://local@localhost:12345/user/test_endpoint" ===
         newRef.asInstanceOf[AkkaRpcEndpointRef].actorRef.path.toString)
     } finally {
       newRpcEnv.shutdown()
