@@ -143,19 +143,38 @@ private[sql] case class ParquetTableScan(
           relation.partitioningAttributes
             .map(a => Cast(Literal(partValues(a.name)), a.dataType).eval(EmptyRow))
 
+        val mutableRow = new GenericMutableRow(output.size)
+
         new Iterator[Row] {
           def hasNext = iter.hasNext
           def next() = {
-            val row = iter.next()._2.asInstanceOf[SpecificMutableRow]
+            iter.next() match {
+              case (_, row: SpecificMutableRow) =>
+                // Parquet will leave partitioning columns empty, so we fill them in here.
+                var i = 0
+                while (i < requestedPartitionOrdinals.size) {
+                  row(requestedPartitionOrdinals(i)._2) =
+                    partitionRowValues(requestedPartitionOrdinals(i)._1)
+                  i += 1
+                }
+                row
 
-            // Parquet will leave partitioning columns empty, so we fill them in here.
-            var i = 0
-            while (i < requestedPartitionOrdinals.size) {
-              row(requestedPartitionOrdinals(i)._2) =
-                partitionRowValues(requestedPartitionOrdinals(i)._1)
-              i += 1
+              case (_, row: Row) =>
+                var i = 0
+                while (i < row.size) {
+                  mutableRow(i) = row(i)
+                  i += 1
+                }
+
+                i = 0
+                while (i < requestedPartitionOrdinals.size) {
+                  mutableRow(requestedPartitionOrdinals(i)._2) =
+                    partitionRowValues(requestedPartitionOrdinals(i)._1)
+                  i += 1
+                }
+
+                mutableRow
             }
-            row
           }
         }
       }
