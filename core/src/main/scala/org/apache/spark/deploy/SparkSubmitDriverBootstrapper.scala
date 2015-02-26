@@ -58,6 +58,8 @@ private[spark] object SparkSubmitDriverBootstrapper {
     val submitLibraryPath = sys.env.get("SPARK_SUBMIT_LIBRARY_PATH")
     val submitClasspath = sys.env.get("SPARK_SUBMIT_CLASSPATH")
     val submitJavaOpts = sys.env.get("SPARK_SUBMIT_OPTS")
+    val submitPackages = sys.env.getOrElse("SPARK_SUBMIT_PACKAGES", "")
+    val submitRepositories = sys.env.get("SPARK_SUBMIT_REPOSITORIES")
 
     assume(runner != null, "RUNNER must be set")
     assume(classpath != null, "CLASSPATH must be set")
@@ -73,6 +75,7 @@ private[spark] object SparkSubmitDriverBootstrapper {
     val confLibraryPath = properties.get("spark.driver.extraLibraryPath")
     val confClasspath = properties.get("spark.driver.extraClassPath")
     val confJavaOpts = properties.get("spark.driver.extraJavaOptions")
+    val confIvyRepo = properties.get("spark.jars.ivy")
 
     // Favor Spark submit arguments over the equivalent configs in the properties file.
     // Note that we do not actually use the Spark submit values for library path, classpath,
@@ -82,12 +85,22 @@ private[spark] object SparkSubmitDriverBootstrapper {
       .orElse(confDriverMemory)
       .getOrElse(defaultDriverMemory)
 
-    val newClasspath =
+    var newClasspath =
       if (submitClasspath.isDefined) {
         classpath
       } else {
         classpath + confClasspath.map(sys.props("path.separator") + _).getOrElse("")
       }
+
+    // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
+    // too for packages that include Python code
+    val resolvedMavenCoordinates =
+      SparkSubmitUtils.resolveMavenCoordinates(
+        submitPackages, submitRepositories, confIvyRepo)
+    if (resolvedMavenCoordinates.head.length > 0) {
+      newClasspath += sys.props("path.separator") + 
+        resolvedMavenCoordinates.mkString(sys.props("path.separator"))
+    }
 
     val newJavaOpts =
       if (submitJavaOpts.isDefined) {
@@ -108,6 +121,7 @@ private[spark] object SparkSubmitDriverBootstrapper {
       filteredJavaOpts ++
       Seq(s"-Xms$newDriverMemory", s"-Xmx$newDriverMemory") ++
       Seq("org.apache.spark.deploy.SparkSubmit") ++
+      Seq("--packages-resolved", resolvedMavenCoordinates.mkString(",")) ++
       submitArgs
 
     // Print the launch command. This follows closely the format used in `bin/spark-class`.

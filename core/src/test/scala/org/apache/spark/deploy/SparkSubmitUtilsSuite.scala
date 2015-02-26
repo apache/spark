@@ -91,7 +91,8 @@ class SparkSubmitUtilsSuite extends FunSuite with BeforeAndAfterAll {
     val ivyPath = "dummy/ivy"
     val md = SparkSubmitUtils.getModuleDescriptor
     val artifacts = for (i <- 0 until 3) yield new MDArtifact(md, s"jar-$i", "jar", "jar")
-    var jPaths = SparkSubmitUtils.resolveDependencyPaths(artifacts.toArray, new File(ivyPath))
+    var jPaths = 
+      SparkSubmitUtils.resolveDependencyPaths(artifacts.toArray, new File(ivyPath)).mkString(",")
     for (i <- 0 until 3) {
       val index = jPaths.indexOf(ivyPath)
       assert(index >= 0)
@@ -99,13 +100,13 @@ class SparkSubmitUtilsSuite extends FunSuite with BeforeAndAfterAll {
     }
     // end to end
     val jarPath = SparkSubmitUtils.resolveMavenCoordinates(
-      "com.databricks:spark-csv_2.10:0.1", None, Option(ivyPath), true)
+      "com.databricks:spark-csv_2.10:0.1", None, Option(ivyPath), true).mkString(",")
     assert(jarPath.indexOf(ivyPath) >= 0, "should use non-default ivy path")
   }
 
   test("search for artifact at other repositories") {
     val path = SparkSubmitUtils.resolveMavenCoordinates("com.agimatec:agimatec-validation:0.9.3",
-      Option("https://oss.sonatype.org/content/repositories/agimatec/"), None, true)
+      Option("https://oss.sonatype.org/content/repositories/agimatec/"), None, true).mkString(",")
     assert(path.indexOf("agimatec-validation") >= 0, "should find package. If it doesn't, check" +
       "if package still exists. If it has been removed, replace the example in this test.")
   }
@@ -124,7 +125,7 @@ class SparkSubmitUtilsSuite extends FunSuite with BeforeAndAfterAll {
       components.map(comp => s"org.apache.spark:spark-${comp}2.10:1.2.0").mkString(",") + 
       ",org.apache.spark:spark-core_fake:1.2.0"
     val path = SparkSubmitUtils.resolveMavenCoordinates(
-      coordinates, None, None, true)
+      coordinates, None, None, true).mkString(",")
     assert(path === "", "should return empty path")
     // Should not exclude the following dependency. Will throw an error, because it doesn't exist, 
     // but the fact that it is checking means that it wasn't excluded.

@@ -38,6 +38,10 @@ while (($#)); do
     export SPARK_SUBMIT_CLASSPATH=$2
   elif [ "$1" = "--driver-java-options" ]; then
     export SPARK_SUBMIT_OPTS=$2
+  elif [ "$1" = "--packages" ]; then
+    export SPARK_SUBMIT_PACKAGES=$2
+  elif [ "$1" = "--repositories" ]; then
+    export SPARK_SUBMIT_REPOSITORIES=$2
   elif [ "$1" = "--master" ]; then
     export MASTER=$2
   fi
@@ -65,7 +69,7 @@ if [[ "$SPARK_SUBMIT_DEPLOY_MODE" == "client" && -f "$SPARK_SUBMIT_PROPERTIES_FI
     grep -e "spark.driver.extra*\|spark.driver.memory" "$SPARK_SUBMIT_PROPERTIES_FILE" | \
     grep -v "^[[:space:]]*#"
   )
-  if [ -n "$contains_special_configs" ]; then
+  if [[ -n "$contains_special_configs" || -n "$SPARK_SUBMIT_PACKAGES" ]]; then
     export SPARK_SUBMIT_BOOTSTRAP_DRIVER=1
   fi
 fi

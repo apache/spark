@@ -50,6 +50,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   var childArgs: ArrayBuffer[String] = new ArrayBuffer[String]()
   var jars: String = null
   var packages: String = null
+  var packagesResolved: String = null
   var repositories: String = null
   var ivyRepoPath: String = null
   var verbose: Boolean = false
@@ -393,6 +394,11 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
 
       case ("--packages") :: value :: tail =>
         packages = value
+        parse(tail)
+
+      // Internal flag to receive the resolved maven jars and add to --jars
+      case ("--packages-resolved") :: value :: tail =>
+        packagesResolved = Utils.resolveURIs(value)
         parse(tail)
 
       case ("--repositories") :: value :: tail =>

@@ -251,15 +251,20 @@ object SparkSubmit {
     }
 
     val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
-
-    // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
-    // too for packages that include Python code
-    val resolvedMavenCoordinates =
-      SparkSubmitUtils.resolveMavenCoordinates(
-        args.packages, Option(args.repositories), Option(args.ivyRepoPath))
-    args.jars = mergeFileLists(args.jars, resolvedMavenCoordinates)
-    if (args.isPython) args.pyFiles = mergeFileLists(args.pyFiles, resolvedMavenCoordinates)
-
+    println(s"\n\n${args.packagesResolved}\n\n")
+    if (args.packagesResolved != null) {
+      args.jars = mergeFileLists(args.jars, args.packagesResolved)
+      if (args.isPython) args.pyFiles = mergeFileLists(args.pyFiles, args.packagesResolved)
+    } else {
+      // This part needs to be added in case SparkSubmitDriverBootstrapper is not called
+      val resolvedMavenCoordinates =
+        SparkSubmitUtils.resolveMavenCoordinates(
+          args.packages, Option(args.repositories), Option(args.ivyRepoPath)).mkString(",")
+      if (resolvedMavenCoordinates.trim.length > 0) {
+        args.jars = mergeFileLists(args.jars, resolvedMavenCoordinates)
+        if (args.isPython) args.pyFiles = mergeFileLists(args.pyFiles, resolvedMavenCoordinates)
+      }
+    }
 
     // Require all python files to be local, so we can add them to the PYTHONPATH
     // In YARN cluster mode, python files are distributed as regular files, which can be non-local
@@ -713,13 +718,13 @@ private[spark] object SparkSubmitUtils {
    */
   private[spark] def resolveDependencyPaths(
       artifacts: Array[AnyRef],
-      cacheDirectory: File): String = {
+      cacheDirectory: File): Seq[String] = {
     artifacts.map { artifactInfo =>
       val artifactString = artifactInfo.toString
       val jarName = artifactString.drop(artifactString.lastIndexOf("!") + 1)
       cacheDirectory.getAbsolutePath + File.separator +
         jarName.substring(0, jarName.lastIndexOf(".jar") + 4)
-    }.mkString(",")
+    }
   }
 
   /** Adds the given maven coordinates to Ivy's module descriptor. */
@@ -781,9 +786,9 @@ private[spark] object SparkSubmitUtils {
       coordinates: String,
       remoteRepos: Option[String],
       ivyPath: Option[String],
-      isTest: Boolean = false): String = {
+      isTest: Boolean = false): Seq[String] = {
     if (coordinates == null || coordinates.trim.isEmpty) {
-      ""
+      Seq("")
     } else {
       val sysOut = System.out
       // To prevent ivy from logging to system out
