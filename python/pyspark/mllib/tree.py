@@ -33,6 +33,10 @@ class TreeEnsembleModel(JavaModelWrapper):
         """
         Predict values for a single data point or an RDD of points using
         the model trained.
+
+        Note: In Python, predict cannot currently be used within an RDD
+              transformation or action.
+              Call predict directly on the RDD instead.
         """
         if isinstance(x, RDD):
             return self.call("predict", x.map(_convert_to_vector))
@@ -48,7 +52,8 @@ class TreeEnsembleModel(JavaModelWrapper):
 
     def totalNumNodes(self):
         """
-        Get total number of nodes, summed over all trees in the ensemble.
+        Get total number of nodes, summed over all trees in the
+        ensemble.
         """
         return self.call("totalNumNodes")
 
@@ -70,6 +75,10 @@ class DecisionTreeModel(JavaModelWrapper):
     def predict(self, x):
         """
         Predict the label of one or more examples.
+
+        Note: In Python, predict cannot currently be used within an RDD
+              transformation or action.
+              Call predict directly on the RDD instead.
 
         :param x:  Data point (feature vector),
                    or an RDD of data points (feature vectors).
@@ -99,7 +108,8 @@ class DecisionTree(object):
     """
     .. note:: Experimental
 
-    Learning algorithm for a decision tree model for classification or regression.
+    Learning algorithm for a decision tree model for classification or
+    regression.
     """
 
     @classmethod
@@ -176,17 +186,17 @@ class DecisionTree(object):
 
         :param data: Training data: RDD of LabeledPoint.
                      Labels are real numbers.
-        :param categoricalFeaturesInfo: Map from categorical feature index
-                                        to number of categories.
-                                        Any feature not in this map
-                                        is treated as continuous.
+        :param categoricalFeaturesInfo: Map from categorical feature
+                 index to number of categories.
+                 Any feature not in this map is treated as continuous.
         :param impurity: Supported values: "variance"
         :param maxDepth: Max depth of tree.
-                         E.g., depth 0 means 1 leaf node.
-                         Depth 1 means 1 internal node + 2 leaf nodes.
-        :param maxBins: Number of bins used for finding splits at each node.
-        :param minInstancesPerNode: Min number of instances required at child
-                                    nodes to create the parent split
+                 E.g., depth 0 means 1 leaf node.
+                 Depth 1 means 1 internal node + 2 leaf nodes.
+        :param maxBins: Number of bins used for finding splits at each
+                 node.
+        :param minInstancesPerNode: Min number of instances required at
+                 child nodes to create the parent split
         :param minInfoGain: Min info gain required to create a split
         :return: DecisionTreeModel
 
@@ -229,7 +239,8 @@ class RandomForest(object):
     """
     .. note:: Experimental
 
-    Learning algorithm for a random forest model for classification or regression.
+    Learning algorithm for a random forest model for classification or
+    regression.
     """
 
     supportedFeatureSubsetStrategies = ("auto", "all", "sqrt", "log2", "onethird")
@@ -256,26 +267,33 @@ class RandomForest(object):
         Method to train a decision tree model for binary or multiclass
         classification.
 
-        :param data: Training dataset: RDD of LabeledPoint. Labels should take
-               values {0, 1, ..., numClasses-1}.
+        :param data: Training dataset: RDD of LabeledPoint. Labels
+                 should take values {0, 1, ..., numClasses-1}.
         :param numClasses: number of classes for classification.
-        :param categoricalFeaturesInfo: Map storing arity of categorical features.
-               E.g., an entry (n -> k) indicates that feature n is categorical
-               with k categories indexed from 0: {0, 1, ..., k-1}.
+        :param categoricalFeaturesInfo: Map storing arity of categorical
+                 features.  E.g., an entry (n -> k) indicates that
+                 feature n is categorical with k categories indexed
+                 from 0: {0, 1, ..., k-1}.
         :param numTrees: Number of trees in the random forest.
-        :param featureSubsetStrategy: Number of features to consider for splits at
-               each node.
-               Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
-               If "auto" is set, this parameter is set based on numTrees:
-               if numTrees == 1, set to "all";
-               if numTrees > 1 (forest) set to "sqrt".
-        :param impurity: Criterion used for information gain calculation.
+        :param featureSubsetStrategy: Number of features to consider for
+                 splits at each node.
+                 Supported: "auto" (default), "all", "sqrt", "log2",
+                  "onethird".
+                 If "auto" is set, this parameter is set based on
+                 numTrees:
+                   if numTrees == 1, set to "all";
+                   if numTrees > 1 (forest) set to "sqrt".
+        :param impurity: Criterion used for information gain
+                 calculation.
                Supported values: "gini" (recommended) or "entropy".
-        :param maxDepth: Maximum depth of the tree. E.g., depth 0 means 1 leaf node;
-               depth 1 means 1 internal node + 2 leaf nodes. (default: 4)
-        :param maxBins: maximum number of bins used for splitting features
+        :param maxDepth: Maximum depth of the tree.
+                 E.g., depth 0 means 1 leaf node; depth 1 means
+                 1 internal node + 2 leaf nodes. (default: 4)
+        :param maxBins: maximum number of bins used for splitting
+                 features
                (default: 100)
-        :param seed: Random seed for bootstrapping and choosing feature subsets.
+        :param seed: Random seed for bootstrapping and choosing feature
+                 subsets.
         :return: RandomForestModel that can be used for prediction
 
         Example usage:
@@ -337,19 +355,24 @@ class RandomForest(object):
                {0, 1, ..., k-1}.
         :param numTrees: Number of trees in the random forest.
         :param featureSubsetStrategy: Number of features to consider for
-               splits at each node.
-               Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
-               If "auto" is set, this parameter is set based on numTrees:
-               if numTrees == 1, set to "all";
-               if numTrees > 1 (forest) set to "onethird" for regression.
-        :param impurity: Criterion used for information gain calculation.
-               Supported values: "variance".
-        :param maxDepth: Maximum depth of the tree. E.g., depth 0 means 1
-               leaf node; depth 1 means 1 internal node + 2 leaf nodes.
-               (default: 4)
-        :param maxBins: maximum number of bins used for splitting features
-               (default: 100)
-        :param seed: Random seed for bootstrapping and choosing feature subsets.
+                 splits at each node.
+                 Supported: "auto" (default), "all", "sqrt", "log2",
+                   "onethird".
+                 If "auto" is set, this parameter is set based on
+                 numTrees:
+                   if numTrees == 1, set to "all";
+                   if numTrees > 1 (forest) set to "onethird" for
+                     regression.
+        :param impurity: Criterion used for information gain
+                 calculation.
+                 Supported values: "variance".
+        :param maxDepth: Maximum depth of the tree. E.g., depth 0 means
+                 1 leaf node; depth 1 means 1 internal node + 2 leaf
+                 nodes. (default: 4)
+        :param maxBins: maximum number of bins used for splitting
+                 features (default: 100)
+        :param seed: Random seed for bootstrapping and choosing feature
+                 subsets.
         :return: RandomForestModel that can be used for prediction
 
         Example usage:
@@ -395,7 +418,8 @@ class GradientBoostedTrees(object):
     """
     .. note:: Experimental
 
-    Learning algorithm for a gradient boosted trees model for classification or regression.
+    Learning algorithm for a gradient boosted trees model for
+    classification or regression.
     """
 
     @classmethod
@@ -411,24 +435,29 @@ class GradientBoostedTrees(object):
     def trainClassifier(cls, data, categoricalFeaturesInfo,
                         loss="logLoss", numIterations=100, learningRate=0.1, maxDepth=3):
         """
-        Method to train a gradient-boosted trees model for classification.
+        Method to train a gradient-boosted trees model for
+        classification.
 
-        :param data: Training dataset: RDD of LabeledPoint. Labels should take values {0, 1}.
+        :param data: Training dataset: RDD of LabeledPoint.
+                 Labels should take values {0, 1}.
         :param categoricalFeaturesInfo: Map storing arity of categorical
                features. E.g., an entry (n -> k) indicates that feature
                n is categorical with k categories indexed from 0:
                {0, 1, ..., k-1}.
-        :param loss: Loss function used for minimization during gradient boosting.
-                     Supported: {"logLoss" (default), "leastSquaresError", "leastAbsoluteError"}.
+        :param loss: Loss function used for minimization during gradient
+                 boosting. Supported: {"logLoss" (default),
+                 "leastSquaresError", "leastAbsoluteError"}.
         :param numIterations: Number of iterations of boosting.
                               (default: 100)
-        :param learningRate: Learning rate for shrinking the contribution of each estimator.
-                             The learning rate should be between in the interval (0, 1]
-                             (default: 0.1)
-        :param maxDepth: Maximum depth of the tree. E.g., depth 0 means 1
-               leaf node; depth 1 means 1 internal node + 2 leaf nodes.
-               (default: 3)
-        :return: GradientBoostedTreesModel that can be used for prediction
+        :param learningRate: Learning rate for shrinking the
+                 contribution of each estimator. The learning rate
+                 should be between in the interval (0, 1].
+                 (default: 0.1)
+        :param maxDepth: Maximum depth of the tree. E.g., depth 0 means
+                 1 leaf node; depth 1 means 1 internal node + 2 leaf
+                 nodes. (default: 3)
+        :return: GradientBoostedTreesModel that can be used for
+                   prediction
 
         Example usage:
 
@@ -472,17 +501,20 @@ class GradientBoostedTrees(object):
                features. E.g., an entry (n -> k) indicates that feature
                n is categorical with k categories indexed from 0:
                {0, 1, ..., k-1}.
-        :param loss: Loss function used for minimization during gradient boosting.
-                     Supported: {"logLoss" (default), "leastSquaresError", "leastAbsoluteError"}.
+        :param loss: Loss function used for minimization during gradient
+                 boosting. Supported: {"logLoss" (default),
+                 "leastSquaresError", "leastAbsoluteError"}.
         :param numIterations: Number of iterations of boosting.
                               (default: 100)
-        :param learningRate: Learning rate for shrinking the contribution of each estimator.
-                             The learning rate should be between in the interval (0, 1]
-                             (default: 0.1)
-        :param maxDepth: Maximum depth of the tree. E.g., depth 0 means 1
-               leaf node; depth 1 means 1 internal node + 2 leaf nodes.
-               (default: 3)
-        :return: GradientBoostedTreesModel that can be used for prediction
+        :param learningRate: Learning rate for shrinking the
+                 contribution of each estimator. The learning rate
+                 should be between in the interval (0, 1].
+                 (default: 0.1)
+        :param maxDepth: Maximum depth of the tree. E.g., depth 0 means
+                 1 leaf node; depth 1 means 1 internal node + 2 leaf
+                 nodes.  (default: 3)
+        :return: GradientBoostedTreesModel that can be used for
+                   prediction
 
         Example usage:
 
