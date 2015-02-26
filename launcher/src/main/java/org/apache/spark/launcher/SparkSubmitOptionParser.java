@@ -23,8 +23,6 @@ import java.util.regex.Pattern;
 
 /**
  * Parser for spark-submit command line options.
- * </p>
- * This class, although public, is not designed to be used outside of Spark.
  * <p/>
  * This class encapsulates the parsing code for spark-submit command line options, so that there
  * is a single list of options that needs to be maintained (well, sort of, but it makes it harder
