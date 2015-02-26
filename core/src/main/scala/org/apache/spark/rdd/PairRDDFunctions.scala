@@ -1004,7 +1004,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
           recordsWritten += 1
         }
       } finally {
-        writer.close(hadoopContext)
+        if (writer != null) {
+          writer.close(hadoopContext)
+        }
       }
       committer.commitTask(hadoopContext)
       bytesWrittenCallback.foreach { fn => outputMetrics.setBytesWritten(fn()) }
