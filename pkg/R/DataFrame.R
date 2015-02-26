@@ -58,9 +58,96 @@ setGeneric("printSchema", function(x) { standardGeneric("printSchema") })
 setMethod("printSchema",
           signature(x = "DataFrame"),
           function(x) {
-            sdf <- x@sdf
-            schemaString <- callJMethod(sdf, "printSchema")
+            schemaString <- callJMethod(x@sdf, "printSchema")
             cat(schemaString)
+          })
+
+#' Get schema object
+#' 
+#' Returns the schema of this DataFrame as a list of named lists. Each named
+#' list contains the elements of the StructField type, i.e. name, dataType, nullable.
+#' 
+#' @param x A SparkSQL DataFrame
+#' 
+#' @rdname schema
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' dfSchema <- schema(df)
+#'}
+
+setGeneric("schema", function(x) { standardGeneric("schema") })
+
+setMethod("schema",
+          signature(x = "DataFrame"),
+          function(x) {
+            schemaOut <- callJMethod(x@sdf, "schema")
+            schemaOut
+          })
+
+#' DataTypes
+#' 
+#' Return all column names and their data types as a list
+#' 
+#' @param x A SparkSQL DataFrame
+#' 
+#' @rdname dtypes
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' dtypes(df)
+#'}
+
+setGeneric("dtypes", function(x) {standardGeneric("dtypes") })
+
+setMethod("dtypes",
+          signature(x = "DataFrame"),
+          function(x) {
+              lapply(schema(x), function(f) {
+                field <- c(f$name, f$dataType)
+            })
+          })
+
+#' Column names
+#' 
+#' Return all column names as a list
+#' 
+#' @param x A SparkSQL DataFrame
+#' 
+#' @rdname columns
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' columns(df)
+#'}
+setGeneric("columns", function(x) {standardGeneric("columns") })
+
+setMethod("columns",
+          signature(x = "DataFrame"),
+          function(x) {
+            sapply(schema(x), function(f) {
+              f$name
+            })
+          })
+
+#' @rdname columns
+#' @export
+setMethod("names",
+          signature(x = "DataFrame"),
+          function(x) {
+            columns(x)
           })
 
 #' Register Temporary Table

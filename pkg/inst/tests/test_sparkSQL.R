@@ -161,4 +161,24 @@ test_that("cache(), persist(), and unpersist() on a DataFrame", {
   # make sure the data is collectable
   expect_true(is.data.frame(collect(df)))
 })
+
+test_that("schema(), dtypes(), columns(), names() return the correct values/format", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  testSchema <- schema(df)
+  expect_true(length(testSchema) == 2)
+  expect_true(names(testSchema[[1]][2]) == "dataType")
+  expect_true(length(testSchema[[1]]) == 3)
+  
+  testTypes <- dtypes(df)
+  expect_true(length(testTypes[[1]]) == 2)
+  expect_true(testTypes[[1]][1] == "age")
+  
+  testCols <- columns(df)
+  expect_true(length(testCols) == 2)
+  expect_true(testCols[2] == "name")
+  
+  testNames <- names(df)
+  expect_true(length(testNames) == 2)
+  expect_true(testNames[2] == "name")
+})
 unlink(jsonPath)
