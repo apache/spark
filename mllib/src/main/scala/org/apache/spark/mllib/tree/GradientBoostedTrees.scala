@@ -226,10 +226,17 @@ object GradientBoostedTrees extends Logging {
       logDebug("error of gbt = " + loss.computeError(partialModel, input))
 
       if (validate) {
-        // Record the best model if the reduction in error is more than the validationTol.
+        // Stop training early if
+        // 1. Reduction in error is less than the validationTol or
+        // 2. If the error increases, that is if the model is overfit.
         // We want the model returned corresponding to the best validation error.
         val currentValidateError = loss.computeError(partialModel, validationInput)
-        if (currentValidateError < bestValidateError - validationTol) {
+        if (bestValidateError - currentValidateError < validationTol) {
+          return new GradientBoostedTreesModel(
+            boostingStrategy.treeStrategy.algo,
+            baseLearners.slice(0, bestM),
+            baseLearnerWeights.slice(0, bestM))
+        } else if (currentValidateError < bestValidateError) {
             bestValidateError = currentValidateError
             bestM = m + 1
         }
