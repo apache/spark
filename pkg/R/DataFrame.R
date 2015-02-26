@@ -350,7 +350,3 @@ createMethod <- function(name) {
 for (name in metheds) {
   createMethod(name)
 }
-
-
-
-
