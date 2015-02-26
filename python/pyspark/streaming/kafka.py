@@ -50,8 +50,6 @@ class KafkaUtils(object):
         :param valueDecoder:  A function used to decode value (default is utf8_decoder)
         :return: A DStream object
         """
-        java_import(ssc._jvm, "org.apache.spark.streaming.kafka.KafkaUtils")
-
         kafkaParams.update({
             "zookeeper.connect": zkQuorum,
             "group.id": groupId,
