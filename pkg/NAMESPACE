@@ -80,7 +80,6 @@ importFrom(methods, setGeneric, setMethod, setOldClass)
 # SparkRSQL
 
 exportClasses("DataFrame")
-
 exportMethods("printSchema",
               "registerTempTable",
               "toRDD",
@@ -90,7 +89,6 @@ exportMethods("printSchema",
 
 exportClasses("GroupedData")
 exportMethods("count", "agg", "avg")
-
 
 export("jsonFile",
        "parquetFile",
