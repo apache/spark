@@ -44,7 +44,7 @@ private[spark] object SparkSubmitDriverBootstrapper {
       System.exit(1)
     }
 
-    val submitArgs = args
+    var submitArgs = args
     val runner = sys.env("RUNNER")
     val classpath = sys.env("CLASSPATH")
     val javaOpts = sys.env("JAVA_OPTS")
@@ -100,6 +100,7 @@ private[spark] object SparkSubmitDriverBootstrapper {
     if (resolvedMavenCoordinates.head.length > 0) {
       newClasspath += sys.props("path.separator") + 
         resolvedMavenCoordinates.mkString(sys.props("path.separator"))
+      submitArgs ++= Seq("--packages-resolved", resolvedMavenCoordinates.mkString(","))
     }
 
     val newJavaOpts =
@@ -121,7 +122,6 @@ private[spark] object SparkSubmitDriverBootstrapper {
       filteredJavaOpts ++
       Seq(s"-Xms$newDriverMemory", s"-Xmx$newDriverMemory") ++
       Seq("org.apache.spark.deploy.SparkSubmit") ++
-      Seq("--packages-resolved", resolvedMavenCoordinates.mkString(",")) ++
       submitArgs
 
     // Print the launch command. This follows closely the format used in `bin/spark-class`.
