@@ -272,9 +272,9 @@ class DataFrame(object):
         """
         return self._jdf.isLocal()
 
-    def show(self):
+    def show(self, n=20):
         """
-        Print the first 20 rows.
+        Print the first n rows.
 
         >>> df
         DataFrame[age: int, name: string]
@@ -283,7 +283,7 @@ class DataFrame(object):
         2   Alice
         5   Bob
         """
-        print self._jdf.showString().encode('utf8', 'ignore')
+        print self._jdf.showString(n).encode('utf8', 'ignore')
 
     def __repr__(self):
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
