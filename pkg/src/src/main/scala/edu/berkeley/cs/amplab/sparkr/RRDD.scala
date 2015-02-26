@@ -1,6 +1,7 @@
 package edu.berkeley.cs.amplab.sparkr
 
 import java.io._
+import java.net.{ServerSocket}
 import java.util.{Map => JMap}
 
 import scala.collection.JavaConversions._
@@ -11,6 +12,8 @@ import org.apache.spark.{SparkEnv, Partition, SparkException, TaskContext, Spark
 import org.apache.spark.api.java.{JavaSparkContext, JavaRDD, JavaPairRDD}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
+
+import scala.util.Try
 
 private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
     parent: RDD[T],
@@ -27,21 +30,32 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
 
   override def compute(split: Partition, context: TaskContext): Iterator[U] = {
 
-    val parentIterator = firstParent[T].iterator(split, context)
+    val serverSocket = new ServerSocket(0, 2)
+    val listenPort = serverSocket.getLocalPort()
 
-    val pb = rWorkerProcessBuilder()
+    val pb = rWorkerProcessBuilder(listenPort)
+    pb.redirectErrorStream()  // redirect stderr into stdout
     val proc = pb.start()
+    val errThread =  startStdoutThread(proc)
 
-    val errThread = startStderrThread(proc)
+    // We use two socket ot separate input and output, then it's easy to manage
+    // the lifecycle of them to avoid deadlock.
+    // TODO: optimize it to use one socket
 
-    val tempFile = startStdinThread(proc, parentIterator, split.index)
+    // the socket used to send out the input of task
+    serverSocket.setSoTimeout(10000)
+    val inSocket = serverSocket.accept()
+    val parentIterator = firstParent[T].iterator(split, context)
+    startStdinThread(inSocket.getOutputStream(), parentIterator, split.index)
 
-    // Return an iterator that read lines from the process's stdout
-    val inputStream = new BufferedReader(new InputStreamReader(proc.getInputStream))
+    // the socket used to receive the output of task
+    val outSocket = serverSocket.accept()
+    val inputStream = new BufferedInputStream(outSocket.getInputStream)
+    val dataStream = openDataStream(inputStream)
+
+    serverSocket.close()
 
     try {
-      val stdOutFileName = inputStream.readLine().trim()
-      val dataStream = openDataStream(stdOutFileName)
 
       return new Iterator[U] {
         def next(): U = {
@@ -57,9 +71,7 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
         def hasNext(): Boolean = {
           val hasMore = (_nextObj != null)
           if (!hasMore) {
-            // Delete the temporary file we created as we are done reading it
             dataStream.close()
-            tempFile.delete()
           }
           hasMore
         }
@@ -73,7 +85,7 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
   /**
    * ProcessBuilder used to launch worker R processes.
    */
-  private def rWorkerProcessBuilder() = {
+  private def rWorkerProcessBuilder(port: Int) = {
     val rCommand = "Rscript"
     val rOptions = "--vanilla"
     val rExecScript = rLibDir + "/SparkR/worker/worker.R"
@@ -82,47 +94,42 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
     // This is set by R CMD check as startup.Rs
     // (http://svn.r-project.org/R/trunk/src/library/tools/R/testing.R)
     // and confuses worker script which tries to load a non-existent file
-    pb.environment().put("R_TESTS", "");
+    pb.environment().put("R_TESTS", "")
+    pb.environment().put("SPARKR_WORKER_PORT", port.toString)
     pb
   }
 
   /**
    * Start a thread to print the process's stderr to ours
    */
-  private def startStderrThread(proc: Process): BufferedStreamThread = {
-    val ERR_BUFFER_SIZE = 100
-    val errThread = new BufferedStreamThread(proc.getErrorStream, "stderr reader for R",
-      ERR_BUFFER_SIZE)
-    errThread.start()
-    errThread
+  private def startStdoutThread(proc: Process): BufferedStreamThread = {
+    val BUFFER_SIZE = 100
+    val thread = new BufferedStreamThread(proc.getInputStream, "stdout reader for R", BUFFER_SIZE)
+    thread.setDaemon(true)
+    thread.start()
+    thread
   }
 
   /**
    * Start a thread to write RDD data to the R process.
    */
   private def startStdinThread[T](
-    proc: Process,
+    output: OutputStream,
     iter: Iterator[T],
-    splitIndex: Int) : File = {
+    splitIndex: Int) = {
 
     val env = SparkEnv.get
-    val conf = env.conf
-    val tempDir = RRDD.getLocalDir(conf)
-    val tempFile = File.createTempFile("rSpark", "out", new File(tempDir))
-    val tempFileIn = File.createTempFile("rSpark", "in", new File(tempDir))
-
-    val tempFileName = tempFile.getAbsolutePath()
     val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
+    val stream = new BufferedOutputStream(output, bufferSize)
 
-    // Start a thread to feed the process input from our parent's iterator
-    new Thread("stdin writer for R") {
+    new Thread("writer for R") {
       override def run() {
         try {
           SparkEnv.set(env)
-          val stream = new BufferedOutputStream(new FileOutputStream(tempFileIn), bufferSize)
           val printOut = new PrintStream(stream)
-          val dataOut = new DataOutputStream(stream)
+          printOut.println(rLibDir)
 
+          val dataOut = new DataOutputStream(stream)
           dataOut.writeInt(splitIndex)
 
           dataOut.writeInt(func.length)
@@ -157,44 +164,33 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
             dataOut.writeInt(1)
           }
 
-          for (elem <- iter) {
-            if (parentSerialized) {
+          if (parentSerialized) {
+            for (elem <- iter) {
               val elemArr = elem.asInstanceOf[Array[Byte]]
               dataOut.writeInt(elemArr.length)
               dataOut.write(elemArr, 0, elemArr.length)
-            } else {
+            }
+          } else {
+            for (elem <- iter) {
               printOut.println(elem)
             }
           }
 
-          printOut.flush()
-          dataOut.flush()
           stream.flush()
-          stream.close()
-
-          // NOTE: We need to write out the temp file before writing out the 
-          // file name to stdin. Otherwise the R process could read partial state
-          val streamStd = new BufferedOutputStream(proc.getOutputStream, bufferSize)
-          val printOutStd = new PrintStream(streamStd)
-          printOutStd.println(tempFileName)
-          printOutStd.println(rLibDir)
-          printOutStd.println(tempFileIn.getAbsolutePath())
-          printOutStd.flush()
-
-          streamStd.close()
         } catch {
           // TODO: We should propogate this error to the task thread
           case e: Exception =>
             System.err.println("R Writer thread got an exception " + e)
             e.printStackTrace()
+        } finally {
+          Try(output.close())
         }
       }
     }.start()
-
-    tempFile
   }
 
-  protected def openDataStream(stdOutFileName: String): Closeable
+  protected def openDataStream(input: InputStream): Closeable
+
   protected def read(): U
 }
 
@@ -217,8 +213,8 @@ private class PairwiseRRDD[T: ClassTag](
 
   private var dataStream: DataInputStream = _
   
-  override protected def openDataStream(stdOutFileName: String) = {
-    dataStream = new DataInputStream(new FileInputStream(stdOutFileName))
+  override protected def openDataStream(input: InputStream) = {
+    dataStream = new DataInputStream(input)
     dataStream
   }
 
@@ -261,9 +257,9 @@ private class RRDD[T: ClassTag](
                                 broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])) {
 
   private var dataStream: DataInputStream = _
-  
-  override protected def openDataStream(stdOutFileName: String) = {
-    dataStream = new DataInputStream(new FileInputStream(stdOutFileName))
+
+  override protected def openDataStream(input: InputStream) = {
+    dataStream = new DataInputStream(input)
     dataStream
   }
 
@@ -305,9 +301,8 @@ private class StringRRDD[T: ClassTag](
 
   private var dataStream: BufferedReader = _
 
-  override protected def openDataStream(stdOutFileName: String) = {
-    dataStream = new BufferedReader(
-                     new InputStreamReader(new FileInputStream(stdOutFileName)))
+  override protected def openDataStream(input: InputStream) = {
+    dataStream = new BufferedReader(new InputStreamReader(input))
     dataStream
   }
 
@@ -334,6 +329,7 @@ private class BufferedStreamThread(
     for (line <- Source.fromInputStream(in).getLines) {
       lines(lineIdx) = line
       lineIdx = (lineIdx + 1) % errBufferSize
+      // TODO: user logger
       System.err.println(line)
     }
   }
