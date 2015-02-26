@@ -95,6 +95,6 @@ export("jsonFile",
        "tableNames",
        "cacheTable",
        "uncacheTable",
-       "clearCache)
+       "clearCache")
 
 export("sparkRSQL.init")

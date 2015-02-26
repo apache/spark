@@ -190,8 +190,9 @@ serializeToString <- function(rdd) {
     stop("Argument 'rdd' is not an RDD type.")
   }
   if (getSerializedMode(rdd) != "string") {
-    ser.rdd <- lapply(rdd, function(x) { x })
-    ser.rdd@env$jrdd_val <- getJRDD(rdd, "string")
+    ser.rdd <- lapply(rdd, function(x) { toString(x) })
+    # force it to create jrdd using "string"
+    getJRDD(ser.rdd, serializedMode = "string")
     return(ser.rdd)
   } else {
     return(rdd)

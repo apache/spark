@@ -35,8 +35,8 @@ jsonFile <- function(sqlCtx, path) {
 jsonRDD <- function(sqlCtx, rdd, schema = NULL, samplingRatio = 1.0) {
   rdd <- serializeToString(rdd)
   if (is.null(schema)) {
-    srdd <- callJMethod(getJRDD(rdd), "rdd")
-    callJMethod(sqlCtx, "jsonRDD", srdd, samplingRatio)
+    sdf <- callJMethod(sqlCtx, "jsonRDD", callJMethod(getJRDD(rdd), "rdd"), samplingRatio)
+    dataFrame(sdf)
   } else {
     stop("not implemented")
   }
@@ -111,15 +111,15 @@ table <- function(sqlCtx, tableName) {
 }
 
 
-#' Tables
+#' Tablesq
 #'
 #' Returns a DataFrame containing names of tables in the given database.
 #' @export
 tables <- function(sqlCtx, databaseName=NULL) {
   jdf <- if (is.null(databaseName)) {
-    callJMethod(sqlCtx, "table")
+    callJMethod(sqlCtx, "tables")
   } else {
-    callJMethod(sqlCtx, "table", databaseName)
+    callJMethod(sqlCtx, "tables", databaseName)
   }
   dataFrame(jdf)
 }

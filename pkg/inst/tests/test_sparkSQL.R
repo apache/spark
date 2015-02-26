@@ -20,6 +20,35 @@ test_that("jsonFile() on a local file returns a DataFrame", {
   expect_true(count(df) == 3)
 })
 
+test_that("jsonRDD() on a RDD with json string", {
+  rdd <- parallelize(sc, mockLines)
+  expect_true(count(rdd) == 3)
+  df <- jsonRDD(sqlCtx, rdd)
+  expect_true(inherits(df, "DataFrame"))
+  expect_true(count(df) == 3)
+
+  rdd2 <- flatMap(rdd, function(x) c(x, x))
+  df <- jsonRDD(sqlCtx, rdd2)
+  expect_true(inherits(df, "DataFrame"))
+  expect_true(count(df) == 6)
+})
+
+test_that("test cache and persist and unpersist", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  cache(sqlCtx, df)
+  persist(sqlCtx, df)
+  unpersist(sqlCtx, df)
+  expect_true(count(df) == 3)
+  clearCache(sqlCtx)
+})
+
+test_that("test tableNames and tables", {
+  expect_true(length(tableNames(sqlCtx)) == 0)
+  df <- tables(sqlCtx)
+  expect_true(count(df) == 0)
+})
+
+
 test_that("registerTempTable() results in a queryable table and sql() results in a new DataFrame", {
   df <- jsonFile(sqlCtx, jsonPath)
   registerTempTable(df, "table1")
@@ -55,7 +84,7 @@ test_that("union on mixed serialization types correctly returns a byte RRDD", {
   # Byte RDD
   nums <- 1:10
   rdd <- parallelize(sc, nums, 2L)
-  
+
   # String RDD
   textLines <- c("Michael",
                  "Andy, 30",
@@ -63,16 +92,16 @@ test_that("union on mixed serialization types correctly returns a byte RRDD", {
   textPath <- tempfile(pattern="sparkr-textLines", fileext=".tmp")
   writeLines(textLines, textPath)
   textRDD <- textFile(sc, textPath)
-  
+
   df <- jsonFile(sqlCtx, jsonPath)
   dfRDD <- toRDD(df)
-  
+
   unionByte <- unionRDD(rdd, dfRDD)
   expect_true(inherits(unionByte, "RDD"))
   expect_true(getSerializedMode(unionByte) == "byte")
   expect_true(collect(unionByte)[[1]] == 1)
   expect_true(collect(unionByte)[[12]]$name == "Andy")
-  
+
   unionString <- unionRDD(textRDD, dfRDD)
   expect_true(inherits(unionString, "RDD"))
   expect_true(getSerializedMode(unionString) == "byte")
@@ -86,7 +115,7 @@ test_that("objectFile() works with row serialization", {
   dfRDD <- toRDD(df)
   saveAsObjectFile(dfRDD, objectPath)
   objectIn <- objectFile(sc, objectPath)
-  
+
   expect_true(inherits(objectIn, "RDD"))
   expect_true(getSerializedMode(objectIn) == "byte")
   expect_true(collect(objectIn)[[2]]$age == 30)

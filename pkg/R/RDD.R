@@ -1118,6 +1118,7 @@ setMethod("saveAsTextFile",
               toString(x)
             }
             stringRdd <- lapply(rdd, func)
+
             # Return nothing
             invisible(
               callJMethod(getJRDD(stringRdd, serializedMode = "string"), "saveAsTextFile", path))
