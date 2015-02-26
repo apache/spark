@@ -171,7 +171,7 @@ private[spark] object SizeEstimator extends Logging {
       // general all ClassLoaders and Classes will be shared between objects anyway.
     } else {
       val classInfo = getClassInfo(cls)
-      state.size += classInfo.shellSize
+      state.size += alignSize(classInfo.shellSize)
       for (field <- classInfo.pointerFields) {
         state.enqueue(field.get(obj))
       }
@@ -288,7 +288,6 @@ private[spark] object SizeEstimator extends Logging {
       }
     }
 
-    shellSize = alignSize(shellSize)
 
     // Create and cache a new ClassInfo
     val newInfo = new ClassInfo(shellSize, pointerFields)

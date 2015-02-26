@@ -61,6 +61,13 @@ class SizeEstimatorSuite
     assertResult(24)(SizeEstimator.estimate(new DummyClass4(null)))
     assertResult(48)(SizeEstimator.estimate(new DummyClass4(new DummyClass3)))
   }
+  
+  test("primitive wrapper objects") {
+    assertResult(16)(SizeEstimator.estimate(new Integer(1)))
+    assertResult(24)(SizeEstimator.estimate(new java.lang.Long(1)))
+    assertResult(16)(SizeEstimator.estimate(new java.lang.Float(1.0)))
+    assertResult(24)(SizeEstimator.estimate(new java.lang.Double(1.0d)))
+  }
 
   // NOTE: The String class definition varies across JDK versions (1.6 vs. 1.7) and vendors
   // (Sun vs IBM). Use a DummyString class to make tests deterministic.
