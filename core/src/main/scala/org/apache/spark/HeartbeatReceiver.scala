@@ -30,7 +30,7 @@ import org.apache.spark.util.ActorLogReceive
 /**
  * A heartbeat from executors to the driver. This is a shared message used by several internal
  * components to convey liveness or execution information for in-progress tasks. It will also 
- * expire the hosts that have not heartbeated for more than spark.driver.executorTimeoutMs.
+ * expire the hosts that have not heartbeated for more than spark.network.timeoutMs.
  */
 private[spark] case class Heartbeat(
     executorId: String,
@@ -47,15 +47,16 @@ private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
 private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskScheduler)
   extends Actor with ActorLogReceive with Logging {
 
-  val executorLastSeen = new mutable.HashMap[String, Long]
+  // executor ID -> timestamp of when the last heartbeat from this executor was received
+  private val executorLastSeen = new mutable.HashMap[String, Long]
   
-  val executorTimeout = sc.conf.getLong("spark.driver.executorTimeoutMs", 
+  private val executorTimeout = sc.conf.getLong("spark.network.timeoutMs", 
     sc.conf.getLong("spark.storage.blockManagerSlaveTimeoutMs", 120 * 1000))
   
-  val checkTimeoutInterval = sc.conf.getLong("spark.driver.executorTimeoutIntervalMs",
+  private val checkTimeoutInterval = sc.conf.getLong("spark.network.timeoutIntervalMs",
     sc.conf.getLong("spark.storage.blockManagerTimeoutIntervalMs", 60000))
   
-  var timeoutCheckingTask: Cancellable = null
+  private var timeoutCheckingTask: Cancellable = null
   
   override def preStart(): Unit = {
     import context.dispatcher
@@ -66,8 +67,9 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
   
   override def receiveWithLogging = {
     case Heartbeat(executorId, taskMetrics, blockManagerId) =>
-      val response = HeartbeatResponse(
-        !scheduler.executorHeartbeatReceived(executorId, taskMetrics, blockManagerId))
+      val unknownExecutor = !scheduler.executorHeartbeatReceived(
+        executorId, taskMetrics, blockManagerId)
+      val response = HeartbeatResponse(reregisterBlockManager = unknownExecutor)
       executorLastSeen(executorId) = System.currentTimeMillis()
       sender ! response
     case ExpireDeadHosts =>
@@ -77,13 +79,13 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
   private def expireDeadHosts(): Unit = {
     logTrace("Checking for hosts with no recent heartbeats in HeartbeatReceiver.")
     val now = System.currentTimeMillis()
-    val minSeenTime = now - executorTimeout
     for ((executorId, lastSeenMs) <- executorLastSeen) {
-      if (lastSeenMs < minSeenTime) {
+      if (now - lastSeenMs > executorTimeout) {
         logWarning(s"Removing executor $executorId with no recent heartbeats: " +
           s"${now - lastSeenMs} ms exceeds timeout $executorTimeout ms")
-        scheduler.executorLost(executorId, SlaveLost())
-        if (sc.supportKillExecutor) {
+        scheduler.executorLost(executorId, SlaveLost("Executor heartbeat " +
+          "timed out after ${now - lastSeenMs} ms"))
+        if (sc.supportDynamicAllocation) {
           sc.killExecutor(executorId)
         }
         executorLastSeen.remove(executorId)

@@ -1035,7 +1035,12 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     postEnvironmentUpdate()
   }
 
-  private[spark] def supportKillExecutor = master.contains("yarn") || dynamicAllocationTesting
+  /**
+   * Return whether dynamically adjusting the amount of resources allocated to
+   * this application is supported. This is currently only available for YARN.
+   */
+  private[spark] def supportDynamicAllocation = 
+    master.contains("yarn") || dynamicAllocationTesting
 
   /**
    * :: DeveloperApi ::
