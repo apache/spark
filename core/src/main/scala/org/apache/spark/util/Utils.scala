@@ -63,6 +63,7 @@ private[spark] object Utils extends Logging {
   val random = new Random()
 
   private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
+  @volatile private var localRootDirs: Array[String] = null
 
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
@@ -440,6 +441,12 @@ private[spark] object Utils extends Logging {
     }
     // Make the file executable - That's necessary for scripts
     FileUtil.chmod(targetFile.getAbsolutePath, "a+x")
+
+    // Windows does not grant read permission by default to non-admin users
+    // Add read permission to owner explicitly
+    if (isWindows) {
+      FileUtil.chmod(targetFile.getAbsolutePath, "u+r")
+    }
   }
 
   /**
@@ -677,14 +684,31 @@ private[spark] object Utils extends Logging {
    * and returns only the directories that exist / could be created.
    *
    * If no directories could be created, this will return an empty list.
+   *
+   * This method will cache the local directories for the application when it's first invoked.
+   * So calling it multiple times with a different configuration will always return the same
+   * set of directories.
    */
   private[spark] def getOrCreateLocalRootDirs(conf: SparkConf): Array[String] = {
+    if (localRootDirs == null) {
+      this.synchronized {
+        if (localRootDirs == null) {
+          localRootDirs = getOrCreateLocalRootDirsImpl(conf)
+        }
+      }
+    }
+    localRootDirs
+  }
+
+  private def getOrCreateLocalRootDirsImpl(conf: SparkConf): Array[String] = {
     if (isRunningInYarnContainer(conf)) {
       // If we are in yarn mode, systems can have different disk layouts so we must set it
       // to what Yarn on this system said was available. Note this assumes that Yarn has
       // created the directories already, and that they are secured so that only the
       // user has access to them.
       getYarnLocalDirs(conf).split(",")
+    } else if (conf.getenv("SPARK_EXECUTOR_DIRS") != null) {
+      conf.getenv("SPARK_EXECUTOR_DIRS").split(File.pathSeparator)
     } else {
       // In non-Yarn mode (or for the driver in yarn-client mode), we cannot trust the user
       // configuration to point to a secure directory. So create a subdirectory with restricted
@@ -696,7 +720,7 @@ private[spark] object Utils extends Logging {
           try {
             val rootDir = new File(root)
             if (rootDir.exists || rootDir.mkdirs()) {
-              val dir = createDirectory(root)
+              val dir = createTempDir(root)
               chmod700(dir)
               Some(dir.getAbsolutePath)
             } else {
@@ -726,6 +750,11 @@ private[spark] object Utils extends Logging {
       throw new Exception("Yarn Local dirs can't be empty")
     }
     localDirs
+  }
+
+  /** Used by unit tests. Do not call from other places. */
+  private[spark] def clearLocalRootDirs(): Unit = {
+    localRootDirs = null
   }
 
   /**

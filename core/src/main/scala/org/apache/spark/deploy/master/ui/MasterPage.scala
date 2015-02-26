@@ -50,12 +50,16 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     val workers = state.workers.sortBy(_.id)
     val workerTable = UIUtils.listingTable(workerHeaders, workerRow, workers)
 
-    val appHeaders = Seq("Application ID", "Name", "Cores", "Memory per Node", "Submitted Time",
-      "User", "State", "Duration")
+    val activeAppHeaders = Seq("Application ID", "Name", "Cores in Use",
+      "Cores Requested", "Memory per Node", "Submitted Time", "User", "State", "Duration")
     val activeApps = state.activeApps.sortBy(_.startTime).reverse
-    val activeAppsTable = UIUtils.listingTable(appHeaders, appRow, activeApps)
+    val activeAppsTable = UIUtils.listingTable(activeAppHeaders, activeAppRow, activeApps)
+
+    val completedAppHeaders = Seq("Application ID", "Name", "Cores Requested", "Memory per Node",
+      "Submitted Time", "User", "State", "Duration")
     val completedApps = state.completedApps.sortBy(_.endTime).reverse
-    val completedAppsTable = UIUtils.listingTable(appHeaders, appRow, completedApps)
+    val completedAppsTable = UIUtils.listingTable(completedAppHeaders, completeAppRow,
+      completedApps)
 
     val driverHeaders = Seq("Submission ID", "Submitted Time", "Worker", "State", "Cores",
       "Memory", "Main Class")
@@ -162,7 +166,7 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     </tr>
   }
 
-  private def appRow(app: ApplicationInfo): Seq[Node] = {
+  private def appRow(app: ApplicationInfo, active: Boolean): Seq[Node] = {
     <tr>
       <td>
         <a href={"app?appId=" + app.id}>{app.id}</a>
@@ -170,8 +174,15 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <td>
         <a href={app.desc.appUiUrl}>{app.desc.name}</a>
       </td>
+      {
+        if (active) {
+          <td>
+            {app.coresGranted}
+          </td>
+        }
+      }
       <td>
-        {app.coresGranted}
+        {app.requestedCores}
       </td>
       <td sorttable_customkey={app.desc.memoryPerSlave.toString}>
         {Utils.megabytesToString(app.desc.memoryPerSlave)}
@@ -181,6 +192,14 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <td>{app.state.toString}</td>
       <td>{UIUtils.formatDuration(app.duration)}</td>
     </tr>
+  }
+
+  private def activeAppRow(app: ApplicationInfo): Seq[Node] = {
+    appRow(app, active = true)
+  }
+
+  private def completeAppRow(app: ApplicationInfo): Seq[Node] = {
+    appRow(app, active = false)
   }
 
   private def driverRow(driver: DriverInfo): Seq[Node] = {

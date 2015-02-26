@@ -1958,7 +1958,7 @@ class RDD(object):
 
         my_batch = get_batch_size(self._jrdd_deserializer)
         other_batch = get_batch_size(other._jrdd_deserializer)
-        if my_batch != other_batch:
+        if my_batch != other_batch or not my_batch:
             # use the smallest batchSize for both of them
             batchSize = min(my_batch, other_batch)
             if batchSize <= 0:
@@ -2119,6 +2119,7 @@ class RDD(object):
     def countApprox(self, timeout, confidence=0.95):
         """
         .. note:: Experimental
+
         Approximate version of count() that returns a potentially incomplete
         result within a timeout, even if not all tasks have finished.
 
@@ -2132,6 +2133,7 @@ class RDD(object):
     def sumApprox(self, timeout, confidence=0.95):
         """
         .. note:: Experimental
+
         Approximate operation to return the sum within a timeout
         or meet the confidence.
 
@@ -2148,6 +2150,7 @@ class RDD(object):
     def meanApprox(self, timeout, confidence=0.95):
         """
         .. note:: Experimental
+
         Approximate operation to return the mean within a timeout
         or meet the confidence.
 
@@ -2164,6 +2167,7 @@ class RDD(object):
     def countApproxDistinct(self, relativeSD=0.05):
         """
         .. note:: Experimental
+
         Return approximate number of distinct elements in the RDD.
 
         The algorithm used is based on streamlib's implementation of

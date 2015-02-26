@@ -298,23 +298,22 @@ In general the use of non-deterministic RDDs can lead to errors.
 
 ### BlockMatrix
 
-A `BlockMatrix` is a distributed matrix backed by an RDD of `MatrixBlock`s, where `MatrixBlock` is
+A `BlockMatrix` is a distributed matrix backed by an RDD of `MatrixBlock`s, where a `MatrixBlock` is
 a tuple of `((Int, Int), Matrix)`, where the `(Int, Int)` is the index of the block, and `Matrix` is
 the sub-matrix at the given index with size `rowsPerBlock` x `colsPerBlock`.
-`BlockMatrix` supports methods such as `.add` and `.multiply` with another `BlockMatrix`.
-`BlockMatrix` also has a helper function `.validate` which can be used to debug whether the
+`BlockMatrix` supports methods such as `add` and `multiply` with another `BlockMatrix`.
+`BlockMatrix` also has a helper function `validate` which can be used to check whether the
 `BlockMatrix` is set up properly.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
 A [`BlockMatrix`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix) can be
-most easily created from an `IndexedRowMatrix` or `CoordinateMatrix` using `.toBlockMatrix()`.
-`.toBlockMatrix()` will create blocks of size 1024 x 1024. Users may change the sizes of their blocks
-by supplying the values through `.toBlockMatrix(rowsPerBlock, colsPerBlock)`.
+most easily created from an `IndexedRowMatrix` or `CoordinateMatrix` by calling `toBlockMatrix`.
+`toBlockMatrix` creates blocks of size 1024 x 1024 by default.
+Users may change the block size by supplying the values through `toBlockMatrix(rowsPerBlock, colsPerBlock)`.
 
 {% highlight scala %}
-import org.apache.spark.mllib.linalg.SingularValueDecomposition
 import org.apache.spark.mllib.linalg.distributed.{BlockMatrix, CoordinateMatrix, MatrixEntry}
 
 val entries: RDD[MatrixEntry] = ... // an RDD of (i, j, v) matrix entries
@@ -323,29 +322,24 @@ val coordMat: CoordinateMatrix = new CoordinateMatrix(entries)
 // Transform the CoordinateMatrix to a BlockMatrix
 val matA: BlockMatrix = coordMat.toBlockMatrix().cache()
 
-// validate whether the BlockMatrix is set up properly. Throws an Exception when it is not valid.
+// Validate whether the BlockMatrix is set up properly. Throws an Exception when it is not valid.
 // Nothing happens if it is valid.
-matA.validate
+matA.validate()
 
 // Calculate A^T A.
-val AtransposeA = matA.transpose.multiply(matA)
-
-// get SVD of 2 * A
-val A2 = matA.add(matA)
-val svd = A2.toIndexedRowMatrix().computeSVD(20, false, 1e-9)
+val ata = matA.transpose.multiply(matA)
 {% endhighlight %}
 </div>
 
 <div data-lang="java" markdown="1">
 
-A [`BlockMatrix`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix) can be
-most easily created from an `IndexedRowMatrix` or `CoordinateMatrix` using `.toBlockMatrix()`.
-`.toBlockMatrix()` will create blocks of size 1024 x 1024. Users may change the sizes of their blocks
-by supplying the values through `.toBlockMatrix(rowsPerBlock, colsPerBlock)`.
+A [`BlockMatrix`](api/java/org/apache/spark/mllib/linalg/distributed/BlockMatrix.html) can be
+most easily created from an `IndexedRowMatrix` or `CoordinateMatrix` by calling `toBlockMatrix`.
+`toBlockMatrix` creates blocks of size 1024 x 1024 by default.
+Users may change the block size by supplying the values through `toBlockMatrix(rowsPerBlock, colsPerBlock)`.
 
 {% highlight java %}
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.mllib.linalg.SingularValueDecomposition;
 import org.apache.spark.mllib.linalg.distributed.BlockMatrix;
 import org.apache.spark.mllib.linalg.distributed.CoordinateMatrix;
 import org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix;
@@ -356,17 +350,12 @@ CoordinateMatrix coordMat = new CoordinateMatrix(entries.rdd());
 // Transform the CoordinateMatrix to a BlockMatrix
 BlockMatrix matA = coordMat.toBlockMatrix().cache();
 
-// validate whether the BlockMatrix is set up properly. Throws an Exception when it is not valid.
+// Validate whether the BlockMatrix is set up properly. Throws an Exception when it is not valid.
 // Nothing happens if it is valid.
 matA.validate();
 
 // Calculate A^T A.
-BlockMatrix AtransposeA = matA.transpose().multiply(matA);
-
-// get SVD of 2 * A
-BlockMatrix A2 = matA.add(matA);
-SingularValueDecomposition<IndexedRowMatrix, Matrix> svd =
-  A2.toIndexedRowMatrix().computeSVD(20, false, 1e-9);
+BlockMatrix ata = matA.transpose().multiply(matA);
 {% endhighlight %}
 </div>
 </div>
