@@ -19,10 +19,16 @@
 
 SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 
-usage() {
-  "$SPARK_HOME"/bin/spark-class org.apache.spark.deploy.SparkSubmit --help
-  exit $1
-}
-export -f usage
+# Only define a usage function if an upstream script hasn't done so.
+if ! type -t usage >/dev/null 2>&1; then
+  usage() {
+    if [ -n "$1" ]; then
+      echo $1
+    fi
+    "$SPARK_HOME"/bin/spark-class org.apache.spark.deploy.SparkSubmit --help
+    exit $2
+  }
+  export -f usage
+fi
 
 exec "$SPARK_HOME"/bin/spark-class org.apache.spark.deploy.SparkSubmit "$@"

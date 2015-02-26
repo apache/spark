@@ -31,6 +31,9 @@ export CLASS="org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver"
 export FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 
 function usage {
+  if [ -n "$1" ]; then
+    echo $1
+  fi
   echo "Usage: ./bin/spark-sql [options] [cli option]"
   pattern="usage"
   pattern+="\|Spark assembly has been built with Hive"
@@ -43,12 +46,12 @@ function usage {
   echo
   echo "CLI options:"
   "$FWDIR"/bin/spark-class $CLASS --help 2>&1 | grep -v "$pattern" 1>&2
-  exit $1
+  exit $2
 }
 export -f usage
 
 if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
-  usage 0
+  usage "" 0
 fi
 
 exec "$FWDIR"/bin/spark-submit --class $CLASS "$@"
