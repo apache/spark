@@ -394,9 +394,6 @@ private[spark] class TaskSchedulerImpl(
       taskResultGetter.stop()
     }
     starvationTimer.cancel()
-
-    // sleeping for an arbitrary 1 seconds to ensure that messages are sent out.
-    Thread.sleep(1000L)
   }
 
   override def defaultParallelism() = backend.defaultParallelism()
