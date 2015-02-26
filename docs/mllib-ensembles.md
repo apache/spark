@@ -98,6 +98,7 @@ The test error is calculated to measure the algorithm accuracy.
 <div data-lang="scala">
 {% highlight scala %}
 import org.apache.spark.mllib.tree.RandomForest
+import org.apache.spark.mllib.tree.model.RandomForestModel
 import org.apache.spark.mllib.util.MLUtils
 
 // Load and parse the data file.
@@ -127,6 +128,9 @@ val labelAndPreds = testData.map { point =>
 val testErr = labelAndPreds.filter(r => r._1 != r._2).count.toDouble / testData.count()
 println("Test Error = " + testErr)
 println("Learned classification forest model:\n" + model.toDebugString)
+
+model.save("myModelPath")
+val sameModel = RandomForestModel.load("myModelPath")
 {% endhighlight %}
 </div>
 
@@ -188,10 +192,16 @@ Double testErr =
   }).count() / testData.count();
 System.out.println("Test Error: " + testErr);
 System.out.println("Learned classification forest model:\n" + model.toDebugString());
+
+model.save("myModelPath");
+RandomForestModel sameModel = RandomForestModel.load("myModelPath");
 {% endhighlight %}
 </div>
 
 <div data-lang="python">
+
+Note that the Python API does not yet support model save/load but will in the future.
+
 {% highlight python %}
 from pyspark.mllib.tree import RandomForest
 from pyspark.mllib.util import MLUtils
@@ -235,6 +245,7 @@ The Mean Squared Error (MSE) is computed at the end to evaluate
 <div data-lang="scala">
 {% highlight scala %}
 import org.apache.spark.mllib.tree.RandomForest
+import org.apache.spark.mllib.tree.model.RandomForestModel
 import org.apache.spark.mllib.util.MLUtils
 
 // Load and parse the data file.
@@ -264,6 +275,9 @@ val labelsAndPredictions = testData.map { point =>
 val testMSE = labelsAndPredictions.map{ case(v, p) => math.pow((v - p), 2)}.mean()
 println("Test Mean Squared Error = " + testMSE)
 println("Learned regression forest model:\n" + model.toDebugString)
+
+model.save("myModelPath")
+val sameModel = RandomForestModel.load("myModelPath")
 {% endhighlight %}
 </div>
 
@@ -328,10 +342,16 @@ Double testMSE =
   }) / testData.count();
 System.out.println("Test Mean Squared Error: " + testMSE);
 System.out.println("Learned regression forest model:\n" + model.toDebugString());
+
+model.save("myModelPath");
+RandomForestModel sameModel = RandomForestModel.load("myModelPath");
 {% endhighlight %}
 </div>
 
 <div data-lang="python">
+
+Note that the Python API does not yet support model save/load but will in the future.
+
 {% highlight python %}
 from pyspark.mllib.tree import RandomForest
 from pyspark.mllib.util import MLUtils
@@ -441,8 +461,6 @@ iterations.
 
 ### Examples
 
-GBTs currently have APIs in Scala and Java.  Examples in both languages are shown below.
-
 #### Classification
 
 The example below demonstrates how to load a
@@ -457,6 +475,7 @@ The test error is calculated to measure the algorithm accuracy.
 {% highlight scala %}
 import org.apache.spark.mllib.tree.GradientBoostedTrees
 import org.apache.spark.mllib.tree.configuration.BoostingStrategy
+import org.apache.spark.mllib.tree.model.GradientBoostedTreesModel
 import org.apache.spark.mllib.util.MLUtils
 
 // Load and parse the data file.
@@ -484,6 +503,9 @@ val labelAndPreds = testData.map { point =>
 val testErr = labelAndPreds.filter(r => r._1 != r._2).count.toDouble / testData.count()
 println("Test Error = " + testErr)
 println("Learned classification GBT model:\n" + model.toDebugString)
+
+model.save("myModelPath")
+val sameModel = GradientBoostedTreesModel.load("myModelPath")
 {% endhighlight %}
 </div>
 
@@ -545,6 +567,38 @@ Double testErr =
   }).count() / testData.count();
 System.out.println("Test Error: " + testErr);
 System.out.println("Learned classification GBT model:\n" + model.toDebugString());
+
+model.save("myModelPath");
+GradientBoostedTreesModel sameModel = GradientBoostedTreesModel.load("myModelPath");
+{% endhighlight %}
+</div>
+
+<div data-lang="python">
+
+Note that the Python API does not yet support model save/load but will in the future.
+
+{% highlight python %}
+from pyspark.mllib.tree import GradientBoostedTrees
+from pyspark.mllib.util import MLUtils
+
+# Load and parse the data file.
+data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
+# Split the data into training and test sets (30% held out for testing)
+(trainingData, testData) = data.randomSplit([0.7, 0.3])
+
+# Train a GradientBoostedTrees model.
+#  Notes: (a) Empty categoricalFeaturesInfo indicates all features are continuous.
+#         (b) Use more iterations in practice.
+model = GradientBoostedTrees.trainClassifier(trainingData,
+    categoricalFeaturesInfo={}, numIterations=3)
+
+# Evaluate model on test instances and compute test error
+predictions = model.predict(testData.map(lambda x: x.features))
+labelsAndPredictions = testData.map(lambda lp: lp.label).zip(predictions)
+testErr = labelsAndPredictions.filter(lambda (v, p): v != p).count() / float(testData.count())
+print('Test Error = ' + str(testErr))
+print('Learned classification GBT model:')
+print(model.toDebugString())
 {% endhighlight %}
 </div>
 
@@ -565,6 +619,7 @@ The Mean Squared Error (MSE) is computed at the end to evaluate
 {% highlight scala %}
 import org.apache.spark.mllib.tree.GradientBoostedTrees
 import org.apache.spark.mllib.tree.configuration.BoostingStrategy
+import org.apache.spark.mllib.tree.model.GradientBoostedTreesModel
 import org.apache.spark.mllib.util.MLUtils
 
 // Load and parse the data file.
@@ -591,6 +646,9 @@ val labelsAndPredictions = testData.map { point =>
 val testMSE = labelsAndPredictions.map{ case(v, p) => math.pow((v - p), 2)}.mean()
 println("Test Mean Squared Error = " + testMSE)
 println("Learned regression GBT model:\n" + model.toDebugString)
+
+model.save("myModelPath")
+val sameModel = GradientBoostedTreesModel.load("myModelPath")
 {% endhighlight %}
 </div>
 
@@ -658,6 +716,38 @@ Double testMSE =
   }) / data.count();
 System.out.println("Test Mean Squared Error: " + testMSE);
 System.out.println("Learned regression GBT model:\n" + model.toDebugString());
+
+model.save("myModelPath");
+GradientBoostedTreesModel sameModel = GradientBoostedTreesModel.load("myModelPath");
+{% endhighlight %}
+</div>
+
+<div data-lang="python">
+
+Note that the Python API does not yet support model save/load but will in the future.
+
+{% highlight python %}
+from pyspark.mllib.tree import GradientBoostedTrees
+from pyspark.mllib.util import MLUtils
+
+# Load and parse the data file.
+data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
+# Split the data into training and test sets (30% held out for testing)
+(trainingData, testData) = data.randomSplit([0.7, 0.3])
+
+# Train a GradientBoostedTrees model.
+#  Notes: (a) Empty categoricalFeaturesInfo indicates all features are continuous.
+#         (b) Use more iterations in practice.
+model = GradientBoostedTrees.trainRegressor(trainingData,
+    categoricalFeaturesInfo={}, numIterations=3)
+
+# Evaluate model on test instances and compute test error
+predictions = model.predict(testData.map(lambda x: x.features))
+labelsAndPredictions = testData.map(lambda lp: lp.label).zip(predictions)
+testMSE = labelsAndPredictions.map(lambda (v, p): (v - p) * (v - p)).sum() / float(testData.count())
+print('Test Mean Squared Error = ' + str(testMSE))
+print('Learned regression GBT model:')
+print(model.toDebugString())
 {% endhighlight %}
 </div>
 
