@@ -257,7 +257,10 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
       case ExecutedCommand(
         InsertIntoDataSource(
           LogicalRelation(r: ParquetRelation2), query, overwrite)) => // OK
-      case _ => fail("test_parquet_ctas should be converted to a data source relation.")
+      case o => fail("test_insert_parquet should be converted to a " +
+        s"${classOf[ParquetRelation2].getCanonicalName} and " +
+        s"${classOf[InsertIntoDataSource].getCanonicalName} is expcted as the SparkPlan." +
+        s"However, found a ${o.toString} ")
     }
 
     checkAnswer(
@@ -298,7 +301,8 @@ class ParquetDataSourceOffMetastoreSuite extends ParquetMetastoreSuiteBase {
     val df = sql("INSERT INTO TABLE test_insert_parquet SELECT a FROM jt")
     df.queryExecution.executedPlan match {
       case insert: InsertIntoHiveTable => // OK
-      case _ => fail("test_parquet_ctas should not be converted to a data source relation.")
+      case o => fail(s"The SparkPlan should be ${classOf[InsertIntoHiveTable].getCanonicalName}. " +
+        s"However, found ${o.toString}.")
     }
 
     checkAnswer(
