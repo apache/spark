@@ -159,9 +159,10 @@ class DataFrame protected[sql](
 
   /**
    * Internal API for Python
+   * @param numRows Number of rows to show
    */
-  private[sql] def showString(): String = {
-    val data = take(20)
+  private[sql] def showString(numRows: Int): String = {
+    val data = take(numRows)
     val numCols = schema.fieldNames.length
 
     // For cells that are beyond 20 characters, replace it with the first 17 and "..."
@@ -293,9 +294,15 @@ class DataFrame protected[sql](
    *   1983  03    0.410516        0.442194
    *   1984  04    0.450090        0.483521
    * }}}
+   * @param numRows Number of rows to show
    * @group basic
    */
-  def show(): Unit = println(showString())
+  def show(numRows: Int): Unit = println(showString(numRows))
+
+  /**
+   * Displays the top 20 rows of [[DataFrame]] in a tabular form.
+   */
+  def show(): Unit = show(20)
 
   /**
    * Cartesian join with another [[DataFrame]].
