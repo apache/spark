@@ -251,17 +251,19 @@ object SparkSubmit {
     }
 
     val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
-    if (args.packagesResolved != null) {
-      args.jars = mergeFileLists(args.jars, args.packagesResolved)
-      if (args.isPython) args.pyFiles = mergeFileLists(args.pyFiles, args.packagesResolved)
-    } else {
-      // This part needs to be added in case SparkSubmitDriverBootstrapper is not called
-      val resolvedMavenCoordinates =
-        SparkSubmitUtils.resolveMavenCoordinates(
-          args.packages, Option(args.repositories), Option(args.ivyRepoPath)).mkString(",")
-      if (resolvedMavenCoordinates.trim.length > 0) {
-        args.jars = mergeFileLists(args.jars, resolvedMavenCoordinates)
-        if (args.isPython) args.pyFiles = mergeFileLists(args.pyFiles, resolvedMavenCoordinates)
+    val packagesResolved =
+      if (args.packagesResolved != null) {
+        // SparkSubmitDriverBootstrapper already downloaded the jars for us
+        args.packagesResolved
+      } else {
+        SparkSubmitUtils.resolveMavenCoordinates(args.packages, Option(args.repositories), 
+          Option(args.ivyRepoPath)).mkString(",")
+      }
+
+    if (packagesResolved.nonEmpty) {
+      args.jars = mergeFileLists(args.jars, packagesResolved)
+      if (args.isPython) {
+        args.pyFiles = mergeFileLists(args.pyFiles, packagesResolved)
       }
     }
 
@@ -713,7 +715,7 @@ private[spark] object SparkSubmitUtils {
    * after a '!' by Ivy. It also sometimes contains '(bundle)' after '.jar'. Remove that as well.
    * @param artifacts Sequence of dependencies that were resolved and retrieved
    * @param cacheDirectory directory where jars are cached
-   * @return a comma-delimited list of paths for the dependencies
+   * @return A sequence of paths for the dependencies
    */
   private[spark] def resolveDependencyPaths(
       artifacts: Array[AnyRef],
@@ -778,7 +780,7 @@ private[spark] object SparkSubmitUtils {
    * @param coordinates Comma-delimited string of maven coordinates
    * @param remoteRepos Comma-delimited string of remote repositories other than maven central
    * @param ivyPath The path to the local ivy repository
-   * @return The comma-delimited path to the jars of the given maven artifacts including their
+   * @return A sequence of paths to the jars of the given maven artifacts including their
    *         transitive dependencies
    */
   private[spark] def resolveMavenCoordinates(
@@ -787,7 +789,7 @@ private[spark] object SparkSubmitUtils {
       ivyPath: Option[String],
       isTest: Boolean = false): Seq[String] = {
     if (coordinates == null || coordinates.trim.isEmpty) {
-      Seq("")
+      Seq.empty
     } else {
       val sysOut = System.out
       // To prevent ivy from logging to system out

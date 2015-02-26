@@ -396,7 +396,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         packages = value
         parse(tail)
 
-      // Internal flag to receive the resolved maven jars and add to --jars
+      // Spark-6031 Internal flag to receive the resolved maven jars and add to --jars. 
+      // This is only passed through the Bootstrapper
       case ("--packages-resolved") :: value :: tail =>
         packagesResolved = Utils.resolveURIs(value)
         parse(tail)

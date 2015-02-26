@@ -97,7 +97,7 @@ private[spark] object SparkSubmitDriverBootstrapper {
     val resolvedMavenCoordinates =
       SparkSubmitUtils.resolveMavenCoordinates(
         submitPackages, submitRepositories, confIvyRepo)
-    if (resolvedMavenCoordinates.head.length > 0) {
+    if (resolvedMavenCoordinates.nonEmpty) {
       newClasspath += sys.props("path.separator") + 
         resolvedMavenCoordinates.mkString(sys.props("path.separator"))
       submitArgs = 
