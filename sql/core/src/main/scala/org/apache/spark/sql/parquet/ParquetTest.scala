@@ -131,6 +131,11 @@ private[sql] trait ParquetTest {
     data.toDF().save(path.getCanonicalPath, "org.apache.spark.sql.parquet", SaveMode.Overwrite)
   }
 
+  protected def makeParquetFile[T <: Product: ClassTag: TypeTag](
+      df: DataFrame, path: File): Unit = {
+    df.save(path.getCanonicalPath, "org.apache.spark.sql.parquet", SaveMode.Overwrite)
+  }
+
   protected def makePartitionDir(
       basePath: File,
       defaultPartitionName: String,

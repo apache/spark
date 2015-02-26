@@ -184,9 +184,9 @@ case $option in
 
     if [ -f $pid ]; then
       TARGET_ID="$(cat "$pid")"
-      if [[ $(ps -p "$TARGET_ID" -o args=) =~ $command ]]; then
+      if [[ $(ps -p "$TARGET_ID" -o comm=) =~ "java" ]]; then
         echo "stopping $command"
-        kill "$TARGET_ID"
+        kill "$TARGET_ID" && rm -f "$pid"
       else
         echo "no $command to stop"
       fi

@@ -200,7 +200,7 @@ private[sql] case class ParquetRelation2(
     private var commonMetadataStatuses: Array[FileStatus] = _
 
     // Parquet footer cache.
-    private var footers: Map[FileStatus, Footer] = _
+    var footers: Map[FileStatus, Footer] = _
 
     // `FileStatus` objects of all data files (Parquet part-files).
     var dataStatuses: Array[FileStatus] = _
@@ -400,6 +400,7 @@ private[sql] case class ParquetRelation2(
     } else {
       metadataCache.dataStatuses.toSeq
     }
+    val selectedFooters = selectedFiles.map(metadataCache.footers)
 
     // FileInputFormat cannot handle empty lists.
     if (selectedFiles.nonEmpty) {
@@ -447,11 +448,16 @@ private[sql] case class ParquetRelation2(
         @transient
         val cachedStatus = selectedFiles
 
+        @transient
+        val cachedFooters = selectedFooters
+
         // Overridden so we can inject our own cached files statuses.
         override def getPartitions: Array[SparkPartition] = {
           val inputFormat = if (cacheMetadata) {
             new FilteringParquetRowInputFormat {
               override def listStatus(jobContext: JobContext): JList[FileStatus] = cachedStatus
+
+              override def getFooters(jobContext: JobContext): JList[Footer] = cachedFooters
             }
           } else {
             new FilteringParquetRowInputFormat

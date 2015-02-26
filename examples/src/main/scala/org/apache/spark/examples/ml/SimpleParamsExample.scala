@@ -40,8 +40,8 @@ object SimpleParamsExample {
     import sqlContext.implicits._
 
     // Prepare training data.
-    // We use LabeledPoint, which is a case class.  Spark SQL can convert RDDs of Java Beans
-    // into DataFrames, where it uses the bean metadata to infer the schema.
+    // We use LabeledPoint, which is a case class.  Spark SQL can convert RDDs of case classes
+    // into DataFrames, where it uses the case class metadata to infer the schema.
     val training = sc.parallelize(Seq(
       LabeledPoint(1.0, Vectors.dense(0.0, 1.1, 0.1)),
       LabeledPoint(0.0, Vectors.dense(2.0, 1.0, -1.0)),
@@ -94,7 +94,7 @@ object SimpleParamsExample {
       .select("features", "label", "myProbability", "prediction")
       .collect()
       .foreach { case Row(features: Vector, label: Double, prob: Vector, prediction: Double) =>
-        println("($features, $label) -> prob=$prob, prediction=$prediction")
+        println(s"($features, $label) -> prob=$prob, prediction=$prediction")
       }
 
     sc.stop()

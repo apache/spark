@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.NumericType
  * A set of methods for aggregations on a [[DataFrame]], created by [[DataFrame.groupBy]].
  */
 @Experimental
-class GroupedData protected[sql](df: DataFrameImpl, groupingExprs: Seq[Expression]) {
+class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) {
 
   private[this] implicit def toDF(aggExprs: Seq[NamedExpression]): DataFrame = {
     val namedGroupingExprs = groupingExprs.map {
