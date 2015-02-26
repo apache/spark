@@ -1021,7 +1021,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>0.0 for Mesos and Standalone mode, 0.8 for YARN</td>
   <td>
     The minimum ratio of registered resources (registered resources / total expected resources)
-    (resources are executors in yarn mode, CPU cores in standalone mode)
+    (resources are executors in yarn mode, CPU cores in standalone mode and coarse-grained mesos mode)
     to wait for before scheduling begins. Specified as a double between 0.0 and 1.0.
     Regardless of whether the minimum ratio of resources has been reached,
     the maximum amount of time it will wait before scheduling begins is controlled by config

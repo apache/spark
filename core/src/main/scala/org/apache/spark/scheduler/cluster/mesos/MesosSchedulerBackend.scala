@@ -70,7 +70,7 @@ private[spark] class MesosSchedulerBackend(
 
   @volatile var appId: String = _
   
-  if (!sc.getConf.getOption("spark.scheduler.minRegisteredResourcesRatio").isEmpty) {
+  if (sc.conf.contains("spark.scheduler.minRegisteredResourcesRatio")) {
     logWarning("spark.scheduler.minRegisteredResourcesRatio is set, "
       + "but it will be ignored in mesos fine-grained mode.")
   }
