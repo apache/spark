@@ -84,7 +84,7 @@ private[spark] trait RpcEnv {
   /**
    * Create a URI used to create a [[RpcEndpointRef]]
    */
-  def newURI(systemName: String, address: RpcAddress, endpointName: String): String
+  def uriOf(systemName: String, address: RpcAddress, endpointName: String): String
 }
 
 private[spark] case class RpcEnvConfig(

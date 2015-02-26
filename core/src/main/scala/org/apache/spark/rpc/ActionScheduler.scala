@@ -66,7 +66,10 @@ private[spark] trait ActionScheduler {
 }
 
 private[spark] trait Cancellable {
-  // Should be reentrant
+  /**
+   * Cancel the corresponding work. The caller may call this method multiple times and call it in
+   * any thread.
+   */
   def cancel(): Unit
 }
 

@@ -172,6 +172,10 @@ private[spark] class AkkaRpcEnv private (
     }
   }
 
+  /**
+   * Run `action` safely to avoid to crash the thread. If any non-fatal exception happens, it will
+   * call `endpoint.onError`. If `endpoint.onError` throws any non-fatal exception, just log it.
+   */
   private def safelyCall(endpoint: RpcEndpoint)(action: => Unit): Unit = {
     try {
       action
@@ -204,10 +208,10 @@ private[spark] class AkkaRpcEnv private (
 
   override def setupEndpointRef(
       systemName: String, address: RpcAddress, endpointName: String): RpcEndpointRef = {
-    setupEndpointRefByUrl(newURI(systemName, address, endpointName))
+    setupEndpointRefByUrl(uriOf(systemName, address, endpointName))
   }
 
-  override def newURI(systemName: String, address: RpcAddress, endpointName: String): String = {
+  override def uriOf(systemName: String, address: RpcAddress, endpointName: String): String = {
     AkkaUtils.address(
       AkkaUtils.protocol(actorSystem), systemName, address.host, address.port, endpointName)
   }

@@ -37,6 +37,10 @@ private[spark] class WorkerWatcher(override val rpcEnv: RpcEnv, workerUrl: Strin
   }
 
   // Used to avoid shutting down JVM during tests
+  // In the normal case, exitNonZero will call `System.exit(-1)` to shutdown the JVM. In the unit
+  // test, the user should call `setTesting(true)` so that `exitNonZero` will set `isShutDown` to
+  // true rather than calling `System.exit`. The user can check `isShutDown` to know if
+  // `exitNonZero` is called.
   private[deploy] var isShutDown = false
   private[deploy] def setTesting(testing: Boolean) = isTesting = testing
   private var isTesting = false
