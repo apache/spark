@@ -265,7 +265,7 @@ setGeneric("unpersist", function(x) { standardGeneric("unpersist") })
 setMethod("unpersist",
           signature(x = "RDD"),
           function(x) {
-            callJMethod(getJRDD(x, "unpersist"))
+            callJMethod(getJRDD(x), "unpersist")
             x@env$isCached <- FALSE
             x
           })
@@ -399,7 +399,7 @@ setGeneric("collectAsMap", function(x) { standardGeneric("collectAsMap") })
 setMethod("collectAsMap",
           signature(x = "RDD"),
           function(x) {
-            pairList <- collect(rdd)
+            pairList <- collect(x)
             map <- new.env()
             lapply(pairList, function(i) { assign(as.character(i[[1]]), i[[2]], envir = map) })
             as.list(map)
