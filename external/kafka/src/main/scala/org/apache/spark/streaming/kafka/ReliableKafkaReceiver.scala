@@ -27,7 +27,7 @@ import kafka.common.TopicAndPartition
 import kafka.consumer.{Consumer, ConsumerConfig, ConsumerConnector, KafkaStream}
 import kafka.message.MessageAndMetadata
 import kafka.serializer.Decoder
-import kafka.utils.{VerifiableProperties, ZKGroupTopicDirs, ZKStringSerializer, ZkUtils}
+import kafka.utils.{VerifiableProperties, ZKStringSerializer}
 import org.I0Itec.zkclient.ZkClient
 
 import org.apache.spark.{Logging, SparkEnv}
@@ -221,38 +221,18 @@ class ReliableKafkaReceiver[
       }
     }
     if (pushed) {
-      Option(blockOffsetMap.get(blockId)).foreach(commitOffset)
-      blockOffsetMap.remove(blockId)
+      Option(blockOffsetMap.get(blockId)).foreach { offsets =>
+        try {
+          SparkKafkaUtils.commitOffset(zkClient, groupId, offsets.toMap)
+        } catch {
+          case ex: Exception =>
+            exception = ex
+            stop("Error while committing the offsets into Spark", exception)
+        }
+        blockOffsetMap.remove(blockId)
+      }
     } else {
       stop("Error while storing block into Spark", exception)
-    }
-  }
-
-  /**
-   * Commit the offset of Kafka's topic/partition, the commit mechanism follow Kafka 0.8.x's
-   * metadata schema in Zookeeper.
-   */
-  private def commitOffset(offsetMap: Map[TopicAndPartition, Long]): Unit = {
-    if (zkClient == null) {
-      val thrown = new IllegalStateException("Zookeeper client is unexpectedly null")
-      stop("Zookeeper client is not initialized before commit offsets to ZK", thrown)
-      return
-    }
-
-    for ((topicAndPart, offset) <- offsetMap) {
-      try {
-        val topicDirs = new ZKGroupTopicDirs(groupId, topicAndPart.topic)
-        val zkPath = s"${topicDirs.consumerOffsetDir}/${topicAndPart.partition}"
-
-        ZkUtils.updatePersistentPath(zkClient, zkPath, offset.toString)
-      } catch {
-        case e: Exception =>
-          logWarning(s"Exception during commit offset $offset for topic" +
-            s"${topicAndPart.topic}, partition ${topicAndPart.partition}", e)
-      }
-
-      logInfo(s"Committed offset $offset for topic ${topicAndPart.topic}, " +
-        s"partition ${topicAndPart.partition}")
     }
   }
 

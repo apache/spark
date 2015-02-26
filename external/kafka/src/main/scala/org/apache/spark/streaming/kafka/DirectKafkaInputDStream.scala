@@ -19,17 +19,19 @@ package org.apache.spark.streaming.kafka
 
 import scala.annotation.tailrec
 import scala.collection.mutable
-import scala.reflect.{classTag, ClassTag}
+import scala.reflect.ClassTag
 
 import kafka.common.TopicAndPartition
 import kafka.message.MessageAndMetadata
 import kafka.serializer.Decoder
+import kafka.utils.ZKStringSerializer
+import org.I0Itec.zkclient.ZkClient
 
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.kafka.KafkaCluster.LeaderOffset
-import org.apache.spark.streaming.scheduler.InputInfo
+import org.apache.spark.streaming.scheduler._
 
 /**
  *  A stream of {@link org.apache.spark.streaming.kafka.KafkaRDD} where
@@ -81,7 +83,11 @@ class DirectKafkaInputDStream[
     }
   }
 
+  private val offsetMap = new mutable.HashMap[Time, Map[TopicAndPartition, Long]]()
   protected var currentOffsets = fromOffsets
+
+  // Add to the listener bus for job completion hook
+  context.addStreamingListener(new DirectKafkaStreamingListener)
 
   @tailrec
   protected final def latestLeaderOffsets(retries: Int): Map[TopicAndPartition, LeaderOffset] = {
@@ -122,6 +128,7 @@ class DirectKafkaInputDStream[
     ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
 
     currentOffsets = untilOffsets.map(kv => kv._1 -> kv._2.offset)
+    offsetMap += ((validTime, currentOffsets))
     Some(rdd)
   }
 
@@ -155,6 +162,8 @@ class DirectKafkaInputDStream[
         ok => ok
       )
 
+      offsetMap.clear()
+
       batchForTime.toSeq.sortBy(_._1)(Time.ordering).foreach { case (t, b) =>
           logInfo(s"Restoring KafkaRDD for time $t ${b.mkString("[", ", ", "]")}")
           generatedRDDs += t -> new KafkaRDD[K, V, U, T, R](
@@ -163,4 +172,37 @@ class DirectKafkaInputDStream[
     }
   }
 
+  private[streaming]
+  class DirectKafkaStreamingListener extends StreamingListener {
+
+    val offsetCommitEnabled = context.conf.getBoolean("spark.streaming.kafka.offsetCommit", false)
+
+    val zkClientOpt = if (offsetCommitEnabled) {
+      kafkaParams.get("zookeeper.connect").map { zkConnect =>
+        val zkSessionTimeoutMs = kafkaParams.getOrElse("zookeeper.session.timeout.ms", "6000").toInt
+        val zkConnectionTimeoutMs =
+          kafkaParams.getOrElse("zookeeper.session.timeout.ms", "6000").toInt
+        new ZkClient(zkConnect, zkSessionTimeoutMs, zkConnectionTimeoutMs, ZKStringSerializer)
+      }
+    } else {
+      None
+    }
+
+    val groupId = "directKafkaConsumer"
+
+    override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted) = synchronized {
+      if (offsetCommitEnabled) {
+        for (offsets <- offsetMap.get(batchCompleted.batchInfo.batchTime); client <- zkClientOpt) {
+          try {
+            SparkKafkaUtils.commitOffset(client, groupId, offsets)
+          } catch {
+            case e: Exception =>
+              logWarning(s"Fail to commit offsets ${offsets.mkString("{", ", ", "}")}")
+          }
+        }
+      }
+
+      offsetMap.dropWhile(_._1 <= batchCompleted.batchInfo.batchTime)
+    }
+  }
 }
