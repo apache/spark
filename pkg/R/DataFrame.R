@@ -280,6 +280,10 @@ setMethod("count",
           })
 
 #' Collects all the elements of a Spark DataFrame and coerces them into an R data.frame.
+#'
+#' @param x A SparkSQL DataFrame
+#' @param stringsAsFactors (Optional) A logical indicating whether or not string columns
+#' should be converted to factors. FALSE by default.
 
 #' @rdname collect-methods
 #' @export
@@ -295,7 +299,7 @@ setMethod("count",
 
 setMethod("collect",
           signature(x = "DataFrame"),
-          function(x) {
+          function(x, stringsAsFactors = FALSE) {
             # listCols is a list of raw vectors, one per column
             listCols <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "dfToCols", x@sdf)
             cols <- lapply(listCols, function(col) {
@@ -307,7 +311,7 @@ setMethod("collect",
             })
             colNames <- callJMethod(x@sdf, "columns")
             names(cols) <- colNames
-            dfOut <- do.call(cbind.data.frame, cols)
+            dfOut <- do.call(cbind.data.frame, list(cols, stringsAsFactors = stringsAsFactors))
             dfOut
           })
 
@@ -337,9 +341,9 @@ setMethod("limit",
           function(x, num) {
             res <- callJMethod(x@sdf, "limit", as.integer(num))
             dataFrame(res)
-            })
+          })
 
-# Take the first NUM elements in a DataFrame and return a the results as a data.frame
+# Take the first NUM rows of a DataFrame and return a the results as a data.frame
 
 #' @rdname take
 #' @export
@@ -357,6 +361,57 @@ setMethod("take",
           function(x, num) {
             limited <- limit(x, num)
             collect(limited)
+          })
+
+#' Head
+#'
+#' Return the first NUM rows of a DataFrame as a data.frame. If NUM is NULL, 
+#' then head() returns the first 6 rows in keeping with the current data.frame 
+#' convention in R.
+#'
+#' @param x A SparkSQL DataFrame
+#' @param num The number of rows to return. Default is 6.
+#' @return A data.frame
+#'
+#' @rdname head
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' head(df)
+#' }
+
+setMethod("head",
+          signature(x = "DataFrame"),
+          function(x, num = 6L) {
+          # Default num is 6L in keeping with R's data.frame convention
+            take(x, num)
+          })
+
+#' Return the first row of a DataFrame
+#'
+#' @param x A SparkSQL DataFrame
+#'
+#' @rdname first
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' first(df)
+#' }
+
+setGeneric("first", function(x) {standardGeneric("first") })
+
+setMethod("first",
+          signature(x = "DataFrame"),
+          function(x) {
+            take(x, 1)
           })
 
 #' toRDD()

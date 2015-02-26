@@ -181,4 +181,19 @@ test_that("schema(), dtypes(), columns(), names() return the correct values/form
   expect_true(length(testNames) == 2)
   expect_true(testNames[2] == "name")
 })
+
+test_that("head() and first() return the correct data", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  testHead <- head(df)
+  expect_true(nrow(testHead) == 3)
+  expect_true(ncol(testHead) == 2)
+  
+  testHead2 <- head(df, 2)
+  expect_true(nrow(testHead2) == 2)
+  expect_true(ncol(testHead2) == 2)
+  
+  testFirst <- first(df)
+  expect_true(nrow(testFirst) == 1)
+})
+
 unlink(jsonPath)
