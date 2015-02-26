@@ -493,7 +493,7 @@ setMethod("lapply",
             func <- function(split, iterator) {
               lapply(iterator, FUN)
             }
-            PipelinedRDD(X, func)
+            lapplyPartitionsWithIndex(X, func)
           })
 
 #' @rdname lapply
