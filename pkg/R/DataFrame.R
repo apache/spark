@@ -39,7 +39,7 @@ dataFrame <- function(sdf) {
 #' 
 #' Prints out the schema in tree format
 #' 
-#' @param df A SparkSQL DataFrame
+#' @param x A SparkSQL DataFrame
 #' 
 #' @rdname printSchema
 #' @export
@@ -52,12 +52,12 @@ dataFrame <- function(sdf) {
 #' printSchema(df)
 #'}
 
-setGeneric("printSchema", function(df) { standardGeneric("printSchema") })
+setGeneric("printSchema", function(x) { standardGeneric("printSchema") })
 
 setMethod("printSchema",
-          signature(df = "DataFrame"),
-          function(df) {
-            sdf <- df@sdf
+          signature(x = "DataFrame"),
+          function(x) {
+            sdf <- x@sdf
             schemaString <- callJMethod(sdf, "printSchema")
             cat(schemaString)
           })
@@ -66,7 +66,7 @@ setMethod("printSchema",
 #' 
 #' Registers a DataFrame as a Temporary Table in the SQLContext
 #' 
-#' @param df A SparkSQL DataFrame
+#' @param x A SparkSQL DataFrame
 #' @param tableName A character vector containing the name of the table
 #' 
 #' @rdname registerTempTable
@@ -81,12 +81,12 @@ setMethod("printSchema",
 #' new_df <- sql(sqlCtx, "SELECT * FROM json_df")
 #'}
 
-setGeneric("registerTempTable", function(df, tableName) { standardGeneric("registerTempTable") })
+setGeneric("registerTempTable", function(x, tableName) { standardGeneric("registerTempTable") })
 
 setMethod("registerTempTable",
-          signature(df = "DataFrame", tableName = "character"),
-          function(df, tableName) {
-              sdf <- df@sdf
+          signature(x = "DataFrame", tableName = "character"),
+          function(x, tableName) {
+              sdf <- x@sdf
               callJMethod(sdf, "registerTempTable", tableName)
           })
 
@@ -94,7 +94,7 @@ setMethod("registerTempTable",
 #' 
 #' Returns the number of rows in a DataFrame
 #' 
-#' @param df A SparkSQL DataFrame
+#' @param x A SparkSQL DataFrame
 #' 
 #' @rdname count
 #' @export
@@ -149,7 +149,7 @@ setMethod("collect",
 #' 
 #' Limit the resulting DataFrame to the number of rows specified.
 #' 
-#' @param df A SparkSQL DataFrame
+#' @param x A SparkSQL DataFrame
 #' @param num The number of rows to return
 #' @return A new DataFrame containing the number of rows specified.
 #' 
@@ -164,12 +164,12 @@ setMethod("collect",
 #' limitedDF <- limit(df, 10)
 #' }
 
-setGeneric("limit", function(df, num) {standardGeneric("limit") })
+setGeneric("limit", function(x, num) {standardGeneric("limit") })
 
 setMethod("limit",
-          signature(df = "DataFrame", num = "numeric"),
-          function(df, num) {
-            res <- callJMethod(df@sdf, "limit", as.integer(num))
+          signature(x = "DataFrame", num = "numeric"),
+          function(x, num) {
+            res <- callJMethod(x@sdf, "limit", as.integer(num))
             dataFrame(res)
             })
 
@@ -197,7 +197,7 @@ setMethod("take",
 #' 
 #' Converts a Spark DataFrame to an RDD while preserving column names.
 #' 
-#' @param df A Spark DataFrame
+#' @param x A Spark DataFrame
 #' 
 #' @rdname DataFrame
 #' @export
@@ -210,13 +210,13 @@ setMethod("take",
 #' rdd <- toRDD(df)
 #' }
 
-setGeneric("toRDD", function(df) { standardGeneric("toRDD") })
+setGeneric("toRDD", function(x) { standardGeneric("toRDD") })
 
 setMethod("toRDD",
-          signature(df = "DataFrame"),
-          function(df) {
-            jrdd <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "dfToRowRDD", df@sdf)
-            colNames <- callJMethod(df@sdf, "columns")
+          signature(x = "DataFrame"),
+          function(x) {
+            jrdd <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "dfToRowRDD", x@sdf)
+            colNames <- callJMethod(x@sdf, "columns")
             rdd <- RDD(jrdd, serializedMode = "row")
             lapply(rdd, function(row) {
               names(row) <- colNames
