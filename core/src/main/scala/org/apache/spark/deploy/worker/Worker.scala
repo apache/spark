@@ -61,7 +61,7 @@ private[worker] class Worker(
   assert (port > 0)
 
   // For worker and executor IDs
-  private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")  
+  private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")
 
   // Send a heartbeat every (heartbeat timeout) / 4 milliseconds
   private val HEARTBEAT_MILLIS = conf.getLong("spark.worker.timeout", 60) * 1000 / 4
@@ -85,10 +85,10 @@ private[worker] class Worker(
 
   private val CLEANUP_ENABLED = conf.getBoolean("spark.worker.cleanup.enabled", false)
   // How often worker will clean up old app folders
-  private val CLEANUP_INTERVAL_MILLIS = 
+  private val CLEANUP_INTERVAL_MILLIS =
     conf.getLong("spark.worker.cleanup.interval", 60 * 30) * 1000
   // TTL for app folders/data;  after TTL expires it will be cleaned up
-  private val APP_DATA_RETENTION_SECS = 
+  private val APP_DATA_RETENTION_SECS =
     conf.getLong("spark.worker.cleanup.appDataTtl", 7 * 24 * 3600)
 
   private val testing: Boolean = sys.props.contains("spark.testing")
@@ -112,7 +112,7 @@ private[worker] class Worker(
     } else {
       new File(sys.env.get("SPARK_HOME").getOrElse("."))
     }
-  
+
   var workDir: File = null
   val finishedExecutors = new HashMap[String, ExecutorRunner]
   val drivers = new HashMap[String, DriverRunner]
@@ -134,7 +134,7 @@ private[worker] class Worker(
 
   private val metricsSystem = MetricsSystem.createMetricsSystem("worker", conf, securityMgr)
   private val workerSource = new WorkerSource(this)
-  
+
   private var registrationRetryTimer: Option[Cancellable] = None
 
   var coresUsed = 0

@@ -44,7 +44,7 @@ class WorkerWebUI(
 
   /** Initialize all components of the server. */
   def initialize() {
-    val logPage = new LogPage(this)
+    val logPage = new LogPage(worker, workDir)
     attachPage(logPage)
     attachPage(new WorkerPage(this))
     attachHandler(createStaticHandler(WorkerWebUI.STATIC_RESOURCE_BASE, "/static"))

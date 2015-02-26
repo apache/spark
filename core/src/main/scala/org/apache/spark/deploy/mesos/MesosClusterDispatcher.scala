@@ -37,7 +37,17 @@ import org.apache.spark.deploy.worker.DriverRunner
 import java.io.{IOException, File}
 import java.util.Date
 import java.text.SimpleDateFormat
-import scala.collection.mutable
+import org.apache.spark.deploy.mesos.ui.MesosClusterUI
+import org.apache.spark.deploy.mesos.Messages.{DispatcherStateResponse, RequestDispatcherState}
+
+private [deploy] object Messages {
+  case object RequestDispatcherState
+
+  case class DispatcherStateResponse(
+      activeDrivers: Iterable[DriverInfo],
+      completedDrivers: Iterable[DriverInfo]) {
+  }
+}
 
 /*
  * A dispatcher actor that is responsible for managing drivers, that is intended to
@@ -45,10 +55,11 @@ import scala.collection.mutable
  * This class is needed since Mesos doesn't manage frameworks, so the dispatcher acts as
  * a daemon to launch drivers as Mesos frameworks upon request.
  */
-class MesosClusterDispatcher(
+private [spark] class MesosClusterDispatcher(
     host: String,
     serverPort: Int,
     actorPort: Int,
+    webUiPort: Int,
     systemName: String,
     actorName: String,
     conf: SparkConf,
@@ -56,18 +67,13 @@ class MesosClusterDispatcher(
     workDirPath: Option[String] = None) extends Actor with ActorLogReceive with Logging {
   val server = new MesosRestServer(host, serverPort, self, conf, masterUrl)
 
-  val runners = new HashMap[String, DriverRunner]
-  val drivers = new HashMap[String, DriverInfo]
-  val completedDrivers = new ArrayBuffer[DriverInfo]
-  val RETAINED_DRIVERS = conf.getInt("spark.deploy.retainedDrivers", 200)
-  var nextDriverNumber = 0
+  val dispatcherPublicAddress = {
+    val envVar = System.getenv("SPARK_PUBLIC_DNS")
+    if (envVar != null) envVar else host
+  }
 
-  var workDir: File = null
-
-  def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")
-
-  def createWorkDir() {
-    workDir = workDirPath.map(new File(_)).getOrElse(new File(sparkHome, "work"))
+  lazy val workDir: File = {
+    val dir = workDirPath.map(new File(_)).getOrElse(new File(sparkHome, "work"))
 
     // Attempt to remove the work directory if it exists on startup.
     // This is to avoid unbounded growing the work directory as drivers
@@ -75,8 +81,8 @@ class MesosClusterDispatcher(
     // We don't fail startup if we are not able to remove, as this is
     // a short-term solution.
     try {
-      if (workDir.exists()) {
-        workDir.delete()
+      if (dir.exists()) {
+        dir.delete()
       }
     } catch {
       case e: IOException =>
@@ -86,18 +92,30 @@ class MesosClusterDispatcher(
     try {
       // This sporadically fails - not sure why ... !workDir.exists() && !workDir.mkdirs()
       // So attempting to create and then check if directory was created or not.
-      workDir.mkdirs()
-      if (!workDir.exists() || !workDir.isDirectory) {
-        logError("Failed to create work directory " + workDir)
+      dir.mkdirs()
+      if (!dir.exists() || !dir.isDirectory) {
+        logError("Failed to create work directory " + dir)
         System.exit(1)
       }
-      assert (workDir.isDirectory)
+      assert (dir.isDirectory)
     } catch {
       case e: Exception =>
-        logError("Failed to create work directory " + workDir, e)
+        logError("Failed to create work directory " + dir, e)
         System.exit(1)
     }
+    dir
   }
+
+  val webUi = new MesosClusterUI(
+    self, new SecurityManager(conf), webUiPort, conf, workDir, dispatcherPublicAddress)
+
+  val runners = new HashMap[String, DriverRunner]
+  val drivers = new HashMap[String, DriverInfo]
+  val completedDrivers = new ArrayBuffer[DriverInfo]
+  val RETAINED_DRIVERS = conf.getInt("spark.deploy.retainedDrivers", 200)
+  var nextDriverNumber = 0
+
+  def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")
 
   val sparkHome =
     new File(sys.env.get("SPARK_HOME").getOrElse("."))
@@ -122,11 +140,12 @@ class MesosClusterDispatcher(
   }
 
   override def preStart() {
-    createWorkDir()
     server.start()
+    webUi.bind()
   }
 
   override def postStop() {
+    webUi.stop()
     server.stop()
     runners.values.foreach(_.kill())
   }
@@ -172,6 +191,10 @@ class MesosClusterDispatcher(
         case _ =>
           throw new Exception(s"Received unexpected state update for driver $driverId: $state")
       }
+    }
+
+    case RequestDispatcherState => {
+      sender ! DispatcherStateResponse(drivers.values, completedDrivers)
     }
   }
 
@@ -225,6 +248,7 @@ object MesosClusterDispatcher {
         args.host,
         args.port,
         boundPort,
+        args.webUiPort,
         systemName,
         actorName,
         conf,
@@ -237,6 +261,7 @@ object MesosClusterDispatcher {
   class ClusterDispatcherArguments(args: Array[String], conf: SparkConf) {
     var host = Utils.localHostName()
     var port = 7077
+    var webUiPort = 8081
     var masterUrl: String = null
 
     parse(args.toList)
@@ -249,6 +274,10 @@ object MesosClusterDispatcher {
 
       case ("--port" | "-p") :: IntParam(value) :: tail =>
         port = value
+        parse(tail)
+
+      case ("--webui-port" | "-p") :: IntParam(value) :: tail =>
+        webUiPort = value
         parse(tail)
 
       case ("--master" | "-m") :: value :: tail =>
@@ -283,6 +312,7 @@ object MesosClusterDispatcher {
           "Options:\n" +
           "  -h HOST, --host HOST   Hostname to listen on\n" +
           "  -p PORT, --port PORT   Port to listen on (default: 7077)\n" +
+          "  --webui-port WEBUI_PORT   WebUI Port to listen on (default: 8081)\n" +
           "  -m --master MASTER      URI for connecting to Mesos master\n")
       System.exit(exitCode)
     }
