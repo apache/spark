@@ -606,6 +606,8 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       options = Map("path" -> "just a dummy path"),
       isExternal = false)
 
+    invalidateTable("wide_schema")
+
     val actualSchema = table("wide_schema").schema
     assert(schema === actualSchema)
   }

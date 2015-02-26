@@ -69,13 +69,25 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         val table = synchronized {
           client.getTable(in.database, in.name)
         }
-        val schemaString = table.getProperty("spark.sql.sources.schema")
-        val userSpecifiedSchema =
-          if (schemaString == null) {
-            None
-          } else {
-            Some(DataType.fromJson(schemaString).asInstanceOf[StructType])
+        val schemaString = Option(table.getProperty("spark.sql.sources.schema"))
+          .orElse {
+            // If spark.sql.sources.schema is not defined, we either splitted the schema to multiple
+            // parts or the schema was not defined. To determine if the schema was defined,
+            // we check spark.sql.sources.schema.numOfParts.
+            Option(table.getProperty("spark.sql.sources.schema.numOfParts")) match {
+              case Some(numOfParts) =>
+                val parts = (0 until numOfParts.toInt).map { index =>
+                  Option(table.getProperty(s"spark.sql.sources.schema.part.${index}"))
+                    .getOrElse("Could not read schema from the metastore because it is corrupted.")
+                }
+                // Stick all parts back to a single schema string in the JSON representation.
+                Some(parts.mkString)
+              case None => None // The schema was not defined.
+            }
           }
+
+        val userSpecifiedSchema =
+          schemaString.flatMap(s => Some(DataType.fromJson(s).asInstanceOf[StructType]))
         // It does not appear that the ql client for the metastore has a way to enumerate all the
         // SerDe properties directly...
         val options = table.getTTable.getSd.getSerdeInfo.getParameters.toMap
@@ -119,7 +131,26 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
     tbl.setProperty("spark.sql.sources.provider", provider)
     if (userSpecifiedSchema.isDefined) {
-      tbl.setProperty("spark.sql.sources.schema", userSpecifiedSchema.get.json)
+      val threshold = hive.conf.schemaStringLengthThreshold
+      val schemaJsonString = userSpecifiedSchema.get.json
+      // Check if the size of the JSON string of the schema exceeds the threshold.
+      if (schemaJsonString.size > threshold) {
+        // Need to split the string.
+        val parts = schemaJsonString.grouped(threshold).toSeq
+        // First, record the total number of parts we have.
+        tbl.setProperty("spark.sql.sources.schema.numOfParts", parts.size.toString)
+        // Second, write every part to table property.
+        parts.zipWithIndex.foreach {
+          case (part, index) =>
+            tbl.setProperty(s"spark.sql.sources.schema.part.${index}", part)
+        }
+      } else {
+        // The length is less than the threshold, just put it in the table property.
+        tbl.setProperty("spark.sql.sources.schema.numOfParts", "1")
+        // We use spark.sql.sources.schema instead of using spark.sql.sources.schema.part.0
+        // because users may have already created data source tables in metastore.
+        tbl.setProperty("spark.sql.sources.schema", schemaJsonString)
+      }
     }
     options.foreach { case (key, value) => tbl.setSerdeParam(key, value) }
 
