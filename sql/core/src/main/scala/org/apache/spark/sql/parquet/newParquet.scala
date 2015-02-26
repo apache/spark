@@ -482,17 +482,35 @@ private[sql] case class ParquetRelation2(
         }.get
 
         val requiredPartOrdinal = partitionKeyLocations.keys.toSeq
+        val mutableRow = new GenericMutableRow(requestedSchema.size)
 
-        iterator.map { pair =>
-          val row = pair._2.asInstanceOf[SpecificMutableRow]
-          var i = 0
-          while (i < requiredPartOrdinal.size) {
-            // TODO Avoids boxing cost here!
-            val partOrdinal = requiredPartOrdinal(i)
-            row.update(partitionKeyLocations(partOrdinal), partValues(partOrdinal))
-            i += 1
-          }
-          row
+        iterator.map {
+          case (_, row: SpecificMutableRow) =>
+            var i = 0
+            while (i < requiredPartOrdinal.size) {
+              // TODO Avoids boxing cost here!
+              val partOrdinal = requiredPartOrdinal(i)
+              row.update(partitionKeyLocations(partOrdinal), partValues(partOrdinal))
+              i += 1
+            }
+            row
+
+          case (_, row: Row) =>
+            var i = 0
+            while (i < row.size) {
+              // TODO Avoids boxing cost here!
+              mutableRow(i) = row(i)
+              i += 1
+            }
+
+            i = 0
+            while (i < requiredPartOrdinal.size) {
+              // TODO Avoids boxing cost here!
+              val partOrdinal = requiredPartOrdinal(i)
+              mutableRow.update(partitionKeyLocations(partOrdinal), partValues(partOrdinal))
+              i += 1
+            }
+            mutableRow
         }
       }
     } else {
