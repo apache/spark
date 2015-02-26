@@ -166,20 +166,11 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     }
 
     if (table.getProperty("spark.sql.sources.provider") != null) {
-      val dataSourceTable =
-        cachedDataSourceTables(QualifiedTableName(databaseName, tblName).toLowerCase)
-      // Then, if alias is specified, wrap the table with a Subquery using the alias.
-      // Othersie, wrap the table with a Subquery using the table name.
-      val withAlias =
-        alias.map(a => Subquery(a, dataSourceTable)).getOrElse(
-          Subquery(tableIdent.last, dataSourceTable))
-
-      withAlias
+      MetastoreDataSourceRelation(databaseName, tblName, alias, table, tableIdentifier, hive)
     } else if (table.isView) {
-      // if the unresolved relation is from hive view
-      // parse the text into logic node.
-      HiveQl.createPlanForView(table, alias)
+      MetaStoreViewRelation(table, alias)
     } else {
+      // TODO move the resolution into the the rule object
       val partitions: Seq[Partition] =
         if (table.isPartitioned) {
           HiveShim.getAllPartitionsOf(client, table).toSeq
@@ -575,6 +566,30 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
   }
 
   /**
+   * Extract logical MetastoreRelation(include view and cache relation)
+   * as unresolved logical plan tree.
+   */
+  object ExtractLogicalRelation extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.transform {
+      // Wait until children are resolved.
+      case p: LogicalPlan if !p.childrenResolved => p
+
+      case MetaStoreViewRelation(table, alias) => HiveQl.createPlanForView(table, alias)
+
+      case MetastoreDataSourceRelation(dbName, tblName, alias, table, tableIdentifier, hive) =>
+        val qTableName = hive.catalog.QualifiedTableName(dbName, tblName).toLowerCase
+        val dataSourceTable = hive.catalog.cachedDataSourceTables(qTableName)
+        // Then, if alias is specified, wrap the table with a Subquery using the alias.
+        // Othersie, wrap the table with a Subquery using the table name.
+        val withAlias =
+          alias.map(a => Subquery(a, dataSourceTable)).getOrElse(
+            Subquery(tableIdentifier.last, dataSourceTable))
+
+        withAlias
+    }
+  }
+
+  /**
    * Casts input data to correct data types according to table definition before inserting into
    * that table.
    */
@@ -649,9 +664,31 @@ private[hive] case class InsertIntoHiveTable(
   }
 }
 
+// TODO should we create the trait for MetaStoreXXXRelation(XXX = Table / View / Cache)
+private[hive] case class MetaStoreViewRelation(table: Table, alias: Option[String])
+  extends LeafNode {
+
+  self: Product =>
+
+  override lazy val resolved = false
+  override def output = Nil
+}
+
+private[hive] case class MetastoreDataSourceRelation
+    (databaseName: String, tableName: String, alias: Option[String],
+    table: Table, tableIdentifier: Seq[String],
+    sqlContext: HiveContext)
+  extends LeafNode {
+
+  self: Product =>
+
+  override lazy val resolved = false
+  override def output = Nil
+}
+
 private[hive] case class MetastoreRelation
     (databaseName: String, tableName: String, alias: Option[String])
-    (val table: TTable, val partitions: Seq[TPartition])
+    (val table: TTable, val partitions: Seq[TPartition] = Nil)
     (@transient sqlContext: SQLContext)
   extends LeafNode {
 

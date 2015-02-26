@@ -23,10 +23,11 @@ import org.apache.hadoop.hive.metastore.api.FieldSchema
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
-import org.apache.spark.sql.execution.{SparkPlan, RunnableCommand}
-import org.apache.spark.sql.hive.{HiveContext, MetastoreRelation}
-import org.apache.spark.sql.hive.HiveShim
+import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.hive.MetastoreRelation
+import org.apache.spark.sql.hive.MetaStoreViewRelation
+import org.apache.spark.sql.hive.MetastoreDataSourceRelation
 
 /**
  * :: DeveloperApi ::
@@ -35,16 +36,15 @@ import org.apache.spark.sql.SQLContext
  */
 @DeveloperApi
 case class DescribeHiveTableCommand(
-    table: MetastoreRelation,
+    table: AnyRef,
     override val output: Seq[Attribute],
     isExtended: Boolean) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext) = {
-    // Trying to mimic the format of Hive's output. But not exactly the same.
+  def process(m: MetastoreRelation): Seq[(String, String, String)] = {
     var results: Seq[(String, String, String)] = Nil
 
-    val columns: Seq[FieldSchema] = table.hiveQlTable.getCols
-    val partitionColumns: Seq[FieldSchema] = table.hiveQlTable.getPartCols
+    val columns: Seq[FieldSchema] = m.hiveQlTable.getCols
+    val partitionColumns: Seq[FieldSchema] = m.hiveQlTable.getPartCols
     results ++= columns.map(field => (field.getName, field.getType, field.getComment))
     if (partitionColumns.nonEmpty) {
       val partColumnInfo =
@@ -57,7 +57,46 @@ case class DescribeHiveTableCommand(
     }
 
     if (isExtended) {
-      results ++= Seq(("Detailed Table Information", table.hiveQlTable.getTTable.toString, ""))
+      results ++= Seq(("Detailed Table Information", m.hiveQlTable.getTTable.toString, ""))
+    }
+
+    results
+  }
+
+  def process(m: MetaStoreViewRelation): Seq[(String, String, String)] = {
+    var results: Seq[(String, String, String)] = Nil
+
+    val columns: Seq[FieldSchema] = m.table.getCols
+    results ++= columns.map(field => (field.getName, field.getType, field.getComment))
+
+    if (isExtended) {
+      results ++= Seq(("Detailed View Information", m.table.getTTable.toString, ""))
+    }
+
+    results
+  }
+
+  def process(m: MetastoreDataSourceRelation): Seq[(String, String, String)] = {
+    var results: Seq[(String, String, String)] = Nil
+
+    val columns: Seq[FieldSchema] = m.table.getCols
+    results ++= columns.map(field => (field.getName, field.getType, field.getComment))
+
+    if (isExtended) {
+      results ++= Seq(
+        ("Detailed DataSourceProvider Table Information",
+        m.table.getTTable.toString, ""))
+    }
+
+    results
+  }
+
+  override def run(sqlContext: SQLContext) = {
+    // Trying to mimic the format of Hive's output. But not exactly the same.
+    val results = table match {
+      case m: MetastoreRelation => process(m)
+      case m: MetaStoreViewRelation => process(m)
+      case m: MetastoreDataSourceRelation => process(m)
     }
 
     results.map { case (name, dataType, comment) =>
