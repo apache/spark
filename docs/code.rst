@@ -90,7 +90,7 @@ Hooks
 -----
 .. automodule:: airflow.hooks
     :show-inheritance:
-    :members: MySqlHook, PrestoHook, HiveHook
+    :members: MySqlHook, PrestoHook, HiveCliHook, HiveServer2Hook, HiveMetastoreHook
 
 Executors
 ---------
