@@ -92,8 +92,8 @@ private[spark] object SparkSubmitDriverBootstrapper {
         classpath + confClasspath.map(sys.props("path.separator") + _).getOrElse("")
       }
 
-    // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
-    // too for packages that include Python code
+    // Resolve maven dependencies if there are any and add them to classpath. Also send them
+    // to SparkSubmit so that they can be shipped to executors.
     val resolvedMavenCoordinates =
       SparkSubmitUtils.resolveMavenCoordinates(
         submitPackages, submitRepositories, confIvyRepo)
