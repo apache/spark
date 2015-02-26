@@ -63,14 +63,12 @@ export SPARK_SUBMIT_PROPERTIES_FILE=${SPARK_SUBMIT_PROPERTIES_FILE:-"$DEFAULT_PR
 # paths, library paths, java options and memory early on. Otherwise, it will
 # be too late by the time the driver JVM has started.
 
-if [ "$SPARK_SUBMIT_DEPLOY_MODE" == "client" ]; then
-  if [ -f "$SPARK_SUBMIT_PROPERTIES_FILE" ]; then
-    # Parse the properties file only if the special configs exist
-    contains_special_configs=$(
-      grep -e "spark.driver.extra*\|spark.driver.memory" "$SPARK_SUBMIT_PROPERTIES_FILE" | \
-      grep -v "^[[:space:]]*#"
-    )
-  fi
+if [[ "$SPARK_SUBMIT_DEPLOY_MODE" == "client" && -f "$SPARK_SUBMIT_PROPERTIES_FILE" ]]; then
+  # Parse the properties file only if the special configs exist
+  contains_special_configs=$(
+    grep -e "spark.driver.extra*\|spark.driver.memory" "$SPARK_SUBMIT_PROPERTIES_FILE" | \
+    grep -v "^[[:space:]]*#"
+  )
   if [[ -n "$contains_special_configs" || -n "$SPARK_SUBMIT_PACKAGES" ]]; then
     export SPARK_SUBMIT_BOOTSTRAP_DRIVER=1
   fi
