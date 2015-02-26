@@ -76,9 +76,9 @@ if [%SPARK_SUBMIT_DEPLOY_MODE%] == [client] (
       %SPARK_SUBMIT_PROPERTIES_FILE%') do (
       set SPARK_SUBMIT_BOOTSTRAP_DRIVER=1
     )
-  )
-  if [%SPARK_SUBMIT_PACKAGES%] != [] (
-    set SPARK_SUBMIT_BOOTSTRAP_DRIVER=1
+    if [%SPARK_SUBMIT_PACKAGES%] NEQ [] (
+      set SPARK_SUBMIT_BOOTSTRAP_DRIVER=1
+    )
   )
 )
 
