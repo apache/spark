@@ -300,6 +300,11 @@ class DataFrame protected[sql](
   def show(numRows: Int = 20): Unit = println(showString(numRows))
 
   /**
+   * Displays the [[DataFrame]] in a tabular form. (For Java compatibility)
+   */
+  def show(): Unit = println(showString(20))
+
+  /**
    * Cartesian join with another [[DataFrame]].
    *
    * Note that cartesian joins are very expensive without an extra filter that can be pushed down.

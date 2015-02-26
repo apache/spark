@@ -85,7 +85,7 @@ public class JavaDataFrameSuite {
   @Test
   public void testShow() {
     DataFrame df = context.table("testData");
-    df.show(10);
+    df.show();
     df.show(1000);
   }
 }
