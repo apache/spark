@@ -446,11 +446,14 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case Project(projectList, child) if containsAggregates(projectList) =>
         var op: Seq[Expression] = Nil
+        var i = 0
         projectList.foreach(_.foreach {
           case CountDistinct(exp) => op = op ++ exp
+          i += 1
+          case agg: AggregateExpression => i += 1
           case _ =>
         })
-        if(op.size > 0) {
+        if(i == 1) {
           Aggregate(op, projectList, child)
         } else {
           Aggregate(Nil, projectList, child)
