@@ -69,6 +69,11 @@ private[spark] class MesosSchedulerBackend(
   val listenerBus = sc.listenerBus
 
   @volatile var appId: String = _
+  
+  if (!sc.getConf.getOption("spark.scheduler.minRegisteredResourcesRatio").isEmpty) {
+    logWarning("spark.scheduler.minRegisteredResourcesRatio is set, "
+      + "but it will be ignored in mesos fine-grained mode.")
+  }
 
   override def start() {
     synchronized {
