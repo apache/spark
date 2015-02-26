@@ -85,14 +85,13 @@ private[spark] class ExecutorRunner(
     var exitCode: Option[Int] = None
     if (process != null) {
       logInfo("Killing process!")
-      process.destroy()
-      process.waitFor()
       if (stdoutAppender != null) {
         stdoutAppender.stop()
       }
       if (stderrAppender != null) {
         stderrAppender.stop()
       }
+      process.destroy()
       exitCode = Some(process.waitFor())
     }
     worker ! ExecutorStateChanged(appId, execId, state, message, exitCode)
