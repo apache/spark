@@ -143,4 +143,22 @@ test_that("multiple pipeline transformations starting with a DataFrame result in
   expect_false(collect(second)[[3]]$testCol)
 })
 
+test_that("cache(), persist(), and unpersist() on a DataFrame", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  expect_false(df@env$isCached)
+  cache(df)
+  expect_true(df@env$isCached)
+  
+  unpersist(df)
+  expect_false(df@env$isCached)
+  
+  persist(df, "MEMORY_AND_DISK")
+  expect_true(df@env$isCached)
+  
+  unpersist(df)
+  expect_false(df@env$isCached)
+  
+  # make sure the data is collectable
+  expect_true(is.data.frame(collect(df)))
+})
 unlink(jsonPath)

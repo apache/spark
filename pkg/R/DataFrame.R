@@ -19,8 +19,9 @@ setClass("DataFrame",
          slots = list(env = "environment",
                       sdf = "jobj"))
 
-setMethod("initialize", "DataFrame", function(.Object, sdf) {
+setMethod("initialize", "DataFrame", function(.Object, sdf, isCached) {
   .Object@env <- new.env()
+  .Object@env$isCached <- isCached
   
   .Object@sdf <- sdf
   .Object
@@ -29,8 +30,8 @@ setMethod("initialize", "DataFrame", function(.Object, sdf) {
 #' @rdname DataFrame
 #' @export
 
-dataFrame <- function(sdf) {
-  new("DataFrame", sdf)
+dataFrame <- function(sdf, isCached = FALSE) {
+  new("DataFrame", sdf, isCached)
 }
 
 ############################ DataFrame Methods ##############################################
@@ -88,6 +89,84 @@ setMethod("registerTempTable",
           function(x, tableName) {
               sdf <- x@sdf
               callJMethod(sdf, "registerTempTable", tableName)
+          })
+
+#' Cache
+#' 
+#' Persist with the default storage level (MEMORY_ONLY).
+#' 
+#' @param x A SparkSQL DataFrame
+#' 
+#' @rdname cache-methods
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' cache(df)
+#'}
+
+setMethod("cache",
+          signature(x = "DataFrame"),
+          function(x) {
+            cached <- callJMethod(x@sdf, "cache")
+            x@env$isCached <- TRUE
+            x
+          })
+
+#' Persist
+#'
+#' Persist this DataFrame with the specified storage level. For details of the
+#' supported storage levels, refer to
+#' http://spark.apache.org/docs/latest/programming-guide.html#rdd-persistence.
+#'
+#' @param x The DataFrame to persist
+#' @rdname persist
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' persist(df, "MEMORY_AND_DISK")
+#'}
+
+setMethod("persist",
+          signature(x = "DataFrame", newLevel = "character"),
+          function(x, newLevel) {
+            callJMethod(x@sdf, "persist", getStorageLevel(newLevel))
+            x@env$isCached <- TRUE
+            x
+          })
+
+#' Unpersist
+#'
+#' Mark this DataFrame as non-persistent, and remove all blocks for it from memory and
+#' disk.
+#'
+#' @param x The DataFrame to unpersist
+#' @param blocking Whether to block until all blocks are deleted
+#' @rdname unpersist-methods
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' persist(df, "MEMORY_AND_DISK")
+#' unpersist(df)
+#'}
+
+setMethod("unpersist",
+          signature(x = "DataFrame"),
+          function(x, blocking = TRUE) {
+            callJMethod(x@sdf, "unpersist", blocking)
+            x@env$isCached <- FALSE
+            x
           })
 
 #' Count

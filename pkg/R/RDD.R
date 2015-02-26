@@ -235,32 +235,8 @@ setGeneric("persist", function(x, newLevel) { standardGeneric("persist") })
 #' @aliases persist,RDD-method
 setMethod("persist",
           signature(x = "RDD", newLevel = "character"),
-          function(x, newLevel = c("DISK_ONLY",
-                                     "DISK_ONLY_2",
-                                     "MEMORY_AND_DISK",
-                                     "MEMORY_AND_DISK_2",
-                                     "MEMORY_AND_DISK_SER",
-                                     "MEMORY_AND_DISK_SER_2",
-                                     "MEMORY_ONLY",
-                                     "MEMORY_ONLY_2",
-                                     "MEMORY_ONLY_SER",
-                                     "MEMORY_ONLY_SER_2",
-                                     "OFF_HEAP")) {
-            match.arg(newLevel)
-            storageLevel <- switch(newLevel,
-              "DISK_ONLY" = callJStatic("org.apache.spark.storage.StorageLevel", "DISK_ONLY"),
-              "DISK_ONLY_2" = callJStatic("org.apache.spark.storage.StorageLevel", "DISK_ONLY_2"),
-              "MEMORY_AND_DISK" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK"),
-              "MEMORY_AND_DISK_2" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK_2"),
-              "MEMORY_AND_DISK_SER" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK_SER"),
-              "MEMORY_AND_DISK_SER_2" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK_SER_2"),
-              "MEMORY_ONLY" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY"),
-              "MEMORY_ONLY_2" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY_2"),
-              "MEMORY_ONLY_SER" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY_SER"),
-              "MEMORY_ONLY_SER_2" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY_SER_2"),
-              "OFF_HEAP" = callJStatic("org.apache.spark.storage.StorageLevel", "OFF_HEAP"))
-            
-            callJMethod(getJRDD(x), "persist", storageLevel)
+          function(x, newLevel) {
+            callJMethod(getJRDD(x), "persist", getStorageLevel(newLevel))
             x@env$isCached <- TRUE
             x
           })
@@ -280,7 +256,7 @@ setMethod("persist",
 #' cache(rdd) # rdd@@env$isCached == TRUE
 #' unpersist(rdd) # rdd@@env$isCached == FALSE
 #'}
-setGeneric("unpersist", function(x) { standardGeneric("unpersist") })
+setGeneric("unpersist", function(x, ...) { standardGeneric("unpersist") })
 
 #' @rdname unpersist-methods
 #' @aliases unpersist,RDD-method
