@@ -143,7 +143,7 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
-    val model = NaiveBayes.train(testRDD, 1.0, "Bernoulli") ///!!! this gives same result on both models check the math
+    val model = NaiveBayes.train(testRDD, 1.0, "Bernoulli")
     validateModelFit(pi, theta, model)
 
     val validationData = NaiveBayesSuite.generateNaiveBayesInput(pi, theta, nPoints, 20, NaiveBayesModels.Bernoulli)
