@@ -81,4 +81,11 @@ public class JavaDataFrameSuite {
     df.groupBy().agg(countDistinct(col("key"), col("value")));
     df.select(coalesce(col("key")));
   }
+
+  @Test
+  public void testShow() {
+    DataFrame df = context.table("testData");
+    df.show(10);
+    df.show(1000);
+  }
 }

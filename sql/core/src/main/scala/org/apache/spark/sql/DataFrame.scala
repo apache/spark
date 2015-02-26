@@ -161,9 +161,8 @@ class DataFrame protected[sql](
    * Internal API for Python
    * @param numRows Number of rows to show
    */
-  private[sql] def showString(numRows: Int = 20): String = {
-    val size = count()
-    val data = if (numRows > size) collect() else take(numRows)
+  private[sql] def showString(numRows: Int): String = {
+    val data = take(numRows)
     val numCols = schema.fieldNames.length
 
     // For cells that are beyond 20 characters, replace it with the first 17 and "..."

@@ -441,4 +441,8 @@ class DataFrameSuite extends QueryTest {
     checkAnswer(df.select(df("key")), testData.select('key).collect().toSeq)
   }
 
+  test("show") {
+    testData.select($"*").show()
+    testData.select($"*").show(1000)
+  }
 }
