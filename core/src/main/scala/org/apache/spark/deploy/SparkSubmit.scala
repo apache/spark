@@ -251,7 +251,6 @@ object SparkSubmit {
     }
 
     val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
-    println(s"\n\n${args.packagesResolved}\n\n")
     if (args.packagesResolved != null) {
       args.jars = mergeFileLists(args.jars, args.packagesResolved)
       if (args.isPython) args.pyFiles = mergeFileLists(args.pyFiles, args.packagesResolved)
