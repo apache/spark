@@ -64,7 +64,9 @@ class KafkaUtils(object):
         jlevel = ssc._sc._getJavaStorageLevel(storageLevel)
 
         try:
-            helperClass = ssc._jvm.java.lang.Thread.currentThread().getContextClassLoader().loadClass("org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper")
+            # Use KafkaUtilsPythonHelper to access Scala's KafkaUtils (see SPARK-6027)
+            helperClass = ssc._jvm.java.lang.Thread.currentThread().getContextClassLoader()\
+                .loadClass("org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper")
             helper = helperClass.newInstance()
             jstream = helper.createStream(ssc._jssc, jparam, jtopics, jlevel)
         except Py4JJavaError, e:
@@ -78,7 +80,7 @@ ________________________________________________________________________________
   1. Include the Kafka library and its dependencies with in the
      spark-submit command as
 
-     $ bin/spark-submit --package org.apache.spark:spark-streaming-kafka:%s ...
+     $ bin/spark-submit --packages org.apache.spark:spark-streaming-kafka:%s ...
 
   2. Download the JAR of the artifact from Maven Central http://search.maven.org/,
      Group Id = org.apache.spark, Artifact Id = spark-streaming-kafka-assembly, Version = %s.
