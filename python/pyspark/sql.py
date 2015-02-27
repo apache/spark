@@ -24,6 +24,7 @@ import decimal
 import datetime
 import keyword
 import warnings
+import weakref
 from array import array
 from operator import itemgetter
 
@@ -55,8 +56,7 @@ class DataType(object):
         return hash(str(self))
 
     def __eq__(self, other):
-        return (isinstance(other, self.__class__) and
-                self.__dict__ == other.__dict__)
+        return isinstance(other, self.__class__) and str(self) == str(other)
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -751,7 +751,7 @@ def _verify_type(obj, dataType):
             _verify_type(v, f.dataType)
 
 
-_cached_cls = {}
+_cached_cls = weakref.WeakValueDictionary()
 
 
 def _restore_object(dataType, obj):
