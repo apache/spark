@@ -114,6 +114,7 @@ private [spark] class MesosClusterDispatcher(
   val completedDrivers = new ArrayBuffer[DriverInfo]
   val RETAINED_DRIVERS = conf.getInt("spark.deploy.retainedDrivers", 200)
   var nextDriverNumber = 0
+  val securityManager = new SecurityManager(conf)
 
   def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")
 
@@ -154,7 +155,7 @@ private [spark] class MesosClusterDispatcher(
     case RequestSubmitDriver(driverDescription) => {
       val driverInfo = createDriver(driverDescription)
       val runner = new DriverRunner(conf, driverInfo.id, workDir,
-        sparkHome, driverDescription, self, akkaUrl)
+        sparkHome, driverDescription, self, akkaUrl, securityManager)
       runners(driverInfo.id) = runner
       drivers(driverInfo.id) = driverInfo
       runner.start()
