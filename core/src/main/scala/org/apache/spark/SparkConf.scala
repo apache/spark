@@ -68,7 +68,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     if (value == null) {
       throw new NullPointerException("null value for " + key)
     }
-    settings.put(translateConfKey(key, warn = true), value)
+    settings.put(key, value)
     this
   }
 
@@ -140,7 +140,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
   /** Set a parameter if it isn't already configured */
   def setIfMissing(key: String, value: String): SparkConf = {
-    settings.putIfAbsent(translateConfKey(key, warn = true), value)
+    settings.putIfAbsent(key, value)
     this
   }
 
@@ -176,7 +176,8 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
   /** Get a parameter as an Option */
   def getOption(key: String): Option[String] = {
-    Option(settings.get(translateConfKey(key)))
+    val warnIfDeprecated = contains(key)
+    Option(settings.get(translateConfKey(key, warnIfDeprecated)))
   }
 
   /** Get all parameters as a list of pairs */
@@ -229,7 +230,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   def getAppId: String = get("spark.app.id")
 
   /** Does the configuration contain a given parameter? */
-  def contains(key: String): Boolean = settings.containsKey(translateConfKey(key))
+  def contains(key: String): Boolean = settings.containsKey(key)
 
   /** Copy this object */
   override def clone: SparkConf = {
