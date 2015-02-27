@@ -183,9 +183,9 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
    */
   private[history] def checkForLogs(): Unit = {
     try {
-      var newLastModifiedTime = lastModifiedTime
       val statusList = Option(fs.listStatus(new Path(logDir))).map(_.toSeq)
         .getOrElse(Seq[FileStatus]())
+      var newLastModifiedTime = lastModifiedTime
       val logInfos: Seq[FileStatus] = statusList
         .filter { entry =>
           try {
@@ -243,13 +243,11 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     // to avoid having to sort the list every time there is a request for the log list.
     if (newApps.nonEmpty) {
       val mergedApps = new mutable.LinkedHashMap[String, FsApplicationHistoryInfo]()
-      def addIfAbsent(
-        newApps: mutable.LinkedHashMap[String, FsApplicationHistoryInfo],
-        info: FsApplicationHistoryInfo): Unit = {
-        val appJustFinished = newApps(info.id).logPath.endsWith(EventLoggingListener.IN_PROGRESS) &&
-          !info.logPath.endsWith(EventLoggingListener.IN_PROGRESS)
-        if (!newApps.contains(info.id) || appJustFinished) {
-          newApps += (info.id -> info)
+      def addIfAbsent(info: FsApplicationHistoryInfo): Unit = {
+        if (!mergedApps.contains(info.id) ||
+            mergedApps(info.id).logPath.endsWith(EventLoggingListener.IN_PROGRESS) &&
+            !info.logPath.endsWith(EventLoggingListener.IN_PROGRESS)) {
+          mergedApps += (info.id -> info)
         }
       }
 
@@ -257,13 +255,13 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       val oldIterator = applications.values.iterator.buffered
       while (newIterator.hasNext && oldIterator.hasNext) {
         if (compareAppInfo(newIterator.head, oldIterator.head)) {
-          addIfAbsent(mergedApps, newIterator.next())
+          addIfAbsent(newIterator.next())
         } else {
-          addIfAbsent(mergedApps, oldIterator.next())
+          addIfAbsent(oldIterator.next())
         }
       }
-      newIterator.foreach(addIfAbsent(mergedApps, _))
-      oldIterator.foreach(addIfAbsent(mergedApps, _))
+      newIterator.foreach(addIfAbsent)
+      oldIterator.foreach(addIfAbsent)
 
       applications = mergedApps
     }
