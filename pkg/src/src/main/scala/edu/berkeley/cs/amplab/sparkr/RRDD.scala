@@ -7,13 +7,13 @@ import java.util.{Map => JMap}
 import scala.collection.JavaConversions._
 import scala.io.Source
 import scala.reflect.ClassTag
+import scala.util.Try
 
 import org.apache.spark.{SparkEnv, Partition, SparkException, TaskContext, SparkConf}
 import org.apache.spark.api.java.{JavaSparkContext, JavaRDD, JavaPairRDD}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 
-import scala.util.Try
 
 private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
     parent: RDD[T],
