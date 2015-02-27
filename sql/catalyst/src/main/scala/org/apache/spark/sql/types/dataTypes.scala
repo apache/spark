@@ -198,6 +198,43 @@ object DataType {
       case (left, right) => left == right
     }
   }
+
+  /**
+   * Compares two types, ignoring compatible nullability of ArrayType, MapType, StructType.
+   *
+   * Compatible nullability is defined as follows:
+   *   - If `from` and `to` are ArrayTypes, `from` has a compatible nullability with `to`
+   *   if and only if `from.containsNull` is false, or both of `from.containsNull` and
+   *   `to.containsNull` are true.
+   *   - If `from` and `to` are MapTypes, `from` has a compatible nullability with `to`
+   *   if and only if `from.valueContainsNull` is false, or both of `from.valueContainsNull` and
+   *   `to.valueContainsNull` are true.
+   *   - If `from` and `to` are StructTypes, `from` has a compatible nullability with `to`
+   *   if and only if for all every pair of fields, `fromField.nullable` is false, or both
+   *   of `fromField.nullable` and `toField.nullable` are true.
+   */
+  private[sql] def equalsIgnoreCompatibleNullability(from: DataType, to: DataType): Boolean = {
+    (from, to) match {
+      case (ArrayType(fromElement, fn), ArrayType(toElement, tn)) =>
+        (tn || !fn) && equalsIgnoreCompatibleNullability(fromElement, toElement)
+
+      case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
+        (tn || !fn) &&
+          equalsIgnoreCompatibleNullability(fromKey, toKey) &&
+          equalsIgnoreCompatibleNullability(fromValue, toValue)
+
+      case (StructType(fromFields), StructType(toFields)) =>
+        fromFields.size == toFields.size &&
+          fromFields.zip(toFields).forall {
+            case (fromField, toField) =>
+              fromField.name == toField.name &&
+                (toField.nullable || !fromField.nullable) &&
+                equalsIgnoreCompatibleNullability(fromField.dataType, toField.dataType)
+          }
+
+      case (fromDataType, toDataType) => fromDataType == toDataType
+    }
+  }
 }
 
 
