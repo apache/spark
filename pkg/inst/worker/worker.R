@@ -1,22 +1,17 @@
 # Worker class
 
-# NOTE: We use "stdin" to get the process stdin instead of the command line
-inputConStdin  <- file("stdin", open = "rb")
+port <- as.integer(Sys.getenv("SPARKR_WORKER_PORT"))
 
-outputFileName <- readLines(inputConStdin, n = 1)
-outputCon <- file(outputFileName, open="wb")
+inputCon <- socketConnection(port = port, blocking = TRUE, open = "rb")
+outputCon <- socketConnection(port = port, blocking = TRUE, open = "wb")
 
 # Set libPaths to include SparkR package as loadNamespace needs this
 # TODO: Figure out if we can avoid this by not loading any objects that require
 # SparkR namespace
-rLibDir <- readLines(inputConStdin, n = 1)
+rLibDir <- readLines(inputCon, n = 1)
 .libPaths(c(rLibDir, .libPaths()))
 
 suppressPackageStartupMessages(library(SparkR))
-
-inFileName <- readLines(inputConStdin, n = 1)
-
-inputCon <- file(inFileName, open = "rb")
 
 # read the index of the current partition inside the RDD
 splitIndex <- SparkR:::readInt(inputCon)
@@ -30,10 +25,6 @@ isInputSerialized <- SparkR:::readInt(inputCon)
 
 # read the isOutputSerialized bit flag
 isOutputSerialized <- SparkR:::readInt(inputCon)
-
-# Redirect stdout to stderr to prevent print statements from
-# interfering with outputStream
-sink(stderr())
 
 # Include packages as required
 packageNames <- unserialize(SparkR:::readRaw(inputCon))
@@ -123,10 +114,3 @@ if (isOutputSerialized) {
 
 close(outputCon)
 close(inputCon)
-unlink(inFileName)
-
-# Restore stdout
-sink()
-
-# Finally print the name of the output file
-cat(outputFileName, "\n")
