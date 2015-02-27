@@ -198,15 +198,23 @@ class SparkConfSuite extends FunSuite with LocalSparkContext with ResetSystemPro
   }
 
   test("deprecated config keys") {
+    val conf = new SparkConf().set("spark.executor.userClassPathFirst", "true")
+    assert(conf.contains("spark.executor.userClassPathFirst"))
+    assert(!conf.contains("spark.files.userClassPathFirst"))
+    assert(conf.get("spark.executor.userClassPathFirst") === "true")
+    assert(conf.get("spark.files.userClassPathFirst") === "true")
+  }
+
+  test("deprecated config does not override original config") {
     val conf = new SparkConf()
       .set("spark.files.userClassPathFirst", "true")
-      .set("spark.yarn.user.classpath.first", "true")
-    assert(conf.contains("spark.files.userClassPathFirst"))
-    assert(conf.contains("spark.executor.userClassPathFirst"))
-    assert(conf.contains("spark.yarn.user.classpath.first"))
-    assert(conf.getBoolean("spark.files.userClassPathFirst", false))
-    assert(conf.getBoolean("spark.executor.userClassPathFirst", false))
-    assert(conf.getBoolean("spark.yarn.user.classpath.first", false))
+      .set("spark.executor.userClassPathFirst", "false")
+    val conf2 = new SparkConf()
+      .set("spark.executor.userClassPathFirst", "false")
+      .set("spark.files.userClassPathFirst", "true")
+    // In both cases, the new config's value should be used
+    assert(conf.get("spark.executor.userClassPathFirst") === "false")
+    assert(conf2.get("spark.executor.userClassPathFirst") === "false")
   }
 
 }
