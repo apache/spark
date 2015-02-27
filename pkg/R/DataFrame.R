@@ -1,6 +1,6 @@
 # DataFrame.R - DataFrame class and methods implemented in S4 OO classes
 
-#' @include jobj.R types.R RDD.R pairRDD.R
+#' @include jobj.R SQLTypes.R RDD.R pairRDD.R
 NULL
 
 setOldClass("jobj")
@@ -12,7 +12,7 @@ setOldClass("jobj")
 #' @seealso jsonFile, table
 #'
 #' @param env An R environment that stores bookkeeping states of the DataFrame
-#' @param sdf A Java object reference to the backing Scala SchemaRDD
+#' @param sdf A Java object reference to the backing Scala DataFrame
 #' @export
 
 setClass("DataFrame",
@@ -64,8 +64,7 @@ setMethod("printSchema",
 
 #' Get schema object
 #' 
-#' Returns the schema of this DataFrame as a list of named lists. Each named
-#' list contains the elements of the StructField type, i.e. name, dataType, nullable.
+#' Returns the schema of this DataFrame as a structType object.
 #' 
 #' @param x A SparkSQL DataFrame
 #' 
@@ -105,13 +104,13 @@ setMethod("schema",
 #' dtypes(df)
 #'}
 
-setGeneric("dtypes", function(x) {standardGeneric("dtypes") })
+setGeneric("dtypes", function(x) { standardGeneric("dtypes") })
 
 setMethod("dtypes",
           signature(x = "DataFrame"),
           function(x) {
-            lapply(schema(x)$fields, function(f) {
-              field <- c(f$name, f$dataType.simpleString)
+            lapply(schema(x)$fields(), function(f) {
+              c(f$name(), f$dataType.simpleString())
             })
           })
 
@@ -136,8 +135,8 @@ setGeneric("columns", function(x) {standardGeneric("columns") })
 setMethod("columns",
           signature(x = "DataFrame"),
           function(x) {
-            sapply(schema(x)$fields, function(f) {
-              f$name
+            sapply(schema(x)$fields(), function(f) {
+              f$name()
             })
           })
 
@@ -173,8 +172,7 @@ setGeneric("registerTempTable", function(x, tableName) { standardGeneric("regist
 setMethod("registerTempTable",
           signature(x = "DataFrame", tableName = "character"),
           function(x, tableName) {
-              sdf <- x@sdf
-              callJMethod(sdf, "registerTempTable", tableName)
+              callJMethod(x@sdf, "registerTempTable", tableName)
           })
 
 #' Cache
