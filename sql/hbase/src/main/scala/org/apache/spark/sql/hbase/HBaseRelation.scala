@@ -38,8 +38,8 @@ import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 class HBaseSource extends RelationProvider {
   // Returns a new HBase relation with the given parameters
   override def createRelation(
-       sqlContext: SQLContext,
-       parameters: Map[String, String]): BaseRelation = {
+                               sqlContext: SQLContext,
+                               parameters: Map[String, String]): BaseRelation = {
     val catalog = sqlContext.catalog.asInstanceOf[HBaseCatalog]
 
     val tableName = parameters("tableName")
@@ -84,12 +84,12 @@ class HBaseSource extends RelationProvider {
  * @param allColumns schema
  * @param context HBaseSQLContext
  */
-@SerialVersionUID(1529873946227428789L)
+@SerialVersionUID(15298736227428789L)
 private[hbase] case class HBaseRelation(
-     tableName: String,
-     hbaseNamespace: String,
-     hbaseTableName: String,
-     allColumns: Seq[AbstractColumn])(@transient var context: SQLContext)
+  tableName: String,
+  hbaseNamespace: String,
+  hbaseTableName: String,
+  allColumns: Seq[AbstractColumn])(@transient var context: SQLContext)
   extends CatalystScan with Serializable {
 
   @transient lazy val logger = Logger.getLogger(getClass.getName)
@@ -166,6 +166,12 @@ private[hbase] case class HBaseRelation(
   // find the index in a sequence of AttributeReferences that is a key; -1 if not present
   def rowIndex(refs: Seq[Attribute], keyIndex: Int): Int = {
     refs.indexWhere(_.exprId == partitionKeys(keyIndex).exprId)
+  }
+
+  def flushHTable() = {
+    if (htable_ != null) {
+      htable_.flushCommits()
+    }
   }
 
   def closeHTable() = {
@@ -273,8 +279,8 @@ private[hbase] case class HBaseRelation(
   }
 
   def buildFilter(
-       projList: Seq[NamedExpression],
-       pred: Option[Expression]): (Option[FilterList], Option[Expression]) = {
+                   projList: Seq[NamedExpression],
+                   pred: Option[Expression]): (Option[FilterList], Option[Expression]) = {
     var distinctProjList = projList.distinct
     if (pred.isDefined) {
       distinctProjList = distinctProjList.filterNot(_.references.subsetOf(pred.get.references))
@@ -622,7 +628,7 @@ private[hbase] case class HBaseRelation(
    * @param rawKey the HBase row key
    * @return A sequence of column values from the row Key
    */
-  def nativeKeysConvert(rawKey: Option[HBaseRawType]): Seq[Any] = {
+  def nativeKeyConvert(rawKey: Option[HBaseRawType]): Seq[Any] = {
     if (rawKey.isEmpty) Nil
     else {
       HBaseKVHelper.decodingRawKeyColumns(rawKey.get, keyColumns).
@@ -630,4 +636,64 @@ private[hbase] case class HBaseRelation(
         pi._1._1, pi._1._2, keyColumns(pi._2).dataType))
     }
   }
+
+  def getFinalKey(rawKey: Option[HBaseRawType]): HBaseRawType = {
+    val origRowKey: HBaseRawType = rawKey.get
+
+    def getFinalRowKey(rowIndex: Int, curKeyIndex: Int)
+    : HBaseRawType = {
+      if (curKeyIndex >= keyColumns.length) origRowKey
+      else {
+        val typeOfKey = keyColumns(curKeyIndex)
+        if (typeOfKey.dataType == StringType) {
+          val indexOfStringEnd = origRowKey.indexOf(0x00, rowIndex)
+          if (indexOfStringEnd == -1) {
+            val delta: Array[Byte] = if ((origRowKey.length - rowIndex) % 2 == 0) {
+              new Array[Byte](1 + getMinimum(curKeyIndex + 1))
+            } else {
+              new Array[Byte](2 + getMinimum(curKeyIndex + 1))
+            }
+            origRowKey ++ delta
+          } else {
+            getFinalRowKey(indexOfStringEnd + 1, curKeyIndex + 1)
+          }
+        } else {
+          val nextRowIndex = rowIndex +
+            typeOfKey.dataType.asInstanceOf[NativeType].defaultSize
+          if (nextRowIndex <= origRowKey.length) {
+            getFinalRowKey(nextRowIndex, curKeyIndex + 1)
+          } else {
+            val delta: Array[Byte] = {
+              new Array[Byte](nextRowIndex - origRowKey.length + getMinimum(curKeyIndex + 1))
+            }
+            origRowKey ++ delta
+          }
+        }
+      }
+    }
+
+    def getMinimum(startKeyIndex: Int): Int = {
+      keyColumns.drop(startKeyIndex).map(k => {
+        k.dataType match {
+          case StringType => 1
+          case _ => k.dataType.asInstanceOf[NativeType].defaultSize
+        }
+      }
+      ).sum
+    }
+
+    getFinalRowKey(0, 0)
+  }
+
+  def nativeKeyConvertPartition(rawKey: Option[HBaseRawType]): Seq[Any] = {
+    if (rawKey.isEmpty) Nil
+    else {
+      val finalRowKey = getFinalKey(rawKey)
+
+      HBaseKVHelper.decodingRawKeyColumns(finalRowKey, keyColumns).
+        zipWithIndex.map(pi => DataTypeUtils.bytesToData(finalRowKey,
+        pi._1._1, pi._1._2, keyColumns(pi._2).dataType))
+    }
+  }
 }
+

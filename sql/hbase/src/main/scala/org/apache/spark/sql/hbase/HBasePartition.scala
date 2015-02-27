@@ -23,21 +23,22 @@ import org.apache.spark.sql.hbase.types.{HBaseBytesType, PartitionRange, Range}
 
 
 private[hbase] class HBasePartition(
-    val idx: Int, val mappedIndex: Int,
-    start: Option[HBaseRawType] = None,
-    end: Option[HBaseRawType] = None,
-    val server: Option[String] = None,
-    val filterPredicates: Option[Expression] = None,
-    @transient relation: HBaseRelation = null) extends Range[HBaseRawType](start, true,
-               end, false, HBaseBytesType) with Partition with IndexMappable with Logging {
+                                     val idx: Int, val mappedIndex: Int,
+                                     start: Option[HBaseRawType] = None,
+                                     end: Option[HBaseRawType] = None,
+                                     val server: Option[String] = None,
+                                     val filterPredicates: Option[Expression] = None,
+                                     @transient relation: HBaseRelation = null)
+  extends Range[HBaseRawType](start, true, end, false, HBaseBytesType)
+  with Partition with IndexMappable with Logging {
 
   override def index: Int = idx
 
   override def hashCode(): Int = idx
 
-  @transient lazy val startNative: Seq[Any] = relation.nativeKeysConvert(start)
+  @transient lazy val startNative: Seq[Any] = relation.nativeKeyConvertPartition(start)
 
-  @transient lazy val endNative: Seq[Any] = relation.nativeKeysConvert(end)
+  @transient lazy val endNative: Seq[Any] = relation.nativeKeyConvertPartition(end)
 
   def computePredicate(relation: HBaseRelation): Option[Expression] = {
     val predicate = if (filterPredicates.isDefined &&
