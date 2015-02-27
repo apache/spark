@@ -97,6 +97,7 @@ val MSE = ratesAndPreds.map { case ((user, product), (r1, r2)) =>
 }.mean()
 println("Mean Squared Error = " + MSE)
 
+// Save and load model
 model.save(sc, "myModelPath")
 val sameModel = MatrixFactorizationModel.load(sc, "myModelPath")
 {% endhighlight %}
@@ -186,6 +187,7 @@ public class CollaborativeFiltering {
     ).rdd()).mean();
     System.out.println("Mean Squared Error = " + MSE);
 
+    // Save and load model
     model.save(sc.sc(), "myModelPath");
     MatrixFactorizationModel sameModel = MatrixFactorizationModel.load(sc.sc(), "myModelPath");
   }

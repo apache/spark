@@ -223,6 +223,7 @@ val auROC = metrics.areaUnderROC()
 
 println("Area under ROC = " + auROC)
 
+// Save and load model
 model.save(sc, "myModelPath")
 val sameModel = SVMModel.load(sc, "myModelPath")
 {% endhighlight %}
@@ -308,6 +309,7 @@ public class SVMClassifier {
     
     System.out.println("Area under ROC = " + auROC);
 
+    // Save and load model
     model.save(sc.sc(), "myModelPath");
     SVMModel sameModel = SVMModel.load(sc.sc(), "myModelPath");
   }
@@ -423,6 +425,7 @@ val valuesAndPreds = parsedData.map { point =>
 val MSE = valuesAndPreds.map{case(v, p) => math.pow((v - p), 2)}.mean()
 println("training Mean Squared Error = " + MSE)
 
+// Save and load model
 model.save(sc, "myModelPath")
 val sameModel = LinearRegressionModel.load(sc, "myModelPath")
 {% endhighlight %}
@@ -496,6 +499,7 @@ public class LinearRegression {
     ).rdd()).mean();
     System.out.println("training Mean Squared Error = " + MSE);
 
+    // Save and load model
     model.save(sc.sc(), "myModelPath");
     LinearRegressionModel sameModel = LinearRegressionModel.load(sc.sc(), "myModelPath");
   }

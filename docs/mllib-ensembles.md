@@ -129,6 +129,7 @@ val testErr = labelAndPreds.filter(r => r._1 != r._2).count.toDouble / testData.
 println("Test Error = " + testErr)
 println("Learned classification forest model:\n" + model.toDebugString)
 
+// Save and load model
 model.save(sc, "myModelPath")
 val sameModel = RandomForestModel.load(sc, "myModelPath")
 {% endhighlight %}
@@ -193,6 +194,7 @@ Double testErr =
 System.out.println("Test Error: " + testErr);
 System.out.println("Learned classification forest model:\n" + model.toDebugString());
 
+// Save and load model
 model.save(sc.sc(), "myModelPath");
 RandomForestModel sameModel = RandomForestModel.load(sc.sc(), "myModelPath");
 {% endhighlight %}
@@ -276,6 +278,7 @@ val testMSE = labelsAndPredictions.map{ case(v, p) => math.pow((v - p), 2)}.mean
 println("Test Mean Squared Error = " + testMSE)
 println("Learned regression forest model:\n" + model.toDebugString)
 
+// Save and load model
 model.save(sc, "myModelPath")
 val sameModel = RandomForestModel.load(sc, "myModelPath")
 {% endhighlight %}
@@ -343,6 +346,7 @@ Double testMSE =
 System.out.println("Test Mean Squared Error: " + testMSE);
 System.out.println("Learned regression forest model:\n" + model.toDebugString());
 
+// Save and load model
 model.save(sc.sc(), "myModelPath");
 RandomForestModel sameModel = RandomForestModel.load(sc.sc(), "myModelPath");
 {% endhighlight %}
@@ -504,6 +508,7 @@ val testErr = labelAndPreds.filter(r => r._1 != r._2).count.toDouble / testData.
 println("Test Error = " + testErr)
 println("Learned classification GBT model:\n" + model.toDebugString)
 
+// Save and load model
 model.save(sc, "myModelPath")
 val sameModel = GradientBoostedTreesModel.load(sc, "myModelPath")
 {% endhighlight %}
@@ -568,6 +573,7 @@ Double testErr =
 System.out.println("Test Error: " + testErr);
 System.out.println("Learned classification GBT model:\n" + model.toDebugString());
 
+// Save and load model
 model.save(sc.sc(), "myModelPath");
 GradientBoostedTreesModel sameModel = GradientBoostedTreesModel.load(sc.sc(), "myModelPath");
 {% endhighlight %}
@@ -647,6 +653,7 @@ val testMSE = labelsAndPredictions.map{ case(v, p) => math.pow((v - p), 2)}.mean
 println("Test Mean Squared Error = " + testMSE)
 println("Learned regression GBT model:\n" + model.toDebugString)
 
+// Save and load model
 model.save(sc, "myModelPath")
 val sameModel = GradientBoostedTreesModel.load(sc, "myModelPath")
 {% endhighlight %}
@@ -717,6 +724,7 @@ Double testMSE =
 System.out.println("Test Mean Squared Error: " + testMSE);
 System.out.println("Learned regression GBT model:\n" + model.toDebugString());
 
+// Save and load model
 model.save(sc.sc(), "myModelPath");
 GradientBoostedTreesModel sameModel = GradientBoostedTreesModel.load(sc.sc(), "myModelPath");
 {% endhighlight %}

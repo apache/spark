@@ -223,6 +223,7 @@ val testErr = labelAndPreds.filter(r => r._1 != r._2).count.toDouble / testData.
 println("Test Error = " + testErr)
 println("Learned classification tree model:\n" + model.toDebugString)
 
+// Save and load model
 model.save(sc, "myModelPath")
 val sameModel = DecisionTreeModel.load(sc, "myModelPath")
 {% endhighlight %}
@@ -284,6 +285,7 @@ Double testErr =
 System.out.println("Test Error: " + testErr);
 System.out.println("Learned classification tree model:\n" + model.toDebugString());
 
+// Save and load model
 model.save(sc.sc(), "myModelPath");
 DecisionTreeModel sameModel = DecisionTreeModel.load(sc.sc(), "myModelPath");
 {% endhighlight %}
@@ -362,6 +364,7 @@ val testMSE = labelsAndPredictions.map{ case(v, p) => math.pow((v - p), 2)}.mean
 println("Test Mean Squared Error = " + testMSE)
 println("Learned regression tree model:\n" + model.toDebugString)
 
+// Save and load model
 model.save(sc, "myModelPath")
 val sameModel = DecisionTreeModel.load(sc, "myModelPath")
 {% endhighlight %}
@@ -429,6 +432,7 @@ Double testMSE =
 System.out.println("Test Mean Squared Error: " + testMSE);
 System.out.println("Learned regression tree model:\n" + model.toDebugString());
 
+// Save and load model
 model.save(sc.sc(), "myModelPath");
 DecisionTreeModel sameModel = DecisionTreeModel.load(sc.sc(), "myModelPath");
 {% endhighlight %}
