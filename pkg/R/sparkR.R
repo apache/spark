@@ -119,30 +119,38 @@ sparkR.init <- function(
   if (sparkRExistingPort != "") {
     sparkRBackendPort <- sparkRExistingPort
   } else {
-    # TODO: test the random port and retry, or use httpuv:::startServer
-    callbackPort = sample(40000, 1) + 10000
+    path <- tempfile(pattern = "backend_port")
     if (Sys.getenv("SPARKR_USE_SPARK_SUBMIT", "") == "") {
       launchBackend(classPath = cp,
                     mainClass = "edu.berkeley.cs.amplab.sparkr.SparkRBackend",
-                    args = as.character(callbackPort),
+                    args = path,
                     javaOpts = paste("-Xmx", sparkMem, sep = ""))
     } else {
       # TODO: We should deprecate sparkJars and ask users to add it to the
       # command line (using --jars) which is picked up by SparkSubmit
       launchBackendSparkSubmit(
           mainClass = "edu.berkeley.cs.amplab.sparkr.SparkRBackend",
-          args = as.character(callbackPort),
+          args = path,
           appJar = .sparkREnv$assemblyJarPath,
           sparkHome = sparkHome,
           sparkSubmitOpts = Sys.getenv("SPARKR_SUBMIT_ARGS", ""))
     }
-    sock <- socketConnection(port = callbackPort, server = TRUE, open = 'rb',
-        blocking = TRUE, timeout = 10)
-    sparkRBackendPort <- readInt(sock)
+    for (i in 1:100) {
+      if (file.exists(path)) {
+        break
+      }
+      Sys.sleep(0.1)
+    }
+    if (!file.exists(path)) {
+      stop("JVM is not ready after 10 seconds")
+    }
+    f <- file(path, open='rb')
+    sparkRBackendPort <- readInt(f)
+    close(f)
+    file.remove(path)
     if (length(sparkRBackendPort) == 0) {
       stop("JVM failed to launch")
     }
-    close(sock)
   }
 
   .sparkREnv$sparkRBackendPort <- sparkRBackendPort

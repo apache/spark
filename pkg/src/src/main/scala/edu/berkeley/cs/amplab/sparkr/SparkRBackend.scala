@@ -1,6 +1,6 @@
 package edu.berkeley.cs.amplab.sparkr
 
-import java.io.{DataOutputStream, IOException}
+import java.io.{File, FileOutputStream, DataOutputStream, IOException}
 import java.net.{InetSocketAddress, Socket}
 import java.util.concurrent.TimeUnit
 
@@ -78,20 +78,22 @@ class SparkRBackend {
 object SparkRBackend {
   def main(args: Array[String]) {
     if (args.length < 1) {
-      System.err.println("Usage: SparkRBackend <port>")
+      System.err.println("Usage: SparkRBackend <path>")
       System.exit(-1)
     }
     val sparkRBackend = new SparkRBackend()
     try {
       // bind to random port
       val boundPort = sparkRBackend.init()
-      val callbackPort = args(0).toInt
-      val callbackSocket = new Socket("localhost", callbackPort)
-      val dos = new DataOutputStream(callbackSocket.getOutputStream)
+      // tell the R process via temporary file
+      val path = args(0)
+      val f = new File(path + ".tmp")
+      val output = new FileOutputStream(f)
+      val dos = new DataOutputStream(output)
       dos.writeInt(boundPort)
       dos.close()
-      callbackSocket.close()
-
+      output.close()
+      f.renameTo(new File(path))
       sparkRBackend.run()
     } catch {
       case e: IOException =>
