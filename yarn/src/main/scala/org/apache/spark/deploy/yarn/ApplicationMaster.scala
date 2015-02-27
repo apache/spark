@@ -68,8 +68,8 @@ private[spark] class ApplicationMaster(
   @volatile private var finalMsg: String = ""
   @volatile private var userClassThread: Thread = _
 
-  private var reporterThread: Thread = _
-  private var allocator: YarnAllocator = _
+  @volatile private var reporterThread: Thread = _
+  @volatile private var allocator: YarnAllocator = _
 
   // Fields used in client mode.
   private var actorSystem: ActorSystem = null
