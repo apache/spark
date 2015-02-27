@@ -34,20 +34,20 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object LeftSemiJoin extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case ExtractEquiJoinKeys(LeftSemi, leftKeys, rightKeys, condition, left, right)
+      case ExtractEquiJoinKeys(jt: LeftSemiType, leftKeys, rightKeys, condition, left, right)
         if sqlContext.conf.autoBroadcastJoinThreshold > 0 &&
           right.statistics.sizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold =>
         val semiJoin = joins.BroadcastLeftSemiJoinHash(
-          leftKeys, rightKeys, planLater(left), planLater(right))
+          leftKeys, rightKeys, planLater(left), planLater(right), jt)
         condition.map(Filter(_, semiJoin)).getOrElse(semiJoin) :: Nil
       // Find left semi joins where at least some predicates can be evaluated by matching join keys
-      case ExtractEquiJoinKeys(LeftSemi, leftKeys, rightKeys, condition, left, right) =>
+      case ExtractEquiJoinKeys(jt: LeftSemiType, leftKeys, rightKeys, condition, left, right) =>
         val semiJoin = joins.LeftSemiJoinHash(
-          leftKeys, rightKeys, planLater(left), planLater(right))
+          leftKeys, rightKeys, planLater(left), planLater(right), jt)
         condition.map(Filter(_, semiJoin)).getOrElse(semiJoin) :: Nil
       // no predicate can be evaluated by matching hash keys
-      case logical.Join(left, right, LeftSemi, condition) =>
-        joins.LeftSemiJoinBNL(planLater(left), planLater(right), condition) :: Nil
+      case logical.Join(left, right, jt: LeftSemiType, condition) =>
+        joins.LeftSemiJoinBNL(planLater(left), planLater(right), condition, jt) :: Nil
       case _ => Nil
     }
   }

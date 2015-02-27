@@ -993,5 +993,5 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "view",
     "view_cast",
     "view_inputs"
-  )
+  ) ++ HiveShim.compatibilityWhiteList
 }

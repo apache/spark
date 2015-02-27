@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.plans.{LeftSemiExist, LeftSemiNotExist}
 import org.apache.spark.util.collection.OpenHashSet
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -59,6 +59,7 @@ class Analyzer(
       ResolveReferences ::
       ResolveGroupingAnalytics ::
       ResolveSortReferences ::
+      RewriteWhereClause ::
       ImplicitGenerate ::
       ResolveFunctions ::
       GlobalAggregates ::
@@ -199,6 +200,24 @@ class Analyzer(
         case u: UnresolvedRelation =>
           getTable(u, cteRelations)
       }
+    }
+  }
+
+  /**
+   * Rewrite the [[Exists]] with left semi join
+   * TODO add support for IN / NOT IN subquery
+   */
+  object RewriteWhereClause extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+      case e @ Exists(left, Project(_, Filter(condition, right)), true) =>
+          Join(left, right, LeftSemiExist, Some(condition))
+
+      case e @ Exists(left, Project(_, Filter(condition, right)), false) =>
+          Join(left, right, LeftSemiNotExist, Some(condition))
+
+      case e @ Exists(left, right, exist) =>
+        throw new AnalysisException(
+          s"[${right}] should contain WHERE clause")
     }
   }
 

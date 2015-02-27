@@ -641,10 +641,26 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           case Some(f) => nodeToRelation(f)
           case None => OneRowRelation
         }
- 
+
+        val not = "(?i)not".r
+        val exists = "(?i)exists".r
+
         val withWhere = whereClause.map { whereNode =>
-          val Seq(whereExpr) = whereNode.getChildren.toSeq
-          Filter(nodeToExpr(whereExpr), relations)
+          val Seq(clause) = whereNode.getChildren.toSeq
+          clause match {
+            case Token(not(),
+                   Token("TOK_SUBQUERY_EXPR",
+                     Token("TOK_SUBQUERY_OP", Token(exists(), Nil) :: Nil) ::
+                     subquery :: Nil) :: Nil) =>
+              Exists(relations, nodeToPlan(subquery), false)
+            case Token("TOK_SUBQUERY_EXPR",
+                   Token("TOK_SUBQUERY_OP", Token(exists(), Nil) :: Nil) ::
+                   subquery :: Nil) =>
+              Exists(relations, nodeToPlan(subquery), true)
+            // TODO add IN and NOT IN
+            case whereExpr =>
+              Filter(nodeToExpr(whereExpr), relations)
+          }
         }.getOrElse(relations)
 
         val select =
