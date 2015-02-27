@@ -253,6 +253,96 @@ setMethod("unpersist",
             x
           })
 
+#' Repartition
+#'
+#' Return a new DataFrame that has exactly numPartitions partitions.
+#'
+#' @param x A SparkSQL DataFrame
+#' @param numPartitions The number of partitions to use.
+#' @rdname repartition
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' newDF <- repartition(df, 2L)
+#'}
+
+setGeneric("repartition", function(x, numPartitions) { standardGeneric("repartition") })
+
+#' @rdname repartition
+#' @export
+setMethod("repartition",
+          signature(x = "DataFrame", numPartitions = "integer"),
+          function(x, numPartitions) {
+            sdf <- callJMethod(x@sdf, "repartition", as.integer(numPartitions))
+            dataFrame(sdf)     
+            })
+
+#' Distinct
+#'
+#' Return a new DataFrame containing the distinct rows in this DataFrame.
+#'
+#' @param x A SparkSQL DataFrame
+#' @rdname distinct
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' distinctDF <- distinct(df)
+#'}
+
+setMethod("distinct",
+          signature(x = "DataFrame"),
+          function(x) {
+            sdf <- callJMethod(x@sdf, "distinct")
+            dataFrame(sdf)
+            })
+
+#' SampleDF
+#'
+#' Return a sampled subset of this DataFrame using a random seed.
+#'
+#' @param x A SparkSQL DataFrame
+#' @param withReplacement Sampling with replacement or not
+#' @param fraction The (rough) sample target fraction
+#' @param seed Randomness seed value
+#' @rdname sampleDF
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' collect(sampleRDD(rdd, FALSE, 0.5, 1618L)) 
+#' collect(sampleRDD(rdd, TRUE, 0.5, 9L))
+#'}
+
+setGeneric("sampleDF",
+           function(x, withReplacement, fraction, seed) {
+             standardGeneric("sampleDF")
+          })
+
+#' @rdname sampleDF
+#' @export
+
+setMethod("sampleDF",
+          # TODO : Figure out how to send integer as java.lang.Long to JVM so
+          # we can send seed as an argument through callJMethod
+          signature(x = "DataFrame", withReplacement = "logical",
+                      fraction = "numeric"),
+          function(x, withReplacement, fraction) {
+            if (fraction < 0.0) stop(cat("Negative fraction value:", fraction))
+            sdf <- callJMethod(x@sdf, "sample", withReplacement, fraction)
+            dataFrame(sdf)
+          })
+
 #' Count
 #' 
 #' Returns the number of rows in a DataFrame
