@@ -351,7 +351,8 @@ processClosure <- function(node, oldEnv, argNames, newEnv) {
         # attached package environments.
         if (exists(nodeChar, envir=func.env, inherits = FALSE)) {
           obj <- get(nodeChar, envir=func.env)
-          if (is.function(obj)) {
+          if (is.function(obj)) {  
+            # if the node is a function call, recursively clean its closure.
             obj <- cleanClosure(obj)
           }
           assign(nodeChar, obj, envir = newEnv)
@@ -373,7 +374,7 @@ processClosure <- function(node, oldEnv, argNames, newEnv) {
 # return value
 #   a new function that has an correct environment (closure).
 cleanClosure <- function(func) {
-  if (is.function(func) {
+  if (is.function(func)) {
     newEnv <- new.env(parent = .GlobalEnv)
     # .defVars is a character vector of variables names defined in the function.
     assign(".defVars", c(), envir = .sparkREnv)
