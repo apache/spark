@@ -468,6 +468,7 @@ private[spark] object Utils extends Logging {
       in: InputStream,
       destFile: File,
       fileOverwrite: Boolean): Unit = {
+    logDebug(s"Creating temp file in ${destFile.getParentFile.getAbsolutePath}")
     val tempFile = File.createTempFile("fetchFileTemp", null,
       new File(destFile.getParentFile.getAbsolutePath))
     logInfo(s"Fetching $url to $tempFile")

@@ -28,7 +28,7 @@ import org.scalatest.FunSuite
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
 import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, RecoveryState, WorkerInfo}
 import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
-import org.apache.spark.SparkConf
+import org.apache.spark.{SecurityManager, SparkConf}
 
 class JsonProtocolSuite extends FunSuite {
 
@@ -124,8 +124,9 @@ class JsonProtocolSuite extends FunSuite {
   }
 
   def createDriverRunner(): DriverRunner = {
-    new DriverRunner(new SparkConf(), "driverId", new File("workDir"), new File("sparkHome"),
-      createDriverDesc(), null, "akka://worker")
+    val conf = new SparkConf()
+    new DriverRunner(conf, "driverId", new File("workDir"), new File("sparkHome"),
+      createDriverDesc(), null, "akka://worker", new SecurityManager(conf))
   }
 
   def assertValidJson(json: JValue) {
