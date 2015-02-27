@@ -144,41 +144,7 @@ denoted by $\x$, the model makes predictions based on the value of $\wv^T \x$.
 By the default, if $\wv^T \x \geq 0$ then the outcome is positive, and negative
 otherwise.
 
-### Logistic regression
-
-[Logistic regression](http://en.wikipedia.org/wiki/Logistic_regression) is widely used to predict a
-binary response. 
-It is a linear method as described above in equation `$\eqref{eq:regPrimal}$`, with the loss
-function in the formulation given by the logistic loss:
-`\[
-L(\wv;\x,y) :=  \log(1+\exp( -y \wv^T \x)).
-\]`
-
-The logistic regression algorithm outputs a logistic regression model.  Given a
-new data point, denoted by $\x$, the model makes predictions by
-applying the logistic function
-`\[
-\mathrm{f}(z) = \frac{1}{1 + e^{-z}}
-\]`
-where $z = \wv^T \x$.
-By default, if $\mathrm{f}(\wv^T x) > 0.5$, the outcome is positive, or
-negative otherwise, though unlike linear SVMs, the raw output of the logistic regression
-model, $\mathrm{f}(z)$, has a probabilistic interpretation (i.e., the probability
-that $\x$ is positive).
-
-### Evaluation metrics
-
-MLlib supports common evaluation metrics for binary classification (not available in PySpark). 
-This
-includes precision, recall, [F-measure](http://en.wikipedia.org/wiki/F1_score),
-[receiver operating characteristic (ROC)](http://en.wikipedia.org/wiki/Receiver_operating_characteristic),
-precision-recall curve, and
-[area under the curves (AUC)](http://en.wikipedia.org/wiki/Receiver_operating_characteristic#Area_under_the_curve).
-AUC is commonly used to compare the performance of various models while
-precision/recall/F-measure can help determine the appropriate threshold to use
-for prediction purposes. 
-
-### Examples
+#### Examples
 
 <div class="codetabs">
 
@@ -211,7 +177,7 @@ val model = SVMWithSGD.train(training, numIterations)
 // Clear the default threshold.
 model.clearThreshold()
 
-// Compute raw scores on the test set. 
+// Compute raw scores on the test set.
 val scoreAndLabels = test.map { point =>
   val score = model.predict(point.features)
   (score, point.label)
@@ -283,11 +249,11 @@ public class SVMClassifier {
     JavaRDD<LabeledPoint> training = data.sample(false, 0.6, 11L);
     training.cache();
     JavaRDD<LabeledPoint> test = data.subtract(training);
-    
+
     // Run training algorithm to build the model.
     int numIterations = 100;
     final SVMModel model = SVMWithSGD.train(training.rdd(), numIterations);
-    
+
     // Clear the default threshold.
     model.clearThreshold();
 
@@ -300,12 +266,12 @@ public class SVMClassifier {
         }
       }
     );
-    
+
     // Get evaluation metrics.
-    BinaryClassificationMetrics metrics = 
+    BinaryClassificationMetrics metrics =
       new BinaryClassificationMetrics(JavaRDD.toRDD(scoreAndLabels));
     double auROC = metrics.areaUnderROC();
-    
+
     System.out.println("Area under ROC = " + auROC);
 
     model.save("myModelPath");
@@ -369,6 +335,59 @@ print("Training Error = " + str(trainErr))
 {% endhighlight %}
 </div>
 </div>
+
+### Logistic regression
+
+[Logistic regression](http://en.wikipedia.org/wiki/Logistic_regression) is widely used to predict a
+binary response. It is a linear method as described above in equation `$\eqref{eq:regPrimal}$`,
+with the loss function in the formulation given by the logistic loss:
+`\[
+L(\wv;\x,y) :=  \log(1+\exp( -y \wv^T \x)).
+\]`
+
+Binary logistic regression can be generalized into multinomial logistic regression to
+train and predict multi-class classification problems. For example, for $K$ possible outcomes,
+one of the outcomes can be chosen as a "pivot", and the other $K - 1$ outcomes can be separately
+regressed against the pivot outcome. In mllib, the first class, $0$ is chosen as "pivot" class.
+See $Eq.~(4.17)$ and $Eq.~(4.18)$ on page 119 of
+[The Elements of Statistical Learning: Data Mining, Inference, and Prediction, 2nd Edition]
+(http://statweb.stanford.edu/~tibs/ElemStatLearn/printings/ESLII_print10.pdf) by
+Trevor Hastie, Robert Tibshirani, and Jerome Friedman, and
+[Multinomial logistic regression](http://en.wikipedia.org/wiki/Multinomial_logistic_regression)
+for references. Here is [the detailed mathematical derivation]
+(http://www.slideshare.net/dbtsai/2014-0620-mlor-36132297).
+
+For binary classification problems, the algorithm outputs a binary logistic regression model.
+Given a new data point, denoted by $\x$, the model makes predictions by
+applying the logistic function
+`\[
+\mathrm{f}(z) = \frac{1}{1 + e^{-z}}
+\]`
+where $z = \wv^T \x$.
+By default, if $\mathrm{f}(\wv^T x) > 0.5$, the outcome is positive, or
+negative otherwise, though unlike linear SVMs, the raw output of the logistic regression
+model, $\mathrm{f}(z)$, has a probabilistic interpretation (i.e., the probability
+that $\x$ is positive).
+
+For multi-class classification problems, the algorithm will outputs $K - 1$ binary
+logistic regression models regressed against the first class, $0$ as "pivot" outcome.
+Given a new data points, $K - 1$ models will be run, and the probabilities will be
+normalized into $1.0$. The class with largest probability will be chosen as output.
+
+#### Examples
+
+
+### Evaluation metrics
+
+MLlib supports common evaluation metrics for binary classification (not available in PySpark). 
+This
+includes precision, recall, [F-measure](http://en.wikipedia.org/wiki/F1_score),
+[receiver operating characteristic (ROC)](http://en.wikipedia.org/wiki/Receiver_operating_characteristic),
+precision-recall curve, and
+[area under the curves (AUC)](http://en.wikipedia.org/wiki/Receiver_operating_characteristic#Area_under_the_curve).
+AUC is commonly used to compare the performance of various models while
+precision/recall/F-measure can help determine the appropriate threshold to use
+for prediction purposes. 
 
 ## Linear least squares, Lasso, and ridge regression
 
