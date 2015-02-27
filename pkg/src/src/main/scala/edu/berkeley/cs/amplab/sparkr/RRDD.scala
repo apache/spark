@@ -30,6 +30,10 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
 
   override def compute(split: Partition, context: TaskContext): Iterator[U] = {
 
+    // The parent may be also an RRDD, so we should launch it first.
+    val parentIterator = firstParent[T].iterator(split, context)
+
+    // we expect two connections
     val serverSocket = new ServerSocket(0, 2)
     val listenPort = serverSocket.getLocalPort()
 
@@ -38,14 +42,13 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
     val proc = pb.start()
     val errThread =  startStdoutThread(proc)
 
-    // We use two socket ot separate input and output, then it's easy to manage
+    // We use two sockets to separate input and output, then it's easy to manage
     // the lifecycle of them to avoid deadlock.
     // TODO: optimize it to use one socket
 
     // the socket used to send out the input of task
     serverSocket.setSoTimeout(10000)
     val inSocket = serverSocket.accept()
-    val parentIterator = firstParent[T].iterator(split, context)
     startStdinThread(inSocket.getOutputStream(), parentIterator, split.index)
 
     // the socket used to receive the output of task
@@ -164,18 +167,15 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
             dataOut.writeInt(1)
           }
 
-          if (parentSerialized) {
-            for (elem <- iter) {
+          for (elem <- iter) {
+            if (parentSerialized) {
               val elemArr = elem.asInstanceOf[Array[Byte]]
               dataOut.writeInt(elemArr.length)
               dataOut.write(elemArr, 0, elemArr.length)
-            }
-          } else {
-            for (elem <- iter) {
+            } else {
               printOut.println(elem)
             }
           }
-
           stream.flush()
         } catch {
           // TODO: We should propogate this error to the task thread
