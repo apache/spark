@@ -120,7 +120,8 @@ case class InsertIntoTable(
   override def output = child.output
 
   override lazy val resolved = childrenResolved && child.output.zip(table.output).forall {
-    case (childAttr, tableAttr) => childAttr.dataType == tableAttr.dataType
+    case (childAttr, tableAttr) =>
+      DataType.equalsIgnoreCompatibleNullability(childAttr.dataType, tableAttr.dataType)
   }
 }
 
