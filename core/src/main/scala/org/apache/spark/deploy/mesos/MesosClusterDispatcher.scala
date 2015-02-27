@@ -185,6 +185,7 @@ private [spark] class MesosClusterDispatcher(
     }
 
     case DriverStateChanged(driverId, state, exception) => {
+      logDriverChange(driverId, state, exception)
       state match {
         case DriverState.ERROR | DriverState.FINISHED | DriverState.KILLED | DriverState.FAILED =>
           removeDriver(driverId, state, exception)
@@ -195,6 +196,21 @@ private [spark] class MesosClusterDispatcher(
 
     case RequestDispatcherState => {
       sender ! DispatcherStateResponse(drivers.values, completedDrivers)
+    }
+  }
+
+  def logDriverChange(driverId: String, state: DriverState, exception: Option[Exception]) {
+    state match {
+      case DriverState.ERROR =>
+        logWarning(s"Driver $driverId failed with unrecoverable exception: ${exception.get}")
+      case DriverState.FAILED =>
+        logWarning(s"Driver $driverId exited with failure")
+      case DriverState.FINISHED =>
+        logInfo(s"Driver $driverId exited successfully")
+      case DriverState.KILLED =>
+        logInfo(s"Driver $driverId was killed by user")
+      case _ =>
+        logDebug(s"Driver $driverId changed state to $state")
     }
   }
 

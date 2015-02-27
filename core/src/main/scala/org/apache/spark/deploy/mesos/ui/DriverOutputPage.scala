@@ -31,45 +31,51 @@ class DriverOutputPage(parent: MesosClusterUI) extends WebUIPage("") {
   def render(request: HttpServletRequest): Seq[Node] = {
     val stateFuture = (dispatcher ? RequestDispatcherState)(timeout).mapTo[DispatcherStateResponse]
     val state = Await.result(stateFuture, timeout)
+
+    val driverHeaders = Seq("DriverID", "Submit Date", "Start Date", "Logs")
+    val completedDriverHeaders = driverHeaders ++ Seq("State", "Exception")
+    val driverTable = UIUtils.listingTable(driverHeaders, driverRow, state.activeDrivers)
+    val completedDriverTable =
+      UIUtils.listingTable(completedDriverHeaders, completedDriverRow, state.completedDrivers)
     val content =
       <div class="row-fluid">
         <div class="span12">
-          <h3>Active drivers</h3>
-          {state.activeDrivers.map(d => driverContent(d)).flatten}
-          <h3>Completed drivers</h3>
-          {state.completedDrivers.map(d => completedDriverContent(d)).flatten}
+          <h4>Running Drivers</h4>
+          {driverTable}
+          <h4>Finished Drivers</h4>
+          {completedDriverTable}
         </div>
       </div>;
     UIUtils.basicSparkPage(content, "Spark Drivers for Mesos cluster")
   }
 
-  def driverContent(info: DriverInfo): Seq[Node] = {
-    <ul class="unstyled">
-      <li><strong>ID:</strong> {info.id}</li>
-      <li><strong>Submit Date:</strong> {info.submitDate}</li>
-      <li><strong>Start Date:</strong> {info.startTime}</li>
-      <li><strong>Output:</strong>
+  def driverRow(info: DriverInfo): Seq[Node] = {
+    <tr>
+      <td>{info.id}</td>
+      <td>{info.submitDate}</td>
+      <td>{info.startTime}</td>
+      <td>
         <a href={"logPage?driverId=%s&logType=stdout"
-          .format(info.id)}>stdout</a>
+          .format(info.id)}>stdout</a>,
         <a href={"logPage?driverId=%s&logType=stderr"
           .format(info.id)}>stderr</a>
-      </li>
-    </ul>
+      </td>
+    </tr>
   }
 
-  def completedDriverContent(info: DriverInfo): Seq[Node] = {
-    <ul class="unstyled">
-      <li><strong>ID:</strong> {info.id}</li>
-      <li><strong>Submit Date:</strong> {info.submitDate}</li>
-      <li><strong>Start Date:</strong> {info.startTime}</li>
-      <li><strong>Output:</strong>
+  def completedDriverRow(info: DriverInfo): Seq[Node] = {
+    <tr>
+      <td>{info.id}</td>
+      <td>{info.submitDate}</td>
+      <td>{info.startTime}</td>
+      <td>
         <a href={"logPage?driverId=%s&logType=stdout"
-          .format(info.id)}>stdout</a>
+          .format(info.id)}>stdout</a>,
         <a href={"logPage?driverId=%s&logType=stderr"
           .format(info.id)}>stderr</a>
-      </li>
-      <li><strong>State:</strong>{info.state}</li>
-      <li><strong>Exception:</strong>{info.exception}</li>
-    </ul>
+      </td>
+      <td>{info.state}</td>
+      <td>{info.exception}</td>
+    </tr>
   }
 }
