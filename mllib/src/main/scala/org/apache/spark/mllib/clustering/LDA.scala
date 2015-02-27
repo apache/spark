@@ -233,10 +233,12 @@ class LDA private (
    */
   def run(documents: RDD[(Long, Vector)]): DistributedLDAModel = {
     val state = algorithm match {
-      case LearningAlgorithms.EM => LDA.EMLearningStateInitializer
-        .initialState(documents, k, getDocConcentration, getTopicConcentration, seed, checkpointInterval)
-      case LearningAlgorithms.Gibbs => LDA.EMLearningStateInitializer
-        .initialState(documents, k, getDocConcentration, getTopicConcentration, seed, checkpointInterval)
+      case LearningAlgorithms.EM => LDA.EMLearningStateInitializer.initialState(
+        documents, k, getDocConcentration, getTopicConcentration, seed, checkpointInterval
+      )
+      case LearningAlgorithms.Gibbs => LDA.EMLearningStateInitializer.initialState(
+        documents, k, getDocConcentration, getTopicConcentration, seed, checkpointInterval
+      )
     }
     var iter = 0
     val iterationTimes = Array.fill[Double](maxIterations)(0)
@@ -520,7 +522,9 @@ private[clustering] object LDA {
       val graph = Graph(docTermVertices, edges)
         .partitionBy(PartitionStrategy.EdgePartition1D)
 
-      val optimizer = new EMOptimizer(graph, k, vocabSize, docConcentration, topicConcentration, checkpointInterval)
+      val optimizer = new EMOptimizer(
+        graph, k, vocabSize, docConcentration, topicConcentration, checkpointInterval
+      )
       new EMLearningState(optimizer)
     }
     /**
