@@ -46,6 +46,13 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   // A mapping from thread ID to amount of memory used for unrolling a block (in bytes)
   // All accesses of this map are assumed to have manually synchronized on `accountingLock`
   private val unrollMemoryMap = mutable.HashMap[Long, Long]()
+  // Same as `unrollMemoryMap`, but for pending unroll memory as defined below.
+  // Pending unroll memory refers to the intermediate memory occupied by a thread
+  // after the unroll but before the actual putting of the block in the cache.
+  // This chunk of memory is expected to be released *as soon as* we finish
+  // caching the corresponding block as opposed to until after the task finishes.
+  // This is only used if a block is successfully unrolled in its entirety in
+  // memory (SPARK-4777).
   private val pendingUnrollMemoryMap = mutable.HashMap[Long, Long]()
 
   /**
@@ -284,13 +291,16 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       }
 
     } finally {
-      // If we return an array, the values returned will be used in tryToPut()
-      // and finally put into memoryStore.entrys, so we pending unroll memory
-      // for this thread and release it in tryToPut(). Otherwise, if we return an iterator,
-      // we release the memory claimed by this thread later on when the task finishes.
+      // If we return an array, the values returned will later be cached in `tryToPut`.
+      // In this case, we should release the memory after we cache the block there.
+      // Otherwise, if we return an iterator, we release the memory reserved here
+      // later when the task finishes.
       if (keepUnrolling) {
-        val amountToRelease = currentUnrollMemoryForThisThread - previousMemoryReserved
-        releaseUnrollMemoryForThisThread(amountToRelease, true)
+        accountingLock.synchronized {
+          val amountToRelease = currentUnrollMemoryForThisThread - previousMemoryReserved
+          releaseUnrollMemoryForThisThread(amountToRelease)
+          reservePendingUnrollMemoryForThisThread(amountToRelease)
+        }
       }
     }
   }
@@ -330,7 +340,6 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     val droppedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
 
     accountingLock.synchronized {
-      releasePendingUnrollMemoryForThisThread()
       val freeSpaceResult = ensureFreeSpace(blockId, size)
       val enoughFreeSpace = freeSpaceResult.success
       droppedBlocks ++= freeSpaceResult.droppedBlocks
@@ -356,6 +365,8 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
         val droppedBlockStatus = blockManager.dropFromMemory(blockId, data)
         droppedBlockStatus.foreach { status => droppedBlocks += ((blockId, status)) }
       }
+      // Release the unroll memory used because we no longer need the underlying Array
+      releasePendingUnrollMemoryForThisThread()
     }
     ResultWithDroppedBlocks(putSuccess, droppedBlocks)
   }
@@ -456,21 +467,25 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    * Release memory used by this thread for unrolling blocks.
    * If the amount is not specified, remove the current thread's allocation altogether.
    */
-  def releaseUnrollMemoryForThisThread(memory: Long = -1L, pending: Boolean = false): Unit = {
+  def releaseUnrollMemoryForThisThread(memory: Long = -1L): Unit = {
     val threadId = Thread.currentThread().getId
     accountingLock.synchronized {
       if (memory < 0) {
         unrollMemoryMap.remove(threadId)
       } else {
-        if (pending) {
-          pendingUnrollMemoryMap(threadId) = pendingUnrollMemoryMap.getOrElse(threadId, 0L) + memory
-        }
         unrollMemoryMap(threadId) = unrollMemoryMap.getOrElse(threadId, memory) - memory
         // If this thread claims no more unroll memory, release it completely
         if (unrollMemoryMap(threadId) <= 0) {
           unrollMemoryMap.remove(threadId)
         }
       }
+    }
+  }
+
+  def reservePendingUnrollMemoryForThisThread(memory: Long): Unit = {
+    val threadId = Thread.currentThread().getId
+    accountingLock.synchronized {
+       pendingUnrollMemoryMap(threadId) = pendingUnrollMemoryMap.getOrElse(threadId, 0L) + memory
     }
   }
 
