@@ -71,9 +71,9 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
 
     private void updateCurrentBuffer() {
         //TODO fix end condition
-        while(!currentBuffer.hasRemaining()) {
+        while(currentBuffer != null && !currentBuffer.hasRemaining()) {
             currentBufferIdx += 1;
-            currentBuffer = underlying[currentBufferIdx];
+            currentBuffer = currentBufferIdx < underlying.length ? underlying[currentBufferIdx] : null;
         }
     }
 

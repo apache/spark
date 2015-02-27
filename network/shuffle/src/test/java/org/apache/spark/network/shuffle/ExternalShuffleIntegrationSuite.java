@@ -30,6 +30,8 @@ import java.util.concurrent.TimeUnit;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import org.apache.spark.network.buffer.LargeByteBuffer;
+import org.apache.spark.network.buffer.LargeByteBufferHelper;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -284,17 +286,18 @@ public class ExternalShuffleIntegrationSuite {
     throws Exception {
     assertEquals(list0.size(), list1.size());
     for (int i = 0; i < list0.size(); i ++) {
-      assertBuffersEqual(list0.get(i), new NioManagedBuffer(ByteBuffer.wrap(list1.get(i))));
+      assertBuffersEqual(list0.get(i), new NioManagedBuffer(
+              LargeByteBufferHelper.asLargeByteBuffer(list1.get(i))));
     }
   }
 
   private void assertBuffersEqual(ManagedBuffer buffer0, ManagedBuffer buffer1) throws Exception {
-    ByteBuffer nio0 = buffer0.nioByteBuffer();
-    ByteBuffer nio1 = buffer1.nioByteBuffer();
+    LargeByteBuffer nio0 = buffer0.nioByteBuffer();
+    LargeByteBuffer nio1 = buffer1.nioByteBuffer();
 
-    int len = nio0.remaining();
+    long len = nio0.remaining();
     assertEquals(nio0.remaining(), nio1.remaining());
-    for (int i = 0; i < len; i ++) {
+    for (long i = 0; i < len; i ++) {
       assertEquals(nio0.get(), nio1.get());
     }
   }

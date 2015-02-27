@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.common.collect.Maps;
 import io.netty.buffer.Unpooled;
+import org.apache.spark.network.buffer.LargeByteBufferHelper;
 import org.junit.Test;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
@@ -48,7 +49,7 @@ public class OneForOneBlockFetcherSuite {
   @Test
   public void testFetchOne() {
     LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
-    blocks.put("shuffle_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[0])));
+    blocks.put("shuffle_0_0_0", new NioManagedBuffer(LargeByteBufferHelper.asLargeByteBuffer(new byte[0])));
 
     BlockFetchingListener listener = fetchBlocks(blocks);
 
@@ -58,8 +59,8 @@ public class OneForOneBlockFetcherSuite {
   @Test
   public void testFetchThree() {
     LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
-    blocks.put("b0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
-    blocks.put("b1", new NioManagedBuffer(ByteBuffer.wrap(new byte[23])));
+    blocks.put("b0", new NioManagedBuffer(LargeByteBufferHelper.asLargeByteBuffer(new byte[12])));
+    blocks.put("b1", new NioManagedBuffer(LargeByteBufferHelper.asLargeByteBuffer(new byte[23])));
     blocks.put("b2", new NettyManagedBuffer(Unpooled.wrappedBuffer(new byte[23])));
 
     BlockFetchingListener listener = fetchBlocks(blocks);
@@ -72,7 +73,7 @@ public class OneForOneBlockFetcherSuite {
   @Test
   public void testFailure() {
     LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
-    blocks.put("b0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
+    blocks.put("b0", new NioManagedBuffer(LargeByteBufferHelper.asLargeByteBuffer(new byte[12])));
     blocks.put("b1", null);
     blocks.put("b2", null);
 
@@ -87,9 +88,9 @@ public class OneForOneBlockFetcherSuite {
   @Test
   public void testFailureAndSuccess() {
     LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
-    blocks.put("b0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
+    blocks.put("b0", new NioManagedBuffer(LargeByteBufferHelper.asLargeByteBuffer(new byte[12])));
     blocks.put("b1", null);
-    blocks.put("b2", new NioManagedBuffer(ByteBuffer.wrap(new byte[21])));
+    blocks.put("b2", new NioManagedBuffer(LargeByteBufferHelper.asLargeByteBuffer(new byte[21])));
 
     BlockFetchingListener listener = fetchBlocks(blocks);
 
