@@ -1,6 +1,6 @@
 # DataFrame.R - DataFrame class and methods implemented in S4 OO classes
 
-#' @include jobj.R RDD.R pairRDD.R
+#' @include jobj.R types.R RDD.R pairRDD.R
 NULL
 
 setOldClass("jobj")
@@ -58,7 +58,7 @@ setGeneric("printSchema", function(x) { standardGeneric("printSchema") })
 setMethod("printSchema",
           signature(x = "DataFrame"),
           function(x) {
-            schemaString <- callJMethod(x@sdf, "printSchema")
+            schemaString <- callJMethod(schema(x)$jobj, "treeString")
             cat(schemaString)
           })
 
@@ -85,8 +85,7 @@ setGeneric("schema", function(x) { standardGeneric("schema") })
 setMethod("schema",
           signature(x = "DataFrame"),
           function(x) {
-            schemaOut <- callJMethod(x@sdf, "schema")
-            schemaOut
+            structType(callJMethod(x@sdf, "schema"))
           })
 
 #' DataTypes
@@ -111,8 +110,8 @@ setGeneric("dtypes", function(x) {standardGeneric("dtypes") })
 setMethod("dtypes",
           signature(x = "DataFrame"),
           function(x) {
-              lapply(schema(x), function(f) {
-                field <- c(f$name, f$dataType)
+            lapply(schema(x)$fields, function(f) {
+              field <- c(f$name, f$dataType.simpleString)
             })
           })
 
@@ -137,7 +136,7 @@ setGeneric("columns", function(x) {standardGeneric("columns") })
 setMethod("columns",
           signature(x = "DataFrame"),
           function(x) {
-            sapply(schema(x), function(f) {
+            sapply(schema(x)$fields, function(f) {
               f$name
             })
           })
