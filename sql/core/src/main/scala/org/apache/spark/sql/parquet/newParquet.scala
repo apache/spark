@@ -476,16 +476,21 @@ private[sql] case class ParquetRelation2(
     // When the data does not include the key and the key is requested then we must fill it in
     // based on information from the input split.
     if (!partitionKeysIncludedInDataSchema && partitionKeyLocations.nonEmpty) {
+      // This check if based on CatalystConverter.createRootConverter.
+      val primitiveRow =
+        requestedSchema.forall(a => ParquetTypesConverter.isPrimitiveType(a.dataType))
+
       baseRDD.mapPartitionsWithInputSplit { case (split: ParquetInputSplit, iterator) =>
         val partValues = selectedPartitions.collectFirst {
           case p if split.getPath.getParent.toString == p.path => p.values
         }.get
 
         val requiredPartOrdinal = partitionKeyLocations.keys.toSeq
-        val mutableRow = new GenericMutableRow(requestedSchema.size)
 
-        iterator.map {
-          case (_, row: SpecificMutableRow) =>
+        if (primitiveRow) {
+          iterator.map { pair =>
+            // We are using CatalystPrimitiveRowConverter and it returns a SpecificMutableRow.
+            val row = pair._2.asInstanceOf[SpecificMutableRow]
             var i = 0
             while (i < requiredPartOrdinal.size) {
               // TODO Avoids boxing cost here!
@@ -494,8 +499,14 @@ private[sql] case class ParquetRelation2(
               i += 1
             }
             row
-
-          case (_, row: Row) =>
+          }
+        } else {
+          // Create a mutable row since we need to fill in values from partition columns.
+          val mutableRow = new GenericMutableRow(requestedSchema.size)
+          iterator.map { pair =>
+            // We are using CatalystGroupConverter and it returns a GenericRow.
+            // Since GenericRow is not mutable, we just cast it to a Row.
+            val row = pair._2.asInstanceOf[Row]
             var i = 0
             while (i < row.size) {
               // TODO Avoids boxing cost here!
@@ -511,6 +522,7 @@ private[sql] case class ParquetRelation2(
               i += 1
             }
             mutableRow
+          }
         }
       }
     } else {
