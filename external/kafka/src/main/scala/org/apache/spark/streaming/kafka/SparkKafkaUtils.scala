@@ -17,6 +17,8 @@
 
 package org.apache.spark.streaming.kafka
 
+import scala.collection.Map
+
 import kafka.common.TopicAndPartition
 import kafka.utils.{ZkUtils, ZKGroupTopicDirs}
 import org.I0Itec.zkclient.ZkClient

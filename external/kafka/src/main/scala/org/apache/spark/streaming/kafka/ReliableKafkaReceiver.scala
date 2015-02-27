@@ -239,7 +239,7 @@ class ReliableKafkaReceiver[
       return
     }
 
-    SparkKafkaUtils.commitOffset(zkClient, groupId, offsetMap.toMap)
+    SparkKafkaUtils.commitOffset(zkClient, groupId, offsetMap)
   }
 
   /** Class to handle received Kafka message. */
