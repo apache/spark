@@ -434,22 +434,13 @@ private[parquet] class FilteringParquetRowInputFormat
      return splits
     }
 
-    Option(globalMetaData.getKeyValueMetaData.get(RowReadSupport.SPARK_METADATA_KEY)).foreach {
-      schemas =>
-        val mergedSchema = schemas
-          .map(DataType.fromJson(_).asInstanceOf[StructType])
-          .reduce(_ merge _)
-          .json
+    val metadata = configuration.get(RowWriteSupport.SPARK_ROW_SCHEMA)
+    val mergedMetadata = globalMetaData
+      .getKeyValueMetaData
+      .updated(RowReadSupport.SPARK_METADATA_KEY, setAsJavaSet(Set(metadata)))
 
-        val mergedMetadata = globalMetaData
-          .getKeyValueMetaData
-          .updated(RowReadSupport.SPARK_METADATA_KEY, setAsJavaSet(Set(mergedSchema)))
-
-        globalMetaData = new GlobalMetaData(
-          globalMetaData.getSchema,
-          mergedMetadata,
-          globalMetaData.getCreatedBy)
-    }
+    globalMetaData = new GlobalMetaData(globalMetaData.getSchema,
+      mergedMetadata, globalMetaData.getCreatedBy)
 
     val readContext = getReadSupport(configuration).init(
       new InitContext(configuration,
