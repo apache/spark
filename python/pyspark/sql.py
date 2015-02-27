@@ -69,7 +69,7 @@ class DataType(object):
         return hash(str(self))
 
     def __eq__(self, other):
-        return isinstance(other, self.__class__) and self.jsonValue() == other.jsonValue()
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -104,10 +104,6 @@ class PrimitiveType(DataType):
     """Spark SQL PrimitiveType"""
 
     __metaclass__ = PrimitiveTypeSingleton
-
-    def __eq__(self, other):
-        # because they should be the same object
-        return self is other
 
 
 class NullType(PrimitiveType):
@@ -499,6 +495,9 @@ _all_complex_types = dict((v.typeName(), v)
 
 def _parse_datatype_json_string(json_string):
     """Parses the given data type JSON string.
+
+    >>> import pickle
+    >>> LongType() == pickle.loads(pickle.dumps(LongType()))
     >>> def check_datatype(datatype):
     ...     scala_datatype = sqlCtx._ssql_ctx.parseDataType(datatype.json())
     ...     python_datatype = _parse_datatype_json_string(scala_datatype.json())
