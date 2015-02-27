@@ -223,8 +223,9 @@ val auROC = metrics.areaUnderROC()
 
 println("Area under ROC = " + auROC)
 
-model.save("myModelPath")
-val sameModel = SVMModel.load("myModelPath")
+// Save and load model
+model.save(sc, "myModelPath")
+val sameModel = SVMModel.load(sc, "myModelPath")
 {% endhighlight %}
 
 The `SVMWithSGD.train()` method by default performs L2 regularization with the
@@ -308,8 +309,9 @@ public class SVMClassifier {
     
     System.out.println("Area under ROC = " + auROC);
 
-    model.save("myModelPath");
-    SVMModel sameModel = SVMModel.load("myModelPath");
+    // Save and load model
+    model.save(sc.sc(), "myModelPath");
+    SVMModel sameModel = SVMModel.load(sc.sc(), "myModelPath");
   }
 }
 {% endhighlight %}
@@ -423,8 +425,9 @@ val valuesAndPreds = parsedData.map { point =>
 val MSE = valuesAndPreds.map{case(v, p) => math.pow((v - p), 2)}.mean()
 println("training Mean Squared Error = " + MSE)
 
-model.save("myModelPath")
-val sameModel = LinearRegressionModel.load("myModelPath")
+// Save and load model
+model.save(sc, "myModelPath")
+val sameModel = LinearRegressionModel.load(sc, "myModelPath")
 {% endhighlight %}
 
 [`RidgeRegressionWithSGD`](api/scala/index.html#org.apache.spark.mllib.regression.RidgeRegressionWithSGD)
@@ -496,8 +499,9 @@ public class LinearRegression {
     ).rdd()).mean();
     System.out.println("training Mean Squared Error = " + MSE);
 
-    model.save("myModelPath");
-    LinearRegressionModel sameModel = LinearRegressionModel.load("myModelPath");
+    // Save and load model
+    model.save(sc.sc(), "myModelPath");
+    LinearRegressionModel sameModel = LinearRegressionModel.load(sc.sc(), "myModelPath");
   }
 }
 {% endhighlight %}
