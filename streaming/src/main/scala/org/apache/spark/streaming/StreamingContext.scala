@@ -412,6 +412,7 @@ class StreamingContext private[streaming] (
    * @param filter Function to filter paths to process
    * @param newFilesOnly Should process only new files and ignore existing files in the directory
    * @param conf Hadoop configuration
+   * @param depth Searching depth of HDFS directory
    * @tparam K Key type for reading HDFS file
    * @tparam V Value type for reading HDFS file
    * @tparam F Input format for reading HDFS file
@@ -423,8 +424,9 @@ class StreamingContext private[streaming] (
   ] (directory: String,
      filter: Path => Boolean,
      newFilesOnly: Boolean,
-     conf: Configuration): InputDStream[(K, V)] = {
-    new FileInputDStream[K, V, F](this, directory, filter, newFilesOnly, Option(conf))
+     conf: Configuration,
+     depth: Int = 1): InputDStream[(K, V)] = {
+    new FileInputDStream[K, V, F](this, directory, depth, filter, newFilesOnly, Option(conf))
   }
 
   /**
@@ -434,7 +436,7 @@ class StreamingContext private[streaming] (
    * monitored directory by "moving" them from another location within the same
    * file system. File names starting with . are ignored.
    * @param directory HDFS directory to monitor for new file
-   * @param depth Searching depth of directory
+   * @param depth Searching depth of HDFS directory
    */
   def textFileStream(
       directory: String,
@@ -456,15 +458,17 @@ class StreamingContext private[streaming] (
    *
    * @param directory HDFS directory to monitor for new file
    * @param recordLength length of each record in bytes
+   * @param depth Searching depth of HDFS directory
    */
   @Experimental
   def binaryRecordsStream(
       directory: String,
-      recordLength: Int): DStream[Array[Byte]] = withNamedScope("binary records stream") {
+      recordLength: Int,
+      depth: Int = 1): DStream[Array[Byte]] = withNamedScope("binary records stream") {
     val conf = sc_.hadoopConfiguration
     conf.setInt(FixedLengthBinaryInputFormat.RECORD_LENGTH_PROPERTY, recordLength)
     val br = fileStream[LongWritable, BytesWritable, FixedLengthBinaryInputFormat](
-      directory, FileInputDStream.defaultFilter : Path => Boolean, newFilesOnly=true, conf)
+      directory, FileInputDStream.defaultFilter : Path => Boolean, newFilesOnly=true, conf, depth)
     val data = br.map { case (k, v) =>
       val bytes = v.getBytes
       assert(bytes.length == recordLength, "Byte array does not have correct length")

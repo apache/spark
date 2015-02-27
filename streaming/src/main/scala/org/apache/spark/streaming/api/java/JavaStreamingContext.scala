@@ -206,12 +206,20 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * monitored directory by "moving" them from another location within the same
    * file system. File names starting with . are ignored.
    * @param directory HDFS directory to monitor for new file
-   * @param depth Searching depth of directory
    */
-  def textFileStream(directory: String, depth: Int = 1): JavaDStream[String] = {
-    ssc.textFileStream(directory,depth)
+  def textFileStream(directory: String): JavaDStream[String] = {
+    ssc.textFileStream(directory, 1)
   }
 
+  /**
+   * Create an input stream that monitor files in subdirectories for new files
+   * and reads them as text files.
+   * @param directory HDFS directory to monitor for new file
+   * @param depth Searching depth of HDFS directory
+   */
+  def textFileStream(directory: String, depth: Int): JavaDStream[String] = {
+    ssc.textFileStream(directory,depth)
+  }
   /**
    * :: Experimental ::
    *
@@ -272,7 +280,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * Files must be written to the monitored directory by "moving" them from another
    * location within the same file system. File names starting with . are ignored.
    * @param directory HDFS directory to monitor for new file
-   * @param depth Searching depth of directory
+   * @param depth Searching depth of HDFS directory
    * @param kClass class of key for reading HDFS file
    * @param vClass class of value for reading HDFS file
    * @param fClass class of input format for reading HDFS file
@@ -346,12 +354,13 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
       fClass: Class[F],
       filter: JFunction[Path, JBoolean],
       newFilesOnly: Boolean,
-      conf: Configuration): JavaPairInputDStream[K, V] = {
+      conf: Configuration,
+      depth: Int = 1): JavaPairInputDStream[K, V] = {
     implicit val cmk: ClassTag[K] = ClassTag(kClass)
     implicit val cmv: ClassTag[V] = ClassTag(vClass)
     implicit val cmf: ClassTag[F] = ClassTag(fClass)
     def fn: (Path) => Boolean = (x: Path) => filter.call(x).booleanValue()
-    ssc.fileStream[K, V, F](directory, fn, newFilesOnly, conf)
+    ssc.fileStream[K, V, F](directory, fn, newFilesOnly, conf, depth)
   }
 
   /**
