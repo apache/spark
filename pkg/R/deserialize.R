@@ -29,8 +29,6 @@ readTypedObject <- function(con, type) {
     "l" = readList(con),
     "n" = NULL,
     "j" = getJobj(readString(con)),
-    "t" = readStructType(con),
-    "f" = readStructField(con),
     stop("Unsupported type for deserialization"))
 }
 
@@ -78,23 +76,6 @@ readRaw <- function(con) {
 
 readRawLen <- function(con, dataLen) {
   data <- readBin(con, raw(), as.integer(dataLen), endian = "big")
-}
-
-readStructType <- function(inputCon) {
-  data <- list()
-  numFields <- readInt(inputCon)
-  data <- lapply(1:numFields, function(field) {
-    data[[field]] <- readStructField(inputCon)
-  })
-}
-
-readStructField <- function(inputCon) {
-  numElems <- readInt(inputCon)
-  sfOut <- lapply(1:numElems, function(elem) {
-    obj <- readObject(inputCon)
-  })
-  names(sfOut) <- c("name", "dataType", "nullable")
-  sfOut
 }
 
 readDeserialize <- function(con) {

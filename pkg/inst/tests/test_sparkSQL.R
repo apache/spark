@@ -165,9 +165,10 @@ test_that("cache(), persist(), and unpersist() on a DataFrame", {
 test_that("schema(), dtypes(), columns(), names() return the correct values/format", {
   df <- jsonFile(sqlCtx, jsonPath)
   testSchema <- schema(df)
-  expect_true(length(testSchema) == 2)
-  expect_true(names(testSchema[[1]][2]) == "dataType")
-  expect_true(length(testSchema[[1]]) == 3)
+  expect_true(length(testSchema$fields) == 2)
+  expect_true(testSchema$fields[[1]]$dataType.toString == "IntegerType")
+  expect_true(testSchema$fields[[2]]$dataType.simpleString == "string")
+  expect_true(testSchema$fields[[1]]$name == "age")
   
   testTypes <- dtypes(df)
   expect_true(length(testTypes[[1]]) == 2)

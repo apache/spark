@@ -103,3 +103,5 @@ export("jsonFile",
        "uncacheTable")
 
 export("sparkRSQL.init")
+export("print.structType",
+       "print.structField")
