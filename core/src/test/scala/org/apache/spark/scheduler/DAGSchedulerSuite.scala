@@ -764,20 +764,22 @@ class DAGSchedulerSuite
       (Success, makeMapStatus("hostA", 1))
     ))
     runEvent(ExecutorLost("exec-hostA"))
-    runEvent(CompletionEvent(taskSets(1).tasks(0), Resubmitted, null, null, null, null))
-    runEvent(CompletionEvent(taskSets(1).tasks(2), Resubmitted, null, null, null, null))
+    runEvent(CompletionEvent(taskSets(1).tasks(0), Resubmitted,
+      null, null, createFakeTaskInfo(), null))
+    runEvent(CompletionEvent(taskSets(1).tasks(2), Resubmitted,
+      null, null, createFakeTaskInfo(), null))
     runEvent(CompletionEvent(taskSets(1).tasks(0),
       FetchFailed(null, firstShuyffleId, -1, 0, "Fetch Mata data failed"),
-      null, null, null, null))
+      null, null, createFakeTaskInfo(), null))
     scheduler.resubmitFailedStages()
     runEvent(CompletionEvent(taskSets(1).tasks(0), Success,
-      makeMapStatus("hostC", 1), null, null, null))
+      makeMapStatus("hostC", 1), null, createFakeTaskInfo(), null))
     runEvent(CompletionEvent(taskSets(1).tasks(2), Success,
-      makeMapStatus("hostC", 1), null, null, null))
+      makeMapStatus("hostC", 1), null, createFakeTaskInfo(), null))
     runEvent(CompletionEvent(taskSets(1).tasks(4), Success,
-      makeMapStatus("hostC", 1), null, null, null))
+      makeMapStatus("hostC", 1), null, createFakeTaskInfo(), null))
     runEvent(CompletionEvent(taskSets(1).tasks(5), Success,
-      makeMapStatus("hostB", 2), null, null, null))
+      makeMapStatus("hostB", 2), null, createFakeTaskInfo(), null))
     val stage = scheduler.stageIdToStage(taskSets(1).stageId)
     assert(stage.attemptId == 2)
     assert(stage.isAvailable)
