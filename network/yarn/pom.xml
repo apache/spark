@@ -33,6 +33,8 @@
   <url>http://spark.apache.org/</url>
   <properties>
     <sbt.project.name>network-yarn</sbt.project.name>
+    <!-- Make sure all Hadoop dependencies are provided to avoid repackaging. -->
+    <hadoop.deps.scope>provided</hadoop.deps.scope>
   </properties>
 
   <dependencies>
@@ -87,19 +89,4 @@
       </plugin>
     </plugins>
   </build>
-
-  <profiles>
-    <!-- Always enable this profile so that Hadoop classes are not re-packaged. -->
-    <profile>
-      <id>hadoop-provided</id>
-      <activation>
-        <file>
-          <exists>pom.xml</exists>
-        </file>
-      </activation>
-      <properties>
-        <hadoop.deps.scope>provided</hadoop.deps.scope>
-      </properties>
-    </profile>
-  </profiles>
 </project>
