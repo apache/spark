@@ -157,8 +157,6 @@ object SerDe {
       case "raw" => dos.writeByte('r')
       case "list" => dos.writeByte('l')
       case "jobj" => dos.writeByte('j')
-      case "structType" => dos.writeByte('t')
-      case "structField" => dos.writeByte('f')
       case _ => throw new IllegalArgumentException(s"Invalid type $typeStr")
     }
   }
@@ -186,12 +184,6 @@ object SerDe {
         case "[B" =>
           writeType(dos, "raw")
           writeBytes(dos, value.asInstanceOf[Array[Byte]])
-        case "StructType" | "org.apache.spark.sql.types.StructType" =>
-          writeType(dos, "structType")
-          writeStructType(dos, value.asInstanceOf[StructType])
-        case "StructField" | "org.apache.spark.sql.types.StructField" =>
-          writeType(dos, "structField")
-          writeStructField(dos, value.asInstanceOf[StructField])
         // TODO: Types not handled right now include
         // byte, char, short, float
 
@@ -291,23 +283,23 @@ object SerDe {
     value.foreach(v => writeBytes(out, v))
   }
 
-  def writeStructType(out: DataOutputStream, value: StructType) {
-    // Write a StructType as a list of lists in R
-    val fields = value.fields //Array[StructField]
-    out.writeInt(value.length) // Number of fields
-    fields.foreach { v =>
-      writeStructField(out, v)
-    }
-  }
+  // def writeStructType(out: DataOutputStream, value: StructType) {
+  //   // Write a StructType as a list of lists in R
+  //   val fields = value.fields //Array[StructField]
+  //   out.writeInt(value.length) // Number of fields
+  //   fields.foreach { v =>
+  //     writeStructField(out, v)
+  //   }
+  // }
 
-  def writeStructField(out: DataOutputStream, value: StructField) {
-    // Write the contents of a single StructField as a list
-    val contents = Seq(value.name, value.dataType.typeName, value.nullable)
-    out.writeInt(contents.length)
-    contents.foreach { t =>
-      writeObject(out, t.asInstanceOf[Object])
-    }
-  }
+  // def writeStructField(out: DataOutputStream, value: StructField) {
+  //   // Write the contents of a single StructField as a list
+  //   val contents = Seq(value.name, value.dataType.typeName, value.nullable)
+  //   out.writeInt(contents.length)
+  //   contents.foreach { t =>
+  //     writeObject(out, t.asInstanceOf[Object])
+  //   }
+  // }
 }
 
 object SerializationFormats {
