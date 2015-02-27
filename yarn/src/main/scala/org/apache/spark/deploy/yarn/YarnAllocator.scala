@@ -290,15 +290,16 @@ private[yarn] class YarnAllocator(
       location: String,
       containersToUse: ArrayBuffer[Container],
       remaining: ArrayBuffer[Container]): Unit = {
-    // SPARK-6050: certain Yarn configurations return a resource configuration that doesn't match
-    // the request; for example, capacity scheduler + DefaultResourceCalculator. Allow users in
-    // those situations to disable resource matching.
+    // SPARK-6050: certain Yarn configurations return a virtual core count that doesn't match the
+    // request; for example, capacity scheduler + DefaultResourceCalculator. Allow users in those
+    // situations to disable matching of the core count.
     val matchingResource =
-        if (sparkConf.getBoolean("spark.yarn.container.matchAnyResource", false)) {
-          resource
-        } else {
-          allocatedContainer.getResource
-        }
+      if (sparkConf.getBoolean("spark.yarn.container.disableCpuMatching", false)) {
+        Resource.newInstance(allocatedContainer.getResource().getMemory(),
+          resource.getVirtualCores())
+      } else {
+        allocatedContainer.getResource
+      }
 
     val matchingRequests = amClient.getMatchingRequests(allocatedContainer.getPriority, location,
       matchingResource)
