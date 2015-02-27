@@ -27,8 +27,9 @@ import akka.actor._
 import akka.pattern.ask
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 
-import org.apache.spark.deploy.SparkHadoopUtil
+
 import org.apache.spark.{ExecutorAllocationClient, Logging, SparkEnv, SparkException, TaskState}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util.{ActorLogReceive, SerializableBuffer, AkkaUtils, Utils}
@@ -75,11 +76,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
   /**
    * Send new credentials to executors. This is the method that is called when the scheduled
    * login completes, so the new credentials can be sent to the executors.
-   * @param credentials
+   * @param credentialsPath
    */
-  def sendNewCredentialsToExecutors(credentials: SerializableBuffer): Unit = {
+  def sendNewCredentialsToExecutors(credentialsPath: String): Unit = {
     // We don't care about the reply, so going to deadLetters is fine.
-    executorDataMap.values.foreach(_.executorActor ! UpdateCredentials(credentials))
+    executorDataMap.values.foreach(_.executorActor ! UpdateCredentials(credentialsPath))
   }
 
   class DriverActor(sparkProperties: Seq[(String, String)]) extends Actor with ActorLogReceive {

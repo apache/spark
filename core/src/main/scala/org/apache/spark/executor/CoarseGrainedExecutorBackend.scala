@@ -17,8 +17,8 @@
 
 package org.apache.spark.executor
 
-import java.net.URL
 import java.io.{ByteArrayInputStream, DataInputStream}
+import java.net.URL
 import java.nio.ByteBuffer
 
 import scala.collection.mutable
@@ -27,6 +27,7 @@ import scala.concurrent.Await
 import akka.actor.{Actor, ActorSelection, Props}
 import akka.pattern.Patterns
 import akka.remote.{RemotingLifecycleEvent, DisassociatedEvent}
+import org.apache.hadoop.fs.{Path, FileSystem}
 import org.apache.hadoop.security.Credentials
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv}
@@ -109,12 +110,14 @@ private[spark] class CoarseGrainedExecutorBackend(
       context.system.shutdown()
 
     // Add new credentials received from the driver to the current user.
-    case UpdateCredentials(newCredentials) =>
+    case UpdateCredentials(newCredentialsPath) =>
       logInfo("New credentials received from driver, adding the credentials to the current user")
       val credentials = new Credentials()
-      credentials.readTokenStorageStream(
-        new DataInputStream(new ByteArrayInputStream(newCredentials.value.array())))
+      val remoteFs = FileSystem.get(SparkHadoopUtil.get.conf)
+      val inStream = remoteFs.open(new Path(newCredentialsPath))
+      credentials.readTokenStorageStream(inStream)
       SparkHadoopUtil.get.addCurrentUserCredentials(credentials)
+      inStream.close()
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer) {

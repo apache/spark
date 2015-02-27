@@ -122,9 +122,9 @@ class SparkHadoopUtil extends Logging {
     UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
   }
 
-  def setPrincipalAndKeytabForLogin(principal: String, keytab: String): Unit = {}
+  def setPrincipalAndKeytabForLogin(principal: String, keytab: String): Unit = ???
 
-  private[spark] def scheduleLoginFromKeytab(callback: (SerializableBuffer) => Unit): Unit = {}
+  private[spark] def scheduleLoginFromKeytab(callback: (String) => Unit): Unit = {}
 
   /**
    * Returns a function that can be called to find Hadoop FileSystem bytes read. If

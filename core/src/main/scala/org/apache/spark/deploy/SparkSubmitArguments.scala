@@ -58,6 +58,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   var action: SparkSubmitAction = null
   val sparkProperties: HashMap[String, String] = new HashMap[String, String]()
   var proxyUser: String = null
+  var principal: String = null
+  var keytab: String = null
 
   // Standalone cluster mode only
   var supervise: Boolean = false
@@ -408,6 +410,14 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
 
       case ("--proxy-user") :: value :: tail =>
         proxyUser = value
+        parse(tail)
+
+      case ("--principal") :: value :: tail =>
+        principal = value
+        parse(tail)
+
+      case ("--keytab") :: value :: tail =>
+        keytab = value
         parse(tail)
 
       case ("--help" | "-h") :: tail =>

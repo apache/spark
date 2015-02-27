@@ -36,7 +36,7 @@ function gatherSparkSubmitOpts() {
       --conf | --repositories | --properties-file | --driver-memory | --driver-java-options | \
       --driver-library-path | --driver-class-path | --executor-memory | --driver-cores | \
       --total-executor-cores | --executor-cores | --queue | --num-executors | --archives | \
-      --proxy-user)
+      --proxy-user | --principal | --keytab)
         if [[ $# -lt 2 ]]; then
           "$SUBMIT_USAGE_FUNCTION"
           exit 1;

@@ -562,25 +562,22 @@ private[spark] class Client(
   }
 
   def setupCredentials(): Unit = {
-    Option(args.principal) match {
-      case Some(principal) =>
-        Option(args.keytab) match {
-          case Some(keytabPath) =>
-            // Generate a file name that can be used for the keytab file, that does not conflict
-            // with any user file.
-            logInfo("Attempting to login to the Kerberos" +
-              s" using principal: $principal and keytab: $keytabPath")
-            val f = new File(keytabPath)
-            keytabFileName = f.getName + "-" + System.currentTimeMillis()
-            val ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytabPath)
-            credentials = ugi.getCredentials
-            loginFromKeytab = true
-            logInfo("Successfully logged into Kerberos.")
-          case None =>
-            throw new SparkException("Keytab must be specified when principal is specified.")
-        }
-      case None =>
-        credentials = UserGroupInformation.getCurrentUser.getCredentials
+    if (args.principal != null) {
+      if (args.keytab == null) {
+        throw new SparkException("Keytab must be specified when principal is specified.")
+      }
+      logInfo("Attempting to login to the Kerberos" +
+        s" using principal: ${args.principal} and keytab: ${args.keytab}")
+      val f = new File(args.keytab)
+      // Generate a file name that can be used for the keytab file, that does not conflict
+      // with any user file.
+      keytabFileName = f.getName + "-" + System.currentTimeMillis()
+      val ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(args.principal, args.keytab)
+      credentials = ugi.getCredentials
+      loginFromKeytab = true
+      logInfo("Successfully logged into Kerberos.")
+    } else {
+      credentials = UserGroupInformation.getCurrentUser.getCredentials
     }
   }
 

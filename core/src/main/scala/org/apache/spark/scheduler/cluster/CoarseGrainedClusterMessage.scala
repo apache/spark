@@ -53,7 +53,7 @@ private[spark] object CoarseGrainedClusterMessages {
 
   // When the delegation tokens are about expire, the driver creates new tokens and sends them to
   // the executors via this message.
-  case class UpdateCredentials(newCredentials: SerializableBuffer)
+  case class UpdateCredentials(newCredentialsLocation: String)
     extends CoarseGrainedClusterMessage
 
   object StatusUpdate {
