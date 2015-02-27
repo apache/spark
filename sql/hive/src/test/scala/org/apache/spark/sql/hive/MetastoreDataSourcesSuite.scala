@@ -581,7 +581,8 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
         case LogicalRelation(p: ParquetRelation2) => // OK
         case _ =>
           fail(
-            s"test_parquet_ctas should be converted to ${classOf[ParquetRelation2].getCanonicalName}")
+            "test_parquet_ctas should be converted to " +
+            s"${classOf[ParquetRelation2].getCanonicalName}")
       }
 
       // Clenup and reset confs.
@@ -592,13 +593,24 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     }
   }
 
+  test("Pre insert nullability check") {
+    val df1 =
+      createDataFrame(Tuple1(Seq(Int.box(1), null.asInstanceOf[Integer])) :: Nil).toDF("a")
+    df1.saveAsTable("arrayInParquet", "parquet", SaveMode.Overwrite)
+
+    val df2 =
+      createDataFrame(Tuple1(Seq(2, 3)) :: Nil).toDF("a")
+    df2.saveAsTable("arrayInParquet", SaveMode.Append)
+
+  }
+
   test("SPARK-6024 wide schema support") {
     // We will need 80 splits for this schema if the threshold is 4000.
     val schema = StructType((1 to 5000).map(i => StructField(s"c_${i}", StringType, true)))
     assert(
       schema.json.size > conf.schemaStringLengthThreshold,
       "To correctly test the fix of SPARK-6024, the value of " +
-      s"spark.sql.sources.schemaStringLengthThreshold needs to be less than ${schema.json.size}")
+        s"spark.sql.sources.schemaStringLengthThreshold needs to be less than ${schema.json.size}")
     // Manually create a metastore data source table.
     catalog.createDataSourceTable(
       tableName = "wide_schema",
