@@ -11,12 +11,12 @@ this uses a shuffle to redistribute data.
 If you are decreasing the number of partitions in this RDD, consider using
 coalesce, which can avoid performing a shuffle.}
 \usage{
-repartition(rdd, numPartitions)
+repartition(x, numPartitions)
 
-\S4method{repartition}{RDD,integer}(rdd, numPartitions)
+\S4method{repartition}{RDD,integer}(x, numPartitions)
 }
 \arguments{
-\item{rdd}{The RDD.}
+\item{x}{The RDD.}
 
 \item{numPartitions}{Number of partitions to create.}
 }

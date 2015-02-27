@@ -1045,7 +1045,7 @@ setMethod("keyBy",
 #' If you are decreasing the number of partitions in this RDD, consider using
 #' coalesce, which can avoid performing a shuffle.
 #'
-#' @param rdd The RDD.
+#' @param x The RDD.
 #' @param numPartitions Number of partitions to create.
 #' @rdname repartition
 #' @seealso coalesce
@@ -1057,19 +1057,19 @@ setMethod("keyBy",
 #' numPartitions(rdd)                   # 4
 #' numPartitions(repartition(rdd, 2L))  # 2
 #'}
-setGeneric("repartition", function(rdd, numPartitions) { standardGeneric("repartition") })
+setGeneric("repartition", function(x, numPartitions) { standardGeneric("repartition") })
 
 #' @rdname repartition
 #' @aliases repartition,RDD
 setMethod("repartition",
-          signature(rdd = "RDD", numPartitions = "numeric"),
-          function(rdd, numPartitions) {
-            coalesce(rdd, numPartitions, TRUE)
+          signature(x = "RDD", numPartitions = "numeric"),
+          function(x, numPartitions) {
+            coalesce(x, numPartitions, TRUE)
           })
 
 #' Return a new RDD that is reduced into numPartitions partitions.
 #'
-#' @param rdd The RDD.
+#' @param x The RDD.
 #' @param numPartitions Number of partitions to create.
 #' @rdname coalesce
 #' @seealso repartition
@@ -1081,18 +1081,18 @@ setMethod("repartition",
 #' numPartitions(rdd)               # 3
 #' numPartitions(coalesce(rdd, 1L)) # 1
 #'}
-setGeneric("coalesce", function(rdd, numPartitions, ...) { standardGeneric("coalesce") })
+setGeneric("coalesce", function(x, numPartitions, ...) { standardGeneric("coalesce") })
 
 #' @rdname coalesce
 #' @aliases coalesce,RDD
 setMethod("coalesce",
-           signature(rdd = "RDD", numPartitions = "numeric"),
-           function(rdd, numPartitions, shuffle = FALSE) {
+           signature(x = "RDD", numPartitions = "numeric"),
+           function(x, numPartitions, shuffle = FALSE) {
              if(as.integer(numPartitions) != numPartitions) {
               warning("Number of partitions should be an integer. Coercing it to integer.")
              }
              numPartitions <- as.integer(numPartitions)
-             if (shuffle || numPartitions > SparkR::numPartitions(rdd)) {
+             if (shuffle || numPartitions > SparkR::numPartitions(x)) {
                 func <- function(s, part) {
                  set.seed(s)  # split as seed
                  lapply(part,
@@ -1101,11 +1101,11 @@ setMethod("coalesce",
                           list(k, v)
                         })
                }
-               shuffled <- lapplyPartitionsWithIndex(rdd, func)
+               shuffled <- lapplyPartitionsWithIndex(x, func)
                reparted <- partitionBy(shuffled, numPartitions)
                values(reparted)
              } else {
-               jrdd <- callJMethod(getJRDD(rdd), "coalesce", numPartitions, shuffle)
+               jrdd <- callJMethod(getJRDD(x), "coalesce", numPartitions, shuffle)
                RDD(jrdd)
              }
            })

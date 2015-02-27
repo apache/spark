@@ -7,12 +7,12 @@
 \alias{coalesce,RDD,integer-method}
 \title{Return a new RDD that is reduced into numPartitions partitions.}
 \usage{
-coalesce(rdd, numPartitions, ...)
+coalesce(x, numPartitions, ...)
 
-\S4method{coalesce}{RDD,integer}(rdd, numPartitions, shuffle = FALSE)
+\S4method{coalesce}{RDD,integer}(x, numPartitions, shuffle = FALSE)
 }
 \arguments{
-\item{rdd}{The RDD.}
+\item{x}{The RDD.}
 
 \item{numPartitions}{Number of partitions to create.}
 }
