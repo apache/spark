@@ -192,7 +192,8 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   }
 
   private def appRow(app: ApplicationInfo, active: Boolean): Seq[Node] = {
-    val killLink = if (parent.killEnabled && app.state == ApplicationState.RUNNING) {
+    val killLink = if (parent.killEnabled &&
+      (app.state == ApplicationState.RUNNING || app.state == ApplicationState.WAITING)) {
     val killLinkUri = s"app/kill?id=${app.id}&terminate=true"
     val confirm = "return window.confirm(" +
       s"'Are you sure you want to kill application ${app.id} ?');"
@@ -238,7 +239,10 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   }
 
   private def driverRow(driver: DriverInfo): Seq[Node] = {
-    val killLink = if (parent.killEnabled && driver.state == DriverState.RUNNING) {
+    val killLink = if (parent.killEnabled &&
+      (driver.state == DriverState.RUNNING ||
+        driver.state == DriverState.SUBMITTED ||
+        driver.state == DriverState.RELAUNCHING)) {
     val killLinkUri = s"driver/kill?id=${driver.id}&terminate=true"
     val confirm = "return window.confirm(" +
       s"'Are you sure you want to kill driver ${driver.id} ?');"
