@@ -36,9 +36,9 @@ private[hbase] class HBasePartition(
 
   override def hashCode(): Int = idx
 
-  @transient lazy val startNative: Seq[Any] = relation.nativeKeyConvertPartition(start)
+  @transient lazy val startNative: Seq[Any] = relation.nativeKeyConvert(start)
 
-  @transient lazy val endNative: Seq[Any] = relation.nativeKeyConvertPartition(end)
+  @transient lazy val endNative: Seq[Any] = relation.nativeKeyConvert(end)
 
   def computePredicate(relation: HBaseRelation): Option[Expression] = {
     val predicate = if (filterPredicates.isDefined &&

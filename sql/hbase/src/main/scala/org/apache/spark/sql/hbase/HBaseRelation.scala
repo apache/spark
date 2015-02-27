@@ -624,24 +624,27 @@ private[hbase] case class HBaseRelation(
   }
 
   /**
-   * Convert a HBase row key into column values in their native data formats
-   * @param rawKey the HBase row key
-   * @return A sequence of column values from the row Key
+   * Convert the row key to its proper format. Due to the nature of HBase, the start and
+   * end of partition could be partial row key, we may need to append 0x00 to make it comply
+   * with the definition of key columns, for example, add four 0x00 if a key column type is
+   * integer. Also string type will always be even number, so we need to add one 0x00 or two
+   * depends on the length of the byte.
+   * @param rawKey the original row key
+   * @return the proper row key based on the definition of the key columns
    */
-  def nativeKeyConvert(rawKey: Option[HBaseRawType]): Seq[Any] = {
-    if (rawKey.isEmpty) Nil
-    else {
-      HBaseKVHelper.decodingRawKeyColumns(rawKey.get, keyColumns).
-        zipWithIndex.map(pi => DataTypeUtils.bytesToData(rawKey.get,
-        pi._1._1, pi._1._2, keyColumns(pi._2).dataType))
-    }
-  }
-
   def getFinalKey(rawKey: Option[HBaseRawType]): HBaseRawType = {
     val origRowKey: HBaseRawType = rawKey.get
 
-    def getFinalRowKey(rowIndex: Int, curKeyIndex: Int)
-    : HBaseRawType = {
+    /**
+     * Recursively run this function to check the key columns one by one.
+     * If the input raw key contains the whole part of this key columns, then continue to
+     * check the next one; otherwise, append the raw key by adding 0x00 to its proper format
+     * and return it.
+     * @param rowIndex the start point of unchecked bytes in the input raw key
+     * @param curKeyIndex the next key column need to be checked
+     * @return the proper row key based on the definition of the key columns
+     */
+    def getFinalRowKey(rowIndex: Int, curKeyIndex: Int): HBaseRawType = {
       if (curKeyIndex >= keyColumns.length) origRowKey
       else {
         val typeOfKey = keyColumns(curKeyIndex)
@@ -672,6 +675,11 @@ private[hbase] case class HBaseRelation(
       }
     }
 
+    /**
+     * Get the minimum key length based on the key columns definition
+     * @param startKeyIndex the start point of the key column
+     * @return the minimum length required for the remaining key columns
+     */
     def getMinimum(startKeyIndex: Int): Int = {
       keyColumns.drop(startKeyIndex).map(k => {
         k.dataType match {
@@ -685,7 +693,12 @@ private[hbase] case class HBaseRelation(
     getFinalRowKey(0, 0)
   }
 
-  def nativeKeyConvertPartition(rawKey: Option[HBaseRawType]): Seq[Any] = {
+  /**
+   * Convert a HBase row key into column values in their native data formats
+   * @param rawKey the HBase row key
+   * @return A sequence of column values from the row Key
+   */
+  def nativeKeyConvert(rawKey: Option[HBaseRawType]): Seq[Any] = {
     if (rawKey.isEmpty) Nil
     else {
       val finalRowKey = getFinalKey(rawKey)
