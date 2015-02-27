@@ -18,44 +18,53 @@
 package org.apache.spark.ml.evaluation
 
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml._
+import org.apache.spark.ml.Evaluator
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
-import org.apache.spark.sql.{Row, SchemaRDD}
+import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.types.DoubleType
+
 
 /**
  * :: AlphaComponent ::
+ *
  * Evaluator for binary classification, which expects two input columns: score and label.
  */
 @AlphaComponent
 class BinaryClassificationEvaluator extends Evaluator with Params
-  with HasScoreCol with HasLabelCol {
+  with HasRawPredictionCol with HasLabelCol {
 
-  /** param for metric name in evaluation */
+  /**
+   * param for metric name in evaluation
+   * @group param
+   */
   val metricName: Param[String] = new Param(this, "metricName",
     "metric name in evaluation (areaUnderROC|areaUnderPR)", Some("areaUnderROC"))
+
+  /** @group getParam */
   def getMetricName: String = get(metricName)
+
+  /** @group setParam */
   def setMetricName(value: String): this.type = set(metricName, value)
 
-  def setScoreCol(value: String): this.type = set(scoreCol, value)
+  /** @group setParam */
+  def setScoreCol(value: String): this.type = set(rawPredictionCol, value)
+
+  /** @group setParam */
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
-  override def evaluate(dataset: SchemaRDD, paramMap: ParamMap): Double = {
+  override def evaluate(dataset: DataFrame, paramMap: ParamMap): Double = {
     val map = this.paramMap ++ paramMap
 
     val schema = dataset.schema
-    val scoreType = schema(map(scoreCol)).dataType
-    require(scoreType == DoubleType,
-      s"Score column ${map(scoreCol)} must be double type but found $scoreType")
-    val labelType = schema(map(labelCol)).dataType
-    require(labelType == DoubleType,
-      s"Label column ${map(labelCol)} must be double type but found $labelType")
+    checkInputColumn(schema, map(rawPredictionCol), new VectorUDT)
+    checkInputColumn(schema, map(labelCol), DoubleType)
 
-    import dataset.sqlContext._
-    val scoreAndLabels = dataset.select(map(scoreCol).attr, map(labelCol).attr)
-      .map { case Row(score: Double, label: Double) =>
-        (score, label)
+    // TODO: When dataset metadata has been implemented, check rawPredictionCol vector length = 2.
+    val scoreAndLabels = dataset.select(map(rawPredictionCol), map(labelCol))
+      .map { case Row(rawPrediction: Vector, label: Double) =>
+        (rawPrediction(1), label)
       }
     val metrics = new BinaryClassificationMetrics(scoreAndLabels)
     val metric = map(metricName) match {

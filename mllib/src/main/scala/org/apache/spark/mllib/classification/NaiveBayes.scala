@@ -20,12 +20,17 @@ package org.apache.spark.mllib.classification
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax => brzArgmax, sum => brzSum, Axis}
 import breeze.numerics.{exp => brzExp, log => brzLog}
 
-import org.apache.spark.{SparkException, Logging}
-import org.apache.spark.SparkContext._
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+import org.json4s.{DefaultFormats, JValue}
+
+import org.apache.spark.{Logging, SparkContext, SparkException}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.classification.NaiveBayesModels.NaiveBayesModels
+import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{DataFrame, SQLContext}
 
 
 /**
@@ -34,6 +39,10 @@ import org.apache.spark.rdd.RDD
 object NaiveBayesModels extends Enumeration {
   type NaiveBayesModels = Value
   val Multinomial, Bernoulli = Value
+
+  implicit def toString(model: NaiveBayesModels): String = {
+    model.toString
+  }
 }
 
 /**
@@ -43,7 +52,7 @@ object NaiveBayesModels extends Enumeration {
  * @param pi log of class priors, whose dimension is C, number of labels
  * @param theta log of class conditional probabilities, whose dimension is C-by-D,
  *              where D is number of features
- * @param model The type of NB model to fit from the enumeration NaiveBayesModels, can be
+ * @param modelType The type of NB model to fit from the enumeration NaiveBayesModels, can be
  *              Multinomial or Bernoulli
  */
 
@@ -51,12 +60,12 @@ class NaiveBayesModel private[mllib] (
     val labels: Array[Double],
     val pi: Array[Double],
     val theta: Array[Array[Double]],
-    val model: NaiveBayesModels) extends ClassificationModel with Serializable {
+    val modelType: NaiveBayesModels) extends ClassificationModel with Serializable with Saveable {
 
   private val brzPi = new BDV[Double](pi)
   private val brzTheta = new BDM(theta(0).length, theta.length, theta.flatten).t
 
-  private val brzNegTheta: Option[BDM[Double]] = model match {
+  private val brzNegTheta: Option[BDM[Double]] = modelType match {
     case NaiveBayesModels.Multinomial => None
     case NaiveBayesModels.Bernoulli =>
       val negTheta = brzLog((brzExp(brzTheta.copy) :*= (-1.0)) :+= 1.0) // log(1.0 - exp(x))
@@ -72,13 +81,98 @@ class NaiveBayesModel private[mllib] (
   }
 
   override def predict(testData: Vector): Double = {
-    model match {
+    modelType match {
       case NaiveBayesModels.Multinomial =>
         labels (brzArgmax (brzPi + brzTheta * testData.toBreeze) )
       case NaiveBayesModels.Bernoulli =>
         labels (brzArgmax (brzPi +
           (brzTheta - brzNegTheta.get) * testData.toBreeze +
           brzSum(brzNegTheta.get, Axis._1)))
+    }
+  }
+
+  override def save(sc: SparkContext, path: String): Unit = {
+    val data = NaiveBayesModel.SaveLoadV1_0.Data(labels, pi, theta, modelType)
+    NaiveBayesModel.SaveLoadV1_0.save(sc, path, data)
+  }
+
+  override protected def formatVersion: String = "1.0"
+}
+
+object NaiveBayesModel extends Loader[NaiveBayesModel] {
+
+  import org.apache.spark.mllib.util.Loader._
+
+  private object SaveLoadV1_0 {
+
+    def thisFormatVersion = "1.0"
+
+    /** Hard-code class name string in case it changes in the future */
+    def thisClassName = "org.apache.spark.mllib.classification.NaiveBayesModel"
+
+    /** Model data for model import/export */
+    case class Data(labels: Array[Double], pi: Array[Double], theta: Array[Array[Double]], modelType: String)
+
+    def save(sc: SparkContext, path: String, data: Data): Unit = {
+      val sqlContext = new SQLContext(sc)
+      import sqlContext.implicits._
+
+      // Create JSON metadata.
+      val metadata = compact(render(
+        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
+          ("numFeatures" -> data.theta(0).length) ~ ("numClasses" -> data.pi.length) ~
+          ("modelType" -> data.modelType)))
+      sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
+
+      // Create Parquet data.
+      val dataRDD: DataFrame = sc.parallelize(Seq(data), 1).toDF()
+      dataRDD.saveAsParquetFile(dataPath(path))
+    }
+
+    def load(sc: SparkContext, path: String): NaiveBayesModel = {
+      val sqlContext = new SQLContext(sc)
+      // Load Parquet data.
+      val dataRDD = sqlContext.parquetFile(dataPath(path))
+      // Check schema explicitly since erasure makes it hard to use match-case for checking.
+      checkSchema[Data](dataRDD.schema)
+      val dataArray = dataRDD.select("labels", "pi", "theta", "modelType").take(1)
+      assert(dataArray.size == 1, s"Unable to load NaiveBayesModel data from: ${dataPath(path)}")
+      val data = dataArray(0)
+      val labels = data.getAs[Seq[Double]](0).toArray
+      val pi = data.getAs[Seq[Double]](1).toArray
+      val theta = data.getAs[Seq[Seq[Double]]](2).map(_.toArray).toArray
+      val modelType: NaiveBayesModels = NaiveBayesModels.withName(data.getAs[String](3))
+      new NaiveBayesModel(labels, pi, theta, modelType)
+    }
+  }
+
+  override def load(sc: SparkContext, path: String): NaiveBayesModel = {
+    def getModelType(metadata: JValue): NaiveBayesModels = {
+      implicit val formats = DefaultFormats
+      NaiveBayesModels.withName((metadata \ "modelType").extract[String])
+    }
+    val (loadedClassName, version, metadata) = loadMetadata(sc, path)
+    val classNameV1_0 = SaveLoadV1_0.thisClassName
+    (loadedClassName, version) match {
+      case (className, "1.0") if className == classNameV1_0 =>
+        val (numFeatures, numClasses) = ClassificationModel.getNumFeaturesClasses(metadata)
+        val model = SaveLoadV1_0.load(sc, path)
+        assert(model.pi.size == numClasses,
+          s"NaiveBayesModel.load expected $numClasses classes," +
+          s" but class priors vector pi had ${model.pi.size} elements")
+        assert(model.theta.size == numClasses,
+          s"NaiveBayesModel.load expected $numClasses classes," +
+            s" but class conditionals array theta had ${model.theta.size} elements")
+        assert(model.theta.forall(_.size == numFeatures),
+          s"NaiveBayesModel.load expected $numFeatures features," +
+          s" but class conditionals array theta had elements of size:" +
+          s" ${model.theta.map(_.size).mkString(",")}")
+        assert(model.modelType == getModelType(metadata))
+        model
+      case _ => throw new Exception(
+        s"NaiveBayesModel.load did not recognize model with (className, format version):" +
+        s"($loadedClassName, $version).  Supported:\n" +
+        s"  ($classNameV1_0, 1.0)")
     }
   }
 }
@@ -92,7 +186,7 @@ class NaiveBayesModel private[mllib] (
  * Bernoulli NB ([[http://tinyurl.com/p7c96j6]]). The input feature values must be nonnegative.
  */
 class NaiveBayes private (private var lambda: Double,
-                          var model: NaiveBayesModels) extends Serializable with Logging {
+                          var modelType: NaiveBayesModels) extends Serializable with Logging {
 
   def this(lambda: Double) = this(lambda, NaiveBayesModels.Multinomial)
 
@@ -106,7 +200,7 @@ class NaiveBayes private (private var lambda: Double,
 
   /** Set the model type. Default: Multinomial. */
   def setModelType(model: NaiveBayesModels): NaiveBayes = {
-    this.model = model
+    this.modelType = model
     this
   }
 
@@ -161,7 +255,7 @@ class NaiveBayes private (private var lambda: Double,
     aggregated.foreach { case (label, (n, sumTermFreqs)) =>
       labels(i) = label
       pi(i) = math.log(n + lambda) - piLogDenom
-      val thetaLogDenom = model match {
+      val thetaLogDenom = modelType match {
         case NaiveBayesModels.Multinomial => math.log(brzSum(sumTermFreqs) + numFeatures * lambda)
         case NaiveBayesModels.Bernoulli => math.log(n + 2.0 * lambda)
       }
@@ -173,7 +267,7 @@ class NaiveBayes private (private var lambda: Double,
       i += 1
     }
 
-    new NaiveBayesModel(labels, pi, theta, model)
+    new NaiveBayesModel(labels, pi, theta, modelType)
   }
 }
 
@@ -226,10 +320,10 @@ object NaiveBayes {
    *              vector or a count vector.
    * @param lambda The smoothing parameter
    *
-   * @param model The type of NB model to fit from the enumeration NaiveBayesModels, can be
+   * @param modelType The type of NB model to fit from the enumeration NaiveBayesModels, can be
    *              Multinomial or Bernoulli
    */
-  def train(input: RDD[LabeledPoint], lambda: Double, model: String): NaiveBayesModel = {
-    new NaiveBayes(lambda,  NaiveBayesModels.withName(model)).run(input)
+  def train(input: RDD[LabeledPoint], lambda: Double, modelType: String): NaiveBayesModel = {
+    new NaiveBayes(lambda,  NaiveBayesModels.withName(modelType)).run(input)
   }
 }

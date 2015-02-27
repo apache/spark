@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive
 
 import java.util
-import java.sql.Date
 import java.util.{Locale, TimeZone}
 
 import org.apache.hadoop.hive.ql.udf.UDAFPercentile
@@ -76,7 +75,7 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
     Literal(0.asInstanceOf[Float]) ::
     Literal(0.asInstanceOf[Double]) ::
     Literal("0") ::
-    Literal(new Date(2014, 9, 23)) ::
+    Literal(new java.sql.Date(114, 8, 23)) ::
     Literal(Decimal(BigDecimal(123.123))) ::
     Literal(new java.sql.Timestamp(123123)) ::
     Literal(Array[Byte](1,2,3)) ::
@@ -129,6 +128,12 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
     }
   }
 
+  def checkValues(row1: Seq[Any], row2: Row): Unit = {
+    row1.zip(row2.toSeq).map {
+      case (r1, r2) => checkValue(r1, r2)
+    }
+  }
+
   def checkValue(v1: Any, v2: Any): Unit = {
     (v1, v2) match {
       case (r1: Decimal, r2: Decimal) =>
@@ -137,7 +142,6 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
       case (r1: Array[Byte], r2: Array[Byte])
         if r1 != null && r2 != null && r1.length == r2.length =>
         r1.zip(r2).map { case (b1, b2) => assert(b1 === b2) }
-      case (r1: Date, r2: Date) => assert(r1.compareTo(r2) === 0)
       case (r1, r2) => assert(r1 === r2)
     }
   }
@@ -198,7 +202,7 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
       case (t, idx) => StructField(s"c_$idx", t)
     })
 
-    checkValues(row, unwrap(wrap(row, toInspector(dt)), toInspector(dt)).asInstanceOf[Row])
+    checkValues(row, unwrap(wrap(Row.fromSeq(row), toInspector(dt)), toInspector(dt)).asInstanceOf[Row])
     checkValue(null, unwrap(wrap(null, toInspector(dt)), toInspector(dt)))
   }
 

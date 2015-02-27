@@ -30,6 +30,7 @@ import org.apache.mesos._
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, TaskState => MesosTaskState,
   ExecutorInfo => MesosExecutorInfo, _}
 
+import org.apache.spark.executor.MesosExecutorBackend
 import org.apache.spark.{Logging, SparkContext, SparkException, TaskState}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.scheduler._
@@ -123,14 +124,15 @@ private[spark] class MesosSchedulerBackend(
     val command = CommandInfo.newBuilder()
       .setEnvironment(environment)
     val uri = sc.conf.get("spark.executor.uri", null)
+    val executorBackendName = classOf[MesosExecutorBackend].getName
     if (uri == null) {
-      val executorPath = new File(executorSparkHome, "/sbin/spark-executor").getCanonicalPath
-      command.setValue("%s %s".format(prefixEnv, executorPath))
+      val executorPath = new File(executorSparkHome, "/bin/spark-class").getCanonicalPath
+      command.setValue(s"$prefixEnv $executorPath $executorBackendName")
     } else {
       // Grab everything to the first '.'. We'll use that and '*' to
       // glob the directory "correctly".
       val basename = uri.split('/').last.split('.').head
-      command.setValue("cd %s*; %s ./sbin/spark-executor".format(basename, prefixEnv))
+      command.setValue(s"cd ${basename}*; $prefixEnv ./bin/spark-class $executorBackendName")
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri))
     }
     val cpus = Resource.newBuilder()
@@ -267,8 +269,9 @@ private[spark] class MesosSchedulerBackend(
 
       mesosTasks.foreach { case (slaveId, tasks) =>
         slaveIdToWorkerOffer.get(slaveId).foreach(o =>
-          listenerBus.post(SparkListenerExecutorAdded(slaveId,
-            new ExecutorInfo(o.host, o.cores)))
+          listenerBus.post(SparkListenerExecutorAdded(System.currentTimeMillis(), slaveId,
+            // TODO: Add support for log urls for Mesos
+            new ExecutorInfo(o.host, o.cores, Map.empty)))
         )
         d.launchTasks(Collections.singleton(slaveIdToOffer(slaveId).getId), tasks, filters)
       }
@@ -325,7 +328,7 @@ private[spark] class MesosSchedulerBackend(
       synchronized {
         if (status.getState == MesosTaskState.TASK_LOST && taskIdToSlaveId.contains(tid)) {
           // We lost the executor on this slave, so remember that it's gone
-          removeExecutor(taskIdToSlaveId(tid))
+          removeExecutor(taskIdToSlaveId(tid), "Lost executor")
         }
         if (isFinished(status.getState)) {
           taskIdToSlaveId.remove(tid)
@@ -357,9 +360,9 @@ private[spark] class MesosSchedulerBackend(
   /**
    * Remove executor associated with slaveId in a thread safe manner.
    */
-  private def removeExecutor(slaveId: String) = {
+  private def removeExecutor(slaveId: String, reason: String) = {
     synchronized {
-      listenerBus.post(SparkListenerExecutorRemoved(slaveId))
+      listenerBus.post(SparkListenerExecutorRemoved(System.currentTimeMillis(), slaveId, reason))
       slaveIdsWithExecutors -= slaveId
     }
   }
@@ -367,7 +370,7 @@ private[spark] class MesosSchedulerBackend(
   private def recordSlaveLost(d: SchedulerDriver, slaveId: SlaveID, reason: ExecutorLossReason) {
     inClassLoader() {
       logInfo("Mesos slave lost: " + slaveId.getValue)
-      removeExecutor(slaveId.getValue)
+      removeExecutor(slaveId.getValue, reason.toString)
       scheduler.executorLost(slaveId.getValue, reason)
     }
   }

@@ -46,7 +46,8 @@ private[sql] class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(co
     kryo.register(classOf[org.apache.spark.sql.catalyst.expressions.GenericMutableRow])
     kryo.register(classOf[com.clearspring.analytics.stream.cardinality.HyperLogLog],
                   new HyperLogLogSerializer)
-    kryo.register(classOf[scala.math.BigDecimal], new BigDecimalSerializer)
+    kryo.register(classOf[java.math.BigDecimal], new JavaBigDecimalSerializer)
+    kryo.register(classOf[BigDecimal], new ScalaBigDecimalSerializer)
 
     // Specific hashsets must come first TODO: Move to core.
     kryo.register(classOf[IntegerHashSet], new IntegerHashSetSerializer)
@@ -99,14 +100,25 @@ private[sql] object SparkSqlSerializer {
     }
 }
 
-private[sql] class BigDecimalSerializer extends Serializer[BigDecimal] {
-  def write(kryo: Kryo, output: Output, bd: math.BigDecimal) {
+private[sql] class JavaBigDecimalSerializer extends Serializer[java.math.BigDecimal] {
+  def write(kryo: Kryo, output: Output, bd: java.math.BigDecimal) {
     // TODO: There are probably more efficient representations than strings...
-    output.writeString(bd.toString())
+    output.writeString(bd.toString)
+  }
+
+  def read(kryo: Kryo, input: Input, tpe: Class[java.math.BigDecimal]): java.math.BigDecimal = {
+    new java.math.BigDecimal(input.readString())
+  }
+}
+
+private[sql] class ScalaBigDecimalSerializer extends Serializer[BigDecimal] {
+  def write(kryo: Kryo, output: Output, bd: BigDecimal) {
+    // TODO: There are probably more efficient representations than strings...
+    output.writeString(bd.toString)
   }
 
   def read(kryo: Kryo, input: Input, tpe: Class[BigDecimal]): BigDecimal = {
-    BigDecimal(input.readString())
+    new java.math.BigDecimal(input.readString())
   }
 }
 

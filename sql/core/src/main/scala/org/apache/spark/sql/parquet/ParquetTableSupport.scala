@@ -83,7 +83,8 @@ private[parquet] class RowReadSupport extends ReadSupport[Row] with Logging {
     // TODO: Why it can be null?
     if (schema == null)  {
       log.debug("falling back to Parquet read schema")
-      schema = ParquetTypesConverter.convertToAttributes(parquetSchema, false)
+      schema = ParquetTypesConverter.convertToAttributes(
+        parquetSchema, false, true)
     }
     log.debug(s"list of attributes that will be read: $schema")
     new RowRecordMaterializer(parquetSchema, schema)
@@ -98,7 +99,11 @@ private[parquet] class RowReadSupport extends ReadSupport[Row] with Logging {
     val requestedAttributes = RowReadSupport.getRequestedSchema(configuration)
 
     if (requestedAttributes != null) {
-      parquetSchema = ParquetTypesConverter.convertFromAttributes(requestedAttributes)
+      // If the parquet file is thrift derived, there is a good chance that
+      // it will have the thrift class in metadata.
+      val isThriftDerived = keyValueMetaData.keySet().contains("thrift.class")
+      parquetSchema = ParquetTypesConverter
+        .convertFromAttributes(requestedAttributes, isThriftDerived)
       metadata.put(
         RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
         ParquetTypesConverter.convertToString(requestedAttributes))
@@ -154,7 +159,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
     val attributesSize = attributes.size
     if (attributesSize > record.size) {
       throw new IndexOutOfBoundsException(
-        s"Trying to write more fields than contained in row (${attributesSize}>${record.size})")
+        s"Trying to write more fields than contained in row ($attributesSize > ${record.size})")
     }
 
     var index = 0
@@ -184,12 +189,12 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
         case t @ StructType(_) => writeStruct(
           t,
           value.asInstanceOf[CatalystConverter.StructScalaType[_]])
-        case _ => writePrimitive(schema.asInstanceOf[PrimitiveType], value)
+        case _ => writePrimitive(schema.asInstanceOf[NativeType], value)
       }
     }
   }
 
-  private[parquet] def writePrimitive(schema: PrimitiveType, value: Any): Unit = {
+  private[parquet] def writePrimitive(schema: DataType, value: Any): Unit = {
     if (value != null) {
       schema match {
         case StringType => writer.addBinary(
@@ -202,6 +207,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
         case IntegerType => writer.addInteger(value.asInstanceOf[Int])
         case ShortType => writer.addInteger(value.asInstanceOf[Short])
         case LongType => writer.addLong(value.asInstanceOf[Long])
+        case TimestampType => writeTimestamp(value.asInstanceOf[java.sql.Timestamp])
         case ByteType => writer.addInteger(value.asInstanceOf[Byte])
         case DoubleType => writer.addDouble(value.asInstanceOf[Double])
         case FloatType => writer.addFloat(value.asInstanceOf[Float])
@@ -307,6 +313,10 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
     writer.addBinary(Binary.fromByteArray(scratchBytes, 0, numBytes))
   }
 
+  private[parquet] def writeTimestamp(ts: java.sql.Timestamp): Unit = {
+    val binaryNanoTime = CatalystTimestampConverter.convertFromTimestamp(ts)
+    writer.addBinary(binaryNanoTime)
+  }
 }
 
 // Optimized for non-nested rows
@@ -315,7 +325,7 @@ private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
     val attributesSize = attributes.size
     if (attributesSize > record.size) {
       throw new IndexOutOfBoundsException(
-        s"Trying to write more fields than contained in row (${attributesSize}>${record.size})")
+        s"Trying to write more fields than contained in row ($attributesSize > ${record.size})")
     }
 
     var index = 0
@@ -338,10 +348,7 @@ private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
       index: Int): Unit = {
     ctype match {
       case StringType => writer.addBinary(
-        Binary.fromByteArray(
-          record(index).asInstanceOf[String].getBytes("utf-8")
-        )
-      )
+        Binary.fromByteArray(record(index).asInstanceOf[String].getBytes("utf-8")))
       case BinaryType => writer.addBinary(
         Binary.fromByteArray(record(index).asInstanceOf[Array[Byte]]))
       case IntegerType => writer.addInteger(record.getInt(index))
@@ -351,6 +358,7 @@ private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
       case DoubleType => writer.addDouble(record.getDouble(index))
       case FloatType => writer.addFloat(record.getFloat(index))
       case BooleanType => writer.addBoolean(record.getBoolean(index))
+      case TimestampType => writeTimestamp(record(index).asInstanceOf[java.sql.Timestamp])
       case d: DecimalType =>
         if (d.precisionInfo == None || d.precisionInfo.get.precision > 18) {
           sys.error(s"Unsupported datatype $d, cannot write to consumer")

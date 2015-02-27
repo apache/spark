@@ -55,7 +55,7 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
     context = new TaskContextImpl(stageId = stageId, partitionId = partitionId,
       taskAttemptId = taskAttemptId, attemptNumber = attemptNumber, runningLocally = false)
     TaskContextHelper.setTaskContext(context)
-    context.taskMetrics.hostname = Utils.localHostName()
+    context.taskMetrics.setHostname(Utils.localHostName())
     taskThread = Thread.currentThread()
     if (_killed) {
       kill(interruptThread = false)

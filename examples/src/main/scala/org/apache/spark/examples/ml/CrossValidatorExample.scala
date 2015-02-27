@@ -18,12 +18,12 @@
 package org.apache.spark.examples.ml
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.SparkContext._
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
 import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
 import org.apache.spark.ml.tuning.{ParamGridBuilder, CrossValidator}
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.sql.{Row, SQLContext}
 
 /**
@@ -44,10 +44,10 @@ object CrossValidatorExample {
     val conf = new SparkConf().setAppName("CrossValidatorExample")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
-    import sqlContext._
+    import sqlContext.implicits._
 
     // Prepare training documents, which are labeled.
-    val training = sparkContext.parallelize(Seq(
+    val training = sc.parallelize(Seq(
       LabeledDocument(0L, "a b c d e spark", 1.0),
       LabeledDocument(1L, "b d", 0.0),
       LabeledDocument(2L, "spark f g h", 1.0),
@@ -90,21 +90,21 @@ object CrossValidatorExample {
     crossval.setNumFolds(2) // Use 3+ in practice
 
     // Run cross-validation, and choose the best set of parameters.
-    val cvModel = crossval.fit(training)
+    val cvModel = crossval.fit(training.toDF())
 
     // Prepare test documents, which are unlabeled.
-    val test = sparkContext.parallelize(Seq(
+    val test = sc.parallelize(Seq(
       Document(4L, "spark i j k"),
       Document(5L, "l m n"),
       Document(6L, "mapreduce spark"),
       Document(7L, "apache hadoop")))
 
     // Make predictions on test documents. cvModel uses the best model found (lrModel).
-    cvModel.transform(test)
-      .select('id, 'text, 'score, 'prediction)
+    cvModel.transform(test.toDF())
+      .select("id", "text", "probability", "prediction")
       .collect()
-      .foreach { case Row(id: Long, text: String, score: Double, prediction: Double) =>
-      println("(" + id + ", " + text + ") --> score=" + score + ", prediction=" + prediction)
+      .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
+      println(s"($id, $text) --> prob=$prob, prediction=$prediction")
     }
 
     sc.stop()

@@ -19,11 +19,26 @@ package org.apache.spark.sql.types
 
 import java.text.SimpleDateFormat
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.types.Decimal
+import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 
 
 protected[sql] object DataTypeConversions {
+
+  def productToRow(product: Product, schema: StructType): Row = {
+    val mutableRow = new GenericMutableRow(product.productArity)
+    val schemaFields = schema.fields.toArray
+
+    var i = 0
+    while (i < mutableRow.length) {
+      mutableRow(i) =
+        ScalaReflection.convertToCatalyst(product.productElement(i), schemaFields(i).dataType)
+      i += 1
+    }
+
+    mutableRow
+  }
 
   def stringToTime(s: String): java.util.Date = {
     if (!s.contains('T')) {
@@ -56,13 +71,7 @@ protected[sql] object DataTypeConversions {
   /** Converts Java objects to catalyst rows / types */
   def convertJavaToCatalyst(a: Any, dataType: DataType): Any = (a, dataType) match {
     case (obj, udt: UserDefinedType[_]) => ScalaReflection.convertToCatalyst(obj, udt) // Scala type
-    case (d: java.math.BigDecimal, _) => Decimal(BigDecimal(d))
+    case (d: java.math.BigDecimal, _) => Decimal(d)
     case (other, _) => other
-  }
-
-  /** Converts Java objects to catalyst rows / types */
-  def convertCatalystToJava(a: Any): Any = a match {
-    case d: scala.math.BigDecimal => d.underlying()
-    case other => other
   }
 }

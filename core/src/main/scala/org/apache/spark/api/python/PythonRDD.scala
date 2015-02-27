@@ -67,17 +67,16 @@ private[spark] class PythonRDD(
       envVars += ("SPARK_REUSE_WORKER" -> "1")
     }
     val worker: Socket = env.createPythonWorker(pythonExec, envVars.toMap)
+    // Whether is the worker released into idle pool
+    @volatile var released = false
 
     // Start a thread to feed the process input from our parent's iterator
     val writerThread = new WriterThread(env, worker, split, context)
 
-    var complete_cleanly = false
     context.addTaskCompletionListener { context =>
       writerThread.shutdownOnTaskCompletion()
       writerThread.join()
-      if (reuse_worker && complete_cleanly) {
-        env.releasePythonWorker(pythonExec, envVars.toMap, worker)
-      } else {
+      if (!reuse_worker || !released) {
         try {
           worker.close()
         } catch {
@@ -125,8 +124,8 @@ private[spark] class PythonRDD(
                 init, finish))
               val memoryBytesSpilled = stream.readLong()
               val diskBytesSpilled = stream.readLong()
-              context.taskMetrics.memoryBytesSpilled += memoryBytesSpilled
-              context.taskMetrics.diskBytesSpilled += diskBytesSpilled
+              context.taskMetrics.incMemoryBytesSpilled(memoryBytesSpilled)
+              context.taskMetrics.incDiskBytesSpilled(diskBytesSpilled)
               read()
             case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
               // Signals that an exception has been thrown in python
@@ -145,8 +144,12 @@ private[spark] class PythonRDD(
                 stream.readFully(update)
                 accumulator += Collections.singletonList(update)
               }
+              // Check whether the worker is ready to be re-used.
               if (stream.readInt() == SpecialLengths.END_OF_STREAM) {
-                complete_cleanly = true
+                if (reuse_worker) {
+                  env.releasePythonWorker(pythonExec, envVars.toMap, worker)
+                  released = true
+                }
               }
               null
           }
@@ -245,13 +248,13 @@ private[spark] class PythonRDD(
       } catch {
         case e: Exception if context.isCompleted || context.isInterrupted =>
           logDebug("Exception thrown after task completion (likely due to cleanup)", e)
-          worker.shutdownOutput()
+          Utils.tryLog(worker.shutdownOutput())
 
         case e: Exception =>
           // We must avoid throwing exceptions here, because the thread uncaught exception handler
           // will kill the whole executor (see org.apache.spark.executor.Executor).
           _exception = e
-          worker.shutdownOutput()
+          Utils.tryLog(worker.shutdownOutput())
       } finally {
         // Release memory used by this thread for shuffles
         env.shuffleMemoryManager.releaseMemoryForThisThread()
@@ -300,6 +303,7 @@ private class PythonException(msg: String, cause: Exception) extends RuntimeExce
 private class PairwiseRDD(prev: RDD[Array[Byte]]) extends
   RDD[(Long, Array[Byte])](prev) {
   override def getPartitions = prev.partitions
+  override val partitioner = prev.partitioner
   override def compute(split: Partition, context: TaskContext) =
     prev.iterator(split, context).grouped(2).map {
       case Seq(a, b) => (Utils.deserializeLongValue(a), b)
@@ -313,6 +317,7 @@ private object SpecialLengths {
   val PYTHON_EXCEPTION_THROWN = -2
   val TIMING_DATA = -3
   val END_OF_STREAM = -4
+  val NULL = -5
 }
 
 private[spark] object PythonRDD extends Logging {
@@ -323,6 +328,15 @@ private[spark] object PythonRDD extends Logging {
     synchronized {
       workerBroadcasts.getOrElseUpdate(worker, new mutable.HashSet[Long]())
     }
+  }
+
+  /**
+   * Return an RDD of values from an RDD of (Long, Array[Byte]), with preservePartitions=true
+   *
+   * This is useful for PySpark to have the partitioner after partitionBy()
+   */
+  def valueOfPair(pair: JavaPairRDD[Long, Array[Byte]]): JavaRDD[Array[Byte]] = {
+    pair.rdd.mapPartitions(it => it.map(_._2), true)
   }
 
   /**
@@ -371,54 +385,25 @@ private[spark] object PythonRDD extends Logging {
   }
 
   def writeIteratorToStream[T](iter: Iterator[T], dataOut: DataOutputStream) {
-    // The right way to implement this would be to use TypeTags to get the full
-    // type of T.  Since I don't want to introduce breaking changes throughout the
-    // entire Spark API, I have to use this hacky approach:
-    if (iter.hasNext) {
-      val first = iter.next()
-      val newIter = Seq(first).iterator ++ iter
-      first match {
-        case arr: Array[Byte] =>
-          newIter.asInstanceOf[Iterator[Array[Byte]]].foreach { bytes =>
-            dataOut.writeInt(bytes.length)
-            dataOut.write(bytes)
-          }
-        case string: String =>
-          newIter.asInstanceOf[Iterator[String]].foreach { str =>
-            writeUTF(str, dataOut)
-          }
-        case stream: PortableDataStream =>
-          newIter.asInstanceOf[Iterator[PortableDataStream]].foreach { stream =>
-            val bytes = stream.toArray()
-            dataOut.writeInt(bytes.length)
-            dataOut.write(bytes)
-          }
-        case (key: String, stream: PortableDataStream) =>
-          newIter.asInstanceOf[Iterator[(String, PortableDataStream)]].foreach {
-            case (key, stream) =>
-              writeUTF(key, dataOut)
-              val bytes = stream.toArray()
-              dataOut.writeInt(bytes.length)
-              dataOut.write(bytes)
-          }
-        case (key: String, value: String) =>
-          newIter.asInstanceOf[Iterator[(String, String)]].foreach {
-            case (key, value) =>
-              writeUTF(key, dataOut)
-              writeUTF(value, dataOut)
-          }
-        case (key: Array[Byte], value: Array[Byte]) =>
-          newIter.asInstanceOf[Iterator[(Array[Byte], Array[Byte])]].foreach {
-            case (key, value) =>
-              dataOut.writeInt(key.length)
-              dataOut.write(key)
-              dataOut.writeInt(value.length)
-              dataOut.write(value)
-          }
-        case other =>
-          throw new SparkException("Unexpected element type " + first.getClass)
-      }
+
+    def write(obj: Any): Unit = obj match {
+      case null =>
+        dataOut.writeInt(SpecialLengths.NULL)
+      case arr: Array[Byte] =>
+        dataOut.writeInt(arr.length)
+        dataOut.write(arr)
+      case str: String =>
+        writeUTF(str, dataOut)
+      case stream: PortableDataStream =>
+        write(stream.toArray())
+      case (key, value) =>
+        write(key)
+        write(value)
+      case other =>
+        throw new SparkException("Unexpected element type " + other.getClass)
     }
+
+    iter.foreach(write)
   }
 
   /**

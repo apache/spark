@@ -30,7 +30,7 @@ class ColumnStatsSuite extends FunSuite {
   testColumnStats(classOf[FloatColumnStats], FLOAT, Row(Float.MaxValue, Float.MinValue, 0))
   testColumnStats(classOf[DoubleColumnStats], DOUBLE, Row(Double.MaxValue, Double.MinValue, 0))
   testColumnStats(classOf[StringColumnStats], STRING, Row(null, null, 0))
-  testColumnStats(classOf[DateColumnStats], DATE, Row(null, null, 0))
+  testColumnStats(classOf[DateColumnStats], DATE, Row(Int.MaxValue, Int.MinValue, 0))
   testColumnStats(classOf[TimestampColumnStats], TIMESTAMP, Row(null, null, 0))
 
   def testColumnStats[T <: NativeType, U <: ColumnStats](
@@ -42,8 +42,8 @@ class ColumnStatsSuite extends FunSuite {
 
     test(s"$columnStatsName: empty") {
       val columnStats = columnStatsClass.newInstance()
-      columnStats.collectedStatistics.zip(initialStatistics).foreach { case (actual, expected) =>
-        assert(actual === expected)
+      columnStats.collectedStatistics.toSeq.zip(initialStatistics.toSeq).foreach {
+        case (actual, expected) => assert(actual === expected)
       }
     }
 
@@ -54,7 +54,7 @@ class ColumnStatsSuite extends FunSuite {
       val rows = Seq.fill(10)(makeRandomRow(columnType)) ++ Seq.fill(10)(makeNullRow(1))
       rows.foreach(columnStats.gatherStats(_, 0))
 
-      val values = rows.take(10).map(_.head.asInstanceOf[T#JvmType])
+      val values = rows.take(10).map(_(0).asInstanceOf[T#JvmType])
       val ordering = columnType.dataType.ordering.asInstanceOf[Ordering[T#JvmType]]
       val stats = columnStats.collectedStatistics
 

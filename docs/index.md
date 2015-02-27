@@ -1,6 +1,8 @@
 ---
 layout: global
-title: Spark Overview
+displayTitle: Spark Overview
+title: Overview
+description: Apache Spark SPARK_VERSION_SHORT documentation homepage
 ---
 
 Apache Spark is a fast and general-purpose cluster computing system.

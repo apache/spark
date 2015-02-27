@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.types.NativeType
+import org.apache.spark.sql.types.{StructType, NativeType}
 
 
 /**
@@ -44,7 +44,7 @@ trait MutableRow extends Row {
  */
 object EmptyRow extends Row {
   override def apply(i: Int): Any = throw new UnsupportedOperationException
-  override def iterator = Iterator.empty
+  override def toSeq = Seq.empty
   override def length = 0
   override def isNullAt(i: Int): Boolean = throw new UnsupportedOperationException
   override def getInt(i: Int): Int = throw new UnsupportedOperationException
@@ -70,7 +70,7 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
 
   def this(size: Int) = this(new Array[Any](size))
 
-  override def iterator = values.iterator
+  override def toSeq = values.toSeq
 
   override def length = values.length
 
@@ -114,12 +114,11 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
   }
 
   override def getString(i: Int): String = {
-    if (values(i) == null) sys.error("Failed to check null bit for primitive String value.")
     values(i).asInstanceOf[String]
   }
 
   // Custom hashCode function that matches the efficient code generated version.
-  override def hashCode(): Int = {
+  override def hashCode: Int = {
     var result: Int = 37
 
     var i = 0
@@ -148,6 +147,10 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
   }
 
   def copy() = this
+}
+
+class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
+  extends GenericRow(values) {
 }
 
 class GenericMutableRow(v: Array[Any]) extends GenericRow(v) with MutableRow {

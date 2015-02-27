@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.GenericRow
+import scala.util.hashing.MurmurHash3
 
+import org.apache.spark.sql.catalyst.expressions.GenericRow
+import org.apache.spark.sql.types.{StructType, DateUtils}
 
 object Row {
   /**
@@ -32,7 +34,7 @@ object Row {
    * }
    * }}}
    */
-  def unapplySeq(row: Row): Some[Seq[Any]] = Some(row)
+  def unapplySeq(row: Row): Some[Seq[Any]] = Some(row.toSeq)
 
   /**
    * This method can be used to construct a [[Row]] with the given values.
@@ -43,6 +45,16 @@ object Row {
    * This method can be used to construct a [[Row]] from a [[Seq]] of values.
    */
   def fromSeq(values: Seq[Any]): Row = new GenericRow(values.toArray)
+
+  def fromTuple(tuple: Product): Row = fromSeq(tuple.productIterator.toSeq)
+
+  /**
+   * Merge multiple rows into a single row, one after another.
+   */
+  def merge(rows: Row*): Row = {
+    // TODO: Improve the performance of this if used in performance critical part.
+    new GenericRow(rows.flatMap(_.toSeq).toArray)
+  }
 }
 
 
@@ -91,26 +103,6 @@ object Row {
  * // isNull: Boolean = true
  * }}}
  *
- * Interfaces related to native primitive access are:
- *
- * `isNullAt(i: Int): Boolean`
- *
- * `getInt(i: Int): Int`
- *
- * `getLong(i: Int): Long`
- *
- * `getDouble(i: Int): Double`
- *
- * `getFloat(i: Int): Float`
- *
- * `getBoolean(i: Int): Boolean`
- *
- * `getShort(i: Int): Short`
- *
- * `getByte(i: Int): Byte`
- *
- * `getString(i: Int): String`
- *
  * In Scala, fields in a [[Row]] object can be extracted in a pattern match. Example:
  * {{{
  * import org.apache.spark.sql._
@@ -123,100 +115,193 @@ object Row {
  *
  * @group row
  */
-trait Row extends Seq[Any] with Serializable {
+trait Row extends Serializable {
+  /** Number of elements in the Row. */
+  def size: Int = length
+
+  /** Number of elements in the Row. */
+  def length: Int
+
+  /**
+   * Schema for the row.
+   */
+  def schema: StructType = null
+
+  /**
+   * Returns the value at position i. If the value is null, null is returned. The following
+   * is a mapping between Spark SQL types and return types:
+   *
+   * {{{
+   *   BooleanType -> java.lang.Boolean
+   *   ByteType -> java.lang.Byte
+   *   ShortType -> java.lang.Short
+   *   IntegerType -> java.lang.Integer
+   *   FloatType -> java.lang.Float
+   *   DoubleType -> java.lang.Double
+   *   StringType -> String
+   *   DecimalType -> java.math.BigDecimal
+   *
+   *   DateType -> java.sql.Date
+   *   TimestampType -> java.sql.Timestamp
+   *
+   *   BinaryType -> byte array
+   *   ArrayType -> scala.collection.Seq (use getList for java.util.List)
+   *   MapType -> scala.collection.Map (use getJavaMap for java.util.Map)
+   *   StructType -> org.apache.spark.sql.Row
+   * }}}
+   */
   def apply(i: Int): Any
 
-  /** Returns the value at position i. If the value is null, null is returned. */
+  /**
+   * Returns the value at position i. If the value is null, null is returned. The following
+   * is a mapping between Spark SQL types and return types:
+   *
+   * {{{
+   *   BooleanType -> java.lang.Boolean
+   *   ByteType -> java.lang.Byte
+   *   ShortType -> java.lang.Short
+   *   IntegerType -> java.lang.Integer
+   *   FloatType -> java.lang.Float
+   *   DoubleType -> java.lang.Double
+   *   StringType -> String
+   *   DecimalType -> java.math.BigDecimal
+   *
+   *   DateType -> java.sql.Date
+   *   TimestampType -> java.sql.Timestamp
+   *
+   *   BinaryType -> byte array
+   *   ArrayType -> scala.collection.Seq (use getList for java.util.List)
+   *   MapType -> scala.collection.Map (use getJavaMap for java.util.Map)
+   *   StructType -> org.apache.spark.sql.Row
+   * }}}
+   */
   def get(i: Int): Any = apply(i)
 
   /** Checks whether the value at position i is null. */
   def isNullAt(i: Int): Boolean
 
   /**
+   * Returns the value at position i as a primitive boolean.
+   *
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
+   */
+  def getBoolean(i: Int): Boolean
+
+  /**
+   * Returns the value at position i as a primitive byte.
+   *
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
+   */
+  def getByte(i: Int): Byte
+
+  /**
+   * Returns the value at position i as a primitive short.
+   *
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
+   */
+  def getShort(i: Int): Short
+
+  /**
    * Returns the value at position i as a primitive int.
-   * Throws an exception if the type mismatches or if the value is null.
+   *
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
    */
   def getInt(i: Int): Int
 
   /**
    * Returns the value at position i as a primitive long.
-   * Throws an exception if the type mismatches or if the value is null.
+   *
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
    */
   def getLong(i: Int): Long
 
   /**
-   * Returns the value at position i as a primitive double.
-   * Throws an exception if the type mismatches or if the value is null.
-   */
-  def getDouble(i: Int): Double
-
-  /**
    * Returns the value at position i as a primitive float.
    * Throws an exception if the type mismatches or if the value is null.
+   *
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
    */
   def getFloat(i: Int): Float
 
   /**
-   * Returns the value at position i as a primitive boolean.
-   * Throws an exception if the type mismatches or if the value is null.
+   * Returns the value at position i as a primitive double.
+   *
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
    */
-  def getBoolean(i: Int): Boolean
-
-  /**
-   * Returns the value at position i as a primitive short.
-   * Throws an exception if the type mismatches or if the value is null.
-   */
-  def getShort(i: Int): Short
-
-  /**
-   * Returns the value at position i as a primitive byte.
-   * Throws an exception if the type mismatches or if the value is null.
-   */
-  def getByte(i: Int): Byte
+  def getDouble(i: Int): Double
 
   /**
    * Returns the value at position i as a String object.
-   * Throws an exception if the type mismatches or if the value is null.
+   *
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
    */
   def getString(i: Int): String
 
   /**
-   * Return the value at position i of array type as a Scala Seq.
-   * Throws an exception if the type mismatches.
+   * Returns the value at position i of decimal type as java.math.BigDecimal.
+   *
+   * @throws ClassCastException when data type does not match.
+   */
+  def getDecimal(i: Int): java.math.BigDecimal = apply(i).asInstanceOf[java.math.BigDecimal]
+
+  /**
+   * Returns the value at position i of date type as java.sql.Date.
+   *
+   * @throws ClassCastException when data type does not match.
+   */
+  def getDate(i: Int): java.sql.Date = apply(i).asInstanceOf[java.sql.Date]
+
+  /**
+   * Returns the value at position i of array type as a Scala Seq.
+   *
+   * @throws ClassCastException when data type does not match.
    */
   def getSeq[T](i: Int): Seq[T] = apply(i).asInstanceOf[Seq[T]]
 
   /**
-   * Return the value at position i of array type as [[java.util.List]].
-   * Throws an exception if the type mismatches.
+   * Returns the value at position i of array type as [[java.util.List]].
+   *
+   * @throws ClassCastException when data type does not match.
    */
   def getList[T](i: Int): java.util.List[T] = {
     scala.collection.JavaConversions.seqAsJavaList(getSeq[T](i))
   }
 
   /**
-   * Return the value at position i of map type as a Scala Map.
-   * Throws an exception if the type mismatches.
+   * Returns the value at position i of map type as a Scala Map.
+   *
+   * @throws ClassCastException when data type does not match.
    */
   def getMap[K, V](i: Int): scala.collection.Map[K, V] = apply(i).asInstanceOf[Map[K, V]]
 
   /**
-   * Return the value at position i of array type as a [[java.util.Map]].
-   * Throws an exception if the type mismatches.
+   * Returns the value at position i of array type as a [[java.util.Map]].
+   *
+   * @throws ClassCastException when data type does not match.
    */
   def getJavaMap[K, V](i: Int): java.util.Map[K, V] = {
     scala.collection.JavaConversions.mapAsJavaMap(getMap[K, V](i))
   }
 
   /**
-   * Return the value at position i of struct type as an [[Row]] object.
-   * Throws an exception if the type mismatches.
+   * Returns the value at position i of struct type as an [[Row]] object.
+   *
+   * @throws ClassCastException when data type does not match.
    */
   def getStruct(i: Int): Row = getAs[Row](i)
 
   /**
    * Returns the value at position i.
-   * Throws an exception if the type mismatches.
+   *
+   * @throws ClassCastException when data type does not match.
    */
   def getAs[T](i: Int): T = apply(i).asInstanceOf[T]
 
@@ -229,12 +314,61 @@ trait Row extends Seq[Any] with Serializable {
 
   /** Returns true if there are any NULL values in this row. */
   def anyNull: Boolean = {
-    val l = length
+    val len = length
     var i = 0
-    while (i < l) {
+    while (i < len) {
       if (isNullAt(i)) { return true }
       i += 1
     }
     false
   }
+
+  override def equals(that: Any): Boolean = that match {
+    case null => false
+    case that: Row =>
+      if (this.length != that.length) {
+        return false
+      }
+      var i = 0
+      val len = this.length
+      while (i < len) {
+        if (apply(i) != that.apply(i)) {
+          return false
+        }
+        i += 1
+      }
+      true
+    case _ => false
+  }
+
+  override def hashCode: Int = {
+    // Using Scala's Seq hash code implementation.
+    var n = 0
+    var h = MurmurHash3.seqSeed
+    val len = length
+    while (n < len) {
+      h = MurmurHash3.mix(h, apply(n).##)
+      n += 1
+    }
+    MurmurHash3.finalizeHash(h, n)
+  }
+
+  /* ---------------------- utility methods for Scala ---------------------- */
+
+  /**
+   * Return a Scala Seq representing the row. ELements are placed in the same order in the Seq.
+   */
+  def toSeq: Seq[Any]
+
+  /** Displays all elements of this sequence in a string (without a separator). */
+  def mkString: String = toSeq.mkString
+
+  /** Displays all elements of this sequence in a string using a separator string. */
+  def mkString(sep: String): String = toSeq.mkString(sep)
+
+  /**
+   * Displays all elements of this traversable or iterator in a string using
+   * start, end, and separator strings.
+   */
+  def mkString(start: String, sep: String, end: String): String = toSeq.mkString(start, sep, end)
 }

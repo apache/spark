@@ -25,10 +25,10 @@ import org.apache.spark.sql.catalyst.expressions.GenericRow;
 public class RowFactory {
 
   /**
-   * Create a {@link Row} from an array of values. Position i in the array becomes position i
-   * in the created {@link Row} object.
+   * Create a {@link Row} from the given arguments. Position i in the argument list becomes
+   * position i in the created {@link Row} object.
    */
-  public static Row create(Object[] values) {
+  public static Row create(Object ... values) {
     return new GenericRow(values);
   }
 }

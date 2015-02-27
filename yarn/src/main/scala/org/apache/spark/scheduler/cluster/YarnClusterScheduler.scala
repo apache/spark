@@ -18,29 +18,15 @@
 package org.apache.spark.scheduler.cluster
 
 import org.apache.spark._
-import org.apache.spark.deploy.yarn.{ApplicationMaster, YarnSparkHadoopUtil}
-import org.apache.spark.scheduler.TaskSchedulerImpl
-import org.apache.spark.util.Utils
+import org.apache.spark.deploy.yarn.ApplicationMaster
 
 /**
  * This is a simple extension to ClusterScheduler - to ensure that appropriate initialization of
  * ApplicationMaster, etc is done
  */
-private[spark] class YarnClusterScheduler(sc: SparkContext) extends TaskSchedulerImpl(sc) {
+private[spark] class YarnClusterScheduler(sc: SparkContext) extends YarnScheduler(sc) {
 
   logInfo("Created YarnClusterScheduler")
-
-  // Nothing else for now ... initialize application master : which needs a SparkContext to
-  // determine how to allocate.
-  // Note that only the first creation of a SparkContext influences (and ideally, there must be
-  // only one SparkContext, right ?). Subsequent creations are ignored since executors are already
-  // allocated by then.
-
-  // By default, rack is unknown
-  override def getRackForHost(hostPort: String): Option[String] = {
-    val host = Utils.parseHostPort(hostPort)._1
-    Option(YarnSparkHadoopUtil.lookupRack(sc.hadoopConfiguration, host))
-  }
 
   override def postStartHook() {
     ApplicationMaster.sparkContextInitialized(sc)

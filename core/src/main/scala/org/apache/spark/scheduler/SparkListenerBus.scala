@@ -17,78 +17,47 @@
 
 package org.apache.spark.scheduler
 
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
-
-import org.apache.spark.Logging
-import org.apache.spark.util.Utils
+import org.apache.spark.util.ListenerBus
 
 /**
- * A SparkListenerEvent bus that relays events to its listeners
+ * A [[SparkListenerEvent]] bus that relays [[SparkListenerEvent]]s to its listeners
  */
-private[spark] trait SparkListenerBus extends Logging {
+private[spark] trait SparkListenerBus extends ListenerBus[SparkListener, SparkListenerEvent] {
 
-  // SparkListeners attached to this event bus
-  protected val sparkListeners = new ArrayBuffer[SparkListener]
-    with mutable.SynchronizedBuffer[SparkListener]
-
-  def addListener(listener: SparkListener) {
-    sparkListeners += listener
-  }
-
-  /**
-   * Post an event to all attached listeners.
-   * This does nothing if the event is SparkListenerShutdown.
-   */
-  def postToAll(event: SparkListenerEvent) {
+  override def onPostEvent(listener: SparkListener, event: SparkListenerEvent): Unit = {
     event match {
       case stageSubmitted: SparkListenerStageSubmitted =>
-        foreachListener(_.onStageSubmitted(stageSubmitted))
+        listener.onStageSubmitted(stageSubmitted)
       case stageCompleted: SparkListenerStageCompleted =>
-        foreachListener(_.onStageCompleted(stageCompleted))
+        listener.onStageCompleted(stageCompleted)
       case jobStart: SparkListenerJobStart =>
-        foreachListener(_.onJobStart(jobStart))
+        listener.onJobStart(jobStart)
       case jobEnd: SparkListenerJobEnd =>
-        foreachListener(_.onJobEnd(jobEnd))
+        listener.onJobEnd(jobEnd)
       case taskStart: SparkListenerTaskStart =>
-        foreachListener(_.onTaskStart(taskStart))
+        listener.onTaskStart(taskStart)
       case taskGettingResult: SparkListenerTaskGettingResult =>
-        foreachListener(_.onTaskGettingResult(taskGettingResult))
+        listener.onTaskGettingResult(taskGettingResult)
       case taskEnd: SparkListenerTaskEnd =>
-        foreachListener(_.onTaskEnd(taskEnd))
+        listener.onTaskEnd(taskEnd)
       case environmentUpdate: SparkListenerEnvironmentUpdate =>
-        foreachListener(_.onEnvironmentUpdate(environmentUpdate))
+        listener.onEnvironmentUpdate(environmentUpdate)
       case blockManagerAdded: SparkListenerBlockManagerAdded =>
-        foreachListener(_.onBlockManagerAdded(blockManagerAdded))
+        listener.onBlockManagerAdded(blockManagerAdded)
       case blockManagerRemoved: SparkListenerBlockManagerRemoved =>
-        foreachListener(_.onBlockManagerRemoved(blockManagerRemoved))
+        listener.onBlockManagerRemoved(blockManagerRemoved)
       case unpersistRDD: SparkListenerUnpersistRDD =>
-        foreachListener(_.onUnpersistRDD(unpersistRDD))
+        listener.onUnpersistRDD(unpersistRDD)
       case applicationStart: SparkListenerApplicationStart =>
-        foreachListener(_.onApplicationStart(applicationStart))
+        listener.onApplicationStart(applicationStart)
       case applicationEnd: SparkListenerApplicationEnd =>
-        foreachListener(_.onApplicationEnd(applicationEnd))
+        listener.onApplicationEnd(applicationEnd)
       case metricsUpdate: SparkListenerExecutorMetricsUpdate =>
-        foreachListener(_.onExecutorMetricsUpdate(metricsUpdate))
+        listener.onExecutorMetricsUpdate(metricsUpdate)
       case executorAdded: SparkListenerExecutorAdded =>
-        foreachListener(_.onExecutorAdded(executorAdded))
+        listener.onExecutorAdded(executorAdded)
       case executorRemoved: SparkListenerExecutorRemoved =>
-        foreachListener(_.onExecutorRemoved(executorRemoved))
-      case SparkListenerShutdown =>
-    }
-  }
-
-  /**
-   * Apply the given function to all attached listeners, catching and logging any exception.
-   */
-  private def foreachListener(f: SparkListener => Unit): Unit = {
-    sparkListeners.foreach { listener =>
-      try {
-        f(listener)
-      } catch {
-        case e: Exception =>
-          logError(s"Listener ${Utils.getFormattedClassName(listener)} threw an exception", e)
-      }
+        listener.onExecutorRemoved(executorRemoved)
     }
   }
 

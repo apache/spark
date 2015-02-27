@@ -19,6 +19,7 @@ package org.apache.spark.executor
 
 import java.io.File
 import java.lang.management.ManagementFactory
+import java.net.URL
 import java.nio.ByteBuffer
 import java.util.concurrent._
 
@@ -33,7 +34,8 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler._
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
-import org.apache.spark.util.{SparkUncaughtExceptionHandler, AkkaUtils, Utils}
+import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader,
+  SparkUncaughtExceptionHandler, AkkaUtils, Utils}
 
 /**
  * Spark executor used with Mesos, YARN, and the standalone scheduler.
@@ -41,11 +43,15 @@ import org.apache.spark.util.{SparkUncaughtExceptionHandler, AkkaUtils, Utils}
  */
 private[spark] class Executor(
     executorId: String,
-    slaveHostname: String,
+    executorHostname: String,
     env: SparkEnv,
+    userClassPath: Seq[URL] = Nil,
     isLocal: Boolean = false)
   extends Logging
 {
+
+  logInfo(s"Starting executor ID $executorId on host $executorHostname")
+
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
   // Each map holds the master's timestamp for the version of that file or JAR we got.
   private val currentFiles: HashMap[String, Long] = new HashMap[String, Long]()
@@ -58,12 +64,12 @@ private[spark] class Executor(
   @volatile private var isStopped = false
 
   // No ip or host:port - just hostname
-  Utils.checkHost(slaveHostname, "Expected executed slave to be a hostname")
+  Utils.checkHost(executorHostname, "Expected executed slave to be a hostname")
   // must not have port specified.
-  assert (0 == Utils.parseHostPort(slaveHostname)._2)
+  assert (0 == Utils.parseHostPort(executorHostname)._2)
 
   // Make sure the local hostname we report matches the cluster scheduler's name for this host
-  Utils.setCustomHostname(slaveHostname)
+  Utils.setCustomHostname(executorHostname)
 
   if (!isLocal) {
     // Setup an uncaught exception handler for non-local mode.
@@ -72,8 +78,10 @@ private[spark] class Executor(
     Thread.setDefaultUncaughtExceptionHandler(SparkUncaughtExceptionHandler)
   }
 
+  // Start worker thread pool
+  val threadPool = Utils.newDaemonCachedThreadPool("Executor task launch worker")
+
   val executorSource = new ExecutorSource(this, executorId)
-  conf.set("spark.executor.id", executorId)
 
   if (!isLocal) {
     env.metricsSystem.registerSource(executorSource)
@@ -98,9 +106,6 @@ private[spark] class Executor(
 
   // Limit of bytes for total size of results (default is 1GB)
   private val maxResultSize = Utils.getMaxResultSize(conf)
-
-  // Start worker thread pool
-  val threadPool = Utils.newDaemonCachedThreadPool("Executor task launch worker")
 
   // Maintains the list of running tasks.
   private val runningTasks = new ConcurrentHashMap[Long, TaskRunner]
@@ -203,10 +208,10 @@ private[spark] class Executor(
         val afterSerialization = System.currentTimeMillis()
 
         for (m <- task.metrics) {
-          m.executorDeserializeTime = taskStart - deserializeStartTime
-          m.executorRunTime = taskFinish - taskStart
-          m.jvmGCTime = gcTime - startGCTime
-          m.resultSerializationTime = afterSerialization - beforeSerialization
+          m.setExecutorDeserializeTime(taskStart - deserializeStartTime)
+          m.setExecutorRunTime(taskFinish - taskStart)
+          m.setJvmGCTime(gcTime - startGCTime)
+          m.setResultSerializationTime(afterSerialization - beforeSerialization)
         }
 
         val accumUpdates = Accumulators.values
@@ -248,6 +253,11 @@ private[spark] class Executor(
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
         }
 
+        case cDE: CommitDeniedException => {
+          val reason = cDE.toTaskEndReason
+          execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
+        }
+
         case t: Throwable => {
           // Attempt to exit cleanly by informing the driver of our failure.
           // If anything goes wrong (or this was a fatal exception), we will delegate to
@@ -257,8 +267,8 @@ private[spark] class Executor(
           val serviceTime = System.currentTimeMillis() - taskStart
           val metrics = attemptedTask.flatMap(t => t.metrics)
           for (m <- metrics) {
-            m.executorRunTime = serviceTime
-            m.jvmGCTime = gcTime - startGCTime
+            m.setExecutorRunTime(serviceTime)
+            m.setJvmGCTime(gcTime - startGCTime)
           }
           val reason = new ExceptionFailure(t, metrics)
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
@@ -286,17 +296,23 @@ private[spark] class Executor(
    * created by the interpreter to the search path
    */
   private def createClassLoader(): MutableURLClassLoader = {
+    // Bootstrap the list of jars with the user class path.
+    val now = System.currentTimeMillis()
+    userClassPath.foreach { url =>
+      currentJars(url.getPath().split("/").last) = now
+    }
+
     val currentLoader = Utils.getContextOrSparkClassLoader
 
     // For each of the jars in the jarSet, add them to the class loader.
     // We assume each of the files has already been fetched.
-    val urls = currentJars.keySet.map { uri =>
+    val urls = userClassPath.toArray ++ currentJars.keySet.map { uri =>
       new File(uri.split("/").last).toURI.toURL
-    }.toArray
-    val userClassPathFirst = conf.getBoolean("spark.files.userClassPathFirst", false)
-    userClassPathFirst match {
-      case true => new ChildExecutorURLClassLoader(urls, currentLoader)
-      case false => new ExecutorURLClassLoader(urls, currentLoader)
+    }
+    if (conf.getBoolean("spark.executor.userClassPathFirst", false)) {
+      new ChildFirstURLClassLoader(urls, currentLoader)
+    } else {
+      new MutableURLClassLoader(urls, currentLoader)
     }
   }
 
@@ -309,7 +325,7 @@ private[spark] class Executor(
     if (classUri != null) {
       logInfo("Using REPL class URI: " + classUri)
       val userClassPathFirst: java.lang.Boolean =
-        conf.getBoolean("spark.files.userClassPathFirst", false)
+        conf.getBoolean("spark.executor.userClassPathFirst", false)
       try {
         val klass = Class.forName("org.apache.spark.repl.ExecutorClassLoader")
           .asInstanceOf[Class[_ <: ClassLoader]]
@@ -342,18 +358,23 @@ private[spark] class Executor(
           env.securityManager, hadoopConf, timestamp, useCache = !isLocal)
         currentFiles(name) = timestamp
       }
-      for ((name, timestamp) <- newJars if currentJars.getOrElse(name, -1L) < timestamp) {
-        logInfo("Fetching " + name + " with timestamp " + timestamp)
-        // Fetch file with useCache mode, close cache for local mode.
-        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf,
-          env.securityManager, hadoopConf, timestamp, useCache = !isLocal)
-        currentJars(name) = timestamp
-        // Add it to our class loader
+      for ((name, timestamp) <- newJars) {
         val localName = name.split("/").last
-        val url = new File(SparkFiles.getRootDirectory, localName).toURI.toURL
-        if (!urlClassLoader.getURLs.contains(url)) {
-          logInfo("Adding " + url + " to class loader")
-          urlClassLoader.addURL(url)
+        val currentTimeStamp = currentJars.get(name)
+          .orElse(currentJars.get(localName))
+          .getOrElse(-1L)
+        if (currentTimeStamp < timestamp) {
+          logInfo("Fetching " + name + " with timestamp " + timestamp)
+          // Fetch file with useCache mode, close cache for local mode.
+          Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf,
+            env.securityManager, hadoopConf, timestamp, useCache = !isLocal)
+          currentJars(name) = timestamp
+          // Add it to our class loader
+          val url = new File(SparkFiles.getRootDirectory, localName).toURI.toURL
+          if (!urlClassLoader.getURLs.contains(url)) {
+            logInfo("Adding " + url + " to class loader")
+            urlClassLoader.addURL(url)
+          }
         }
       }
     }
@@ -376,11 +397,12 @@ private[spark] class Executor(
           val curGCTime = gcTime
 
           for (taskRunner <- runningTasks.values()) {
-            if (!taskRunner.attemptedTask.isEmpty) {
+            if (taskRunner.attemptedTask.nonEmpty) {
               Option(taskRunner.task).flatMap(_.metrics).foreach { metrics =>
-                metrics.updateShuffleReadMetrics
+                metrics.updateShuffleReadMetrics()
                 metrics.updateInputMetrics()
-                metrics.jvmGCTime = curGCTime - taskRunner.startGCTime
+                metrics.setJvmGCTime(curGCTime - taskRunner.startGCTime)
+
                 if (isLocal) {
                   // JobProgressListener will hold an reference of it during
                   // onExecutorMetricsUpdate(), then JobProgressListener can not see

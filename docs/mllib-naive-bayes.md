@@ -40,7 +40,7 @@ smoothing parameter `lambda` as input, an optional model type parameter (default
 can be used for evaluation and prediction.
 
 {% highlight scala %}
-import org.apache.spark.mllib.classification.NaiveBayes
+import org.apache.spark.mllib.classification.{NaiveBayes, NaiveBayesModel}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 
@@ -58,6 +58,9 @@ val model = NaiveBayes.train(training, lambda = 1.0, model = "Multinomial")
 
 val predictionAndLabel = test.map(p => (model.predict(p.features), p.label))
 val accuracy = 1.0 * predictionAndLabel.filter(x => x._1 == x._2).count() / test.count()
+
+model.save("myModelPath")
+val sameModel = NaiveBayesModel.load("myModelPath")
 {% endhighlight %}
 </div>
 
@@ -96,6 +99,9 @@ double accuracy = predictionAndLabel.filter(new Function<Tuple2<Double, Double>,
       return pl._1().equals(pl._2());
     }
   }).count() / (double) test.count();
+
+model.save("myModelPath");
+NaiveBayesModel sameModel = NaiveBayesModel.load("myModelPath");
 {% endhighlight %}
 </div>
 
@@ -107,6 +113,8 @@ naive Bayes. It takes an RDD of
 smoothing parameter `lambda` as input, and output a
 [NaiveBayesModel](api/python/pyspark.mllib.classification.NaiveBayesModel-class.html), which can be
 used for evaluation and prediction.
+
+Note that the Python API does not yet support model save/load but will in the future.
 
 <!-- TODO: Make Python's example consistent with Scala's and Java's. -->
 {% highlight python %}
