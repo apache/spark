@@ -24,7 +24,7 @@ import scala.collection.JavaConversions._
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-import akka.actor.{Actor, ActorRef, Cancellable}
+import akka.actor.{Actor, ActorRef}
 import akka.pattern.ask
 
 import org.apache.spark.{Logging, SparkConf, SparkException}
@@ -51,19 +51,6 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
   private val blockLocations = new JHashMap[BlockId, mutable.HashSet[BlockManagerId]]
 
   private val akkaTimeout = AkkaUtils.askTimeout(conf)
-
-  val slaveTimeout = conf.getLong("spark.storage.blockManagerSlaveTimeoutMs", 120 * 1000)
-
-  val checkTimeoutInterval = conf.getLong("spark.storage.blockManagerTimeoutIntervalMs", 60000)
-
-  var timeoutCheckingTask: Cancellable = null
-
-  override def preStart() {
-    import context.dispatcher
-    timeoutCheckingTask = context.system.scheduler.schedule(0.seconds,
-      checkTimeoutInterval.milliseconds, self, ExpireDeadHosts)
-    super.preStart()
-  }
 
   override def receiveWithLogging = {
     case RegisterBlockManager(blockManagerId, maxMemSize, slaveActor) =>
@@ -118,13 +105,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
 
     case StopBlockManagerMaster =>
       sender ! true
-      if (timeoutCheckingTask != null) {
-        timeoutCheckingTask.cancel()
-      }
       context.stop(self)
-
-    case ExpireDeadHosts =>
-      expireDeadHosts()
 
     case BlockManagerHeartbeat(blockManagerId) =>
       sender ! heartbeatReceived(blockManagerId)
@@ -205,21 +186,6 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     }
     listenerBus.post(SparkListenerBlockManagerRemoved(System.currentTimeMillis(), blockManagerId))
     logInfo(s"Removing block manager $blockManagerId")
-  }
-
-  private def expireDeadHosts() {
-    logTrace("Checking for hosts with no recent heart beats in BlockManagerMaster.")
-    val now = System.currentTimeMillis()
-    val minSeenTime = now - slaveTimeout
-    val toRemove = new mutable.HashSet[BlockManagerId]
-    for (info <- blockManagerInfo.values) {
-      if (info.lastSeenMs < minSeenTime && !info.blockManagerId.isDriver) {
-        logWarning("Removing BlockManager " + info.blockManagerId + " with no recent heart beats: "
-          + (now - info.lastSeenMs) + "ms exceeds " + slaveTimeout + "ms")
-        toRemove += info.blockManagerId
-      }
-    }
-    toRemove.foreach(removeBlockManager)
   }
 
   private def removeExecutor(execId: String) {

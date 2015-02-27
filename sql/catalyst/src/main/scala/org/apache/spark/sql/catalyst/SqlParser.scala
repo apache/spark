@@ -40,7 +40,7 @@ class SqlParser extends AbstractSparkSQLParser {
   def parseExpression(input: String): Expression = {
     // Initialize the Keywords.
     lexical.initialize(reservedWords)
-    phrase(expression)(new lexical.Scanner(input)) match {
+    phrase(projection)(new lexical.Scanner(input)) match {
       case Success(plan, _) => plan
       case failureOrError => sys.error(failureOrError.toString)
     }
