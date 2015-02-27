@@ -36,6 +36,7 @@ import keyword
 import warnings
 import json
 import re
+import weakref
 from array import array
 from operator import itemgetter
 from itertools import imap
@@ -68,8 +69,7 @@ class DataType(object):
         return hash(str(self))
 
     def __eq__(self, other):
-        return (isinstance(other, self.__class__) and
-                self.__dict__ == other.__dict__)
+        return isinstance(other, self.__class__) and self.jsonValue() == other.jsonValue()
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -781,8 +781,25 @@ def _merge_type(a, b):
         return a
 
 
+def _need_converter(dataType):
+    if isinstance(dataType, StructType):
+        return True
+    elif isinstance(dataType, ArrayType):
+        return _need_converter(dataType.elementType)
+    elif isinstance(dataType, MapType):
+        return _need_converter(dataType.keyType) or _need_converter(dataType.valueType)
+    elif isinstance(dataType, NullType):
+        return True
+    else:
+        return False
+
+
 def _create_converter(dataType):
     """Create an converter to drop the names of fields in obj """
+
+    if not _need_converter(dataType):
+        return lambda x: x
+
     if isinstance(dataType, ArrayType):
         conv = _create_converter(dataType.elementType)
         return lambda row: map(conv, row)
@@ -800,6 +817,7 @@ def _create_converter(dataType):
     # dataType must be StructType
     names = [f.name for f in dataType.fields]
     converters = [_create_converter(f.dataType) for f in dataType.fields]
+    convert_fields = any(_need_converter(f.dataType) for f in dataType.fields)
 
     def convert_struct(obj):
         if obj is None:
@@ -822,7 +840,10 @@ def _create_converter(dataType):
         else:
             raise ValueError("Unexpected obj: %s" % obj)
 
-        return tuple([conv(d.get(name)) for name, conv in zip(names, converters)])
+        if convert_fields:
+            return tuple([conv(d.get(name)) for name, conv in zip(names, converters)])
+        else:
+            return tuple([d.get(name) for name in names])
 
     return convert_struct
 
@@ -1039,7 +1060,7 @@ def _verify_type(obj, dataType):
             _verify_type(v, f.dataType)
 
 
-_cached_cls = {}
+_cached_cls = weakref.WeakValueDictionary()
 
 
 def _restore_object(dataType, obj):
