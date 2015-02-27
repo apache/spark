@@ -1095,10 +1095,11 @@ setMethod("coalesce",
              if (shuffle || numPartitions > SparkR::numPartitions(x)) {
                 func <- function(s, part) {
                  set.seed(s)  # split as seed
-                 lapply(part,
-                        function(v) {
-                          k <- as.integer(runif(1, 0, numPartitions))
-                          list(k, v)
+                 start <- as.integer(runif(1, 0, numPartitions))
+                 lapply(seq_along(part),
+                        function(i) {
+                          pos <- (start + i) %% numPartitions
+                          list(pos, part[[i]])
                         })
                }
                shuffled <- lapplyPartitionsWithIndex(x, func)
