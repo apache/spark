@@ -49,7 +49,10 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
       val lines = Source.fromInputStream(logData).getLines()
       lines.foreach { line =>
         currentLine = line
-        postToAll(JsonProtocol.sparkEventFromJson(parse(line)))
+        JsonProtocol.sparkEventFromJson(parse(line)) match {
+          case SparkListenerMetadataIdentifier => // Ignore metadata for now
+          case event => postToAll(event)
+        }
         lineNumber += 1
       }
     } catch {

@@ -99,6 +99,12 @@ case class SparkListenerExecutorRemoved(time: Long, executorId: String, reason: 
   extends SparkListenerEvent
 
 /**
+ * A special dummy event used to identify the metadata header in event logs.
+ * This is not actually posted anywhere.
+ */
+private[spark] case object SparkListenerMetadataIdentifier extends SparkListenerEvent
+
+/**
  * Periodic updates from executors.
  * @param execId executor id
  * @param taskMetrics sequence of (task id, stage id, stage attempt, metrics)
