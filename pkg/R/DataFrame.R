@@ -1,6 +1,6 @@
 # DataFrame.R - DataFrame class and methods implemented in S4 OO classes
 
-#' @include jobj.R RDD.R pairRDD.R
+#' @include jobj.R SQLTypes.R RDD.R pairRDD.R
 NULL
 
 setOldClass("jobj")
@@ -12,15 +12,16 @@ setOldClass("jobj")
 #' @seealso jsonFile, table
 #'
 #' @param env An R environment that stores bookkeeping states of the DataFrame
-#' @param sdf A Java object reference to the backing Scala SchemaRDD
+#' @param sdf A Java object reference to the backing Scala DataFrame
 #' @export
 
 setClass("DataFrame",
          slots = list(env = "environment",
                       sdf = "jobj"))
 
-setMethod("initialize", "DataFrame", function(.Object, sdf) {
+setMethod("initialize", "DataFrame", function(.Object, sdf, isCached) {
   .Object@env <- new.env()
+  .Object@env$isCached <- isCached
   
   .Object@sdf <- sdf
   .Object
@@ -29,8 +30,8 @@ setMethod("initialize", "DataFrame", function(.Object, sdf) {
 #' @rdname DataFrame
 #' @export
 
-dataFrame <- function(sdf) {
-  new("DataFrame", sdf)
+dataFrame <- function(sdf, isCached = FALSE) {
+  new("DataFrame", sdf, isCached)
 }
 
 ############################ DataFrame Methods ##############################################
@@ -39,7 +40,7 @@ dataFrame <- function(sdf) {
 #' 
 #' Prints out the schema in tree format
 #' 
-#' @param df A SparkSQL DataFrame
+#' @param x A SparkSQL DataFrame
 #' 
 #' @rdname printSchema
 #' @export
@@ -52,21 +53,106 @@ dataFrame <- function(sdf) {
 #' printSchema(df)
 #'}
 
-setGeneric("printSchema", function(df) { standardGeneric("printSchema") })
+setGeneric("printSchema", function(x) { standardGeneric("printSchema") })
 
 setMethod("printSchema",
-          signature(df = "DataFrame"),
-          function(df) {
-            sdf <- df@sdf
-            schemaString <- callJMethod(sdf, "printSchema")
+          signature(x = "DataFrame"),
+          function(x) {
+            schemaString <- callJMethod(schema(x)$jobj, "treeString")
             cat(schemaString)
+          })
+
+#' Get schema object
+#' 
+#' Returns the schema of this DataFrame as a structType object.
+#' 
+#' @param x A SparkSQL DataFrame
+#' 
+#' @rdname schema
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' dfSchema <- schema(df)
+#'}
+
+setGeneric("schema", function(x) { standardGeneric("schema") })
+
+setMethod("schema",
+          signature(x = "DataFrame"),
+          function(x) {
+            structType(callJMethod(x@sdf, "schema"))
+          })
+
+#' DataTypes
+#' 
+#' Return all column names and their data types as a list
+#' 
+#' @param x A SparkSQL DataFrame
+#' 
+#' @rdname dtypes
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' dtypes(df)
+#'}
+
+setGeneric("dtypes", function(x) { standardGeneric("dtypes") })
+
+setMethod("dtypes",
+          signature(x = "DataFrame"),
+          function(x) {
+            lapply(schema(x)$fields(), function(f) {
+              c(f$name(), f$dataType.simpleString())
+            })
+          })
+
+#' Column names
+#' 
+#' Return all column names as a list
+#' 
+#' @param x A SparkSQL DataFrame
+#' 
+#' @rdname columns
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' columns(df)
+#'}
+setGeneric("columns", function(x) {standardGeneric("columns") })
+
+setMethod("columns",
+          signature(x = "DataFrame"),
+          function(x) {
+            sapply(schema(x)$fields(), function(f) {
+              f$name()
+            })
+          })
+
+#' @rdname columns
+#' @export
+setMethod("names",
+          signature(x = "DataFrame"),
+          function(x) {
+            columns(x)
           })
 
 #' Register Temporary Table
 #' 
 #' Registers a DataFrame as a Temporary Table in the SQLContext
 #' 
-#' @param df A SparkSQL DataFrame
+#' @param x A SparkSQL DataFrame
 #' @param tableName A character vector containing the name of the table
 #' 
 #' @rdname registerTempTable
@@ -81,20 +167,97 @@ setMethod("printSchema",
 #' new_df <- sql(sqlCtx, "SELECT * FROM json_df")
 #'}
 
-setGeneric("registerTempTable", function(df, tableName) { standardGeneric("registerTempTable") })
+setGeneric("registerTempTable", function(x, tableName) { standardGeneric("registerTempTable") })
 
 setMethod("registerTempTable",
-          signature(df = "DataFrame", tableName = "character"),
-          function(df, tableName) {
-              sdf <- df@sdf
-              callJMethod(sdf, "registerTempTable", tableName)
+          signature(x = "DataFrame", tableName = "character"),
+          function(x, tableName) {
+              callJMethod(x@sdf, "registerTempTable", tableName)
+          })
+
+#' Cache
+#' 
+#' Persist with the default storage level (MEMORY_ONLY).
+#' 
+#' @param x A SparkSQL DataFrame
+#' 
+#' @rdname cache-methods
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' cache(df)
+#'}
+
+setMethod("cache",
+          signature(x = "DataFrame"),
+          function(x) {
+            cached <- callJMethod(x@sdf, "cache")
+            x@env$isCached <- TRUE
+            x
+          })
+
+#' Persist
+#'
+#' Persist this DataFrame with the specified storage level. For details of the
+#' supported storage levels, refer to
+#' http://spark.apache.org/docs/latest/programming-guide.html#rdd-persistence.
+#'
+#' @param x The DataFrame to persist
+#' @rdname persist
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' persist(df, "MEMORY_AND_DISK")
+#'}
+
+setMethod("persist",
+          signature(x = "DataFrame", newLevel = "character"),
+          function(x, newLevel) {
+            callJMethod(x@sdf, "persist", getStorageLevel(newLevel))
+            x@env$isCached <- TRUE
+            x
+          })
+
+#' Unpersist
+#'
+#' Mark this DataFrame as non-persistent, and remove all blocks for it from memory and
+#' disk.
+#'
+#' @param x The DataFrame to unpersist
+#' @param blocking Whether to block until all blocks are deleted
+#' @rdname unpersist-methods
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' persist(df, "MEMORY_AND_DISK")
+#' unpersist(df)
+#'}
+
+setMethod("unpersist",
+          signature(x = "DataFrame"),
+          function(x, blocking = TRUE) {
+            callJMethod(x@sdf, "unpersist", blocking)
+            x@env$isCached <- FALSE
+            x
           })
 
 #' Count
 #' 
 #' Returns the number of rows in a DataFrame
 #' 
-#' @param df A SparkSQL DataFrame
+#' @param x A SparkSQL DataFrame
 #' 
 #' @rdname count
 #' @export
@@ -114,6 +277,10 @@ setMethod("count",
           })
 
 #' Collects all the elements of a Spark DataFrame and coerces them into an R data.frame.
+#'
+#' @param x A SparkSQL DataFrame
+#' @param stringsAsFactors (Optional) A logical indicating whether or not string columns
+#' should be converted to factors. FALSE by default.
 
 #' @rdname collect-methods
 #' @export
@@ -129,7 +296,7 @@ setMethod("count",
 
 setMethod("collect",
           signature(x = "DataFrame"),
-          function(x) {
+          function(x, stringsAsFactors = FALSE) {
             # listCols is a list of raw vectors, one per column
             listCols <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "dfToCols", x@sdf)
             cols <- lapply(listCols, function(col) {
@@ -141,7 +308,7 @@ setMethod("collect",
             })
             colNames <- callJMethod(x@sdf, "columns")
             names(cols) <- colNames
-            dfOut <- do.call(cbind.data.frame, cols)
+            dfOut <- do.call(cbind.data.frame, list(cols, stringsAsFactors = stringsAsFactors))
             dfOut
           })
 
@@ -149,7 +316,7 @@ setMethod("collect",
 #' 
 #' Limit the resulting DataFrame to the number of rows specified.
 #' 
-#' @param df A SparkSQL DataFrame
+#' @param x A SparkSQL DataFrame
 #' @param num The number of rows to return
 #' @return A new DataFrame containing the number of rows specified.
 #' 
@@ -164,16 +331,16 @@ setMethod("collect",
 #' limitedDF <- limit(df, 10)
 #' }
 
-setGeneric("limit", function(df, num) {standardGeneric("limit") })
+setGeneric("limit", function(x, num) {standardGeneric("limit") })
 
 setMethod("limit",
-          signature(df = "DataFrame", num = "numeric"),
-          function(df, num) {
-            res <- callJMethod(df@sdf, "limit", as.integer(num))
+          signature(x = "DataFrame", num = "numeric"),
+          function(x, num) {
+            res <- callJMethod(x@sdf, "limit", as.integer(num))
             dataFrame(res)
-            })
+          })
 
-# Take the first NUM elements in a DataFrame and return a the results as a data.frame
+# Take the first NUM rows of a DataFrame and return a the results as a data.frame
 
 #' @rdname take
 #' @export
@@ -193,11 +360,62 @@ setMethod("take",
             collect(limited)
           })
 
+#' Head
+#'
+#' Return the first NUM rows of a DataFrame as a data.frame. If NUM is NULL, 
+#' then head() returns the first 6 rows in keeping with the current data.frame 
+#' convention in R.
+#'
+#' @param x A SparkSQL DataFrame
+#' @param num The number of rows to return. Default is 6.
+#' @return A data.frame
+#'
+#' @rdname head
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' head(df)
+#' }
+
+setMethod("head",
+          signature(x = "DataFrame"),
+          function(x, num = 6L) {
+          # Default num is 6L in keeping with R's data.frame convention
+            take(x, num)
+          })
+
+#' Return the first row of a DataFrame
+#'
+#' @param x A SparkSQL DataFrame
+#'
+#' @rdname first
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' first(df)
+#' }
+
+setGeneric("first", function(x) {standardGeneric("first") })
+
+setMethod("first",
+          signature(x = "DataFrame"),
+          function(x) {
+            take(x, 1)
+          })
+
 #' toRDD()
 #' 
 #' Converts a Spark DataFrame to an RDD while preserving column names.
 #' 
-#' @param df A Spark DataFrame
+#' @param x A Spark DataFrame
 #' 
 #' @rdname DataFrame
 #' @export
@@ -210,13 +428,13 @@ setMethod("take",
 #' rdd <- toRDD(df)
 #' }
 
-setGeneric("toRDD", function(df) { standardGeneric("toRDD") })
+setGeneric("toRDD", function(x) { standardGeneric("toRDD") })
 
 setMethod("toRDD",
-          signature(df = "DataFrame"),
-          function(df) {
-            jrdd <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "dfToRowRDD", df@sdf)
-            colNames <- callJMethod(df@sdf, "columns")
+          signature(x = "DataFrame"),
+          function(x) {
+            jrdd <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "dfToRowRDD", x@sdf)
+            colNames <- callJMethod(x@sdf, "columns")
             rdd <- RDD(jrdd, serializedMode = "row")
             lapply(rdd, function(row) {
               names(row) <- colNames

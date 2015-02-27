@@ -143,4 +143,58 @@ test_that("multiple pipeline transformations starting with a DataFrame result in
   expect_false(collect(second)[[3]]$testCol)
 })
 
+test_that("cache(), persist(), and unpersist() on a DataFrame", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  expect_false(df@env$isCached)
+  cache(df)
+  expect_true(df@env$isCached)
+  
+  unpersist(df)
+  expect_false(df@env$isCached)
+  
+  persist(df, "MEMORY_AND_DISK")
+  expect_true(df@env$isCached)
+  
+  unpersist(df)
+  expect_false(df@env$isCached)
+  
+  # make sure the data is collectable
+  expect_true(is.data.frame(collect(df)))
+})
+
+test_that("schema(), dtypes(), columns(), names() return the correct values/format", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  testSchema <- schema(df)
+  expect_true(length(testSchema$fields()) == 2)
+  expect_true(testSchema$fields()[[1]]$dataType.toString() == "IntegerType")
+  expect_true(testSchema$fields()[[2]]$dataType.simpleString() == "string")
+  expect_true(testSchema$fields()[[1]]$name() == "age")
+  
+  testTypes <- dtypes(df)
+  expect_true(length(testTypes[[1]]) == 2)
+  expect_true(testTypes[[1]][1] == "age")
+  
+  testCols <- columns(df)
+  expect_true(length(testCols) == 2)
+  expect_true(testCols[2] == "name")
+  
+  testNames <- names(df)
+  expect_true(length(testNames) == 2)
+  expect_true(testNames[2] == "name")
+})
+
+test_that("head() and first() return the correct data", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  testHead <- head(df)
+  expect_true(nrow(testHead) == 3)
+  expect_true(ncol(testHead) == 2)
+  
+  testHead2 <- head(df, 2)
+  expect_true(nrow(testHead2) == 2)
+  expect_true(ncol(testHead2) == 2)
+  
+  testFirst <- first(df)
+  expect_true(nrow(testFirst) == 1)
+})
+
 unlink(jsonPath)

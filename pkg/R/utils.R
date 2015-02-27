@@ -299,3 +299,30 @@ convertEnvsToList <- function(keys, vals) {
            list(keys[[name]], vals[[name]])
          })
 }
+
+getStorageLevel <- function(newLevel = c("DISK_ONLY",
+                                         "DISK_ONLY_2",
+                                         "MEMORY_AND_DISK",
+                                         "MEMORY_AND_DISK_2",
+                                         "MEMORY_AND_DISK_SER",
+                                         "MEMORY_AND_DISK_SER_2",
+                                         "MEMORY_ONLY",
+                                         "MEMORY_ONLY_2",
+                                         "MEMORY_ONLY_SER",
+                                         "MEMORY_ONLY_SER_2",
+                                         "OFF_HEAP")) {
+  match.arg(newLevel)
+  storageLevel <- switch(newLevel,
+                         "DISK_ONLY" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "DISK_ONLY"),
+                         "DISK_ONLY_2" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "DISK_ONLY_2"),
+                         "MEMORY_AND_DISK" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK"),
+                         "MEMORY_AND_DISK_2" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK_2"),
+                         "MEMORY_AND_DISK_SER" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK_SER"),
+                         "MEMORY_AND_DISK_SER_2" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK_SER_2"),
+                         "MEMORY_ONLY" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY"),
+                         "MEMORY_ONLY_2" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY_2"),
+                         "MEMORY_ONLY_SER" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY_SER"),
+                         "MEMORY_ONLY_SER_2" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY_SER_2"),
+                         "OFF_HEAP" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "OFF_HEAP"))
+}
+

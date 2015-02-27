@@ -84,10 +84,16 @@ importFrom(methods, setGeneric, setMethod, setOldClass)
 
 exportClasses("DataFrame")
 
-exportMethods("printSchema",
+exportMethods("columns",
+              "dtypes",
+              "first",
+              "head",
+              "limit",
+              "names",
+              "printSchema",
               "registerTempTable",
-              "toRDD",
-              "limit")
+              "schema",
+              "toRDD")
 
 export("jsonFile",
        "parquetFile",
@@ -97,3 +103,5 @@ export("jsonFile",
        "uncacheTable")
 
 export("sparkRSQL.init")
+export("print.structType",
+       "print.structField")
