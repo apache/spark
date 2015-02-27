@@ -93,40 +93,6 @@ isSparkFunction <- function(name) {
   packageName(environment(fun)) == "SparkR"
 }
 
-# Serialize the dependencies of the given function and return them as a raw
-# vector. Filters out RDDs before serializing the dependencies
-getDependencies <- function(name) {
-  varsToSave <- c()
-  closureEnv <- environment(name)
-
-  currentEnv <- closureEnv
-  while (TRUE) {
-    # Don't serialize namespaces
-    if (!isNamespace(currentEnv)) {
-      varsToSave <- c(varsToSave, ls(currentEnv))
-    }
-
-    # Everything below globalenv are packages, search path stuff etc.
-    if (identical(currentEnv, globalenv()))
-       break
-    currentEnv <- parent.env(currentEnv)
-  }
-  filteredVars <- Filter(function(x) { !isRDD(x, closureEnv) }, varsToSave)
-
-  # TODO: A better way to exclude variables that have been broadcast
-  # would be to actually list all the variables used in every function using
-  # `all.vars` and then walking through functions etc.
-  filteredVars <- Filter(
-                    function(x) { !exists(x, .broadcastNames, inherits = FALSE) },
-                    filteredVars)
-
-  rc <- rawConnection(raw(), 'wb')
-  save(list = filteredVars, file = rc, envir = closureEnv)
-  binData <- rawConnectionValue(rc)
-  close(rc)
-  binData
-}
-
 #' Compute the hashCode of an object
 #'
 #' Java-style function to compute the hashCode for the given object. Returns

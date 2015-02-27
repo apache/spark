@@ -21,10 +21,6 @@ inputCon <- file(inFileName, open = "rb")
 # read the index of the current partition inside the RDD
 splitIndex <- SparkR:::readInt(inputCon)
 
-# read the function; if used for pairwise RRDD, this is the hash function.
-execLen <- SparkR:::readInt(inputCon)
-execFunctionName <- unserialize(SparkR:::readRawLen(inputCon, execLen))
-
 # read the isInputSerialized bit flag
 isInputSerialized <- SparkR:::readInt(inputCon)
 
@@ -42,11 +38,11 @@ for (pkg in packageNames) {
 }
 
 # read function dependencies
-depsLen <- SparkR:::readInt(inputCon)
-if (depsLen > 0) {
-  execFunctionDeps <- SparkR:::readRawLen(inputCon, depsLen)
-  # load the dependencies into current environment
-  load(rawConnection(execFunctionDeps, open='rb'))
+funcLen <- SparkR:::readInt(inputCon)
+if (funcLen > 0) {
+  computeFunc <- unserialize(SparkR:::readRawLen(inputCon, funcLen))
+  env <- environment(computeFunc)
+  parent.env(env) <- .GlobalEnv  # Attach under global environment.
 }
 
 # Read and set broadcast variables
@@ -74,7 +70,7 @@ if (isEmpty != 0) {
     } else {
       data <- readLines(inputCon)
     }
-    output <- do.call(execFunctionName, list(splitIndex, data))
+    output <- computeFunc(splitIndex, data)
     if (isOutputSerialized) {
       SparkR:::writeRawSerialize(outputCon, output)
     } else {
@@ -93,7 +89,7 @@ if (isEmpty != 0) {
     # Step 1: hash the data to an environment
     hashTupleToEnvir <- function(tuple) {
       # NOTE: execFunction is the hash function here
-      hashVal <- do.call(execFunctionName, list(tuple[[1]]))
+      hashVal <- computeFunc(tuple[[1]])
       bucket <- as.character(hashVal %% numPartitions)
       acc <- res[[bucket]]
       # Create a new accumulator
