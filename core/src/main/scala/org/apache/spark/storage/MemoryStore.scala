@@ -395,6 +395,8 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     }
 
     // Take into account the amount of memory currently occupied by unrolling blocks
+    // and minus the pending unroll memory for that block on current thread.
+    val threadId = Thread.currentThread().getId
     val actualFreeMemory = freeMemory - currentUnrollMemory
 
     if (actualFreeMemory < space) {
@@ -482,6 +484,10 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     }
   }
 
+  /**
+   * Reserve the unroll memory of current unroll successful block used by this thread
+   * until actually put the block into memory entry.
+   */
   def reservePendingUnrollMemoryForThisThread(memory: Long): Unit = {
     val threadId = Thread.currentThread().getId
     accountingLock.synchronized {
@@ -489,6 +495,9 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     }
   }
 
+  /**
+   * Release pending unroll memory of current unroll successful block used by this thread
+   */
   def releasePendingUnrollMemoryForThisThread(): Unit = {
     val threadId = Thread.currentThread().getId
     accountingLock.synchronized {
@@ -500,7 +509,8 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    * Return the amount of memory currently occupied for unrolling blocks across all threads.
    */
   def currentUnrollMemory: Long = accountingLock.synchronized {
-    unrollMemoryMap.values.sum + pendingUnrollMemoryMap.values.sum
+    unrollMemoryMap.values.sum + pendingUnrollMemoryMap.
+      filter(_._1 != Thread.currentThread().getId).values.sum
   }
 
   /**
