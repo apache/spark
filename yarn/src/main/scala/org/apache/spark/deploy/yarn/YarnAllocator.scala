@@ -290,8 +290,18 @@ private[yarn] class YarnAllocator(
       location: String,
       containersToUse: ArrayBuffer[Container],
       remaining: ArrayBuffer[Container]): Unit = {
+    // SPARK-6050: certain Yarn configurations return a resource configuration that doesn't match
+    // the request; for example, capacity scheduler + DefaultResourceCalculator. Allow users in
+    // those situations to disable resource matching.
+    val matchingResource =
+        if (sparkConf.getBoolean("spark.yarn.container.matchAnyResource", false)) {
+          resource
+        } else {
+          allocatedContainer.getResource
+        }
+
     val matchingRequests = amClient.getMatchingRequests(allocatedContainer.getPriority, location,
-      allocatedContainer.getResource)
+      matchingResource)
 
     // Match the allocation to a request
     if (!matchingRequests.isEmpty) {
@@ -318,7 +328,7 @@ private[yarn] class YarnAllocator(
       assert(container.getResource.getMemory >= resource.getMemory)
 
       logInfo("Launching container %s for on host %s".format(containerId, executorHostname))
-      executorIdToContainer(executorId) = container      
+      executorIdToContainer(executorId) = container
 
       val containerSet = allocatedHostToContainersMap.getOrElseUpdate(executorHostname,
         new HashSet[ContainerId])
