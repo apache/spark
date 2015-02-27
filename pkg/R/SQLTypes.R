@@ -1,10 +1,10 @@
-# Utility functions for handling Spark DataTypes.
+# Utility functions for handling SparkSQL DataTypes.
 
 # Handler for StructType
 structType <- function(st) {
   obj <- structure(new.env(parent = emptyenv()), class = "structType")
   obj$jobj <- st
-  obj$fields <- lapply(SparkR:::callJMethod(st, "fields"), structField)
+  obj$fields <- function() { lapply(callJMethod(st, "fields"), structField) }
   obj
 }
 
@@ -16,7 +16,7 @@ structType <- function(st) {
 #' @param x A StructType object
 #' @param ... further arguments passed to or from other methods
 print.structType <- function(x, ...) {
-  fieldsList <- lapply(x$fields, function(i) i$print)
+  fieldsList <- lapply(x$fields(), function(i) { i$print() })
   print(fieldsList)
 }
 
@@ -24,14 +24,14 @@ print.structType <- function(x, ...) {
 structField <- function(sf) {
   obj <- structure(new.env(parent = emptyenv()), class = "structField")
   obj$jobj <- sf
-  obj$name <- SparkR:::callJMethod(sf, "name")
-  obj$dataType <- SparkR:::callJMethod(sf, "dataType")
-  obj$dataType.toString <- SparkR:::callJMethod(obj$dataType, "toString")
-  obj$dataType.simpleString <- SparkR:::callJMethod(obj$dataType, "simpleString")
-  obj$nullable <- SparkR:::callJMethod(sf, "nullable")
-  obj$print <- paste("StructField(", 
-                     paste(obj$name, obj$dataType.toString, obj$nullable, sep = ", "),
-                     ")", sep = "")
+  obj$name <- function() { callJMethod(sf, "name") }
+  obj$dataType <- function() { callJMethod(sf, "dataType") }
+  obj$dataType.toString <- function() { callJMethod(obj$dataType(), "toString") }
+  obj$dataType.simpleString <- function() { callJMethod(obj$dataType(), "simpleString") }
+  obj$nullable <- function() { callJMethod(sf, "nullable") }
+  obj$print <- function() { paste("StructField(", 
+                     paste(obj$name(), obj$dataType.toString(), obj$nullable(), sep = ", "),
+                     ")", sep = "") }
   obj
 }
 
@@ -43,5 +43,5 @@ structField <- function(sf) {
 #' @param x A StructField object
 #' @param ... further arguments passed to or from other methods
 print.structField <- function(x, ...) {
-  cat(x$print)
+  cat(x$print())
 }

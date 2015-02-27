@@ -16,7 +16,7 @@ Description: R frontend for Spark
 License: Apache License (== 2.0)
 Collate:
     'jobj.R'
-    'types.R'
+    'SQLTypes.R'
     'RDD.R'
     'pairRDD.R'
     'DataFrame.R'
