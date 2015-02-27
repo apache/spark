@@ -339,7 +339,7 @@ private[clustering] object LDA {
     def deleteAllCheckpoints(): Unit
   }
 
-  trait LearningStateInitializer {
+  private[clustering] trait LearningStateInitializer {
     def initialState(
       docs: RDD[(Long, Vector)],
       k: Int,
@@ -349,7 +349,7 @@ private[clustering] object LDA {
       checkpointInterval: Int): LearningState
   }
 
-  object EMLearningStateInitializer extends LearningStateInitializer {
+  private[clustering] object EMLearningStateInitializer extends LearningStateInitializer {
 
     /** Term vertex IDs are {-1, -2, ..., -vocabSize} */
     private[clustering] def term2index(term: Int): Long = -(1 + term.toLong)
@@ -360,7 +360,7 @@ private[clustering] object LDA {
 
     private[clustering] def isTermVertex(v: (VertexId, _)): Boolean = v._1 < 0
 
-    class EMLearningState(optimizer: EMOptimizer) extends LearningState {
+    private[clustering] class EMLearningState(optimizer: EMOptimizer) extends LearningState {
       val k: Int = optimizer.k
       val vocabSize = optimizer.vocabSize
       val docConcentration = optimizer.docConcentration
