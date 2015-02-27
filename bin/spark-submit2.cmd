@@ -49,6 +49,10 @@ if [%1] == [] goto continue
     set SPARK_SUBMIT_CLASSPATH=%2
   ) else if [%1] == [--driver-java-options] (
     set SPARK_SUBMIT_OPTS=%2
+  ) else if [%1] == [--packages] (
+    set SPARK_SUBMIT_PACKAGES=%2
+  ) else if [%1] == [--repositories] (
+    set SPARK_SUBMIT_REPOSITORIES=%2
   ) else if [%1] == [--master] (
     set MASTER=%2
   )
@@ -70,6 +74,9 @@ if [%SPARK_SUBMIT_DEPLOY_MODE%] == [client] (
     rem Parse the properties file only if the special configs exist
     for /f %%i in ('findstr /r /c:"^[\t ]*spark.driver.memory" /c:"^[\t ]*spark.driver.extra" ^
       %SPARK_SUBMIT_PROPERTIES_FILE%') do (
+      set SPARK_SUBMIT_BOOTSTRAP_DRIVER=1
+    )
+    if [%SPARK_SUBMIT_PACKAGES%] NEQ [] (
       set SPARK_SUBMIT_BOOTSTRAP_DRIVER=1
     )
   )

@@ -251,24 +251,19 @@ object SparkSubmit {
     }
 
     val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
-
-    // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
-    // too for packages that include Python code
-    val resolvedMavenCoordinates =
-      SparkSubmitUtils.resolveMavenCoordinates(
-        args.packages, Option(args.repositories), Option(args.ivyRepoPath))
-    if (!resolvedMavenCoordinates.trim.isEmpty) {
-      if (args.jars == null || args.jars.trim.isEmpty) {
-        args.jars = resolvedMavenCoordinates
+    val packagesResolved =
+      if (args.packagesResolved != null) {
+        // SparkSubmitDriverBootstrapper already downloaded the jars for us
+        args.packagesResolved
       } else {
-        args.jars += s",$resolvedMavenCoordinates"
+        SparkSubmitUtils.resolveMavenCoordinates(args.packages, Option(args.repositories), 
+          Option(args.ivyRepoPath)).mkString(",")
       }
+
+    if (packagesResolved.nonEmpty) {
+      args.jars = mergeFileLists(args.jars, packagesResolved)
       if (args.isPython) {
-        if (args.pyFiles == null || args.pyFiles.trim.isEmpty) {
-          args.pyFiles = resolvedMavenCoordinates
-        } else {
-          args.pyFiles += s",$resolvedMavenCoordinates"
-        }
+        args.pyFiles = mergeFileLists(args.pyFiles, packagesResolved)
       }
     }
 
@@ -655,8 +650,7 @@ private[spark] object SparkSubmitUtils {
 
 /**
  * Extracts maven coordinates from a comma-delimited string. Coordinates should be provided
- * in the format `groupId:artifactId:version` or `groupId/artifactId:version`. The latter provides
- * simplicity for Spark Package users.
+ * in the format `groupId:artifactId:version` or `groupId/artifactId:version`.
  * @param coordinates Comma-delimited string of maven coordinates
  * @return Sequence of Maven coordinates
  */
@@ -721,17 +715,17 @@ private[spark] object SparkSubmitUtils {
    * after a '!' by Ivy. It also sometimes contains '(bundle)' after '.jar'. Remove that as well.
    * @param artifacts Sequence of dependencies that were resolved and retrieved
    * @param cacheDirectory directory where jars are cached
-   * @return a comma-delimited list of paths for the dependencies
+   * @return A sequence of paths for the dependencies
    */
   private[spark] def resolveDependencyPaths(
       artifacts: Array[AnyRef],
-      cacheDirectory: File): String = {
+      cacheDirectory: File): Seq[String] = {
     artifacts.map { artifactInfo =>
       val artifactString = artifactInfo.toString
       val jarName = artifactString.drop(artifactString.lastIndexOf("!") + 1)
       cacheDirectory.getAbsolutePath + File.separator +
         jarName.substring(0, jarName.lastIndexOf(".jar") + 4)
-    }.mkString(",")
+    }
   }
 
   /** Adds the given maven coordinates to Ivy's module descriptor. */
@@ -748,6 +742,35 @@ private[spark] object SparkSubmitUtils {
     }
   }
 
+  /** Add exclusion rules for dependencies already included in the spark-assembly */
+  private[spark] def addExclusionRules(
+      ivySettings: IvySettings,
+      ivyConfName: String,
+      md: DefaultModuleDescriptor): Unit = {
+    // Add scala exclusion rule
+    val scalaArtifacts = new ArtifactId(new ModuleId("*", "scala-library"), "*", "*", "*")
+    val scalaDependencyExcludeRule =
+      new DefaultExcludeRule(scalaArtifacts, ivySettings.getMatcher("glob"), null)
+    scalaDependencyExcludeRule.addConfiguration(ivyConfName)
+    md.addExcludeRule(scalaDependencyExcludeRule)
+
+    // We need to specify each component explicitly, otherwise we miss spark-streaming-kafka and
+    // other spark-streaming utility components. Underscore is there to differentiate between
+    // spark-streaming_2.1x and spark-streaming-kafka-assembly_2.1x
+    val components = Seq("bagel_", "catalyst_", "core_", "graphx_", "hive_", "mllib_", "repl_",
+      "sql_", "streaming_", "yarn_", "network-common_", "network-shuffle_", "network-yarn_")
+    
+    components.foreach { comp =>
+      val sparkArtifacts =
+        new ArtifactId(new ModuleId("org.apache.spark", s"spark-$comp*"), "*", "*", "*")
+      val sparkDependencyExcludeRule =
+        new DefaultExcludeRule(sparkArtifacts, ivySettings.getMatcher("glob"), null)
+      sparkDependencyExcludeRule.addConfiguration(ivyConfName)
+
+      md.addExcludeRule(sparkDependencyExcludeRule)
+    }
+  }
+
   /** A nice function to use in tests as well. Values are dummy strings. */
   private[spark] def getModuleDescriptor = DefaultModuleDescriptor.newDefaultInstance(
     ModuleRevisionId.newInstance("org.apache.spark", "spark-submit-parent", "1.0"))
@@ -757,17 +780,20 @@ private[spark] object SparkSubmitUtils {
    * @param coordinates Comma-delimited string of maven coordinates
    * @param remoteRepos Comma-delimited string of remote repositories other than maven central
    * @param ivyPath The path to the local ivy repository
-   * @return The comma-delimited path to the jars of the given maven artifacts including their
+   * @return A sequence of paths to the jars of the given maven artifacts including their
    *         transitive dependencies
    */
   private[spark] def resolveMavenCoordinates(
       coordinates: String,
       remoteRepos: Option[String],
       ivyPath: Option[String],
-      isTest: Boolean = false): String = {
+      isTest: Boolean = false): Seq[String] = {
     if (coordinates == null || coordinates.trim.isEmpty) {
-      ""
+      Seq.empty
     } else {
+      val sysOut = System.out
+      // To prevent ivy from logging to system out
+      System.setOut(printStream)
       val artifacts = extractMavenCoordinates(coordinates)
       // Default configuration name for ivy
       val ivyConfName = "default"
@@ -811,19 +837,9 @@ private[spark] object SparkSubmitUtils {
       val md = getModuleDescriptor
       md.setDefaultConf(ivyConfName)
 
-      // Add an exclusion rule for Spark and Scala Library
-      val sparkArtifacts = new ArtifactId(new ModuleId("org.apache.spark", "*"), "*", "*", "*")
-      val sparkDependencyExcludeRule =
-        new DefaultExcludeRule(sparkArtifacts, ivySettings.getMatcher("glob"), null)
-      sparkDependencyExcludeRule.addConfiguration(ivyConfName)
-      val scalaArtifacts = new ArtifactId(new ModuleId("*", "scala-library"), "*", "*", "*")
-      val scalaDependencyExcludeRule =
-        new DefaultExcludeRule(scalaArtifacts, ivySettings.getMatcher("glob"), null)
-      scalaDependencyExcludeRule.addConfiguration(ivyConfName)
-
-      // Exclude any Spark dependencies, and add all supplied maven artifacts as dependencies
-      md.addExcludeRule(sparkDependencyExcludeRule)
-      md.addExcludeRule(scalaDependencyExcludeRule)
+      // Add exclusion rules for Spark and Scala Library
+      addExclusionRules(ivySettings, ivyConfName, md)
+      // add all supplied maven artifacts as dependencies
       addDependenciesToIvy(md, artifacts, ivyConfName)
 
       // resolve dependencies
@@ -836,6 +852,7 @@ private[spark] object SparkSubmitUtils {
         packagesDirectory.getAbsolutePath + File.separator + "[artifact](-[classifier]).[ext]",
         retrieveOptions.setConfs(Array(ivyConfName)))
 
+      System.setOut(sysOut)
       resolveDependencyPaths(rr.getArtifacts.toArray, packagesDirectory)
     }
   }

@@ -42,7 +42,7 @@ private[spark] object SparkSubmitDriverBootstrapper {
       System.exit(1)
     }
 
-    val submitArgs = args
+    var submitArgs = args
     val runner = sys.env("RUNNER")
     val classpath = sys.env("CLASSPATH")
     val javaOpts = sys.env("JAVA_OPTS")
@@ -56,6 +56,8 @@ private[spark] object SparkSubmitDriverBootstrapper {
     val submitLibraryPath = sys.env.get("SPARK_SUBMIT_LIBRARY_PATH")
     val submitClasspath = sys.env.get("SPARK_SUBMIT_CLASSPATH")
     val submitJavaOpts = sys.env.get("SPARK_SUBMIT_OPTS")
+    val submitPackages = sys.env.getOrElse("SPARK_SUBMIT_PACKAGES", "")
+    val submitRepositories = sys.env.get("SPARK_SUBMIT_REPOSITORIES")
 
     assume(runner != null, "RUNNER must be set")
     assume(classpath != null, "CLASSPATH must be set")
@@ -71,6 +73,7 @@ private[spark] object SparkSubmitDriverBootstrapper {
     val confLibraryPath = properties.get("spark.driver.extraLibraryPath")
     val confClasspath = properties.get("spark.driver.extraClassPath")
     val confJavaOpts = properties.get("spark.driver.extraJavaOptions")
+    val confIvyRepo = properties.get("spark.jars.ivy")
 
     // Favor Spark submit arguments over the equivalent configs in the properties file.
     // Note that we do not actually use the Spark submit values for library path, classpath,
@@ -80,12 +83,24 @@ private[spark] object SparkSubmitDriverBootstrapper {
       .orElse(confDriverMemory)
       .getOrElse(defaultDriverMemory)
 
-    val newClasspath =
+    var newClasspath =
       if (submitClasspath.isDefined) {
         classpath
       } else {
         classpath + confClasspath.map(sys.props("path.separator") + _).getOrElse("")
       }
+
+    // Resolve maven dependencies if there are any and add them to classpath. Also send them
+    // to SparkSubmit so that they can be shipped to executors.
+    val resolvedMavenCoordinates =
+      SparkSubmitUtils.resolveMavenCoordinates(
+        submitPackages, submitRepositories, confIvyRepo)
+    if (resolvedMavenCoordinates.nonEmpty) {
+      newClasspath += sys.props("path.separator") + 
+        resolvedMavenCoordinates.mkString(sys.props("path.separator"))
+      submitArgs = 
+        Array("--packages-resolved", resolvedMavenCoordinates.mkString(",")) ++ submitArgs
+    }
 
     val newJavaOpts =
       if (submitJavaOpts.isDefined) {
