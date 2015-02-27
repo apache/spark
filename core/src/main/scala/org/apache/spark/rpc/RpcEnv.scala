@@ -59,7 +59,7 @@ private[spark] trait RpcEnv {
    * Retrieve the [[RpcEndpointRef]] represented by `systemName`, `address` and `endpointName`
    */
   def setupEndpointRef(
-       systemName: String, address: RpcAddress, endpointName: String): RpcEndpointRef
+      systemName: String, address: RpcAddress, endpointName: String): RpcEndpointRef
 
   /**
    * Stop [[RpcEndpoint]] specified by `endpoint`.
