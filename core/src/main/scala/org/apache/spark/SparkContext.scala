@@ -1389,17 +1389,17 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         stopped = true
         env.metricsSystem.report()
         metadataCleaner.cancel()
-        env.actorSystem.stop(heartbeatReceiver)
         cleaner.foreach(_.stop())
         dagScheduler.stop()
         dagScheduler = null
+        listenerBus.stop()
+        eventLogger.foreach(_.stop())
+        env.actorSystem.stop(heartbeatReceiver)
         progressBar.foreach(_.stop())
         taskScheduler = null
         // TODO: Cache.stop()?
         env.stop()
         SparkEnv.set(null)
-        listenerBus.stop()
-        eventLogger.foreach(_.stop())
         logInfo("Successfully stopped SparkContext")
         SparkContext.clearActiveContext()
       } else {
