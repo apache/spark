@@ -61,7 +61,8 @@ private[spark] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app
       state.completedApps.find(_.id == appId).getOrElse(null)
     })
     if (app == null) {
-      return Seq[Node]()
+      val msg = <div class="row-fluid">Application {appId} not found.</div>
+      return UIUtils.basicSparkPage(msg, "Not Found")
     }
 
     val executorHeaders = Seq("ExecutorID", "Worker", "Cores", "Memory", "State", "Logs")
