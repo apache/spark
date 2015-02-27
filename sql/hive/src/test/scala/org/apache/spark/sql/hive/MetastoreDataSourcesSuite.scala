@@ -34,6 +34,8 @@ import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.parquet.ParquetRelation2
 import org.apache.spark.sql.sources.LogicalRelation
 
+import scala.collection.mutable.ArrayBuffer
+
 /**
  * Tests for persisting tables created though the data sources API into the metastore.
  */
@@ -596,12 +598,23 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
   test("Pre insert nullability check") {
     val df1 =
       createDataFrame(Tuple1(Seq(Int.box(1), null.asInstanceOf[Integer])) :: Nil).toDF("a")
+    val expectedSchema1 =
+      StructType(
+        StructField("a", ArrayType(IntegerType, containsNull = true), nullable = true) :: Nil)
+    assert(df1.schema === expectedSchema1)
     df1.saveAsTable("arrayInParquet", "parquet", SaveMode.Overwrite)
 
     val df2 =
       createDataFrame(Tuple1(Seq(2, 3)) :: Nil).toDF("a")
+    val expectedSchema2 =
+      StructType(
+        StructField("a", ArrayType(IntegerType, containsNull = false), nullable = true) :: Nil)
+    assert(df2.schema === expectedSchema2)
     df2.saveAsTable("arrayInParquet", SaveMode.Append)
 
+    checkAnswer(
+      sql("SELECT a FROM arrayInParquet"),
+      Row(ArrayBuffer(1, null)) :: Row(ArrayBuffer(2, 3)) :: Nil)
   }
 
   test("SPARK-6024 wide schema support") {
