@@ -247,6 +247,7 @@ class ArrayType(DataType):
         >>> ArrayType(StringType(), False) == ArrayType(StringType())
         False
         """
+        assert isinstance(elementType, DataType), "elementType should be DataType"
         self.elementType = elementType
         self.containsNull = containsNull
 
@@ -299,6 +300,8 @@ class MapType(DataType):
         ...        == MapType(StringType(), FloatType()))
         False
         """
+        assert isinstance(keyType, DataType), "keyType should be DataType"
+        assert isinstance(valueType, DataType), "valueType should be DataType"
         self.keyType = keyType
         self.valueType = valueType
         self.valueContainsNull = valueContainsNull
@@ -355,6 +358,7 @@ class StructField(DataType):
         ...      == StructField("f2", StringType(), True))
         False
         """
+        assert isinstance(dataType, DataType), "dataType should be DataType"
         self.name = name
         self.dataType = dataType
         self.nullable = nullable
@@ -403,6 +407,7 @@ class StructType(DataType):
         >>> struct1 == struct2
         False
         """
+        assert all(isinstance(f, DataType) for f in fields), "fields should be a list of DataType"
         self.fields = fields
 
     def simpleString(self):
