@@ -182,7 +182,7 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
         }
       }
       <td>
-        {app.requestedCores}
+        {if (app.requestedCores == Int.MaxValue) "*" else app.requestedCores}
       </td>
       <td sorttable_customkey={app.desc.memoryPerSlave.toString}>
         {Utils.megabytesToString(app.desc.memoryPerSlave)}
