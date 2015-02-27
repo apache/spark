@@ -470,7 +470,7 @@ class SQLQuerySuite extends QueryTest {
   }
   
   test("SPARK-5203 union with different decimal precision") {
-    val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString))
+    val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).toDF()
     sql("CREATE TABLE test_decimal1 (key INT, value DECIMAL(3, 1))")
     testData.insertInto("test_decimal1")
     sql("CREATE TABLE test_decimal2 (key INT, value DECIMAL(14, 1))")
