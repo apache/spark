@@ -204,7 +204,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         .flatMap { entry => Some(entry) }
         .sortWith { case (entry1, entry2) =>
           val mod1 = getModificationTime(entry1).getOrElse(-1L)
-          val mod2 = getModificationTime(entry1).getOrElse(-1L)
+          val mod2 = getModificationTime(entry2).getOrElse(-1L)
           mod1 >= mod2
       }
 
