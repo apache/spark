@@ -56,7 +56,7 @@ class DataType(object):
         return hash(str(self))
 
     def __eq__(self, other):
-        return isinstance(other, self.__class__) and str(self) == str(other)
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -79,10 +79,6 @@ class PrimitiveType(DataType):
     """Spark SQL PrimitiveType"""
 
     __metaclass__ = PrimitiveTypeSingleton
-
-    def __eq__(self, other):
-        # because they should be the same object
-        return self is other
 
 
 class StringType(PrimitiveType):
@@ -343,6 +339,8 @@ _all_primitive_types = dict((k, v) for k, v in globals().iteritems()
 def _parse_datatype_string(datatype_string):
     """Parses the given data type string.
 
+    >>> import pickle
+    >>> LongType() == pickle.loads(pickle.dumps(LongType()))
     >>> def check_datatype(datatype):
     ...     scala_datatype = sqlCtx._ssql_ctx.parseDataType(str(datatype))
     ...     python_datatype = _parse_datatype_string(
