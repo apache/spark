@@ -111,7 +111,10 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
     def thisClassName = "org.apache.spark.mllib.classification.NaiveBayesModel"
 
     /** Model data for model import/export */
-    case class Data(labels: Array[Double], pi: Array[Double], theta: Array[Array[Double]], modelType: String)
+    case class Data(labels: Array[Double],
+                    pi: Array[Double],
+                    theta: Array[Array[Double]],
+                    modelType: String)
 
     def save(sc: SparkContext, path: String, data: Data): Unit = {
       val sqlContext = new SQLContext(sc)
