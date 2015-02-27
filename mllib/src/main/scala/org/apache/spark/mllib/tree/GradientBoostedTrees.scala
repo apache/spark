@@ -25,7 +25,9 @@ import org.apache.spark.mllib.tree.configuration.BoostingStrategy
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.impl.TimeTracker
 import org.apache.spark.mllib.tree.impurity.Variance
+import org.apache.spark.mllib.tree.loss.{LogLoss, SquaredError, Loss, AbsoluteError}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel, GradientBoostedTreesModel}
+import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -144,6 +146,42 @@ object GradientBoostedTrees extends Logging {
     train(input.rdd, boostingStrategy)
   }
 
+  private def evaluateEachIteration(
+      residual: RDD[Double],
+      loss: Loss) = {
+    loss match {
+      // equivalent to 2.0 * log(1 + exp(-margin)) but more numerically stable.
+      case LogLoss => residual.map(error => 2.0 * MLUtils.log1pExp(-1 * error)).mean()
+      case SquaredError => residual.map(error => error * error).mean()
+      case AbsoluteError => residual.map(error => math.abs(error)).mean()
+    }
+  }
+
+  private def computeInitialResidual(
+      input: RDD[LabeledPoint],
+      treeModel: DecisionTreeModel,
+      loss: Loss) = {
+    loss match {
+      case LogLoss => input.map(point => 2 * point.label * treeModel.predict(point.features))
+      case _ => input.map(point => treeModel.predict(point.features) - point.label)
+    }
+  }
+
+  private def updateResidual(
+      residual: RDD[Double],
+      input: RDD[LabeledPoint],
+      treeModel: DecisionTreeModel,
+      loss: Loss) = {
+    loss match {
+      case LogLoss => (residual zip input) map {
+        case (error, point) => error + 2 * point.label * treeModel.predict(point.features)
+      }
+      case _ => (residual zip input) map {
+        case (error, point) => error + treeModel.predict(point.features)
+      }
+    }
+  }
+
   /**
    * Internal method for performing regression using trees as base learners.
    * @param input training dataset
@@ -195,12 +233,15 @@ object GradientBoostedTrees extends Logging {
     baseLearners(0) = firstTreeModel
     baseLearnerWeights(0) = 1.0
     val startingModel = new GradientBoostedTreesModel(Regression, Array(firstTreeModel), Array(1.0))
-    logDebug("error of gbt = " + loss.computeError(startingModel, input))
+    var residual = computeInitialResidual(data, firstTreeModel, loss)
+
+    logDebug("error of gbt = " + evaluateEachIteration(residual, loss))
 
     // Note: A model of type regression is used since we require raw prediction
     timer.stop("building tree 0")
 
-    var bestValidateError = if (validate) loss.computeError(startingModel, validationInput) else 0.0
+    var validateResidual = computeInitialResidual(validationInput, firstTreeModel, loss)
+    var bestValidateError = if (validate) evaluateEachIteration(validateResidual, loss) else 0.0
     var bestM = 1
 
     // psuedo-residual for second iteration
@@ -223,14 +264,18 @@ object GradientBoostedTrees extends Logging {
       // Note: A model of type regression is used since we require raw prediction
       val partialModel = new GradientBoostedTreesModel(
         Regression, baseLearners.slice(0, m + 1), baseLearnerWeights.slice(0, m + 1))
-      logDebug("error of gbt = " + loss.computeError(partialModel, input))
+
+      residual = updateResidual(residual, input, model, loss)
+      logDebug("error of gbt = " + evaluateEachIteration(residual, loss))
 
       if (validate) {
         // Stop training early if
         // 1. Reduction in error is less than the validationTol or
         // 2. If the error increases, that is if the model is overfit.
         // We want the model returned corresponding to the best validation error.
-        val currentValidateError = loss.computeError(partialModel, validationInput)
+
+        validateResidual = updateResidual(validateResidual, validationInput, model, loss)
+        val currentValidateError = evaluateEachIteration(validateResidual, loss)
         if (bestValidateError - currentValidateError < validationTol) {
           return new GradientBoostedTreesModel(
             boostingStrategy.treeStrategy.algo,
