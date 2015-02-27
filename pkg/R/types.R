@@ -1,6 +1,6 @@
 # Utility functions for handling Spark DataTypes.
 
-
+# Handler for StructType
 structType <- function(st) {
   obj <- structure(new.env(parent = emptyenv()), class = "structType")
   obj$jobj <- st
@@ -8,11 +8,19 @@ structType <- function(st) {
   obj
 }
 
+#' Print a Spark StructType.
+#'
+#' This function prints the contents of a StructType returned from the
+#' SparkR JVM backend.
+#'
+#' @param x A StructType object
+#' @param ... further arguments passed to or from other methods
 print.structType <- function(x, ...) {
   fieldsList <- lapply(x$fields, function(i) i$print)
   print(fieldsList)
 }
 
+# Handler for StructField
 structField <- function(sf) {
   obj <- structure(new.env(parent = emptyenv()), class = "structField")
   obj$jobj <- sf
@@ -27,6 +35,13 @@ structField <- function(sf) {
   obj
 }
 
+#' Print a Spark StructField.
+#'
+#' This function prints the contents of a StructField returned from the
+#' SparkR JVM backend.
+#'
+#' @param x A StructField object
+#' @param ... further arguments passed to or from other methods
 print.structField <- function(x, ...) {
   cat(x$print)
 }
