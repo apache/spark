@@ -47,22 +47,6 @@
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-client</artifactId>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-yarn-client</artifactId>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-yarn-api</artifactId>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-yarn-common</artifactId>
-      <scope>provided</scope>
     </dependency>
   </dependencies>
 
@@ -103,4 +87,19 @@
       </plugin>
     </plugins>
   </build>
+
+  <profiles>
+    <!-- Always enable this profile so that Hadoop classes are not re-packaged. -->
+    <profile>
+      <id>hadoop-provided</id>
+      <activation>
+        <file>
+          <exists>pom.xml</exists>
+        </file>
+      </activation>
+      <properties>
+        <hadoop.deps.scope>provided</hadoop.deps.scope>
+      </properties>
+    </profile>
+  </profiles>
 </project>
