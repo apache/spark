@@ -341,6 +341,7 @@ def _parse_datatype_string(datatype_string):
 
     >>> import pickle
     >>> LongType() == pickle.loads(pickle.dumps(LongType()))
+    True
     >>> def check_datatype(datatype):
     ...     scala_datatype = sqlCtx._ssql_ctx.parseDataType(str(datatype))
     ...     python_datatype = _parse_datatype_string(
