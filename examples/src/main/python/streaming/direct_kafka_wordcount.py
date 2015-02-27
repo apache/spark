@@ -23,7 +23,7 @@
  http://kafka.apache.org/documentation.html#quickstart
 
  and then run the example
-    `$ bin/spark-submit --driver-class-path external/kafka-assembly/target/scala-*/\
+    `$ bin/spark-submit --jars external/kafka-assembly/target/scala-*/\
       spark-streaming-kafka-assembly-*.jar \
       examples/src/main/python/streaming/direct_kafka_wordcount.py \
       localhost:9092 test`

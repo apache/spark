@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from py4j.java_collections import MapConverter, SetConverter
+from py4j.java_collections import ListConverter, MapConverter, SetConverter
 from py4j.java_gateway import java_import, Py4JError, Py4JJavaError
 
 from pyspark.rdd import RDD
@@ -69,25 +69,7 @@ class KafkaUtils(object):
         except Py4JJavaError as e:
             # TODO: use --jar once it also work on driver
             if 'ClassNotFoundException' in str(e.java_exception):
-                print("""
-________________________________________________________________________________________________
-
-  Spark Streaming's Kafka libraries not found in class path. Try one of the following.
-
-  1. Include the Kafka library and its dependencies with in the
-     spark-submit command as
-
-     $ bin/spark-submit --packages org.apache.spark:spark-streaming-kafka:%s ...
-
-  2. Download the JAR of the artifact from Maven Central http://search.maven.org/,
-     Group Id = org.apache.spark, Artifact Id = spark-streaming-kafka-assembly, Version = %s.
-     Then, include the jar in the spark-submit command as
-
-     $ bin/spark-submit --jars <spark-streaming-kafka-assembly.jar> ...
-
-________________________________________________________________________________________________
-
-""" % (ssc.sparkContext.version, ssc.sparkContext.version))
+                KafkaUtils._printErrorMsg(ssc.sparkContext)
             raise e
         ser = PairDeserializer(NoOpSerializer(), NoOpSerializer())
         stream = DStream(jstream, ssc, ser)
@@ -131,14 +113,15 @@ ________________________________________________________________________________
         jparam = MapConverter().convert(kafkaParams, ssc.sparkContext._gateway._gateway_client)
 
         try:
-            array = KafkaUtils._getClassByName(ssc._jvm, "[B")
-            decoder = KafkaUtils._getClassByName(ssc._jvm, "kafka.serializer.DefaultDecoder")
-            jstream = ssc._jvm.KafkaUtils.createDirectStream(ssc._jssc, array, array, decoder,
-                                                             decoder, jparam, jtopics)
-        except Py4JError, e:
-            if not e.message or 'call a package' in e.message:
-                KafkaUtils._printErrorMsg()
+            helperClass = ssc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
+                .loadClass("org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper")
+            helper = helperClass.newInstance()
+            jstream = helper.createDirectStream(ssc._jssc, jparam, jtopics)
+        except Py4JJavaError, e:
+            if 'ClassNotFoundException' in str(e.java_exception):
+                KafkaUtils._printErrorMsg(ssc.sparkContext)
             raise e
+
         ser = PairDeserializer(NoOpSerializer(), NoOpSerializer())
         stream = DStream(jstream, ssc, ser)
         return stream.map(lambda (k, v): (keyDecoder(k), valueDecoder(v)))
@@ -158,9 +141,6 @@ ________________________________________________________________________________
         :param valueDecoder:  A function used to decode value (default is utf8_decoder)
         :return: A RDD object
         """
-        java_import(sc._jvm, "org.apache.spark.streaming.kafka.KafkaUtils")
-        java_import(sc._jvm, "org.apache.spark.streaming.kafka.OffsetRange")
-
         kafkaParams.update({"metadata.broker.list": brokerList})
 
         if not isinstance(offsetRanges, list):
@@ -168,31 +148,42 @@ ________________________________________________________________________________
         jparam = MapConverter().convert(kafkaParams, sc._gateway._gateway_client)
 
         try:
-            array = KafkaUtils._getClassByName(sc._jvm, "[B")
-            decoder = KafkaUtils._getClassByName(sc._jvm, "kafka.serializer.DefaultDecoder")
-            joffsetRanges = sc._gateway.new_array(sc._jvm.OffsetRange, len(offsetRanges))
-            for idx, o in enumerate(offsetRanges):
-                joffsetRanges[idx] = o._joffsetRange(sc)
-            jrdd = sc._jvm.KafkaUtils.createRDD(sc._jsc, array, array, decoder, decoder,
-                                                jparam, joffsetRanges)
-        except Py4JError, e:
-            if not e.message or 'call a package' in e.message:
-                KafkaUtils._printErrorMsg()
+            helperClass = sc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
+                .loadClass("org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper")
+            helper = helperClass.newInstance()
+            joffsetRanges = ListConverter().convert([o._joffsetRange(helper) for o in offsetRanges],
+                                                    sc._gateway._gateway_client)
+            jrdd = helper.createRDD(sc._jsc, jparam, joffsetRanges)
+        except Py4JJavaError, e:
+            if 'ClassNotFoundException' in str(e.java_exception):
+                KafkaUtils._printErrorMsg(sc)
             raise e
+
         ser = PairDeserializer(NoOpSerializer(), NoOpSerializer())
         rdd = RDD(jrdd, sc, ser)
         return rdd.map(lambda (k, v): (keyDecoder(k), valueDecoder(v)))
 
     @staticmethod
-    def _getClassByName(jvm, name):
-        return jvm.org.apache.spark.util.Utils.classForName(name)
+    def _printErrorMsg(sc):
+        print """
+________________________________________________________________________________________________
 
-    @staticmethod
-    def _printErrorMsg():
-        # TODO: use --jar once it also work on driver
-        print "No kafka package, please put the assembly jar into classpath:"
-        print " $ bin/spark-submit --driver-class-path external/kafka-assembly/target/" + \
-              "scala-*/spark-streaming-kafka-assembly-*.jar"
+  Spark Streaming's Kafka libraries not found in class path. Try one of the following.
+
+  1. Include the Kafka library and its dependencies with in the
+     spark-submit command as
+
+     $ bin/spark-submit --packages org.apache.spark:spark-streaming-kafka:%s ...
+
+  2. Download the JAR of the artifact from Maven Central http://search.maven.org/,
+     Group Id = org.apache.spark, Artifact Id = spark-streaming-kafka-assembly, Version = %s.
+     Then, include the jar in the spark-submit command as
+
+     $ bin/spark-submit --jars <spark-streaming-kafka-assembly.jar> ...
+
+________________________________________________________________________________________________
+
+        """ % (sc.version, sc.version)
 
 
 class OffsetRange(object):
@@ -213,6 +204,6 @@ class OffsetRange(object):
         self._fromOffset = fromOffset
         self._untilOffset = untilOffset
 
-    def _joffsetRange(self, sc):
-        return sc._jvm.OffsetRange.create(self._topic, self._partition, self._fromOffset,
-                                          self._untilOffset)
+    def _joffsetRange(self, helper):
+        return helper.createOffsetRange(self._topic, self._partition, self._fromOffset,
+                                        self._untilOffset)

@@ -21,6 +21,7 @@ import java.lang.{Integer => JInt}
 import java.lang.{Long => JLong}
 import java.util.{Map => JMap}
 import java.util.{Set => JSet}
+import java.util.{List => JList}
 
 import scala.reflect.ClassTag
 import scala.collection.JavaConversions._
@@ -558,4 +559,36 @@ private class KafkaUtilsPythonHelper {
       topics,
       storageLevel)
   }
+
+  def createRDD(
+      jsc: JavaSparkContext,
+      kafkaParams: JMap[String, String],
+      offsetRanges: JList[OffsetRange]): JavaPairRDD[Array[Byte], Array[Byte]] = {
+    KafkaUtils.createRDD[Array[Byte], Array[Byte], DefaultDecoder, DefaultDecoder](
+      jsc,
+      classOf[Array[Byte]],
+      classOf[Array[Byte]],
+      classOf[DefaultDecoder],
+      classOf[DefaultDecoder],
+      kafkaParams,
+      offsetRanges.toArray(new Array[OffsetRange](offsetRanges.size())))
+  }
+
+  def createDirectStream(
+      jssc: JavaStreamingContext,
+      kafkaParams: JMap[String, String],
+      topics: JSet[String]): JavaPairInputDStream[Array[Byte], Array[Byte]] = {
+    KafkaUtils.createDirectStream[Array[Byte], Array[Byte], DefaultDecoder, DefaultDecoder](
+      jssc,
+      classOf[Array[Byte]],
+      classOf[Array[Byte]],
+      classOf[DefaultDecoder],
+      classOf[DefaultDecoder],
+      kafkaParams,
+      topics
+    )
+  }
+
+  def createOffsetRange(topic: String, partition: Int, fromOffset: Long, untilOffset: Long)
+      : OffsetRange = OffsetRange.create(topic, partition, fromOffset, untilOffset)
 }
