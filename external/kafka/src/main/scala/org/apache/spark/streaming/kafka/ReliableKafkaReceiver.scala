@@ -221,19 +221,25 @@ class ReliableKafkaReceiver[
       }
     }
     if (pushed) {
-      Option(blockOffsetMap.get(blockId)).foreach { offsets =>
-        try {
-          SparkKafkaUtils.commitOffset(zkClient, groupId, offsets.toMap)
-        } catch {
-          case ex: Exception =>
-            exception = ex
-            stop("Error while committing the offsets into Spark", exception)
-        }
-        blockOffsetMap.remove(blockId)
-      }
+      Option(blockOffsetMap.get(blockId)).foreach(commitOffset)
+      blockOffsetMap.remove(blockId)
     } else {
       stop("Error while storing block into Spark", exception)
     }
+  }
+
+  /**
+   * Commit the offset of Kafka's topic/partition, the commit mechanism follow Kafka 0.8.x's
+   * metadata schema in Zookeeper.
+   */
+  private def commitOffset(offsetMap: Map[TopicAndPartition, Long]): Unit = {
+    if (zkClient == null) {
+      val thrown = new IllegalStateException("Zookeeper client is unexpectedly null")
+      stop("Zookeeper client is not initialized before commit offsets to ZK", thrown)
+      return
+    }
+
+    SparkKafkaUtils.commitOffset(zkClient, groupId, offsetMap.toMap)
   }
 
   /** Class to handle received Kafka message. */
