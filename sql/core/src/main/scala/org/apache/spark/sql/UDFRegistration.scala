@@ -32,9 +32,9 @@ import org.apache.spark.sql.types.DataType
 
 
 /**
- * Functions for registering user-defined functions.
+ * Functions for registering user-defined functions. Use [[SQLContext.udf]] to access this.
  */
-class UDFRegistration(sqlContext: SQLContext) extends Logging {
+class UDFRegistration private[sql] (sqlContext: SQLContext) extends Logging {
 
   private val functionRegistry = sqlContext.functionRegistry
 

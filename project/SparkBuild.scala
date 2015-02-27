@@ -177,6 +177,29 @@ object SparkBuild extends PomBuild {
 
   enable(Flume.settings)(streamingFlumeSink)
 
+
+  /**
+   * Adds the ability to run the spark shell directly from SBT without building an assembly
+   * jar.
+   *
+   * Usage: `build/sbt sparkShell`
+   */
+  val sparkShell = taskKey[Unit]("start a spark-shell.")
+
+  enable(Seq(
+    connectInput in run := true,
+    fork := true,
+    outputStrategy in run := Some (StdoutOutput),
+
+    javaOptions ++= Seq("-Xmx2G", "-XX:MaxPermSize=1g"),
+
+    sparkShell := {
+      (runMain in Compile).toTask(" org.apache.spark.repl.Main -usejavacp").value
+    }
+  ))(assembly)
+
+  enable(Seq(sparkShell := sparkShell in "assembly"))(spark)
+
   // TODO: move this to its upstream project.
   override def projectDefinitions(baseDirectory: File): Seq[Project] = {
     super.projectDefinitions(baseDirectory).map { x =>
@@ -276,6 +299,7 @@ object Hive {
         |import org.apache.spark.sql.catalyst.plans.logical._
         |import org.apache.spark.sql.catalyst.rules._
         |import org.apache.spark.sql.catalyst.util._
+        |import org.apache.spark.sql.Dsl._
         |import org.apache.spark.sql.execution
         |import org.apache.spark.sql.hive._
         |import org.apache.spark.sql.hive.test.TestHive._
@@ -337,9 +361,16 @@ object Unidoc {
     publish := {},
 
     unidocProjectFilter in(ScalaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, catalyst, streamingFlumeSink, yarn),
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, streamingFlumeSink, yarn),
     unidocProjectFilter in(JavaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, bagel, examples, tools, catalyst, streamingFlumeSink, yarn),
+      inAnyProject -- inProjects(OldDeps.project, repl, bagel, examples, tools, streamingFlumeSink, yarn),
+
+    // Skip actual catalyst, but include the subproject.
+    // Catalyst is not public API and contains quasiquotes which break scaladoc.
+    unidocAllSources in (ScalaUnidoc, unidoc) := {
+      (unidocAllSources in (ScalaUnidoc, unidoc)).value
+        .map(_.filterNot(_.getCanonicalPath.contains("sql/catalyst")))
+    },
 
     // Skip class names containing $ and some internal packages in Javadocs
     unidocAllSources in (JavaUnidoc, unidoc) := {
@@ -352,6 +383,7 @@ object Unidoc {
         .map(_.filterNot(_.getCanonicalPath.contains("executor")))
         .map(_.filterNot(_.getCanonicalPath.contains("python")))
         .map(_.filterNot(_.getCanonicalPath.contains("collection")))
+        .map(_.filterNot(_.getCanonicalPath.contains("sql/catalyst")))
     },
 
     // Javadoc options: create a window title, and group key packages on index page
@@ -374,7 +406,10 @@ object Unidoc {
       ),
       "-group", "Spark SQL", packageList("sql.api.java", "sql.api.java.types", "sql.hive.api.java"),
       "-noqualifier", "java.lang"
-    )
+    ),
+
+    // Group similar methods together based on the @group annotation.
+    scalacOptions in (ScalaUnidoc, unidoc) ++= Seq("-groups")
   )
 }
 
@@ -384,6 +419,10 @@ object TestSettings {
   lazy val settings = Seq (
     // Fork new JVMs for tests and set Java options for those
     fork := true,
+    // Setting SPARK_DIST_CLASSPATH is a simple way to make sure any child processes
+    // launched by the tests have access to the correct test-time classpath.
+    envVars in Test += ("SPARK_DIST_CLASSPATH" ->
+      (fullClasspath in Test).value.files.map(_.getAbsolutePath).mkString(":").stripSuffix(":")),
     javaOptions in Test += "-Dspark.test.home=" + sparkHome,
     javaOptions in Test += "-Dspark.testing=1",
     javaOptions in Test += "-Dspark.port.maxRetries=100",
@@ -396,10 +435,6 @@ object TestSettings {
     javaOptions in Test += "-ea",
     javaOptions in Test ++= "-Xmx3g -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g"
       .split(" ").toSeq,
-    // This places test scope jars on the classpath of executors during tests.
-    javaOptions in Test +=
-      "-Dspark.executor.extraClassPath=" + (fullClasspath in Test).value.files.
-      map(_.getAbsolutePath).mkString(":").stripSuffix(":"),
     javaOptions += "-Xmx3g",
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),

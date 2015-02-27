@@ -60,4 +60,6 @@ private[sql] trait RDDApi[T] {
   def first(): T
 
   def repartition(numPartitions: Int): DataFrame
+
+  def distinct: DataFrame
 }

@@ -219,14 +219,13 @@ private[spark] class PythonRDD(
         val oldBids = PythonRDD.getWorkerBroadcasts(worker)
         val newBids = broadcastVars.map(_.id).toSet
         // number of different broadcasts
-        val cnt = oldBids.diff(newBids).size + newBids.diff(oldBids).size
+        val toRemove = oldBids.diff(newBids)
+        val cnt = toRemove.size + newBids.diff(oldBids).size
         dataOut.writeInt(cnt)
-        for (bid <- oldBids) {
-          if (!newBids.contains(bid)) {
-            // remove the broadcast from worker
-            dataOut.writeLong(- bid - 1)  // bid >= 0
-            oldBids.remove(bid)
-          }
+        for (bid <- toRemove) {
+          // remove the broadcast from worker
+          dataOut.writeLong(- bid - 1)  // bid >= 0
+          oldBids.remove(bid)
         }
         for (broadcast <- broadcastVars) {
           if (!oldBids.contains(broadcast.id)) {
@@ -248,13 +247,13 @@ private[spark] class PythonRDD(
       } catch {
         case e: Exception if context.isCompleted || context.isInterrupted =>
           logDebug("Exception thrown after task completion (likely due to cleanup)", e)
-          worker.shutdownOutput()
+          Utils.tryLog(worker.shutdownOutput())
 
         case e: Exception =>
           // We must avoid throwing exceptions here, because the thread uncaught exception handler
           // will kill the whole executor (see org.apache.spark.executor.Executor).
           _exception = e
-          worker.shutdownOutput()
+          Utils.tryLog(worker.shutdownOutput())
       } finally {
         // Release memory used by this thread for shuffles
         env.shuffleMemoryManager.releaseMemoryForThisThread()
@@ -303,6 +302,7 @@ private class PythonException(msg: String, cause: Exception) extends RuntimeExce
 private class PairwiseRDD(prev: RDD[Array[Byte]]) extends
   RDD[(Long, Array[Byte])](prev) {
   override def getPartitions = prev.partitions
+  override val partitioner = prev.partitioner
   override def compute(split: Partition, context: TaskContext) =
     prev.iterator(split, context).grouped(2).map {
       case Seq(a, b) => (Utils.deserializeLongValue(a), b)
@@ -327,6 +327,15 @@ private[spark] object PythonRDD extends Logging {
     synchronized {
       workerBroadcasts.getOrElseUpdate(worker, new mutable.HashSet[Long]())
     }
+  }
+
+  /**
+   * Return an RDD of values from an RDD of (Long, Array[Byte]), with preservePartitions=true
+   *
+   * This is useful for PySpark to have the partitioner after partitionBy()
+   */
+  def valueOfPair(pair: JavaPairRDD[Long, Array[Byte]]): JavaRDD[Array[Byte]] = {
+    pair.rdd.mapPartitions(it => it.map(_._2), true)
   }
 
   /**

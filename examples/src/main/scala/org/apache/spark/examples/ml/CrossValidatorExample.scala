@@ -23,6 +23,7 @@ import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
 import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
 import org.apache.spark.ml.tuning.{ParamGridBuilder, CrossValidator}
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.sql.{Row, SQLContext}
 
 /**
@@ -89,7 +90,7 @@ object CrossValidatorExample {
     crossval.setNumFolds(2) // Use 3+ in practice
 
     // Run cross-validation, and choose the best set of parameters.
-    val cvModel = crossval.fit(training)
+    val cvModel = crossval.fit(training.toDF())
 
     // Prepare test documents, which are unlabeled.
     val test = sc.parallelize(Seq(
@@ -99,11 +100,11 @@ object CrossValidatorExample {
       Document(7L, "apache hadoop")))
 
     // Make predictions on test documents. cvModel uses the best model found (lrModel).
-    cvModel.transform(test)
-      .select("id", "text", "score", "prediction")
+    cvModel.transform(test.toDF())
+      .select("id", "text", "probability", "prediction")
       .collect()
-      .foreach { case Row(id: Long, text: String, score: Double, prediction: Double) =>
-      println("(" + id + ", " + text + ") --> score=" + score + ", prediction=" + prediction)
+      .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
+      println(s"($id, $text) --> prob=$prob, prediction=$prediction")
     }
 
     sc.stop()

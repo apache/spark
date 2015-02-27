@@ -23,6 +23,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.sql.{Row, SQLContext}
 
 @BeanInfo
@@ -68,7 +69,7 @@ object SimpleTextClassificationPipeline {
       .setStages(Array(tokenizer, hashingTF, lr))
 
     // Fit the pipeline to training documents.
-    val model = pipeline.fit(training)
+    val model = pipeline.fit(training.toDF())
 
     // Prepare test documents, which are unlabeled.
     val test = sc.parallelize(Seq(
@@ -78,11 +79,11 @@ object SimpleTextClassificationPipeline {
       Document(7L, "apache hadoop")))
 
     // Make predictions on test documents.
-    model.transform(test)
-      .select("id", "text", "score", "prediction")
+    model.transform(test.toDF())
+      .select("id", "text", "probability", "prediction")
       .collect()
-      .foreach { case Row(id: Long, text: String, score: Double, prediction: Double) =>
-        println("(" + id + ", " + text + ") --> score=" + score + ", prediction=" + prediction)
+      .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
+        println(s"($id, $text) --> prob=$prob, prediction=$prediction")
       }
 
     sc.stop()

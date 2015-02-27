@@ -37,6 +37,7 @@ private[spark] object SQLConf {
   val PARQUET_CACHE_METADATA = "spark.sql.parquet.cacheMetadata"
   val PARQUET_COMPRESSION = "spark.sql.parquet.compression.codec"
   val PARQUET_FILTER_PUSHDOWN_ENABLED = "spark.sql.parquet.filterPushdown"
+  val PARQUET_USE_DATA_SOURCE_API = "spark.sql.parquet.useDataSourceApi"
 
   val COLUMN_NAME_OF_CORRUPT_RECORD = "spark.sql.columnNameOfCorruptRecord"
   val BROADCAST_TIMEOUT = "spark.sql.broadcastTimeout"
@@ -49,7 +50,16 @@ private[spark] object SQLConf {
   val THRIFTSERVER_POOL = "spark.sql.thriftserver.scheduler.pool"
 
   // This is used to set the default data source
-  val DEFAULT_DATA_SOURCE_NAME = "spark.sql.default.datasource"
+  val DEFAULT_DATA_SOURCE_NAME = "spark.sql.sources.default"
+  // This is used to control the when we will split a schema's JSON string to multiple pieces
+  // in order to fit the JSON string in metastore's table property (by default, the value has
+  // a length restriction of 4000 characters). We will split the JSON string of a schema
+  // to its length exceeds the threshold.
+  val SCHEMA_STRING_LENGTH_THRESHOLD = "spark.sql.sources.schemaStringLengthThreshold"
+
+  // Whether to perform eager analysis when constructing a dataframe.
+  // Set to false when debugging requires the ability to look at invalid query plans.
+  val DATAFRAME_EAGER_ANALYSIS = "spark.sql.eagerAnalysis"
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -104,6 +114,10 @@ private[sql] class SQLConf extends Serializable {
   /** When true predicates will be passed to the parquet record reader when possible. */
   private[spark] def parquetFilterPushDown =
     getConf(PARQUET_FILTER_PUSHDOWN_ENABLED, "false").toBoolean
+
+  /** When true uses Parquet implementation based on data source API */
+  private[spark] def parquetUseDataSourceApi =
+    getConf(PARQUET_USE_DATA_SOURCE_API, "true").toBoolean
 
   /** When true the planner will use the external sort, which may spill to disk. */
   private[spark] def externalSortEnabled: Boolean = getConf(EXTERNAL_SORT, "false").toBoolean
@@ -167,6 +181,14 @@ private[sql] class SQLConf extends Serializable {
 
   private[spark] def defaultDataSourceName: String =
     getConf(DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.parquet")
+
+  // Do not use a value larger than 4000 as the default value of this property.
+  // See the comments of SCHEMA_STRING_LENGTH_THRESHOLD above for more information.
+  private[spark] def schemaStringLengthThreshold: Int =
+    getConf(SCHEMA_STRING_LENGTH_THRESHOLD, "4000").toInt
+
+  private[spark] def dataFrameEagerAnalysis: Boolean =
+    getConf(DATAFRAME_EAGER_ANALYSIS, "true").toBoolean
 
   /** ********************** SQLConf functionality methods ************ */
 

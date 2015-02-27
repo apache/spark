@@ -225,6 +225,11 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Needs constant object inspectors
     "udf_round",
 
+    // the table src(key INT, value STRING) is not the same as HIVE unittest. In Hive
+    // is src(key STRING, value STRING), and in the reflect.q, it failed in
+    // Integer.valueOf, which expect the first argument passed as STRING type not INT.
+    "udf_reflect",
+
     // Sort with Limit clause causes failure.
     "ctas",
     "ctas_hadoop20",
@@ -518,6 +523,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "inputddl2",
     "inputddl3",
     "inputddl4",
+    "inputddl5",
     "inputddl6",
     "inputddl7",
     "inputddl8",
@@ -639,6 +645,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "nonblock_op_deduplicate",
     "notable_alias1",
     "notable_alias2",
+    "nullformatCTAS",
     "nullgroup",
     "nullgroup2",
     "nullgroup3",
@@ -884,6 +891,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_power",
     "udf_radians",
     "udf_rand",
+    "udf_reflect2",
     "udf_regexp",
     "udf_regexp_extract",
     "udf_regexp_replace",

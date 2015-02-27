@@ -45,7 +45,7 @@ public class JavaPipelineSuite {
     jsql = new SQLContext(jsc);
     JavaRDD<LabeledPoint> points =
       jsc.parallelize(generateLogisticInputAsList(1.0, 1.0, 100, 42), 2);
-    dataset = jsql.applySchema(points, LabeledPoint.class);
+    dataset = jsql.createDataFrame(points, LabeledPoint.class);
   }
 
   @After
@@ -65,7 +65,7 @@ public class JavaPipelineSuite {
       .setStages(new PipelineStage[] {scaler, lr});
     PipelineModel model = pipeline.fit(dataset);
     model.transform(dataset).registerTempTable("prediction");
-    DataFrame predictions = jsql.sql("SELECT label, score, prediction FROM prediction");
+    DataFrame predictions = jsql.sql("SELECT label, probability, prediction FROM prediction");
     predictions.collectAsList();
   }
 }

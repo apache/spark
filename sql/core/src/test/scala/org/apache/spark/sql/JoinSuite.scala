@@ -20,10 +20,11 @@ package org.apache.spark.sql
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.TestData._
-import org.apache.spark.sql.Dsl._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.test.TestSQLContext.implicits._
 
 
 class JoinSuite extends QueryTest with BeforeAndAfterEach {
@@ -39,8 +40,8 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   }
 
   def assertJoin(sqlString: String, c: Class[_]): Any = {
-    val rdd = sql(sqlString)
-    val physical = rdd.queryExecution.sparkPlan
+    val df = sql(sqlString)
+    val physical = df.queryExecution.sparkPlan
     val operators = physical.collect {
       case j: ShuffledHashJoin => j
       case j: HashOuterJoin => j
@@ -409,8 +410,8 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   }
 
   test("left semi join") {
-    val rdd = sql("SELECT * FROM testData2 LEFT SEMI JOIN testData ON key = a")
-    checkAnswer(rdd,
+    val df = sql("SELECT * FROM testData2 LEFT SEMI JOIN testData ON key = a")
+    checkAnswer(df,
       Row(1, 1) ::
         Row(1, 2) ::
         Row(2, 1) ::
