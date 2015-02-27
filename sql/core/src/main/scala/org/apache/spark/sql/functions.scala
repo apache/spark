@@ -33,6 +33,7 @@ import org.apache.spark.sql.types._
  *
  * @groupname udf_funcs UDF functions
  * @groupname agg_funcs Aggregate functions
+ * @groupname sort_funcs Sorting functions
  * @groupname normal_funcs Non-aggregate functions
  * @groupname Ungrouped Support functions for DataFrames.
  */
@@ -73,29 +74,38 @@ object functions {
       case _ =>  // continue
     }
 
-    val literalExpr = literal match {
-      case v: Boolean => Literal(v, BooleanType)
-      case v: Byte => Literal(v, ByteType)
-      case v: Short => Literal(v, ShortType)
-      case v: Int => Literal(v, IntegerType)
-      case v: Long => Literal(v, LongType)
-      case v: Float => Literal(v, FloatType)
-      case v: Double => Literal(v, DoubleType)
-      case v: String => Literal(v, StringType)
-      case v: BigDecimal => Literal(Decimal(v), DecimalType.Unlimited)
-      case v: java.math.BigDecimal => Literal(Decimal(v), DecimalType.Unlimited)
-      case v: Decimal => Literal(v, DecimalType.Unlimited)
-      case v: java.sql.Timestamp => Literal(v, TimestampType)
-      case v: java.sql.Date => Literal(v, DateType)
-      case v: Array[Byte] => Literal(v, BinaryType)
-      case null => Literal(null, NullType)
-      case _ =>
-        throw new RuntimeException("Unsupported literal type " + literal.getClass + " " + literal)
-    }
+    val literalExpr = Literal(literal)
     Column(literalExpr)
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
+  // Sort functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Returns a sort expression based on ascending order of the column.
+   * {{
+   *   // Sort by dept in ascending order, and then age in descending order.
+   *   df.sort(asc("dept"), desc("age"))
+   * }}
+   *
+   * @group sort_funcs
+   */
+  def asc(columnName: String): Column = Column(columnName).asc
+
+  /**
+   * Returns a sort expression based on the descending order of the column.
+   * {{
+   *   // Sort by dept in ascending order, and then age in descending order.
+   *   df.sort(asc("dept"), desc("age"))
+   * }}
+   *
+   * @group sort_funcs
+   */
+  def desc(columnName: String): Column = Column(columnName).desc
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // Aggregate functions
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
@@ -263,6 +273,7 @@ object functions {
   def max(columnName: String): Column = max(Column(columnName))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
+  // Non-aggregate functions
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
