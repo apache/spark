@@ -70,20 +70,21 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
           client.getTable(in.database, in.name)
         }
         val userSpecifiedSchema =
-          Option(table.getProperty("spark.sql.sources.schema.numParts")).flatMap { numParts =>
+          Option(table.getProperty("spark.sql.sources.schema.numParts")).map { numParts =>
             val parts = (0 until numParts.toInt).map { index =>
               val part = table.getProperty(s"spark.sql.sources.schema.part.${index}")
               if (part == null) {
                 throw new AnalysisException(
-                  "Could not read schema from the metastore because it is corrupted.")
+                  s"Could not read schema from the metastore because it is corrupted " +
+                  s"(missing part ${index} of the schema).")
               }
 
               part
             }
             // Stick all parts back to a single schema string in the JSON representation
             // and convert it back to a StructType.
-            Some(DataType.fromJson(parts.mkString).asInstanceOf[StructType])
-        }
+            DataType.fromJson(parts.mkString).asInstanceOf[StructType]
+          }
 
         // It does not appear that the ql client for the metastore has a way to enumerate all the
         // SerDe properties directly...
