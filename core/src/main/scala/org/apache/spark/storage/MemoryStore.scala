@@ -397,7 +397,8 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     // Take into account the amount of memory currently occupied by unrolling blocks
     // and minus the pending unroll memory for that block on current thread.
     val threadId = Thread.currentThread().getId
-    val actualFreeMemory = freeMemory - currentUnrollMemory
+    val actualFreeMemory = freeMemory - currentUnrollMemory +
+      pendingUnrollMemoryMap.getOrElse(threadId, 0L)
 
     if (actualFreeMemory < space) {
       val rddToAdd = getRddId(blockIdToAdd)
@@ -509,8 +510,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    * Return the amount of memory currently occupied for unrolling blocks across all threads.
    */
   def currentUnrollMemory: Long = accountingLock.synchronized {
-    unrollMemoryMap.values.sum + pendingUnrollMemoryMap.
-      filter(_._1 != Thread.currentThread().getId).values.sum
+    unrollMemoryMap.values.sum + pendingUnrollMemoryMap.values.sum
   }
 
   /**
