@@ -1025,10 +1025,12 @@ class Column(object):
             ssql_ctx = sc._jvm.SQLContext(sc._jsc.sc())
             jdt = ssql_ctx.parseDataType(dataType.json())
             jc = self._jc.cast(jdt)
+        else:
+            raise TypeError("unexpected type: %s" % type(dataType))
         return Column(jc)
 
     def __repr__(self):
-        return 'Column<%s>' % self._jdf.toString().encode('utf8')
+        return 'Column<%s>' % self._jc.toString().encode('utf8')
 
 
 def _test():
