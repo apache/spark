@@ -1103,8 +1103,8 @@ setMethod("coalesce",
                         })
                }
                shuffled <- lapplyPartitionsWithIndex(x, func)
-               reparted <- partitionBy(shuffled, numPartitions)
-               values(reparted)
+               repartitioned <- partitionBy(shuffled, numPartitions)
+               values(repartitioned)
              } else {
                jrdd <- callJMethod(getJRDD(x), "coalesce", numPartitions, shuffle)
                RDD(jrdd)

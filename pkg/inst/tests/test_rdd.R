@@ -268,17 +268,21 @@ test_that("keyBy on RDDs", {
 })
 
 test_that("repartition/coalesce on RDDs", {
-  rdd <- parallelize(sc, 1:10, 3L)
-  expect_equal(numPartitions(rdd), 3L)
+  rdd <- parallelize(sc, 1:20, 4L) # each partition contains 5 elements
 
-  nrdd <- repartition(rdd, 2L)
-  expect_equal(numPartitions(nrdd), 2L)
+  # repartition
+  r1 <- repartition(rdd, 2)
+  count <- length(collectPartition(r1, 0L))
+  expect_true(count >= 8 && count <= 12)
 
-  nrdd2 <- repartition(rdd, 5L)
-  expect_equal(numPartitions(nrdd2), 5L)
+  r2 <- repartition(rdd, 6)
+  count <- length(collectPartition(r2, 0L))
+  expect_true(count >=0 && count <= 4)
 
-  nrdd3 <- coalesce(rdd, 1L)
-  expect_equal(numPartitions(nrdd3), 1L)
+  # coalesce
+  r3 <- coalesce(rdd, 1)
+  count <- length(collectPartition(r3, 0L))
+  expect_equal(count, 20)
 })
 
 test_that("sortBy() on RDDs", {
