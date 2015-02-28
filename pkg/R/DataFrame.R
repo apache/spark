@@ -279,7 +279,7 @@ setMethod("repartition",
           function(x, numPartitions) {
             sdf <- callJMethod(x@sdf, "repartition", as.integer(numPartitions))
             dataFrame(sdf)     
-            })
+          })
 
 #' Distinct
 #'
@@ -302,7 +302,7 @@ setMethod("distinct",
           function(x) {
             sdf <- callJMethod(x@sdf, "distinct")
             dataFrame(sdf)
-            })
+          })
 
 #' SampleDF
 #'
@@ -311,7 +311,6 @@ setMethod("distinct",
 #' @param x A SparkSQL DataFrame
 #' @param withReplacement Sampling with replacement or not
 #' @param fraction The (rough) sample target fraction
-#' @param seed Randomness seed value
 #' @rdname sampleDF
 #' @export
 #' @examples
@@ -320,8 +319,8 @@ setMethod("distinct",
 #' sqlCtx <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
 #' df <- jsonFile(sqlCtx, path)
-#' collect(sampleRDD(rdd, FALSE, 0.5, 1618L)) 
-#' collect(sampleRDD(rdd, TRUE, 0.5, 9L))
+#' collect(sampleDF(df, FALSE, 0.5)) 
+#' collect(sampleDF(df, TRUE, 0.5))
 #'}
 
 setGeneric("sampleDF",
