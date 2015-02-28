@@ -189,7 +189,7 @@ class StreamingContext(object):
         if timeout is None:
             self._jssc.awaitTermination()
         else:
-            self._jssc.awaitTermination(int(timeout * 1000))
+            self._jssc.awaitTerminationOrTimeout(int(timeout * 1000))
 
     def awaitTerminationOrTimeout(self, timeout):
         """

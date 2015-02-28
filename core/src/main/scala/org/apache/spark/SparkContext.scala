@@ -351,7 +351,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private[spark] var (schedulerBackend, taskScheduler) =
     SparkContext.createTaskScheduler(this, master)
   private val heartbeatReceiver = env.actorSystem.actorOf(
-    Props(new HeartbeatReceiver(taskScheduler)), "HeartbeatReceiver")
+    Props(new HeartbeatReceiver(this, taskScheduler)), "HeartbeatReceiver")
   @volatile private[spark] var dagScheduler: DAGScheduler = _
   try {
     dagScheduler = new DAGScheduler(this)
@@ -398,7 +398,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private val dynamicAllocationTesting = conf.getBoolean("spark.dynamicAllocation.testing", false)
   private[spark] val executorAllocationManager: Option[ExecutorAllocationManager] =
     if (dynamicAllocationEnabled) {
-      assert(master.contains("yarn") || dynamicAllocationTesting,
+      assert(supportDynamicAllocation,
         "Dynamic allocation of executors is currently only supported in YARN mode")
       Some(new ExecutorAllocationManager(this, listenerBus, conf))
     } else {
@@ -548,6 +548,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @note Parallelize acts lazily. If `seq` is a mutable collection and is altered after the call
    * to parallelize and before the first action on the RDD, the resultant RDD will reflect the
    * modified collection. Pass a copy of the argument to avoid this.
+   * @note avoid using `parallelize(Seq())` to create an empty `RDD`. Consider `emptyRDD` for an
+   * RDD with no partitions, or `parallelize(Seq[T]())` for an RDD of `T` with empty partitions.
    */
   def parallelize[T: ClassTag](seq: Seq[T], numSlices: Int = defaultParallelism): RDD[T] = {
     assertNotStopped()
@@ -984,7 +986,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * values to using the `+=` method. Only the driver can access the accumulator's `value`.
    */
   def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]) =
-    new Accumulator(initialValue, param)
+  {
+    val acc = new Accumulator(initialValue, param)
+    cleaner.foreach(_.registerAccumulatorForCleanup(acc))
+    acc
+  }
 
   /**
    * Create an [[org.apache.spark.Accumulator]] variable of a given type, with a name for display
@@ -992,7 +998,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * driver can access the accumulator's `value`.
    */
   def accumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T]) = {
-    new Accumulator(initialValue, param, Some(name))
+    val acc = new Accumulator(initialValue, param, Some(name))
+    cleaner.foreach(_.registerAccumulatorForCleanup(acc))
+    acc
   }
 
   /**
@@ -1001,8 +1009,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @tparam R accumulator result type
    * @tparam T type that can be added to the accumulator
    */
-  def accumulable[R, T](initialValue: R)(implicit param: AccumulableParam[R, T]) =
-    new Accumulable(initialValue, param)
+  def accumulable[R, T](initialValue: R)(implicit param: AccumulableParam[R, T]) = {
+    val acc = new Accumulable(initialValue, param)
+    cleaner.foreach(_.registerAccumulatorForCleanup(acc))
+    acc
+  }
 
   /**
    * Create an [[org.apache.spark.Accumulable]] shared variable, with a name for display in the
@@ -1011,8 +1022,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @tparam R accumulator result type
    * @tparam T type that can be added to the accumulator
    */
-  def accumulable[R, T](initialValue: R, name: String)(implicit param: AccumulableParam[R, T]) =
-    new Accumulable(initialValue, param, Some(name))
+  def accumulable[R, T](initialValue: R, name: String)(implicit param: AccumulableParam[R, T]) = {
+    val acc = new Accumulable(initialValue, param, Some(name))
+    cleaner.foreach(_.registerAccumulatorForCleanup(acc))
+    acc
+  }
 
   /**
    * Create an accumulator from a "mutable collection" type.
@@ -1023,7 +1037,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   def accumulableCollection[R <% Growable[T] with TraversableOnce[T] with Serializable: ClassTag, T]
       (initialValue: R): Accumulable[R, T] = {
     val param = new GrowableAccumulableParam[R,T]
-    new Accumulable(initialValue, param)
+    val acc = new Accumulable(initialValue, param)
+    cleaner.foreach(_.registerAccumulatorForCleanup(acc))
+    acc
   }
 
   /**
@@ -1107,6 +1123,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
+   * Return whether dynamically adjusting the amount of resources allocated to
+   * this application is supported. This is currently only available for YARN.
+   */
+  private[spark] def supportDynamicAllocation = 
+    master.contains("yarn") || dynamicAllocationTesting
+
+  /**
    * :: DeveloperApi ::
    * Register a listener to receive up-calls from events that happen during execution.
    */
@@ -1139,7 +1162,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   @DeveloperApi
   override def requestExecutors(numAdditionalExecutors: Int): Boolean = {
-    assert(master.contains("yarn") || dynamicAllocationTesting,
+    assert(supportDynamicAllocation,
       "Requesting executors is currently only supported in YARN mode")
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
@@ -1157,7 +1180,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   @DeveloperApi
   override def killExecutors(executorIds: Seq[String]): Boolean = {
-    assert(master.contains("yarn") || dynamicAllocationTesting,
+    assert(supportDynamicAllocation,
       "Killing executors is currently only supported in YARN mode")
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
@@ -1366,17 +1389,17 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         stopped = true
         env.metricsSystem.report()
         metadataCleaner.cancel()
-        env.actorSystem.stop(heartbeatReceiver)
         cleaner.foreach(_.stop())
         dagScheduler.stop()
         dagScheduler = null
+        listenerBus.stop()
+        eventLogger.foreach(_.stop())
+        env.actorSystem.stop(heartbeatReceiver)
         progressBar.foreach(_.stop())
         taskScheduler = null
         // TODO: Cache.stop()?
         env.stop()
         SparkEnv.set(null)
-        listenerBus.stop()
-        eventLogger.foreach(_.stop())
         logInfo("Successfully stopped SparkContext")
         SparkContext.clearActiveContext()
       } else {

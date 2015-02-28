@@ -205,7 +205,7 @@ class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
     val message = intercept[AnalysisException] {
       sql(
         s"""
-        |INSERT OVERWRITE TABLE oneToTen SELECT a FROM jt
+        |INSERT OVERWRITE TABLE oneToTen SELECT CAST(a AS INT) FROM jt
         """.stripMargin)
     }.getMessage
     assert(

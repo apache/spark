@@ -538,7 +538,7 @@ val joinedGraph = graph.joinVertices(uniqueCosts,
 
 ## Neighborhood Aggregation
 
-A key step in may graph analytics tasks is aggregating information about the neighborhood of each
+A key step in many graph analytics tasks is aggregating information about the neighborhood of each
 vertex.
 For example, we might want to know the number of followers each user has or the average age of the
 the followers of each user.  Many iterative graph algorithms (e.g., PageRank, Shortest Path, and
@@ -634,7 +634,7 @@ avgAgeOfOlderFollowers.collect.foreach(println(_))
 
 ### Map Reduce Triplets Transition Guide (Legacy)
 
-In earlier versions of GraphX we neighborhood aggregation was accomplished using the
+In earlier versions of GraphX neighborhood aggregation was accomplished using the
 [`mapReduceTriplets`][Graph.mapReduceTriplets] operator:
 
 {% highlight scala %}
@@ -682,8 +682,8 @@ val result = graph.aggregateMessages[String](msgFun, reduceFun)
 ### Computing Degree Information
 
 A common aggregation task is computing the degree of each vertex: the number of edges adjacent to
-each vertex.  In the context of directed graphs it often necessary to know the in-degree, out-
-degree, and the total degree of each vertex.  The  [`GraphOps`][GraphOps] class contains a
+each vertex.  In the context of directed graphs it is often necessary to know the in-degree, 
+out-degree, and the total degree of each vertex.  The  [`GraphOps`][GraphOps] class contains a
 collection of operators to compute the degrees of each vertex.  For example in the following we
 compute the max in, out, and total degrees:
 
