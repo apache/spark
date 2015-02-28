@@ -108,7 +108,7 @@ class MesosSubmitRequestServlet(
     val javaOpts = sparkJavaOpts ++ extraJavaOpts
     val command = new Command(
       "org.apache.spark.deploy.SparkSubmit",
-      Seq("--master", masterUrl, "--class", mainClass, appResource) ++ appArgs,
+      Seq("--master", masterUrl, "--class", mainClass, "{{USER_JAR}}") ++ appArgs,
       environmentVariables, extraClassPath, extraLibraryPath, javaOpts)
     val actualSuperviseDriver = superviseDriver.map(_.toBoolean).getOrElse(DEFAULT_SUPERVISE)
     val actualDriverMemory = driverMemory.map(Utils.memoryStringToMb).getOrElse(DEFAULT_MEMORY)
