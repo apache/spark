@@ -81,7 +81,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     = new mutable.LinkedHashMap()
 
   // Constants used to parse Spark 1.0.0 log directories.
-  private[history] val LOG_PREFIX = EventLoggingListener.EVENT_LOG_KEY + "_"
+  private[history] val LOG_PREFIX = "EVENT_LOG_"
   private[history] val SPARK_VERSION_PREFIX = EventLoggingListener.SPARK_VERSION_KEY + "_"
   private[history] val COMPRESSION_CODEC_PREFIX = EventLoggingListener.COMPRESSION_CODEC_KEY + "_"
   private[history] val APPLICATION_COMPLETE = "APPLICATION_COMPLETE"

@@ -117,15 +117,21 @@ private[spark] class EventLoggingListener(
         hadoopDataStream = Some(fileSystem.create(path))
         hadoopDataStream.get
       }
-    val cstream = compressionCodec.map(_.compressedOutputStream(dstream)).getOrElse(dstream)
-    val bstream = new BufferedOutputStream(cstream, outputBufferSize)
 
-    fileSystem.setPermission(path, LOG_FILE_PERMISSIONS)
+    try {
+      val cstream = compressionCodec.map(_.compressedOutputStream(dstream)).getOrElse(dstream)
+      val bstream = new BufferedOutputStream(cstream, outputBufferSize)
 
-    val logStream = initEventLog(bstream, compressionCodec)
-    writer = Some(new PrintWriter(logStream))
+      fileSystem.setPermission(path, LOG_FILE_PERMISSIONS)
 
-    logInfo("Logging events to %s".format(logPath))
+      val logStream = initEventLog(bstream, compressionCodec)
+      writer = Some(new PrintWriter(logStream))
+      logInfo("Logging events to %s".format(logPath))
+    } catch {
+      case e: Exception =>
+        dstream.close()
+        throw e
+    }
   }
 
   /** Log the event as JSON. */
@@ -203,8 +209,6 @@ private[spark] object EventLoggingListener extends Logging {
   // Suffix applied to the names of files still being written by applications.
   val IN_PROGRESS = ".inprogress"
   val DEFAULT_LOG_DIR = "/tmp/spark-events"
-
-  val EVENT_LOG_KEY = "EVENT_LOG"
   val SPARK_VERSION_KEY = "SPARK_VERSION"
   val COMPRESSION_CODEC_KEY = "COMPRESSION_CODEC"
 
@@ -270,9 +274,9 @@ private[spark] object EventLoggingListener extends Logging {
     val sanitizedAppId = appId.replaceAll("[ :/]", "-").replaceAll("[${}'\"]", "_").toLowerCase
     // e.g. EVENT_LOG_app_123_SPARK_VERSION_1.3.1
     // e.g. EVENT_LOG_ {...} _COMPRESSION_CODEC_org.apache.spark.io.LZFCompressionCodec
-    val logName = s"${EVENT_LOG_KEY}_${sanitizedAppId}_${SPARK_VERSION_KEY}_$SPARK_VERSION" +
+    val logName = s"${sanitizedAppId}_${SPARK_VERSION_KEY}_$SPARK_VERSION" +
       compressionCodecName.map { c => s"_${COMPRESSION_CODEC_KEY}_$c" }.getOrElse("")
-    Utils.resolveURI(logBaseDir).toString.stripSuffix("/") + "/" + logName.stripSuffix("/")
+    Utils.resolveURI(logBaseDir).toString.stripSuffix("/") + "/" + logName
   }
 
   /**
@@ -294,7 +298,7 @@ private[spark] object EventLoggingListener extends Logging {
 
     // Parse information from the log name
     val logName = log.getName
-    val baseRegex = s"${EVENT_LOG_KEY}_(.*)_${SPARK_VERSION_KEY}_(.*)".r
+    val baseRegex = s"(.*)_${SPARK_VERSION_KEY}_(.*)".r
     val compressionRegex = (baseRegex + s"_${COMPRESSION_CODEC_KEY}_(.*)").r
     val (sparkVersion, codecName) = logName match {
       case compressionRegex(_, version, _codecName) => (version, Some(_codecName))

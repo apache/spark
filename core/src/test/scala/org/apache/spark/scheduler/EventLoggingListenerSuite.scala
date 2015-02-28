@@ -106,13 +106,13 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
 
   test("Event log name") {
     // without compression
-    assert(s"file:/base-dir/EVENT_LOG_app1_SPARK_VERSION_$SPARK_VERSION" ===
+    assert(s"file:/base-dir/app1_SPARK_VERSION_$SPARK_VERSION" ===
       EventLoggingListener.getLogPath("/base-dir", "app1"))
     // with compression
-    assert(s"file:/base-dir/EVENT_LOG_app1_SPARK_VERSION_${SPARK_VERSION}_COMPRESSION_CODEC_lzf" ===
+    assert(s"file:/base-dir/app1_SPARK_VERSION_${SPARK_VERSION}_COMPRESSION_CODEC_lzf" ===
       EventLoggingListener.getLogPath("/base-dir", "app1", Some("lzf")))
     // illegal characters in app ID
-    assert(s"file:/base-dir/EVENT_LOG_a-fine-mind_dollar_bills_1_SPARK_VERSION_$SPARK_VERSION" ===
+    assert(s"file:/base-dir/a-fine-mind_dollar_bills_1_SPARK_VERSION_$SPARK_VERSION" ===
       EventLoggingListener.getLogPath("/base-dir", "a fine:mind$dollar{bills}1"))
   }
 
