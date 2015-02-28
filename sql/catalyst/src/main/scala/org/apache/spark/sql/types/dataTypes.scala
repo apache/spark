@@ -181,7 +181,7 @@ object DataType {
   /**
    * Compares two types, ignoring nullability of ArrayType, MapType, StructType.
    */
-  private[sql] def equalsIgnoreNullability(left: DataType, right: DataType): Boolean = {
+  private[spark] def equalsIgnoreNullability(left: DataType, right: DataType): Boolean = {
     (left, right) match {
       case (ArrayType(leftElementType, _), ArrayType(rightElementType, _)) =>
         equalsIgnoreNullability(leftElementType, rightElementType)
@@ -213,7 +213,7 @@ object DataType {
    *   if and only if for all every pair of fields, `fromField.nullable` is false, or both
    *   of `fromField.nullable` and `toField.nullable` are true.
    */
-  private[sql] def equalsIgnoreCompatibleNullability(from: DataType, to: DataType): Boolean = {
+  private[spark] def equalsIgnoreCompatibleNullability(from: DataType, to: DataType): Boolean = {
     (from, to) match {
       case (ArrayType(fromElement, fn), ArrayType(toElement, tn)) =>
         (tn || !fn) && equalsIgnoreCompatibleNullability(fromElement, toElement)
@@ -237,7 +237,7 @@ object DataType {
   }
 
   /** Sets all nullable/containsNull/valueContainsNull to true. */
-  def alwaysNullable(dataType: DataType): DataType = dataType match {
+  private[spark] def alwaysNullable(dataType: DataType): DataType = dataType match {
     case ArrayType(elementType, _) =>
       ArrayType(alwaysNullable(elementType), containsNull = true)
     case MapType(keyType, valueType, _) =>
