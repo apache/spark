@@ -476,7 +476,7 @@ private[sql] case class ParquetRelation2(
     // When the data does not include the key and the key is requested then we must fill it in
     // based on information from the input split.
     if (!partitionKeysIncludedInDataSchema && partitionKeyLocations.nonEmpty) {
-      // This check if based on CatalystConverter.createRootConverter.
+      // This check is based on CatalystConverter.createRootConverter.
       val primitiveRow =
         requestedSchema.forall(a => ParquetTypesConverter.isPrimitiveType(a.dataType))
 

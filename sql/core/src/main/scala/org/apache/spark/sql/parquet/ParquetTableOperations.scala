@@ -126,8 +126,12 @@ private[sql] case class ParquetTableScan(
         conf)
 
     if (requestedPartitionOrdinals.nonEmpty) {
-      // This check if based on CatalystConverter.createRootConverter.
+      // This check is based on CatalystConverter.createRootConverter.
       val primitiveRow = output.forall(a => ParquetTypesConverter.isPrimitiveType(a.dataType))
+
+      // Uses temporary variable to avoid the whole `ParquetTableScan` object being captured into
+      // the `mapPartitionsWithInputSplit` closure below.
+      val outputSize = output.size
 
       baseRDD.mapPartitionsWithInputSplit { case (split, iter) =>
         val partValue = "([^=]+)=([^=]+)".r
@@ -165,7 +169,7 @@ private[sql] case class ParquetTableScan(
           }
         } else {
           // Create a mutable row since we need to fill in values from partition columns.
-          val mutableRow = new GenericMutableRow(output.size)
+          val mutableRow = new GenericMutableRow(outputSize)
           new Iterator[Row] {
             def hasNext = iter.hasNext
             def next() = {
