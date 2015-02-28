@@ -88,11 +88,9 @@ object SparkRBackend {
       // tell the R process via temporary file
       val path = args(0)
       val f = new File(path + ".tmp")
-      val output = new FileOutputStream(f)
-      val dos = new DataOutputStream(output)
+      val dos = new DataOutputStream(new FileOutputStream(f))
       dos.writeInt(boundPort)
       dos.close()
-      output.close()
       f.renameTo(new File(path))
       sparkRBackend.run()
     } catch {
