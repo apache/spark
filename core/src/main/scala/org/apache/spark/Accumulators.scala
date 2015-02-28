@@ -306,12 +306,9 @@ private[spark] object Accumulators extends Logging {
 
   def register(a: Accumulable[_, _], original: Boolean): Unit = synchronized {
     if (original) {
-      require(!originals.contains(a.id), s"Accumulator ${a.id} has already been registered")
       originals(a.id) = new WeakReference[Accumulable[_, _]](a)
     } else {
-      val localAccs = localAccums.get()
-      require(!localAccs.contains(a.id), s"Accumulator ${a.id} has already been registered")
-      localAccs(a.id) = a
+      localAccums.get()(a.id) = a
     }
   }
 
