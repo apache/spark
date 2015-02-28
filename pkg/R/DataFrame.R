@@ -275,9 +275,9 @@ setGeneric("repartition", function(x, numPartitions) { standardGeneric("repartit
 #' @rdname repartition
 #' @export
 setMethod("repartition",
-          signature(x = "DataFrame", numPartitions = "integer"),
+          signature(x = "DataFrame", numPartitions = "numeric"),
           function(x, numPartitions) {
-            sdf <- callJMethod(x@sdf, "repartition", as.integer(numPartitions))
+            sdf <- callJMethod(x@sdf, "repartition", numToInt(numPartitions))
             dataFrame(sdf)     
           })
 
