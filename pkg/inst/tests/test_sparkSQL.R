@@ -55,7 +55,7 @@ test_that("union on mixed serialization types correctly returns a byte RRDD", {
   # Byte RDD
   nums <- 1:10
   rdd <- parallelize(sc, nums, 2L)
-  
+
   # String RDD
   textLines <- c("Michael",
                  "Andy, 30",
@@ -63,16 +63,16 @@ test_that("union on mixed serialization types correctly returns a byte RRDD", {
   textPath <- tempfile(pattern="sparkr-textLines", fileext=".tmp")
   writeLines(textLines, textPath)
   textRDD <- textFile(sc, textPath)
-  
+
   df <- jsonFile(sqlCtx, jsonPath)
   dfRDD <- toRDD(df)
-  
+
   unionByte <- unionRDD(rdd, dfRDD)
   expect_true(inherits(unionByte, "RDD"))
   expect_true(getSerializedMode(unionByte) == "byte")
   expect_true(collect(unionByte)[[1]] == 1)
   expect_true(collect(unionByte)[[12]]$name == "Andy")
-  
+
   unionString <- unionRDD(textRDD, dfRDD)
   expect_true(inherits(unionString, "RDD"))
   expect_true(getSerializedMode(unionString) == "byte")
@@ -86,7 +86,7 @@ test_that("objectFile() works with row serialization", {
   dfRDD <- toRDD(df)
   saveAsObjectFile(dfRDD, objectPath)
   objectIn <- objectFile(sc, objectPath)
-  
+
   expect_true(inherits(objectIn, "RDD"))
   expect_true(getSerializedMode(objectIn) == "byte")
   expect_true(collect(objectIn)[[2]]$age == 30)
@@ -148,16 +148,16 @@ test_that("cache(), persist(), and unpersist() on a DataFrame", {
   expect_false(df@env$isCached)
   cache(df)
   expect_true(df@env$isCached)
-  
+
   unpersist(df)
   expect_false(df@env$isCached)
-  
+
   persist(df, "MEMORY_AND_DISK")
   expect_true(df@env$isCached)
-  
+
   unpersist(df)
   expect_false(df@env$isCached)
-  
+
   # make sure the data is collectable
   expect_true(is.data.frame(collect(df)))
 })
@@ -169,15 +169,15 @@ test_that("schema(), dtypes(), columns(), names() return the correct values/form
   expect_true(testSchema$fields()[[1]]$dataType.toString() == "IntegerType")
   expect_true(testSchema$fields()[[2]]$dataType.simpleString() == "string")
   expect_true(testSchema$fields()[[1]]$name() == "age")
-  
+
   testTypes <- dtypes(df)
   expect_true(length(testTypes[[1]]) == 2)
   expect_true(testTypes[[1]][1] == "age")
-  
+
   testCols <- columns(df)
   expect_true(length(testCols) == 2)
   expect_true(testCols[2] == "name")
-  
+
   testNames <- names(df)
   expect_true(length(testNames) == 2)
   expect_true(testNames[2] == "name")
@@ -188,13 +188,40 @@ test_that("head() and first() return the correct data", {
   testHead <- head(df)
   expect_true(nrow(testHead) == 3)
   expect_true(ncol(testHead) == 2)
-  
+
   testHead2 <- head(df, 2)
   expect_true(nrow(testHead2) == 2)
   expect_true(ncol(testHead2) == 2)
-  
+
   testFirst <- first(df)
   expect_true(nrow(testFirst) == 1)
+})
+
+test_that("select with column", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  df1 <- select(df, "name")
+  expect_true(columns(df1) == c("name"))
+  expect_true(count(df1) == 3)
+
+  df2 <- select(df, df$age)
+  expect_true(columns(df2) == c("age"))
+  expect_true(count(df2) == 3)
+})
+
+test_that("column calculation", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  d <- collect(select(df, alias(df$age + 1, "age2")))
+  expect_true(names(d) == c("age2"))
+  df2 <- select(df, lower(df$name), abs(df$age))
+  expect_true(inherits(df2, "DataFrame"))
+  expect_true(count(df2) == 3)
+})
+
+test_that("column operators", {
+  c <- col("a")
+  c2 <- (c + 1 - 2) * 3 / 4.0
+  c3 <- (c + c2 - c2) * c2 %% c2
+  c4 <- (c > c2) & (c2 <= c3) | (c == c2) & (c2 != c3)
 })
 
 unlink(jsonPath)

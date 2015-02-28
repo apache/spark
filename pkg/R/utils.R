@@ -326,3 +326,11 @@ getStorageLevel <- function(newLevel = c("DISK_ONLY",
                          "OFF_HEAP" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "OFF_HEAP"))
 }
 
+toSeq <- function(...) {
+  callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "toSeq", list(...))
+}
+
+listToSeq <- function(l) {
+  callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "toSeq", l)
+}
+

@@ -95,6 +95,25 @@ exportMethods("columns",
               "schema",
               "toRDD")
 
+exportClasses("Column")
+
+exportMethods("asc",
+              "desc",
+              "last",
+              "lower",
+              "upper",
+              "abs",
+              "sqrt",
+              "min",
+              "max",
+              "sum",
+              "avg",
+              "alias",
+              "cast",
+              "countDistinct",
+              "approxCountDistinct",
+              "sumDistinct")
+
 export("jsonFile",
        "parquetFile",
        "sql",

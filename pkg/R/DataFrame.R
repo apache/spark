@@ -1,6 +1,6 @@
 # DataFrame.R - DataFrame class and methods implemented in S4 OO classes
 
-#' @include jobj.R SQLTypes.R RDD.R pairRDD.R
+#' @include jobj.R SQLTypes.R RDD.R pairRDD.R column.R
 NULL
 
 setOldClass("jobj")
@@ -494,3 +494,29 @@ setMethod("foreachPartition",
             rdd <- toRDD(x)
             foreachPartition(rdd, func)
           })
+
+
+############################## DSL ##################################
+
+setMethod("$", signature(x = "DataFrame"),
+          function(x, name) {
+            column(callJMethod(x@sdf, "col", name))
+          })
+
+setGeneric("select", function(df, col, ...) { standardGeneric("select") } )
+
+setMethod("select", signature(df = "DataFrame", col = "character"),
+          function(df, col, ...) {
+            sdf <- callJMethod(df@sdf, "select", col, toSeq(...))
+            dataFrame(sdf)
+          })
+
+setMethod("select", signature(df = "DataFrame", col = "Column"),
+          function(df, col, ...) {
+            jcols <- lapply(list(col, ...), function(x) {
+              x@jc
+            })
+            sdf <- callJMethod(df@sdf, "select", listToSeq(jcols))
+            dataFrame(sdf)
+          })
+
