@@ -90,6 +90,18 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     }
   }
 
+  /**
+   * Use `size` to test if there is enough space in MemoryStore. If so, create the ByteBuffer and
+   * put it into MemoryStore. Otherwise, the ByteBuffer won't be created.
+   */
+  def putBytes(blockId: BlockId, size: Long)(_bytes: => ByteBuffer): PutResult = {
+    // Work on a duplicate - since the original input might be used elsewhere.
+    lazy val bytes = _bytes.duplicate().rewind().asInstanceOf[ByteBuffer]
+    val putAttempt = tryToPut(blockId, bytes, size, deserialized = false)
+    val data = if (putAttempt.success) Right(bytes.duplicate()) else null
+    PutResult(size, data, putAttempt.droppedBlocks)
+  }
+
   override def putArray(
       blockId: BlockId,
       values: Array[Any],
@@ -314,7 +326,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    */
   private def tryToPut(
       blockId: BlockId,
-      value: Any,
+      value: => Any,
       size: Long,
       deserialized: Boolean): ResultWithDroppedBlocks = {
 
@@ -345,7 +357,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       } else {
         // Tell the block manager that we couldn't put it in memory so that it can drop it to
         // disk if the block allows disk storage.
-        val data = if (deserialized) {
+        lazy val data = if (deserialized) {
           Left(value.asInstanceOf[Array[Any]])
         } else {
           Right(value.asInstanceOf[ByteBuffer].duplicate())
