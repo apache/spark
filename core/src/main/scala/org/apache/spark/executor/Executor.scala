@@ -93,9 +93,14 @@ private[spark] class Executor(
     Props(new ExecutorActor(executorId)), "ExecutorActor")
 
   // Whether to load classes in user jars before those in Spark jars
-  private val userClassPathFirst =
-    conf.getBoolean("spark.executor.userClassPathFirst",
-      conf.getBoolean("spark.files.userClassPathFirst", false))
+  private val userClassPathFirst: Boolean = {
+    val oldKey = "spark.files.userClassPathFirst"
+    val newKey = "spark.executor.userClassPathFirst"
+    if (conf.contains(oldKey)) {
+      logWarning(s"$oldKey is deprecated. Please use $newKey instead.")
+    }
+    conf.getBoolean(newKey, conf.getBoolean(oldKey, false))
+  }
 
   // Create our ClassLoader
   // do this after SparkEnv creation so can access the SecurityManager

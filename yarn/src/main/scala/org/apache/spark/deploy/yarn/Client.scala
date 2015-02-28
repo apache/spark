@@ -955,8 +955,12 @@ object Client extends Logging {
     if (isDriver) {
       conf.getBoolean("spark.driver.userClassPathFirst", false)
     } else {
-      conf.getBoolean("spark.executor.userClassPathFirst",
-        conf.getBoolean("spark.files.userClassPathFirst", false))
+      val oldKey = "spark.files.userClassPathFirst"
+      val newKey = "spark.executor.userClassPathFirst"
+      if (conf.contains(oldKey)) {
+        logWarning(s"$oldKey is deprecated. Please use $newKey instead.")
+      }
+      conf.getBoolean(newKey, conf.getBoolean(oldKey, false))
     }
   }
 

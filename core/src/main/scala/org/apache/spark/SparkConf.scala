@@ -176,8 +176,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
   /** Get a parameter as an Option */
   def getOption(key: String): Option[String] = {
-    val warnIfDeprecated = contains(key)
-    Option(settings.get(translateConfKey(key, warnIfDeprecated)))
+    Option(settings.get(key))
   }
 
   /** Get all parameters as a list of pairs */
