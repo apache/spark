@@ -500,7 +500,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         case InsertIntoHiveTable(r: MetastoreRelation, partition, child, overwrite)
           if relationMap.contains(r) => {
           val parquetRelation = relationMap(r)
-          InsertIntoTable(parquetRelation, partition, child, overwrite)
+          InsertIntoHiveTable(parquetRelation, partition, child, overwrite)
         }
         case other => other.transformExpressions {
           case a: Attribute if a.resolved => attributedRewrites.getOrElse(a, a)

@@ -263,9 +263,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   override protected[sql] lazy val analyzer =
     new Analyzer(catalog, functionRegistry, caseSensitive = false) {
       override val extendedResolutionRules =
+        catalog.PreInsertionCasts ::
         catalog.ParquetConversions ::
         catalog.CreateTables ::
-        catalog.PreInsertionCasts ::
         ExtractPythonUdfs ::
         ResolveUdtfsAlias ::
         sources.PreInsertCastAndRename ::
@@ -343,6 +343,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
     override def strategies: Seq[Strategy] = experimental.extraStrategies ++ Seq(
       DataSourceStrategy,
+      HiveDataSourceStrategy,
       HiveCommandStrategy(self),
       HiveDDLStrategy,
       DDLStrategy,

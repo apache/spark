@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeComman
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.sources.{CreateTableUsingAsSelect, CreateTableUsing}
+import org.apache.spark.sql.sources.{CreateTableUsingAsSelect, CreateTableUsing, LogicalRelation, InsertIntoDataSource, InsertableRelation}
 import org.apache.spark.sql.types.StringType
 
 
@@ -251,6 +251,15 @@ private[hive] trait HiveStrategies {
               resultPlan, describe.output, describe.isExtended)) :: Nil
         }
 
+      case _ => Nil
+    }
+  }
+
+  object HiveDataSourceStrategy extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case i @ InsertIntoHiveTable(
+        l @ LogicalRelation(t: InsertableRelation), part, query, overwrite) if part.isEmpty =>
+        ExecutedCommand(InsertIntoDataSource(l, query, overwrite)) :: Nil
       case _ => Nil
     }
   }
