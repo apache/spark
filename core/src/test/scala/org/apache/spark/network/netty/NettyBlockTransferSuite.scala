@@ -123,12 +123,15 @@ class NettyBlockTransferSuite extends FunSuite with Matchers with MockitoSugar w
   }
 
   test("giant upload") {
-    //actually pretty close to max size due to overhead from the rest of the msg
+    // pretty close to max size due to overhead from the rest of the msg
     val parts = (0 until 2).map{_ => ByteBuffer.allocate(Integer.MAX_VALUE - 200)}.toArray
     val buf = new WrappedLargeByteBuffer(parts)
-    uploadBlock(buf, 2, 15 * 60 * 1000)
+    uploadBlock(buf, 2, 20 * 60 * 1000) // yup, takes this long ...
   }
 
+  test("cleanup partial uploads") {
+    pending
+  }
 
 
   def equivalentBuffers(exp: ManagedBuffer, act: ManagedBuffer): Unit = {

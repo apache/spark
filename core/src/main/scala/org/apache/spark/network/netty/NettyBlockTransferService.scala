@@ -115,57 +115,44 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
     // using our binary protocol.
     val levelBytes = serializer.newInstance().serialize(level).array()
 
-    // Convert or copy nio buffer into array in order to serialize it.
     val largeByteBuffer = blockData.nioByteBuffer()
     val bufferParts = largeByteBuffer.nioBuffers().asScala
     val chunkOffsets: Seq[Long] = bufferParts.scanLeft(0l){case(offset, buf) => offset + buf.limit()}
 
-    performSequentially(bufferParts.zipWithIndex){case (buf,idx) =>
-      val partialBlockArray = if (buf.hasArray) {
-        buf.array()
-      } else {
-        val arr = new Array[Byte](buf.limit())
-        buf.get(arr)
-        arr
-      }
-      //Note: one major shortcoming of this is that it expects the incoming LargeByteBuffer to
-      // already be reasonably chunked -- in particular, the chunks cannot get too close to 2GB
-      // or else we'll still run into problems b/c there is some more overhead in the transfer
-      val msg = new UploadPartialBlock(appId, execId, blockId.toString, bufferParts.size, idx,
-        chunkOffsets(idx), levelBytes, partialBlockArray)
-
-      val result = Promise[Unit]()
-      client.sendRpc(msg.toByteArray,
-        new RpcResponseCallback {
-          override def onSuccess(response: Array[Byte]): Unit = {
-            logTrace(s"Successfully uploaded partial block $blockId, part $idx (out of ${bufferParts.size})")
-            result.success()
-          }
-
-          override def onFailure(e: Throwable): Unit = {
-            logError(s"Error while uploading partial block $blockId, part $idx (out of ${bufferParts.size})", e)
-            result.failure(e)
-          }
-        })
-      result.future
-    }
-  }
-
-  //thanks to our old friend @ryanlecompte: https://gist.github.com/squito/242f82ad6345e3f85a5b
-  private def performSequentially[A](items: Seq[A])(f: A => Future[Unit]): Future[Unit] = {
     import scala.concurrent.ExecutionContext.Implicits.global
-    items.headOption match {
-      case Some(nextItem) =>
-        val fut = f(nextItem)
-        fut.flatMap { _ =>
-            performSequentially(items.tail)(f)
+    bufferParts.zipWithIndex.foldLeft(Future.successful(())){case (prevFuture,(buf,idx)) =>
+      prevFuture.flatMap{_ =>
+        // Convert or copy nio buffer into array in order to serialize it.
+        val partialBlockArray = if (buf.hasArray) {
+          buf.array()
+        } else {
+          val arr = new Array[Byte](buf.limit())
+          buf.get(arr)
+          arr
         }
-      case None =>
-        // nothing left to process
-        Future.successful(())
+        //Note: one major shortcoming of this is that it expects the incoming LargeByteBuffer to
+        // already be reasonably chunked -- in particular, the chunks cannot get too close to 2GB
+        // or else we'll still run into problems b/c there is some more overhead in the transfer
+        val msg = new UploadPartialBlock(appId, execId, blockId.toString, bufferParts.size, idx,
+          chunkOffsets(idx), levelBytes, partialBlockArray)
+
+        val result = Promise[Unit]()
+        client.sendRpc(msg.toByteArray,
+          new RpcResponseCallback {
+            override def onSuccess(response: Array[Byte]): Unit = {
+              logTrace(s"Successfully uploaded partial block $blockId, part $idx (out of ${bufferParts.size})")
+              result.success()
+            }
+
+            override def onFailure(e: Throwable): Unit = {
+              logError(s"Error while uploading partial block $blockId, part $idx (out of ${bufferParts.size})", e)
+              result.failure(e)
+            }
+          })
+        result.future
+      }
     }
   }
-
 
   override def close(): Unit = {
     server.close()

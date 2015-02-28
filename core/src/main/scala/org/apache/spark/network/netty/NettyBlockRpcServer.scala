@@ -75,7 +75,6 @@ class NettyBlockRpcServer(
         logTrace("received upload partial block: " + uploadPartialBock)
         val storageLevel: StorageLevel =
           serializer.newInstance().deserialize(ByteBuffer.wrap(uploadPartialBock.metadata))
-        logTrace("open requests = " + openRequests)
         openRequests.putIfAbsent(uploadPartialBock.blockId,
           new PartialBlockUploadHandler(uploadPartialBock.blockId, storageLevel,
             uploadPartialBock.nTotalBlockChunks))
