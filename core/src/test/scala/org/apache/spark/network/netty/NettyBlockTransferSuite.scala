@@ -97,15 +97,21 @@ class NettyBlockTransferSuite extends FunSuite with Matchers with MockitoSugar w
     val to = new NettyBlockTransferService(conf, securityManager, numCores = 1)
     to.init(toBlockManager)
 
-    val uploadFuture = from.uploadBlock(to.hostName, to.port, "exec-1", blockId, blockBuffer, level)
-    Await.result(uploadFuture, Duration.apply(timeout, TimeUnit.MILLISECONDS))
-    val bufferCaptor = ArgumentCaptor.forClass(classOf[ManagedBuffer])
-    verify(toBlockManager).putBlockData(MockitoMatchers.eq(blockId), bufferCaptor.capture(),
-      MockitoMatchers.eq(level))
-    val putBuffer = bufferCaptor.getValue()
-    logTrace("begin checking buffer equivalence")
-    equivalentBuffers(blockBuffer, putBuffer)
-    logTrace("finished checking buffer equivalence")
+    try {
+      val uploadFuture = from.uploadBlock(to.hostName, to.port, "exec-1", blockId, blockBuffer, level)
+      Await.result(uploadFuture, Duration.apply(timeout, TimeUnit.MILLISECONDS))
+      val bufferCaptor = ArgumentCaptor.forClass(classOf[ManagedBuffer])
+      verify(toBlockManager).putBlockData(MockitoMatchers.eq(blockId), bufferCaptor.capture(),
+        MockitoMatchers.eq(level))
+      val putBuffer = bufferCaptor.getValue()
+      logTrace("begin checking buffer equivalence")
+      equivalentBuffers(blockBuffer, putBuffer)
+      logTrace("finished checking buffer equivalence")
+    } finally {
+      from.close()
+      to.close()
+    }
+
   }
 
   test("small one-part upload") {
@@ -132,7 +138,6 @@ class NettyBlockTransferSuite extends FunSuite with Matchers with MockitoSugar w
   test("cleanup partial uploads") {
     pending
   }
-
 
   def equivalentBuffers(exp: ManagedBuffer, act: ManagedBuffer): Unit = {
     equivalentBuffers(exp.nioByteBuffer(), act.nioByteBuffer())

@@ -18,11 +18,13 @@
 package org.apache.spark.network.netty
 
 import java.nio.ByteBuffer
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{TimeUnit, Executors, ConcurrentHashMap}
+
+import org.apache.spark.util.Utils
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkException, Logging}
 import org.apache.spark.network.BlockDataManager
 import org.apache.spark.network.buffer.{WrappedLargeByteBuffer, LargeByteBufferHelper, ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
@@ -45,7 +47,22 @@ class NettyBlockRpcServer(
 
   private val streamManager = new OneForOneStreamManager()
 
-  private val openRequests = new ConcurrentHashMap[String,PartialBlockUploadHandler]()
+  private val openRequests = new ConcurrentHashMap[String, PartialBlockUploadHandler]()
+  // TODO from configuration.  Might need to be really big ...
+  private val cleanupTime = 30 * 60 * 1000
+
+  //ideally, this should be empty, and it will contain a very small amount of data for abandoned
+  // requests -- so hopefully its OK to hold on to this forever
+  private val abandonedRequests = new ConcurrentHashMap[String,Object]()
+
+  val cleaner = Executors.newSingleThreadScheduledExecutor(
+    Utils.namedThreadFactory("NettyBlockRPCServer cleanup")).scheduleWithFixedDelay(
+      new Runnable {
+        def run() {
+          dropAbandonedPartialUploads()
+        }
+      }, cleanupTime / 10, cleanupTime / 10, TimeUnit.MILLISECONDS
+    )
 
   override def receive(
       client: TransportClient,
@@ -75,6 +92,11 @@ class NettyBlockRpcServer(
         logTrace("received upload partial block: " + uploadPartialBock)
         val storageLevel: StorageLevel =
           serializer.newInstance().deserialize(ByteBuffer.wrap(uploadPartialBock.metadata))
+        if (abandonedRequests.containsKey(uploadPartialBock.blockId)) {
+          val msg = s"Too much time passed between the msgs for this block -- the other msgs have" +
+            " already been dropped.  Try increasing the timeout specified in XXX"
+          throw new SparkException(msg)
+        }
         openRequests.putIfAbsent(uploadPartialBock.blockId,
           new PartialBlockUploadHandler(uploadPartialBock.blockId, storageLevel,
             uploadPartialBock.nTotalBlockChunks))
@@ -92,8 +114,12 @@ class NettyBlockRpcServer(
   ) {
     val chunks = new Array[Array[Byte]](nTotalBlockChunks)
     var nMissing = nTotalBlockChunks
+    var lastUpdated = System.currentTimeMillis()
 
-    def addPartialBlock(partial: UploadPartialBlock, storageLevel: StorageLevel): Unit = {
+    def addPartialBlock(
+      partial: UploadPartialBlock,
+      storageLevel: StorageLevel
+    ): Unit = synchronized {
       if (partial.nTotalBlockChunks != nTotalBlockChunks) {
         throw new IllegalArgumentException(s"received incompatible UploadPartialBlock: expecting " +
           s"$nTotalBlockChunks total chunks, but new msg has ${partial.nTotalBlockChunks}")
@@ -102,6 +128,7 @@ class NettyBlockRpcServer(
         throw new IllegalArgumentException(s"received incompatible UploadPartialBlock: expecting " +
           s"${this.storageLevel}, but new message has $storageLevel")
       }
+      lastUpdated = System.currentTimeMillis()
       logTrace("received partial msg")
       chunks(partial.blockChunkIndex) = partial.blockData
       nMissing -= 1
@@ -116,5 +143,23 @@ class NettyBlockRpcServer(
     }
   }
 
+  private def dropAbandonedPartialUploads(): Unit = {
+    logTrace("checking for abandoned uploads among: " + openRequests.keys().asScala.mkString(","))
+    val itr = openRequests.entrySet.iterator
+    while (itr.hasNext()) {
+      val entry = itr.next()
+      if (System.currentTimeMillis() - entry.getValue().lastUpdated > cleanupTime) {
+        logWarning(s"never received all parts for block ${entry.getKey}; dropping this block")
+        abandonedRequests.putIfAbsent(entry.getKey, new Object())
+        itr.remove()
+      } else {
+        logTrace(entry.getKey() + " OK")
+      }
+    }
+  }
+
+
   override def getStreamManager(): StreamManager = streamManager
+
+  override def close(): Unit = {cleaner.cancel(false)}
 }
