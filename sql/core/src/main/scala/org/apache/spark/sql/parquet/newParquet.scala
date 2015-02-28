@@ -105,7 +105,8 @@ private[sql] class DefaultSource
     val path = checkPath(parameters)
     val filesystemPath = new Path(path)
     val fs = filesystemPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
-    val doInsertion = (mode, fs.exists(filesystemPath)) match {
+    val dataExists = fs.exists(filesystemPath)
+    val doInsertion = (mode, dataExists) match {
       case (SaveMode.ErrorIfExists, true) =>
         sys.error(s"path $path already exists.")
       case (SaveMode.Append, _) | (SaveMode.Overwrite, _) | (SaveMode.ErrorIfExists, false) =>
@@ -115,9 +116,28 @@ private[sql] class DefaultSource
     }
 
     val relation = if (doInsertion) {
+      val df = if (dataExists) {
+        data
+      } else {
+        def alwaysNullable(dataType: DataType): DataType = dataType match {
+          case ArrayType(elementType, _) =>
+            ArrayType(alwaysNullable(elementType), containsNull = true)
+          case MapType(keyType, valueType, _) =>
+            MapType(alwaysNullable(keyType), alwaysNullable(valueType), true)
+          case StructType(fields) =>
+            val newFields = fields.map { field =>
+              StructField(field.name, alwaysNullable(field.dataType), nullable = true)
+            }
+            StructType(newFields)
+          case other => other
+        }
+        sqlContext.createDataFrame(
+          data.queryExecution.toRdd,
+          alwaysNullable(data.schema).asInstanceOf[StructType])
+      }
       val createdRelation =
-        createRelation(sqlContext, parameters, data.schema).asInstanceOf[ParquetRelation2]
-      createdRelation.insert(data, overwrite = mode == SaveMode.Overwrite)
+        createRelation(sqlContext, parameters, df.schema).asInstanceOf[ParquetRelation2]
+      createdRelation.insert(df, overwrite = mode == SaveMode.Overwrite)
       createdRelation
     } else {
       // If the save mode is Ignore, we will just create the relation based on existing data.
