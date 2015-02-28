@@ -1,18 +1,18 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+/**
+ * Copyright 2015 Stijn de Gouw
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 package org.apache.spark.util.collection;
 
@@ -24,10 +24,10 @@ import java.util.*;
  * The blog that reported the bug
  * http://www.envisage-project.eu/timsort-specification-and-verification/
  *
- * The algorithms to reproduce the bug is obtained from the reporter of the bug
- * https://github.com/abstools/java-timsort-bug
+ * This codes was originally wrote by Stijn de Gouw, modified by Evan Yu to adapt to
+ * our test suite.
  *
- * Licensed under Apache License 2.0
+ * https://github.com/abstools/java-timsort-bug
  * https://github.com/abstools/java-timsort-bug/blob/master/LICENSE
  */
 public class TestTimSort {
@@ -56,8 +56,9 @@ public class TestTimSort {
     int[] a = new int[length];
     Arrays.fill(a, 0);
     int endRun = -1;
-    for (long len : runs)
+    for (long len : runs) {
       a[endRun += len] = 1;
+    }
     a[length - 1] = 0;
     return a;
   }
