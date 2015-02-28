@@ -45,7 +45,7 @@ class SparkStatusTracker private[spark] (sc: SparkContext) {
    */
   def getJobIdsForGroup(jobGroup: String): Array[Int] = {
     jobProgressListener.synchronized {
-      jobProgressListener.jobGroupToJobIds(jobGroup).toArray
+      jobProgressListener.jobGroupToJobIds.getOrElse(jobGroup, Seq.empty).toArray
     }
   }
 
