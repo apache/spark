@@ -31,7 +31,7 @@ import org.mockito.Mockito._
 import org.scalatest.mock.MockitoSugar
 import org.scalatest.{Matchers, FunSuite}
 
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.concurrent.{Await, Promise}
 
 class NettyBlockTransferSuite extends FunSuite with Matchers with MockitoSugar with Logging {
@@ -84,39 +84,49 @@ class NettyBlockTransferSuite extends FunSuite with Matchers with MockitoSugar w
   }
 
 
-  def uploadBlock(buf: LargeByteBuffer) {
+  def uploadBlock(buf: LargeByteBuffer, rddId: Int, timeout: Long) {
 
     val fromBlockManager = mock[BlockDataManager]
     val toBlockManager = mock[BlockDataManager]
-    val blockId = RDDBlockId(0, 1)
+    val blockId = RDDBlockId(rddId, rddId + 1)
     val blockBuffer = new NioManagedBuffer(buf)
     val level = StorageLevel.DISK_ONLY //doesn't matter
 
     val from = new NettyBlockTransferService(conf, securityManager, numCores = 1)
     from.init(fromBlockManager)
     val to = new NettyBlockTransferService(conf, securityManager, numCores = 1)
-    logTrace("to block manager = " + toBlockManager)
     to.init(toBlockManager)
 
-    from.uploadBlock(to.hostName, to.port, "exec-1", blockId, blockBuffer, level)
-    //TODO how to get rid of this wait??
-    Thread.sleep(1000)
+    val uploadFuture = from.uploadBlock(to.hostName, to.port, "exec-1", blockId, blockBuffer, level)
+    Await.result(uploadFuture, Duration.apply(timeout, TimeUnit.MILLISECONDS))
     val bufferCaptor = ArgumentCaptor.forClass(classOf[ManagedBuffer])
     verify(toBlockManager).putBlockData(MockitoMatchers.eq(blockId), bufferCaptor.capture(),
       MockitoMatchers.eq(level))
     val putBuffer = bufferCaptor.getValue()
+    logTrace("begin checking buffer equivalence")
+    equivalentBuffers(blockBuffer, putBuffer)
+    logTrace("finished checking buffer equivalence")
   }
 
-  test("simple upload") {
+  test("small one-part upload") {
     val buf = LargeByteBufferHelper.asLargeByteBuffer(Array[Byte](0,1,2,3))
-    uploadBlock(buf)
+    uploadBlock(buf, 0, 100)
   }
 
+  test("small multi-part upload") {
+    val parts = (0 until 5).map{idx =>
+      val arr = Array.tabulate[Byte](100){subIdx => (idx + subIdx).toByte}
+      ByteBuffer.wrap(arr)
+    }.toArray
+    val buf = new WrappedLargeByteBuffer(parts)
+    uploadBlock(buf, 1, 500)
+  }
 
   test("giant upload") {
-    val parts = (0 until 2).map{_ => ByteBuffer.allocate(Integer.MAX_VALUE - 100)}.toArray
+    //actually pretty close to max size due to overhead from the rest of the msg
+    val parts = (0 until 2).map{_ => ByteBuffer.allocate(Integer.MAX_VALUE - 200)}.toArray
     val buf = new WrappedLargeByteBuffer(parts)
-    uploadBlock(buf)
+    uploadBlock(buf, 2, 15 * 60 * 1000)
   }
 
 
@@ -131,9 +141,5 @@ class NettyBlockTransferSuite extends FunSuite with Matchers with MockitoSugar w
     while (exp.remaining() > 0) {
       assert(exp.get() === act.get())
     }
-
   }
-
-
-
 }

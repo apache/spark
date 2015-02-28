@@ -19,6 +19,9 @@ package org.apache.spark.network.buffer;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
+import java.util.Arrays;
+import java.util.Iterator;
+import java.util.List;
 
 public class WrappedLargeByteBuffer implements LargeByteBuffer {
 
@@ -141,5 +144,10 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
     @Override
     public ByteBuffer firstByteBuffer() {
         return underlying[0];
+    }
+
+    @Override
+    public List<ByteBuffer> nioBuffers() {
+        return Arrays.asList(underlying);
     }
 }

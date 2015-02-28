@@ -947,8 +947,8 @@ private[spark] class BlockManager(
             //TODO
             //ACK!  here we're stuck -- we can't replicate a large block until we figure out
             // how to deal w/ shuffling more than 2 gb
-//            blockTransferService.uploadBlockSync(
-//              peer.host, peer.port, peer.executorId, blockId, new NioManagedBuffer(data), tLevel)
+            blockTransferService.uploadBlockSync(
+              peer.host, peer.port, peer.executorId, blockId, new NioManagedBuffer(data), tLevel)
             logTrace(s"Replicated $blockId of ${data.limit()} bytes to $peer in %s ms"
               .format(System.currentTimeMillis - onePeerStartTime))
             peersReplicatedTo += peer

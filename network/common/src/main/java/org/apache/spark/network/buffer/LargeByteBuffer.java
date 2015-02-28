@@ -19,6 +19,7 @@ package org.apache.spark.network.buffer;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
+import java.util.List;
 
 public interface LargeByteBuffer {
     public long capacity();
@@ -58,5 +59,8 @@ public interface LargeByteBuffer {
 
     //TODO this should be deleted -- just to help me get going
     public ByteBuffer firstByteBuffer();
+
+    //List b/c we need to know the size.  Could also use Iterator w/ separate numBuffers method
+    public List<ByteBuffer> nioBuffers();
 
 }

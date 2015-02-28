@@ -33,4 +33,8 @@ class LargePartitionCachingSuite extends FunSuite with SharedSparkContext {
   test("disk cache large partitions") {
     largePartitionRdd.persist(StorageLevel.DISK_ONLY).count()
   }
+
+  test("disk cache large partitions with replications") {
+    pending
+  }
 }

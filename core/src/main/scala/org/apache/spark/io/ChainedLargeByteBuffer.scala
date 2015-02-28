@@ -19,6 +19,8 @@ package org.apache.spark.io
 import java.nio.ByteBuffer
 import java.nio.channels.WritableByteChannel
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.network.buffer.LargeByteBuffer
 import org.apache.spark.util.collection.ChainedBuffer
 
@@ -81,5 +83,9 @@ class ChainedLargeByteBuffer(private[io] val underlying: ChainedBuffer) extends 
 
   override def firstByteBuffer(): ByteBuffer = {
     ByteBuffer.wrap(underlying.chunks(0))
+  }
+
+  override def nioBuffers(): java.util.List[ByteBuffer] = {
+    underlying.chunks.map{bytes => ByteBuffer.wrap(bytes)}.asJava
   }
 }
