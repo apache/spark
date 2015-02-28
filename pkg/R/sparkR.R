@@ -135,11 +135,14 @@ sparkR.init <- function(
           sparkHome = sparkHome,
           sparkSubmitOpts = Sys.getenv("SPARKR_SUBMIT_ARGS", ""))
     }
-    for (i in 1:100) {
+    # wait atmost 100 seconds for JVM to launch 
+    wait <- 0.1
+    for (i in 1:25) {
+      Sys.sleep(wait)
       if (file.exists(path)) {
         break
       }
-      Sys.sleep(0.1)
+      wait <- wait * 1.25
     }
     if (!file.exists(path)) {
       stop("JVM is not ready after 10 seconds")
