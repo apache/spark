@@ -39,7 +39,7 @@ private[ui] class JobsTab(parent: SparkUI) extends SparkUITab(parent, "jobs") {
       if (jobId >= 0 && killFlag && listener.activeJobs.contains(jobId)) {
         sc.get.cancelJob(jobId)
       }
-      // Do a quick pause here to give Spark time to kill the stage so it shows up as
+      // Do a quick pause here to give Spark time to kill the job so it shows up as
       // killed after the refresh. Note that this will block the serving thread so the
       // time should be limited in duration.
       Thread.sleep(100)
