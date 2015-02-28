@@ -235,6 +235,20 @@ object DataType {
       case (fromDataType, toDataType) => fromDataType == toDataType
     }
   }
+
+  /** Sets all nullable/containsNull/valueContainsNull to true. */
+  def alwaysNullable(dataType: DataType): DataType = dataType match {
+    case ArrayType(elementType, _) =>
+      ArrayType(alwaysNullable(elementType), containsNull = true)
+    case MapType(keyType, valueType, _) =>
+      MapType(alwaysNullable(keyType), alwaysNullable(valueType), true)
+    case StructType(fields) =>
+      val newFields = fields.map { field =>
+        StructField(field.name, alwaysNullable(field.dataType), nullable = true)
+      }
+      StructType(newFields)
+    case other => other
+  }
 }
 
 
