@@ -24,8 +24,7 @@ class HiveCliHook(BaseHook):
         conn = self.get_connection(hive_cli_conn_id)
         self.hive_cli_params = ""
         try:
-            self.hive_cli_params = json.loads(
-                conn.extra)['hive_cli_params']
+            self.hive_cli_params = json.loads(conn.extra)['hive_cli_params']
         except:
             pass
 

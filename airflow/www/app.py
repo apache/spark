@@ -1200,7 +1200,9 @@ class ConnectionModelView(LoginMixin, ModelView):
         'conn_type': [
             ('ftp', 'FTP',),
             ('hdfs', 'HDFS',),
-            ('hive', 'Hive',),
+            ('hive_cli', 'Hive Client Wrapper',),
+            ('hive_metastore', 'Hive Metastore Thrift',),
+            ('hiveserver2', 'Hive Server 2 Thrift',),
             ('mysql', 'MySQL',),
             ('oracle', 'Oracle',),
             ('presto', 'Presto',),

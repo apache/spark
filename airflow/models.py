@@ -612,24 +612,19 @@ class TaskInstance(Base):
             session.add(Log(State.FAILED, self))
 
         # Let's go deeper
-        #try:
-        if self.try_number <= task.retries:
-            self.state = State.UP_FOR_RETRY
-            if task.email_on_retry and task.email:
-                self.email_alert(error, is_retry=True)
-        else:
-            self.state = State.FAILED
-            if task.email_on_failure and task.email:
-                self.email_alert(error, is_retry=False)
-        '''
+        try:
+            if self.try_number <= task.retries:
+                self.state = State.UP_FOR_RETRY
+                if task.email_on_retry and task.email:
+                    self.email_alert(error, is_retry=True)
+            else:
+                self.state = State.FAILED
+                if task.email_on_failure and task.email:
+                    self.email_alert(error, is_retry=False)
         except Exception as e2:
             logging.error(
                 'Failed to send email to: ' + str(task.email))
             logging.error(str(e2))
-
-
-
-        '''
 
         if not test_mode:
             session.merge(self)
@@ -1343,7 +1338,9 @@ class DAG(Base):
             task.start_date = self.start_date
 
         if task.task_id in [t.task_id for t in self.tasks]:
-            raise Exception("Task already added")
+            raise Exception(
+                "Task id '{0}' has already been added "
+                "to the DAG ".format(task.task_id))
         else:
             self.tasks.append(task)
             task.dag_id = self.dag_id

@@ -87,13 +87,30 @@ def initdb():
                 schema='hive', port=3400))
         session.commit()
 
-    conn = session.query(C).filter(C.conn_id == 'hive_default').first()
+    conn = session.query(C).filter(C.conn_id == 'hive_cli_default').first()
     if not conn:
         session.add(
             models.Connection(
-                conn_id='hive_default', conn_type='hive',
+                conn_id='hive_cli_default', conn_type='hive_cli',
+                schema='default',))
+        session.commit()
+
+    conn = session.query(C).filter(C.conn_id == 'hiveserver2_default').first()
+    if not conn:
+        session.add(
+            models.Connection(
+                conn_id='hiveserver2_default', conn_type='hiveserver2',
                 host='localhost',
                 schema='default', port=10000))
+        session.commit()
+
+    conn = session.query(C).filter(C.conn_id == 'metastore_default').first()
+    if not conn:
+        session.add(
+            models.Connection(
+                conn_id='metastore_default', conn_type='hive_metastore',
+                host='localhost',
+                port=10001))
         session.commit()
 
 
@@ -116,8 +133,8 @@ def validate_key(k, max_length=250):
             max_length))
     elif not re.match(r'^[A-Za-z0-9_-]+$', k):
         raise Exception(
-            "The key has to be made of alphanumeric characters, dashes "
-            "and underscores exclusively")
+            "The key ({k}) has to be made of alphanumeric characters, dashes "
+            "and underscores exclusively".format(**locals()))
     else:
         return True
 
