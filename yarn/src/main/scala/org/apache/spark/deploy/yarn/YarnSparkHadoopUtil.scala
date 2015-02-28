@@ -100,18 +100,6 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   private[spark] override def scheduleLoginFromKeytab(
     callback: (String) => Unit): Unit = {
     if (principal != null) {
-      val stagingDir = System.getenv("SPARK_YARN_STAGING_DIR")
-      val remoteFs = FileSystem.get(conf)
-      val remoteKeytabPath = new Path(
-        remoteFs.getHomeDirectory, stagingDir + Path.SEPARATOR + keytab)
-      val localFS = FileSystem.getLocal(conf)
-      // At this point, SparkEnv is likely no initialized, so create a dir, put the keytab there.
-      val tempDir = Utils.createTempDir()
-      Utils.chmod700(tempDir)
-      val localURI = new URI(tempDir.getAbsolutePath + Path.SEPARATOR + keytab)
-      val qualifiedURI = new URI(localFS.makeQualified(new Path(localURI)).toString)
-      FileUtil.copy(
-        remoteFs, remoteKeytabPath, localFS, new Path(qualifiedURI), false, false, conf)
       // Get the current credentials, find out when they expire.
       val creds = {
         if (loggedInUGI == null) {
@@ -131,13 +119,17 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
           new Runnable {
             override def run(): Unit = {
               if (!loggedInViaKeytab) {
+                // Keytab is copied by YARN to the working directory of the AM, so full path is
+                // not needed.
                 loggedInUGI = UserGroupInformation.loginUserFromKeytabAndReturnUGI(
-                  principal, tempDir.getAbsolutePath + Path.SEPARATOR + keytab)
+                  principal, keytab)
                 loggedInViaKeytab = true
               }
-              val nns = getNameNodesToAccess(sparkConf) + remoteKeytabPath
+              val nns = getNameNodesToAccess(sparkConf)
               val newCredentials = loggedInUGI.getCredentials
               obtainTokensForNamenodes(nns, conf, newCredentials)
+              val remoteFs = FileSystem.get(conf)
+              val stagingDir = System.getenv("SPARK_YARN_STAGING_DIR")
               val tokenPath = new Path(remoteFs.getHomeDirectory, stagingDir + Path.SEPARATOR +
                 "credentials - " + System.currentTimeMillis())
               val stream = remoteFs.create(tokenPath, true)

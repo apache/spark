@@ -21,6 +21,7 @@ import java.io.File
 import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
 import java.nio.ByteBuffer
 import java.nio.file.Files
+import java.util.UUID
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap, ListBuffer, Map}
@@ -222,8 +223,10 @@ private[spark] class Client(
     // and add them as local resources to the application master.
     val fs = FileSystem.get(hadoopConf)
     val dst = new Path(fs.getHomeDirectory(), appStagingDir)
-    val nns = getNameNodesToAccess(sparkConf) + dst
-    obtainTokensForNamenodes(nns, hadoopConf, credentials)
+    val nns =
+      SparkHadoopUtil.get.asInstanceOf[YarnSparkHadoopUtil].getNameNodesToAccess(sparkConf) + dst
+    SparkHadoopUtil.get.asInstanceOf[YarnSparkHadoopUtil].
+      obtainTokensForNamenodes(nns, hadoopConf, credentials)
 
     val replication = sparkConf.getInt("spark.yarn.submit.file.replication",
       fs.getDefaultReplication(dst)).toShort
@@ -238,6 +241,20 @@ private[spark] class Client(
         "SPARK_LOG4J_CONF detected in the system environment. This variable has been " +
           "deprecated. Please refer to the \"Launching Spark on YARN\" documentation " +
           "for alternatives.")
+    }
+
+    // If we passed in a keytab, make sure we copy the keytab to the staging directory on
+    // HDFS, and setup the relevant environment vars, so the AM can login again.
+    if (loginFromKeytab) {
+      val fs = FileSystem.get(hadoopConf)
+      val stagingDirPath = new Path(fs.getHomeDirectory, appStagingDir)
+      val localUri = new URI(args.keytab)
+      val localPath = getQualifiedLocalPath(localUri, hadoopConf)
+      val destinationPath = new Path(stagingDirPath, keytabFileName)
+      copyFileToRemote(destinationPath, localPath, replication)
+      distCacheMgr.addResource(
+        fs, hadoopConf, destinationPath, localResources, LocalResourceType.FILE, keytabFileName,
+        statCache, appMasterOnly = true)
     }
 
     /**
@@ -320,21 +337,10 @@ private[spark] class Client(
     env("SPARK_YARN_MODE") = "true"
     env("SPARK_YARN_STAGING_DIR") = stagingDir
     env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
-    // If we logged in from keytab, make sure we copy the keytab to the staging directory on
-    // HDFS, and setup the relevant environment vars, so the AM can login again.
     if (loginFromKeytab) {
-      val fs = FileSystem.get(hadoopConf)
-      val stagingDirPath = new Path(fs.getHomeDirectory, stagingDir)
-      val localUri = new URI(args.keytab)
-      val localPath = getQualifiedLocalPath(localUri, hadoopConf)
-      val destinationPath = new Path(stagingDirPath, keytabFileName)
-      val replication = sparkConf.getInt("spark.yarn.submit.file.replication",
-        fs.getDefaultReplication(destinationPath)).toShort
-      copyFileToRemote(destinationPath, localPath, replication)
       env("SPARK_PRINCIPAL") = args.principal
       env("SPARK_KEYTAB") = keytabFileName
     }
-
 
     // Set the environment variables to be passed on to the executors.
     distCacheMgr.setDistFilesEnv(env)
@@ -571,7 +577,7 @@ private[spark] class Client(
       val f = new File(args.keytab)
       // Generate a file name that can be used for the keytab file, that does not conflict
       // with any user file.
-      keytabFileName = f.getName + "-" + System.currentTimeMillis()
+      keytabFileName = f.getName + "-" + UUID.randomUUID()
       val ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(args.principal, args.keytab)
       credentials = ugi.getCredentials
       loginFromKeytab = true
@@ -902,28 +908,6 @@ object Client extends Logging {
    */
   private def addClasspathEntry(path: String, env: HashMap[String, String]): Unit =
     YarnSparkHadoopUtil.addPathToEnvironment(env, Environment.CLASSPATH.name, path)
-
-  /**
-   * Get the list of namenodes the user may access.
-   */
-  private[yarn] def getNameNodesToAccess(sparkConf: SparkConf): Set[Path] = {
-    SparkHadoopUtil.get.asInstanceOf[YarnSparkHadoopUtil].getNameNodesToAccess(sparkConf)
-  }
-
-  private[yarn] def getTokenRenewer(conf: Configuration): String = {
-    SparkHadoopUtil.get.asInstanceOf[YarnSparkHadoopUtil].getTokenRenewer(conf)
-  }
-
-  /**
-   * Obtains tokens for the namenodes passed in and adds them to the credentials.
-   */
-  private def obtainTokensForNamenodes(
-      paths: Set[Path],
-      conf: Configuration,
-      creds: Credentials): Unit = {
-    SparkHadoopUtil.get.asInstanceOf[YarnSparkHadoopUtil]
-      .obtainTokensForNamenodes(paths, conf, creds)
-  }
 
   /**
    * Return whether the two file systems are the same.
