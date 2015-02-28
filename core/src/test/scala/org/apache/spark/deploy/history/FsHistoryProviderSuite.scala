@@ -18,17 +18,16 @@
 package org.apache.spark.deploy.history
 
 import java.io.{File, FileOutputStream, OutputStreamWriter}
+import java.net.URI
 
 import scala.io.Source
 
-import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.Matchers
 
 import org.apache.spark.{Logging, SparkConf}
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io._
 import org.apache.spark.scheduler._
 import org.apache.spark.util.{JsonProtocol, Utils}
@@ -45,18 +44,26 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
     Utils.deleteRecursively(testDir)
   }
 
+  /** Create a fake log file using the new log format used in Spark 1.3+ */
+  private def newLogFile(appId: String, inProgress: Boolean = false): File = {
+    val ip = if (inProgress) EventLoggingListener.IN_PROGRESS else ""
+    val logUri = EventLoggingListener.getLogPath(testDir.getAbsolutePath, appId)
+    val logPath = new URI(logUri).getPath + ip
+    new File(logPath)
+  }
+
   test("Parse new and old application logs") {
     val provider = new FsHistoryProvider(createTestConf())
 
     // Write a new-style application log.
-    val newAppComplete = new File(testDir, "new1")
+    val newAppComplete = newLogFile("new1", inProgress = false)
     writeFile(newAppComplete, true, None,
       SparkListenerApplicationStart("new-app-complete", None, 1L, "test"),
       SparkListenerApplicationEnd(4L)
       )
 
     // Write an unfinished app, new-style.
-    val newAppIncomplete = new File(testDir, "new2" + EventLoggingListener.IN_PROGRESS)
+    val newAppIncomplete = newLogFile("new2", inProgress = true)
     writeFile(newAppIncomplete, true, None,
       SparkListenerApplicationStart("new-app-incomplete", None, 1L, "test")
       )
@@ -141,12 +148,12 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
   }
 
   test("SPARK-3697: ignore directories that cannot be read.") {
-    val logFile1 = new File(testDir, "new1")
+    val logFile1 = newLogFile("new1")
     writeFile(logFile1, true, None,
       SparkListenerApplicationStart("app1-1", None, 1L, "test"),
       SparkListenerApplicationEnd(2L)
       )
-    val logFile2 = new File(testDir, "new2")
+    val logFile2 = newLogFile("new2")
     writeFile(logFile2, true, None,
       SparkListenerApplicationStart("app1-2", None, 1L, "test"),
       SparkListenerApplicationEnd(2L)
@@ -164,7 +171,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
   test("history file is renamed from inprogress to completed") {
     val provider = new FsHistoryProvider(createTestConf())
 
-    val logFile1 = new File(testDir, "app1" + EventLoggingListener.IN_PROGRESS)
+    val logFile1 = newLogFile("app1", inProgress = true)
     writeFile(logFile1, true, None,
       SparkListenerApplicationStart("app1", Some("app1"), 1L, "test"),
       SparkListenerApplicationEnd(2L)
@@ -174,7 +181,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
     appListBeforeRename.size should be (1)
     appListBeforeRename.head.logPath should endWith(EventLoggingListener.IN_PROGRESS)
 
-    logFile1.renameTo(new File(testDir, "app1"))
+    logFile1.renameTo(newLogFile("app1", inProgress = false))
     provider.checkForLogs()
     val appListAfterRename = provider.getListing()
     appListAfterRename.size should be (1)
@@ -184,7 +191,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
   test("SPARK-5582: empty log directory") {
     val provider = new FsHistoryProvider(createTestConf())
 
-    val logFile1 = new File(testDir, "app1" + EventLoggingListener.IN_PROGRESS)
+    val logFile1 = newLogFile("app1", inProgress = true)
     writeFile(logFile1, true, None,
       SparkListenerApplicationStart("app1", Some("app1"), 1L, "test"),
       SparkListenerApplicationEnd(2L))

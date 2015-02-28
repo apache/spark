@@ -266,7 +266,7 @@ private[spark] object EventLoggingListener extends Logging {
   def getLogPath(
       logBaseDir: String,
       appId: String,
-      compressionCodecName: Option[String]): String = {
+      compressionCodecName: Option[String] = None): String = {
     val sanitizedAppId = appId.replaceAll("[ :/]", "-").replaceAll("[${}'\"]", "_").toLowerCase
     // e.g. EVENT_LOG_app_123_SPARK_VERSION_1.3.1
     // e.g. EVENT_LOG_ {...} _COMPRESSION_CODEC_org.apache.spark.io.LZFCompressionCodec
@@ -276,7 +276,10 @@ private[spark] object EventLoggingListener extends Logging {
   }
 
   /**
-   * Opens an event log file and returns an input stream to the event data.
+   * Opens an event log file and returns an input stream that contains the event data.
+   *
+   * The first line of the returned input stream is a JSON header that describes the metadata
+   * of the event log.
    *
    * @return 2-tuple (event input stream, Spark version of event data)
    */

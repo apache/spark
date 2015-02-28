@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.io.{File, FileOutputStream, InputStream, IOException}
+import java.net.URI
 
 import scala.collection.mutable
 import scala.io.Source
@@ -93,16 +94,12 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
   }
 
   test("Log overwriting") {
-    val log = new FileOutputStream(new File(testDir, "test"))
-    log.close()
-    try {
-      testEventLogging()
-      assert(false)
-    } catch {
-      case e: IOException =>
-        // Expected, since we haven't enabled log overwrite.
-    }
-
+    val logUri = EventLoggingListener.getLogPath(testDir.getAbsolutePath, "test")
+    val logPath = new URI(logUri).getPath
+    // Create file before writing the event log
+    new FileOutputStream(new File(logPath)).close()
+    // Expected IOException, since we haven't enabled log overwrite.
+    intercept[IOException] { testEventLogging() }
     // Try again, but enable overwriting.
     testEventLogging(extraConf = Map("spark.eventLog.overwrite" -> "true"))
   }
@@ -144,11 +141,12 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
       fileSystem)
     try {
       val lines = readLines(logData)
-      assert(lines.size === 2)
-      assert(lines(0).contains("SparkListenerApplicationStart"))
-      assert(lines(1).contains("SparkListenerApplicationEnd"))
-      assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === applicationStart)
-      assert(JsonProtocol.sparkEventFromJson(parse(lines(1))) === applicationEnd)
+      assert(lines.size === 3) // including the header
+      assert(lines(0).contains("SparkListenerMetadataIdentifier"))
+      assert(lines(1).contains("SparkListenerApplicationStart"))
+      assert(lines(2).contains("SparkListenerApplicationEnd"))
+      assert(JsonProtocol.sparkEventFromJson(parse(lines(1))) === applicationStart)
+      assert(JsonProtocol.sparkEventFromJson(parse(lines(2))) === applicationEnd)
     } finally {
       logData.close()
     }
@@ -164,7 +162,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
     assert(sc.eventLogger.isDefined)
     val eventLogger = sc.eventLogger.get
     val expectedLogDir = testDir.toURI().toString()
-    assert(eventLogger.logPath.startsWith(expectedLogDir + "/"))
+    assert(eventLogger.logPath.startsWith(expectedLogDir))
 
     // Begin listening for events that trigger asserts
     val eventExistenceListener = new EventExistenceListener(eventLogger)
