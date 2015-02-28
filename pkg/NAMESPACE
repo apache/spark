@@ -85,6 +85,7 @@ importFrom(methods, setGeneric, setMethod, setOldClass)
 exportClasses("DataFrame")
 
 exportMethods("columns",
+              "distinct",
               "dtypes",
               "first",
               "head",
@@ -92,6 +93,8 @@ exportMethods("columns",
               "names",
               "printSchema",
               "registerTempTable",
+              "repartition",
+              "sampleDF",
               "schema",
               "toRDD")
 

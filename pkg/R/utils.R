@@ -326,10 +326,21 @@ getStorageLevel <- function(newLevel = c("DISK_ONLY",
                          "OFF_HEAP" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "OFF_HEAP"))
 }
 
+# Utility function for functions where an argument needs to be integer but we want to allow
+# the user to type (for example) `5` instead of `5L` to avoid a confusing error message.
+numToInt <- function(num) {
+  if (as.integer(num) != num) {
+    warning(paste("Coercing", as.list(sys.call())[[2]], "to integer."))
+  }
+  as.integer(num)
+}
+
+# create a Seq in JVM
 toSeq <- function(...) {
   callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "toSeq", list(...))
 }
 
+# create a Seq in JVM from a list
 listToSeq <- function(l) {
   callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "toSeq", l)
 }
