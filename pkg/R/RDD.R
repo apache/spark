@@ -1088,14 +1088,14 @@ setGeneric("coalesce", function(x, numPartitions, ...) { standardGeneric("coales
 setMethod("coalesce",
            signature(x = "RDD", numPartitions = "numeric"),
            function(x, numPartitions, shuffle = FALSE) {
-             if(as.integer(numPartitions) != numPartitions) {
+             if (as.integer(numPartitions) != numPartitions) {
               warning("Number of partitions should be an integer. Coercing it to integer.")
              }
              numPartitions <- as.integer(numPartitions)
              if (shuffle || numPartitions > SparkR::numPartitions(x)) {
                 func <- function(s, part) {
                  set.seed(s)  # split as seed
-                 start <- as.integer(runif(1, 0, numPartitions))
+                 start <- as.integer(sample(numPartitions, 1) - 1)
                  lapply(seq_along(part),
                         function(i) {
                           pos <- (start + i) %% numPartitions
