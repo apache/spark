@@ -3,10 +3,16 @@ package org.apache.spark.util.collection;
 import java.util.*;
 
 /**
- * This codes generates a int array which fails the standard TimSort, Borrowed from
- * the reporter of this bug.
+ * This codes generates a int array which fails the standard TimSort.
  *
+ * The blog that reported the bug
  * http://www.envisage-project.eu/timsort-specification-and-verification/
+ *
+ * The algorithms to reproduce the bug is obtained from the reporter of the bug
+ * https://github.com/abstools/java-timsort-bug
+ *
+ * Licensed under Apache License 2.0
+ * https://github.com/abstools/java-timsort-bug/blob/master/LICENSE
  */
 public class TestTimSort {
 
