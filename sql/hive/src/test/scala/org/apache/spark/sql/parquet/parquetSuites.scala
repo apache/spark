@@ -30,10 +30,21 @@ import org.apache.spark.sql.hive.test.TestHive._
 // The data where the partitioning key exists only in the directory structure.
 case class ParquetData(intField: Int, stringField: String)
 // The data that also includes the partitioning key
-case class ParquetDataWithKey(p: Int, intField: Int, stringField: String)
-case class StructContainer(intStructField :Int, stringStructField: String )
-case class ParquetDataWithComplexTypes(intField :Int, stringField: String ,structField: StructContainer, arrayField: Seq[Int])
-case class ParquetDataWithKeyAndComplexTypes(p: Int,intField :Int, stringField: String , structField: StructContainer, arrayField: Seq[Int])
+case class ParquetDataWithKey(p:Int, intField: Int, stringField: String)
+case class StructContainer(intStructField :Int, stringStructField: String)
+
+case class ParquetDataWithComplexTypes(
+    intField: Int,
+    stringField: String,
+    structField: StructContainer,
+    arrayField: Seq[Int])
+
+case class ParquetDataWithKeyAndComplexTypes(
+    p: Int,
+    intField: Int,
+    stringField: String,
+    structField: StructContainer,
+    arrayField: Seq[Int])
 
 /**
  * A suite to test the automatic conversion of metastore tables with parquet data to use the
@@ -136,6 +147,12 @@ class ParquetMetastoreSuite extends ParquetTest {
   }
 
   override def afterAll(): Unit = {
+    sql("DROP TABLE IF EXISTS partitioned_parquet")
+    sql("DROP TABLE IF EXISTS partitioned_parquet_with_key")
+    sql("DROP TABLE IF EXISTS partitioned_parquet_with_complextypes")
+    sql("DROP TABLE IF EXISTS partitioned_parquet_with_key_and_complextypes")
+    sql("DROP TABLE IF EXISTS normal_parquet")
+
     setConf("spark.sql.hive.convertMetastoreParquet", "false")
   }
 
@@ -183,7 +200,7 @@ class ParquetSourceSuite extends ParquetTest {
     """)
 
     sql( s"""
-      create temporary table partitioned_parquet_with_key_and_complextypes
+      CREATE TEMPORARY TABLE partitioned_parquet_with_key_and_complextypes
       USING org.apache.spark.sql.parquet
       OPTIONS (
         path '${partitionedTableDirWithKeyAndComplexTypes.getCanonicalPath}'
@@ -191,7 +208,7 @@ class ParquetSourceSuite extends ParquetTest {
     """)
 
     sql( s"""
-      create temporary table partitioned_parquet_with_complextypes
+      CREATE TEMPORARY TABLE partitioned_parquet_with_complextypes
       USING org.apache.spark.sql.parquet
       OPTIONS (
         path '${partitionedTableDirWithComplexTypes.getCanonicalPath}'
@@ -205,6 +222,7 @@ class ParquetSourceSuite extends ParquetTest {
  */
 abstract class ParquetTest extends QueryTest with BeforeAndAfterAll {
   var partitionedTableDir: File = null
+  var normalTableDir: File = null
   var partitionedTableDirWithKey: File = null
   var partitionedTableDirWithKeyAndComplexTypes: File = null
   var partitionedTableDirWithComplexTypes: File = null
@@ -220,6 +238,15 @@ abstract class ParquetTest extends QueryTest with BeforeAndAfterAll {
         .map(i => ParquetData(i, s"part-$p"))
         .saveAsParquetFile(partDir.getCanonicalPath)
     }
+
+    normalTableDir = File.createTempFile("parquettests", "sparksql")
+    normalTableDir.delete()
+    normalTableDir.mkdir()
+
+    sparkContext
+      .makeRDD(1 to 10)
+      .map(i => ParquetData(i, s"part-1"))
+      .saveAsParquetFile(new File(normalTableDir, "normal").getCanonicalPath)
 
     partitionedTableDirWithKey = File.createTempFile("parquettests", "sparksql")
     partitionedTableDirWithKey.delete()
@@ -239,7 +266,8 @@ abstract class ParquetTest extends QueryTest with BeforeAndAfterAll {
     (1 to 10).foreach { p =>
       val partDir = new File(partitionedTableDirWithKeyAndComplexTypes, s"p=$p")
       sparkContext.makeRDD(1 to 10)
-        .map(i => ParquetDataWithKeyAndComplexTypes(p, i,s"part-$p", StructContainer(i,f"${i}_string"), (1 to i)))
+        .map(i => ParquetDataWithKeyAndComplexTypes(
+          p, i, s"part-$p", StructContainer(i, f"${i}_string"), 1 to i))
         .saveAsParquetFile(partDir.getCanonicalPath)
     }
 
@@ -250,21 +278,26 @@ abstract class ParquetTest extends QueryTest with BeforeAndAfterAll {
     (1 to 10).foreach { p =>
       val partDir = new File(partitionedTableDirWithComplexTypes, s"p=$p")
       sparkContext.makeRDD(1 to 10)
-        .map(i => ParquetDataWithComplexTypes(i,s"part-$p", StructContainer(i,f"${i}_string"), (1 to i)))
+        .map(i => ParquetDataWithComplexTypes(
+          i, s"part-$p", StructContainer(i, f"${i}_string"), 1 to i))
         .saveAsParquetFile(partDir.getCanonicalPath)
     }
-
   }
 
-  override def afterAll(): Unit = {
+  override protected def afterAll(): Unit = {
     //delete temporary files
     partitionedTableDir.delete()
+    normalTableDir.delete()
     partitionedTableDirWithKey.delete()
     partitionedTableDirWithKeyAndComplexTypes.delete()
     partitionedTableDirWithComplexTypes.delete()
   }
 
-  Seq("partitioned_parquet", "partitioned_parquet_with_key", "partitioned_parquet_with_key_and_complextypes","partitioned_parquet_with_complextypes").foreach { table =>
+  Seq(
+    "partitioned_parquet",
+    "partitioned_parquet_with_key",
+    "partitioned_parquet_with_complextypes",
+    "partitioned_parquet_with_key_and_complextypes").foreach { table =>
     test(s"ordering of the partitioning columns $table") {
       checkAnswer(
         sql(s"SELECT p, stringField FROM $table WHERE p = 1"),
@@ -356,19 +389,26 @@ abstract class ParquetTest extends QueryTest with BeforeAndAfterAll {
     }
   }
 
-  Seq("partitioned_parquet_with_key_and_complextypes", "partitioned_parquet_with_complextypes").foreach { table =>
-    test(s"SPARK-5775 read struct from $table") {
+  Seq(
+    "partitioned_parquet_with_key_and_complextypes",
+    "partitioned_parquet_with_complextypes").foreach { table =>
+    test(s"SPARK-5775 read structure from $table") {
       checkAnswer(
-        sql(s"SELECT p,  structField.intStructField , structField.stringStructField FROM $table WHERE p = 1"),
-        (1 to 10).map { i => ((1, i, f"${i}_string"))}
-      )
+        sql(s"""
+          SELECT
+            p,
+            structField.intStructField,
+            structField.stringStructField
+          FROM $table
+          WHERE p = 1"""),
+        (1 to 10).map(i => Row(1, i, f"${i}_string")))
     }
 
-    test (s"SPARK-5775 read array from $table") {
-              checkAnswer(
-                sql(s"SELECT arrayField, p FROM $table WHERE p = 1"),
-                (1 to 10).map { i => ((1 to i,1))}
-              )
+    // Re-enable this after SPARK-5508 is fixed
+    ignore(s"SPARK-5775 read array from $table") {
+      checkAnswer(
+        sql(s"SELECT arrayField, p FROM $table WHERE p = 1"),
+        (1 to 10).map(i => Row(1 to i, 1)))
     }
   }
 
