@@ -44,6 +44,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   // These type aliases are public because they're used in the types of public fields:
 
   type JobId = Int
+  type JobGroupId = String
   type StageId = Int
   type StageAttemptId = Int
   type PoolName = String
@@ -54,6 +55,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   val completedJobs = ListBuffer[JobUIData]()
   val failedJobs = ListBuffer[JobUIData]()
   val jobIdToData = new HashMap[JobId, JobUIData]
+  val jobGroupToJobIds = new HashMap[JobGroupId, HashSet[JobId]]
 
   // Stages:
   val pendingStages = new HashMap[StageId, StageInfo]
@@ -109,7 +111,8 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       "failedJobs" -> failedJobs.size,
       "completedStages" -> completedStages.size,
       "skippedStages" -> skippedStages.size,
-      "failedStages" -> failedStages.size
+      "failedStages" -> failedStages.size,
+      "jobGroupToJobIds" -> jobGroupToJobIds.values.map(_.size).sum
     )
   }
   
@@ -140,7 +143,16 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     if (jobs.size > retainedJobs) {
       val toRemove = math.max(retainedJobs / 10, 1)
       jobs.take(toRemove).foreach { job =>
-        jobIdToData.remove(job.jobId)
+        for (
+          removedJob <- jobIdToData.remove(job.jobId);
+          jobGroupId = removedJob.jobGroup.orNull;
+          jobsInGroup <- jobGroupToJobIds.get(jobGroupId)
+        ) {
+          jobsInGroup.remove(job.jobId)
+          if (jobsInGroup.isEmpty) {
+            jobGroupToJobIds.remove(jobGroupId)
+          }
+        }
       }
       jobs.trimStart(toRemove)
     }
@@ -158,6 +170,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
         stageIds = jobStart.stageIds,
         jobGroup = jobGroup,
         status = JobExecutionStatus.RUNNING)
+    jobGroupToJobIds.getOrElseUpdate(jobGroup.orNull, new HashSet[JobId]).add(jobStart.jobId)
     jobStart.stageInfos.foreach(x => pendingStages(x.stageId) = x)
     // Compute (a potential underestimate of) the number of tasks that will be run by this job.
     // This may be an underestimate because the job start event references all of the result
