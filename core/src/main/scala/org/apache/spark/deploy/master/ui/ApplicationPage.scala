@@ -61,7 +61,7 @@ private[spark] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app
       state.completedApps.find(_.id == appId).getOrElse(null)
     })
     if (app == null) {
-      val msg = <div class="row-fluid">Application {appId} not found.</div>
+      val msg = <div class="row-fluid">No running application with ID {appId}</div>
       return UIUtils.basicSparkPage(msg, "Not Found")
     }
 
