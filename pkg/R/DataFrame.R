@@ -335,7 +335,7 @@ setMethod("sampleDF",
           # TODO : Figure out how to send integer as java.lang.Long to JVM so
           # we can send seed as an argument through callJMethod
           signature(x = "DataFrame", withReplacement = "logical",
-                      fraction = "numeric"),
+                    fraction = "numeric"),
           function(x, withReplacement, fraction) {
             if (fraction < 0.0) stop(cat("Negative fraction value:", fraction))
             sdf <- callJMethod(x@sdf, "sample", withReplacement, fraction)

@@ -216,6 +216,8 @@ test_that("sampleDF on a DataFrame", {
   sampled <- sampleDF(df, FALSE, 1.0)
   expect_equal(nrow(collect(sampled)), count(df))
   expect_true(inherits(sampled, "DataFrame"))
+  sampled2 <- sampleDF(df, FALSE, 0.1)
+  expect_true(count(sampled2) < 3)
 })
 
 unlink(jsonPath)
