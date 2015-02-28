@@ -29,7 +29,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
   private val startTime: Option[Long] = parent.sc.map(_.startTime)
   private val listener = parent.listener
 
-  private def jobsTable(jobs: Seq[JobUIData]): Seq[Node] = {
+  private def jobsTable(jobs: Seq[JobUIData], killEnabled: Boolean): Seq[Node] = {
     val someJobHasJobGroup = jobs.exists(_.jobGroup.isDefined)
 
     val columns: Seq[Node] = {
@@ -42,6 +42,18 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
     }
 
     def makeRow(job: JobUIData): Seq[Node] = {
+      // scalastyle:off
+      val killLink = if (killEnabled) {
+        val killLinkUri = "%s/jobs/job/kill?id=%s&terminate=true"
+          .format(UIUtils.prependBaseUri(parent.basePath), job.jobId)
+        val confirm = "return window.confirm('Are you sure you want to kill job %s ?');"
+          .format(job.jobId)
+        <span class="kill-link">
+          (<a href={killLinkUri} onclick={confirm}>kill</a>)
+        </span>
+      }
+      // scalastyle:on
+
       val lastStageInfo = Option(job.stageIds)
         .filter(_.nonEmpty)
         .flatMap { ids => listener.stageIdToInfo.get(ids.max) }
@@ -68,6 +80,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         <td>
           <span class="description-input" title={lastStageDescription}>{lastStageDescription}</span>
           <a href={detailUrl}>{lastStageName}</a>
+          {killLink}
         </td>
         <td sorttable_customkey={job.submissionTime.getOrElse(-1).toString}>
           {formattedSubmissionTime}
@@ -102,11 +115,14 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val now = System.currentTimeMillis
 
       val activeJobsTable =
-        jobsTable(activeJobs.sortBy(_.submissionTime.getOrElse(-1L)).reverse)
+        jobsTable(activeJobs.sortBy(_.submissionTime.getOrElse(-1L)).reverse,
+          killEnabled = parent.killEnabled)
       val completedJobsTable =
-        jobsTable(completedJobs.sortBy(_.completionTime.getOrElse(-1L)).reverse)
+        jobsTable(completedJobs.sortBy(_.completionTime.getOrElse(-1L)).reverse,
+          killEnabled = false)
       val failedJobsTable =
-        jobsTable(failedJobs.sortBy(_.completionTime.getOrElse(-1L)).reverse)
+        jobsTable(failedJobs.sortBy(_.completionTime.getOrElse(-1L)).reverse,
+          killEnabled = false)
 
       val shouldShowActiveJobs = activeJobs.nonEmpty
       val shouldShowCompletedJobs = completedJobs.nonEmpty
