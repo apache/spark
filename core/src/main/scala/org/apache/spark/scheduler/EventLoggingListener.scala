@@ -87,9 +87,13 @@ private[spark] class EventLoggingListener(
    */
   def start() {
     val logBasePath = new Path(logBaseDir)
-    if (!fileSystem.exists(logBasePath) || !fileSystem.isDirectory(logBasePath)) {
+    if (!fileSystem.isDirectory(logBasePath)) {
+      if (fileSystem.exists(logBasePath)) {
+        throw new IllegalArgumentException(s"Event log dir $logBaseDir is not a directory.")
+      }
+      logWarning(s"Event log dir $logBaseDir does not exists, will newly create one.")
       if (!fileSystem.mkdirs(logBasePath)) {
-        throw new IOException(s"Failed to create EventLog dir: $logBaseDir.")
+        throw new IOException(s"Failed to create event log dir $logBaseDir.")
       }
     }
       
