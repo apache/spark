@@ -260,7 +260,7 @@ class StreamingContext(object):
         monitored directory by "moving" them from another location within the same
         file system. File names starting with . are ignored.
         """
-        return DStream(self._jssc.textFileStream(directory), self, UTF8Deserializer())
+        return textFileStream(self, directory, 1)
 
     def textFileStream(self, directory, depth):
         """

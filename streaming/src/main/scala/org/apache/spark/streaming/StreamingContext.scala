@@ -364,7 +364,6 @@ class StreamingContext private[streaming] (
    * Files must be written to the monitored directory by "moving" them from another
    * location within the same file system. File names starting with . are ignored.
    * @param directory HDFS directory to monitor for new file
-   * @param depth Searching depth of directory
    * @tparam K Key type for reading HDFS file
    * @tparam V Value type for reading HDFS file
    * @tparam F Input format for reading HDFS file
@@ -373,7 +372,28 @@ class StreamingContext private[streaming] (
     K: ClassTag,
     V: ClassTag,
     F <: NewInputFormat[K, V]: ClassTag
-  ] (directory: String, depth: Int = 1): InputDStream[(K, V)] = {
+  ] (directory: String): InputDStream[(K, V)] = {
+    new FileInputDStream[K, V, F](this, directory)
+  }
+
+  /**
+   * Create a input stream that monitors a Hadoop-compatible filesystem
+   * for new files and reads them using the given key-value types and input format.
+   * Files must be written to the monitored directory by "moving" them from another
+   * location within the same file system. File names starting with . are ignored.
+   * It can also monitor files in subdirectories by setting the optional `depth`
+   * parameter to a value greater than 1.
+   * @param directory HDFS directory to monitor for new file
+   * @param depth Searching depth of HDFS directory
+   * @tparam K Key type for reading HDFS file
+   * @tparam V Value type for reading HDFS file
+   * @tparam F Input format for reading HDFS file
+   */
+  def fileStream[
+    K: ClassTag,
+    V: ClassTag,
+    F <: NewInputFormat[K, V]: ClassTag
+  ] (directory: String, depth: Int): InputDStream[(K, V)] = {
     new FileInputDStream[K, V, F](this, directory, depth)
   }
 
@@ -385,7 +405,6 @@ class StreamingContext private[streaming] (
    * @param directory HDFS directory to monitor for new file
    * @param filter Function to filter paths to process
    * @param newFilesOnly Should process only new files and ignore existing files in the directory
-   * @param depth Searching depth of directory
    * @tparam K Key type for reading HDFS file
    * @tparam V Value type for reading HDFS file
    * @tparam F Input format for reading HDFS file
@@ -394,12 +413,33 @@ class StreamingContext private[streaming] (
     K: ClassTag,
     V: ClassTag,
     F <: NewInputFormat[K, V]: ClassTag
-  ] (
-    directory: String,
-    filter: Path => Boolean,
-    newFilesOnly: Boolean,
-    depth: Int = 1
-  ): InputDStream[(K, V)] = {
+  ] (directory: String, filter: Path => Boolean, newFilesOnly: Boolean): InputDStream[(K, V)] = {
+    new FileInputDStream[K, V, F](this, directory, 1, filter, newFilesOnly)
+  }
+
+  /**
+   * Create a input stream that monitors a Hadoop-compatible filesystem
+   * for new files and reads them using the given key-value types and input format.
+   * Files must be written to the monitored directory by "moving" them from another
+   * location within the same file system.
+   * It can also monitor files in subdirectories by setting the optional `depth`
+   * parameter to a value greater than 1.
+   * @param directory HDFS directory to monitor for new file
+   * @param filter Function to filter paths to process
+   * @param newFilesOnly Should process only new files and ignore existing files in the directory
+   * @param depth Searching depth of HDFS directory
+   * @tparam K Key type for reading HDFS file
+   * @tparam V Value type for reading HDFS file
+   * @tparam F Input format for reading HDFS file
+   */
+  def fileStream[
+    K: ClassTag,
+    V: ClassTag,
+    F <: NewInputFormat[K, V]: ClassTag
+  ] (directory: String,
+     filter: Path => Boolean,
+     newFilesOnly: Boolean,
+     depth: Int): InputDStream[(K, V)] = {
     new FileInputDStream[K, V, F](this, directory, depth, filter, newFilesOnly)
   }
 
@@ -408,6 +448,32 @@ class StreamingContext private[streaming] (
    * for new files and reads them using the given key-value types and input format.
    * Files must be written to the monitored directory by "moving" them from another
    * location within the same file system. File names starting with . are ignored.
+   * @param directory HDFS directory to monitor for new file
+   * @param filter Function to filter paths to process
+   * @param newFilesOnly Should process only new files and ignore existing files in the directory
+   * @param conf Hadoop configuration
+   * @tparam K Key type for reading HDFS file
+   * @tparam V Value type for reading HDFS file
+   * @tparam F Input format for reading HDFS file
+   */
+  def fileStream[
+    K: ClassTag,
+    V: ClassTag,
+    F <: NewInputFormat[K, V]: ClassTag
+  ] (directory: String,
+     filter: Path => Boolean,
+     newFilesOnly: Boolean,
+     conf: Configuration): InputDStream[(K, V)] = {
+    new FileInputDStream[K, V, F](this, directory, 1, filter, newFilesOnly, Option(conf))
+  }
+
+  /**
+   * Create a input stream that monitors a Hadoop-compatible filesystem
+   * for new files and reads them using the given key-value types and input format.
+   * Files must be written to the monitored directory by "moving" them from another
+   * location within the same file system. File names starting with . are ignored.
+   * It can also monitor files in subdirectories by setting the optional `depth`
+   * parameter to a value greater than 1.
    * @param directory HDFS directory to monitor for new file
    * @param filter Function to filter paths to process
    * @param newFilesOnly Should process only new files and ignore existing files in the directory
@@ -425,7 +491,7 @@ class StreamingContext private[streaming] (
      filter: Path => Boolean,
      newFilesOnly: Boolean,
      conf: Configuration,
-     depth: Int = 1): InputDStream[(K, V)] = {
+     depth: Int): InputDStream[(K, V)] = {
     new FileInputDStream[K, V, F](this, directory, depth, filter, newFilesOnly, Option(conf))
   }
 
@@ -435,6 +501,20 @@ class StreamingContext private[streaming] (
    * as Text and input format as TextInputFormat). Files must be written to the
    * monitored directory by "moving" them from another location within the same
    * file system. File names starting with . are ignored.
+   * @param directory HDFS directory to monitor for new file
+   */
+  def textFileStream(directory: String): DStream[String] = {
+    fileStream[LongWritable, Text, TextInputFormat](directory).map(_._2.toString)
+  }
+
+  /**
+   * Create a input stream that monitors a Hadoop-compatible filesystem
+   * for new files and reads them as text files (using key as LongWritable, value
+   * as Text and input format as TextInputFormat). Files must be written to the
+   * monitored directory by "moving" them from another location within the same
+   * file system. File names starting with . are ignored.
+   * It can also monitor files in subdirectories by setting the optional `depth`
+   * parameter to a value greater than 1.
    * @param directory HDFS directory to monitor for new file
    * @param depth Searching depth of HDFS directory
    */
@@ -452,6 +532,8 @@ class StreamingContext private[streaming] (
    * generating one byte array per record. Files must be written to the monitored directory
    * by "moving" them from another location within the same file system. File names
    * starting with . are ignored.
+   * It can also monitor files in subdirectories by setting the optional `depth`
+   * parameter to a value greater than 1.
    *
    * '''Note:''' We ensure that the byte array for each record in the
    * resulting RDDs of the DStream has the provided record length.
@@ -475,6 +557,28 @@ class StreamingContext private[streaming] (
       bytes
     }
     data
+  }
+
+  /**
+   * :: Experimental ::
+   *
+   * Create an input stream that monitors a Hadoop-compatible filesystem
+   * for new files and reads them as flat binary files, assuming a fixed length per record,
+   * generating one byte array per record. Files must be written to the monitored directory
+   * by "moving" them from another location within the same file system. File names
+   * starting with . are ignored.
+   *
+   * '''Note:''' We ensure that the byte array for each record in the
+   * resulting RDDs of the DStream has the provided record length.
+   *
+   * @param directory HDFS directory to monitor for new file
+   * @param recordLength length of each record in bytes
+   */
+  @Experimental
+  def binaryRecordsStream(
+      directory: String,
+      recordLength: Int): DStream[Array[Byte]] = {
+      binaryRecordsStream(directory, recordLength, 1)
   }
 
   /**

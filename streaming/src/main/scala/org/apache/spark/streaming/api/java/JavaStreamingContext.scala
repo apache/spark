@@ -208,7 +208,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * @param directory HDFS directory to monitor for new file
    */
   def textFileStream(directory: String): JavaDStream[String] = {
-    ssc.textFileStream(directory, 1)
+    ssc.textFileStream(directory)
   }
 
   /**
@@ -280,6 +280,32 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * Files must be written to the monitored directory by "moving" them from another
    * location within the same file system. File names starting with . are ignored.
    * @param directory HDFS directory to monitor for new file
+   * @param kClass class of key for reading HDFS file
+   * @param vClass class of value for reading HDFS file
+   * @param fClass class of input format for reading HDFS file
+   * @tparam K Key type for reading HDFS file
+   * @tparam V Value type for reading HDFS file
+   * @tparam F Input format for reading HDFS file
+   */
+  def fileStream[K, V, F <: NewInputFormat[K, V]](
+      directory: String,
+      kClass: Class[K],
+      vClass: Class[V],
+      fClass: Class[F]): JavaPairInputDStream[K, V] = {
+    implicit val cmk: ClassTag[K] = ClassTag(kClass)
+    implicit val cmv: ClassTag[V] = ClassTag(vClass)
+    implicit val cmf: ClassTag[F] = ClassTag(fClass)
+    ssc.fileStream[K, V, F](directory)
+  }
+
+  /**
+   * Create an input stream that monitors a Hadoop-compatible filesystem
+   * for new files and reads them using the given key-value types and input format.
+   * Files must be written to the monitored directory by "moving" them from another
+   * location within the same file system. File names starting with . are ignored.
+   * It can also monitor files in subdirectories by setting the optional `depth`
+   * parameter to a value greater than 1.
+   * @param directory HDFS directory to monitor for new file
    * @param depth Searching depth of HDFS directory
    * @param kClass class of key for reading HDFS file
    * @param vClass class of value for reading HDFS file
@@ -290,7 +316,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    */
   def fileStream[K, V, F <: NewInputFormat[K, V]](
       directory: String,
-      depth: Int = 1,
+      depth: Int,
       kClass: Class[K],
       vClass: Class[V],
       fClass: Class[F]): JavaPairInputDStream[K, V] = {
@@ -311,7 +337,38 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * @param fClass class of input format for reading HDFS file
    * @param filter Function to filter paths to process
    * @param newFilesOnly Should process only new files and ignore existing files in the directory
-   * @param depth Searching depth of directory
+   * @tparam K Key type for reading HDFS file
+   * @tparam V Value type for reading HDFS file
+   * @tparam F Input format for reading HDFS file
+   */
+  def fileStream[K, V, F <: NewInputFormat[K, V]](
+      directory: String,
+      kClass: Class[K],
+      vClass: Class[V],
+      fClass: Class[F],
+      filter: JFunction[Path, JBoolean],
+      newFilesOnly: Boolean): JavaPairInputDStream[K, V] = {
+    implicit val cmk: ClassTag[K] = ClassTag(kClass)
+    implicit val cmv: ClassTag[V] = ClassTag(vClass)
+    implicit val cmf: ClassTag[F] = ClassTag(fClass)
+    def fn = (x: Path) => filter.call(x).booleanValue()
+    ssc.fileStream[K, V, F](directory, fn, newFilesOnly)
+  }
+
+  /**
+   * Create an input stream that monitors a Hadoop-compatible filesystem
+   * for new files and reads them using the given key-value types and input format.
+   * Files must be written to the monitored directory by "moving" them from another
+   * location within the same file system. File names starting with . are ignored.
+   * It can also monitor files in subdirectories by setting the optional `depth`
+   * parameter to a value greater than 1.
+   * @param directory HDFS directory to monitor for new file
+   * @param kClass class of key for reading HDFS file
+   * @param vClass class of value for reading HDFS file
+   * @param fClass class of input format for reading HDFS file
+   * @param filter Function to filter paths to process
+   * @param newFilesOnly Should process only new files and ignore existing files in the directory
+   * @param depth Searching depth of HDFS directory
    * @tparam K Key type for reading HDFS file
    * @tparam V Value type for reading HDFS file
    * @tparam F Input format for reading HDFS file
@@ -323,7 +380,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
       fClass: Class[F],
       filter: JFunction[Path, JBoolean],
       newFilesOnly: Boolean,
-      depth: Int = 1): JavaPairInputDStream[K, V] = {
+      depth: Int): JavaPairInputDStream[K, V] = {
     implicit val cmk: ClassTag[K] = ClassTag(kClass)
     implicit val cmv: ClassTag[V] = ClassTag(vClass)
     implicit val cmf: ClassTag[F] = ClassTag(fClass)
@@ -354,8 +411,42 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
       fClass: Class[F],
       filter: JFunction[Path, JBoolean],
       newFilesOnly: Boolean,
+      conf: Configuration): JavaPairInputDStream[K, V] = {
+    implicit val cmk: ClassTag[K] = ClassTag(kClass)
+    implicit val cmv: ClassTag[V] = ClassTag(vClass)
+    implicit val cmf: ClassTag[F] = ClassTag(fClass)
+    def fn = (x: Path) => filter.call(x).booleanValue()
+    ssc.fileStream[K, V, F](directory, fn, newFilesOnly, conf)
+  }
+
+  /**
+   * Create an input stream that monitors a Hadoop-compatible filesystem
+   * for new files and reads them using the given key-value types and input format.
+   * Files must be written to the monitored directory by "moving" them from another
+   * location within the same file system. File names starting with . are ignored.
+   * It can also monitor files in subdirectories by setting the optional `depth`
+   * parameter to a value greater than 1.
+   * @param directory HDFS directory to monitor for new file
+   * @param kClass class of key for reading HDFS file
+   * @param vClass class of value for reading HDFS file
+   * @param fClass class of input format for reading HDFS file
+   * @param filter Function to filter paths to process
+   * @param newFilesOnly Should process only new files and ignore existing files in the directory
+   * @param conf Hadoop configuration
+   * @param depth Searching depth of HDFS directory
+   * @tparam K Key type for reading HDFS file
+   * @tparam V Value type for reading HDFS file
+   * @tparam F Input format for reading HDFS file
+   */
+  def fileStream[K, V, F <: NewInputFormat[K, V]](
+      directory: String,
+      kClass: Class[K],
+      vClass: Class[V],
+      fClass: Class[F],
+      filter: JFunction[Path, JBoolean],
+      newFilesOnly: Boolean,
       conf: Configuration,
-      depth: Int = 1): JavaPairInputDStream[K, V] = {
+      depth: Int): JavaPairInputDStream[K, V] = {
     implicit val cmk: ClassTag[K] = ClassTag(kClass)
     implicit val cmv: ClassTag[V] = ClassTag(vClass)
     implicit val cmf: ClassTag[F] = ClassTag(fClass)
