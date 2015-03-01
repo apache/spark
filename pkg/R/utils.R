@@ -93,40 +93,6 @@ isSparkFunction <- function(name) {
   packageName(environment(fun)) == "SparkR"
 }
 
-# Serialize the dependencies of the given function and return them as a raw
-# vector. Filters out RDDs before serializing the dependencies
-getDependencies <- function(name) {
-  varsToSave <- c()
-  closureEnv <- environment(name)
-
-  currentEnv <- closureEnv
-  while (TRUE) {
-    # Don't serialize namespaces
-    if (!isNamespace(currentEnv)) {
-      varsToSave <- c(varsToSave, ls(currentEnv))
-    }
-
-    # Everything below globalenv are packages, search path stuff etc.
-    if (identical(currentEnv, globalenv()))
-       break
-    currentEnv <- parent.env(currentEnv)
-  }
-  filteredVars <- Filter(function(x) { !isRDD(x, closureEnv) }, varsToSave)
-
-  # TODO: A better way to exclude variables that have been broadcast
-  # would be to actually list all the variables used in every function using
-  # `all.vars` and then walking through functions etc.
-  filteredVars <- Filter(
-                    function(x) { !exists(x, .broadcastNames, inherits = FALSE) },
-                    filteredVars)
-
-  rc <- rawConnection(raw(), 'wb')
-  save(list = filteredVars, file = rc, envir = closureEnv)
-  binData <- rawConnectionValue(rc)
-  close(rc)
-  binData
-}
-
 #' Compute the hashCode of an object
 #'
 #' Java-style function to compute the hashCode for the given object. Returns
@@ -287,4 +253,116 @@ convertEnvsToList <- function(keys, vals) {
          function(name) {
            list(keys[[name]], vals[[name]])
          })
+}
+
+# Utility function to recursively traverse the Abstract Syntax Tree (AST) of a
+# user defined function (UDF), and to examine variables in the UDF to decide 
+# if their values should be included in the new function environment.
+# param
+#   node The current AST node in the traversal.
+#   oldEnv The original function environment.
+#   argNames A character vector of parameters of the function. Their values are
+#            passed in as arguments, and not included in the closure.
+#   newEnv A new function environment to store necessary function dependencies.
+processClosure <- function(node, oldEnv, argNames, newEnv) {
+  nodeLen <- length(node)
+  
+  if (nodeLen > 1 && typeof(node) == "language") {
+    # Recursive case: current AST node is an internal node, check for its children. 
+    if (length(node[[1]]) > 1) {
+      for (i in 1:nodeLen) {
+        processClosure(node[[i]], oldEnv, argNames, newEnv)
+      }
+    } else {  # if node[[1]] is length of 1, check for some R special functions.
+      nodeChar <- as.character(node[[1]])
+      if (nodeChar == "{" || nodeChar == "(") {  # Skip start symbol.
+        for (i in 2:nodeLen) {
+          processClosure(node[[i]], oldEnv, argNames, newEnv)
+        }
+      } else if (nodeChar == "<-" || nodeChar == "=" || 
+                   nodeChar == "<<-") { # Assignment Ops.
+        defVar <- node[[2]]
+        if (length(defVar) == 1 && typeof(defVar) == "symbol") {
+          # Add the defined variable name into .defVars.
+          assign(".defVars", 
+                 c(get(".defVars", envir = .sparkREnv), as.character(defVar)), 
+                 envir = .sparkREnv)
+        } else {
+          processClosure(node[[2]], oldEnv, argNames, newEnv)
+        }
+        for (i in 3:nodeLen) {
+          processClosure(node[[i]], oldEnv, argNames, newEnv)
+        }
+      } else if (nodeChar == "function") {  # Function definition.
+        newArgs <- names(node[[2]])
+        argNames <- c(argNames, newArgs)  # Add parameter names.
+        for (i in 3:nodeLen) {
+          processClosure(node[[i]], oldEnv, argNames, newEnv)
+        }
+      } else if (nodeChar == "$") {  # Skip the field.
+        processClosure(node[[2]], oldEnv, argNames, newEnv)
+      } else {
+        for (i in 1:nodeLen) {
+          processClosure(node[[i]], oldEnv, argNames, newEnv)
+        }
+      }
+    }
+  } else if (nodeLen == 1 && 
+               (typeof(node) == "symbol" || typeof(node) == "language")) {
+    # Base case: current AST node is a leaf node and a symbol or a function call.
+    nodeChar <- as.character(node)
+    if (!nodeChar %in% argNames && # Not a function parameter or function local variable.
+          !nodeChar %in% get(".defVars", envir = .sparkREnv)) {
+      func.env <- oldEnv
+      topEnv <- parent.env(.GlobalEnv)
+      # Search in function environment, and function's enclosing environments 
+      # up to global environment. There is no need to look into package environments
+      # above the global or namespace environment that is not SparkR below the global, 
+      # as they are assumed to be loaded on workers.
+      while (!identical(func.env, topEnv)) {
+        # Namespaces other than "SparkR" will not be searched.
+        if (!isNamespace(func.env) || 
+              (getNamespaceName(func.env) == "SparkR" && 
+              !(nodeChar %in% getNamespaceExports("SparkR")))) {  # Only include SparkR internals.
+          # Set parameter 'inherits' to FALSE since we do not need to search in
+          # attached package environments.
+          if (exists(nodeChar, envir = func.env, inherits = FALSE)) {
+            obj <- get(nodeChar, envir = func.env, inherits = FALSE)
+            if (is.function(obj)) {  
+              # if the node is a function call, recursively clean its closure.
+              obj <- cleanClosure(obj)
+            }
+            assign(nodeChar, obj, envir = newEnv)
+            break
+          }
+        }
+        
+        # Continue to search in enclosure.
+        func.env <- parent.env(func.env)
+      }
+    }
+  }
+}
+
+# Utility function to get user defined function (UDF) dependencies (closure). 
+# More specifically, this function captures the values of free variables defined 
+# outside a UDF, and stores them in the function's environment.
+# param
+#   func A function whose closure needs to be captured.
+# return value
+#   a new version of func that has an correct environment (closure).
+cleanClosure <- function(func) {
+  if (is.function(func)) {
+    newEnv <- new.env(parent = .GlobalEnv)
+    # .defVars is a character vector of variables names defined in the function.
+    assign(".defVars", c(), envir = .sparkREnv)
+    func.body <- body(func)
+    oldEnv <- environment(func)
+    argNames <- names(as.list(args(func)))
+    argsNames <- argNames[-length(argNames)]  # Remove the ending NULL in pairlist.
+    # Recursively examine variables in the function body.
+    processClosure(func.body, oldEnv, argNames, newEnv)
+    environment(func) <- newEnv
+  }
+  func
 }

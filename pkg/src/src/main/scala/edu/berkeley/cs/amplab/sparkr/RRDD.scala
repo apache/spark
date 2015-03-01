@@ -18,10 +18,9 @@ import org.apache.spark.rdd.RDD
 private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
     parent: RDD[T],
     numPartitions: Int,
-    func: Array[Byte],
     parentSerialized: Boolean,
     dataSerialized: Boolean,
-    functionDependencies: Array[Byte],
+    func: Array[Byte],
     packageNames: Array[Byte],
     rLibDir: String,
     broadcastVars: Array[Broadcast[Object]])
@@ -135,9 +134,6 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
           val dataOut = new DataOutputStream(stream)
           dataOut.writeInt(splitIndex)
 
-          dataOut.writeInt(func.length)
-          dataOut.write(func, 0, func.length)
-
           // R worker process input serialization flag
           dataOut.writeInt(if (parentSerialized) 1 else 0)
           // R worker process output serialization flag
@@ -146,8 +142,8 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
           dataOut.writeInt(packageNames.length)
           dataOut.write(packageNames, 0, packageNames.length)
 
-          dataOut.writeInt(functionDependencies.length)
-          dataOut.write(functionDependencies, 0, functionDependencies.length)
+          dataOut.writeInt(func.length)
+          dataOut.write(func, 0, func.length)
 
           dataOut.writeInt(broadcastVars.length)
           broadcastVars.foreach { broadcast =>
@@ -201,14 +197,13 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
 private class PairwiseRRDD[T: ClassTag](
     parent: RDD[T],
     numPartitions: Int,
-    hashFunc: Array[Byte],
     parentSerialized: Boolean,
-    functionDependencies: Array[Byte],
+    hashFunc: Array[Byte],
     packageNames: Array[Byte],
     rLibDir: String,
     broadcastVars: Array[Object])
-  extends BaseRRDD[T, (Int, Array[Byte])](parent, numPartitions, hashFunc, parentSerialized,
-                                          true, functionDependencies, packageNames, rLibDir,
+  extends BaseRRDD[T, (Int, Array[Byte])](parent, numPartitions, parentSerialized,
+                                          true, hashFunc, packageNames, rLibDir,
                                           broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])) {
 
   private var dataStream: DataInputStream = _
@@ -246,14 +241,13 @@ private class PairwiseRRDD[T: ClassTag](
  */
 private class RRDD[T: ClassTag](
     parent: RDD[T],
-    func: Array[Byte],
     parentSerialized: Boolean,
-    functionDependencies: Array[Byte],
+    func: Array[Byte],
     packageNames: Array[Byte],
     rLibDir: String,
     broadcastVars: Array[Object])
-  extends BaseRRDD[T, Array[Byte]](parent, -1, func, parentSerialized,
-                                true, functionDependencies, packageNames, rLibDir,
+  extends BaseRRDD[T, Array[Byte]](parent, -1, parentSerialized,
+                                true, func, packageNames, rLibDir,
                                 broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])) {
 
   private var dataStream: DataInputStream = _
@@ -289,14 +283,13 @@ private class RRDD[T: ClassTag](
  */
 private class StringRRDD[T: ClassTag](
     parent: RDD[T],
-    func: Array[Byte],
     parentSerialized: Boolean,
-    functionDependencies: Array[Byte],
+    func: Array[Byte],
     packageNames: Array[Byte],
     rLibDir: String,
     broadcastVars: Array[Object])
-  extends BaseRRDD[T, String](parent, -1, func, parentSerialized,
-                           false, functionDependencies, packageNames, rLibDir,
+  extends BaseRRDD[T, String](parent, -1, parentSerialized,
+                           false, func, packageNames, rLibDir,
                            broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])) {
 
   private var dataStream: BufferedReader = _

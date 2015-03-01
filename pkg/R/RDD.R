@@ -110,7 +110,6 @@ setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
             computeFunc <- function(split, part) {
               rdd@func(split, part)
             }
-            serializedFuncArr <- serialize("computeFunc", connection = NULL)
 
             packageNamesArr <- serialize(.sparkREnv[[".packages"]],
                                          connection = NULL)
@@ -118,16 +117,15 @@ setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
             broadcastArr <- lapply(ls(.broadcastNames),
                                    function(name) { get(name, .broadcastNames) })
 
-            depsBin <- getDependencies(computeFunc)
+            serializedFuncArr <- serialize(computeFunc, connection = NULL)
 
             prev_jrdd <- rdd@prev_jrdd
 
             if (dataSerialization) {
               rddRef <- newJObject("edu.berkeley.cs.amplab.sparkr.RRDD",
                                    callJMethod(prev_jrdd, "rdd"),
-                                   serializedFuncArr,
                                    rdd@env$prev_serialized,
-                                   depsBin,
+                                   serializedFuncArr,
                                    packageNamesArr,
                                    as.character(.sparkREnv[["libname"]]),
                                    broadcastArr,
@@ -135,9 +133,8 @@ setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
             } else {
               rddRef <- newJObject("edu.berkeley.cs.amplab.sparkr.StringRRDD",
                                    callJMethod(prev_jrdd, "rdd"),
-                                   serializedFuncArr,
                                    rdd@env$prev_serialized,
-                                   depsBin,
+                                   serializedFuncArr,
                                    packageNamesArr,
                                    as.character(.sparkREnv[["libname"]]),
                                    broadcastArr,
@@ -610,6 +607,7 @@ setGeneric("lapplyPartitionsWithIndex", function(X, FUN) {
 setMethod("lapplyPartitionsWithIndex",
           signature(X = "RDD", FUN = "function"),
           function(X, FUN) {
+            FUN <- cleanClosure(FUN)
             closureCapturingFunc <- function(split, part) {
               FUN(split, part)
             }

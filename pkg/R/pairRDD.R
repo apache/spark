@@ -209,10 +209,8 @@ setMethod("partitionBy",
             #  partitionFunc <- hashCode
             #}
 
-            depsBinArr <- getDependencies(partitionFunc)
-
-            serializedHashFuncBytes <- serialize(as.character(substitute(partitionFunc)),
-                                                 connection = NULL)
+            partitionFunc <- cleanClosure(partitionFunc)
+            serializedHashFuncBytes <- serialize(partitionFunc, connection = NULL)
 
             packageNamesArr <- serialize(.sparkREnv$.packages,
                                          connection = NULL)
@@ -226,9 +224,8 @@ setMethod("partitionBy",
             pairwiseRRDD <- newJObject("edu.berkeley.cs.amplab.sparkr.PairwiseRRDD",
                                        callJMethod(jrdd, "rdd"),
                                        as.integer(numPartitions),
-                                       serializedHashFuncBytes,
                                        x@env$serialized,
-                                       depsBinArr,
+                                       serializedHashFuncBytes,
                                        packageNamesArr,
                                        as.character(.sparkREnv$libname),
                                        broadcastArr,
