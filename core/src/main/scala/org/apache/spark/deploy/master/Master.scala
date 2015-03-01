@@ -85,7 +85,8 @@ private[spark] class Master(
 
   private val drivers = new HashSet[DriverInfo]
   private val completedDrivers = new ArrayBuffer[DriverInfo]
-  private val waitingDrivers = new ArrayBuffer[DriverInfo] // Drivers currently spooled for scheduling
+  // Drivers currently spooled for scheduling
+  private val waitingDrivers = new ArrayBuffer[DriverInfo] 
   private var nextDriverNumber = 0
 
   Utils.checkHost(host, "Expected hostname")
@@ -843,7 +844,8 @@ private[spark] class Master(
     driver.state = DriverState.RUNNING
   }
 
-  private def removeDriver(driverId: String, finalState: DriverState, exception: Option[Exception]) {
+  private def removeDriver(driverId: String, finalState: DriverState, 
+                           exception: Option[Exception]) {
     drivers.find(d => d.id == driverId) match {
       case Some(driver) =>
         logInfo(s"Removing driver: $driverId")
