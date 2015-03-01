@@ -68,8 +68,8 @@ private[spark] class ApplicationMaster(
   @volatile private var finalMsg: String = ""
   @volatile private var userClassThread: Thread = _
 
-  private var reporterThread: Thread = _
-  private var allocator: YarnAllocator = _
+  @volatile private var reporterThread: Thread = _
+  @volatile private var allocator: YarnAllocator = _
 
   // Fields used in client mode.
   private var actorSystem: ActorSystem = null
@@ -486,11 +486,10 @@ private[spark] class ApplicationMaster(
               case _: InterruptedException =>
                 // Reporter thread can interrupt to stop user class
               case cause: Throwable =>
+                logError("User class threw exception: " + cause.getMessage, cause)
                 finish(FinalApplicationStatus.FAILED,
                   ApplicationMaster.EXIT_EXCEPTION_USER_CLASS,
                   "User class threw exception: " + cause.getMessage)
-                // re-throw to get it logged
-                throw cause
             }
         }
       }

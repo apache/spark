@@ -97,8 +97,9 @@ val MSE = ratesAndPreds.map { case ((user, product), (r1, r2)) =>
 }.mean()
 println("Mean Squared Error = " + MSE)
 
-model.save("myModelPath")
-val sameModel = MatrixFactorizationModel.load("myModelPath")
+// Save and load model
+model.save(sc, "myModelPath")
+val sameModel = MatrixFactorizationModel.load(sc, "myModelPath")
 {% endhighlight %}
 
 If the rating matrix is derived from another source of information (e.g., it is inferred from
@@ -186,8 +187,9 @@ public class CollaborativeFiltering {
     ).rdd()).mean();
     System.out.println("Mean Squared Error = " + MSE);
 
-    model.save("myModelPath");
-    MatrixFactorizationModel sameModel = MatrixFactorizationModel.load("myModelPath");
+    // Save and load model
+    model.save(sc.sc(), "myModelPath");
+    MatrixFactorizationModel sameModel = MatrixFactorizationModel.load(sc.sc(), "myModelPath");
   }
 }
 {% endhighlight %}
