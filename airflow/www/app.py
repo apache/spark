@@ -554,20 +554,28 @@ class Airflow(BaseView):
     @login_required
     def conf(self):
         from airflow import configuration
+        raw = request.args.get('raw') == "true"
         title = "Airflow Configuration"
         subtitle = configuration.AIRFLOW_CONFIG
         f = open(configuration.AIRFLOW_CONFIG, 'r')
+        config = f.read()
 
-        code_html = Markup(highlight(
-            f.read(),
-            IniLexer(),  # Lexer call
-            HtmlFormatter(noclasses=True))
-        )
         f.close()
-        return self.render(
-            'airflow/code.html',
-            pre_subtitle=settings.HEADER + "  v" + airflow.__version__,
-            code_html=code_html, title=title, subtitle=subtitle)
+        if raw:
+            return Response(
+                response=config,
+                status=200,
+                mimetype="application/text")
+        else:
+            code_html = Markup(highlight(
+                config,
+                IniLexer(),  # Lexer call
+                HtmlFormatter(noclasses=True))
+            )
+            return self.render(
+                'airflow/code.html',
+                pre_subtitle=settings.HEADER + "  v" + airflow.__version__,
+                code_html=code_html, title=title, subtitle=subtitle)
 
     @expose('/noaccess')
     def noaccess(self):
