@@ -22,12 +22,13 @@ import java.io.OutputStream
 import java.io.StringWriter
 import javax.xml.transform.stream.StreamResult
 import org.jpmml.model.JAXBUtil
+import org.apache.spark.SparkContext
 import org.apache.spark.mllib.pmml.export.PMMLModelExport
 import org.apache.spark.mllib.pmml.export.PMMLModelExportFactory
 
 /**
  * Export model to the PMML format
- * Predictive Model Markup Language (PMML) in an XML-based file format
+ * Predictive Model Markup Language (PMML) is an XML-based file format
  * developed by the Data Mining Group (www.dmg.org).
  */
 trait PMMLExportable {
@@ -45,6 +46,14 @@ trait PMMLExportable {
   */
   def toPMML(localPath: String): Unit = {
     toPMML(new StreamResult(new File(localPath)))
+  }
+  
+  /**
+  * Export the model to a distributed file in PMML format 
+  */
+  def toPMML(sc: SparkContext, path: String): Unit = {
+    val pmml = toPMML()
+    sc.parallelize(Array(pmml),1).saveAsTextFile(path)
   }
   
   /**
