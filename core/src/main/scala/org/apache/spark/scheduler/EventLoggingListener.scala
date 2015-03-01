@@ -266,12 +266,11 @@ private[spark] object EventLoggingListener extends Logging {
       appAttemptId: String,
       compressionCodecName: Option[String] = None): String = {
     val name = appId.replaceAll("[ :/]", "-").replaceAll("[${}'\"]", "_").toLowerCase
-
-   if (appAttemptId.equals("")) {
-      Utils.resolveURI(logBaseDir) + "/" + name.stripSuffix("/")
-   } else {
-      Utils.resolveURI(logBaseDir) + "/" + appAttemptId + "/" + name.stripSuffix("/")
-   }
+    if (appAttemptId.equals("")) {
+      logBaseDir.toString.stripSuffix("/") + "/" + name.stripSuffix("/")
+    } else {
+      logBaseDir.toString.stripSuffix("/") + "/" + name.stripSuffix("/") +  "_" + appAttemptId
+    }
   }
 
   def getLogPath(

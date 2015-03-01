@@ -194,7 +194,8 @@ private[spark] object JsonProtocol {
     ("App Name" -> applicationStart.appName) ~
     ("App ID" -> applicationStart.appId.map(JString(_)).getOrElse(JNothing)) ~
     ("Timestamp" -> applicationStart.time) ~
-    ("User" -> applicationStart.sparkUser)
+    ("User" -> applicationStart.sparkUser) ~
+    ("appAttemptId" -> applicationStart.appAttemptId)
   }
 
   def applicationEndToJson(applicationEnd: SparkListenerApplicationEnd): JValue = {
@@ -562,7 +563,8 @@ private[spark] object JsonProtocol {
     val appId = Utils.jsonOption(json \ "App ID").map(_.extract[String])
     val time = (json \ "Timestamp").extract[Long]
     val sparkUser = (json \ "User").extract[String]
-    SparkListenerApplicationStart(appName, appId, time, sparkUser)
+    val appAttemptId = (json \ "appAttemptId").extract[String]
+    SparkListenerApplicationStart(appName, appId, time, sparkUser, appAttemptId)
   }
 
   def applicationEndFromJson(json: JValue): SparkListenerApplicationEnd = {

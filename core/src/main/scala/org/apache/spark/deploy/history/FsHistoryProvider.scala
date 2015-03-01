@@ -248,7 +248,13 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         if (!mergedApps.contains(info.id) ||
             mergedApps(info.id).logPath.endsWith(EventLoggingListener.IN_PROGRESS) &&
             !info.logPath.endsWith(EventLoggingListener.IN_PROGRESS)) {
-          mergedApps += (info.id -> info)
+          val key =
+            if (info.appAttemptId.equals("")) {
+              info.id
+            } else {
+              info.id + "_" + info.appAttemptId
+            }
+          mergedApps += (key -> info)
         }
       }
 
@@ -343,7 +349,8 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         appListener.endTime.getOrElse(-1L),
         getModificationTime(eventLog).get,
         appListener.sparkUser.getOrElse(NOT_STARTED),
-        isApplicationCompleted(eventLog))
+        isApplicationCompleted(eventLog),
+        appListener.appAttemptId.getOrElse(""))
     } finally {
       logInput.close()
     }
@@ -438,5 +445,7 @@ private class FsApplicationHistoryInfo(
     endTime: Long,
     lastUpdated: Long,
     sparkUser: String,
-    completed: Boolean = true)
-  extends ApplicationHistoryInfo(id, name, startTime, endTime, lastUpdated, sparkUser, completed)
+    completed: Boolean = true,
+    appAttemptId: String ="")
+  extends ApplicationHistoryInfo(
+      id, name, startTime, endTime, lastUpdated, sparkUser, completed, appAttemptId)
