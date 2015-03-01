@@ -37,7 +37,7 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
     val listenPort = serverSocket.getLocalPort()
 
     val pb = rWorkerProcessBuilder(listenPort)
-    pb.redirectErrorStream()  // redirect stderr into stdout
+    pb.redirectErrorStream(true)  // redirect stderr into stdout
     val proc = pb.start()
     val errThread =  startStdoutThread(proc)
 
