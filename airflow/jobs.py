@@ -25,11 +25,11 @@ ID_LEN = models.ID_LEN
 
 # Setting up a statsd client if needed
 statsd = None
-if conf.get('misc', 'statsd_on'):
+if conf.get('master', 'statsd_on'):
     from statsd import StatsClient
     statsd = StatsClient(
-        host=conf.get('misc', 'statsd_host'),
-        port=conf.getint('misc', 'statsd_port'),
+        host=conf.get('master', 'statsd_host'),
+        port=conf.getint('master', 'statsd_port'),
         prefix='airflow')
 
 
@@ -62,7 +62,7 @@ class BaseJob(Base):
     def __init__(
             self,
             executor=executors.DEFAULT_EXECUTOR,
-            heartrate=conf.getint('misc', 'JOB_HEARTBEAT_SEC'),
+            heartrate=conf.getint('master', 'JOB_HEARTBEAT_SEC'),
             *args, **kwargs):
         self.hostname = socket.gethostname()
         self.executor = executor
@@ -76,7 +76,7 @@ class BaseJob(Base):
     def is_alive(self):
         return (
             (datetime.now() - self.latest_heartbeat).seconds <
-            (conf.getint('misc', 'JOB_HEARTBEAT_SEC') * 2.1)
+            (conf.getint('master', 'JOB_HEARTBEAT_SEC') * 2.1)
         )
 
     def kill(self):
@@ -188,7 +188,7 @@ class MasterJob(BaseJob):
         self.test_mode = test_mode
         super(MasterJob, self).__init__(*args, **kwargs)
 
-        heartrate=conf.getint('misc', 'MASTER_HEARTBEAT_SEC'),
+        self.heartrate=conf.getint('master', 'MASTER_HEARTBEAT_SEC')
 
     def _execute(self):
         dag_id = self.dag_id

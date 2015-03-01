@@ -27,6 +27,8 @@ from airflow.utils import apply_defaults
 Base = declarative_base()
 ID_LEN = 250
 SQL_ALCHEMY_CONN = conf.get('core', 'SQL_ALCHEMY_CONN')
+DAGS_FOLDER = os.path.expanduser(conf.get('core', 'DAGS_FOLDER'))
+
 if 'mysql' in SQL_ALCHEMY_CONN:
     LongText = LONGTEXT
 else:
@@ -68,7 +70,7 @@ class DagBag(object):
             executor=DEFAULT_EXECUTOR,
             include_examples=True):
         if not dag_folder:
-            dag_folder = conf.get('core', 'DAGS_FOLDER')
+            dag_folder = DAGS_FOLDER
         logging.info("Filling up the DagBag from " + dag_folder)
         self.dag_folder = dag_folder
         self.dags = {}
@@ -121,7 +123,7 @@ class DagBag(object):
 
     def collect_dags(
             self,
-            dag_folder=conf.get('core', 'dags_folder'),
+            dag_folder=DAGS_FOLDER,
             only_if_updated=True):
         """
         Given a file path or a folder, this file looks for python modules,
@@ -333,7 +335,7 @@ class TaskInstance(Base):
     @property
     def log_url(self):
         iso = self.execution_date.isoformat()
-        BASE_URL = conf.get('core', 'BASE_URL')
+        BASE_URL = conf.get('webserver', 'BASE_URL')
         return BASE_URL + (
             "/admin/airflow/log"
             "?dag_id={self.dag_id}"
@@ -1137,8 +1139,7 @@ class DAG(Base):
 
     @property
     def filepath(self):
-        base = conf.get('core', 'DAGS_FOLDER')
-        fn = self.full_filepath.replace(base + '/', '')
+        fn = self.full_filepath.replace(DAGS_FOLDER + '/', '')
         fn = fn.replace(os.path.dirname(__file__) + '/', '')
         return fn
 

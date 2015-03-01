@@ -17,6 +17,8 @@ import sys
 
 import argparse
 
+DAGS_FOLDER = os.path.expanduser(conf.get('core', 'DAGS_FOLDER'))
+
 # Common help text across subcommands
 mark_success_help = "Mark jobs as succeeded without running them"
 subdir_help = "File location or directory from which to look for the dag"
@@ -322,7 +324,7 @@ def get_parser():
         action="store_true")
     parser_backfill.add_argument(
         "-sd", "--subdir", help=subdir_help,
-        default=conf.get('core', 'DAGS_FOLDER'))
+        default=DAGS_FOLDER)
     parser_backfill.set_defaults(func=backfill)
 
     ht = "Clear a set of task instance, as if they never ran"
@@ -349,7 +351,7 @@ def get_parser():
         "-d", "--downstream", help=ht, action="store_true")
     parser_clear.add_argument(
         "-sd", "--subdir", help=subdir_help,
-        default=conf.get('core', 'DAGS_FOLDER'))
+        default=DAGS_FOLDER)
     parser_clear.set_defaults(func=clear)
 
     ht = "Run a single task instance"
@@ -360,7 +362,7 @@ def get_parser():
         "execution_date", help="The execution date to run")
     parser_run.add_argument(
         "-sd", "--subdir", help=subdir_help,
-        default=conf.get('core', 'DAGS_FOLDER'))
+        default=DAGS_FOLDER)
     parser_run.add_argument(
         "-m", "--mark_success", help=mark_success_help, action="store_true")
     parser_run.add_argument(
@@ -397,19 +399,19 @@ def get_parser():
         "execution_date", help="The execution date to run")
     parser_test.add_argument(
         "-sd", "--subdir", help=subdir_help,
-        default=conf.get('core', 'DAGS_FOLDER'))
+        default=DAGS_FOLDER)
     parser_test.set_defaults(func=test)
 
     ht = "Start a Airflow webserver instance"
     parser_webserver = subparsers.add_parser('webserver', help=ht)
     parser_webserver.add_argument(
         "-p", "--port",
-        default=conf.get('server', 'WEB_SERVER_PORT'),
+        default=conf.get('webserver', 'WEB_SERVER_PORT'),
         type=int,
         help="Set the port on which to run the web server")
     parser_webserver.add_argument(
         "-hn", "--hostname",
-        default=conf.get('server', 'WEB_SERVER_HOST'),
+        default=conf.get('webserver', 'WEB_SERVER_HOST'),
         help="Set the hostname on which to run the web server")
     ht = "Use the server that ships with Flask in debug mode"
     parser_webserver.add_argument(
@@ -422,7 +424,7 @@ def get_parser():
         "-d", "--dag_id", help="The id of the dag to run")
     parser_master.add_argument(
         "-sd", "--subdir", help=subdir_help,
-        default=conf.get('core', 'DAGS_FOLDER'))
+        default=DAGS_FOLDER)
     parser_master.set_defaults(func=master)
 
     ht = "Initialize the metadata database"

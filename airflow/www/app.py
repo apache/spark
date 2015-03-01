@@ -50,11 +50,11 @@ special_attrs = {
     'bash_command': BashLexer,
 }
 
-AUTHENTICATE = conf.getboolean('core', 'AUTHENTICATE')
+AUTHENTICATE = conf.getboolean('master', 'AUTHENTICATE')
 if AUTHENTICATE is False:
     login_required = lambda x: x
 
-dagbag = models.DagBag(conf.get('core', 'DAGS_FOLDER'))
+dagbag = models.DagBag(os.path.expanduser(conf.get('core', 'DAGS_FOLDER')))
 utils.pessimistic_connection_handling()
 
 app = Flask(__name__)
@@ -595,7 +595,7 @@ class Airflow(BaseView):
         ago = (datetime.now() - latest_heartbeat).total_seconds()
         fail = False
         if (
-                ago > (2.5 * conf.getint('misc', "MASTER_HEARTBEAT_SEC"))
+                ago > (2.5 * conf.getint('master', "MASTER_HEARTBEAT_SEC"))
         ):
             fail = True
         d = {

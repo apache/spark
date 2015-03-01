@@ -4,14 +4,21 @@ import logging
 import os
 
 defaults = {
-    'misc': {
+    'core': {
+        'unit_test_mode': False,
+    },
+    'webserver': {
+        'base_url': 'http://localhost:8080',
+        'web_server_host': '0.0.0.0',
+        'web_server_port': '8080',
+    },
+    'master': {
         'statsd_on': False,
         'statsd_host': 'localhost',
         'statsd_port': 8125,
-    },
-    'core': {
+        'job_heartbeat_sec': 5,
+        'master_heartbeat_sec': 60,
         'authenticate': False,
-        'unit_test_mode': False,
     },
 }
 
@@ -20,11 +27,11 @@ DEFAULT_CONFIG = """\
 airflow_home = {AIRFLOW_HOME}
 dags_folder = {AIRFLOW_HOME}/dags
 base_log_folder = {AIRFLOW_HOME}/logs
-base_url = http://localhost:8080
 executor = SequentialExecutor
 sql_alchemy_conn = sqlite:///{AIRFLOW_HOME}/airflow.db
 
-[server]
+[webserver]
+base_url = http://localhost:8080
 web_server_host = 0.0.0.0
 web_server_port = 8080
 
@@ -41,28 +48,24 @@ celeryd_concurrency = 16
 worker_log_server_port = 8793
 broker_url = sqla+mysql://airflow:airflow@localhost:3306/airflow
 celery_result_backend = db+mysql://airflow:airflow@localhost:3306/airflow
-flower_port = 5555
+flower_port = 8383
 
-[misc]
+[master]
 job_heartbeat_sec = 5
 master_heartbeat_sec = 60
-statsd_on = false
-statsd_host = localhost
-statsd_port = 8125
 """
 
 TEST_CONFIG = """\
 [core]
 airflow_home = {AIRFLOW_HOME}
-authenticate = False
 dags_folder = {AIRFLOW_HOME}/dags
 base_log_folder = {AIRFLOW_HOME}/logs
-base_url = http://localhost:8080
 executor = SequentialExecutor
 sql_alchemy_conn = sqlite:///{AIRFLOW_HOME}/unittests.db
 unit_test_mode = True
 
-[server]
+[webserver]
+base_url = http://localhost:8080
 web_server_host = 0.0.0.0
 web_server_port = 8080
 
@@ -81,14 +84,10 @@ broker_url = sqla+mysql://airflow:airflow@localhost:3306/airflow
 celery_result_backend = db+mysql://airflow:airflow@localhost:3306/airflow
 flower_port = 5555
 
-[misc]
+[master]
 job_heartbeat_sec = 1
-master_heartbeat_sec = 30
-
-[statsd]
-statsd_on = false
-statsd_host = localhost
-statsd_port = 8125
+master_heartbeat_sec = 5
+authenticate = true
 """
 
 
@@ -99,14 +98,31 @@ class ConfigParserWithDefaults(ConfigParser):
         ConfigParser.__init__(self, *args, **kwargs)
 
     def get(self, section, key):
+        section = str(section).lower()
+        key = str(key).lower()
         d = self.defaults
         try:
             return ConfigParser.get(self, section, key)
         except:
             if section not in d or key not in d[section]:
-                raise Exception("section/key not found in config")
+                raise Exception(
+                    "section/key [{section}/{key}] not found "
+                    "in config".format(**locals()))
             else:
                 return d[section][key]
+
+    def getboolean(self, section, key):
+        val = str(self.get(section, key)).lower().strip()
+        if val == "true":
+            return True
+        elif val == "false":
+            return False
+        else:
+            Exception("Not a boolean.")
+
+    def getint(self, section, key):
+        return int(self.get(section, key))
+
 
 
 def mkdir_p(path):
