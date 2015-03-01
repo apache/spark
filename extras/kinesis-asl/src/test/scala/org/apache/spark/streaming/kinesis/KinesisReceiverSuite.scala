@@ -25,8 +25,7 @@ import org.apache.spark.streaming.Milliseconds
 import org.apache.spark.streaming.Seconds
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.TestSuiteBase
-import org.apache.spark.streaming.util.Clock
-import org.apache.spark.streaming.util.ManualClock
+import org.apache.spark.util.{ManualClock, Clock}
 
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfter
@@ -129,45 +128,45 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
   }
 
   test("should set checkpoint time to currentTime + checkpoint interval upon instantiation") {
-    when(currentClockMock.currentTime()).thenReturn(0)
+    when(currentClockMock.getTimeMillis()).thenReturn(0)
 
     val checkpointIntervalMillis = 10
     val checkpointState =
       new KinesisCheckpointState(Milliseconds(checkpointIntervalMillis), currentClockMock)
-    assert(checkpointState.checkpointClock.currentTime() == checkpointIntervalMillis)
+    assert(checkpointState.checkpointClock.getTimeMillis() == checkpointIntervalMillis)
 
-    verify(currentClockMock, times(1)).currentTime()
+    verify(currentClockMock, times(1)).getTimeMillis()
   }
 
   test("should checkpoint if we have exceeded the checkpoint interval") {
-    when(currentClockMock.currentTime()).thenReturn(0)
+    when(currentClockMock.getTimeMillis()).thenReturn(0)
 
     val checkpointState = new KinesisCheckpointState(Milliseconds(Long.MinValue), currentClockMock)
     assert(checkpointState.shouldCheckpoint())
 
-    verify(currentClockMock, times(1)).currentTime()
+    verify(currentClockMock, times(1)).getTimeMillis()
   }
 
   test("shouldn't checkpoint if we have not exceeded the checkpoint interval") {
-    when(currentClockMock.currentTime()).thenReturn(0)
+    when(currentClockMock.getTimeMillis()).thenReturn(0)
 
     val checkpointState = new KinesisCheckpointState(Milliseconds(Long.MaxValue), currentClockMock)
     assert(!checkpointState.shouldCheckpoint())
 
-    verify(currentClockMock, times(1)).currentTime()
+    verify(currentClockMock, times(1)).getTimeMillis()
   }
 
   test("should add to time when advancing checkpoint") {
-    when(currentClockMock.currentTime()).thenReturn(0)
+    when(currentClockMock.getTimeMillis()).thenReturn(0)
 
     val checkpointIntervalMillis = 10
     val checkpointState =
       new KinesisCheckpointState(Milliseconds(checkpointIntervalMillis), currentClockMock)
-    assert(checkpointState.checkpointClock.currentTime() == checkpointIntervalMillis)
+    assert(checkpointState.checkpointClock.getTimeMillis() == checkpointIntervalMillis)
     checkpointState.advanceCheckpoint()
-    assert(checkpointState.checkpointClock.currentTime() == (2 * checkpointIntervalMillis))
+    assert(checkpointState.checkpointClock.getTimeMillis() == (2 * checkpointIntervalMillis))
 
-    verify(currentClockMock, times(1)).currentTime()
+    verify(currentClockMock, times(1)).getTimeMillis()
   }
 
   test("shutdown should checkpoint if the reason is TERMINATE") {

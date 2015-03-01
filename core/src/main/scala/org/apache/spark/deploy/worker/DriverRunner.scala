@@ -20,19 +20,18 @@ package org.apache.spark.deploy.worker
 import java.io._
 
 import scala.collection.JavaConversions._
-import scala.collection.Map
 
 import akka.actor.ActorRef
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileUtil, Path}
 
 import org.apache.spark.{Logging, SparkConf}
-import org.apache.spark.deploy.{Command, DriverDescription, SparkHadoopUtil}
+import org.apache.spark.deploy.{DriverDescription, SparkHadoopUtil}
 import org.apache.spark.deploy.DeployMessages.DriverStateChanged
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.master.DriverState.DriverState
+import org.apache.spark.util.{Clock, SystemClock}
 
 /**
  * Manages the execution of one driver, including automatically restarting the driver on failure.
@@ -59,9 +58,7 @@ private[spark] class DriverRunner(
   // Decoupled for testing
   private[deploy] def setClock(_clock: Clock) = clock = _clock
   private[deploy] def setSleeper(_sleeper: Sleeper) = sleeper = _sleeper
-  private var clock = new Clock {
-    def currentTimeMillis(): Long = System.currentTimeMillis()
-  }
+  private var clock: Clock = new SystemClock()
   private var sleeper = new Sleeper {
     def sleep(seconds: Int): Unit = (0 until seconds).takeWhile(f => {Thread.sleep(1000); !killed})
   }
@@ -190,9 +187,9 @@ private[spark] class DriverRunner(
         initialize(process.get)
       }
 
-      val processStart = clock.currentTimeMillis()
+      val processStart = clock.getTimeMillis()
       val exitCode = process.get.waitFor()
-      if (clock.currentTimeMillis() - processStart > successfulRunDuration * 1000) {
+      if (clock.getTimeMillis() - processStart > successfulRunDuration * 1000) {
         waitSeconds = 1
       }
 
@@ -206,10 +203,6 @@ private[spark] class DriverRunner(
       finalExitCode = Some(exitCode)
     }
   }
-}
-
-private[deploy] trait Clock {
-  def currentTimeMillis(): Long
 }
 
 private[deploy] trait Sleeper {
