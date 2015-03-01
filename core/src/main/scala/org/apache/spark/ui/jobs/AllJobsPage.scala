@@ -44,10 +44,10 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
     def makeRow(job: JobUIData): Seq[Node] = {
       // scalastyle:off
       val killLink = if (killEnabled) {
-        val killLinkUri = "%s/jobs/job/kill?id=%s&terminate=true"
-          .format(UIUtils.prependBaseUri(parent.basePath), job.jobId)
-        val confirm = "return window.confirm('Are you sure you want to kill job %s ?');"
-          .format(job.jobId)
+        val killLinkUri = s"${UIUtils.prependBaseUri(parent.basePath)}/jobs/job/kill?" +
+          s"id=${job.jobId}&terminate=true"
+        val confirm = "return window.confirm(" +
+          s"'Are you sure you want to kill job ${job.jobId} ?');"
         <span class="kill-link">
           (<a href={killLinkUri} onclick={confirm}>kill</a>)
         </span>
