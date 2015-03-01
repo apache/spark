@@ -18,13 +18,12 @@ package org.apache.spark.util.expression
 
 import org.scalatest.FunSuite
 
-class SimpleExpressionParserSuite extends FunSuite {
+class NumberExpressionParserSuite extends FunSuite {
   val parser = new NumberExpressionParser()
 
   def testParser(in: String, expectedResult:Double): Unit = {
-    val parseResult = parser.parseAll(p = parser.expr, in = in)
-    assert(!parseResult.isEmpty)
-    assert(parseResult.get == expectedResult)
+    val parseResult = parser.parse(in)
+    assert(parseResult == Some(expectedResult))
   }
 
   test("simple addition") {

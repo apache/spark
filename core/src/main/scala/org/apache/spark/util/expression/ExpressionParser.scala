@@ -34,7 +34,7 @@ trait ExpressionParser[T] extends JavaTokenParsers {
     case h ~ t => h * t.foldLeft(1.0)((a, b) => a * b)
   }
 
-  def factor: Parser[Double] = extensions | decimalNumber ^^ (_.toDouble)
+  def factor: Parser[Double] = extensions | floatingPointNumber ^^ (_.toDouble) |
     "(" ~ expr ~ ")" ^^ {
       case "(" ~ expr ~ ")" => expr
     }
@@ -42,9 +42,9 @@ trait ExpressionParser[T] extends JavaTokenParsers {
   def extensions: Parser[Double]
 
   def multi: Parser[Double] = "*" ~ factor ^^ { case "*" ~ num => num }
-  def div: Parser[Double] = "/" ~ factor ^^ { case "/" ~ num => 1 / num }
+  def div: Parser[Double] = "/" ~ factor ^^ { case "/" ~ num => 1.0 / num }
   def add: Parser[Double] = "+" ~ term ^^ { case "+" ~ num => num }
-  def subtract: Parser[Double] = "-" ~ term ^^ { case "-" ~ num => -num }
+  def subtract: Parser[Double] = "-" ~ term ^^ { case "-" ~ num => - num }
 
   def parse(expression: String): Option[T]
 }

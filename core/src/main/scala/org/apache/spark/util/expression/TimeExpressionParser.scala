@@ -16,17 +16,34 @@
  */
 package org.apache.spark.util.expression
 
-class NumberExpressionParser extends ExpressionParser[Double]  {
+class TimeExpressionParser extends ExpressionParser[TimeQuantity] {
+  /**
+   * Those expression that are unique to a TimeExpression
+   */
+  def extensions = timeExpression | standAloneTimeUnit
 
-  // those expressions unique to a NumberExpressionParser
-  def extensions =
-    "numCores" ^^ (x=>Runtime.getRuntime.availableProcessors() * 1.0)
+  /**
+   * An expression of time quantity eg 30 S, 4 Hours etc
+   * returns number of bytes
+   */
+  def timeExpression: Parser[Double] = decimalNumber~timeUnit ^^ {
+    case decimalNumber~byteUnit => TimeQuantity(decimalNumber.toDouble, byteUnit).toMs
+  }
 
-  def parse(expression: String): Option[Double] = {
+  /**
+   * A byte quantity (eg 'MB') if not parsed as anything else is considered
+   * a single unit of the specified quantity
+   */
+  def standAloneTimeUnit: Parser[Double] = timeUnit ^^ {
+    case timeUnit => TimeQuantity(1.0,timeUnit).toMs
+  }
+
+  def timeUnit: Parser[String] = """^(?i)((second|minute|hour|day|sec|min)s?|(ms|s|m|h|d))""".r
+
+  def parse(expression: String): Option[TimeQuantity] = {
     parseAll(p = expr, in = expression) match {
-      case Success(x,_) => Option(x)
+      case Success(x,_) => Option(TimeQuantity(x))
       case _ => None
     }
   }
-
 }

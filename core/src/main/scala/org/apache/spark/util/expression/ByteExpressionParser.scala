@@ -25,8 +25,9 @@ package org.apache.spark.util.expression
  * numCores * 20 MB
  *
  * Supports basic arithmetic (+-/star) operations with precedence and brackets,
- * all bytes units (case insensitive) (KB,MB,GB,TB,KiB,MiB,GiB,TiB etc)
- * as well as the following special operators (case insensitive)
+ * all bytes units (case insensitive) (KB,MB,GB,TB,KiB,MiB,GiB,TiB etc) are expanded into
+ * their equivalent number of bytes
+ * The following special functions are also supported (case insensitive)
  *
  * numCores:          Number of cores assigned to the JVM
  * totalMemoryBytes:  current bytes of memory allocated to the JVM
@@ -39,7 +40,7 @@ class ByteExpressionParser extends ExpressionParser[ByteQuantity] {
   /**
    * Those expression that are unique to a ByteExpression
    */
-  def extensions = externInfo | byteExpression
+  def extensions = externInfo | byteExpression | standAloneByteUnit
 
   /**
    * Provides for functions that query the underlying JVM for system statistics
@@ -53,16 +54,19 @@ class ByteExpressionParser extends ExpressionParser[ByteQuantity] {
    * An expression of byte quantity eg 30 MB, 4 KiB etc
    * returns number of bytes
    */
-  def byteExpression = decimalNumber~byteUnit ^^ {
-    case decimalNumber~byteUnit => ByteQuantity(decimalNumber.toDouble, byteUnit.toUpperCase)
-      .toBytes
+  def byteExpression: Parser[Double] = decimalNumber~byteUnit ^^ {
+    case decimalNumber~byteUnit => ByteQuantity(decimalNumber.toDouble, byteUnit).toBytes
   }
 
+  /**
+   * A byte quantity (eg 'MB') if not parsed as anything else is considered
+   * a single unit of the specified quantity
+   */
   def standAloneByteUnit: Parser[Double] = byteUnit ^^ {
-    case byteUnit => ByteQuantity(1.0,byteUnit.toUpperCase).toBytes
+    case byteUnit => ByteQuantity(1.0,byteUnit).toBytes
   }
 
-  def byteUnit: Parser[String] = """((?i)[KMGTPEZY]?i?B)""".r
+  def byteUnit: Parser[String] = """^(?i)([KMGTPEZY]?i?B|[KMGT])""".r
 
   def parse(expression: String): Option[ByteQuantity] = {
     parseAll(p = expr, in = expression) match {
