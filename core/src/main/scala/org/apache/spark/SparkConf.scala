@@ -407,7 +407,7 @@ private[spark] object SparkConf extends Logging {
    * @param warn Whether to print a warning if the key is deprecated. Warnings will be printed
    *             only once for each key.
    */
-  def translateConfKey(userKey: String, warn: Boolean = false): String = {
+  private def translateConfKey(userKey: String, warn: Boolean = false): String = {
     deprecatedConfigs.get(userKey)
       .map { deprecatedKey =>
         if (warn) {

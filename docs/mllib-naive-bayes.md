@@ -56,8 +56,9 @@ val model = NaiveBayes.train(training, lambda = 1.0)
 val predictionAndLabel = test.map(p => (model.predict(p.features), p.label))
 val accuracy = 1.0 * predictionAndLabel.filter(x => x._1 == x._2).count() / test.count()
 
-model.save("myModelPath")
-val sameModel = NaiveBayesModel.load("myModelPath")
+// Save and load model
+model.save(sc, "myModelPath")
+val sameModel = NaiveBayesModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 
@@ -97,8 +98,9 @@ double accuracy = predictionAndLabel.filter(new Function<Tuple2<Double, Double>,
     }
   }).count() / (double) test.count();
 
-model.save("myModelPath");
-NaiveBayesModel sameModel = NaiveBayesModel.load("myModelPath");
+// Save and load model
+model.save(sc.sc(), "myModelPath");
+NaiveBayesModel sameModel = NaiveBayesModel.load(sc.sc(), "myModelPath");
 {% endhighlight %}
 </div>
 
