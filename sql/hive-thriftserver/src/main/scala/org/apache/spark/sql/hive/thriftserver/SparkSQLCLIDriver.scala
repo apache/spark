@@ -27,6 +27,7 @@ import jline.{ConsoleReader, History}
 import org.apache.commons.lang.StringUtils
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.hive.cli.{CliDriver, CliSessionState, OptionsProcessor}
 import org.apache.hadoop.hive.common.LogUtils.LogInitializationException
 import org.apache.hadoop.hive.common.{HiveInterruptCallback, HiveInterruptUtils, LogUtils}
@@ -36,12 +37,14 @@ import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.processors.{SetProcessor, CommandProcessor, CommandProcessorFactory}
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.shims.ShimLoader
+import org.apache.hadoop.util.ShutdownHookManager
 import org.apache.thrift.transport.TSocket
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.hive.HiveShim
 
 private[hive] object SparkSQLCLIDriver {
+  val SHUTDOWN_HOOK_PRIORITY: Int = 30
   private var prompt = "spark-sql"
   private var continuedPrompt = "".padTo(prompt.length, ' ')
   private var transport:TSocket = _
@@ -100,13 +103,15 @@ private[hive] object SparkSQLCLIDriver {
 
     SessionState.start(sessionState)
 
-    // Clean up after we exit
-    Runtime.getRuntime.addShutdownHook(
-      new Thread() {
+    // Clean up after we exit. Use higher priority than FileSystem.
+    assert(SHUTDOWN_HOOK_PRIORITY > FileSystem.SHUTDOWN_HOOK_PRIORITY)
+    ShutdownHookManager.get().addShutdownHook(
+      new Runnable {
         override def run() {
           SparkSQLEnv.stop()
         }
-      }
+      },
+      SHUTDOWN_HOOK_PRIORITY
     )
 
     // "-h" option has been passed, so connect to Hive thrift server.
