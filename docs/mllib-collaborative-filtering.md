@@ -201,7 +201,7 @@ We use the default ALS.train() method which assumes ratings are explicit. We eva
 recommendation by measuring the Mean Squared Error of rating prediction.
 
 {% highlight python %}
-from pyspark.mllib.recommendation import ALS, Rating
+from pyspark.mllib.recommendation import ALS, MatrixFactorizationModel, Rating
 
 # Load and parse the data
 data = sc.textFile("data/mllib/als/test.data")
@@ -220,7 +220,7 @@ MSE = ratesAndPreds.map(lambda r: (r[1][0] - r[1][1])**2).reduce(lambda x, y: x 
 print("Mean Squared Error = " + str(MSE))
 
 # Save and load model
-model.save("myModelPath")
+model.save(sc, "myModelPath")
 sameModel = MatrixFactorizationModel.load(sc, "myModelPath")
 {% endhighlight %}
 
