@@ -82,7 +82,7 @@ class TaskInfo(
   def status: String = {
     if (running) {
       "RUNNING"
-    } else if (gettingResult) {
+    } else if (gettingResult && running) {
       "GET RESULT"
     } else if (failed) {
       "FAILED"
