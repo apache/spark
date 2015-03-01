@@ -523,7 +523,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
       // TODO extra is in type of ASTNode which means the logical plan is not resolved
       // Need to think about how to implement the CreateTableAsSelect.resolved
-      case CreateTableAsSelect(db, tableName, child, allowExisting, Some(extra: ASTNode)) =>
+      case CreateTableAsSelect(db, tableName, child, allowExisting, extraInfo: Option[ASTNode]) =>
         val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
         val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
 
@@ -531,19 +531,23 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         val desc: Option[CreateTableDesc] = if (tableExists(Seq(databaseName, tblName))) {
           None
         } else {
-          val sa = new SemanticAnalyzer(hive.hiveconf) {
-            override def analyzeInternal(ast: ASTNode) {
-              // A hack to intercept the SemanticAnalyzer.analyzeInternal,
-              // to ignore the SELECT clause of the CTAS
-              val method = classOf[SemanticAnalyzer].getDeclaredMethod(
-                "analyzeCreateTable", classOf[ASTNode], classOf[QB])
-              method.setAccessible(true)
-              method.invoke(this, ast, this.getQB)
-            }
+          extraInfo match {
+            case Some(extra: ASTNode) =>
+              val sa = new SemanticAnalyzer(hive.hiveconf) {
+                override def analyzeInternal(ast: ASTNode) {
+                  // A hack to intercept the SemanticAnalyzer.analyzeInternal,
+                  // to ignore the SELECT clause of the CTAS
+                  val method = classOf[SemanticAnalyzer].getDeclaredMethod(
+                    "analyzeCreateTable", classOf[ASTNode], classOf[QB])
+                  method.setAccessible(true)
+                  method.invoke(this, ast, this.getQB)
+                }
+              }
+              
+              sa.analyze(extra, new Context(hive.hiveconf))
+              Some(sa.getQB().getTableDesc)
+            case None => None
           }
-
-          sa.analyze(extra, new Context(hive.hiveconf))
-          Some(sa.getQB().getTableDesc)
         }
 
         // Check if the query specifies file format or storage handler.
@@ -581,34 +585,6 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         }
 
       case p: LogicalPlan if p.resolved => p
-
-      case p @ CreateTableAsSelect(db, tableName, child, allowExisting, None) =>
-        val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
-        if (hive.convertCTAS) {
-          if (dbName.isDefined) {
-            throw new AnalysisException(
-              "Cannot specify database name in a CTAS statement " +
-              "when spark.sql.hive.convertCTAS is set to true.")
-          }
-
-          val mode = if (allowExisting) SaveMode.Ignore else SaveMode.ErrorIfExists
-          CreateTableUsingAsSelect(
-            tblName,
-            hive.conf.defaultDataSourceName,
-            temporary = false,
-            mode,
-            options = Map.empty[String, String],
-            child
-          )
-        } else {
-          val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
-          execution.CreateTableAsSelect(
-            databaseName,
-            tableName,
-            child,
-            allowExisting,
-            None)
-        }
     }
   }
 
