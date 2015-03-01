@@ -119,6 +119,17 @@ private[sql] case class InMemoryRelation(
           var rowCount = 0
           while (rowIterator.hasNext && rowCount < batchSize) {
             val row = rowIterator.next()
+
+            // Added for SPARK-6082. This assertion can be useful for scenarios when something
+            // like Hive TRANSFORM is used. The external data generation script used in TRANSFORM
+            // may result malformed rows, causing ArrayIndexOutOfBoundsException, which is somewhat
+            // hard to decipher.
+            assert(
+              row.size == columnBuilders.size,
+              s"""Row column number mismatch, expected ${output.size} columns, but got ${row.size}.
+                 |Row content: $row
+               """.stripMargin)
+
             var i = 0
             while (i < row.length) {
               columnBuilders(i).appendFrom(row, i)
