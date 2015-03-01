@@ -21,7 +21,7 @@ from airflow.utils import State
 
 
 Base = models.Base
-ID_LEN = conf.getint('misc', 'ID_LEN')
+ID_LEN = models.ID_LEN
 
 # Setting up a statsd client if needed
 statsd = None

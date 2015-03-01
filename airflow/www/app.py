@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 import dateutil.parser
 import json
 import logging
+import os
 import re
 import socket
 import sys
@@ -684,7 +685,8 @@ class Airflow(BaseView):
 
     @expose('/log')
     def log(self):
-        BASE_LOG_FOLDER = conf.get('core', 'BASE_LOG_FOLDER')
+        BASE_LOG_FOLDER = os.path.expanduser(
+            conf.get('core', 'BASE_LOG_FOLDER'))
         dag_id = request.args.get('dag_id')
         task_id = request.args.get('task_id')
         execution_date = request.args.get('execution_date')

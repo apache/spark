@@ -25,7 +25,7 @@ from airflow.utils import State
 from airflow.utils import apply_defaults
 
 Base = declarative_base()
-ID_LEN = conf.getint('misc', 'ID_LEN')
+ID_LEN = 250
 SQL_ALCHEMY_CONN = conf.get('core', 'SQL_ALCHEMY_CONN')
 if 'mysql' in SQL_ALCHEMY_CONN:
     LongText = LONGTEXT
@@ -326,8 +326,9 @@ class TaskInstance(Base):
     @property
     def log_filepath(self):
         iso = self.execution_date.isoformat()
-        return conf.get('core', 'BASE_LOG_FOLDER') + \
-            "/{self.dag_id}/{self.task_id}/{iso}.log".format(**locals())
+        log = os.path.expanduser(conf.get('core', 'BASE_LOG_FOLDER'))
+        return (
+            "{log}/{self.dag_id}/{self.task_id}/{iso}.log".format(**locals()))
 
     @property
     def log_url(self):

@@ -64,8 +64,8 @@ def run(args):
 
     utils.pessimistic_connection_handling()
     # Setting up logging
-    directory = conf.get('core', 'BASE_LOG_FOLDER') + \
-        "/{args.dag_id}/{args.task_id}".format(args=args)
+    log = os.path.expanduser(conf.get('core', 'BASE_LOG_FOLDER'))
+    directory = log + "/{args.dag_id}/{args.task_id}".format(args=args)
     if not os.path.exists(directory):
         os.makedirs(directory)
     args.execution_date = dateutil.parser.parse(args.execution_date)
@@ -230,14 +230,12 @@ def serve_logs(args):
 
     @flask_app.route('/log/<path:filename>')
     def serve_logs(filename):
-        conf.get('core', 'BASE_LOG_FOLDER')
-        print filename
+        log = os.path.expanduser(conf.get('core', 'BASE_LOG_FOLDER'))
         return flask.send_from_directory(
-            conf.get('core', 'BASE_LOG_FOLDER'),
+            log,
             filename,
             mimetype="application/json",
             as_attachment=False)
-    print(conf.get('core', 'BASE_LOG_FOLDER'))
     WORKER_LOG_SERVER_PORT = \
         int(conf.get('celery', 'WORKER_LOG_SERVER_PORT'))
     flask_app.run(

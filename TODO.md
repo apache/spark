@@ -28,6 +28,7 @@ TODO
 
 #### Backend
 * Callbacks
+* Master auto dag refresh at time intervals
 * Set default args at the DAG level?
 * Prevent timezone chagne on import
 * Add decorator to timeout imports on master process [lib](https://github.com/pnpnpn/timeout-decorator)

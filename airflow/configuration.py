@@ -9,18 +9,20 @@ defaults = {
         'statsd_host': 'localhost',
         'statsd_port': 8125,
     },
+    'core': {
+        'authenticate': False,
+        'unit_test_mode': False,
+    },
 }
 
 DEFAULT_CONFIG = """\
 [core]
 airflow_home = {AIRFLOW_HOME}
-authenticate = False
 dags_folder = {AIRFLOW_HOME}/dags
 base_log_folder = {AIRFLOW_HOME}/logs
 base_url = http://localhost:8080
 executor = SequentialExecutor
 sql_alchemy_conn = sqlite:///{AIRFLOW_HOME}/airflow.db
-unit_test_mode = False
 
 [server]
 web_server_host = 0.0.0.0
@@ -44,7 +46,6 @@ flower_port = 5555
 [misc]
 job_heartbeat_sec = 5
 master_heartbeat_sec = 60
-id_len = 250
 statsd_on = false
 statsd_host = localhost
 statsd_port = 8125
@@ -83,7 +84,6 @@ flower_port = 5555
 [misc]
 job_heartbeat_sec = 1
 master_heartbeat_sec = 30
-id_len = 250
 
 [statsd]
 statsd_on = false
@@ -126,7 +126,7 @@ Setting AIRFLOW_HOME and AIRFLOW_CONFIG from environment variables, using
 if 'AIRFLOW_HOME' not in os.environ:
     AIRFLOW_HOME = os.path.expanduser('~/airflow')
 else:
-    AIRFLOW_HOME = os.environ['AIRFLOW_HOME']
+    AIRFLOW_HOME = os.path.expanduser(os.environ['AIRFLOW_HOME'])
 
 mkdir_p(AIRFLOW_HOME)
 
