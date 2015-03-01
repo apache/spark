@@ -476,16 +476,16 @@ private[spark] class BlockManagerInfo(
       val blockStatus: BlockStatus = _blocks.get(blockId)
       _blocks.remove(blockId)
       if (blockStatus.storageLevel.useMemory) {
-        logDebug("Removed %s on %s in memory (size: %s, free: %s)".format(
+        logInfo("Removed %s on %s in memory (size: %s, free: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(blockStatus.memSize),
           Utils.bytesToString(_remainingMem)))
       }
       if (blockStatus.storageLevel.useDisk) {
-        logDebug("Removed %s on %s on disk (size: %s)".format(
+        logInfo("Removed %s on %s on disk (size: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(blockStatus.diskSize)))
       }
       if (blockStatus.storageLevel.useOffHeap) {
-        logDebug("Removed %s on %s on tachyon (size: %s)".format(
+        logInfo("Removed %s on %s on tachyon (size: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(blockStatus.tachyonSize)))
       }
     }

@@ -371,7 +371,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   private def ensureFreeSpace(
       blockIdToAdd: BlockId,
       space: Long): ResultWithDroppedBlocks = {
-    logDebug(s"ensureFreeSpace($space) called with curMem=$currentMemory, maxMem=$maxMemory")
+    logInfo(s"ensureFreeSpace($space) called with curMem=$currentMemory, maxMem=$maxMemory")
 
     val droppedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
 
