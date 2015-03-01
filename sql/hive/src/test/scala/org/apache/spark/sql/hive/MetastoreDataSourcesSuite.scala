@@ -667,7 +667,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     assert(
       schema.json.size > conf.schemaStringLengthThreshold,
       "To correctly test the fix of SPARK-6024, the value of " +
-        s"spark.sql.sources.schemaStringLengthThreshold needs to be less than ${schema.json.size}")
+      s"spark.sql.sources.schemaStringLengthThreshold needs to be less than ${schema.json.size}")
     // Manually create a metastore data source table.
     catalog.createDataSourceTable(
       tableName = "wide_schema",
