@@ -268,7 +268,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             </td> +: getFormattedTimeQuantiles(serializationTimes)
 
           val gettingResultTimes = validTasks.map { case TaskUIData(info, _, _) =>
-            getGettingResultTime(info)
+            getGettingResultTime(info).toDouble
           }
           val gettingResultQuantiles =
             <td>
