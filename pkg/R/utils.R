@@ -70,29 +70,6 @@ isRDD <- function(name, env) {
   inherits(obj, "RDD")
 }
 
-# Returns TRUE if `name` is a function in the SparkR package.
-# TODO: Handle package-private functions as well ?
-isSparkFunction <- function(name) {
-  if (is.function(name)) {
-    fun <- name
-  } else {
-    if (!(is.character(name) && length(name) == 1L || is.symbol(name))) {
-      fun <- eval.parent(substitute(substitute(name)))
-      if (!is.symbol(fun))
-        stop(gettextf("'%s' is not a function, character or symbol",
-                      deparse(fun)), domain = NA)
-    } else {
-      fun <- name
-    }
-    envir <- parent.frame(2)
-    if (!exists(as.character(fun), mode = "function", envir = envir)) {
-      return(FALSE)
-    }
-    fun <- get(as.character(fun), mode = "function", envir = envir)
-  }
-  packageName(environment(fun)) == "SparkR"
-}
-
 #' Compute the hashCode of an object
 #'
 #' Java-style function to compute the hashCode for the given object. Returns
