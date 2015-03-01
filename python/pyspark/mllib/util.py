@@ -185,8 +185,8 @@ class Saveable(object):
 
         :param sc: Spark context used to save model data.
         :param path: Path specifying the directory in which to save
-                     this model. This directory and any intermediate
-                     directory will be created if needed.
+                     this model. If the directory already exists,
+                     this method throws an exception.
         """
         raise NotImplementedError
 
