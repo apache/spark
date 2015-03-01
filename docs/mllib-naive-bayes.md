@@ -120,19 +120,16 @@ from pyspark.mllib.classification import NaiveBayes
 from pyspark.mllib.linalg import Vectors
 from pyspark.mllib.regression import LabeledPoint
 
-data = sc.textFile("data/mllib/sample_naive_bayes_data.txt")
+def parseLine(line):
+    parts = line.split(',')
+    label = float(parts[0])
+    features = Vectors.dense([float(x) for x in parts[1].split(' ')])
+    return LabeledPoint(label, features)
 
-# Preprocessing
-splitData = data.map(lambda line: line.split(','))
-parsedData = splitData.map(
-  lambda parts: LabeledPoint(
-    float(parts[0]),
-    Vectors.dense(map(lambda x: float(x), parts[1].split(' ')))
-    )
-  )
+data = sc.textFile('data/mllib/sample_naive_bayes_data.txt').map(parseLine)
 
-# Split data into training (60%) and test (40%)
-training, test = parsedData.randomSplit([0.6, 0.4], seed = 0)
+# Split data aproximately into training (60%) and test (40%)
+training, test = data.randomSplit([0.6, 0.4], seed = 0)
 
 # Train a naive Bayes model.
 model = NaiveBayes.train(training, 1.0)
