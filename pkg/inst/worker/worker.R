@@ -39,11 +39,9 @@ for (pkg in packageNames) {
 
 # read function dependencies
 funcLen <- SparkR:::readInt(inputCon)
-if (funcLen > 0) {
-  computeFunc <- unserialize(SparkR:::readRawLen(inputCon, funcLen))
-  env <- environment(computeFunc)
-  parent.env(env) <- .GlobalEnv  # Attach under global environment.
-}
+computeFunc <- unserialize(SparkR:::readRawLen(inputCon, funcLen))
+env <- environment(computeFunc)
+parent.env(env) <- .GlobalEnv  # Attach under global environment.
 
 # Read and set broadcast variables
 numBroadcastVars <- SparkR:::readInt(inputCon)

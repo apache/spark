@@ -53,7 +53,7 @@ test_that("cleanClosure on R functions", {
   funcEnv <- new.env(parent = env2)
   f <- function(x) { min(g(x) + y) }
   environment(f) <- funcEnv  # enclosing relationship: f -> funcEnv -> env2 -> .GlobalEnv
-  newF <- SparkR:::cleanClosure(f)
+  newF <- cleanClosure(f)
   env <- environment(newF)
   expect_equal(length(ls(env)), 2)  # "min" should not be included
   actual <- get("y", envir = env)
@@ -61,11 +61,12 @@ test_that("cleanClosure on R functions", {
   actual <- get("g", envir = env)
   expect_equal(actual, g)
 
+  # Test for recursive closure capture for a free variable of a function.
   g <- function(x) { x + y }
   f <- function(x) { lapply(x, g) + 1 }
-  newF <- SparkR:::cleanClosure(f)
+  newF <- cleanClosure(f)
   env <- environment(newF)
-  expect_equal(length(ls(env)), 1)  # Only "g", "y" should be in the environemnt of g.
+  expect_equal(length(ls(env)), 1)  # Only "g". "y" should be in the environemnt of g.
   expect_equal(ls(env), "g")
   newG <- get("g", envir = env)
   env <- environment(newG)
@@ -78,7 +79,7 @@ test_that("cleanClosure on R functions", {
     g <- function(y) { y * 2 }
     g(x)
   }
-  newF <- SparkR:::cleanClosure(f)
+  newF <- cleanClosure(f)
   env <- environment(newF)
   expect_equal(length(ls(env)), 0)  # "y" and "g" should not be included.
 })

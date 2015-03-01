@@ -266,9 +266,7 @@ convertEnvsToList <- function(keys, vals) {
 #   newEnv A new function environment to store necessary function dependencies.
 processClosure <- function(node, oldEnv, argNames, newEnv) {
   nodeLen <- length(node)
-  if (nodeLen == 0) {
-    return
-  }
+  
   if (nodeLen > 1 && typeof(node) == "language") {
     # Recursive case: current AST node is an internal node, check for its children. 
     if (length(node[[1]]) > 1) {
@@ -277,36 +275,35 @@ processClosure <- function(node, oldEnv, argNames, newEnv) {
       }
     } else {  # if node[[1]] is length of 1, might be an R primitive.
       nodeChar <- as.character(node[[1]])
-      switch(nodeChar, 
-             "{" = {  # Start of a function body.
-               for (i in 2:nodeLen) {
-                 processClosure(node[[i]], oldEnv, argNames, newEnv)
-               }
-             },
-             "<-" = {  # Assignment.
-               defVar <- node[[2]]
-               if (length(defVar) == 1 && typeof(defVar) == "symbol") {
-                 # Add the defined variable name into .defVars.
-                 assign(".defVars", 
-                        c(get(".defVars", envir = .sparkREnv), as.character(defVar)), 
-                        envir = .sparkREnv)
-               }
-               for (i in 3:nodeLen) {
-                 processClosure(node[[i]], oldEnv, argNames, newEnv)
-               }
-             },
-             "function" = {  # Function definition.
-               newArgs <- names(node[[2]])
-               argNames <- c(argNames, newArgs)  # Add parameter names.
-               for (i in 3:nodeLen) {
-                 processClosure(node[[i]], oldEnv, argNames, newEnv)
-               }
-             }, 
-             {
-               for (i in 1:nodeLen) {
-                 processClosure(node[[i]], oldEnv, argNames, newEnv)
-               }             
-            })
+      if (nodeChar == "{" || nodeChar == "(") {  # Skip start symbol.
+        for (i in 2:nodeLen) {
+          processClosure(node[[i]], oldEnv, argNames, newEnv)
+        }
+      } else if (nodeChar == "<-" || nodeChar == "=" || 
+                   nodeChar == "<<-") { # Assignment Ops.
+        defVar <- node[[2]]
+        if (length(defVar) == 1 && typeof(defVar) == "symbol") {
+          # Add the defined variable name into .defVars.
+          assign(".defVars", 
+                 c(get(".defVars", envir = .sparkREnv), as.character(defVar)), 
+                 envir = .sparkREnv)
+        } else {
+          processClosure(node[[2]], oldEnv, argNames, newEnv)
+        }
+        for (i in 3:nodeLen) {
+          processClosure(node[[i]], oldEnv, argNames, newEnv)
+        }
+      } else if (nodeChar == "function") {  # Function definition.
+        newArgs <- names(node[[2]])
+        argNames <- c(argNames, newArgs)  # Add parameter names.
+        for (i in 3:nodeLen) {
+          processClosure(node[[i]], oldEnv, argNames, newEnv)
+        }
+      } else {
+        for (i in 1:nodeLen) {
+          processClosure(node[[i]], oldEnv, argNames, newEnv)
+        }
+      }
     }
   } else if (nodeLen == 1 && 
                (typeof(node) == "symbol" || typeof(node) == "language")) {
@@ -322,20 +319,19 @@ processClosure <- function(node, oldEnv, argNames, newEnv) {
       # as they are assumed to be loaded on workers.
       while (!identical(func.env, topEnv)) {
         # Namespaces other than "SparkR" will not be searched.
-        if (!isNamespace(func.env) || getNamespaceName(func.env) == "SparkR") {
+        if (!isNamespace(func.env) || 
+              getNamespaceName(func.env) == "SparkR" && 
+              !nodeChar %in% getNamespaceExports("SparkR")) {  # Only include SparkR internals.
           # Set parameter 'inherits' to FALSE since we do not need to search in
           # attached package environments.
           if (exists(nodeChar, envir = func.env, inherits = FALSE)) {
-            if (!isNamespace(func.env) || 
-                  !nodeChar %in% getNamespaceExports("SparkR")) {  # Only include SparkR internals.
-              obj <- get(nodeChar, envir = func.env)
-              if (is.function(obj)) {  
-                # if the node is a function call, recursively clean its closure.
-                obj <- cleanClosure(obj)
-              }
-              assign(nodeChar, obj, envir = newEnv)
-              break
+            obj <- get(nodeChar, envir = func.env, inherits = FALSE)
+            if (is.function(obj)) {  
+              # if the node is a function call, recursively clean its closure.
+              obj <- cleanClosure(obj)
             }
+            assign(nodeChar, obj, envir = newEnv)
+            break
           }
         }
         
@@ -348,7 +344,7 @@ processClosure <- function(node, oldEnv, argNames, newEnv) {
 
 # Utility function to get user defined function (UDF) dependencies (closure). 
 # More specifically, this function captures the values of free variables defined 
-# outside a UDF, and stores them in a new environment.
+# outside a UDF, and stores them in the function's environment.
 # param
 #   func A function whose closure needs to be captured.
 # return value
