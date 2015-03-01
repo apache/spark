@@ -78,7 +78,7 @@ class SparkRBackend {
 object SparkRBackend {
   def main(args: Array[String]) {
     if (args.length < 1) {
-      System.err.println("Usage: SparkRBackend <path>")
+      System.err.println("Usage: SparkRBackend <tempFilePath>")
       System.exit(-1)
     }
     val sparkRBackend = new SparkRBackend()
