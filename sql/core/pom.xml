@@ -109,5 +109,13 @@
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
+    <resources>
+      <resource>
+        <directory>../../python</directory>
+        <includes>
+          <include>pyspark/sql/*.py</include>
+        </includes>
+      </resource>
+    </resources>
   </build>
 </project>
