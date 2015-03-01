@@ -43,9 +43,9 @@ test_that("cleanClosure on R functions", {
   newF <- cleanClosure(f)
   env <- environment(newF)
   expect_equal(length(ls(env)), 2)  # y, g
-  actual <- get("y", envir = env)
+  actual <- get("y", envir = env, inherits = FALSE)
   expect_equal(actual, y)
-  actual <- get("g", envir = env)
+  actual <- get("g", envir = env, inherits = FALSE)
   expect_equal(actual, g)
   
   # Test for nested enclosures and package variables.
@@ -56,9 +56,9 @@ test_that("cleanClosure on R functions", {
   newF <- cleanClosure(f)
   env <- environment(newF)
   expect_equal(length(ls(env)), 2)  # "min" should not be included
-  actual <- get("y", envir = env)
+  actual <- get("y", envir = env, inherits = FALSE)
   expect_equal(actual, y)
-  actual <- get("g", envir = env)
+  actual <- get("g", envir = env, inherits = FALSE)
   expect_equal(actual, g)
 
   # Test for recursive closure capture for a free variable of a function.
@@ -68,10 +68,10 @@ test_that("cleanClosure on R functions", {
   env <- environment(newF)
   expect_equal(length(ls(env)), 1)  # Only "g". "y" should be in the environemnt of g.
   expect_equal(ls(env), "g")
-  newG <- get("g", envir = env)
+  newG <- get("g", envir = env, inherits = FALSE)
   env <- environment(newG)
   expect_equal(length(ls(env)), 1)
-  actual <- get("y", envir = env)
+  actual <- get("y", envir = env, inherits = FALSE)
   expect_equal(actual, y)
   
   # Test for function (and variable) definitions.
@@ -91,8 +91,17 @@ test_that("cleanClosure on R functions", {
   newF <- cleanClosure(f)
   env <- environment(newF)
   expect_equal(ls(env), "t")
-  expect_equal(get("t", envir = env), t)
+  expect_equal(get("t", envir = env, inherits = FALSE), t)
   actual <- collect(lapply(rdd, f))
   expected <- as.list(c(rep(FALSE, 4), rep(TRUE, 6)))
   expect_equal(actual, expected)
+  
+  # Test for broadcast variables.
+  a <- matrix(nrow=10, ncol=10, data=rnorm(100))
+  aBroadcast <- broadcast(sc, a)
+  normMultiply <- function(x) { norm(aBroadcast$value) * x }
+  newnormMultiply <- SparkR:::cleanClosure(normMultiply)
+  env <- environment(newnormMultiply)
+  expect_equal(ls(env), "aBroadcast")
+  expect_equal(get("aBroadcast", envir = env, inherits = FALSE), aBroadcast)
 })

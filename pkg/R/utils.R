@@ -299,6 +299,8 @@ processClosure <- function(node, oldEnv, argNames, newEnv) {
         for (i in 3:nodeLen) {
           processClosure(node[[i]], oldEnv, argNames, newEnv)
         }
+      } else if (nodeChar == "$") {  # Skip the field.
+        processClosure(node[[2]], oldEnv, argNames, newEnv)
       } else {
         for (i in 1:nodeLen) {
           processClosure(node[[i]], oldEnv, argNames, newEnv)
