@@ -273,7 +273,7 @@ processClosure <- function(node, oldEnv, argNames, newEnv) {
       for (i in 1:nodeLen) {
         processClosure(node[[i]], oldEnv, argNames, newEnv)
       }
-    } else {  # if node[[1]] is length of 1, might be an R primitive.
+    } else {  # if node[[1]] is length of 1, check for some R special functions.
       nodeChar <- as.character(node[[1]])
       if (nodeChar == "{" || nodeChar == "(") {  # Skip start symbol.
         for (i in 2:nodeLen) {
@@ -320,8 +320,8 @@ processClosure <- function(node, oldEnv, argNames, newEnv) {
       while (!identical(func.env, topEnv)) {
         # Namespaces other than "SparkR" will not be searched.
         if (!isNamespace(func.env) || 
-              getNamespaceName(func.env) == "SparkR" && 
-              !nodeChar %in% getNamespaceExports("SparkR")) {  # Only include SparkR internals.
+              (getNamespaceName(func.env) == "SparkR" && 
+              !(nodeChar %in% getNamespaceExports("SparkR")))) {  # Only include SparkR internals.
           # Set parameter 'inherits' to FALSE since we do not need to search in
           # attached package environments.
           if (exists(nodeChar, envir = func.env, inherits = FALSE)) {

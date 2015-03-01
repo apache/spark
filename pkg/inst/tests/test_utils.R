@@ -48,10 +48,10 @@ test_that("cleanClosure on R functions", {
   actual <- get("g", envir = env)
   expect_equal(actual, g)
   
-  # Check for nested enclosures and package variables.
+  # Test for nested enclosures and package variables.
   env2 <- new.env()
   funcEnv <- new.env(parent = env2)
-  f <- function(x) { min(g(x) + y) }
+  f <- function(x) { log(g(x) + y) }
   environment(f) <- funcEnv  # enclosing relationship: f -> funcEnv -> env2 -> .GlobalEnv
   newF <- cleanClosure(f)
   env <- environment(newF)
@@ -82,4 +82,17 @@ test_that("cleanClosure on R functions", {
   newF <- cleanClosure(f)
   env <- environment(newF)
   expect_equal(length(ls(env)), 0)  # "y" and "g" should not be included.
+  
+  # Test for overriding variables in base namespace (Issue: SparkR-196).
+  nums <- as.list(1:10)
+  rdd <- parallelize(sc, nums, 2L)
+  t = 4  # Override base::t in .GlobalEnv.
+  f <- function(x) { x > t }
+  newF <- cleanClosure(f)
+  env <- environment(newF)
+  expect_equal(ls(env), "t")
+  expect_equal(get("t", envir = env), t)
+  actual <- collect(lapply(rdd, f))
+  expected <- as.list(c(rep(FALSE, 4), rep(TRUE, 6)))
+  expect_equal(actual, expected)
 })
