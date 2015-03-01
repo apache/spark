@@ -14,12 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.util
+package org.apache.spark.util.expression
 
 import org.scalatest.FunSuite
 
 class SimpleExpressionParserSuite extends FunSuite {
-  val parser = new SimpleExpressionParser()
+  val parser = new NumberExpressionParser()
 
   def testParser(in: String, expectedResult:Double): Unit = {
     val parseResult = parser.parseAll(p = parser.expr, in = in)
@@ -28,11 +28,11 @@ class SimpleExpressionParserSuite extends FunSuite {
   }
 
   test("simple addition") {
-    testParser(in = "1+1", expectedResult = 2.0)
+    testParser(in = "4+4", expectedResult = 8)
   }
 
   test("simple subtraction") {
-    testParser(in = "1-1", expectedResult = 0)
+    testParser(in = "5-5", expectedResult = 0)
   }
 
   test("simple division") {
@@ -40,7 +40,7 @@ class SimpleExpressionParserSuite extends FunSuite {
   }
 
   test("simple multiplication") {
-    testParser(in = "1*2", expectedResult = 2.0)
+    testParser(in = "1*2", expectedResult = 2)
   }
 
   test("multiplication and division") {
@@ -77,5 +77,19 @@ class SimpleExpressionParserSuite extends FunSuite {
 
   test("divide by zero") {
     testParser(in = "1 / 0", expectedResult = Double.PositiveInfinity)
+  }
+
+  test("multiplay by zero") {
+    testParser(in = "1 * 0", expectedResult = 0.0)
+  }
+
+  test("numCores") {
+    val numCores = Runtime.getRuntime.availableProcessors() * 1.0
+    testParser(in="numCores", expectedResult=numCores)
+  }
+
+  test("numCores fractional") {
+    val numCores = Runtime.getRuntime.availableProcessors() * 1.0
+    testParser(in="numCores/2", expectedResult=numCores/2)
   }
 }

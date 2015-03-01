@@ -14,29 +14,39 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.util
+package org.apache.spark.util.expression
+
+
 
 import scala.util.parsing.combinator.JavaTokenParsers
 
 /**
- * A simple parser of arithmetic expressions with a special token
- * to represent the number of cores in the machine.
- * Inspired by examples given by Ordesky, Spoon and Venners.
+ * A simple parser of arithmetic expressions
+ * Inspired by examples given in Ordesky, Spoon and Venners.
  */
-class SimpleExpressionParser extends JavaTokenParsers {
+trait ExpressionParser[T] extends JavaTokenParsers {
+
   def expr: Parser[Double] = term ~ rep(add | subtract) ^^ {
     case h ~ t => h + t.sum
   }
+
   def term: Parser[Double] = factor ~ rep(multi | div) ^^ {
     case h ~ t => h * t.foldLeft(1.0)((a, b) => a * b)
   }
-  def factor: Parser[Double] = floatingPointNumber ^^ (_.toDouble) | "(" ~ expr ~ ")" ^^ {
-    case "(" ~ expr ~ ")" => expr
-  }
+
+  def factor: Parser[Double] = extensions | decimalNumber ^^ (_.toDouble)
+    "(" ~ expr ~ ")" ^^ {
+      case "(" ~ expr ~ ")" => expr
+    }
+
+  def extensions: Parser[Double]
+
   def multi: Parser[Double] = "*" ~ factor ^^ { case "*" ~ num => num }
-  def div: Parser[Double] = "/" ~ factor ^^ { case "/" ~ num => 1.0 / num }
+  def div: Parser[Double] = "/" ~ factor ^^ { case "/" ~ num => 1 / num }
   def add: Parser[Double] = "+" ~ term ^^ { case "+" ~ num => num }
   def subtract: Parser[Double] = "-" ~ term ^^ { case "-" ~ num => -num }
+
+  def parse(expression: String): Option[T]
 }
 
 
