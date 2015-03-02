@@ -408,7 +408,7 @@ private[clustering] object LDA {
 
   /**
    * Optimizer for Online LDA algorithm which breaks corpus into mini-batches and scans only once.
-   * Hoffman, Blei and Bach, “Online Learning for Latent Dirichlet Allocation.” NIPS, 2010.
+   * Hoffman, Blei and Bach, "Online Learning for Latent Dirichlet Allocation." NIPS, 2010.
    */
   private[clustering] class OnlineLDAOptimizer(
     private val documents: RDD[(Long, Vector)],
