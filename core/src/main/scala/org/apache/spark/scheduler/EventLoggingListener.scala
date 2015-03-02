@@ -243,7 +243,7 @@ private[spark] object EventLoggingListener extends Logging {
   /**
    * Opens an event log file and returns an input stream that contains the event data.
    *
-   * @return input stream that holds one JSON serialized event per line
+   * @return input stream that holds one JSON record per line
    */
   def openEventLog(log: Path, fs: FileSystem): InputStream = {
     // It's not clear whether FileSystem.open() throws FileNotFoundException or just plain
@@ -256,7 +256,7 @@ private[spark] object EventLoggingListener extends Logging {
 
     // Compression codec is encoded as an extension, e.g. app_123.lzf
     // Since we sanitize the app ID to not include periods, it is safe to split on it
-    val logName = log.getName.replaceAll(IN_PROGRESS, "")
+    val logName = log.getName.stripSuffix(IN_PROGRESS)
     val codecName: Option[String] = logName.split("\\.").tail.lastOption
     val codec = codecName.map { c =>
       codecMap.getOrElseUpdate(c, CompressionCodec.createCodec(new SparkConf, c))

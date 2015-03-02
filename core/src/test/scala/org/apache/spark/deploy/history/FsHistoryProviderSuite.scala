@@ -45,7 +45,10 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
   }
 
   /** Create a fake log file using the new log format used in Spark 1.3+ */
-  private def newLogFile(appId: String, inProgress: Boolean = false): File = {
+  private def newLogFile(
+      appId: String,
+      inProgress: Boolean,
+      codec: Option[String] = None): File = {
     val ip = if (inProgress) EventLoggingListener.IN_PROGRESS else ""
     val logUri = EventLoggingListener.getLogPath(testDir.getAbsolutePath, appId)
     val logPath = new URI(logUri).getPath + ip
@@ -61,6 +64,12 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
       SparkListenerApplicationStart("new-app-complete", None, 1L, "test"),
       SparkListenerApplicationEnd(4L)
       )
+
+    // Write a new-style application log.
+    val newAppCompressedComplete = newLogFile("new1compressed", inProgress = false, Some("lzf"))
+    writeFile(newAppCompressedComplete, true, None,
+      SparkListenerApplicationStart("new-app-compressed-complete", None, 1L, "test"),
+      SparkListenerApplicationEnd(4L))
 
     // Write an unfinished app, new-style.
     val newAppIncomplete = newLogFile("new2", inProgress = true)
@@ -96,16 +105,18 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
 
     val list = provider.getListing().toSeq
     list should not be (null)
-    list.size should be (4)
-    list.count(e => e.completed) should be (2)
+    list.size should be (5)
+    list.count(_.completed) should be (3)
 
-    list(0) should be (ApplicationHistoryInfo(newAppComplete.getName(), "new-app-complete", 1L, 4L,
+    list(0) should be (ApplicationHistoryInfo(newAppCompressedComplete.getName(),
+      "new-app-compressed-complete", 1L, 4L, newAppCompressedComplete.lastModified(), "test", true))
+    list(1) should be (ApplicationHistoryInfo(newAppComplete.getName(), "new-app-complete", 1L, 4L,
       newAppComplete.lastModified(), "test", true))
-    list(1) should be (ApplicationHistoryInfo(oldAppComplete.getName(), "old-app-complete", 2L, 3L,
+    list(2) should be (ApplicationHistoryInfo(oldAppComplete.getName(), "old-app-complete", 2L, 3L,
       oldAppComplete.lastModified(), "test", true))
-    list(2) should be (ApplicationHistoryInfo(oldAppIncomplete.getName(), "old-app-incomplete", 2L,
+    list(3) should be (ApplicationHistoryInfo(oldAppIncomplete.getName(), "old-app-incomplete", 2L,
       -1L, oldAppIncomplete.lastModified(), "test", false))
-    list(3) should be (ApplicationHistoryInfo(newAppIncomplete.getName(), "new-app-incomplete", 1L,
+    list(4) should be (ApplicationHistoryInfo(newAppIncomplete.getName(), "new-app-incomplete", 1L,
       -1L, newAppIncomplete.lastModified(), "test", false))
 
     // Make sure the UI can be rendered.
@@ -148,12 +159,12 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
   }
 
   test("SPARK-3697: ignore directories that cannot be read.") {
-    val logFile1 = newLogFile("new1")
+    val logFile1 = newLogFile("new1", inProgress = false)
     writeFile(logFile1, true, None,
       SparkListenerApplicationStart("app1-1", None, 1L, "test"),
       SparkListenerApplicationEnd(2L)
       )
-    val logFile2 = newLogFile("new2")
+    val logFile2 = newLogFile("new2", inProgress = false)
     writeFile(logFile2, true, None,
       SparkListenerApplicationStart("app1-2", None, 1L, "test"),
       SparkListenerApplicationEnd(2L)
