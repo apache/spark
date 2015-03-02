@@ -21,7 +21,7 @@ import java.io.File
 import java.lang.management.ManagementFactory
 import java.net.URL
 import java.nio.ByteBuffer
-import java.util.concurrent._
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
@@ -31,11 +31,10 @@ import akka.actor.Props
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.{DirectTaskResult, IndirectTaskResult, Task}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
-import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader,
-  SparkUncaughtExceptionHandler, AkkaUtils, Utils}
+import org.apache.spark.util._
 
 /**
  * Spark executor, backed by a threadpool to run tasks.
@@ -50,8 +49,8 @@ private[spark] class Executor(
     env: SparkEnv,
     userClassPath: Seq[URL] = Nil,
     isLocal: Boolean = false)
-  extends Logging
-{
+  extends Logging {
+
   logInfo(s"Starting executor ID $executorId on host $executorHostname")
 
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
@@ -392,13 +391,14 @@ private[spark] class Executor(
     }
   }
 
+  private val timeout = AkkaUtils.lookupTimeout(conf)
+  private val retryAttempts = AkkaUtils.numRetries(conf)
+  private val retryIntervalMs = AkkaUtils.retryWaitMs(conf)
+  private val heartbeatReceiverRef =
+    AkkaUtils.makeDriverRef("HeartbeatReceiver", conf, env.actorSystem)
+
   /** Reports heartbeat and metrics for active tasks to the driver. */
   private def reportHeartBeat(): Unit = {
-    val timeout = AkkaUtils.lookupTimeout(conf)
-    val retryAttempts = AkkaUtils.numRetries(conf)
-    val retryIntervalMs = AkkaUtils.retryWaitMs(conf)
-    val heartbeatReceiverRef = AkkaUtils.makeDriverRef("HeartbeatReceiver", conf, env.actorSystem)
-
     // list of (task id, metrics) to send back to the driver
     val tasksMetrics = new ArrayBuffer[(Long, TaskMetrics)]()
     val curGCTime = computeTotalGcTime()
@@ -441,7 +441,7 @@ private[spark] class Executor(
    * Starts a thread to report heartbeat and partial metrics for active tasks to driver.
    * This thread stops running when the executor is stopped.
    */
-  private def startDriverHeartbeater() {
+  private def startDriverHeartbeater(): Unit = {
     val interval = conf.getInt("spark.executor.heartbeatInterval", 10000)
     val thread = new Thread() {
       override def run() {
@@ -454,7 +454,7 @@ private[spark] class Executor(
       }
     }
     thread.setDaemon(true)
-    thread.setName("driver-heartbeat")
+    thread.setName("driver-heartbeater")
     thread.start()
   }
 }
