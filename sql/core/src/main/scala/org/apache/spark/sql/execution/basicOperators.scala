@@ -257,6 +257,16 @@ case class Intersect(left: SparkPlan, right: SparkPlan) extends BinaryNode {
   }
 }
 
+case class With(child: SparkPlan, subqueries: Seq[String]) extends UnaryNode {
+  override def output = child.output
+
+  override def execute() = {
+    val result = child.execute()
+    subqueries.foreach(name => sqlContext.catalog.unregisterTable(Seq(name)))
+    result
+  }
+}
+
 /**
  * :: DeveloperApi ::
  * A plan node that does nothing but lie about the output of its child.  Used to spice a
