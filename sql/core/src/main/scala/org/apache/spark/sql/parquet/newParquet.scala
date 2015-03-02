@@ -120,7 +120,7 @@ private[sql] class DefaultSource
       val df =
         sqlContext.createDataFrame(
           data.queryExecution.toRdd,
-          DataType.alwaysNullable(data.schema).asInstanceOf[StructType])
+          data.schema.asNullable)
       val createdRelation =
         createRelation(sqlContext, parameters, df.schema).asInstanceOf[ParquetRelation2]
       createdRelation.insert(df, overwrite = mode == SaveMode.Overwrite)
@@ -185,11 +185,11 @@ private[sql] case class ParquetRelation2(
       val schemaEquality = if (shouldMergeSchemas) {
         shouldMergeSchemas == relation.shouldMergeSchemas
       } else {
-        DataType.equalsIgnoreNullability(schema, relation.schema)
+        schema.sameType(relation.schema)
       }
 
       val maybeSchemaEquality = (maybeMetastoreSchema, relation.maybeMetastoreSchema) match {
-        case (Some(left), Some(right)) => DataType.equalsIgnoreNullability(left, right)
+        case (Some(left), Some(right)) => left.sameType(right)
         case (left, right) => left == right
       }
 

@@ -280,8 +280,7 @@ private[sql] case class InsertIntoParquetTable(
     val conf = ContextUtil.getConfiguration(job)
     // This is a hack. We always set nullable/containsNull/valueContainsNull to true
     // for the schema of a parquet data.
-    val schema =
-      DataType.alwaysNullable(StructType.fromAttributes(relation.output)).asInstanceOf[StructType]
+    val schema = StructType.fromAttributes(relation.output).asNullable
     RowWriteSupport.setSchema(schema.toAttributes, conf)
 
     val fspath = new Path(relation.path)

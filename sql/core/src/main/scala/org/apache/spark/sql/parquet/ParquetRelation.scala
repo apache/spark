@@ -175,8 +175,7 @@ private[sql] object ParquetRelation {
     ParquetRelation.enableLogForwarding()
     // This is a hack. We always set nullable/containsNull/valueContainsNull to true
     // for the schema of a parquet data.
-    val schema =
-      DataType.alwaysNullable(StructType.fromAttributes(attributes)).asInstanceOf[StructType]
+    val schema = StructType.fromAttributes(attributes).asNullable
     val newAttributes = schema.toAttributes
     ParquetTypesConverter.writeMetaData(newAttributes, path, conf)
     new ParquetRelation(path.toString, Some(conf), sqlContext) {

@@ -131,7 +131,7 @@ private[sql] case class JSONRelation(
 
   override def equals(other: Any): Boolean = other match {
     case that: JSONRelation =>
-      (this.path == that.path) && (DataType.equalsIgnoreNullability(this.schema, that.schema))
+      (this.path == that.path) && this.schema.sameType(that.schema)
     case _ => false
   }
 }
