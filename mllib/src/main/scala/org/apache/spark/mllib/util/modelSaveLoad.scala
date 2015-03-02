@@ -48,7 +48,7 @@ trait Saveable {
    *
    * @param sc  Spark context used to save model data.
    * @param path  Path specifying the directory in which to save this model.
-   *              This directory and any intermediate directory will be created if needed.
+   *              If the directory already exists, this method throws an exception.
    */
   def save(sc: SparkContext, path: String): Unit
 
