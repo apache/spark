@@ -76,7 +76,7 @@ object PythonRunner {
    * PYTHONPATH, we need to extract the path from the URI. This is safe to do because we
    * currently only support local python files.
    */
-  def formatPath(path: String, testWindows: Boolean = false): String = {
+  private[deploy] def formatPath(path: String, testWindows: Boolean = false): String = {
     if (Utils.nonLocalPaths(path, testWindows).nonEmpty) {
       throw new IllegalArgumentException("Launching Python applications through " +
         s"spark-submit is currently only supported for local files: $path")

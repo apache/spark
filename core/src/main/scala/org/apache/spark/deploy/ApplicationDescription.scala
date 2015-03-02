@@ -18,19 +18,19 @@
 package org.apache.spark.deploy
 
 private[spark] class ApplicationDescription(
-    val name: String,
-    val maxCores: Option[Int],
-    val memoryPerSlave: Int,
-    val command: Command,
-    var appUiUrl: String,
-    val eventLogDir: Option[String] = None,
+    private[deploy] val name: String,
+    private[deploy] val maxCores: Option[Int],
+    private[deploy] val memoryPerSlave: Int,
+    private[deploy] val command: Command,
+    private[deploy] var appUiUrl: String,
+    private[deploy] val eventLogDir: Option[String] = None,
     // short name of compression codec used when writing event logs, if any (e.g. lzf)
-    val eventLogCodec: Option[String] = None)
+    private[deploy] val eventLogCodec: Option[String] = None)
   extends Serializable {
 
-  val user = System.getProperty("user.name", "<unknown>")
+  private[deploy] val user = System.getProperty("user.name", "<unknown>")
 
-  def copy(
+  private[deploy] def copy(
       name: String = name,
       maxCores: Option[Int] = maxCores,
       memoryPerSlave: Int = memoryPerSlave,
