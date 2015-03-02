@@ -858,7 +858,7 @@ setGeneric("first", function(x) { standardGeneric("first") })
 setMethod("first",
           signature(x = "RDD"),
           function(x) {
-            take(x, 1)
+            take(x, 1)[[1]]
           })
 
 #' Removes the duplicates from RDD.
