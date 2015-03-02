@@ -755,7 +755,7 @@ private[spark] class Master(
       }
       
       val eventLogFile = eventLogFilePrefix + {
-        if(inProgressExists) EventLoggingListener.IN_PROGRESS
+        if (inProgressExists) EventLoggingListener.IN_PROGRESS
       }
       val status = if (eventLogFile.endsWith(EventLoggingListener.IN_PROGRESS)) " (inprogress)" 
         else " (completed)"
