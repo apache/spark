@@ -337,11 +337,11 @@ class DataFrame protected[sql](
    * {{{
    *   // Scala:
    *   import org.apache.spark.sql.functions._
-   *   df1.join(df2, "outer", $"df1Key" === $"df2Key")
+   *   df1.join(df2, $"df1Key" === $"df2Key", "outer")
    *
    *   // Java:
    *   import static org.apache.spark.sql.functions.*;
-   *   df1.join(df2, "outer", col("df1Key") === col("df2Key"));
+   *   df1.join(df2, col("df1Key").equalTo(col("df2Key")), "outer");
    * }}}
    *
    * @param right Right side of the join.
