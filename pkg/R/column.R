@@ -30,13 +30,16 @@ col <- function(x) {
 }
 
 # TODO(davies): like, rlike, startwith, substr, getField, getItem
-
 operators <- list(
   "+" = "plus", "-" = "minus", "*" = "multiply", "/" = "divide", "%%" = "mod",
   "==" = "equalTo", ">" = "gt", "<" = "lt", "!=" = "notEqual", "<=" = "leq", ">=" = "geq",
   # we can not override `&&` and `||`, so use `&` and `|` instead
   "&" = "and", "|" = "or" #, "!" = "unary_$bang"
 )
+
+functions <- c("min", "max", "sum", "avg", "mean", "count", "abs", "sqrt",
+               "first", "last", "asc", "desc", "lower", "upper", "sumDistinct",
+               "isNull", "isNotNull")
 
 createOperator <- function(op) {
   setMethod(op,
@@ -58,10 +61,6 @@ createOperator <- function(op) {
             })
 }
 
-for (op in names(operators)) {
-  createOperator(op)
-}
-
 createFunction <- function(name) {
   setMethod(name,
             signature(x = "Column"),
@@ -71,23 +70,27 @@ createFunction <- function(name) {
             })
 }
 
-setGeneric("avg", function(x) { standardGeneric("avg") })
-setGeneric("last", function(x) { standardGeneric("last") })
-setGeneric("asc", function(x) { standardGeneric("asc") })
-setGeneric("desc", function(x) { standardGeneric("desc") })
-setGeneric("lower", function(x) { standardGeneric("lower") })
-setGeneric("upper", function(x) { standardGeneric("upper") })
-setGeneric("isNull", function(x) { standardGeneric("isNull") })
-setGeneric("isNotNull", function(x) { standardGeneric("isNotNull") })
-setGeneric("sumDistinct", function(x) { standardGeneric("sumDistinct") })
+createMethods <- function() {
+  for (op in names(operators)) {
+    createOperator(op)
+  }
 
-Functions <- c("min", "max", "sum", "avg", "mean", "count", "abs", "sqrt",
-"first", "last", "asc", "desc", "lower", "upper", "sumDistinct",
-"isNull", "isNotNull")
+  setGeneric("avg", function(x) { standardGeneric("avg") })
+  setGeneric("last", function(x) { standardGeneric("last") })
+  setGeneric("asc", function(x) { standardGeneric("asc") })
+  setGeneric("desc", function(x) { standardGeneric("desc") })
+  setGeneric("lower", function(x) { standardGeneric("lower") })
+  setGeneric("upper", function(x) { standardGeneric("upper") })
+  setGeneric("isNull", function(x) { standardGeneric("isNull") })
+  setGeneric("isNotNull", function(x) { standardGeneric("isNotNull") })
+  setGeneric("sumDistinct", function(x) { standardGeneric("sumDistinct") })
 
-for (x in Functions) {
-  createFunction(x)
+  for (x in functions) {
+    createFunction(x)
+  }
 }
+
+createMethods()
 
 setMethod("alias",
           signature(object = "Column"),
