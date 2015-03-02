@@ -183,7 +183,7 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     sc = new SparkContext("local", "test", httpConf)
     val bigArr = new Array[Long]((2.3e9 / 8).toInt)
     val bcArr = sc.broadcast(bigArr)
-    sc.parallelize(1 to 1).map{x => bcArr.value.size}.count()
+    assert(sc.parallelize(1 to 1).map{x => bcArr.value.size}.collect() === Array((2.3e9 / 8).toInt))
   }
 
   /**
