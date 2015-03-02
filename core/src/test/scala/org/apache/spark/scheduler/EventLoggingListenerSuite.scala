@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.Path
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
-import org.apache.spark.{Logging, SparkConf, SparkContext}
+import org.apache.spark.{Logging, SparkConf, SparkContext, SPARK_VERSION}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io._
 import org.apache.spark.util.{JsonProtocol, Utils}
@@ -154,11 +154,14 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
     val logData = EventLoggingListener.openEventLog(new Path(eventLogger.logPath), fileSystem)
     try {
       val lines = readLines(logData)
-      assert(lines.size === 2)
-      assert(lines(0).contains("SparkListenerApplicationStart"))
-      assert(lines(1).contains("SparkListenerApplicationEnd"))
-      assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === applicationStart)
-      assert(JsonProtocol.sparkEventFromJson(parse(lines(1))) === applicationEnd)
+      val logStart = SparkListenerLogStart(SPARK_VERSION)
+      assert(lines.size === 3)
+      assert(lines(0).contains("SparkListenerLogStart"))
+      assert(lines(1).contains("SparkListenerApplicationStart"))
+      assert(lines(2).contains("SparkListenerApplicationEnd"))
+      assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === logStart)
+      assert(JsonProtocol.sparkEventFromJson(parse(lines(1))) === applicationStart)
+      assert(JsonProtocol.sparkEventFromJson(parse(lines(2))) === applicationEnd)
     } finally {
       logData.close()
     }
@@ -191,6 +194,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
 
     // Make sure expected events exist in the log file.
     val logData = EventLoggingListener.openEventLog(new Path(eventLogger.logPath), fileSystem)
+    val logStart = SparkListenerLogStart(SPARK_VERSION)
     val lines = readLines(logData)
     val eventSet = mutable.Set(
       SparkListenerApplicationStart,
@@ -215,6 +219,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
         }
       }
     }
+    assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === logStart)
     assert(eventSet.isEmpty, "The following events are missing: " + eventSet.toSeq)
   }
 

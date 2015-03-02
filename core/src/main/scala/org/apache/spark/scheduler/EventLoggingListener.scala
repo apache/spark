@@ -23,13 +23,14 @@ import java.net.URI
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import com.google.common.base.Charsets
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.{Logging, SparkConf, SPARK_VERSION}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{JsonProtocol, Utils}
@@ -122,6 +123,8 @@ private[spark] class EventLoggingListener(
     try {
       val cstream = compressionCodec.map(_.compressedOutputStream(dstream)).getOrElse(dstream)
       val bstream = new BufferedOutputStream(cstream, outputBufferSize)
+
+      EventLoggingListener.initEventLog(bstream)
       fileSystem.setPermission(path, LOG_FILE_PERMISSIONS)
       writer = Some(new PrintWriter(bstream))
       logInfo("Logging events to %s".format(logPath))
@@ -216,6 +219,18 @@ private[spark] object EventLoggingListener extends Logging {
   private val codecMap = new mutable.HashMap[String, CompressionCodec]
 
   /**
+   * Write metadata about an event log to the given stream.
+   * The metadata is encoded in the first line of the event log as JSON.
+   *
+   * @param logStream Raw output stream to the event log file.
+   */
+  def initEventLog(logStream: OutputStream): Unit = {
+    val metadata = SparkListenerLogStart(SPARK_VERSION)
+    val metadataJson = compact(JsonProtocol.logStartToJson(metadata)) + "\n"
+    logStream.write(metadataJson.getBytes(Charsets.UTF_8))
+  }
+
+  /**
    * Return a file-system-safe path to the log file for the given application.
    *
    * Note that because we currently only create a single log file for each application,
@@ -243,7 +258,7 @@ private[spark] object EventLoggingListener extends Logging {
   /**
    * Opens an event log file and returns an input stream that contains the event data.
    *
-   * @return input stream that holds one JSON record per line
+   * @return input stream that holds one JSON record per line.
    */
   def openEventLog(log: Path, fs: FileSystem): InputStream = {
     // It's not clear whether FileSystem.open() throws FileNotFoundException or just plain

@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.{File, FileOutputStream, OutputStreamWriter}
+import java.io.{BufferedOutputStream, File, FileOutputStream, OutputStreamWriter}
 import java.net.URI
 
 import scala.io.Source
@@ -108,10 +108,10 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
     list.size should be (5)
     list.count(_.completed) should be (3)
 
-    list(0) should be (ApplicationHistoryInfo(newAppCompressedComplete.getName(),
-      "new-app-compressed-complete", 1L, 4L, newAppCompressedComplete.lastModified(), "test", true))
-    list(1) should be (ApplicationHistoryInfo(newAppComplete.getName(), "new-app-complete", 1L, 4L,
+    list(0) should be (ApplicationHistoryInfo(newAppComplete.getName(), "new-app-complete", 1L, 4L,
       newAppComplete.lastModified(), "test", true))
+    list(1) should be (ApplicationHistoryInfo(newAppCompressedComplete.getName(),
+      "new-app-compressed-complete", 1L, 4L, newAppCompressedComplete.lastModified(), "test", true))
     list(2) should be (ApplicationHistoryInfo(oldAppComplete.getName(), "old-app-complete", 2L, 3L,
       oldAppComplete.lastModified(), "test", true))
     list(3) should be (ApplicationHistoryInfo(oldAppIncomplete.getName(), "old-app-incomplete", 2L,
@@ -217,9 +217,13 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
 
   private def writeFile(file: File, isNewFormat: Boolean, codec: Option[CompressionCodec],
     events: SparkListenerEvent*) = {
-    val fileStream = new FileOutputStream(file)
-    val out = codec.map(_.compressedOutputStream(fileStream)).getOrElse(fileStream)
-    val writer = new OutputStreamWriter(out, "UTF-8")
+    val fstream = new FileOutputStream(file)
+    val cstream = codec.map(_.compressedOutputStream(fstream)).getOrElse(fstream)
+    val bstream = new BufferedOutputStream(cstream)
+    if (isNewFormat) {
+      EventLoggingListener.initEventLog(new FileOutputStream(file))
+    }
+    val writer = new OutputStreamWriter(bstream, "UTF-8")
     try {
       events.foreach(e => writer.write(compact(render(JsonProtocol.sparkEventToJson(e))) + "\n"))
     } finally {
