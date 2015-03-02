@@ -115,22 +115,28 @@ used for evaluation and prediction.
 
 Note that the Python API does not yet support model save/load but will in the future.
 
-<!-- TODO: Make Python's example consistent with Scala's and Java's. -->
 {% highlight python %}
-from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.classification import NaiveBayes
+from pyspark.mllib.linalg import Vectors
+from pyspark.mllib.regression import LabeledPoint
 
-# an RDD of LabeledPoint
-data = sc.parallelize([
-  LabeledPoint(0.0, [0.0, 0.0])
-  ... # more labeled points
-])
+def parseLine(line):
+    parts = line.split(',')
+    label = float(parts[0])
+    features = Vectors.dense([float(x) for x in parts[1].split(' ')])
+    return LabeledPoint(label, features)
+
+data = sc.textFile('data/mllib/sample_naive_bayes_data.txt').map(parseLine)
+
+# Split data aproximately into training (60%) and test (40%)
+training, test = data.randomSplit([0.6, 0.4], seed = 0)
 
 # Train a naive Bayes model.
-model = NaiveBayes.train(data, 1.0)
+model = NaiveBayes.train(training, 1.0)
 
-# Make prediction.
-prediction = model.predict([0.0, 0.0])
+# Make prediction and test accuracy.
+predictionAndLabel = test.map(lambda p : (model.predict(p.features), p.label))
+accuracy = 1.0 * predictionAndLabel.filter(lambda (x, v): x == v).count() / test.count()
 {% endhighlight %}
 
 </div>
