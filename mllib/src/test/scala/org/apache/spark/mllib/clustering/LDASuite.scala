@@ -68,7 +68,7 @@ class LDASuite extends FunSuite with MLlibTestSparkContext {
       .setSeed(12345)
     val corpus = sc.parallelize(tinyCorpus, 2)
 
-    val model: DistributedLDAModel = lda.run(corpus).asInstanceOf[DistributedLDAModel]
+    val model: DistributedLDAModel = lda.run(corpus)
 
     // Check: basic parameters
     val localModel = model.toLocal
