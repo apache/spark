@@ -736,30 +736,31 @@ private[spark] class Master(
     val appName = app.desc.name
     val notFoundBasePath = HistoryServer.UI_PATH_PREFIX + "/not-found"
     try {
-      val eventLogFile = app.desc.eventLogDir
-        .map { dir => EventLoggingListener.getLogPath(dir, app.id, app.desc.eventLogCodec) }
+      val eventLogDir = app.desc.eventLogDir
         .getOrElse {
           // Event logging is not enabled for this application
           app.desc.appUiUrl = notFoundBasePath
           return false
         }
-
-      val fs = Utils.getHadoopFileSystem(eventLogFile, hadoopConf)
-
-      if (fs.exists(new Path(eventLogFile + EventLoggingListener.IN_PROGRESS))) {
-        // Event logging is enabled for this application, but the application is still in progress
-        val title = s"Application history not found (${app.id})"
-        var msg = s"Application $appName is still in progress."
+      
+      val eventLogFilePrefix = EventLoggingListener.getLogPath(eventLogDir, app.id, app.desc.eventLogCodec)        
+      val fs = Utils.getHadoopFileSystem(eventLogDir, hadoopConf)
+      val eventLogFileSuffix = if (fs.exists(new Path(eventLogDir + 
+          EventLoggingListener.IN_PROGRESS))) {
+        // Event logging is enabled for this application, but the application is still in progress        
+        var msg = s"Application $appName is still in progress, it may be terminated accidently."
         logWarning(msg)
-        msg = URLEncoder.encode(msg, "UTF-8")
-        app.desc.appUiUrl = notFoundBasePath + s"?msg=$msg&title=$title"
-        return false
-      }
+        EventLoggingListener.IN_PROGRESS
+      } else ""
+      
+      val eventLogFile = eventLogFilePrefix + eventLogFileSuffix
+      val status = if (eventLogFile.endsWith(EventLoggingListener.IN_PROGRESS)) 
+        " (inprogress)" else " (completed)"
 
       val logInput = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
       val replayBus = new ReplayListenerBus()
       val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
-        appName + " (completed)", HistoryServer.UI_PATH_PREFIX + s"/${app.id}")
+        appName + status, HistoryServer.UI_PATH_PREFIX + s"/${app.id}")
       try {
         replayBus.replay(logInput, eventLogFile)
       } finally {
