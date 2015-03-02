@@ -467,6 +467,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   test("sampling") {
     sql("SELECT * FROM src TABLESAMPLE(0.1 PERCENT) s")
+    sql("SELECT * FROM src TABLESAMPLE(100 PERCENT) s")
   }
 
   test("DataFrame toString") {

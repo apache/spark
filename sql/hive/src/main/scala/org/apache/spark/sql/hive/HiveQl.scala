@@ -40,6 +40,7 @@ import org.apache.spark.sql.execution.ExplainCommand
 import org.apache.spark.sql.sources.DescribeCommand
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, AnalyzeTable, HiveScriptIOSchema}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.random.RandomSampler
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -850,7 +851,15 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         case Token("TOK_TABLESPLITSAMPLE",
                Token("TOK_PERCENT", Nil) ::
                Token(fraction, Nil) :: Nil) =>
-          Sample(fraction.toDouble, withReplacement = false, (math.random * 1000).toInt, relation)
+          // The range of fraction accepted by Sample is [0, 1]. Because Hive's block sampling
+          // function takes X PERCENT as the input and the range of X is [0, 100], we need to
+          // adjust the fraction.
+          require(
+            fraction.toDouble >= (0.0 - RandomSampler.roundingEpsilon)
+              && fraction.toDouble <= (100.0 + RandomSampler.roundingEpsilon),
+            s"Sampling fraction ($fraction) must be on interval [0, 100]")
+          Sample(fraction.toDouble / 100, withReplacement = false, (math.random * 1000).toInt,
+            relation)
         case Token("TOK_TABLEBUCKETSAMPLE",
                Token(numerator, Nil) ::
                Token(denominator, Nil) :: Nil) =>
