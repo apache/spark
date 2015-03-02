@@ -54,6 +54,7 @@ class Analyzer(catalog: Catalog,
 
   lazy val batches: Seq[Batch] = Seq(
     Batch("Resolution", fixedPoint,
+      ResolveWith ::
       ResolveRelations ::
       ResolveReferences ::
       ResolveGroupingAnalytics ::
@@ -166,6 +167,15 @@ class Analyzer(catalog: Catalog,
     }
   }
 
+  object ResolveWith extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case origin @ With(child, subQueries)
+        if subQueries.forall(query => !catalog.tableExists(Seq(query.alias))) =>
+        subQueries.foreach(subQuery =>
+          catalog.registerTable(Seq(subQuery.alias), subQuery.child))
+        origin
+    }
+  }
   /**
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
    */

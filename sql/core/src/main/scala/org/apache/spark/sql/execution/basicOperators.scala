@@ -257,12 +257,12 @@ case class Intersect(left: SparkPlan, right: SparkPlan) extends BinaryNode {
   }
 }
 
-case class With(child: SparkPlan, subqueries: Seq[String]) extends UnaryNode {
+case class With(child: SparkPlan, subQueries: Seq[String]) extends UnaryNode {
   override def output = child.output
 
   override def execute() = {
     val result = child.execute()
-    subqueries.foreach(name => sqlContext.catalog.unregisterTable(Seq(name)))
+    subQueries.foreach(name => sqlContext.catalog.unregisterTable(Seq(name)))
     result
   }
 }

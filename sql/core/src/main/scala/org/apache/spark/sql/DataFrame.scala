@@ -132,10 +132,6 @@ class DataFrame protected[sql](
          _: CreateTableUsingAsSelect |
          _: WriteToFile =>
       LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sqlContext)
-    case origin @ With(child, subqueries) =>
-      subqueries.foreach(subquery =>
-        sqlContext.catalog.registerTable(Seq(subquery.alias), subquery.child))
-      origin
     case _ =>
       queryExecution.logical
   }
