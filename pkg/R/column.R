@@ -85,16 +85,19 @@ Functions <- c("min", "max", "sum", "avg", "mean", "count", "abs", "sqrt",
 "first", "last", "asc", "desc", "lower", "upper", "sumDistinct",
 "isNull", "isNotNull")
 
-for (name in Functions) {
-  createFunction(name)
+for (x in Functions) {
+  createFunction(x)
 }
 
-setGeneric("alias", function(x, name) { standardGeneric("alias") })
-
 setMethod("alias",
-          signature(x = "Column", name = "character"),
-          function(x, name) {
-            column(callJMethod(x@jc, "as", name))
+          signature(object = "Column"),
+          function(object, data) {
+            if (class(data) == "character") {
+              column(callJMethod(object@jc, "as", data))
+            } else {
+              # TODO(davies): support DataType object
+              stop("not implemented")
+            }
           })
 
 setGeneric("cast", function(x, dataType) { standardGeneric("cast") })

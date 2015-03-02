@@ -96,12 +96,14 @@ exportMethods("columns",
               "repartition",
               "sampleDF",
               "schema",
+              "select",
               "toRDD")
 
 exportClasses("Column")
 
 exportMethods("asc",
               "desc",
+              "first",
               "last",
               "lower",
               "upper",
@@ -111,10 +113,13 @@ exportMethods("asc",
               "max",
               "sum",
               "avg",
+              "mean",
+              "isNull",
+              "isNotNull",
               "alias",
               "cast",
-              "countDistinct",
               "approxCountDistinct",
+              "countDistinct",
               "sumDistinct")
 
 export("jsonFile",
