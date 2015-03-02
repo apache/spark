@@ -551,6 +551,24 @@ class Airflow(BaseView):
         return self.render(
             'airflow/circles.html')
 
+    @expose('/sandbox')
+    @login_required
+    def sandbox(self):
+        from airflow import configuration
+        title = "Sandbox Suggested Configuration"
+        cfg_loc = configuration.AIRFLOW_CONFIG + '.sandbox'
+        f = open(cfg_loc, 'r')
+        config = f.read()
+        f.close()
+        code_html = Markup(highlight(
+            config,
+            IniLexer(),  # Lexer call
+            HtmlFormatter(noclasses=True))
+        )
+        return self.render(
+            'airflow/code.html',
+            code_html=code_html, title=title, subtitle=cfg_loc)
+
     @expose('/conf')
     @login_required
     def conf(self):

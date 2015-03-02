@@ -1,3 +1,4 @@
+import os
 import sys
 
 from sqlalchemy.orm import scoped_session, sessionmaker
@@ -14,8 +15,8 @@ _____  |__|_______/ ____\  |   ______  _  __
      \/"""
 
 BASE_LOG_URL = '/admin/airflow/log'
-AIRFLOW_HOME = conf.get('core', 'AIRFLOW_HOME')
-DAGS_FOLDER = conf.get('core', 'DAGS_FOLDER')
+AIRFLOW_HOME = os.path.expanduser(conf.get('core', 'AIRFLOW_HOME'))
+DAGS_FOLDER = os.path.expanduser(conf.get('core', 'DAGS_FOLDER'))
 SQL_ALCHEMY_CONN = conf.get('core', 'SQL_ALCHEMY_CONN')
 
 if DAGS_FOLDER not in sys.path:
@@ -29,9 +30,8 @@ if 'sqlite' not in SQL_ALCHEMY_CONN:
 
 engine = create_engine(
     SQL_ALCHEMY_CONN, **engine_args)
-Session = scoped_session(sessionmaker(autocommit=False,
-        autoflush=False,
-        bind=engine))
+Session = scoped_session(
+    sessionmaker(autocommit=False, autoflush=False, bind=engine))
 
 # can't move this to configuration due to ConfigParser interpolation
 LOG_FORMAT =  \
