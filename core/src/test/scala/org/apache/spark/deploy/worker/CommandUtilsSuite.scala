@@ -15,11 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy
+package org.apache.spark.deploy.worker
 
-import org.apache.spark.deploy.worker.CommandUtils
+import org.apache.spark.deploy.Command
 import org.apache.spark.util.Utils
-
 import org.scalatest.{FunSuite, Matchers}
 
 class CommandUtilsSuite extends FunSuite with Matchers {
