@@ -17,7 +17,7 @@
 
 """
  Counts words in UTF8 encoded, '\n' delimited text received from the network every second.
- Usage: network_wordcount.py <zk> <topic>
+ Usage: kafka_wordcount.py <zk> <topic>
 
  To run this on your local machine, you need to setup Kafka and create a producer first, see
  http://kafka.apache.org/documentation.html#quickstart
