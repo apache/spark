@@ -747,7 +747,7 @@ private[spark] class Master(
       val fs = Utils.getHadoopFileSystem(eventLogDir, hadoopConf)
       val eventLogFileSuffix = if (fs.exists(new Path(eventLogFilePrefix + 
           EventLoggingListener.IN_PROGRESS))) {
-        // Event logging is enabled for this application, but the application is still in progress        
+        // Event logging is enabled for this application, but the application is still in progress
         var msg = s"Application $appName is still in progress, it may be terminated accidently."
         logWarning(msg)
         EventLoggingListener.IN_PROGRESS
