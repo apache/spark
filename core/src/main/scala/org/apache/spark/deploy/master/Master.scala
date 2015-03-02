@@ -753,13 +753,12 @@ private[spark] class Master(
         logWarning(s"Application $appName is still in progress, it may be terminated accidently.")
       }
       
-      val eventLogFile = if (inProgressExists) {
-        eventLogFilePrefix + EventLoggingListener.IN_PROGRESS
+      val (eventLogFile, status) = if (inProgressExists) {
+        (eventLogFilePrefix + EventLoggingListener.IN_PROGRESS, " (inprogress)")
       } else {
-        eventLogFilePrefix
+        (eventLogFilePrefix, " (completed)")
       }
-
-      val status = if (inProgressExists) " (inprogress)" else " (completed)"
+      
       val logInput = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
       val replayBus = new ReplayListenerBus()
       val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
