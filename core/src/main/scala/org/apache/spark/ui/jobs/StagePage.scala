@@ -622,8 +622,13 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
   }
 
   private def getGettingResultTime(info: TaskInfo): Long = {
-    if (info.gettingResultTime > 0 && info.finishTime > 0) {
-      info.finishTime - info.gettingResultTime
+    if (info.gettingResultTime > 0) {
+      if (info.finishTime > 0) {
+        info.finishTime - info.gettingResultTime
+      } else {
+        // The task is still fetching the result.
+        System.currentTimeMillis - info.gettingResultTime
+      }
     } else {
       0L
     }
