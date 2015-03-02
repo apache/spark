@@ -117,6 +117,7 @@ class SqlParser extends AbstractSparkSQLParser {
   protected val UPPER = Keyword("UPPER")
   protected val WHEN = Keyword("WHEN")
   protected val WHERE = Keyword("WHERE")
+  protected val WITH = Keyword("WITH")
 
   protected def assignAliases(exprs: Seq[Expression]): Seq[NamedExpression] = {
     exprs.zipWithIndex.map {
@@ -133,6 +134,7 @@ class SqlParser extends AbstractSparkSQLParser {
       | UNION ~ DISTINCT.? ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Distinct(Union(q1, q2)) }
       )
     | insert
+    | cte
     )
 
   protected lazy val select: Parser[LogicalPlan] =
@@ -160,6 +162,11 @@ class SqlParser extends AbstractSparkSQLParser {
   protected lazy val insert: Parser[LogicalPlan] =
     INSERT ~> (OVERWRITE ^^^ true | INTO ^^^ false) ~ (TABLE ~> relation) ~ select ^^ {
       case o ~ r ~ s => InsertIntoTable(r, Map.empty[String, Option[String]], s, o)
+    }
+
+  protected lazy val cte: Parser[LogicalPlan] =
+    WITH ~> rep1sep(ident ~ ( AS ~ "(" ~> start <~ ")"), ",") ~ start ^^ {
+      case r ~ s => With(s, r.map({case n ~ s => Subquery(n, s)}).toSeq)
     }
 
   protected lazy val projection: Parser[Expression] =

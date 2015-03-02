@@ -134,6 +134,10 @@ case class CreateTableAsSelect[T](
   override lazy val resolved = databaseName != None && childrenResolved
 }
 
+case class With(child: LogicalPlan, subQueries: Seq[Subquery]) extends UnaryNode {
+  override def output = child.output
+}
+
 case class WriteToFile(
     path: String,
     child: LogicalPlan) extends UnaryNode {
