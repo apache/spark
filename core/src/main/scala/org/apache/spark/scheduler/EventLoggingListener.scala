@@ -234,11 +234,9 @@ private[spark] object EventLoggingListener extends Logging {
       logBaseDir: String,
       appId: String,
       compressionCodecName: Option[String] = None): String = {
-    val sanitizedAppId = appId.replaceAll("[ :/]", "-").replaceAll("[${}'\"]", "_").toLowerCase
-    // e.g. app_123, app_123_COMPRESSION_CODEC_lzf
-    val logName = sanitizedAppId + compressionCodecName
-      .map { c => s"_${COMPRESSION_CODEC_KEY}_$c" }
-      .getOrElse("")
+    val sanitizedAppId = appId.replaceAll("[ :/]", "-").replaceAll("[.${}'\"]", "_").toLowerCase
+    // e.g. app_123, app_123.lzf
+    val logName = sanitizedAppId + compressionCodecName.map { "." + _ }.getOrElse("")
     Utils.resolveURI(logBaseDir).toString.stripSuffix("/") + "/" + logName
   }
 
@@ -256,13 +254,10 @@ private[spark] object EventLoggingListener extends Logging {
 
     val in = new BufferedInputStream(fs.open(log))
 
-    // Parse compression codec from the log name
-    val logName = log.getName
-    val compressionRegex = s".*_${COMPRESSION_CODEC_KEY}_(.*)".r
-    val codecName: Option[String] = logName match {
-      case compressionRegex(_codecName) => Some(_codecName)
-      case _ => None
-    }
+    // Compression codec is encoded as an extension, e.g. app_123.lzf
+    // Since we sanitize the app ID to not include periods, it is safe to split on it
+    val logName = log.getName.replaceAll(IN_PROGRESS, "")
+    val codecName: Option[String] = logName.split("\\.").tail.lastOption
     val codec = codecName.map { c =>
       codecMap.getOrElseUpdate(c, CompressionCodec.createCodec(new SparkConf, c))
     }

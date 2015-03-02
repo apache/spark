@@ -79,7 +79,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
 
   test("Basic event logging with compression") {
     CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codec =>
-      testEventLogging(compressionCodec = Some(codec))
+      testEventLogging(compressionCodec = Some(CompressionCodec.getShortName(codec)))
     }
   }
 
@@ -89,7 +89,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
 
   test("End-to-end event logging with compression") {
     CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codec =>
-      testApplicationEventLogging(compressionCodec = Some(codec))
+      testApplicationEventLogging(compressionCodec = Some(CompressionCodec.getShortName(codec)))
     }
   }
 
@@ -108,11 +108,14 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
     // without compression
     assert(s"file:/base-dir/app1" === EventLoggingListener.getLogPath("/base-dir", "app1"))
     // with compression
-    assert(s"file:/base-dir/app1_COMPRESSION_CODEC_lzf" ===
+    assert(s"file:/base-dir/app1.lzf" ===
       EventLoggingListener.getLogPath("/base-dir", "app1", Some("lzf")))
     // illegal characters in app ID
-    assert(s"file:/base-dir/a-fine-mind_dollar_bills_1" ===
-      EventLoggingListener.getLogPath("/base-dir", "a fine:mind$dollar{bills}1"))
+    assert(s"file:/base-dir/a-fine-mind_dollar_bills__1" ===
+      EventLoggingListener.getLogPath("/base-dir", "a fine:mind$dollar{bills}.1"))
+    // illegal characters in app ID with compression
+    assert(s"file:/base-dir/a-fine-mind_dollar_bills__1.lz4" ===
+      EventLoggingListener.getLogPath("/base-dir", "a fine:mind$dollar{bills}.1", Some("lz4")))
   }
 
   /* ----------------- *
