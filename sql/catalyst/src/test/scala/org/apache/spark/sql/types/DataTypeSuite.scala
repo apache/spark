@@ -168,6 +168,11 @@ class DataTypeSuite extends FunSuite {
     from = MapType(StringType, ArrayType(IntegerType, true), valueContainsNull = true),
     to = MapType(StringType,  ArrayType(IntegerType, false), valueContainsNull = true),
     expected = false)
+  checkEqualsIgnoreCompatibleNullability(
+    from = MapType(StringType, ArrayType(IntegerType, false), valueContainsNull = true),
+    to = MapType(StringType,  ArrayType(IntegerType, true), valueContainsNull = true),
+    expected = true)
+
 
   checkEqualsIgnoreCompatibleNullability(
     from = StructType(StructField("a", StringType, nullable = true) :: Nil),
@@ -193,6 +198,4 @@ class DataTypeSuite extends FunSuite {
       StructField("a", StringType, nullable = false) ::
       StructField("b", StringType, nullable = false) :: Nil),
     expected = false)
-
-
 }

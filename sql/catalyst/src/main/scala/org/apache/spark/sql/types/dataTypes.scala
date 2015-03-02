@@ -204,14 +204,14 @@ object DataType {
    *
    * Compatible nullability is defined as follows:
    *   - If `from` and `to` are ArrayTypes, `from` has a compatible nullability with `to`
-   *   if and only if `from.containsNull` is false, or both of `from.containsNull` and
-   *   `to.containsNull` are true.
+   *   if and only if `to.containsNull` is true, or both of `from.containsNull` and
+   *   `to.containsNull` are false.
    *   - If `from` and `to` are MapTypes, `from` has a compatible nullability with `to`
-   *   if and only if `from.valueContainsNull` is false, or both of `from.valueContainsNull` and
-   *   `to.valueContainsNull` are true.
+   *   if and only if `to.valueContainsNull` is true, or both of `from.valueContainsNull` and
+   *   `to.valueContainsNull` are false.
    *   - If `from` and `to` are StructTypes, `from` has a compatible nullability with `to`
-   *   if and only if for all every pair of fields, `fromField.nullable` is false, or both
-   *   of `fromField.nullable` and `toField.nullable` are true.
+   *   if and only if for all every pair of fields, `to.nullable` is true, or both
+   *   of `fromField.nullable` and `toField.nullable` are false.
    */
   private[spark] def equalsIgnoreCompatibleNullability(from: DataType, to: DataType): Boolean = {
     (from, to) match {
@@ -241,7 +241,7 @@ object DataType {
     case ArrayType(elementType, _) =>
       ArrayType(alwaysNullable(elementType), containsNull = true)
     case MapType(keyType, valueType, _) =>
-      MapType(alwaysNullable(keyType), alwaysNullable(valueType), true)
+      MapType(alwaysNullable(keyType), alwaysNullable(valueType), valueContainsNull = true)
     case StructType(fields) =>
       val newFields = fields.map { field =>
         StructField(field.name, alwaysNullable(field.dataType), nullable = true)

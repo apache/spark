@@ -185,12 +185,17 @@ private[sql] case class ParquetRelation2(
       val schemaEquality = if (shouldMergeSchemas) {
         shouldMergeSchemas == relation.shouldMergeSchemas
       } else {
-        schema == relation.schema
+        DataType.equalsIgnoreNullability(schema, relation.schema)
+      }
+
+      val maybeSchemaEquality = (maybeMetastoreSchema, relation.maybeMetastoreSchema) match {
+        case (Some(left), Some(right)) => DataType.equalsIgnoreNullability(left, right)
+        case (left, right) => left == right
       }
 
       paths.toSet == relation.paths.toSet &&
         schemaEquality &&
-        maybeMetastoreSchema == relation.maybeMetastoreSchema &&
+        maybeSchemaEquality &&
         maybePartitionSpec == relation.maybePartitionSpec
 
     case _ => false
