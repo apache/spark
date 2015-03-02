@@ -88,10 +88,10 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   }
 
   /** Stop the receiver execution thread. */
-  def stop() = synchronized {
+  def stop(graceful: Boolean) = synchronized {
     if (!receiverInputStreams.isEmpty && actor != null) {
       // First, stop the receivers
-      if (!skipReceiverLaunch) receiverExecutor.stop()
+      if (!skipReceiverLaunch) receiverExecutor.stop(graceful)
 
       // Finally, stop the actor
       ssc.env.actorSystem.stop(actor)
@@ -220,6 +220,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   /** This thread class runs all the receivers on the cluster.  */
   class ReceiverLauncher {
     @transient val env = ssc.env
+    @volatile @transient private var running = false
     @transient val thread  = new Thread() {
       override def run() {
         try {
@@ -235,7 +236,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       thread.start()
     }
 
-    def stop() {
+    def stop(graceful: Boolean) {
       // Send the stop signal to all the receivers
       stopReceivers()
 
@@ -243,9 +244,19 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       // That is, for the receivers to quit gracefully.
       thread.join(10000)
 
+      if (graceful) {
+        val pollTime = 100
+        def done = { receiverInfo.isEmpty && !running }
+        logInfo("Waiting for receiver job to terminate gracefully")
+        while(!done) {
+          Thread.sleep(pollTime)
+        }
+        logInfo("Waited for receiver job to terminate gracefully")
+      }
+
       // Check if all the receivers have been deregistered or not
       if (!receiverInfo.isEmpty) {
-        logWarning("All of the receivers have not deregistered, " + receiverInfo)
+        logWarning("Not all of the receivers have deregistered, " + receiverInfo)
       } else {
         logInfo("All of the receivers have deregistered successfully")
       }
@@ -301,7 +312,9 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
       // Distribute the receivers and start them
       logInfo("Starting " + receivers.length + " receivers")
+      running = true
       ssc.sparkContext.runJob(tempRDD, ssc.sparkContext.clean(startReceiver))
+      running = false
       logInfo("All of the receivers have been terminated")
     }
 

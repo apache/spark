@@ -35,9 +35,11 @@ object Literal {
     case d: java.math.BigDecimal => Literal(Decimal(d), DecimalType.Unlimited)
     case d: Decimal => Literal(d, DecimalType.Unlimited)
     case t: Timestamp => Literal(t, TimestampType)
-    case d: Date => Literal(d, DateType)
+    case d: Date => Literal(DateUtils.fromJavaDate(d), DateType)
     case a: Array[Byte] => Literal(a, BinaryType)
     case null => Literal(null, NullType)
+    case _ =>
+      throw new RuntimeException("Unsupported literal type " + v.getClass + " " + v)
   }
 }
 

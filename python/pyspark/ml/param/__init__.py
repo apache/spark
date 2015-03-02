@@ -80,3 +80,11 @@ class Params(Identifiable):
         dummy = Params()
         dummy.uid = "undefined"
         return dummy
+
+    def _set_params(self, **kwargs):
+        """
+        Sets params.
+        """
+        for param, value in kwargs.iteritems():
+            self.paramMap[getattr(self, param)] = value
+        return self

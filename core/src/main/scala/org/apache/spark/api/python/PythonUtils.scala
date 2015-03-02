@@ -17,11 +17,14 @@
 
 package org.apache.spark.api.python
 
-import java.io.{File, InputStream, IOException, OutputStream}
+import java.io.{File}
+import java.util.{List => JList}
 
+import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkContext
+import org.apache.spark.api.java.{JavaSparkContext, JavaRDD}
 
 private[spark] object PythonUtils {
   /** Get the PYTHONPATH for PySpark, either from SPARK_HOME, if it is set, or from our JAR */
@@ -38,5 +41,16 @@ private[spark] object PythonUtils {
   /** Merge PYTHONPATHS with the appropriate separator. Ignores blank strings. */
   def mergePythonPaths(paths: String*): String = {
     paths.filter(_ != "").mkString(File.pathSeparator)
+  }
+
+  def generateRDDWithNull(sc: JavaSparkContext): JavaRDD[String] = {
+    sc.parallelize(List("a", null, "b"))
+  }
+
+  /**
+   * Convert list of T into seq of T (for calling API with varargs)
+   */
+  def toSeq[T](cols: JList[T]): Seq[T] = {
+    cols.toList.toSeq
   }
 }

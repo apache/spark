@@ -21,7 +21,7 @@ import java.lang.reflect.Method
 import java.security.PrivilegedExceptionAction
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.fs.FileSystem.Statistics
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
@@ -52,18 +52,13 @@ class SparkHadoopUtil extends Logging {
    * do a FileSystem.closeAllForUGI in order to avoid leaking Filesystems
    */
   def runAsSparkUser(func: () => Unit) {
-    val user = Option(System.getenv("SPARK_USER")).getOrElse(SparkContext.SPARK_UNKNOWN_USER)
-    if (user != SparkContext.SPARK_UNKNOWN_USER) {
-      logDebug("running as user: " + user)
-      val ugi = UserGroupInformation.createRemoteUser(user)
-      transferCredentials(UserGroupInformation.getCurrentUser(), ugi)
-      ugi.doAs(new PrivilegedExceptionAction[Unit] {
-        def run: Unit = func()
-      })
-    } else {
-      logDebug("running as SPARK_UNKNOWN_USER")
-      func()
-    }
+    val user = Utils.getCurrentUserName()
+    logDebug("running as user: " + user)
+    val ugi = UserGroupInformation.createRemoteUser(user)
+    transferCredentials(UserGroupInformation.getCurrentUser(), ugi)
+    ugi.doAs(new PrivilegedExceptionAction[Unit] {
+      def run: Unit = func()
+    })
   }
 
   def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
@@ -190,6 +185,21 @@ class SparkHadoopUtil extends Logging {
   def getConfigurationFromJobContext(context: JobContext): Configuration = {
     val method = context.getClass.getMethod("getConfiguration")
     method.invoke(context).asInstanceOf[Configuration]
+  }
+
+  /**
+   * Get [[FileStatus]] objects for all leaf children (files) under the given base path. If the
+   * given path points to a file, return a single-element collection containing [[FileStatus]] of
+   * that file.
+   */
+  def listLeafStatuses(fs: FileSystem, basePath: Path): Seq[FileStatus] = {
+    def recurse(path: Path) = {
+      val (directories, leaves) = fs.listStatus(path).partition(_.isDir)
+      leaves ++ directories.flatMap(f => listLeafStatuses(fs, f.getPath))
+    }
+
+    val baseStatus = fs.getFileStatus(basePath)
+    if (baseStatus.isDir) recurse(basePath) else Array(baseStatus)
   }
 }
 

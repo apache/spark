@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.Dsl._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.types.{BooleanType, IntegerType, StructField, StructType}
 
 
@@ -27,13 +28,18 @@ class ColumnExpressionSuite extends QueryTest {
 
   // TODO: Add test cases for bitwise operations.
 
+  test("collect on column produced by a binary operator") {
+    val df = Seq((1, 2, 3)).toDF("a", "b", "c")
+    checkAnswer(df.select(df("a") + df("b")), Seq(Row(3)))
+    checkAnswer(df.select(df("a") + df("b").as("c")), Seq(Row(3)))
+  }
+
   test("star") {
     checkAnswer(testData.select($"*"), testData.collect().toSeq)
   }
 
   test("star qualified by data frame object") {
-    // This is not yet supported.
-    val df = testData.toDataFrame
+    val df = testData.toDF
     val goldAnswer = df.collect().toSeq
     checkAnswer(df.select(df("*")), goldAnswer)
 
@@ -110,13 +116,13 @@ class ColumnExpressionSuite extends QueryTest {
 
   test("isNull") {
     checkAnswer(
-      nullStrings.toDataFrame.where($"s".isNull),
+      nullStrings.toDF.where($"s".isNull),
       nullStrings.collect().toSeq.filter(r => r.getString(1) eq null))
   }
 
   test("isNotNull") {
     checkAnswer(
-      nullStrings.toDataFrame.where($"s".isNotNull),
+      nullStrings.toDF.where($"s".isNotNull),
       nullStrings.collect().toSeq.filter(r => r.getString(1) ne null))
   }
 
@@ -141,7 +147,7 @@ class ColumnExpressionSuite extends QueryTest {
   }
 
   test("!==") {
-    val nullData = TestSQLContext.applySchema(TestSQLContext.sparkContext.parallelize(
+    val nullData = TestSQLContext.createDataFrame(TestSQLContext.sparkContext.parallelize(
       Row(1, 1) ::
       Row(1, 2) ::
       Row(1, null) ::
@@ -201,7 +207,7 @@ class ColumnExpressionSuite extends QueryTest {
       testData2.collect().toSeq.filter(r => r.getInt(0) <= r.getInt(1)))
   }
 
-  val booleanData = TestSQLContext.applySchema(TestSQLContext.sparkContext.parallelize(
+  val booleanData = TestSQLContext.createDataFrame(TestSQLContext.sparkContext.parallelize(
     Row(false, false) ::
       Row(false, true) ::
       Row(true, false) ::
@@ -302,5 +308,9 @@ class ColumnExpressionSuite extends QueryTest {
       testData.select(lower(lit(null))),
       (1 to 100).map(n => Row(null))
     )
+  }
+
+  test("lift alias out of cast") {
+    assert(col("1234").as("name").cast("int").expr === col("1234").cast("int").as("name").expr)
   }
 }

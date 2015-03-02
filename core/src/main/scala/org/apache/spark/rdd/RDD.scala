@@ -25,11 +25,8 @@ import scala.language.implicitConversions
 import scala.reflect.{classTag, ClassTag}
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLogPlus
-import org.apache.hadoop.io.BytesWritable
+import org.apache.hadoop.io.{Writable, BytesWritable, NullWritable, Text}
 import org.apache.hadoop.io.compress.CompressionCodec
-import org.apache.hadoop.io.NullWritable
-import org.apache.hadoop.io.Text
-import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.TextOutputFormat
 
 import org.apache.spark._
@@ -57,8 +54,7 @@ import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler, Bernoulli
  * [[org.apache.spark.rdd.SequenceFileRDDFunctions]] contains operations available on RDDs that
  * can be saved as SequenceFiles.
  * All operations are automatically available on any RDD of the right type (e.g. RDD[(Int, Int)]
- * through implicit conversions except `saveAsSequenceFile`. You need to
- * `import org.apache.spark.SparkContext._` to make `saveAsSequenceFile` work.
+ * through implicit.
  *
  * Internally, each RDD is characterized by five main properties:
  *
@@ -466,7 +462,13 @@ abstract class RDD[T: ClassTag](
    * Return the union of this RDD and another one. Any identical elements will appear multiple
    * times (use `.distinct()` to eliminate them).
    */
-  def union(other: RDD[T]): RDD[T] = new UnionRDD(sc, Array(this, other))
+  def union(other: RDD[T]): RDD[T] = {
+    if (partitioner.isDefined && other.partitioner == partitioner) {
+      new PartitionerAwareUnionRDD(sc, Array(this, other))
+    } else {
+      new UnionRDD(sc, Array(this, other))
+    }
+  }
 
   /**
    * Return the union of this RDD and another one. Any identical elements will appear multiple
@@ -1144,6 +1146,9 @@ abstract class RDD[T: ClassTag](
    * Take the first num elements of the RDD. It works by first scanning one partition, and use the
    * results from that partition to estimate the number of additional partitions needed to satisfy
    * the limit.
+   *
+   * @note due to complications in the internal implementation, this method will raise
+   * an exception if called on an RDD of `Nothing` or `Null`.
    */
   def take(num: Int): Array[T] = {
     if (num == 0) {
@@ -1256,6 +1261,10 @@ abstract class RDD[T: ClassTag](
   def min()(implicit ord: Ordering[T]): T = this.reduce(ord.min)
 
   /**
+   * @note due to complications in the internal implementation, this method will raise an
+   * exception if called on an RDD of `Nothing` or `Null`. This may be come up in practice
+   * because, for example, the type of `parallelize(Seq())` is `RDD[Nothing]`.
+   * (`parallelize(Seq())` should be avoided anyway in favor of `parallelize(Seq[T]())`.)
    * @return true if and only if the RDD contains no elements at all. Note that an RDD
    *         may be empty even when it has at least 1 partition.
    */
@@ -1527,7 +1536,7 @@ abstract class RDD[T: ClassTag](
  */
 object RDD {
 
-  // The following implicit functions were in SparkContext before 1.2 and users had to
+  // The following implicit functions were in SparkContext before 1.3 and users had to
   // `import SparkContext._` to enable them. Now we move them here to make the compiler find
   // them automatically. However, we still keep the old functions in SparkContext for backward
   // compatibility and forward to the following functions directly.
@@ -1541,9 +1550,15 @@ object RDD {
     new AsyncRDDActions(rdd)
   }
 
-  implicit def rddToSequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable: ClassTag](
-      rdd: RDD[(K, V)]): SequenceFileRDDFunctions[K, V] = {
-    new SequenceFileRDDFunctions(rdd)
+  implicit def rddToSequenceFileRDDFunctions[K, V](rdd: RDD[(K, V)])
+      (implicit kt: ClassTag[K], vt: ClassTag[V],
+                keyWritableFactory: WritableFactory[K],
+                valueWritableFactory: WritableFactory[V])
+    : SequenceFileRDDFunctions[K, V] = {
+    implicit val keyConverter = keyWritableFactory.convert
+    implicit val valueConverter = valueWritableFactory.convert
+    new SequenceFileRDDFunctions(rdd,
+      keyWritableFactory.writableClass(kt), valueWritableFactory.writableClass(vt))
   }
 
   implicit def rddToOrderedRDDFunctions[K : Ordering : ClassTag, V: ClassTag](rdd: RDD[(K, V)])

@@ -36,6 +36,7 @@ object MimaExcludes {
         case v if v.startsWith("1.3") =>
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),
+            MimaBuild.excludeSparkPackage("ml"),
             // These are needed if checking against the sbt build, since they are part of
             // the maven-generated artifacts in the 1.2 build.
             MimaBuild.excludeSparkPackage("unused"),
@@ -69,7 +70,12 @@ object MimaExcludes {
           ) ++ Seq(
             // SPARK-5540
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.mllib.recommendation.ALS.solveLeastSquares")
+              "org.apache.spark.mllib.recommendation.ALS.solveLeastSquares"),
+            // SPARK-5536
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$^dateFeatures"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$^dateBlock")
           ) ++ Seq(
             // SPARK-3325
             ProblemFilters.exclude[MissingMethodProblem](
@@ -141,6 +147,16 @@ object MimaExcludes {
               "org.apache.spark.graphx.Graph.getCheckpointFiles"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.graphx.Graph.isCheckpointed")
+          ) ++ Seq(
+            // SPARK-4789 Standardize ML Prediction APIs
+            ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.mllib.linalg.VectorUDT"),
+            ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.mllib.linalg.VectorUDT.serialize"),
+            ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.mllib.linalg.VectorUDT.sqlType")
+          ) ++ Seq(
+            // SPARK-4682
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.RealClock"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.Clock"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.TestClock")
           )
 
         case v if v.startsWith("1.2") =>

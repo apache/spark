@@ -167,6 +167,32 @@ class ListTests(PySparkTestCase):
             # TODO: Allow small numeric difference.
             self.assertTrue(array_equal(c1, c2))
 
+    def test_gmm(self):
+        from pyspark.mllib.clustering import GaussianMixture
+        data = self.sc.parallelize([
+            [1, 2],
+            [8, 9],
+            [-4, -3],
+            [-6, -7],
+        ])
+        clusters = GaussianMixture.train(data, 2, convergenceTol=0.001,
+                                         maxIterations=100, seed=56)
+        labels = clusters.predict(data).collect()
+        self.assertEquals(labels[0], labels[1])
+        self.assertEquals(labels[2], labels[3])
+
+    def test_gmm_deterministic(self):
+        from pyspark.mllib.clustering import GaussianMixture
+        x = range(0, 100, 10)
+        y = range(0, 100, 10)
+        data = self.sc.parallelize([[a, b] for a, b in zip(x, y)])
+        clusters1 = GaussianMixture.train(data, 5, convergenceTol=0.001,
+                                          maxIterations=100, seed=63)
+        clusters2 = GaussianMixture.train(data, 5, convergenceTol=0.001,
+                                          maxIterations=100, seed=63)
+        for c1, c2 in zip(clusters1.weights, clusters2.weights):
+            self.assertEquals(round(c1, 7), round(c2, 7))
+
     def test_classification(self):
         from pyspark.mllib.classification import LogisticRegressionWithSGD, SVMWithSGD, NaiveBayes
         from pyspark.mllib.tree import DecisionTree, RandomForest, GradientBoostedTrees
@@ -259,7 +285,7 @@ class ListTests(PySparkTestCase):
         self.assertTrue(dt_model.predict(features[3]) > 0)
 
         rf_model = RandomForest.trainRegressor(
-            rdd, categoricalFeaturesInfo=categoricalFeaturesInfo, numTrees=100)
+            rdd, categoricalFeaturesInfo=categoricalFeaturesInfo, numTrees=100, seed=1)
         self.assertTrue(rf_model.predict(features[0]) <= 0)
         self.assertTrue(rf_model.predict(features[1]) > 0)
         self.assertTrue(rf_model.predict(features[2]) <= 0)
@@ -309,7 +335,7 @@ class VectorUDTTests(PySparkTestCase):
         sqlCtx = SQLContext(self.sc)
         rdd = self.sc.parallelize([LabeledPoint(1.0, self.dv1), LabeledPoint(0.0, self.sv1)])
         srdd = sqlCtx.inferSchema(rdd)
-        schema = srdd.schema()
+        schema = srdd.schema
         field = [f for f in schema.fields if f.name == "features"][0]
         self.assertEqual(field.dataType, self.udt)
         vectors = srdd.map(lambda p: p.features).collect()

@@ -58,14 +58,6 @@ class KryoSerializer(conf: SparkConf)
   private val classesToRegister = conf.get("spark.kryo.classesToRegister", "")
     .split(',')
     .filter(!_.isEmpty)
-    .map { className =>
-      try {
-        Class.forName(className)
-      } catch {
-        case e: Exception =>
-          throw new SparkException("Failed to load class to register with Kryo", e)
-      }
-    }
 
   def newKryoOutput() = new KryoOutput(bufferSize, math.max(bufferSize, maxBufferSize))
 
@@ -97,7 +89,8 @@ class KryoSerializer(conf: SparkConf)
       // Use the default classloader when calling the user registrator.
       Thread.currentThread.setContextClassLoader(classLoader)
       // Register classes given through spark.kryo.classesToRegister.
-      classesToRegister.foreach { clazz => kryo.register(clazz) }
+      classesToRegister
+        .foreach { className => kryo.register(Class.forName(className, true, classLoader)) }
       // Allow the user to register their own classes by setting spark.kryo.registrator.
       userRegistrator
         .map(Class.forName(_, true, classLoader).newInstance().asInstanceOf[KryoRegistrator])

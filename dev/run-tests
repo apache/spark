@@ -36,7 +36,7 @@ function handle_error () {
 }
 
 
-# Build against the right verison of Hadoop.
+# Build against the right version of Hadoop.
 {
   if [ -n "$AMPLAB_JENKINS_BUILD_PROFILE" ]; then
     if [ "$AMPLAB_JENKINS_BUILD_PROFILE" = "hadoop1.0" ]; then
@@ -77,7 +77,7 @@ export SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Pkinesis-asl"
   fi
 }
 
-# Only run Hive tests if there are sql changes.
+# Only run Hive tests if there are SQL changes.
 # Partial solution for SPARK-1455.
 if [ -n "$AMPLAB_JENKINS" ]; then
   git fetch origin master:master
@@ -183,7 +183,7 @@ CURRENT_BLOCK=$BLOCK_SPARK_UNIT_TESTS
   if [ -n "$_SQL_TESTS_ONLY" ]; then
     # This must be an array of individual arguments. Otherwise, having one long string
     # will be interpreted as a single test, which doesn't work.
-    SBT_MAVEN_TEST_ARGS=("catalyst/test" "sql/test" "hive/test" "mllib/test")
+    SBT_MAVEN_TEST_ARGS=("catalyst/test" "sql/test" "hive/test" "hive-thriftserver/test" "mllib/test")
   else
     SBT_MAVEN_TEST_ARGS=("test")
   fi

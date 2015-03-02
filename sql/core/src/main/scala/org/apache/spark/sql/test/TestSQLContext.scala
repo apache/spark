@@ -41,7 +41,7 @@ object TestSQLContext
    * construct [[DataFrame]] directly out of local data without relying on implicits.
    */
   protected[sql] implicit def logicalPlanToSparkQuery(plan: LogicalPlan): DataFrame = {
-    new DataFrame(this, plan)
+    DataFrame(this, plan)
   }
 
 }

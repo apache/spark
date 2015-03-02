@@ -122,6 +122,23 @@
       <artifactId>jetty-http</artifactId>
       <scope>compile</scope>
     </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-continuation</artifactId>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-servlet</artifactId>
+      <scope>compile</scope>
+    </dependency>
+    <!-- Because we mark jetty as provided and shade it, its dependency
+         orbit is ignored, so we explicitly list it here (see SPARK-5557).-->
+    <dependency>
+      <groupId>org.eclipse.jetty.orbit</groupId>
+      <artifactId>javax.servlet</artifactId>
+      <version>${orbit.version}</version>
+    </dependency>
 
     <dependency>
       <groupId>org.apache.commons</groupId>
@@ -227,9 +244,28 @@
       <artifactId>metrics-graphite</artifactId>
     </dependency>
     <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.module</groupId>
+      <artifactId>jackson-module-scala_2.10</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.apache.derby</groupId>
       <artifactId>derby</artifactId>
       <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.ivy</groupId>
+      <artifactId>ivy</artifactId>
+      <version>${ivy.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>oro</groupId>
+      <!-- oro is needed by ivy, but only listed as an optional dependency, so we include it. -->
+      <artifactId>oro</artifactId>
+      <version>${oro.version}</version>
     </dependency>
     <dependency>
       <groupId>org.tachyonproject</groupId>
@@ -291,16 +327,6 @@
     <dependency>
       <groupId>org.scalacheck</groupId>
       <artifactId>scalacheck_${scala.binary.version}</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.easymock</groupId>
-      <artifactId>easymockclassextension</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>asm</groupId>
-      <artifactId>asm</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -377,7 +403,7 @@
               <overWriteIfNewer>true</overWriteIfNewer>
               <useSubDirectoryPerType>true</useSubDirectoryPerType>
               <includeArtifactIds>
-                guava,jetty-io,jetty-http,jetty-plus,jetty-util,jetty-server
+                guava,jetty-io,jetty-servlet,jetty-continuation,jetty-http,jetty-plus,jetty-util,jetty-server
               </includeArtifactIds>
               <silent>true</silent>
             </configuration>

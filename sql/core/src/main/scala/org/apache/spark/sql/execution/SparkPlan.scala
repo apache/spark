@@ -27,6 +27,8 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 
+import scala.collection.mutable.ArrayBuffer
+
 object SparkPlan {
   protected[sql] val currentContext = new ThreadLocal[SQLContext]()
 }
@@ -77,8 +79,53 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /**
    * Runs this query returning the result as an array.
    */
-  def executeCollect(): Array[Row] =
+  def executeCollect(): Array[Row] = {
     execute().map(ScalaReflection.convertRowToScala(_, schema)).collect()
+  }
+
+  /**
+   * Runs this query returning the first `n` rows as an array.
+   *
+   * This is modeled after RDD.take but never runs any job locally on the driver.
+   */
+  def executeTake(n: Int): Array[Row] = {
+    if (n == 0) {
+      return new Array[Row](0)
+    }
+
+    val childRDD = execute().map(_.copy())
+
+    val buf = new ArrayBuffer[Row]
+    val totalParts = childRDD.partitions.length
+    var partsScanned = 0
+    while (buf.size < n && partsScanned < totalParts) {
+      // The number of partitions to try in this iteration. It is ok for this number to be
+      // greater than totalParts because we actually cap it at totalParts in runJob.
+      var numPartsToTry = 1
+      if (partsScanned > 0) {
+        // If we didn't find any rows after the first iteration, just try all partitions next.
+        // Otherwise, interpolate the number of partitions we need to try, but overestimate it
+        // by 50%.
+        if (buf.size == 0) {
+          numPartsToTry = totalParts - 1
+        } else {
+          numPartsToTry = (1.5 * n * partsScanned / buf.size).toInt
+        }
+      }
+      numPartsToTry = math.max(0, numPartsToTry)  // guard against negative num of partitions
+
+      val left = n - buf.size
+      val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
+      val sc = sqlContext.sparkContext
+      val res =
+        sc.runJob(childRDD, (it: Iterator[Row]) => it.take(left).toArray, p, allowLocal = false)
+
+      res.foreach(buf ++= _.take(n - buf.size))
+      partsScanned += numPartsToTry
+    }
+
+    buf.toArray.map(ScalaReflection.convertRowToScala(_, this.schema))
+  }
 
   protected def newProjection(
       expressions: Seq[Expression], inputSchema: Seq[Attribute]): Projection = {
