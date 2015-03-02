@@ -30,9 +30,6 @@ import static org.apache.spark.launcher.CommandBuilderUtils.*;
  * <p/>
  * Use this class to start Spark applications programmatically. The class uses a builder pattern
  * to allow clients to configure the Spark application and launch it as a child process.
- * <p/>
- * Note that launching Spark applications using this class will not automatically load environment
- * variables from the "spark-env.sh" or "spark-env.cmd" scripts in the configuration directory.
  */
 public class SparkLauncher {
 
