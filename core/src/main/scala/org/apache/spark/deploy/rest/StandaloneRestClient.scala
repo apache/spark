@@ -52,7 +52,7 @@ import org.apache.spark.{Logging, SparkConf, SPARK_VERSION => sparkVersion}
  * implementation of this client can use that information to retry using the version specified
  * by the server.
  */
-private[spark] class StandaloneRestClient extends Logging {
+private[deploy] class StandaloneRestClient extends Logging {
   import StandaloneRestClient._
 
   /**
@@ -61,7 +61,7 @@ private[spark] class StandaloneRestClient extends Logging {
    * If the submission was successful, poll the status of the submission and report
    * it to the user. Otherwise, report the error message provided by the server.
    */
-  def createSubmission(
+  private[rest] def createSubmission(
       master: String,
       request: CreateSubmissionRequest): SubmitRestProtocolResponse = {
     logInfo(s"Submitting a request to launch an application in $master.")
@@ -79,7 +79,8 @@ private[spark] class StandaloneRestClient extends Logging {
   }
 
   /** Request that the server kill the specified submission. */
-  def killSubmission(master: String, submissionId: String): SubmitRestProtocolResponse = {
+  private[deploy] def killSubmission(master: String, submissionId: String): 
+  SubmitRestProtocolResponse = {
     logInfo(s"Submitting a request to kill submission $submissionId in $master.")
     validateMaster(master)
     val response = post(getKillUrl(master, submissionId))
@@ -91,7 +92,7 @@ private[spark] class StandaloneRestClient extends Logging {
   }
 
   /** Request the status of a submission from the server. */
-  def requestSubmissionStatus(
+  private[deploy] def requestSubmissionStatus(
       master: String,
       submissionId: String,
       quiet: Boolean = false): SubmitRestProtocolResponse = {
@@ -106,7 +107,7 @@ private[spark] class StandaloneRestClient extends Logging {
   }
 
   /** Construct a message that captures the specified parameters for submitting an application. */
-  def constructSubmitRequest(
+  private[rest] def constructSubmitRequest(
       appResource: String,
       mainClass: String,
       appArgs: Array[String],
@@ -292,9 +293,9 @@ private[spark] class StandaloneRestClient extends Logging {
 }
 
 private[spark] object StandaloneRestClient {
-  val REPORT_DRIVER_STATUS_INTERVAL = 1000
-  val REPORT_DRIVER_STATUS_MAX_TRIES = 10
-  val PROTOCOL_VERSION = "v1"
+  private val REPORT_DRIVER_STATUS_INTERVAL = 1000
+  private val REPORT_DRIVER_STATUS_MAX_TRIES = 10
+  private[rest] val PROTOCOL_VERSION = "v1"
 
   /**
    * Submit an application, assuming Spark parameters are specified through the given config.
