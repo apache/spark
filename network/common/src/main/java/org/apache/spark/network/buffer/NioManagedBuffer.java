@@ -47,9 +47,7 @@ public final class NioManagedBuffer extends ManagedBuffer {
 
   @Override
   public InputStream createInputStream() throws IOException {
-    //TODO
-    ByteBuffer aBuf = ((WrappedLargeByteBuffer) buf).underlying[0];
-    return new ByteBufInputStream(Unpooled.wrappedBuffer(aBuf));
+    return new ByteBufInputStream(Unpooled.wrappedBuffer(buf.firstByteBuffer()));
   }
 
   @Override
