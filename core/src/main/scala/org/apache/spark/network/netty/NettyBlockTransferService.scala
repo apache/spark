@@ -117,7 +117,8 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
 
     val largeByteBuffer = blockData.nioByteBuffer()
     val bufferParts = largeByteBuffer.nioBuffers().asScala
-    val chunkOffsets: Seq[Long] = bufferParts.scanLeft(0l){case(offset, buf) => offset + buf.limit()}
+    val chunkOffsets: Seq[Long] = bufferParts.scanLeft(0L){
+      case(offset, buf) => offset + buf.limit()}
 
     import scala.concurrent.ExecutionContext.Implicits.global
     bufferParts.zipWithIndex.foldLeft(Future.successful(())){case (prevFuture,(buf,idx)) =>
@@ -130,7 +131,7 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
           buf.get(arr)
           arr
         }
-        //Note: one major shortcoming of this is that it expects the incoming LargeByteBuffer to
+        // Note: one major shortcoming of this is that it expects the incoming LargeByteBuffer to
         // already be reasonably chunked -- in particular, the chunks cannot get too close to 2GB
         // or else we'll still run into problems b/c there is some more overhead in the transfer
         val msg = new UploadPartialBlock(appId, execId, blockId.toString, bufferParts.size, idx,
@@ -140,12 +141,14 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
         client.sendRpc(msg.toByteArray,
           new RpcResponseCallback {
             override def onSuccess(response: Array[Byte]): Unit = {
-              logTrace(s"Successfully uploaded partial block $blockId, part $idx (out of ${bufferParts.size})")
+              logTrace(s"Successfully uploaded partial block $blockId," +
+                s" part $idx (out of ${bufferParts.size})")
               result.success()
             }
 
             override def onFailure(e: Throwable): Unit = {
-              logError(s"Error while uploading partial block $blockId, part $idx (out of ${bufferParts.size})", e)
+              logError(s"Error while uploading partial block $blockId," +
+                s" part $idx (out of ${bufferParts.size})", e)
               result.failure(e)
             }
           })

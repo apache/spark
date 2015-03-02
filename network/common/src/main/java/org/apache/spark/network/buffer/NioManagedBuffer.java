@@ -64,9 +64,8 @@ public final class NioManagedBuffer extends ManagedBuffer {
 
   @Override
   public Object convertToNetty() throws IOException {
-    //TODO
-    ByteBuffer aBuf = ((WrappedLargeByteBuffer) buf).underlying[0];
-    return Unpooled.wrappedBuffer(aBuf);
+    //TODO can we do anything sensible here when we're over 2gb?
+    return Unpooled.wrappedBuffer(buf.firstByteBuffer());
   }
 
   @Override

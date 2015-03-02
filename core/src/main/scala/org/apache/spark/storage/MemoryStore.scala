@@ -78,10 +78,13 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     }
   }
 
-  override def putBytes(blockId: BlockId, _bytes: LargeByteBuffer, level: StorageLevel): PutResult = {
+  override def putBytes(
+      blockId: BlockId,
+      _bytes: LargeByteBuffer,
+      level: StorageLevel): PutResult = {
     // Work on a duplicate - since the original input might be used elsewhere.
     val bytes = _bytes.duplicate()
-    bytes.position(0l);
+    bytes.position(0L)
     if (level.deserialized) {
       val values = blockManager.dataDeserialize(blockId, bytes)
       putIterator(blockId, values, level, returnValues = true)
@@ -175,7 +178,8 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     } else if (entry.deserialized) {
       Some(entry.value.asInstanceOf[Array[Any]].iterator)
     } else {
-      val buffer = entry.value.asInstanceOf[LargeByteBuffer].duplicate() // Doesn't actually copy data
+      // Doesn't actually copy data
+      val buffer = entry.value.asInstanceOf[LargeByteBuffer].duplicate()
       Some(blockManager.dataDeserialize(blockId, buffer))
     }
   }

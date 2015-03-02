@@ -539,7 +539,7 @@ private[spark] class BlockManager(
               val copyForMemory = LargeByteBufferHelper.allocate(bytes.limit)
               copyForMemory.put(bytes)
               memoryStore.putBytes(blockId, copyForMemory, level)
-              bytes.position(0l)
+              bytes.position(0L)
             }
             if (!asBlockResult) {
               return Some(bytes)
@@ -592,7 +592,7 @@ private[spark] class BlockManager(
     val locations = Random.shuffle(master.getLocations(blockId))
     for (loc <- locations) {
       logDebug(s"Getting remote block $blockId from $loc")
-      //TODO the fetch will always be one byte buffer till we fix SPARK-5928
+      // the fetch will always be one byte buffer till we fix SPARK-5928
       val data: LargeByteBuffer = blockTransferService.fetchBlockSync(
         loc.host, loc.port, loc.executorId, blockId.toString).nioByteBuffer()
 
@@ -789,7 +789,7 @@ private[spark] class BlockManager(
           case ArrayValues(array) =>
             blockStore.putArray(blockId, array, putLevel, returnValues)
           case ByteBufferValues(bytes) =>
-            bytes.position(0l)
+            bytes.position(0L)
             blockStore.putBytes(blockId, bytes, putLevel)
         }
         size = result.size
@@ -940,11 +940,8 @@ private[spark] class BlockManager(
         case Some(peer) =>
           try {
             val onePeerStartTime = System.currentTimeMillis
-            data.position(0l)
+            data.position(0L)
             logTrace(s"Trying to replicate $blockId of ${data.limit()} bytes to $peer")
-            //TODO
-            //ACK!  here we're stuck -- we can't replicate a large block until we figure out
-            // how to deal w/ shuffling more than 2 gb
             blockTransferService.uploadBlockSync(
               peer.host, peer.port, peer.executorId, blockId, new NioManagedBuffer(data), tLevel)
             logTrace(s"Replicated $blockId of ${data.limit()} bytes to $peer in %s ms"

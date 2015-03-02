@@ -51,7 +51,7 @@ class NettyBlockRpcServer(
   // TODO from configuration.  Might need to be really big ...
   private val cleanupTime = 30 * 60 * 1000
 
-  //ideally, this should be empty, and it will contain a very small amount of data for abandoned
+  // ideally, this should be empty, and it will contain a very small amount of data for abandoned
   // requests -- so hopefully its OK to hold on to this forever
   private val abandonedRequests = new ConcurrentHashMap[String,Object]()
 
@@ -83,7 +83,8 @@ class NettyBlockRpcServer(
         // StorageLevel is serialized as bytes using our JavaSerializer.
         val level: StorageLevel =
           serializer.newInstance().deserialize(ByteBuffer.wrap(uploadBlock.metadata))
-        val data = new NioManagedBuffer(LargeByteBufferHelper.asLargeByteBuffer(uploadBlock.blockData))
+        val data = new NioManagedBuffer(LargeByteBufferHelper.asLargeByteBuffer(
+          uploadBlock.blockData))
         logTrace("putting block into our block manager: " + blockManager)
         blockManager.putBlockData(BlockId(uploadBlock.blockId), data, level)
         responseContext.onSuccess(new Array[Byte](0))
@@ -134,7 +135,7 @@ class NettyBlockRpcServer(
       nMissing -= 1
       logTrace("nmissing = " + nMissing)
       if (nMissing == 0) {
-        //we've got all the blocks -- now we can insert into the block manager
+        // we've got all the blocks -- now we can insert into the block manager
         logTrace("received all partial blocks for " + blockId)
         val data = new NioManagedBuffer(new WrappedLargeByteBuffer(chunks.map{ByteBuffer.wrap}))
         blockManager.putBlockData(BlockId(blockId), data, storageLevel)
