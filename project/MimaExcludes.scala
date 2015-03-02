@@ -202,11 +202,7 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.streaming.StreamingContext.fileStream"),
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.streaming.StreamingContext.textFileStream"),
-            ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.streaming.api.java.JavaStreamingContext.fileStream"),
-            ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.streaming.api.java.JavaStreamingContext.textFileStream")
+              "org.apache.spark.streaming.StreamingContext.textFileStream")
           ) ++ Seq(
             // SPARK-5123 (SparkSQL data type change) - alpha component only
             ProblemFilters.exclude[IncompatibleResultTypeProblem](
