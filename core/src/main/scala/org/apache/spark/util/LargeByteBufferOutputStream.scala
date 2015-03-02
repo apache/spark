@@ -18,16 +18,16 @@
 package org.apache.spark.util
 
 import java.io.OutputStream
+import java.nio.ByteBuffer
 
-import org.apache.spark.io.ChainedLargeByteBuffer
-import org.apache.spark.network.buffer.LargeByteBuffer
-import org.apache.spark.util.collection.ChainedBuffer
+import org.apache.spark.network.buffer.{WrappedLargeByteBuffer, LargeByteBuffer}
+import org.apache.spark.util.io.ByteArrayChunkOutputStream
 
 private[spark]
 class LargeByteBufferOutputStream(chunkSize: Int = 65536)
   extends OutputStream {
 
-  val buffer = ChainedBuffer.withInitialSize(chunkSize)
+  val output = new ByteArrayChunkOutputStream(chunkSize)
 
   private var _pos = 0
 
@@ -36,11 +36,13 @@ class LargeByteBufferOutputStream(chunkSize: Int = 65536)
   }
 
   override def write(bytes: Array[Byte], offs: Int, len: Int): Unit = {
-    buffer.write(_pos, bytes, offs, len)
+    output.write(bytes, offs, len)
     _pos += len
   }
 
   def pos: Int = _pos
 
-  def largeBuffer: LargeByteBuffer = new ChainedLargeByteBuffer(buffer)
+  def largeBuffer: LargeByteBuffer = {
+    new WrappedLargeByteBuffer(output.toArrays.map{ByteBuffer.wrap})
+  }
 }

@@ -67,7 +67,7 @@ public class LargeByteBufferHelper {
         long end = offset + length;
         while (curOffset < end) {
             offsets.add(curOffset);
-            int chunkLength = Math.min((int) (end - curOffset), maxChunk);
+            int chunkLength = (int) Math.min((end - curOffset), maxChunk);
             curOffset += chunkLength;
         }
         offsets.add(end);

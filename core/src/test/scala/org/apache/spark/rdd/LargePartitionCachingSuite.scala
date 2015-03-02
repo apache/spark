@@ -25,8 +25,6 @@ class LargePartitionCachingSuite extends FunSuite with SharedSparkContext {
   def largePartitionRdd = sc.parallelize(1 to 1e6.toInt, 1).map{i => new Array[Byte](2.2e3.toInt)}
 
   test("memory serialized cache large partitions") {
-    //this test doesn't actually work, b/c we'll just think we don't have enough memory,
-    // and so it won't get persisted :(
     largePartitionRdd.persist(StorageLevel.MEMORY_ONLY_SER).count()
   }
 

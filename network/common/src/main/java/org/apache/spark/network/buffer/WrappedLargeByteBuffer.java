@@ -62,6 +62,7 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
             moved += toRead;
             updateCurrentBuffer();
         }
+        _pos += moved;
     }
 
     @Override

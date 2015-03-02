@@ -1254,7 +1254,9 @@ private[spark] object BlockManager extends Logging {
   }
 
   def dispose(buffer: LargeByteBuffer): Unit = {
-    buffer.nioBuffers().asScala.foreach{buf => dispose(buf)}
+    if (buffer != null) {
+      buffer.nioBuffers().asScala.foreach { buf => dispose(buf)}
+    }
   }
 
   def blockIdsToBlockManagers(
