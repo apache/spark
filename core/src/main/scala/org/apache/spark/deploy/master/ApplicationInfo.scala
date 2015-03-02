@@ -28,7 +28,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.ApplicationDescription
 import org.apache.spark.util.Utils
 
-private[spark] class ApplicationInfo(
+private[deploy] class ApplicationInfo(
     val startTime: Long,
     val id: String,
     val desc: ApplicationDescription,
@@ -38,11 +38,11 @@ private[spark] class ApplicationInfo(
   extends Serializable {
 
   @transient var state: ApplicationState.Value = _
-  @transient var executors: mutable.HashMap[Int, ExecutorDesc] = _
-  @transient var removedExecutors: ArrayBuffer[ExecutorDesc] = _
-  @transient var coresGranted: Int = _
+  @transient private[master] var executors: mutable.HashMap[Int, ExecutorDesc] = _
+  @transient private[master] var removedExecutors: ArrayBuffer[ExecutorDesc] = _
+  @transient private[master] var coresGranted: Int = _
   @transient var endTime: Long = _
-  @transient var appSource: ApplicationSource = _
+  @transient private[master] var appSource: ApplicationSource = _
 
   @transient private var nextExecutorId: Int = _
 
@@ -75,14 +75,15 @@ private[spark] class ApplicationInfo(
     }
   }
 
-  def addExecutor(worker: WorkerInfo, cores: Int, useID: Option[Int] = None): ExecutorDesc = {
+  private[master] def addExecutor(worker: WorkerInfo, cores: Int, useID: Option[Int] = None): 
+  ExecutorDesc = {
     val exec = new ExecutorDesc(newExecutorId(useID), this, worker, cores, desc.memoryPerSlave)
     executors(exec.id) = exec
     coresGranted += cores
     exec
   }
 
-  def removeExecutor(exec: ExecutorDesc) {
+  private[master] def removeExecutor(exec: ExecutorDesc) {
     if (executors.contains(exec.id)) {
       removedExecutors += executors(exec.id)
       executors -= exec.id
@@ -90,22 +91,22 @@ private[spark] class ApplicationInfo(
     }
   }
 
-  val requestedCores = desc.maxCores.getOrElse(defaultCores)
+  private[master] val requestedCores = desc.maxCores.getOrElse(defaultCores)
 
-  def coresLeft: Int = requestedCores - coresGranted
+  private[master] def coresLeft: Int = requestedCores - coresGranted
 
   private var _retryCount = 0
 
-  def retryCount = _retryCount
+  private[master] def retryCount = _retryCount
 
-  def incrementRetryCount() = {
+  private[master] def incrementRetryCount() = {
     _retryCount += 1
     _retryCount
   }
 
-  def resetRetryCount() = _retryCount = 0
+  private[master] def resetRetryCount() = _retryCount = 0
 
-  def markFinished(endState: ApplicationState.Value) {
+  private[master] def markFinished(endState: ApplicationState.Value) {
     state = endState
     endTime = System.currentTimeMillis()
   }

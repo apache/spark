@@ -23,18 +23,18 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.DriverDescription
 import org.apache.spark.util.Utils
 
-private[spark] class DriverInfo(
+private[deploy] class DriverInfo(
     val startTime: Long,
     val id: String,
     val desc: DriverDescription,
-    val submitDate: Date)
+    private[master] val submitDate: Date)
   extends Serializable {
 
   @transient var state: DriverState.Value = DriverState.SUBMITTED
   /* If we fail when launching the driver, the exception is stored here. */
-  @transient var exception: Option[Exception] = None
+  @transient private[master] var exception: Option[Exception] = None
   /* Most recent worker assigned to this driver */
-  @transient var worker: Option[WorkerInfo] = None
+  @transient private[master] var worker: Option[WorkerInfo] = None
 
   init()
 

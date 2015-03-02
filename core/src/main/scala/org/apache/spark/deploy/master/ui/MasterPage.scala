@@ -31,7 +31,7 @@ import org.apache.spark.deploy.master._
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
-private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
+private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   private val master = parent.masterActorRef
   private val timeout = parent.timeout
 
@@ -41,7 +41,7 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     JsonProtocol.writeMasterState(state)
   }
 
-  def handleAppKillRequest(request: HttpServletRequest): Unit = {
+  private[ui] def handleAppKillRequest(request: HttpServletRequest): Unit = {
     handleKillRequest(request, id => {
       parent.master.idToApp.get(id).foreach { app =>
         parent.master.removeApplication(app, ApplicationState.KILLED)
@@ -49,7 +49,7 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     })
   }
 
-  def handleDriverKillRequest(request: HttpServletRequest): Unit = {
+  private[ui] def handleDriverKillRequest(request: HttpServletRequest): Unit = {
     handleKillRequest(request, id => { master ! RequestKillDriver(id) })
   }
 

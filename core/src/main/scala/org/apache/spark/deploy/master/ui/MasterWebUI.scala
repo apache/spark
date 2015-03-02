@@ -26,13 +26,13 @@ import org.apache.spark.util.AkkaUtils
 /**
  * Web UI server for the standalone master.
  */
-private[spark]
-class MasterWebUI(val master: Master, requestedPort: Int)
+private[master]
+class MasterWebUI(private[ui] val master: Master, requestedPort: Int)
   extends WebUI(master.securityMgr, requestedPort, master.conf, name = "MasterUI") with Logging {
 
-  val masterActorRef = master.self
-  val timeout = AkkaUtils.askTimeout(master.conf)
-  val killEnabled = master.conf.getBoolean("spark.ui.killEnabled", true)
+  private[ui] val masterActorRef = master.self
+  private[ui] val timeout = AkkaUtils.askTimeout(master.conf)
+  private[ui] val killEnabled = master.conf.getBoolean("spark.ui.killEnabled", true)
 
   initialize()
 
@@ -50,18 +50,18 @@ class MasterWebUI(val master: Master, requestedPort: Int)
   }
 
   /** Attach a reconstructed UI to this Master UI. Only valid after bind(). */
-  def attachSparkUI(ui: SparkUI) {
+  private[master] def attachSparkUI(ui: SparkUI) {
     assert(serverInfo.isDefined, "Master UI must be bound to a server before attaching SparkUIs")
     ui.getHandlers.foreach(attachHandler)
   }
 
   /** Detach a reconstructed UI from this Master UI. Only valid after bind(). */
-  def detachSparkUI(ui: SparkUI) {
+  private[master] def detachSparkUI(ui: SparkUI) {
     assert(serverInfo.isDefined, "Master UI must be bound to a server before detaching SparkUIs")
     ui.getHandlers.foreach(detachHandler)
   }
 }
 
 private[spark] object MasterWebUI {
-  val STATIC_RESOURCE_DIR = SparkUI.STATIC_RESOURCE_DIR
+  private val STATIC_RESOURCE_DIR = SparkUI.STATIC_RESOURCE_DIR
 }
