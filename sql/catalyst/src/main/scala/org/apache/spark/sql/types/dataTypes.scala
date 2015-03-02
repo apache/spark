@@ -271,12 +271,13 @@ abstract class DataType {
   /** Check if `this` and `other` are the same data type when ignoring nullability
    *  (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
    */
-  private[sql] def sameType(other: DataType): Boolean = DataType.equalsIgnoreNullability(this, other)
+  private[spark] def sameType(other: DataType): Boolean =
+    DataType.equalsIgnoreNullability(this, other)
 
   /** Returns the same data type but set all nullability fields are true
    * (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
    */
-  private[sql] def asNullable: DataType
+  private[spark] def asNullable: DataType
 }
 
 /**
@@ -293,7 +294,7 @@ class NullType private() extends DataType {
   // Defined with a private constructor so the companion object is the only possible instantiation.
   override def defaultSize: Int = 1
 
-  private[sql] override def asNullable: NullType = this
+  private[spark] override def asNullable: NullType = this
 }
 
 case object NullType extends NullType
@@ -360,7 +361,7 @@ class StringType private() extends NativeType with PrimitiveType {
    */
   override def defaultSize: Int = 4096
 
-  private[sql] override def asNullable: StringType = this
+  private[spark] override def asNullable: StringType = this
 }
 
 case object StringType extends StringType
@@ -396,7 +397,7 @@ class BinaryType private() extends NativeType with PrimitiveType {
    */
   override def defaultSize: Int = 4096
 
-  private[sql] override def asNullable: BinaryType = this
+  private[spark] override def asNullable: BinaryType = this
 }
 
 case object BinaryType extends BinaryType
@@ -423,7 +424,7 @@ class BooleanType private() extends NativeType with PrimitiveType {
    */
   override def defaultSize: Int = 1
 
-  private[sql] override def asNullable: BooleanType = this
+  private[spark] override def asNullable: BooleanType = this
 }
 
 case object BooleanType extends BooleanType
@@ -455,7 +456,7 @@ class TimestampType private() extends NativeType {
    */
   override def defaultSize: Int = 12
 
-  private[sql] override def asNullable: TimestampType = this
+  private[spark] override def asNullable: TimestampType = this
 }
 
 case object TimestampType extends TimestampType
@@ -485,7 +486,7 @@ class DateType private() extends NativeType {
    */
   override def defaultSize: Int = 4
 
-  private[sql] override def asNullable: DateType = this
+  private[spark] override def asNullable: DateType = this
 }
 
 case object DateType extends DateType
@@ -545,7 +546,7 @@ class LongType private() extends IntegralType {
 
   override def simpleString = "bigint"
 
-  private[sql] override def asNullable: LongType = this
+  private[spark] override def asNullable: LongType = this
 }
 
 case object LongType extends LongType
@@ -576,7 +577,7 @@ class IntegerType private() extends IntegralType {
 
   override def simpleString = "int"
 
-  private[sql] override def asNullable: IntegerType = this
+  private[spark] override def asNullable: IntegerType = this
 }
 
 case object IntegerType extends IntegerType
@@ -607,7 +608,7 @@ class ShortType private() extends IntegralType {
 
   override def simpleString = "smallint"
 
-  private[sql] override def asNullable: ShortType = this
+  private[spark] override def asNullable: ShortType = this
 }
 
 case object ShortType extends ShortType
@@ -638,7 +639,7 @@ class ByteType private() extends IntegralType {
 
   override def simpleString = "tinyint"
 
-  private[sql] override def asNullable: ByteType = this
+  private[spark] override def asNullable: ByteType = this
 }
 
 case object ByteType extends ByteType
@@ -706,7 +707,7 @@ case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalT
     case None => "decimal(10,0)"
   }
 
-  private[sql] override def asNullable: DecimalType = this
+  private[spark] override def asNullable: DecimalType = this
 }
 
 
@@ -766,7 +767,7 @@ class DoubleType private() extends FractionalType {
    */
   override def defaultSize: Int = 8
 
-  private[sql] override def asNullable: DoubleType = this
+  private[spark] override def asNullable: DoubleType = this
 }
 
 case object DoubleType extends DoubleType
@@ -796,7 +797,7 @@ class FloatType private() extends FractionalType {
    */
   override def defaultSize: Int = 4
 
-  private[sql] override def asNullable: FloatType = this
+  private[spark] override def asNullable: FloatType = this
 }
 
 case object FloatType extends FloatType
@@ -846,7 +847,8 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
 
   override def simpleString = s"array<${elementType.simpleString}>"
 
-  private[sql] override def asNullable: ArrayType = ArrayType(elementType.asNullable, containsNull = true)
+  private[spark] override def asNullable: ArrayType =
+    ArrayType(elementType.asNullable, containsNull = true)
 }
 
 
@@ -1093,7 +1095,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   private[sql] def merge(that: StructType): StructType =
     StructType.merge(this, that).asInstanceOf[StructType]
 
-  private[sql] override def asNullable: StructType = {
+  private[spark] override def asNullable: StructType = {
     val newFields = fields.map {
       case StructField(name, dataType, nullable, metadata) =>
         StructField(name, dataType.asNullable, nullable = true, metadata)
@@ -1154,7 +1156,7 @@ case class MapType(
 
   override def simpleString = s"map<${keyType.simpleString},${valueType.simpleString}>"
 
-  private[sql] override def asNullable: MapType =
+  private[spark] override def asNullable: MapType =
     MapType(keyType.asNullable, valueType.asNullable, valueContainsNull = true)
 }
 
@@ -1210,7 +1212,9 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
    */
   override def defaultSize: Int = 4096
 
-  private[sql] override def sameType(other: DataType): Boolean = ???
-
-  private[sql] override def asNullable: DataType = ???
+  /**
+   * For UDT, asNullable will not change the nullability of its internal sqlType and just returns
+   * itself.
+   */
+  private[spark] override def asNullable: UserDefinedType[UserType] = this
 }
