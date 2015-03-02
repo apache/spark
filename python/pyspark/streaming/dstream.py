@@ -578,7 +578,7 @@ class DStream(object):
             if a is None:
                 g = b.groupByKey(numPartitions).mapValues(lambda vs: (list(vs), None))
             else:
-                g = a.cogroup(b, numPartitions)
+                g = a.cogroup(b.partitionBy(numPartitions), numPartitions)
                 g = g.mapValues(lambda (va, vb): (list(vb), list(va)[0] if len(va) else None))
             state = g.mapValues(lambda (vs, s): updateFunc(vs, s))
             return state.filter(lambda (k, v): v is not None)

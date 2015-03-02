@@ -31,22 +31,42 @@ import org.apache.spark.sql.types.StructType
  * Params for [[CrossValidator]] and [[CrossValidatorModel]].
  */
 private[ml] trait CrossValidatorParams extends Params {
-  /** param for the estimator to be cross-validated */
+  /**
+   * param for the estimator to be cross-validated
+   * @group param
+   */
   val estimator: Param[Estimator[_]] = new Param(this, "estimator", "estimator for selection")
+
+  /** @group getParam */
   def getEstimator: Estimator[_] = get(estimator)
 
-  /** param for estimator param maps */
+  /**
+   * param for estimator param maps
+   * @group param
+   */
   val estimatorParamMaps: Param[Array[ParamMap]] =
     new Param(this, "estimatorParamMaps", "param maps for the estimator")
+
+  /** @group getParam */
   def getEstimatorParamMaps: Array[ParamMap] = get(estimatorParamMaps)
 
-  /** param for the evaluator for selection */
+  /**
+   * param for the evaluator for selection
+   * @group param
+   */
   val evaluator: Param[Evaluator] = new Param(this, "evaluator", "evaluator for selection")
+
+  /** @group getParam */
   def getEvaluator: Evaluator = get(evaluator)
 
-  /** param for number of folds for cross validation */
+  /**
+   * param for number of folds for cross validation
+   * @group param
+   */
   val numFolds: IntParam =
     new IntParam(this, "numFolds", "number of folds for cross validation", Some(3))
+
+  /** @group getParam */
   def getNumFolds: Int = get(numFolds)
 }
 
@@ -59,9 +79,16 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
 
   private val f2jBLAS = new F2jBLAS
 
+  /** @group setParam */
   def setEstimator(value: Estimator[_]): this.type = set(estimator, value)
+
+  /** @group setParam */
   def setEstimatorParamMaps(value: Array[ParamMap]): this.type = set(estimatorParamMaps, value)
+
+  /** @group setParam */
   def setEvaluator(value: Evaluator): this.type = set(evaluator, value)
+
+  /** @group setParam */
   def setNumFolds(value: Int): this.type = set(numFolds, value)
 
   override def fit(dataset: DataFrame, paramMap: ParamMap): CrossValidatorModel = {
@@ -76,11 +103,12 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
     val metrics = new Array[Double](epm.size)
     val splits = MLUtils.kFold(dataset.rdd, map(numFolds), 0)
     splits.zipWithIndex.foreach { case ((training, validation), splitIndex) =>
-      val trainingDataset = sqlCtx.applySchema(training, schema).cache()
-      val validationDataset = sqlCtx.applySchema(validation, schema).cache()
+      val trainingDataset = sqlCtx.createDataFrame(training, schema).cache()
+      val validationDataset = sqlCtx.createDataFrame(validation, schema).cache()
       // multi-model training
       logDebug(s"Train split $splitIndex with multiple sets of parameters.")
       val models = est.fit(trainingDataset, epm).asInstanceOf[Seq[Model[_]]]
+      trainingDataset.unpersist()
       var i = 0
       while (i < numModels) {
         val metric = eval.evaluate(models(i).transform(validationDataset, epm(i)), map)
@@ -88,6 +116,7 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
         metrics(i) += metric
         i += 1
       }
+      validationDataset.unpersist()
     }
     f2jBLAS.dscal(numModels, 1.0 / map(numFolds), metrics, 1)
     logInfo(s"Average cross-validation metrics: ${metrics.toSeq}")
@@ -100,7 +129,7 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
     cvModel
   }
 
-  private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
+  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     val map = this.paramMap ++ paramMap
     map(estimator).transformSchema(schema, paramMap)
   }
@@ -121,7 +150,7 @@ class CrossValidatorModel private[ml] (
     bestModel.transform(dataset, paramMap)
   }
 
-  private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
+  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     bestModel.transformSchema(schema, paramMap)
   }
 }

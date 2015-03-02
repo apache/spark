@@ -51,7 +51,7 @@ private[spark] class TaskSetManager(
     sched: TaskSchedulerImpl,
     val taskSet: TaskSet,
     val maxTaskFailures: Int,
-    clock: Clock = SystemClock)
+    clock: Clock = new SystemClock())
   extends Schedulable with Logging {
 
   val conf = sched.sc.conf
@@ -166,7 +166,7 @@ private[spark] class TaskSetManager(
   // last launched a task at that level, and move up a level when localityWaits[curLevel] expires.
   // We then move down if we manage to launch a "more local" task.
   var currentLocalityIndex = 0    // Index of our current locality level in validLocalityLevels
-  var lastLaunchTime = clock.getTime()  // Time we last launched a task at this level
+  var lastLaunchTime = clock.getTimeMillis()  // Time we last launched a task at this level
 
   override def schedulableQueue = null
 
@@ -281,7 +281,7 @@ private[spark] class TaskSetManager(
       val failed = failedExecutors.get(taskId).get
 
       return failed.contains(execId) &&
-        clock.getTime() - failed.get(execId).get < EXECUTOR_TASK_BLACKLIST_TIMEOUT
+        clock.getTimeMillis() - failed.get(execId).get < EXECUTOR_TASK_BLACKLIST_TIMEOUT
     }
 
     false
@@ -292,7 +292,8 @@ private[spark] class TaskSetManager(
    * an attempt running on this host, in case the host is slow. In addition, the task should meet
    * the given locality constraint.
    */
-  private def dequeueSpeculativeTask(execId: String, host: String, locality: TaskLocality.Value)
+  // Labeled as protected to allow tests to override providing speculative tasks if necessary
+  protected def dequeueSpeculativeTask(execId: String, host: String, locality: TaskLocality.Value)
     : Option[(Int, TaskLocality.Value)] =
   {
     speculatableTasks.retain(index => !successful(index)) // Remove finished tasks from set
@@ -427,7 +428,7 @@ private[spark] class TaskSetManager(
     : Option[TaskDescription] =
   {
     if (!isZombie) {
-      val curTime = clock.getTime()
+      val curTime = clock.getTimeMillis()
 
       var allowedLocality = maxLocality
 
@@ -458,7 +459,7 @@ private[spark] class TaskSetManager(
             lastLaunchTime = curTime
           }
           // Serialize and return the task
-          val startTime = clock.getTime()
+          val startTime = clock.getTimeMillis()
           val serializedTask: ByteBuffer = try {
             Task.serializeWithDependencies(task, sched.sc.addedFiles, sched.sc.addedJars, ser)
           } catch {
@@ -673,7 +674,7 @@ private[spark] class TaskSetManager(
           return
         }
         val key = ef.description
-        val now = clock.getTime()
+        val now = clock.getTimeMillis()
         val (printFull, dupCount) = {
           if (recentExceptions.contains(key)) {
             val (dupCount, printTime) = recentExceptions(key)
@@ -705,10 +706,13 @@ private[spark] class TaskSetManager(
     }
     // always add to failed executors
     failedExecutors.getOrElseUpdate(index, new HashMap[String, Long]()).
-      put(info.executorId, clock.getTime())
+      put(info.executorId, clock.getTimeMillis())
     sched.dagScheduler.taskEnded(tasks(index), reason, null, null, info, taskMetrics)
     addPendingTask(index)
-    if (!isZombie && state != TaskState.KILLED) {
+    if (!isZombie && state != TaskState.KILLED && !reason.isInstanceOf[TaskCommitDenied]) {
+      // If a task failed because its attempt to commit was denied, do not count this failure
+      // towards failing the stage. This is intended to prevent spurious stage failures in cases
+      // where many speculative tasks are launched and denied to commit.
       assert (null != failureReason)
       numFailures(index) += 1
       if (numFailures(index) >= maxTaskFailures) {
@@ -817,7 +821,7 @@ private[spark] class TaskSetManager(
     val minFinishedForSpeculation = (SPECULATION_QUANTILE * numTasks).floor.toInt
     logDebug("Checking for speculative tasks: minFinished = " + minFinishedForSpeculation)
     if (tasksSuccessful >= minFinishedForSpeculation && tasksSuccessful > 0) {
-      val time = clock.getTime()
+      val time = clock.getTimeMillis()
       val durations = taskInfos.values.filter(_.successful).map(_.duration).toArray
       Arrays.sort(durations)
       val medianDuration = durations(min((0.5 * tasksSuccessful).round.toInt, durations.size - 1))

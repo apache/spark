@@ -42,7 +42,7 @@ from datetime import datetime
 from optparse import OptionParser
 from sys import stderr
 
-SPARK_EC2_VERSION = "1.2.0"
+SPARK_EC2_VERSION = "1.2.1"
 SPARK_EC2_DIR = os.path.dirname(os.path.realpath(__file__))
 
 VALID_SPARK_VERSIONS = set([
@@ -58,6 +58,7 @@ VALID_SPARK_VERSIONS = set([
     "1.1.0",
     "1.1.1",
     "1.2.0",
+    "1.2.1",
 ])
 
 DEFAULT_SPARK_VERSION = SPARK_EC2_VERSION
@@ -112,6 +113,7 @@ def parse_args():
         version="%prog {v}".format(v=SPARK_EC2_VERSION),
         usage="%prog [options] <action> <cluster_name>\n\n"
         + "<action> can be: launch, destroy, login, stop, start, get-master, reboot-slaves")
+
     parser.add_option(
         "-s", "--slaves", type="int", default=1,
         help="Number of slaves to launch (default: %default)")
@@ -133,13 +135,15 @@ def parse_args():
         help="Master instance type (leave empty for same as instance-type)")
     parser.add_option(
         "-r", "--region", default="us-east-1",
-        help="EC2 region zone to launch instances in")
+        help="EC2 region used to launch instances in, or to find them in")
     parser.add_option(
         "-z", "--zone", default="",
         help="Availability zone to launch instances in, or 'all' to spread " +
              "slaves across multiple (an additional $0.01/Gb for bandwidth" +
              "between zones applies) (default: a single zone chosen at random)")
-    parser.add_option("-a", "--ami", help="Amazon Machine Image ID to use")
+    parser.add_option(
+        "-a", "--ami",
+        help="Amazon Machine Image ID to use")
     parser.add_option(
         "-v", "--spark-version", default=DEFAULT_SPARK_VERSION,
         help="Version of Spark to use: 'X.Y.Z' or a specific git hash (default: %default)")
@@ -179,10 +183,11 @@ def parse_args():
              "Only possible on EBS-backed AMIs. " +
              "EBS volumes are only attached if --ebs-vol-size > 0." +
              "Only support up to 8 EBS volumes.")
-    parser.add_option("--placement-group", type="string", default=None,
-                      help="Which placement group to try and launch " +
-                      "instances into. Assumes placement group is already " +
-                      "created.")
+    parser.add_option(
+        "--placement-group", type="string", default=None,
+        help="Which placement group to try and launch " +
+             "instances into. Assumes placement group is already " +
+             "created.")
     parser.add_option(
         "--swap", metavar="SWAP", type="int", default=1024,
         help="Swap space to set up per node, in MB (default: %default)")
@@ -226,9 +231,11 @@ def parse_args():
         "--copy-aws-credentials", action="store_true", default=False,
         help="Add AWS credentials to hadoop configuration to allow Spark to access S3")
     parser.add_option(
-        "--subnet-id", default=None, help="VPC subnet to launch instances in")
+        "--subnet-id", default=None,
+        help="VPC subnet to launch instances in")
     parser.add_option(
-        "--vpc-id", default=None, help="VPC to launch instances in")
+        "--vpc-id", default=None,
+        help="VPC to launch instances in")
 
     (opts, args) = parser.parse_args()
     if len(args) != 2:
@@ -290,52 +297,54 @@ def is_active(instance):
     return (instance.state in ['pending', 'running', 'stopping', 'stopped'])
 
 
-# Attempt to resolve an appropriate AMI given the architecture and region of the request.
 # Source: http://aws.amazon.com/amazon-linux-ami/instance-type-matrix/
 # Last Updated: 2014-06-20
 # For easy maintainability, please keep this manually-inputted dictionary sorted by key.
+EC2_INSTANCE_TYPES = {
+    "c1.medium":   "pvm",
+    "c1.xlarge":   "pvm",
+    "c3.2xlarge":  "pvm",
+    "c3.4xlarge":  "pvm",
+    "c3.8xlarge":  "pvm",
+    "c3.large":    "pvm",
+    "c3.xlarge":   "pvm",
+    "cc1.4xlarge": "hvm",
+    "cc2.8xlarge": "hvm",
+    "cg1.4xlarge": "hvm",
+    "cr1.8xlarge": "hvm",
+    "hi1.4xlarge": "pvm",
+    "hs1.8xlarge": "pvm",
+    "i2.2xlarge":  "hvm",
+    "i2.4xlarge":  "hvm",
+    "i2.8xlarge":  "hvm",
+    "i2.xlarge":   "hvm",
+    "m1.large":    "pvm",
+    "m1.medium":   "pvm",
+    "m1.small":    "pvm",
+    "m1.xlarge":   "pvm",
+    "m2.2xlarge":  "pvm",
+    "m2.4xlarge":  "pvm",
+    "m2.xlarge":   "pvm",
+    "m3.2xlarge":  "hvm",
+    "m3.large":    "hvm",
+    "m3.medium":   "hvm",
+    "m3.xlarge":   "hvm",
+    "r3.2xlarge":  "hvm",
+    "r3.4xlarge":  "hvm",
+    "r3.8xlarge":  "hvm",
+    "r3.large":    "hvm",
+    "r3.xlarge":   "hvm",
+    "t1.micro":    "pvm",
+    "t2.medium":   "hvm",
+    "t2.micro":    "hvm",
+    "t2.small":    "hvm",
+}
+
+
+# Attempt to resolve an appropriate AMI given the architecture and region of the request.
 def get_spark_ami(opts):
-    instance_types = {
-        "c1.medium":   "pvm",
-        "c1.xlarge":   "pvm",
-        "c3.2xlarge":  "pvm",
-        "c3.4xlarge":  "pvm",
-        "c3.8xlarge":  "pvm",
-        "c3.large":    "pvm",
-        "c3.xlarge":   "pvm",
-        "cc1.4xlarge": "hvm",
-        "cc2.8xlarge": "hvm",
-        "cg1.4xlarge": "hvm",
-        "cr1.8xlarge": "hvm",
-        "hi1.4xlarge": "pvm",
-        "hs1.8xlarge": "pvm",
-        "i2.2xlarge":  "hvm",
-        "i2.4xlarge":  "hvm",
-        "i2.8xlarge":  "hvm",
-        "i2.xlarge":   "hvm",
-        "m1.large":    "pvm",
-        "m1.medium":   "pvm",
-        "m1.small":    "pvm",
-        "m1.xlarge":   "pvm",
-        "m2.2xlarge":  "pvm",
-        "m2.4xlarge":  "pvm",
-        "m2.xlarge":   "pvm",
-        "m3.2xlarge":  "hvm",
-        "m3.large":    "hvm",
-        "m3.medium":   "hvm",
-        "m3.xlarge":   "hvm",
-        "r3.2xlarge":  "hvm",
-        "r3.4xlarge":  "hvm",
-        "r3.8xlarge":  "hvm",
-        "r3.large":    "hvm",
-        "r3.xlarge":   "hvm",
-        "t1.micro":    "pvm",
-        "t2.medium":   "hvm",
-        "t2.micro":    "hvm",
-        "t2.small":    "hvm",
-    }
-    if opts.instance_type in instance_types:
-        instance_type = instance_types[opts.instance_type]
+    if opts.instance_type in EC2_INSTANCE_TYPES:
+        instance_type = EC2_INSTANCE_TYPES[opts.instance_type]
     else:
         instance_type = "pvm"
         print >> stderr,\
@@ -605,10 +614,9 @@ def launch_cluster(conn, opts, cluster_name):
 
 # Get the EC2 instances in an existing cluster if available.
 # Returns a tuple of lists of EC2 instance objects for the masters and slaves
-
-
 def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
-    print "Searching for existing cluster " + cluster_name + "..."
+    print "Searching for existing cluster " + cluster_name + " in region " \
+        + opts.region + "..."
     reservations = conn.get_all_reservations()
     master_nodes = []
     slave_nodes = []
@@ -626,9 +634,11 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
         return (master_nodes, slave_nodes)
     else:
         if master_nodes == [] and slave_nodes != []:
-            print >> sys.stderr, "ERROR: Could not find master in group " + cluster_name + "-master"
+            print >> sys.stderr, "ERROR: Could not find master in group " + cluster_name \
+                + "-master" + " in region " + opts.region
         else:
-            print >> sys.stderr, "ERROR: Could not find any existing cluster"
+            print >> sys.stderr, "ERROR: Could not find any existing cluster" \
+                + " in region " + opts.region
         sys.exit(1)
 
 
@@ -1050,6 +1060,30 @@ def real_main():
             print >> stderr, 'You can fix this with: chmod 400 "{f}"'.format(f=opts.identity_file)
             sys.exit(1)
 
+    if opts.instance_type not in EC2_INSTANCE_TYPES:
+        print >> stderr, "Warning: Unrecognized EC2 instance type for instance-type: {t}".format(
+            t=opts.instance_type)
+
+    if opts.master_instance_type != "":
+        if opts.master_instance_type not in EC2_INSTANCE_TYPES:
+            print >> stderr, \
+                "Warning: Unrecognized EC2 instance type for master-instance-type: {t}".format(
+                    t=opts.master_instance_type)
+        # Since we try instance types even if we can't resolve them, we check if they resolve first
+        # and, if they do, see if they resolve to the same virtualization type.
+        if opts.instance_type in EC2_INSTANCE_TYPES and \
+           opts.master_instance_type in EC2_INSTANCE_TYPES:
+            if EC2_INSTANCE_TYPES[opts.instance_type] != \
+               EC2_INSTANCE_TYPES[opts.master_instance_type]:
+                print >> stderr, \
+                    "Error: spark-ec2 currently does not support having a master and slaves with " + \
+                    "different AMI virtualization types."
+                print >> stderr, "master instance virtualization type: {t}".format(
+                    t=EC2_INSTANCE_TYPES[opts.master_instance_type])
+                print >> stderr, "slave instance virtualization type: {t}".format(
+                    t=EC2_INSTANCE_TYPES[opts.instance_type])
+                sys.exit(1)
+
     if opts.ebs_vol_num > 8:
         print >> stderr, "ebs-vol-num cannot be greater than 8"
         sys.exit(1)
@@ -1140,11 +1174,12 @@ def real_main():
                     time.sleep(30)  # Yes, it does have to be this long :-(
                     for group in groups:
                         try:
-                            conn.delete_security_group(group.name)
-                            print "Deleted security group " + group.name
+                            # It is needed to use group_id to make it work with VPC
+                            conn.delete_security_group(group_id=group.id)
+                            print "Deleted security group %s" % group.name
                         except boto.exception.EC2ResponseError:
                             success = False
-                            print "Failed to delete security group " + group.name
+                            print "Failed to delete security group %s" % group.name
 
                     # Unfortunately, group.revoke() returns True even if a rule was not
                     # deleted, so this needs to be rerun if something fails

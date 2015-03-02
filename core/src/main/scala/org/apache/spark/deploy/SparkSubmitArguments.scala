@@ -57,6 +57,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   var pyFiles: String = null
   var action: SparkSubmitAction = null
   val sparkProperties: HashMap[String, String] = new HashMap[String, String]()
+  var proxyUser: String = null
 
   // Standalone cluster mode only
   var supervise: Boolean = false
@@ -405,12 +406,19 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         }
         parse(tail)
 
+      case ("--proxy-user") :: value :: tail =>
+        proxyUser = value
+        parse(tail)
+
       case ("--help" | "-h") :: tail =>
         printUsageAndExit(0)
 
       case ("--verbose" | "-v") :: tail =>
         verbose = true
         parse(tail)
+
+      case ("--version") :: tail =>
+        SparkSubmit.printVersionAndExit()
 
       case EQ_SEPARATED_OPT(opt, value) :: tail =>
         parse(opt :: value :: tail)
@@ -476,8 +484,11 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         |
         |  --executor-memory MEM       Memory per executor (e.g. 1000M, 2G) (Default: 1G).
         |
+        |  --proxy-user NAME           User to impersonate when submitting the application.
+        |
         |  --help, -h                  Show this help message and exit
         |  --verbose, -v               Print additional debug output
+        |  --version,                  Print the version of current Spark
         |
         | Spark standalone with cluster deploy mode only:
         |  --driver-cores NUM          Cores for driver (Default: 1).

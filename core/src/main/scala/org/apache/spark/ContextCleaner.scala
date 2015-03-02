@@ -32,6 +32,7 @@ private sealed trait CleanupTask
 private case class CleanRDD(rddId: Int) extends CleanupTask
 private case class CleanShuffle(shuffleId: Int) extends CleanupTask
 private case class CleanBroadcast(broadcastId: Long) extends CleanupTask
+private case class CleanAccum(accId: Long) extends CleanupTask
 
 /**
  * A WeakReference associated with a CleanupTask.
@@ -114,6 +115,10 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
     registerForCleanup(rdd, CleanRDD(rdd.id))
   }
 
+  def registerAccumulatorForCleanup(a: Accumulable[_, _]): Unit = {
+    registerForCleanup(a, CleanAccum(a.id))
+  }
+
   /** Register a ShuffleDependency for cleanup when it is garbage collected. */
   def registerShuffleForCleanup(shuffleDependency: ShuffleDependency[_, _, _]) {
     registerForCleanup(shuffleDependency, CleanShuffle(shuffleDependency.shuffleId))
@@ -145,6 +150,8 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
               doCleanupShuffle(shuffleId, blocking = blockOnShuffleCleanupTasks)
             case CleanBroadcast(broadcastId) =>
               doCleanupBroadcast(broadcastId, blocking = blockOnCleanupTasks)
+            case CleanAccum(accId) =>
+              doCleanupAccum(accId, blocking = blockOnCleanupTasks)
           }
         }
       } catch {
@@ -190,6 +197,18 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
     }
   }
 
+  /** Perform accumulator cleanup. */
+  def doCleanupAccum(accId: Long, blocking: Boolean) {
+    try {
+      logDebug("Cleaning accumulator " + accId)
+      Accumulators.remove(accId)
+      listeners.foreach(_.accumCleaned(accId))
+      logInfo("Cleaned accumulator " + accId)
+    } catch {
+      case e: Exception => logError("Error cleaning accumulator " + accId, e)
+    }
+  }
+
   private def blockManagerMaster = sc.env.blockManager.master
   private def broadcastManager = sc.env.broadcastManager
   private def mapOutputTrackerMaster = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
@@ -206,4 +225,5 @@ private[spark] trait CleanerListener {
   def rddCleaned(rddId: Int)
   def shuffleCleaned(shuffleId: Int)
   def broadcastCleaned(broadcastId: Long)
+  def accumCleaned(accId: Long)
 }

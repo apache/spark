@@ -33,8 +33,6 @@
 
   <properties>
     <sbt.project.name>repl</sbt.project.name>
-    <deb.install.path>/usr/share/spark</deb.install.path>
-    <deb.user>root</deb.user>
     <extra.source.dir>scala-2.10/src/main/scala</extra.source.dir>
     <extra.testsource.dir>scala-2.10/src/test/scala</extra.testsource.dir>
   </properties>
