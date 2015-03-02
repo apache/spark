@@ -22,6 +22,9 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.Node
 
 import org.apache.spark.ui.{WebUIPage, UIUtils}
+import scala.collection.immutable.ListMap
+import scala.collection.mutable.HashMap
+import scala.collection.mutable.ArrayBuffer
 
 private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
 
@@ -34,18 +37,31 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
     val requestedIncomplete =
       Option(request.getParameter("showIncomplete")).getOrElse("false").toBoolean
 
-    val allApps = parent.getApplicationList().filter(_.completed != requestedIncomplete)
-    val actualFirst = if (requestedFirst < allApps.size) requestedFirst else 0
-    val apps = allApps.slice(actualFirst, Math.min(actualFirst + pageSize, allApps.size))
-
+    val allCompletedAppsNAttempts = 
+        parent.getApplicationList().filter(_.completed != requestedIncomplete)
+    val (hasAttemptInfo, appToAttemptMap)  = getApplicationLevelList(allCompletedAppsNAttempts)
+    
+    val allAppsSize = allCompletedAppsNAttempts.size
+    
+    val actualFirst = if (requestedFirst < allAppsSize) requestedFirst else 0
+    val apps = 
+        allCompletedAppsNAttempts.slice(actualFirst, Math.min(actualFirst + pageSize, allAppsSize))
+    val appWithAttemptsDisplayList = 
+        appToAttemptMap.slice(actualFirst, Math.min(actualFirst + pageSize, allAppsSize))
+        
     val actualPage = (actualFirst / pageSize) + 1
-    val last = Math.min(actualFirst + pageSize, allApps.size) - 1
-    val pageCount = allApps.size / pageSize + (if (allApps.size % pageSize > 0) 1 else 0)
+    val last = Math.min(actualFirst + pageSize, allAppsSize) - 1
+    val pageCount = allAppsSize / pageSize + (if (allAppsSize % pageSize > 0) 1 else 0)
 
     val secondPageFromLeft = 2
     val secondPageFromRight = pageCount - 1
 
-    val appTable = UIUtils.listingTable(appHeader, appRow, apps)
+    val appTable = 
+      if (hasAttemptInfo) {
+        UIUtils.listingTable(appWithAttemptHeader, appWithAttemptRow, appWithAttemptsDisplayList)
+      } else {
+        UIUtils.listingTable(appHeader, appRow, apps) 
+      }
     val providerConfig = parent.getProviderConfig()
     val content =
       <div class="row-fluid">
@@ -59,7 +75,7 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
             // to the first and last page. If the current page +/- `plusOrMinus` is greater
             // than the 2nd page from the first page or less than the 2nd page from the last
             // page, `...` will be displayed.
-            if (allApps.size > 0) {
+            if (allAppsSize > 0) {
               val leftSideIndices =
                 rangeIndices(actualPage - plusOrMinus until actualPage, 1 < _, requestedIncomplete)
               val rightSideIndices =
@@ -67,7 +83,7 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
                   requestedIncomplete)
 
               <h4>
-                Showing {actualFirst + 1}-{last + 1} of {allApps.size}
+                Showing {actualFirst + 1}-{last + 1} of {allAppsSize}
                 {if (requestedIncomplete) "(Incomplete applications)"}
                 <span style="float: right">
                   {
@@ -113,6 +129,36 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
       </div>
     UIUtils.basicSparkPage(content, "History Server")
   }
+  
+  private def getApplicationLevelList (appNattemptList: Iterable[ApplicationHistoryInfo])  ={
+    // Create HashMap as per the multiple attempts for one application. 
+    // If there is no attempt specific stuff, then
+    // do return false, to indicate the same, so that previous UI gets displayed.
+    var hasAttemptInfo = false
+    val appToAttemptInfo = new HashMap[String, ArrayBuffer[ApplicationHistoryInfo]]
+    for( appAttempt <- appNattemptList) {
+      if(!appAttempt.appAttemptId.equals("")){
+        hasAttemptInfo = true
+        val attemptId = appAttempt.appAttemptId.toInt
+         if(appToAttemptInfo.contains(appAttempt.id)){
+           val currentAttempts = appToAttemptInfo.get(appAttempt.id).get
+           currentAttempts += appAttempt
+           appToAttemptInfo.put( appAttempt.id, currentAttempts) 
+         } else {
+           val currentAttempts = new ArrayBuffer[ApplicationHistoryInfo]()
+           currentAttempts += appAttempt
+           appToAttemptInfo.put( appAttempt.id, currentAttempts )
+         }
+      }else {
+        val currentAttempts = new ArrayBuffer[ApplicationHistoryInfo]()
+           currentAttempts += appAttempt
+        appToAttemptInfo.put(appAttempt.id, currentAttempts)
+      }
+    } 
+    val sortedMap = ListMap(appToAttemptInfo.toSeq.sortWith(_._1 > _._1):_*)
+    (hasAttemptInfo, sortedMap)
+  } 
+  
 
   private val appHeader = Seq(
     "App ID",
@@ -128,6 +174,16 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
     range.filter(condition).map(nextPage =>
       <a href={makePageLink(nextPage, showIncomplete)}> {nextPage} </a>)
   }
+    
+  private val appWithAttemptHeader = Seq(
+    "App ID",
+    "App Name",
+    "Attempt ID",
+    "Started",
+    "Completed",
+    "Duration",
+    "Spark User",
+    "Last Updated")
 
   private def appRow(info: ApplicationHistoryInfo): Seq[Node] = {
     val uiAddress = HistoryServer.UI_PATH_PREFIX + s"/${info.id}"
@@ -145,6 +201,69 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
       <td>{info.sparkUser}</td>
       <td sorttable_customkey={info.lastUpdated.toString}>{lastUpdated}</td>
     </tr>
+  }
+  
+  private def getAttemptURI(attemptInfo: ApplicationHistoryInfo, 
+                            returnEmptyIfAttemptInfoNull: Boolean = true ) = {
+    if (attemptInfo.appAttemptId.equals("")) { 
+      if(returnEmptyIfAttemptInfoNull) {
+        attemptInfo.appAttemptId
+      } else {
+        HistoryServer.UI_PATH_PREFIX + s"/${attemptInfo.id}"
+      }
+   } else {
+     HistoryServer.UI_PATH_PREFIX + s"/${attemptInfo.id}" + "_" +  s"${attemptInfo.appAttemptId}"
+     }
+  }
+  
+  private def firstAttemptRow(attemptInfo : ApplicationHistoryInfo)  = {
+    val uiAddress = 
+      if (attemptInfo.appAttemptId.equals("")) {
+       attemptInfo.appAttemptId
+      } else {
+       HistoryServer.UI_PATH_PREFIX + s"/${attemptInfo.id}" + "_" +  s"${attemptInfo.appAttemptId}"
+      }
+              
+    val startTime = UIUtils.formatDate(attemptInfo.startTime)
+    val endTime = UIUtils.formatDate(attemptInfo.endTime)
+    val duration = UIUtils.formatDuration(attemptInfo.endTime - attemptInfo.startTime)
+    val lastUpdated = UIUtils.formatDate(attemptInfo.lastUpdated)
+    val attemptId = attemptInfo.appAttemptId
+       <td><a href={uiAddress}>{attemptId}</a></td>
+       <td sorttable_customkey={attemptInfo.startTime.toString}>{startTime}</td>
+      <td sorttable_customkey={attemptInfo.endTime.toString}>{endTime}</td>
+      <td sorttable_customkey={(attemptInfo.endTime - attemptInfo.startTime).toString}>
+                  {duration}</td>
+      <td>{attemptInfo.sparkUser}</td>
+      <td sorttable_customkey={attemptInfo.lastUpdated.toString}>{lastUpdated}</td>
+  }
+  
+  private def attemptRow(attemptInfo: ApplicationHistoryInfo)  = {
+    <tr>
+      {firstAttemptRow(attemptInfo)}
+    </tr>
+  }
+    
+  private def appWithAttemptRow(
+      appAttemptsInfo: (String,ArrayBuffer[ApplicationHistoryInfo])): Seq[Node] = {
+    val applicationId = appAttemptsInfo._1
+    val info  = appAttemptsInfo._2
+    val rowSpan = info.length
+    val rowSpanString = rowSpan.toString
+    val applicatioName = info(0).name
+    val lastAttemptURI = getAttemptURI(info(0), false)
+    val ttAttempts = info.slice(1, rowSpan -1)
+    val x = new xml.NodeBuffer
+    x += 
+    <tr>
+      <td rowspan={rowSpanString}><a href={lastAttemptURI}>{applicationId}</a></td>
+      <td rowspan={rowSpanString}>{applicatioName}</td>
+      { firstAttemptRow(info(0)) }
+    </tr>;
+    for( i <- 1 until rowSpan ){
+      x += attemptRow(info(i))
+    }
+      x
   }
 
   private def makePageLink(linkPage: Int, showIncomplete: Boolean): String = {
