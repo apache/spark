@@ -128,7 +128,8 @@ class NettyBlockTransferSuite extends FunSuite with Matchers with MockitoSugar w
     uploadBlock(buf, 1, 500)
   }
 
-  test("giant upload") {
+  //just don't want to kill the test server
+  ignore("giant upload") {
     // pretty close to max size due to overhead from the rest of the msg
     val parts = (0 until 2).map{_ => ByteBuffer.allocate(Integer.MAX_VALUE - 200)}.toArray
     val buf = new WrappedLargeByteBuffer(parts)
