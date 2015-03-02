@@ -64,25 +64,28 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       jsonFile(filePath).collect().toSeq)
   }
 
-  test ("persistent JSON table with a user specified schema") {
-    sql(
-      s"""
-        |CREATE TABLE jsonTable (
-        |a string,
-        |b String,
-        |`c_!@(3)` int,
-        |`<d>` Struct<`d!`:array<int>, `=`:array<struct<Dd2: boolean>>>)
-        |USING org.apache.spark.sql.json.DefaultSource
-        |OPTIONS (
-        |  path '${filePath}'
-        |)
+  // Hive 0.12.0 can't parse the SELECT statement used in this case.
+  if (HiveShim.version != "0.12.0") {
+    test ("persistent JSON table with a user specified schema") {
+      sql(
+        s"""
+           |CREATE TABLE jsonTable (
+           |a string,
+           |b String,
+           |`c_!@(3)` int,
+           |`<d>` Struct<`d!`:array<int>, `=`:array<struct<Dd2: boolean>>>)
+           |USING org.apache.spark.sql.json.DefaultSource
+           |OPTIONS (
+           |  path '${filePath}'
+           |)
       """.stripMargin)
 
-    jsonFile(filePath).registerTempTable("expectedJsonTable")
+      jsonFile(filePath).registerTempTable("expectedJsonTable")
 
-    checkAnswer(
-      sql("SELECT a, b, `c_!@(3)`, `<d>`.`d!`, `<d>`.`=` FROM jsonTable"),
-      sql("SELECT a, b, `c_!@(3)`, `<d>`.`d!`, `<d>`.`=` FROM expectedJsonTable").collect().toSeq)
+      checkAnswer(
+        sql("SELECT a, b, `c_!@(3)`, `<d>`.`d!`, `<d>`.`=` FROM jsonTable"),
+        sql("SELECT a, b, `c_!@(3)`, `<d>`.`d!`, `<d>`.`=` FROM expectedJsonTable").collect().toSeq)
+    }
   }
 
   test ("persistent JSON table with a user specified schema with a subset of fields") {

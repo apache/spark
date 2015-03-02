@@ -220,7 +220,18 @@ private[hive] object HiveShim {
     "serde_regex",
     "udf_to_date",
     "udaf_collect_set",
-    "udf_concat"
+    "udf_concat",
+
+    // The following 3 cases use 0.13.1 decimal syntax
+    "udf_to_double",
+    "udf_to_float",
+    "udf_pmod",
+
+    // This case uses different ".q" files for 0.12.0 and 0.13.1.  The version used in 0.13.1
+    // includes a regression test for HIVE-4116, which wasn't fixed until 0.13.0.  Developers who
+    // sets HIVE_DEV_HOME properly won't see any error.  However, we don't have Hive source tree on
+    // Jenkins nodes, thus this case is blacklisted for the sake of Jenkins.
+    "create_view_translate"
   )
 
   def setLocation(tbl: Table, crtTbl: CreateTableDesc): Unit = {

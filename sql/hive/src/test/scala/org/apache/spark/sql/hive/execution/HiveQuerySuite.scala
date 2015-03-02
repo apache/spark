@@ -82,8 +82,11 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       printf("Bb%d", 12), "13",
       repeat(printf("s%d", 14), 2), "14") FROM src LIMIT 1""")
 
-  createQueryTest("NaN to Decimal",
-    "SELECT CAST(CAST('NaN' AS DOUBLE) AS DECIMAL(1,1)) FROM src LIMIT 1")
+  // Hive 0.12.0 doesn't support decimal with precision and scale.
+  if (HiveShim.version != "0.12.0") {
+    createQueryTest("NaN to Decimal",
+      "SELECT CAST(CAST('NaN' AS DOUBLE) AS DECIMAL(1,1)) FROM src LIMIT 1")
+  }
 
   createQueryTest("constant null testing",
     """SELECT
