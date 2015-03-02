@@ -19,7 +19,9 @@
 Fuller unit tests for Python MLlib.
 """
 
-import os, sys, tempfile
+import os
+import sys
+impprt tempfile
 import array as pyarray
 
 from numpy import array, array_equal
@@ -267,7 +269,6 @@ class ListTests(PySparkTestCase):
             os.removedirs(temp_dir)
         except OSError:
             pass
-
 
     def test_regression(self):
         from pyspark.mllib.regression import LinearRegressionWithSGD, LassoWithSGD, \
