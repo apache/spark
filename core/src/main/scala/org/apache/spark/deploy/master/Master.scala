@@ -745,7 +745,7 @@ private[spark] class Master(
       
       val eventLogFilePrefix = EventLoggingListener.getLogPath(eventLogDir, app.id, app.desc.eventLogCodec)        
       val fs = Utils.getHadoopFileSystem(eventLogDir, hadoopConf)
-      val eventLogFileSuffix = if (fs.exists(new Path(eventLogDir + 
+      val eventLogFileSuffix = if (fs.exists(new Path(eventLogFilePrefix + 
           EventLoggingListener.IN_PROGRESS))) {
         // Event logging is enabled for this application, but the application is still in progress        
         var msg = s"Application $appName is still in progress, it may be terminated accidently."
@@ -775,7 +775,7 @@ private[spark] class Master(
       case fnf: FileNotFoundException =>
         // Event logging is enabled for this application, but no event logs are found
         val title = s"Application history not found (${app.id})"
-        var msg = s"No event logs found for application $appName in ${app.desc.eventLogDir}."
+        var msg = s"No event logs found for application $appName in ${app.desc.eventLogDir.get}."
         logWarning(msg)
         msg += " Did you specify the correct logging directory?"
         msg = URLEncoder.encode(msg, "UTF-8")
