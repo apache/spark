@@ -750,7 +750,7 @@ private[spark] class Master(
       
       if (inProgressExists) {
         // Event logging is enabled for this application, but the application is still in progress
-        logWarning(s"Application $appName is still in progress, it may be terminated accidently.")
+        logWarning(s"Application $appName is still in progress, it may be terminated abnormally.")
       }
       
       val (eventLogFile, status) = if (inProgressExists) {
