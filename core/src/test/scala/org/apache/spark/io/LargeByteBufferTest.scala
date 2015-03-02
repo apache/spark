@@ -24,20 +24,6 @@ import org.scalatest.{Matchers, FunSuite}
 
 class LargeByteBufferTest extends FunSuite with Matchers {
 
-//  test("allocateOnHeap") {
-//    val bufs = LargeByteBuffer.allocateOnHeap(10, 3).asInstanceOf[ChainedLargeByteBuffer]
-//    bufs.underlying.foreach{buf => buf.capacity should be <= 3}
-//    bufs.underlying.map{_.capacity}.sum should be (10)
-//  }
-//
-//  test("allocate large") {
-//    val size = Integer.MAX_VALUE.toLong + 10
-//    val bufs = LargeByteBuffer.allocateOnHeap(size, 1e9.toInt).asInstanceOf[WrappedLargeByteBuffer]
-//    bufs.capacity should be (size)
-//    bufs.underlying.map{_.capacity.toLong}.sum should be (Integer.MAX_VALUE.toLong + 10)
-//  }
-
-
   test("io stream roundtrip") {
 
     val rawOut = new LargeByteBufferOutputStream(128)
