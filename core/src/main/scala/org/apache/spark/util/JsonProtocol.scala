@@ -584,8 +584,8 @@ private[spark] object JsonProtocol {
   }
 
   def logStartFromJson(json: JValue): SparkListenerLogStart = {
-    val version = (json \ "Spark Version").extract[String]
-    SparkListenerLogStart(version)
+    val sparkVersion = (json \ "Spark Version").extract[String]
+    SparkListenerLogStart(sparkVersion)
   }
 
   /** --------------------------------------------------------------------- *

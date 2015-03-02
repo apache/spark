@@ -62,7 +62,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
     val newAppComplete = newLogFile("new1", inProgress = false)
     writeFile(newAppComplete, true, None,
       SparkListenerApplicationStart("new-app-complete", None, 1L, "test"),
-      SparkListenerApplicationEnd(4L)
+      SparkListenerApplicationEnd(5L)
       )
 
     // Write a new-style application log.
@@ -108,7 +108,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
     list.size should be (5)
     list.count(_.completed) should be (3)
 
-    list(0) should be (ApplicationHistoryInfo(newAppComplete.getName(), "new-app-complete", 1L, 4L,
+    list(0) should be (ApplicationHistoryInfo(newAppComplete.getName(), "new-app-complete", 1L, 5L,
       newAppComplete.lastModified(), "test", true))
     list(1) should be (ApplicationHistoryInfo(newAppCompressedComplete.getName(),
       "new-app-compressed-complete", 1L, 4L, newAppCompressedComplete.lastModified(), "test", true))
