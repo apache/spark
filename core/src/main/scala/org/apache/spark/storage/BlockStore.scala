@@ -24,14 +24,7 @@ import org.apache.spark.network.buffer.LargeByteBuffer
  * Abstract class to store blocks.
  */
 private[spark] abstract class BlockStore(val blockManager: BlockManager) extends Logging {
-  // TODO: We have inconsistent usage of the bytes in spark.
-  // In DiskStore, we simply emit bytes to the file without a rewind
-  // While in memory and tachyon store, we do a rewind.
-  // Not sure which is correct - since both seem to be working fine in the tests !
-  // There is some underlying assumption which is probably unspecified and incorrect
-  // in a general case.
-  // Change: consistently modified to do a rewind before calling this method.
-  // Now, it validates that position == 0 (and so remaining == limit obviously)
+
   def putBytes(blockId: BlockId, bytes: LargeByteBuffer, level: StorageLevel) : PutResult
 
   /**

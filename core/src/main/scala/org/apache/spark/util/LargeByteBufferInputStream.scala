@@ -23,7 +23,7 @@ import org.apache.spark.network.buffer.LargeByteBuffer
 import org.apache.spark.storage.BlockManager
 
 /**
- * Reads data from a ByteBuffer, and optionally cleans it up using BlockManager.dispose()
+ * Reads data from a LargeByteBuffer, and optionally cleans it up using BlockManager.dispose()
  * at the end of the stream (e.g. to close a memory-mapped file).
  */
 private[spark]

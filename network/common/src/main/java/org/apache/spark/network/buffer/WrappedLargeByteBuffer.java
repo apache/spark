@@ -111,14 +111,6 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
         return new WrappedLargeByteBuffer(duplicates);
     }
 
-//    @Override
-//    public void rewind() {
-//        _pos = 0;
-//        for (ByteBuffer buf: underlying) {
-//            buf.rewind();
-//        }
-//    }
-
     @Override
     public long limit() {
         return limit;

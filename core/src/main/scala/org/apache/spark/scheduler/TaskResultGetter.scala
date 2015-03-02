@@ -74,7 +74,8 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
                   taskSetManager, tid, TaskState.FINISHED, TaskResultLost)
                 return
               }
-              //TODO either change serializer interface, or ...
+              //Just blindly assume there is only one byte buffer here, b/c we expect
+              // task results to be small.
               val deserializedResult = serializer.get().deserialize[DirectTaskResult[_]](
                 serializedTaskResult.get.firstByteBuffer())
               sparkEnv.blockManager.master.removeBlock(blockId)

@@ -79,9 +79,6 @@ private[spark] class BlockManager(
 
   val diskBlockManager = new DiskBlockManager(this, conf)
 
-  //XXX
-  val largeByteBufferChunkSize = 65536
-
   private val blockInfo = new TimeStampedHashMap[BlockId, BlockInfo]
 
   // Actual storage of where blocks are kept
