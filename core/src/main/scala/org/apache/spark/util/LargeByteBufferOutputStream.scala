@@ -32,7 +32,7 @@ class LargeByteBufferOutputStream(chunkSize: Int = 65536)
   private var _pos = 0
 
   override def write(b: Int): Unit = {
-    throw new UnsupportedOperationException()
+    output.write(b)
   }
 
   override def write(bytes: Array[Byte], offs: Int, len: Int): Unit = {
@@ -44,5 +44,9 @@ class LargeByteBufferOutputStream(chunkSize: Int = 65536)
 
   def largeBuffer: LargeByteBuffer = {
     new WrappedLargeByteBuffer(output.toArrays.map{ByteBuffer.wrap})
+  }
+
+  override def close(): Unit = {
+    output.close()
   }
 }

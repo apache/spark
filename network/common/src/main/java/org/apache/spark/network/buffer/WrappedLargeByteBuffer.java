@@ -59,7 +59,7 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
         int moved = 0;
         while (moved < length) {
             int toRead = Math.min(length - moved, currentBuffer.remaining());
-            currentBuffer.get(dest, offset, toRead);
+            currentBuffer.get(dest, offset + moved, toRead);
             moved += toRead;
             updateCurrentBuffer();
         }

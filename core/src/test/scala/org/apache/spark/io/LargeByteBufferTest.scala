@@ -26,18 +26,21 @@ class LargeByteBufferTest extends FunSuite with Matchers {
 
   test("io stream roundtrip") {
 
-    val rawOut = new LargeByteBufferOutputStream(128)
-    val objOut = new ObjectOutputStream(rawOut)
-    val someObject = (1 to 100).map{x => x -> scala.util.Random.nextInt(x)}.toMap
-    objOut.writeObject(someObject)
-    objOut.close()
+    val out = new LargeByteBufferOutputStream(128)
+    (0 until 200).foreach{idx => out.write(idx)}
+    out.close()
 
-    rawOut.largeBuffer.asInstanceOf[WrappedLargeByteBuffer].underlying.size should be > 1
+    out.largeBuffer.asInstanceOf[WrappedLargeByteBuffer].underlying.size should be > 1
 
-    val rawIn = new LargeByteBufferInputStream(rawOut.largeBuffer)
-    val objIn = new ObjectInputStream(rawIn)
-    val deser = objIn.readObject()
-    deser should be (someObject)
+    val rawIn = new LargeByteBufferInputStream(out.largeBuffer)
+    val arr = new Array[Byte](500)
+    val nRead = rawIn.read(arr, 0, 500)
+    nRead should be (200)
+    (0 until 200).foreach{idx =>
+      println(idx)
+      arr(idx) should be (idx.toByte)
+    }
+
   }
 
 }
