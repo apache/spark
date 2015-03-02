@@ -121,7 +121,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    * @param nullTerm A term that holds a boolean value representing whether the expression evaluated
    *                 to null.
    * @param primitiveTerm A term for a possible primitive value of the result of the evaluation. Not
-   *                      valid if `nullTerm` is set to `false`.
+   *                      valid if `nullTerm` is set to `true`.
    * @param objectTerm A possibly boxed version of the result of evaluating this expression.
    */
   protected case class EvaluatedExpression(
