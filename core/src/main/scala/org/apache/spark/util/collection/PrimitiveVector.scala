@@ -78,7 +78,12 @@ class PrimitiveVector[@specialized(Long, Int, Double) V: ClassTag](initialSize: 
     this
   }
 
-  protected def copyArrayWithLength(length: Int): Array[V] = {
+  /** Return a trimmed version of the underlying array. */
+  def toArray: Array[V] = {
+    copyArrayWithLength(size)
+  }
+
+  private def copyArrayWithLength(length: Int): Array[V] = {
     val copy = new Array[V](length)
     _array.copyToArray(copy)
     copy
