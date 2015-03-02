@@ -754,8 +754,8 @@ private[spark] class Master(
       } else ""
       
       val eventLogFile = eventLogFilePrefix + eventLogFileSuffix
-      val status = if (eventLogFile.endsWith(EventLoggingListener.IN_PROGRESS)) 
-        " (inprogress)" else " (completed)"
+      val status = if (eventLogFile.endsWith(EventLoggingListener.IN_PROGRESS)) " (inprogress)" 
+        else " (completed)"
 
       val logInput = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
       val replayBus = new ReplayListenerBus()
