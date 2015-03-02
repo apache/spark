@@ -492,8 +492,6 @@ setMethod("head",
 #' first(df)
 #' }
 
-setGeneric("first", function(x) {standardGeneric("first") })
-
 setMethod("first",
           signature(x = "DataFrame"),
           function(x) {

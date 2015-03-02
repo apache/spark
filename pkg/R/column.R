@@ -76,6 +76,7 @@ createMethods <- function() {
   }
 
   setGeneric("avg", function(x) { standardGeneric("avg") })
+  setGeneric("first", function(x) {standardGeneric("first") })
   setGeneric("last", function(x) { standardGeneric("last") })
   setGeneric("asc", function(x) { standardGeneric("asc") })
   setGeneric("desc", function(x) { standardGeneric("desc") })
