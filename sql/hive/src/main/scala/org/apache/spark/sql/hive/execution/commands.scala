@@ -248,6 +248,8 @@ case class CreateMetastoreDataSourceAsSelect(
         isExternal)
     }
 
+    // Refresh the cache of the table in the catalog.
+    hiveContext.refreshTable(tableName)
     Seq.empty[Row]
   }
 }
