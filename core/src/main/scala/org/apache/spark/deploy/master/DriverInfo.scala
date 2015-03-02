@@ -27,14 +27,14 @@ private[deploy] class DriverInfo(
     val startTime: Long,
     val id: String,
     val desc: DriverDescription,
-    private[master] val submitDate: Date)
+    val submitDate: Date)
   extends Serializable {
 
   @transient var state: DriverState.Value = DriverState.SUBMITTED
   /* If we fail when launching the driver, the exception is stored here. */
-  @transient private[master] var exception: Option[Exception] = None
+  @transient var exception: Option[Exception] = None
   /* Most recent worker assigned to this driver */
-  @transient private[master] var worker: Option[WorkerInfo] = None
+  @transient var worker: Option[WorkerInfo] = None
 
   init()
 

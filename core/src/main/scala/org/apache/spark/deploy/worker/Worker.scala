@@ -42,7 +42,7 @@ import org.apache.spark.util.{ActorLogReceive, AkkaUtils, SignalLogger, Utils}
 /**
   * @param masterAkkaUrls Each url should be a valid akka url.
   */
-private[spark] class Worker(
+private[worker] class Worker(
     host: String,
     port: Int,
     webUiPort: Int,
@@ -525,7 +525,7 @@ private[spark] class Worker(
   }
 }
 
-private[spark] object Worker extends Logging {
+private[deploy] object Worker extends Logging {
   def main(argStrings: Array[String]) {
     SignalLogger.register(log)
     val conf = new SparkConf
@@ -535,7 +535,7 @@ private[spark] object Worker extends Logging {
     actorSystem.awaitTermination()
   }
 
-  private[deploy] def startSystemAndActor(
+  def startSystemAndActor(
       host: String,
       port: Int,
       webUiPort: Int,
@@ -558,7 +558,7 @@ private[spark] object Worker extends Logging {
     (actorSystem, boundPort)
   }
 
-  private[spark] def isUseLocalNodeSSLConfig(cmd: Command): Boolean = {
+  def isUseLocalNodeSSLConfig(cmd: Command): Boolean = {
     val pattern = """\-Dspark\.ssl\.useNodeLocalConf\=(.+)""".r
     val result = cmd.javaOpts.collectFirst {
       case pattern(_result) => _result.toBoolean
@@ -566,7 +566,7 @@ private[spark] object Worker extends Logging {
     result.getOrElse(false)
   }
 
-  private[spark] def maybeUpdateSSLSettings(cmd: Command, conf: SparkConf): Command = {
+  def maybeUpdateSSLSettings(cmd: Command, conf: SparkConf): Command = {
     val prefix = "spark.ssl."
     val useNLC = "spark.ssl.useNodeLocalConf"
     if (isUseLocalNodeSSLConfig(cmd)) {

@@ -32,8 +32,8 @@ import org.apache.spark.util.AkkaUtils
  */
 private[worker]
 class WorkerWebUI(
-    private[ui] val worker: Worker,
-    private[ui] val workDir: File,
+    val worker: Worker,
+    val workDir: File,
     requestedPort: Int)
   extends WebUI(worker.securityMgr, requestedPort, worker.conf, name = "WorkerUI")
   with Logging {

@@ -93,7 +93,7 @@ object CommandUtils extends Logging {
   }
 
   /** Spawn a thread that will redirect a given stream to a file */
-  private[worker] def redirectStream(in: InputStream, file: File) {
+  def redirectStream(in: InputStream, file: File) {
     val out = new FileOutputStream(file, true)
     // TODO: It would be nice to add a shutdown hook here that explains why the output is
     //       terminating. Otherwise if the worker dies the executor logs will silently stop.

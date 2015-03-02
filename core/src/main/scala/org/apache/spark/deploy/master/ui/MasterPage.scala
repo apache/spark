@@ -41,7 +41,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     JsonProtocol.writeMasterState(state)
   }
 
-  private[ui] def handleAppKillRequest(request: HttpServletRequest): Unit = {
+  def handleAppKillRequest(request: HttpServletRequest): Unit = {
     handleKillRequest(request, id => {
       parent.master.idToApp.get(id).foreach { app =>
         parent.master.removeApplication(app, ApplicationState.KILLED)
@@ -49,7 +49,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     })
   }
 
-  private[ui] def handleDriverKillRequest(request: HttpServletRequest): Unit = {
+  def handleDriverKillRequest(request: HttpServletRequest): Unit = {
     handleKillRequest(request, id => { master ! RequestKillDriver(id) })
   }
 

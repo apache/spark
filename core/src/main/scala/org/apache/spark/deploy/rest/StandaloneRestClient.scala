@@ -79,8 +79,7 @@ private[deploy] class StandaloneRestClient extends Logging {
   }
 
   /** Request that the server kill the specified submission. */
-  private[deploy] def killSubmission(master: String, submissionId: String): 
-  SubmitRestProtocolResponse = {
+  def killSubmission(master: String, submissionId: String): SubmitRestProtocolResponse = {
     logInfo(s"Submitting a request to kill submission $submissionId in $master.")
     validateMaster(master)
     val response = post(getKillUrl(master, submissionId))
@@ -92,7 +91,7 @@ private[deploy] class StandaloneRestClient extends Logging {
   }
 
   /** Request the status of a submission from the server. */
-  private[deploy] def requestSubmissionStatus(
+  def requestSubmissionStatus(
       master: String,
       submissionId: String,
       quiet: Boolean = false): SubmitRestProtocolResponse = {
@@ -292,16 +291,16 @@ private[deploy] class StandaloneRestClient extends Logging {
   }
 }
 
-private[spark] object StandaloneRestClient {
+private[rest] object StandaloneRestClient {
   private val REPORT_DRIVER_STATUS_INTERVAL = 1000
   private val REPORT_DRIVER_STATUS_MAX_TRIES = 10
-  private[rest] val PROTOCOL_VERSION = "v1"
+  val PROTOCOL_VERSION = "v1"
 
   /**
    * Submit an application, assuming Spark parameters are specified through the given config.
    * This is abstracted to its own method for testing purposes.
    */
-  private[rest] def run(
+  def run(
       appResource: String,
       mainClass: String,
       appArgs: Array[String],

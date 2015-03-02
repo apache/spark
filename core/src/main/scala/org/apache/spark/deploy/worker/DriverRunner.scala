@@ -39,15 +39,15 @@ import org.apache.spark.util.{Clock, SystemClock}
  */
 private[deploy] class DriverRunner(
     conf: SparkConf,
-    private[worker] val driverId: String,
-    workDir: File,
-    sparkHome: File,
-    private[worker] val driverDesc: DriverDescription,
-    worker: ActorRef,
-    workerUrl: String)
+    val driverId: String,
+    val workDir: File,
+    val sparkHome: File,
+    val driverDesc: DriverDescription,
+    val worker: ActorRef,
+    val workerUrl: String)
   extends Logging {
 
-  @volatile private[worker] var process: Option[Process] = None
+  @volatile private var process: Option[Process] = None
   @volatile private var killed = false
 
   // Populated once finished

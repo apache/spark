@@ -38,19 +38,19 @@ private[deploy] class ExecutorRunner(
     val appId: String,
     val execId: Int,
     val appDesc: ApplicationDescription,
-    private[worker] val cores: Int,
+    val cores: Int,
     val memory: Int,
-    worker: ActorRef,
+    val worker: ActorRef,
     val workerId: String,
-    host: String,
-    webUiPort: Int,
-    publicAddress: String,
-    sparkHome: File,
-    executorDir: File,
-    workerUrl: String,
+    val host: String,
+    val webUiPort: Int,
+    val publicAddress: String,
+    val sparkHome: File,
+    val executorDir: File,
+    val workerUrl: String,
     conf: SparkConf,
-    appLocalDirs: Seq[String],
-    private[worker] var state: ExecutorState.Value)
+    val appLocalDirs: Seq[String],
+    var state: ExecutorState.Value)
   extends Logging {
 
   private val fullId = appId + "/" + execId

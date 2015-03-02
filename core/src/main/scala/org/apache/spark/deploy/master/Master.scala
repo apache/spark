@@ -49,7 +49,7 @@ import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{ActorLogReceive, AkkaUtils, SignalLogger, Utils}
 
-private[spark] class Master(
+private[master] class Master(
     host: String,
     port: Int,
     webUiPort: Int,
@@ -69,10 +69,10 @@ private[spark] class Master(
   private val REAPER_ITERATIONS = conf.getInt("spark.dead.worker.persistence", 15)
   private val RECOVERY_MODE = conf.get("spark.deploy.recoveryMode", "NONE")
 
-  private[master] val workers = new HashSet[WorkerInfo]
-  private[master] val idToApp = new HashMap[String, ApplicationInfo]
-  private[master] val waitingApps = new ArrayBuffer[ApplicationInfo]
-  private[master] val apps = new HashSet[ApplicationInfo]
+  val workers = new HashSet[WorkerInfo]
+  val idToApp = new HashMap[String, ApplicationInfo]
+  val waitingApps = new ArrayBuffer[ApplicationInfo]
+  val apps = new HashSet[ApplicationInfo]
 
   private val idToWorker = new HashMap[String, WorkerInfo]
   private val addressToWorker = new HashMap[Address, WorkerInfo]
@@ -691,7 +691,7 @@ private[spark] class Master(
     removeApplication(app, ApplicationState.FINISHED)
   }
 
-  private[master] def removeApplication(app: ApplicationInfo, state: ApplicationState.Value) {
+  def removeApplication(app: ApplicationInfo, state: ApplicationState.Value) {
     if (apps.contains(app)) {
       logInfo("Removing app " + app.id)
       apps -= app
@@ -866,7 +866,7 @@ private[spark] class Master(
   }
 }
 
-private[spark] object Master extends Logging {
+private[deploy] object Master extends Logging {
   val systemName = "sparkMaster"
   private val actorName = "Master"
 
@@ -883,7 +883,7 @@ private[spark] object Master extends Logging {
    *
    * @throws SparkException if the url is invalid
    */
-  private[deploy] def toAkkaUrl(sparkUrl: String, protocol: String): String = {
+  def toAkkaUrl(sparkUrl: String, protocol: String): String = {
     val (host, port) = Utils.extractHostPortFromSparkUrl(sparkUrl)
     AkkaUtils.address(protocol, systemName, host, port, actorName)
   }
@@ -893,7 +893,7 @@ private[spark] object Master extends Logging {
    *
    * @throws SparkException if the url is invalid
    */
-  private[deploy] def toAkkaAddress(sparkUrl: String, protocol: String): Address = {
+  def toAkkaAddress(sparkUrl: String, protocol: String): Address = {
     val (host, port) = Utils.extractHostPortFromSparkUrl(sparkUrl)
     Address(protocol, systemName, host, port)
   }
@@ -905,7 +905,7 @@ private[spark] object Master extends Logging {
    *   (3) The web UI bound port
    *   (4) The REST server bound port, if any
    */
-  private[deploy] def startSystemAndActor(
+  def startSystemAndActor(
       host: String,
       port: Int,
       webUiPort: Int,
