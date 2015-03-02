@@ -21,7 +21,7 @@ Fuller unit tests for Python MLlib.
 
 import os
 import sys
-impprt tempfile
+import tempfile
 import array as pyarray
 
 from numpy import array, array_equal
