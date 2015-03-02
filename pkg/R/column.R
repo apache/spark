@@ -24,38 +24,36 @@ column <- function(jc) {
 }
 
 # TODO: change Dsl to functions once update spark-sql
+# A helper function to create a column from name
 col <- function(x) {
   column(callJStatic("org.apache.spark.sql.Dsl", "col", x))
 }
 
-alias <- function(col, name) {
-  column(callJMethod(col@jc, "as", name))
-}
-
-cast <- function(col, dataType) {
-  # TODO(davies): support DataType
-  if (class(dataType) == "character") {
-    column(callJMethod(col@jc, "cast", dataType))
-  }
-}
-
-#TODO(davies): like, rlike, startwith, substr, isNull, isNotNull, getField, getItem
+# TODO(davies): like, rlike, startwith, substr, getField, getItem
 
 operators <- list(
   "+" = "plus", "-" = "minus", "*" = "multiply", "/" = "divide", "%%" = "mod",
   "==" = "equalTo", ">" = "gt", "<" = "lt", "!=" = "notEqual", "<=" = "leq", ">=" = "geq",
   # we can not override `&&` and `||`, so use `&` and `|` instead
-  "&" = "and", "|" = "or"
+  "&" = "and", "|" = "or" #, "!" = "unary_$bang"
 )
 
 createOperator <- function(op) {
   setMethod(op,
             signature(e1 = "Column"),
             function(e1, e2) {
-              if (class(e2) == "Column") {
-                e2 <- e2@jc
+              jc <- if (missing(e2)) {
+                if (op == "-") {
+                  callJMethod(e1@jc, "unary_$minus")
+                } else {
+                  callJMethod(e1@jc, operators[[op]])
+                }
+              } else {
+                if (class(e2) == "Column") {
+                  e2 <- e2@jc
+                }
+                callJMethod(e1@jc, operators[[op]], e2)
               }
-              jc <- callJMethod(e1@jc, operators[[op]], e2)
               column(jc)
             })
 }
@@ -63,7 +61,6 @@ createOperator <- function(op) {
 for (op in names(operators)) {
   createOperator(op)
 }
-
 
 createFunction <- function(name) {
   setMethod(name,
@@ -80,29 +77,53 @@ setGeneric("asc", function(x) { standardGeneric("asc") })
 setGeneric("desc", function(x) { standardGeneric("desc") })
 setGeneric("lower", function(x) { standardGeneric("lower") })
 setGeneric("upper", function(x) { standardGeneric("upper") })
+setGeneric("isNull", function(x) { standardGeneric("isNull") })
+setGeneric("isNotNull", function(x) { standardGeneric("isNotNull") })
+setGeneric("sumDistinct", function(x) { standardGeneric("sumDistinct") })
 
 Functions <- c("min", "max", "sum", "avg", "mean", "count", "abs", "sqrt",
- "first", "last", "asc", "desc", "lower", "upper")
+"first", "last", "asc", "desc", "lower", "upper", "sumDistinct",
+"isNull", "isNotNull")
 
 for (name in Functions) {
   createFunction(name)
 }
 
-approxCountDistinct <- function(col, rsd) {
-  jc <- callJStatic("org.apache.spark.sql.Dsl", "approxCountDistinct", col@jc, rsd)
-  column(jc)
-}
+setGeneric("alias", function(x, name) { standardGeneric("alias") })
 
-countDistinct <- function(col, ...) {
-  jcol <- lapply(list(...), function (col) {
-    col@jc
-  })
-  jc <- callJStatic("org.apache.spark.sql.Dsl", "countDistinct", col@jc, arrayToSeq(jcol))
-  column(jc)
-}
+setMethod("alias",
+          signature(x = "Column", name = "character"),
+          function(x, name) {
+            column(callJMethod(x@jc, "as", name))
+          })
 
-sumDistinct <- function(col) {
-  jc <- callJStatic("org.apache.spark.sql.Dsl", "sumDistinct", x@jc)
-  column(jc)
-}
+setGeneric("cast", function(x, dataType) { standardGeneric("cast") })
+
+setMethod("cast",
+          signature(x = "Column", dataType = "character"),
+          function(x, dataType) {
+            column(callJMethod(x@jc, "cast", dataType))
+          })
+
+
+setGeneric("approxCountDistinct", function(x, rsd) { standardGeneric("approxCountDistinct") })
+
+setMethod("approxCountDistinct",
+          signature(x = "Column"),
+          function(x, rsd) {
+            jc <- callJStatic("org.apache.spark.sql.Dsl", "approxCountDistinct", x@jc, rsd)
+            column(jc)
+          })
+
+setGeneric("countDistinct", function(x, ...) { standardGeneric("countDistinct") })
+
+setMethod("countDistinct",
+          signature(x = "Column"),
+          function(x, ...) {
+            jcol <- lapply(list(...), function (x) {
+              x@jc
+            })
+            jc <- callJStatic("org.apache.spark.sql.Dsl", "countDistinct", x@jc, listToSeq(jcol))
+            column(jc)
+          })
 

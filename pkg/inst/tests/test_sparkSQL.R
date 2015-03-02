@@ -242,9 +242,16 @@ test_that("column calculation", {
 
 test_that("column operators", {
   c <- col("a")
-  c2 <- (c + 1 - 2) * 3 / 4.0
+  c2 <- (- c + 1 - 2) * 3 / 4.0
   c3 <- (c + c2 - c2) * c2 %% c2
   c4 <- (c > c2) & (c2 <= c3) | (c == c2) & (c2 != c3)
+})
+
+test_that("column functions", {
+  c <- col("a")
+  c2 <- min(c) + max(c) + sum(c) + avg(c) + count(c) + abs(c) + sqrt(c)
+  c3 <- lower(c) + upper(c) + first(c) + last(c)
+  c4 <- approxCountDistinct(c) + countDistinct(c) + cast(c, "string")
 })
 
 unlink(jsonPath)
