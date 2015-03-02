@@ -1,12 +1,7 @@
-import urllib2
-import json
-
 import flask_login
-from flask import redirect
 
 from airflow.models import User
 from airflow import settings
-from airflow.configuration import conf
 
 login_manager = flask_login.LoginManager()
 

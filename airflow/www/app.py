@@ -634,13 +634,20 @@ class Airflow(BaseView):
             status=200, mimetype="application/json")
 
     @expose('/login')
-    def login(u):
+    def login(self):
         session = settings.Session()
-        role = 'airpal_topsecret.engineering.airbnb.com'
+        roles = [
+            'airpal_topsecret.engineering.airbnb.com',
+            'hadoop_user.engineering.airbnb.com',
+            'analytics.engineering.airbnb.com',
+            'nerds.engineering.airbnb.com',
+        ]
         if 'X-Internalauth-Username' not in request.headers:
             return redirect(url_for('airflow.noaccess'))
         username = request.headers.get('X-Internalauth-Username')
-        has_access = role in request.headers.get('X-Internalauth-Groups')
+        groups = request.headers.get(
+            'X-Internalauth-Groups').lower().split(',')
+        has_access = any([g in roles for g in groups])
 
         d = {k: v for k, v in request.headers}
         cookie = urllib2.unquote(d.get('Cookie', ''))
