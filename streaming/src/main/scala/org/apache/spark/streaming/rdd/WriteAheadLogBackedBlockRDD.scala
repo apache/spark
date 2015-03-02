@@ -16,6 +16,8 @@
  */
 package org.apache.spark.streaming.rdd
 
+import org.apache.spark.network.buffer.LargeByteBufferHelper
+
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
@@ -97,13 +99,13 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
         iterator
       case None => // Data not found in Block Manager, grab it from write ahead log file
         val reader = new WriteAheadLogRandomReader(partition.segment.path, hadoopConf)
-        val dataRead = reader.read(partition.segment)
+        val dataRead = LargeByteBufferHelper.asLargeByteBuffer(reader.read(partition.segment))
         reader.close()
         logInfo(s"Read partition data of $this from write ahead log, segment ${partition.segment}")
         if (storeInBlockManager) {
           blockManager.putBytes(blockId, dataRead, storageLevel)
           logDebug(s"Stored partition data of $this into block manager with level $storageLevel")
-          dataRead.rewind()
+          dataRead.position(0L)
         }
         blockManager.dataDeserialize(blockId, dataRead).asInstanceOf[Iterator[T]]
     }

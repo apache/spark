@@ -17,6 +17,8 @@
 
 package org.apache.spark.streaming.receiver
 
+import org.apache.spark.network.buffer.LargeByteBufferHelper
+
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.language.{existentials, postfixOps}
@@ -70,7 +72,8 @@ private[streaming] class BlockManagerBasedBlockHandler(
       case IteratorBlock(iterator) =>
         blockManager.putIterator(blockId, iterator, storageLevel, tellMaster = true)
       case ByteBufferBlock(byteBuffer) =>
-        blockManager.putBytes(blockId, byteBuffer, storageLevel, tellMaster = true)
+        blockManager.putBytes(blockId, LargeByteBufferHelper.asLargeByteBuffer(byteBuffer),
+          storageLevel, tellMaster = true)
       case o =>
         throw new SparkException(
           s"Could not store $blockId to block manager, unexpected block type ${o.getClass.getName}")
@@ -166,7 +169,7 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
       case IteratorBlock(iterator) =>
         blockManager.dataSerialize(blockId, iterator)
       case ByteBufferBlock(byteBuffer) =>
-        byteBuffer
+        LargeByteBufferHelper.asLargeByteBuffer(byteBuffer)
       case _ =>
         throw new Exception(s"Could not push $blockId to block manager, unexpected block type")
     }
@@ -183,7 +186,7 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
 
     // Store the block in write ahead log
     val storeInWriteAheadLogFuture = Future {
-      logManager.writeToLog(serializedBlock)
+      logManager.writeToLog(serializedBlock.firstByteBuffer())
     }
 
     // Combine the futures, wait for both to complete, and return the write ahead log segment
