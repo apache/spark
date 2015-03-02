@@ -109,11 +109,11 @@ setMethod("cast",
           })
 
 
-setGeneric("approxCountDistinct", function(x, rsd) { standardGeneric("approxCountDistinct") })
+setGeneric("approxCountDistinct", function(x, ...) { standardGeneric("approxCountDistinct") })
 
 setMethod("approxCountDistinct",
           signature(x = "Column"),
-          function(x, rsd) {
+          function(x, rsd = 0.95) {
             jc <- callJStatic("org.apache.spark.sql.Dsl", "approxCountDistinct", x@jc, rsd)
             column(jc)
           })
