@@ -15,6 +15,12 @@ test_that("get number of partitions in RDD", {
   expect_equal(numPartitions(intRdd), 2)
 })
 
+test_that("first on RDD") {
+  expect_true(first(rdd) == 1)
+  newrdd <- lapply(rdd, function(x) x + 1)
+  expect_true(first(newrdd) == 2)  
+}
+
 test_that("count and length on RDD", {
    expect_equal(count(rdd), 10)
    expect_equal(length(rdd), 10)
