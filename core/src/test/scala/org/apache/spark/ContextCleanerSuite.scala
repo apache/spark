@@ -382,6 +382,10 @@ class CleanerTester(
       toBeCleanedBroadcstIds -= broadcastId
       logInfo("Broadcast" + broadcastId + " cleaned")
     }
+
+    def accumCleaned(accId: Long): Unit = {
+      logInfo("Cleaned accId " + accId + " cleaned")
+    }
   }
 
   val MAX_VALIDATION_ATTEMPTS = 10

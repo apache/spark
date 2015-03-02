@@ -40,7 +40,7 @@ class SqlParser extends AbstractSparkSQLParser {
   def parseExpression(input: String): Expression = {
     // Initialize the Keywords.
     lexical.initialize(reservedWords)
-    phrase(expression)(new lexical.Scanner(input)) match {
+    phrase(projection)(new lexical.Scanner(input)) match {
       case Success(plan, _) => plan
       case failureOrError => sys.error(failureOrError.toString)
     }
@@ -57,7 +57,6 @@ class SqlParser extends AbstractSparkSQLParser {
   protected val AVG = Keyword("AVG")
   protected val BETWEEN = Keyword("BETWEEN")
   protected val BY = Keyword("BY")
-  protected val CACHE = Keyword("CACHE")
   protected val CASE = Keyword("CASE")
   protected val CAST = Keyword("CAST")
   protected val COALESCE = Keyword("COALESCE")
@@ -79,6 +78,7 @@ class SqlParser extends AbstractSparkSQLParser {
   protected val IF = Keyword("IF")
   protected val IN = Keyword("IN")
   protected val INNER = Keyword("INNER")
+  protected val INT = Keyword("INT")
   protected val INSERT = Keyword("INSERT")
   protected val INTERSECT = Keyword("INTERSECT")
   protected val INTO = Keyword("INTO")
@@ -373,7 +373,7 @@ class SqlParser extends AbstractSparkSQLParser {
     | expression ~ ("[" ~> expression <~ "]") ^^
       { case base ~ ordinal => GetItem(base, ordinal) }
     | (expression <~ ".") ~ ident ^^
-      { case base ~ fieldName => GetField(base, fieldName) }
+      { case base ~ fieldName => UnresolvedGetField(base, fieldName) }
     | cast
     | "(" ~> expression <~ ")"
     | function
@@ -395,6 +395,7 @@ class SqlParser extends AbstractSparkSQLParser {
     | fixedDecimalType
     | DECIMAL ^^^ DecimalType.Unlimited
     | DATE ^^^ DateType
+    | INT ^^^ IntegerType
     )
 
   protected lazy val fixedDecimalType: Parser[DataType] =

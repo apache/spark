@@ -46,7 +46,7 @@ public class JavaLinearRegressionSuite implements Serializable {
     jsql = new SQLContext(jsc);
     List<LabeledPoint> points = generateLogisticInputAsList(1.0, 1.0, 100, 42);
     datasetRDD = jsc.parallelize(points, 2);
-    dataset = jsql.applySchema(datasetRDD, LabeledPoint.class);
+    dataset = jsql.createDataFrame(datasetRDD, LabeledPoint.class);
     dataset.registerTempTable("dataset");
   }
 
@@ -76,13 +76,13 @@ public class JavaLinearRegressionSuite implements Serializable {
         .setMaxIter(10)
         .setRegParam(1.0);
     LinearRegressionModel model = lr.fit(dataset);
-    assert(model.fittingParamMap().apply(lr.maxIter()) == 10);
+    assert(model.fittingParamMap().apply(lr.maxIter()).equals(10));
     assert(model.fittingParamMap().apply(lr.regParam()).equals(1.0));
 
     // Call fit() with new params, and check as many params as we can.
     LinearRegressionModel model2 =
         lr.fit(dataset, lr.maxIter().w(5), lr.regParam().w(0.1), lr.predictionCol().w("thePred"));
-    assert(model2.fittingParamMap().apply(lr.maxIter()) == 5);
+    assert(model2.fittingParamMap().apply(lr.maxIter()).equals(5));
     assert(model2.fittingParamMap().apply(lr.regParam()).equals(0.1));
     assert(model2.getPredictionCol().equals("thePred"));
   }

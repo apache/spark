@@ -62,7 +62,7 @@ public class JavaDeveloperApiExample {
         new LabeledPoint(0.0, Vectors.dense(2.0, 1.0, -1.0)),
         new LabeledPoint(0.0, Vectors.dense(2.0, 1.3, 1.0)),
         new LabeledPoint(1.0, Vectors.dense(0.0, 1.2, -0.5)));
-    DataFrame training = jsql.applySchema(jsc.parallelize(localTraining), LabeledPoint.class);
+    DataFrame training = jsql.createDataFrame(jsc.parallelize(localTraining), LabeledPoint.class);
 
     // Create a LogisticRegression instance.  This instance is an Estimator.
     MyJavaLogisticRegression lr = new MyJavaLogisticRegression();
@@ -80,7 +80,7 @@ public class JavaDeveloperApiExample {
         new LabeledPoint(1.0, Vectors.dense(-1.0, 1.5, 1.3)),
         new LabeledPoint(0.0, Vectors.dense(3.0, 2.0, -0.1)),
         new LabeledPoint(1.0, Vectors.dense(0.0, 2.2, -1.5)));
-    DataFrame test = jsql.applySchema(jsc.parallelize(localTest), LabeledPoint.class);
+    DataFrame test = jsql.createDataFrame(jsc.parallelize(localTest), LabeledPoint.class);
 
     // Make predictions on test documents. cvModel uses the best model found (lrModel).
     DataFrame results = model.transform(test);
@@ -116,7 +116,7 @@ class MyJavaLogisticRegression
    */
   IntParam maxIter = new IntParam(this, "maxIter", "max number of iterations");
 
-  int getMaxIter() { return (int)get(maxIter); }
+  int getMaxIter() { return (Integer) get(maxIter); }
 
   public MyJavaLogisticRegression() {
     setMaxIter(100);
@@ -124,7 +124,7 @@ class MyJavaLogisticRegression
 
   // The parameter setter is in this class since it should return type MyJavaLogisticRegression.
   MyJavaLogisticRegression setMaxIter(int value) {
-    return (MyJavaLogisticRegression)set(maxIter, value);
+    return (MyJavaLogisticRegression) set(maxIter, value);
   }
 
   // This method is used by fit().

@@ -105,6 +105,13 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   </td>
 </tr>
 <tr>
+ <td><code>spark.executor.instances</code></td>
+  <td>2</td>
+  <td>
+    The number of executors. Note that this property is incompatible with <code>spark.dynamicAllocation.enabled</code>.
+  </td>
+</tr>
+<tr>
  <td><code>spark.yarn.executor.memoryOverhead</code></td>
   <td>executorMemory * 0.07, with minimum of 384 </td>
   <td>

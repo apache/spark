@@ -21,7 +21,7 @@ import org.apache.spark.annotation.{DeveloperApi, AlphaComponent}
 import org.apache.spark.ml.impl.estimator.{PredictionModel, Predictor, PredictorParams}
 import org.apache.spark.ml.param.{Params, ParamMap, HasRawPredictionCol}
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
-import org.apache.spark.sql.Dsl._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
@@ -66,6 +66,7 @@ private[spark] abstract class Classifier[
   extends Predictor[FeaturesType, E, M]
   with ClassifierParams {
 
+  /** @group setParam */
   def setRawPredictionCol(value: String): E =
     set(rawPredictionCol, value).asInstanceOf[E]
 
@@ -87,6 +88,7 @@ private[spark]
 abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[FeaturesType, M]]
   extends PredictionModel[FeaturesType, M] with ClassifierParams {
 
+  /** @group setParam */
   def setRawPredictionCol(value: String): M = set(rawPredictionCol, value).asInstanceOf[M]
 
   /** Number of classes (values which the label can take). */
@@ -180,24 +182,22 @@ private[ml] object ClassificationModel {
     if (map(model.rawPredictionCol) != "") {
       // output raw prediction
       val features2raw: FeaturesType => Vector = model.predictRaw
-      tmpData = tmpData.select($"*",
-        callUDF(features2raw, new VectorUDT,
-          col(map(model.featuresCol))).as(map(model.rawPredictionCol)))
+      tmpData = tmpData.withColumn(map(model.rawPredictionCol),
+        callUDF(features2raw, new VectorUDT, col(map(model.featuresCol))))
       numColsOutput += 1
       if (map(model.predictionCol) != "") {
         val raw2pred: Vector => Double = (rawPred) => {
           rawPred.toArray.zipWithIndex.maxBy(_._1)._2
         }
-        tmpData = tmpData.select($"*", callUDF(raw2pred, DoubleType,
-          col(map(model.rawPredictionCol))).as(map(model.predictionCol)))
+        tmpData = tmpData.withColumn(map(model.predictionCol),
+          callUDF(raw2pred, DoubleType, col(map(model.rawPredictionCol))))
         numColsOutput += 1
       }
     } else if (map(model.predictionCol) != "") {
       // output prediction
       val features2pred: FeaturesType => Double = model.predict
-      tmpData = tmpData.select($"*",
-        callUDF(features2pred, DoubleType,
-          col(map(model.featuresCol))).as(map(model.predictionCol)))
+      tmpData = tmpData.withColumn(map(model.predictionCol),
+        callUDF(features2pred, DoubleType, col(map(model.featuresCol))))
       numColsOutput += 1
     }
     (numColsOutput, tmpData)

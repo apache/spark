@@ -17,10 +17,8 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.FunSuite
+import scala.collection.JavaConversions._
 
-import org.apache.spark.sql.catalyst.expressions.{ExprId, AttributeReference}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
 
@@ -55,9 +53,36 @@ class QueryTest extends PlanTest {
   /**
    * Runs the plan and makes sure the answer matches the expected result.
    * @param rdd the [[DataFrame]] to be executed
-   * @param expectedAnswer the expected result, can either be an Any, Seq[Product], or Seq[ Seq[Any] ].
+   * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
    */
   protected def checkAnswer(rdd: DataFrame, expectedAnswer: Seq[Row]): Unit = {
+    QueryTest.checkAnswer(rdd, expectedAnswer) match {
+      case Some(errorMessage) => fail(errorMessage)
+      case None =>
+    }
+  }
+
+  protected def checkAnswer(rdd: DataFrame, expectedAnswer: Row): Unit = {
+    checkAnswer(rdd, Seq(expectedAnswer))
+  }
+
+  def sqlTest(sqlString: String, expectedAnswer: Seq[Row])(implicit sqlContext: SQLContext): Unit = {
+    test(sqlString) {
+      checkAnswer(sqlContext.sql(sqlString), expectedAnswer)
+    }
+  }
+}
+
+object QueryTest {
+  /**
+   * Runs the plan and makes sure the answer matches the expected result.
+   * If there was exception during the execution or the contents of the DataFrame does not
+   * match the expected result, an error message will be returned. Otherwise, a [[None]] will
+   * be returned.
+   * @param rdd the [[DataFrame]] to be executed
+   * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
+   */
+  def checkAnswer(rdd: DataFrame, expectedAnswer: Seq[Row]): Option[String] = {
     val isSorted = rdd.logicalPlan.collect { case s: logical.Sort => s }.nonEmpty
     def prepareAnswer(answer: Seq[Row]): Seq[Row] = {
       // Converts data to types that we can do equality comparison using Scala collections.
@@ -73,18 +98,20 @@ class QueryTest extends PlanTest {
     }
     val sparkAnswer = try rdd.collect().toSeq catch {
       case e: Exception =>
-        fail(
+        val errorMessage =
           s"""
             |Exception thrown while executing query:
             |${rdd.queryExecution}
             |== Exception ==
             |$e
             |${org.apache.spark.sql.catalyst.util.stackTraceToString(e)}
-          """.stripMargin)
+          """.stripMargin
+        return Some(errorMessage)
     }
 
     if (prepareAnswer(expectedAnswer) != prepareAnswer(sparkAnswer)) {
-      fail(s"""
+      val errorMessage =
+        s"""
         |Results do not match for query:
         |${rdd.logicalPlan}
         |== Analyzed Plan ==
@@ -93,22 +120,21 @@ class QueryTest extends PlanTest {
         |${rdd.queryExecution.executedPlan}
         |== Results ==
         |${sideBySide(
-        s"== Correct Answer - ${expectedAnswer.size} ==" +:
-          prepareAnswer(expectedAnswer).map(_.toString),
-        s"== Spark Answer - ${sparkAnswer.size} ==" +:
-          prepareAnswer(sparkAnswer).map(_.toString)).mkString("\n")}
-      """.stripMargin)
+          s"== Correct Answer - ${expectedAnswer.size} ==" +:
+            prepareAnswer(expectedAnswer).map(_.toString),
+          s"== Spark Answer - ${sparkAnswer.size} ==" +:
+            prepareAnswer(sparkAnswer).map(_.toString)).mkString("\n")}
+      """.stripMargin
+      return Some(errorMessage)
+    }
+
+    return None
+  }
+
+  def checkAnswer(rdd: DataFrame, expectedAnswer: java.util.List[Row]): String = {
+    checkAnswer(rdd, expectedAnswer.toSeq) match {
+      case Some(errorMessage) => errorMessage
+      case None => null
     }
   }
-
-  protected def checkAnswer(rdd: DataFrame, expectedAnswer: Row): Unit = {
-    checkAnswer(rdd, Seq(expectedAnswer))
-  }
-
-  def sqlTest(sqlString: String, expectedAnswer: Seq[Row])(implicit sqlContext: SQLContext): Unit = {
-    test(sqlString) {
-      checkAnswer(sqlContext.sql(sqlString), expectedAnswer)
-    }
-  }
-
 }

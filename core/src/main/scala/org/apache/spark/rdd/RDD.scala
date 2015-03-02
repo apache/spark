@@ -462,7 +462,13 @@ abstract class RDD[T: ClassTag](
    * Return the union of this RDD and another one. Any identical elements will appear multiple
    * times (use `.distinct()` to eliminate them).
    */
-  def union(other: RDD[T]): RDD[T] = new UnionRDD(sc, Array(this, other))
+  def union(other: RDD[T]): RDD[T] = {
+    if (partitioner.isDefined && other.partitioner == partitioner) {
+      new PartitionerAwareUnionRDD(sc, Array(this, other))
+    } else {
+      new UnionRDD(sc, Array(this, other))
+    }
+  }
 
   /**
    * Return the union of this RDD and another one. Any identical elements will appear multiple
@@ -1140,6 +1146,9 @@ abstract class RDD[T: ClassTag](
    * Take the first num elements of the RDD. It works by first scanning one partition, and use the
    * results from that partition to estimate the number of additional partitions needed to satisfy
    * the limit.
+   *
+   * @note due to complications in the internal implementation, this method will raise
+   * an exception if called on an RDD of `Nothing` or `Null`.
    */
   def take(num: Int): Array[T] = {
     if (num == 0) {
@@ -1252,6 +1261,10 @@ abstract class RDD[T: ClassTag](
   def min()(implicit ord: Ordering[T]): T = this.reduce(ord.min)
 
   /**
+   * @note due to complications in the internal implementation, this method will raise an
+   * exception if called on an RDD of `Nothing` or `Null`. This may be come up in practice
+   * because, for example, the type of `parallelize(Seq())` is `RDD[Nothing]`.
+   * (`parallelize(Seq())` should be avoided anyway in favor of `parallelize(Seq[T]())`.)
    * @return true if and only if the RDD contains no elements at all. Note that an RDD
    *         may be empty even when it has at least 1 partition.
    */

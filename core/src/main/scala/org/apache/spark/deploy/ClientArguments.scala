@@ -29,8 +29,7 @@ import org.apache.spark.util.{IntParam, MemoryParam}
  * Command-line parser for the driver client.
  */
 private[spark] class ClientArguments(args: Array[String]) {
-  val defaultCores = 1
-  val defaultMemory = 512
+  import ClientArguments._
 
   var cmd: String = "" // 'launch' or 'kill'
   var logLevel = Level.WARN
@@ -39,9 +38,9 @@ private[spark] class ClientArguments(args: Array[String]) {
   var master: String = ""
   var jarUrl: String = ""
   var mainClass: String = ""
-  var supervise: Boolean = false
-  var memory: Int = defaultMemory
-  var cores: Int = defaultCores
+  var supervise: Boolean = DEFAULT_SUPERVISE
+  var memory: Int = DEFAULT_MEMORY
+  var cores: Int = DEFAULT_CORES
   private var _driverOptions = ListBuffer[String]()
   def driverOptions = _driverOptions.toSeq
 
@@ -50,7 +49,7 @@ private[spark] class ClientArguments(args: Array[String]) {
 
   parse(args.toList)
 
-  def parse(args: List[String]): Unit = args match {
+  private def parse(args: List[String]): Unit = args match {
     case ("--cores" | "-c") :: IntParam(value) :: tail =>
       cores = value
       parse(tail)
@@ -106,9 +105,10 @@ private[spark] class ClientArguments(args: Array[String]) {
       |Usage: DriverClient kill <active-master> <driver-id>
       |
       |Options:
-      |   -c CORES, --cores CORES        Number of cores to request (default: $defaultCores)
-      |   -m MEMORY, --memory MEMORY     Megabytes of memory to request (default: $defaultMemory)
+      |   -c CORES, --cores CORES        Number of cores to request (default: $DEFAULT_CORES)
+      |   -m MEMORY, --memory MEMORY     Megabytes of memory to request (default: $DEFAULT_MEMORY)
       |   -s, --supervise                Whether to restart the driver on failure
+      |                                  (default: $DEFAULT_SUPERVISE)
       |   -v, --verbose                  Print more debugging output
      """.stripMargin
     System.err.println(usage)
@@ -117,6 +117,10 @@ private[spark] class ClientArguments(args: Array[String]) {
 }
 
 object ClientArguments {
+  private[spark] val DEFAULT_CORES = 1
+  private[spark] val DEFAULT_MEMORY = 512 // MB
+  private[spark] val DEFAULT_SUPERVISE = false
+
   def isValidJarUrl(s: String): Boolean = {
     try {
       val uri = new URI(s)

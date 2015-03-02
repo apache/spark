@@ -33,7 +33,7 @@ import org.apache.spark.rdd.RDD
  *
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model. (Only used in Binary Logistic Regression.
- *                  In Multinomial Logistic Regression, the intercepts will not be a single values,
+ *                  In Multinomial Logistic Regression, the intercepts will not be a single value,
  *                  so the intercepts will be part of the weights.)
  * @param numFeatures the dimension of the features.
  * @param numClasses the number of possible outcomes for k classes classification problem in
@@ -107,7 +107,7 @@ class LogisticRegressionModel (
     // If dataMatrix and weightMatrix have the same dimension, it's binary logistic regression.
     if (numClasses == 2) {
       require(numFeatures == weightMatrix.size)
-      val margin = dot(weights, dataMatrix) + intercept
+      val margin = dot(weightMatrix, dataMatrix) + intercept
       val score = 1.0 / (1.0 + math.exp(-margin))
       threshold match {
         case Some(t) => if (score > t) 1.0 else 0.0
@@ -116,11 +116,11 @@ class LogisticRegressionModel (
     } else {
       val dataWithBiasSize = weightMatrix.size / (numClasses - 1)
 
-      val weightsArray = weights match {
+      val weightsArray = weightMatrix match {
         case dv: DenseVector => dv.values
         case _ =>
           throw new IllegalArgumentException(
-            s"weights only supports dense vector but got type ${weights.getClass}.")
+            s"weights only supports dense vector but got type ${weightMatrix.getClass}.")
       }
 
       val margins = (0 until numClasses - 1).map { i =>
@@ -173,8 +173,7 @@ object LogisticRegressionModel extends Loader[LogisticRegressionModel] {
     val classNameV1_0 = "org.apache.spark.mllib.classification.LogisticRegressionModel"
     (loadedClassName, version) match {
       case (className, "1.0") if className == classNameV1_0 =>
-        val (numFeatures, numClasses) =
-          ClassificationModel.getNumFeaturesClasses(metadata, classNameV1_0, path)
+        val (numFeatures, numClasses) = ClassificationModel.getNumFeaturesClasses(metadata)
         val data = GLMClassificationModel.SaveLoadV1_0.loadData(sc, path, classNameV1_0)
         // numFeatures, numClasses, weights are checked in model initialization
         val model =
@@ -356,6 +355,10 @@ class LogisticRegressionWithLBFGS
   }
 
   override protected def createModel(weights: Vector, intercept: Double) = {
-    new LogisticRegressionModel(weights, intercept, numFeatures, numOfLinearPredictor + 1)
+    if (numOfLinearPredictor == 1) {
+      new LogisticRegressionModel(weights, intercept)
+    } else {
+      new LogisticRegressionModel(weights, intercept, numFeatures, numOfLinearPredictor + 1)
+    }
   }
 }

@@ -17,8 +17,6 @@
 
 package org.apache.spark.deploy
 
-import java.io.File
-
 import scala.collection.JavaConversions._
 
 import org.apache.spark.util.{RedirectThread, Utils}
@@ -164,6 +162,8 @@ private[spark] object SparkSubmitDriverBootstrapper {
       }
     }
     val returnCode = process.waitFor()
+    stdoutThread.join()
+    stderrThread.join()
     sys.exit(returnCode)
   }
 
