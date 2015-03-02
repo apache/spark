@@ -21,6 +21,7 @@ import java.io.{BufferedOutputStream, File, InputStream, OutputStream}
 import java.nio.{ByteBuffer, MappedByteBuffer}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.JavaConverters._
 import scala.concurrent.{Await, Future}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
@@ -1253,8 +1254,7 @@ private[spark] object BlockManager extends Logging {
   }
 
   def dispose(buffer: LargeByteBuffer): Unit = {
-    // TODO
-    ???
+    buffer.nioBuffers().asScala.foreach{buf => dispose(buf)}
   }
 
   def blockIdsToBlockManagers(
