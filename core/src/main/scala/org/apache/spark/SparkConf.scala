@@ -343,6 +343,13 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
         }
       }
     }
+
+    // Warn against the use of deprecated configs
+    deprecatedConfigs.values.foreach { dc =>
+      if (contains(dc.oldName)) {
+        dc.warn()
+      }
+    }
   }
 
   /**
