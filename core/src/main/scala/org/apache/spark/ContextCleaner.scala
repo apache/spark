@@ -188,10 +188,10 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   /** Perform broadcast cleanup. */
   def doCleanupBroadcast(broadcastId: Long, blocking: Boolean) {
     try {
-      logDebug("Cleaning broadcast " + broadcastId)
+      logDebug(s"Cleaning broadcast $broadcastId")
       broadcastManager.unbroadcast(broadcastId, true, blocking)
       listeners.foreach(_.broadcastCleaned(broadcastId))
-      logInfo("Cleaned broadcast " + broadcastId)
+      logDebug(s"Cleaned broadcast $broadcastId")
     } catch {
       case e: Exception => logError("Error cleaning broadcast " + broadcastId, e)
     }
