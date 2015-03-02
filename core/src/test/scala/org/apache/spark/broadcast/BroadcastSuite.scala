@@ -179,7 +179,8 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     assert(thrown.getMessage.toLowerCase.contains("stopped"))
   }
 
-  test("large broadcast variable") {
+  //ignored for now just because it needs a lot of memory
+  ignore("large broadcast variable") {
     sc = new SparkContext("local", "test", httpConf)
     val bigArr = new Array[Long]((2.3e9 / 8).toInt)
     val bcArr = sc.broadcast(bigArr)
