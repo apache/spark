@@ -291,16 +291,11 @@ private[yarn] class YarnAllocator(
       containersToUse: ArrayBuffer[Container],
       remaining: ArrayBuffer[Container]): Unit = {
     // SPARK-6050: certain Yarn configurations return a virtual core count that doesn't match the
-    // request; for example, capacity scheduler + DefaultResourceCalculator. Allow users in those
-    // situations to disable matching of the core count.
-    val matchingResource =
-      if (sparkConf.getBoolean("spark.yarn.container.disableCpuMatching", false)) {
-        Resource.newInstance(allocatedContainer.getResource().getMemory(),
-          resource.getVirtualCores())
-      } else {
-        allocatedContainer.getResource
-      }
-
+    // request; for example, capacity scheduler + DefaultResourceCalculator. So match on requested
+    // memory, but use the asked vcore count for matching, effectively disabling matching on vcore
+    // count.
+    val matchingResource = Resource.newInstance(allocatedContainer.getResource.getMemory,
+          resource.getVirtualCores)
     val matchingRequests = amClient.getMatchingRequests(allocatedContainer.getPriority, location,
       matchingResource)
 
