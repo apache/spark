@@ -84,7 +84,7 @@ class DagBag(object):
             self.collect_dags(example_dag_folder)
         self.merge_dags()
 
-    def process_file(self, filepath, only_if_updated=True):
+    def process_file(self, filepath, only_if_updated=True, safe_mode=True):
         """
         Given a path to a python module, this method imports the module and
         look for dag objects whithin it.
@@ -97,6 +97,14 @@ class DagBag(object):
 
         if file_ext != '.py':
             return
+
+        # Skip file if no obvious references to airflow or DAG are found.
+        if safe_mode:
+            f = open(filepath, 'r')
+            content = f.read()
+            f.close()
+            if not all([s in content for s in ('DAG', 'airflow')]):
+                return
 
         if (
                 not only_if_updated or
@@ -1392,7 +1400,8 @@ class Chart(Base):
 
     id = Column(Integer, primary_key=True)
     label = Column(String(200))
-    conn_id = Column(String(ID_LEN), ForeignKey('connection.conn_id'), nullable=False)
+    conn_id = Column(
+        String(ID_LEN), ForeignKey('connection.conn_id'), nullable=False)
     user_id = Column(Integer(), ForeignKey('user.id'),)
     chart_type = Column(String(100), default="line")
     sql_layout = Column(String(50), default="series")
