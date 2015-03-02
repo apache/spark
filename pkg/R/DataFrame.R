@@ -592,20 +592,20 @@ setMethod("$", signature(x = "DataFrame"),
             column(callJMethod(x@sdf, "col", name))
           })
 
-setGeneric("select", function(df, col, ...) { standardGeneric("select") } )
+setGeneric("select", function(x, col, ...) { standardGeneric("select") } )
 
-setMethod("select", signature(df = "DataFrame", col = "character"),
-          function(df, col, ...) {
-            sdf <- callJMethod(df@sdf, "select", col, toSeq(...))
+setMethod("select", signature(x = "DataFrame", col = "character"),
+          function(x, col, ...) {
+            sdf <- callJMethod(x@sdf, "select", col, toSeq(...))
             dataFrame(sdf)
           })
 
-setMethod("select", signature(df = "DataFrame", col = "Column"),
-          function(df, col, ...) {
+setMethod("select", signature(x = "DataFrame", col = "Column"),
+          function(x, col, ...) {
             jcols <- lapply(list(col, ...), function(x) {
               x@jc
             })
-            sdf <- callJMethod(df@sdf, "select", listToSeq(jcols))
+            sdf <- callJMethod(x@sdf, "select", listToSeq(jcols))
             dataFrame(sdf)
           })
 
