@@ -318,7 +318,7 @@ print(model.toDebugString())
 
 # Save and load model
 model.save(sc, "myModelPath")
-sameModel = DecisionTreeModel.load(sc, "myModelPath)
+sameModel = DecisionTreeModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 
@@ -467,7 +467,7 @@ print(model.toDebugString())
 
 # Save and load model
 model.save(sc, "myModelPath")
-sameModel = DecisionTreeModel.load(sc, "myModelPath)
+sameModel = DecisionTreeModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 

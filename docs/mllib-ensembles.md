@@ -229,7 +229,7 @@ print(model.toDebugString())
 
 # Save and load model
 model.save(sc, "myModelPath")
-sameModel = RandomForestModel.load(sc, "myModelPath)
+sameModel = RandomForestModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 
@@ -383,7 +383,7 @@ print(model.toDebugString())
 
 # Save and load model
 model.save(sc, "myModelPath")
-sameModel = RandomForestModel.load(sc, "myModelPath)
+sameModel = RandomForestModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 
@@ -610,7 +610,7 @@ print(model.toDebugString())
 
 # Save and load model
 model.save(sc, "myModelPath")
-sameModel = GradientBoostedTreesModel.load(sc, "myModelPath)
+sameModel = GradientBoostedTreesModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 
@@ -763,7 +763,7 @@ print(model.toDebugString())
 
 # Save and load model
 model.save(sc, "myModelPath")
-sameModel = GradientBoostedTreesModel.load(sc, "myModelPath)
+sameModel = GradientBoostedTreesModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 
