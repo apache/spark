@@ -237,7 +237,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private[spark] val eventLogCodec: Option[String] = {
     val compress = conf.getBoolean("spark.eventLog.compress", false)
     if (compress && isEventLogEnabled) {
-      Some(CompressionCodec.createCodec(conf)).map(_.getClass.getCanonicalName)
+      Some(CompressionCodec.getCodecName(conf)).map(CompressionCodec.getShortName)
     } else {
       None
     }

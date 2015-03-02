@@ -291,7 +291,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   private def replay(eventLog: FileStatus, bus: ReplayListenerBus): FsApplicationHistoryInfo = {
     val logPath = eventLog.getPath()
     logInfo(s"Replaying log path: $logPath")
-    val (logInput, sparkVersion) =
+    val logInput =
       if (isLegacyLogDirectory(eventLog)) {
         openLegacyEventLog(logPath)
       } else {
@@ -300,7 +300,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     try {
       val appListener = new ApplicationEventListener
       bus.addListener(appListener)
-      bus.replay(logInput, sparkVersion, logPath.toString)
+      bus.replay(logInput, logPath.toString)
       new FsApplicationHistoryInfo(
         logPath.getName(),
         appListener.appId.getOrElse(logPath.getName()),
@@ -322,28 +322,22 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
    *
    * @return 2-tuple of (input stream of the events, version of Spark which wrote the log)
    */
-  private[history] def openLegacyEventLog(dir: Path): (InputStream, String) = {
+  private[history] def openLegacyEventLog(dir: Path): InputStream = {
     val children = fs.listStatus(dir)
     var eventLogPath: Path = null
     var codecName: Option[String] = None
-    var sparkVersion: String = null
 
     children.foreach { child =>
       child.getPath().getName() match {
         case name if name.startsWith(LOG_PREFIX) =>
           eventLogPath = child.getPath()
-
         case codec if codec.startsWith(COMPRESSION_CODEC_PREFIX) =>
           codecName = Some(codec.substring(COMPRESSION_CODEC_PREFIX.length()))
-
-        case version if version.startsWith(SPARK_VERSION_PREFIX) =>
-          sparkVersion = version.substring(SPARK_VERSION_PREFIX.length())
-
         case _ =>
       }
     }
 
-    if (eventLogPath == null || sparkVersion == null) {
+    if (eventLogPath == null) {
       throw new IllegalArgumentException(s"$dir is not a Spark application log directory.")
     }
 
@@ -355,7 +349,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       }
 
     val in = new BufferedInputStream(fs.open(eventLogPath))
-    (codec.map(_.compressedInputStream(in)).getOrElse(in), sparkVersion)
+    codec.map(_.compressedInputStream(in)).getOrElse(in)
   }
 
   /**

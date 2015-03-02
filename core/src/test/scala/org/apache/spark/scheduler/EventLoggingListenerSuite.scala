@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.Path
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
-import org.apache.spark.{Logging, SparkConf, SparkContext, SPARK_VERSION}
+import org.apache.spark.{Logging, SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io._
 import org.apache.spark.util.{JsonProtocol, Utils}
@@ -106,13 +106,12 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
 
   test("Event log name") {
     // without compression
-    assert(s"file:/base-dir/app1_SPARK_VERSION_$SPARK_VERSION" ===
-      EventLoggingListener.getLogPath("/base-dir", "app1"))
+    assert(s"file:/base-dir/app1" === EventLoggingListener.getLogPath("/base-dir", "app1"))
     // with compression
-    assert(s"file:/base-dir/app1_SPARK_VERSION_${SPARK_VERSION}_COMPRESSION_CODEC_lzf" ===
+    assert(s"file:/base-dir/app1_COMPRESSION_CODEC_lzf" ===
       EventLoggingListener.getLogPath("/base-dir", "app1", Some("lzf")))
     // illegal characters in app ID
-    assert(s"file:/base-dir/a-fine-mind_dollar_bills_1_SPARK_VERSION_$SPARK_VERSION" ===
+    assert(s"file:/base-dir/a-fine-mind_dollar_bills_1" ===
       EventLoggingListener.getLogPath("/base-dir", "a fine:mind$dollar{bills}1"))
   }
 
@@ -149,32 +148,17 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
     eventLogger.stop()
 
     // Verify file contains exactly the two events logged
-    val (logData, version) = EventLoggingListener.openEventLog(new Path(eventLogger.logPath),
-      fileSystem)
+    val logData = EventLoggingListener.openEventLog(new Path(eventLogger.logPath), fileSystem)
     try {
       val lines = readLines(logData)
-      assert(lines.size === 3) // including the header
-      assert(lines(0).contains("SparkListenerMetadataIdentifier"))
-      assert(lines(1).contains("SparkListenerApplicationStart"))
-      assert(lines(2).contains("SparkListenerApplicationEnd"))
-      assertMetadataValid(lines(0), compressionCodec)
-      assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === SparkListenerMetadataIdentifier)
-      assert(JsonProtocol.sparkEventFromJson(parse(lines(1))) === applicationStart)
-      assert(JsonProtocol.sparkEventFromJson(parse(lines(2))) === applicationEnd)
+      assert(lines.size === 2)
+      assert(lines(0).contains("SparkListenerApplicationStart"))
+      assert(lines(1).contains("SparkListenerApplicationEnd"))
+      assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === applicationStart)
+      assert(JsonProtocol.sparkEventFromJson(parse(lines(1))) === applicationEnd)
     } finally {
       logData.close()
     }
-  }
-
-  /**
-   * Assert that the line is a correct JSON representation of the event log metadata.
-   */
-  private def assertMetadataValid(line: String, compressionCodec: Option[String] = None): Unit = {
-    val metadata = JsonProtocol.mapFromJson(parse(line))
-    assert(metadata.size === 2 + compressionCodec.size)
-    assert(metadata.get("Event") === Some(SparkListenerMetadataIdentifier.toString))
-    assert(metadata.get(EventLoggingListener.SPARK_VERSION_KEY) === Some(SPARK_VERSION))
-    assert(metadata.get(EventLoggingListener.COMPRESSION_CODEC_KEY) === compressionCodec)
   }
 
   /**
@@ -189,7 +173,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
     val eventLogPath = eventLogger.logPath
     val expectedLogDir = testDir.toURI().toString()
     assert(eventLogPath === EventLoggingListener.getLogPath(
-      expectedLogDir, sc.applicationId, compressionCodec))
+      expectedLogDir, sc.applicationId, compressionCodec.map(CompressionCodec.getShortName)))
 
     // Begin listening for events that trigger asserts
     val eventExistenceListener = new EventExistenceListener(eventLogger)
@@ -203,8 +187,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
     eventExistenceListener.assertAllCallbacksInvoked()
 
     // Make sure expected events exist in the log file.
-    val (logData, version) = EventLoggingListener.openEventLog(new Path(eventLogger.logPath),
-      fileSystem)
+    val logData = EventLoggingListener.openEventLog(new Path(eventLogger.logPath), fileSystem)
     val lines = readLines(logData)
     val eventSet = mutable.Set(
       SparkListenerApplicationStart,
@@ -218,8 +201,6 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
       SparkListenerTaskStart,
       SparkListenerTaskEnd,
       SparkListenerApplicationEnd).map(Utils.getFormattedClassName)
-    // Verify that the first line is valid metadata
-    assertMetadataValid(lines(0), compressionCodec)
     lines.foreach { line =>
       eventSet.foreach { event =>
         if (line.contains(event)) {

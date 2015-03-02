@@ -23,14 +23,13 @@ import java.net.URI
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import com.google.common.base.Charsets
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{Logging, SparkConf, SPARK_VERSION}
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{JsonProtocol, Utils}
@@ -68,7 +67,9 @@ private[spark] class EventLoggingListener(
     } else {
       None
     }
-  private val compressionCodecName = compressionCodec.map(_.getClass.getCanonicalName)
+  private val compressionCodecName = compressionCodec.map { c =>
+    CompressionCodec.getShortName(c.getClass.getName)
+  }
 
   // Only defined if the file system scheme is not local
   private var hadoopDataStream: Option[FSDataOutputStream] = None
@@ -121,11 +122,8 @@ private[spark] class EventLoggingListener(
     try {
       val cstream = compressionCodec.map(_.compressedOutputStream(dstream)).getOrElse(dstream)
       val bstream = new BufferedOutputStream(cstream, outputBufferSize)
-
       fileSystem.setPermission(path, LOG_FILE_PERMISSIONS)
-
-      val logStream = initEventLog(bstream, compressionCodec)
-      writer = Some(new PrintWriter(logStream))
+      writer = Some(new PrintWriter(bstream))
       logInfo("Logging events to %s".format(logPath))
     } catch {
       case e: Exception =>
@@ -214,44 +212,8 @@ private[spark] object EventLoggingListener extends Logging {
 
   private val LOG_FILE_PERMISSIONS = new FsPermission(Integer.parseInt("770", 8).toShort)
 
-  // To avoid corrupted files causing the heap to fill up. Value is arbitrary.
-  private val MAX_HEADER_LINE_LENGTH = 4096
-
   // A cache for compression codecs to avoid creating the same codec many times
   private val codecMap = new mutable.HashMap[String, CompressionCodec]
-
-  /**
-   * Write metadata about the event log to the given stream.
-   *
-   * The header is a single line of JSON in the beginning of the file. Note that this
-   * assumes all metadata necessary to parse the log is also included in the file name.
-   * The format needs to be kept in sync with the `openEventLog()` method below. Also, it
-   * cannot change in new Spark versions without some other way of detecting the change.
-   *
-   * @param logStream Raw output stream to the event log file.
-   * @param compressionCodec Optional compression codec to use.
-   * @return A stream to which event log data is written. This may be a wrapper around the original
-   *         stream (for example, when compression is enabled).
-   */
-  def initEventLog(
-      logStream: OutputStream,
-      compressionCodec: Option[CompressionCodec]): OutputStream = {
-    val metadata = new mutable.HashMap[String, String]
-    // Some of these metadata are already encoded in the file name
-    // Here we include them again within the file itself for completeness
-    metadata += ("Event" -> Utils.getFormattedClassName(SparkListenerMetadataIdentifier))
-    metadata += (SPARK_VERSION_KEY -> SPARK_VERSION)
-    compressionCodec.foreach { codec =>
-      metadata += (COMPRESSION_CODEC_KEY -> codec.getClass.getCanonicalName)
-    }
-    val metadataJson = compact(render(JsonProtocol.mapToJson(metadata)))
-    val metadataBytes = (metadataJson + "\n").getBytes(Charsets.UTF_8)
-    if (metadataBytes.length > MAX_HEADER_LINE_LENGTH) {
-      throw new IOException(s"Event log metadata too long: $metadataJson")
-    }
-    logStream.write(metadataBytes, 0, metadataBytes.length)
-    logStream
-  }
 
   /**
    * Return a file-system-safe path to the log file for the given application.
@@ -259,11 +221,12 @@ private[spark] object EventLoggingListener extends Logging {
    * Note that because we currently only create a single log file for each application,
    * we must encode all the information needed to parse this event log in the file name
    * instead of within the file itself. Otherwise, if the file is compressed, for instance,
-   * we won't know which codec to use to decompress the metadata.
+   * we won't know which codec to use to decompress the metadata needed to open the file in
+   * the first place.
    *
    * @param logBaseDir Directory where the log file will be written.
    * @param appId A unique app ID.
-   * @param compressionCodecName Name of the compression codec used to compress the contents
+   * @param compressionCodecName Name to identify the codec used to compress the contents
    *                             of the log, or None if compression is not enabled.
    * @return A path which consists of file-system-safe characters.
    */
@@ -272,22 +235,19 @@ private[spark] object EventLoggingListener extends Logging {
       appId: String,
       compressionCodecName: Option[String] = None): String = {
     val sanitizedAppId = appId.replaceAll("[ :/]", "-").replaceAll("[${}'\"]", "_").toLowerCase
-    // e.g. EVENT_LOG_app_123_SPARK_VERSION_1.3.1
-    // e.g. EVENT_LOG_ {...} _COMPRESSION_CODEC_org.apache.spark.io.LZFCompressionCodec
-    val logName = s"${sanitizedAppId}_${SPARK_VERSION_KEY}_$SPARK_VERSION" +
-      compressionCodecName.map { c => s"_${COMPRESSION_CODEC_KEY}_$c" }.getOrElse("")
+    // e.g. app_123, app_123_COMPRESSION_CODEC_lzf
+    val logName = sanitizedAppId + compressionCodecName
+      .map { c => s"_${COMPRESSION_CODEC_KEY}_$c" }
+      .getOrElse("")
     Utils.resolveURI(logBaseDir).toString.stripSuffix("/") + "/" + logName
   }
 
   /**
    * Opens an event log file and returns an input stream that contains the event data.
    *
-   * The first line of the returned input stream is a JSON header that describes the metadata
-   * of the event log.
-   *
-   * @return 2-tuple (event input stream, Spark version of event data)
+   * @return input stream that holds one JSON serialized event per line
    */
-  def openEventLog(log: Path, fs: FileSystem): (InputStream, String) = {
+  def openEventLog(log: Path, fs: FileSystem): InputStream = {
     // It's not clear whether FileSystem.open() throws FileNotFoundException or just plain
     // IOException when a file does not exist, so try our best to throw a proper exception.
     if (!fs.exists(log)) {
@@ -296,21 +256,19 @@ private[spark] object EventLoggingListener extends Logging {
 
     val in = new BufferedInputStream(fs.open(log))
 
-    // Parse information from the log name
+    // Parse compression codec from the log name
     val logName = log.getName
-    val baseRegex = s"(.*)_${SPARK_VERSION_KEY}_(.*)".r
-    val compressionRegex = (baseRegex + s"_${COMPRESSION_CODEC_KEY}_(.*)").r
-    val (sparkVersion, codecName) = logName match {
-      case compressionRegex(_, version, _codecName) => (version, Some(_codecName))
-      case baseRegex(_, version) => (version, None)
-      case _ => throw new IllegalArgumentException(s"Malformed event log name: $logName")
+    val compressionRegex = s".*_${COMPRESSION_CODEC_KEY}_(.*)".r
+    val codecName: Option[String] = logName match {
+      case compressionRegex(_codecName) => Some(_codecName)
+      case _ => None
     }
     val codec = codecName.map { c =>
       codecMap.getOrElseUpdate(c, CompressionCodec.createCodec(new SparkConf, c))
     }
 
     try {
-      (codec.map(_.compressedInputStream(in)).getOrElse(in), sparkVersion)
+      codec.map(_.compressedInputStream(in)).getOrElse(in)
     } catch {
       case e: Exception =>
         in.close()

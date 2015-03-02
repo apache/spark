@@ -58,7 +58,6 @@ private[spark] trait SparkListenerBus extends ListenerBus[SparkListener, SparkLi
         listener.onExecutorAdded(executorAdded)
       case executorRemoved: SparkListenerExecutorRemoved =>
         listener.onExecutorRemoved(executorRemoved)
-      case SparkListenerMetadataIdentifier =>
     }
   }
 

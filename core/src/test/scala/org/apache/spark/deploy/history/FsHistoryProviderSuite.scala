@@ -134,7 +134,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
 
       val logPath = new Path(logDir.getAbsolutePath())
       try {
-        val (logInput, sparkVersion) = provider.openLegacyEventLog(logPath)
+        val logInput = provider.openLegacyEventLog(logPath)
         try {
           Source.fromInputStream(logInput).getLines().toSeq.size should be (2)
         } finally {
@@ -206,13 +206,8 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
 
   private def writeFile(file: File, isNewFormat: Boolean, codec: Option[CompressionCodec],
     events: SparkListenerEvent*) = {
-    val out =
-      if (isNewFormat) {
-        EventLoggingListener.initEventLog(new FileOutputStream(file), codec)
-      } else {
-        val fileStream = new FileOutputStream(file)
-        codec.map(_.compressedOutputStream(fileStream)).getOrElse(fileStream)
-      }
+    val fileStream = new FileOutputStream(file)
+    val out = codec.map(_.compressedOutputStream(fileStream)).getOrElse(fileStream)
     val writer = new OutputStreamWriter(out, "UTF-8")
     try {
       events.foreach(e => writer.write(compact(render(JsonProtocol.sparkEventToJson(e))) + "\n"))

@@ -91,7 +91,6 @@ private[spark] object JsonProtocol {
         executorRemovedToJson(executorRemoved)
       // These aren't used, but keeps compiler happy
       case SparkListenerExecutorMetricsUpdate(_, _) => JNothing
-      case SparkListenerMetadataIdentifier => JNothing
     }
   }
 
@@ -448,7 +447,6 @@ private[spark] object JsonProtocol {
     val applicationEnd = Utils.getFormattedClassName(SparkListenerApplicationEnd)
     val executorAdded = Utils.getFormattedClassName(SparkListenerExecutorAdded)
     val executorRemoved = Utils.getFormattedClassName(SparkListenerExecutorRemoved)
-    val metadataIdentifier = Utils.getFormattedClassName(SparkListenerMetadataIdentifier)
 
     (json \ "Event").extract[String] match {
       case `stageSubmitted` => stageSubmittedFromJson(json)
@@ -466,7 +464,6 @@ private[spark] object JsonProtocol {
       case `applicationEnd` => applicationEndFromJson(json)
       case `executorAdded` => executorAddedFromJson(json)
       case `executorRemoved` => executorRemovedFromJson(json)
-      case `metadataIdentifier` => SparkListenerMetadataIdentifier
     }
   }
 
