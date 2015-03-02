@@ -25,7 +25,8 @@ import java.util.List;
 
 public class WrappedLargeByteBuffer implements LargeByteBuffer {
 
-    final ByteBuffer[] underlying;
+    //only public for tests for the moment ...
+    public final ByteBuffer[] underlying;
     private final Long totalCapacity;
     private final long[] chunkOffsets;
 

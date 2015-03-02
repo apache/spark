@@ -18,6 +18,7 @@ package org.apache.spark.io
 
 import java.io.{ObjectInputStream, ObjectOutputStream}
 
+import org.apache.spark.network.buffer.WrappedLargeByteBuffer
 import org.apache.spark.util.{LargeByteBufferInputStream, LargeByteBufferOutputStream}
 import org.scalatest.{Matchers, FunSuite}
 
@@ -45,13 +46,12 @@ class LargeByteBufferTest extends FunSuite with Matchers {
     objOut.writeObject(someObject)
     objOut.close()
 
-    rawOut.largeBuffer.asInstanceOf[ChainedLargeByteBuffer].underlying.chunks.size should be > 1
+    rawOut.largeBuffer.asInstanceOf[WrappedLargeByteBuffer].underlying.size should be > 1
 
     val rawIn = new LargeByteBufferInputStream(rawOut.largeBuffer)
     val objIn = new ObjectInputStream(rawIn)
     val deser = objIn.readObject()
     deser should be (someObject)
-
   }
 
 }
