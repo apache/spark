@@ -30,15 +30,15 @@ import org.apache.spark.util.AkkaUtils
 /**
  * Web UI server for the standalone worker.
  */
-private[spark]
+private[worker]
 class WorkerWebUI(
-    val worker: Worker,
-    val workDir: File,
+    private[ui] val worker: Worker,
+    private[ui] val workDir: File,
     requestedPort: Int)
   extends WebUI(worker.securityMgr, requestedPort, worker.conf, name = "WorkerUI")
   with Logging {
 
-  val timeout = AkkaUtils.askTimeout(worker.conf)
+  private[ui] val timeout = AkkaUtils.askTimeout(worker.conf)
 
   initialize()
 
@@ -53,6 +53,6 @@ class WorkerWebUI(
   }
 }
 
-private[spark] object WorkerWebUI {
+private[ui] object WorkerWebUI {
   val STATIC_RESOURCE_BASE = SparkUI.STATIC_RESOURCE_DIR
 }
