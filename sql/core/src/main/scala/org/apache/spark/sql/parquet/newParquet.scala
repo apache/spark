@@ -159,7 +159,8 @@ private[sql] case class ParquetRelation2(
     maybeSchema: Option[StructType] = None,
     maybePartitionSpec: Option[PartitionSpec] = None)(
     @transient val sqlContext: SQLContext)
-  extends CatalystScan
+  extends BaseRelation
+  with CatalystScan
   with InsertableRelation
   with SparkHadoopMapReduceUtil
   with Logging {
