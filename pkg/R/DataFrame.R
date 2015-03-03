@@ -628,6 +628,8 @@ setMethod("select", signature(x = "DataFrame", col = "Column"),
 #' }
 setGeneric("selectExpr", function(x, expr, ...) { standardGeneric("selectExpr") })
 
+#' @rdname selectExpr
+#' @export
 setMethod("selectExpr",
           signature(x = "DataFrame", expr = "character"),
           function(x, expr, ...) {
