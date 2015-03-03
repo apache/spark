@@ -444,6 +444,10 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
    */
   object ParquetConversions extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = {
+      if (!plan.resolved) {
+        return plan
+      }
+
       // Collects all `MetastoreRelation`s which should be replaced
       val toBeReplaced = plan.collect {
         // Write path
