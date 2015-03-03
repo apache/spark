@@ -208,23 +208,27 @@ case class InsertIntoHiveTable(
       val inheritTableSpecs = true
       // TODO: Correctly set isSkewedStoreAsSubdir.
       val isSkewedStoreAsSubdir = false
-      val oldPart = catalog.synchronized {
-        catalog.client.getPartition(
-          catalog.client.getTable(qualifiedTableName), partitionSpec, false)
-      }
-      if (oldPart == null || !ifNotExists) {
-        if (numDynamicPartitions > 0) {
-          catalog.synchronized {
-            catalog.client.loadDynamicPartitions(
-              outputPath,
-              qualifiedTableName,
-              orderedPartitionSpec,
-              overwrite,
-              numDynamicPartitions,
-              holdDDLTime,
-              isSkewedStoreAsSubdir)
-          }
-        } else {
+      if (numDynamicPartitions > 0) {
+        catalog.synchronized {
+          catalog.client.loadDynamicPartitions(
+            outputPath,
+            qualifiedTableName,
+            orderedPartitionSpec,
+            overwrite,
+            numDynamicPartitions,
+            holdDDLTime,
+            isSkewedStoreAsSubdir)
+        }
+      } else {
+        // scalastyle:off
+        // ifNotExists is only valid with static partition, refer to
+        // https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DML#LanguageManualDML-InsertingdataintoHiveTablesfromqueries
+        // scalastyle:on
+        val oldPart = catalog.synchronized {
+          catalog.client.getPartition(
+            catalog.client.getTable(qualifiedTableName), partitionSpec, false)
+        }
+        if (oldPart == null || !ifNotExists) {
           catalog.synchronized {
             catalog.client.loadPartition(
               outputPath,
@@ -236,14 +240,14 @@ case class InsertIntoHiveTable(
               isSkewedStoreAsSubdir)
           }
         }
-      } else {
-        catalog.synchronized {
-          catalog.client.loadTable(
-            outputPath,
-            qualifiedTableName,
-            overwrite,
-            holdDDLTime)
-        }
+      }
+    } else {
+      catalog.synchronized {
+        catalog.client.loadTable(
+          outputPath,
+          qualifiedTableName,
+          overwrite,
+          holdDDLTime)
       }
     }
 
