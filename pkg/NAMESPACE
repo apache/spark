@@ -88,16 +88,20 @@ exportClasses("DataFrame")
 exportMethods("columns",
               "distinct",
               "dtypes",
+              "filter",
               "head",
               "limit",
+              "orderBy",
               "names",
               "printSchema",
               "registerTempTable",
               "repartition",
               "sampleDF",
               "schema",
+              "sortDF",
               "select",
-              "toRDD")
+              "toRDD",
+              "where")
 
 exportClasses("Column")
 

@@ -607,3 +607,143 @@ setMethod("select", signature(x = "DataFrame", col = "Column"),
             dataFrame(sdf)
           })
 
+#' SortDF 
+#'
+#' Sort a DataFrame by the specified column(s).
+#'
+#' @param x A DataFrame to be sorted.
+#' @param col Either a Column object or character vector indicating the field to sort on
+#' @param ... Additional sorting fields
+#' @return A DataFrame where all elements are sorted.
+#' @rdname sortDF
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' sortDF(df, df$col1)
+#' sortDF(df, "col1")
+#' sortDF(df, asc(df$col1), desc(abs(df$col2)))
+#' }
+setGeneric("sortDF", function(x, col, ...) { standardGeneric("sortDF") })
+
+setClassUnion("characterOrColumn", c("character", "Column"))
+
+#' @rdname sortDF
+#' @export
+setMethod("sortDF",
+          signature(x = "DataFrame", col = "characterOrColumn"),
+          function(x, col, ...) {
+            if (class(col) == "character") {
+              sdf <- callJMethod(x@sdf, "sort", col, toSeq(...))
+            } else if (class(col) == "Column") {
+              jcols <- lapply(list(col, ...), function(c) {
+                c@jc
+              })
+              sdf <- callJMethod(x@sdf, "sort", listToSeq(jcols))
+            }
+            dataFrame(sdf)
+          })
+
+#' @rdname sortDF
+#' @export
+setGeneric("orderBy", function(x, col) { standardGeneric("orderBy") })
+
+#' @rdname sortDF
+#' @export
+setMethod("orderBy",
+          signature(x = "DataFrame", col = "characterOrColumn"),
+          function(x, col) {
+            sortDF(x, col)
+          })
+
+#' Filter
+#'
+#' Filter the rows of a DataFrame according to a given condition.
+#'
+#' @param x A DataFrame to be sorted.
+#' @param condition The condition to sort on. This may either be a Column expression
+#' or a string containing a SQL statement
+#' @return A DataFrame containing only the rows that meet the condition.
+#' @rdname filter
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' filter(df, "col1 > 0")
+#' filter(df, df$col2 != "abcdefg")
+#' }
+setGeneric("filter", function(x, condition) { standardGeneric("filter") })
+
+#' @rdname filter
+#' @export
+setMethod("filter",
+          signature(x = "DataFrame", condition = "characterOrColumn"),
+          function(x, condition) {
+            if (class(condition) == "Column") {
+              condition <- condition@jc
+            }
+            sdf <- callJMethod(x@sdf, "filter", condition)
+            dataFrame(sdf)
+          })
+
+#' @rdname filter
+#' @export
+setGeneric("where", function(x, condition) { standardGeneric("where") })
+
+#' @rdname filter
+#' @export
+setMethod("where",
+          signature(x = "DataFrame", condition = "characterOrColumn"),
+          function(x, condition) {
+            filter(x, condition)
+          })
+
+#' Join
+#'
+#' Join two DataFrames based on the given join expression.
+#'
+#' @param x A Spark DataFrame
+#' @param y A Spark DataFrame
+#' @param joinExpr (Optional) The expression used to perform the join. joinExpr must be a 
+#' Column expression. If joinExpr is omitted, join() wil perform a Cartesian join
+#' @param joinType The type of join to perform. The following join types are available:
+#' 'inner', 'outer', 'left_outer', 'right_outer', 'semijoin'. The default joinType is "inner".
+#' @return A DataFrame containing the result of the join operation.
+#' @rdname join
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' df1 <- jsonFile(sqlCtx, path)
+#' df2 <- jsonFile(sqlCtx, path2)
+#' join(df1, df2) # Performs a Cartesian
+#' join(df1, df2, df1$col1 == df2$col2) # Performs an inner join based on expression
+#' join(df1, df2, df1$col1 == df2$col2, "right_outer")
+#' }
+setMethod("join",
+          signature(x = "DataFrame", y = "DataFrame"),
+          function(x, y, joinExpr = NULL, joinType = NULL) {
+            if (is.null(joinExpr)) {
+              sdf <- callJMethod(x@sdf, "join", y@sdf)
+            } else {
+              if (class(joinExpr) != "Column") stop("joinExpr must be a Column")
+              if (is.null(joinType)) {
+                sdf <- callJMethod(x@sdf, "join", y@sdf, joinExpr@jc)
+              } else {
+                if (joinType %in% c("inner", "outer", "left_outer", "right_outer", "semijoin")) {
+                  sdf <- callJMethod(x@sdf, "join", y@sdf, joinExpr@jc, joinType)
+                } else {
+                  stop("joinType must be one of the following types: ",
+                       "'inner', 'outer', 'left_outer', 'right_outer', 'semijoin'")
+                }
+              }
+            }
+            dataFrame(sdf)
+          })
