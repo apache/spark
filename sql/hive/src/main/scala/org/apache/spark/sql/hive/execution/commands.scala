@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.hadoop.hive.ql.parse.VariableSubstitution
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.util._
@@ -78,8 +80,10 @@ case class AddJar(path: String) extends RunnableCommand {
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     hiveContext.runSqlHive(s"ADD JAR $path")
-    hiveContext.sparkContext.addJar(path)
-    Seq.empty[Row]
+    val substituted =
+      new VariableSubstitution().substitute(sqlContext.asInstanceOf[HiveContext].hiveconf, path)
+    hiveContext.sparkContext.addJar(substituted)
+    Seq(Row(0))
   }
 }
 

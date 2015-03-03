@@ -620,6 +620,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "load_file_with_space_in_the_name",
     "loadpart1",
     "louter_join_ppr",
+    "mapjoin_addjar",
     "mapjoin_distinct",
     "mapjoin_filter_on_outerjoin",
     "mapjoin_mapjoin",

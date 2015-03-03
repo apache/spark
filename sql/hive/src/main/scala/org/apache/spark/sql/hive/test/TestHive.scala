@@ -66,6 +66,10 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   // without restarting the JVM.
   System.clearProperty("spark.hostPort")
   CommandProcessorFactory.clean(hiveconf)
+  System.setProperty("hive.version", HiveShim.version)
+  System.setProperty(
+    "maven.local.repository",
+    System.getProperty("user.home") + File.separator + ".m2" + File.separator + "repository")
 
   hiveconf.set("hive.plan.serialization.format", "javaXML")
 
