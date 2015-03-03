@@ -53,20 +53,52 @@ class Tokenizer extends UnaryTransformer[String, Seq[String], Tokenizer] {
 @AlphaComponent
 class RegexTokenizer extends UnaryTransformer[String, Seq[String], RegexTokenizer] {
 
-  val lowerCase = new BooleanParam(this, "lowerCase", "Folds case to lower case", Some(false))
+  /**
+   * param to enable/disable code folding to lowercase prior tokenization
+   * @group param
+   */
+  val lowerCase = new BooleanParam(this, "lowerCase", "Fold case to lower case", Some(false))
+
+  /** @group setParam */
   def setLowercase(value: Boolean) = set(lowerCase, value)
+  
+  /** @group getParam */
   def getLowercase: Boolean = get(lowerCase)
 
+  /**
+   * param for minimum token length
+   * @group param
+   */
   val minTokenLength = new IntParam(this, "minLength", "minimum token length", Some(1))
+
+  /** @group setParam */
   def setMinTokenLength(value: Int) = set(minTokenLength, value)
+
+  /** @group getParam */
   def getMinTokenLength: Int = get(minTokenLength)
 
-  val matching = new BooleanParam(this, "matching", "Sets regex to matching or split", Some(true))
+  /**
+   * param sets regex as matching (true) or splitting (false)
+   * @group param
+   */
+  val matching = new BooleanParam(this, "matching", "Set regex to matching or split", Some(true))
+
+  /** @group setParam */
   def setMatching(value: Boolean) = set(matching, value)
+
+  /** @group getParam */
   def getMatching: Boolean = get(matching)
 
+  /**
+   * param sets regex used by tokenizer 
+   * @group param
+   */
   val regex = new Param(this, "regex", "regex used for tokenizing", Some("\\p{L}+|[^\\p{L}\\s]+"))
+
+  /** @group setParam */
   def setRegex(value: String) = set(regex, value)
+
+  /** @group getParam */
   def getRegex: String = get(regex)
 
   override protected def createTransformFunc(paramMap: ParamMap): String => Seq[String] = { x =>
