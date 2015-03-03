@@ -51,6 +51,7 @@ import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.executor.TriggerThreadDump
 import org.apache.spark.input.{StreamInputFormat, PortableDataStream, WholeTextFileInputFormat,
   FixedLengthBinaryInputFormat}
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
 import org.apache.spark.scheduler._
@@ -229,6 +230,14 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private[spark] val eventLogDir: Option[String] = {
     if (isEventLogEnabled) {
       Some(conf.get("spark.eventLog.dir", EventLoggingListener.DEFAULT_LOG_DIR).stripSuffix("/"))
+    } else {
+      None
+    }
+  }
+  private[spark] val eventLogCodec: Option[String] = {
+    val compress = conf.getBoolean("spark.eventLog.compress", false)
+    if (compress && isEventLogEnabled) {
+      Some(CompressionCodec.getCodecName(conf)).map(CompressionCodec.getShortName)
     } else {
       None
     }

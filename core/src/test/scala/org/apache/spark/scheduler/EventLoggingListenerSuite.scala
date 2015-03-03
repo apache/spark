@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.io.{File, FileOutputStream, InputStream, IOException}
+import java.net.URI
 
 import scala.collection.mutable
 import scala.io.Source
@@ -26,7 +27,7 @@ import org.apache.hadoop.fs.Path
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
-import org.apache.spark.{Logging, SparkConf, SparkContext}
+import org.apache.spark.{Logging, SparkConf, SparkContext, SPARK_VERSION}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io._
 import org.apache.spark.util.{JsonProtocol, Utils}
@@ -78,7 +79,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
 
   test("Basic event logging with compression") {
     CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codec =>
-      testEventLogging(compressionCodec = Some(codec))
+      testEventLogging(compressionCodec = Some(CompressionCodec.getShortName(codec)))
     }
   }
 
@@ -88,23 +89,33 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
 
   test("End-to-end event logging with compression") {
     CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codec =>
-      testApplicationEventLogging(compressionCodec = Some(codec))
+      testApplicationEventLogging(compressionCodec = Some(CompressionCodec.getShortName(codec)))
     }
   }
 
   test("Log overwriting") {
-    val log = new FileOutputStream(new File(testDir, "test"))
-    log.close()
-    try {
-      testEventLogging()
-      assert(false)
-    } catch {
-      case e: IOException =>
-        // Expected, since we haven't enabled log overwrite.
-    }
-
+    val logUri = EventLoggingListener.getLogPath(testDir.getAbsolutePath, "test")
+    val logPath = new URI(logUri).getPath
+    // Create file before writing the event log
+    new FileOutputStream(new File(logPath)).close()
+    // Expected IOException, since we haven't enabled log overwrite.
+    intercept[IOException] { testEventLogging() }
     // Try again, but enable overwriting.
     testEventLogging(extraConf = Map("spark.eventLog.overwrite" -> "true"))
+  }
+
+  test("Event log name") {
+    // without compression
+    assert(s"file:/base-dir/app1" === EventLoggingListener.getLogPath("/base-dir", "app1"))
+    // with compression
+    assert(s"file:/base-dir/app1.lzf" ===
+      EventLoggingListener.getLogPath("/base-dir", "app1", Some("lzf")))
+    // illegal characters in app ID
+    assert(s"file:/base-dir/a-fine-mind_dollar_bills__1" ===
+      EventLoggingListener.getLogPath("/base-dir", "a fine:mind$dollar{bills}.1"))
+    // illegal characters in app ID with compression
+    assert(s"file:/base-dir/a-fine-mind_dollar_bills__1.lz4" ===
+      EventLoggingListener.getLogPath("/base-dir", "a fine:mind$dollar{bills}.1", Some("lz4")))
   }
 
   /* ----------------- *
@@ -140,15 +151,17 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
     eventLogger.stop()
 
     // Verify file contains exactly the two events logged
-    val (logData, version) = EventLoggingListener.openEventLog(new Path(eventLogger.logPath),
-      fileSystem)
+    val logData = EventLoggingListener.openEventLog(new Path(eventLogger.logPath), fileSystem)
     try {
       val lines = readLines(logData)
-      assert(lines.size === 2)
-      assert(lines(0).contains("SparkListenerApplicationStart"))
-      assert(lines(1).contains("SparkListenerApplicationEnd"))
-      assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === applicationStart)
-      assert(JsonProtocol.sparkEventFromJson(parse(lines(1))) === applicationEnd)
+      val logStart = SparkListenerLogStart(SPARK_VERSION)
+      assert(lines.size === 3)
+      assert(lines(0).contains("SparkListenerLogStart"))
+      assert(lines(1).contains("SparkListenerApplicationStart"))
+      assert(lines(2).contains("SparkListenerApplicationEnd"))
+      assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === logStart)
+      assert(JsonProtocol.sparkEventFromJson(parse(lines(1))) === applicationStart)
+      assert(JsonProtocol.sparkEventFromJson(parse(lines(2))) === applicationEnd)
     } finally {
       logData.close()
     }
@@ -163,8 +176,10 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
     val sc = new SparkContext("local-cluster[2,2,512]", "test", conf)
     assert(sc.eventLogger.isDefined)
     val eventLogger = sc.eventLogger.get
+    val eventLogPath = eventLogger.logPath
     val expectedLogDir = testDir.toURI().toString()
-    assert(eventLogger.logPath.startsWith(expectedLogDir + "/"))
+    assert(eventLogPath === EventLoggingListener.getLogPath(
+      expectedLogDir, sc.applicationId, compressionCodec.map(CompressionCodec.getShortName)))
 
     // Begin listening for events that trigger asserts
     val eventExistenceListener = new EventExistenceListener(eventLogger)
@@ -178,8 +193,8 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
     eventExistenceListener.assertAllCallbacksInvoked()
 
     // Make sure expected events exist in the log file.
-    val (logData, version) = EventLoggingListener.openEventLog(new Path(eventLogger.logPath),
-      fileSystem)
+    val logData = EventLoggingListener.openEventLog(new Path(eventLogger.logPath), fileSystem)
+    val logStart = SparkListenerLogStart(SPARK_VERSION)
     val lines = readLines(logData)
     val eventSet = mutable.Set(
       SparkListenerApplicationStart,
@@ -204,6 +219,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
         }
       }
     }
+    assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === logStart)
     assert(eventSet.isEmpty, "The following events are missing: " + eventSet.toSeq)
   }
 
