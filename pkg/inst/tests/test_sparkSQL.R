@@ -282,34 +282,34 @@ test_that("filter() on a DataFrame", {
 })
 
 test_that("join() on a DataFrame", {
-df <- jsonFile(sqlCtx, jsonPath)
-
-mockLines2 <- c("{\"name\":\"Michael\", \"test\": \"yes\"}",
-                "{\"name\":\"Andy\",  \"test\": \"no\"}",
-                "{\"name\":\"Justin\", \"test\": \"yes\"}",
-                "{\"name\":\"Bob\", \"test\": \"yes\"}")
-jsonPath2 <- tempfile(pattern="sparkr-test", fileext=".tmp")
-writeLines(mockLines2, jsonPath2)
-df2 <- jsonFile(sqlCtx, jsonPath2)
-
-joined <- join(df, df2)
-expect_equal(names(joined), c("age", "name", "name", "test"))
-expect_true(count(joined) == 12)
-
-joined2 <- join(df, df2, df$name == df2$name)
-expect_equal(names(joined2), c("age", "name", "name", "test"))
-expect_true(count(joined2) == 3)
-
-joined3 <- join(df, df2, df$name == df2$name, "right_outer")
-expect_equal(names(joined3), c("age", "name", "name", "test"))
-expect_true(count(joined3) == 4)
-expect_true(is.na(collect(joined3)$age[4]))
-
-joined4 <- select(join(df, df2, df$name == df2$name, "outer"),
-                  alias(df$age + 5, "newAge"), df$name, df2$test)
-expect_equal(names(joined4), c("newAge", "name", "test"))
-expect_true(count(joined4) == 4)
-expect_true(first(joined4)$newAge == 24)
+  df <- jsonFile(sqlCtx, jsonPath)
+  
+  mockLines2 <- c("{\"name\":\"Michael\", \"test\": \"yes\"}",
+                  "{\"name\":\"Andy\",  \"test\": \"no\"}",
+                  "{\"name\":\"Justin\", \"test\": \"yes\"}",
+                  "{\"name\":\"Bob\", \"test\": \"yes\"}")
+  jsonPath2 <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  writeLines(mockLines2, jsonPath2)
+  df2 <- jsonFile(sqlCtx, jsonPath2)
+  
+  joined <- join(df, df2)
+  expect_equal(names(joined), c("age", "name", "name", "test"))
+  expect_true(count(joined) == 12)
+  
+  joined2 <- join(df, df2, df$name == df2$name)
+  expect_equal(names(joined2), c("age", "name", "name", "test"))
+  expect_true(count(joined2) == 3)
+  
+  joined3 <- join(df, df2, df$name == df2$name, "right_outer")
+  expect_equal(names(joined3), c("age", "name", "name", "test"))
+  expect_true(count(joined3) == 4)
+  expect_true(is.na(collect(joined3)$age[4]))
+  
+  joined4 <- select(join(df, df2, df$name == df2$name, "outer"),
+                    alias(df$age + 5, "newAge"), df$name, df2$test)
+  expect_equal(names(joined4), c("newAge", "name", "test"))
+  expect_true(count(joined4) == 4)
+  expect_true(first(joined4)$newAge == 24)
 })
 
 unlink(jsonPath)
