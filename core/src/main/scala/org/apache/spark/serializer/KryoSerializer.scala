@@ -24,6 +24,8 @@ import com.esotericsoftware.kryo.{Kryo, KryoException}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
 import com.esotericsoftware.kryo.serializers.{JavaSerializer => KryoJavaSerializer}
 import com.twitter.chill.{AllScalaRegistrar, EmptyScalaKryoInstantiator}
+import org.roaringbitmap.{ArrayContainer, RoaringArray, RoaringBitmap}
+
 
 import org.apache.spark._
 import org.apache.spark.api.python.PythonBroadcast
@@ -202,6 +204,12 @@ private[serializer] object KryoSerializer {
     classOf[GetBlock],
     classOf[CompressedMapStatus],
     classOf[HighlyCompressedMapStatus],
+    classOf[RoaringBitmap],
+    classOf[RoaringArray],
+    classOf[RoaringArray.Element],
+    classOf[Array[RoaringArray.Element]],
+    classOf[ArrayContainer],
+    classOf[Array[Short]],
     classOf[CompactBuffer[_]],
     classOf[BlockManagerId],
     classOf[Array[Byte]],

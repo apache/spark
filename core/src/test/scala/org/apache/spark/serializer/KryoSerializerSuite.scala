@@ -17,6 +17,9 @@
 
 package org.apache.spark.serializer
 
+import org.apache.spark.scheduler.HighlyCompressedMapStatus
+import org.apache.spark.storage.BlockManagerId
+
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
@@ -241,6 +244,16 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
     intercept[UnsupportedOperationException] {
       ser.newInstance().deserialize[ClassLoaderTestingObject](bytes)
     }
+  }
+
+  test("registration of HighlyCompressedMapStatus") {
+    val conf = new SparkConf(false)
+    conf.set("spark.kryo.registrationRequired", "true")
+    val hcmo = HighlyCompressedMapStatus(BlockManagerId("exec-1", "host", 1234), Array(0l,2l,5l))
+    val ser = new KryoSerializer(conf)
+    val serInstance = ser.newInstance()
+    serInstance.serialize(hcmo)
+
   }
 }
 
