@@ -105,9 +105,19 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
     cleaningThread.start()
   }
 
-  /** Stop the cleaner. */
+  /**
+   * Stop the cleaning thread and wait until the thread has finished running its current task.
+   */
   def stop() {
     stopped = true
+    // Interrupt the cleaning thread, but wait until the current task has finished before
+    // doing so. This guards against the race condition where a cleaning thread may
+    // potentially clean similarly named variables created by a different SparkContext,
+    // resulting in otherwise inexplicable block-not-found exceptions (SPARK-6132).
+    synchronized {
+      cleaningThread.interrupt()
+    }
+    cleaningThread.join()
   }
 
   /** Register a RDD for cleanup when it is garbage collected. */
@@ -140,18 +150,21 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
       try {
         val reference = Option(referenceQueue.remove(ContextCleaner.REF_QUEUE_POLL_TIMEOUT))
           .map(_.asInstanceOf[CleanupTaskWeakReference])
-        reference.map(_.task).foreach { task =>
-          logDebug("Got cleaning task " + task)
-          referenceBuffer -= reference.get
-          task match {
-            case CleanRDD(rddId) =>
-              doCleanupRDD(rddId, blocking = blockOnCleanupTasks)
-            case CleanShuffle(shuffleId) =>
-              doCleanupShuffle(shuffleId, blocking = blockOnShuffleCleanupTasks)
-            case CleanBroadcast(broadcastId) =>
-              doCleanupBroadcast(broadcastId, blocking = blockOnCleanupTasks)
-            case CleanAccum(accId) =>
-              doCleanupAccum(accId, blocking = blockOnCleanupTasks)
+        // Synchronize here to avoid being interrupted on stop()
+        synchronized {
+          reference.map(_.task).foreach { task =>
+            logDebug("Got cleaning task " + task)
+            referenceBuffer -= reference.get
+            task match {
+              case CleanRDD(rddId) =>
+                doCleanupRDD(rddId, blocking = blockOnCleanupTasks)
+              case CleanShuffle(shuffleId) =>
+                doCleanupShuffle(shuffleId, blocking = blockOnShuffleCleanupTasks)
+              case CleanBroadcast(broadcastId) =>
+                doCleanupBroadcast(broadcastId, blocking = blockOnCleanupTasks)
+              case CleanAccum(accId) =>
+                doCleanupAccum(accId, blocking = blockOnCleanupTasks)
+            }
           }
         }
       } catch {
