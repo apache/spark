@@ -600,8 +600,8 @@ setMethod("select", signature(x = "DataFrame", col = "character"),
 
 setMethod("select", signature(x = "DataFrame", col = "Column"),
           function(x, col, ...) {
-            jcols <- lapply(list(col, ...), function(x) {
-              x@jc
+            jcols <- lapply(list(col, ...), function(c) {
+              c@jc
             })
             sdf <- callJMethod(x@sdf, "select", listToSeq(jcols))
             dataFrame(sdf)
