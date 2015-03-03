@@ -17,4 +17,7 @@
 # limitations under the License.
 #
 find . -name 'pom.xml' | grep -v target \
-  | xargs -I {} sed -i -e 's|\(artifactId.*\)_2.11|\1_2.10|g' {}  
+  | xargs -I {} sed -i -e 's|\(artifactId.*\)_2.11|\1_2.10|g' {}
+
+# Also update <scala.binary.version> in parent POM
+sed -i -e 's|<scala\.binary\.version>2.11<|<scala.binary.version>2.10<|1' pom.xml
