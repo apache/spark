@@ -35,18 +35,19 @@ test_that("jsonRDD() on a RDD with json string", {
 
 test_that("test cache, uncache and clearCache", {
   df <- jsonFile(sqlCtx, jsonPath)
-  registerTempTable(df, "temp")
-  cacheTable(sqlCtx, "temp")
-  uncacheTable(sqlCtx, "temp")
+  registerTempTable(df, "table1")
+  cacheTable(sqlCtx, "table1")
+  uncacheTable(sqlCtx, "table1")
   clearCache(sqlCtx)
 })
 
 test_that("test tableNames and tables", {
-  expect_true(length(tableNames(sqlCtx)) == 0)
+  df <- jsonFile(sqlCtx, jsonPath)
+  registerTempTable(df, "table1")
+  expect_true(length(tableNames(sqlCtx)) == 1)
   df <- tables(sqlCtx)
-  expect_true(count(df) == 0)
+  expect_true(count(df) == 1)
 })
-
 
 test_that("registerTempTable() results in a queryable table and sql() results in a new DataFrame", {
   df <- jsonFile(sqlCtx, jsonPath)
