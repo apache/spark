@@ -638,7 +638,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         p
       } else if (childOutputDataTypes.size == tableOutputDataTypes.size &&
         childOutputDataTypes.zip(tableOutputDataTypes)
-          .forall { case (left, right) => DataType.equalsIgnoreNullability(left, right) }) {
+          .forall { case (left, right) => left.sameType(right) }) {
         // If both types ignoring nullability of ArrayType, MapType, StructType are the same,
         // use InsertIntoHiveTable instead of InsertIntoTable.
         InsertIntoHiveTable(p.table, p.partition, p.child, p.overwrite)
@@ -686,8 +686,7 @@ private[hive] case class InsertIntoHiveTable(
   override def output = child.output
 
   override lazy val resolved = childrenResolved && child.output.zip(table.output).forall {
-    case (childAttr, tableAttr) =>
-      DataType.equalsIgnoreNullability(childAttr.dataType, tableAttr.dataType)
+    case (childAttr, tableAttr) => childAttr.dataType.sameType(tableAttr.dataType)
   }
 }
 
