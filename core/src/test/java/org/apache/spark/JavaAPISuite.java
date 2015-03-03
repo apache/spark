@@ -708,6 +708,10 @@ public class JavaAPISuite implements Serializable {
     // Test with provided buckets
     long[] histogram = rdd.histogram(expected_buckets);
     Assert.assertArrayEquals(expected_counts, histogram);
+    // SPARK-5744
+    Assert.assertArrayEquals(
+        new long[] {0},
+        sc.parallelizeDoubles(new ArrayList<Double>(0), 1).histogram(new double[]{0.0, 1.0}));
   }
 
   @Test

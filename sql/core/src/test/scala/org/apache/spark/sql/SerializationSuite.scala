@@ -15,12 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util
+package org.apache.spark.sql
 
-class FakeClock extends Clock {
-  private var time = 0L
+import org.scalatest.FunSuite
 
-  def advance(millis: Long): Unit = time += millis
+import org.apache.spark.SparkConf
+import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.sql.test.TestSQLContext
 
-  def getTime(): Long = time
+class SerializationSuite extends FunSuite {
+
+  test("[SPARK-5235] SQLContext should be serializable") {
+    val sqlContext = new SQLContext(TestSQLContext.sparkContext)
+    new JavaSerializer(new SparkConf()).newInstance().serialize(sqlContext)
+  }
 }

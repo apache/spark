@@ -46,8 +46,8 @@ class FPGrowthSuite extends FunSuite with MLlibTestSparkContext {
       .setMinSupport(0.5)
       .setNumPartitions(2)
       .run(rdd)
-    val freqItemsets3 = model3.freqItemsets.collect().map { case (items, count) =>
-      (items.toSet, count)
+    val freqItemsets3 = model3.freqItemsets.collect().map { itemset =>
+      (itemset.items.toSet, itemset.freq)
     }
     val expected = Set(
       (Set("s"), 3L), (Set("z"), 5L), (Set("x"), 4L), (Set("t"), 3L), (Set("y"), 3L),
@@ -96,10 +96,10 @@ class FPGrowthSuite extends FunSuite with MLlibTestSparkContext {
       .setMinSupport(0.5)
       .setNumPartitions(2)
       .run(rdd)
-    assert(model3.freqItemsets.first()._1.getClass === Array(1).getClass,
+    assert(model3.freqItemsets.first().items.getClass === Array(1).getClass,
       "frequent itemsets should use primitive arrays")
-    val freqItemsets3 = model3.freqItemsets.collect().map { case (items, count) =>
-      (items.toSet, count)
+    val freqItemsets3 = model3.freqItemsets.collect().map { itemset =>
+      (itemset.items.toSet, itemset.freq)
     }
     val expected = Set(
       (Set(1), 6L), (Set(2), 5L), (Set(3), 5L), (Set(4), 4L),

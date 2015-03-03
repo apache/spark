@@ -148,6 +148,11 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.mllib.linalg.VectorUDT"),
             ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.mllib.linalg.VectorUDT.serialize"),
             ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.mllib.linalg.VectorUDT.sqlType")
+          ) ++ Seq(
+            // SPARK-4682
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.RealClock"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.Clock"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.TestClock")
           )
 
         case v if v.startsWith("1.2") =>

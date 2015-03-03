@@ -18,17 +18,15 @@
 package org.apache.spark.sql
 
 import scala.concurrent.duration._
-import scala.language.implicitConversions
-import scala.language.postfixOps
+import scala.language.{implicitConversions, postfixOps}
 
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.columnar._
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.test.TestSQLContext.implicits._
-import org.apache.spark.storage.{StorageLevel, RDDBlockId}
+import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 
 case class BigData(s: String)
 
@@ -59,15 +57,15 @@ class CachedTableSuite extends QueryTest {
 
   test("unpersist an uncached table will not raise exception") {
     assert(None == cacheManager.lookupCachedData(testData))
-    testData.unpersist(true)
+    testData.unpersist(blocking = true)
     assert(None == cacheManager.lookupCachedData(testData))
-    testData.unpersist(false)
+    testData.unpersist(blocking = false)
     assert(None == cacheManager.lookupCachedData(testData))
     testData.persist()
     assert(None != cacheManager.lookupCachedData(testData))
-    testData.unpersist(true)
+    testData.unpersist(blocking = true)
     assert(None == cacheManager.lookupCachedData(testData))
-    testData.unpersist(false)
+    testData.unpersist(blocking = false)
     assert(None == cacheManager.lookupCachedData(testData))
   }
 
@@ -281,5 +279,21 @@ class CachedTableSuite extends QueryTest {
     dropTempTable("t1")
     assert(intercept[RuntimeException](table("t1")).getMessage.startsWith("Table Not Found"))
     assert(!isCached("t2"))
+  }
+
+  test("Clear all cache") {
+    sql("SELECT key FROM testData LIMIT 10").registerTempTable("t1")
+    sql("SELECT key FROM testData LIMIT 5").registerTempTable("t2")
+    cacheTable("t1")
+    cacheTable("t2")
+    clearCache()
+    assert(cacheManager.isEmpty)
+
+    sql("SELECT key FROM testData LIMIT 10").registerTempTable("t1")
+    sql("SELECT key FROM testData LIMIT 5").registerTempTable("t2")
+    cacheTable("t1")
+    cacheTable("t2")
+    sql("Clear CACHE")
+    assert(cacheManager.isEmpty)
   }
 }

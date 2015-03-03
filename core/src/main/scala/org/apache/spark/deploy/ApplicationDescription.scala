@@ -23,7 +23,9 @@ private[spark] class ApplicationDescription(
     val memoryPerSlave: Int,
     val command: Command,
     var appUiUrl: String,
-    val eventLogDir: Option[String] = None)
+    val eventLogDir: Option[String] = None,
+    // short name of compression codec used when writing event logs, if any (e.g. lzf)
+    val eventLogCodec: Option[String] = None)
   extends Serializable {
 
   val user = System.getProperty("user.name", "<unknown>")
@@ -34,8 +36,10 @@ private[spark] class ApplicationDescription(
       memoryPerSlave: Int = memoryPerSlave,
       command: Command = command,
       appUiUrl: String = appUiUrl,
-      eventLogDir: Option[String] = eventLogDir): ApplicationDescription =
-    new ApplicationDescription(name, maxCores, memoryPerSlave, command, appUiUrl, eventLogDir)
+      eventLogDir: Option[String] = eventLogDir,
+      eventLogCodec: Option[String] = eventLogCodec): ApplicationDescription =
+    new ApplicationDescription(
+      name, maxCores, memoryPerSlave, command, appUiUrl, eventLogDir, eventLogCodec)
 
   override def toString: String = "ApplicationDescription(" + name + ")"
 }

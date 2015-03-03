@@ -96,7 +96,7 @@ class DataFrame(object):
         return self._lazy_rdd
 
     def toJSON(self, use_unicode=False):
-        """Convert a DataFrame into a MappedRDD of JSON documents; one document per row.
+        """Convert a :class:`DataFrame` into a MappedRDD of JSON documents; one document per row.
 
         >>> df.toJSON().first()
         '{"age":2,"name":"Alice"}'
@@ -108,7 +108,7 @@ class DataFrame(object):
         """Save the contents as a Parquet file, preserving the schema.
 
         Files that are written out using this method can be read back in as
-        a DataFrame using the L{SQLContext.parquetFile} method.
+        a :class:`DataFrame` using the L{SQLContext.parquetFile} method.
 
         >>> import tempfile, shutil
         >>> parquetFile = tempfile.mkdtemp()
@@ -139,7 +139,7 @@ class DataFrame(object):
         self.registerTempTable(name)
 
     def insertInto(self, tableName, overwrite=False):
-        """Inserts the contents of this DataFrame into the specified table.
+        """Inserts the contents of this :class:`DataFrame` into the specified table.
 
         Optionally overwriting any existing data.
         """
@@ -165,7 +165,7 @@ class DataFrame(object):
         return jmode
 
     def saveAsTable(self, tableName, source=None, mode="append", **options):
-        """Saves the contents of the DataFrame to a data source as a table.
+        """Saves the contents of the :class:`DataFrame` to a data source as a table.
 
         The data source is specified by the `source` and a set of `options`.
         If `source` is not specified, the default data source configured by
@@ -174,12 +174,13 @@ class DataFrame(object):
         Additionally, mode is used to specify the behavior of the saveAsTable operation when
         table already exists in the data source. There are four modes:
 
-        * append: Contents of this DataFrame are expected to be appended to existing table.
-        * overwrite: Data in the existing table is expected to be overwritten by the contents of \
-            this DataFrame.
+        * append: Contents of this :class:`DataFrame` are expected to be appended \
+            to existing table.
+        * overwrite: Data in the existing table is expected to be overwritten by \
+            the contents of  this DataFrame.
         * error: An exception is expected to be thrown.
-        * ignore: The save operation is expected to not save the contents of the DataFrame and \
-            to not change the existing table.
+        * ignore: The save operation is expected to not save the contents of the \
+            :class:`DataFrame` and to not change the existing table.
         """
         if source is None:
             source = self.sql_ctx.getConf("spark.sql.sources.default",
@@ -190,7 +191,7 @@ class DataFrame(object):
         self._jdf.saveAsTable(tableName, source, jmode, joptions)
 
     def save(self, path=None, source=None, mode="append", **options):
-        """Saves the contents of the DataFrame to a data source.
+        """Saves the contents of the :class:`DataFrame` to a data source.
 
         The data source is specified by the `source` and a set of `options`.
         If `source` is not specified, the default data source configured by
@@ -199,11 +200,11 @@ class DataFrame(object):
         Additionally, mode is used to specify the behavior of the save operation when
         data already exists in the data source. There are four modes:
 
-        * append: Contents of this DataFrame are expected to be appended to existing data.
+        * append: Contents of this :class:`DataFrame` are expected to be appended to existing data.
         * overwrite: Existing data is expected to be overwritten by the contents of this DataFrame.
         * error: An exception is expected to be thrown.
-        * ignore: The save operation is expected to not save the contents of the DataFrame and \
-            to not change the existing data.
+        * ignore: The save operation is expected to not save the contents of \
+            the :class:`DataFrame` and to not change the existing data.
         """
         if path is not None:
             options["path"] = path
@@ -217,7 +218,7 @@ class DataFrame(object):
 
     @property
     def schema(self):
-        """Returns the schema of this DataFrame (represented by
+        """Returns the schema of this :class:`DataFrame` (represented by
         a L{StructType}).
 
         >>> df.schema
@@ -271,18 +272,18 @@ class DataFrame(object):
         """
         return self._jdf.isLocal()
 
-    def show(self):
+    def show(self, n=20):
         """
-        Print the first 20 rows.
+        Print the first n rows.
 
+        >>> df
+        DataFrame[age: int, name: string]
         >>> df.show()
         age name
         2   Alice
         5   Bob
-        >>> df
-        DataFrame[age: int, name: string]
         """
-        print self._jdf.showString().encode('utf8', 'ignore')
+        print self._jdf.showString(n).encode('utf8', 'ignore')
 
     def __repr__(self):
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
@@ -434,12 +435,18 @@ class DataFrame(object):
     def repartition(self, numPartitions):
         """ Return a new :class:`DataFrame` that has exactly `numPartitions`
         partitions.
+
+        >>> df.repartition(10).rdd.getNumPartitions()
+        10
         """
-        return DataFrame(self._jdf.repartition(numPartitions, None), self.sql_ctx)
+        return DataFrame(self._jdf.repartition(numPartitions), self.sql_ctx)
 
     def distinct(self):
         """
         Return a new :class:`DataFrame` containing the distinct rows in this DataFrame.
+
+        >>> df.distinct().count()
+        2L
         """
         return DataFrame(self._jdf.distinct(), self.sql_ctx)
 
@@ -475,8 +482,8 @@ class DataFrame(object):
 
     def join(self, other, joinExprs=None, joinType=None):
         """
-        Join with another DataFrame, using the given join expression.
-        The following performs a full outer join between `df1` and `df2`::
+        Join with another :class:`DataFrame`, using the given join expression.
+        The following performs a full outer join between `df1` and `df2`.
 
         :param other: Right side of the join
         :param joinExprs: Join expression
@@ -498,13 +505,18 @@ class DataFrame(object):
         return DataFrame(jdf, self.sql_ctx)
 
     def sort(self, *cols):
-        """ Return a new :class:`DataFrame` sorted by the specified column.
+        """ Return a new :class:`DataFrame` sorted by the specified column(s).
 
         :param cols: The columns or expressions used for sorting
 
         >>> df.sort(df.age.desc()).collect()
         [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
-        >>> df.sortBy(df.age.desc()).collect()
+        >>> df.orderBy(df.age.desc()).collect()
+        [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
+        >>> from pyspark.sql.functions import *
+        >>> df.sort(asc("age")).collect()
+        [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
+        >>> df.orderBy(desc("age"), "name").collect()
         [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
         """
         if not cols:
@@ -514,7 +526,7 @@ class DataFrame(object):
         jdf = self._jdf.sort(self._sc._jvm.PythonUtils.toSeq(jcols))
         return DataFrame(jdf, self.sql_ctx)
 
-    sortBy = sort
+    orderBy = sort
 
     def head(self, n=None):
         """ Return the first `n` rows or the first row if n is None.
@@ -540,7 +552,7 @@ class DataFrame(object):
     def __getitem__(self, item):
         """ Return the column by given name
 
-        >>> df['age'].collect()
+        >>> df.select(df['age']).collect()
         [Row(age=2), Row(age=5)]
         >>> df[ ["name", "age"]].collect()
         [Row(name=u'Alice', age=2), Row(name=u'Bob', age=5)]
@@ -549,7 +561,7 @@ class DataFrame(object):
         """
         if isinstance(item, basestring):
             jc = self._jdf.apply(item)
-            return Column(jc, self.sql_ctx)
+            return Column(jc)
         elif isinstance(item, Column):
             return self.filter(item)
         elif isinstance(item, list):
@@ -560,19 +572,17 @@ class DataFrame(object):
     def __getattr__(self, name):
         """ Return the column by given name
 
-        >>> df.age.collect()
+        >>> df.select(df.age).collect()
         [Row(age=2), Row(age=5)]
         """
         if name.startswith("__"):
             raise AttributeError(name)
         jc = self._jdf.apply(name)
-        return Column(jc, self.sql_ctx)
+        return Column(jc)
 
     def select(self, *cols):
         """ Selecting a set of expressions.
 
-        >>> df.select().collect()
-        [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         >>> df.select('*').collect()
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         >>> df.select('name', 'age').collect()
@@ -580,8 +590,6 @@ class DataFrame(object):
         >>> df.select(df.name, (df.age + 10).alias('age')).collect()
         [Row(name=u'Alice', age=12), Row(name=u'Bob', age=15)]
         """
-        if not cols:
-            cols = ["*"]
         jcols = ListConverter().convert([_to_java_column(c) for c in cols],
                                         self._sc._gateway._gateway_client)
         jdf = self._jdf.select(self.sql_ctx._sc._jvm.PythonUtils.toSeq(jcols))
@@ -601,7 +609,7 @@ class DataFrame(object):
 
     def filter(self, condition):
         """ Filtering rows using the given condition, which could be
-        Column expression or string of SQL expression.
+        :class:`Column` expression or string of SQL expression.
 
         where() is an alias for filter().
 
@@ -655,7 +663,7 @@ class DataFrame(object):
         return self.groupBy().agg(*exprs)
 
     def unionAll(self, other):
-        """ Return a new DataFrame containing union of rows in this
+        """ Return a new :class:`DataFrame` containing union of rows in this
         frame and another frame.
 
         This is equivalent to `UNION ALL` in SQL.
@@ -692,7 +700,7 @@ class DataFrame(object):
         >>> df.withColumnRenamed('age', 'age2').collect()
         [Row(age2=2, name=u'Alice'), Row(age2=5, name=u'Bob')]
         """
-        cols = [Column(_to_java_column(c), self.sql_ctx).alias(new)
+        cols = [Column(_to_java_column(c)).alias(new)
                 if c == existing else c
                 for c in self.columns]
         return self.select(*cols)
@@ -797,7 +805,7 @@ class GroupedData(object):
         >>> df.groupBy().mean('age').collect()
         [Row(AVG(age#0)=3.5)]
         >>> df3.groupBy().mean('age', 'height').collect()
-        [Row(AVG(age#4)=3.5, AVG(height#5)=82.5)]
+        [Row(AVG(age#4L)=3.5, AVG(height#5L)=82.5)]
         """
 
     @df_varargs_api
@@ -808,7 +816,7 @@ class GroupedData(object):
         >>> df.groupBy().avg('age').collect()
         [Row(AVG(age#0)=3.5)]
         >>> df3.groupBy().avg('age', 'height').collect()
-        [Row(AVG(age#4)=3.5, AVG(height#5)=82.5)]
+        [Row(AVG(age#4L)=3.5, AVG(height#5L)=82.5)]
         """
 
     @df_varargs_api
@@ -819,7 +827,7 @@ class GroupedData(object):
         >>> df.groupBy().max('age').collect()
         [Row(MAX(age#0)=5)]
         >>> df3.groupBy().max('age', 'height').collect()
-        [Row(MAX(age#4)=5, MAX(height#5)=85)]
+        [Row(MAX(age#4L)=5, MAX(height#5L)=85)]
         """
 
     @df_varargs_api
@@ -830,7 +838,7 @@ class GroupedData(object):
         >>> df.groupBy().min('age').collect()
         [Row(MIN(age#0)=2)]
         >>> df3.groupBy().min('age', 'height').collect()
-        [Row(MIN(age#4)=2, MIN(height#5)=80)]
+        [Row(MIN(age#4L)=2, MIN(height#5L)=80)]
         """
 
     @df_varargs_api
@@ -841,7 +849,7 @@ class GroupedData(object):
         >>> df.groupBy().sum('age').collect()
         [Row(SUM(age#0)=7)]
         >>> df3.groupBy().sum('age', 'height').collect()
-        [Row(SUM(age#4)=7, SUM(height#5)=165)]
+        [Row(SUM(age#4L)=7, SUM(height#5L)=165)]
         """
 
 
@@ -867,15 +875,16 @@ def _unary_op(name, doc="unary operator"):
     """ Create a method for given unary operator """
     def _(self):
         jc = getattr(self._jc, name)()
-        return Column(jc, self.sql_ctx)
+        return Column(jc)
     _.__doc__ = doc
     return _
 
 
 def _func_op(name, doc=''):
     def _(self):
-        jc = getattr(self._sc._jvm.functions, name)(self._jc)
-        return Column(jc, self.sql_ctx)
+        sc = SparkContext._active_spark_context
+        jc = getattr(sc._jvm.functions, name)(self._jc)
+        return Column(jc)
     _.__doc__ = doc
     return _
 
@@ -886,7 +895,7 @@ def _bin_op(name, doc="binary operator"):
     def _(self, other):
         jc = other._jc if isinstance(other, Column) else other
         njc = getattr(self._jc, name)(jc)
-        return Column(njc, self.sql_ctx)
+        return Column(njc)
     _.__doc__ = doc
     return _
 
@@ -897,19 +906,20 @@ def _reverse_op(name, doc="binary operator"):
     def _(self, other):
         jother = _create_column_from_literal(other)
         jc = getattr(jother, name)(self._jc)
-        return Column(jc, self.sql_ctx)
+        return Column(jc)
     _.__doc__ = doc
     return _
 
 
-class Column(DataFrame):
+class Column(object):
 
     """
     A column in a DataFrame.
 
-    `Column` instances can be created by::
+    :class:`Column` instances can be created by::
 
         # 1. Select a column out of a DataFrame
+
         df.colName
         df["colName"]
 
@@ -918,9 +928,8 @@ class Column(DataFrame):
         1 / df.colName
     """
 
-    def __init__(self, jc, sql_ctx=None):
+    def __init__(self, jc):
         self._jc = jc
-        super(Column, self).__init__(jc, sql_ctx)
 
     # arithmetic operators
     __neg__ = _func_op("negate")
@@ -964,12 +973,12 @@ class Column(DataFrame):
 
     def substr(self, startPos, length):
         """
-        Return a Column which is a substring of the column
+        Return a :class:`Column` which is a substring of the column
 
         :param startPos: start position (int or Column)
         :param length:  length of the substring (int or Column)
 
-        >>> df.name.substr(1, 3).collect()
+        >>> df.select(df.name.substr(1, 3).alias("col")).collect()
         [Row(col=u'Ali'), Row(col=u'Bob')]
         """
         if type(startPos) != type(length):
@@ -980,13 +989,15 @@ class Column(DataFrame):
             jc = self._jc.substr(startPos._jc, length._jc)
         else:
             raise TypeError("Unexpected type: %s" % type(startPos))
-        return Column(jc, self.sql_ctx)
+        return Column(jc)
 
     __getslice__ = substr
 
     # order
-    asc = _unary_op("asc")
-    desc = _unary_op("desc")
+    asc = _unary_op("asc", "Returns a sort expression based on the"
+                           " ascending order of the given column name.")
+    desc = _unary_op("desc", "Returns a sort expression based on the"
+                             " descending order of the given column name.")
 
     isNull = _unary_op("isNull", "True if the current expression is null.")
     isNotNull = _unary_op("isNotNull", "True if the current expression is not null.")
@@ -994,10 +1005,10 @@ class Column(DataFrame):
     def alias(self, alias):
         """Return a alias for this column
 
-        >>> df.age.alias("age2").collect()
+        >>> df.select(df.age.alias("age2")).collect()
         [Row(age2=2), Row(age2=5)]
         """
-        return Column(getattr(self._jc, "as")(alias), self.sql_ctx)
+        return Column(getattr(self._jc, "as")(alias))
 
     def cast(self, dataType):
         """ Convert the column into type `dataType`
@@ -1007,33 +1018,19 @@ class Column(DataFrame):
         >>> df.select(df.age.cast(StringType()).alias('ages')).collect()
         [Row(ages=u'2'), Row(ages=u'5')]
         """
-        if self.sql_ctx is None:
-            sc = SparkContext._active_spark_context
-            ssql_ctx = sc._jvm.SQLContext(sc._jsc.sc())
-        else:
-            ssql_ctx = self.sql_ctx._ssql_ctx
         if isinstance(dataType, basestring):
             jc = self._jc.cast(dataType)
         elif isinstance(dataType, DataType):
+            sc = SparkContext._active_spark_context
+            ssql_ctx = sc._jvm.SQLContext(sc._jsc.sc())
             jdt = ssql_ctx.parseDataType(dataType.json())
             jc = self._jc.cast(jdt)
-        return Column(jc, self.sql_ctx)
+        else:
+            raise TypeError("unexpected type: %s" % type(dataType))
+        return Column(jc)
 
     def __repr__(self):
-        return 'Column<%s>' % self._jdf.toString().encode('utf8')
-
-    def toPandas(self):
-        """
-        Return a pandas.Series from the column
-
-        >>> df.age.toPandas()  # doctest: +SKIP
-        0    2
-        1    5
-        dtype: int64
-        """
-        import pandas as pd
-        data = [c for c, in self.collect()]
-        return pd.Series(data)
+        return 'Column<%s>' % self._jc.toString().encode('utf8')
 
 
 def _test():
@@ -1045,7 +1042,9 @@ def _test():
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
     globs['sqlCtx'] = SQLContext(sc)
-    globs['df'] = sc.parallelize([Row(name='Alice', age=2), Row(name='Bob', age=5)]).toDF()
+    globs['df'] = sc.parallelize([(2, 'Alice'), (5, 'Bob')])\
+        .toDF(StructType([StructField('age', IntegerType()),
+                          StructField('name', StringType())]))
     globs['df2'] = sc.parallelize([Row(name='Tom', height=80), Row(name='Bob', height=85)]).toDF()
     globs['df3'] = sc.parallelize([Row(name='Alice', age=2, height=80),
                                   Row(name='Bob', age=5, height=85)]).toDF()

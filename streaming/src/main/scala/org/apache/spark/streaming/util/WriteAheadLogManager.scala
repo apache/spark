@@ -19,13 +19,12 @@ package org.apache.spark.streaming.util
 import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.spark.Logging
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Clock, SystemClock, Utils}
 import WriteAheadLogManager._
 
 /**
@@ -82,7 +81,7 @@ private[streaming] class WriteAheadLogManager(
     var succeeded = false
     while (!succeeded && failures < maxFailures) {
       try {
-        fileSegment = getLogWriter(clock.currentTime).write(byteBuffer)
+        fileSegment = getLogWriter(clock.getTimeMillis()).write(byteBuffer)
         succeeded = true
       } catch {
         case ex: Exception =>
