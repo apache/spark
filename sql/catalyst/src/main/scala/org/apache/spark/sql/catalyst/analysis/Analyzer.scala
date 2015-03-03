@@ -184,13 +184,14 @@ class Analyzer(catalog: Catalog,
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = {
-      val cteRelations = plan match {
+      // specially handle CTE
+      val (planRet, cteRelations) = plan match {
         case With(child, subQueries) =>
-          Some(subQueries)
-        case _ => None
+          (child, Some(subQueries))
+        case _ => (plan, None)
       }
 
-      plan transform {
+      planRet transform {
         case i @ InsertIntoTable(u: UnresolvedRelation, _, _, _) =>
           i.copy(
             table = EliminateSubQueries(getTable(u, cteRelations)))
