@@ -569,19 +569,21 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case Token("TOK_QUERY", queryArgs)
         if Seq("TOK_FROM", "TOK_INSERT").contains(queryArgs.head.getText) =>
 
-      val (fromClause: Option[ASTNode], insertClauses, cteSubqueries) =
+      val (fromClause: Option[ASTNode], insertClauses, cteRelations) =
         queryArgs match {
           case Token("TOK_FROM", args: Seq[ASTNode]) :: insertClauses =>
+            // check if has CTE
             insertClauses.last match {
               case Token("TOK_CTE", cteClauses) =>
-                val subQueries = cteClauses.map(node => {
+                val cteRelations = cteClauses.map(node => {
                   val relation = nodeToRelation(node).asInstanceOf[Subquery]
                   (relation.alias, relation)
                 }).toMap
-                (Some(args.head), insertClauses.init, Some(subQueries))
+                (Some(args.head), insertClauses.init, Some(cteRelations))
 
               case _ => (Some(args.head), insertClauses, None)
             }
+
           case Token("TOK_INSERT", _) :: Nil => (None, queryArgs, None)
         }
 
@@ -798,7 +800,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       // If there are multiple INSERTS just UNION them together into on query.
       val query = queries.reduceLeft(Union)
 
-      cteSubqueries.map(With(query, _)).getOrElse(query)
+      // return With plan if there is CTE
+      cteRelations.map(With(query, _)).getOrElse(query)
 
     case Token("TOK_UNION", left :: right :: Nil) => Union(nodeToPlan(left), nodeToPlan(right))
 

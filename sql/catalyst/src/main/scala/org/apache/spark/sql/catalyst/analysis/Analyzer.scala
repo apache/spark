@@ -185,6 +185,7 @@ class Analyzer(catalog: Catalog,
       val cteRelations = new scala.collection.mutable.HashMap[String, LogicalPlan]()
 
       plan transform {
+        // add cte table to a temp relation map,drop `with` plan and keep its child
         case With(child, relations) =>
           cteRelations ++= relations
           child
