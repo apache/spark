@@ -58,7 +58,7 @@ private[spark] class FileSystemPersistenceEngine(
     if (!created) { throw new IllegalStateException("Could not create file: " + file) }
     val serializer = serialization.findSerializerFor(value)
     val serialized = serializer.toBinary(value)
-    val out = new FileOutputStream(file)
+    val out = new BufferedOutputStream(new FileOutputStream(file))
     try {
       out.write(serialized)
     } finally {
@@ -68,7 +68,7 @@ private[spark] class FileSystemPersistenceEngine(
 
   private def deserializeFromFile[T](file: File)(implicit m: ClassTag[T]): T = {
     val fileData = new Array[Byte](file.length().asInstanceOf[Int])
-    val dis = new DataInputStream(new FileInputStream(file))
+    val dis = new DataInputStream(new BufferedInputStream(new FileInputStream(file)))
     try {
       dis.readFully(fileData)
     } finally {
