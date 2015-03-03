@@ -17,17 +17,16 @@
 
 package org.apache.spark.serializer
 
-import org.apache.spark.scheduler.HighlyCompressedMapStatus
-import org.apache.spark.storage.BlockManagerId
-
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.Kryo
 import org.scalatest.FunSuite
 
-import org.apache.spark.{SparkConf, SharedSparkContext}
+import org.apache.spark.scheduler.HighlyCompressedMapStatus
 import org.apache.spark.serializer.KryoTest._
+import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.{SharedSparkContext, SparkConf}
 
 
 class KryoSerializerSuite extends FunSuite with SharedSparkContext {
@@ -253,7 +252,6 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
     val ser = new KryoSerializer(conf)
     val serInstance = ser.newInstance()
     serInstance.serialize(hcmo)
-
   }
 }
 
