@@ -572,17 +572,16 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       val (fromClause: Option[ASTNode], insertClauses, cteSubqueries) =
         queryArgs match {
           case Token("TOK_FROM", args: Seq[ASTNode]) :: insertClauses =>
-            val (newInsertClauses, cteSubqueries) = insertClauses.last match {
+            insertClauses.last match {
               case Token("TOK_CTE", cteClauses) =>
                 val subQueries = cteClauses.map(node => {
                   val relation = nodeToRelation(node)
                   relation.asInstanceOf[Subquery]
                 }).toSeq
-                (insertClauses.init, Some(subQueries))
+                (Some(args.head), insertClauses.init, Some(subQueries))
 
-              case _ => (insertClauses, None)
+              case _ => (Some(args.head), insertClauses, None)
             }
-            (Some(args.head), newInsertClauses, cteSubqueries)
           case Token("TOK_INSERT", _) :: Nil => (None, queryArgs, None)
         }
 

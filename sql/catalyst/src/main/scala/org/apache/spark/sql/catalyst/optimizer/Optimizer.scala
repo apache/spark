@@ -53,7 +53,14 @@ object DefaultOptimizer extends Optimizer {
       PushPredicateThroughGenerate,
       ColumnPruning) ::
     Batch("LocalRelation", FixedPoint(100),
-      ConvertToLocalRelation) :: Nil
+      ConvertToLocalRelation) ::
+    Batch("Drop With", Once, DropWith) :: Nil
+}
+
+object DropWith extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case With(child, _) => child
+  }
 }
 
 /**

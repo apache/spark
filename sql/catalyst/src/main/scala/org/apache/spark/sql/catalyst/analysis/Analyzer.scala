@@ -54,7 +54,6 @@ class Analyzer(catalog: Catalog,
 
   lazy val batches: Seq[Batch] = Seq(
     Batch("Resolution", fixedPoint,
-      ResolveWith ::
       ResolveRelations ::
       ResolveReferences ::
       ResolveGroupingAnalytics ::
@@ -167,34 +166,37 @@ class Analyzer(catalog: Catalog,
     }
   }
 
-  object ResolveWith extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case origin @ With(child, subQueries)
-        if subQueries.forall(query => !catalog.tableExists(Seq(query.alias))) =>
-        subQueries.foreach(subQuery =>
-          catalog.registerTable(Seq(subQuery.alias), subQuery.child))
-        origin
-    }
-  }
   /**
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
    */
   object ResolveRelations extends Rule[LogicalPlan] {
-    def getTable(u: UnresolvedRelation) = {
+    def getTable(u: UnresolvedRelation, extraRelations: Option[Seq[Subquery]]) = {
       try {
-        catalog.lookupRelation(u.tableIdentifier, u.alias)
+        extraRelations.fold(catalog.lookupRelation(u.tableIdentifier, u.alias)) { cteRelations =>
+          cteRelations.find(_.alias == u.tableIdentifier)
+            .map(relation => u.alias.map(Subquery(_, relation.child)).getOrElse(relation.child))
+            .getOrElse(catalog.lookupRelation(u.tableIdentifier, u.alias))
+        }
       } catch {
         case _: NoSuchTableException =>
           u.failAnalysis(s"no such table ${u.tableIdentifier}")
       }
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case i @ InsertIntoTable(u: UnresolvedRelation, _, _, _) =>
-        i.copy(
-          table = EliminateSubQueries(getTable(u)))
-      case u: UnresolvedRelation =>
-        getTable(u)
+    def apply(plan: LogicalPlan): LogicalPlan = {
+      val cteRelations = plan match {
+        case With(child, subQueries) =>
+          Some(subQueries)
+        case _ => None
+      }
+
+      plan transform {
+        case i @ InsertIntoTable(u: UnresolvedRelation, _, _, _) =>
+          i.copy(
+            table = EliminateSubQueries(getTable(u, cteRelations)))
+        case u: UnresolvedRelation =>
+          getTable(u, cteRelations)
+      }
     }
   }
 
