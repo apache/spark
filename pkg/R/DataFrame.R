@@ -607,7 +607,6 @@ setMethod("select", signature(x = "DataFrame", col = "Column"),
             dataFrame(sdf)
           })
 
-
 #' SelectExpr
 #'
 #' Select from a DataFrame using a set of SQL expressions.
