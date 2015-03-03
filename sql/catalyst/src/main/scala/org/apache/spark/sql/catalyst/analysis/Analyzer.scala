@@ -173,7 +173,7 @@ class Analyzer(catalog: Catalog,
     def getTable(u: UnresolvedRelation, extraRelations: Option[Seq[Subquery]]) = {
       try {
         extraRelations.fold(catalog.lookupRelation(u.tableIdentifier, u.alias)) { cteRelations =>
-          cteRelations.find(_.alias == u.tableIdentifier)
+          cteRelations.find(_.alias == u.tableIdentifier.head)
             .map(relation => u.alias.map(Subquery(_, relation.child)).getOrElse(relation.child))
             .getOrElse(catalog.lookupRelation(u.tableIdentifier, u.alias))
         }
