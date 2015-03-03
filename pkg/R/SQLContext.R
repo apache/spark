@@ -30,6 +30,20 @@ jsonFile <- function(sqlCtx, path) {
 #' JSON RDD
 #'
 #' Loads an RDD storing one JSON object per string as a DataFrame.
+#'
+#' @param sqlCtx SQLContext to use
+#' @param rdd An RDD of JSON string
+#' @param schema A StructType object to use as schema
+#' @param samplingRatio The ratio of simpling used to infer the schema
+#' @return A DataFrame
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' rdd <- texFile(sc, "path/to/json")
+#' df <- jsonRDD(sqlCtx, rdd)
+#' }
 
 # TODO: support schema
 jsonRDD <- function(sqlCtx, rdd, schema = NULL, samplingRatio = 1.0) {
@@ -111,10 +125,21 @@ table <- function(sqlCtx, tableName) {
 }
 
 
-#' Tablesq
+#' Tables
 #'
 #' Returns a DataFrame containing names of tables in the given database.
+#'
+#' @param sqlCtx SQLContext to use
+#' @param databaseName name of the database
+#' @return a DataFrame
 #' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' tables(sqlCtx, "hive")
+#' }
+
 tables <- function(sqlCtx, databaseName=NULL) {
   jdf <- if (is.null(databaseName)) {
     callJMethod(sqlCtx, "tables")
@@ -128,7 +153,18 @@ tables <- function(sqlCtx, databaseName=NULL) {
 #' Table Names
 #'
 #' Returns the names of tables in the given database as an array.
+#'
+#' @param sqlCtx SQLContext to use
+#' @param databaseName name of the database
+#' @return a list of table names
 #' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' tableNames(sqlCtx, "hive")
+#' }
+
 tableNames <- function(sqlCtx, databaseName=NULL) {
   if (is.null(databaseName)) {
     callJMethod(sqlCtx, "tableNames")
@@ -148,6 +184,11 @@ tableNames <- function(sqlCtx, databaseName=NULL) {
 #' @export
 #' @examples
 #'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' registerTempTable(df, "table")
 #' cacheTable(sqlCtx, "table")
 #' }
 
@@ -165,6 +206,11 @@ cacheTable <- function(sqlCtx, tableName) {
 #' @export
 #' @examples
 #'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' registerTempTable(df, "table")
 #' uncacheTable(sqlCtx, "table")
 #' }
 
@@ -177,6 +223,14 @@ uncacheTable <- function(sqlCtx, tableName) {
 #'
 #' Removes all cached tables from the in-memory cache.
 #'
+#' @param sqlCtx SQLContext to use
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' clearCache(sqlCtx)
+#' }
 
 clearCache <- function(sqlCtx) {
   callJMethod(sqlCtx, "clearCache")
