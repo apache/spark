@@ -17,7 +17,7 @@ displayTitle: <a href="mllib-guide.html">MLlib</a> - Linear Methods
 \newcommand{\av}{\mathbf{\alpha}}
 \newcommand{\bv}{\mathbf{b}}
 \newcommand{\N}{\mathbb{N}}
-\newcommand{\id}{\mathbf{I}} 
+\newcommand{\id}{\mathbf{I}}
 \newcommand{\ind}{\mathbf{1}} 
 \newcommand{\0}{\mathbf{0}} 
 \newcommand{\unit}{\mathbf{e}} 
@@ -114,18 +114,26 @@ especially when the number of training examples is small.
 
 Under the hood, linear methods use convex optimization methods to optimize the objective functions.  MLlib uses two methods, SGD and L-BFGS, described in the [optimization section](mllib-optimization.html).  Currently, most algorithm APIs support Stochastic Gradient Descent (SGD), and a few support L-BFGS. Refer to [this optimization section](mllib-optimization.html#Choosing-an-Optimization-Method) for guidelines on choosing between optimization methods.
 
-## Binary classification
+## Classification
 
-[Binary classification](http://en.wikipedia.org/wiki/Binary_classification)
-aims to divide items into two categories: positive and negative.  MLlib
-supports two linear methods for binary classification: linear Support Vector
-Machines (SVMs) and logistic regression. For both methods, MLlib supports
-L1 and L2 regularized variants. The training data set is represented by an RDD
-of [LabeledPoint](mllib-data-types.html) in MLlib.  Note that, in the
-mathematical formulation in this guide, a training label $y$ is denoted as
-either $+1$ (positive) or $-1$ (negative), which is convenient for the
-formulation.  *However*, the negative label is represented by $0$ in MLlib
-instead of $-1$, to be consistent with multiclass labeling.
+[Classification](http://en.wikipedia.org/wiki/Statistical_classification) aims to divide items into
+categories.
+The most common classification type is
+[binary classificaion](http://en.wikipedia.org/wiki/Binary_classification), where there are two
+categories, usually named positive and negative.
+If there are more than two categories, it is called
+[multiclass classification](http://en.wikipedia.org/wiki/Multiclass_classification).
+MLlib supports two linear methods for classification: linear Support Vector Machines (SVMs)
+and logistic regression.
+Linear SVMs supports only binary classification, while logistic regression supports both binary and
+multiclass classification problems.
+For both methods, MLlib supports L1 and L2 regularized variants.
+The training data set is represented by an RDD of [LabeledPoint](mllib-data-types.html) in MLlib,
+where labels are class indices starting from zero: $0, 1, 2, \ldots$.
+Note that, in the mathematical formulation in this guide, a binary label $y$ is denoted as either
+$+1$ (positive) or $-1$ (negative), which is convenient for the formulation.
+*However*, the negative label is represented by $0$ in MLlib instead of $-1$, to be consistent with
+multiclass labeling.
 
 ### Linear Support Vector Machines (SVMs)
 
@@ -144,41 +152,7 @@ denoted by $\x$, the model makes predictions based on the value of $\wv^T \x$.
 By the default, if $\wv^T \x \geq 0$ then the outcome is positive, and negative
 otherwise.
 
-### Logistic regression
-
-[Logistic regression](http://en.wikipedia.org/wiki/Logistic_regression) is widely used to predict a
-binary response. 
-It is a linear method as described above in equation `$\eqref{eq:regPrimal}$`, with the loss
-function in the formulation given by the logistic loss:
-`\[
-L(\wv;\x,y) :=  \log(1+\exp( -y \wv^T \x)).
-\]`
-
-The logistic regression algorithm outputs a logistic regression model.  Given a
-new data point, denoted by $\x$, the model makes predictions by
-applying the logistic function
-`\[
-\mathrm{f}(z) = \frac{1}{1 + e^{-z}}
-\]`
-where $z = \wv^T \x$.
-By default, if $\mathrm{f}(\wv^T x) > 0.5$, the outcome is positive, or
-negative otherwise, though unlike linear SVMs, the raw output of the logistic regression
-model, $\mathrm{f}(z)$, has a probabilistic interpretation (i.e., the probability
-that $\x$ is positive).
-
-### Evaluation metrics
-
-MLlib supports common evaluation metrics for binary classification (not available in PySpark). 
-This
-includes precision, recall, [F-measure](http://en.wikipedia.org/wiki/F1_score),
-[receiver operating characteristic (ROC)](http://en.wikipedia.org/wiki/Receiver_operating_characteristic),
-precision-recall curve, and
-[area under the curves (AUC)](http://en.wikipedia.org/wiki/Receiver_operating_characteristic#Area_under_the_curve).
-AUC is commonly used to compare the performance of various models while
-precision/recall/F-measure can help determine the appropriate threshold to use
-for prediction purposes. 
-
-### Examples
+**Examples**
 
 <div class="codetabs">
 
@@ -211,7 +185,7 @@ val model = SVMWithSGD.train(training, numIterations)
 // Clear the default threshold.
 model.clearThreshold()
 
-// Compute raw scores on the test set. 
+// Compute raw scores on the test set.
 val scoreAndLabels = test.map { point =>
   val score = model.predict(point.features)
   (score, point.label)
@@ -246,8 +220,6 @@ svmAlg.optimizer.
   setUpdater(new L1Updater)
 val modelL1 = svmAlg.run(training)
 {% endhighlight %}
-
-[`LogisticRegressionWithSGD`](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithSGD) can be used in a similar fashion as `SVMWithSGD`.
 
 </div>
 
@@ -284,11 +256,11 @@ public class SVMClassifier {
     JavaRDD<LabeledPoint> training = data.sample(false, 0.6, 11L);
     training.cache();
     JavaRDD<LabeledPoint> test = data.subtract(training);
-    
+
     // Run training algorithm to build the model.
     int numIterations = 100;
     final SVMModel model = SVMWithSGD.train(training.rdd(), numIterations);
-    
+
     // Clear the default threshold.
     model.clearThreshold();
 
@@ -301,12 +273,12 @@ public class SVMClassifier {
         }
       }
     );
-    
+
     // Get evaluation metrics.
-    BinaryClassificationMetrics metrics = 
+    BinaryClassificationMetrics metrics =
       new BinaryClassificationMetrics(JavaRDD.toRDD(scoreAndLabels));
     double auROC = metrics.areaUnderROC();
-    
+
     System.out.println("Area under ROC = " + auROC);
 
     // Save and load model
@@ -372,7 +344,191 @@ print("Training Error = " + str(trainErr))
 </div>
 </div>
 
-## Linear least squares, Lasso, and ridge regression
+### Logistic regression
+
+[Logistic regression](http://en.wikipedia.org/wiki/Logistic_regression) is widely used to predict a
+binary response. It is a linear method as described above in equation `$\eqref{eq:regPrimal}$`,
+with the loss function in the formulation given by the logistic loss:
+`\[
+L(\wv;\x,y) :=  \log(1+\exp( -y \wv^T \x)).
+\]`
+
+For binary classification problems, the algorithm outputs a binary logistic regression model.
+Given a new data point, denoted by $\x$, the model makes predictions by
+applying the logistic function
+`\[
+\mathrm{f}(z) = \frac{1}{1 + e^{-z}}
+\]`
+where $z = \wv^T \x$.
+By default, if $\mathrm{f}(\wv^T x) > 0.5$, the outcome is positive, or
+negative otherwise, though unlike linear SVMs, the raw output of the logistic regression
+model, $\mathrm{f}(z)$, has a probabilistic interpretation (i.e., the probability
+that $\x$ is positive).
+
+Binary logistic regression can be generalized into
+[multinomial logistic regression](http://en.wikipedia.org/wiki/Multinomial_logistic_regression) to
+train and predict multiclass classification problems.
+For example, for $K$ possible outcomes, one of the outcomes can be chosen as a "pivot", and the
+other $K - 1$ outcomes can be separately regressed against the pivot outcome.
+In MLlib, the first class $0$ is chosen as the "pivot" class.
+See Section 4.4 of
+[The Elements of Statistical Learning](http://statweb.stanford.edu/~tibs/ElemStatLearn/) for
+references.
+Here is an
+[detailed mathematical derivation](http://www.slideshare.net/dbtsai/2014-0620-mlor-36132297).
+
+For multiclass classification problems, the algorithm will outputs a multinomial logistic regression
+model, which contains $K - 1$ binary logistic regression models regressed against the first class.
+Given a new data points, $K - 1$ models will be run, and the class with largest probability will be
+chosen as the predicted class.
+
+We implemented two algorithms to solve logistic regression: mini-batch gradient descent and L-BFGS.
+We recommend L-BFGS over mini-batch gradient descent for faster convergence.
+
+**Examples**
+
+<div class="codetabs">
+
+<div data-lang="scala" markdown="1">
+The following code illustrates how to load a sample multiclass dataset, split it into train and
+test, and use
+[LogisticRegressionWithLBFGS](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS)
+to fit a logistic regression model.
+Then the model is evaluated against the test dataset and saved to disk.
+
+{% highlight scala %}
+import org.apache.spark.SparkContext
+import org.apache.spark.mllib.classification.{LogisticRegressionWithLBFGS, LogisticRegressionModel}
+import org.apache.spark.mllib.evaluation.MulticlassMetrics
+import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.util.MLUtils
+
+// Load training data in LIBSVM format.
+val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
+
+// Split data into training (60%) and test (40%).
+val splits = data.randomSplit(Array(0.6, 0.4), seed = 11L)
+val training = splits(0).cache()
+val test = splits(1)
+
+// Run training algorithm to build the model
+val model = new LogisticRegressionWithLBFGS()
+  .setNumClasses(10)
+  .run(training)
+
+// Compute raw scores on the test set.
+val predictionAndLabels = test.map { case LabeledPoint(label, features) =>
+  val prediction = model.predict(features)
+  (prediction, label)
+}
+
+// Get evaluation metrics.
+val metrics = new MulticlassMetrics(predictionAndLabels)
+val precision = metrics.precision
+println("Precision = " + precision)
+
+// Save and load model
+model.save(sc, "myModelPath")
+val sameModel = LogisticRegressionModel.load(sc, "myModelPath")
+{% endhighlight %}
+
+</div>
+
+<div data-lang="java" markdown="1">
+The following code illustrates how to load a sample multiclass dataset, split it into train and
+test, and use
+[LogisticRegressionWithLBFGS](api/java/org/apache/spark/mllib/classification/LogisticRegressionWithLBFGS.html)
+to fit a logistic regression model.
+Then the model is evaluated against the test dataset and saved to disk.
+
+{% highlight java %}
+import scala.Tuple2;
+
+import org.apache.spark.api.java.*;
+import org.apache.spark.api.java.function.Function;
+import org.apache.spark.mllib.classification.LogisticRegressionModel;
+import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS;
+import org.apache.spark.mllib.evaluation.MulticlassMetrics;
+import org.apache.spark.mllib.regression.LabeledPoint;
+import org.apache.spark.mllib.util.MLUtils;
+import org.apache.spark.SparkConf;
+import org.apache.spark.SparkContext;
+
+public class MultinomialLogisticRegressionExample {
+  public static void main(String[] args) {
+    SparkConf conf = new SparkConf().setAppName("SVM Classifier Example");
+    SparkContext sc = new SparkContext(conf);
+    String path = "data/mllib/sample_libsvm_data.txt";
+    JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc, path).toJavaRDD();
+
+    // Split initial RDD into two... [60% training data, 40% testing data].
+    JavaRDD<LabeledPoint>[] splits = data.randomSplit(new double[] {0.6, 0.4}, 11L);
+    JavaRDD<LabeledPoint> training = splits[0].cache();
+    JavaRDD<LabeledPoint> test = splits[1];
+
+    // Run training algorithm to build the model.
+    final LogisticRegressionModel model = new LogisticRegressionWithLBFGS()
+      .setNumClasses(10)
+      .run(training.rdd());
+
+    // Compute raw scores on the test set.
+    JavaRDD<Tuple2<Object, Object>> predictionAndLabels = test.map(
+      new Function<LabeledPoint, Tuple2<Object, Object>>() {
+        public Tuple2<Object, Object> call(LabeledPoint p) {
+          Double prediction = model.predict(p.features());
+          return new Tuple2<Object, Object>(prediction, p.label());
+        }
+      }
+    );
+
+    // Get evaluation metrics.
+    MulticlassMetrics metrics = new MulticlassMetrics(predictionAndLabels.rdd());
+    double precision = metrics.precision();
+    System.out.println("Precision = " + precision);
+
+    // Save and load model
+    model.save(sc, "myModelPath");
+    LogisticRegressionModel sameModel = LogisticRegressionModel.load(sc, "myModelPath");
+  }
+}
+{% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+The following example shows how to load a sample dataset, build Logistic Regression model,
+and make predictions with the resulting model to compute the training error.
+
+Note that the Python API does not yet support multiclass classification and model save/load but
+will in the future.
+
+{% highlight python %}
+from pyspark.mllib.classification import LogisticRegressionWithLBFGS
+from pyspark.mllib.regression import LabeledPoint
+from numpy import array
+
+# Load and parse the data
+def parsePoint(line):
+    values = [float(x) for x in line.split(' ')]
+    return LabeledPoint(values[0], values[1:])
+
+data = sc.textFile("data/mllib/sample_svm_data.txt")
+parsedData = data.map(parsePoint)
+
+# Build the model
+model = LogisticRegressionWithLBFGS.train(parsedData)
+
+# Evaluating the model on training data
+labelsAndPreds = parsedData.map(lambda p: (p.label, model.predict(p.features)))
+trainErr = labelsAndPreds.filter(lambda (v, p): v != p).count() / float(parsedData.count())
+print("Training Error = " + str(trainErr))
+{% endhighlight %}
+</div>
+</div>
+
+# Regression
+
+### Linear least squares, Lasso, and ridge regression
 
 
 Linear least squares is the most common formulation for regression problems. 
@@ -390,7 +546,7 @@ regularization; and [*Lasso*](http://en.wikipedia.org/wiki/Lasso_(statistics)) u
 regularization.  For all of these models, the average loss or training error, $\frac{1}{n} \sum_{i=1}^n (\wv^T x_i - y_i)^2$, is
 known as the [mean squared error](http://en.wikipedia.org/wiki/Mean_squared_error).
 
-### Examples
+**Examples**
 
 <div class="codetabs">
 
@@ -544,7 +700,7 @@ section of the Spark
 quick-start guide. Be sure to also include *spark-mllib* to your build file as
 a dependency.
 
-## Streaming linear regression
+###Streaming linear regression
 
 When data arrive in a streaming fashion, it is useful to fit regression models online, 
 updating the parameters of the model as new data arrives. MLlib currently supports 
@@ -552,7 +708,7 @@ streaming linear regression using ordinary least squares. The fitting is similar
 to that performed offline, except fitting occurs on each batch of data, so that
 the model continually updates to reflect the data from the stream.
 
-### Examples
+**Examples**
 
 The following example demonstrates how to load training and testing data from two different
 input streams of text files, parse the streams as labeled points, fit a linear regression model
@@ -619,7 +775,7 @@ will get better!
 </div>
 
 
-## Implementation (developer)
+# Implementation (developer)
 
 Behind the scene, MLlib implements a simple distributed version of stochastic gradient descent
 (SGD), building on the underlying gradient descent primitive (as described in the <a
