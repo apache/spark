@@ -1605,7 +1605,7 @@
       <properties>
         <hadoop.version>1.0.3-mapr-3.0.3</hadoop.version>
         <yarn.version>2.4.1-mapr-1408</yarn.version>
-        <hbase.version>0.94.17-mapr-1405</hbase.version>
+        <hbase.version>0.98.4-mapr-1408</hbase.version>
         <zookeeper.version>3.4.5-mapr-1406</zookeeper.version>
       </properties>
     </profile>
@@ -1615,7 +1615,7 @@
       <properties>
         <hadoop.version>2.4.1-mapr-1408</hadoop.version>
         <yarn.version>2.4.1-mapr-1408</yarn.version>
-        <hbase.version>0.94.17-mapr-1405-4.0.0-FCS</hbase.version>
+        <hbase.version>0.98.4-mapr-1408</hbase.version>
         <zookeeper.version>3.4.5-mapr-1406</zookeeper.version>
       </properties>
       <dependencies>
