@@ -202,12 +202,12 @@ object SparkBuild extends PomBuild {
 
   // TODO: move this to its upstream project.
   override def projectDefinitions(baseDirectory: File): Seq[Project] = {
-    super.projectDefinitions(baseDirectory).map { x =>
+    val allProjs = super.projectDefinitions(baseDirectory).map { x =>
       if (projectsMap.exists(_._1 == x.id)) x.settings(projectsMap(x.id): _*)
       else x.settings(Seq[Setting[_]](): _*)
     } ++ Seq[Project](OldDeps.project)
+    allProjs.map{proj => TestSettings.setupUnitTests(proj)}
   }
-
 }
 
 object Flume {
@@ -438,9 +438,9 @@ object TestSettings {
     javaOptions += "-Xmx3g",
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),
-    testOptions += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
+    testOptions in Test += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
     // Enable Junit testing.
-    libraryDependencies += "com.novocode" % "junit-interface" % "0.9" % "test",
+    libraryDependencies += "com.novocode" % "junit-interface" % "0.11" % "test",
     // Only allow one test at a time, even across projects, since they run in the same JVM
     parallelExecution in Test := false,
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
@@ -457,5 +457,16 @@ object TestSettings {
       "-doc-title", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " ScalaDoc"
     )
   )
+
+  val UnitTest = config("unit") extend(Test)
+
+  def setupUnitTests(proj: Project): Project = {
+    proj.configs(UnitTest)
+      .settings(inConfig(UnitTest)(Defaults.testTasks): _*)
+      .settings(testOptions in UnitTest ++= Seq(
+        Tests.Argument(TestFrameworks.JUnit,"--exclude-categories=org.apache.spark.sparktest.categories.IntegrationTests"),
+        Tests.Argument(TestFrameworks.ScalaTest,"-l", "org.apache.sparktest.tags.IntegrationTest")
+      )) 
+  }
 
 }

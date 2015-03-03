@@ -25,6 +25,8 @@ import java.util.*;
 import java.util.concurrent.*;
 
 import org.apache.spark.input.PortableDataStream;
+import org.apache.spark.sparktest.categories.IntegrationTests;
+import org.junit.experimental.categories.Category;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
@@ -1587,6 +1589,7 @@ public class JavaAPISuite implements Serializable {
    * since that's the only artifact where Guava classes have been relocated.
    */
   @Test
+  @Category(IntegrationTests.class)
   public void testGuavaOptional() {
     // Stop the context created in setUp() and start a local-cluster one, to force usage of the
     // assembly.

@@ -26,6 +26,7 @@ import org.apache.spark.io.SnappyCompressionCodec
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.storage._
+import org.apache.sparktest.TestTags.IntegrationTest
 
 // Dummy class that creates a broadcast variable but doesn't use it
 class DummyBroadcastClass(rdd: RDD[Int]) extends Serializable {
@@ -64,7 +65,7 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     assert(results.collect().toSet === (1 to 10).map(x => (x, 10)).toSet)
   }
 
-  test("Accessing HttpBroadcast variables in a local cluster") {
+  test("Accessing HttpBroadcast variables in a local cluster", IntegrationTest) {
     val numSlaves = 4
     val conf = httpConf.clone
     conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
@@ -92,7 +93,7 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     assert(results.collect().toSet === (1 to 10).map(x => (x, 10)).toSet)
   }
 
-  test("Accessing TorrentBroadcast variables in a local cluster") {
+  test("Accessing TorrentBroadcast variables in a local cluster", IntegrationTest) {
     val numSlaves = 4
     val conf = torrentConf.clone
     conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
@@ -122,7 +123,7 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     }
   }
 
-  test("Test Lazy Broadcast variables with TorrentBroadcast") {
+  test("Test Lazy Broadcast variables with TorrentBroadcast", IntegrationTest) {
     val numSlaves = 2
     val conf = torrentConf.clone
     sc = new SparkContext("local-cluster[%d, 1, 512]".format(numSlaves), "test", conf)
@@ -141,11 +142,11 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     testUnpersistHttpBroadcast(distributed = false, removeFromDriver = true)
   }
 
-  test("Unpersisting HttpBroadcast on executors only in distributed mode") {
+  test("Unpersisting HttpBroadcast on executors only in distributed mode", IntegrationTest) {
     testUnpersistHttpBroadcast(distributed = true, removeFromDriver = false)
   }
 
-  test("Unpersisting HttpBroadcast on executors and driver in distributed mode") {
+  test("Unpersisting HttpBroadcast on executors and driver in distributed mode", IntegrationTest) {
     testUnpersistHttpBroadcast(distributed = true, removeFromDriver = true)
   }
 
@@ -157,11 +158,11 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     testUnpersistTorrentBroadcast(distributed = false, removeFromDriver = true)
   }
 
-  test("Unpersisting TorrentBroadcast on executors only in distributed mode") {
+  test("Unpersisting TorrentBroadcast on executors only in distributed mode", IntegrationTest) {
     testUnpersistTorrentBroadcast(distributed = true, removeFromDriver = false)
   }
 
-  test("Unpersisting TorrentBroadcast on executors and driver in distributed mode") {
+  test("Unpersisting TorrentBroadcast on executors and driver in distributed mode", IntegrationTest) {
     testUnpersistTorrentBroadcast(distributed = true, removeFromDriver = true)
   }
 

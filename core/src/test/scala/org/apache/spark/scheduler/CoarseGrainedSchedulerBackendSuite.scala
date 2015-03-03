@@ -19,12 +19,13 @@ package org.apache.spark.scheduler
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkException, SparkContext}
 import org.apache.spark.util.{SerializableBuffer, AkkaUtils}
+import org.apache.sparktest.TestTags.IntegrationTest
 
 import org.scalatest.FunSuite
 
 class CoarseGrainedSchedulerBackendSuite extends FunSuite with LocalSparkContext {
 
-  test("serialized task larger than akka frame size") {
+  test("serialized task larger than akka frame size", IntegrationTest) {
     val conf = new SparkConf
     conf.set("spark.akka.frameSize","1")
     conf.set("spark.default.parallelism","1")

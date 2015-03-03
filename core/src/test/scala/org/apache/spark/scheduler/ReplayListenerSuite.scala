@@ -27,6 +27,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{JsonProtocol, Utils}
+import org.apache.sparktest.TestTags.IntegrationTest
 
 /**
  * Test whether ReplayListenerBus replays events from logs correctly.
@@ -71,12 +72,12 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
   }
 
   // This assumes the correctness of EventLoggingListener
-  test("End-to-end replay") {
+  test("End-to-end replay", IntegrationTest) {
     testApplicationReplay()
   }
 
   // This assumes the correctness of EventLoggingListener
-  test("End-to-end replay with compression") {
+  test("End-to-end replay with compression", IntegrationTest) {
     CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codec =>
       testApplicationReplay(Some(codec))
     }

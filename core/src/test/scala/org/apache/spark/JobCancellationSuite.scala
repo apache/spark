@@ -28,6 +28,7 @@ import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.Matchers
 
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
+import org.apache.sparktest.TestTags.IntegrationTest
 
 /**
  * Test suite for cancelling running jobs. We run the cancellation tasks for single job action
@@ -62,7 +63,7 @@ class JobCancellationSuite extends FunSuite with Matchers with BeforeAndAfter
     assert(sc.parallelize(1 to 10, 2).count === 10)
   }
 
-  test("cluster mode, FIFO scheduler") {
+  test("cluster mode, FIFO scheduler", IntegrationTest) {
     val conf = new SparkConf().set("spark.scheduler.mode", "FIFO")
     sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
     testCount()
@@ -71,7 +72,7 @@ class JobCancellationSuite extends FunSuite with Matchers with BeforeAndAfter
     assert(sc.parallelize(1 to 10, 2).count === 10)
   }
 
-  test("cluster mode, fair scheduler") {
+  test("cluster mode, fair scheduler", IntegrationTest) {
     val conf = new SparkConf().set("spark.scheduler.mode", "FAIR")
     val xmlPath = getClass.getClassLoader.getResource("fairscheduler.xml").getFile()
     conf.set("spark.scheduler.allocation.file", xmlPath)

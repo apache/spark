@@ -25,6 +25,7 @@ import org.apache.spark.rdd.{CoGroupedRDD, OrderedRDDFunctions, RDD, ShuffledRDD
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.storage.{ShuffleDataBlockId, ShuffleBlockId}
 import org.apache.spark.util.MutablePair
+import org.apache.sparktest.TestTags.IntegrationTest
 
 abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
 
@@ -34,7 +35,7 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
   // test that the shuffle works (rather than retrying until all blocks are local to one Executor).
   conf.set("spark.test.noStageRetry", "true")
 
-  test("groupByKey without compression") {
+  test("groupByKey without compression", IntegrationTest) {
     val myConf = conf.clone().set("spark.shuffle.compress", "false")
     sc = new SparkContext("local", "test", myConf)
     val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (2, 1)), 4)
@@ -46,7 +47,7 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
     assert(valuesFor2.toList.sorted === List(1))
   }
 
-  test("shuffle non-zero block size") {
+  test("shuffle non-zero block size", IntegrationTest) {
     sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
     val NUM_BLOCKS = 3
 
@@ -71,7 +72,7 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
     }
   }
 
-  test("shuffle serializer") {
+  test("shuffle serializer", IntegrationTest) {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
     val a = sc.parallelize(1 to 10, 2)
@@ -87,7 +88,7 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
     assert(c.count === 10)
   }
 
-  test("zero sized blocks") {
+  test("zero sized blocks", IntegrationTest) {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
 
@@ -114,7 +115,7 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
     assert(nonEmptyBlocks.size <= 4)
   }
 
-  test("zero sized blocks without kryo") {
+  test("zero sized blocks without kryo", IntegrationTest) {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
 
@@ -139,7 +140,7 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
     assert(nonEmptyBlocks.size <= 4)
   }
 
-  test("shuffle on mutable pairs") {
+  test("shuffle on mutable pairs", IntegrationTest) {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
     def p[T1, T2](_1: T1, _2: T2) = MutablePair(_1, _2)
@@ -151,7 +152,7 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
     data.foreach { pair => results should contain ((pair._1, pair._2)) }
   }
 
-  test("sorting on mutable pairs") {
+  test("sorting on mutable pairs", IntegrationTest) {
     // This is not in SortingSuite because of the local cluster setup.
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
@@ -166,7 +167,7 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
     results(3) should be ((100, 100))
   }
 
-  test("cogroup using mutable pairs") {
+  test("cogroup using mutable pairs", IntegrationTest) {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
     def p[T1, T2](_1: T1, _2: T2) = MutablePair(_1, _2)
@@ -193,7 +194,7 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
     assert(results(3)(1).contains("3"))
   }
 
-  test("subtract mutable pairs") {
+  test("subtract mutable pairs", IntegrationTest) {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
     def p[T1, T2](_1: T1, _2: T2) = MutablePair(_1, _2)
@@ -207,7 +208,7 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
     results(0) should be ((3, 33))
   }
 
-  test("sort with Java non serializable class - Kryo") {
+  test("sort with Java non serializable class - Kryo", IntegrationTest) {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     val myConf = conf.clone().set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
     sc = new SparkContext("local-cluster[2,1,512]", "test", myConf)
@@ -221,7 +222,7 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
     assert(c.collect() === Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
   }
 
-  test("sort with Java non serializable class - Java") {
+  test("sort with Java non serializable class - Java", IntegrationTest) {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
     val a = sc.parallelize(1 to 10, 2)
@@ -237,7 +238,7 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
     assert(thrown.getMessage.toLowerCase.contains("serializable"))
   }
 
-  test("shuffle with different compression settings (SPARK-3426)") {
+  test("shuffle with different compression settings (SPARK-3426)", IntegrationTest) {
     for (
       shuffleSpillCompress <- Set(true, false);
       shuffleCompress <- Set(true, false)
@@ -261,7 +262,7 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
     }
   }
 
-  test("[SPARK-4085] rerun map stage if reduce stage cannot find its local shuffle file") {
+  test("[SPARK-4085] rerun map stage if reduce stage cannot find its local shuffle file", IntegrationTest) {
     val myConf = conf.clone().set("spark.test.noStageRetry", "false")
     sc = new SparkContext("local", "test", myConf)
     val rdd = sc.parallelize(1 to 10, 2).map((_, 1)).reduceByKey(_ + _)

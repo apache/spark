@@ -24,10 +24,11 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkEnv, TestUtils}
 import org.apache.spark.serializer.KryoDistributedTest._
+import org.apache.sparktest.TestTags.IntegrationTest
 
 class KryoSerializerDistributedSuite extends FunSuite {
 
-  test("kryo objects are serialised consistently in different processes") {
+  test("kryo objects are serialised consistently in different processes", IntegrationTest) {
     val conf = new SparkConf(false)
       .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
       .set("spark.kryo.registrator", classOf[AppJarRegistrator].getName)

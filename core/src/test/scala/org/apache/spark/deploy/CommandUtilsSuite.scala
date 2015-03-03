@@ -19,12 +19,13 @@ package org.apache.spark.deploy
 
 import org.apache.spark.deploy.worker.CommandUtils
 import org.apache.spark.util.Utils
+import org.apache.sparktest.TestTags.IntegrationTest
 
 import org.scalatest.{FunSuite, Matchers}
 
 class CommandUtilsSuite extends FunSuite with Matchers {
 
-  test("set libraryPath correctly") {
+  test("set libraryPath correctly", IntegrationTest) {
     val appId = "12345-worker321-9876"
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
     val cmd = new Command("mainClass", Seq(), Map(), Seq(), Seq("libraryPathToB"), Seq())

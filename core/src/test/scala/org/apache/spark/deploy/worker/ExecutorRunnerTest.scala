@@ -25,9 +25,10 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.deploy.{ApplicationDescription, Command, ExecutorState}
 import org.apache.spark.SparkConf
+import org.apache.sparktest.TestTags.IntegrationTest
 
 class ExecutorRunnerTest extends FunSuite {
-  test("command includes appId") {
+  test("command includes appId", IntegrationTest) {
     val appId = "12345-worker321-9876"
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
     val appDesc = new ApplicationDescription("app name", Some(8), 500,

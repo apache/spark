@@ -31,6 +31,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark._
 import org.apache.spark.deploy.SparkSubmit._
 import org.apache.spark.util.{ResetSystemProperties, Utils}
+import org.apache.sparktest.TestTags.IntegrationTest
 
 // Note: this suite mixes in ResetSystemProperties because SparkSubmit.main() sets a bunch
 // of properties that neeed to be cleared after tests.
@@ -310,7 +311,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
     mainClass should be ("org.apache.spark.deploy.yarn.Client")
   }
 
-  test("launch simple application with spark-submit") {
+  test("launch simple application with spark-submit", IntegrationTest) {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val args = Seq(
       "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
@@ -320,7 +321,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
     runSparkSubmit(args)
   }
 
-  test("includes jars passed in through --jars") {
+  test("includes jars passed in through --jars", IntegrationTest) {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val jar1 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassA"))
     val jar2 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassB"))

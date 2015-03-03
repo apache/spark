@@ -36,6 +36,7 @@ import org.apache.spark.storage.BroadcastBlockId
 import org.apache.spark.storage.RDDBlockId
 import org.apache.spark.storage.ShuffleBlockId
 import org.apache.spark.storage.ShuffleIndexBlockId
+import org.apache.sparktest.TestTags.IntegrationTest
 
 /**
  * An abstract base class for context cleaner tests, which sets up a context with a config
@@ -235,7 +236,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     }, askSlaves = true).isEmpty)
   }
 
-  test("automatically cleanup RDD + shuffle + broadcast in distributed mode") {
+  test("automatically cleanup RDD + shuffle + broadcast in distributed mode", IntegrationTest) {
     sc.stop()
 
     val conf2 = new SparkConf()
@@ -312,7 +313,7 @@ class SortShuffleContextCleanerSuite extends ContextCleanerSuiteBase(classOf[Sor
     postGCTester.assertCleanup()
   }
 
-  test("automatically cleanup RDD + shuffle + broadcast in distributed mode") {
+  test("automatically cleanup RDD + shuffle + broadcast in distributed mode", IntegrationTest) {
     sc.stop()
 
     val conf2 = new SparkConf()
