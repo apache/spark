@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.util._
@@ -30,14 +29,13 @@ import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.types.StructType
 
 /**
- * :: DeveloperApi ::
  * Analyzes the given table in the current database to generate statistics, which will be
  * used in query optimizations.
  *
  * Right now, it only supports Hive tables and it only updates the size of a Hive table
  * in the Hive metastore.
  */
-@DeveloperApi
+private[hive]
 case class AnalyzeTable(tableName: String) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext) = {
@@ -47,10 +45,9 @@ case class AnalyzeTable(tableName: String) extends RunnableCommand {
 }
 
 /**
- * :: DeveloperApi ::
  * Drops a table from the metastore and removes it if it is cached.
  */
-@DeveloperApi
+private[hive]
 case class DropTable(
     tableName: String,
     ifExists: Boolean) extends RunnableCommand {
@@ -75,10 +72,7 @@ case class DropTable(
   }
 }
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
+private[hive]
 case class AddJar(path: String) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext) = {
@@ -89,10 +83,7 @@ case class AddJar(path: String) extends RunnableCommand {
   }
 }
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
+private[hive]
 case class AddFile(path: String) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext) = {
@@ -103,10 +94,7 @@ case class AddFile(path: String) extends RunnableCommand {
   }
 }
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
+private[hive]
 case class CreateMetastoreDataSource(
     tableName: String,
     userSpecifiedSchema: Option[StructType],
@@ -146,10 +134,7 @@ case class CreateMetastoreDataSource(
   }
 }
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
+private[hive]
 case class CreateMetastoreDataSourceAsSelect(
     tableName: String,
     provider: String,

@@ -777,7 +777,8 @@ private[hive] case class MetastoreRelation
   val columnOrdinals = AttributeMap(attributes.zipWithIndex)
 }
 
-object HiveMetastoreTypes {
+
+private[hive] object HiveMetastoreTypes {
   protected val ddlParser = new DDLParser(HiveQl.parseSql(_))
 
   def toDataType(metastoreType: String): DataType = synchronized {

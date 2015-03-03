@@ -16,19 +16,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.parquet
+package org.apache.spark.sql.hive
 
 import java.io.File
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.{SQLConf, QueryTest}
+import org.apache.spark.sql.{QueryTest, SQLConf, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.execution.{ExecutedCommand, PhysicalRDD}
-import org.apache.spark.sql.hive.execution.{InsertIntoHiveTable, HiveTableScan}
+import org.apache.spark.sql.hive.execution.HiveTableScan
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.sources.{InsertIntoDataSource, LogicalRelation}
+import org.apache.spark.sql.parquet.{ParquetRelation2, ParquetTableScan}
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.types._
 
@@ -393,7 +394,7 @@ class ParquetDataSourceOffMetastoreSuite extends ParquetMetastoreSuiteBase {
 
     val df = sql("INSERT INTO TABLE test_insert_parquet SELECT a FROM jt")
     df.queryExecution.executedPlan match {
-      case insert: InsertIntoHiveTable => // OK
+      case insert: execution.InsertIntoHiveTable => // OK
       case o => fail(s"The SparkPlan should be ${classOf[InsertIntoHiveTable].getCanonicalName}. " +
         s"However, found ${o.toString}.")
     }
@@ -422,7 +423,7 @@ class ParquetDataSourceOffMetastoreSuite extends ParquetMetastoreSuiteBase {
 
     val df = sql("INSERT INTO TABLE test_insert_parquet SELECT a FROM jt_array")
     df.queryExecution.executedPlan match {
-      case insert: InsertIntoHiveTable => // OK
+      case insert: execution.InsertIntoHiveTable => // OK
       case o => fail(s"The SparkPlan should be ${classOf[InsertIntoHiveTable].getCanonicalName}. " +
         s"However, found ${o.toString}.")
     }
