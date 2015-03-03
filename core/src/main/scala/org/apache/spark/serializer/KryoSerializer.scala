@@ -209,10 +209,10 @@ private[serializer] object KryoSerializer {
     classOf[RoaringArray.Element],
     classOf[Array[RoaringArray.Element]],
     classOf[ArrayContainer],
-    classOf[Array[Short]],
     classOf[CompactBuffer[_]],
     classOf[BlockManagerId],
     classOf[Array[Byte]],
+    classOf[Array[Short]],
     classOf[BoundedPriorityQueue[_]],
     classOf[SparkConf]
   )
