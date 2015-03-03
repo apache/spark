@@ -23,10 +23,10 @@ import scala.reflect.ClassTag
 import com.esotericsoftware.kryo.Kryo
 import org.scalatest.FunSuite
 
+import org.apache.spark.{SharedSparkContext, SparkConf}
 import org.apache.spark.scheduler.HighlyCompressedMapStatus
 import org.apache.spark.serializer.KryoTest._
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.{SharedSparkContext, SparkConf}
 
 
 class KryoSerializerSuite extends FunSuite with SharedSparkContext {
