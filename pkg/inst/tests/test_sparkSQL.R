@@ -234,7 +234,7 @@ test_that("select with column", {
 test_that("selectExpr() on a DataFrame", {
   df <- jsonFile(sqlCtx, jsonPath)
   selected <- selectExpr(df, "age * 2")
-  expect_true(names(selected) == "age * 2")
+  expect_true(names(selected) == "(age * 2)")
   expect_equal(collect(selected), collect(select(df, df$age * 2L)))
   
   selected2 <- selectExpr(df, "name as newName", "abs(age) as age")
