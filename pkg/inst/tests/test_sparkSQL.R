@@ -194,7 +194,7 @@ test_that("schema(), dtypes(), columns(), names() return the correct values/form
   df <- jsonFile(sqlCtx, jsonPath)
   testSchema <- schema(df)
   expect_true(length(testSchema$fields()) == 2)
-  expect_true(testSchema$fields()[[1]]$dataType.toString() == "IntegerType")
+  expect_true(testSchema$fields()[[1]]$dataType.toString() == "LongType")
   expect_true(testSchema$fields()[[2]]$dataType.simpleString() == "string")
   expect_true(testSchema$fields()[[1]]$name() == "age")
 
