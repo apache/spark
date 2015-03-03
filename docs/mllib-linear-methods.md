@@ -784,9 +784,19 @@ regularization parameter (`regParam`) along with various parameters associated w
 gradient descent (`stepSize`, `numIterations`, `miniBatchFraction`).  For each of them, we support
 all three possible regularizations (none, L1 or L2).
 
+For Logistic Regression, [L-BFGS](api/scala/index.html#org.apache.spark.mllib.optimization.LBFGS)
+version is implemented under [LogisticRegressionWithLBFGS]
+(api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS), and this
+version supports both binary and multinomial Logistic Regression while SGD version only supports
+binary Logistic Regression. However, L-BFGS version doesn't support L1 regularization but SGD one
+supports L1 regularization. When L1 regularization is not required, L-BFGS version is strongly
+recommended since it converges faster and more accurately compared to SGD by approximating the
+inverse Hessian matrix using quasi-Newton method.
+
 Algorithms are all implemented in Scala:
 
 * [SVMWithSGD](api/scala/index.html#org.apache.spark.mllib.classification.SVMWithSGD)
+* [LogisticRegressionWithLBFGS](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS)
 * [LogisticRegressionWithSGD](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithSGD)
 * [LinearRegressionWithSGD](api/scala/index.html#org.apache.spark.mllib.regression.LinearRegressionWithSGD)
 * [RidgeRegressionWithSGD](api/scala/index.html#org.apache.spark.mllib.regression.RidgeRegressionWithSGD)
