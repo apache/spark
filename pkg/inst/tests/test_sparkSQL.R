@@ -33,12 +33,11 @@ test_that("jsonRDD() on a RDD with json string", {
   expect_true(count(df) == 6)
 })
 
-test_that("test cache and persist and unpersist", {
+test_that("test cache, uncache and clearCache", {
   df <- jsonFile(sqlCtx, jsonPath)
-  cache(sqlCtx, df)
-  persist(sqlCtx, df)
-  unpersist(sqlCtx, df)
-  expect_true(count(df) == 3)
+  registerTempTable(df, "temp")
+  cacheTable(sqlCtx, "temp")
+  uncacheTable(sqlCtx, "temp")
   clearCache(sqlCtx)
 })
 

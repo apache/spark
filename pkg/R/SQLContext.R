@@ -148,11 +148,6 @@ tableNames <- function(sqlCtx, databaseName=NULL) {
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlCtx <- sparkRSQL.init(sc)
-#' path <- "path/to/file.json"
-#' df <- jsonFile(sqlCtx, path)
-#' registerTempTable(df, "table")
 #' cacheTable(sqlCtx, "table")
 #' }
 
@@ -170,9 +165,6 @@ cacheTable <- function(sqlCtx, tableName) {
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlCtx <- sparkRSQL.init(sc)
-#' df <- table(sqlCtx, "table")
 #' uncacheTable(sqlCtx, "table")
 #' }
 
