@@ -23,8 +23,6 @@ column <- function(jc) {
   new("Column", jc)
 }
 
-# TODO: change Dsl to functions once update spark-sql
-# A helper function to create a column from name
 col <- function(x) {
   column(callJStatic("org.apache.spark.sql.functions", "col", x))
 }
