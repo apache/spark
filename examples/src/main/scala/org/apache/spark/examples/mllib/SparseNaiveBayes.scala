@@ -89,6 +89,10 @@ object SparseNaiveBayes {
 
     println(s"numTraining = $numTraining, numTest = $numTest.")
 
+    // Example which compiles.  (Don't actually include!)
+    val nb = new NaiveBayes()
+    nb.setModelType(NaiveBayes.Bernoulli)
+
     val model = new NaiveBayes().setLambda(params.lambda).run(training)
 
     val prediction = model.predict(test.map(_.features))
