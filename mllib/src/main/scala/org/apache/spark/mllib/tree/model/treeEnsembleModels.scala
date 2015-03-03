@@ -281,19 +281,22 @@ private[tree] object TreeEnsembleModel extends Logging {
       // SPARK-6120: We do a hacky check here so users understand why save() is failing
       //             when they run the ML guide example.
       // TODO: Fix this issue for real.
-      val driverMemory = sc.getConf.getOption("spark.driver.memory")
-        .orElse(Option(System.getenv("SPARK_DRIVER_MEMORY")))
-        .map(Utils.memoryStringToMb)
-        .getOrElse(512)
+      val memThreshold = 768
       if (sc.isLocal) {
-        if (driverMemory <= 768) {
+        val driverMemory = sc.getConf.getOption("spark.driver.memory")
+          .orElse(Option(System.getenv("SPARK_DRIVER_MEMORY")))
+          .map(Utils.memoryStringToMb)
+          .getOrElse(512)
+        if (driverMemory <= memThreshold) {
           logWarning(s"$className.save() was called, but it may fail because of too little" +
-            " driver memory.  If failure occurs, try setting driver-memory 768m (or larger).")
+            s" driver memory (${driverMemory}m)." +
+            s"  If failure occurs, try setting driver-memory ${memThreshold}m (or larger).")
         }
       } else {
-        if (sc.executorMemory <= 768) {
+        if (sc.executorMemory <= memThreshold) {
           logWarning(s"$className.save() was called, but it may fail because of too little" +
-            " executor memory.  If failure occurs try setting executor-memory 768m (or larger).")
+            s" executor memory (${sc.executorMemory}m)." +
+            s"  If failure occurs try setting executor-memory ${memThreshold}m (or larger).")
         }
       }
 
