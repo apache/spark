@@ -45,7 +45,8 @@ case class InsertIntoHiveTable(
     table: MetastoreRelation,
     partition: Map[String, Option[String]],
     child: SparkPlan,
-    overwrite: Boolean) extends UnaryNode with HiveInspectors {
+    overwrite: Boolean,
+    ifNotExists: Boolean) extends UnaryNode with HiveInspectors {
 
   @transient val sc: HiveContext = sqlContext.asInstanceOf[HiveContext]
   @transient lazy val outputClass = newSerializer(table.tableDesc).getSerializedClass
@@ -207,36 +208,42 @@ case class InsertIntoHiveTable(
       val inheritTableSpecs = true
       // TODO: Correctly set isSkewedStoreAsSubdir.
       val isSkewedStoreAsSubdir = false
-      if (numDynamicPartitions > 0) {
-        catalog.synchronized {
-          catalog.client.loadDynamicPartitions(
-            outputPath,
-            qualifiedTableName,
-            orderedPartitionSpec,
-            overwrite,
-            numDynamicPartitions,
-            holdDDLTime,
-            isSkewedStoreAsSubdir)
+      val oldPart = catalog.synchronized {
+        catalog.client.getPartition(
+          catalog.client.getTable(qualifiedTableName), partitionSpec, false)
+      }
+      if (oldPart == null || !ifNotExists) {
+        if (numDynamicPartitions > 0) {
+          catalog.synchronized {
+            catalog.client.loadDynamicPartitions(
+              outputPath,
+              qualifiedTableName,
+              orderedPartitionSpec,
+              overwrite,
+              numDynamicPartitions,
+              holdDDLTime,
+              isSkewedStoreAsSubdir)
+          }
+        } else {
+          catalog.synchronized {
+            catalog.client.loadPartition(
+              outputPath,
+              qualifiedTableName,
+              orderedPartitionSpec,
+              overwrite,
+              holdDDLTime,
+              inheritTableSpecs,
+              isSkewedStoreAsSubdir)
+          }
         }
       } else {
         catalog.synchronized {
-          catalog.client.loadPartition(
+          catalog.client.loadTable(
             outputPath,
             qualifiedTableName,
-            orderedPartitionSpec,
             overwrite,
-            holdDDLTime,
-            inheritTableSpecs,
-            isSkewedStoreAsSubdir)
+            holdDDLTime)
         }
-      }
-    } else {
-      catalog.synchronized {
-        catalog.client.loadTable(
-          outputPath,
-          qualifiedTableName,
-          overwrite,
-          holdDDLTime)
       }
     }
 

@@ -193,7 +193,7 @@ class Analyzer(
       }
 
       realPlan transform {
-        case i@InsertIntoTable(u: UnresolvedRelation, _, _, _) =>
+        case i@InsertIntoTable(u: UnresolvedRelation, _, _, _, _) =>
           i.copy(
             table = EliminateSubQueries(getTable(u, cteRelations)))
         case u: UnresolvedRelation =>
