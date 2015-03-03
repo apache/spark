@@ -607,6 +607,37 @@ setMethod("select", signature(x = "DataFrame", col = "Column"),
             dataFrame(sdf)
           })
 
+
+#' SelectExpr
+#'
+#' Select from a DataFrame using a set of SQL expressions.
+#'
+#' @param x A DataFrame to be sorted.
+#' @param expr A string containing a SQL expression
+#' @param ... Additional expressions
+#' @return A DataFrame
+#' @rdname selectExpr
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' selectExpr(df, "col1", "(col2 * 5) as newCol")
+#' }
+setGeneric("selectExpr", function(x, expr, ...) { standardGeneric("selectExpr") })
+
+#' @rdname selectExpr
+#' @export
+setMethod("selectExpr",
+          signature(x = "DataFrame", expr = "character"),
+          function(x, expr, ...) {
+            exprList <- list(expr, ...)
+            sdf <- callJMethod(x@sdf, "selectExpr", listToSeq(exprList))
+            dataFrame(sdf)
+          })
+
 #' SortDF 
 #'
 #' Sort a DataFrame by the specified column(s).
