@@ -17,6 +17,9 @@
 
 package org.apache.spark.streaming.api.java
 
+import java.util.{List => JList}
+import scala.collection.JavaConversions._
+import com.google.common.base.Optional
 import org.apache.spark.streaming.{Duration, Time}
 import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.api.java.JavaRDD
@@ -81,6 +84,22 @@ class JavaDStream[T](val dstream: DStream[T])(implicit val classTag: ClassTag[T]
    */
   def window(windowDuration: Duration, slideDuration: Duration): JavaDStream[T] =
     dstream.window(windowDuration, slideDuration)
+
+  /**
+   * Return a new DStream in which each RDD contains all the elements in seen in a
+   * sliding window of time over this DStream.
+   * @param windowDuration width of the window; must be a multiple of this DStream's
+   *                       batching interval
+   * @param slideDuration  sliding interval of the window (i.e., the interval after which
+   *                       the new DStream will generate RDDs); must be a multiple of this
+   *                       DStream's batching interval
+   * @param initialWindow  initial window values to prepend starting with the oldest entry
+   */
+  def window(windowDuration: Duration, slideDuration: Duration, initialWindow: Optional[JList[JavaRDD[T]]]): JavaDStream[T] =
+    dstream.window(windowDuration, slideDuration, initialWindow.isPresent match {
+      case true => Some(initialWindow.get.toList.map(rdd => rdd.rdd))
+      case _ => None
+    })
 
   /**
    * Return a new DStream by unifying data of another DStream with this DStream.

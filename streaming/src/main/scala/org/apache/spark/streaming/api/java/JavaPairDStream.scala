@@ -101,6 +101,21 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
     dstream.window(windowDuration, slideDuration)
 
   /**
+   * Return a new DStream which is computed based on windowed batches of this DStream.
+   * @param windowDuration duration (i.e., width) of the window;
+   *                   must be a multiple of this DStream's interval
+   * @param slideDuration  sliding interval of the window (i.e., the interval after which
+   *                   the new DStream will generate RDDs); must be a multiple of this
+   *                   DStream's interval
+   * @param initialWindow  initial window values to prepend starting with the oldest entry
+   */
+  def window(windowDuration: Duration, slideDuration: Duration, initialWindow: Optional[JList[JavaPairRDD[K, V]]]): JavaPairDStream[K, V] =
+    dstream.window(windowDuration, slideDuration, initialWindow.isPresent match {
+      case true => Some(initialWindow.get.toList.map(rdd => rdd.rdd))
+      case _ => None
+    })
+
+  /**
    * Return a new DStream by unifying data of another DStream with this DStream.
    * @param that Another DStream having the same interval (i.e., slideDuration) as this DStream.
    */

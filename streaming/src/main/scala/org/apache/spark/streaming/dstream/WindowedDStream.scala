@@ -28,7 +28,8 @@ private[streaming]
 class WindowedDStream[T: ClassTag](
     parent: DStream[T],
     _windowDuration: Duration,
-    _slideDuration: Duration)
+    _slideDuration: Duration,
+    _initialWindow: Option[Seq[RDD[T]]])
   extends DStream[T](parent.ssc) {
 
   if (!_windowDuration.isMultipleOf(parent.slideDuration)) {
@@ -43,6 +44,8 @@ class WindowedDStream[T: ClassTag](
 
   // Persist parent level by default, as those RDDs are going to be obviously reused.
   parent.persist(StorageLevel.MEMORY_ONLY_SER)
+
+  val windowBatchCount: Int = (_windowDuration / parent.slideDuration).toInt
 
   def windowDuration: Duration =  _windowDuration
 
@@ -62,7 +65,21 @@ class WindowedDStream[T: ClassTag](
 
   override def compute(validTime: Time): Option[RDD[T]] = {
     val currentWindow = new Interval(validTime - windowDuration + parent.slideDuration, validTime)
-    val rddsInWindow = parent.slice(currentWindow)
+    val parentRddsInWindow = parent.slice(currentWindow)
+    val rddsInWindow = _initialWindow match {
+      case None => {
+        parentRddsInWindow
+      }
+      case Some (initialWindowRDD) => {
+        if(parentRddsInWindow.length - windowBatchCount == 0) {
+          // Window is full
+          parentRddsInWindow
+        } else {
+          // Fill the remainder of the window with initial data
+          parentRddsInWindow ++ initialWindowRDD.drop(initialWindowRDD.length + parentRddsInWindow.length - windowBatchCount)
+        }
+      }
+    }
     val windowRDD = if (rddsInWindow.flatMap(_.partitioner).distinct.length == 1) {
       logDebug("Using partition aware union for windowing at " + validTime)
       new PartitionerAwareUnionRDD(ssc.sc, rddsInWindow)

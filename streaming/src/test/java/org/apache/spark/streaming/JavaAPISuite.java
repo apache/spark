@@ -160,6 +160,38 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
   @SuppressWarnings("unchecked")
   @Test
+  public void testWindowWithInitialData()
+  {
+
+    List<JavaRDD<Integer>> initialData = Arrays.asList(
+        ssc.sparkContext().parallelize(Arrays.asList(-3, -2, -1)),
+        ssc.sparkContext().parallelize(Arrays.asList(1, 2, 3)),
+        ssc.sparkContext().parallelize(Arrays.asList(4, 5, 6)));
+
+    List<List<Integer>> inputData = Arrays.asList(
+        Arrays.asList(7, 8, 9),
+        Arrays.asList(10, 11, 12),
+        Arrays.asList(13, 14, 15),
+        Arrays.asList(16, 17, 18),
+        Arrays.asList(19, 20, 21),
+        Arrays.asList(22, 23, 24));
+
+    List<List<Integer>> expected = Arrays.asList(
+        Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12),
+        Arrays.asList(7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18),
+        Arrays.asList(13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24),
+        Arrays.asList(19, 20, 21, 22, 23, 24));
+
+    JavaDStream<Integer> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
+    JavaDStream<Integer> windowed = stream.window(new Duration(4000), new Duration(2000), Optional.of(initialData));
+    JavaTestUtils.attachTestOutputStream(windowed);
+    List<List<Integer>> result = JavaTestUtils.runStreams(ssc, 8, 4);
+
+    assertOrderInvariantEquals(expected, result);
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
   public void testFilter() {
     List<List<String>> inputData = Arrays.asList(
         Arrays.asList("giants", "dodgers"),

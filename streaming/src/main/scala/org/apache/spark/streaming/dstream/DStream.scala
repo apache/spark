@@ -649,7 +649,21 @@ abstract class DStream[T: ClassTag] (
    *                       DStream's batching interval
    */
   def window(windowDuration: Duration, slideDuration: Duration): DStream[T] = {
-    new WindowedDStream(this, windowDuration, slideDuration)
+    new WindowedDStream(this, windowDuration, slideDuration, None)
+  }
+
+  /**
+   * Return a new DStream in which each RDD contains all the elements in seen in a
+   * sliding window of time over this DStream.
+   * @param windowDuration width of the window; must be a multiple of this DStream's
+   *                       batching interval
+   * @param slideDuration  sliding interval of the window (i.e., the interval after which
+   *                       the new DStream will generate RDDs); must be a multiple of this
+   *                       DStream's batching interval
+   * @param initialWindow  initial window values to prepend starting with the oldest entry
+   */
+  def window(windowDuration: Duration, slideDuration: Duration, initialWindow: Option[Seq[RDD[T]]]): DStream[T] = {
+    new WindowedDStream(this, windowDuration, slideDuration, initialWindow)
   }
 
   /**
