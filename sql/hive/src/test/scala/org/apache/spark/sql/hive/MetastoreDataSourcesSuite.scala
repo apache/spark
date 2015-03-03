@@ -34,6 +34,8 @@ import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.parquet.ParquetRelation2
 import org.apache.spark.sql.sources.LogicalRelation
 
+import scala.collection.mutable.ArrayBuffer
+
 /**
  * Tests for persisting tables created though the data sources API into the metastore.
  */
@@ -581,7 +583,8 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
         case LogicalRelation(p: ParquetRelation2) => // OK
         case _ =>
           fail(
-            s"test_parquet_ctas should be converted to ${classOf[ParquetRelation2].getCanonicalName}")
+            "test_parquet_ctas should be converted to " +
+            s"${classOf[ParquetRelation2].getCanonicalName}")
       }
 
       // Clenup and reset confs.
@@ -590,6 +593,72 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       setConf("spark.sql.hive.convertMetastoreParquet", originalConvertMetastore)
       setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalUseDataSource)
     }
+  }
+
+  test("Pre insert nullability check (ArrayType)") {
+    val df1 =
+      createDataFrame(Tuple1(Seq(Int.box(1), null.asInstanceOf[Integer])) :: Nil).toDF("a")
+    val expectedSchema1 =
+      StructType(
+        StructField("a", ArrayType(IntegerType, containsNull = true), nullable = true) :: Nil)
+    assert(df1.schema === expectedSchema1)
+    df1.saveAsTable("arrayInParquet", "parquet", SaveMode.Overwrite)
+
+    val df2 =
+      createDataFrame(Tuple1(Seq(2, 3)) :: Nil).toDF("a")
+    val expectedSchema2 =
+      StructType(
+        StructField("a", ArrayType(IntegerType, containsNull = false), nullable = true) :: Nil)
+    assert(df2.schema === expectedSchema2)
+    df2.insertInto("arrayInParquet", overwrite = false)
+    createDataFrame(Tuple1(Seq(4, 5)) :: Nil).toDF("a")
+      .saveAsTable("arrayInParquet", SaveMode.Append) // This one internally calls df2.insertInto.
+    createDataFrame(Tuple1(Seq(Int.box(6), null.asInstanceOf[Integer])) :: Nil).toDF("a")
+      .saveAsTable("arrayInParquet", "parquet", SaveMode.Append)
+    refreshTable("arrayInParquet")
+
+    checkAnswer(
+      sql("SELECT a FROM arrayInParquet"),
+      Row(ArrayBuffer(1, null)) ::
+        Row(ArrayBuffer(2, 3)) ::
+        Row(ArrayBuffer(4, 5)) ::
+        Row(ArrayBuffer(6, null)) :: Nil)
+
+    sql("DROP TABLE arrayInParquet")
+  }
+
+  test("Pre insert nullability check (MapType)") {
+    val df1 =
+      createDataFrame(Tuple1(Map(1 -> null.asInstanceOf[Integer])) :: Nil).toDF("a")
+    val mapType1 = MapType(IntegerType, IntegerType, valueContainsNull = true)
+    val expectedSchema1 =
+      StructType(
+        StructField("a", mapType1, nullable = true) :: Nil)
+    assert(df1.schema === expectedSchema1)
+    df1.saveAsTable("mapInParquet", "parquet", SaveMode.Overwrite)
+
+    val df2 =
+      createDataFrame(Tuple1(Map(2 -> 3)) :: Nil).toDF("a")
+    val mapType2 = MapType(IntegerType, IntegerType, valueContainsNull = false)
+    val expectedSchema2 =
+      StructType(
+        StructField("a", mapType2, nullable = true) :: Nil)
+    assert(df2.schema === expectedSchema2)
+    df2.insertInto("mapInParquet", overwrite = false)
+    createDataFrame(Tuple1(Map(4 -> 5)) :: Nil).toDF("a")
+      .saveAsTable("mapInParquet", SaveMode.Append) // This one internally calls df2.insertInto.
+    createDataFrame(Tuple1(Map(6 -> null.asInstanceOf[Integer])) :: Nil).toDF("a")
+      .saveAsTable("mapInParquet", "parquet", SaveMode.Append)
+    refreshTable("mapInParquet")
+
+    checkAnswer(
+      sql("SELECT a FROM mapInParquet"),
+      Row(Map(1 -> null)) ::
+        Row(Map(2 -> 3)) ::
+        Row(Map(4 -> 5)) ::
+        Row(Map(6 -> null)) :: Nil)
+
+    sql("DROP TABLE mapInParquet")
   }
 
   test("SPARK-6024 wide schema support") {

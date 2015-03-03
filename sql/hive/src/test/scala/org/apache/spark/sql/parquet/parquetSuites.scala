@@ -30,6 +30,7 @@ import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.sources.{InsertIntoDataSource, LogicalRelation}
 import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.types._
 
 // The data where the partitioning key exists only in the directory structure.
 case class ParquetData(intField: Int, stringField: String)
@@ -521,6 +522,34 @@ class ParquetDataSourceOnSourceSuite extends ParquetSourceSuiteBase {
   override def afterAll(): Unit = {
     super.afterAll()
     setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
+  }
+
+  test("values in arrays and maps stored in parquet are always nullable") {
+    val df = createDataFrame(Tuple2(Map(2 -> 3), Seq(4, 5, 6)) :: Nil).toDF("m", "a")
+    val mapType1 = MapType(IntegerType, IntegerType, valueContainsNull = false)
+    val arrayType1 = ArrayType(IntegerType, containsNull = false)
+    val expectedSchema1 =
+      StructType(
+        StructField("m", mapType1, nullable = true) ::
+        StructField("a", arrayType1, nullable = true) :: Nil)
+    assert(df.schema === expectedSchema1)
+
+    df.saveAsTable("alwaysNullable", "parquet")
+
+    val mapType2 = MapType(IntegerType, IntegerType, valueContainsNull = true)
+    val arrayType2 = ArrayType(IntegerType, containsNull = true)
+    val expectedSchema2 =
+      StructType(
+        StructField("m", mapType2, nullable = true) ::
+          StructField("a", arrayType2, nullable = true) :: Nil)
+
+    assert(table("alwaysNullable").schema === expectedSchema2)
+
+    checkAnswer(
+      sql("SELECT m, a FROM alwaysNullable"),
+      Row(Map(2 -> 3), Seq(4, 5, 6)))
+
+    sql("DROP TABLE alwaysNullable")
   }
 }
 
