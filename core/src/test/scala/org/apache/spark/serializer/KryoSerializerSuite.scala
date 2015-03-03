@@ -248,10 +248,19 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
   test("registration of HighlyCompressedMapStatus") {
     val conf = new SparkConf(false)
     conf.set("spark.kryo.registrationRequired", "true")
-    val hcmo = HighlyCompressedMapStatus(BlockManagerId("exec-1", "host", 1234), Array(0l,2l,5l))
-    val ser = new KryoSerializer(conf)
-    val serInstance = ser.newInstance()
-    serInstance.serialize(hcmo)
+
+    // these cases require knowing the internals of RoaringBitmap a little.  Blocks span 2^16
+    // values, and they use a bitmap (dense) if they have more than 4096 values, and an
+    // array (sparse) if they use less.  So we just create two cases, one sparse and one dense.
+    // and we use a roaring bitmap for the empty blocks, so we trigger the dense case w/ mostly
+    // empty blocks
+
+    val ser = new KryoSerializer(conf).newInstance()
+    val denseBlockSizes = new Array[Long](5000)
+    val sparseBlockSizes = Array[Long](0l, 1l, 0l, 2l)
+    Seq(denseBlockSizes, sparseBlockSizes).foreach{ blockSizes =>
+      ser.serialize(HighlyCompressedMapStatus(BlockManagerId("exec-1", "host", 1234), blockSizes))
+    }
   }
 }
 
