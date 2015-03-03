@@ -154,6 +154,7 @@ case class CreateMetastoreDataSourceAsSelect(
         options
       }
 
+    var existingSchema = None: Option[StructType]
     if (sqlContext.catalog.tableExists(Seq(tableName))) {
       // Check if we need to throw an exception or just return.
       mode match {
@@ -173,22 +174,7 @@ case class CreateMetastoreDataSourceAsSelect(
           val createdRelation = LogicalRelation(resolved.relation)
           EliminateSubQueries(sqlContext.table(tableName).logicalPlan) match {
             case l @ LogicalRelation(i: InsertableRelation) =>
-              if (l.schema != createdRelation.schema) {
-                val errorDescription =
-                  s"Cannot append to table $tableName because the schema of this " +
-                    s"DataFrame does not match the schema of table $tableName."
-                val errorMessage =
-                  s"""
-                |$errorDescription
-                |== Schemas ==
-                |${sideBySide(
-                s"== Expected Schema ==" +:
-                  l.schema.treeString.split("\\\n"),
-                s"== Actual Schema ==" +:
-                  createdRelation.schema.treeString.split("\\\n")).mkString("\n")}
-              """.stripMargin
-                throw new AnalysisException(errorMessage)
-              } else if (i != createdRelation.relation) {
+              if (i != createdRelation.relation) {
                 val errorDescription =
                   s"Cannot append to table $tableName because the resolved relation does not " +
                   s"match the existing relation of $tableName. " +
@@ -206,6 +192,7 @@ case class CreateMetastoreDataSourceAsSelect(
               """.stripMargin
                 throw new AnalysisException(errorMessage)
               }
+              existingSchema = Some(l.schema)
             case o =>
               throw new AnalysisException(s"Saving data in ${o.toString} is not supported.")
           }
@@ -219,15 +206,23 @@ case class CreateMetastoreDataSourceAsSelect(
       createMetastoreTable = true
     }
 
-    val df = DataFrame(hiveContext, query)
+    val data = DataFrame(hiveContext, query)
+    val df = existingSchema match {
+      // If we are inserting into an existing table, just use the existing schema.
+      case Some(schema) => sqlContext.createDataFrame(data.queryExecution.toRdd, schema)
+      case None => data
+    }
 
     // Create the relation based on the data of df.
-    ResolvedDataSource(sqlContext, provider, mode, optionsWithPath, df)
+    val resolved = ResolvedDataSource(sqlContext, provider, mode, optionsWithPath, df)
 
     if (createMetastoreTable) {
+      // We will use the schema of resolved.relation as the schema of the table (instead of
+      // the schema of df). It is important since the nullability may be changed by the relation
+      // provider (for example, see org.apache.spark.sql.parquet.DefaultSource).
       hiveContext.catalog.createDataSourceTable(
         tableName,
-        Some(df.schema),
+        Some(resolved.relation.schema),
         provider,
         optionsWithPath,
         isExternal)

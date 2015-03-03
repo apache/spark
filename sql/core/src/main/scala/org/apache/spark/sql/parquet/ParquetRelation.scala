@@ -23,6 +23,7 @@ import java.util.logging.Level
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.fs.permission.FsAction
+import org.apache.spark.sql.types.{StructType, DataType}
 import parquet.hadoop.{ParquetOutputCommitter, ParquetOutputFormat}
 import parquet.hadoop.metadata.CompressionCodecName
 import parquet.schema.MessageType
@@ -172,9 +173,13 @@ private[sql] object ParquetRelation {
       sqlContext.conf.parquetCompressionCodec.toUpperCase, CompressionCodecName.UNCOMPRESSED)
       .name())
     ParquetRelation.enableLogForwarding()
-    ParquetTypesConverter.writeMetaData(attributes, path, conf)
+    // This is a hack. We always set nullable/containsNull/valueContainsNull to true
+    // for the schema of a parquet data.
+    val schema = StructType.fromAttributes(attributes).asNullable
+    val newAttributes = schema.toAttributes
+    ParquetTypesConverter.writeMetaData(newAttributes, path, conf)
     new ParquetRelation(path.toString, Some(conf), sqlContext) {
-      override val output = attributes
+      override val output = newAttributes
     }
   }
 
