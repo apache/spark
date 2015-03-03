@@ -1229,10 +1229,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /** Shut down the SparkContext. */
   def stop() {
     SparkContext.SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
-      postApplicationEnd()
-      ui.foreach(_.stop())
       if (!stopped) {
         stopped = true
+        postApplicationEnd()
+        ui.foreach(_.stop())
         env.metricsSystem.report()
         metadataCleaner.cancel()
         env.actorSystem.stop(heartbeatReceiver)
