@@ -662,7 +662,9 @@ abstract class DStream[T: ClassTag] (
    *                       DStream's batching interval
    * @param initialWindow  initial window values to prepend starting with the oldest entry
    */
-  def window(windowDuration: Duration, slideDuration: Duration, initialWindow: Option[Seq[RDD[T]]]): DStream[T] = {
+  def window(windowDuration: Duration,
+             slideDuration: Duration,
+             initialWindow: Option[Seq[RDD[T]]]): DStream[T] = {
     new WindowedDStream(this, windowDuration, slideDuration, initialWindow)
   }
 

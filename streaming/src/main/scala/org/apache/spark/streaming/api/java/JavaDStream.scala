@@ -95,7 +95,9 @@ class JavaDStream[T](val dstream: DStream[T])(implicit val classTag: ClassTag[T]
    *                       DStream's batching interval
    * @param initialWindow  initial window values to prepend starting with the oldest entry
    */
-  def window(windowDuration: Duration, slideDuration: Duration, initialWindow: Optional[JList[JavaRDD[T]]]): JavaDStream[T] =
+  def window(windowDuration: Duration,
+             slideDuration: Duration,
+             initialWindow: Optional[JList[JavaRDD[T]]]): JavaDStream[T] =
     dstream.window(windowDuration, slideDuration, initialWindow.isPresent match {
       case true => Some(initialWindow.get.toList.map(rdd => rdd.rdd))
       case _ => None

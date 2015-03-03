@@ -109,7 +109,9 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    *                   DStream's interval
    * @param initialWindow  initial window values to prepend starting with the oldest entry
    */
-  def window(windowDuration: Duration, slideDuration: Duration, initialWindow: Optional[JList[JavaPairRDD[K, V]]]): JavaPairDStream[K, V] =
+  def window(windowDuration: Duration,
+             slideDuration: Duration,
+             initialWindow: Optional[JList[JavaPairRDD[K, V]]]): JavaPairDStream[K, V] =
     dstream.window(windowDuration, slideDuration, initialWindow.isPresent match {
       case true => Some(initialWindow.get.toList.map(rdd => rdd.rdd))
       case _ => None

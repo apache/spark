@@ -76,7 +76,8 @@ class WindowedDStream[T: ClassTag](
           parentRddsInWindow
         } else {
           // Fill the remainder of the window with initial data
-          parentRddsInWindow ++ initialWindowRDD.drop(initialWindowRDD.length + parentRddsInWindow.length - windowBatchCount)
+          parentRddsInWindow ++ initialWindowRDD.drop(
+            initialWindowRDD.length + parentRddsInWindow.length - windowBatchCount)
         }
       }
     }
