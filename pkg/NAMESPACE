@@ -127,7 +127,6 @@ exportMethods("asc",
 exportClasses("GroupedData")
 exportMethods("count", "agg", "avg")
 
-
 export("jsonFile",
        "parquetFile",
        "sql",
