@@ -217,7 +217,7 @@ class SQLQuerySuite extends QueryTest {
       sql("""
             |with q1 as (select * from src where key= '5'),
             |q2 as (select * from src s2 where key = '4')
-            |select * from q1 union all select * from q2"""),
+            |select * from q1 union all select * from q2""".stripMargin),
       sql(
         """
           |select * from (select * from src where key = '5') q2
