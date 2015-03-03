@@ -170,13 +170,11 @@ class Analyzer(catalog: Catalog,
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
    */
   object ResolveRelations extends Rule[LogicalPlan] {
-    def getTable(u: UnresolvedRelation, extraRelations: Option[Seq[Subquery]]) = {
+    def getTable(u: UnresolvedRelation, cteRelations: Map[String, LogicalPlan]) = {
       try {
-        extraRelations.fold(catalog.lookupRelation(u.tableIdentifier, u.alias)) { cteRelations =>
-          cteRelations.find(_.alias == u.tableIdentifier.head)
+          cteRelations.get(u.tableIdentifier.head)
             .map(relation => u.alias.map(Subquery(_, relation)).getOrElse(relation))
             .getOrElse(catalog.lookupRelation(u.tableIdentifier, u.alias))
-        }
       } catch {
         case _: NoSuchTableException =>
           u.failAnalysis(s"no such table ${u.tableIdentifier}")
@@ -184,20 +182,18 @@ class Analyzer(catalog: Catalog,
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = {
-      // specially handle CTE
-      val (planRet, cteRelations) = plan match {
-        case With(child, subQueries) =>
-          (child, Some(subQueries))
-        case _ => (plan, None)
-      }
+      val cteRelations = new scala.collection.mutable.HashMap[String, LogicalPlan]()
 
-      planRet transform {
+      plan transform {
+        case With(child, relations) =>
+          cteRelations ++= relations
+          child
         case i @ InsertIntoTable(u: UnresolvedRelation, _, _, _) =>
-          i.copy(
-            table = EliminateSubQueries(getTable(u, cteRelations)))
-        case u: UnresolvedRelation =>
-          getTable(u, cteRelations)
-      }
+        i.copy(
+          table = EliminateSubQueries(getTable(u, cteRelations.toMap)))
+      case u: UnresolvedRelation =>
+        getTable(u, cteRelations.toMap)
+    }
     }
   }
 

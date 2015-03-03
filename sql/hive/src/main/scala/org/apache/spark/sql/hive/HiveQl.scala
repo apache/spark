@@ -575,9 +575,9 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             insertClauses.last match {
               case Token("TOK_CTE", cteClauses) =>
                 val subQueries = cteClauses.map(node => {
-                  val relation = nodeToRelation(node)
-                  relation.asInstanceOf[Subquery]
-                }).toSeq
+                  val relation = nodeToRelation(node).asInstanceOf[Subquery]
+                  (relation.alias, relation)
+                }).toMap
                 (Some(args.head), insertClauses.init, Some(subQueries))
 
               case _ => (Some(args.head), insertClauses, None)
