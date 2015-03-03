@@ -93,7 +93,7 @@ private[spark] class Master(
     securityMgr)
   val masterSource = new MasterSource(this)
 
-  val webUi = new MasterWebUI(this, webUiPort)
+  val webUi = new MasterWebUI(this, host, webUiPort)
 
   val masterPublicAddress = {
     val envVar = System.getenv("SPARK_PUBLIC_DNS")

@@ -23,45 +23,57 @@ import org.apache.spark.util.{IntParam, MemoryParam, Utils}
 import org.apache.spark.SparkConf
 
 /**
- * Command-line parser for the worker.
+ * Arguments parser for the worker.
  */
 private[spark] class WorkerArguments(args: Array[String], conf: SparkConf) {
-  var host = Utils.localHostName()
-  var port = 0
-  var webUiPort = 8081
-  var cores = inferDefaultCores()
-  var memory = inferDefaultMemory()
+  var host: String = null
+  var port: Int = -1
+  var webUiPort: Int = -1
+  var cores: Int = -1
+  var memory: Int = -1
   var masters: Array[String] = null
   var workDir: String = null
   var propertiesFile: String = null
-
-  // Check for settings in environment variables
-  if (System.getenv("SPARK_WORKER_PORT") != null) {
-    port = System.getenv("SPARK_WORKER_PORT").toInt
-  }
-  if (System.getenv("SPARK_WORKER_CORES") != null) {
-    cores = System.getenv("SPARK_WORKER_CORES").toInt
-  }
-  if (conf.getenv("SPARK_WORKER_MEMORY") != null) {
-    memory = Utils.memoryStringToMb(conf.getenv("SPARK_WORKER_MEMORY"))
-  }
-  if (System.getenv("SPARK_WORKER_WEBUI_PORT") != null) {
-    webUiPort = System.getenv("SPARK_WORKER_WEBUI_PORT").toInt
-  }
-  if (System.getenv("SPARK_WORKER_DIR") != null) {
-    workDir = System.getenv("SPARK_WORKER_DIR")
-  }
 
   parse(args.toList)
 
   // This mutates the SparkConf, so all accesses to it must be made after this line
   propertiesFile = Utils.loadDefaultSparkProperties(conf, propertiesFile)
 
-  if (conf.contains("spark.worker.ui.port")) {
-    webUiPort = conf.get("spark.worker.ui.port").toInt
-  }
-
+  loadEnvironmentArguments()
   checkWorkerMemory()
+
+  /**
+   * Load arguments from environment variables, Spark properties etc.
+   */
+  private def loadEnvironmentArguments(): Unit = {
+    host = Option(host)
+      .orElse(conf.getOption("spark.worker.host"))
+      .getOrElse(Utils.localHostName())
+    if (port < 0) {
+      port = conf.getOption("spark.worker.port")
+        .orElse(Option(conf.getenv("SPARK_WORKER_PORT")))
+        .getOrElse("0")
+        .toInt
+    }
+    if (webUiPort < 0) {
+      webUiPort = conf.getOption("spark.worker.ui.port")
+        .orElse(Option(conf.getenv("SPARK_WORKER_WEBUI_PORT")))
+        .getOrElse("8081")
+        .toInt
+    }
+    if (cores < 0) {
+      cores = Option(conf.getenv("SPARK_WORKER_CORES")).map(_.toInt)
+        .getOrElse(inferDefaultCores())
+    }
+    if (memory < 0) {
+      memory = Option(conf.getenv("SPARK_WORKER_MEMORY")).map(Utils.memoryStringToMb(_))
+      .getOrElse(inferDefaultMemory())
+    }
+    workDir = Option(workDir)
+      .orElse(Option(conf.getenv("SPARK_WORKER_DIR")))
+      .getOrElse(null)
+  }
 
   def parse(args: List[String]): Unit = args match {
     case ("--ip" | "-i") :: value :: tail =>
@@ -122,20 +134,21 @@ private[spark] class WorkerArguments(args: Array[String], conf: SparkConf) {
    */
   def printUsageAndExit(exitCode: Int) {
     System.err.println(
-      "Usage: Worker [options] <master>\n" +
-      "\n" +
-      "Master must be a URL of the form spark://hostname:port\n" +
-      "\n" +
-      "Options:\n" +
-      "  -c CORES, --cores CORES  Number of cores to use\n" +
-      "  -m MEM, --memory MEM     Amount of memory to use (e.g. 1000M, 2G)\n" +
-      "  -d DIR, --work-dir DIR   Directory to run apps in (default: SPARK_HOME/work)\n" +
-      "  -i HOST, --ip IP         Hostname to listen on (deprecated, please use --host or -h)\n" +
-      "  -h HOST, --host HOST     Hostname to listen on\n" +
-      "  -p PORT, --port PORT     Port to listen on (default: random)\n" +
-      "  --webui-port PORT        Port for web UI (default: 8081)\n" +
-      "  --properties-file FILE   Path to a custom Spark properties file.\n" +
-      "                           Default is conf/spark-defaults.conf.")
+      """Usage: Worker [options] <master>
+        |
+        |Master must be a URL of the form spark://hostname:port
+        |
+        |Options:
+        |  -c CORES, --cores CORES  Number of cores to use.
+        |  -m MEM, --memory MEM     Amount of memory to use (e.g. 1000M, 2G).
+        |  -d DIR, --work-dir DIR   Directory to run apps in (default: SPARK_HOME/work).
+        |  -i HOST, --ip IP         Hostname to listen on (deprecated, please use --host or -h).
+        |  -h HOST, --host HOST     Hostname to listen on.
+        |  -p PORT, --port PORT     Port to listen on (default: random).
+        |  --webui-port PORT        Port for web UI (default: 8081).
+        |  --properties-file FILE   Path to a custom Spark properties file.
+        |                           Default is conf/spark-defaults.conf.
+      """.stripMargin)
     System.exit(exitCode)
   }
 

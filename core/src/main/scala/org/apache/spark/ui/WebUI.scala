@@ -37,6 +37,7 @@ import org.apache.spark.util.Utils
  */
 private[spark] abstract class WebUI(
     securityManager: SecurityManager,
+    hostName: String,
     port: Int,
     conf: SparkConf,
     basePath: String = "",
@@ -47,7 +48,9 @@ private[spark] abstract class WebUI(
   protected val handlers = ArrayBuffer[ServletContextHandler]()
   protected var serverInfo: Option[ServerInfo] = None
   protected val localHostName = Utils.localHostName()
-  protected val publicHostName = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(localHostName)
+  protected val publicHostName = Option(hostName)
+    .orElse(sys.env.get("SPARK_PUBLIC_DNS"))
+    .getOrElse(localHostName)
   private val className = Utils.getFormattedClassName(this)
 
   def getBasePath: String = basePath
@@ -99,7 +102,7 @@ private[spark] abstract class WebUI(
   def bind() {
     assert(!serverInfo.isDefined, "Attempted to bind %s more than once!".format(className))
     try {
-      serverInfo = Some(startJettyServer("0.0.0.0", port, handlers, conf, name))
+      serverInfo = Some(startJettyServer(publicHostName, port, handlers, conf, name))
       logInfo("Started %s at http://%s:%d".format(className, publicHostName, boundPort))
     } catch {
       case e: Exception =>

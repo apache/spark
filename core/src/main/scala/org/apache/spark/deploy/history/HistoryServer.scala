@@ -44,8 +44,9 @@ class HistoryServer(
     conf: SparkConf,
     provider: ApplicationHistoryProvider,
     securityManager: SecurityManager,
+    hostName: String,
     port: Int)
-  extends WebUI(securityManager, port, conf) with Logging {
+  extends WebUI(securityManager, hostName, port, conf) with Logging {
 
   // How many applications to retain
   private val retainedApplications = conf.getInt("spark.history.retainedApplications", 50)
@@ -189,9 +190,10 @@ object HistoryServer extends Logging {
       .newInstance(conf)
       .asInstanceOf[ApplicationHistoryProvider]
 
+    val hostName = conf.get("spark.history.ui.host")
     val port = conf.getInt("spark.history.ui.port", 18080)
 
-    val server = new HistoryServer(conf, provider, securityManager, port)
+    val server = new HistoryServer(conf, provider, securityManager, hostName, port)
     server.bind()
 
     Runtime.getRuntime().addShutdownHook(new Thread("HistoryServerStopper") {

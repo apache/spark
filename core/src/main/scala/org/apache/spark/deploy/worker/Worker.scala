@@ -165,7 +165,7 @@ private[spark] class Worker(
     createWorkDir()
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
     shuffleService.startIfEnabled()
-    webUi = new WorkerWebUI(this, workDir, webUiPort)
+    webUi = new WorkerWebUI(this, workDir, host, webUiPort)
     webUi.bind()
     registerWithMaster()
 

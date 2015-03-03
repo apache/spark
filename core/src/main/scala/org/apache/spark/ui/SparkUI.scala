@@ -25,6 +25,7 @@ import org.apache.spark.ui.env.{EnvironmentListener, EnvironmentTab}
 import org.apache.spark.ui.exec.{ExecutorsListener, ExecutorsTab}
 import org.apache.spark.ui.jobs.{JobsTab, JobProgressListener, StagesTab}
 import org.apache.spark.ui.storage.{StorageListener, StorageTab}
+import org.apache.spark.util.Utils
 
 /**
  * Top level user interface for a Spark application.
@@ -40,7 +41,13 @@ private[spark] class SparkUI private (
     val storageListener: StorageListener,
     var appName: String,
     val basePath: String)
-  extends WebUI(securityManager, SparkUI.getUIPort(conf), conf, basePath, "SparkUI")
+  extends WebUI(
+    securityManager,
+    SparkUI.getUIHost(conf),
+    SparkUI.getUIPort(conf),
+    conf,
+    basePath,
+    "SparkUI")
   with Logging {
 
   val killEnabled = sc.map(_.conf.getBoolean("spark.ui.killEnabled", true)).getOrElse(false)
@@ -91,6 +98,10 @@ private[spark] abstract class SparkUITab(parent: SparkUI, prefix: String)
 private[spark] object SparkUI {
   val DEFAULT_PORT = 4040
   val STATIC_RESOURCE_DIR = "org/apache/spark/ui/static"
+
+  def getUIHost(conf: SparkConf): String = {
+    conf.get("spark.ui.host", Utils.localHostName())
+  }
 
   def getUIPort(conf: SparkConf): Int = {
     conf.getInt("spark.ui.port", SparkUI.DEFAULT_PORT)

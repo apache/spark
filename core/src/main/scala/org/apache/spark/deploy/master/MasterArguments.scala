@@ -21,32 +21,41 @@ import org.apache.spark.SparkConf
 import org.apache.spark.util.{IntParam, Utils}
 
 /**
- * Command-line parser for the master.
+ * Arguments parser for the master.
  */
 private[spark] class MasterArguments(args: Array[String], conf: SparkConf) {
-  var host = Utils.localHostName()
-  var port = 7077
-  var webUiPort = 8080
+  var host: String = null
+  var port: Int = -1
+  var webUiPort: Int = -1
   var propertiesFile: String = null
-
-  // Check for settings in environment variables
-  if (System.getenv("SPARK_MASTER_HOST") != null) {
-    host = System.getenv("SPARK_MASTER_HOST")
-  }
-  if (System.getenv("SPARK_MASTER_PORT") != null) {
-    port = System.getenv("SPARK_MASTER_PORT").toInt
-  }
-  if (System.getenv("SPARK_MASTER_WEBUI_PORT") != null) {
-    webUiPort = System.getenv("SPARK_MASTER_WEBUI_PORT").toInt
-  }
 
   parse(args.toList)
 
   // This mutates the SparkConf, so all accesses to it must be made after this line
   propertiesFile = Utils.loadDefaultSparkProperties(conf, propertiesFile)
 
-  if (conf.contains("spark.master.ui.port")) {
-    webUiPort = conf.get("spark.master.ui.port").toInt
+  loadEnvironmentArguments()
+
+  /**
+   * Load arguments from environment variables, Spark properties etc.
+   */
+  private def loadEnvironmentArguments(): Unit = {
+    host = Option(host)
+      .orElse(conf.getOption("spark.master.host"))
+      .orElse(Option(conf.getenv("SPARK_MASTER_HOST")))
+      .getOrElse(Utils.localHostName())
+    if (port < 0) {
+      port = conf.getOption("spark.master.port")
+        .orElse(Option(conf.getenv("SPARK_MASTER_PORT")))
+        .getOrElse("7077")
+        .toInt
+    }
+    if (webUiPort < 0) {
+      webUiPort = conf.getOption("spark.master.ui.port")
+        .orElse(Option(conf.getenv("SPARK_MASTER_WEBUI_PORT")))
+        .getOrElse("8080")
+        .toInt
+    }
   }
 
   def parse(args: List[String]): Unit = args match {
@@ -86,15 +95,16 @@ private[spark] class MasterArguments(args: Array[String], conf: SparkConf) {
    */
   def printUsageAndExit(exitCode: Int) {
     System.err.println(
-      "Usage: Master [options]\n" +
-      "\n" +
-      "Options:\n" +
-      "  -i HOST, --ip HOST     Hostname to listen on (deprecated, please use --host or -h) \n" +
-      "  -h HOST, --host HOST   Hostname to listen on\n" +
-      "  -p PORT, --port PORT   Port to listen on (default: 7077)\n" +
-      "  --webui-port PORT      Port for web UI (default: 8080)\n" +
-      "  --properties-file FILE Path to a custom Spark properties file.\n" +
-      "                         Default is conf/spark-defaults.conf.")
+      """Usage: Master [options]
+        |
+        |Options:
+        |  -i HOST, --ip HOST     Hostname to listen on (deprecated, please use --host or -h).
+        |  -h HOST, --host HOST   Hostname to listen on.
+        |  -p PORT, --port PORT   Port to listen on (default: 7077).
+        |  --webui-port PORT      Port for web UI (default: 8080).
+        |  --properties-file FILE Path to a custom Spark properties file.
+        |                         Default is conf/spark-defaults.conf.
+      """.stripMargin)
     System.exit(exitCode)
   }
 }
