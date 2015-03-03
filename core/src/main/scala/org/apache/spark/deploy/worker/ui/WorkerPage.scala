@@ -139,8 +139,8 @@ private[spark] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
       <td sorttable_customkey={driver.driverDesc.cores.toString}>
         {driver.driverDesc.cores.toString}
       </td>
-      <td sorttable_customkey={driver.driverDesc.mem.toString}>
-        {Utils.megabytesToString(driver.driverDesc.mem)}
+      <td sorttable_customkey={driver.driverDesc.memMB.toString}>
+        {Utils.megabytesToString(driver.driverDesc.memMB)}
       </td>
       <td>
         <a href={s"logPage?driverId=${driver.driverId}&logType=stdout"}>stdout</a>

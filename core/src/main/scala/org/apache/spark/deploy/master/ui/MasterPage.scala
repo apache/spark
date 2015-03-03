@@ -259,8 +259,8 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <td sorttable_customkey={driver.desc.cores.toString}>
         {driver.desc.cores}
       </td>
-      <td sorttable_customkey={driver.desc.mem.toString}>
-        {Utils.megabytesToString(driver.desc.mem.toLong)}
+      <td sorttable_customkey={driver.desc.memMB.toString}>
+        {Utils.megabytesToString(driver.desc.memMB.toLong)}
       </td>
       <td>{driver.desc.command.arguments(2)}</td>
     </tr>

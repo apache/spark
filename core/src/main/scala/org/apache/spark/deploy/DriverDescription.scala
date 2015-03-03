@@ -19,7 +19,7 @@ package org.apache.spark.deploy
 
 private[spark] class DriverDescription(
     val jarUrl: String,
-    val mem: Int,
+    val memMB: Int,
     val cores: Int,
     val supervise: Boolean,
     val command: Command)
@@ -27,11 +27,11 @@ private[spark] class DriverDescription(
 
   def copy(
       jarUrl: String = jarUrl,
-      mem: Int = mem,
+      memMB: Int = memMB,
       cores: Int = cores,
       supervise: Boolean = supervise,
       command: Command = command): DriverDescription =
-    new DriverDescription(jarUrl, mem, cores, supervise, command)
+    new DriverDescription(jarUrl, memMB, cores, supervise, command)
 
   override def toString: String = s"DriverDescription (${command.mainClass})"
 }

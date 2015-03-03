@@ -204,6 +204,28 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     getOption(key).map(_.toBoolean).getOrElse(defaultValue)
   }
 
+  // Limit of bytes for total size of results (default is 1GB)
+  def getMaxResultSize: Long = {
+    getMemory("spark.driver.maxResultSize", "1g", outputScale = 'b')
+  }
+
+  private def getMemory(
+      key: String,
+      defaultValue: String,
+      defaultInputScale: Char = 'b',
+      outputScale: Char = 'm'): Long = {
+    Utils.parseMemoryString(getOption(key).getOrElse(defaultValue), defaultInputScale, outputScale)
+  }
+
+  def getMB(
+      key: String,
+      defaultValue: Int): Int = {
+    getOption(key)
+        .map(Utils.memoryStringToMb(_, defaultInputScale = 'm'))
+        .map(_.toInt)
+        .getOrElse(defaultValue)
+  }
+
   /** Get all executor environment variables set on this SparkConf */
   def getExecutorEnv: Seq[(String, String)] = {
     val prefix = "spark.executorEnv."

@@ -39,7 +39,7 @@ private[spark] class ClientArguments(args: Array[String]) {
   var jarUrl: String = ""
   var mainClass: String = ""
   var supervise: Boolean = DEFAULT_SUPERVISE
-  var memory: Int = DEFAULT_MEMORY
+  var memoryMB: Int = DEFAULT_MEMORY_MB
   var cores: Int = DEFAULT_CORES
   private var _driverOptions = ListBuffer[String]()
   def driverOptions = _driverOptions.toSeq
@@ -55,7 +55,7 @@ private[spark] class ClientArguments(args: Array[String]) {
       parse(tail)
 
     case ("--memory" | "-m") :: MemoryParam(value) :: tail =>
-      memory = value
+      memoryMB = value
       parse(tail)
 
     case ("--supervise" | "-s") :: tail =>
@@ -106,7 +106,7 @@ private[spark] class ClientArguments(args: Array[String]) {
       |
       |Options:
       |   -c CORES, --cores CORES        Number of cores to request (default: $DEFAULT_CORES)
-      |   -m MEMORY, --memory MEMORY     Megabytes of memory to request (default: $DEFAULT_MEMORY)
+      |   -m MEMORY, --memory MEMORY     Megabytes of memory to request (default: $DEFAULT_MEMORY_MB)
       |   -s, --supervise                Whether to restart the driver on failure
       |                                  (default: $DEFAULT_SUPERVISE)
       |   -v, --verbose                  Print more debugging output
@@ -118,7 +118,7 @@ private[spark] class ClientArguments(args: Array[String]) {
 
 object ClientArguments {
   private[spark] val DEFAULT_CORES = 1
-  private[spark] val DEFAULT_MEMORY = 512 // MB
+  private[spark] val DEFAULT_MEMORY_MB = 512
   private[spark] val DEFAULT_SUPERVISE = false
 
   def isValidJarUrl(s: String): Boolean = {

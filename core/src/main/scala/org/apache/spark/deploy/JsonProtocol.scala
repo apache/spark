@@ -71,7 +71,7 @@ private[spark] object JsonProtocol {
     ("starttime" -> obj.startTime.toString) ~
     ("state" -> obj.state.toString) ~
     ("cores" -> obj.desc.cores) ~
-    ("memory" -> obj.desc.mem)
+    ("memory" -> obj.desc.memMB)
   }
 
   def writeMasterState(obj: MasterStateResponse) = {

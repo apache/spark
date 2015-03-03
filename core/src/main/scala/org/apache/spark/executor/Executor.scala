@@ -111,7 +111,7 @@ private[spark] class Executor(
   private val akkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
 
   // Limit of bytes for total size of results (default is 1GB)
-  private val maxResultSize = Utils.getMaxResultSize(conf)
+  private val maxResultSize = conf.getMaxResultSize
 
   // Maintains the list of running tasks.
   private val runningTasks = new ConcurrentHashMap[Long, TaskRunner]

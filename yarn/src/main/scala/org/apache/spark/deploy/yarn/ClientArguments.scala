@@ -33,17 +33,17 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var pyFiles: String = null
   var primaryPyFile: String = null
   var userArgs: ArrayBuffer[String] = new ArrayBuffer[String]()
-  var executorMemory = 1024 // MB
+  var executorMemoryMB = 1024
   var executorCores = 1
   var numExecutors = DEFAULT_NUMBER_EXECUTORS
   var amQueue = sparkConf.get("spark.yarn.queue", "default")
-  var amMemory: Int = 512 // MB
+  var amMemoryMB: Int = 512
   var amCores: Int = 1
   var appName: String = "Spark"
   var priority = 0
   def isClusterMode: Boolean = userClass != null
 
-  private var driverMemory: Int = 512 // MB
+  private var driverMemoryMB: Int = 512
   private var driverCores: Int = 1
   private val driverMemOverheadKey = "spark.yarn.driver.memoryOverhead"
   private val amMemKey = "spark.yarn.am.memory"
@@ -58,12 +58,12 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   validateArgs()
 
   // Additional memory to allocate to containers
-  val amMemoryOverheadConf = if (isClusterMode) driverMemOverheadKey else amMemOverheadKey
-  val amMemoryOverhead = sparkConf.getInt(amMemoryOverheadConf,
-    math.max((MEMORY_OVERHEAD_FACTOR * amMemory).toInt, MEMORY_OVERHEAD_MIN))
+  private val amMemoryOverheadConf = if (isClusterMode) driverMemOverheadKey else amMemOverheadKey
+  val amMemoryOverheadMB = sparkConf.getMB(amMemoryOverheadConf,
+    math.max((MEMORY_OVERHEAD_FACTOR * amMemoryMB).toInt, MEMORY_OVERHEAD_MIN_MB))
 
-  val executorMemoryOverhead = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
-    math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, MEMORY_OVERHEAD_MIN))
+  val executorMemoryOverheadMB = sparkConf.getMB("spark.yarn.executor.memoryOverhead",
+    math.max((MEMORY_OVERHEAD_FACTOR * executorMemoryMB).toInt, MEMORY_OVERHEAD_MIN_MB))
 
   /** Load any default arguments provided through environment variables and Spark properties. */
   private def loadEnvironmentArgs(): Unit = {
@@ -116,7 +116,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
           println(s"$key is set but does not apply in cluster mode.")
         }
       }
-      amMemory = driverMemory
+      amMemoryMB = driverMemoryMB
       amCores = driverCores
     } else {
       for (key <- Seq(driverMemOverheadKey, driverCoresKey)) {
@@ -126,7 +126,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
       }
       sparkConf.getOption(amMemKey)
         .map(Utils.memoryStringToMb)
-        .foreach { mem => amMemory = mem }
+        .foreach { mem => amMemoryMB = mem }
       sparkConf.getOption(amCoresKey)
         .map(_.toInt)
         .foreach { cores => amCores = cores }
@@ -165,7 +165,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
           if (args(0) == "--master-memory") {
             println("--master-memory is deprecated. Use --driver-memory instead.")
           }
-          driverMemory = value
+          driverMemoryMB = value
           args = tail
 
         case ("--driver-cores") :: IntParam(value) :: tail =>
@@ -188,7 +188,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
           if (args(0) == "--worker-memory") {
             println("--worker-memory is deprecated. Use --executor-memory instead.")
           }
-          executorMemory = value
+          executorMemoryMB = value
           args = tail
 
         case ("--worker-cores" | "--executor-cores") :: IntParam(value) :: tail =>

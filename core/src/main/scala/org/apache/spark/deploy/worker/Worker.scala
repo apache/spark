@@ -435,7 +435,7 @@ private[spark] class Worker(
       driver.start()
 
       coresUsed += driverDesc.cores
-      memoryUsed += driverDesc.mem
+      memoryUsed += driverDesc.memMB
     }
 
     case KillDriver(driverId) => {
@@ -464,7 +464,7 @@ private[spark] class Worker(
       master ! DriverStateChanged(driverId, state, exception)
       val driver = drivers.remove(driverId).get
       finishedDrivers(driverId) = driver
-      memoryUsed -= driver.driverDesc.mem
+      memoryUsed -= driver.driverDesc.memMB
       coresUsed -= driver.driverDesc.cores
     }
 

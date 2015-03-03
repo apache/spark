@@ -78,7 +78,7 @@ private[spark] class DriverRunner(
           }
 
           // TODO: If we add ability to submit multiple jars they should also be added here
-          val builder = CommandUtils.buildProcessBuilder(driverDesc.command, driverDesc.mem,
+          val builder = CommandUtils.buildProcessBuilder(driverDesc.command, driverDesc.memMB,
             sparkHome.getAbsolutePath, substituteVariables)
           launchDriver(builder, driverDir, driverDesc.supervise)
         }
