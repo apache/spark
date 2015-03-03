@@ -152,10 +152,10 @@ YARN_CONF_DIR=/root/ephemeral-hdfs/conf/ ./sparkR examples/pi.R yarn-client
 
 ## Running on a cluster using sparkR-submit
 
-sparkR-submit is a script introduced to faciliate submission of SparkR jobs to a Spark supported cluster (eg. Standalone, Mesos, YARN).
+sparkR-submit is a script introduced to facilitate submission of SparkR jobs to a Spark supported cluster (eg. Standalone, Mesos, YARN).
 It supports the same commandline parameters as [spark-submit](http://spark.apache.org/docs/latest/submitting-applications.html). SPARK_HOME and JAVA_HOME must be defined.
 
-On YARN, YARN_HOME must be defined. Currently, SparkR only supports [yarn-client](http://spark.apache.org/docs/latest/running-on-yarn.html) mode.
+On YARN, YARN_HOME must be defined. Currently, SparkR only supports the [yarn-client](http://spark.apache.org/docs/latest/running-on-yarn.html) mode.
 
 sparkR-submit is installed with the SparkR package. By default, it can be found under the default Library (['library'](https://stat.ethz.ch/R-manual/R-devel/library/base/html/libPaths.html) subdirectory of R_HOME)
 
