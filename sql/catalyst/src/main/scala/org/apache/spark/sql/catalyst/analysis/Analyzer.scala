@@ -174,7 +174,7 @@ class Analyzer(catalog: Catalog,
       try {
         extraRelations.fold(catalog.lookupRelation(u.tableIdentifier, u.alias)) { cteRelations =>
           cteRelations.find(_.alias == u.tableIdentifier.head)
-            .map(relation => u.alias.map(Subquery(_, relation.child)).getOrElse(relation.child))
+            .map(relation => u.alias.map(Subquery(_, relation)).getOrElse(relation))
             .getOrElse(catalog.lookupRelation(u.tableIdentifier, u.alias))
         }
       } catch {
