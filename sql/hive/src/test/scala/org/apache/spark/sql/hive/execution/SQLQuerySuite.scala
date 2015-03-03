@@ -207,6 +207,26 @@ class SQLQuerySuite extends QueryTest {
     }
   }
 
+  test("CTE feature") {
+    checkAnswer(
+      sql("with q1 as (select key from src) select * from q1 where key = 5"),
+      sql("select * from (select key from src) q1 where key = 5").collect().toSeq
+    )
+
+    checkAnswer(
+      sql("""
+            |with q1 as (select * from src where key= '5'),
+            |q2 as (select * from src s2 where key = '4')
+            |select * from q1 union all select * from q2"""),
+      sql(
+        """
+          |select * from (select * from src where key = '5') q2
+          |union all
+          |select * from (select * from src where key = '4') q1
+        """.stripMargin).collect().toSeq
+    )
+  }
+
   test("command substitution") {
     sql("set tbl=src")
     checkAnswer(

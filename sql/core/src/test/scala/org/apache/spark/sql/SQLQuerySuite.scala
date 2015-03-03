@@ -17,16 +17,11 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.test.TestSQLContext
-import org.scalatest.BeforeAndAfterAll
-
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.types._
-
 import org.apache.spark.sql.TestData._
+import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.{udf => _, _}
+import org.apache.spark.sql.types._
+import org.scalatest.BeforeAndAfterAll
 
 
 class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
@@ -285,6 +280,20 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(
       sql("SELECT * FROM mapData LIMIT 1"),
       mapData.collect().take(1).map(Row.fromTuple).toSeq)
+  }
+
+  test("CTE feature") {
+    checkAnswer(
+      sql("with q1 as (select * from testData limit 10) select * from q1"),
+      testData.take(10).toSeq)
+
+    checkAnswer(
+      sql("""
+            |with q1 as (select * from testData where key= '5'),
+            |q2 as (select * from testData where key = '4')
+            |select * from q1 union all select * from q2""".stripMargin),
+      Row(5, "5") :: Row(4, "4") :: Nil)
+
   }
 
   test("date row") {
