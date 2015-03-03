@@ -841,6 +841,26 @@ setMethod("take",
             resList
           })
 
+#' First
+#'
+#' Return the first element of an RDD
+#'
+#' @rdname first
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:10)
+#' first(rdd)
+#' }
+setGeneric("first", function(x) { standardGeneric("first") })
+
+setMethod("first",
+          signature(x = "RDD"),
+          function(x) {
+            take(x, 1)[[1]]
+          })
+
 #' Removes the duplicates from RDD.
 #'
 #' This function returns a new RDD containing the distinct elements in the
