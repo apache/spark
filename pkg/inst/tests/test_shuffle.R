@@ -70,6 +70,77 @@ test_that("combineByKey for doubles", {
   expect_equal(sortKeyValueList(actual), sortKeyValueList(expected))
 })
 
+test_that("aggregateByKey", {
+  # test aggregateByKey for int keys
+  rdd <- parallelize(sc, list(list(1, 1), list(1, 2), list(2, 3), list(2, 4)))
+
+  zeroValue <- list(0, 0)
+  seqOp <- function(x, y) { list(x[[1]] + y, x[[2]] + 1) }
+  combOp <- function(x, y) { list(x[[1]] + y[[1]], x[[2]] + y[[2]]) }
+  aggregatedRDD <- aggregateByKey(rdd, zeroValue, seqOp, combOp, 2L)   
+  
+  actual <- collect(aggregatedRDD)
+  
+  expected <- list(list(1, list(3, 2)), list(2, list(7, 2)))
+  expect_equal(sortKeyValueList(actual), sortKeyValueList(expected))
+
+  # test aggregateByKey for string keys
+  rdd <- parallelize(sc, list(list("a", 1), list("a", 2), list("b", 3), list("b", 4)))
+  
+  zeroValue <- list(0, 0)
+  seqOp <- function(x, y) { list(x[[1]] + y, x[[2]] + 1) }
+  combOp <- function(x, y) { list(x[[1]] + y[[1]], x[[2]] + y[[2]]) }
+  aggregatedRDD <- aggregateByKey(rdd, zeroValue, seqOp, combOp, 2L)   
+
+  actual <- collect(aggregatedRDD)
+  
+  expected <- list(list("a", list(3, 2)), list("b", list(7, 2)))
+  expect_equal(sortKeyValueList(actual), sortKeyValueList(expected))
+})
+
+test_that("foldByKey", {  
+  # test foldByKey for int keys
+  folded <- foldByKey(intRdd, 0, "+", 2L)
+  
+  actual <- collect(folded)
+  
+  expected <- list(list(2L, 101), list(1L, 199))
+  expect_equal(sortKeyValueList(actual), sortKeyValueList(expected))
+
+  # test foldByKey for double keys
+  folded <- foldByKey(doubleRdd, 0, "+", 2L)
+  
+  actual <- collect(folded)
+
+  expected <- list(list(1.5, 199), list(2.5, 101))
+  expect_equal(sortKeyValueList(actual), sortKeyValueList(expected))
+
+  # test foldByKey for string keys
+  stringKeyPairs <- list(list("a", -1), list("b", 100), list("b", 1), list("a", 200))
+  
+  stringKeyRDD <- parallelize(sc, stringKeyPairs)
+  folded <- foldByKey(stringKeyRDD, 0, "+", 2L)
+  
+  actual <- collect(folded)
+  
+  expected <- list(list("b", 101), list("a", 199))
+  expect_equal(sortKeyValueList(actual), sortKeyValueList(expected))
+  
+  # test foldByKey for empty pair RDD
+  rdd <- parallelize(sc, list())
+  folded <- foldByKey(rdd, 0, "+", 2L)
+  actual <- collect(folded)
+  expected <- list()
+  expect_equal(actual, expected)
+
+  # test foldByKey for RDD with only 1 pair
+  rdd <- parallelize(sc,  list(list(1, 1)))
+  folded <- foldByKey(rdd, 0, "+", 2L)
+  actual <- collect(folded)
+  expected <- list(list(1, 1))
+  expect_equal(actual, expected)
+})
+
 test_that("partitionBy() partitions data correctly", {
   # Partition by magnitude
   partitionByMagnitude <- function(key) { if (key >= 3) 1 else 0 }

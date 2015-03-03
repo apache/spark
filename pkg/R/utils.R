@@ -315,3 +315,49 @@ convertEnvsToList <- function(keys, vals) {
            list(keys[[name]], vals[[name]])
          })
 }
+
+getStorageLevel <- function(newLevel = c("DISK_ONLY",
+                                         "DISK_ONLY_2",
+                                         "MEMORY_AND_DISK",
+                                         "MEMORY_AND_DISK_2",
+                                         "MEMORY_AND_DISK_SER",
+                                         "MEMORY_AND_DISK_SER_2",
+                                         "MEMORY_ONLY",
+                                         "MEMORY_ONLY_2",
+                                         "MEMORY_ONLY_SER",
+                                         "MEMORY_ONLY_SER_2",
+                                         "OFF_HEAP")) {
+  match.arg(newLevel)
+  storageLevel <- switch(newLevel,
+                         "DISK_ONLY" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "DISK_ONLY"),
+                         "DISK_ONLY_2" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "DISK_ONLY_2"),
+                         "MEMORY_AND_DISK" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK"),
+                         "MEMORY_AND_DISK_2" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK_2"),
+                         "MEMORY_AND_DISK_SER" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK_SER"),
+                         "MEMORY_AND_DISK_SER_2" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK_SER_2"),
+                         "MEMORY_ONLY" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY"),
+                         "MEMORY_ONLY_2" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY_2"),
+                         "MEMORY_ONLY_SER" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY_SER"),
+                         "MEMORY_ONLY_SER_2" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY_SER_2"),
+                         "OFF_HEAP" = SparkR:::callJStatic("org.apache.spark.storage.StorageLevel", "OFF_HEAP"))
+}
+
+# Utility function for functions where an argument needs to be integer but we want to allow
+# the user to type (for example) `5` instead of `5L` to avoid a confusing error message.
+numToInt <- function(num) {
+  if (as.integer(num) != num) {
+    warning(paste("Coercing", as.list(sys.call())[[2]], "to integer."))
+  }
+  as.integer(num)
+}
+
+# create a Seq in JVM
+toSeq <- function(...) {
+  callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "toSeq", list(...))
+}
+
+# create a Seq in JVM from a list
+listToSeq <- function(l) {
+  callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "toSeq", l)
+}
+
