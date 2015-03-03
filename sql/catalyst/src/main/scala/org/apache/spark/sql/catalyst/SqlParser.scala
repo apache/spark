@@ -166,7 +166,7 @@ class SqlParser extends AbstractSparkSQLParser {
 
   protected lazy val cte: Parser[LogicalPlan] =
     WITH ~> rep1sep(ident ~ ( AS ~ "(" ~> start <~ ")"), ",") ~ start ^^ {
-      case r ~ s => With(s, r.map({case n ~ s => Subquery(n, s)}).toSeq)
+      case r ~ s => With(s, r.map({case n ~ s => (n, Subquery(n, s))}).toMap)
     }
 
   protected lazy val projection: Parser[Expression] =
