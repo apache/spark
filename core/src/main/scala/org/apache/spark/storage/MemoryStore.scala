@@ -184,7 +184,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       val entry = entries.remove(blockId)
       if (entry != null) {
         currentMemory -= entry.size
-        logInfo(s"Block $blockId of size ${entry.size} dropped from memory (free $freeMemory)")
+        logDebug(s"Block $blockId of size ${entry.size} dropped from memory (free $freeMemory)")
         true
       } else {
         false

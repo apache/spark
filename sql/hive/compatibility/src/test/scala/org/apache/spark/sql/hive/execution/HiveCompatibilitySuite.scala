@@ -632,6 +632,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "mapreduce8",
     "merge1",
     "merge2",
+    "merge4",
     "mergejoins",
     "multiMapJoin1",
     "multiMapJoin2",

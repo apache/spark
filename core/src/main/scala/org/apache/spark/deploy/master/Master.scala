@@ -737,13 +737,13 @@ private[spark] class Master(
     val notFoundBasePath = HistoryServer.UI_PATH_PREFIX + "/not-found"
     try {
       val eventLogFile = app.desc.eventLogDir
-        .map { dir => EventLoggingListener.getLogPath(dir, app.id) }
+        .map { dir => EventLoggingListener.getLogPath(dir, app.id, app.desc.eventLogCodec) }
         .getOrElse {
           // Event logging is not enabled for this application
           app.desc.appUiUrl = notFoundBasePath
           return false
         }
-        
+
       val fs = Utils.getHadoopFileSystem(eventLogFile, hadoopConf)
 
       if (fs.exists(new Path(eventLogFile + EventLoggingListener.IN_PROGRESS))) {
@@ -756,12 +756,12 @@ private[spark] class Master(
         return false
       }
 
-      val (logInput, sparkVersion) = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
+      val logInput = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
       val replayBus = new ReplayListenerBus()
       val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
         appName + " (completed)", HistoryServer.UI_PATH_PREFIX + s"/${app.id}")
       try {
-        replayBus.replay(logInput, sparkVersion, eventLogFile)
+        replayBus.replay(logInput, eventLogFile)
       } finally {
         logInput.close()
       }
