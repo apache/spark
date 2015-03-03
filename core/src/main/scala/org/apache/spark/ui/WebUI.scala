@@ -17,17 +17,17 @@
 
 package org.apache.spark.ui
 
+import scala.collection.mutable.HashMap
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.mutable.ArrayBuffer
-import scala.xml.Node
-
+import org.apache.spark.ui.JettyUtils._
+import org.apache.spark.util.Utils
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.eclipse.jetty.servlet.ServletContextHandler
 import org.json4s.JsonAST.{JNothing, JValue}
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
-import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.util.Utils
+import scala.collection.mutable.ArrayBuffer
+import scala.xml.Node
 
 /**
  * The top level component of the UI hierarchy that contains the server.
@@ -45,6 +45,7 @@ private[spark] abstract class WebUI(
 
   protected val tabs = ArrayBuffer[WebUITab]()
   protected val handlers = ArrayBuffer[ServletContextHandler]()
+  protected val page2Handlers = new HashMap[WebUIPage, ArrayBuffer[ServletContextHandler]]
   protected var serverInfo: Option[ServerInfo] = None
   protected val localHostName = Utils.localHostName()
   protected val publicHostName = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(localHostName)
@@ -60,14 +61,34 @@ private[spark] abstract class WebUI(
     tab.pages.foreach(attachPage)
     tabs += tab
   }
+  
+  def detachTab(tab: WebUITab) {
+    tab.pages.foreach(detachPage)
+    tabs -= tab
+  }
+  
+  def detachPage(page: WebUIPage) {
+    page2Handlers.remove(page) match {
+      case Some(handlers) => handlers.foreach(detachHandler)
+      case None =>
+    }
+  }
+  
 
   /** Attach a page to this UI. */
   def attachPage(page: WebUIPage) {
     val pagePath = "/" + page.prefix
-    attachHandler(createServletHandler(pagePath,
-      (request: HttpServletRequest) => page.render(request), securityManager, basePath))
-    attachHandler(createServletHandler(pagePath.stripSuffix("/") + "/json",
-      (request: HttpServletRequest) => page.renderJson(request), securityManager, basePath))
+    val renderHandler = createServletHandler(pagePath,
+      (request: HttpServletRequest) => page.render(request), securityManager, basePath)
+    val renderJsonHandler = createServletHandler(pagePath.stripSuffix("/") + "/json",
+      (request: HttpServletRequest) => page.renderJson(request), securityManager, basePath)
+    attachHandler(renderHandler)
+    attachHandler(renderJsonHandler)
+    page2Handlers.getOrElseUpdate(page, ArrayBuffer[ServletContextHandler]())
+      .append(renderHandler)
+    page2Handlers.getOrElseUpdate(page, ArrayBuffer[ServletContextHandler]())
+      .append(renderJsonHandler)
+    
   }
 
   /** Attach a handler to this UI. */
