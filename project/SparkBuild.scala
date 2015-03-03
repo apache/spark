@@ -357,6 +357,21 @@ object Unidoc {
     names.map(s => "org.apache.spark." + s).mkString(":")
   }
 
+  private def ignoreUndocumentedPackages(packages: Seq[Seq[File]]): Seq[Seq[File]] = {
+    packages
+      .map(_.filterNot(_.getName.contains("$")))
+      .map(_.filterNot(_.getCanonicalPath.contains("akka")))
+      .map(_.filterNot(_.getCanonicalPath.contains("deploy")))
+      .map(_.filterNot(_.getCanonicalPath.contains("network")))
+      .map(_.filterNot(_.getCanonicalPath.contains("shuffle")))
+      .map(_.filterNot(_.getCanonicalPath.contains("executor")))
+      .map(_.filterNot(_.getCanonicalPath.contains("python")))
+      .map(_.filterNot(_.getCanonicalPath.contains("collection")))
+      .map(_.filterNot(_.getCanonicalPath.contains("sql/catalyst")))
+      .map(_.filterNot(_.getCanonicalPath.contains("sql/execution")))
+      .map(_.filterNot(_.getCanonicalPath.contains("sql/hive/test")))
+  }
+
   lazy val settings = scalaJavaUnidocSettings ++ Seq (
     publish := {},
 
@@ -368,22 +383,12 @@ object Unidoc {
     // Skip actual catalyst, but include the subproject.
     // Catalyst is not public API and contains quasiquotes which break scaladoc.
     unidocAllSources in (ScalaUnidoc, unidoc) := {
-      (unidocAllSources in (ScalaUnidoc, unidoc)).value
-        .map(_.filterNot(_.getCanonicalPath.contains("sql/catalyst")))
+      ignoreUndocumentedPackages((unidocAllSources in (ScalaUnidoc, unidoc)).value)
     },
 
     // Skip class names containing $ and some internal packages in Javadocs
     unidocAllSources in (JavaUnidoc, unidoc) := {
-      (unidocAllSources in (JavaUnidoc, unidoc)).value
-        .map(_.filterNot(_.getName.contains("$")))
-        .map(_.filterNot(_.getCanonicalPath.contains("akka")))
-        .map(_.filterNot(_.getCanonicalPath.contains("deploy")))
-        .map(_.filterNot(_.getCanonicalPath.contains("network")))
-        .map(_.filterNot(_.getCanonicalPath.contains("shuffle")))
-        .map(_.filterNot(_.getCanonicalPath.contains("executor")))
-        .map(_.filterNot(_.getCanonicalPath.contains("python")))
-        .map(_.filterNot(_.getCanonicalPath.contains("collection")))
-        .map(_.filterNot(_.getCanonicalPath.contains("sql/catalyst")))
+      ignoreUndocumentedPackages((unidocAllSources in (JavaUnidoc, unidoc)).value)
     },
 
     // Javadoc options: create a window title, and group key packages on index page

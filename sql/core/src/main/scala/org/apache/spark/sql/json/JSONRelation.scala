@@ -90,7 +90,10 @@ private[sql] case class JSONRelation(
     samplingRatio: Double,
     userSpecifiedSchema: Option[StructType])(
     @transient val sqlContext: SQLContext)
-  extends TableScan with InsertableRelation {
+  extends BaseRelation
+  with TableScan
+  with InsertableRelation {
+
   // TODO: Support partitioned JSON relation.
   private def baseRDD = sqlContext.sparkContext.textFile(path)
 
