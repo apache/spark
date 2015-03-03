@@ -4,7 +4,6 @@ import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.sql.{SQLContext, DataFrame, Row}
-import org.apache.spark.sql.types.{StructType}
 
 import edu.berkeley.cs.amplab.sparkr.SerDe._
 

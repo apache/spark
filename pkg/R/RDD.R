@@ -81,7 +81,6 @@ setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) 
     .Object@prev_jrdd <- prev@prev_jrdd # maintain the pipeline
     # Get the serialization mode of the parent RDD
     .Object@env$prev_serializedMode <- prev@env$prev_serializedMode
-    
   }
 
   .Object
@@ -134,12 +133,10 @@ setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
             computeFunc <- function(split, part) {
               rdd@func(split, part)
             }
-            serializedFuncArr <- serialize("computeFunc", connection = NULL,
-                                           ascii = TRUE)
+            serializedFuncArr <- serialize("computeFunc", connection = NULL)
 
             packageNamesArr <- serialize(.sparkREnv[[".packages"]],
-                                         connection = NULL,
-                                         ascii = TRUE)
+                                         connection = NULL)
 
             broadcastArr <- lapply(ls(.broadcastNames),
                                    function(name) { get(name, .broadcastNames) })
@@ -195,7 +192,7 @@ setValidity("RDD",
 #'
 #' Persist this RDD with the default storage level (MEMORY_ONLY).
 #'
-#' @param rdd The RDD to cache
+#' @param x The RDD to cache
 #' @rdname cache-methods
 #' @export
 #' @examples
@@ -204,16 +201,16 @@ setValidity("RDD",
 #' rdd <- parallelize(sc, 1:10, 2L)
 #' cache(rdd)
 #'}
-setGeneric("cache", function(rdd) { standardGeneric("cache") })
+setGeneric("cache", function(x) { standardGeneric("cache") })
 
 #' @rdname cache-methods
 #' @aliases cache,RDD-method
 setMethod("cache",
-          signature(rdd = "RDD"),
-          function(rdd) {
-            callJMethod(getJRDD(rdd), "cache")
-            rdd@env$isCached <- TRUE
-            rdd
+          signature(x = "RDD"),
+          function(x) {
+            callJMethod(getJRDD(x), "cache")
+            x@env$isCached <- TRUE
+            x
           })
 
 #' Persist an RDD
@@ -222,7 +219,7 @@ setMethod("cache",
 #' supported storage levels, refer to
 #' http://spark.apache.org/docs/latest/programming-guide.html#rdd-persistence.
 #'
-#' @param rdd The RDD to persist
+#' @param x The RDD to persist
 #' @param newLevel The new storage level to be assigned
 #' @rdname persist
 #' @export
@@ -232,40 +229,16 @@ setMethod("cache",
 #' rdd <- parallelize(sc, 1:10, 2L)
 #' persist(rdd, "MEMORY_AND_DISK")
 #'}
-setGeneric("persist", function(rdd, newLevel) { standardGeneric("persist") })
+setGeneric("persist", function(x, newLevel) { standardGeneric("persist") })
 
 #' @rdname persist
 #' @aliases persist,RDD-method
 setMethod("persist",
-          signature(rdd = "RDD", newLevel = "character"),
-          function(rdd, newLevel = c("DISK_ONLY",
-                                     "DISK_ONLY_2",
-                                     "MEMORY_AND_DISK",
-                                     "MEMORY_AND_DISK_2",
-                                     "MEMORY_AND_DISK_SER",
-                                     "MEMORY_AND_DISK_SER_2",
-                                     "MEMORY_ONLY",
-                                     "MEMORY_ONLY_2",
-                                     "MEMORY_ONLY_SER",
-                                     "MEMORY_ONLY_SER_2",
-                                     "OFF_HEAP")) {
-            match.arg(newLevel)
-            storageLevel <- switch(newLevel,
-              "DISK_ONLY" = callJStatic("org.apache.spark.storage.StorageLevel", "DISK_ONLY"),
-              "DISK_ONLY_2" = callJStatic("org.apache.spark.storage.StorageLevel", "DISK_ONLY_2"),
-              "MEMORY_AND_DISK" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK"),
-              "MEMORY_AND_DISK_2" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK_2"),
-              "MEMORY_AND_DISK_SER" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK_SER"),
-              "MEMORY_AND_DISK_SER_2" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK_SER_2"),
-              "MEMORY_ONLY" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY"),
-              "MEMORY_ONLY_2" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY_2"),
-              "MEMORY_ONLY_SER" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY_SER"),
-              "MEMORY_ONLY_SER_2" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY_SER_2"),
-              "OFF_HEAP" = callJStatic("org.apache.spark.storage.StorageLevel", "OFF_HEAP"))
-            
-            callJMethod(getJRDD(rdd), "persist", storageLevel)
-            rdd@env$isCached <- TRUE
-            rdd
+          signature(x = "RDD", newLevel = "character"),
+          function(x, newLevel) {
+            callJMethod(getJRDD(x), "persist", getStorageLevel(newLevel))
+            x@env$isCached <- TRUE
+            x
           })
 
 #' Unpersist an RDD
@@ -283,16 +256,16 @@ setMethod("persist",
 #' cache(rdd) # rdd@@env$isCached == TRUE
 #' unpersist(rdd) # rdd@@env$isCached == FALSE
 #'}
-setGeneric("unpersist", function(rdd) { standardGeneric("unpersist") })
+setGeneric("unpersist", function(x, ...) { standardGeneric("unpersist") })
 
 #' @rdname unpersist-methods
 #' @aliases unpersist,RDD-method
 setMethod("unpersist",
-          signature(rdd = "RDD"),
-          function(rdd) {
-            callJMethod(getJRDD(rdd), "unpersist")
-            rdd@env$isCached <- FALSE
-            rdd
+          signature(x = "RDD"),
+          function(x) {
+            callJMethod(getJRDD(x), "unpersist")
+            x@env$isCached <- FALSE
+            x
           })
 
 
@@ -314,22 +287,22 @@ setMethod("unpersist",
 #' rdd <- parallelize(sc, 1:10, 2L)
 #' checkpoint(rdd)
 #'}
-setGeneric("checkpoint", function(rdd) { standardGeneric("checkpoint") })
+setGeneric("checkpoint", function(x) { standardGeneric("checkpoint") })
 
 #' @rdname checkpoint-methods
 #' @aliases checkpoint,RDD-method
 setMethod("checkpoint",
-          signature(rdd = "RDD"),
-          function(rdd) {
-            jrdd <- getJRDD(rdd)
+          signature(x = "RDD"),
+          function(x) {
+            jrdd <- getJRDD(x)
             callJMethod(jrdd, "checkpoint")
-            rdd@env$isCheckpointed <- TRUE
-            rdd
+            x@env$isCheckpointed <- TRUE
+            x
           })
 
 #' Gets the number of partitions of an RDD
 #'
-#' @param rdd A RDD.
+#' @param x A RDD.
 #' @return the number of partitions of rdd as an integer.
 #' @rdname numPartitions
 #' @export
@@ -339,14 +312,14 @@ setMethod("checkpoint",
 #' rdd <- parallelize(sc, 1:10, 2L)
 #' numPartitions(rdd)  # 2L
 #'}
-setGeneric("numPartitions", function(rdd) { standardGeneric("numPartitions") })
+setGeneric("numPartitions", function(x) { standardGeneric("numPartitions") })
 
 #' @rdname numPartitions
 #' @aliases numPartitions,RDD-method
 setMethod("numPartitions",
-          signature(rdd = "RDD"),
-          function(rdd) {
-            jrdd <- getJRDD(rdd)
+          signature(x = "RDD"),
+          function(x) {
+            jrdd <- getJRDD(x)
             partitions <- callJMethod(jrdd, "splits")
             callJMethod(partitions, "size")
           })
@@ -356,7 +329,7 @@ setMethod("numPartitions",
 #' @description
 #' \code{collect} returns a list that contains all of the elements in this RDD.
 #'
-#' @param rdd The RDD to collect
+#' @param x The RDD to collect
 #' @param ... Other optional arguments to collect
 #' @param flatten FALSE if the list should not flattened
 #' @return a list containing elements in the RDD
@@ -369,17 +342,17 @@ setMethod("numPartitions",
 #' collect(rdd) # list from 1 to 10
 #' collectPartition(rdd, 0L) # list from 1 to 5
 #'}
-setGeneric("collect", function(rdd, ...) { standardGeneric("collect") })
+setGeneric("collect", function(x, ...) { standardGeneric("collect") })
 
 #' @rdname collect-methods
 #' @aliases collect,RDD-method
 setMethod("collect",
-          signature(rdd = "RDD"),
-          function(rdd, flatten = TRUE) {
+          signature(x = "RDD"),
+          function(x, flatten = TRUE) {
             # Assumes a pairwise RDD is backed by a JavaPairRDD.
-            collected <- callJMethod(getJRDD(rdd), "collect")
+            collected <- callJMethod(getJRDD(x), "collect")
             convertJListToRList(collected, flatten,
-              serializedMode = getSerializedMode(rdd))
+              serializedMode = getSerializedMode(x))
           })
 
 
@@ -390,22 +363,22 @@ setMethod("collect",
 #' in the specified partition of the RDD.
 #' @param partitionId the partition to collect (starts from 0)
 setGeneric("collectPartition",
-           function(rdd, partitionId) {
+           function(x, partitionId) {
              standardGeneric("collectPartition")
            })
 
 #' @rdname collect-methods
 #' @aliases collectPartition,integer,RDD-method
 setMethod("collectPartition",
-          signature(rdd = "RDD", partitionId = "integer"),
-          function(rdd, partitionId) {
-            jPartitionsList <- callJMethod(getJRDD(rdd),
+          signature(x = "RDD", partitionId = "integer"),
+          function(x, partitionId) {
+            jPartitionsList <- callJMethod(getJRDD(x),
                                            "collectPartitions",
                                            as.list(as.integer(partitionId)))
 
             jList <- jPartitionsList[[1]]
             convertJListToRList(jList, flatten = TRUE,
-              serializedMode = getSerializedMode(rdd))
+              serializedMode = getSerializedMode(x))
           })
 
 #' @rdname collect-methods
@@ -419,16 +392,16 @@ setMethod("collectPartition",
 #' rdd <- parallelize(sc, list(list(1, 2), list(3, 4)), 2L)
 #' collectAsMap(rdd) # list(`1` = 2, `3` = 4)
 #'}
-setGeneric("collectAsMap", function(rdd) { standardGeneric("collectAsMap") })
+setGeneric("collectAsMap", function(x) { standardGeneric("collectAsMap") })
 
 #' @rdname collect-methods
 #' @aliases collectAsMap,RDD-method
 setMethod("collectAsMap",
-          signature(rdd = "RDD"),
-          function(rdd) {
-            pairList <- collect(rdd)
+          signature(x = "RDD"),
+          function(x) {
+            pairList <- collect(x)
             map <- new.env()
-            lapply(pairList, function(x) { assign(as.character(x[[1]]), x[[2]], envir = map) })
+            lapply(pairList, function(i) { assign(as.character(i[[1]]), i[[2]], envir = map) })
             as.list(map)
           })
 
@@ -474,7 +447,7 @@ setMethod("length",
 #'
 #' Same as countByValue in Spark.
 #'
-#' @param rdd The RDD to count
+#' @param x The RDD to count
 #' @return list of (value, count) pairs, where count is number of each unique
 #' value in rdd.
 #' @rdname countByValue
@@ -485,15 +458,15 @@ setMethod("length",
 #' rdd <- parallelize(sc, c(1,2,3,2,1))
 #' countByValue(rdd) # (1,2L), (2,2L), (3,1L)
 #'}
-setGeneric("countByValue", function(rdd) { standardGeneric("countByValue") })
+setGeneric("countByValue", function(x) { standardGeneric("countByValue") })
 
 #' @rdname countByValue
 #' @aliases countByValue,RDD-method
 setMethod("countByValue",
-          signature(rdd = "RDD"),
-          function(rdd) {
-            ones <- lapply(rdd, function(item) { list(item, 1L) })
-            collect(reduceByKey(ones, `+`, numPartitions(rdd)))
+          signature(x = "RDD"),
+          function(x) {
+            ones <- lapply(x, function(item) { list(item, 1L) })
+            collect(reduceByKey(ones, `+`, numPartitions(x)))
           })
 
 #' Apply a function to all elements
@@ -710,26 +683,26 @@ setMethod("Filter",
 #' rdd <- parallelize(sc, 1:10)
 #' reduce(rdd, "+") # 55
 #'}
-setGeneric("reduce", function(rdd, func) { standardGeneric("reduce") })
+setGeneric("reduce", function(x, func) { standardGeneric("reduce") })
 
 #' @rdname reduce
 #' @aliases reduce,RDD,ANY-method
 setMethod("reduce",
-          signature(rdd = "RDD", func = "ANY"),
-          function(rdd, func) {
+          signature(x = "RDD", func = "ANY"),
+          function(x, func) {
 
             reducePartition <- function(part) {
               Reduce(func, part)
             }
 
-            partitionList <- collect(lapplyPartition(rdd, reducePartition),
+            partitionList <- collect(lapplyPartition(x, reducePartition),
                                      flatten = FALSE)
             Reduce(func, partitionList)
           })
 
 #' Get the maximum element of an RDD.
 #'
-#' @param rdd The RDD to get the maximum element from
+#' @param x The RDD to get the maximum element from
 #' @export
 #' @rdname maximum
 #' @examples
@@ -738,19 +711,19 @@ setMethod("reduce",
 #' rdd <- parallelize(sc, 1:10)
 #' maximum(rdd) # 10
 #'}
-setGeneric("maximum", function(rdd) { standardGeneric("maximum") })
+setGeneric("maximum", function(x) { standardGeneric("maximum") })
 
 #' @rdname maximum
 #' @aliases maximum,RDD
 setMethod("maximum",
-          signature(rdd = "RDD"),
-          function(rdd) {
-            reduce(rdd, max)
+          signature(x = "RDD"),
+          function(x) {
+            reduce(x, max)
           })
 
 #' Get the minimum element of an RDD.
 #'
-#' @param rdd The RDD to get the minimum element from
+#' @param x The RDD to get the minimum element from
 #' @export
 #' @rdname minimum
 #' @examples
@@ -759,19 +732,19 @@ setMethod("maximum",
 #' rdd <- parallelize(sc, 1:10)
 #' minimum(rdd) # 1
 #'}
-setGeneric("minimum", function(rdd) { standardGeneric("minimum") })
+setGeneric("minimum", function(x) { standardGeneric("minimum") })
 
 #' @rdname minimum
 #' @aliases minimum,RDD
 setMethod("minimum",
-          signature(rdd = "RDD"),
-          function(rdd) {
-            reduce(rdd, min)
+          signature(x = "RDD"),
+          function(x) {
+            reduce(x, min)
           })
 
 #' Applies a function to all elements in an RDD, and force evaluation.
 #'
-#' @param rdd The RDD to apply the function
+#' @param x The RDD to apply the function
 #' @param func The function to be applied.
 #' @return invisible NULL.
 #' @export
@@ -782,18 +755,18 @@ setMethod("minimum",
 #' rdd <- parallelize(sc, 1:10)
 #' foreach(rdd, function(x) { save(x, file=...) })
 #'}
-setGeneric("foreach", function(rdd, func) { standardGeneric("foreach") })
+setGeneric("foreach", function(x, func) { standardGeneric("foreach") })
 
 #' @rdname foreach
 #' @aliases foreach,RDD,function-method
 setMethod("foreach",
-          signature(rdd = "RDD", func = "function"),
-          function(rdd, func) {
+          signature(x = "RDD", func = "function"),
+          function(x, func) {
             partition.func <- function(x) {
               lapply(x, func)
               NULL
             }
-            invisible(collect(mapPartitions(rdd, partition.func)))
+            invisible(collect(mapPartitions(x, partition.func)))
           })
 
 #' Applies a function to each partition in an RDD, and force evaluation.
@@ -807,14 +780,14 @@ setMethod("foreach",
 #' foreachPartition(rdd, function(part) { save(part, file=...); NULL })
 #'}
 setGeneric("foreachPartition", 
-           function(rdd, func) { standardGeneric("foreachPartition") })
+           function(x, func) { standardGeneric("foreachPartition") })
 
 #' @rdname foreach
 #' @aliases foreachPartition,RDD,function-method
 setMethod("foreachPartition",
-          signature(rdd = "RDD", func = "function"),
-          function(rdd, func) {
-            invisible(collect(mapPartitions(rdd, func)))
+          signature(x = "RDD", func = "function"),
+          function(x, func) {
+            invisible(collect(mapPartitions(x, func)))
           })
 
 #' Take elements from an RDD.
@@ -822,7 +795,7 @@ setMethod("foreachPartition",
 #' This function takes the first NUM elements in the RDD and
 #' returns them in a list.
 #'
-#' @param rdd The RDD to take elements from
+#' @param x The RDD to take elements from
 #' @param num Number of elements to take
 #' @rdname take
 #' @export
@@ -832,17 +805,17 @@ setMethod("foreachPartition",
 #' rdd <- parallelize(sc, 1:10)
 #' take(rdd, 2L) # list(1, 2)
 #'}
-setGeneric("take", function(rdd, num) { standardGeneric("take") })
+setGeneric("take", function(x, num) { standardGeneric("take") })
 
 #' @rdname take
 #' @aliases take,RDD,numeric-method
 setMethod("take",
-          signature(rdd = "RDD", num = "numeric"),
-          function(rdd, num) {
+          signature(x = "RDD", num = "numeric"),
+          function(x, num) {
             resList <- list()
             index <- -1
-            jrdd <- getJRDD(rdd)
-            numPartitions <- numPartitions(rdd)
+            jrdd <- getJRDD(x)
+            numPartitions <- numPartitions(x)
 
             # TODO(shivaram): Collect more than one partition based on size
             # estimates similar to the scala version of `take`.
@@ -861,11 +834,31 @@ setMethod("take",
               elems <- convertJListToRList(partition,
                                            flatten = TRUE,
                                            logicalUpperBound = size,
-                                           serializedMode = getSerializedMode(rdd))
+                                           serializedMode = getSerializedMode(x))
               # TODO: Check if this append is O(n^2)?
               resList <- append(resList, elems)
             }
             resList
+          })
+
+#' First
+#'
+#' Return the first element of an RDD
+#'
+#' @rdname first
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:10)
+#' first(rdd)
+#' }
+setGeneric("first", function(x) { standardGeneric("first") })
+
+setMethod("first",
+          signature(x = "RDD"),
+          function(x) {
+            take(x, 1)[[1]]
           })
 
 #' Removes the duplicates from RDD.
@@ -873,7 +866,7 @@ setMethod("take",
 #' This function returns a new RDD containing the distinct elements in the
 #' given RDD. The same as `distinct()' in Spark.
 #'
-#' @param rdd The RDD to remove duplicates from.
+#' @param x The RDD to remove duplicates from.
 #' @param numPartitions Number of partitions to create.
 #' @rdname distinct
 #' @export
@@ -884,18 +877,18 @@ setMethod("take",
 #' sort(unlist(collect(distinct(rdd)))) # c(1, 2, 3)
 #'}
 setGeneric("distinct",
-           function(rdd, numPartitions) { standardGeneric("distinct") })
+           function(x, numPartitions) { standardGeneric("distinct") })
 
 setClassUnion("missingOrInteger", c("missing", "integer"))
 #' @rdname distinct
 #' @aliases distinct,RDD,missingOrInteger-method
 setMethod("distinct",
-          signature(rdd = "RDD", numPartitions = "missingOrInteger"),
-          function(rdd, numPartitions) {
+          signature(x = "RDD", numPartitions = "missingOrInteger"),
+          function(x, numPartitions) {
             if (missing(numPartitions)) {
-              numPartitions <- SparkR::numPartitions(rdd)
+              numPartitions <- SparkR::numPartitions(x)
             }
-            identical.mapped <- lapply(rdd, function(x) { list(x, NULL) })
+            identical.mapped <- lapply(x, function(x) { list(x, NULL) })
             reduced <- reduceByKey(identical.mapped,
                                    function(x, y) { x },
                                    numPartitions)
@@ -908,7 +901,7 @@ setMethod("distinct",
 #' The same as `sample()' in Spark. (We rename it due to signature
 #' inconsistencies with the `sample()' function in R's base package.)
 #'
-#' @param rdd The RDD to sample elements from
+#' @param x The RDD to sample elements from
 #' @param withReplacement Sampling with replacement or not
 #' @param fraction The (rough) sample target fraction
 #' @param seed Randomness seed value
@@ -922,16 +915,16 @@ setMethod("distinct",
 #' collect(sampleRDD(rdd, TRUE, 0.5, 9L)) # ~5 elements possibly with duplicates
 #'}
 setGeneric("sampleRDD",
-           function(rdd, withReplacement, fraction, seed) {
+           function(x, withReplacement, fraction, seed) {
              standardGeneric("sampleRDD")
            })
 
 #' @rdname sampleRDD
 #' @aliases sampleRDD,RDD
 setMethod("sampleRDD",
-          signature(rdd = "RDD", withReplacement = "logical",
+          signature(x = "RDD", withReplacement = "logical",
                     fraction = "numeric", seed = "integer"),
-          function(rdd, withReplacement, fraction, seed) {
+          function(x, withReplacement, fraction, seed) {
 
             # The sampler: takes a partition and returns its sampled version.
             samplingFunc <- function(split, part) {
@@ -968,13 +961,13 @@ setMethod("sampleRDD",
                 list()
             }
 
-            lapplyPartitionsWithIndex(rdd, samplingFunc)
+            lapplyPartitionsWithIndex(x, samplingFunc)
           })
 
 
 #' Return a list of the elements that are a sampled subset of the given RDD.
 #'
-#' @param rdd The RDD to sample elements from
+#' @param x The RDD to sample elements from
 #' @param withReplacement Sampling with replacement or not
 #' @param num Number of elements to return
 #' @param seed Randomness seed value
@@ -990,19 +983,19 @@ setMethod("sampleRDD",
 #' takeSample(rdd, FALSE, 5L, 16181618L)
 #'}
 setGeneric("takeSample",
-           function(rdd, withReplacement, num, seed) {
+           function(x, withReplacement, num, seed) {
              standardGeneric("takeSample")
            })
 #' @rdname takeSample
 #' @aliases takeSample,RDD
-setMethod("takeSample", signature(rdd = "RDD", withReplacement = "logical",
+setMethod("takeSample", signature(x = "RDD", withReplacement = "logical",
                                   num = "integer", seed = "integer"),
-          function(rdd, withReplacement, num, seed) {
+          function(x, withReplacement, num, seed) {
             # This function is ported from RDD.scala.
             fraction <- 0.0
             total <- 0
             multiplier <- 3.0
-            initialCount <- count(rdd)
+            initialCount <- count(x)
             maxSelected <- 0
             MAXINT <- .Machine$integer.max
 
@@ -1024,7 +1017,7 @@ setMethod("takeSample", signature(rdd = "RDD", withReplacement = "logical",
             }
 
             set.seed(seed)
-            samples <- collect(sampleRDD(rdd, withReplacement, fraction,
+            samples <- collect(sampleRDD(x, withReplacement, fraction,
                                          as.integer(ceiling(runif(1,
                                                                   -MAXINT,
                                                                   MAXINT)))))
@@ -1032,7 +1025,7 @@ setMethod("takeSample", signature(rdd = "RDD", withReplacement = "logical",
             # take samples; this shouldn't happen often because we use a big
             # multiplier for thei initial size
             while (length(samples) < total)
-              samples <- collect(sampleRDD(rdd, withReplacement, fraction,
+              samples <- collect(sampleRDD(x, withReplacement, fraction,
                                            as.integer(ceiling(runif(1,
                                                                     -MAXINT,
                                                                     MAXINT)))))
@@ -1043,7 +1036,7 @@ setMethod("takeSample", signature(rdd = "RDD", withReplacement = "logical",
 
 #' Creates tuples of the elements in this RDD by applying a function.
 #'
-#' @param rdd The RDD.
+#' @param x The RDD.
 #' @param func The function to be applied.
 #' @rdname keyBy
 #' @export
@@ -1053,22 +1046,22 @@ setMethod("takeSample", signature(rdd = "RDD", withReplacement = "logical",
 #' rdd <- parallelize(sc, list(1, 2, 3))
 #' collect(keyBy(rdd, function(x) { x*x })) # list(list(1, 1), list(4, 2), list(9, 3))
 #'}
-setGeneric("keyBy", function(rdd, func) { standardGeneric("keyBy") })
+setGeneric("keyBy", function(x, func) { standardGeneric("keyBy") })
 
 #' @rdname keyBy
 #' @aliases keyBy,RDD
 setMethod("keyBy",
-          signature(rdd = "RDD", func = "function"),
-          function(rdd, func) {
+          signature(x = "RDD", func = "function"),
+          function(x, func) {
             apply.func <- function(x) {
               list(func(x), x)
             }
-            lapply(rdd, apply.func)
+            lapply(x, apply.func)
           })
 
 #' Save this RDD as a SequenceFile of serialized objects.
 #'
-#' @param rdd The RDD to save
+#' @param x The RDD to save
 #' @param path The directory where the file is saved
 #' @rdname saveAsObjectFile
 #' @seealso objectFile
@@ -1079,25 +1072,25 @@ setMethod("keyBy",
 #' rdd <- parallelize(sc, 1:3)
 #' saveAsObjectFile(rdd, "/tmp/sparkR-tmp")
 #'}
-setGeneric("saveAsObjectFile", function(rdd, path) { standardGeneric("saveAsObjectFile") })
+setGeneric("saveAsObjectFile", function(x, path) { standardGeneric("saveAsObjectFile") })
 
 #' @rdname saveAsObjectFile
 #' @aliases saveAsObjectFile,RDD
 setMethod("saveAsObjectFile",
-          signature(rdd = "RDD", path = "character"),
-          function(rdd, path) {
+          signature(x = "RDD", path = "character"),
+          function(x, path) {
             # If serializedMode == "string" we need to serialize the data before saving it since
             # objectFile() assumes serializedMode == "byte".
-            if (getSerializedMode(rdd) != "byte") {
-              rdd <- serializeToBytes(rdd)
+            if (getSerializedMode(x) != "byte") {
+              x <- serializeToBytes(x)
             }
             # Return nothing
-            invisible(callJMethod(getJRDD(rdd), "saveAsObjectFile", path))
+            invisible(callJMethod(getJRDD(x), "saveAsObjectFile", path))
           })
 
 #' Save this RDD as a text file, using string representations of elements.
 #'
-#' @param rdd The RDD to save
+#' @param x The RDD to save
 #' @param path The directory where the splits of the text file are saved
 #' @rdname saveAsTextFile
 #' @export
@@ -1107,17 +1100,17 @@ setMethod("saveAsObjectFile",
 #' rdd <- parallelize(sc, 1:3)
 #' saveAsTextFile(rdd, "/tmp/sparkR-tmp")
 #'}
-setGeneric("saveAsTextFile", function(rdd, path) { standardGeneric("saveAsTextFile") })
+setGeneric("saveAsTextFile", function(x, path) { standardGeneric("saveAsTextFile") })
 
 #' @rdname saveAsTextFile
 #' @aliases saveAsTextFile,RDD
 setMethod("saveAsTextFile",
-          signature(rdd = "RDD", path = "character"),
-          function(rdd, path) {
-            func <- function(x) {
-              toString(x)
+          signature(x = "RDD", path = "character"),
+          function(x, path) {
+            func <- function(str) {
+              toString(str)
             }
-            stringRdd <- lapply(rdd, func)
+            stringRdd <- lapply(x, func)
             # Return nothing
             invisible(
               callJMethod(getJRDD(stringRdd, serializedMode = "string"), "saveAsTextFile", path))
@@ -1125,7 +1118,7 @@ setMethod("saveAsTextFile",
 
 #' Sort an RDD by the given key function.
 #'
-#' @param rdd An RDD to be sorted.
+#' @param x An RDD to be sorted.
 #' @param func A function used to compute the sort key for each element.
 #' @param ascending A flag to indicate whether the sorting is ascending or descending.
 #' @param numPartitions Number of partitions to create.
@@ -1138,7 +1131,7 @@ setMethod("saveAsTextFile",
 #' rdd <- parallelize(sc, list(3, 2, 1))
 #' collect(sortBy(rdd, function(x) { x })) # list (1, 2, 3)
 #'}
-setGeneric("sortBy", function(rdd,
+setGeneric("sortBy", function(x,
                               func,
                               ascending = TRUE,
                               numPartitions = 1L) {
@@ -1148,20 +1141,20 @@ setGeneric("sortBy", function(rdd,
 #' @rdname sortBy
 #' @aliases sortBy,RDD,RDD-method
 setMethod("sortBy",
-          signature(rdd = "RDD", func = "function"),
-          function(rdd, func, ascending = TRUE, numPartitions = SparkR::numPartitions(rdd)) {          
-            values(sortByKey(keyBy(rdd, func), ascending, numPartitions))
+          signature(x = "RDD", func = "function"),
+          function(x, func, ascending = TRUE, numPartitions = SparkR::numPartitions(x)) {          
+            values(sortByKey(keyBy(x, func), ascending, numPartitions))
           })
 
 # Helper function to get first N elements from an RDD in the specified order.
 # Param:
-#   rdd An RDD.
+#   x An RDD.
 #   num Number of elements to return.
 #   ascending A flag to indicate whether the sorting is ascending or descending.
 # Return:
 #   A list of the first N elements from the RDD in the specified order.
 #
-takeOrderedElem <- function(rdd, num, ascending = TRUE) {          
+takeOrderedElem <- function(x, num, ascending = TRUE) {          
   if (num <= 0L) {
     return(list())
   }
@@ -1183,13 +1176,13 @@ takeOrderedElem <- function(rdd, num, ascending = TRUE) {
     newElems[ord[1:num]]
   }
   
-  newRdd <- mapPartitions(rdd, partitionFunc)
+  newRdd <- mapPartitions(x, partitionFunc)
   reduce(newRdd, reduceFunc)
 }
 
 #' Returns the first N elements from an RDD in ascending order.
 #'
-#' @param rdd An RDD.
+#' @param x An RDD.
 #' @param num Number of elements to return.
 #' @return The first N elements from the RDD in ascending order.
 #' @rdname takeOrdered
@@ -1200,19 +1193,19 @@ takeOrderedElem <- function(rdd, num, ascending = TRUE) {
 #' rdd <- parallelize(sc, list(10, 1, 2, 9, 3, 4, 5, 6, 7))
 #' takeOrdered(rdd, 6L) # list(1, 2, 3, 4, 5, 6)
 #'}
-setGeneric("takeOrdered", function(rdd, num) { standardGeneric("takeOrdered") })
+setGeneric("takeOrdered", function(x, num) { standardGeneric("takeOrdered") })
 
 #' @rdname takeOrdered
 #' @aliases takeOrdered,RDD,RDD-method
 setMethod("takeOrdered",
-          signature(rdd = "RDD", num = "integer"),
-          function(rdd, num) {          
-            takeOrderedElem(rdd, num)
+          signature(x = "RDD", num = "integer"),
+          function(x, num) {          
+            takeOrderedElem(x, num)
           })
 
 #' Returns the top N elements from an RDD.
 #'
-#' @param rdd An RDD.
+#' @param x An RDD.
 #' @param num Number of elements to return.
 #' @return The top N elements from the RDD.
 #' @rdname top
@@ -1223,14 +1216,14 @@ setMethod("takeOrdered",
 #' rdd <- parallelize(sc, list(10, 1, 2, 9, 3, 4, 5, 6, 7))
 #' top(rdd, 6L) # list(10, 9, 7, 6, 5, 4)
 #'}
-setGeneric("top", function(rdd, num) { standardGeneric("top") })
+setGeneric("top", function(x, num) { standardGeneric("top") })
 
 #' @rdname top
 #' @aliases top,RDD,RDD-method
 setMethod("top",
-          signature(rdd = "RDD", num = "integer"),
-          function(rdd, num) {          
-            takeOrderedElem(rdd, num, FALSE)
+          signature(x = "RDD", num = "integer"),
+          function(x, num) {          
+            takeOrderedElem(x, num, FALSE)
           })
 
 #' Fold an RDD using a given associative function and a neutral "zero value".
@@ -1238,7 +1231,7 @@ setMethod("top",
 #' Aggregate the elements of each partition, and then the results for all the
 #' partitions, using a given associative function and a neutral "zero value".
 #' 
-#' @param rdd An RDD.
+#' @param x An RDD.
 #' @param zeroValue A neutral "zero value".
 #' @param op An associative function for the folding operation.
 #' @return The folding result.
@@ -1251,14 +1244,14 @@ setMethod("top",
 #' rdd <- parallelize(sc, list(1, 2, 3, 4, 5))
 #' fold(rdd, 0, "+") # 15
 #'}
-setGeneric("fold", function(rdd, zeroValue, op) { standardGeneric("fold") })
+setGeneric("fold", function(x, zeroValue, op) { standardGeneric("fold") })
 
 #' @rdname fold
 #' @aliases fold,RDD,RDD-method
 setMethod("fold",
-          signature(rdd = "RDD", zeroValue = "ANY", op = "ANY"),
-          function(rdd, zeroValue, op) {
-            aggregateRDD(rdd, zeroValue, op, op)
+          signature(x = "RDD", zeroValue = "ANY", op = "ANY"),
+          function(x, zeroValue, op) {
+            aggregateRDD(x, zeroValue, op, op)
           })
 
 #' Aggregate an RDD using the given combine functions and a neutral "zero value".
@@ -1266,7 +1259,7 @@ setMethod("fold",
 #' Aggregate the elements of each partition, and then the results for all the
 #' partitions, using given combine functions and a neutral "zero value".
 #' 
-#' @param rdd An RDD.
+#' @param x An RDD.
 #' @param zeroValue A neutral "zero value".
 #' @param seqOp A function to aggregate the RDD elements. It may return a different
 #'              result type from the type of the RDD elements.
@@ -1284,26 +1277,63 @@ setMethod("fold",
 #' combOp <- function(x, y) { list(x[[1]] + y[[1]], x[[2]] + y[[2]]) }
 #' aggregateRDD(rdd, zeroValue, seqOp, combOp) # list(10, 4)
 #'}
-setGeneric("aggregateRDD", function(rdd, zeroValue, seqOp, combOp) { standardGeneric("aggregateRDD") })
+setGeneric("aggregateRDD", function(x, zeroValue, seqOp, combOp) { standardGeneric("aggregateRDD") })
 
 #' @rdname aggregateRDD
 #' @aliases aggregateRDD,RDD,RDD-method
 setMethod("aggregateRDD",
-          signature(rdd = "RDD", zeroValue = "ANY", seqOp = "ANY", combOp = "ANY"),
-          function(rdd, zeroValue, seqOp, combOp) {        
+          signature(x = "RDD", zeroValue = "ANY", seqOp = "ANY", combOp = "ANY"),
+          function(x, zeroValue, seqOp, combOp) {        
             partitionFunc <- function(part) {
               Reduce(seqOp, part, zeroValue)
             }
             
-            partitionList <- collect(lapplyPartition(rdd, partitionFunc),
+            partitionList <- collect(lapplyPartition(x, partitionFunc),
                                      flatten = FALSE)
             Reduce(combOp, partitionList, zeroValue)
+          })
+
+#' Pipes elements to a forked external process.
+#'
+#' The same as 'pipe()' in Spark.
+#'
+#' @param x The RDD whose elements are piped to the forked external process.
+#' @param command The command to fork an external process.
+#' @param env A named list to set environment variables of the external process.
+#' @return A new RDD created by piping all elements to a forked external process.
+#' @rdname pipeRDD
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:10)
+#' collect(pipeRDD(rdd, "more")
+#' Output: c("1", "2", ..., "10")
+#'}
+setGeneric("pipeRDD", function(x, command, env = list()) { 
+  standardGeneric("pipeRDD") 
+})
+
+#' @rdname pipeRDD
+#' @aliases pipeRDD,RDD,character-method
+setMethod("pipeRDD",
+          signature(x = "RDD", command = "character"),
+          function(x, command, env = list()) {
+            func <- function(part) {
+              trim.trailing.func <- function(x) {
+                sub("[\r\n]*$", "", toString(x))
+              }
+              input <- unlist(lapply(part, trim.trailing.func))
+              res <- system2(command, stdout = TRUE, input = input, env = env)
+              lapply(res, trim.trailing.func)
+            }
+            lapplyPartition(x, func)
           })
 
 # TODO: Consider caching the name in the RDD's environment
 #' Return an RDD's name.
 #'
-#' @param rdd The RDD whose name is returned.
+#' @param x The RDD whose name is returned.
 #' @rdname name
 #' @export
 #' @examples
@@ -1312,19 +1342,19 @@ setMethod("aggregateRDD",
 #' rdd <- parallelize(sc, list(1,2,3))
 #' name(rdd) # NULL (if not set before)
 #'}
-setGeneric("name", function(rdd) { standardGeneric("name") })
+setGeneric("name", function(x) { standardGeneric("name") })
 
 #' @rdname name
 #' @aliases name,RDD
 setMethod("name",
-          signature(rdd = "RDD"),
-          function(rdd) {
-            callJMethod(getJRDD(rdd), "name")
+          signature(x = "RDD"),
+          function(x) {
+            callJMethod(getJRDD(x), "name")
           })
 
 #' Set an RDD's name.
 #'
-#' @param rdd The RDD whose name is to be set.
+#' @param x The RDD whose name is to be set.
 #' @param name The RDD name to be set.
 #' @return a new RDD renamed.
 #' @rdname setName
@@ -1336,15 +1366,15 @@ setMethod("name",
 #' setName(rdd, "myRDD")
 #' name(rdd) # "myRDD"
 #'}
-setGeneric("setName", function(rdd, name) { standardGeneric("setName") })
+setGeneric("setName", function(x, name) { standardGeneric("setName") })
 
 #' @rdname setName
 #' @aliases setName,RDD
 setMethod("setName",
-          signature(rdd = "RDD", name = "character"),
-          function(rdd, name) {
-            callJMethod(getJRDD(rdd), "setName", name)
-            rdd
+          signature(x = "RDD", name = "character"),
+          function(x, name) {
+            callJMethod(getJRDD(x), "setName", name)
+            x
           })
 
 ############ Binary Functions #############

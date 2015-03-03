@@ -2,6 +2,7 @@
 exportClasses("RDD")
 exportClasses("Broadcast")
 exportMethods(
+              "aggregateByKey",
               "aggregateRDD",
               "cache",
               "checkpoint",
@@ -16,9 +17,11 @@ exportMethods(
               "distinct",
               "Filter",
               "filterRDD",
+              "first",
               "flatMap",
               "flatMapValues",
               "fold",
+              "foldByKey",
               "foreach",
               "foreachPartition",
               "fullOuterJoin",
@@ -41,6 +44,7 @@ exportMethods(
               "numPartitions",
               "partitionBy",
               "persist",
+              "pipeRDD",
               "reduce",
               "reduceByKey",
               "reduceByKeyLocally",
@@ -81,12 +85,44 @@ importFrom(methods, setGeneric, setMethod, setOldClass)
 
 exportClasses("DataFrame")
 
-exportMethods("printSchema",
+exportMethods("columns",
+              "distinct",
+              "dtypes",
+              "head",
+              "limit",
+              "names",
+              "printSchema",
               "registerTempTable",
-              "toRDD",
+              "repartition",
+              "sampleDF",
+              "schema",
+              "select",
               "groupBy",
               "agg",
-              "limit")
+              "toRDD")
+
+exportClasses("Column")
+
+exportMethods("asc",
+              "desc",
+              "first",
+              "last",
+              "lower",
+              "upper",
+              "abs",
+              "sqrt",
+              "min",
+              "max",
+              "sum",
+              "avg",
+              "mean",
+              "isNull",
+              "isNotNull",
+              "alias",
+              "cast",
+              "approxCountDistinct",
+              "countDistinct",
+              "sumDistinct")
 
 exportClasses("GroupedData")
 exportMethods("count", "agg", "avg")
@@ -100,3 +136,5 @@ export("jsonFile",
        "uncacheTable")
 
 export("sparkRSQL.init")
+export("print.structType",
+       "print.structField")

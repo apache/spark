@@ -180,7 +180,7 @@ includePackage <- function(sc, pkg) {
 #'}
 broadcast <- function(sc, object) {
   objName <- as.character(substitute(object))
-  serializedObj <- serialize(object, connection = NULL, ascii = TRUE)
+  serializedObj <- serialize(object, connection = NULL)
 
   jBroadcast <- callJMethod(sc, "broadcast", serializedObj)
   id <- as.character(callJMethod(jBroadcast, "id"))
