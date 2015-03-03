@@ -96,7 +96,31 @@ exportMethods("columns",
               "repartition",
               "sampleDF",
               "schema",
+              "select",
               "toRDD")
+
+exportClasses("Column")
+
+exportMethods("asc",
+              "desc",
+              "first",
+              "last",
+              "lower",
+              "upper",
+              "abs",
+              "sqrt",
+              "min",
+              "max",
+              "sum",
+              "avg",
+              "mean",
+              "isNull",
+              "isNotNull",
+              "alias",
+              "cast",
+              "approxCountDistinct",
+              "countDistinct",
+              "sumDistinct")
 
 export("jsonFile",
        "parquetFile",

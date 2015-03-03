@@ -334,3 +334,14 @@ numToInt <- function(num) {
   }
   as.integer(num)
 }
+
+# create a Seq in JVM
+toSeq <- function(...) {
+  callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "toSeq", list(...))
+}
+
+# create a Seq in JVM from a list
+listToSeq <- function(l) {
+  callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "toSeq", l)
+}
+
