@@ -9,6 +9,10 @@ redirect_from: "building-with-maven.html"
 
 Building Spark using Maven requires Maven 3.0.4 or newer and Java 6+.
 
+**Note:** Building Spark with Java 7 or later can create JAR files that may not be
+readable with early versions of Java 6, due to the large number of files in the JAR
+archive. Build with Java 6 if this is an issue for your deployment.
+
 # Building with `build/mvn`
 
 Spark now comes packaged with a self-contained Maven installation to ease building and deployment of Spark from source located under the `build/` directory. This script will automatically download and setup all necessary build requirements ([Maven](https://maven.apache.org/), [Scala](http://www.scala-lang.org/), and [Zinc](https://github.com/typesafehub/zinc)) locally within the `build/` directory itself. It honors any `mvn` binary if present already, however, will pull down its own copy of Scala and Zinc regardless to ensure proper version requirements are met. `build/mvn` execution acts as a pass through to the `mvn` call allowing easy transition from previous build methods. As an example, one can build a version of Spark as follows:
