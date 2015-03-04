@@ -749,11 +749,6 @@ setMethod("join",
           })
 
 
-#' Return the SaveMode by name
-toJMode <- function(name) {
-
-}
-
 #' Save the contents of the DataFrame to a data source
 #'
 #' The data source is specified by the `source` and a set of options (...).
@@ -785,6 +780,8 @@ toJMode <- function(name) {
 #' saveAsTable(df, "myfile")
 #' }
 
+allModes <- c("append", "overwrite", "error", "ignore")
+
 setGeneric("saveDF", function(df, path, source, mode, ...) { standardGeneric("saveDF") })
 
 setMethod("saveDF",
@@ -792,11 +789,15 @@ setMethod("saveDF",
                     mode = 'character'),
           function(df, path=NULL, source=NULL, mode="append", ...){
             if (is.null(source)) {
-              # TODO: read from conf
-              source = 'parquet'
+              sqlCtx <- get(".sparkRSQLsc", envir = .sparkREnv)
+              source <- callJMethod(sqlCtx, "getConf", "spark.sql.sources.default",
+                                    "org.apache.spark.sql.parquet")
+            }
+            if (!(mode %in% allModes)) {
+              stop('mode should be one of "append", "overwrite", "error", "ignore"')
             }
             jmode <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "saveMode", mode)
-            options <- varargToEnv(...)
+            options <- varargsToEnv(...)
             if (!is.null(path)) {
                 options[['path']] = path
             }
@@ -846,11 +847,15 @@ setMethod("saveAsTable",
                     mode = 'character'),
           function(df, tableName, source=NULL, mode="append", ...){
             if (is.null(source)) {
-              #' TODO: getConf('spark.sql.sources.default')
-              source <- 'parquet'
+              sqlCtx <- get(".sparkRSQLsc", envir = .sparkREnv)
+              source <- callJMethod(sqlCtx, "getConf", "spark.sql.sources.default",
+                                    "org.apache.spark.sql.parquet")
+            }
+            if (!(mode %in% allModes)) {
+              stop('mode should be one of "append", "overwrite", "error", "ignore"')
             }
             jmode <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "saveMode", mode)
-            options <- varargToEnv(...)
+            options <- varargsToEnv(...)
             callJMethod(df@sdf, "saveAsTable", tableName, source, jmode, options)
           })
 

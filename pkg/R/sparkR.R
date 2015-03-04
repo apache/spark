@@ -221,22 +221,39 @@ sparkR.init <- function(
 #'}
 
 sparkRSQL.init <- function(jsc) {
-  sparkContext = callJMethod(jsc, "sc")
-  
   if (exists(".sparkRSQLsc", envir = .sparkREnv)) {
     cat("Re-using existing SparkSQL Context. Please restart R to create a new SparkSQL Context\n")
     return(get(".sparkRSQLsc", envir = .sparkREnv))
   }
-  
-  assign(
-    ".sparkRSQLsc",
-    callJStatic(
-      "edu.berkeley.cs.amplab.sparkr.SQLUtils",
-      "createSQLContext",
-      sparkContext),
-    envir = .sparkREnv
-  )
-  sqlCtx <- get(".sparkRSQLsc", envir = .sparkREnv)
-  
+
+  sqlCtx <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils",
+                        "createSQLContext",
+                        jsc)
+  assign(".sparkRSQLsc", sqlCtx, envir = .sparkREnv)
   sqlCtx
+}
+
+#' Initialize a new HiveContext.
+#'
+#' This function creates a HiveContext from an existing JavaSparkContext
+#'
+#' @param jsc The existing JavaSparkContext created with SparkR.init()
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRHive.init(sc)
+#'}
+
+sparkRHive.init <- function(jsc) {
+  if (exists(".sparkRHivesc", envir = .sparkREnv)) {
+    cat("Re-using existing HiveContext. Please restart R to create a new  HiveContext\n")
+    return(get(".sparkRHivesc", envir = .sparkREnv))
+  }
+
+  hiveCtx <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils",
+                        "createHiveContext",
+                        jsc)
+  assign(".sparkRHivesc", hiveCtx, envir = .sparkREnv)
+  hiveCtx
 }
