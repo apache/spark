@@ -60,6 +60,7 @@ class Analyzer(catalog: Catalog,
       ResolveSortReferences ::
       ImplicitGenerate ::
       ResolveFunctions ::
+      WindowAttributes ::
       GlobalAggregates ::
       UnresolvedHavingClauseAttributes ::
       TrimGroupingAliases ::
@@ -366,6 +367,20 @@ class Analyzer(catalog: Catalog,
         q transformExpressions {
           case u @ UnresolvedFunction(name, children) if u.childrenResolved =>
             registry.lookupFunction(name, children)
+        }
+    }
+  }
+
+  /**
+   * translate WindowAttribute in SelectExpression to attribute
+   */
+  object WindowAttributes extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case q: WindowAggregate => q
+      case q: LogicalPlan =>
+        q transformExpressions {
+          // translate WindowAttribute in SelectExpression to attribute
+          case u @ WindowExpression(children, name, windowSpec) => u.toAttribute
         }
     }
   }

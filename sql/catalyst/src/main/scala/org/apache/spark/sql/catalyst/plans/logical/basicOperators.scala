@@ -163,6 +163,16 @@ case class Aggregate(
   override def output = aggregateExpressions.map(_.toAttribute)
 }
 
+case class WindowAggregate(
+    partitionExpressions: Seq[Expression],
+    windowExpressions: Seq[WindowExpression],
+    otherExpressions: Seq[NamedExpression],
+    child: LogicalPlan)
+  extends UnaryNode {
+
+  override def output = (windowExpressions ++ otherExpressions).map(_.toAttribute)
+}
+
 /**
  * Apply the all of the GroupExpressions to every input row, hence we will get
  * multiple output rows for a input row.

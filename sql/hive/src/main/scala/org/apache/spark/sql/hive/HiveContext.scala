@@ -428,6 +428,7 @@ private object HiveContext {
           toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
       }.toSeq.sorted.mkString("{", ",", "}")
     case (null, _) => "NULL"
+    case (o, ArrayType(typ, _)) => toHiveStructString(o, typ)
     case (d: Int, DateType) => new DateWritable(d).toString
     case (t: Timestamp, TimestampType) => new TimestampWritable(t).toString
     case (bin: Array[Byte], BinaryType) => new String(bin, "UTF-8")
