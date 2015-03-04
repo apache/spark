@@ -172,7 +172,7 @@ class Analyzer(catalog: Catalog,
   object ResolveRelations extends Rule[LogicalPlan] {
     def getTable(u: UnresolvedRelation, cteRelations: Map[String, LogicalPlan]) = {
       try {
-          cteRelations.get(u.tableIdentifier.head)
+          cteRelations.get(u.tableIdentifier.last)
             .map(relation => u.alias.map(Subquery(_, relation)).getOrElse(relation))
             .getOrElse(catalog.lookupRelation(u.tableIdentifier, u.alias))
       } catch {
