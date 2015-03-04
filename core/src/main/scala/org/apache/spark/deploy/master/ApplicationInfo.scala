@@ -90,9 +90,9 @@ private[spark] class ApplicationInfo(
     }
   }
 
-  private val myMaxCores = desc.maxCores.getOrElse(defaultCores)
+  val requestedCores = desc.maxCores.getOrElse(defaultCores)
 
-  def coresLeft: Int = myMaxCores - coresGranted
+  def coresLeft: Int = requestedCores - coresGranted
 
   private var _retryCount = 0
 

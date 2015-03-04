@@ -85,14 +85,13 @@ private[spark] class ExecutorRunner(
     var exitCode: Option[Int] = None
     if (process != null) {
       logInfo("Killing process!")
-      process.destroy()
-      process.waitFor()
       if (stdoutAppender != null) {
         stdoutAppender.stop()
       }
       if (stderrAppender != null) {
         stderrAppender.stop()
       }
+      process.destroy()
       exitCode = Some(process.waitFor())
     }
     worker ! ExecutorStateChanged(appId, execId, state, message, exitCode)
@@ -135,7 +134,7 @@ private[spark] class ExecutorRunner(
       logInfo("Launch command: " + command.mkString("\"", "\" \"", "\""))
 
       builder.directory(executorDir)
-      builder.environment.put("SPARK_LOCAL_DIRS", appLocalDirs.mkString(","))
+      builder.environment.put("SPARK_EXECUTOR_DIRS", appLocalDirs.mkString(File.pathSeparator))
       // In case we are running this from within the Spark Shell, avoid creating a "scala"
       // parent process for the executor command
       builder.environment.put("SPARK_LAUNCH_WITH_SCALA", "0")
