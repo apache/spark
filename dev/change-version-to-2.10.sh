@@ -20,7 +20,7 @@
 # Note that this will not necessarily work as intended with non-GNU sed (e.g. OS X)
 
 find . -name 'pom.xml' | grep -v target \
-  | xargs -I {} sed -i -e 's/\(artifactId.*\)_2.10/\1_2.11/g' {}
+  | xargs -I {} sed -i -e 's/\(artifactId.*\)_2.11/\1_2.10/g' {}
 
 # Also update <scala.binary.version> in parent POM
-sed -i -e '0,/<scala\.binary\.version>2.10</s//<scala.binary.version>2.11</' pom.xml
+sed -i -e '0,/<scala\.binary\.version>2.11</s//<scala.binary.version>2.10</' pom.xml
