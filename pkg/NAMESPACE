@@ -127,11 +127,15 @@ exportMethods("asc",
               "countDistinct",
               "sumDistinct")
 
-export("jsonFile",
+export("cacheTable",
+       "clearCache",
+       "jsonFile",
+       "jsonRDD",
        "parquetFile",
        "sql",
        "table",
-       "cacheTable",
+       "tableNames",
+       "tables",
        "uncacheTable")
 
 export("sparkRSQL.init")

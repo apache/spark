@@ -20,6 +20,35 @@ test_that("jsonFile() on a local file returns a DataFrame", {
   expect_true(count(df) == 3)
 })
 
+test_that("jsonRDD() on a RDD with json string", {
+  rdd <- parallelize(sc, mockLines)
+  expect_true(count(rdd) == 3)
+  df <- jsonRDD(sqlCtx, rdd)
+  expect_true(inherits(df, "DataFrame"))
+  expect_true(count(df) == 3)
+
+  rdd2 <- flatMap(rdd, function(x) c(x, x))
+  df <- jsonRDD(sqlCtx, rdd2)
+  expect_true(inherits(df, "DataFrame"))
+  expect_true(count(df) == 6)
+})
+
+test_that("test cache, uncache and clearCache", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  registerTempTable(df, "table1")
+  cacheTable(sqlCtx, "table1")
+  uncacheTable(sqlCtx, "table1")
+  clearCache(sqlCtx)
+})
+
+test_that("test tableNames and tables", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  registerTempTable(df, "table1")
+  expect_true(length(tableNames(sqlCtx)) == 1)
+  df <- tables(sqlCtx)
+  expect_true(count(df) == 1)
+})
+
 test_that("registerTempTable() results in a queryable table and sql() results in a new DataFrame", {
   df <- jsonFile(sqlCtx, jsonPath)
   registerTempTable(df, "table1")
