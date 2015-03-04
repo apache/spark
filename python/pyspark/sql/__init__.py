@@ -37,5 +37,5 @@ from pyspark.sql.types import Row
 from pyspark.sql.dataframe import DataFrame, GroupedData, Column, SchemaRDD
 
 __all__ = [
-    'SQLContext', 'HiveContext', 'DataFrame', 'GroupedData', 'Column', 'Row',
+    'SQLContext', 'HiveContext', 'DataFrame', 'GroupedData', 'Column', 'Row', 'HbaseSQLContext'
 ]

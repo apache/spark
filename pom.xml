@@ -96,6 +96,7 @@
     <module>streaming</module>
     <module>sql/catalyst</module>
     <module>sql/core</module>
+    <module>sql/hbase</module>
     <module>sql/hive</module>
     <module>assembly</module>
     <module>external/twitter</module>
@@ -1689,6 +1690,23 @@
         <jline.version>2.12</jline.version>
         <jline.groupid>jline</jline.groupid>
       </properties>
+    </profile>
+    
+    <profile>
+      <id>hbase</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+      </activation>
+      <properties>
+        <hadoop.version>2.3.0</hadoop.version>
+        <protobuf.version>2.5.0</protobuf.version>
+        <jets3t.version>0.9.0</jets3t.version>
+        <hbase.version>0.98.5-hadoop2</hbase.version>
+        <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
+      </properties>
+      <modules>
+        <module>sql/hbase</module>
+      </modules>
     </profile>
 
     <!--
