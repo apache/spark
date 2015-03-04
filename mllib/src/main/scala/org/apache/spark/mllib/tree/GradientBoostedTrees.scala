@@ -60,12 +60,11 @@ class GradientBoostedTrees(private val boostingStrategy: BoostingStrategy)
   def run(input: RDD[LabeledPoint]): GradientBoostedTreesModel = {
     val algo = boostingStrategy.treeStrategy.algo
     algo match {
-      case Regression => GradientBoostedTrees.boost(input, input, boostingStrategy, validate=false)
+      case Regression => boost(input, input, boostingStrategy, validate=false)
       case Classification =>
         // Map labels to -1, +1 so binary classification can be treated as regression.
         val remappedInput = input.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
-        GradientBoostedTrees.boost(remappedInput,
-          remappedInput, boostingStrategy, validate=false)
+        boost(remappedInput, remappedInput, boostingStrategy, validate=false)
       case _ =>
         throw new IllegalArgumentException(s"$algo is not supported by the gradient boosting.")
     }
@@ -93,7 +92,7 @@ class GradientBoostedTrees(private val boostingStrategy: BoostingStrategy)
       validationInput: RDD[LabeledPoint]): GradientBoostedTreesModel = {
     val algo = boostingStrategy.treeStrategy.algo
     algo match {
-      case Regression => GradientBoostedTrees.boost(
+      case Regression => boost(
         input, validationInput, boostingStrategy, validate=true)
       case Classification =>
         // Map labels to -1, +1 so binary classification can be treated as regression.
@@ -101,8 +100,7 @@ class GradientBoostedTrees(private val boostingStrategy: BoostingStrategy)
           x => new LabeledPoint((x.label * 2) - 1, x.features))
         val remappedValidationInput = validationInput.map(
           x => new LabeledPoint((x.label * 2) - 1, x.features))
-        GradientBoostedTrees.boost(remappedInput, remappedValidationInput, boostingStrategy,
-          validate=true)
+        boost(remappedInput, remappedValidationInput, boostingStrategy, validate=true)
       case _ =>
         throw new IllegalArgumentException(s"$algo is not supported by the gradient boosting.")
     }
@@ -115,33 +113,6 @@ class GradientBoostedTrees(private val boostingStrategy: BoostingStrategy)
       input: JavaRDD[LabeledPoint],
       validationInput: JavaRDD[LabeledPoint]): GradientBoostedTreesModel = {
     runWithValidation(input.rdd, validationInput.rdd)
-  }
-}
-
-object GradientBoostedTrees extends Logging {
-
-  /**
-   * Method to train a gradient boosting model.
-   *
-   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
-   *              For classification, labels should take values {0, 1, ..., numClasses-1}.
-   *              For regression, labels are real numbers.
-   * @param boostingStrategy Configuration options for the boosting algorithm.
-   * @return a gradient boosted trees model that can be used for prediction
-   */
-  def train(
-      input: RDD[LabeledPoint],
-      boostingStrategy: BoostingStrategy): GradientBoostedTreesModel = {
-    new GradientBoostedTrees(boostingStrategy).run(input)
-  }
-
-  /**
-   * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoostedTrees$#train]]
-   */
-  def train(
-      input: JavaRDD[LabeledPoint],
-      boostingStrategy: BoostingStrategy): GradientBoostedTreesModel = {
-    train(input.rdd, boostingStrategy)
   }
 
   /**
@@ -260,6 +231,33 @@ object GradientBoostedTrees extends Logging {
       new GradientBoostedTreesModel(
         boostingStrategy.treeStrategy.algo, baseLearners, baseLearnerWeights)
     }
+  }
+}
+
+object GradientBoostedTrees extends Logging {
+
+  /**
+   * Method to train a gradient boosting model.
+   *
+   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   *              For classification, labels should take values {0, 1, ..., numClasses-1}.
+   *              For regression, labels are real numbers.
+   * @param boostingStrategy Configuration options for the boosting algorithm.
+   * @return a gradient boosted trees model that can be used for prediction
+   */
+  def train(
+      input: RDD[LabeledPoint],
+      boostingStrategy: BoostingStrategy): GradientBoostedTreesModel = {
+    new GradientBoostedTrees(boostingStrategy).run(input)
+  }
+
+  /**
+   * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoostedTrees$#train]]
+   */
+  def train(
+      input: JavaRDD[LabeledPoint],
+      boostingStrategy: BoostingStrategy): GradientBoostedTreesModel = {
+    train(input.rdd, boostingStrategy)
   }
 
 }
