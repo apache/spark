@@ -387,6 +387,33 @@ setMethod("toJSON",
             RDD(jrdd, serializedMode = "string")
           })
 
+#' saveAsParquetFile
+#'
+#' Save the contents of a DataFrame as a Parquet file, preserving the schema. Files written out
+#' with this method can be read back in as a DataFrame using parquetFile().
+#'
+#' @param x A SparkSQL DataFrame
+#' @param path The directory where the file is saved
+#' @rdname saveAsParquetFile
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' saveAsParquetFile(df, "/tmp/sparkr-tmp/")
+#'}
+setGeneric("saveAsParquetFile", function(x, path) { standardGeneric("saveAsParquetFile") })
+
+#' @rdname saveAsParquetFile
+#' @export
+setMethod("saveAsParquetFile",
+          signature(x = "DataFrame", path = "character"),
+          function(x, path) {
+            invisible(callJMethod(x@sdf, "saveAsParquetFile", path))
+          })
+
 #' Distinct
 #'
 #' Return a new DataFrame containing the distinct rows in this DataFrame.

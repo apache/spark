@@ -370,4 +370,15 @@ test_that("isLocal()", {
   expect_false(isLocal(df))
 })
 
+# TODO: Enable and test once the parquetFile PR has been merged
+# test_that("saveAsParquetFile() on DataFrame and works with parquetFile", {
+#   df <- jsonFile(sqlCtx, jsonPath)
+#   parquetPath <- tempfile(pattern="spark-test", fileext=".tmp")
+#   saveAsParquetFile(df, parquetPath)
+#   parquetDF <- parquetFile(sqlCtx, parquetPath)
+#   expect_true(inherits(parquetDF, "DataFrame"))
+#   expect_equal(collect(df), collect(parquetDF))
+#   unlink(parquetPath)
+# })
+
 unlink(jsonPath)
