@@ -638,16 +638,22 @@ private[spark] object Utils extends Logging {
     if (!targetDir.exists() && !targetDir.mkdir()) {
       throw new IOException(s"Failed to create directory ${targetDir.getPath}")
     }
-    fs.listStatus(path).foreach { fileStatus =>
-      val innerPath = fileStatus.getPath
-      if (fileStatus.isDir) {
-        fetchHcfsFile(innerPath, new File(targetDir, innerPath.getName), fs, conf, hadoopConf,
-          fileOverwrite)
-      } else {
-        val in = fs.open(innerPath)
-        val targetFile = new File(targetDir, filename.getOrElse(innerPath.getName))
-        downloadFile(innerPath.toString, in, targetFile, fileOverwrite)
+    if (fs.isDirectory(path)) {
+      fs.listStatus(path).foreach { fileStatus =>
+        val innerPath = fileStatus.getPath
+        if (fileStatus.isDir) {
+          fetchHcfsFile(innerPath, new File(targetDir, innerPath.getName), fs, conf, hadoopConf,
+            fileOverwrite)
+        } else {
+          val in = fs.open(innerPath)
+          val targetFile = new File(targetDir, innerPath.getName)
+          downloadFile(innerPath.toString, in, targetFile, fileOverwrite)
+        }
       }
+    } else {
+      val in = fs.open(path)
+      val targetFile = new File(targetDir, filename.getOrElse(path.getName))
+      downloadFile(path.toString, in, targetFile, fileOverwrite)
     }
   }
 
