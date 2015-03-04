@@ -172,6 +172,10 @@ class Analyzer(catalog: Catalog,
   object ResolveRelations extends Rule[LogicalPlan] {
     def getTable(u: UnresolvedRelation, cteRelations: Map[String, LogicalPlan]) = {
       try {
+          // In hive, if there is same table name in database and CTE statement,
+          // hive will use the table in database, not the CTE one.
+          // Taking into account the reasonableness and the implementation complexity,
+          // here use the CTE definition first, check table name only and ignore database name
           cteRelations.get(u.tableIdentifier.last)
             .map(relation => u.alias.map(Subquery(_, relation)).getOrElse(relation))
             .getOrElse(catalog.lookupRelation(u.tableIdentifier, u.alias))
