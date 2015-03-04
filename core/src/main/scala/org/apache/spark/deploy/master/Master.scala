@@ -736,30 +736,34 @@ private[spark] class Master(
     val appName = app.desc.name
     val notFoundBasePath = HistoryServer.UI_PATH_PREFIX + "/not-found"
     try {
-      val eventLogFile = app.desc.eventLogDir
-        .map { dir => EventLoggingListener.getLogPath(dir, app.id, app.desc.eventLogCodec) }
+      val eventLogDir = app.desc.eventLogDir
         .getOrElse {
           // Event logging is not enabled for this application
           app.desc.appUiUrl = notFoundBasePath
           return false
         }
-
-      val fs = Utils.getHadoopFileSystem(eventLogFile, hadoopConf)
-
-      if (fs.exists(new Path(eventLogFile + EventLoggingListener.IN_PROGRESS))) {
+      
+      val eventLogFilePrefix = EventLoggingListener.getLogPath(
+          eventLogDir, app.id, app.desc.eventLogCodec)
+      val fs = Utils.getHadoopFileSystem(eventLogDir, hadoopConf)
+      val inProgressExists = fs.exists(new Path(eventLogFilePrefix + 
+          EventLoggingListener.IN_PROGRESS))
+      
+      if (inProgressExists) {
         // Event logging is enabled for this application, but the application is still in progress
-        val title = s"Application history not found (${app.id})"
-        var msg = s"Application $appName is still in progress."
-        logWarning(msg)
-        msg = URLEncoder.encode(msg, "UTF-8")
-        app.desc.appUiUrl = notFoundBasePath + s"?msg=$msg&title=$title"
-        return false
+        logWarning(s"Application $appName is still in progress, it may be terminated abnormally.")
       }
-
+      
+      val (eventLogFile, status) = if (inProgressExists) {
+        (eventLogFilePrefix + EventLoggingListener.IN_PROGRESS, " (in progress)")
+      } else {
+        (eventLogFilePrefix, " (completed)")
+      }
+      
       val logInput = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
       val replayBus = new ReplayListenerBus()
       val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
-        appName + " (completed)", HistoryServer.UI_PATH_PREFIX + s"/${app.id}")
+        appName + status, HistoryServer.UI_PATH_PREFIX + s"/${app.id}")
       try {
         replayBus.replay(logInput, eventLogFile)
       } finally {
@@ -774,7 +778,7 @@ private[spark] class Master(
       case fnf: FileNotFoundException =>
         // Event logging is enabled for this application, but no event logs are found
         val title = s"Application history not found (${app.id})"
-        var msg = s"No event logs found for application $appName in ${app.desc.eventLogDir}."
+        var msg = s"No event logs found for application $appName in ${app.desc.eventLogDir.get}."
         logWarning(msg)
         msg += " Did you specify the correct logging directory?"
         msg = URLEncoder.encode(msg, "UTF-8")
