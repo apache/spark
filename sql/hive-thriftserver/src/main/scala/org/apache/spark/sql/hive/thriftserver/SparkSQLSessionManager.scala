@@ -23,6 +23,7 @@ import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.service.cli.session.SessionManager
+import org.apache.hive.service.cli.thrift.TProtocolVersion
 
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
@@ -49,8 +50,22 @@ private[hive] class SparkSQLSessionManager(hiveContext: HiveContext)
     initCompositeService(hiveConf)
   }
 
+  override def openSession(
+      protocol: TProtocolVersion,
+      username: String,
+      passwd: String,
+      sessionConf: java.util.Map[String, String],
+      withImpersonation: Boolean,
+      delegationToken: String): SessionHandle = {
+    hiveContext.openSession()
+
+    super.openSession(protocol, username, passwd, sessionConf, withImpersonation, delegationToken)
+  }
+
   override def closeSession(sessionHandle: SessionHandle) {
     super.closeSession(sessionHandle)
     sparkSqlOperationManager.sessionToActivePool -= sessionHandle
+
+    hiveContext.detachSession()
   }
 }
