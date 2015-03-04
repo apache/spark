@@ -515,6 +515,7 @@ class SparseVector(
     val values: Array[Double]) extends Vector {
 
   require(indices.length == values.length)
+  require(indices.forall(index => index < size))
 
   override def toString: String =
     "(%s,%s,%s)".format(size, indices.mkString("[", ",", "]"), values.mkString("[", ",", "]"))

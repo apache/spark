@@ -51,6 +51,12 @@ class VectorsSuite extends FunSuite {
     assert(vec.values.eq(values))
   }
 
+  test("sparse vector construction with invalid index") {
+    intercept[IllegalArgumentException] {
+      Vectors.sparse(n, Array(100), Array(1.0))
+    }
+  }
+
   test("sparse vector construction with unordered elements") {
     val vec = Vectors.sparse(n, indices.zip(values).reverse).asInstanceOf[SparseVector]
     assert(vec.size === n)
