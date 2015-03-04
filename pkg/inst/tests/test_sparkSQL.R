@@ -260,6 +260,17 @@ test_that("select with column", {
   expect_true(count(df2) == 3)
 })
 
+test_that("selectExpr() on a DataFrame", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  selected <- selectExpr(df, "age * 2")
+  expect_true(names(selected) == "(age * 2)")
+  expect_equal(collect(selected), collect(select(df, df$age * 2L)))
+  
+  selected2 <- selectExpr(df, "name as newName", "abs(age) as age")
+  expect_equal(names(selected2), c("newName", "age"))
+  expect_true(count(selected2) == 3)
+})
+
 test_that("column calculation", {
   df <- jsonFile(sqlCtx, jsonPath)
   d <- collect(select(df, alias(df$age + 1, "age2")))
