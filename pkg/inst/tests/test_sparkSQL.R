@@ -362,10 +362,7 @@ test_that("toJSON() returns an RDD of the correct values", {
 
 test_that("showDF()", {
   df <- jsonFile(sqlCtx, jsonPath)
-  expect_output(showDF(df), "age  name
-null Michael
-30   Andy
-19   Justin ")
+  expect_output(showDF(df), "age  name   \nnull Michael\n30   Andy   \n19   Justin ")
 })
 
 test_that("isLocal()", {
