@@ -102,6 +102,7 @@ exportMethods("columns",
               "schema",
               "sortDF",
               "select",
+              "selectExpr",
               "toRDD",
               "where")
 
@@ -129,12 +130,16 @@ exportMethods("asc",
               "sumDistinct")
 
 export("cacheTable",
+       "clearCache",
        "createExternalTable",
        "jsonFile",
+       "jsonRDD",
        "loadDF",
        "parquetFile",
        "sql",
        "table",
+       "tableNames",
+       "tables",
        "uncacheTable")
 
 export("sparkRSQL.init")

@@ -21,6 +21,35 @@ test_that("jsonFile() on a local file returns a DataFrame", {
   expect_true(count(df) == 3)
 })
 
+test_that("jsonRDD() on a RDD with json string", {
+  rdd <- parallelize(sc, mockLines)
+  expect_true(count(rdd) == 3)
+  df <- jsonRDD(sqlCtx, rdd)
+  expect_true(inherits(df, "DataFrame"))
+  expect_true(count(df) == 3)
+
+  rdd2 <- flatMap(rdd, function(x) c(x, x))
+  df <- jsonRDD(sqlCtx, rdd2)
+  expect_true(inherits(df, "DataFrame"))
+  expect_true(count(df) == 6)
+})
+
+test_that("test cache, uncache and clearCache", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  registerTempTable(df, "table1")
+  cacheTable(sqlCtx, "table1")
+  uncacheTable(sqlCtx, "table1")
+  clearCache(sqlCtx)
+})
+
+test_that("test tableNames and tables", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  registerTempTable(df, "table1")
+  expect_true(length(tableNames(sqlCtx)) == 1)
+  df <- tables(sqlCtx)
+  expect_true(count(df) == 1)
+})
+
 test_that("registerTempTable() results in a queryable table and sql() results in a new DataFrame", {
   df <- jsonFile(sqlCtx, jsonPath)
   registerTempTable(df, "table1")
@@ -230,6 +259,17 @@ test_that("select with column", {
   df2 <- select(df, df$age)
   expect_true(columns(df2) == c("age"))
   expect_true(count(df2) == 3)
+})
+
+test_that("selectExpr() on a DataFrame", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  selected <- selectExpr(df, "age * 2")
+  expect_true(names(selected) == "(age * 2)")
+  expect_equal(collect(selected), collect(select(df, df$age * 2L)))
+  
+  selected2 <- selectExpr(df, "name as newName", "abs(age) as age")
+  expect_equal(names(selected2), c("newName", "age"))
+  expect_true(count(selected2) == 3)
 })
 
 test_that("column calculation", {
