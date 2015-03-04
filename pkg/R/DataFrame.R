@@ -1,6 +1,6 @@
 # DataFrame.R - DataFrame class and methods implemented in S4 OO classes
 
-#' @include jobj.R SQLTypes.R RDD.R pairRDD.R column.R
+#' @include jobj.R SQLTypes.R RDD.R pairRDD.R column.R group.R
 NULL
 
 setOldClass("jobj")
@@ -529,26 +529,30 @@ setMethod("toRDD",
             })
           })
 
-
+#' GroupBy
+#'
+#' Groups the DataFrame using the specified columns, so we can run aggregation on them.
+#'
 setGeneric("groupBy", function(x, ...) { standardGeneric("groupBy") })
 
 setMethod("groupBy",
            signature(x = "DataFrame"),
-           function(x, col, ...) {
-             jseq <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "toSeq", list(...))
-             sgd <- callJMethod(x@sdf, "groupBy", col, jseq)
+           function(x, ...) {
+             cols <- list(...)
+             if (length(cols) >= 1 && class(cols[[1]]) == "character") {
+               sgd <- callJMethod(x@sdf, "groupBy", cols[[1]], listToSeq(cols[-1]))
+             } else {
+               jcol <- lapply(cols, function(c) { c@jc })
+               sgd <- callJMethod(x@sdf, "groupBy", listToSeq(jcol))
+             }
              groupedData(sgd)
            })
 
 
-setGeneric("agg", function (x, ...) { standardGeneric("agg") })
-
 setMethod("agg",
           signature(x = "DataFrame"),
           function(x, ...) {
-            cols <- varargsToEnv(...)
-            sdf <- callJMethod(x@sdf, "agg", cols)
-            dataFrame(sdf)
+            agg(groupBy(x), ...)
           })
 
 
@@ -631,53 +635,5 @@ setMethod("select", signature(x = "DataFrame", col = "Column"),
           })
 
 
-############################## GroupedData ########################################
 
-setClass("GroupedData",
-         slots = list(env = "environment",
-                      sgd = "jobj"))
-
-setMethod("initialize", "GroupedData", function(.Object, sgd) {
-  .Object@env <- new.env()
-  .Object@sgd <- sgd
-  .Object
-})
-
-groupedData <- function(sgd) {
-  new("GroupedData", sgd)
-}
-
-setMethod("count",
-          signature(x = "GroupedData"),
-          function(x) {
-            dataFrame(callJMethod(x@sgd, "count"))
-          })
-
-setMethod("agg",
-          signature(x = "GroupedData"),
-          function(x, ...) {
-            cols <- varargsToEnv(...)
-            sdf <- callJMethod(x@sgd, "agg", cols)
-            dataFrame(sdf)
-          })
-
-#' sum/mean/avg/min/max
-
-metheds <- c("sum", "mean", "avg", "min", "max")
-
-setGeneric("avg", function(x, ...) { standardGeneric("avg") })
-
-createMethod <- function(name) {
-  setMethod(name,
-            signature(x = "GroupedData"),
-            function(x, ...) {
-              jseq <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "toSeq", list(...))
-              sdf <- callJMethod(x@sgd, name, jseq)
-              dataFrame(sdf)
-            })
-}
-
-for (name in metheds) {
-  createMethod(name)
-}
 

@@ -166,7 +166,7 @@ class SparkRBackendHandler(server: SparkRBackend)
         }
       }
       if (!parameterWrapperType.isInstance(args(i))) {
-        logInfo(s"arg $i not match: type $parameterWrapperType != ${args(i)}")
+        logInfo(s"arg $i not match: type $parameterWrapperType != ${args(i).getClass()}")
         return false
       }
     }

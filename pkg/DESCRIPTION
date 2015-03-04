@@ -20,6 +20,7 @@ Collate:
     'RDD.R'
     'pairRDD.R'
     'column.R'
+    'group.R'
     'DataFrame.R'
     'SQLContext.R'
     'broadcast.R'

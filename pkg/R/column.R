@@ -75,7 +75,7 @@ createMethods <- function() {
     createOperator(op)
   }
 
-  setGeneric("avg", function(x) { standardGeneric("avg") })
+  setGeneric("avg", function(x, ...) { standardGeneric("avg") })
   setGeneric("last", function(x) { standardGeneric("last") })
   setGeneric("asc", function(x) { standardGeneric("asc") })
   setGeneric("desc", function(x) { standardGeneric("desc") })

@@ -256,8 +256,11 @@ test_that("column functions", {
 
 test_that("group by", {
   df <- jsonFile(sqlCtx, jsonPath)
-  df1 <- agg(df, name="max", age="sum")
+  df1 <- agg(df, name = "max", age = "sum")
   expect_true(1 == count(df1))
+  df1 <- agg(df, age2 = max(df$age))
+  expect_true(1 == count(df1))
+  expect_true(columns(df1) == c("age2"))
 
   gd <- groupBy(df, "name")
   expect_true(inherits(gd, "GroupedData"))
