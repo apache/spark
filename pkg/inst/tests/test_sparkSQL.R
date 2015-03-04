@@ -360,4 +360,8 @@ test_that("toJSON() returns an RDD of the correct values", {
   expect_equal(collect(testRDD)[[1]], mockLines[1])
 })
 
+test_that("isLocal()", {
+  expect_false(isLocal(df))
+}
+
 unlink(jsonPath)

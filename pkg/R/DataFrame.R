@@ -111,6 +111,33 @@ setMethod("explain",
             callJMethod(x@sdf, "explain", extended)
           })
 
+#' isLocal
+#'
+#' Returns True if the `collect` and `take` methods can be run locally
+#' (without any Spark executors).
+#'
+#' @param x A SparkSQL DataFrame
+#'
+#' @rdname isLocal
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' isLocal(df)
+#'}
+setGeneric("isLocal", function(x) { standardGeneric("isLocal") })
+
+#' @rdname isLocal
+#' @export
+setMethod("isLocal",
+          signature(x = "DataFrame"),
+          function(x) {
+            callJMethod(x@sdf, "isLocal")
+          })
+
 #' DataTypes
 #' 
 #' Return all column names and their data types as a list
