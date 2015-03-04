@@ -23,7 +23,7 @@ class PostgresHook(object):
                 Connection).filter(
                     Connection.conn_id == postgres_conn_id)
             if db.count() == 0:
-                raise Exception("The mysql_dbid you provided isn't defined")
+                raise Exception("The postgres_dbid you provided isn't defined")
             else:
                 db = db.all()[0]
             self.host = db.host
