@@ -2,7 +2,7 @@ library(testthat)
 
 context("SparkSQL functions")
 
-# Tests for jsonFile, registerTempTable, sql, count, table
+# Tests for SparkSQL functions in SparkR
 
 sc <- sparkR.init()
 
@@ -350,6 +350,14 @@ test_that("join() on a DataFrame", {
   expect_equal(names(joined4), c("newAge", "name", "test"))
   expect_true(count(joined4) == 4)
   expect_true(first(joined4)$newAge == 24)
+})
+
+test_that("toJSON() returns an RDD of the correct values", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  testRDD <- toJSON(df)
+  expect_true(inherits(testRDD, "RDD"))
+  expect_true(SparkR:::getSerializedMode(testRDD) == "string")
+  expect_equal(collect(testRDD)[[1]], mockLines[1])
 })
 
 unlink(jsonPath)

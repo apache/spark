@@ -102,6 +102,7 @@ exportMethods("columns",
               "sortDF",
               "select",
               "selectExpr",
+              "toJSON",
               "toRDD",
               "where")
 

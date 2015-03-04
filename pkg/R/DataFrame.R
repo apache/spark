@@ -305,6 +305,34 @@ setMethod("repartition",
             dataFrame(sdf)     
           })
 
+#' toJSON
+#'
+#' Convert the rows of a DataFrame into JSON objects and return a StringRRDD
+#'
+#' @param x A SparkSQL DataFrame
+#' @return A StringRRDD of JSON objects
+#' @rdname toJSON
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' newRDD <- toJSON(df)
+#'}
+setGeneric("toJSON", function(x) { standardGeneric("toJSON") })
+
+#' @rdname toJSON
+#' @export
+setMethod("toJSON",
+          signature(x = "DataFrame"),
+          function(x) {
+            rdd <- callJMethod(x@sdf, "toJSON")
+            jrdd <- callJMethod(rdd, "toJavaRDD")
+            RDD(jrdd, serializedMode = "string")
+          })
+
 #' Distinct
 #'
 #' Return a new DataFrame containing the distinct rows in this DataFrame.
