@@ -108,7 +108,13 @@ setGeneric("explain", function(x, ...) { standardGeneric("explain") })
 setMethod("explain",
           signature(x = "DataFrame"),
           function(x, extended = FALSE) {
-            callJMethod(x@sdf, "explain", extended)
+            queryExec <- callJMethod(x@sdf, "queryExecution")
+            if (extended) {
+              cat(callJMethod(queryExec, "toString"))
+            } else {
+              execPlan <- callJMethod(queryExec, "executedPlan")
+              cat(callJMethod(execPlan, "toString"))
+            }
           })
 
 #' isLocal
@@ -361,7 +367,8 @@ setMethod("repartition",
 
 #' toJSON
 #'
-#' Convert the rows of a DataFrame into JSON objects and return a StringRRDD
+#' Convert the rows of a DataFrame into JSON objects and return an RDD where
+#' each element contains a JSON string.
 #'
 #' @param x A SparkSQL DataFrame
 #' @return A StringRRDD of JSON objects
