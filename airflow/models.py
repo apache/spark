@@ -1197,20 +1197,18 @@ class DAG(Base):
         Returns a jinja2 Environment while taking into account the DAGs
         template_searchpath and user_defined_macros
         '''
-        if not hasattr(self, 'template_env') or not self.template_env:
-            searchpath = [self.folder]
-            if self.template_searchpath:
-                searchpath += self.template_searchpath
+        searchpath = [self.folder]
+        if self.template_searchpath:
+            searchpath += self.template_searchpath
 
-            env = jinja2.Environment(
-                loader=jinja2.FileSystemLoader(searchpath),
-                extensions=["jinja2.ext.do"],
-                cache_size=0)
-            if self.user_defined_macros:
-                env.globals.update(self.user_defined_macros)
+        env = jinja2.Environment(
+            loader=jinja2.FileSystemLoader(searchpath),
+            extensions=["jinja2.ext.do"],
+            cache_size=0)
+        if self.user_defined_macros:
+            env.globals.update(self.user_defined_macros)
 
-            self.template_env = env
-        return self.template_env
+        return env
 
     def set_dependency(self, upstream_task_id, downstream_task_id):
         """
@@ -1293,7 +1291,17 @@ class DAG(Base):
         based on a regex that should match one or many tasks, and includes
         upstream and downstream neighboors based on the flag passed.
         """
-        dag = copy.copy(self)
+
+        # Swiwtcharoo to go around deepcopying objects coming through the
+        # backdoor
+        user_defined_macros = self.user_defined_macros
+        params = self.params
+        delattr(self, 'user_defined_macros')
+        delattr(self, 'params')
+        dag = copy.deepcopy(self)
+        self.user_defined_macros = user_defined_macros
+        self.params = params
+
         regex_match = [
             t for t in dag.tasks if re.findall(task_regex, t.task_id)]
         also_include = []
