@@ -17,7 +17,7 @@ pyspark.sql.types module
 
 
 pyspark.sql.functions module
-------------------------
+----------------------------
 .. automodule:: pyspark.sql.functions
     :members:
     :undoc-members:

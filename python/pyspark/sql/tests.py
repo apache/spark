@@ -24,6 +24,7 @@ import sys
 import pydoc
 import shutil
 import tempfile
+import pickle
 
 import py4j
 
@@ -86,6 +87,14 @@ class ExamplePoint:
     def __eq__(self, other):
         return isinstance(other, ExamplePoint) and \
             other.x == self.x and other.y == self.y
+
+
+class DataTypeTests(unittest.TestCase):
+    # regression test for SPARK-6055
+    def test_data_type_eq(self):
+        lt = LongType()
+        lt2 = pickle.loads(pickle.dumps(LongType()))
+        self.assertEquals(lt, lt2)
 
 
 class SQLTests(ReusedPySparkTestCase):

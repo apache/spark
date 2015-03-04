@@ -199,13 +199,12 @@ private[sql] object JsonRDD extends Logging {
    * type conflicts.
    */
   private def typeOfArray(l: Seq[Any]): ArrayType = {
-    val containsNull = l.exists(v => v == null)
     val elements = l.flatMap(v => Option(v))
     if (elements.isEmpty) {
       // If this JSON array is empty, we use NullType as a placeholder.
       // If this array is not empty in other JSON objects, we can resolve
       // the type after we have passed through all JSON objects.
-      ArrayType(NullType, containsNull)
+      ArrayType(NullType, containsNull = true)
     } else {
       val elementType = elements.map {
         e => e match {
@@ -217,7 +216,7 @@ private[sql] object JsonRDD extends Logging {
         }
       }.reduce((type1: DataType, type2: DataType) => compatibleType(type1, type2))
 
-      ArrayType(elementType, containsNull)
+      ArrayType(elementType, containsNull = true)
     }
   }
 
@@ -245,7 +244,7 @@ private[sql] object JsonRDD extends Logging {
         // The value associated with the key is an array.
         // Handle inner structs of an array.
         def buildKeyPathForInnerStructs(v: Any, t: DataType): Seq[(String, DataType)] = t match {
-          case ArrayType(e: StructType, containsNull) => {
+          case ArrayType(e: StructType, _) => {
             // The elements of this arrays are structs.
             v.asInstanceOf[Seq[Map[String, Any]]].flatMap(Option(_)).flatMap {
               element => allKeysWithValueTypes(element)
@@ -253,7 +252,7 @@ private[sql] object JsonRDD extends Logging {
               case (k, t) => (s"$key.$k", t)
             }
           }
-          case ArrayType(t1, containsNull) =>
+          case ArrayType(t1, _) =>
             v.asInstanceOf[Seq[Any]].flatMap(Option(_)).flatMap {
               element => buildKeyPathForInnerStructs(element, t1)
             }
