@@ -237,8 +237,8 @@ private[spark] object SizeEstimator extends Logging {
     }
     size
   }
-  
-  private def primitiveSize(cls: Class[_]): Long = {
+
+  private def primitiveSize(cls: Class[_]): Int = {
     if (cls == classOf[Byte]) {
       BYTE_SIZE
     } else if (cls == classOf[Boolean]) {
@@ -274,20 +274,38 @@ private[spark] object SizeEstimator extends Logging {
     val parent = getClassInfo(cls.getSuperclass)
     var shellSize = parent.shellSize
     var pointerFields = parent.pointerFields
+    
+    // we have only four kinds of size: 1, 2, 4, 8. pointerSize can be 4 or 8.
+    // we can just use an Array.fill(9) to hold all the size counting, but we
+    // also use a HashMap to store size counting;
+    val sizeCount = Array.fill(9)(0)
 
+    // iterate through the fields of this class and gather information.
     for (field <- cls.getDeclaredFields) {
       if (!Modifier.isStatic(field.getModifiers)) {
         val fieldClass = field.getType
         if (fieldClass.isPrimitive) {
-          shellSize += primitiveSize(fieldClass)
+          sizeCount(primitiveSize(fieldClass)) += 1
         } else {
           field.setAccessible(true) // Enable future get()'s on this field
-          shellSize += pointerSize
+          sizeCount(pointerSize) += 1
           pointerFields = field :: pointerFields
         }
       }
     }
 
+    // place fields and calculated size
+    var alignedSize = shellSize
+    for (size <- Array(8, 4, 2, 1) if sizeCount(size) > 0) {
+      val count = sizeCount(size)
+      alignedSize = (alignSizeUp(shellSize, size) + size * count) max alignedSize
+      shellSize += size * count
+    }
+
+    shellSize = alignedSize
+
+    // round up instance filed blocks
+    shellSize = alignSizeUp(shellSize, pointerSize)
 
     // Create and cache a new ClassInfo
     val newInfo = new ClassInfo(shellSize, pointerFields)
@@ -299,4 +317,7 @@ private[spark] object SizeEstimator extends Logging {
     val rem = size % ALIGN_SIZE
     if (rem == 0) size else (size + ALIGN_SIZE - rem)
   }
+
+  private def alignSizeUp(size: Long, alignSize: Int): Long =
+    (size + alignSize - 1) & ~(alignSize - 1)
 }
