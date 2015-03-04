@@ -585,8 +585,7 @@ private class KafkaUtilsPythonHelper {
       classOf[DefaultDecoder],
       classOf[DefaultDecoder],
       kafkaParams,
-      topics
-    )
+      topics)
   }
 
   def createOffsetRange(topic: String, partition: Int, fromOffset: Long, untilOffset: Long)
