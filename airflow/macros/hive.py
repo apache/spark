@@ -2,7 +2,7 @@ import datetime
 
 
 def max_partition(
-        table, schema="default",
+        table, schema="default", field=None, filter=None,
         metastore_conn_id='metastore_default'):
     '''
     Gets the max partition for a table.
@@ -16,6 +16,11 @@ def max_partition(
     :param hive_conn_id: The hive connection you are interested in.
         If your default is set you don't need to use this parameter.
     :type hive_conn_id: string
+    :param filter: filter on a subset of partition as in
+        `sub_part='specific_value'`
+    :type filter: string
+    :param field: the field to get the max value from. If there's only
+        one partition field, this will be inferred
 
     >>> max_partition('airflow.static_babynames_partitioned')
     '2015-01-01'
@@ -24,7 +29,8 @@ def max_partition(
     if '.' in table:
         schema, table = table.split('.')
     hh = HiveMetastoreHook(metastore_conn_id=metastore_conn_id)
-    return hh.max_partition(schema=schema, table_name=table)
+    return hh.max_partition(
+        schema=schema, table_name=table, field=field, filter=filter)
 
 
 def _closest_date(target_dt, date_list, before_target=None):
@@ -78,7 +84,9 @@ def closest_ds_partition(
     target_dt = datetime.datetime.strptime(ds, '%Y-%m-%d')
     hh = HiveMetastoreHook(metastore_conn_id=metastore_conn_id)
     partitions = hh.get_partitions(schema=schema, table_name=table)
-    parts = [datetime.datetime.strptime(p, '%Y-%m-%d') for p in partitions]
+    parts = [
+        datetime.datetime.strptime(p.values()[0], '%Y-%m-%d')
+        for p in partitions]
     if partitions is None or partitions == []:
         return None
     if ds in partitions:

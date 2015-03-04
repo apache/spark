@@ -139,7 +139,8 @@ class HiveMetastoreHook(BaseHook):
         self.metastore._oprot.trans.close()
         return objs
 
-    def get_partitions(self, schema, table_name):
+    def get_partitions(
+            self, schema, table_name, filter=None):
         '''
         Returns a list of all partitions in a table. Works only
         for tables with less than 32767 (java short max val).
@@ -150,25 +151,27 @@ class HiveMetastoreHook(BaseHook):
         >>> parts = hh.get_partitions(schema='airflow', table_name=t)
         >>> len(parts)
         1
-        >>> max(parts)
-        '2015-01-01'
+        >>> parts
+        [{'ds': '2015-01-01'}]
         '''
         self.metastore._oprot.trans.open()
         table = self.metastore.get_table(dbname=schema, tbl_name=table_name)
         if len(table.partitionKeys) == 0:
             raise Exception("The table isn't partitionned")
-        elif len(table.partitionKeys) > 1:
-            raise Exception(
-                "The table is partitionned by multiple columns, "
-                "use a signal table!")
         else:
-            parts = self.metastore.get_partitions(
-                db_name=schema, tbl_name=table_name, max_parts=32767)
+            if filter:
+                parts = self.metastore.get_partitions_by_filter(
+                    db_name=schema, tbl_name=table_name,
+                    filter=filter, max_parts=32767)
+            else:
+                parts = self.metastore.get_partitions(
+                    db_name=schema, tbl_name=table_name, max_parts=32767)
 
             self.metastore._oprot.trans.close()
-            return [p.values[0] for p in parts]
+            pnames = [p.name for p in table.partitionKeys]
+            return [dict(zip(pnames, p.values)) for p in parts]
 
-    def max_partition(self, schema, table_name):
+    def max_partition(self, schema, table_name, field=None, filter=None):
         '''
         Returns the maximum value for all partitions in a table. Works only
         for tables that have a single partition key. For subpartitionned
@@ -179,7 +182,17 @@ class HiveMetastoreHook(BaseHook):
         >>> hh.max_partition(schema='airflow', table_name=t)
         '2015-01-01'
         '''
-        return max(self.get_partitions(schema, table_name))
+        parts = self.get_partitions(schema, table_name, filter)
+        if not parts:
+            return None
+        elif len(parts[0]) == 1:
+            field = parts[0].keys()[0]
+        elif not field:
+            raise Exception(
+                "Please specify the field you want the max "
+                "value for")
+
+        return max([p[field] for p in parts])
 
 
 class HiveServer2Hook(BaseHook):
