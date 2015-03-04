@@ -753,11 +753,12 @@ private[spark] class Master(
       
       if (inProgressExists) {
         // Event logging is enabled for this application, but the application is still in progress
-        logWarning(s"Application $appName is still in progress, it may be terminated abnormally.")
+        logWarning(s"Application $appName is still in progress.")
       }
 
       if (abnormalLogExists) {
-        // Event logging is enabled for this application, but the application is terminated abnormally.
+        // Event logging is enabled for this application,
+        // but the application may be terminated abnormally.
         logWarning(s"Application $appName may be terminated abnormally.")
       }
       
