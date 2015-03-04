@@ -978,15 +978,16 @@ class BaseOperator(Base):
             TI.execution_date <= end_date,
         ).order_by(TI.execution_date).all()
 
-    def get_flat_relatives(self, upstream=False):
+    def get_flat_relatives(self, upstream=False, l=None):
         """
         Get a flat list of relatives, either upstream or downstream.
         """
-        l = []
+        if not l:
+            l = []
         for t in self.get_direct_relatives(upstream):
             if t not in l:
                 l.append(t)
-                l += t.get_direct_relatives(upstream)
+                t.get_flat_relatives(upstream, l)
         return l
 
     def detect_downstream_cycle(self, task=None):
@@ -1310,7 +1311,6 @@ class DAG(Base):
                 also_include += t.get_flat_relatives(upstream=False)
             if include_upstream:
                 also_include += t.get_flat_relatives(upstream=True)
-
         # Compiling the unique list of tasks that made the cut
         tasks = list(set(regex_match + also_include))
         dag.tasks = tasks
