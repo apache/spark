@@ -14,7 +14,6 @@ setOldClass("jobj")
 #' @param env An R environment that stores bookkeeping states of the DataFrame
 #' @param sdf A Java object reference to the backing Scala DataFrame
 #' @export
-
 setClass("DataFrame",
          slots = list(env = "environment",
                       sdf = "jobj"))
@@ -29,7 +28,6 @@ setMethod("initialize", "DataFrame", function(.Object, sdf, isCached) {
 
 #' @rdname DataFrame
 #' @export
-
 dataFrame <- function(sdf, isCached = FALSE) {
   new("DataFrame", sdf, isCached)
 }
@@ -52,7 +50,6 @@ dataFrame <- function(sdf, isCached = FALSE) {
 #' df <- jsonFile(sqlCtx, path)
 #' printSchema(df)
 #'}
-
 setGeneric("printSchema", function(x) { standardGeneric("printSchema") })
 
 setMethod("printSchema",
@@ -78,9 +75,10 @@ setMethod("printSchema",
 #' df <- jsonFile(sqlCtx, path)
 #' dfSchema <- schema(df)
 #'}
-
 setGeneric("schema", function(x) { standardGeneric("schema") })
 
+#' @rdname schema
+#' @export
 setMethod("schema",
           signature(x = "DataFrame"),
           function(x) {
@@ -103,9 +101,10 @@ setMethod("schema",
 #' df <- jsonFile(sqlCtx, path)
 #' dtypes(df)
 #'}
-
 setGeneric("dtypes", function(x) { standardGeneric("dtypes") })
 
+#' @rdname dtypes
+#' @export
 setMethod("dtypes",
           signature(x = "DataFrame"),
           function(x) {
@@ -132,6 +131,8 @@ setMethod("dtypes",
 #'}
 setGeneric("columns", function(x) {standardGeneric("columns") })
 
+#' @rdname columns
+#' @export
 setMethod("columns",
           signature(x = "DataFrame"),
           function(x) {
@@ -166,9 +167,10 @@ setMethod("names",
 #' registerTempTable(df, "json_df")
 #' new_df <- sql(sqlCtx, "SELECT * FROM json_df")
 #'}
-
 setGeneric("registerTempTable", function(x, tableName) { standardGeneric("registerTempTable") })
 
+#' @rdname registerTempTable
+#' @export
 setMethod("registerTempTable",
           signature(x = "DataFrame", tableName = "character"),
           function(x, tableName) {
@@ -191,7 +193,6 @@ setMethod("registerTempTable",
 #' df <- jsonFile(sqlCtx, path)
 #' cache(df)
 #'}
-
 setMethod("cache",
           signature(x = "DataFrame"),
           function(x) {
@@ -217,7 +218,6 @@ setMethod("cache",
 #' df <- jsonFile(sqlCtx, path)
 #' persist(df, "MEMORY_AND_DISK")
 #'}
-
 setMethod("persist",
           signature(x = "DataFrame", newLevel = "character"),
           function(x, newLevel) {
@@ -244,7 +244,6 @@ setMethod("persist",
 #' persist(df, "MEMORY_AND_DISK")
 #' unpersist(df)
 #'}
-
 setMethod("unpersist",
           signature(x = "DataFrame"),
           function(x, blocking = TRUE) {
@@ -269,7 +268,6 @@ setMethod("unpersist",
 #' df <- jsonFile(sqlCtx, path)
 #' newDF <- repartition(df, 2L)
 #'}
-
 setGeneric("repartition", function(x, numPartitions) { standardGeneric("repartition") })
 
 #' @rdname repartition
@@ -296,7 +294,6 @@ setMethod("repartition",
 #' df <- jsonFile(sqlCtx, path)
 #' distinctDF <- distinct(df)
 #'}
-
 setMethod("distinct",
           signature(x = "DataFrame"),
           function(x) {
@@ -322,7 +319,6 @@ setMethod("distinct",
 #' collect(sampleDF(df, FALSE, 0.5)) 
 #' collect(sampleDF(df, TRUE, 0.5))
 #'}
-
 setGeneric("sampleDF",
            function(x, withReplacement, fraction, seed) {
              standardGeneric("sampleDF")
@@ -330,7 +326,6 @@ setGeneric("sampleDF",
 
 #' @rdname sampleDF
 #' @export
-
 setMethod("sampleDF",
           # TODO : Figure out how to send integer as java.lang.Long to JVM so
           # we can send seed as an argument through callJMethod
@@ -358,7 +353,6 @@ setMethod("sampleDF",
 #' df <- jsonFile(sqlCtx, path)
 #' count(df)
 #' }
-
 setMethod("count",
           signature(x = "DataFrame"),
           function(x) {
@@ -382,7 +376,6 @@ setMethod("count",
 #' collected <- collect(df)
 #' firstName <- collected[[1]]$name
 #' }
-
 setMethod("collect",
           signature(x = "DataFrame"),
           function(x, stringsAsFactors = FALSE) {
@@ -419,9 +412,10 @@ setMethod("collect",
 #' df <- jsonFile(sqlCtx, path)
 #' limitedDF <- limit(df, 10)
 #' }
-
 setGeneric("limit", function(x, num) {standardGeneric("limit") })
 
+#' @rdname limit
+#' @export
 setMethod("limit",
           signature(x = "DataFrame", num = "numeric"),
           function(x, num) {
@@ -441,7 +435,6 @@ setMethod("limit",
 #' df <- jsonFile(sqlCtx, path)
 #' take(df, 2)
 #' }
-
 setMethod("take",
           signature(x = "DataFrame", num = "numeric"),
           function(x, num) {
@@ -469,7 +462,6 @@ setMethod("take",
 #' df <- jsonFile(sqlCtx, path)
 #' head(df)
 #' }
-
 setMethod("head",
           signature(x = "DataFrame"),
           function(x, num = 6L) {
@@ -491,7 +483,6 @@ setMethod("head",
 #' df <- jsonFile(sqlCtx, path)
 #' first(df)
 #' }
-
 setMethod("first",
           signature(x = "DataFrame"),
           function(x) {
@@ -514,9 +505,10 @@ setMethod("first",
 #' df <- jsonFile(sqlCtx, path)
 #' rdd <- toRDD(df)
 #' }
-
 setGeneric("toRDD", function(x) { standardGeneric("toRDD") })
 
+#' @rdname DataFrame
+#' @export
 setMethod("toRDD",
           signature(x = "DataFrame"),
           function(x) {
