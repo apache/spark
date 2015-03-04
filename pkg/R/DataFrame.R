@@ -611,7 +611,7 @@ setMethod("select", signature(x = "DataFrame", col = "Column"),
 #'
 #' Select from a DataFrame using a set of SQL expressions.
 #'
-#' @param x A DataFrame to be sorted.
+#' @param x A DataFrame to be selected from.
 #' @param expr A string containing a SQL expression
 #' @param ... Additional expressions
 #' @return A DataFrame
