@@ -426,4 +426,23 @@ class SQLQuerySuite extends QueryTest {
     dropTempTable("data")
     setConf("spark.sql.hive.convertCTAS", originalConf)
   }
+
+  test("SPARK-4226 Add support for subqueries in predicates- Uncorelated queries") {
+    checkAnswer(
+        sql(
+          """SELECT a.key FROM src a 
+            |WHERE a.key in
+            |(SELECT b.key FROM src b WHERE b.key in (230))""".stripMargin),
+            sql("SELECT key FROM src WHERE key in (230)").collect().toSeq)
+  }
+
+  test("SPARK-4226 Add support for subqueries in predicates- corelated queries") {
+    checkAnswer(
+        sql(
+          """SELECT a.key FROM src a 
+            |WHERE a.key in
+            |(SELECT b.key FROM src b WHERE b.key in (230)and a.value=b.value)""".stripMargin),
+            sql("SELECT key FROM src WHERE key in (230)").collect().toSeq)
+  }
+
 }

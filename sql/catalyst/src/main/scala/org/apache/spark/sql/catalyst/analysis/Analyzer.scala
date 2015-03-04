@@ -21,6 +21,7 @@ import org.apache.spark.util.collection.OpenHashSet
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types._
@@ -59,6 +60,7 @@ class Analyzer(catalog: Catalog,
       ResolveGroupingAnalytics ::
       ResolveSortReferences ::
       ImplicitGenerate ::
+      SubQueryExpressions ::
       ResolveFunctions ::
       GlobalAggregates ::
       UnresolvedHavingClauseAttributes ::
@@ -420,6 +422,108 @@ class Analyzer(catalog: Catalog,
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case Project(Seq(Alias(g: Generator, _)), child) =>
         Generate(g, join = false, outer = false, None, child)
+    }
+  }
+
+  /**
+   * Transforms the query which has subquery expressions in where clause to left semi join.
+   * select T1.x from T1 where T1.x in (select T2.y from T2) transformed to
+   * select T1.x from T1 left semi join T2 on T1.x = T2.y.
+   */
+  object SubQueryExpressions extends Rule[LogicalPlan] {
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case p: LogicalPlan if !p.childrenResolved => p
+      case filter @ Filter(conditions, child) =>
+        val subqueryExprs = conditions.collect {
+          case In(exp, Seq(SubqueryExpression(subquery))) => (exp, subquery)
+        }
+        // Replace subqueries with a dummy true literal since they are evaluated separately now.
+        val transformedConds = conditions.transform {
+          case In(_, Seq(SubqueryExpression(_))) => Literal(true)
+        }
+        subqueryExprs match {
+          case Seq() => filter // No subqueries.
+          case Seq((exp, subquery)) =>
+            createLeftSemiJoin(
+              child,
+              exp,
+              subquery,
+              transformedConds)
+          case _ =>
+            throw new TreeNodeException(filter, "Only one SubQuery expression is supported.")
+        }
+    }
+
+    /**
+     * Create LeftSemi join with parent query to the subquery which is mentioned in 'IN' predicate
+     * And combine the subquery conditions and parent query conditions.
+     */ 
+    def createLeftSemiJoin(left: LogicalPlan,
+        value: Expression,
+        subquery: LogicalPlan,
+        parentConds: Expression) : LogicalPlan = {
+      val (transformedPlan, subqueryConds) = transformAndGetConditions(value, subquery)
+      // Add both parent query conditions and subquery conditions as join conditions
+      val allPredicates = And(parentConds, subqueryConds)
+      Join(left, transformedPlan, LeftSemi, Some(allPredicates))
+    }
+
+    /**
+     * Transform the subquery LogicalPlan and add the expressions which are used as filters to the
+     * projection. And also return filter conditions used in subquery
+     */
+    def transformAndGetConditions(value: Expression,
+          subquery: LogicalPlan): (LogicalPlan, Expression) = {
+      val expr = new scala.collection.mutable.ArrayBuffer[Expression]()
+      // TODO : we only decorelate subqueries in very specific cases like the cases mentioned above
+      // in documentation. The more complex queries like using of subqueries inside subqueries can 
+      // be supported in future.
+      val transformedPlan = subquery transform {
+        case project @ Project(projectList, f @ Filter(condition, child)) =>
+          // Don't support more than one item in select list of subquery
+          if(projectList.size > 1) {
+            throw new TreeNodeException(
+                project,
+                "SubQuery can contain only one item in Select List")
+          }
+          val resolvedChild = ResolveRelations(child)
+          // Add the expressions to the projections which are used as filters in subquery
+          val toBeAddedExprs = f.references.filter{a =>
+            resolvedChild.resolve(a.name, resolver) != None && !project.outputSet.contains(a)}
+          val nameToExprMap = collection.mutable.Map[String, Alias]()
+          // Create aliases for all projection expressions.
+          val witAliases = (projectList ++ toBeAddedExprs).zipWithIndex.map {
+            case (exp, index) => 
+              nameToExprMap.put(exp.name, Alias(exp, s"sqc$index")())
+              Alias(exp, s"sqc$index")()
+          }
+          // Replace the condition column names with alias names.
+          val transformedConds = condition.transform {
+            case a: Attribute if resolvedChild.resolve(a.name, resolver) != None =>
+              nameToExprMap.get(a.name).get.toAttribute
+          }
+          // Join the first projection column of subquery to the main query and add as condition
+          // TODO : We can avoid if the parent condition already has this condition.
+          expr += EqualTo(value, witAliases(0).toAttribute)
+          expr += transformedConds
+          Project(witAliases, child)
+        case project @ Project(projectList, child) =>
+          // Don't support more than one item in select list of subquery
+          if(projectList.size > 1) {
+            throw new TreeNodeException(
+                project,
+                "SubQuery can contain only one item in Select List")
+          }
+          // Case 1  Uncorelated queries
+          // Create aliases for all projection expressions.
+          val witAliases = projectList.zipWithIndex.map{case (x,y) => Alias(x, s"sqc$y")()}
+          // Take the first projection expression as join condition.
+          expr += EqualTo(value, witAliases(0).toAttribute)
+          Project(witAliases, child)
+      }
+      // Add alias to Subquery as 'subquery'
+      (transformedPlan, expr.reduce(And))
     }
   }
 }

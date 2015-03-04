@@ -1215,6 +1215,12 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case Token("TOK_STRINGLITERALSEQUENCE", strings) =>
       Literal(strings.map(s => BaseSemanticAnalyzer.unescapeSQLString(s.getText)).mkString)
 
+    /* Subquery expressions in where condition */
+    case Token("TOK_SUBQUERY_EXPR",
+                   Token("TOK_SUBQUERY_OP",
+                       Token("in", Nil) :: Nil) ::
+                       query :: exprsn :: Nil) =>
+      In(nodeToExpr(exprsn), Seq(SubqueryExpression(nodeToPlan(query))))
     // This code is adapted from
     // /ql/src/java/org/apache/hadoop/hive/ql/parse/TypeCheckProcFactory.java#L223
     case ast: ASTNode if numericAstTypes contains ast.getType =>
