@@ -15,6 +15,12 @@ test_that("get number of partitions in RDD", {
   expect_equal(numPartitions(intRdd), 2)
 })
 
+test_that("first on RDD", {
+  expect_true(first(rdd) == 1)
+  newrdd <- lapply(rdd, function(x) x + 1)
+  expect_true(first(newrdd) == 2)  
+})
+
 test_that("count and length on RDD", {
    expect_equal(count(rdd), 10)
    expect_equal(length(rdd), 10)
@@ -334,6 +340,23 @@ test_that("values() on RDDs", {
   values <- values(intRdd)
   actual <- collect(values)
   expect_equal(actual, lapply(intPairs, function(x) { x[[2]] }))
+})
+
+test_that("pipeRDD() on RDDs", {
+  actual <- collect(pipeRDD(rdd, "more"))
+  expected <- as.list(as.character(1:10))
+  expect_equal(actual, expected)
+  
+  trailed.rdd <- parallelize(sc, c("1", "", "2\n", "3\n\r\n"))
+  actual <- collect(pipeRDD(trailed.rdd, "sort"))
+  expected <- list("", "1", "2", "3")
+  expect_equal(actual, expected)
+  
+  rev.nums <- 9:0
+  rev.rdd <- parallelize(sc, rev.nums, 2L)
+  actual <- collect(pipeRDD(rev.rdd, "sort"))
+  expected <- as.list(as.character(c(5:9, 0:4)))
+  expect_equal(actual, expected)
 })
 
 test_that("join() on pairwise RDDs", {

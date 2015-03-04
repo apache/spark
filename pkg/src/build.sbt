@@ -29,7 +29,7 @@ libraryDependencies ++= Seq(
   val excludeHadoop = ExclusionRule(organization = "org.apache.hadoop")
   val sbtYarnFlag = scala.util.Properties.envOrElse("USE_YARN", "")
   val defaultHadoopVersion = "1.0.4"
-  val defaultSparkVersion = "1.3.0"
+  val defaultSparkVersion = "1.3.0-SNAPSHOT-sparkr"
   val hadoopVersion = scala.util.Properties.envOrElse("SPARK_HADOOP_VERSION", defaultHadoopVersion)
   val sparkVersion = scala.util.Properties.envOrElse("SPARK_VERSION", defaultSparkVersion)
   libraryDependencies ++= Seq(
@@ -53,6 +53,7 @@ libraryDependencies ++= Seq(
 }
 
 resolvers ++= Seq(
+  "SparkR 1.3 Snapshots" at "https://s3-us-west-2.amazonaws.com/sparkr-dep-1.3/release",
   "Apache Staging" at "https://repository.apache.org/content/repositories/staging/",
   "Typesafe" at "http://repo.typesafe.com/typesafe/releases",
   "Scala Tools Snapshots" at "http://scala-tools.org/repo-snapshots/",

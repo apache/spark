@@ -2,6 +2,7 @@
 exportClasses("RDD")
 exportClasses("Broadcast")
 exportMethods(
+              "aggregateByKey",
               "aggregateRDD",
               "cache",
               "checkpoint",
@@ -16,9 +17,11 @@ exportMethods(
               "distinct",
               "Filter",
               "filterRDD",
+              "first",
               "flatMap",
               "flatMapValues",
               "fold",
+              "foldByKey",
               "foreach",
               "foreachPartition",
               "fullOuterJoin",
@@ -41,6 +44,7 @@ exportMethods(
               "numPartitions",
               "partitionBy",
               "persist",
+              "pipeRDD",
               "reduce",
               "reduceByKey",
               "reduceByKeyLocally",
@@ -81,12 +85,48 @@ importFrom(methods, setGeneric, setMethod, setOldClass)
 
 exportClasses("DataFrame")
 
-exportMethods("printSchema",
-              "registerTempTable",
-              "toRDD",
+exportMethods("columns",
+              "distinct",
+              "dtypes",
+              "filter",
+              "head",
               "limit",
+              "orderBy",
+              "names",
+              "printSchema",
+              "registerTempTable",
+              "repartition",
+              "sampleDF",
+              "saveAsTable",
               "saveDF",
-              "saveAsTable")
+              "schema",
+              "sortDF",
+              "select",
+              "toRDD",
+              "where")
+
+exportClasses("Column")
+
+exportMethods("asc",
+              "desc",
+              "first",
+              "last",
+              "lower",
+              "upper",
+              "abs",
+              "sqrt",
+              "min",
+              "max",
+              "sum",
+              "avg",
+              "mean",
+              "isNull",
+              "isNotNull",
+              "alias",
+              "cast",
+              "approxCountDistinct",
+              "countDistinct",
+              "sumDistinct")
 
 export("jsonFile",
        "parquetFile",
@@ -98,3 +138,5 @@ export("jsonFile",
        "createExternalTable")
 
 export("sparkRSQL.init")
+export("print.structType",
+       "print.structField")

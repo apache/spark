@@ -4,7 +4,6 @@ import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.sql.{SQLContext, DataFrame, Row, SaveMode}
-import org.apache.spark.sql.types.{StructType}
 
 import edu.berkeley.cs.amplab.sparkr.SerDe._
 
@@ -14,6 +13,10 @@ import java.io.DataOutputStream
 object SQLUtils {
   def createSQLContext(sc: SparkContext): SQLContext = {
     new SQLContext(sc)
+  }
+
+  def toSeq[T](arr: Array[T]): Seq[T] = {
+    arr.toSeq
   }
 
   def dfToRowRDD(df: DataFrame): JavaRDD[Array[Byte]] = {
