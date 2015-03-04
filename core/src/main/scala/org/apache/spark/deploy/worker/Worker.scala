@@ -112,13 +112,14 @@ private[worker] class Worker(
     } else {
       new File(sys.env.get("SPARK_HOME").getOrElse("."))
     }
-  private var workDir: File = null
-  private val finishedExecutors = new HashMap[String, ExecutorRunner]
-  private val drivers = new HashMap[String, DriverRunner]
-  private[worker] val executors = new HashMap[String, ExecutorRunner]
-  private val finishedDrivers = new HashMap[String, DriverRunner]
-  private val appDirectories = new HashMap[String, Seq[String]]
-  private val finishedApps = new HashSet[String]
+  
+  var workDir: File = null
+  val finishedExecutors = new HashMap[String, ExecutorRunner]
+  val drivers = new HashMap[String, DriverRunner]
+  val executors = new HashMap[String, ExecutorRunner]
+  val finishedDrivers = new HashMap[String, DriverRunner]
+  val appDirectories = new HashMap[String, Seq[String]]
+  val finishedApps = new HashSet[String]
 
   // The shuffle service is not actually started unless configured.
   private val shuffleService = new StandaloneWorkerShuffleService(conf, securityMgr)
@@ -136,11 +137,11 @@ private[worker] class Worker(
   
   private var registrationRetryTimer: Option[Cancellable] = None
 
-  private[worker] var coresUsed = 0
-  private[worker] var memoryUsed = 0
+  var coresUsed = 0
+  var memoryUsed = 0
 
-  private[worker] def coresFree: Int = cores - coresUsed
-  private[worker] def memoryFree: Int = memory - memoryUsed
+  def coresFree: Int = cores - coresUsed
+  def memoryFree: Int = memory - memoryUsed
 
   private def createWorkDir() {
     workDir = Option(workDirPath).map(new File(_)).getOrElse(new File(sparkHome, "work"))

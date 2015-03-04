@@ -38,11 +38,11 @@ private[deploy] class ApplicationInfo(
   extends Serializable {
 
   @transient var state: ApplicationState.Value = _
-  @transient private[master] var executors: mutable.HashMap[Int, ExecutorDesc] = _
-  @transient private[master] var removedExecutors: ArrayBuffer[ExecutorDesc] = _
-  @transient private[master] var coresGranted: Int = _
+  @transient var executors: mutable.HashMap[Int, ExecutorDesc] = _
+  @transient var removedExecutors: ArrayBuffer[ExecutorDesc] = _
+  @transient var coresGranted: Int = _
   @transient var endTime: Long = _
-  @transient private[master] var appSource: ApplicationSource = _
+  @transient var appSource: ApplicationSource = _
 
   @transient private var nextExecutorId: Int = _
 

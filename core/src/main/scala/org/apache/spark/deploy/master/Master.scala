@@ -844,8 +844,10 @@ private[master] class Master(
     driver.state = DriverState.RUNNING
   }
 
-  private def removeDriver(driverId: String, finalState: DriverState, 
-                           exception: Option[Exception]) {
+  private def removeDriver(
+      driverId: String, 
+      finalState: DriverState, 
+      exception: Option[Exception]) {
     drivers.find(d => d.id == driverId) match {
       case Some(driver) =>
         logInfo(s"Removing driver: $driverId")

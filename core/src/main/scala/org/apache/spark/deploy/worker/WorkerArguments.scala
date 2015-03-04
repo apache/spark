@@ -33,7 +33,7 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
   var memory = inferDefaultMemory()
   var masters: Array[String] = null
   var workDir: String = null
-  private var propertiesFile: String = null
+  var propertiesFile: String = null
 
   // Check for settings in environment variables
   if (System.getenv("SPARK_WORKER_PORT") != null) {
