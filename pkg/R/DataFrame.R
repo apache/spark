@@ -85,6 +85,32 @@ setMethod("schema",
             structType(callJMethod(x@sdf, "schema"))
           })
 
+#' Explain
+#' 
+#' Print the logical and physical Catalyst plans to the console for debugging.
+#' 
+#' @param x A SparkSQL DataFrame
+#' @param extended Logical. If extended is False, explain() only prints the physical plan.
+#' @rdname explain
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' explain(df, TRUE)
+#'}
+setGeneric("explain", function(x, ...) { standardGeneric("explain") })
+
+#' @rdname explain
+#' @export
+setMethod("explain",
+          signature(x = "DataFrame"),
+          function(x, extended = FALSE) {
+            callJMethod(x@sdf, "explain", extended)
+          })
+
 #' DataTypes
 #' 
 #' Return all column names and their data types as a list
