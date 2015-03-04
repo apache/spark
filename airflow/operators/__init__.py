@@ -1,6 +1,7 @@
 from bash_operator import BashOperator
 from python_operator import PythonOperator
 from mysql_operator import MySqlOperator
+from postgres_operator import PostgresOperator
 from hive_operator import HiveOperator
 from presto_check_operator import PrestoCheckOperator
 from presto_check_operator import PrestoIntervalCheckOperator
