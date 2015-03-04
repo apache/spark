@@ -426,7 +426,7 @@ private[spark] class BlockManager(
   /**
    * Get block from local block manager.
    */
-  def getLocal(blockId: BlockId): Option[BlockResult] = {
+  def getLocal(blockId: BlockId, isDiskToMemory: Boolean = true): Option[BlockResult] = {
     logDebug(s"Getting local block $blockId")
     doGetLocal(blockId, asBlockResult = true).asInstanceOf[Option[BlockResult]]
   }
@@ -452,7 +452,9 @@ private[spark] class BlockManager(
     }
   }
 
-  private def doGetLocal(blockId: BlockId, asBlockResult: Boolean): Option[Any] = {
+  private def doGetLocal(blockId: BlockId,
+                         asBlockResult: Boolean,
+                         isDiskToMemory: Boolean = True): Option[Any] = {
     val info = blockInfo.get(blockId).orNull
     if (info != null) {
       info.synchronized {
@@ -521,7 +523,7 @@ private[spark] class BlockManager(
           }
           assert(0 == bytes.position())
 
-          if (!level.useMemory) {
+          if (!level.useMemory || isDiskToMemory) {
             // If the block shouldn't be stored in memory, we can just return it
             if (asBlockResult) {
               return Some(new BlockResult(dataDeserialize(blockId, bytes), DataReadMethod.Disk,

@@ -152,7 +152,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
        */
       updatedBlocks ++=
         blockManager.putIterator(key, values, level, tellMaster = true, effectiveStorageLevel)
-      blockManager.get(key) match {
+      blockManager.getLocal(key, !level.useMemory) match {
         case Some(v) => v.data.asInstanceOf[Iterator[T]]
         case None =>
           logInfo(s"Failure to store $key")
