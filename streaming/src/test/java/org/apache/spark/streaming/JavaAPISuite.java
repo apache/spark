@@ -183,7 +183,10 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         Arrays.asList(19, 20, 21, 22, 23, 24));
 
     JavaDStream<Integer> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
-    JavaDStream<Integer> windowed = stream.window(new Duration(4000), new Duration(2000), Optional.of(initialData));
+    JavaDStream<Integer> windowed = stream.window(
+        new Duration(4000),
+        new Duration(2000),
+        Optional.of(initialData));
     JavaTestUtils.attachTestOutputStream(windowed);
     List<List<Integer>> result = JavaTestUtils.runStreams(ssc, 8, 4);
 
