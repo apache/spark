@@ -100,7 +100,7 @@ object SparkRBackend {
       f.renameTo(new File(path))
 
       // wait for the end of stdin, then exit
-      new Thread("wait for stdin") {
+      new Thread("wait for socket to close") {
         setDaemon(true)
         override def run(): Unit = {
           // any un-catched exception will also shutdown JVM
