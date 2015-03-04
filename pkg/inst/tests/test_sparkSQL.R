@@ -360,8 +360,17 @@ test_that("toJSON() returns an RDD of the correct values", {
   expect_equal(collect(testRDD)[[1]], mockLines[1])
 })
 
+test_that("showDF()", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  expect_output(showDF(df), "age  name
+null Michael
+30   Andy
+19   Justin ")
+})
+
 test_that("isLocal()", {
+  df <- jsonFile(sqlCtx, jsonPath)
   expect_false(isLocal(df))
-}
+})
 
 unlink(jsonPath)

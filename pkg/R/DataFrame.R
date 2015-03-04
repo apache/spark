@@ -138,6 +138,33 @@ setMethod("isLocal",
             callJMethod(x@sdf, "isLocal")
           })
 
+#' ShowDF
+#'
+#' Print the first numRows rows of a DataFrame
+#'
+#' @param x A SparkSQL DataFrame
+#' @param numRows The number of rows to print. Defaults to 20.
+#'
+#' @rdname showDF
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' showDF(df)
+#'}
+setGeneric("showDF", function(x,...) { standardGeneric("showDF") })
+
+#' @rdname showDF
+#' @export
+setMethod("showDF",
+          signature(x = "DataFrame"),
+          function(x, numRows = 20) {
+            cat(callJMethod(x@sdf, "showString", numToInt(numRows)))
+          })
+
 #' DataTypes
 #' 
 #' Return all column names and their data types as a list
