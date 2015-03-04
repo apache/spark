@@ -46,6 +46,22 @@ the environment variable `USE_MAVEN=1`. For example
 If you are building SparkR from behind a proxy, you can [setup maven](https://maven.apache.org/guides/mini/guide-proxies.html) to use the right proxy
 server.
 
+#### Building from source from GitHub
+
+Run the following within R to pull source code from GitHub and build locally. It is possible
+to specify build dependencies by starting R with environment values:
+
+1. Start R
+```
+SPARK_VERSION=1.2.0 SPARK_HADOOP_VERSION=2.5.0 R
+```
+
+2. Run install_github
+```
+library(devtools)
+install_github("repo/SparkR-pkg", ref="branchname", subdir="pkg")
+```
+*note: replace repo and branchname*
 
 ## Running sparkR
 If you have cloned and built SparkR, you can start using it by launching the SparkR
@@ -110,15 +126,45 @@ cd SparkR-pkg/
 USE_YARN=1 SPARK_YARN_VERSION=2.4.0 SPARK_HADOOP_VERSION=2.4.0 ./install-dev.sh
 ```
 
+Alternatively, install_github can be use (on CDH in this case):
+
+```
+# assume devtools package is installed by install.packages("devtools")
+USE_YARN=1 SPARK_VERSION=1.1.0 SPARK_YARN_VERSION=2.5.0-cdh5.3.0 SPARK_HADOOP_VERSION=2.5.0-cdh5.3.0 R
+```
+Then within R,
+```
+library(devtools)
+install_github("amplab-extras/SparkR-pkg", ref="master", subdir="pkg")
+```
+
 Before launching an application, make sure each worker node has a local copy of `lib/SparkR/sparkr-assembly-0.1.jar`. With a cluster launched with the `spark-ec2` script, do:
 ```
 ~/spark-ec2/copy-dir ~/SparkR-pkg
 ```
+Or run the above installation steps on all worker node.
 
 Finally, when launching an application, the environment variable `YARN_CONF_DIR` needs to be set to the directory which contains the client-side configuration files for the Hadoop cluster (with a cluster launched with `spark-ec2`, this defaults to `/root/ephemeral-hdfs/conf/`):
 ```
 YARN_CONF_DIR=/root/ephemeral-hdfs/conf/ MASTER=yarn-client ./sparkR
 YARN_CONF_DIR=/root/ephemeral-hdfs/conf/ ./sparkR examples/pi.R yarn-client
+```
+
+## Running on a cluster using sparkR-submit
+
+sparkR-submit is a script introduced to facilitate submission of SparkR jobs to a Spark supported cluster (eg. Standalone, Mesos, YARN).
+It supports the same commandline parameters as [spark-submit](http://spark.apache.org/docs/latest/submitting-applications.html). SPARK_HOME and JAVA_HOME must be defined.
+
+On YARN, YARN_CONF_DIR must be defined. sparkR-submit supports [YARN deploy modes](http://spark.apache.org/docs/latest/running-on-yarn.html): yarn-client and yarn-cluster.
+
+sparkR-submit is installed with the SparkR package. By default, it can be found under the default Library (['library'](https://stat.ethz.ch/R-manual/R-devel/library/base/html/libPaths.html) subdirectory of R_HOME)
+
+For example, to run on YARN (CDH 5.3.0),
+```
+export SPARK_HOME=/opt/cloudera/parcels/CDH-5.3.0-1.cdh5.3.0.p0.30/lib/spark
+export YARN_CONF_DIR=/etc/hadoop/conf
+export JAVA_HOME=/usr/java/jdk1.7.0_67-cloudera
+/usr/lib64/R/library/SparkR/sparkR-submit --master yarn-client examples/pi.R yarn-client 4
 ```
 
 ## Report Issues/Feedback 
