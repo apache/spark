@@ -32,6 +32,7 @@ class HBaseSQLQuerySuite extends HBaseIntegrationTestBase {
   TestData
 
   import org.apache.spark.sql.hbase.TestHbase._
+  import org.apache.spark.sql.hbase.TestHbase.implicits._
 
   var origZone: TimeZone = _
 
@@ -546,7 +547,7 @@ class HBaseSQLQuerySuite extends HBaseIntegrationTestBase {
       ("1" :: "2" :: "3" :: "4" :: "A" :: "B" :: "C" :: "D" :: "E" :: "F" :: Nil).map(Row(_)))
     // Column type mismatches where a coercion is not possible, in this case between integer
     // and array types, trigger a TreeNodeException.
-    intercept[TreeNodeException[_]] {
+    intercept[AnalysisException] {
       sql("SELECT dt FROM arrayData UNION SELECT 1 FROM arrayData").collect()
     }
   }
@@ -626,8 +627,8 @@ class HBaseSQLQuerySuite extends HBaseIntegrationTestBase {
       Row(values(0).toInt, values(1), values(2).toBoolean, v4)
     }
 
-    val schemaRDD1 = applySchema(rowRDD1, schema1)
-    schemaRDD1.registerTempTable("applySchema1")
+    val df1 = createDataFrame(rowRDD1, schema1)
+    df1.registerTempTable("applySchema1")
     checkAnswer(
       sql("SELECT * FROM applySchema1"),
       Row(1, "A1", true, null) ::
@@ -656,8 +657,8 @@ class HBaseSQLQuerySuite extends HBaseIntegrationTestBase {
       Row(Row(values(0).toInt, values(2).toBoolean), Map(values(1) -> v4))
     }
 
-    val schemaRDD2 = applySchema(rowRDD2, schema2)
-    schemaRDD2.registerTempTable("applySchema2")
+    val df2 = createDataFrame(rowRDD2, schema2)
+    df2.registerTempTable("applySchema2")
     checkAnswer(
       sql("SELECT * FROM applySchema2"),
       Row(Row(1, true), Map("A1" -> null)) ::
@@ -681,8 +682,8 @@ class HBaseSQLQuerySuite extends HBaseIntegrationTestBase {
       Row(Row(values(0).toInt, values(2).toBoolean), scala.collection.mutable.Map(values(1) -> v4))
     }
 
-    val schemaRDD3 = applySchema(rowRDD3, schema2)
-    schemaRDD3.registerTempTable("applySchema3")
+    val df3 = createDataFrame(rowRDD3, schema2)
+    df3.registerTempTable("applySchema3")
 
     checkAnswer(
       sql("SELECT f1.f11, f2['D4'] FROM applySchema3"),
@@ -717,7 +718,7 @@ class HBaseSQLQuerySuite extends HBaseIntegrationTestBase {
   }
 
   test("metadata is propagated correctly") {
-    val person = sql("SELECT * FROM person")
+    val person: DataFrame = sql("SELECT * FROM person")
     val schema = person.schema
     val docKey = "doc"
     val docValue = "first name"
@@ -726,14 +727,14 @@ class HBaseSQLQuerySuite extends HBaseIntegrationTestBase {
       .build()
     val schemaWithMeta = new StructType(Array(
       schema("id"), schema("name").copy(metadata = metadata), schema("age")))
-    val personWithMeta = applySchema(person, schemaWithMeta)
-    def validateMetadata(rdd: SchemaRDD): Unit = {
+    val personWithMeta = createDataFrame(person.rdd, schemaWithMeta)
+    def validateMetadata(rdd: DataFrame): Unit = {
       assert(rdd.schema("name").metadata.getString(docKey) == docValue)
     }
     personWithMeta.registerTempTable("personWithMeta")
-    validateMetadata(personWithMeta.select('name))
-    validateMetadata(personWithMeta.select("name".attr))
-    validateMetadata(personWithMeta.select('id, 'name))
+    validateMetadata(personWithMeta.select($"name"))
+    validateMetadata(personWithMeta.select($"name"))
+    validateMetadata(personWithMeta.select($"id", $"name"))
     validateMetadata(sql("SELECT * FROM personWithMeta"))
     validateMetadata(sql("SELECT id, name FROM personWithMeta"))
     validateMetadata(sql("SELECT * FROM personWithMeta JOIN salary ON id = personId"))
@@ -761,13 +762,9 @@ class HBaseSQLQuerySuite extends HBaseIntegrationTestBase {
 
   test("throw errors for non-aggregate attributes with aggregation") {
     def checkAggregation(query: String, isInvalidQuery: Boolean = true) {
-      val logicalPlan = sql(query).queryExecution.logical
-
       if (isInvalidQuery) {
-        val e = intercept[TreeNodeException[LogicalPlan]](sql(query).queryExecution.analyzed)
-        assert(
-          e.getMessage().startsWith("Expression not in GROUP BY"),
-          "Non-aggregate attribute(s) not detected\n" + logicalPlan)
+        val e = intercept[AnalysisException](sql(query).queryExecution.analyzed)
+        assert(e.getMessage contains "group by")
       } else {
         // Should not throw
         sql(query).queryExecution.analyzed
@@ -994,10 +991,10 @@ class HBaseSQLQuerySuite extends HBaseIntegrationTestBase {
   test("Supporting relational operator '<=>' in Spark SQL") {
     val nullCheckData1 = TestData(1, "1") :: TestData(2, null) :: Nil
     val rdd1 = sparkContext.parallelize((0 to 1).map(i => nullCheckData1(i)))
-    rdd1.registerTempTable("nulldata1")
+    rdd1.toDF.registerTempTable("nulldata1")
     val nullCheckData2 = TestData(1, "1") :: TestData(2, null) :: Nil
     val rdd2 = sparkContext.parallelize((0 to 1).map(i => nullCheckData2(i)))
-    rdd2.registerTempTable("nulldata2")
+    rdd2.toDF.registerTempTable("nulldata2")
     checkAnswer(sql("SELECT nulldata1.k FROM nulldata1 join " +
       "nulldata2 on nulldata1.v <=> nulldata2.v"),
       (1 to 2).map(i => Row(i)))
@@ -1006,7 +1003,7 @@ class HBaseSQLQuerySuite extends HBaseIntegrationTestBase {
   test("Multi-column COUNT(DISTINCT ...)") {
     val data = TestData(1, "val_1") :: TestData(2, "val_2") :: Nil
     val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
-    rdd.registerTempTable("distinctData")
+    rdd.toDF.registerTempTable("distinctData")
     checkAnswer(sql("SELECT COUNT(DISTINCT k,v) FROM distinctData"), Row(2))
   }
 }

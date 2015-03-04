@@ -22,16 +22,22 @@ import org.apache.hadoop.hbase.HBaseConfiguration
 import org.apache.hadoop.hbase.client.{Get, HTable, Put, Result, Scan}
 import org.apache.hadoop.hbase.filter._
 import org.apache.log4j.Logger
+
 import org.apache.spark.Partition
+import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
+
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.hbase.catalyst.NotPusher
 import org.apache.spark.sql.hbase.types.PartitionRange
 import org.apache.spark.sql.hbase.util.{DataTypeUtils, HBaseKVHelper, BytesUtils, Util}
-import org.apache.spark.sql.sources.{BaseRelation, CatalystScan, LogicalRelation, RelationProvider}
+import org.apache.spark.sql.sources.{BaseRelation, CatalystScan, LogicalRelation}
+import org.apache.spark.sql.sources.{RelationProvider, InsertableRelation}
 
+import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
@@ -86,11 +92,11 @@ class HBaseSource extends RelationProvider {
  */
 @SerialVersionUID(15298736227428789L)
 private[hbase] case class HBaseRelation(
-  tableName: String,
-  hbaseNamespace: String,
-  hbaseTableName: String,
-  allColumns: Seq[AbstractColumn])(@transient var context: SQLContext)
-  extends CatalystScan with Serializable {
+     tableName: String,
+     hbaseNamespace: String,
+     hbaseTableName: String,
+     allColumns: Seq[AbstractColumn])(@transient var context: SQLContext)
+  extends BaseRelation with CatalystScan with InsertableRelation with Serializable {
 
   @transient lazy val logger = Logger.getLogger(getClass.getName)
 
@@ -560,6 +566,60 @@ private[hbase] case class HBaseRelation(
     case NonKeyColumn(name, dt, _, _) => StructField(name, dt, nullable = true)
   })
 
+  override def insert(data: DataFrame, overwrite: Boolean) = {
+    if (!overwrite) {
+      sqlContext.sparkContext.runJob(data.rdd, writeToHBase _)
+    } else {
+      // TODO: Support INSERT OVERWITE INTO
+      sys.error("HBASE Table doesnot support INSERT OVERWRITE for now.")
+    }
+  }
+  
+  def writeToHBase(context: TaskContext, iterator: Iterator[Row]) = {
+    // TODO:make the BatchMaxSize configurable
+    val BatchMaxSize = 100
+    
+    var rowIndexInBatch = 0
+    var colIndexInBatch = 0
+
+    var puts = new ListBuffer[Put]()
+    while (iterator.hasNext) {
+      val row = iterator.next()
+      val rawKeyCol = keyColumns.map(
+        kc => {
+          val rowColumn = DataTypeUtils.getRowColumnInHBaseRawType(
+            row, kc.ordinal, kc.dataType)
+          colIndexInBatch += 1
+          (rowColumn, kc.dataType)
+        }
+      )
+      val key = HBaseKVHelper.encodingRawKeyColumns(rawKeyCol)
+      val put = new Put(key)
+      nonKeyColumns.foreach(
+        nkc => {
+          val rowVal = DataTypeUtils.getRowColumnInHBaseRawType(
+            row, nkc.ordinal, nkc.dataType)
+          colIndexInBatch += 1
+          put.add(nkc.familyRaw, nkc.qualifierRaw, rowVal)
+        }
+      )
+
+      puts += put
+      colIndexInBatch = 0
+      rowIndexInBatch += 1
+      if (rowIndexInBatch >= BatchMaxSize) {
+        htable.put(puts.toList)
+        puts.clear()
+        rowIndexInBatch = 0
+      }
+    }
+    if (puts.nonEmpty) {
+      htable.put(puts.toList)
+    }
+    closeHTable()
+  }
+  
+  
   def buildScan(requiredColumns: Seq[Attribute], filters: Seq[Expression]): RDD[Row] = {
     require(filters.size < 2, "Internal logical error: unexpected filter list size")
     val filterPredicate = if (filters.isEmpty) None

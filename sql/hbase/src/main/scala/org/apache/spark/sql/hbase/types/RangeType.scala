@@ -62,6 +62,8 @@ private[hbase] class RangeType[T] extends PartialOrderingDataType {
   // TODO: can not use ScalaReflectionLock now for its accessibility
   // @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   @transient private[sql] lazy val tag = synchronized(typeTag[JvmType])
+  
+  private[spark] override def asNullable: RangeType[T] = this
 
   def toPartiallyOrderingDataType(s: Any, dt: NativeType): Any = s match {
     case i: Int => new Range[Int](Some(i), true, Some(i), true, IntegerType)

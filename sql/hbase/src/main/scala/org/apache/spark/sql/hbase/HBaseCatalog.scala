@@ -273,6 +273,19 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: SQLContext,
     }
   }
 
+  /**
+   * Returns tuples of (tableName, isTemporary) for all tables in the given database.
+   * isTemporary is a Boolean value indicates if a table is a temporary or not.
+   */
+  override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {
+     var tables = getAllTableName
+     tables.map((_,true))
+  }
+
+  override def refreshTable(databaseName: String, tableName: String): Unit = {
+    
+  }
+  
   def deleteTable(tableName: String): Unit = {
     val metadataTable = getMetadataTable
     if (!checkLogicalTableExist(tableName, metadataTable)) {

@@ -50,7 +50,6 @@ class HBaseSQLParser extends SqlParser {
   protected val FIELDS = Keyword("FIELDS")
   protected val FLOAT = Keyword("FLOAT")
   protected val INPATH = Keyword("INPATH")
-  protected val INT = Keyword("INT")
   protected val INTEGER = Keyword("INTEGER")
   protected val KEY = Keyword("KEY")
   protected val LOAD = Keyword("LOAD")

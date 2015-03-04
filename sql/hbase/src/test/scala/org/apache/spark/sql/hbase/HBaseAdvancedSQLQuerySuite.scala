@@ -26,6 +26,7 @@ class HBaseAdvancedSQLQuerySuite extends HBaseIntegrationTestBase {
   TestData
 
   import org.apache.spark.sql.hbase.TestHbase._
+  import org.apache.spark.sql.hbase.TestHbase.implicits._
 
   test("aggregation with codegen") {
     val originalValue = TestHbase.conf.codegenEnabled
@@ -44,7 +45,7 @@ class HBaseAdvancedSQLQuerySuite extends HBaseIntegrationTestBase {
       tableA.where('col2 === 6).orderBy('col2.asc).select('col7),
       Row(-31) :: Nil)
   }
-
+ 
   test("metadata is propagated correctly") {
     val tableA = sql("SELECT col7, col1, col3 FROM ta")
     val schema = tableA.schema
@@ -55,14 +56,14 @@ class HBaseAdvancedSQLQuerySuite extends HBaseIntegrationTestBase {
       .build()
     val schemaWithMeta = new StructType(Array(
       schema("col7"), schema("col1").copy(metadata = metadata), schema("col3")))
-    val personWithMeta = applySchema(tableA, schemaWithMeta)
-    def validateMetadata(rdd: SchemaRDD): Unit = {
+    val personWithMeta = createDataFrame(tableA.rdd, schemaWithMeta)
+    def validateMetadata(rdd: DataFrame): Unit = {
       assert(rdd.schema("col1").metadata.getString(docKey) == docValue)
     }
     personWithMeta.registerTempTable("personWithMeta")
-    validateMetadata(personWithMeta.select('col1))
-    validateMetadata(personWithMeta.select("col1".attr))
-    validateMetadata(personWithMeta.select('col7, 'col1))
+    validateMetadata(personWithMeta.select($"col1"))
+    validateMetadata(personWithMeta.select($"col1"))
+    validateMetadata(personWithMeta.select($"col7", $"col1"))
     validateMetadata(sql("SELECT * FROM personWithMeta"))
     validateMetadata(sql("SELECT col7, col1 FROM personWithMeta"))
     validateMetadata(sql("SELECT * FROM personWithMeta JOIN salary ON col7 = personId"))

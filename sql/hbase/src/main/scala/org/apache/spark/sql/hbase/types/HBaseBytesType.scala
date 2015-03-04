@@ -44,4 +44,6 @@ private[hbase] case object HBaseBytesType extends NativeType with PrimitiveType 
       x.length - y.length
     }
   }
+ 
+  private[spark] override def asNullable = this
 }
