@@ -24,9 +24,8 @@ import scala.language.existentials
 import akka.actor._
 
 import org.apache.spark.{Logging, SerializableWritable, SparkEnv, SparkException}
-import org.apache.spark.SparkContext._
 import org.apache.spark.streaming.{StreamingContext, Time}
-import org.apache.spark.streaming.receiver.{Receiver, ReceiverSupervisorImpl, StopReceiver}
+import org.apache.spark.streaming.receiver.{CleanupOldBlocks, Receiver, ReceiverSupervisorImpl, StopReceiver}
 
 /**
  * Messages used by the NetworkReceiver and the ReceiverTracker to communicate
@@ -87,10 +86,10 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   }
 
   /** Stop the receiver execution thread. */
-  def stop() = synchronized {
+  def stop(graceful: Boolean) = synchronized {
     if (!receiverInputStreams.isEmpty && actor != null) {
       // First, stop the receivers
-      if (!skipReceiverLaunch) receiverExecutor.stop()
+      if (!skipReceiverLaunch) receiverExecutor.stop(graceful)
 
       // Finally, stop the actor
       ssc.env.actorSystem.stop(actor)
@@ -119,9 +118,20 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     }
   }
 
-    /** Clean up metadata older than the given threshold time */
-  def cleanupOldMetadata(cleanupThreshTime: Time) {
-    receivedBlockTracker.cleanupOldBatches(cleanupThreshTime)
+  /**
+   * Clean up the data and metadata of blocks and batches that are strictly
+   * older than the threshold time. Note that this does not
+   */
+  def cleanupOldBlocksAndBatches(cleanupThreshTime: Time) {
+    // Clean up old block and batch metadata
+    receivedBlockTracker.cleanupOldBatches(cleanupThreshTime, waitForCompletion = false)
+
+    // Signal the receivers to delete old block data
+    if (ssc.conf.getBoolean("spark.streaming.receiver.writeAheadLog.enable", false)) {
+      logInfo(s"Cleanup old received batch data: $cleanupThreshTime")
+      receiverInfo.values.flatMap { info => Option(info.actor) }
+        .foreach { _ ! CleanupOldBlocks(cleanupThreshTime) }
+    }
   }
 
   /** Register a receiver */
@@ -208,6 +218,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   /** This thread class runs all the receivers on the cluster.  */
   class ReceiverLauncher {
     @transient val env = ssc.env
+    @volatile @transient private var running = false
     @transient val thread  = new Thread() {
       override def run() {
         try {
@@ -223,7 +234,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       thread.start()
     }
 
-    def stop() {
+    def stop(graceful: Boolean) {
       // Send the stop signal to all the receivers
       stopReceivers()
 
@@ -231,9 +242,19 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       // That is, for the receivers to quit gracefully.
       thread.join(10000)
 
+      if (graceful) {
+        val pollTime = 100
+        def done = { receiverInfo.isEmpty && !running }
+        logInfo("Waiting for receiver job to terminate gracefully")
+        while(!done) {
+          Thread.sleep(pollTime)
+        }
+        logInfo("Waited for receiver job to terminate gracefully")
+      }
+
       // Check if all the receivers have been deregistered or not
       if (!receiverInfo.isEmpty) {
-        logWarning("All of the receivers have not deregistered, " + receiverInfo)
+        logWarning("Not all of the receivers have deregistered, " + receiverInfo)
       } else {
         logInfo("All of the receivers have deregistered successfully")
       }
@@ -285,7 +306,9 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
       // Distribute the receivers and start them
       logInfo("Starting " + receivers.length + " receivers")
+      running = true
       ssc.sparkContext.runJob(tempRDD, ssc.sparkContext.clean(startReceiver))
+      running = false
       logInfo("All of the receivers have been terminated")
     }
 

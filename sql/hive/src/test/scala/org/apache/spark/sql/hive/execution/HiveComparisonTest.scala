@@ -22,6 +22,8 @@ import java.io._
 import org.scalatest.{BeforeAndAfterAll, FunSuite, GivenWhenThen}
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.sources.DescribeCommand
+import org.apache.spark.sql.execution.{SetCommand, ExplainCommand}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
@@ -132,7 +134,7 @@ abstract class HiveComparisonTest
 
     def isSorted(plan: LogicalPlan): Boolean = plan match {
       case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
-      case PhysicalOperation(_, _, Sort(_, _)) => true
+      case PhysicalOperation(_, _, Sort(_, true, _)) => true
       case _ => plan.children.iterator.exists(isSorted)
     }
 

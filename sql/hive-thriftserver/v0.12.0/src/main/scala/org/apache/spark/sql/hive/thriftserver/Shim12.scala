@@ -22,7 +22,6 @@ import java.util.{ArrayList => JArrayList, Map => JMap}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, Map => SMap}
-import scala.math._
 
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.metastore.api.FieldSchema
@@ -33,11 +32,11 @@ import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.plans.logical.SetCommand
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.{DataFrame, SQLConf, Row => SparkRow}
+import org.apache.spark.sql.execution.SetCommand
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
-import org.apache.spark.sql.{SQLConf, SchemaRDD, Row => SparkRow}
+import org.apache.spark.sql.types._
 
 /**
  * A compatibility layer for interacting with Hive version 0.12.0.
@@ -72,7 +71,7 @@ private[hive] class SparkExecuteStatementOperation(
     sessionToActivePool: SMap[SessionHandle, String])
   extends ExecuteStatementOperation(parentSession, statement, confOverlay) with Logging {
 
-  private var result: SchemaRDD = _
+  private var result: DataFrame = _
   private var iter: Iterator[SparkRow] = _
   private var dataTypes: Array[DataType] = _
 
@@ -123,7 +122,7 @@ private[hive] class SparkExecuteStatementOperation(
       case FloatType =>
         to.addColumnValue(ColumnValue.floatValue(from.getFloat(ordinal)))
       case DecimalType() =>
-        val hiveDecimal = from.get(ordinal).asInstanceOf[BigDecimal].bigDecimal
+        val hiveDecimal = from.getDecimal(ordinal)
         to.addColumnValue(ColumnValue.stringValue(new HiveDecimal(hiveDecimal)))
       case LongType =>
         to.addColumnValue(ColumnValue.longValue(from.getLong(ordinal)))
@@ -186,26 +185,24 @@ private[hive] class SparkExecuteStatementOperation(
   def run(): Unit = {
     logInfo(s"Running query '$statement'")
     setState(OperationState.RUNNING)
+    hiveContext.sparkContext.setJobDescription(statement)
+    sessionToActivePool.get(parentSession.getSessionHandle).foreach { pool =>
+      hiveContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
+    }
     try {
       result = hiveContext.sql(statement)
       logDebug(result.queryExecution.toString())
       result.queryExecution.logical match {
-        case SetCommand(Some((SQLConf.THRIFTSERVER_POOL, Some(value)))) =>
+        case SetCommand(Some((SQLConf.THRIFTSERVER_POOL, Some(value))), _) =>
           sessionToActivePool(parentSession.getSessionHandle) = value
           logInfo(s"Setting spark.scheduler.pool=$value for future statements in this session.")
         case _ =>
-      }
-
-      val groupId = round(random * 1000000).toString
-      hiveContext.sparkContext.setJobGroup(groupId, statement)
-      sessionToActivePool.get(parentSession.getSessionHandle).foreach { pool =>
-        hiveContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
       }
       iter = {
         val useIncrementalCollect =
           hiveContext.getConf("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
         if (useIncrementalCollect) {
-          result.toLocalIterator
+          result.rdd.toLocalIterator
         } else {
           result.collect().iterator
         }

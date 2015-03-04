@@ -21,10 +21,11 @@ import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.test.TestSQLContext.implicits._
 
 class PartitionBatchPruningSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfter {
-  val originalColumnBatchSize = columnBatchSize
-  val originalInMemoryPartitionPruning = inMemoryPartitionPruning
+  val originalColumnBatchSize = conf.columnBatchSize
+  val originalInMemoryPartitionPruning = conf.inMemoryPartitionPruning
 
   override protected def beforeAll(): Unit = {
     // Make a table with 5 partitions, 2 batches per partition, 10 elements per batch
@@ -33,7 +34,7 @@ class PartitionBatchPruningSuite extends FunSuite with BeforeAndAfterAll with Be
     val pruningData = sparkContext.makeRDD((1 to 100).map { key =>
       val string = if (((key - 1) / 10) % 2 == 0) null else key.toString
       TestData(key, string)
-    }, 5)
+    }, 5).toDF()
     pruningData.registerTempTable("pruningData")
 
     // Enable in-memory partition pruning
@@ -104,17 +105,21 @@ class PartitionBatchPruningSuite extends FunSuite with BeforeAndAfterAll with Be
       expectedQueryResult: => Seq[Int]): Unit = {
 
     test(query) {
-      val schemaRdd = sql(query)
-      assertResult(expectedQueryResult.toArray, "Wrong query result") {
-        schemaRdd.collect().map(_.head).toArray
+      val df = sql(query)
+      val queryExecution = df.queryExecution
+
+      assertResult(expectedQueryResult.toArray, s"Wrong query result: $queryExecution") {
+        df.collect().map(_(0)).toArray
       }
 
-      val (readPartitions, readBatches) = schemaRdd.queryExecution.executedPlan.collect {
+      val (readPartitions, readBatches) = df.queryExecution.executedPlan.collect {
         case in: InMemoryColumnarTableScan => (in.readPartitions.value, in.readBatches.value)
       }.head
 
-      assert(readBatches === expectedReadBatches, "Wrong number of read batches")
-      assert(readPartitions === expectedReadPartitions, "Wrong number of read partitions")
+      assert(readBatches === expectedReadBatches, s"Wrong number of read batches: $queryExecution")
+      assert(
+        readPartitions === expectedReadPartitions,
+        s"Wrong number of read partitions: $queryExecution")
     }
   }
 }

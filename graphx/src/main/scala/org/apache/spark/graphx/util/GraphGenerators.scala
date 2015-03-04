@@ -133,6 +133,12 @@ object GraphGenerators {
     // This ensures that the 4 quadrants are the same size at all recursion levels
     val numVertices = math.round(
       math.pow(2.0, math.ceil(math.log(requestedNumVertices) / math.log(2.0)))).toInt
+    val numEdgesUpperBound =
+      math.pow(2.0, 2 * ((math.log(numVertices) / math.log(2.0)) - 1)).toInt
+    if (numEdgesUpperBound < numEdges) {
+      throw new IllegalArgumentException(
+        s"numEdges must be <= $numEdgesUpperBound but was $numEdges")
+    }
     var edges: Set[Edge[Int]] = Set()
     while (edges.size < numEdges) {
       if (edges.size % 100 == 0) {

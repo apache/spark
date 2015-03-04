@@ -71,10 +71,20 @@ class VertexRDDImpl[VD] private[graphx] (
     this
   }
 
+  override def getStorageLevel = partitionsRDD.getStorageLevel
+
   override def checkpoint() = {
     partitionsRDD.checkpoint()
   }
-    
+
+  override def isCheckpointed: Boolean = {
+    firstParent[ShippableVertexPartition[VD]].isCheckpointed
+  }
+
+  override def getCheckpointFile: Option[String] = {
+    partitionsRDD.getCheckpointFile
+  }
+
   /** The number of vertices in the RDD. */
   override def count(): Long = {
     partitionsRDD.map(_.size).reduce(_ + _)
