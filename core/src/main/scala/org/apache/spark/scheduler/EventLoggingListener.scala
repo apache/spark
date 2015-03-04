@@ -202,13 +202,23 @@ private[spark] class EventLoggingListener(
       }
     }
     fileSystem.rename(new Path(logPath + IN_PROGRESS), target)
+    writer = None
   }
 
+  Runtime.getRuntime.addShutdownHook(new Thread("Renaming inprogress log to logPath") {
+    override def run(): Unit = Utils.logUncaughtExceptions {
+      if (writer != None && fileSystem.exists(new Path(logPath + IN_PROGRESS))) {
+        logDebug("Inprogressing event log exists. Application may be terminated abnormally.")
+        fileSystem.rename(new Path(logPath + IN_PROGRESS), new Path(logPath + ABNORMAL))
+      }
+    }
+  })
 }
 
 private[spark] object EventLoggingListener extends Logging {
   // Suffix applied to the names of files still being written by applications.
   val IN_PROGRESS = ".inprogress"
+  val ABNORMAL = ".abnormal"
   val DEFAULT_LOG_DIR = "/tmp/spark-events"
   val SPARK_VERSION_KEY = "SPARK_VERSION"
   val COMPRESSION_CODEC_KEY = "COMPRESSION_CODEC"

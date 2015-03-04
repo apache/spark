@@ -744,19 +744,28 @@ private[spark] class Master(
         }
       
       val eventLogFilePrefix = EventLoggingListener.getLogPath(
-          eventLogDir, app.id, app.desc.eventLogCodec)
+        eventLogDir, app.id, app.desc.eventLogCodec)
       val fs = Utils.getHadoopFileSystem(eventLogDir, hadoopConf)
       val inProgressExists = fs.exists(new Path(eventLogFilePrefix + 
-          EventLoggingListener.IN_PROGRESS))
+        EventLoggingListener.IN_PROGRESS))
+      val abnormalLogExists = fs.exists(new Path(eventLogFilePrefix +
+        EventLoggingListener.ABNORMAL))
       
       if (inProgressExists) {
         // Event logging is enabled for this application, but the application is still in progress
         logWarning(s"Application $appName is still in progress, it may be terminated abnormally.")
       }
+
+      if (abnormalLogExists) {
+        // Event logging is enabled for this application, but the application is terminated abnormally.
+        logWarning(s"Application $appName may be terminated abnormally.")
+      }
       
       val (eventLogFile, status) = if (inProgressExists) {
         (eventLogFilePrefix + EventLoggingListener.IN_PROGRESS, " (in progress)")
-      } else {
+      } else if (abnormalLogExists) {
+        (eventLogFilePrefix + EventLoggingListener.ABNORMAL, " (terminated abnormally)")
+      }  else {
         (eventLogFilePrefix, " (completed)")
       }
       
