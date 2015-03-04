@@ -153,7 +153,7 @@ sparkR.init <- function(
     close(f)
     file.remove(path)
     if (length(sparkRBackendPort) == 0 || sparkRBackendPort == 0 ||
-     length(monitorPort) == 0 || monitorPort == 0) {
+        length(monitorPort) == 0 || monitorPort == 0) {
       stop("JVM failed to launch")
     }
     # never close this socket, JVM is waiting for it
