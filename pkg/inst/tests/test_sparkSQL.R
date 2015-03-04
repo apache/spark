@@ -1,6 +1,4 @@
 library(testthat)
-library(devtools)
-library(SparkR)
 
 context("SparkSQL functions")
 

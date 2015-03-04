@@ -787,7 +787,7 @@ setGeneric("saveDF", function(df, path, source, mode, ...) { standardGeneric("sa
 setMethod("saveDF",
           signature(df = "DataFrame", path = 'character', source = 'character',
                     mode = 'character'),
-          function(df, path=NULL, source=NULL, mode="append", ...){
+          function(df, path = NULL, source = NULL, mode = "append", ...){
             if (is.null(source)) {
               sqlCtx <- get(".sparkRSQLsc", envir = .sparkREnv)
               source <- callJMethod(sqlCtx, "getConf", "spark.sql.sources.default",
@@ -845,7 +845,7 @@ setGeneric("saveAsTable", function(df, tableName, source, mode, ...) {
 setMethod("saveAsTable",
           signature(df = "DataFrame", tableName = 'character', source = 'character',
                     mode = 'character'),
-          function(df, tableName, source=NULL, mode="append", ...){
+          function(df, tableName, source = NULL, mode="append", ...){
             if (is.null(source)) {
               sqlCtx <- get(".sparkRSQLsc", envir = .sparkREnv)
               source <- callJMethod(sqlCtx, "getConf", "spark.sql.sources.default",
