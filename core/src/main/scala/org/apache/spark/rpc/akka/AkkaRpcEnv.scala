@@ -27,13 +27,14 @@ import scala.language.postfixOps
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-import _root_.akka.actor.{ActorSystem, ExtendedActorSystem, Actor, ActorRef, Props, Address}
+import akka.actor.{ActorSystem, ExtendedActorSystem, Actor, ActorRef, Props, Address}
 import akka.pattern.{ask => akkaAsk}
-import akka.remote._
-
-import org.apache.spark.{Logging, SparkConf}
+import akka.remote.{AssociatedEvent => AkkaAssociatedEvent}
+import akka.remote.{DisassociatedEvent => AkkaDisassociatedEvent}
+import akka.remote.{AssociationErrorEvent, RemotingLifecycleEvent}
+import org.apache.spark.{SparkException, Logging, SparkConf}
 import org.apache.spark.rpc._
-import org.apache.spark.util.{SparkUncaughtExceptionHandler, ActorLogReceive, AkkaUtils}
+import org.apache.spark.util.{ActorLogReceive, AkkaUtils}
 
 /**
  * A RpcEnv implementation based on Akka.
@@ -92,6 +93,10 @@ private[spark] class AkkaRpcEnv private (
   }
 
   override def setupEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef = {
+    setupThreadSafeEndpoint(name, endpoint)
+  }
+
+  override def setupThreadSafeEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef = {
     val latch = new CountDownLatch(1)
     try {
       @volatile var endpointRef: AkkaRpcEndpointRef = null
@@ -102,57 +107,84 @@ private[spark] class AkkaRpcEnv private (
         require(endpointRef != null)
         registerEndpoint(endpoint, endpointRef)
 
-        var isNetworkRpcEndpoint = false
-
         override def preStart(): Unit = {
-          if (endpoint.isInstanceOf[NetworkRpcEndpoint]) {
-            isNetworkRpcEndpoint = true
-            // Listen for remote client network events only when it's `NetworkRpcEndpoint`
-            context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
-          }
+          // Listen for remote client network events
+          context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
           safelyCall(endpoint) {
             endpoint.onStart()
           }
         }
 
-        override def receiveWithLogging: Receive = if (isNetworkRpcEndpoint) {
-          case AssociatedEvent(_, remoteAddress, _) =>
+        override def receiveWithLogging: Receive = {
+          case AkkaAssociatedEvent(_, remoteAddress, _) =>
             safelyCall(endpoint) {
-              endpoint.asInstanceOf[NetworkRpcEndpoint].
-                onConnected(akkaAddressToRpcAddress(remoteAddress))
+              val event = AssociatedEvent(akkaAddressToRpcAddress(remoteAddress))
+              val pf = endpoint.receive
+              if (pf.isDefinedAt(event)) {
+                pf.apply(event)
+              }
             }
 
-          case DisassociatedEvent(_, remoteAddress, _) =>
+          case AkkaDisassociatedEvent(_, remoteAddress, _) =>
             safelyCall(endpoint) {
-              endpoint.asInstanceOf[NetworkRpcEndpoint].
-                onDisconnected(akkaAddressToRpcAddress(remoteAddress))
+              val event = DisassociatedEvent(akkaAddressToRpcAddress(remoteAddress))
+              val pf = endpoint.receive
+              if (pf.isDefinedAt(event)) {
+                pf.apply(event)
+              }
             }
 
           case AssociationErrorEvent(cause, localAddress, remoteAddress, inbound, _) =>
             safelyCall(endpoint) {
-              endpoint.asInstanceOf[NetworkRpcEndpoint].
-                onNetworkError(cause, akkaAddressToRpcAddress(remoteAddress))
+              val event = NetworkErrorEvent(akkaAddressToRpcAddress(remoteAddress), cause)
+              val pf = endpoint.receive
+              if (pf.isDefinedAt(event)) {
+                pf.apply(event)
+              }
             }
           case e: RemotingLifecycleEvent =>
           // TODO ignore?
 
-          case message: Any =>
-            logDebug("Received RPC message: " + message)
+          case AkkaMessage(message: Any, reply: Boolean)=>
+            logDebug("Received RPC message: " + AkkaMessage(message, reply))
             safelyCall(endpoint) {
-              val pf = endpoint.receive(new AkkaRpcEndpointRef(defaultAddress, sender(), conf))
-              if (pf.isDefinedAt(message)) {
-                pf.apply(message)
+              val s = sender()
+              val pf =
+                if (reply) {
+                  endpoint.receiveAndReply(new RpcResponse {
+                    override def fail(e: Throwable): Unit = {
+                      s ! AkkaFailure(e)
+                    }
+
+                    override def reply(response: Any): Unit = {
+                      s ! AkkaMessage(response, false)
+                    }
+
+                    override def replyWithSender(response: Any, sender: RpcEndpointRef): Unit = {
+                      s.!(AkkaMessage(response, true))(
+                        sender.asInstanceOf[AkkaRpcEndpointRef].actorRef)
+                    }
+                  })
+                } else {
+                  endpoint.receive
+                }
+              try {
+                if (pf.isDefinedAt(message)) {
+                  pf.apply(message)
+                }
+              } catch {
+                case NonFatal(e) =>
+                  if (reply) {
+                    // If the sender asks a reply, we should send the error back to the sender
+                    s ! AkkaFailure(e)
+                  } else {
+                    throw e
+                  }
               }
             }
-        } else {
-          case message: Any =>
-            logDebug("Received RPC message: " + message)
-            safelyCall(endpoint) {
-              val pf = endpoint.receive(new AkkaRpcEndpointRef(defaultAddress, sender(), conf))
-              if (pf.isDefinedAt(message)) {
-                pf.apply(message)
-              }
-            }
+          case message: Any => {
+            logWarning(s"Unknown message: $message")
+          }
         }
 
         override def postStop(): Unit = {
@@ -259,20 +291,39 @@ private[akka] class AkkaRpcEndpointRef(
 
   override val name: String = actorRef.path.name
 
-  override def ask[T: ClassTag](message: Any): Future[T] = ask(message, defaultTimeout)
-
-  override def ask[T: ClassTag](message: Any, timeout: FiniteDuration): Future[T] = {
-    actorRef.ask(message)(timeout).mapTo[T]
-  }
-
   override def askWithReply[T: ClassTag](message: Any): T = askWithReply(message, defaultTimeout)
 
   override def askWithReply[T: ClassTag](message: Any, timeout: FiniteDuration): T = {
     // TODO: Consider removing multiple attempts
-    AkkaUtils.askWithReply(message, actorRef, maxRetries, retryWaitMs, timeout)
+    var attempts = 0
+    var lastException: Exception = null
+    while (attempts < maxRetries) {
+      attempts += 1
+      try {
+        val future = sendWithReply[T](message, timeout)
+        val result = Await.result(future, timeout)
+        if (result == null) {
+          throw new SparkException("Actor returned null")
+        }
+        return result
+      } catch {
+        case ie: InterruptedException => throw ie
+        case e: Exception =>
+          lastException = e
+          logWarning(s"Error sending message [message = $message] in $attempts attempts", e)
+      }
+      Thread.sleep(retryWaitMs)
+    }
+
+    throw new SparkException(
+      s"Error sending message [message = $message]", lastException)
   }
 
-  override def send(message: Any)(implicit sender: RpcEndpointRef = RpcEndpoint.noSender): Unit = {
+  override def send(message: Any): Unit = {
+    actorRef ! AkkaMessage(message, false)
+  }
+
+  override def sendWithReply(message: Any, sender: RpcEndpointRef): Unit = {
     implicit val actorSender: ActorRef =
       if (sender == null) {
         Actor.noSender
@@ -280,10 +331,41 @@ private[akka] class AkkaRpcEndpointRef(
         require(sender.isInstanceOf[AkkaRpcEndpointRef])
         sender.asInstanceOf[AkkaRpcEndpointRef].actorRef
       }
-    actorRef ! message
+    actorRef ! AkkaMessage(message, true)
+  }
+
+
+  override def sendWithReply[T: ClassTag](message: Any): Future[T] = {
+    sendWithReply(message, defaultTimeout)
+  }
+
+  override def sendWithReply[T: ClassTag](message: Any, timeout: FiniteDuration): Future[T] = {
+    import scala.concurrent.ExecutionContext.Implicits.global
+    actorRef.ask(AkkaMessage(message, true))(timeout).flatMap {
+      case AkkaMessage(message, reply) =>
+        if (reply) {
+          Future.failed(new SparkException("The sender cannot reply"))
+        } else {
+          Future.successful(message)
+        }
+      case AkkaFailure(e) =>
+        Future.failed(e)
+    }.mapTo[T]
   }
 
   override def toString: String = s"${getClass.getSimpleName}($actorRef)"
 
   override def toURI: URI = new URI(actorRef.path.toString)
 }
+
+/**
+ * A wrapper to `message` so that the receiver knows if the sender expects a reply.
+ * @param message
+ * @param reply if the sender expects a reply message
+ */
+private[akka] case class AkkaMessage(message: Any, reply: Boolean)
+
+/**
+ * A reply with the failure error from the receiver to the sender
+ */
+private[akka] case class AkkaFailure(e: Throwable)

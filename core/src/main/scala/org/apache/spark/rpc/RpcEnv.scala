@@ -23,7 +23,7 @@ import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 import scala.reflect.ClassTag
 
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.{SparkException, SecurityManager, SparkConf}
 import org.apache.spark.util.Utils
 
 /**
@@ -31,8 +31,15 @@ import org.apache.spark.util.Utils
  */
 private[spark] trait RpcEnv {
 
+  /**
+   * Return RpcEndpointRef of the registered [[RpcEndpoint]]. Will be used to implement
+   * [[RpcEndpoint.self]].
+   */
   private[rpc] def endpointRef(endpoint: RpcEndpoint): RpcEndpointRef
 
+  /**
+   * Return an ActionScheduler for the caller to run long-time actions out of the current thread.
+   */
   def scheduler: ActionScheduler
 
   /**
@@ -41,9 +48,16 @@ private[spark] trait RpcEnv {
   def address: RpcAddress
 
   /**
-   * Register a [[RpcEndpoint]] with a name and return its [[RpcEndpointRef]].
+   * Register a [[RpcEndpoint]] with a name and return its [[RpcEndpointRef]]. [[RpcEnv]] does not
+   * guarantee thread-safety.
    */
   def setupEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef
+
+  /**
+   * Register a [[RpcEndpoint]] with a name and return its [[RpcEndpointRef]]. [[RpcEnv]] should
+   * make sure thread-safely sending messages to [[RpcEndpoint]].
+   */
+  def setupThreadSafeEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef
 
   /**
    * Retrieve a [[RpcEndpointRef]] which is located in the driver via its name.
@@ -80,7 +94,8 @@ private[spark] trait RpcEnv {
   def awaitTermination(): Unit
 
   /**
-   * Create a URI used to create a [[RpcEndpointRef]]
+   * Create a URI used to create a [[RpcEndpointRef]]. Use this one to create the URI instead of
+   * creating it manually because different [[RpcEnv]] may have different formats.
    */
   def uriOf(systemName: String, address: RpcAddress, endpointName: String): String
 }
@@ -117,11 +132,11 @@ private[spark] object RpcEnv {
   }
 
   def create(
-       name: String,
-       host: String,
-       port: Int,
-       conf: SparkConf,
-       securityManager: SecurityManager): RpcEnv = {
+      name: String,
+      host: String,
+      port: Int,
+      conf: SparkConf,
+      securityManager: SecurityManager): RpcEnv = {
     // Using Reflection to create the RpcEnv to avoid to depend on Akka directly
     val config = RpcEnvConfig(conf, name, host, port, securityManager)
     val companion = getRpcEnvCompanion(conf)
@@ -141,8 +156,11 @@ private[spark] object RpcEnv {
  *
  * constructor onStart receive* onStop
  *
- * If any error is thrown from one of RpcEndpoint methods except `onError`, [[RpcEndpoint.onError]]
- * will be invoked with the cause. If onError throws an error, [[RpcEnv]] will ignore it.
+ * Note: `receive` can be called concurrently. If you want `receive` is thread-safe, please use
+ * [[RpcEnv.setupThreadSafeEndpoint]]
+ *
+ * If any error is thrown from one of [[RpcEndpoint]] methods except `onError`, `onError` will be
+ * invoked with the cause. If `onError` throws an error, [[RpcEnv]] will ignore it.
  */
 private[spark] trait RpcEndpoint {
 
@@ -152,25 +170,31 @@ private[spark] trait RpcEndpoint {
   val rpcEnv: RpcEnv
 
   /**
-   * Provide the implicit sender. `self` will become valid when `onStart` is called.
+   * The [[RpcEndpointRef]] of this [[RpcEndpoint]]. `self` will become valid when `onStart` is
+   * called.
    *
    * Note: Because before `onStart`, [[RpcEndpoint]] has not yet been registered and there is not
-   * valid [[RpcEndpointRef]] for it. So don't call `self` before `onStart` is called. In the other
-   * words, don't call [[RpcEndpointRef.send]] in the constructor of [[RpcEndpoint]].
+   * valid [[RpcEndpointRef]] for it. So don't call `self` before `onStart` is called.
    */
-  implicit final def self: RpcEndpointRef = {
+  final def self: RpcEndpointRef = {
     require(rpcEnv != null, "rpcEnv has not been initialized")
     rpcEnv.endpointRef(this)
   }
 
   /**
-   * Same assumption like Actor: messages sent to a RpcEndpoint will be delivered in sequence, and
-   * messages from the same RpcEndpoint will be delivered in order.
-   *
-   * @param sender
-   * @return
+   * Process messages from [[RpcEndpointRef.send]] or [[RpcResponse.reply)]]
    */
-  def receive(sender: RpcEndpointRef): PartialFunction[Any, Unit]
+  def receive: PartialFunction[Any, Unit] = {
+    case _ =>
+      // network events will be passed here by default, so do nothing by default to avoid noise.
+  }
+
+  /**
+   * Process messages from [[RpcEndpointRef.sendWithReply]] or [[RpcResponse.replyWithSender)]]
+   */
+  def receiveAndReply(response: RpcResponse): PartialFunction[Any, Unit] = {
+    case _ => response.fail(new SparkException(self + " won't reply anything"))
+  }
 
   /**
    * Call onError when any exception is thrown during handling messages.
@@ -208,49 +232,6 @@ private[spark] trait RpcEndpoint {
 }
 
 /**
- * A RpcEndoint interested in network events.
- *
- * [[NetworkRpcEndpoint]] will be guaranteed that `onStart`, `receive` , `onConnected`,
- * `onDisconnected`, `onNetworkError` and `onStop` will be called in sequence.
- *
- * The lift-cycle will be:
- *
- * constructor onStart (receive|onConnected|onDisconnected|onNetworkError)* onStop
- *
- * If any error is thrown from `onConnected`, `onDisconnected` or `onNetworkError`,
- * [[RpcEndpoint.onError)]] will be invoked with the cause. If onError throws an error,
- * [[RpcEnv]] will ignore it.
- */
-private[spark] trait NetworkRpcEndpoint extends RpcEndpoint {
-
-  /**
-   * Invoked when `remoteAddress` is connected to the current node.
-   */
-  def onConnected(remoteAddress: RpcAddress): Unit = {
-    // By default, do nothing.
-  }
-
-  /**
-   * Invoked when `remoteAddress` is lost.
-   */
-  def onDisconnected(remoteAddress: RpcAddress): Unit = {
-    // By default, do nothing.
-  }
-
-  /**
-   * Invoked when some network error happens in the connection between the current node and
-   * `remoteAddress`.
-   */
-  def onNetworkError(cause: Throwable, remoteAddress: RpcAddress): Unit = {
-    // By default, do nothing.
-  }
-}
-
-private[spark] object RpcEndpoint {
-  final val noSender: RpcEndpointRef = null
-}
-
-/**
  * A reference for a remote [[RpcEndpoint]]. [[RpcEndpointRef]] is thread-safe.
  */
 private[spark] trait RpcEndpointRef {
@@ -261,18 +242,6 @@ private[spark] trait RpcEndpointRef {
   def address: RpcAddress
 
   def name: String
-
-  /**
-   * Send a message to the corresponding [[RpcEndpoint]] and return a `Future` to receive the reply
-   * within a default timeout.
-   */
-  def ask[T: ClassTag](message: Any): Future[T]
-
-  /**
-   * Send a message to the corresponding [[RpcEndpoint]] and return a `Future` to receive the reply
-   * within the specified timeout.
-   */
-  def ask[T: ClassTag](message: Any, timeout: FiniteDuration): Future[T]
 
   /**
    * Send a message to the corresponding [[RpcEndpoint]] and get its result within a default
@@ -288,8 +257,9 @@ private[spark] trait RpcEndpointRef {
   def askWithReply[T: ClassTag](message: Any): T
 
   /**
-   * Send a message to the corresponding [[RpcEndpoint]] and get its result within a specified
-   * timeout, throw a SparkException if this fails even after the specified number of retries.
+   * Send a message to the corresponding [[RpcEndpoint.receive]] and get its result within a
+   * specified timeout, throw a SparkException if this fails even after the specified number of
+   * retries.
    *
    * Note: this is a blocking action which may cost a lot of time, so don't call it in an message
    * loop of [[RpcEndpoint]].
@@ -303,14 +273,29 @@ private[spark] trait RpcEndpointRef {
 
   /**
    * Sends a one-way asynchronous message. Fire-and-forget semantics.
-   *
-   * If invoked from within an [[RpcEndpoint]] then `self` is implicitly passed on as the implicit
-   * 'sender' argument. If not then no sender is available.
-   *
-   * This `sender` reference is then available in the receiving [[RpcEndpoint]] as the `sender`
-   * parameter of [[RpcEndpoint.receive]]
    */
-  def send(message: Any)(implicit sender: RpcEndpointRef = RpcEndpoint.noSender): Unit
+  def send(message: Any): Unit
+
+  /**
+   * Send a message to the corresponding [[RpcEndpoint.receiveAndReply]] asynchronously.
+   * Fire-and-forget semantics.
+   *
+   * The receiver will reply to sender's [[RpcEndpoint.receive]] or [[RpcEndpoint.receiveAndReply]]
+   * depending on which one of [[RpcResponse.reply]]s is called.
+   */
+  def sendWithReply(message: Any, sender: RpcEndpointRef): Unit
+
+  /**
+   * Send a message to the corresponding [[RpcEndpoint.receiveAndReply)]] and return a `Future` to
+   * receive the reply within a default timeout.
+   */
+  def sendWithReply[T: ClassTag](message: Any): Future[T]
+
+  /**
+   * Send a message to the corresponding [[RpcEndpoint.receiveAndReply)]] and return a `Future` to
+   * receive the reply within the specified timeout.
+   */
+  def sendWithReply[T: ClassTag](message: Any, timeout: FiniteDuration): Future[T]
 
   def toURI: URI
 }
@@ -340,4 +325,54 @@ private[spark] object RpcAddress {
     val (host, port) = Utils.extractHostPortFromSparkUrl(sparkUrl)
     RpcAddress(host, port)
   }
+}
+
+/**
+ * Indicate that a new connection is established.
+ *
+ * @param address the remote address of the connection
+ */
+private[spark] case class AssociatedEvent(address: RpcAddress)
+
+/**
+ * Indicate a disconnection from a remote address.
+ *
+ * @param address the remote address of the connection
+ */
+private[spark] case class DisassociatedEvent(address: RpcAddress)
+
+/**
+ * Indicate a network error.
+ * @param address the remote address of the connection which this error happens on.
+ * @param cause the cause of the network error.
+ */
+private[spark] case class NetworkErrorEvent(address: RpcAddress, cause: Throwable)
+
+/**
+ * A callback that [[RpcEndpoint]] can use it to send back a message or failure.
+ */
+private[spark] trait RpcResponse {
+
+  /**
+   * Reply a message to the sender. If the sender is [[RpcEndpoint]], its [[RpcEndpoint.receive]]
+   * will be called.
+   */
+  def reply(response: Any): Unit
+
+  /**
+   * Reply a message to the corresponding [[RpcEndpoint.receiveAndReply]]. If you use this one to
+   * reply, it means you expect the target [[RpcEndpoint]] should reply you something.
+   *
+   * TODO better method name?
+   *
+   * @param response the response message
+   * @param sender who replies this message. The target [[RpcEndpoint]] will use `sender` to send
+   *               back something.
+   */
+  def replyWithSender(response: Any, sender: RpcEndpointRef): Unit
+
+  /**
+   * Report a failure to the sender.
+   */
+  def fail(e: Throwable): Unit
 }

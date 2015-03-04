@@ -20,7 +20,7 @@ package org.apache.spark.scheduler
 import scala.collection.mutable
 
 import org.apache.spark._
-import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv, RpcEndpoint}
+import org.apache.spark.rpc.{RpcResponse, RpcEndpointRef, RpcEnv, RpcEndpoint}
 
 private sealed trait OutputCommitCoordinationMessage extends Serializable
 
@@ -156,13 +156,13 @@ private[spark] object OutputCommitCoordinator {
       override val rpcEnv: RpcEnv, outputCommitCoordinator: OutputCommitCoordinator)
     extends RpcEndpoint with Logging {
 
-    override def receive(sender: RpcEndpointRef) = {
+    override def receiveAndReply(response: RpcResponse) = {
       case AskPermissionToCommitOutput(stage, partition, taskAttempt) =>
-        sender.send(
+        response.reply(
           outputCommitCoordinator.handleAskPermissionToCommit(stage, partition, taskAttempt))
       case StopCoordinator =>
         logInfo("OutputCommitCoordinator stopped!")
-        sender.send(true)
+        response.reply(true)
         stop()
     }
   }
