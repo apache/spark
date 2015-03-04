@@ -1293,7 +1293,7 @@ class DAG(Base):
         based on a regex that should match one or many tasks, and includes
         upstream and downstream neighboors based on the flag passed.
         """
-        dag = copy.deepcopy(self)
+        dag = copy.copy(self)
         regex_match = [
             t for t in dag.tasks if re.findall(task_regex, t.task_id)]
         also_include = []

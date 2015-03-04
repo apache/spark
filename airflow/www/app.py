@@ -867,6 +867,13 @@ class Airflow(BaseView):
     def tree(self):
         dag_id = request.args.get('dag_id')
         dag = dagbag.dags[dag_id]
+        root = request.args.get('root')
+        if root:
+            dag = dag.sub_dag(
+                task_regex=root,
+                include_downstream=False,
+                include_upstream=True)
+
         session = settings.Session()
 
         base_date = request.args.get('base_date')
@@ -946,6 +953,12 @@ class Airflow(BaseView):
             return redirect(url_for('index'))
 
         dag = dagbag.dags[dag_id]
+        root = request.args.get('root')
+        if root:
+            dag = dag.sub_dag(
+                task_regex=root,
+                include_downstream=False,
+                include_upstream=True)
 
         nodes = []
         edges = []
