@@ -390,6 +390,7 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     val innerTempDir = Utils.createTempDir(tempDir.getPath)
     val tempFile = File.createTempFile("someprefix", "somesuffix", innerTempDir)
     val targetDir = new File("target-dir")
+    val testFileDir = new File("test-filename")
     Files.write("some text", tempFile, UTF_8)
 
     try {
@@ -399,6 +400,8 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
       Utils.fetchHcfsFile(path, targetDir, fs, new SparkConf(), conf, false)
       assert(targetDir.exists())
       assert(targetDir.isDirectory())
+      // Testing to make sure it doesn't error if the dir already exists
+      Utils.fetchHcfsFile(path, targetDir, fs, new SparkConf(), conf, false)
       val newInnerDir = new File(targetDir, innerTempDir.getName)
       println("inner temp dir: " + innerTempDir.getName)
       targetDir.listFiles().map(_.getName).foreach(println)
@@ -407,9 +410,18 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
       val newInnerFile = new File(newInnerDir, tempFile.getName)
       assert(newInnerFile.exists())
       assert(newInnerFile.isFile())
+      val filePath = new Path("file://" + tempFile.getAbsolutePath)
+      val testFileName = "testFName"
+      val testFilefs = Utils.getHadoopFileSystem(filePath.toString, conf)
+      Utils.fetchHcfsFile(filePath, testFileDir, testFilefs, new SparkConf(), 
+                          conf, false, Some(testFileName))
+      val newFileName = new File(testFileDir, testFileName)
+      assert(newFileName.exists())
+      assert(newFileName.isFile())
     } finally {
       Utils.deleteRecursively(tempDir)
       Utils.deleteRecursively(targetDir)
+      Utils.deleteRecursively(testFileDir)
     }
   }
 }

@@ -624,7 +624,8 @@ private[spark] object Utils extends Logging {
       case _ =>
         val fs = getHadoopFileSystem(uri, hadoopConf)
         val path = new Path(uri)
-        fetchHcfsFile(path, new File(targetDir, path.getName), fs, conf, hadoopConf, fileOverwrite)
+        fetchHcfsFile(path, targetDir, fs, conf, hadoopConf, fileOverwrite, 
+                      Some(filename))
     }
   }
 
@@ -639,8 +640,9 @@ private[spark] object Utils extends Logging {
       fs: FileSystem,
       conf: SparkConf,
       hadoopConf: Configuration,
-      fileOverwrite: Boolean): Unit = {
-    if (!targetDir.mkdir()) {
+      fileOverwrite: Boolean,
+      filename: Option[String] = None): Unit = {
+    if (!targetDir.exists() && !targetDir.mkdir()) {
       throw new IOException(s"Failed to create directory ${targetDir.getPath}")
     }
     fs.listStatus(path).foreach { fileStatus =>
@@ -650,7 +652,7 @@ private[spark] object Utils extends Logging {
           fileOverwrite)
       } else {
         val in = fs.open(innerPath)
-        val targetFile = new File(targetDir, innerPath.getName)
+        val targetFile = new File(targetDir, filename.getOrElse(innerPath.getName))
         downloadFile(innerPath.toString, in, targetFile, fileOverwrite)
       }
     }
