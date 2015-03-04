@@ -323,7 +323,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   @deprecated("Use reduceByKeyLocally", "1.0.0")
   def reduceByKeyToDriver(func: (V, V) => V): Map[K, V] = reduceByKeyLocally(func)
 
-  /** 
+  /**
    * Count the number of elements for each key, collecting the results to a local Map.
    *
    * Note that this method should only be used if the resulting map is expected to be small, as
@@ -867,7 +867,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     saveAsHadoopFile(path, keyClass, valueClass, fm.runtimeClass.asInstanceOf[Class[F]])
   }
 
-  class RDDMultipleTextOutputFormat extends MultipleTextOutputFormat[Any, Any]() {
+  class RDDMultipleTextOutputFormat() extends MultipleTextOutputFormat[Any, Any]() {
+
     override def generateActualKey(key: Any, value: Any): Any =
     {
       NullWritable.get()
@@ -881,10 +882,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
   /**
    * TODO: This only works if the key is a java Object (can't work with primitive types)
-   * 
-   * Output the RDD to multiple files by key on any Hadoop-supported file system, using a Hadoop 
+   *
+   * Output the RDD to multiple files by key on any Hadoop-supported file system, using a Hadoop
    * `OutputFormat` class supporting the key and value types K and V in this RDD.
-   * 
+   *
    * Example:
    * [('N', 'Nick'), ('N', 'Nancy'), ('B', 'Bob'), ('B', 'Ben'), ('F', 'Frankie')]
    * /path/prefix/B [/part-1, /part-2, etc]
@@ -898,11 +899,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   def saveAsHadoopFileByKey[F <: OutputFormat[K, V]](path: String)(implicit fm: ClassTag[F]) {
-    saveAsHadoopFile(path, ClassUtils.primitiveToWrapper(keyClass), 
-      ClassUtils.primitiveToWrapper(valueClass), 
+    saveAsHadoopFile(path, ClassUtils.primitiveToWrapper(keyClass),
+      ClassUtils.primitiveToWrapper(valueClass),
       classOf[RDDMultipleTextOutputFormat])
   }
-  
+
   /**
    * Output the RDD to any Hadoop-supported file system, using a Hadoop `OutputFormat` class
    * supporting the key and value types K and V in this RDD. Compress the result with the
