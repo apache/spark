@@ -9,6 +9,9 @@ redirect_from: "building-with-maven.html"
 
 Building Spark using Maven requires Maven 3.0.4 or newer and Java 6+.
 
+**Note:** Building Spark with Java 7 or later can create JAR files that may not be
+readable with early versions of Java 6, due to the large number of files in the JAR
+archive. Build with Java 6 if this is an issue for your deployment.
 
 # Setting up Maven's Memory Usage
 
