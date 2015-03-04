@@ -625,7 +625,7 @@ private[spark] object Utils extends Logging {
         val fs = getHadoopFileSystem(uri, hadoopConf)
         val path = new Path(uri)
         fetchHcfsFile(path, targetDir, fs, conf, hadoopConf, fileOverwrite,
-                      Some(filename))
+                      filename = Some(filename))
     }
   }
 
