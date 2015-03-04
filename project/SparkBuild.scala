@@ -220,7 +220,13 @@ object Flume {
   */
 object ExludedDependencies {
   lazy val settings = Seq(
-    libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") }
+    libraryDependencies ~= { libs =>
+      libs.filterNot(_.name == "groovy-all").map {
+        case m if m.organization == "com.fasterxml.jackson.module" =>
+          m.exclude("com.google.guava", "guava")
+        case m => m
+      }
+    }
   )
 }
 
