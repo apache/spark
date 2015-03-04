@@ -168,6 +168,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
           }
         }
       } catch {
+        case ie: InterruptedException if stopped => // ignore
         case e: Exception => logError("Error in cleaning thread", e)
       }
     }
