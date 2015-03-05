@@ -17,9 +17,8 @@
 
 package org.apache.spark.network.shuffle.protocol;
 
-import io.netty.buffer.ByteBuf;
-
 import com.google.common.base.Objects;
+import io.netty.buffer.ByteBuf;
 
 /**
  * Identifier for a fixed number of chunks to read from a stream created by an "open blocks"

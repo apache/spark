@@ -17,18 +17,17 @@
 
 package org.apache.spark.network.sasl;
 
-import io.netty.buffer.Unpooled;
-
 import java.util.concurrent.ConcurrentMap;
+
+import com.google.common.collect.Maps;
+import io.netty.buffer.Unpooled;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.google.common.collect.Maps;
 
 /**
  * RPC Handler which performs SASL authentication before delegating to a child RPC handler.

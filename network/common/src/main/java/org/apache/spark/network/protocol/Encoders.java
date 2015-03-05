@@ -18,9 +18,8 @@
 package org.apache.spark.network.protocol;
 
 
-import io.netty.buffer.ByteBuf;
-
 import com.google.common.base.Charsets;
+import io.netty.buffer.ByteBuf;
 
 /** Provides a canonical set of Encoders for simple types. */
 public class Encoders {

@@ -17,18 +17,16 @@
 
 package org.apache.spark.network.util;
 
-import io.netty.buffer.Unpooled;
-
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
+import io.netty.buffer.Unpooled;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * General utilities available in the network package. Many of these are sourced from Spark's

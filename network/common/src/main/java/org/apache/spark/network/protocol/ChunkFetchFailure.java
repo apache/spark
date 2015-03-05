@@ -17,9 +17,8 @@
 
 package org.apache.spark.network.protocol;
 
-import io.netty.buffer.ByteBuf;
-
 import com.google.common.base.Objects;
+import io.netty.buffer.ByteBuf;
 
 /**
  * Response to {@link ChunkFetchRequest} when there is an error fetching the chunk.
