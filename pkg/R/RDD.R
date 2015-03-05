@@ -1456,13 +1456,13 @@ setMethod("zipWithUniqueId",
             n <- numPartitions(x)
 
             partitionFunc <- function(split, part) {
-              index <- 0
-              result <- vector("list", length(part))
-              for (item in part) {
-                result[[index + 1]] <- list(item, index * n + split)
-                index <- index + 1
-              }
-              result
+              mapply(
+                function(item, index) {
+                  list(item, (index - 1) * n + split)
+                },
+                part,
+                seq_along(part),
+                SIMPLIFY = FALSE)
             }
 
             lapplyPartitionsWithIndex(x, partitionFunc)
