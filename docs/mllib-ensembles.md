@@ -129,8 +129,9 @@ val testErr = labelAndPreds.filter(r => r._1 != r._2).count.toDouble / testData.
 println("Test Error = " + testErr)
 println("Learned classification forest model:\n" + model.toDebugString)
 
-model.save("myModelPath")
-val sameModel = RandomForestModel.load("myModelPath")
+// Save and load model
+model.save(sc, "myModelPath")
+val sameModel = RandomForestModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 
@@ -193,17 +194,16 @@ Double testErr =
 System.out.println("Test Error: " + testErr);
 System.out.println("Learned classification forest model:\n" + model.toDebugString());
 
-model.save("myModelPath");
-RandomForestModel sameModel = RandomForestModel.load("myModelPath");
+// Save and load model
+model.save(sc.sc(), "myModelPath");
+RandomForestModel sameModel = RandomForestModel.load(sc.sc(), "myModelPath");
 {% endhighlight %}
 </div>
 
 <div data-lang="python">
 
-Note that the Python API does not yet support model save/load but will in the future.
-
 {% highlight python %}
-from pyspark.mllib.tree import RandomForest
+from pyspark.mllib.tree import RandomForest, RandomForestModel
 from pyspark.mllib.util import MLUtils
 
 # Load and parse the data file into an RDD of LabeledPoint.
@@ -226,6 +226,10 @@ testErr = labelsAndPredictions.filter(lambda (v, p): v != p).count() / float(tes
 print('Test Error = ' + str(testErr))
 print('Learned classification forest model:')
 print(model.toDebugString())
+
+# Save and load model
+model.save(sc, "myModelPath")
+sameModel = RandomForestModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 
@@ -276,8 +280,9 @@ val testMSE = labelsAndPredictions.map{ case(v, p) => math.pow((v - p), 2)}.mean
 println("Test Mean Squared Error = " + testMSE)
 println("Learned regression forest model:\n" + model.toDebugString)
 
-model.save("myModelPath")
-val sameModel = RandomForestModel.load("myModelPath")
+// Save and load model
+model.save(sc, "myModelPath")
+val sameModel = RandomForestModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 
@@ -343,17 +348,16 @@ Double testMSE =
 System.out.println("Test Mean Squared Error: " + testMSE);
 System.out.println("Learned regression forest model:\n" + model.toDebugString());
 
-model.save("myModelPath");
-RandomForestModel sameModel = RandomForestModel.load("myModelPath");
+// Save and load model
+model.save(sc.sc(), "myModelPath");
+RandomForestModel sameModel = RandomForestModel.load(sc.sc(), "myModelPath");
 {% endhighlight %}
 </div>
 
 <div data-lang="python">
 
-Note that the Python API does not yet support model save/load but will in the future.
-
 {% highlight python %}
-from pyspark.mllib.tree import RandomForest
+from pyspark.mllib.tree import RandomForest, RandomForestModel
 from pyspark.mllib.util import MLUtils
 
 # Load and parse the data file into an RDD of LabeledPoint.
@@ -376,6 +380,10 @@ testMSE = labelsAndPredictions.map(lambda (v, p): (v - p) * (v - p)).sum() / flo
 print('Test Mean Squared Error = ' + str(testMSE))
 print('Learned regression forest model:')
 print(model.toDebugString())
+
+# Save and load model
+model.save(sc, "myModelPath")
+sameModel = RandomForestModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 
@@ -504,8 +512,9 @@ val testErr = labelAndPreds.filter(r => r._1 != r._2).count.toDouble / testData.
 println("Test Error = " + testErr)
 println("Learned classification GBT model:\n" + model.toDebugString)
 
-model.save("myModelPath")
-val sameModel = GradientBoostedTreesModel.load("myModelPath")
+// Save and load model
+model.save(sc, "myModelPath")
+val sameModel = GradientBoostedTreesModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 
@@ -568,17 +577,16 @@ Double testErr =
 System.out.println("Test Error: " + testErr);
 System.out.println("Learned classification GBT model:\n" + model.toDebugString());
 
-model.save("myModelPath");
-GradientBoostedTreesModel sameModel = GradientBoostedTreesModel.load("myModelPath");
+// Save and load model
+model.save(sc.sc(), "myModelPath");
+GradientBoostedTreesModel sameModel = GradientBoostedTreesModel.load(sc.sc(), "myModelPath");
 {% endhighlight %}
 </div>
 
 <div data-lang="python">
 
-Note that the Python API does not yet support model save/load but will in the future.
-
 {% highlight python %}
-from pyspark.mllib.tree import GradientBoostedTrees
+from pyspark.mllib.tree import GradientBoostedTrees, GradientBoostedTreesModel
 from pyspark.mllib.util import MLUtils
 
 # Load and parse the data file.
@@ -599,6 +607,10 @@ testErr = labelsAndPredictions.filter(lambda (v, p): v != p).count() / float(tes
 print('Test Error = ' + str(testErr))
 print('Learned classification GBT model:')
 print(model.toDebugString())
+
+# Save and load model
+model.save(sc, "myModelPath")
+sameModel = GradientBoostedTreesModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 
@@ -647,8 +659,9 @@ val testMSE = labelsAndPredictions.map{ case(v, p) => math.pow((v - p), 2)}.mean
 println("Test Mean Squared Error = " + testMSE)
 println("Learned regression GBT model:\n" + model.toDebugString)
 
-model.save("myModelPath")
-val sameModel = GradientBoostedTreesModel.load("myModelPath")
+// Save and load model
+model.save(sc, "myModelPath")
+val sameModel = GradientBoostedTreesModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 
@@ -717,17 +730,16 @@ Double testMSE =
 System.out.println("Test Mean Squared Error: " + testMSE);
 System.out.println("Learned regression GBT model:\n" + model.toDebugString());
 
-model.save("myModelPath");
-GradientBoostedTreesModel sameModel = GradientBoostedTreesModel.load("myModelPath");
+// Save and load model
+model.save(sc.sc(), "myModelPath");
+GradientBoostedTreesModel sameModel = GradientBoostedTreesModel.load(sc.sc(), "myModelPath");
 {% endhighlight %}
 </div>
 
 <div data-lang="python">
 
-Note that the Python API does not yet support model save/load but will in the future.
-
 {% highlight python %}
-from pyspark.mllib.tree import GradientBoostedTrees
+from pyspark.mllib.tree import GradientBoostedTrees, GradientBoostedTreesModel
 from pyspark.mllib.util import MLUtils
 
 # Load and parse the data file.
@@ -748,6 +760,10 @@ testMSE = labelsAndPredictions.map(lambda (v, p): (v - p) * (v - p)).sum() / flo
 print('Test Mean Squared Error = ' + str(testMSE))
 print('Learned regression GBT model:')
 print(model.toDebugString())
+
+# Save and load model
+model.save(sc, "myModelPath")
+sameModel = GradientBoostedTreesModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 

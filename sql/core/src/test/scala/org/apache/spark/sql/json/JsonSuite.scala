@@ -248,26 +248,26 @@ class JsonSuite extends QueryTest {
     val jsonDF = jsonRDD(complexFieldAndType1)
 
     val expectedSchema = StructType(
-      StructField("arrayOfArray1", ArrayType(ArrayType(StringType, false), false), true) ::
-      StructField("arrayOfArray2", ArrayType(ArrayType(DoubleType, false), false), true) ::
-      StructField("arrayOfBigInteger", ArrayType(DecimalType.Unlimited, false), true) ::
-      StructField("arrayOfBoolean", ArrayType(BooleanType, false), true) ::
-      StructField("arrayOfDouble", ArrayType(DoubleType, false), true) ::
-      StructField("arrayOfInteger", ArrayType(LongType, false), true) ::
-      StructField("arrayOfLong", ArrayType(LongType, false), true) ::
+      StructField("arrayOfArray1", ArrayType(ArrayType(StringType, true), true), true) ::
+      StructField("arrayOfArray2", ArrayType(ArrayType(DoubleType, true), true), true) ::
+      StructField("arrayOfBigInteger", ArrayType(DecimalType.Unlimited, true), true) ::
+      StructField("arrayOfBoolean", ArrayType(BooleanType, true), true) ::
+      StructField("arrayOfDouble", ArrayType(DoubleType, true), true) ::
+      StructField("arrayOfInteger", ArrayType(LongType, true), true) ::
+      StructField("arrayOfLong", ArrayType(LongType, true), true) ::
       StructField("arrayOfNull", ArrayType(StringType, true), true) ::
-      StructField("arrayOfString", ArrayType(StringType, false), true) ::
+      StructField("arrayOfString", ArrayType(StringType, true), true) ::
       StructField("arrayOfStruct", ArrayType(
         StructType(
           StructField("field1", BooleanType, true) ::
           StructField("field2", StringType, true) ::
-          StructField("field3", StringType, true) :: Nil), false), true) ::
+          StructField("field3", StringType, true) :: Nil), true), true) ::
       StructField("struct", StructType(
         StructField("field1", BooleanType, true) ::
         StructField("field2", DecimalType.Unlimited, true) :: Nil), true) ::
       StructField("structWithArrayFields", StructType(
-        StructField("field1", ArrayType(LongType, false), true) ::
-        StructField("field2", ArrayType(StringType, false), true) :: Nil), true) :: Nil)
+        StructField("field1", ArrayType(LongType, true), true) ::
+        StructField("field2", ArrayType(StringType, true), true) :: Nil), true) :: Nil)
 
     assert(expectedSchema === jsonDF.schema)
 
@@ -487,7 +487,7 @@ class JsonSuite extends QueryTest {
     val jsonDF = jsonRDD(complexFieldValueTypeConflict)
 
     val expectedSchema = StructType(
-      StructField("array", ArrayType(LongType, false), true) ::
+      StructField("array", ArrayType(LongType, true), true) ::
       StructField("num_struct", StringType, true) ::
       StructField("str_array", StringType, true) ::
       StructField("struct", StructType(
@@ -513,8 +513,8 @@ class JsonSuite extends QueryTest {
     val expectedSchema = StructType(
       StructField("array1", ArrayType(StringType, true), true) ::
       StructField("array2", ArrayType(StructType(
-        StructField("field", LongType, true) :: Nil), false), true) ::
-      StructField("array3", ArrayType(StringType, false), true) :: Nil)
+        StructField("field", LongType, true) :: Nil), true), true) ::
+      StructField("array3", ArrayType(StringType, true), true) :: Nil)
 
     assert(expectedSchema === jsonDF.schema)
 
@@ -541,7 +541,7 @@ class JsonSuite extends QueryTest {
     val expectedSchema = StructType(
       StructField("a", BooleanType, true) ::
       StructField("b", LongType, true) ::
-      StructField("c", ArrayType(LongType, false), true) ::
+      StructField("c", ArrayType(LongType, true), true) ::
       StructField("d", StructType(
         StructField("field", BooleanType, true) :: Nil), true) ::
       StructField("e", StringType, true) :: Nil)
@@ -835,15 +835,15 @@ class JsonSuite extends QueryTest {
 
     val schema = StructType(
       StructField("field1",
-        ArrayType(ArrayType(ArrayType(ArrayType(StringType, false), false), true), false), true) ::
+        ArrayType(ArrayType(ArrayType(ArrayType(StringType, true), true), true), true), true) ::
       StructField("field2",
         ArrayType(ArrayType(
-          StructType(StructField("Test", LongType, true) :: Nil), false), true), true) ::
+          StructType(StructField("Test", LongType, true) :: Nil), true), true), true) ::
       StructField("field3",
         ArrayType(ArrayType(
-          StructType(StructField("Test", StringType, true) :: Nil), true), false), true) ::
+          StructType(StructField("Test", StringType, true) :: Nil), true), true), true) ::
       StructField("field4",
-        ArrayType(ArrayType(ArrayType(LongType, false), true), false), true) :: Nil)
+        ArrayType(ArrayType(ArrayType(LongType, true), true), true), true) :: Nil)
 
     assert(schema === jsonDF.schema)
 
