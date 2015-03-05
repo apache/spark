@@ -2,7 +2,7 @@ library(testthat)
 
 context("SparkSQL functions")
 
-# Tests for jsonFile, registerTempTable, sql, count, table
+# Tests for SparkSQL functions in SparkR
 
 sc <- sparkR.init()
 
@@ -18,6 +18,35 @@ test_that("jsonFile() on a local file returns a DataFrame", {
   df <- jsonFile(sqlCtx, jsonPath)
   expect_true(inherits(df, "DataFrame"))
   expect_true(count(df) == 3)
+})
+
+test_that("jsonRDD() on a RDD with json string", {
+  rdd <- parallelize(sc, mockLines)
+  expect_true(count(rdd) == 3)
+  df <- jsonRDD(sqlCtx, rdd)
+  expect_true(inherits(df, "DataFrame"))
+  expect_true(count(df) == 3)
+
+  rdd2 <- flatMap(rdd, function(x) c(x, x))
+  df <- jsonRDD(sqlCtx, rdd2)
+  expect_true(inherits(df, "DataFrame"))
+  expect_true(count(df) == 6)
+})
+
+test_that("test cache, uncache and clearCache", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  registerTempTable(df, "table1")
+  cacheTable(sqlCtx, "table1")
+  uncacheTable(sqlCtx, "table1")
+  clearCache(sqlCtx)
+})
+
+test_that("test tableNames and tables", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  registerTempTable(df, "table1")
+  expect_true(length(tableNames(sqlCtx)) == 1)
+  df <- tables(sqlCtx)
+  expect_true(count(df) == 1)
 })
 
 test_that("registerTempTable() results in a queryable table and sql() results in a new DataFrame", {
@@ -47,7 +76,7 @@ test_that("union on two RDDs created from DataFrames returns an RRDD", {
   RDD2 <- toRDD(df)
   unioned <- unionRDD(RDD1, RDD2)
   expect_true(inherits(unioned, "RDD"))
-  expect_true(getSerializedMode(unioned) == "byte")
+  expect_true(SparkR:::getSerializedMode(unioned) == "byte")
   expect_true(collect(unioned)[[2]]$name == "Andy")
 })
 
@@ -69,13 +98,13 @@ test_that("union on mixed serialization types correctly returns a byte RRDD", {
 
   unionByte <- unionRDD(rdd, dfRDD)
   expect_true(inherits(unionByte, "RDD"))
-  expect_true(getSerializedMode(unionByte) == "byte")
+  expect_true(SparkR:::getSerializedMode(unionByte) == "byte")
   expect_true(collect(unionByte)[[1]] == 1)
   expect_true(collect(unionByte)[[12]]$name == "Andy")
 
   unionString <- unionRDD(textRDD, dfRDD)
   expect_true(inherits(unionString, "RDD"))
-  expect_true(getSerializedMode(unionString) == "byte")
+  expect_true(SparkR:::getSerializedMode(unionString) == "byte")
   expect_true(collect(unionString)[[1]] == "Michael")
   expect_true(collect(unionString)[[5]]$name == "Andy")
 })
@@ -88,7 +117,7 @@ test_that("objectFile() works with row serialization", {
   objectIn <- objectFile(sc, objectPath)
 
   expect_true(inherits(objectIn, "RDD"))
-  expect_true(getSerializedMode(objectIn) == "byte")
+  expect_true(SparkR:::getSerializedMode(objectIn) == "byte")
   expect_true(collect(objectIn)[[2]]$age == 30)
 })
 
@@ -166,7 +195,7 @@ test_that("schema(), dtypes(), columns(), names() return the correct values/form
   df <- jsonFile(sqlCtx, jsonPath)
   testSchema <- schema(df)
   expect_true(length(testSchema$fields()) == 2)
-  expect_true(testSchema$fields()[[1]]$dataType.toString() == "IntegerType")
+  expect_true(testSchema$fields()[[1]]$dataType.toString() == "LongType")
   expect_true(testSchema$fields()[[2]]$dataType.simpleString() == "string")
   expect_true(testSchema$fields()[[1]]$name() == "age")
 
@@ -231,6 +260,17 @@ test_that("select with column", {
   expect_true(count(df2) == 3)
 })
 
+test_that("selectExpr() on a DataFrame", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  selected <- selectExpr(df, "age * 2")
+  expect_true(names(selected) == "(age * 2)")
+  expect_equal(collect(selected), collect(select(df, df$age * 2L)))
+  
+  selected2 <- selectExpr(df, "name as newName", "abs(age) as age")
+  expect_equal(names(selected2), c("newName", "age"))
+  expect_true(count(selected2) == 3)
+})
+
 test_that("column calculation", {
   df <- jsonFile(sqlCtx, jsonPath)
   d <- collect(select(df, alias(df$age + 1, "age2")))
@@ -241,14 +281,14 @@ test_that("column calculation", {
 })
 
 test_that("column operators", {
-  c <- col("a")
+  c <- SparkR:::col("a")
   c2 <- (- c + 1 - 2) * 3 / 4.0
   c3 <- (c + c2 - c2) * c2 %% c2
   c4 <- (c > c2) & (c2 <= c3) | (c == c2) & (c2 != c3)
 })
 
 test_that("column functions", {
-  c <- col("a")
+  c <- SparkR:::col("a")
   c2 <- min(c) + max(c) + sum(c) + avg(c) + count(c) + abs(c) + sqrt(c)
   c3 <- lower(c) + upper(c) + first(c) + last(c)
   c4 <- approxCountDistinct(c) + countDistinct(c) + cast(c, "string")
@@ -278,5 +318,92 @@ test_that("group by", {
   expect_true(3 == count(mean(gd, "age")))
   expect_true(3 == count(max(gd, "age")))
 })
+
+test_that("sortDF() and orderBy() on a DataFrame", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  sorted <- sortDF(df, df$age)
+  expect_true(collect(sorted)[1,2] == "Michael")
+
+  sorted2 <- sortDF(df, "name")
+  expect_true(collect(sorted2)[2,"age"] == 19)
+
+  sorted3 <- orderBy(df, asc(df$age))
+  expect_true(is.na(first(sorted3)$age))
+  expect_true(collect(sorted3)[2, "age"] == 19)
+  
+  sorted4 <- orderBy(df, desc(df$name))
+  expect_true(first(sorted4)$name == "Michael")
+  expect_true(collect(sorted4)[3,"name"] == "Andy")
+})
+
+test_that("filter() on a DataFrame", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  filtered <- filter(df, "age > 20")
+  expect_true(count(filtered) == 1)
+  expect_true(collect(filtered)$name == "Andy")
+  filtered2 <- where(df, df$name != "Michael")
+  expect_true(count(filtered2) == 2)
+  expect_true(collect(filtered2)$age[2] == 19)
+})
+
+test_that("join() on a DataFrame", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  
+  mockLines2 <- c("{\"name\":\"Michael\", \"test\": \"yes\"}",
+                  "{\"name\":\"Andy\",  \"test\": \"no\"}",
+                  "{\"name\":\"Justin\", \"test\": \"yes\"}",
+                  "{\"name\":\"Bob\", \"test\": \"yes\"}")
+  jsonPath2 <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  writeLines(mockLines2, jsonPath2)
+  df2 <- jsonFile(sqlCtx, jsonPath2)
+  
+  joined <- join(df, df2)
+  expect_equal(names(joined), c("age", "name", "name", "test"))
+  expect_true(count(joined) == 12)
+  
+  joined2 <- join(df, df2, df$name == df2$name)
+  expect_equal(names(joined2), c("age", "name", "name", "test"))
+  expect_true(count(joined2) == 3)
+  
+  joined3 <- join(df, df2, df$name == df2$name, "right_outer")
+  expect_equal(names(joined3), c("age", "name", "name", "test"))
+  expect_true(count(joined3) == 4)
+  expect_true(is.na(collect(joined3)$age[4]))
+  
+  joined4 <- select(join(df, df2, df$name == df2$name, "outer"),
+                    alias(df$age + 5, "newAge"), df$name, df2$test)
+  expect_equal(names(joined4), c("newAge", "name", "test"))
+  expect_true(count(joined4) == 4)
+  expect_true(first(joined4)$newAge == 24)
+})
+
+test_that("toJSON() returns an RDD of the correct values", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  testRDD <- toJSON(df)
+  expect_true(inherits(testRDD, "RDD"))
+  expect_true(SparkR:::getSerializedMode(testRDD) == "string")
+  expect_equal(collect(testRDD)[[1]], mockLines[1])
+})
+
+test_that("showDF()", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  expect_output(showDF(df), "age  name   \nnull Michael\n30   Andy   \n19   Justin ")
+})
+
+test_that("isLocal()", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  expect_false(isLocal(df))
+})
+
+# TODO: Enable and test once the parquetFile PR has been merged
+# test_that("saveAsParquetFile() on DataFrame and works with parquetFile", {
+#   df <- jsonFile(sqlCtx, jsonPath)
+#   parquetPath <- tempfile(pattern="spark-test", fileext=".tmp")
+#   saveAsParquetFile(df, parquetPath)
+#   parquetDF <- parquetFile(sqlCtx, parquetPath)
+#   expect_true(inherits(parquetDF, "DataFrame"))
+#   expect_equal(collect(df), collect(parquetDF))
+#   unlink(parquetPath)
+# })
 
 unlink(jsonPath)

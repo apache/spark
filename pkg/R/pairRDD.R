@@ -601,12 +601,12 @@ setMethod("foldByKey",
 #' rdd2 <- parallelize(sc, list(list(1, 2), list(1, 3)))
 #' join(rdd1, rdd2, 2L) # list(list(1, list(1, 2)), list(1, list(1, 3))
 #'}
-setGeneric("join", function(x, y, numPartitions) { standardGeneric("join") })
+setGeneric("join", function(x, y, ...) { standardGeneric("join") })
 
 #' @rdname join-methods
 #' @aliases join,RDD,RDD-method
 setMethod("join",
-          signature(x = "RDD", y = "RDD", numPartitions = "integer"),
+          signature(x = "RDD", y = "RDD"),
           function(x, y, numPartitions) {
             xTagged <- lapply(x, function(i) { list(i[[1]], list(1L, i[[2]])) })
             yTagged <- lapply(y, function(i) { list(i[[1]], list(2L, i[[2]])) })
@@ -615,7 +615,7 @@ setMethod("join",
               joinTaggedList(v, list(FALSE, FALSE))
             }
             
-            joined <- flatMapValues(groupByKey(unionRDD(xTagged, yTagged), numPartitions), doJoin)
+            joined <- flatMapValues(groupByKey(unionRDD(xTagged, yTagged), numToInt(numPartitions)), doJoin)
           })
 
 #' Left outer join two RDDs

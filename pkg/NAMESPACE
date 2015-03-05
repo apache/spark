@@ -85,21 +85,31 @@ importFrom(methods, setGeneric, setMethod, setOldClass)
 
 exportClasses("DataFrame")
 
-exportMethods("columns",
+exportMethods("agg",
+              "columns",
               "distinct",
               "dtypes",
+              "explain",
+              "filter",
+              "groupBy",
               "head",
+              "isLocal",
               "limit",
+              "orderBy",
               "names",
               "printSchema",
               "registerTempTable",
               "repartition",
               "sampleDF",
+              "saveAsParquetFile",
+              "showDF",
               "schema",
+              "sortDF",
               "select",
-              "groupBy",
-              "agg",
-              "toRDD")
+              "selectExpr",
+              "toJSON",
+              "toRDD",
+              "where")
 
 exportClasses("Column")
 
@@ -127,11 +137,15 @@ exportMethods("asc",
 exportClasses("GroupedData")
 exportMethods("count", "agg", "avg")
 
-export("jsonFile",
+export("cacheTable",
+       "clearCache",
+       "jsonFile",
+       "jsonRDD",
        "parquetFile",
        "sql",
        "table",
-       "cacheTable",
+       "tableNames",
+       "tables",
        "uncacheTable")
 
 export("sparkRSQL.init")

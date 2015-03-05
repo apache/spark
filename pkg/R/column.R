@@ -23,10 +23,8 @@ column <- function(jc) {
   new("Column", jc)
 }
 
-# TODO: change Dsl to functions once update spark-sql
-# A helper function to create a column from name
 col <- function(x) {
-  column(callJStatic("org.apache.spark.sql.Dsl", "col", x))
+  column(callJStatic("org.apache.spark.sql.functions", "col", x))
 }
 
 # TODO(davies): like, rlike, startwith, substr, getField, getItem
@@ -38,7 +36,7 @@ operators <- list(
 )
 
 functions <- c("min", "max", "sum", "avg", "mean", "count", "abs", "sqrt",
-               "first", "last", "asc", "desc", "lower", "upper", "sumDistinct",
+               "first", "last", "lower", "upper", "sumDistinct",
                "isNull", "isNotNull")
 
 createOperator <- function(op) {
@@ -65,7 +63,7 @@ createFunction <- function(name) {
   setMethod(name,
             signature(x = "Column"),
             function(x) {
-              jc <- callJStatic("org.apache.spark.sql.Dsl", name, x@jc)
+              jc <- callJStatic("org.apache.spark.sql.functions", name, x@jc)
               column(jc)
             })
 }
@@ -77,8 +75,6 @@ createMethods <- function() {
 
   setGeneric("avg", function(x, ...) { standardGeneric("avg") })
   setGeneric("last", function(x) { standardGeneric("last") })
-  setGeneric("asc", function(x) { standardGeneric("asc") })
-  setGeneric("desc", function(x) { standardGeneric("desc") })
   setGeneric("lower", function(x) { standardGeneric("lower") })
   setGeneric("upper", function(x) { standardGeneric("upper") })
   setGeneric("isNull", function(x) { standardGeneric("isNull") })
@@ -91,6 +87,24 @@ createMethods <- function() {
 }
 
 createMethods()
+
+setGeneric("asc", function(x) { standardGeneric("asc") })
+
+setMethod("asc",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJMethod(x@jc, "asc")
+            column(jc)
+          })
+
+setGeneric("desc", function(x) { standardGeneric("desc") })
+
+setMethod("desc",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJMethod(x@jc, "desc")
+            column(jc)
+          })
 
 setMethod("alias",
           signature(object = "Column"),
@@ -117,7 +131,7 @@ setGeneric("approxCountDistinct", function(x, ...) { standardGeneric("approxCoun
 setMethod("approxCountDistinct",
           signature(x = "Column"),
           function(x, rsd = 0.95) {
-            jc <- callJStatic("org.apache.spark.sql.Dsl", "approxCountDistinct", x@jc, rsd)
+            jc <- callJStatic("org.apache.spark.sql.functions", "approxCountDistinct", x@jc, rsd)
             column(jc)
           })
 
@@ -129,7 +143,7 @@ setMethod("countDistinct",
             jcol <- lapply(list(...), function (x) {
               x@jc
             })
-            jc <- callJStatic("org.apache.spark.sql.Dsl", "countDistinct", x@jc, listToSeq(jcol))
+            jc <- callJStatic("org.apache.spark.sql.functions", "countDistinct", x@jc, listToSeq(jcol))
             column(jc)
           })
 
