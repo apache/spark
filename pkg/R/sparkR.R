@@ -47,14 +47,21 @@ sparkR.stop <- function(env = .sparkREnv) {
   
     callJStatic("SparkRHandler", "stopBackend")
     # Also close the connection and remove it from our env
-    conn <- get(".sparkRCon", env)
+    conn <- get(".sparkRCon", envir = env)
     close(conn)
     rm(".sparkRCon", envir = env)
+
+    if (exists(".monitorConn", envir = env)) {
+      conn <- get(".monitorConn", envir = env)
+      close(conn)
+      rm(".monitorConn", envir = env)
+    }
+
     # Finally, sleep for 1 sec to let backend finish exiting.
     # Without this we get port conflicts in RStudio when we try to 'Restart R'.
     Sys.sleep(1)
   }
-  
+
 }
 
 #' Initialize a new Spark Context.
@@ -156,8 +163,7 @@ sparkR.init <- function(
      length(monitorPort) == 0 || monitorPort == 0) {
       stop("JVM failed to launch")
     }
-    # never close this socket, JVM is waiting for it
-    .sparkREnv$monitorF <- socketConnection(port = monitorPort)
+    assign(".monitorConn", socketConnection(port = monitorPort), envir = .sparkREnv)
   }
 
   .sparkREnv$sparkRBackendPort <- sparkRBackendPort
