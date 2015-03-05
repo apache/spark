@@ -281,7 +281,7 @@ private[spark] object EventLoggingListener extends Logging {
 
     // Compression codec is encoded as an extension, e.g. app_123.lzf
     // Since we sanitize the app ID to not include periods, it is safe to split on it
-    val logName = log.getName.stripSuffix(IN_PROGRESS)
+    val logName = log.getName.stripSuffix(IN_PROGRESS).stripSuffix(ABNORMAL)
     val codecName: Option[String] = logName.split("\\.").tail.lastOption
     val codec = codecName.map { c =>
       codecMap.getOrElseUpdate(c, CompressionCodec.createCodec(new SparkConf, c))
