@@ -467,7 +467,9 @@ private[spark] class Master(
    * two executors on the same worker).
    */
   def canUse(app: ApplicationInfo, worker: WorkerInfo): Boolean = {
-    worker.memoryFree >= app.desc.memoryPerSlave && !worker.hasExecutor(app)
+    worker.memoryFree >= app.desc.memoryPerSlave &&
+    !worker.hasExecutor(app) &&
+    !app.removedExecutors.exists(_.worker == worker)
   }
 
   /**
