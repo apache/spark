@@ -438,6 +438,32 @@ test_that("isLocal()", {
   expect_false(isLocal(df))
 })
 
+test_that("unionAll(), subtract(), and intersect() on a DataFrame", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  
+  lines <- c("{\"name\":\"Bob\", \"age\":24}",
+             "{\"name\":\"Andy\", \"age\":30}",
+             "{\"name\":\"James\", \"age\":35}")
+  jsonPath2 <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  writeLines(lines, jsonPath2)
+  df2 <- loadDF(sqlCtx, jsonPath2, "json")
+  
+  unioned <- unionAll(df, df2)
+  expect_true(inherits(unioned, "DataFrame"))
+  expect_true(count(unioned) == 6)
+  expect_true(first(unioned)$name == "Michael")
+  
+  subtracted <- subtract(df, df2)
+  expect_true(inherits(unioned, "DataFrame"))
+  expect_true(count(subtracted) == 2)
+  expect_true(first(subtracted)$name == "Justin")
+  
+  intersected <- intersect(df, df2)
+  expect_true(inherits(unioned, "DataFrame"))
+  expect_true(count(intersected) == 1)
+  expect_true(first(intersected)$name == "Andy")
+})
+
 # TODO: Enable and test once the parquetFile PR has been merged
 # test_that("saveAsParquetFile() on DataFrame and works with parquetFile", {
 #   df <- jsonFile(sqlCtx, jsonPath)

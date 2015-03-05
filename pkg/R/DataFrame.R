@@ -942,6 +942,92 @@ setMethod("join",
             dataFrame(sdf)
           })
 
+#' UnionAll
+#'
+#' Return a new DataFrame containing the union of rows in this DataFrame
+#' and another DataFrame. This is equivalent to `UNION ALL` in SQL.
+#'
+#' @param x A Spark DataFrame
+#' @param y A Spark DataFrame
+#' @return A DataFrame containing the result of the union.
+#' @rdname unionAll
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' df1 <- jsonFile(sqlCtx, path)
+#' df2 <- jsonFile(sqlCtx, path2)
+#' unioned <- unionAll(df, df2)
+#' }
+setGeneric("unionAll", function(x, y) { standardGeneric("unionAll") })
+
+#' @rdname unionAll
+#' @export
+setMethod("unionAll",
+          signature(x = "DataFrame", y = "DataFrame"),
+          function(x, y) {
+            unioned <- callJMethod(x@sdf, "unionAll", y@sdf)
+            dataFrame(unioned)
+          })
+
+#' Intersect
+#'
+#' Return a new DataFrame containing rows only in both this DataFrame
+#' and another DataFrame. This is equivalent to `INTERSECT` in SQL.
+#'
+#' @param x A Spark DataFrame
+#' @param y A Spark DataFrame
+#' @return A DataFrame containing the result of the intersect.
+#' @rdname intersect
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' df1 <- jsonFile(sqlCtx, path)
+#' df2 <- jsonFile(sqlCtx, path2)
+#' intersectDF <- intersect(df, df2)
+#' }
+setGeneric("intersect", function(x, y) { standardGeneric("intersect") })
+
+#' @rdname intersect
+#' @export
+setMethod("intersect",
+          signature(x = "DataFrame", y = "DataFrame"),
+          function(x, y) {
+            intersected <- callJMethod(x@sdf, "intersect", y@sdf)
+            dataFrame(intersected)
+          })
+
+#' Subtract
+#'
+#' Return a new DataFrame containing rows in this DataFrame
+#' but not in another DataFrame. This is equivalent to `EXCEPT` in SQL.
+#'
+#' @param x A Spark DataFrame
+#' @param y A Spark DataFrame
+#' @return A DataFrame containing the result of the subtract operation.
+#' @rdname subtract
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' df1 <- jsonFile(sqlCtx, path)
+#' df2 <- jsonFile(sqlCtx, path2)
+#' subtractDF <- subtract(df, df2)
+#' }
+setGeneric("subtract", function(x, y) { standardGeneric("subtract") })
+
+#' @rdname subtract
+#' @export
+setMethod("subtract",
+          signature(x = "DataFrame", y = "DataFrame"),
+          function(x, y) {
+            subtracted <- callJMethod(x@sdf, "except", y@sdf)
+            dataFrame(subtracted)
+          })
 
 #' Save the contents of the DataFrame to a data source
 #'

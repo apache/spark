@@ -92,6 +92,7 @@ exportMethods("columns",
               "filter",
               "head",
               "insertInto",
+              "intersect",
               "isLocal",
               "limit",
               "orderBy",
@@ -108,8 +109,10 @@ exportMethods("columns",
               "selectExpr",
               "showDF",
               "sortDF",
+              "subtract",
               "toJSON",
               "toRDD",
+              "unionAll",
               "where")
 
 exportClasses("Column")
