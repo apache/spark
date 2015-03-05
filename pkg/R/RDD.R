@@ -1427,6 +1427,47 @@ setMethod("setName",
             x
           })
 
+#' Zip an RDD with generated unique Long IDs.
+#'
+#' Items in the kth partition will get ids k, n+k, 2*n+k, ..., where
+#' n is the number of partitions. So there may exist gaps, but this
+#' method won't trigger a spark job, which is different from
+#' zipWithIndex.
+#'
+#' @param x An RDD to be zipped.
+#' @return An RDD with zipped items.
+#' @rdname zipWithUniqueId
+#' @seealso zipWithIndex
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, list("a", "b", "c", "d", "e"), 3L)
+#' collect(zipWithUniqueId(rdd)) 
+#' # list(list("a", 0), list("b", 3), list("c", 1), list("d", 4), list("e", 2))
+#'}
+setGeneric("zipWithUniqueId", function(x) { standardGeneric("zipWithUniqueId") })
+
+#' @rdname zipWithUniqueId
+#' @aliases zipWithUniqueId,RDD
+setMethod("zipWithUniqueId",
+          signature(x = "RDD"),
+          function(x) {
+            n <- numPartitions(x)
+
+            partitionFunc <- function(split, part) {
+              mapply(
+                function(item, index) {
+                  list(item, (index - 1) * n + split)
+                },
+                part,
+                seq_along(part),
+                SIMPLIFY = FALSE)
+            }
+
+            lapplyPartitionsWithIndex(x, partitionFunc)
+          })
+
 ############ Binary Functions #############
 
 #' Return the union RDD of two RDDs.
