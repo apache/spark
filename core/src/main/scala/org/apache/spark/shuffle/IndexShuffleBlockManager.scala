@@ -106,7 +106,7 @@ class IndexShuffleBlockManager(conf: SparkConf) extends ShuffleBlockManager {
     // find out the consolidated file, then the offset within that from our index
     val indexFile = getIndexFile(blockId.shuffleId, blockId.mapId)
 
-    val in = new DataInputStream(new FileInputStream(indexFile))
+    val in = new DataInputStream(new BufferedInputStream(new FileInputStream(indexFile)))
     try {
       ByteStreams.skipFully(in, blockId.reduceId * 8)
       val offset = in.readLong()

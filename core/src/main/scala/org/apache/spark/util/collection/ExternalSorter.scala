@@ -721,13 +721,13 @@ private[spark] class ExternalSorter[K, V, C](
       // this simple we spill out the current in-memory collection so that everything is in files.
       spillToPartitionFiles(if (aggregator.isDefined) map else buffer)
       partitionWriters.foreach(_.commitAndClose())
-      var out: FileOutputStream = null
-      var in: FileInputStream = null
+      var out: OutputStream = null
+      var in: InputStream = null
       val writeStartTime = System.nanoTime
       try {
-        out = new FileOutputStream(outputFile, true)
+        out = new BufferedOutputStream(new FileOutputStream(outputFile, true))
         for (i <- 0 until numPartitions) {
-          in = new FileInputStream(partitionWriters(i).fileSegment().file)
+          in = new BufferedInputStream(new FileInputStream(partitionWriters(i).fileSegment().file))
           val size = org.apache.spark.util.Utils.copyStream(in, out, false, transferToEnabled)
           in.close()
           in = null
