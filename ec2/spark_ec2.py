@@ -61,6 +61,16 @@ VALID_SPARK_VERSIONS = set([
     "1.2.1",
 ])
 
+SPARK_TACHYON_MAP = {
+    "1.0.0": "0.4.1",
+    "1.0.1": "0.4.1",
+    "1.0.2": "0.4.1",
+    "1.1.0": "0.5.0",
+    "1.1.1": "0.5.0",
+    "1.2.0": "0.5.0",
+    "1.2.1": "0.5.0",
+}
+
 DEFAULT_SPARK_VERSION = SPARK_EC2_VERSION
 DEFAULT_SPARK_GITHUB_REPO = "https://github.com/apache/spark"
 
@@ -147,6 +157,10 @@ def parse_args():
     parser.add_option(
         "-v", "--spark-version", default=DEFAULT_SPARK_VERSION,
         help="Version of Spark to use: 'X.Y.Z' or a specific git hash (default: %default)")
+    parser.add_option(
+        "--tachyon-version",
+        help="If --spark-version is a git hash, this will be used as the version of Tachyon. " +
+             "Otherwise, this field does not need to be specified")
     parser.add_option(
         "--spark-git-repo",
         default=DEFAULT_SPARK_GITHUB_REPO,
@@ -339,6 +353,10 @@ EC2_INSTANCE_TYPES = {
     "t2.micro":    "hvm",
     "t2.small":    "hvm",
 }
+
+
+def get_tachyon_version(spark_version):
+    return SPARK_TACHYON_MAP.get(spark_version, "")
 
 
 # Attempt to resolve an appropriate AMI given the architecture and region of the request.
@@ -872,9 +890,16 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
     if "." in opts.spark_version:
         # Pre-built Spark deploy
         spark_v = get_validate_spark_version(opts.spark_version, opts.spark_git_repo)
+        tachyon_v = get_tachyon_version(spark_v)
     else:
         # Spark-only custom deploy
         spark_v = "%s|%s" % (opts.spark_git_repo, opts.spark_version)
+        if opts.tachyon_version is None:
+            print >>std_error,\
+                "You have used github hash as --spark-version, " + \
+                "need to manually specify --tachyon-version"
+            sys.exit(1)
+        tachyon_v = opts.tachyon_version
 
     template_vars = {
         "master_list": '\n'.join([i.public_dns_name for i in master_nodes]),
@@ -887,6 +912,7 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
         "swap": str(opts.swap),
         "modules": '\n'.join(modules),
         "spark_version": spark_v,
+        "tachyon_version": tachyon_v,
         "hadoop_major_version": opts.hadoop_major_version,
         "spark_worker_instances": "%d" % opts.worker_instances,
         "spark_master_opts": opts.master_opts
