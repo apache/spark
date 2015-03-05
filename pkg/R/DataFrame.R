@@ -263,6 +263,36 @@ setMethod("registerTempTable",
               callJMethod(x@sdf, "registerTempTable", tableName)
           })
 
+#' insertInto
+#'
+#' Insert the contents of a DataFrame into a table registered in the current SQL Context.
+#'
+#' @param x A SparkSQL DataFrame
+#' @param tableName A character vector containing the name of the table
+#' @param overwrite A logical argument indicating whether or not to overwrite
+#' the existing rows in the table.
+#'
+#' @rdname insertInto
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' df <- loadDF(sqlCtx, path, "parquet")
+#' df2 <- loadDF(sqlCtx, path2, "parquet")
+#' registerTempTable(df, "table1")
+#' insertInto(df2, "table1", overwrite = TRUE)
+#'}
+setGeneric("insertInto", function(x, tableName, ...) { standardGeneric("insertInto") })
+
+#' @rdname insertInto
+#' @export
+setMethod("insertInto",
+          signature(x = "DataFrame", tableName = "character"),
+          function(x, tableName, overwrite = FALSE) {
+            callJMethod(x@sdf, "insertInto", tableName, overwrite)
+          })
+
 #' Cache
 #' 
 #' Persist with the default storage level (MEMORY_ONLY).

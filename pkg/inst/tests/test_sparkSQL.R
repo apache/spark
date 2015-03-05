@@ -60,6 +60,32 @@ test_that("registerTempTable() results in a queryable table and sql() results in
   expect_true(count(newdf) == 1)
   dropTempTable(sqlCtx, "table1")
 })
+
+test_that("insertInto() on a registered table", {
+  df <- loadDF(sqlCtx, jsonPath, "json")
+  saveDF(df, parquetPath, "parquet", "overwrite")
+  dfParquet <- loadDF(sqlCtx, parquetPath, "parquet")
+
+  lines <- c("{\"name\":\"Bob\", \"age\":24}",
+             "{\"name\":\"James\", \"age\":35}")
+  jsonPath2 <- tempfile(pattern="jsonPath2", fileext=".tmp")
+  parquetPath2 <- tempfile(pattern = "parquetPath2", fileext = ".parquet")
+  writeLines(lines, jsonPath2)
+  df2 <- loadDF(sqlCtx, jsonPath2, "json")
+  saveDF(df2, parquetPath2, "parquet", "overwrite")
+  dfParquet2 <- loadDF(sqlCtx, parquetPath2, "parquet")
+
+  registerTempTable(dfParquet, "table1")
+  insertInto(dfParquet2, "table1")
+  expect_true(count(sql(sqlCtx, "select * from table1")) == 5)
+  expect_true(first(sql(sqlCtx, "select * from table1"))$name == "Michael")
+  dropTempTable(sqlCtx, "table1")
+
+  registerTempTable(dfParquet, "table1")
+  insertInto(dfParquet2, "table1", overwrite = TRUE)
+  expect_true(count(sql(sqlCtx, "select * from table1")) == 2)
+  expect_true(first(sql(sqlCtx, "select * from table1"))$name == "Bob")
+  dropTempTable(sqlCtx, "table1")
 })
 
 test_that("table() returns a new DataFrame", {
