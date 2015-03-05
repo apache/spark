@@ -17,7 +17,7 @@ class PostgresOperator(BaseOperator):
     """
 
     __mapper_args__ = {
-        'polymorphic_identity': 'MySqlOperator'
+        'polymorphic_identity': 'PostgresOperator'
     }
     template_fields = ('sql',)
     template_ext = ('.sql',)
