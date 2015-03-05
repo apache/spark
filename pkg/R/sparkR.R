@@ -44,10 +44,6 @@ sparkR.stop <- function(env = .sparkREnv) {
     close(conn)
     rm(".monitorConn", envir = env)
   }
-
-  # clear all the reference of Java object
-  rm(list = ls(.validJobjs, all = TRUE), envir = .validJobjs)
-  rm(list = ls(.toRemoveJobjs, all = TRUE), envir = .toRemoveJobjs)
 }
 
 #' Initialize a new Spark Context.
@@ -197,10 +193,5 @@ sparkR.init <- function(
     envir = .sparkREnv
   )
 
-  sc <- get(".sparkRjsc", envir = .sparkREnv)
-
-  # Register a finalizer to stop backend on R exit
-  reg.finalizer(.sparkREnv, sparkR.stop, onexit = TRUE)
-
-  sc
+  get(".sparkRjsc", envir = .sparkREnv)
 }

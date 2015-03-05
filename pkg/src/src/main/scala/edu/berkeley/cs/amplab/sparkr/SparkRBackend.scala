@@ -107,12 +107,15 @@ object SparkRBackend {
           val buf = new Array[Byte](1024)
           // shutdown JVM if R does not connect back in 10 seconds
           serverSocket.setSoTimeout(10000)
-          val inSocket = serverSocket.accept()
-          serverSocket.close()
-          // wait for the end of socket, closed if R process die
-          inSocket.getInputStream().read(buf)
-          sparkRBackend.close()
-          System.exit(0)
+          try {
+            val inSocket = serverSocket.accept()
+            serverSocket.close()
+            // wait for the end of socket, closed if R process die
+            inSocket.getInputStream().read(buf)
+          } finally {
+            sparkRBackend.close()
+            System.exit(0)
+          }
         }
       }.start()
 
