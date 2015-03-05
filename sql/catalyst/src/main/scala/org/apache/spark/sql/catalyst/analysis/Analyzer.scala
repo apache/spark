@@ -292,8 +292,7 @@ class Analyzer(catalog: Catalog,
       case s @ Sort(ordering, global, p @ Project(projectList, child))
           if !s.resolved && p.resolved =>
         val unresolved = ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name })
-        val resolved = unresolved.flatMap(child.resolve(_, resolver))
-        val requiredAttributes = AttributeSet(resolved.collect { case a: NamedExpression => a })
+        val requiredAttributes = AttributeSet(unresolved.flatMap(child.resolve(_, resolver)))
 
         val missingInProject = requiredAttributes -- p.output
         if (missingInProject.nonEmpty) {
