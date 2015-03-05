@@ -246,14 +246,12 @@ private[spark] class Client(
     // If we passed in a keytab, make sure we copy the keytab to the staging directory on
     // HDFS, and setup the relevant environment vars, so the AM can login again.
     if (loginFromKeytab) {
-      val fs = FileSystem.get(hadoopConf)
-      val stagingDirPath = new Path(fs.getHomeDirectory, appStagingDir)
       val localUri = new URI(args.keytab)
       val localPath = getQualifiedLocalPath(localUri, hadoopConf)
-      val destinationPath = new Path(stagingDirPath, keytabFileName)
-      copyFileToRemote(destinationPath, localPath, replication)
+      val destinationPath = copyFileToRemote(dst, localPath, replication)
+      val destFs = FileSystem.get(destinationPath.toUri(), hadoopConf)
       distCacheMgr.addResource(
-        fs, hadoopConf, destinationPath, localResources, LocalResourceType.FILE, keytabFileName,
+        destFs, hadoopConf, destinationPath, localResources, LocalResourceType.FILE, keytabFileName,
         statCache, appMasterOnly = true)
     }
 
@@ -577,10 +575,12 @@ private[spark] class Client(
       val f = new File(args.keytab)
       // Generate a file name that can be used for the keytab file, that does not conflict
       // with any user file.
-      keytabFileName = f.getName + "-" + UUID.randomUUID()
+      keytabFileName = f.getName + "-" + UUID.randomUUID().toString
       val ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(args.principal, args.keytab)
       credentials = ugi.getCredentials
       loginFromKeytab = true
+      val credentialsFile = "credentials-" + UUID.randomUUID().toString
+      sparkConf.set("spark.yarn.credentials.file", credentialsFile)
       logInfo("Successfully logged into Kerberos.")
     } else {
       credentials = UserGroupInformation.getCurrentUser.getCredentials

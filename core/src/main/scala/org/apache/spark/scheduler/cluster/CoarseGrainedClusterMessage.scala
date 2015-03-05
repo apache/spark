@@ -51,11 +51,6 @@ private[spark] object CoarseGrainedClusterMessages {
   case class StatusUpdate(executorId: String, taskId: Long, state: TaskState,
     data: SerializableBuffer) extends CoarseGrainedClusterMessage
 
-  // When the delegation tokens are about expire, the driver creates new tokens and sends them to
-  // the executors via this message.
-  case class UpdateCredentials(newCredentialsLocation: String)
-    extends CoarseGrainedClusterMessage
-
   object StatusUpdate {
     /** Alternate factory method that takes a ByteBuffer directly for the data field */
     def apply(executorId: String, taskId: Long, state: TaskState, data: ByteBuffer)

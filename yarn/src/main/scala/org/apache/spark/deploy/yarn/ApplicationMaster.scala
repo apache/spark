@@ -257,11 +257,6 @@ private[spark] class ApplicationMaster(
   private def runDriver(securityMgr: SecurityManager): Unit = {
     addAmIpFilter()
 
-    // This must be done before SparkContext is initialized, since the CoarseGrainedSchedulerBackend
-    // is started at that time. That is what schedules the re-logins. It is scheduled only if the
-    // principal is actually setup. So we make sure it is available.
-    SparkHadoopUtil.get.setPrincipalAndKeytabForLogin(
-      System.getenv("SPARK_PRINCIPAL"), System.getenv("SPARK_KEYTAB"))
     userClassThread = startUserApplication()
 
     // This a bit hacky, but we need to wait until the spark.driver.port property has

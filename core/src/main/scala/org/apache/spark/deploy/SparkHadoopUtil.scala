@@ -55,12 +55,15 @@ class SparkHadoopUtil extends Logging {
   def runAsSparkUser(func: () => Unit) {
     val user = Utils.getCurrentUserName()
     logDebug("running as user: " + user)
+    updateCredentialsIfRequired()
     val ugi = UserGroupInformation.createRemoteUser(user)
     transferCredentials(UserGroupInformation.getCurrentUser(), ugi)
     ugi.doAs(new PrivilegedExceptionAction[Unit] {
       def run: Unit = func()
     })
   }
+
+  def updateCredentialsIfRequired(): Unit = {}
 
   def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
     for (token <- source.getTokens()) {
@@ -122,9 +125,13 @@ class SparkHadoopUtil extends Logging {
     UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
   }
 
-  def setPrincipalAndKeytabForLogin(principal: String, keytab: String): Unit = ???
-
-  private[spark] def scheduleLoginFromKeytab(callback: (String) => Unit): Unit = {}
+  /**
+   * Schedule a login from the keytab and principal set using the --principal and --keytab
+   * arguments to spark-submit. This login happens only when the credentials of the current user
+   * are about to expire. This method reads SPARK_PRINCIPAL and SPARK_KEYTAB from the environment
+   * to do the login. This method is a no-op in non-YARN mode.
+   */
+  private[spark] def scheduleLoginFromKeytab(): Unit = {}
 
   /**
    * Returns a function that can be called to find Hadoop FileSystem bytes read. If

@@ -73,16 +73,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
   // Executors we have requested the cluster manager to kill that have not died yet
   private val executorsPendingToRemove = new HashSet[String]
 
-  /**
-   * Send new credentials to executors. This is the method that is called when the scheduled
-   * login completes, so the new credentials can be sent to the executors.
-   * @param credentialsPath
-   */
-  def sendNewCredentialsToExecutors(credentialsPath: String): Unit = {
-    // We don't care about the reply, so going to deadLetters is fine.
-    executorDataMap.values.foreach(_.executorActor ! UpdateCredentials(credentialsPath))
-  }
-
   class DriverActor(sparkProperties: Seq[(String, String)]) extends Actor with ActorLogReceive {
     override protected def log = CoarseGrainedSchedulerBackend.this.log
     private val addressToExecutorId = new HashMap[Address, String]
@@ -253,7 +243,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
 
     // If a principal and keytab have been set, use that to create new credentials for executors
     // periodically
-    SparkHadoopUtil.get.scheduleLoginFromKeytab(sendNewCredentialsToExecutors _)
+    SparkHadoopUtil.get.scheduleLoginFromKeytab()
   }
 
   def stopExecutors() {

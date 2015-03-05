@@ -109,15 +109,6 @@ private[spark] class CoarseGrainedExecutorBackend(
       context.stop(self)
       context.system.shutdown()
 
-    // Add new credentials received from the driver to the current user.
-    case UpdateCredentials(newCredentialsPath) =>
-      logInfo("New credentials received from driver, adding the credentials to the current user")
-      val credentials = new Credentials()
-      val remoteFs = FileSystem.get(SparkHadoopUtil.get.conf)
-      val inStream = remoteFs.open(new Path(newCredentialsPath))
-      credentials.readTokenStorageStream(inStream)
-      SparkHadoopUtil.get.addCurrentUserCredentials(credentials)
-      inStream.close()
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer) {
