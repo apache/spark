@@ -22,7 +22,7 @@ setMethod("count",
 
 #' Agg
 #'
-#' Aggregates on the entire [[DataFrame]] without groups.
+#' Aggregates on the entire DataFrame without groups.
 
 setGeneric("agg", function (x, ...) { standardGeneric("agg") })
 
@@ -59,8 +59,7 @@ createMethod <- function(name) {
   setMethod(name,
             signature(x = "GroupedData"),
             function(x, ...) {
-              # TODO(davies): pass cols into JVM once we upgrade the spark-sql 1.3
-              sdf <- callJMethod(x@sgd, name)
+              sdf <- callJMethod(x@sgd, name, toSeq(...))
               dataFrame(sdf)
             })
 }
