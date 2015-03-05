@@ -21,7 +21,7 @@ jsonFile <- function(sqlCtx, path) {
   # Allow the user to have a more flexible definiton of the text file path
   path <- normalizePath(path)
   # Convert a string vector of paths to a string containing comma separated paths
-  path <- paste(path, collapse=",")
+  path <- paste(path, collapse = ",")
   sdf <- callJMethod(sqlCtx, "jsonFile", path)
   dataFrame(sdf)
 }
@@ -71,7 +71,7 @@ parquetFile <- function(sqlCtx, path) {
   # Allow the user to have a more flexible definiton of the text file path
   path <- normalizePath(path)
   # Convert a string vector of paths to a string containing comma separated paths
-  path <- paste(path, collapse=",")
+  path <- paste(path, collapse = ",")
   sdf <- callJMethod(sqlCtx, "parquetFile", path)
   dataFrame(sdf)
 }
@@ -140,7 +140,7 @@ table <- function(sqlCtx, tableName) {
 #' tables(sqlCtx, "hive")
 #' }
 
-tables <- function(sqlCtx, databaseName=NULL) {
+tables <- function(sqlCtx, databaseName = NULL) {
   jdf <- if (is.null(databaseName)) {
     callJMethod(sqlCtx, "tables")
   } else {
@@ -165,7 +165,7 @@ tables <- function(sqlCtx, databaseName=NULL) {
 #' tableNames(sqlCtx, "hive")
 #' }
 
-tableNames <- function(sqlCtx, databaseName=NULL) {
+tableNames <- function(sqlCtx, databaseName = NULL) {
   if (is.null(databaseName)) {
     callJMethod(sqlCtx, "tableNames")
   } else {
@@ -247,13 +247,13 @@ clearCache <- function(sqlCtx) {
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlCtx <- sparkRSQL.init(sc)
-#' df <- load(sqlCtx, "path/to/file.json", source="json")
+#' df <- load(sqlCtx, "path/to/file.json", source = "json")
 #' }
 
-loadDF <- function(sqlCtx, path=NULL, source=NULL, ...) {
+loadDF <- function(sqlCtx, path = NULL, source = NULL, ...) {
   options <- varargsToEnv(...)
   if (!is.null(path)) {
-    options[['path']] = path
+    options[['path']] <- path
   }
   sdf <- callJMethod(sqlCtx, "load", source, options)
   dataFrame(sdf)
@@ -281,10 +281,10 @@ loadDF <- function(sqlCtx, path=NULL, source=NULL, ...) {
 #' df <- sparkRSQL.createExternalTable(sqlCtx, "myjson", path="path/to/json", source="json")
 #' }
 
-createExternalTable <- function(sqlCtx, tableName, path=NULL, source=NULL, ...) {
+createExternalTable <- function(sqlCtx, tableName, path = NULL, source = NULL, ...) {
   options <- varargsToEnv(...)
   if (!is.null(path)) {
-    options[['path']] = path
+    options[['path']] <- path
   }
   sdf <- callJMethod(sqlCtx, "createExternalTable", tableName, source, options)
   dataFrame(sdf)

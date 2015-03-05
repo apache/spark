@@ -304,7 +304,7 @@ updateOrCreatePair <- function(pair, keys, vals, updateOrCreatePred, updateFn, c
     assign(hashVal, do.call(updateFn, list(get(hashVal, envir = vals), val)), envir = vals)
   } else {
     assign(hashVal, do.call(createFn, list(val)), envir = vals)
-    assign(hashVal, key, envir=keys)
+    assign(hashVal, key, envir = keys)
   }
 }
 
