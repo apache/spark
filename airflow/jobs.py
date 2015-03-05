@@ -188,7 +188,7 @@ class MasterJob(BaseJob):
         self.test_mode = test_mode
         super(MasterJob, self).__init__(*args, **kwargs)
 
-        self.heartrate=conf.getint('master', 'MASTER_HEARTBEAT_SEC')
+        self.heartrate = conf.getint('master', 'MASTER_HEARTBEAT_SEC')
 
     def _execute(self):
         dag_id = self.dag_id
@@ -268,10 +268,13 @@ class MasterJob(BaseJob):
                                 executor.queue_command(ti.key, cmd)
                         else:
                             # Trying to run the next schedule
+                            next_schedule = (
+                                ti.execution_date + task.schedule_interval)
+                            if ti.end_date and next_schedule > ti.end_date:
+                                continue
                             ti = TI(
                                 task=task,
-                                execution_date=(
-                                    ti.execution_date + task.schedule_interval)
+                                execution_date=next_schedule,
                             )
                             ti.refresh_from_db()
                             if ti.is_runnable():
@@ -285,7 +288,6 @@ class MasterJob(BaseJob):
     def heartbeat_callback(self):
         if statsd:
             statsd.gauge('master_heartbeat', 1, 1)
-
 
 
 class BackfillJob(BaseJob):
