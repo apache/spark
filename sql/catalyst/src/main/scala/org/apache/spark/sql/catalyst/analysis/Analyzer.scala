@@ -268,7 +268,9 @@ class Analyzer(catalog: Catalog,
             logDebug(s"Resolving $u to $result")
             result
           case UnresolvedGetField(child, fieldName) if child.resolved =>
-            resolveGetField(child, fieldName)
+            val result = q.resolveGetField(child, fieldName, resolver)
+            logDebug(s"Resolving $fieldName of $child to $result")
+            result
         }
     }
 
@@ -277,36 +279,6 @@ class Analyzer(catalog: Catalog,
      */
     protected def containsStar(exprs: Seq[Expression]): Boolean =
       exprs.exists(_.collect { case _: Star => true }.nonEmpty)
-
-    /**
-     * Returns the resolved `GetField`, and report error if no desired field or over one
-     * desired fields are found.
-     */
-    protected def resolveGetField(expr: Expression, fieldName: String): Expression = {
-      def findField(fields: Array[StructField]): Int = {
-        val checkField = (f: StructField) => resolver(f.name, fieldName)
-        val ordinal = fields.indexWhere(checkField)
-        if (ordinal == -1) {
-          throw new AnalysisException(
-            s"No such struct field $fieldName in ${fields.map(_.name).mkString(", ")}")
-        } else if (fields.indexWhere(checkField, ordinal + 1) != -1) {
-          throw new AnalysisException(
-            s"Ambiguous reference to fields ${fields.filter(checkField).mkString(", ")}")
-        } else {
-          ordinal
-        }
-      }
-      expr.dataType match {
-        case StructType(fields) =>
-          val ordinal = findField(fields)
-          StructGetField(expr, fields(ordinal), ordinal)
-        case ArrayType(StructType(fields), containsNull) =>
-          val ordinal = findField(fields)
-          ArrayGetField(expr, fields(ordinal), ordinal, containsNull)
-        case otherType =>
-          throw new AnalysisException(s"GetField is not valid on fields of type $otherType")
-      }
-    }
   }
 
   /**
@@ -320,12 +292,8 @@ class Analyzer(catalog: Catalog,
       case s @ Sort(ordering, global, p @ Project(projectList, child))
           if !s.resolved && p.resolved =>
         val unresolved = ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name })
-        // TODO child.resolve maybe not resolve all of the nested data at once
         val resolved = unresolved.flatMap(child.resolve(_, resolver))
-        val requiredAttributes = AttributeSet(resolved.collect {
-          case a: Attribute => a
-          case a: NamedExpression if a.resolved == false => a
-        })
+        val requiredAttributes = AttributeSet(resolved.collect { case a: NamedExpression => a })
 
         val missingInProject = requiredAttributes -- p.output
         if (missingInProject.nonEmpty) {
