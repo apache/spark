@@ -100,11 +100,13 @@ exportMethods("columns",
               "repartition",
               "sampleDF",
               "saveAsParquetFile",
-              "showDF",
+              "saveAsTable",
+              "saveDF",
               "schema",
-              "sortDF",
               "select",
               "selectExpr",
+              "showDF",
+              "sortDF",
               "toJSON",
               "toRDD",
               "where")
@@ -134,8 +136,10 @@ exportMethods("asc",
 
 export("cacheTable",
        "clearCache",
+       "createExternalTable",
        "jsonFile",
        "jsonRDD",
+       "loadDF",
        "parquetFile",
        "sql",
        "table",
@@ -143,6 +147,7 @@ export("cacheTable",
        "tables",
        "uncacheTable")
 
-export("sparkRSQL.init")
+export("sparkRSQL.init",
+       "sparkRHive.init")
 export("print.structType",
        "print.structField")

@@ -1,18 +1,17 @@
 package edu.berkeley.cs.amplab.sparkr
 
-import org.apache.spark.SparkContext
-import org.apache.spark.rdd.RDD
-import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.sql.{SQLContext, DataFrame, Row}
-
-import edu.berkeley.cs.amplab.sparkr.SerDe._
-
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 
+import org.apache.spark.rdd.RDD
+import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.sql.{SQLContext, DataFrame, Row, SaveMode}
+
+import edu.berkeley.cs.amplab.sparkr.SerDe._
+
 object SQLUtils {
-  def createSQLContext(sc: SparkContext): SQLContext = {
-    new SQLContext(sc)
+  def createSQLContext(jsc: JavaSparkContext): SQLContext = {
+    new SQLContext(jsc.sc)
   }
 
   def toSeq[T](arr: Array[T]): Seq[T] = {
@@ -67,5 +66,14 @@ object SQLUtils {
       SerDe.writeObject(dos, obj)
     }
     bos.toByteArray()
+  }
+
+  def saveMode(mode: String): SaveMode = {
+    mode match {
+      case "append" => SaveMode.Append
+      case "overwrite" => SaveMode.Overwrite
+      case "error" => SaveMode.ErrorIfExists
+      case "ignore" => SaveMode.Ignore
+    }
   }
 }

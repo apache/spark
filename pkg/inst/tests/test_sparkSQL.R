@@ -12,6 +12,7 @@ mockLines <- c("{\"name\":\"Michael\"}",
                "{\"name\":\"Andy\", \"age\":30}",
                "{\"name\":\"Justin\", \"age\":19}")
 jsonPath <- tempfile(pattern="sparkr-test", fileext=".tmp")
+parquetPath <- tempfile(pattern="sparkr-test", fileext=".parquet")
 writeLines(mockLines, jsonPath)
 
 test_that("jsonFile() on a local file returns a DataFrame", {
@@ -265,7 +266,7 @@ test_that("selectExpr() on a DataFrame", {
   selected <- selectExpr(df, "age * 2")
   expect_true(names(selected) == "(age * 2)")
   expect_equal(collect(selected), collect(select(df, df$age * 2L)))
-  
+
   selected2 <- selectExpr(df, "name as newName", "abs(age) as age")
   expect_equal(names(selected2), c("newName", "age"))
   expect_true(count(selected2) == 3)
@@ -278,6 +279,40 @@ test_that("column calculation", {
   df2 <- select(df, lower(df$name), abs(df$age))
   expect_true(inherits(df2, "DataFrame"))
   expect_true(count(df2) == 3)
+})
+
+test_that("load() from json file", {
+  df <- loadDF(sqlCtx, jsonPath, "json")
+  expect_true(inherits(df, "DataFrame"))
+  expect_true(count(df) == 3)
+})
+
+test_that("save() as parquet file", {
+  df <- loadDF(sqlCtx, jsonPath, "json")
+  saveDF(df, parquetPath, "parquet", mode="overwrite")
+  df2 <- loadDF(sqlCtx, parquetPath, "parquet")
+  expect_true(inherits(df2, "DataFrame"))
+  expect_true(count(df2) == 3)
+})
+
+test_that("test HiveContext", {
+  hiveCtx <- tryCatch({
+    newJObject("org.apache.spark.sql.TestHiveContext", ssc)
+  }, error = function(err) {
+    skip("Hive is not build with SparkSQL, skipped")
+  })
+  df <- createExternalTable(hiveCtx, "json", jsonPath, "json")
+  expect_true(inherits(df, "DataFrame"))
+  expect_true(count(df) == 3)
+  df2 <- sql(hiveCtx, "select * from json")
+  expect_true(inherits(df2, "DataFrame"))
+  expect_true(count(df2) == 3)
+
+  jsonPath2 <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  saveAsTable(df, "json", "json", "append", path = jsonPath2)
+  df3 <- sql(hiveCtx, "select * from json")
+  expect_true(inherits(df3, "DataFrame"))
+  expect_true(count(df3) == 6)
 })
 
 test_that("column operators", {

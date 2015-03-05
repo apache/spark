@@ -21,7 +21,7 @@ jsonFile <- function(sqlCtx, path) {
   # Allow the user to have a more flexible definiton of the text file path
   path <- normalizePath(path)
   # Convert a string vector of paths to a string containing comma separated paths
-  path <- paste(path, collapse=",")
+  path <- paste(path, collapse = ",")
   sdf <- callJMethod(sqlCtx, "jsonFile", path)
   dataFrame(sdf)
 }
@@ -71,7 +71,7 @@ parquetFile <- function(sqlCtx, path) {
   # Allow the user to have a more flexible definiton of the text file path
   path <- normalizePath(path)
   # Convert a string vector of paths to a string containing comma separated paths
-  path <- paste(path, collapse=",")
+  path <- paste(path, collapse = ",")
   sdf <- callJMethod(sqlCtx, "parquetFile", path)
   dataFrame(sdf)
 }
@@ -140,7 +140,7 @@ table <- function(sqlCtx, tableName) {
 #' tables(sqlCtx, "hive")
 #' }
 
-tables <- function(sqlCtx, databaseName=NULL) {
+tables <- function(sqlCtx, databaseName = NULL) {
   jdf <- if (is.null(databaseName)) {
     callJMethod(sqlCtx, "tables")
   } else {
@@ -165,7 +165,7 @@ tables <- function(sqlCtx, databaseName=NULL) {
 #' tableNames(sqlCtx, "hive")
 #' }
 
-tableNames <- function(sqlCtx, databaseName=NULL) {
+tableNames <- function(sqlCtx, databaseName = NULL) {
   if (is.null(databaseName)) {
     callJMethod(sqlCtx, "tableNames")
   } else {
@@ -218,20 +218,74 @@ uncacheTable <- function(sqlCtx, tableName) {
   callJMethod(sqlCtx, "uncacheTable", tableName)
 }
 
-
 #' Clear Cache
 #'
 #' Removes all cached tables from the in-memory cache.
 #'
 #' @param sqlCtx SQLContext to use
-#' @export
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' sqlCtx <- sparkRSQL.init(sc)
 #' clearCache(sqlCtx)
 #' }
 
 clearCache <- function(sqlCtx) {
   callJMethod(sqlCtx, "clearCache")
+}
+
+#' Load an DataFrame
+#'
+#' Returns the dataset in a data source as a DataFrame
+#'
+#' The data source is specified by the `source` and a set of options(...).
+#' If `source` is not specified, the default data source configured by
+#' "spark.sql.sources.default" will be used.
+#'
+#' @param sqlCtx SQLContext to use
+#' @param path The path of files to load
+#' @param source the name of external data source
+#' @return DataFrame
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' df <- load(sqlCtx, "path/to/file.json", source = "json")
+#' }
+
+loadDF <- function(sqlCtx, path = NULL, source = NULL, ...) {
+  options <- varargsToEnv(...)
+  if (!is.null(path)) {
+    options[['path']] <- path
+  }
+  sdf <- callJMethod(sqlCtx, "load", source, options)
+  dataFrame(sdf)
+}
+
+#' Create an external table
+#'
+#' Creates an external table based on the dataset in a data source,
+#' Returns the DataFrame associated with the external table.
+#'
+#' The data source is specified by the `source` and a set of options(...).
+#' If `source` is not specified, the default data source configured by
+#' "spark.sql.sources.default" will be used.
+#'
+#' @param sqlCtx SQLContext to use
+#' @param tableName A name of the table
+#' @param path The path of files to load
+#' @param source the name of external data source
+#' @return DataFrame
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' df <- sparkRSQL.createExternalTable(sqlCtx, "myjson", path="path/to/json", source="json")
+#' }
+
+createExternalTable <- function(sqlCtx, tableName, path = NULL, source = NULL, ...) {
+  options <- varargsToEnv(...)
+  if (!is.null(path)) {
+    options[['path']] <- path
+  }
+  sdf <- callJMethod(sqlCtx, "createExternalTable", tableName, source, options)
+  dataFrame(sdf)
 }
