@@ -730,6 +730,21 @@ class SparkContext(object):
         import tempfile
         import uuid
         tar_dir = tempfile.mkdtemp()
+        try:
+            for req in pip.req.parse_requirements(path, session=uuid.uuid1()):
+                if not req.check_if_exists():
+                    pip.main(['install', req.req.__str__()])
+                mod = importlib.import_module(req.name) # Can throw ImportError
+                mod_path = mod.__path__[0]
+                tar_path = os.path.join(tar_dir, req.name+'.tar.gz')
+                tar = tarfile.open(tar_path, "w:gz")
+                tar.add(mod_path, arcname=os.path.basename(mod_path))
+                tar.close()
+                self.addPyFile(tar_path)
+        finally:
+            shutil.rmtree(tar_dir)
+
+        tar_dir = tempfile.mkdtemp()
         for req in pip.req.parse_requirements(path, session=uuid.uuid1()):
             if not req.check_if_exists():
                 pip.main(['install', req.req.__str__()])
