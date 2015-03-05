@@ -42,15 +42,18 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
     }
 
     def makeRow(job: JobUIData): Seq[Node] = {
+      val firstStageInfo = Option(job.stageIds)
+        .filter(_.nonEmpty)
+        .flatMap { ids => listener.stageIdToInfo.get(ids.min) }
       val lastStageInfo = Option(job.stageIds)
         .filter(_.nonEmpty)
         .flatMap { ids => listener.stageIdToInfo.get(ids.max) }
-      val lastStageData = lastStageInfo.flatMap { s =>
+      val firstStageData = firstStageInfo.flatMap { s =>
         listener.stageIdToData.get((s.stageId, s.attemptId))
       }
 
       val lastStageName = lastStageInfo.map(_.name).getOrElse("(Unknown Stage Name)")
-      val lastStageDescription = lastStageData.flatMap(_.description).getOrElse("")
+      val firstStageDescription = firstStageData.flatMap(_.description).getOrElse("")
       val duration: Option[Long] = {
         job.submissionTime.map { start =>
           val end = job.completionTime.getOrElse(System.currentTimeMillis())
@@ -66,7 +69,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
           {job.jobId} {job.jobGroup.map(id => s"($id)").getOrElse("")}
         </td>
         <td>
-          <span class="description-input" title={lastStageDescription}>{lastStageDescription}</span>
+          <span class="description-input" title={firstStageDescription}>{firstStageDescription}</span>
           <a href={detailUrl}>{lastStageName}</a>
         </td>
         <td sorttable_customkey={job.submissionTime.getOrElse(-1).toString}>
