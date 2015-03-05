@@ -55,9 +55,9 @@ class NaiveBayesModel private[mllib] (
   private val brzPi = new BDV[Double](pi)
   private val brzTheta = new BDM(theta(0).length, theta.length, theta.flatten).t
 
-  //Bernoulli scoring requires log(condprob) if 1 log(1-condprob) if 0
-  //this precomputes log(1.0 - exp(theta)) and its sum for linear algebra application
-  //of this condition in predict function
+  // Bernoulli scoring requires log(condprob) if 1 log(1-condprob) if 0
+  // this precomputes log(1.0 - exp(theta)) and its sum for linear algebra application
+  // of this condition in predict function
   private val (brzNegTheta, brzNegThetaSum) = modelType match {
     case NaiveBayes.Multinomial => (None, None)
     case NaiveBayes.Bernoulli =>
@@ -276,9 +276,9 @@ object NaiveBayes {
   /**
    * Trains a Naive Bayes model given an RDD of `(label, features)` pairs.
    *
-   * This is the default Multinomial NB ([[http://tinyurl.com/lsdw6p]]) which can handle all kinds of
-   * discrete data.  For example, by converting documents into TF-IDF vectors, it can be used for
-   * document classification.
+   * This is the default Multinomial NB ([[http://tinyurl.com/lsdw6p]]) which can handle all
+   * kinds of discrete data.  For example, by converting documents into TF-IDF vectors, it
+   * can be used for document classification.
    *
    * This version of the method uses a default smoothing parameter of 1.0.
    *
@@ -292,9 +292,9 @@ object NaiveBayes {
   /**
    * Trains a Naive Bayes model given an RDD of `(label, features)` pairs.
    *
-   * This is the default Multinomial NB ([[http://tinyurl.com/lsdw6p]]) which can handle all kinds of
-   * discrete data.  For example, by converting documents into TF-IDF vectors, it can be used for
-   * document classification.
+   * This is the default Multinomial NB ([[http://tinyurl.com/lsdw6p]]) which can handle all
+   * kinds of discrete data.  For example, by converting documents into TF-IDF vectors, it
+   * can be used for document classification.
    *
    * @param input RDD of `(label, array of features)` pairs.  Every vector should be a frequency
    *              vector or a count vector.
