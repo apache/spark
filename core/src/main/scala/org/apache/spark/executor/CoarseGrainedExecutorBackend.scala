@@ -17,7 +17,6 @@
 
 package org.apache.spark.executor
 
-import java.io.{ByteArrayInputStream, DataInputStream}
 import java.net.URL
 import java.nio.ByteBuffer
 
@@ -27,8 +26,6 @@ import scala.concurrent.Await
 import akka.actor.{Actor, ActorSelection, Props}
 import akka.pattern.Patterns
 import akka.remote.{RemotingLifecycleEvent, DisassociatedEvent}
-import org.apache.hadoop.fs.{Path, FileSystem}
-import org.apache.hadoop.security.Credentials
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv}
 import org.apache.spark.TaskState.TaskState
@@ -108,7 +105,6 @@ private[spark] class CoarseGrainedExecutorBackend(
       executor.stop()
       context.stop(self)
       context.system.shutdown()
-
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer) {
