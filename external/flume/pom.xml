@@ -37,13 +37,13 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-streaming_${scala.binary.version}</artifactId>
+      <artifactId>spark-streaming_2.10</artifactId>
       <version>${project.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-streaming-flume-sink_${scala.binary.version}</artifactId>
+      <artifactId>spark-streaming-flume-sink_2.10</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -56,7 +56,7 @@
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
-      <artifactId>scalacheck_${scala.binary.version}</artifactId>
+      <artifactId>scalacheck_2.10</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>

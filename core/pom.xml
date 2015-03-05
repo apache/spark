@@ -40,7 +40,7 @@
     </dependency>
     <dependency>
       <groupId>com.twitter</groupId>
-      <artifactId>chill_${scala.binary.version}</artifactId>
+      <artifactId>chill_2.10</artifactId>
       <exclusions>
         <exclusion>
           <groupId>org.ow2.asm</groupId>
@@ -78,12 +78,12 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-network-common_${scala.binary.version}</artifactId>
+      <artifactId>spark-network-common_2.10</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-network-shuffle_${scala.binary.version}</artifactId>
+      <artifactId>spark-network-shuffle_2.10</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -194,15 +194,15 @@
     </dependency>
     <dependency>
       <groupId>${akka.group}</groupId>
-      <artifactId>akka-remote_${scala.binary.version}</artifactId>
+      <artifactId>akka-remote_2.10</artifactId>
     </dependency>
     <dependency>
       <groupId>${akka.group}</groupId>
-      <artifactId>akka-slf4j_${scala.binary.version}</artifactId>
+      <artifactId>akka-slf4j_2.10</artifactId>
     </dependency>
     <dependency>
       <groupId>${akka.group}</groupId>
-      <artifactId>akka-testkit_${scala.binary.version}</artifactId>
+      <artifactId>akka-testkit_2.10</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -211,7 +211,7 @@
     </dependency>
     <dependency>
       <groupId>org.json4s</groupId>
-      <artifactId>json4s-jackson_${scala.binary.version}</artifactId>
+      <artifactId>json4s-jackson_2.10</artifactId>
       <version>3.2.10</version>
     </dependency>
     <dependency>
@@ -326,7 +326,7 @@
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
-      <artifactId>scalacheck_${scala.binary.version}</artifactId>
+      <artifactId>scalacheck_2.10</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>

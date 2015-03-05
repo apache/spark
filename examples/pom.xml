@@ -37,58 +37,58 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core_${scala.binary.version}</artifactId>
+      <artifactId>spark-core_2.10</artifactId>
       <version>${project.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-streaming_${scala.binary.version}</artifactId>
+      <artifactId>spark-streaming_2.10</artifactId>
       <version>${project.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-mllib_${scala.binary.version}</artifactId>
+      <artifactId>spark-mllib_2.10</artifactId>
       <version>${project.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-bagel_${scala.binary.version}</artifactId>
+      <artifactId>spark-bagel_2.10</artifactId>
       <version>${project.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-hive_${scala.binary.version}</artifactId>
+      <artifactId>spark-hive_2.10</artifactId>
       <version>${project.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-graphx_${scala.binary.version}</artifactId>
+      <artifactId>spark-graphx_2.10</artifactId>
       <version>${project.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-streaming-twitter_${scala.binary.version}</artifactId>
+      <artifactId>spark-streaming-twitter_2.10</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-streaming-flume_${scala.binary.version}</artifactId>
+      <artifactId>spark-streaming-flume_2.10</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-streaming-mqtt_${scala.binary.version}</artifactId>
+      <artifactId>spark-streaming-mqtt_2.10</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-streaming-zeromq_${scala.binary.version}</artifactId>
+      <artifactId>spark-streaming-zeromq_2.10</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -237,12 +237,12 @@
     </dependency>
     <dependency>
       <groupId>com.twitter</groupId>
-      <artifactId>algebird-core_${scala.binary.version}</artifactId>
+      <artifactId>algebird-core_2.10</artifactId>
       <version>0.8.1</version>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
-      <artifactId>scalacheck_${scala.binary.version}</artifactId>
+      <artifactId>scalacheck_2.10</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -278,7 +278,7 @@
     </dependency>
     <dependency>
       <groupId>com.github.scopt</groupId>
-      <artifactId>scopt_${scala.binary.version}</artifactId>
+      <artifactId>scopt_2.10</artifactId>
       <version>3.2.0</version>
     </dependency>
   </dependencies>
@@ -347,7 +347,7 @@
       <dependencies>
         <dependency>
           <groupId>org.apache.spark</groupId>
-          <artifactId>spark-streaming-kinesis-asl_${scala.binary.version}</artifactId>
+          <artifactId>spark-streaming-kinesis-asl_2.10</artifactId>
           <version>${project.version}</version>
         </dependency>
         <dependency>
@@ -367,7 +367,7 @@
       <dependencies>
         <dependency>
           <groupId>org.apache.spark</groupId>
-          <artifactId>spark-streaming-kafka_${scala.binary.version}</artifactId>
+          <artifactId>spark-streaming-kafka_2.10</artifactId>
           <version>${project.version}</version>
         </dependency>
       </dependencies>
