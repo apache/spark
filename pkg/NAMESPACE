@@ -85,8 +85,7 @@ importFrom(methods, setGeneric, setMethod, setOldClass)
 
 exportClasses("DataFrame")
 
-exportMethods("agg",
-              "columns",
+exportMethods("columns",
               "distinct",
               "dtypes",
               "explain",
@@ -135,7 +134,7 @@ exportMethods("asc",
               "sumDistinct")
 
 exportClasses("GroupedData")
-exportMethods("count", "agg", "avg")
+exportMethods("agg")
 
 export("cacheTable",
        "clearCache",

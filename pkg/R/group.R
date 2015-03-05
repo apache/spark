@@ -23,7 +23,14 @@ setMethod("count",
 #' Agg
 #'
 #' Aggregates on the entire DataFrame without groups.
-
+#'
+#' df2 <- agg(df, <column> = <aggFunction>)
+#' df2 <- agg(df, newColName = aggFunction(column))
+#' @examples
+#' \dontrun{
+#'  df2 <- agg(df, age = "sum")  # new column name will be created as 'SUM(age#0)'
+#'  df2 <- agg(df, ageSum = sum(df$age)) # Creates a new column named ageSum
+#' }
 setGeneric("agg", function (x, ...) { standardGeneric("agg") })
 
 setMethod("agg",

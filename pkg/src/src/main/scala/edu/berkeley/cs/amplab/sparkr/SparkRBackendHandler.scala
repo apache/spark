@@ -1,13 +1,8 @@
 package edu.berkeley.cs.amplab.sparkr
 
-import org.apache.spark.Logging
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
 import scala.collection.mutable.HashMap
-
-import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
-import java.io.DataInputStream
-import java.io.DataOutputStream
 
 import io.netty.channel.ChannelHandler.Sharable
 import io.netty.channel.ChannelHandlerContext
@@ -22,7 +17,7 @@ import edu.berkeley.cs.amplab.sparkr.SerDe._
  */
 @Sharable
 class SparkRBackendHandler(server: SparkRBackend)
-  extends SimpleChannelInboundHandler[Array[Byte]] with Logging {
+  extends SimpleChannelInboundHandler[Array[Byte]] {
 
   override def channelRead0(ctx: ChannelHandlerContext, msg: Array[Byte]) {
     val bis = new ByteArrayInputStream(msg)
@@ -149,7 +144,7 @@ class SparkRBackendHandler(server: SparkRBackend)
       args: Array[java.lang.Object],
       parameterTypes: Array[Class[_]]): Boolean = {
     if (parameterTypes.length != numArgs) {
-      logInfo(s"num of arguments numArgs not match with ${parameterTypes.length}")
+      // println(s"num of arguments numArgs not match with ${parameterTypes.length}")
       return false
     }
 
@@ -166,7 +161,7 @@ class SparkRBackendHandler(server: SparkRBackend)
         }
       }
       if (!parameterWrapperType.isInstance(args(i))) {
-        logInfo(s"arg $i not match: type $parameterWrapperType != ${args(i).getClass()}")
+        println(s"arg $i not match: expected type $parameterWrapperType, but got ${args(i).getClass()}")
         return false
       }
     }
