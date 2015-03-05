@@ -40,6 +40,7 @@ test_that("test cache, uncache and clearCache", {
   cacheTable(sqlCtx, "table1")
   uncacheTable(sqlCtx, "table1")
   clearCache(sqlCtx)
+  dropTempTable(sqlCtx, "table1")
 })
 
 test_that("test tableNames and tables", {
@@ -48,6 +49,7 @@ test_that("test tableNames and tables", {
   expect_true(length(tableNames(sqlCtx)) == 1)
   df <- tables(sqlCtx)
   expect_true(count(df) == 1)
+  dropTempTable(sqlCtx, "table1")
 })
 
 test_that("registerTempTable() results in a queryable table and sql() results in a new DataFrame", {
@@ -56,12 +58,17 @@ test_that("registerTempTable() results in a queryable table and sql() results in
   newdf <- sql(sqlCtx, "SELECT * FROM table1 where name = 'Michael'")
   expect_true(inherits(newdf, "DataFrame"))
   expect_true(count(newdf) == 1)
+  dropTempTable(sqlCtx, "table1")
+})
 })
 
 test_that("table() returns a new DataFrame", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  registerTempTable(df, "table1")
   tabledf <- table(sqlCtx, "table1")
   expect_true(inherits(tabledf, "DataFrame"))
   expect_true(count(tabledf) == 3)
+  dropTempTable(sqlCtx, "table1")
 })
 
 test_that("toRDD() returns an RRDD", {
