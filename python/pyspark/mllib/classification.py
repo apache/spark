@@ -207,7 +207,7 @@ class LogisticRegressionWithLBFGS(object):
         """
         def train(rdd, i):
             return callMLlibFunc("trainLogisticRegressionModelWithLBFGS", rdd, int(iterations), i,
-                                 float(regParam), str(regType), bool(intercept), int(corrections),
+                                 float(regParam), regType, bool(intercept), int(corrections),
                                  float(tolerance))
 
         return _regression_train_wrapper(train, LogisticRegressionModel, data, initialWeights)

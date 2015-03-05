@@ -23,12 +23,13 @@ from pyspark import SparkContext, RDD
 from pyspark.mllib.common import callMLlibFunc, inherit_doc, JavaModelWrapper
 from pyspark.mllib.linalg import _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint
+from pyspark.mllib.util import JavaLoader, JavaSaveable
 
 __all__ = ['DecisionTreeModel', 'DecisionTree', 'RandomForestModel',
            'RandomForest', 'GradientBoostedTreesModel', 'GradientBoostedTrees']
 
 
-class TreeEnsembleModel(JavaModelWrapper):
+class TreeEnsembleModel(JavaModelWrapper, JavaSaveable):
     def predict(self, x):
         """
         Predict values for a single data point or an RDD of points using
@@ -66,7 +67,7 @@ class TreeEnsembleModel(JavaModelWrapper):
         return self._java_model.toDebugString()
 
 
-class DecisionTreeModel(JavaModelWrapper):
+class DecisionTreeModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     """
     .. note:: Experimental
 
@@ -102,6 +103,10 @@ class DecisionTreeModel(JavaModelWrapper):
     def toDebugString(self):
         """ full model. """
         return self._java_model.toDebugString()
+
+    @classmethod
+    def _java_loader_class(cls):
+        return "org.apache.spark.mllib.tree.model.DecisionTreeModel"
 
 
 class DecisionTree(object):
@@ -227,12 +232,16 @@ class DecisionTree(object):
 
 
 @inherit_doc
-class RandomForestModel(TreeEnsembleModel):
+class RandomForestModel(TreeEnsembleModel, JavaLoader):
     """
     .. note:: Experimental
 
     Represents a random forest model.
     """
+
+    @classmethod
+    def _java_loader_class(cls):
+        return "org.apache.spark.mllib.tree.model.RandomForestModel"
 
 
 class RandomForest(object):
@@ -406,12 +415,16 @@ class RandomForest(object):
 
 
 @inherit_doc
-class GradientBoostedTreesModel(TreeEnsembleModel):
+class GradientBoostedTreesModel(TreeEnsembleModel, JavaLoader):
     """
     .. note:: Experimental
 
     Represents a gradient-boosted tree model.
     """
+
+    @classmethod
+    def _java_loader_class(cls):
+        return "org.apache.spark.mllib.tree.model.GradientBoostedTreesModel"
 
 
 class GradientBoostedTrees(object):

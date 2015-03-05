@@ -15,11 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.deploy.worker
 
-/**
- * Physical execution operators used for running queries against data stored in Hive.  These
- * are not intended for use by users, but are documents so that it is easier to understand
- * the output of EXPLAIN queries.
- */
-package object execution
+import org.apache.spark.deploy.Command
+import org.apache.spark.util.Utils
+import org.scalatest.{FunSuite, Matchers}
+
+class CommandUtilsSuite extends FunSuite with Matchers {
+
+  test("set libraryPath correctly") {
+    val appId = "12345-worker321-9876"
+    val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
+    val cmd = new Command("mainClass", Seq(), Map(), Seq(), Seq("libraryPathToB"), Seq())
+    val builder = CommandUtils.buildProcessBuilder(cmd, 512, sparkHome, t => t)
+    val libraryPath = Utils.libraryPathEnvName
+    val env = builder.environment
+    env.keySet should contain(libraryPath)
+    assert(env.get(libraryPath).startsWith("libraryPathToB"))
+  }
+}
