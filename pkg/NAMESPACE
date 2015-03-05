@@ -90,6 +90,7 @@ exportMethods("columns",
               "dtypes",
               "explain",
               "filter",
+              "groupBy",
               "head",
               "isLocal",
               "limit",
@@ -133,6 +134,9 @@ exportMethods("asc",
               "approxCountDistinct",
               "countDistinct",
               "sumDistinct")
+
+exportClasses("GroupedData")
+exportMethods("agg")
 
 export("cacheTable",
        "clearCache",

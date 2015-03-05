@@ -1,6 +1,6 @@
 # DataFrame.R - DataFrame class and methods implemented in S4 OO classes
 
-#' @include jobj.R SQLTypes.R RDD.R pairRDD.R column.R
+#' @include jobj.R SQLTypes.R RDD.R pairRDD.R column.R group.R
 NULL
 
 setOldClass("jobj")
@@ -662,6 +662,33 @@ setMethod("toRDD",
               row
             })
           })
+
+#' GroupBy
+#'
+#' Groups the DataFrame using the specified columns, so we can run aggregation on them.
+#'
+setGeneric("groupBy", function(x, ...) { standardGeneric("groupBy") })
+
+setMethod("groupBy",
+           signature(x = "DataFrame"),
+           function(x, ...) {
+             cols <- list(...)
+             if (length(cols) >= 1 && class(cols[[1]]) == "character") {
+               sgd <- callJMethod(x@sdf, "groupBy", cols[[1]], listToSeq(cols[-1]))
+             } else {
+               jcol <- lapply(cols, function(c) { c@jc })
+               sgd <- callJMethod(x@sdf, "groupBy", listToSeq(jcol))
+             }
+             groupedData(sgd)
+           })
+
+
+setMethod("agg",
+          signature(x = "DataFrame"),
+          function(x, ...) {
+            agg(groupBy(x), ...)
+          })
+
 
 ############################## RDD Map Functions ##################################
 # All of the following functions mirror the existing RDD map functions,           #

@@ -329,6 +329,31 @@ test_that("column functions", {
   c4 <- approxCountDistinct(c) + countDistinct(c) + cast(c, "string")
 })
 
+test_that("group by", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  df1 <- agg(df, name = "max", age = "sum")
+  expect_true(1 == count(df1))
+  df1 <- agg(df, age2 = max(df$age))
+  expect_true(1 == count(df1))
+  expect_true(columns(df1) == c("age2"))
+
+  gd <- groupBy(df, "name")
+  expect_true(inherits(gd, "GroupedData"))
+  df2 <- count(gd)
+  expect_true(inherits(df2, "DataFrame"))
+  expect_true(3 == count(df2))
+
+  df3 <- agg(gd, age = "sum")
+  expect_true(inherits(df3, "DataFrame"))
+  expect_true(3 == count(df3))
+
+  df4 <- sum(gd, "age")
+  expect_true(inherits(df4, "DataFrame"))
+  expect_true(3 == count(df4))
+  expect_true(3 == count(mean(gd, "age")))
+  expect_true(3 == count(max(gd, "age")))
+})
+
 test_that("sortDF() and orderBy() on a DataFrame", {
   df <- jsonFile(sqlCtx, jsonPath)
   sorted <- sortDF(df, df$age)

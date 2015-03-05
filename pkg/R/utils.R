@@ -370,4 +370,3 @@ toSeq <- function(...) {
 listToSeq <- function(l) {
   callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "toSeq", l)
 }
-
