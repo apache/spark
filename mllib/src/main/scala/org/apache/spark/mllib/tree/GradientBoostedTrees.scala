@@ -25,6 +25,7 @@ import org.apache.spark.mllib.tree.configuration.BoostingStrategy
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.impl.TimeTracker
 import org.apache.spark.mllib.tree.impurity.Variance
+import org.apache.spark.mllib.tree.loss.Loss
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel, GradientBoostedTreesModel}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -52,6 +53,10 @@ import org.apache.spark.storage.StorageLevel
 class GradientBoostedTrees(private val boostingStrategy: BoostingStrategy)
   extends Serializable with Logging {
 
+  private val numIterations = boostingStrategy.numIterations
+  private var baseLearners = new Array[DecisionTreeModel](numIterations)
+  private var baseLearnerWeights = new Array[Double](numIterations)
+
   /**
    * Method to train a gradient boosting model
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
@@ -59,7 +64,7 @@ class GradientBoostedTrees(private val boostingStrategy: BoostingStrategy)
    */
   def run(input: RDD[LabeledPoint]): GradientBoostedTreesModel = {
     val algo = boostingStrategy.treeStrategy.algo
-    algo match {
+    val fitGradientBoostingModel = algo match {
       case Regression => GradientBoostedTrees.boost(input, input, boostingStrategy, validate=false)
       case Classification =>
         // Map labels to -1, +1 so binary classification can be treated as regression.
@@ -69,6 +74,42 @@ class GradientBoostedTrees(private val boostingStrategy: BoostingStrategy)
       case _ =>
         throw new IllegalArgumentException(s"$algo is not supported by the gradient boosting.")
     }
+    baseLearners = fitGradientBoostingModel.trees
+    baseLearnerWeights = fitGradientBoostingModel.treeWeights
+    fitGradientBoostingModel
+  }
+
+  /**
+   * Method to compute error or loss for every iteration of gradient boosting.
+   * @param data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
+   * @param loss: evaluation metric that defaults to boostingStrategy.loss
+   * @return an array with index i having the losses or errors for the ensemble
+   *         containing trees 1 to i + 1
+   */
+  def evaluateEachIteration(
+      data: RDD[LabeledPoint],
+      loss: Loss = boostingStrategy.loss) : Array[Double] = {
+
+    val algo = boostingStrategy.treeStrategy.algo
+    val remappedData = algo match {
+      case Classification => data.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
+      case _ => data
+    }
+    val initialTree = baseLearners(0)
+    val evaluationArray = Array.fill(numIterations)(0.0)
+
+    // Initial weight is 1.0
+    var predictionRDD = remappedData.map(i => initialTree.predict(i.features))
+    evaluationArray(0) = loss.computeError(remappedData, predictionRDD)
+
+    (1 until numIterations).map {nTree =>
+      predictionRDD = (remappedData zip predictionRDD) map {
+        case (point, pred) =>
+          pred + baseLearners(nTree).predict(point.features) * baseLearnerWeights(nTree)
+      }
+      evaluationArray(nTree) = loss.computeError(remappedData, predictionRDD)
+    }
+    evaluationArray
   }
 
   /**
