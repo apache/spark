@@ -3,6 +3,56 @@ Spark Change Log
 
 Release 1.3.0
 
+  SPARK-5143 [BUILD] [WIP] spark-network-yarn 2.11 depends on spark-network-shuffle 2.10
+  Sean Owen <sowen@cloudera.com>
+  2015-03-04 21:00:51 -0800
+  Commit: f509159, github.com/apache/spark/pull/4876
+
+  [SPARK-6149] [SQL] [Build] Excludes Guava 15 referenced by jackson-module-scala_2.10
+  Cheng Lian <lian@databricks.com>
+  2015-03-04 20:52:58 -0800
+  Commit: a0aa24a, github.com/apache/spark/pull/4890
+
+  [SPARK-6144] [core] Fix addFile when source files are on "hdfs:"
+  Marcelo Vanzin <vanzin@cloudera.com>, trystanleftwich <trystan@atscale.com>
+  2015-03-04 12:58:39 -0800
+  Commit: 3fc74f4, github.com/apache/spark/pull/4894
+
+  [SPARK-6134][SQL] Fix wrong datatype for casting FloatType and default LongType value in defaultPrimitive
+  Liang-Chi Hsieh <viirya@gmail.com>
+  2015-03-04 20:23:43 +0800
+  Commit: bfa4e31, github.com/apache/spark/pull/4870
+
+  [SPARK-6136] [SQL] Removed JDBC integration tests which depends on docker-client
+  Cheng Lian <lian@databricks.com>
+  2015-03-04 19:39:02 +0800
+  Commit: 035243d, github.com/apache/spark/pull/4872
+
+  [SPARK-6141][MLlib] Upgrade Breeze from 0.10 to 0.11 to fix convergence bug
+  Xiangrui Meng <meng@databricks.com>, DB Tsai <dbtsai@alpinenow.com>, DB Tsai <dbtsai@dbtsai.com>
+  2015-03-03 23:52:02 -0800
+  Commit: 9f24977, github.com/apache/spark/pull/4879
+
+  [SPARK-5949] HighlyCompressedMapStatus needs more classes registered w/ kryo
+  Imran Rashid <irashid@cloudera.com>
+  2015-03-03 15:33:19 -0800
+  Commit: 9a0b75c, github.com/apache/spark/pull/4877
+
+  SPARK-1911 [DOCS] Warn users if their assembly jars are not built with Java 6
+  Sean Owen <sowen@cloudera.com>
+  2015-03-03 13:40:11 -0800
+  Commit: 8446ad0, github.com/apache/spark/pull/4874
+
+  Revert "[SPARK-5423][Core] Cleanup resources in DiskMapIterator.finalize to ensure deleting the temp file"
+  Andrew Or <andrew@databricks.com>
+  2015-03-03 13:04:15 -0800
+  Commit: ee4929d
+
+  Adding CHANGES.txt for Spark 1.3
+  Patrick Wendell <patrick@databricks.com>
+  2015-03-03 02:19:19 -0800
+  Commit: ce7158c
+
   BUILD: Minor tweaks to internal build scripts
   Patrick Wendell <patrick@databricks.com>
   2015-03-03 00:38:12 -0800
