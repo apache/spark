@@ -325,12 +325,13 @@ class Analyzer(catalog: Catalog,
 
         val missingInProject = requiredAttributes -- p.output
         if (missingInProject.nonEmpty) {
+          logDebug(s"Failed to find $missingInProject in ${p.output.mkString(", ")}")
+          logDebug(s"Adding $missingInProject to $p")
           // Add missing attributes and then project them away after the sort.
-          Project(projectList.map(_.toAttribute),
+          Project(p.output,
             Sort(ordering, global,
               Project(projectList ++ missingInProject, child)))
         } else {
-          logDebug(s"Failed to find $missingInProject in ${p.output.mkString(", ")}")
           s // Nothing we can do here. Return original plan.
         }
       case s @ Sort(ordering, global, a @ Aggregate(grouping, aggs, child))
@@ -345,8 +346,10 @@ class Analyzer(catalog: Catalog,
         logDebug(s"Grouping expressions: $groupingRelation")
         val resolved = unresolved.flatMap(groupingRelation.resolve(_, resolver))
         val missingInAggs = resolved.filterNot(a.outputSet.contains)
-        logDebug(s"Resolved: $resolved Missing in aggs: $missingInAggs")
+        logDebug(s"Resolved: $resolved")
         if (missingInAggs.nonEmpty) {
+          logDebug(s"Missing in aggs: $missingInAggs")
+          logDebug(s"Adding $missingInAggs to $a")
           // Add missing grouping exprs and then project them away after the sort.
           Project(a.output,
             Sort(ordering, global, Aggregate(grouping, aggs ++ missingInAggs, child)))
