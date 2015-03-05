@@ -744,22 +744,6 @@ class SparkContext(object):
         finally:
             shutil.rmtree(tar_dir)
 
-        tar_dir = tempfile.mkdtemp()
-        for req in pip.req.parse_requirements(path, session=uuid.uuid1()):
-            if not req.check_if_exists():
-                pip.main(['install', req.req.__str__()])
-            try:
-                mod = importlib.import_module(req.name)
-            finally:
-                shutil.rmtree(tar_dir)
-            mod_path = mod.__path__[0]
-            tar_path = os.path.join(tar_dir, req.name+'.tar.gz')
-            tar = tarfile.open(tar_path, "w:gz")
-            tar.add(mod_path, arcname=os.path.basename(mod_path))
-            tar.close()
-            self.addPyFile(tar_path)
-        shutil.rmtree(tar_dir)
-
     def setCheckpointDir(self, dirName):
         """
         Set the directory under which RDDs are going to be checkpointed. The
