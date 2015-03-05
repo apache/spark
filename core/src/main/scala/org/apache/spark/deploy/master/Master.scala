@@ -96,7 +96,7 @@ private[spark] class Master(
   val webUi = new MasterWebUI(this, webUiPort)
 
   val masterPublicAddress = {
-    val envVar = System.getenv("SPARK_PUBLIC_DNS")
+    val envVar = conf.getenv("SPARK_PUBLIC_DNS")
     if (envVar != null) envVar else host
   }
 

@@ -121,7 +121,7 @@ private[spark] class Worker(
   val shuffleService = new StandaloneWorkerShuffleService(conf, securityMgr)
 
   val publicAddress = {
-    val envVar = System.getenv("SPARK_PUBLIC_DNS")
+    val envVar = conf.getenv("SPARK_PUBLIC_DNS")
     if (envVar != null) envVar else host
   }
   var webUi: WorkerWebUI = null
@@ -362,7 +362,8 @@ private[spark] class Worker(
             self,
             workerId,
             host,
-            webUiPort,
+            webUi.boundPort,
+            publicAddress,
             sparkHome,
             executorDir,
             akkaUrl,
@@ -538,10 +539,10 @@ private[spark] object Worker extends Logging {
       memory: Int,
       masterUrls: Array[String],
       workDir: String,
-      workerNumber: Option[Int] = None): (ActorSystem, Int) = {
+      workerNumber: Option[Int] = None,
+      conf: SparkConf = new SparkConf): (ActorSystem, Int) = {
 
     // The LocalSparkCluster runs multiple local sparkWorkerX actor systems
-    val conf = new SparkConf
     val systemName = "sparkWorker" + workerNumber.map(_.toString).getOrElse("")
     val actorName = "Worker"
     val securityMgr = new SecurityManager(conf)
