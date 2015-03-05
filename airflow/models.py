@@ -816,7 +816,7 @@ class BaseOperator(Base):
             email_on_retry=True,
             email_on_failure=True,
             retries=0,
-            retry_delay=timedelta(seconds=10),
+            retry_delay=timedelta(seconds=300),
             start_date=None,
             end_date=None,
             schedule_interval=timedelta(days=1),
@@ -842,7 +842,11 @@ class BaseOperator(Base):
         self.wait_for_downstream = wait_for_downstream
         self._schedule_interval = schedule_interval
         self.retries = retries
-        self.retry_delay = retry_delay
+        if isinstance(retry_delay, timedelta):
+            self.retry_delay = retry_delay
+        else:
+            logging.info("retry_delay isn't timedelta object, assuming secs")
+            self.retry_delay = timedelta(seconds=retry_delay)
         self.params = params or {}  # Available in templates!
         self.adhoc = adhoc
         if dag:
