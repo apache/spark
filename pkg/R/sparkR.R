@@ -247,15 +247,15 @@ sparkRSQL.init <- function(jsc) {
 
 sparkRHive.init <- function(jsc) {
   if (exists(".sparkRHivesc", envir = .sparkREnv)) {
-    cat("Re-using existing HiveContext. Please restart R to create a new  HiveContext\n")
+    cat("Re-using existing HiveContext. Please restart R to create a new HiveContext\n")
     return(get(".sparkRHivesc", envir = .sparkREnv))
   }
 
   ssc <- callJMethod(jsc, "sc")
   hiveCtx <- tryCatch({
-    newJObject("org.apache.spark.sql.HiveContext", ssc)
+    newJObject("org.apache.spark.sql.hive.HiveContext", ssc)
   }, error = function(err) {
-    stop("Hive is not build with SparkSQL")
+    stop("Spark SQL is not built with Hive support")
   })
 
   assign(".sparkRHivesc", hiveCtx, envir = .sparkREnv)
