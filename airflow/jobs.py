@@ -270,7 +270,9 @@ class MasterJob(BaseJob):
                             # Trying to run the next schedule
                             next_schedule = (
                                 ti.execution_date + task.schedule_interval)
-                            if ti.end_date and next_schedule > ti.end_date:
+                            if (
+                                    ti.task.end_date and
+                                    next_schedule > ti.task.end_date):
                                 continue
                             ti = TI(
                                 task=task,

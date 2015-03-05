@@ -423,6 +423,8 @@ class TaskInstance(Base):
             return False
         elif self.state == State.UP_FOR_RETRY and not self.ready_for_retry():
             return False
+        elif self.task.end_date and self.execution_date > self.task.end_date:
+            return False
         elif self.state in State.runnable() and self.are_dependencies_met():
             return True
         else:
@@ -649,6 +651,8 @@ class TaskInstance(Base):
         if 'tables' in task.params:
             tables = task.params['tables']
         ds = self.execution_date.isoformat()[:10]
+        yesterday_ds = (self.execution_date - timedelta(1)).isoformat()[:10]
+        tomorrow_ds = (self.execution_date + timedelta(1)).isoformat()[:10]
         ds_nodash = ds.replace('-', '')
         ti_key_str = "{task.dag_id}__{task.task_id}__{ds_nodash}"
         ti_key_str = ti_key_str.format(**locals())
@@ -662,6 +666,8 @@ class TaskInstance(Base):
         return {
             'dag': task.dag,
             'ds': ds,
+            'yesterday_ds': yesterday_ds,
+            'tomorrow_ds': tomorrow_ds,
             'END_DATE': ds,
             'ds_nodash': ds_nodash,
             'end_date': ds,
