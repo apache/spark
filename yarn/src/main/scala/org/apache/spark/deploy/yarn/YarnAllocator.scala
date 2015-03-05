@@ -290,8 +290,14 @@ private[yarn] class YarnAllocator(
       location: String,
       containersToUse: ArrayBuffer[Container],
       remaining: ArrayBuffer[Container]): Unit = {
+    // SPARK-6050: certain Yarn configurations return a virtual core count that doesn't match the
+    // request; for example, capacity scheduler + DefaultResourceCalculator. So match on requested
+    // memory, but use the asked vcore count for matching, effectively disabling matching on vcore
+    // count.
+    val matchingResource = Resource.newInstance(allocatedContainer.getResource.getMemory,
+          resource.getVirtualCores)
     val matchingRequests = amClient.getMatchingRequests(allocatedContainer.getPriority, location,
-      allocatedContainer.getResource)
+      matchingResource)
 
     // Match the allocation to a request
     if (!matchingRequests.isEmpty) {
@@ -318,7 +324,7 @@ private[yarn] class YarnAllocator(
       assert(container.getResource.getMemory >= resource.getMemory)
 
       logInfo("Launching container %s for on host %s".format(containerId, executorHostname))
-      executorIdToContainer(executorId) = container      
+      executorIdToContainer(executorId) = container
 
       val containerSet = allocatedHostToContainersMap.getOrElseUpdate(executorHostname,
         new HashSet[ContainerId])

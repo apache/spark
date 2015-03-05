@@ -512,7 +512,7 @@ object KafkaUtils {
    * @param topics Names of the topics to consume
    */
   @Experimental
-  def createDirectStream[K, V, KD <: Decoder[K], VD <: Decoder[V], R](
+  def createDirectStream[K, V, KD <: Decoder[K], VD <: Decoder[V]](
       jssc: JavaStreamingContext,
       keyClass: Class[K],
       valueClass: Class[V],
