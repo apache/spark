@@ -24,12 +24,11 @@ import com.codahale.metrics.MetricRegistry
 import com.codahale.metrics.ganglia.GangliaReporter
 import info.ganglia.gmetric4j.gmetric.GMetric
 import info.ganglia.gmetric4j.gmetric.GMetric.UDPAddressingMode
-
-import org.apache.spark.SecurityManager
 import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.{Logging, SecurityManager}
 
 class GangliaSink(val property: Properties, val registry: MetricRegistry,
-    securityMgr: SecurityManager) extends Sink {
+    securityMgr: SecurityManager) extends Sink with Logging {
   val GANGLIA_KEY_PERIOD = "period"
   val GANGLIA_DEFAULT_PERIOD = 10
 
@@ -46,18 +45,38 @@ class GangliaSink(val property: Properties, val registry: MetricRegistry,
   val GANGLIA_KEY_HOST = "host"
   val GANGLIA_KEY_PORT = "port"
 
+  val GANGLIA_KEY_SERVERS = "servers"
+  val GANGLIA_DEFAULT_PORT = 8649
+
   def propertyToOption(prop: String): Option[String] = Option(property.getProperty(prop))
 
-  if (!propertyToOption(GANGLIA_KEY_HOST).isDefined) {
-    throw new Exception("Ganglia sink requires 'host' property.")
-  }
+  if (!propertyToOption(GANGLIA_KEY_SERVERS).isDefined) {
+    logWarning("Using *.sink.ganglia.host and *.sink.ganglia.port to set sink of gmond is " +
+      "deprecated, please use *.sink.ganglia.servers instead.")
 
-  if (!propertyToOption(GANGLIA_KEY_PORT).isDefined) {
-    throw new Exception("Ganglia sink requires 'port' property.")
+    if (!propertyToOption(GANGLIA_KEY_HOST).isDefined) {
+      throw new Exception("Ganglia sink requires 'host' property.")
+    }
+
+    if (!propertyToOption(GANGLIA_KEY_PORT).isDefined) {
+      throw new Exception("Ganglia sink requires 'port' property.")
+    }
   }
 
   val host = propertyToOption(GANGLIA_KEY_HOST).get
   val port = propertyToOption(GANGLIA_KEY_PORT).get.toInt
+
+  val serversString = propertyToOption(GANGLIA_KEY_SERVERS).get
+  val servers =
+    if (serversString == null || serversString == "") {
+      logInfo(s"Using *.sink.ganglia.host = $host and *.sink.ganglia.port = $port")
+      host + ":" + port
+    }
+    else {
+      logInfo(s"Using *.sink.ganglia.servers = $serversString")
+      serversString
+    }
+
   val ttl = propertyToOption(GANGLIA_KEY_TTL).map(_.toInt).getOrElse(GANGLIA_DEFAULT_TTL)
   val mode: UDPAddressingMode = propertyToOption(GANGLIA_KEY_MODE)
     .map(u => GMetric.UDPAddressingMode.valueOf(u.toUpperCase)).getOrElse(GANGLIA_DEFAULT_MODE)
@@ -69,22 +88,36 @@ class GangliaSink(val property: Properties, val registry: MetricRegistry,
 
   MetricsSystem.checkMinimalPollingPeriod(pollUnit, pollPeriod)
 
-  val ganglia = new GMetric(host, port, mode, ttl)
-  val reporter: GangliaReporter = GangliaReporter.forRegistry(registry)
+  val reporters = servers.split("\\s*?,\\s*?").map(hostPortString => {
+    val (h, p) = if (hostPortString.contains(":")) {
+      val hostPortArray = hostPortString.split("\\s*?:\\s*?")
+      if (hostPortString.endsWith(":")) {
+        (hostPortArray(0), GANGLIA_DEFAULT_PORT)
+      } else {
+        (hostPortArray(0), hostPortArray(1).toInt)
+      }
+    } else {
+      (hostPortString, GANGLIA_DEFAULT_PORT)
+    }
+    val ganglia = new GMetric(h, p, mode, ttl)
+    val reporter: GangliaReporter = GangliaReporter.forRegistry(registry)
       .convertDurationsTo(TimeUnit.MILLISECONDS)
       .convertRatesTo(TimeUnit.SECONDS)
       .build(ganglia)
 
+    reporter
+  })
+
   override def start() {
-    reporter.start(pollPeriod, pollUnit)
+    for (reporter <- reporters) reporter.start(pollPeriod, pollUnit)
   }
 
   override def stop() {
-    reporter.stop()
+    for (reporter <- reporters) reporter.stop()
   }
 
   override def report() {
-    reporter.report()
+    for (reporter <- reporters) reporter.report()
   }
 }
 
