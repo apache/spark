@@ -105,7 +105,7 @@ class SparkRBackendHandler(server: SparkRBackend)
           System.err.println(s"cannot find matching method ${cls.get}.$methodName. "
             + s"Candidates are:")
           selectedMethods.foreach { method =>
-            System.err.println(s"$methodName(${method.getParameterTypes})")
+            System.err.println(s"$methodName(${method.getParameterTypes.mkString(",")})")
           }
           throw new Exception(s"No matched method found for $cls.$methodName")
         }
