@@ -19,6 +19,8 @@ package org.apache.spark.sql.json
 
 import java.sql.{Date, Timestamp}
 
+import org.scalactic.Tolerance._
+
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.functions._
@@ -566,7 +568,7 @@ class JsonSuite extends QueryTest {
       relation.isInstanceOf[JSONRelation],
       "The DataFrame returned by jsonFile should be based on JSONRelation.")
     assert(relation.asInstanceOf[JSONRelation].path === path)
-    assert(Math.round(relation.asInstanceOf[JSONRelation].samplingRatio) === 0L)
+    assert(relation.asInstanceOf[JSONRelation].samplingRatio === (0.49 +- 0.001))
 
     val schema = StructType(StructField("a", LongType, true) :: Nil)
     val logicalRelation =
