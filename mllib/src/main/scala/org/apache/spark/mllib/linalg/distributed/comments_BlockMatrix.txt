@@ -12,5 +12,14 @@
   (3) The object "GridPartitioner"
 
 2. BlockMatrix
+  (1) multiply() - This method leverages Iterator.tabulate()
+    [1] Note that Scala defines both an Iterator trait and object. The multiply method uses an Iterator object. 
+    [2] Iterator.tabulate(n)(i => f(i)) will iterate through the index i to compute f(i) for some function f and produce n items
+      i) n = number of items in the returned collection
+      ii) f = a function applied to each item
+      iii) i = the index over which the function operates (producing one item per i)
+    [3] In our case, Iterator.tabulate(numRowBlocks)(i => ((i, blockColIndex, blockRowIndex), block))
+      i) n = other.numColBlocks
+      
 
 3. External package
