@@ -16,6 +16,13 @@ pyspark.mllib.clustering module
     :members:
     :undoc-members:
 
+pyspark.mllib.evaluation module
+-------------------------------
+
+.. automodule:: pyspark.mllib.evaluation
+      :members:
+      :undoc-members:
+
 pyspark.mllib.feature module
 -------------------------------
 
