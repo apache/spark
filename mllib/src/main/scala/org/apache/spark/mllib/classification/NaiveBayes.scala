@@ -62,7 +62,7 @@ class NaiveBayesModel private[mllib] (
     case NaiveBayes.Multinomial => (None, None)
     case NaiveBayes.Bernoulli =>
       val negTheta = brzLog((brzExp(brzTheta.copy) :*= (-1.0)) :+= 1.0) // log(1.0 - exp(x))
-      (Option(negTheta), Option(brzSum(brzNegTheta, Axis._1)))
+      (Option(negTheta), Option(brzSum(negTheta, Axis._1)))
   }
 
   override def predict(testData: RDD[Vector]): RDD[Double] = {
