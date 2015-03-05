@@ -117,16 +117,6 @@ external_libs = [
         "name": "boto",
         "version": "2.34.0",
         "md5": "5556223d2d0cc4d06dd4829e671dcecd"
-    },
-    {
-        "name": "PyYAML",
-        "version": "3.11",
-        "md5": "f50e08ef0fe55178479d3a618efe21db"
-    },
-    {
-        "name": "argparse",
-        "version": "1.3.0",
-        "md5": "9bcf7f612190885c8c85e30ba41db3c7"
     }
 ]
 
