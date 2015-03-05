@@ -20,7 +20,7 @@ from collections import namedtuple
 from pyspark import SparkContext
 from pyspark.rdd import RDD
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc, inherit_doc
-from pyspark.mllib.util import Saveable, JavaLoader
+from pyspark.mllib.util import JavaLoader, JavaSaveable
 
 __all__ = ['MatrixFactorizationModel', 'ALS', 'Rating']
 
@@ -41,7 +41,7 @@ class Rating(namedtuple("Rating", ["user", "product", "rating"])):
 
 
 @inherit_doc
-class MatrixFactorizationModel(JavaModelWrapper, Saveable, JavaLoader):
+class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
     """A matrix factorisation model trained by regularized alternating
     least-squares.
@@ -92,7 +92,7 @@ class MatrixFactorizationModel(JavaModelWrapper, Saveable, JavaLoader):
     0.43...
     >>> try:
     ...     os.removedirs(path)
-    ... except:
+    ... except OSError:
     ...     pass
     """
     def predict(self, user, product):
@@ -110,9 +110,6 @@ class MatrixFactorizationModel(JavaModelWrapper, Saveable, JavaLoader):
 
     def productFeatures(self):
         return self.call("getProductFeatures")
-
-    def save(self, sc, path):
-        self.call("save", sc._jsc.sc(), path)
 
 
 class ALS(object):

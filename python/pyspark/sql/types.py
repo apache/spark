@@ -468,7 +468,7 @@ class UserDefinedType(DataType):
         raise NotImplementedError("UDT must implement deserialize().")
 
     def simpleString(self):
-        return 'null'
+        return 'udt'
 
     def json(self):
         return json.dumps(self.jsonValue(), separators=(',', ':'), sort_keys=True)

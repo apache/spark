@@ -56,7 +56,7 @@ private[sql] object PreInsertCastAndRename extends Rule[LogicalPlan] {
       child: LogicalPlan) = {
     val newChildOutput = expectedOutput.zip(child.output).map {
       case (expected, actual) =>
-        val needCast = !DataType.equalsIgnoreNullability(expected.dataType, actual.dataType)
+        val needCast = !expected.dataType.sameType(actual.dataType)
         // We want to make sure the filed names in the data to be inserted exactly match
         // names in the schema.
         val needRename = expected.name != actual.name

@@ -16,20 +16,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.parquet
+package org.apache.spark.sql.hive
 
 import java.io.File
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.{SQLConf, QueryTest}
+import org.apache.spark.sql.{QueryTest, SQLConf, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.execution.{ExecutedCommand, PhysicalRDD}
-import org.apache.spark.sql.hive.execution.{InsertIntoHiveTable, HiveTableScan}
+import org.apache.spark.sql.hive.execution.HiveTableScan
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.sources.{InsertIntoDataSource, LogicalRelation}
+import org.apache.spark.sql.parquet.{ParquetRelation2, ParquetTableScan}
 import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.types._
 
 // The data where the partitioning key exists only in the directory structure.
 case class ParquetData(intField: Int, stringField: String)
@@ -392,7 +394,7 @@ class ParquetDataSourceOffMetastoreSuite extends ParquetMetastoreSuiteBase {
 
     val df = sql("INSERT INTO TABLE test_insert_parquet SELECT a FROM jt")
     df.queryExecution.executedPlan match {
-      case insert: InsertIntoHiveTable => // OK
+      case insert: execution.InsertIntoHiveTable => // OK
       case o => fail(s"The SparkPlan should be ${classOf[InsertIntoHiveTable].getCanonicalName}. " +
         s"However, found ${o.toString}.")
     }
@@ -421,7 +423,7 @@ class ParquetDataSourceOffMetastoreSuite extends ParquetMetastoreSuiteBase {
 
     val df = sql("INSERT INTO TABLE test_insert_parquet SELECT a FROM jt_array")
     df.queryExecution.executedPlan match {
-      case insert: InsertIntoHiveTable => // OK
+      case insert: execution.InsertIntoHiveTable => // OK
       case o => fail(s"The SparkPlan should be ${classOf[InsertIntoHiveTable].getCanonicalName}. " +
         s"However, found ${o.toString}.")
     }
@@ -521,6 +523,34 @@ class ParquetDataSourceOnSourceSuite extends ParquetSourceSuiteBase {
   override def afterAll(): Unit = {
     super.afterAll()
     setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf.toString)
+  }
+
+  test("values in arrays and maps stored in parquet are always nullable") {
+    val df = createDataFrame(Tuple2(Map(2 -> 3), Seq(4, 5, 6)) :: Nil).toDF("m", "a")
+    val mapType1 = MapType(IntegerType, IntegerType, valueContainsNull = false)
+    val arrayType1 = ArrayType(IntegerType, containsNull = false)
+    val expectedSchema1 =
+      StructType(
+        StructField("m", mapType1, nullable = true) ::
+        StructField("a", arrayType1, nullable = true) :: Nil)
+    assert(df.schema === expectedSchema1)
+
+    df.saveAsTable("alwaysNullable", "parquet")
+
+    val mapType2 = MapType(IntegerType, IntegerType, valueContainsNull = true)
+    val arrayType2 = ArrayType(IntegerType, containsNull = true)
+    val expectedSchema2 =
+      StructType(
+        StructField("m", mapType2, nullable = true) ::
+          StructField("a", arrayType2, nullable = true) :: Nil)
+
+    assert(table("alwaysNullable").schema === expectedSchema2)
+
+    checkAnswer(
+      sql("SELECT m, a FROM alwaysNullable"),
+      Row(Map(2 -> 3), Seq(4, 5, 6)))
+
+    sql("DROP TABLE alwaysNullable")
   }
 }
 

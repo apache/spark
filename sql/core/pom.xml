@@ -99,12 +99,6 @@
       <version>9.3-1102-jdbc41</version>
       <scope>test</scope>
     </dependency>
-    <dependency>
-      <groupId>com.spotify</groupId>
-      <artifactId>docker-client</artifactId>
-      <version>2.7.5</version>
-      <scope>test</scope>
-    </dependency>
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
