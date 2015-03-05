@@ -124,7 +124,7 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
-    val model = NaiveBayes.train(testRDD, 1.0, "Multinomial")
+    val model = NaiveBayes.train(testRDD, 1.0, "multinomial")
     validateModelFit(pi, theta, model)
 
     val validationData = NaiveBayesSuite.generateNaiveBayesInput(
@@ -161,7 +161,7 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
-    val model = NaiveBayes.train(testRDD, 1.0, "Bernoulli")
+    val model = NaiveBayes.train(testRDD, 1.0, "bernoulli")
     validateModelFit(pi, theta, model)
 
     val validationData = NaiveBayesSuite.generateNaiveBayesInput(

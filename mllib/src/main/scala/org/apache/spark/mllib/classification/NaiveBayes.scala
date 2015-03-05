@@ -310,10 +310,10 @@ object NaiveBayes {
    *
    * The model type can be set to either Multinomial NB ([[http://tinyurl.com/lsdw6p]])
    * or Bernoulli NB ([[http://tinyurl.com/p7c96j6]]). The Multinomial NB can handle
-   * discrete count data and can be called by setting the model type to "Multinomial".
+   * discrete count data and can be called by setting the model type to "multinomial".
    * For example, it can be used with word counts or TF_IDF vectors of documents.
    * The Bernoulli model fits presence or absence (0-1) counts. By making every vector a
-   * 0-1 vector and setting the model type to "Bernoulli", the  fits and predicts as
+   * 0-1 vector and setting the model type to "bernoulli", the  fits and predicts as
    * Bernoulli NB.
    *
    * @param input RDD of `(label, array of features)` pairs.  Every vector should be a frequency
@@ -321,10 +321,10 @@ object NaiveBayes {
    * @param lambda The smoothing parameter
    *
    * @param modelType The type of NB model to fit from the enumeration NaiveBayesModels, can be
-   *              Multinomial or Bernoulli
+   *              multinomial or bernoulli
    */
   def train(input: RDD[LabeledPoint], lambda: Double, modelType: String): NaiveBayesModel = {
-    new NaiveBayes(lambda, Multinomial).run(input)
+    new NaiveBayes(lambda, MODELTYPE.fromString(modelType)).run(input)
   }
 
 
