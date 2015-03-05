@@ -68,7 +68,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
         """
           |select attribute, sum(cnt)
           |from (
-          |  select nested.attribute, count(*) as cnt
+          |  select nested.attribute as attribute, count(*) as cnt
           |  from rows
           |  group by nested.attribute) a
           |group by attribute

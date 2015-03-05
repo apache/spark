@@ -198,6 +198,11 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
           resolveGetField(e, fieldName, resolver)
         }
 
+        // TODO the alias name is quite tricky to me, set it to _col1, _col2.. ?
+        // Set it as original attribute name like "a.b.c" seems still confusing,
+        // and we may never reference this column by its name (with "."), except
+        // people write SQL like: SELECT a.b.c as newCol FROM nestedTable, which
+        // explicitly specifying the alias name for the output column
         Some(Alias(fieldExprs, name)())
 
       // No matches.
