@@ -55,6 +55,16 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
     assert(flatMappedRDD.collect() === result)
   }
 
+  test("checkpointing with external function") {
+    val parCollection = sc.makeRDD(1 to 4)
+    val flatMappedRDD = parCollection.flatMap(x => 1 to x)
+    flatMappedRDD.checkpoint{ rdd => rdd.sparkContext.makeRDD(rdd.collect, rdd.partitions.size) }
+    assert(flatMappedRDD.dependencies.head.rdd == parCollection)
+    val result = flatMappedRDD.collect()
+    assert(flatMappedRDD.dependencies.head.rdd != parCollection)
+    assert(flatMappedRDD.collect() === result)
+  }
+
   test("RDDs with one-to-one dependencies") {
     testRDD(_.map(x => x.toString))
     testRDD(_.flatMap(x => 1 to x))
