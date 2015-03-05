@@ -562,9 +562,7 @@ class LogisticRegressionClusterSuite extends FunSuite with LocalClusterSparkCont
     }.cache()
     // If we serialize data directly in the task closure, the size of the serialized task would be
     // greater than 1MB and hence Spark would throw an error.
-    val lr = new LogisticRegressionWithLBFGS().setIntercept(true)
-    lr.optimizer.setNumIterations(2)
-    val model = lr.run(points)
+    val model = LogisticRegressionWithLBFGS.train(points, 2)
 
     val predictions = model.predict(points.map(_.features))
 

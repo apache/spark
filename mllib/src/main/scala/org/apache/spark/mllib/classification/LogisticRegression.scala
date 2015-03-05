@@ -362,3 +362,46 @@ class LogisticRegressionWithLBFGS
     }
   }
 }
+
+/**
+ * Top-level methods for calling Logistic Regression using L-BFGS.
+ * NOTE: Labels used in Logistic Regression should be {0, 1}
+ */
+object LogisticRegressionWithLBFGS {
+
+  /**
+  * Train a logistic regression model given an RDD of (label, features) pairs.
+  *
+  * @param input RDD of (label, array of features) pairs.
+  */
+  def train(input: RDD[LabeledPoint]) = {
+    new LogisticRegressionWithLBFGS()
+      .run(input)
+  }
+
+  /**
+   * Train a logistic regression model given an RDD of (label, features) pairs.
+   *
+   * @param input RDD of (label, array of features) pairs.
+   * @param numIterations Number of iterations of BFGS to run.
+   */
+  def train(input: RDD[LabeledPoint], numIterations: Int) = {
+    val lr = new LogisticRegressionWithLBFGS()
+    lr.optimizer.setNumIterations(numIterations)
+    lr.run(input)
+  }
+
+  /**
+   * Train a logistic regression model given an RDD of (label, features) pairs.
+   * The weights used in LBFGS are initialized using the initial weights provided.
+   * NOTE: Labels used in Logistic Regression should be {0, 1}
+   *
+   * @param input RDD of (label, array of features) pairs.
+   * @param initialWeights Initial set of weights to be used. Array should be equal in size to
+   *        the number of features in the data.
+   */
+  def train(input: RDD[LabeledPoint], initialWeights: Vector) = {
+    new LogisticRegressionWithLBFGS()
+      .run(input, initialWeights)
+  }
+}
