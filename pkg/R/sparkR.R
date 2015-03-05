@@ -24,19 +24,6 @@ connExists <- function(env) {
 # Also terminates the backend this R session is connected to
 sparkR.stop <- function(env = .sparkREnv) {
 
-  if (!connExists(env)) {
-    # When the workspace is saved in R, the connections are closed
-    # *before* the finalizer is run. In these cases, we reconnect
-    # to the backend, so we can shut it down.
-    tryCatch({
-      connectBackend("localhost", .sparkREnv$sparkRBackendPort)
-    }, error = function(err) {
-      cat("Error in Connection: Use sparkR.init() to restart SparkR\n")
-    }, warning = function(war) {
-      cat("No Connection Found: Use sparkR.init() to restart SparkR\n")
-    })
-  } 
-
   if (exists(".sparkRCon", envir = env)) {
     cat("Stopping SparkR\n")
     if (exists(".sparkRjsc", envir = env)) {
@@ -50,18 +37,17 @@ sparkR.stop <- function(env = .sparkREnv) {
     conn <- get(".sparkRCon", envir = env)
     close(conn)
     rm(".sparkRCon", envir = env)
-
-    if (exists(".monitorConn", envir = env)) {
-      conn <- get(".monitorConn", envir = env)
-      close(conn)
-      rm(".monitorConn", envir = env)
-    }
-
-    # Finally, sleep for 1 sec to let backend finish exiting.
-    # Without this we get port conflicts in RStudio when we try to 'Restart R'.
-    Sys.sleep(1)
   }
 
+  if (exists(".monitorConn", envir = env)) {
+    conn <- get(".monitorConn", envir = env)
+    close(conn)
+    rm(".monitorConn", envir = env)
+  }
+
+  # clear all the reference of Java object
+  rm(list = ls(.validJobjs, all = TRUE), envir = .validJobjs)
+  rm(list = ls(.toRemoveJobjs, all = TRUE), envir = .toRemoveJobjs)
 }
 
 #' Initialize a new Spark Context.
