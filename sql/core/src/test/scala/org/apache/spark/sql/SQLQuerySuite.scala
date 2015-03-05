@@ -43,6 +43,22 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     )
   }
 
+  test("SPARK-6145 order by the nested data #1") {
+    sqlCtx.jsonRDD(sqlCtx.sparkContext.parallelize(
+      """{"a": {"b": {"d": 1}}, "c": 1}""" :: Nil)).registerTempTable("nestedOrder")
+
+    checkAnswer(sqlCtx.sql("SELECT 1 FROM nestedOrder ORDER BY c"), Row(1))
+    checkAnswer(sqlCtx.sql("SELECT 1 FROM nestedOrder ORDER BY a.b.d"), Row(1))
+    checkAnswer(sqlCtx.sql("SELECT a.b.d FROM nestedOrder ORDER BY a.b.d"), Row(1))
+  }
+
+  test("SPARK-6145 order by the nested data #2") {
+    sqlCtx.jsonRDD(sqlCtx.sparkContext.parallelize(
+      """{"a": {"a": {"a": 1}}, "c": 1}""" :: Nil)).registerTempTable("nestedOrder")
+
+    checkAnswer(sqlCtx.sql("SELECT a.a.a FROM nestedOrder ORDER BY a.a.a"), Row(1))
+  }
+
   test("grouping on nested fields") {
     jsonRDD(sparkContext.parallelize("""{"nested": {"attribute": 1}, "value": 2}""" :: Nil))
      .registerTempTable("rows")
@@ -52,7 +68,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
         """
           |select attribute, sum(cnt)
           |from (
-          |  select nested.attribute, count(*) as cnt
+          |  select nested.attribute as attribute, count(*) as cnt
           |  from rows
           |  group by nested.attribute) a
           |group by attribute

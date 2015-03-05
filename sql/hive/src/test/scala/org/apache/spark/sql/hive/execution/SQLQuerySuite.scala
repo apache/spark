@@ -48,6 +48,15 @@ class SQLQuerySuite extends QueryTest {
       Row(1) :: Row(2) :: Row(3) :: Nil)
   }
 
+  test("SPARK-6145 insert into table by selecting data from a nested table") {
+    jsonRDD(sparkContext.parallelize(
+      """{"a": {"a": {"a": 1}}, "c": 1}""" :: Nil)).registerTempTable("nestedOrder")
+
+    sql("CREATE TABLE gen_tmp_6145 (key Int)")
+    sql("INSERT INTO table gen_tmp_6145 SELECT a.a.a from nestedOrder")
+    sql("DROP TABLE gen_tmp_6145")
+  }
+
   test("SPARK-4512 Fix attribute reference resolution error when using SORT BY") {
     checkAnswer(
       sql("SELECT * FROM (SELECT key + key AS a FROM src SORT BY value) t ORDER BY t.a"),
