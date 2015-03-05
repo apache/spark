@@ -14,7 +14,6 @@ setOldClass("jobj")
 #' @param env An R environment that stores bookkeeping states of the DataFrame
 #' @param sdf A Java object reference to the backing Scala DataFrame
 #' @export
-
 setClass("DataFrame",
          slots = list(env = "environment",
                       sdf = "jobj"))
@@ -29,7 +28,6 @@ setMethod("initialize", "DataFrame", function(.Object, sdf, isCached) {
 
 #' @rdname DataFrame
 #' @export
-
 dataFrame <- function(sdf, isCached = FALSE) {
   new("DataFrame", sdf, isCached)
 }
@@ -52,7 +50,6 @@ dataFrame <- function(sdf, isCached = FALSE) {
 #' df <- jsonFile(sqlCtx, path)
 #' printSchema(df)
 #'}
-
 setGeneric("printSchema", function(x) { standardGeneric("printSchema") })
 
 setMethod("printSchema",
@@ -78,13 +75,100 @@ setMethod("printSchema",
 #' df <- jsonFile(sqlCtx, path)
 #' dfSchema <- schema(df)
 #'}
-
 setGeneric("schema", function(x) { standardGeneric("schema") })
 
+#' @rdname schema
+#' @export
 setMethod("schema",
           signature(x = "DataFrame"),
           function(x) {
             structType(callJMethod(x@sdf, "schema"))
+          })
+
+#' Explain
+#' 
+#' Print the logical and physical Catalyst plans to the console for debugging.
+#' 
+#' @param x A SparkSQL DataFrame
+#' @param extended Logical. If extended is False, explain() only prints the physical plan.
+#' @rdname explain
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' explain(df, TRUE)
+#'}
+setGeneric("explain", function(x, ...) { standardGeneric("explain") })
+
+#' @rdname explain
+#' @export
+setMethod("explain",
+          signature(x = "DataFrame"),
+          function(x, extended = FALSE) {
+            queryExec <- callJMethod(x@sdf, "queryExecution")
+            if (extended) {
+              cat(callJMethod(queryExec, "toString"))
+            } else {
+              execPlan <- callJMethod(queryExec, "executedPlan")
+              cat(callJMethod(execPlan, "toString"))
+            }
+          })
+
+#' isLocal
+#'
+#' Returns True if the `collect` and `take` methods can be run locally
+#' (without any Spark executors).
+#'
+#' @param x A SparkSQL DataFrame
+#'
+#' @rdname isLocal
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' isLocal(df)
+#'}
+setGeneric("isLocal", function(x) { standardGeneric("isLocal") })
+
+#' @rdname isLocal
+#' @export
+setMethod("isLocal",
+          signature(x = "DataFrame"),
+          function(x) {
+            callJMethod(x@sdf, "isLocal")
+          })
+
+#' ShowDF
+#'
+#' Print the first numRows rows of a DataFrame
+#'
+#' @param x A SparkSQL DataFrame
+#' @param numRows The number of rows to print. Defaults to 20.
+#'
+#' @rdname showDF
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' showDF(df)
+#'}
+setGeneric("showDF", function(x,...) { standardGeneric("showDF") })
+
+#' @rdname showDF
+#' @export
+setMethod("showDF",
+          signature(x = "DataFrame"),
+          function(x, numRows = 20) {
+            cat(callJMethod(x@sdf, "showString", numToInt(numRows)))
           })
 
 #' DataTypes
@@ -103,9 +187,10 @@ setMethod("schema",
 #' df <- jsonFile(sqlCtx, path)
 #' dtypes(df)
 #'}
-
 setGeneric("dtypes", function(x) { standardGeneric("dtypes") })
 
+#' @rdname dtypes
+#' @export
 setMethod("dtypes",
           signature(x = "DataFrame"),
           function(x) {
@@ -132,6 +217,8 @@ setMethod("dtypes",
 #'}
 setGeneric("columns", function(x) {standardGeneric("columns") })
 
+#' @rdname columns
+#' @export
 setMethod("columns",
           signature(x = "DataFrame"),
           function(x) {
@@ -166,9 +253,10 @@ setMethod("names",
 #' registerTempTable(df, "json_df")
 #' new_df <- sql(sqlCtx, "SELECT * FROM json_df")
 #'}
-
 setGeneric("registerTempTable", function(x, tableName) { standardGeneric("registerTempTable") })
 
+#' @rdname registerTempTable
+#' @export
 setMethod("registerTempTable",
           signature(x = "DataFrame", tableName = "character"),
           function(x, tableName) {
@@ -191,7 +279,6 @@ setMethod("registerTempTable",
 #' df <- jsonFile(sqlCtx, path)
 #' cache(df)
 #'}
-
 setMethod("cache",
           signature(x = "DataFrame"),
           function(x) {
@@ -217,7 +304,6 @@ setMethod("cache",
 #' df <- jsonFile(sqlCtx, path)
 #' persist(df, "MEMORY_AND_DISK")
 #'}
-
 setMethod("persist",
           signature(x = "DataFrame", newLevel = "character"),
           function(x, newLevel) {
@@ -244,7 +330,6 @@ setMethod("persist",
 #' persist(df, "MEMORY_AND_DISK")
 #' unpersist(df)
 #'}
-
 setMethod("unpersist",
           signature(x = "DataFrame"),
           function(x, blocking = TRUE) {
@@ -269,7 +354,6 @@ setMethod("unpersist",
 #' df <- jsonFile(sqlCtx, path)
 #' newDF <- repartition(df, 2L)
 #'}
-
 setGeneric("repartition", function(x, numPartitions) { standardGeneric("repartition") })
 
 #' @rdname repartition
@@ -279,6 +363,62 @@ setMethod("repartition",
           function(x, numPartitions) {
             sdf <- callJMethod(x@sdf, "repartition", numToInt(numPartitions))
             dataFrame(sdf)     
+          })
+
+#' toJSON
+#'
+#' Convert the rows of a DataFrame into JSON objects and return an RDD where
+#' each element contains a JSON string.
+#'
+#' @param x A SparkSQL DataFrame
+#' @return A StringRRDD of JSON objects
+#' @rdname toJSON
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' newRDD <- toJSON(df)
+#'}
+setGeneric("toJSON", function(x) { standardGeneric("toJSON") })
+
+#' @rdname toJSON
+#' @export
+setMethod("toJSON",
+          signature(x = "DataFrame"),
+          function(x) {
+            rdd <- callJMethod(x@sdf, "toJSON")
+            jrdd <- callJMethod(rdd, "toJavaRDD")
+            RDD(jrdd, serializedMode = "string")
+          })
+
+#' saveAsParquetFile
+#'
+#' Save the contents of a DataFrame as a Parquet file, preserving the schema. Files written out
+#' with this method can be read back in as a DataFrame using parquetFile().
+#'
+#' @param x A SparkSQL DataFrame
+#' @param path The directory where the file is saved
+#' @rdname saveAsParquetFile
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' saveAsParquetFile(df, "/tmp/sparkr-tmp/")
+#'}
+setGeneric("saveAsParquetFile", function(x, path) { standardGeneric("saveAsParquetFile") })
+
+#' @rdname saveAsParquetFile
+#' @export
+setMethod("saveAsParquetFile",
+          signature(x = "DataFrame", path = "character"),
+          function(x, path) {
+            invisible(callJMethod(x@sdf, "saveAsParquetFile", path))
           })
 
 #' Distinct
@@ -296,7 +436,6 @@ setMethod("repartition",
 #' df <- jsonFile(sqlCtx, path)
 #' distinctDF <- distinct(df)
 #'}
-
 setMethod("distinct",
           signature(x = "DataFrame"),
           function(x) {
@@ -322,7 +461,6 @@ setMethod("distinct",
 #' collect(sampleDF(df, FALSE, 0.5)) 
 #' collect(sampleDF(df, TRUE, 0.5))
 #'}
-
 setGeneric("sampleDF",
            function(x, withReplacement, fraction, seed) {
              standardGeneric("sampleDF")
@@ -330,7 +468,6 @@ setGeneric("sampleDF",
 
 #' @rdname sampleDF
 #' @export
-
 setMethod("sampleDF",
           # TODO : Figure out how to send integer as java.lang.Long to JVM so
           # we can send seed as an argument through callJMethod
@@ -358,7 +495,6 @@ setMethod("sampleDF",
 #' df <- jsonFile(sqlCtx, path)
 #' count(df)
 #' }
-
 setMethod("count",
           signature(x = "DataFrame"),
           function(x) {
@@ -382,7 +518,6 @@ setMethod("count",
 #' collected <- collect(df)
 #' firstName <- collected[[1]]$name
 #' }
-
 setMethod("collect",
           signature(x = "DataFrame"),
           function(x, stringsAsFactors = FALSE) {
@@ -419,9 +554,10 @@ setMethod("collect",
 #' df <- jsonFile(sqlCtx, path)
 #' limitedDF <- limit(df, 10)
 #' }
-
 setGeneric("limit", function(x, num) {standardGeneric("limit") })
 
+#' @rdname limit
+#' @export
 setMethod("limit",
           signature(x = "DataFrame", num = "numeric"),
           function(x, num) {
@@ -441,7 +577,6 @@ setMethod("limit",
 #' df <- jsonFile(sqlCtx, path)
 #' take(df, 2)
 #' }
-
 setMethod("take",
           signature(x = "DataFrame", num = "numeric"),
           function(x, num) {
@@ -469,7 +604,6 @@ setMethod("take",
 #' df <- jsonFile(sqlCtx, path)
 #' head(df)
 #' }
-
 setMethod("head",
           signature(x = "DataFrame"),
           function(x, num = 6L) {
@@ -491,7 +625,6 @@ setMethod("head",
 #' df <- jsonFile(sqlCtx, path)
 #' first(df)
 #' }
-
 setMethod("first",
           signature(x = "DataFrame"),
           function(x) {
@@ -514,9 +647,10 @@ setMethod("first",
 #' df <- jsonFile(sqlCtx, path)
 #' rdd <- toRDD(df)
 #' }
-
 setGeneric("toRDD", function(x) { standardGeneric("toRDD") })
 
+#' @rdname DataFrame
+#' @export
 setMethod("toRDD",
           signature(x = "DataFrame"),
           function(x) {

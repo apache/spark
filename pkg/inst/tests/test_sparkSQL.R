@@ -2,7 +2,7 @@ library(testthat)
 
 context("SparkSQL functions")
 
-# Tests for jsonFile, registerTempTable, sql, count, table
+# Tests for SparkSQL functions in SparkR
 
 sc <- sparkR.init()
 
@@ -384,5 +384,34 @@ test_that("join() on a DataFrame", {
   expect_true(count(joined4) == 4)
   expect_true(first(joined4)$newAge == 24)
 })
+
+test_that("toJSON() returns an RDD of the correct values", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  testRDD <- toJSON(df)
+  expect_true(inherits(testRDD, "RDD"))
+  expect_true(SparkR:::getSerializedMode(testRDD) == "string")
+  expect_equal(collect(testRDD)[[1]], mockLines[1])
+})
+
+test_that("showDF()", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  expect_output(showDF(df), "age  name   \nnull Michael\n30   Andy   \n19   Justin ")
+})
+
+test_that("isLocal()", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  expect_false(isLocal(df))
+})
+
+# TODO: Enable and test once the parquetFile PR has been merged
+# test_that("saveAsParquetFile() on DataFrame and works with parquetFile", {
+#   df <- jsonFile(sqlCtx, jsonPath)
+#   parquetPath <- tempfile(pattern="spark-test", fileext=".tmp")
+#   saveAsParquetFile(df, parquetPath)
+#   parquetDF <- parquetFile(sqlCtx, parquetPath)
+#   expect_true(inherits(parquetDF, "DataFrame"))
+#   expect_equal(collect(df), collect(parquetDF))
+#   unlink(parquetPath)
+# })
 
 unlink(jsonPath)
