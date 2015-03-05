@@ -297,7 +297,7 @@ test_that("save() as parquet file", {
 
 test_that("test HiveContext", {
   hiveCtx <- tryCatch({
-    newJObject("org.apache.spark.sql.TestHiveContext", ssc)
+    newJObject("org.apache.spark.sql.hive.test.TestHiveContext", ssc)
   }, error = function(err) {
     skip("Hive is not build with SparkSQL, skipped")
   })
