@@ -1,27 +1,18 @@
 package edu.berkeley.cs.amplab.sparkr
 
+import java.io.ByteArrayOutputStream
+import java.io.DataOutputStream
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.sql.{SQLContext, DataFrame, Row, SaveMode}
-//import org.apache.spark.sql.hive.{HiveContext, TestHiveContext}
 
 import edu.berkeley.cs.amplab.sparkr.SerDe._
-
-import java.io.ByteArrayOutputStream
-import java.io.DataOutputStream
 
 object SQLUtils {
   def createSQLContext(jsc: JavaSparkContext): SQLContext = {
     new SQLContext(jsc.sc)
   }
-
-//  def createHiveContext(jsc: JavaSparkContext): HiveContext = {
-//    new HiveContext(jsc.sc)
-//  }
-//
-//  def createTestHiveContext(jsc: JavaSparkContext): TestHiveContext = {
-//    new TestHiveContext(jsc.sc)
-//  }
 
   def toSeq[T](arr: Array[T]): Seq[T] = {
     arr.toSeq

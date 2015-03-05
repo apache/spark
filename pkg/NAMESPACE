@@ -147,6 +147,7 @@ export("cacheTable",
        "tables",
        "uncacheTable")
 
-export("sparkRSQL.init")
+export("sparkRSQL.init",
+       "sparkRHive.init")
 export("print.structType",
        "print.structField")

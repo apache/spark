@@ -251,9 +251,13 @@ sparkRHive.init <- function(jsc) {
     return(get(".sparkRHivesc", envir = .sparkREnv))
   }
 
-  hiveCtx <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils",
-                        "createHiveContext",
-                        jsc)
+  ssc <- callJMethod(jsc, "sc")
+  hiveCtx <- tryCatch({
+    newJObject("org.apache.spark.sql.HiveContext", ssc)
+  }, error = function(err) {
+    stop("Hive is not build with SparkSQL")
+  })
+
   assign(".sparkRHivesc", hiveCtx, envir = .sparkREnv)
   hiveCtx
 }
