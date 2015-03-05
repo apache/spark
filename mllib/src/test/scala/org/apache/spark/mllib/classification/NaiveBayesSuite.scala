@@ -19,13 +19,13 @@ package org.apache.spark.mllib.classification
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax => brzArgmax, sum => brzSum, Axis}
 import breeze.stats.distributions.Multinomial
-import org.apache.spark.mllib.classification.NaiveBayesModels.NaiveBayesModels
 
 import scala.util.Random
 
 import org.scalatest.FunSuite
 
 import org.apache.spark.SparkException
+import org.apache.spark.mllib.classification.NaiveBayesModels.NaiveBayesModels
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
@@ -49,7 +49,7 @@ object NaiveBayesSuite {
     theta: Array[Array[Double]],  // CXD
     nPoints: Int,
     seed: Int,
-    dataModel: NaiveBayesModels = NaiveBayesModels.Multinomial,
+    dataModel: NaiveBayesModels= NaiveBayesModels.Multinomial,
     sample: Int = 10): Seq[LabeledPoint] = {
     val D = theta(0).length
     val rnd = new Random(seed)
@@ -92,7 +92,10 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
     assert(numOfPredictions < input.length / 5)
   }
 
-  def validateModelFit(piData: Array[Double], thetaData: Array[Array[Double]], model: NaiveBayesModel) = {
+  def validateModelFit(
+      piData: Array[Double],
+      thetaData: Array[Array[Double]],
+      model: NaiveBayesModel) = {
     def closeFit(d1: Double, d2: Double, precision: Double): Boolean = {
       (d1 - d2).abs <= precision
     }
@@ -117,14 +120,20 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
       Array(0.10, 0.10, 0.70, 0.10)  // label 2
     ).map(_.map(math.log))
 
-    val testData = NaiveBayesSuite.generateNaiveBayesInput(pi, theta, nPoints, 42, NaiveBayesModels.Multinomial)
+    val testData = NaiveBayesSuite.generateNaiveBayesInput(
+      pi, theta, nPoints, 42, NaiveBayesModels.Multinomial)
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
     val model = NaiveBayes.train(testRDD, 1.0, "Multinomial")
     validateModelFit(pi, theta, model)
 
-    val validationData = NaiveBayesSuite.generateNaiveBayesInput(pi, theta, nPoints, 17, NaiveBayesModels.Multinomial)
+    val validationData = NaiveBayesSuite.generateNaiveBayesInput(
+      pi,
+      theta,
+      nPoints,
+      17,
+      NaiveBayesModels.Multinomial)
     val validationRDD = sc.parallelize(validationData, 2)
 
     // Test prediction on RDD.
@@ -144,14 +153,24 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
       Array(0.02, 0.02, 0.60, 0.02,  0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.30)  // label 2
     ).map(_.map(math.log))
 
-    val testData = NaiveBayesSuite.generateNaiveBayesInput(pi, theta, nPoints, 45, NaiveBayesModels.Bernoulli)
+    val testData = NaiveBayesSuite.generateNaiveBayesInput(
+      pi,
+      theta,
+      nPoints,
+      45,
+      NaiveBayesModels.Bernoulli)
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
     val model = NaiveBayes.train(testRDD, 1.0, "Bernoulli")
     validateModelFit(pi, theta, model)
 
-    val validationData = NaiveBayesSuite.generateNaiveBayesInput(pi, theta, nPoints, 20, NaiveBayesModels.Bernoulli)
+    val validationData = NaiveBayesSuite.generateNaiveBayesInput(
+      pi,
+      theta,
+      nPoints,
+      20,
+      NaiveBayesModels.Bernoulli)
     val validationRDD = sc.parallelize(validationData, 2)
 
     // Test prediction on RDD.
@@ -218,8 +237,8 @@ class NaiveBayesClusterSuite extends FunSuite with LocalClusterSparkContext {
         LabeledPoint(random.nextInt(2), Vectors.dense(Array.fill(n)(random.nextDouble())))
       }
     }
-    // If we serialize data directly in the task closure, the size of the serialized task would be
-    // greater than 1MB and hence Spark would throw an error.
+    // If we serialize data directly in the task closure, the size of the serialized task
+    // would be greater than 1MB and hence Spark would throw an error.
     val model = NaiveBayes.train(examples)
     val predictions = model.predict(examples.map(_.features))
   }

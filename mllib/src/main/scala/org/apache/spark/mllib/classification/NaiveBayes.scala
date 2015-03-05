@@ -25,16 +25,17 @@ import org.json4s.jackson.JsonMethods._
 import org.json4s.{DefaultFormats, JValue}
 
 import org.apache.spark.{Logging, SparkContext, SparkException}
+import org.apache.spark.mllib.classification.NaiveBayesModels.NaiveBayesModels
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.classification.NaiveBayesModels.NaiveBayesModels
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SQLContext}
 
 
 /**
- *
+ * Model types supported in Naive Bayes:
+ * multinomial and Bernoulli currently supported
  */
 object NaiveBayesModels extends Enumeration {
   type NaiveBayesModels = Value
@@ -44,6 +45,8 @@ object NaiveBayesModels extends Enumeration {
     model.toString
   }
 }
+
+
 
 /**
  * Model for Naive Bayes Classifiers.
@@ -55,7 +58,6 @@ object NaiveBayesModels extends Enumeration {
  * @param modelType The type of NB model to fit from the enumeration NaiveBayesModels, can be
  *              Multinomial or Bernoulli
  */
-
 class NaiveBayesModel private[mllib] (
     val labels: Array[Double],
     val pi: Array[Double],
@@ -68,11 +70,14 @@ class NaiveBayesModel private[mllib] (
   private val brzPi = new BDV[Double](pi)
   private val brzTheta = new BDM(theta(0).length, theta.length, theta.flatten).t
 
-  private val brzNegTheta: Option[BDM[Double]] = modelType match {
-    case NaiveBayesModels.Multinomial => None
+  //Bernoulli scoring requires log(condprob) if 1 log(1-condprob) if 0
+  //precomputing log(1.0 - exp(theta)) and its sum for linear algebra application
+  //of this condition in predict function
+  private val (brzNegTheta, brzNegThetaSum) = modelType match {
+    case NaiveBayesModels.Multinomial => (None, None)
     case NaiveBayesModels.Bernoulli =>
       val negTheta = brzLog((brzExp(brzTheta.copy) :*= (-1.0)) :+= 1.0) // log(1.0 - exp(x))
-      Option(negTheta)
+      (Option(negTheta), Option(brzSum(brzNegTheta, Axis._1)))
   }
 
   override def predict(testData: RDD[Vector]): RDD[Double] = {
@@ -89,8 +94,7 @@ class NaiveBayesModel private[mllib] (
         labels (brzArgmax (brzPi + brzTheta * testData.toBreeze) )
       case NaiveBayesModels.Bernoulli =>
         labels (brzArgmax (brzPi +
-          (brzTheta - brzNegTheta.get) * testData.toBreeze +
-          brzSum(brzNegTheta.get, Axis._1)))
+          (brzTheta - brzNegTheta.get) * testData.toBreeze + brzNegThetaSum.get))
     }
   }
 
@@ -114,10 +118,11 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
     def thisClassName = "org.apache.spark.mllib.classification.NaiveBayesModel"
 
     /** Model data for model import/export */
-    case class Data(labels: Array[Double],
-                    pi: Array[Double],
-                    theta: Array[Array[Double]],
-                    modelType: String)
+    case class Data(
+        labels: Array[Double],
+        pi: Array[Double],
+        theta: Array[Array[Double]],
+        modelType: String)
 
     def save(sc: SparkContext, path: String, data: Data): Unit = {
       val sqlContext = new SQLContext(sc)
@@ -192,7 +197,7 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
  * Bernoulli NB ([[http://tinyurl.com/p7c96j6]]). The input feature values must be nonnegative.
  */
 class NaiveBayes private (private var lambda: Double,
-                          var modelType: NaiveBayesModels) extends Serializable with Logging {
+                          private var modelType: NaiveBayesModels) extends Serializable with Logging {
 
   def this(lambda: Double) = this(lambda, NaiveBayesModels.Multinomial)
 
@@ -284,7 +289,7 @@ object NaiveBayes {
   /**
    * Trains a Naive Bayes model given an RDD of `(label, features)` pairs.
    *
-   * This is the Multinomial NB ([[http://tinyurl.com/lsdw6p]]) which can handle all kinds of
+   * This is the default Multinomial NB ([[http://tinyurl.com/lsdw6p]]) which can handle all kinds of
    * discrete data.  For example, by converting documents into TF-IDF vectors, it can be used for
    * document classification.
    *
@@ -300,7 +305,7 @@ object NaiveBayes {
   /**
    * Trains a Naive Bayes model given an RDD of `(label, features)` pairs.
    *
-   * This is the Multinomial NB ([[http://tinyurl.com/lsdw6p]]) which can handle all kinds of
+   * This is the default Multinomial NB ([[http://tinyurl.com/lsdw6p]]) which can handle all kinds of
    * discrete data.  For example, by converting documents into TF-IDF vectors, it can be used for
    * document classification.
    *
@@ -316,11 +321,13 @@ object NaiveBayes {
   /**
    * Trains a Naive Bayes model given an RDD of `(label, features)` pairs.
    *
-   * This is by default the Multinomial NB ([[http://tinyurl.com/lsdw6p]]) which can handle
-   * all kinds of discrete data.  For example, by converting documents into TF-IDF vectors,
-   * it can be used for document classification.  By making every vector a 0-1 vector and
-   * setting the model type to NaiveBayesModels.Bernoulli, it fits and predicts as
-   * Bernoulli NB ([[http://tinyurl.com/p7c96j6]]).
+   * The model type can be set to either Multinomial NB ([[http://tinyurl.com/lsdw6p]])
+   * or Bernoulli NB ([[http://tinyurl.com/p7c96j6]]). The Multinomial NB can handle
+   * discrete count data and can be called by setting the model type to "Multinomial".
+   * For example, it can be used with word counts or TF_IDF vectors of documents.
+   * The Bernoulli model fits presence or absence (0-1) counts. By making every vector a
+   * 0-1 vector and setting the model type to "Bernoulli", the  fits and predicts as
+   * Bernoulli NB.
    *
    * @param input RDD of `(label, array of features)` pairs.  Every vector should be a frequency
    *              vector or a count vector.
