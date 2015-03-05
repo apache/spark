@@ -17,10 +17,6 @@
 
 package org.apache.spark.network.server;
 
-import java.io.Closeable;
-import java.net.InetSocketAddress;
-import java.util.concurrent.TimeUnit;
-
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelFuture;
@@ -28,14 +24,17 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
-import io.netty.util.internal.PlatformDependent;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import java.io.Closeable;
+import java.net.InetSocketAddress;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.util.IOMode;
 import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Server for the efficient, low-level streaming service.

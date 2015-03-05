@@ -17,9 +17,9 @@
 
 package org.apache.spark.network.protocol;
 
-import com.google.common.base.Charsets;
-import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
+
+import com.google.common.base.Objects;
 
 /** Response to {@link RpcRequest} for a failed RPC. */
 public final class RpcFailure implements ResponseMessage {

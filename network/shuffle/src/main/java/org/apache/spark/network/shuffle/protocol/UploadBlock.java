@@ -17,13 +17,13 @@
 
 package org.apache.spark.network.shuffle.protocol;
 
-import java.util.Arrays;
-
-import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
 
+import java.util.Arrays;
+
 import org.apache.spark.network.protocol.Encoders;
-import org.apache.spark.network.shuffle.protocol.BlockTransferMessage.Type;
+
+import com.google.common.base.Objects;
 
 
 /** Request to upload a block with a certain StorageLevel. Returns nothing (empty byte array). */
