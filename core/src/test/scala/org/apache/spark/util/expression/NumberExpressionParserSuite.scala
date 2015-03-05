@@ -19,10 +19,10 @@ package org.apache.spark.util.expression
 import org.scalatest.FunSuite
 
 class NumberExpressionParserSuite extends FunSuite {
-  val parser = new NumberExpressionParser()
+  val parser = new NumberParser()
 
   def testParser(in: String, expectedResult:Double): Unit = {
-    val parseResult = parser.parse(in)
+    val parseResult: Option[Double] = parser.parse(in)
     assert(parseResult == Some(expectedResult))
   }
 

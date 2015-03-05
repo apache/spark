@@ -16,15 +16,17 @@
  */
 package org.apache.spark.util.expression
 
+import org.apache.spark.util.expression.parserTrait.ByteUnitParsing
+import org.apache.spark.util.expression.quantity.ByteQuantity
 import org.scalatest.FunSuite
 
 
 class ByteExpressionParserSuite extends FunSuite {
-  val parser = new ByteExpressionParser()
+  val parser = new ByteParser()
 
   def testParser(in: String, expectedResult:ByteQuantity): Unit = {
     val parseResult = parser.parse(in)
-    assert(parseResult == Some(expectedResult))
+    assert(parseResult.map(ByteQuantity(_)) == Some(expectedResult))
   }
 
   test("simple bytes") {
@@ -131,17 +133,20 @@ class ByteExpressionParserSuite extends FunSuite {
   // and thus there is no reliable means to verify that the returned values are correct
   test("test totalMemoryBytes") {
     val parseResult = parser.parse("totalMemoryBytes")
-    assert( parseResult.get.toBytes > 0 )
+    assert( parseResult.isDefined )
+    assert( parseResult.get > 0 )
   }
 
   test("test totalFreeBytes") {
     val parseResult = parser.parse("freeMemoryBytes")
-    assert( parseResult.get.toBytes > 0 )
+    assert( parseResult.isDefined )
+    assert( parseResult.get > 0 )
   }
 
   test("test maxMemoryBytes") {
     val parseResult = parser.parse("maxMemoryBytes")
-    assert( parseResult.get.toBytes > 0 )
+    assert( parseResult.isDefined )
+    assert( parseResult.get > 0 )
   }
 
 }

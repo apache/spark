@@ -16,17 +16,12 @@
  */
 package org.apache.spark.util.expression
 
-class NumberExpressionParser extends ExpressionParser[Double]  {
+import org.apache.spark.util.expression.parserTrait.DictionaryExpansion
 
-  // those expressions unique to a NumberExpressionParser
-  def extensions =
-    "numCores" ^^ (x=>Runtime.getRuntime.availableProcessors() * 1.0)
+import scala.collection.SortedMap
 
-  def parse(expression: String): Option[Double] = {
-    parseAll(p = expr, in = expression) match {
-      case Success(x,_) => Option(x)
-      case _ => None
-    }
-  }
-
-}
+/**
+ * An extension of BaseParser that also expands out a user supplied dictionary of symbols
+ * @param dict Symbols to expand into their numeric representation
+ */
+class BaseDictParser(var dict: SortedMap[String, Long]) extends BaseParser with DictionaryExpansion
