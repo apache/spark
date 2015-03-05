@@ -165,3 +165,4 @@ executor.sink.ganglia.class=org.apache.spark.metrics.sink.GangliaSink
 #*.sink.ganglia.servers=node1:8649,node2:9649
 
 #*.sink.ganglia.mode=unicast
+
