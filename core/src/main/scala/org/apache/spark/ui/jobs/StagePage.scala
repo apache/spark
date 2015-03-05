@@ -626,15 +626,16 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
   }
 
   private def getSchedulerDelay(info: TaskInfo, metrics: TaskMetrics): Long = {
-    val totalExecutionTime = {
-      if (info.gettingResultTime > 0) {
-        (info.gettingResultTime - info.launchTime)
+    val totalExecutionTime =
+      if (info.gettingResult) {
+        info.gettingResultTime - info.launchTime
+      } else if (info.finished) {
+        info.finishTime - info.launchTime
       } else {
-        (info.finishTime - info.launchTime)
+        0
       }
-    }
     val executorOverhead = (metrics.executorDeserializeTime +
       metrics.resultSerializationTime)
-    totalExecutionTime - metrics.executorRunTime - executorOverhead
+    math.max(0, totalExecutionTime - metrics.executorRunTime - executorOverhead)
   }
 }

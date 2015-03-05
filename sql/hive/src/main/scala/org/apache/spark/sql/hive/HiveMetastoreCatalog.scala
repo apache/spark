@@ -69,13 +69,23 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         val table = synchronized {
           client.getTable(in.database, in.name)
         }
-        val schemaString = table.getProperty("spark.sql.sources.schema")
         val userSpecifiedSchema =
-          if (schemaString == null) {
-            None
-          } else {
-            Some(DataType.fromJson(schemaString).asInstanceOf[StructType])
+          Option(table.getProperty("spark.sql.sources.schema.numParts")).map { numParts =>
+            val parts = (0 until numParts.toInt).map { index =>
+              val part = table.getProperty(s"spark.sql.sources.schema.part.${index}")
+              if (part == null) {
+                throw new AnalysisException(
+                  s"Could not read schema from the metastore because it is corrupted " +
+                  s"(missing part ${index} of the schema).")
+              }
+
+              part
+            }
+            // Stick all parts back to a single schema string in the JSON representation
+            // and convert it back to a StructType.
+            DataType.fromJson(parts.mkString).asInstanceOf[StructType]
           }
+
         // It does not appear that the ql client for the metastore has a way to enumerate all the
         // SerDe properties directly...
         val options = table.getTTable.getSd.getSerdeInfo.getParameters.toMap
@@ -119,7 +129,14 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
     tbl.setProperty("spark.sql.sources.provider", provider)
     if (userSpecifiedSchema.isDefined) {
-      tbl.setProperty("spark.sql.sources.schema", userSpecifiedSchema.get.json)
+      val threshold = hive.conf.schemaStringLengthThreshold
+      val schemaJsonString = userSpecifiedSchema.get.json
+      // Split the JSON string.
+      val parts = schemaJsonString.grouped(threshold).toSeq
+      tbl.setProperty("spark.sql.sources.schema.numParts", parts.size.toString)
+      parts.zipWithIndex.foreach { case (part, index) =>
+        tbl.setProperty(s"spark.sql.sources.schema.part.${index}", part)
+      }
     }
     options.foreach { case (key, value) => tbl.setSerdeParam(key, value) }
 
@@ -427,6 +444,10 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
    */
   object ParquetConversions extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = {
+      if (!plan.resolved) {
+        return plan
+      }
+
       // Collects all `MetastoreRelation`s which should be replaced
       val toBeReplaced = plan.collect {
         // Write path
@@ -617,7 +638,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         p
       } else if (childOutputDataTypes.size == tableOutputDataTypes.size &&
         childOutputDataTypes.zip(tableOutputDataTypes)
-          .forall { case (left, right) => DataType.equalsIgnoreNullability(left, right) }) {
+          .forall { case (left, right) => left.sameType(right) }) {
         // If both types ignoring nullability of ArrayType, MapType, StructType are the same,
         // use InsertIntoHiveTable instead of InsertIntoTable.
         InsertIntoHiveTable(p.table, p.partition, p.child, p.overwrite)
@@ -665,8 +686,7 @@ private[hive] case class InsertIntoHiveTable(
   override def output = child.output
 
   override lazy val resolved = childrenResolved && child.output.zip(table.output).forall {
-    case (childAttr, tableAttr) =>
-      DataType.equalsIgnoreNullability(childAttr.dataType, tableAttr.dataType)
+    case (childAttr, tableAttr) => childAttr.dataType.sameType(tableAttr.dataType)
   }
 }
 
@@ -757,7 +777,8 @@ private[hive] case class MetastoreRelation
   val columnOrdinals = AttributeMap(attributes.zipWithIndex)
 }
 
-object HiveMetastoreTypes {
+
+private[hive] object HiveMetastoreTypes {
   protected val ddlParser = new DDLParser(HiveQl.parseSql(_))
 
   def toDataType(metastoreType: String): DataType = synchronized {

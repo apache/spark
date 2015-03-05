@@ -126,6 +126,13 @@ private[sql] case class ParquetTableScan(
         conf)
 
     if (requestedPartitionOrdinals.nonEmpty) {
+      // This check is based on CatalystConverter.createRootConverter.
+      val primitiveRow = output.forall(a => ParquetTypesConverter.isPrimitiveType(a.dataType))
+
+      // Uses temporary variable to avoid the whole `ParquetTableScan` object being captured into
+      // the `mapPartitionsWithInputSplit` closure below.
+      val outputSize = output.size
+
       baseRDD.mapPartitionsWithInputSplit { case (split, iter) =>
         val partValue = "([^=]+)=([^=]+)".r
         val partValues =
@@ -143,19 +150,47 @@ private[sql] case class ParquetTableScan(
           relation.partitioningAttributes
             .map(a => Cast(Literal(partValues(a.name)), a.dataType).eval(EmptyRow))
 
-        new Iterator[Row] {
-          def hasNext = iter.hasNext
-          def next() = {
-            val row = iter.next()._2.asInstanceOf[SpecificMutableRow]
+        if (primitiveRow) {
+          new Iterator[Row] {
+            def hasNext = iter.hasNext
+            def next() = {
+              // We are using CatalystPrimitiveRowConverter and it returns a SpecificMutableRow.
+              val row = iter.next()._2.asInstanceOf[SpecificMutableRow]
 
-            // Parquet will leave partitioning columns empty, so we fill them in here.
-            var i = 0
-            while (i < requestedPartitionOrdinals.size) {
-              row(requestedPartitionOrdinals(i)._2) =
-                partitionRowValues(requestedPartitionOrdinals(i)._1)
-              i += 1
+              // Parquet will leave partitioning columns empty, so we fill them in here.
+              var i = 0
+              while (i < requestedPartitionOrdinals.size) {
+                row(requestedPartitionOrdinals(i)._2) =
+                  partitionRowValues(requestedPartitionOrdinals(i)._1)
+                i += 1
+              }
+              row
             }
-            row
+          }
+        } else {
+          // Create a mutable row since we need to fill in values from partition columns.
+          val mutableRow = new GenericMutableRow(outputSize)
+          new Iterator[Row] {
+            def hasNext = iter.hasNext
+            def next() = {
+              // We are using CatalystGroupConverter and it returns a GenericRow.
+              // Since GenericRow is not mutable, we just cast it to a Row.
+              val row = iter.next()._2.asInstanceOf[Row]
+
+              var i = 0
+              while (i < row.size) {
+                mutableRow(i) = row(i)
+                i += 1
+              }
+              // Parquet will leave partitioning columns empty, so we fill them in here.
+              i = 0
+              while (i < requestedPartitionOrdinals.size) {
+                mutableRow(requestedPartitionOrdinals(i)._2) =
+                  partitionRowValues(requestedPartitionOrdinals(i)._1)
+                i += 1
+              }
+              mutableRow
+            }
           }
         }
       }
@@ -243,7 +278,10 @@ private[sql] case class InsertIntoParquetTable(
     ParquetOutputFormat.setWriteSupportClass(job, writeSupport)
 
     val conf = ContextUtil.getConfiguration(job)
-    RowWriteSupport.setSchema(relation.output, conf)
+    // This is a hack. We always set nullable/containsNull/valueContainsNull to true
+    // for the schema of a parquet data.
+    val schema = StructType.fromAttributes(relation.output).asNullable
+    RowWriteSupport.setSchema(schema.toAttributes, conf)
 
     val fspath = new Path(relation.path)
     val fs = fspath.getFileSystem(conf)
@@ -434,22 +472,13 @@ private[parquet] class FilteringParquetRowInputFormat
      return splits
     }
 
-    Option(globalMetaData.getKeyValueMetaData.get(RowReadSupport.SPARK_METADATA_KEY)).foreach {
-      schemas =>
-        val mergedSchema = schemas
-          .map(DataType.fromJson(_).asInstanceOf[StructType])
-          .reduce(_ merge _)
-          .json
+    val metadata = configuration.get(RowWriteSupport.SPARK_ROW_SCHEMA)
+    val mergedMetadata = globalMetaData
+      .getKeyValueMetaData
+      .updated(RowReadSupport.SPARK_METADATA_KEY, setAsJavaSet(Set(metadata)))
 
-        val mergedMetadata = globalMetaData
-          .getKeyValueMetaData
-          .updated(RowReadSupport.SPARK_METADATA_KEY, setAsJavaSet(Set(mergedSchema)))
-
-        globalMetaData = new GlobalMetaData(
-          globalMetaData.getSchema,
-          mergedMetadata,
-          globalMetaData.getCreatedBy)
-    }
+    globalMetaData = new GlobalMetaData(globalMetaData.getSchema,
+      mergedMetadata, globalMetaData.getCreatedBy)
 
     val readContext = getReadSupport(configuration).init(
       new InitContext(configuration,

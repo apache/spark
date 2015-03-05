@@ -42,6 +42,11 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-cli</artifactId>
     </dependency>

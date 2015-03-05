@@ -34,6 +34,9 @@ ASF_PASSWORD=${ASF_PASSWORD:-XXX}
 GPG_PASSPHRASE=${GPG_PASSPHRASE:-XXX}
 GIT_BRANCH=${GIT_BRANCH:-branch-1.0}
 RELEASE_VERSION=${RELEASE_VERSION:-1.2.0}
+# Allows publishing under a different version identifier than
+# was present in the actual release sources (e.g. rc-X)
+PUBLISH_VERSION=${PUBLISH_VERSION:-$RELEASE_VERSION} 
 NEXT_VERSION=${NEXT_VERSION:-1.2.1}
 RC_NAME=${RC_NAME:-rc2}
 
@@ -97,30 +100,35 @@ if [[ ! "$@" =~ --skip-publish ]]; then
   pushd spark
   git checkout --force $GIT_TAG 
   
+  # Substitute in case published version is different than released
+  old="^\( \{2,4\}\)<version>${RELEASE_VERSION}<\/version>$"
+  new="\1<version>${PUBLISH_VERSION}<\/version>"
+  find . -name pom.xml | grep -v dev | xargs -I {} sed -i \
+    -e "s/${old}/${new}/" {}
+
   # Using Nexus API documented here:
   # https://support.sonatype.com/entries/39720203-Uploading-to-a-Staging-Repository-via-REST-API
   echo "Creating Nexus staging repository"
-  repo_request="<promoteRequest><data><description>Apache Spark $GIT_TAG</description></data></promoteRequest>"
+  repo_request="<promoteRequest><data><description>Apache Spark $GIT_TAG (published as $PUBLISH_VERSION)</description></data></promoteRequest>"
   out=$(curl -X POST -d "$repo_request" -u $ASF_USERNAME:$ASF_PASSWORD \
     -H "Content-Type:application/xml" -v \
     $NEXUS_ROOT/profiles/$NEXUS_PROFILE/start)
   staged_repo_id=$(echo $out | sed -e "s/.*\(orgapachespark-[0-9]\{4\}\).*/\1/")
   echo "Created Nexus staging repository: $staged_repo_id"
 
-  rm -rf $SPARK_REPO
-
-  mvn -DskipTests -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
+  build/mvn -DskipTests -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
     -Pyarn -Phive -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
     clean install
 
   ./dev/change-version-to-2.11.sh
   
-  mvn -DskipTests -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
+  build/mvn -DskipTests -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
     -Dscala-2.11 -Pyarn -Phive -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
     clean install
 
   ./dev/change-version-to-2.10.sh
 
+  rm -rf $SPARK_REPO
   pushd $SPARK_REPO
 
   # Remove any extra files generated during install
@@ -196,6 +204,12 @@ if [[ ! "$@" =~ --skip-package ]]; then
     if [[ $FLAGS == *scala-2.11* ]]; then
       ./dev/change-version-to-2.11.sh
     fi
+
+    # Create new Zinc instances for each binary release to avoid interference
+    # that causes OOM's and random compiler crashes.
+    zinc_port=${zinc_port:-3030}
+    zinc_port=$[$zinc_port + 1]
+    export ZINC_PORT=$zinc_port
 
     ./make-distribution.sh --name $NAME --tgz $FLAGS 2>&1 | tee ../binary-release-$NAME.log
     cd ..
