@@ -47,12 +47,12 @@
 
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core_${scala.binary.version}</artifactId>
+      <artifactId>spark-core_2.10</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
-      <artifactId>scalacheck_${scala.binary.version}</artifactId>
+      <artifactId>scalacheck_2.10</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -99,7 +99,7 @@
       <dependencies>
         <dependency>
           <groupId>org.scalamacros</groupId>
-          <artifactId>quasiquotes_${scala.binary.version}</artifactId>
+          <artifactId>quasiquotes_2.10</artifactId>
           <version>${scala.macros.version}</version>
         </dependency>
       </dependencies>

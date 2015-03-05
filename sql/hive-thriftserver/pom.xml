@@ -38,7 +38,7 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-hive_${scala.binary.version}</artifactId>
+      <artifactId>spark-hive_2.10</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
