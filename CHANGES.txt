@@ -3,6 +3,46 @@ Spark Change Log
 
 Release 1.3.0
 
+  [SQL] Make Strategies a public developer API
+  Michael Armbrust <michael@databricks.com>
+  2015-03-05 14:50:25 -0800
+  Commit: 556e0de, github.com/apache/spark/pull/4920
+
+  [SPARK-6163][SQL] jsonFile should be backed by the data source API
+  Yin Huai <yhuai@databricks.com>
+  2015-03-05 14:49:44 -0800
+  Commit: 083fed5, github.com/apache/spark/pull/4896
+
+  [SPARK-6145][SQL] fix ORDER BY on nested fields
+  Wenchen Fan <cloud0fan@outlook.com>, Michael Armbrust <michael@databricks.com>
+  2015-03-05 14:49:01 -0800
+  Commit: e358f55, github.com/apache/spark/pull/4918
+
+  [SPARK-6175] Fix standalone executor log links when ephemeral ports or SPARK_PUBLIC_DNS are used
+  Josh Rosen <joshrosen@databricks.com>
+  2015-03-05 12:04:00 -0800
+  Commit: 988b498, github.com/apache/spark/pull/4903
+
+  SPARK-6182 [BUILD] spark-parent pom needs to be published for both 2.10 and 2.11
+  Sean Owen <sowen@cloudera.com>
+  2015-03-05 11:31:48 -0800
+  Commit: ae315d2, github.com/apache/spark/pull/4912
+
+  Revert "[SPARK-6153] [SQL] promote guava dep for hive-thriftserver"
+  Cheng Lian <lian@databricks.com>
+  2015-03-05 17:58:18 +0800
+  Commit: f8205d3
+
+  [SPARK-6153] [SQL] promote guava dep for hive-thriftserver
+  Daoyuan Wang <daoyuan.wang@intel.com>
+  2015-03-05 16:35:17 +0800
+  Commit: b92d925, github.com/apache/spark/pull/4884
+
+  Updating CHANGES file
+  Patrick Wendell <patrick@databricks.com>
+  2015-03-04 21:19:49 -0800
+  Commit: 87eac3c
+
   SPARK-5143 [BUILD] [WIP] spark-network-yarn 2.11 depends on spark-network-shuffle 2.10
   Sean Owen <sowen@cloudera.com>
   2015-03-04 21:00:51 -0800
