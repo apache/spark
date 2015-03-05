@@ -55,7 +55,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   private var principal: String = null
   @volatile private var loggedInViaKeytab = false
   @volatile private var loggedInUGI: UserGroupInformation = null
-  @volatile private var lastCredentialsRefresh = 0l
+  @volatile private var lastCredentialsRefresh = 0L
   private lazy val delegationTokenRenewer =
     Executors.newSingleThreadScheduledExecutor(
       Utils.namedThreadFactory("Delegation Token Refresh Thread"))
@@ -130,8 +130,22 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
             newCredentials.writeTokenStorageToStream(stream)
             stream.hflush()
             stream.close()
-            remoteFs.delete(tokenPath, true)
+            // HDFS does reads by inodes now, so just doing a rename should be fine. But I could
+            // not find a clear explanation of when the blocks on HDFS are deleted. Ideally, we
+            // would not need this, but just be defensive to ensure we don't mess up the
+            // credentials. So create a file to show that we are currently updating - if the
+            // reader sees this file, they go away and come back later. Then delete old token and
+            // rename the old to new.
+            val updatingPath = new Path(stagingDirPath, "_UPDATING")
+            if (remoteFs.exists(updatingPath)) {
+              remoteFs.delete(updatingPath, true)
+            }
+            remoteFs.create(updatingPath).close()
+            if (remoteFs.exists(tokenPath)) {
+              remoteFs.delete(tokenPath, true)
+            }
             remoteFs.rename(tempTokenPath, tokenPath)
+            remoteFs.delete(updatingPath, true)
             delegationTokenRenewer.schedule(
               this, (0.75 * (getLatestValidity - System.currentTimeMillis())).toLong,
               TimeUnit.MILLISECONDS)
@@ -151,13 +165,19 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
         val sparkStagingDir = System.getenv("SPARK_YARN_STAGING_DIR")
         val stagingDirPath = new Path(remoteFs.getHomeDirectory, sparkStagingDir)
         val credentialsFilePath = new Path(stagingDirPath, credentialsFile)
+        // If an update is currently in progress, come back later!
+        if (remoteFs.exists( new Path(stagingDirPath, "_UPDATING"))) {
+          delegationTokenRenewer.schedule(delegationTokenExecuterUpdaterThread, 1, TimeUnit.HOURS)
+        }
+        // Now check if the file exists, if it does go get the credentials from there
         if (remoteFs.exists(credentialsFilePath)) {
           val status = remoteFs.getFileStatus(credentialsFilePath)
           val modTimeAtStart = status.getModificationTime
           if (modTimeAtStart > lastCredentialsRefresh) {
             val newCredentials = getCredentialsFromHDFSFile(remoteFs, credentialsFilePath)
             val newStatus = remoteFs.getFileStatus(credentialsFilePath)
-            // File was updated after we started reading it, lets come back later and try to read it.
+            // File was updated after we started reading it, lets come back later and try to read
+            // it.
             if (newStatus.getModificationTime != modTimeAtStart) {
               delegationTokenRenewer
                 .schedule(delegationTokenExecuterUpdaterThread, 1, TimeUnit.HOURS)
@@ -177,7 +197,8 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
         }
       }
     } catch {
-      // Since the file may get deleted while we are reading it,
+      // Since the file may get deleted while we are reading it, catch the Exception and come
+      // back in an hour to try again
       case e: Exception =>
         logWarning(
           "Error encountered while trying to update credentials, will try again in 1 hour", e)
