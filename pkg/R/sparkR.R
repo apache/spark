@@ -160,7 +160,7 @@ sparkR.init <- function(
     close(f)
     file.remove(path)
     if (length(sparkRBackendPort) == 0 || sparkRBackendPort == 0 ||
-     length(monitorPort) == 0 || monitorPort == 0) {
+        length(monitorPort) == 0 || monitorPort == 0) {
       stop("JVM failed to launch")
     }
     assign(".monitorConn", socketConnection(port = monitorPort), envir = .sparkREnv)
