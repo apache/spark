@@ -362,6 +362,20 @@ test_that("zipWithUniqueId() on RDDs", {
   expect_equal(actual, expected)
 })
 
+test_that("zipWithIndex() on RDDs", {
+  rdd <- parallelize(sc, list("a", "b", "c", "d", "e"), 3L)
+  actual <- collect(zipWithIndex(rdd))
+  expected <- list(list("a", 0), list("b", 1), list("c", 2), 
+                   list("d", 3), list("e", 4))
+  expect_equal(actual, expected)
+  
+  rdd <- parallelize(sc, list("a", "b", "c", "d", "e"), 1L)
+  actual <- collect(zipWithIndex(rdd))
+  expected <- list(list("a", 0), list("b", 1), list("c", 2), 
+                   list("d", 3), list("e", 4))
+  expect_equal(actual, expected)
+})
+
 test_that("keys() on RDDs", {
   keys <- keys(intRdd)
   actual <- collect(keys)

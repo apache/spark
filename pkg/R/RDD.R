@@ -1468,6 +1468,64 @@ setMethod("zipWithUniqueId",
             lapplyPartitionsWithIndex(x, partitionFunc)
           })
 
+#' Zip an RDD with its element indices.
+#'
+#' The ordering is first based on the partition index and then the
+#' ordering of items within each partition. So the first item in
+#' the first partition gets index 0, and the last item in the last
+#' partition receives the largest index.
+#'
+#' This method needs to trigger a Spark job when this RDD contains
+#' more than one partition.
+#'
+#' @param x An RDD to be zipped.
+#' @return An RDD with zipped items.
+#' @rdname zipWithIndex
+#' @seealso zipWithUniqueId
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, list("a", "b", "c", "d", "e"), 3L)
+#' collect(zipWithIndex(rdd))
+#' # list(list("a", 0), list("b", 1), list("c", 2), list("d", 3), list("e", 4))
+#'}
+setGeneric("zipWithIndex", function(x) { standardGeneric("zipWithIndex") })
+
+#' @rdname zipWithIndex
+#' @aliases zipWithIndex,RDD
+setMethod("zipWithIndex",
+          signature(x = "RDD"),
+          function(x) {
+            n <- numPartitions(x)
+            if (n > 1) {
+              nums <- collect(lapplyPartition(x,
+                                              function(part) {
+                                                list(length(part))
+                                              }))
+              startIndices <- Reduce("+", nums, accumulate = TRUE)
+            }
+
+            partitionFunc <- function(split, part) {
+              if (split == 0) {
+                startIndex <- 0
+              } else {
+                startIndex <- startIndices[[split]]
+              }
+
+              mapply(
+                function(item, index) {
+                  list(item, index - 1 + startIndex)
+                },
+                part,
+                seq_along(part),
+                SIMPLIFY = FALSE)
+           }
+
+           lapplyPartitionsWithIndex(x, partitionFunc)
+         })
+
+
 ############ Binary Functions #############
 
 #' Return the union RDD of two RDDs.
