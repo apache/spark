@@ -1500,19 +1500,19 @@ setMethod("zipWithIndex",
             n <- numPartitions(x)
             if (n > 1) {
               nums <- collect(lapplyPartition(x,
-	                                      function(part) {
-	                                        list(length(part))
-	                                      }))
-	      startIndices <- Reduce("+", nums, accumulate = TRUE)
-	    }
+                                              function(part) {
+                                                list(length(part))
+                                              }))
+              startIndices <- Reduce("+", nums, accumulate = TRUE)
+            }
 
-	    partitionFunc <- function(split, part) {
-	      if (split == 0) {
-	        startIndex <- 0
+            partitionFunc <- function(split, part) {
+              if (split == 0) {
+                startIndex <- 0
               } else {
-	        startIndex <- startIndices[[split]]
-	      }
-			  
+                startIndex <- startIndices[[split]]
+              }
+
               mapply(
                 function(item, index) {
                   list(item, index - 1 + startIndex)
@@ -1521,9 +1521,10 @@ setMethod("zipWithIndex",
                 seq_along(part),
                 SIMPLIFY = FALSE)
            }
-			
+
            lapplyPartitionsWithIndex(x, partitionFunc)
          })
+
 
 ############ Binary Functions #############
 
