@@ -370,7 +370,7 @@ class NominalAttribute private[ml] (
     name.foreach(bldr.putString(NAME, _))
     index.foreach(bldr.putLong(INDEX, _))
     isOrdinal.foreach(bldr.putBoolean(ORDINAL, _))
-    numValues.foreach(bldr.putLong(CARDINALITY, _))
+    numValues.foreach(bldr.putLong(NUM_VALUES, _))
     values.foreach(v => bldr.putStringArray(VALUES, v))
     bldr.build()
   }
@@ -410,11 +410,11 @@ object NominalAttribute extends AttributeFactory {
     val name = if (metadata.contains(NAME)) Some(metadata.getString(NAME)) else None
     val index = if (metadata.contains(INDEX)) Some(metadata.getLong(INDEX).toInt) else None
     val isOrdinal = if (metadata.contains(ORDINAL)) Some(metadata.getBoolean(ORDINAL)) else None
-    val cardinality =
-      if (metadata.contains(CARDINALITY)) Some(metadata.getLong(CARDINALITY).toInt) else None
+    val numValues =
+      if (metadata.contains(NUM_VALUES)) Some(metadata.getLong(NUM_VALUES).toInt) else None
     val values =
       if (metadata.contains(VALUES)) Some(metadata.getStringArray(VALUES)) else None
-    new NominalAttribute(name, index, isOrdinal, cardinality, values)
+    new NominalAttribute(name, index, isOrdinal, numValues, values)
   }
 }
 
