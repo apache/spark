@@ -17,9 +17,8 @@
 
 package org.apache.spark.repl
 
-import java.io.{ByteArrayOutputStream, InputStream, FileNotFoundException}
-import java.net.{URI, URL, URLEncoder}
-import java.util.concurrent.{Executors, ExecutorService}
+import java.io.{ByteArrayOutputStream, InputStream}
+import java.net.{HttpURLConnection, URI, URL, URLEncoder}
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
@@ -71,30 +70,48 @@ class ExecutorClassLoader(conf: SparkConf, classUri: String, parent: ClassLoader
     }
   }
 
-  def findClassLocally(name: String): Option[Class[_]] = {
-    try {
-      val pathInDirectory = name.replace('.', '/') + ".class"
-      val inputStream = {
-        if (fileSystem != null) {
-          fileSystem.open(new Path(directory, pathInDirectory))
-        } else {
-          val url = if (SparkEnv.get.securityManager.isAuthenticationEnabled()) {
-            val uri = new URI(classUri + "/" + urlEncode(pathInDirectory))
-            val newuri = Utils.constructURIForAuthentication(uri, SparkEnv.get.securityManager)
-            newuri.toURL
-          } else {
-            new URL(classUri + "/" + urlEncode(pathInDirectory))
-          }
+  private def getClassFileInputStreamFromHttpServer(pathInDirectory: String): InputStream = {
+    val url = if (SparkEnv.get.securityManager.isAuthenticationEnabled()) {
+      val uri = new URI(classUri + "/" + urlEncode(pathInDirectory))
+      val newuri = Utils.constructURIForAuthentication(uri, SparkEnv.get.securityManager)
+      newuri.toURL
+    } else {
+      new URL(classUri + "/" + urlEncode(pathInDirectory))
+    }
+    val connection: HttpURLConnection = Utils.setupSecureURLConnection(url.openConnection(),
+      SparkEnv.get.securityManager).asInstanceOf[HttpURLConnection]
+    if (connection.getResponseCode != 200) {
+      connection.disconnect()
+      throw new ClassNotFoundException(s"Class file not found at URL $url")
+    } else {
+      connection.getInputStream
+    }
+  }
 
-          Utils.setupSecureURLConnection(url.openConnection(), SparkEnv.get.securityManager)
-            .getInputStream
+  private def getClassFileInputStreamFromFileSystem(pathInDirectory: String): InputStream = {
+    val path = new Path(directory, pathInDirectory)
+    if (fileSystem.exists(path)) {
+      fileSystem.open(path)
+    } else {
+      throw new ClassNotFoundException(s"Class file not found at path $path")
+    }
+  }
+
+  def findClassLocally(name: String): Option[Class[_]] = {
+    val pathInDirectory = name.replace('.', '/') + ".class"
+    var inputStream: InputStream = null
+    try {
+      inputStream = {
+        if (fileSystem != null) {
+          getClassFileInputStreamFromFileSystem(pathInDirectory)
+        } else {
+          getClassFileInputStreamFromHttpServer(pathInDirectory)
         }
       }
       val bytes = readAndTransformClass(name, inputStream)
-      inputStream.close()
       Some(defineClass(name, bytes, 0, bytes.length))
     } catch {
-      case e: FileNotFoundException =>
+      case e: ClassNotFoundException =>
         // We did not find the class
         logDebug(s"Did not load class $name from REPL class server at $uri", e)
         None
@@ -102,6 +119,15 @@ class ExecutorClassLoader(conf: SparkConf, classUri: String, parent: ClassLoader
         // Something bad happened while checking if the class exists
         logError(s"Failed to check existence of class $name on REPL class server at $uri", e)
         None
+    } finally {
+      if (inputStream != null) {
+        try {
+          inputStream.close()
+        } catch {
+          case e: Exception =>
+            logError("Exception while closing inputStream", e)
+        }
+      }
     }
   }
 
