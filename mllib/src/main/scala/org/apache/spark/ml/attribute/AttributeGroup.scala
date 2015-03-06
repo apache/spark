@@ -36,6 +36,10 @@ class AttributeGroup private (
     val numAttributes: Option[Int],
     attrs: Option[Array[Attribute]]) extends Serializable {
 
+  require(name.nonEmpty, "Cannot have an empty string for name.")
+  require(!(numAttributes.isDefined && attrs.isDefined),
+    "Cannot have both numAttributes and attrs defined.")
+
   /**
    * Creates an attribute group without attribute info.
    * @param name name of the attribute group
@@ -87,12 +91,19 @@ class AttributeGroup private (
   /** Index of an attribute specified by name. */
   def indexOf(attrName: String): Int = nameToIndex(attrName)
 
-  /** Gets an attribute by name. */
+  /** Gets an attribute by its name. */
   def apply(attrName: String): Attribute = {
     attributes.get(indexOf(attrName))
   }
 
+  /** Gets an attribute by its name. */
+  def getAttr(attrName: String): Attribute = this(attrName)
+
+  /** Gets an attribute by its index. */
   def apply(attrIndex: Int): Attribute = attributes.get(attrIndex)
+
+  /** Gets an attribute by its index. */
+  def getAttr(attrIndex: Int): Attribute = this(attrIndex)
 
   /** Converts to metadata without name. */
   private[attribute] def toMetadata: Metadata = {

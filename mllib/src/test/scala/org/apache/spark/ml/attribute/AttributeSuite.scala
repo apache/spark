@@ -84,6 +84,15 @@ class AttributeSuite extends FunSuite {
     assert(attr2 === Attribute.fromMetadata(attr2.toMetadata()))
   }
 
+  test("bad numeric attributes") {
+    val attr = NumericAttribute.defaultAttr
+    intercept[IllegalArgumentException](attr.withName(""))
+    intercept[IllegalArgumentException](attr.withIndex(-1))
+    intercept[IllegalArgumentException](attr.withStd(-0.1))
+    intercept[IllegalArgumentException](attr.withSparsity(-0.5))
+    intercept[IllegalArgumentException](attr.withSparsity(1.5))
+  }
+
   test("default nominal attribute") {
     val attr: NominalAttribute = NominalAttribute.defaultAttr
     val metadata = Metadata.fromJson("""{"type":"nominal"}""")
@@ -94,7 +103,7 @@ class AttributeSuite extends FunSuite {
     assert(attr.name.isEmpty)
     assert(attr.index.isEmpty)
     assert(attr.values.isEmpty)
-    assert(attr.cardinality.isEmpty)
+    assert(attr.numValues.isEmpty)
     assert(attr.isOrdinal.isEmpty)
     assert(attr.toMetadata() === metadata)
     assert(attr.toMetadata(withType = true) === metadata)
@@ -125,6 +134,7 @@ class AttributeSuite extends FunSuite {
     assert(attr.index === Some(index))
     assert(attr.values === Some(values))
     assert(attr.indexOf("medium") === 1)
+    assert(attr.getValue(1) === "medium")
     assert(attr.toMetadata() === metadata)
     assert(attr.toMetadata(withType = true) === metadata)
     assert(attr.toMetadata(withType = false) === metadataWithoutType)
@@ -139,6 +149,13 @@ class AttributeSuite extends FunSuite {
     assert(attr2.indexOf("x-large") === 3)
     assert(attr2 === Attribute.fromMetadata(attr2.toMetadata()))
     assert(attr2 === NominalAttribute.fromMetadata(attr2.toMetadata(withType = false)))
+  }
+
+  test("bad nominal attributes") {
+    val attr = NominalAttribute.defaultAttr
+    intercept[IllegalArgumentException](attr.withName(""))
+    intercept[IllegalArgumentException](attr.withIndex(-1))
+    intercept[IllegalArgumentException](attr.withNumValues(-1))
   }
 
   test("default binary attribute") {
@@ -185,5 +202,11 @@ class AttributeSuite extends FunSuite {
     assert(attr === Attribute.fromMetadata(metadata))
     assert(attr === BinaryAttribute.fromMetadata(metadataWithoutType))
     assert(attr.withoutIndex === Attribute.fromStructField(attr.toStructField()))
+  }
+
+  test("bad binary attributes") {
+    val attr = BinaryAttribute.defaultAttr
+    intercept[IllegalArgumentException](attr.withName(""))
+    intercept[IllegalArgumentException](attr.withIndex(-1))
   }
 }

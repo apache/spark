@@ -26,6 +26,13 @@ import org.apache.spark.sql.types.{DoubleType, Metadata, MetadataBuilder, Struct
  */
 sealed abstract class Attribute extends Serializable {
 
+  name.foreach { n =>
+    require(n.nonEmpty, "Cannot have an empty string for name.")
+  }
+  index.foreach { i =>
+    require(i >= 0, s"Index cannot be negative but got $i")
+  }
+
   /** Attribute type. */
   def attrType: AttributeType
 
@@ -155,6 +162,13 @@ class NumericAttribute private[ml] (
     val std: Option[Double] = None,
     val sparsity: Option[Double] = None) extends Attribute {
 
+  std.foreach { s =>
+    require(s >= 0.0, s"Standard deviation cannot be negative but got $s.")
+  }
+  sparsity.foreach { s =>
+    require(s >= 0.0 && s <= 1.0, s"Sparsity must be in [0, 1] but got $s.")
+  }
+
   override def attrType: AttributeType = AttributeType.Numeric
 
   override def withName(name: String): NumericAttribute = copy(name = Some(name))
@@ -271,15 +285,22 @@ object NumericAttribute extends AttributeFactory {
  * @param name optional name
  * @param index optional index
  * @param isOrdinal whether this attribute is ordinal (optional)
- * @param cardinality optional number of values
- * @param values optional values
+ * @param numValues optional number of values. At most one of `numValues` and `values` can be
+ *                  defined.
+ * @param values optional values. At most one of `numValues` and `values` can be defined.
  */
 class NominalAttribute private[ml] (
     override val name: Option[String] = None,
     override val index: Option[Int] = None,
     val isOrdinal: Option[Boolean] = None,
-    val cardinality: Option[Int] = None,
+    val numValues: Option[Int] = None,
     val values: Option[Array[String]] = None) extends Attribute {
+
+  numValues.foreach { n =>
+    require(n >= 0, s"numValues cannot be negative but got $n.")
+  }
+  require(!(numValues.isDefined && values.isDefined),
+    "Cannot have both numValues and values defined.")
 
   override def attrType: AttributeType = AttributeType.Nominal
 
@@ -299,15 +320,24 @@ class NominalAttribute private[ml] (
   /** Tests whether this attribute contains a specific value. */
   def hasValue(value: String): Boolean = valueToIndex.contains(value)
 
-  /** Copy with new values. */
+  /** Gets a value given its index. */
+  def getValue(index: Int): String = values.get(index)
+
+  override def withName(name: String): NominalAttribute = copy(name = Some(name))
+  override def withoutName: NominalAttribute = copy(name = None)
+
+  override def withIndex(index: Int): NominalAttribute = copy(index = Some(index))
+  override def withoutIndex: NominalAttribute = copy(index = None)
+
+  /** Copy with new values and empty `numValues`. */
   def withValues(values: Array[String]): NominalAttribute = {
-    copy(cardinality = None, values = Some(values))
+    copy(numValues = None, values = Some(values))
   }
 
-  /** Copy with new vaues. */
+  /** Copy with new values and empty `numValues`. */
   @varargs
   def withValues(first: String, others: String*): NominalAttribute = {
-    copy(cardinality = None, values = Some((first +: others).toArray))
+    copy(numValues = None, values = Some((first +: others).toArray))
   }
 
   /** Copy without the values. */
@@ -315,33 +345,23 @@ class NominalAttribute private[ml] (
     copy(values = None)
   }
 
-  /** Copy with a new cardinality. */
-  def withCardinality(cardinality: Int): NominalAttribute = {
-    if (values.isDefined) {
-      throw new IllegalArgumentException("Cannot copy with cardinality if values are defined.")
-    } else {
-      copy(cardinality = Some(cardinality))
-    }
+  /** Copy with a new `numValues` and empty `values`. */
+  def withNumValues(numValues: Int): NominalAttribute = {
+    copy(numValues = Some(numValues), values = None)
   }
 
-  /** Copy without the cardinality. */
-  def withoutCardinality: NominalAttribute = copy(cardinality = None)
+  /** Copy without the `numValues`. */
+  def withoutNumValues: NominalAttribute = copy(numValues = None)
 
   /** Creates a copy of this attribute with optional changes. */
   private def copy(
       name: Option[String] = name,
       index: Option[Int] = index,
       isOrdinal: Option[Boolean] = isOrdinal,
-      cardinality: Option[Int] = cardinality,
+      numValues: Option[Int] = numValues,
       values: Option[Array[String]] = values): NominalAttribute = {
-    new NominalAttribute(name, index, isOrdinal, cardinality, values)
+    new NominalAttribute(name, index, isOrdinal, numValues, values)
   }
-
-  override def withName(name: String): NominalAttribute = copy(name = Some(name))
-  override def withoutName: NominalAttribute = copy(name = None)
-
-  override def withIndex(index: Int): NominalAttribute = copy(index = Some(index))
-  override def withoutIndex: NominalAttribute = copy(index = None)
 
   private[attribute] override def toMetadata(withType: Boolean): Metadata = {
     import org.apache.spark.ml.attribute.AttributeKeys._
@@ -350,7 +370,7 @@ class NominalAttribute private[ml] (
     name.foreach(bldr.putString(NAME, _))
     index.foreach(bldr.putLong(INDEX, _))
     isOrdinal.foreach(bldr.putBoolean(ORDINAL, _))
-    cardinality.foreach(bldr.putLong(CARDINALITY, _))
+    numValues.foreach(bldr.putLong(CARDINALITY, _))
     values.foreach(v => bldr.putStringArray(VALUES, v))
     bldr.build()
   }
@@ -361,7 +381,7 @@ class NominalAttribute private[ml] (
         (name == o.name) &&
           (index == o.index) &&
           (isOrdinal == o.isOrdinal) &&
-          (cardinality == o.cardinality) &&
+          (numValues == o.numValues) &&
           (values.map(_.toSeq) == o.values.map(_.toSeq))
       case _ =>
         false
@@ -373,7 +393,7 @@ class NominalAttribute private[ml] (
     sum = 37 * sum + name.hashCode
     sum = 37 * sum + index.hashCode
     sum = 37 * sum + isOrdinal.hashCode
-    sum = 37 * sum + cardinality.hashCode
+    sum = 37 * sum + numValues.hashCode
     sum = 37 * sum + values.map(_.toSeq).hashCode
     sum
   }
@@ -409,6 +429,10 @@ class BinaryAttribute private[ml] (
     override val index: Option[Int] = None,
     val values: Option[Array[String]] = None)
   extends Attribute {
+
+  values.foreach { v =>
+    require(v.length == 2, s"Number of values must be 2 for a binary attribute but got ${v.toSeq}.")
+  }
 
   override def attrType: AttributeType = AttributeType.Binary
 
