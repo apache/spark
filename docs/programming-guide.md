@@ -1353,8 +1353,11 @@ data.map(x -> accum.add(x); f(x););
 <div data-lang="python"  markdown="1">
 {% highlight python %}
 accum = sc.accumulator(0)
-data.map(lambda x: acc.add(x) and f(x))
-# Here, acc is still 0 because no actions have cause the `map` to be computed.
+def g(x):
+  acc.add(x)
+  return f(x)
+data.map(g)
+# Here, acc is still 0 because no actions have caused the `map` to be computed.
 {% endhighlight %}
 </div>
 
