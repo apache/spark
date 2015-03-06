@@ -158,6 +158,7 @@ case class Sort(
     val input = child match {
       case Project(list, c) => list.filter {
         case Alias(g: GetField, _) => false
+        case Alias(g: GetItem, _) => false
         case _ => true
       }.map(_.toAttribute)
       case _ => child.flatMap(_.output)

@@ -1061,4 +1061,11 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(sql("SELECT 1 FROM nestedOrder ORDER BY c[0].d"), Row(1))
     checkAnswer(sql("SELECT c[0].d FROM nestedOrder ORDER BY c[0].d"), Row(1))
   }
+
+  test("SPARK-6145: special cases") {
+    jsonRDD(sparkContext.makeRDD(
+      """{"a": {"b": [1]}, "b": [{"a": 1}], "c0": {"a": 1}}""" :: Nil)).registerTempTable("t")
+    checkAnswer(sql("SELECT a.b[0] FROM t ORDER BY c0.a"), Row(1))
+    checkAnswer(sql("SELECT b[0].a FROM t ORDER BY c0.a"), Row(1))
+  }
 }
