@@ -42,11 +42,6 @@ private[spark] trait RpcEnv {
   private[rpc] def endpointRef(endpoint: RpcEndpoint): RpcEndpointRef
 
   /**
-   * Return an ActionScheduler for the caller to run long-time actions out of the current thread.
-   */
-  def scheduler: ActionScheduler
-
-  /**
    * Return the address that [[RpcEnv]] is listening to.
    */
   def address: RpcAddress

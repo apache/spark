@@ -61,8 +61,6 @@ private[spark] class AkkaRpcEnv private (
    */
   private val endpointToRef = new ConcurrentHashMap[RpcEndpoint, RpcEndpointRef]()
 
-  override val scheduler = new ActionSchedulerImpl(conf)
-
   /**
    * Need this map to remove `RpcEndpoint` from `endpointToRef` via a `RpcEndpointRef`
    */
