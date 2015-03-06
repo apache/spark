@@ -127,41 +127,10 @@ private[spark] class AkkaRpcEnv private (
         case e: AssociationEvent =>
           // TODO ignore?
 
-        case AkkaMessage(message: Any, reply: Boolean)=>
-          logDebug("Received RPC message: " + AkkaMessage(message, reply))
+        case m: AkkaMessage =>
+          logDebug(s"Received RPC message: $m")
           safelyCall(endpoint) {
-            val s = sender()
-            val pf =
-              if (reply) {
-                endpoint.receiveAndReply(new RpcCallContext {
-                  override def sendFailure(e: Throwable): Unit = {
-                    s ! AkkaFailure(e)
-                  }
-
-                  override def reply(response: Any): Unit = {
-                    s ! AkkaMessage(response, false)
-                  }
-
-                  // Some RpcEndpoints need to know the sender's address
-                  override val sender: RpcEndpointRef =
-                    new AkkaRpcEndpointRef(defaultAddress, s, conf)
-                })
-              } else {
-                endpoint.receive
-              }
-            try {
-              if (pf.isDefinedAt(message)) {
-                pf.apply(message)
-              }
-            } catch {
-              case NonFatal(e) =>
-                if (reply) {
-                  // If the sender asks a reply, we should send the error back to the sender
-                  s ! AkkaFailure(e)
-                } else {
-                  throw e
-                }
-            }
+            processMessage(endpoint, m, sender)
           }
         case message: Any => {
           logWarning(s"Unknown message: $message")
@@ -180,6 +149,42 @@ private[spark] class AkkaRpcEnv private (
     // Now actorRef can be created safely
     endpointRef.init()
     endpointRef
+  }
+
+  private def processMessage(endpoint: RpcEndpoint, m: AkkaMessage, _sender: ActorRef): Unit = {
+    val message = m.message
+    val reply = m.reply
+    val pf =
+      if (reply) {
+        endpoint.receiveAndReply(new RpcCallContext {
+          override def sendFailure(e: Throwable): Unit = {
+            _sender ! AkkaFailure(e)
+          }
+
+          override def reply(response: Any): Unit = {
+            _sender ! AkkaMessage(response, false)
+          }
+
+          // Some RpcEndpoints need to know the sender's address
+          override val sender: RpcEndpointRef =
+            new AkkaRpcEndpointRef(defaultAddress, _sender, conf)
+        })
+      } else {
+        endpoint.receive
+      }
+    try {
+      if (pf.isDefinedAt(message)) {
+        pf.apply(message)
+      }
+    } catch {
+      case NonFatal(e) =>
+        if (reply) {
+          // If the sender asks a reply, we should send the error back to the sender
+          _sender ! AkkaFailure(e)
+        } else {
+          throw e
+        }
+    }
   }
 
   /**
