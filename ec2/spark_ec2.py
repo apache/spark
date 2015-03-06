@@ -558,8 +558,11 @@ def launch_cluster(conn, opts, cluster_name):
                                       placement_group=opts.placement_group,
                                       user_data=user_data_content)
                 slave_nodes += slave_res.instances
-                print "Launched %d slaves in %s, regid = %s" % (num_slaves_this_zone,
-                                                                zone, slave_res.id)
+                print "Launched {s} slave{plural_s} in {z}, regid = {r}".format(
+                    s=num_slaves_this_zone,
+                    plural_s=('' if num_slaves_this_zone == 1 else 's'),
+                    z=zone,
+                    r=slave_res.id)
             i += 1
 
     # Launch or resume masters
