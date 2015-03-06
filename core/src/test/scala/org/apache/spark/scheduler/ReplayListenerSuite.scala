@@ -61,7 +61,7 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
     try {
       val replayer = new ReplayListenerBus()
       replayer.addListener(eventMonster)
-      replayer.replay(logData, SPARK_VERSION, logFilePath.toString)
+      replayer.replay(logData, logFilePath.toString)
     } finally {
       logData.close()
     }
@@ -115,12 +115,12 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
     assert(!eventLog.isDir)
 
     // Replay events
-    val (logData, version) = EventLoggingListener.openEventLog(eventLog.getPath(), fileSystem)
+    val logData = EventLoggingListener.openEventLog(eventLog.getPath(), fileSystem)
     val eventMonster = new EventMonster(conf)
     try {
       val replayer = new ReplayListenerBus()
       replayer.addListener(eventMonster)
-      replayer.replay(logData, version, eventLog.getPath().toString)
+      replayer.replay(logData, eventLog.getPath().toString)
     } finally {
       logData.close()
     }
@@ -150,11 +150,4 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
     override def start() { }
 
   }
-
-  private def getCompressionCodec(codecName: String) = {
-    val conf = new SparkConf
-    conf.set("spark.io.compression.codec", codecName)
-    CompressionCodec.createCodec(conf)
-  }
-
 }

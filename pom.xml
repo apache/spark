@@ -25,7 +25,7 @@
     <version>14</version>
   </parent>
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-parent</artifactId>
+  <artifactId>spark-parent_2.10</artifactId>
   <version>1.3.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
@@ -583,10 +583,18 @@
         <artifactId>jackson-databind</artifactId>
         <version>${fasterxml.jackson.version}</version>
       </dependency>
+      <!-- Guava is excluded because of SPARK-6149.  The Guava version referenced in this module is
+           15.0, which causes runtime incompatibility issues. -->
       <dependency>
         <groupId>com.fasterxml.jackson.module</groupId>
         <artifactId>jackson-module-scala_2.10</artifactId>
         <version>${fasterxml.jackson.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.scala-lang</groupId>
@@ -1605,7 +1613,7 @@
       <properties>
         <hadoop.version>1.0.3-mapr-3.0.3</hadoop.version>
         <yarn.version>2.4.1-mapr-1408</yarn.version>
-        <hbase.version>0.94.17-mapr-1405</hbase.version>
+        <hbase.version>0.98.4-mapr-1408</hbase.version>
         <zookeeper.version>3.4.5-mapr-1406</zookeeper.version>
       </properties>
     </profile>
@@ -1615,7 +1623,7 @@
       <properties>
         <hadoop.version>2.4.1-mapr-1408</hadoop.version>
         <yarn.version>2.4.1-mapr-1408</yarn.version>
-        <hbase.version>0.94.17-mapr-1405-4.0.0-FCS</hbase.version>
+        <hbase.version>0.98.4-mapr-1408</hbase.version>
         <zookeeper.version>3.4.5-mapr-1406</zookeeper.version>
       </properties>
       <dependencies>

@@ -15,24 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.api.java;
+package test.org.apache.spark.sql;
 
 import java.io.Serializable;
 
-import org.apache.spark.sql.test.TestSQLContext$;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.api.java.UDF1;
+import org.apache.spark.sql.api.java.UDF2;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.test.TestSQLContext$;
 import org.apache.spark.sql.types.DataTypes;
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
 // serialized, as an alternative to converting these anonymous classes to static inner classes;
 // see http://stackoverflow.com/questions/758570/.
-public class JavaAPISuite implements Serializable {
+public class JavaUDFSuite implements Serializable {
   private transient JavaSparkContext sc;
   private transient SQLContext sqlContext;
 

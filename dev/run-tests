@@ -141,29 +141,41 @@ echo "========================================================================="
 CURRENT_BLOCK=$BLOCK_BUILD
 
 {
+  HIVE_BUILD_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-thriftserver"
+  HIVE_12_BUILD_ARGS="$HIVE_BUILD_ARGS -Phive-0.12.0"
 
-  # NOTE: echo "q" is needed because sbt on encountering a build file with failure
-  # (either resolution or compilation) prompts the user for input either q, r, etc
-  # to quit or retry. This echo is there to make it not block.
-  # NOTE: Do not quote $BUILD_MVN_PROFILE_ARGS or else it will be interpreted as a
-  # single argument!
-  # QUESTION: Why doesn't 'yes "q"' work?
-  # QUESTION: Why doesn't 'grep -v -e "^\[info\] Resolving"' work?
   # First build with Hive 0.12.0 to ensure patches do not break the Hive 0.12.0 build
-  HIVE_12_BUILD_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-thriftserver -Phive-0.12.0"
   echo "[info] Compile with Hive 0.12.0"
-  echo -e "q\n" \
-    | build/sbt $HIVE_12_BUILD_ARGS clean hive/compile hive-thriftserver/compile \
-    | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
+  [ -d "lib_managed" ] && rm -rf lib_managed
+  echo "[info] Building Spark with these arguments: $HIVE_12_BUILD_ARGS"
+
+  if [ "${AMPLAB_JENKINS_BUILD_TOOL}" == "maven" ]; then
+    build/mvn $HIVE_12_BUILD_ARGS clean package -DskipTests
+  else
+    # NOTE: echo "q" is needed because sbt on encountering a build file with failure
+    # (either resolution or compilation) prompts the user for input either q, r, etc
+    # to quit or retry. This echo is there to make it not block.
+    # NOTE: Do not quote $BUILD_MVN_PROFILE_ARGS or else it will be interpreted as a
+    # single argument!
+    # QUESTION: Why doesn't 'yes "q"' work?
+    # QUESTION: Why doesn't 'grep -v -e "^\[info\] Resolving"' work?
+    echo -e "q\n" \
+      | build/sbt $HIVE_12_BUILD_ARGS clean hive/compile hive-thriftserver/compile \
+      | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
+  fi
 
   # Then build with default Hive version (0.13.1) because tests are based on this version
   echo "[info] Compile with Hive 0.13.1"
-  rm -rf lib_managed
-  echo "[info] Building Spark with these arguments: $SBT_MAVEN_PROFILES_ARGS"\
-    " -Phive -Phive-thriftserver"
-  echo -e "q\n" \
-    | build/sbt $SBT_MAVEN_PROFILES_ARGS -Phive -Phive-thriftserver package assembly/assembly  \
-    | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
+  [ -d "lib_managed" ] && rm -rf lib_managed
+  echo "[info] Building Spark with these arguments: $HIVE_BUILD_ARGS"
+
+  if [ "${AMPLAB_JENKINS_BUILD_TOOL}" == "maven" ]; then
+    build/mvn $HIVE_BUILD_ARGS clean package -DskipTests
+  else
+    echo -e "q\n" \
+      | build/sbt $HIVE_BUILD_ARGS package assembly/assembly  \
+      | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
+  fi
 }
 
 echo ""
@@ -190,17 +202,21 @@ CURRENT_BLOCK=$BLOCK_SPARK_UNIT_TESTS
 
   echo "[info] Running Spark tests with these arguments: $SBT_MAVEN_PROFILES_ARGS ${SBT_MAVEN_TEST_ARGS[@]}"
 
-  # NOTE: echo "q" is needed because sbt on encountering a build file with failure
-  # (either resolution or compilation) prompts the user for input either q, r, etc
-  # to quit or retry. This echo is there to make it not block.
-  # NOTE: Do not quote $SBT_MAVEN_PROFILES_ARGS or else it will be interpreted as a
-  # single argument!
-  # "${SBT_MAVEN_TEST_ARGS[@]}" is cool because it's an array.
-  # QUESTION: Why doesn't 'yes "q"' work?
-  # QUESTION: Why doesn't 'grep -v -e "^\[info\] Resolving"' work?
-  echo -e "q\n" \
-    | build/sbt $SBT_MAVEN_PROFILES_ARGS "${SBT_MAVEN_TEST_ARGS[@]}" \
-    | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
+  if [ "${AMPLAB_JENKINS_BUILD_TOOL}" == "maven" ]; then
+    build/mvn test $SBT_MAVEN_PROFILES_ARGS --fail-at-end
+  else
+    # NOTE: echo "q" is needed because sbt on encountering a build file with failure
+    # (either resolution or compilation) prompts the user for input either q, r, etc
+    # to quit or retry. This echo is there to make it not block.
+    # NOTE: Do not quote $SBT_MAVEN_PROFILES_ARGS or else it will be interpreted as a
+    # single argument!
+    # "${SBT_MAVEN_TEST_ARGS[@]}" is cool because it's an array.
+    # QUESTION: Why doesn't 'yes "q"' work?
+    # QUESTION: Why doesn't 'grep -v -e "^\[info\] Resolving"' work?
+    echo -e "q\n" \
+      | build/sbt $SBT_MAVEN_PROFILES_ARGS "${SBT_MAVEN_TEST_ARGS[@]}" \
+      | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
+  fi
 }
 
 echo ""

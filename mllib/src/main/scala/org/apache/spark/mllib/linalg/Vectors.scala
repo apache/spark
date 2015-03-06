@@ -182,6 +182,8 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
       case _ => false
     }
   }
+
+  private[spark] override def asNullable: VectorUDT = this
 }
 
 /**

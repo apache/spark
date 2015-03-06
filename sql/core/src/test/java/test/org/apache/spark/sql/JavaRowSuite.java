@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.api.java;
+package test.org.apache.spark.sql;
 
 import java.math.BigDecimal;
 import java.sql.Date;
