@@ -59,6 +59,10 @@ class BaseJob(Base):
         'polymorphic_identity': 'BaseJob'
     }
 
+    __table_args__ = (
+        Index('job_type_heart', job_type, latest_heartbeat),
+    )
+
     def __init__(
             self,
             executor=executors.DEFAULT_EXECUTOR,
@@ -168,7 +172,6 @@ class BaseJob(Base):
 
     def _execute(self):
         raise NotImplemented("This method needs to be overriden")
-Index('job_type_heart', BaseJob.job_type, BaseJob.latest_heartbeat)
 
 
 class MasterJob(BaseJob):

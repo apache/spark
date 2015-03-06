@@ -11,7 +11,8 @@ import signal
 import socket
 
 from sqlalchemy import (
-    Column, Integer, String, DateTime, Text, Boolean, ForeignKey, PickleType)
+    Column, Integer, String, DateTime, Text, Boolean, ForeignKey, PickleType,
+    Index,)
 from sqlalchemy import func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.dialects.mysql import LONGTEXT
@@ -284,6 +285,11 @@ class TaskInstance(Base):
     hostname = Column(String(1000))
     unixname = Column(String(1000))
     job_id = Column(Integer)
+
+    __table_args__ = (
+        Index('ti_dag_state', dag_id, state),
+        Index('ti_state_lkp', dag_id, task_id, execution_date, state),
+    )
 
     def __init__(self, task, execution_date, job=None):
         self.dag_id = task.dag_id
