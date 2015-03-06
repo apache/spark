@@ -21,6 +21,10 @@ import sys
 from threading import Lock
 from tempfile import NamedTemporaryFile
 
+from py4j.java_gateway import JavaObject
+from py4j.java_collections import ListConverter
+import py4j.protocol
+
 from pyspark import accumulators
 from pyspark.accumulators import Accumulator
 from pyspark.broadcast import Broadcast
@@ -35,8 +39,6 @@ from pyspark.traceback_utils import CallSite, first_spark_call
 from pyspark.status import StatusTracker
 from pyspark.profiler import ProfilerCollector, BasicProfiler
 
-from py4j.java_collections import ListConverter
-
 
 __all__ = ['SparkContext']
 
@@ -47,6 +49,15 @@ DEFAULT_CONFIGS = {
     "spark.serializer.objectStreamReset": 100,
     "spark.rdd.compress": True,
 }
+
+
+# The implementation in Py4j will create 'Java' member for parameter (JavaObject)
+# because of circular reference between JavaObject and JavaMember, then the object
+# can not be released after used until GC kick-in.
+def is_python_proxy(parameter):
+    return not isinstance(parameter, JavaObject) and _old_is_python_proxy(parameter)
+_old_is_python_proxy = py4j.protocol.is_python_proxy
+py4j.protocol.is_python_proxy = is_python_proxy
 
 
 class SparkContext(object):

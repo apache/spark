@@ -310,7 +310,7 @@ class DataFrame(object):
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
         with SCCallSiteSync(self._sc) as css:
-            bytesInJava = self._jdf.javaToPython().collect().iterator()
+            bytesInJava = self._sc._jvm.PythonRDD.collectAsIterator(self._jdf.javaToPython())
         tempFile = NamedTemporaryFile(delete=False, dir=self._sc._temp_dir)
         tempFile.close()
         self._sc._writeToFile(bytesInJava, tempFile.name)

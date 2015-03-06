@@ -19,23 +19,22 @@ package org.apache.spark.api.python
 
 import java.io._
 import java.net._
-import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, UUID, Collections}
-
-import org.apache.spark.input.PortableDataStream
+import java.util.{Collections, ArrayList => JArrayList, List => JList, Map => JMap}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.language.existentials
 
 import com.google.common.base.Charsets.UTF_8
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.compress.CompressionCodec
-import org.apache.hadoop.mapred.{InputFormat, OutputFormat, JobConf}
+import org.apache.hadoop.mapred.{InputFormat, JobConf, OutputFormat}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, OutputFormat => NewOutputFormat}
+
 import org.apache.spark._
-import org.apache.spark.api.java.{JavaSparkContext, JavaPairRDD, JavaRDD}
+import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.input.PortableDataStream
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
@@ -356,6 +355,14 @@ private[spark] object PythonRDD extends Logging {
       sc.runJob(rdd, (x: Iterator[ByteArray]) => x.toArray, partitions, allowLocal)
     val flattenedPartition: UnrolledPartition = Array.concat(allPartitions: _*)
     flattenedPartition.iterator
+  }
+
+  /**
+   * A helper function to collect an RDD as an iterator, then it only export the Iterator
+   * object to Py4j, easily be GCed.
+   */
+  def collectAsIterator[T](jrdd: JavaRDD[T]): Iterator[T] = {
+    jrdd.collect().iterator()
   }
 
   def readRDDFromFile(sc: JavaSparkContext, filename: String, parallelism: Int):
