@@ -22,6 +22,31 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
+  <td><code>spark.yarn.am.memory</code></td>
+  <td>512m</td>
+  <td>
+    Amount of memory to use for the YARN Application Master in client mode, in the same format as JVM memory strings (e.g. <code>512m</code>, <code>2g</code>).
+    In cluster mode, use <code>spark.driver.memory</code> instead.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.driver.cores</code></td>
+  <td>1</td>
+  <td>
+    Number of cores used by the driver in YARN cluster mode.
+    Since the driver is run in the same JVM as the YARN Application Master in cluster mode, this also controls the cores used by the YARN AM.
+    In client mode, use <code>spark.yarn.am.cores</code> to control the number of cores used by the YARN AM instead.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.am.cores</code></td>
+  <td>1</td>
+  <td>
+    Number of cores to use for the YARN Application Master in client mode.
+    In cluster mode, use <code>spark.driver.cores</code> instead.
+  </td>
+</tr>
+<tr>
   <td><code>spark.yarn.am.waitTime</code></td>
   <td>100000</td>
   <td>
@@ -80,8 +105,15 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   </td>
 </tr>
 <tr>
+ <td><code>spark.executor.instances</code></td>
+  <td>2</td>
+  <td>
+    The number of executors. Note that this property is incompatible with <code>spark.dynamicAllocation.enabled</code>.
+  </td>
+</tr>
+<tr>
  <td><code>spark.yarn.executor.memoryOverhead</code></td>
-  <td>executorMemory * 0.07, with minimum of 384 </td>
+  <td>executorMemory * 0.10, with minimum of 384 </td>
   <td>
     The amount of off heap memory (in megabytes) to be allocated per executor. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc. This tends to grow with the executor size (typically 6-10%).
   </td>
@@ -90,7 +122,14 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td><code>spark.yarn.driver.memoryOverhead</code></td>
   <td>driverMemory * 0.07, with minimum of 384 </td>
   <td>
-    The amount of off heap memory (in megabytes) to be allocated per driver. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc. This tends to grow with the container size (typically 6-10%).
+    The amount of off heap memory (in megabytes) to be allocated per driver in cluster mode. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc. This tends to grow with the container size (typically 6-10%).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.am.memoryOverhead</code></td>
+  <td>AM memory * 0.07, with minimum of 384 </td>
+  <td>
+    Same as <code>spark.yarn.driver.memoryOverhead</code>, but for the Application Master in client mode.
   </td>
 </tr>
 <tr>
@@ -145,8 +184,16 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td><code>spark.yarn.am.extraJavaOptions</code></td>
   <td>(none)</td>
   <td>
-  A string of extra JVM options to pass to the Yarn ApplicationMaster in client mode.
+  A string of extra JVM options to pass to the YARN Application Master in client mode.
   In cluster mode, use spark.driver.extraJavaOptions instead.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.maxAppAttempts</code></td>
+  <td>yarn.resourcemanager.am.max-attempts in YARN</td>
+  <td>
+  The maximum number of attempts that will be made to submit the application.
+  It should be no larger than the global number of max attempts in the YARN configuration.
   </td>
 </tr>
 </table>

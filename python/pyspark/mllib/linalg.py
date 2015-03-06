@@ -29,7 +29,7 @@ import copy_reg
 
 import numpy as np
 
-from pyspark.sql import UserDefinedType, StructField, StructType, ArrayType, DoubleType, \
+from pyspark.sql.types import UserDefinedType, StructField, StructType, ArrayType, DoubleType, \
     IntegerType, ByteType
 
 
@@ -152,6 +152,9 @@ class VectorUDT(UserDefinedType):
         else:
             raise ValueError("do not recognize type %r" % tpe)
 
+    def simpleString(self):
+        return "vector"
+
 
 class Vector(object):
 
@@ -178,7 +181,7 @@ class DenseVector(Vector):
         elif not isinstance(ar, np.ndarray):
             ar = np.array(ar, dtype=np.float64)
         if ar.dtype != np.float64:
-            ar.astype(np.float64)
+            ar = ar.astype(np.float64)
         self.array = ar
 
     def __reduce__(self):
@@ -509,6 +512,23 @@ class SparseVector(Vector):
                 and other.size == self.size
                 and np.array_equal(other.indices, self.indices)
                 and np.array_equal(other.values, self.values))
+
+    def __getitem__(self, index):
+        inds = self.indices
+        vals = self.values
+        if not isinstance(index, int):
+            raise ValueError(
+                "Indices must be of type integer, got type %s" % type(index))
+        if index < 0:
+            index += self.size
+        if index >= self.size or index < 0:
+            raise ValueError("Index %d out of bounds." % index)
+
+        insert_index = np.searchsorted(inds, index)
+        row_ind = inds[insert_index]
+        if row_ind == index:
+            return vals[insert_index]
+        return 0.
 
     def __ne__(self, other):
         return not self.__eq__(other)

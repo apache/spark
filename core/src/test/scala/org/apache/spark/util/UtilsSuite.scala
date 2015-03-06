@@ -29,9 +29,12 @@ import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 import org.scalatest.FunSuite
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.SparkConf
 
-class UtilsSuite extends FunSuite {
+class UtilsSuite extends FunSuite with ResetSystemProperties {
 
   test("bytesToString") {
     assert(Utils.bytesToString(10) === "10.0 B")
@@ -205,18 +208,18 @@ class UtilsSuite extends FunSuite {
     child1.setLastModified(System.currentTimeMillis() - (1000 * 30))
 
     // although child1 is old, child2 is still new so return true
-    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5)) 
+    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5))
 
     child2.setLastModified(System.currentTimeMillis - (1000 * 30))
-    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5)) 
+    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5))
 
     parent.setLastModified(System.currentTimeMillis - (1000 * 30))
     // although parent and its immediate children are new, child3 is still old
     // we expect a full recursive search for new files.
-    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5)) 
+    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5))
 
     child3.setLastModified(System.currentTimeMillis - (1000 * 30))
-    assert(!Utils.doesDirectoryContainAnyNewFiles(parent, 5)) 
+    assert(!Utils.doesDirectoryContainAnyNewFiles(parent, 5))
   }
 
   test("resolveURI") {
@@ -336,21 +339,21 @@ class UtilsSuite extends FunSuite {
     assert(!tempDir1.exists())
 
     val tempDir2 = Utils.createTempDir()
-    val tempFile1 = new File(tempDir2, "foo.txt")
-    Files.touch(tempFile1)
-    assert(tempFile1.exists())
-    Utils.deleteRecursively(tempFile1)
-    assert(!tempFile1.exists())
+    val sourceFile1 = new File(tempDir2, "foo.txt")
+    Files.touch(sourceFile1)
+    assert(sourceFile1.exists())
+    Utils.deleteRecursively(sourceFile1)
+    assert(!sourceFile1.exists())
 
     val tempDir3 = new File(tempDir2, "subdir")
     assert(tempDir3.mkdir())
-    val tempFile2 = new File(tempDir3, "bar.txt")
-    Files.touch(tempFile2)
-    assert(tempFile2.exists())
+    val sourceFile2 = new File(tempDir3, "bar.txt")
+    Files.touch(sourceFile2)
+    assert(sourceFile2.exists())
     Utils.deleteRecursively(tempDir2)
     assert(!tempDir2.exists())
     assert(!tempDir3.exists())
-    assert(!tempFile2.exists())
+    assert(!sourceFile2.exists())
   }
 
   test("loading properties from file") {
@@ -380,5 +383,42 @@ class UtilsSuite extends FunSuite {
     val time = Utils.timeIt(2)({}, Some(prepare))
     require(cnt === 2, "prepare should be called twice")
     require(time < 500, "preparation time should not count")
+  }
+
+  test("fetch hcfs dir") {
+    val sourceDir = Utils.createTempDir()
+    val innerSourceDir = Utils.createTempDir(root=sourceDir.getPath)
+    val sourceFile = File.createTempFile("someprefix", "somesuffix", innerSourceDir)
+    val targetDir = new File(Utils.createTempDir(), "target-dir")
+    Files.write("some text", sourceFile, UTF_8)
+
+    val path = new Path("file://" + sourceDir.getAbsolutePath)
+    val conf = new Configuration()
+    val fs = Utils.getHadoopFileSystem(path.toString, conf)
+
+    assert(!targetDir.isDirectory())
+    Utils.fetchHcfsFile(path, targetDir, fs, new SparkConf(), conf, false)
+    assert(targetDir.isDirectory())
+
+    // Copy again to make sure it doesn't error if the dir already exists.
+    Utils.fetchHcfsFile(path, targetDir, fs, new SparkConf(), conf, false)
+
+    val destDir = new File(targetDir, sourceDir.getName())
+    assert(destDir.isDirectory())
+
+    val destInnerDir = new File(destDir, innerSourceDir.getName)
+    assert(destInnerDir.isDirectory())
+
+    val destInnerFile = new File(destInnerDir, sourceFile.getName)
+    assert(destInnerFile.isFile())
+
+    val filePath = new Path("file://" + sourceFile.getAbsolutePath)
+    val testFileDir = new File("test-filename")
+    val testFileName = "testFName"
+    val testFilefs = Utils.getHadoopFileSystem(filePath.toString, conf)
+    Utils.fetchHcfsFile(filePath, testFileDir, testFilefs, new SparkConf(),
+                        conf, false, Some(testFileName))
+    val newFileName = new File(testFileDir, testFileName)
+    assert(newFileName.isFile())
   }
 }

@@ -17,22 +17,60 @@
 
 package org.apache.spark.scheduler.mesos
 
-import org.scalatest.FunSuite
-import org.apache.spark.{scheduler, SparkConf, SparkContext, LocalSparkContext}
-import org.apache.spark.scheduler.{TaskDescription, WorkerOffer, TaskSchedulerImpl}
-import org.apache.spark.scheduler.cluster.mesos.{MemoryUtils, MesosSchedulerBackend}
-import org.apache.mesos.SchedulerDriver
-import org.apache.mesos.Protos._
-import org.scalatest.mock.EasyMockSugar
-import org.apache.mesos.Protos.Value.Scalar
-import org.easymock.{Capture, EasyMock}
 import java.nio.ByteBuffer
-import java.util.Collections
 import java.util
+import java.util.Collections
+
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-class MesosSchedulerBackendSuite extends FunSuite with LocalSparkContext with EasyMockSugar {
+import org.apache.mesos.SchedulerDriver
+import org.apache.mesos.Protos._
+import org.apache.mesos.Protos.Value.Scalar
+import org.mockito.Mockito._
+import org.mockito.Matchers._
+import org.mockito.{ArgumentCaptor, Matchers}
+import org.scalatest.FunSuite
+import org.scalatest.mock.MockitoSugar
+
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext}
+import org.apache.spark.executor.MesosExecutorBackend
+import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerExecutorAdded,
+  TaskDescription, TaskSchedulerImpl, WorkerOffer}
+import org.apache.spark.scheduler.cluster.ExecutorInfo
+import org.apache.spark.scheduler.cluster.mesos.{MesosSchedulerBackend, MemoryUtils}
+
+class MesosSchedulerBackendSuite extends FunSuite with LocalSparkContext with MockitoSugar {
+
+  test("check spark-class location correctly") {
+    val conf = new SparkConf
+    conf.set("spark.mesos.executor.home" , "/mesos-home")
+
+    val listenerBus = mock[LiveListenerBus]
+    listenerBus.post(
+      SparkListenerExecutorAdded(anyLong, "s1", new ExecutorInfo("host1", 2, Map.empty)))
+
+    val sc = mock[SparkContext]
+    when(sc.getSparkHome()).thenReturn(Option("/spark-home"))
+
+    when(sc.conf).thenReturn(conf)
+    when(sc.executorEnvs).thenReturn(new mutable.HashMap[String, String])
+    when(sc.executorMemory).thenReturn(100)
+    when(sc.listenerBus).thenReturn(listenerBus)
+    val taskScheduler = mock[TaskSchedulerImpl]
+    when(taskScheduler.CPUS_PER_TASK).thenReturn(2)
+
+    val mesosSchedulerBackend = new MesosSchedulerBackend(taskScheduler, sc, "master")
+
+    // uri is null.
+    val executorInfo = mesosSchedulerBackend.createExecutorInfo("test-id")
+    assert(executorInfo.getCommand.getValue === s" /mesos-home/bin/spark-class ${classOf[MesosExecutorBackend].getName}")
+
+    // uri exists.
+    conf.set("spark.executor.uri", "hdfs:///test-app-1.0.0.tgz")
+    val executorInfo1 = mesosSchedulerBackend.createExecutorInfo("test-id")
+    assert(executorInfo1.getCommand.getValue === s"cd test-app-1*;  ./bin/spark-class ${classOf[MesosExecutorBackend].getName}")
+  }
 
   test("mesos resource offers result in launching tasks") {
     def createOffer(id: Int, mem: Int, cpu: Int) = {
@@ -49,15 +87,19 @@ class MesosSchedulerBackendSuite extends FunSuite with LocalSparkContext with Ea
         .setSlaveId(SlaveID.newBuilder().setValue(s"s${id.toString}")).setHostname(s"host${id.toString}").build()
     }
 
-    val driver = EasyMock.createMock(classOf[SchedulerDriver])
-    val taskScheduler = EasyMock.createMock(classOf[TaskSchedulerImpl])
+    val driver = mock[SchedulerDriver]
+    val taskScheduler = mock[TaskSchedulerImpl]
 
-    val sc = EasyMock.createMock(classOf[SparkContext])
-    EasyMock.expect(sc.executorMemory).andReturn(100).anyTimes()
-    EasyMock.expect(sc.getSparkHome()).andReturn(Option("/path")).anyTimes()
-    EasyMock.expect(sc.executorEnvs).andReturn(new mutable.HashMap).anyTimes()
-    EasyMock.expect(sc.conf).andReturn(new SparkConf).anyTimes()
-    EasyMock.replay(sc)
+    val listenerBus = mock[LiveListenerBus]
+    listenerBus.post(
+      SparkListenerExecutorAdded(anyLong, "s1", new ExecutorInfo("host1", 2, Map.empty)))
+
+    val sc = mock[SparkContext]
+    when(sc.executorMemory).thenReturn(100)
+    when(sc.getSparkHome()).thenReturn(Option("/path"))
+    when(sc.executorEnvs).thenReturn(new mutable.HashMap[String, String])
+    when(sc.conf).thenReturn(new SparkConf)
+    when(sc.listenerBus).thenReturn(listenerBus)
 
     val minMem = MemoryUtils.calculateTotalMemory(sc).toInt
     val minCpu = 4
@@ -80,26 +122,30 @@ class MesosSchedulerBackendSuite extends FunSuite with LocalSparkContext with Ea
       mesosOffers.get(2).getHostname,
       2
     ))
-    val taskDesc = new TaskDescription(1L, "s1", "n1", 0, ByteBuffer.wrap(new Array[Byte](0)))
-    EasyMock.expect(taskScheduler.resourceOffers(EasyMock.eq(expectedWorkerOffers))).andReturn(Seq(Seq(taskDesc)))
-    EasyMock.expect(taskScheduler.CPUS_PER_TASK).andReturn(2).anyTimes()
-    EasyMock.replay(taskScheduler)
+    val taskDesc = new TaskDescription(1L, 0, "s1", "n1", 0, ByteBuffer.wrap(new Array[Byte](0)))
+    when(taskScheduler.resourceOffers(expectedWorkerOffers)).thenReturn(Seq(Seq(taskDesc)))
+    when(taskScheduler.CPUS_PER_TASK).thenReturn(2)
 
-    val capture = new Capture[util.Collection[TaskInfo]]
-    EasyMock.expect(
+    val capture = ArgumentCaptor.forClass(classOf[util.Collection[TaskInfo]])
+    when(
       driver.launchTasks(
-        EasyMock.eq(Collections.singleton(mesosOffers.get(0).getId)),
-        EasyMock.capture(capture),
-        EasyMock.anyObject(classOf[Filters])
+        Matchers.eq(Collections.singleton(mesosOffers.get(0).getId)),
+        capture.capture(),
+        any(classOf[Filters])
       )
-    ).andReturn(Status.valueOf(1)).once
-    EasyMock.expect(driver.declineOffer(mesosOffers.get(1).getId)).andReturn(Status.valueOf(1)).times(1)
-    EasyMock.expect(driver.declineOffer(mesosOffers.get(2).getId)).andReturn(Status.valueOf(1)).times(1)
-    EasyMock.replay(driver)
+    ).thenReturn(Status.valueOf(1))
+    when(driver.declineOffer(mesosOffers.get(1).getId)).thenReturn(Status.valueOf(1))
+    when(driver.declineOffer(mesosOffers.get(2).getId)).thenReturn(Status.valueOf(1))
 
     backend.resourceOffers(driver, mesosOffers)
 
-    EasyMock.verify(driver)
+    verify(driver, times(1)).launchTasks(
+      Matchers.eq(Collections.singleton(mesosOffers.get(0).getId)),
+      capture.capture(),
+      any(classOf[Filters])
+    )
+    verify(driver, times(1)).declineOffer(mesosOffers.get(1).getId)
+    verify(driver, times(1)).declineOffer(mesosOffers.get(2).getId)
     assert(capture.getValue.size() == 1)
     val taskInfo = capture.getValue.iterator().next()
     assert(taskInfo.getName.equals("n1"))
@@ -111,15 +157,13 @@ class MesosSchedulerBackendSuite extends FunSuite with LocalSparkContext with Ea
     // Unwanted resources offered on an existing node. Make sure they are declined
     val mesosOffers2 = new java.util.ArrayList[Offer]
     mesosOffers2.add(createOffer(1, minMem, minCpu))
-    EasyMock.reset(taskScheduler)
-    EasyMock.reset(driver)
-    EasyMock.expect(taskScheduler.resourceOffers(EasyMock.anyObject(classOf[Seq[WorkerOffer]])).andReturn(Seq(Seq())))
-    EasyMock.expect(taskScheduler.CPUS_PER_TASK).andReturn(2).anyTimes()
-    EasyMock.replay(taskScheduler)
-    EasyMock.expect(driver.declineOffer(mesosOffers2.get(0).getId)).andReturn(Status.valueOf(1)).times(1)
-    EasyMock.replay(driver)
+    reset(taskScheduler)
+    reset(driver)
+    when(taskScheduler.resourceOffers(any(classOf[Seq[WorkerOffer]]))).thenReturn(Seq(Seq()))
+    when(taskScheduler.CPUS_PER_TASK).thenReturn(2)
+    when(driver.declineOffer(mesosOffers2.get(0).getId)).thenReturn(Status.valueOf(1))
 
     backend.resourceOffers(driver, mesosOffers2)
-    EasyMock.verify(driver)
+    verify(driver, times(1)).declineOffer(mesosOffers2.get(0).getId)
   }
 }

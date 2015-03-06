@@ -32,4 +32,11 @@ class Predict(
   override def toString = {
     "predict = %f, prob = %f".format(predict, prob)
   }
+
+  override def equals(other: Any): Boolean = {
+    other match {
+      case p: Predict => predict == p.predict && prob == p.prob
+      case _ => false
+    }
+  }
 }

@@ -34,6 +34,7 @@ import org.apache.spark.SerializableWritable
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, RDD, UnionRDD}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.types.DateUtils
 
 /**
  * A trait for subclasses that handle table scans.
@@ -247,7 +248,7 @@ private[hive] object HadoopTableReader extends HiveInspectors {
    * instantiate a HadoopRDD.
    */
   def initializeLocalJobConfFunc(path: String, tableDesc: TableDesc)(jobConf: JobConf) {
-    FileInputFormat.setInputPaths(jobConf, path)
+    FileInputFormat.setInputPaths(jobConf, Seq[Path](new Path(path)): _*)
     if (tableDesc != null) {
       PlanUtils.configureInputJobPropertiesForStorageHandler(tableDesc)
       Utilities.copyTableJobPropertiesToConf(tableDesc, jobConf)
@@ -306,7 +307,7 @@ private[hive] object HadoopTableReader extends HiveInspectors {
             row.update(ordinal, oi.getPrimitiveJavaObject(value).clone())
         case oi: DateObjectInspector =>
           (value: Any, row: MutableRow, ordinal: Int) =>
-            row.update(ordinal, oi.getPrimitiveJavaObject(value))
+            row.update(ordinal, DateUtils.fromJavaDate(oi.getPrimitiveJavaObject(value)))
         case oi: BinaryObjectInspector =>
           (value: Any, row: MutableRow, ordinal: Int) =>
             row.update(ordinal, oi.getPrimitiveJavaObject(value))

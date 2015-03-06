@@ -37,7 +37,8 @@ public class TransportConf {
 
   /** Connect timeout in milliseconds. Default 120 secs. */
   public int connectionTimeoutMs() {
-    return conf.getInt("spark.shuffle.io.connectionTimeout", 120) * 1000;
+    int defaultTimeout = conf.getInt("spark.network.timeout", 120);
+    return conf.getInt("spark.shuffle.io.connectionTimeout", defaultTimeout) * 1000;
   }
 
   /** Number of concurrent connections between two nodes for fetching data. */
@@ -96,5 +97,12 @@ public class TransportConf {
    */
   public boolean lazyFileDescriptor() {
     return conf.getBoolean("spark.shuffle.io.lazyFD", true);
+  }
+
+  /**
+   * Maximum number of retries when binding to a port before giving up.
+   */
+  public int portMaxRetries() {
+    return conf.getInt("spark.port.maxRetries", 16);
   }
 }

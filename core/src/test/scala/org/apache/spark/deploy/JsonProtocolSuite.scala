@@ -68,7 +68,8 @@ class JsonProtocolSuite extends FunSuite {
     val completedApps = Array[ApplicationInfo]()
     val activeDrivers = Array(createDriverInfo())
     val completedDrivers = Array(createDriverInfo())
-    val stateResponse = new MasterStateResponse("host", 8080, workers, activeApps, completedApps,
+    val stateResponse = new MasterStateResponse(
+      "host", 8080, None, workers, activeApps, completedApps,
       activeDrivers, completedDrivers, RecoveryState.ALIVE)
     val output = JsonProtocol.writeMasterState(stateResponse)
     assertValidJson(output)
@@ -117,8 +118,8 @@ class JsonProtocolSuite extends FunSuite {
   }
 
   def createExecutorRunner(): ExecutorRunner = {
-    new ExecutorRunner("appId", 123, createAppDesc(), 4, 1234, null, "workerId", "host",
-      new File("sparkHome"), new File("workDir"), "akka://worker",
+    new ExecutorRunner("appId", 123, createAppDesc(), 4, 1234, null, "workerId", "host", 123,
+      "publicAddress", new File("sparkHome"), new File("workDir"), "akka://worker",
       new SparkConf, Seq("localDir"), ExecutorState.RUNNING)
   }
 

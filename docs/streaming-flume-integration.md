@@ -64,7 +64,7 @@ configuring Flume agents.
 
 3. **Deploying:** Package `spark-streaming-flume_{{site.SCALA_BINARY_VERSION}}` and its dependencies (except `spark-core_{{site.SCALA_BINARY_VERSION}}` and `spark-streaming_{{site.SCALA_BINARY_VERSION}}` which are provided by `spark-submit`) into the application JAR. Then use `spark-submit` to launch your application (see [Deploying section](streaming-programming-guide.html#deploying-applications) in the main programming guide).
 
-## Approach 2 (Experimental): Pull-based Approach using a Custom Sink
+## Approach 2: Pull-based Approach using a Custom Sink
 Instead of Flume pushing data directly to Spark Streaming, this approach runs a custom Flume sink that allows the following.
 
 - Flume pushes data into the sink, and the data stays buffered.

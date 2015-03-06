@@ -22,6 +22,7 @@ import java.nio.{ByteBuffer, ByteOrder}
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
 import scala.reflect.ClassTag
 
@@ -40,22 +41,22 @@ import org.apache.spark.mllib.recommendation._
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
 import org.apache.spark.mllib.stat.correlation.CorrelationNames
+import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.stat.test.ChiSqTestResult
-import org.apache.spark.mllib.tree.{RandomForest, DecisionTree}
-import org.apache.spark.mllib.tree.configuration.{Algo, Strategy}
+import org.apache.spark.mllib.tree.{GradientBoostedTrees, RandomForest, DecisionTree}
+import org.apache.spark.mllib.tree.configuration.{BoostingStrategy, Algo, Strategy}
 import org.apache.spark.mllib.tree.impurity._
-import org.apache.spark.mllib.tree.model.{RandomForestModel, DecisionTreeModel}
+import org.apache.spark.mllib.tree.loss.Losses
+import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel, RandomForestModel, DecisionTreeModel}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
 /**
- * :: DeveloperApi ::
- * The Java stubs necessary for the Python mllib bindings.
+ * The Java stubs necessary for the Python mllib bindings. It is called by Py4J on the Python side.
  */
-@DeveloperApi
-class PythonMLLibAPI extends Serializable {
+private[python] class PythonMLLibAPI extends Serializable {
 
 
   /**
@@ -259,24 +260,80 @@ class PythonMLLibAPI extends Serializable {
   }
 
   /**
-   * Java stub for Python mllib KMeans.train()
+   * Java stub for Python mllib KMeans.run()
    */
   def trainKMeansModel(
       data: JavaRDD[Vector],
       k: Int,
       maxIterations: Int,
       runs: Int,
-      initializationMode: String): KMeansModel = {
+      initializationMode: String,
+      seed: java.lang.Long): KMeansModel = {
     val kMeansAlg = new KMeans()
       .setK(k)
       .setMaxIterations(maxIterations)
       .setRuns(runs)
       .setInitializationMode(initializationMode)
+
+    if (seed != null) kMeansAlg.setSeed(seed)
+
     try {
       kMeansAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK))
     } finally {
       data.rdd.unpersist(blocking = false)
     }
+  }
+
+  /**
+   * Java stub for Python mllib GaussianMixture.run()
+   * Returns a list containing weights, mean and covariance of each mixture component.
+   */
+  def trainGaussianMixture(
+      data: JavaRDD[Vector], 
+      k: Int, 
+      convergenceTol: Double, 
+      maxIterations: Int,
+      seed: java.lang.Long): JList[Object] = {
+    val gmmAlg = new GaussianMixture()
+      .setK(k)
+      .setConvergenceTol(convergenceTol)
+      .setMaxIterations(maxIterations)
+
+    if (seed != null) gmmAlg.setSeed(seed)
+
+    try {
+      val model = gmmAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK))
+      var wt = ArrayBuffer.empty[Double]
+      var mu = ArrayBuffer.empty[Vector]      
+      var sigma = ArrayBuffer.empty[Matrix]
+      for (i <- 0 until model.k) {
+          wt += model.weights(i)
+          mu += model.gaussians(i).mu
+          sigma += model.gaussians(i).sigma
+      }    
+      List(wt.toArray, mu.toArray, sigma.toArray).map(_.asInstanceOf[Object]).asJava
+    } finally {
+      data.rdd.unpersist(blocking = false)
+    }
+  }
+
+  /**
+   * Java stub for Python mllib GaussianMixtureModel.predictSoft()
+   */
+  def predictSoftGMM(
+      data: JavaRDD[Vector],
+      wt: Object,
+      mu: Array[Object],
+      si: Array[Object]):  RDD[Array[Double]]  = {
+
+      val weight = wt.asInstanceOf[Array[Double]]
+      val mean = mu.map(_.asInstanceOf[DenseVector])
+      val sigma = si.map(_.asInstanceOf[DenseMatrix])
+      val gaussians = Array.tabulate(weight.length){
+        i => new MultivariateGaussian(mean(i), sigma(i))
+      }      
+      val model = new GaussianMixtureModel(weight, gaussians)
+      model.predictSoft(data)
   }
 
   /**
@@ -529,6 +586,35 @@ class PythonMLLibAPI extends Serializable {
   }
 
   /**
+   * Java stub for Python mllib GradientBoostedTrees.train().
+   * This stub returns a handle to the Java object instead of the content of the Java object.
+   * Extra care needs to be taken in the Python code to ensure it gets freed on exit;
+   * see the Py4J documentation.
+   */
+  def trainGradientBoostedTreesModel(
+      data: JavaRDD[LabeledPoint],
+      algoStr: String,
+      categoricalFeaturesInfo: JMap[Int, Int],
+      lossStr: String,
+      numIterations: Int,
+      learningRate: Double,
+      maxDepth: Int): GradientBoostedTreesModel = {
+    val boostingStrategy = BoostingStrategy.defaultParams(algoStr)
+    boostingStrategy.setLoss(Losses.fromString(lossStr))
+    boostingStrategy.setNumIterations(numIterations)
+    boostingStrategy.setLearningRate(learningRate)
+    boostingStrategy.treeStrategy.setMaxDepth(maxDepth)
+    boostingStrategy.treeStrategy.categoricalFeaturesInfo = categoricalFeaturesInfo.asScala.toMap
+
+    val cached = data.rdd.persist(StorageLevel.MEMORY_AND_DISK)
+    try {
+      GradientBoostedTrees.train(cached, boostingStrategy)
+    } finally {
+      cached.unpersist(blocking = false)
+    }
+  }
+
+  /**
    * Java stub for mllib Statistics.colStats(X: RDD[Vector]).
    * TODO figure out return type.
    */
@@ -625,6 +711,21 @@ class PythonMLLibAPI extends Serializable {
   }
 
   /**
+   * Java stub for Python mllib RandomRDDGenerators.logNormalRDD()
+   */
+  def logNormalRDD(jsc: JavaSparkContext,
+      mean: Double,
+      std: Double,
+      size: Long,
+      numPartitions: java.lang.Integer,
+      seed: java.lang.Long): JavaRDD[Double] = {
+    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
+    val s = getSeedOrDefault(seed)
+    RG.logNormalRDD(jsc.sc, mean, std, size, parts, s)
+  }
+
+
+  /**
    * Java stub for Python mllib RandomRDDGenerators.poissonRDD()
    */
   def poissonRDD(jsc: JavaSparkContext,
@@ -635,6 +736,33 @@ class PythonMLLibAPI extends Serializable {
     val parts = getNumPartitionsOrDefault(numPartitions, jsc)
     val s = getSeedOrDefault(seed)
     RG.poissonRDD(jsc.sc, mean, size, parts, s)
+  }
+
+  /**
+   * Java stub for Python mllib RandomRDDGenerators.exponentialRDD()
+   */
+  def exponentialRDD(jsc: JavaSparkContext,
+      mean: Double,
+      size: Long,
+      numPartitions: java.lang.Integer,
+      seed: java.lang.Long): JavaRDD[Double] = {
+    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
+    val s = getSeedOrDefault(seed)
+    RG.exponentialRDD(jsc.sc, mean, size, parts, s)
+  }
+
+  /**
+   * Java stub for Python mllib RandomRDDGenerators.gammaRDD()
+   */
+  def gammaRDD(jsc: JavaSparkContext,
+      shape: Double,
+      scale: Double,
+      size: Long,
+      numPartitions: java.lang.Integer,
+      seed: java.lang.Long): JavaRDD[Double] = {
+    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
+    val s = getSeedOrDefault(seed)
+    RG.gammaRDD(jsc.sc, shape, scale, size, parts, s)
   }
 
   /**
@@ -664,6 +792,22 @@ class PythonMLLibAPI extends Serializable {
   }
 
   /**
+   * Java stub for Python mllib RandomRDDGenerators.logNormalVectorRDD()
+   */
+  def logNormalVectorRDD(jsc: JavaSparkContext,
+      mean: Double,
+      std: Double,
+      numRows: Long,
+      numCols: Int,
+      numPartitions: java.lang.Integer,
+      seed: java.lang.Long): JavaRDD[Vector] = {
+    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
+    val s = getSeedOrDefault(seed)
+    RG.logNormalVectorRDD(jsc.sc, mean, std, numRows, numCols, parts, s)
+  }
+
+
+  /**
    * Java stub for Python mllib RandomRDDGenerators.poissonVectorRDD()
    */
   def poissonVectorRDD(jsc: JavaSparkContext,
@@ -676,6 +820,36 @@ class PythonMLLibAPI extends Serializable {
     val s = getSeedOrDefault(seed)
     RG.poissonVectorRDD(jsc.sc, mean, numRows, numCols, parts, s)
   }
+
+  /**
+   * Java stub for Python mllib RandomRDDGenerators.exponentialVectorRDD()
+   */
+  def exponentialVectorRDD(jsc: JavaSparkContext,
+      mean: Double,
+      numRows: Long,
+      numCols: Int,
+      numPartitions: java.lang.Integer,
+      seed: java.lang.Long): JavaRDD[Vector] = {
+    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
+    val s = getSeedOrDefault(seed)
+    RG.exponentialVectorRDD(jsc.sc, mean, numRows, numCols, parts, s)
+  }
+
+  /**
+   * Java stub for Python mllib RandomRDDGenerators.gammaVectorRDD()
+   */
+  def gammaVectorRDD(jsc: JavaSparkContext,
+      shape: Double,
+      scale: Double,
+      numRows: Long,
+      numCols: Int,
+      numPartitions: java.lang.Integer,
+      seed: java.lang.Long): JavaRDD[Vector] = {
+    val parts = getNumPartitionsOrDefault(numPartitions, jsc)
+    val s = getSeedOrDefault(seed)
+    RG.gammaVectorRDD(jsc.sc, shape, scale, numRows, numCols, parts, s)
+  }
+
 
 }
 

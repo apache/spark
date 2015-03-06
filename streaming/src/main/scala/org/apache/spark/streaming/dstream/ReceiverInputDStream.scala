@@ -86,23 +86,12 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
           }.toArray
           // Since storeInBlockManager = false, the storage level does not matter.
           new WriteAheadLogBackedBlockRDD[T](ssc.sparkContext,
-            blockIds, logSegments, storeInBlockManager = true, StorageLevel.MEMORY_ONLY_SER)
+            blockIds, logSegments, storeInBlockManager = false, StorageLevel.MEMORY_ONLY_SER)
         } else {
           new BlockRDD[T](ssc.sc, blockIds)
         }
       }
     }
     Some(blockRDD)
-  }
-
-  /**
-   * Clear metadata that are older than `rememberDuration` of this DStream.
-   * This is an internal method that should not be called directly. This
-   * implementation overrides the default implementation to clear received
-   * block information.
-   */
-  private[streaming] override def clearMetadata(time: Time) {
-    super.clearMetadata(time)
-    ssc.scheduler.receiverTracker.cleanupOldMetadata(time - rememberDuration)
   }
 }

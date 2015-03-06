@@ -79,7 +79,7 @@ class ReliableKafkaStreamSuite extends KafkaStreamSuiteBase with BeforeAndAfter 
   test("Reliable Kafka input stream with single topic") {
     var topic = "test-topic"
     createTopic(topic)
-    produceAndSendMessage(topic, data)
+    sendMessages(topic, data)
 
     // Verify whether the offset of this group/topic/partition is 0 before starting.
     assert(getCommitOffset(groupId, topic, 0) === None)
@@ -111,7 +111,7 @@ class ReliableKafkaStreamSuite extends KafkaStreamSuiteBase with BeforeAndAfter 
     val topics = Map("topic1" -> 1, "topic2" -> 1, "topic3" -> 1)
     topics.foreach { case (t, _) =>
       createTopic(t)
-      produceAndSendMessage(t, data)
+      sendMessages(t, data)
     }
 
     // Before started, verify all the group/topic/partition offsets are 0.

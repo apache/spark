@@ -21,7 +21,7 @@ import java.lang.{Iterable => JavaIterable}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.ArrayBuilder
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
@@ -272,7 +272,7 @@ class Word2Vec extends Serializable with Logging {
         def hasNext: Boolean = iter.hasNext
 
         def next(): Array[Int] = {
-          var sentence = new ArrayBuffer[Int]
+          val sentence = ArrayBuilder.make[Int]
           var sentenceLength = 0
           while (iter.hasNext && sentenceLength < MAX_SENTENCE_LENGTH) {
             val word = bcVocabHash.value.get(iter.next())
@@ -283,13 +283,20 @@ class Word2Vec extends Serializable with Logging {
               case None =>
             }
           }
-          sentence.toArray
+          sentence.result()
         }
       }
     }
     
     val newSentences = sentences.repartition(numPartitions).cache()
     val initRandom = new XORShiftRandom(seed)
+
+    if (vocabSize.toLong * vectorSize * 8 >= Int.MaxValue) {
+      throw new RuntimeException("Please increase minCount or decrease vectorSize in Word2Vec" +
+        " to avoid an OOM. You are highly recommended to make your vocabSize*vectorSize, " +
+        "which is " + vocabSize + "*" + vectorSize + " for now, less than `Int.MaxValue/8`.")
+    }
+
     val syn0Global =
       Array.fill[Float](vocabSize * vectorSize)((initRandom.nextFloat() - 0.5f) / vectorSize)
     val syn1Global = new Array[Float](vocabSize * vectorSize)

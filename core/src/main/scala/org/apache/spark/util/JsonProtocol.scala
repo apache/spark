@@ -19,6 +19,8 @@ package org.apache.spark.util
 
 import java.util.{Properties, UUID}
 
+import org.apache.spark.scheduler.cluster.ExecutorInfo
+
 import scala.collection.JavaConverters._
 import scala.collection.Map
 
@@ -83,9 +85,13 @@ private[spark] object JsonProtocol {
         applicationStartToJson(applicationStart)
       case applicationEnd: SparkListenerApplicationEnd =>
         applicationEndToJson(applicationEnd)
-
+      case executorAdded: SparkListenerExecutorAdded =>
+        executorAddedToJson(executorAdded)
+      case executorRemoved: SparkListenerExecutorRemoved =>
+        executorRemovedToJson(executorRemoved)
+      case logStart: SparkListenerLogStart =>
+        logStartToJson(logStart)
       // These aren't used, but keeps compiler happy
-      case SparkListenerShutdown => JNothing
       case SparkListenerExecutorMetricsUpdate(_, _) => JNothing
     }
   }
@@ -136,6 +142,7 @@ private[spark] object JsonProtocol {
     val properties = propertiesToJson(jobStart.properties)
     ("Event" -> Utils.getFormattedClassName(jobStart)) ~
     ("Job ID" -> jobStart.jobId) ~
+    ("Submission Time" -> jobStart.time) ~
     ("Stage Infos" -> jobStart.stageInfos.map(stageInfoToJson)) ~  // Added in Spark 1.2.0
     ("Stage IDs" -> jobStart.stageIds) ~
     ("Properties" -> properties)
@@ -145,6 +152,7 @@ private[spark] object JsonProtocol {
     val jobResult = jobResultToJson(jobEnd.jobResult)
     ("Event" -> Utils.getFormattedClassName(jobEnd)) ~
     ("Job ID" -> jobEnd.jobId) ~
+    ("Completion Time" -> jobEnd.time) ~
     ("Job Result" -> jobResult)
   }
 
@@ -194,6 +202,24 @@ private[spark] object JsonProtocol {
     ("Timestamp" -> applicationEnd.time)
   }
 
+  def executorAddedToJson(executorAdded: SparkListenerExecutorAdded): JValue = {
+    ("Event" -> Utils.getFormattedClassName(executorAdded)) ~
+    ("Timestamp" -> executorAdded.time) ~
+    ("Executor ID" -> executorAdded.executorId) ~
+    ("Executor Info" -> executorInfoToJson(executorAdded.executorInfo))
+  }
+
+  def executorRemovedToJson(executorRemoved: SparkListenerExecutorRemoved): JValue = {
+    ("Event" -> Utils.getFormattedClassName(executorRemoved)) ~
+    ("Timestamp" -> executorRemoved.time) ~
+    ("Executor ID" -> executorRemoved.executorId) ~
+    ("Removed Reason" -> executorRemoved.reason)
+  }
+
+  def logStartToJson(logStart: SparkListenerLogStart): JValue = {
+    ("Event" -> Utils.getFormattedClassName(logStart)) ~
+    ("Spark Version" -> SPARK_VERSION)
+  }
 
   /** ------------------------------------------------------------------- *
    * JSON serialization methods for classes SparkListenerEvents depend on |
@@ -274,22 +300,27 @@ private[spark] object JsonProtocol {
     ("Remote Blocks Fetched" -> shuffleReadMetrics.remoteBlocksFetched) ~
     ("Local Blocks Fetched" -> shuffleReadMetrics.localBlocksFetched) ~
     ("Fetch Wait Time" -> shuffleReadMetrics.fetchWaitTime) ~
-    ("Remote Bytes Read" -> shuffleReadMetrics.remoteBytesRead)
+    ("Remote Bytes Read" -> shuffleReadMetrics.remoteBytesRead) ~
+    ("Local Bytes Read" -> shuffleReadMetrics.localBytesRead) ~
+    ("Total Records Read" -> shuffleReadMetrics.recordsRead)
   }
 
   def shuffleWriteMetricsToJson(shuffleWriteMetrics: ShuffleWriteMetrics): JValue = {
     ("Shuffle Bytes Written" -> shuffleWriteMetrics.shuffleBytesWritten) ~
-    ("Shuffle Write Time" -> shuffleWriteMetrics.shuffleWriteTime)
+    ("Shuffle Write Time" -> shuffleWriteMetrics.shuffleWriteTime) ~
+    ("Shuffle Records Written" -> shuffleWriteMetrics.shuffleRecordsWritten)
   }
 
   def inputMetricsToJson(inputMetrics: InputMetrics): JValue = {
     ("Data Read Method" -> inputMetrics.readMethod.toString) ~
-    ("Bytes Read" -> inputMetrics.bytesRead)
+    ("Bytes Read" -> inputMetrics.bytesRead) ~
+    ("Records Read" -> inputMetrics.recordsRead)
   }
 
   def outputMetricsToJson(outputMetrics: OutputMetrics): JValue = {
     ("Data Write Method" -> outputMetrics.writeMethod.toString) ~
-    ("Bytes Written" -> outputMetrics.bytesWritten)
+    ("Bytes Written" -> outputMetrics.bytesWritten) ~
+    ("Records Written" -> outputMetrics.recordsWritten)
   }
 
   def taskEndReasonToJson(taskEndReason: TaskEndReason): JValue = {
@@ -362,6 +393,11 @@ private[spark] object JsonProtocol {
     ("Disk Size" -> blockStatus.diskSize)
   }
 
+  def executorInfoToJson(executorInfo: ExecutorInfo): JValue = {
+    ("Host" -> executorInfo.executorHost) ~
+    ("Total Cores" -> executorInfo.totalCores) ~
+    ("Log Urls" -> mapToJson(executorInfo.logUrlMap))
+  }
 
   /** ------------------------------ *
    * Util JSON serialization methods |
@@ -416,6 +452,9 @@ private[spark] object JsonProtocol {
     val unpersistRDD = Utils.getFormattedClassName(SparkListenerUnpersistRDD)
     val applicationStart = Utils.getFormattedClassName(SparkListenerApplicationStart)
     val applicationEnd = Utils.getFormattedClassName(SparkListenerApplicationEnd)
+    val executorAdded = Utils.getFormattedClassName(SparkListenerExecutorAdded)
+    val executorRemoved = Utils.getFormattedClassName(SparkListenerExecutorRemoved)
+    val logStart = Utils.getFormattedClassName(SparkListenerLogStart)
 
     (json \ "Event").extract[String] match {
       case `stageSubmitted` => stageSubmittedFromJson(json)
@@ -431,6 +470,9 @@ private[spark] object JsonProtocol {
       case `unpersistRDD` => unpersistRDDFromJson(json)
       case `applicationStart` => applicationStartFromJson(json)
       case `applicationEnd` => applicationEndFromJson(json)
+      case `executorAdded` => executorAddedFromJson(json)
+      case `executorRemoved` => executorRemovedFromJson(json)
+      case `logStart` => logStartFromJson(json)
     }
   }
 
@@ -469,6 +511,8 @@ private[spark] object JsonProtocol {
 
   def jobStartFromJson(json: JValue): SparkListenerJobStart = {
     val jobId = (json \ "Job ID").extract[Int]
+    val submissionTime =
+      Utils.jsonOption(json \ "Submission Time").map(_.extract[Long]).getOrElse(-1L)
     val stageIds = (json \ "Stage IDs").extract[List[JValue]].map(_.extract[Int])
     val properties = propertiesFromJson(json \ "Properties")
     // The "Stage Infos" field was added in Spark 1.2.0
@@ -476,13 +520,15 @@ private[spark] object JsonProtocol {
       .map(_.extract[Seq[JValue]].map(stageInfoFromJson)).getOrElse {
         stageIds.map(id => new StageInfo(id, 0, "unknown", 0, Seq.empty, "unknown"))
       }
-    SparkListenerJobStart(jobId, stageInfos, properties)
+    SparkListenerJobStart(jobId, submissionTime, stageInfos, properties)
   }
 
   def jobEndFromJson(json: JValue): SparkListenerJobEnd = {
     val jobId = (json \ "Job ID").extract[Int]
+    val completionTime =
+      Utils.jsonOption(json \ "Completion Time").map(_.extract[Long]).getOrElse(-1L)
     val jobResult = jobResultFromJson(json \ "Job Result")
-    SparkListenerJobEnd(jobId, jobResult)
+    SparkListenerJobEnd(jobId, completionTime, jobResult)
   }
 
   def environmentUpdateFromJson(json: JValue): SparkListenerEnvironmentUpdate = {
@@ -523,6 +569,24 @@ private[spark] object JsonProtocol {
     SparkListenerApplicationEnd((json \ "Timestamp").extract[Long])
   }
 
+  def executorAddedFromJson(json: JValue): SparkListenerExecutorAdded = {
+    val time = (json \ "Timestamp").extract[Long]
+    val executorId = (json \ "Executor ID").extract[String]
+    val executorInfo = executorInfoFromJson(json \ "Executor Info")
+    SparkListenerExecutorAdded(time, executorId, executorInfo)
+  }
+
+  def executorRemovedFromJson(json: JValue): SparkListenerExecutorRemoved = {
+    val time = (json \ "Timestamp").extract[Long]
+    val executorId = (json \ "Executor ID").extract[String]
+    val reason = (json \ "Removed Reason").extract[String]
+    SparkListenerExecutorRemoved(time, executorId, reason)
+  }
+
+  def logStartFromJson(json: JValue): SparkListenerLogStart = {
+    val sparkVersion = (json \ "Spark Version").extract[String]
+    SparkListenerLogStart(sparkVersion)
+  }
 
   /** --------------------------------------------------------------------- *
    * JSON deserialization methods for classes SparkListenerEvents depend on |
@@ -530,7 +594,7 @@ private[spark] object JsonProtocol {
 
   def stageInfoFromJson(json: JValue): StageInfo = {
     val stageId = (json \ "Stage ID").extract[Int]
-    val attemptId = (json \ "Attempt ID").extractOpt[Int].getOrElse(0)
+    val attemptId = (json \ "Stage Attempt ID").extractOpt[Int].getOrElse(0)
     val stageName = (json \ "Stage Name").extract[String]
     val numTasks = (json \ "Number of Tasks").extract[Int]
     val rddInfos = (json \ "RDD Info").extract[List[JValue]].map(rddInfoFromJson(_))
@@ -592,20 +656,20 @@ private[spark] object JsonProtocol {
       return TaskMetrics.empty
     }
     val metrics = new TaskMetrics
-    metrics.hostname = (json \ "Host Name").extract[String]
-    metrics.executorDeserializeTime = (json \ "Executor Deserialize Time").extract[Long]
-    metrics.executorRunTime = (json \ "Executor Run Time").extract[Long]
-    metrics.resultSize = (json \ "Result Size").extract[Long]
-    metrics.jvmGCTime = (json \ "JVM GC Time").extract[Long]
-    metrics.resultSerializationTime = (json \ "Result Serialization Time").extract[Long]
-    metrics.memoryBytesSpilled = (json \ "Memory Bytes Spilled").extract[Long]
-    metrics.diskBytesSpilled = (json \ "Disk Bytes Spilled").extract[Long]
+    metrics.setHostname((json \ "Host Name").extract[String])
+    metrics.setExecutorDeserializeTime((json \ "Executor Deserialize Time").extract[Long])
+    metrics.setExecutorRunTime((json \ "Executor Run Time").extract[Long])
+    metrics.setResultSize((json \ "Result Size").extract[Long])
+    metrics.setJvmGCTime((json \ "JVM GC Time").extract[Long])
+    metrics.setResultSerializationTime((json \ "Result Serialization Time").extract[Long])
+    metrics.incMemoryBytesSpilled((json \ "Memory Bytes Spilled").extract[Long])
+    metrics.incDiskBytesSpilled((json \ "Disk Bytes Spilled").extract[Long])
     metrics.setShuffleReadMetrics(
       Utils.jsonOption(json \ "Shuffle Read Metrics").map(shuffleReadMetricsFromJson))
     metrics.shuffleWriteMetrics =
       Utils.jsonOption(json \ "Shuffle Write Metrics").map(shuffleWriteMetricsFromJson)
-    metrics.inputMetrics =
-      Utils.jsonOption(json \ "Input Metrics").map(inputMetricsFromJson)
+    metrics.setInputMetrics(
+      Utils.jsonOption(json \ "Input Metrics").map(inputMetricsFromJson))
     metrics.outputMetrics =
       Utils.jsonOption(json \ "Output Metrics").map(outputMetricsFromJson)
     metrics.updatedBlocks =
@@ -621,31 +685,37 @@ private[spark] object JsonProtocol {
 
   def shuffleReadMetricsFromJson(json: JValue): ShuffleReadMetrics = {
     val metrics = new ShuffleReadMetrics
-    metrics.remoteBlocksFetched = (json \ "Remote Blocks Fetched").extract[Int]
-    metrics.localBlocksFetched = (json \ "Local Blocks Fetched").extract[Int]
-    metrics.fetchWaitTime = (json \ "Fetch Wait Time").extract[Long]
-    metrics.remoteBytesRead = (json \ "Remote Bytes Read").extract[Long]
+    metrics.incRemoteBlocksFetched((json \ "Remote Blocks Fetched").extract[Int])
+    metrics.incLocalBlocksFetched((json \ "Local Blocks Fetched").extract[Int])
+    metrics.incFetchWaitTime((json \ "Fetch Wait Time").extract[Long])
+    metrics.incRemoteBytesRead((json \ "Remote Bytes Read").extract[Long])
+    metrics.incLocalBytesRead((json \ "Local Bytes Read").extractOpt[Long].getOrElse(0))
+    metrics.incRecordsRead((json \ "Total Records Read").extractOpt[Long].getOrElse(0))
     metrics
   }
 
   def shuffleWriteMetricsFromJson(json: JValue): ShuffleWriteMetrics = {
     val metrics = new ShuffleWriteMetrics
-    metrics.shuffleBytesWritten = (json \ "Shuffle Bytes Written").extract[Long]
-    metrics.shuffleWriteTime = (json \ "Shuffle Write Time").extract[Long]
+    metrics.incShuffleBytesWritten((json \ "Shuffle Bytes Written").extract[Long])
+    metrics.incShuffleWriteTime((json \ "Shuffle Write Time").extract[Long])
+    metrics.setShuffleRecordsWritten((json \ "Shuffle Records Written")
+      .extractOpt[Long].getOrElse(0))
     metrics
   }
 
   def inputMetricsFromJson(json: JValue): InputMetrics = {
     val metrics = new InputMetrics(
       DataReadMethod.withName((json \ "Data Read Method").extract[String]))
-    metrics.bytesRead = (json \ "Bytes Read").extract[Long]
+    metrics.incBytesRead((json \ "Bytes Read").extract[Long])
+    metrics.incRecordsRead((json \ "Records Read").extractOpt[Long].getOrElse(0))
     metrics
   }
 
   def outputMetricsFromJson(json: JValue): OutputMetrics = {
     val metrics = new OutputMetrics(
       DataWriteMethod.withName((json \ "Data Write Method").extract[String]))
-    metrics.bytesWritten = (json \ "Bytes Written").extract[Long]
+    metrics.setBytesWritten((json \ "Bytes Written").extract[Long])
+    metrics.setRecordsWritten((json \ "Records Written").extractOpt[Long].getOrElse(0))
     metrics
   }
 
@@ -745,6 +815,12 @@ private[spark] object JsonProtocol {
     BlockStatus(storageLevel, memorySize, diskSize, tachyonSize)
   }
 
+  def executorInfoFromJson(json: JValue): ExecutorInfo = {
+    val executorHost = (json \ "Host").extract[String]
+    val totalCores = (json \ "Total Cores").extract[Int]
+    val logUrls = mapFromJson(json \ "Log Urls").toMap
+    new ExecutorInfo(executorHost, totalCores, logUrls)
+  }
 
   /** -------------------------------- *
    * Util JSON deserialization methods |

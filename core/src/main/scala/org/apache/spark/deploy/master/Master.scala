@@ -43,6 +43,7 @@ import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
+import org.apache.spark.deploy.rest.StandaloneRestServer
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
 import org.apache.spark.ui.SparkUI
@@ -52,12 +53,12 @@ private[spark] class Master(
     host: String,
     port: Int,
     webUiPort: Int,
-    val securityMgr: SecurityManager)
+    val securityMgr: SecurityManager,
+    val conf: SparkConf)
   extends Actor with ActorLogReceive with Logging with LeaderElectable {
 
   import context.dispatcher   // to use Akka's scheduler.schedule()
 
-  val conf = new SparkConf
   val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
 
   def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")  // For application IDs
@@ -95,7 +96,7 @@ private[spark] class Master(
   val webUi = new MasterWebUI(this, webUiPort)
 
   val masterPublicAddress = {
-    val envVar = System.getenv("SPARK_PUBLIC_DNS")
+    val envVar = conf.getenv("SPARK_PUBLIC_DNS")
     if (envVar != null) envVar else host
   }
 
@@ -120,6 +121,17 @@ private[spark] class Master(
   if (defaultCores < 1) {
     throw new SparkException("spark.deploy.defaultCores must be positive")
   }
+
+  // Alternative application submission gateway that is stable across Spark versions
+  private val restServerEnabled = conf.getBoolean("spark.master.rest.enabled", true)
+  private val restServer =
+    if (restServerEnabled) {
+      val port = conf.getInt("spark.master.rest.port", 6066)
+      Some(new StandaloneRestServer(host, port, self, masterUrl, conf))
+    } else {
+      None
+    }
+  private val restServerBoundPort = restServer.map(_.start())
 
   override def preStart() {
     logInfo("Starting Spark master at " + masterUrl)
@@ -174,6 +186,7 @@ private[spark] class Master(
       recoveryCompletionTask.cancel()
     }
     webUi.stop()
+    restServer.foreach(_.stop())
     masterMetricsSystem.stop()
     applicationMetricsSystem.stop()
     persistenceEngine.close()
@@ -421,7 +434,9 @@ private[spark] class Master(
     }
 
     case RequestMasterState => {
-      sender ! MasterStateResponse(host, port, workers.toArray, apps.toArray, completedApps.toArray,
+      sender ! MasterStateResponse(
+        host, port, restServerBoundPort,
+        workers.toArray, apps.toArray, completedApps.toArray,
         drivers.toArray, completedDrivers.toArray, state)
     }
 
@@ -429,8 +444,8 @@ private[spark] class Master(
       timeOutDeadWorkers()
     }
 
-    case RequestWebUIPort => {
-      sender ! WebUIPortResponse(webUi.boundPort)
+    case BoundPortsRequest => {
+      sender ! BoundPortsResponse(port, webUi.boundPort, restServerBoundPort)
     }
   }
 
@@ -581,7 +596,7 @@ private[spark] class Master(
     }
   }
 
-  def launchExecutor(worker: WorkerInfo, exec: ExecutorInfo) {
+  def launchExecutor(worker: WorkerInfo, exec: ExecutorDesc) {
     logInfo("Launching executor " + exec.fullId + " on worker " + worker.id)
     worker.addExecutor(exec)
     worker.actor ! LaunchExecutor(masterUrl,
@@ -656,7 +671,7 @@ private[spark] class Master(
 
   def registerApplication(app: ApplicationInfo): Unit = {
     val appAddress = app.driver.path.address
-    if (addressToWorker.contains(appAddress)) {
+    if (addressToApp.contains(appAddress)) {
       logInfo("Attempted to re-register application at same address: " + appAddress)
       return
     }
@@ -720,32 +735,37 @@ private[spark] class Master(
   def rebuildSparkUI(app: ApplicationInfo): Boolean = {
     val appName = app.desc.name
     val notFoundBasePath = HistoryServer.UI_PATH_PREFIX + "/not-found"
-    val eventLogFile = app.desc.eventLogDir
-      .map { dir => EventLoggingListener.getLogPath(dir, app.id) }
-      .getOrElse {
-        // Event logging is not enabled for this application
-        app.desc.appUiUrl = notFoundBasePath
-        return false
-    }
-    val fs = Utils.getHadoopFileSystem(eventLogFile, hadoopConf)
-
-    if (fs.exists(new Path(eventLogFile + EventLoggingListener.IN_PROGRESS))) {
-      // Event logging is enabled for this application, but the application is still in progress
-      val title = s"Application history not found (${app.id})"
-      var msg = s"Application $appName is still in progress."
-      logWarning(msg)
-      msg = URLEncoder.encode(msg, "UTF-8")
-      app.desc.appUiUrl = notFoundBasePath + s"?msg=$msg&title=$title"
-      return false
-    }
-
     try {
-      val (logInput, sparkVersion) = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
+      val eventLogDir = app.desc.eventLogDir
+        .getOrElse {
+          // Event logging is not enabled for this application
+          app.desc.appUiUrl = notFoundBasePath
+          return false
+        }
+      
+      val eventLogFilePrefix = EventLoggingListener.getLogPath(
+          eventLogDir, app.id, app.desc.eventLogCodec)
+      val fs = Utils.getHadoopFileSystem(eventLogDir, hadoopConf)
+      val inProgressExists = fs.exists(new Path(eventLogFilePrefix + 
+          EventLoggingListener.IN_PROGRESS))
+      
+      if (inProgressExists) {
+        // Event logging is enabled for this application, but the application is still in progress
+        logWarning(s"Application $appName is still in progress, it may be terminated abnormally.")
+      }
+      
+      val (eventLogFile, status) = if (inProgressExists) {
+        (eventLogFilePrefix + EventLoggingListener.IN_PROGRESS, " (in progress)")
+      } else {
+        (eventLogFilePrefix, " (completed)")
+      }
+      
+      val logInput = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
       val replayBus = new ReplayListenerBus()
       val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
-        appName + " (completed)", HistoryServer.UI_PATH_PREFIX + s"/${app.id}")
+        appName + status, HistoryServer.UI_PATH_PREFIX + s"/${app.id}")
       try {
-        replayBus.replay(logInput, sparkVersion)
+        replayBus.replay(logInput, eventLogFile)
       } finally {
         logInput.close()
       }
@@ -758,7 +778,7 @@ private[spark] class Master(
       case fnf: FileNotFoundException =>
         // Event logging is enabled for this application, but no event logs are found
         val title = s"Application history not found (${app.id})"
-        var msg = s"No event logs found for application $appName in $eventLogFile."
+        var msg = s"No event logs found for application $appName in ${app.desc.eventLogDir.get}."
         logWarning(msg)
         msg += " Did you specify the correct logging directory?"
         msg = URLEncoder.encode(msg, "UTF-8")
@@ -845,39 +865,55 @@ private[spark] class Master(
 private[spark] object Master extends Logging {
   val systemName = "sparkMaster"
   private val actorName = "Master"
-  val sparkUrlRegex = "spark://([^:]+):([0-9]+)".r
 
   def main(argStrings: Array[String]) {
     SignalLogger.register(log)
     val conf = new SparkConf
     val args = new MasterArguments(argStrings, conf)
-    val (actorSystem, _, _) = startSystemAndActor(args.host, args.port, args.webUiPort, conf)
+    val (actorSystem, _, _, _) = startSystemAndActor(args.host, args.port, args.webUiPort, conf)
     actorSystem.awaitTermination()
   }
 
-  /** Returns an `akka.tcp://...` URL for the Master actor given a sparkUrl `spark://host:ip`. */
-  def toAkkaUrl(sparkUrl: String): String = {
-    sparkUrl match {
-      case sparkUrlRegex(host, port) =>
-        "akka.tcp://%s@%s:%s/user/%s".format(systemName, host, port, actorName)
-      case _ =>
-        throw new SparkException("Invalid master URL: " + sparkUrl)
-    }
+  /**
+   * Returns an `akka.tcp://...` URL for the Master actor given a sparkUrl `spark://host:port`.
+   *
+   * @throws SparkException if the url is invalid
+   */
+  def toAkkaUrl(sparkUrl: String, protocol: String): String = {
+    val (host, port) = Utils.extractHostPortFromSparkUrl(sparkUrl)
+    AkkaUtils.address(protocol, systemName, host, port, actorName)
   }
 
+  /**
+   * Returns an akka `Address` for the Master actor given a sparkUrl `spark://host:port`.
+   *
+   * @throws SparkException if the url is invalid
+   */
+  def toAkkaAddress(sparkUrl: String, protocol: String): Address = {
+    val (host, port) = Utils.extractHostPortFromSparkUrl(sparkUrl)
+    Address(protocol, systemName, host, port)
+  }
+
+  /**
+   * Start the Master and return a four tuple of:
+   *   (1) The Master actor system
+   *   (2) The bound port
+   *   (3) The web UI bound port
+   *   (4) The REST server bound port, if any
+   */
   def startSystemAndActor(
       host: String,
       port: Int,
       webUiPort: Int,
-      conf: SparkConf): (ActorSystem, Int, Int) = {
+      conf: SparkConf): (ActorSystem, Int, Int, Option[Int]) = {
     val securityMgr = new SecurityManager(conf)
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port, conf = conf,
       securityManager = securityMgr)
-    val actor = actorSystem.actorOf(Props(classOf[Master], host, boundPort, webUiPort,
-      securityMgr), actorName)
+    val actor = actorSystem.actorOf(
+      Props(classOf[Master], host, boundPort, webUiPort, securityMgr, conf), actorName)
     val timeout = AkkaUtils.askTimeout(conf)
-    val respFuture = actor.ask(RequestWebUIPort)(timeout)
-    val resp = Await.result(respFuture, timeout).asInstanceOf[WebUIPortResponse]
-    (actorSystem, boundPort, resp.webUIBoundPort)
+    val portsRequest = actor.ask(BoundPortsRequest)(timeout)
+    val portsResponse = Await.result(portsRequest, timeout).asInstanceOf[BoundPortsResponse]
+    (actorSystem, boundPort, portsResponse.webUIPort, portsResponse.restPort)
   }
 }

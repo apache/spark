@@ -79,6 +79,9 @@ private[mllib] object EigenValueDecomposition {
     // Mode 1: A*x = lambda*x, A symmetric
     iparam(6) = 1
 
+    require(n * ncv.toLong <= Integer.MAX_VALUE && ncv * (ncv.toLong + 8) <= Integer.MAX_VALUE,
+      s"k = $k and/or n = $n are too large to compute an eigendecomposition")
+    
     var ido = new intW(0)
     var info = new intW(0)
     var resid = new Array[Double](n)
@@ -114,7 +117,7 @@ private[mllib] object EigenValueDecomposition {
       info.`val` match {
         case 1 => throw new IllegalStateException("ARPACK returns non-zero info = " + info.`val` +
             " Maximum number of iterations taken. (Refer ARPACK user guide for details)")
-        case 2 => throw new IllegalStateException("ARPACK returns non-zero info = " + info.`val` +
+        case 3 => throw new IllegalStateException("ARPACK returns non-zero info = " + info.`val` +
             " No shifts could be applied. Try to increase NCV. " +
             "(Refer ARPACK user guide for details)")
         case _ => throw new IllegalStateException("ARPACK returns non-zero info = " + info.`val` +
