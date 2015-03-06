@@ -38,6 +38,8 @@ import org.apache.spark.input.PortableDataStream
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
+import scala.util.control.NonFatal
+
 private[spark] class PythonRDD(
     @transient parent: RDD[_],
     command: Array[Byte],
@@ -340,7 +342,7 @@ private[spark] object PythonRDD extends Logging {
   /**
    * Adapter for calling SparkContext#runJob from Python.
    *
-   * This method will return an iterator of an array that contains all elements in the RDD
+   * This method will serve an iterator of an array that contains all elements in the RDD
    * (effectively a collect()), but allows you to run on a certain subset of partitions,
    * or to enable local execution.
    */
@@ -348,21 +350,20 @@ private[spark] object PythonRDD extends Logging {
       sc: SparkContext,
       rdd: JavaRDD[Array[Byte]],
       partitions: JArrayList[Int],
-      allowLocal: Boolean): Iterator[Array[Byte]] = {
+      allowLocal: Boolean): Int = {
     type ByteArray = Array[Byte]
     type UnrolledPartition = Array[ByteArray]
     val allPartitions: Array[UnrolledPartition] =
       sc.runJob(rdd, (x: Iterator[ByteArray]) => x.toArray, partitions, allowLocal)
     val flattenedPartition: UnrolledPartition = Array.concat(allPartitions: _*)
-    flattenedPartition.iterator
+    serveIterator(flattenedPartition.iterator)
   }
 
   /**
-   * A helper function to collect an RDD as an iterator, then it only export the Iterator
-   * object to Py4j, easily be GCed.
+   * A helper function to collect an RDD as an iterator, then serve it via socket
    */
-  def collectAsIterator[T](jrdd: JavaRDD[T]): Iterator[T] = {
-    jrdd.collect().iterator()
+  def collectAndServe[T](rdd: RDD[T]): Int = {
+    serveIterator(rdd.collect().iterator)
   }
 
   def readRDDFromFile(sc: JavaSparkContext, filename: String, parallelism: Int):
@@ -582,15 +583,32 @@ private[spark] object PythonRDD extends Logging {
     dataOut.write(bytes)
   }
 
-  def writeToFile[T](items: java.util.Iterator[T], filename: String) {
-    import scala.collection.JavaConverters._
-    writeToFile(items.asScala, filename)
-  }
+  private def serveIterator[T](items: Iterator[T]): Int = {
+    val serverSocket = new ServerSocket(0, 1)
+    serverSocket.setReuseAddress(true)
+    serverSocket.setSoTimeout(3000)
 
-  def writeToFile[T](items: Iterator[T], filename: String) {
-    val file = new DataOutputStream(new FileOutputStream(filename))
-    writeIteratorToStream(items, file)
-    file.close()
+    new Thread("serve iterator") {
+      setDaemon(true)
+      override def run() {
+        try {
+          val sock = serverSocket.accept()
+          val out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
+          try {
+            writeIteratorToStream(items, out)
+          } finally {
+            out.close()
+          }
+        } catch {
+          case NonFatal(e) =>
+            logError(s"Error while sending iterator: $e")
+        } finally {
+          serverSocket.close()
+        }
+      }
+    }.start()
+
+    serverSocket.getLocalPort
   }
 
   private def getMergedConf(confAsMap: java.util.HashMap[String, String],

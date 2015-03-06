@@ -21,9 +21,7 @@ import sys
 from threading import Lock
 from tempfile import NamedTemporaryFile
 
-from py4j.java_gateway import JavaObject
 from py4j.java_collections import ListConverter
-import py4j.protocol
 
 from pyspark import accumulators
 from pyspark.accumulators import Accumulator
@@ -34,7 +32,7 @@ from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer, \
     PairDeserializer, AutoBatchedSerializer, NoOpSerializer
 from pyspark.storagelevel import StorageLevel
-from pyspark.rdd import RDD
+from pyspark.rdd import RDD, _load_from_socket
 from pyspark.traceback_utils import CallSite, first_spark_call
 from pyspark.status import StatusTracker
 from pyspark.profiler import ProfilerCollector, BasicProfiler
@@ -51,15 +49,6 @@ DEFAULT_CONFIGS = {
 }
 
 
-# The implementation in Py4j will create 'Java' member for parameter (JavaObject)
-# because of circular reference between JavaObject and JavaMember, then the object
-# can not be released after used until GC kick-in.
-def is_python_proxy(parameter):
-    return not isinstance(parameter, JavaObject) and _old_is_python_proxy(parameter)
-_old_is_python_proxy = py4j.protocol.is_python_proxy
-py4j.protocol.is_python_proxy = is_python_proxy
-
-
 class SparkContext(object):
 
     """
@@ -70,7 +59,6 @@ class SparkContext(object):
 
     _gateway = None
     _jvm = None
-    _writeToFile = None
     _next_accum_id = 0
     _active_spark_context = None
     _lock = Lock()
@@ -232,7 +220,6 @@ class SparkContext(object):
             if not SparkContext._gateway:
                 SparkContext._gateway = gateway or launch_gateway()
                 SparkContext._jvm = SparkContext._gateway.jvm
-                SparkContext._writeToFile = SparkContext._jvm.PythonRDD.writeToFile
 
             if instance:
                 if (SparkContext._active_spark_context and
@@ -851,8 +838,8 @@ class SparkContext(object):
         # by runJob() in order to avoid having to pass a Python lambda into
         # SparkContext#runJob.
         mappedRDD = rdd.mapPartitions(partitionFunc)
-        it = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, javaPartitions, allowLocal)
-        return list(mappedRDD._collect_iterator_through_file(it))
+        port = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, javaPartitions, allowLocal)
+        return list(_load_from_socket(port, mappedRDD._jrdd_deserializer))
 
     def show_profiles(self):
         """ Print the profile stats to stdout """
