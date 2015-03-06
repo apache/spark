@@ -19,8 +19,8 @@ package org.apache.spark.ui
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.mutable.HashMap
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.HashMap
 import scala.xml.Node
 
 import org.eclipse.jetty.servlet.ServletContextHandler
