@@ -27,7 +27,11 @@ import org.apache.spark.{SparkException, SecurityManager, SparkConf}
 import org.apache.spark.util.Utils
 
 /**
- * An RPC environment.
+ * An RPC environment. [[RpcEndpoint]]s need to register itself with a name to [[RpcEnv]] to
+ * receives messages. Then [[RpcEnv]] will process messages sent from [[RpcEndpointRef]] or remote
+ * nodes, and deliver them to corresponding [[RpcEndpoint]]s.
+ *
+ * [[RpcEnv]] also provides some methods to retrieve [[RpcEndpointRef]]s given name or uri.
  */
 private[spark] trait RpcEnv {
 
@@ -189,7 +193,7 @@ private[spark] trait RpcEndpoint {
   }
 
   /**
-   * Process messages from [[RpcEndpointRef.sendWithReply]] or [[RpcCallContext.replyWithSender)]]
+   * Process messages from [[RpcEndpointRef.sendWithReply]]
    */
   def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case _ => context.sendFailure(new SparkException(self + " won't reply anything"))
