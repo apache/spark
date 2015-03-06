@@ -771,6 +771,20 @@ setMethod("select", signature(x = "DataFrame", col = "Column"),
             dataFrame(sdf)
           })
 
+setMethod("select",
+          signature(x = "DataFrame", col = "list"),
+          function(x, col) {
+            cols <- lapply(col, function(c) {
+              if (class(c)== "Column") {
+                c@jc
+              } else {
+                col(c)@jc
+              }
+            })
+            sdf <- callJMethod(x@sdf, "select", listToSeq(cols))
+            dataFrame(sdf)
+          })
+
 #' SelectExpr
 #'
 #' Select from a DataFrame using a set of SQL expressions.
