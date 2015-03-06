@@ -146,10 +146,9 @@ private[spark] class AkkaRpcEnv private (
                       s ! AkkaMessage(response, false)
                     }
 
-                    override def replyWithSender(response: Any, sender: RpcEndpointRef): Unit = {
-                      s.!(AkkaMessage(response, true))(
-                        sender.asInstanceOf[AkkaRpcEndpointRef].actorRef)
-                    }
+                    // Some RpcEndpoints need to know the sender's address
+                    override val sender: RpcEndpointRef =
+                      new AkkaRpcEndpointRef(defaultAddress, s, conf)
                   })
                 } else {
                   endpoint.receive

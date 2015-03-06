@@ -191,8 +191,8 @@ private[spark] trait RpcEndpoint {
   /**
    * Process messages from [[RpcEndpointRef.sendWithReply]] or [[RpcCallContext.replyWithSender)]]
    */
-  def receiveAndReply(response: RpcCallContext): PartialFunction[Any, Unit] = {
-    case _ => response.sendFailure(new SparkException(self + " won't reply anything"))
+  def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+    case _ => context.sendFailure(new SparkException(self + " won't reply anything"))
   }
 
   /**
@@ -360,19 +360,12 @@ private[spark] trait RpcCallContext {
   def reply(response: Any): Unit
 
   /**
-   * Reply a message to the corresponding [[RpcEndpoint.receiveAndReply]]. If you use this one to
-   * reply, it means you expect the target [[RpcEndpoint]] should reply you something.
-   *
-   * TODO better method name?
-   *
-   * @param response the response message
-   * @param sender who replies this message. The target [[RpcEndpoint]] will use `sender` to send
-   *               back something.
-   */
-  def replyWithSender(response: Any, sender: RpcEndpointRef): Unit
-
-  /**
    * Report a failure to the sender.
    */
   def sendFailure(e: Throwable): Unit
+
+  /**
+   * The sender of this message.
+   */
+  def sender: RpcEndpointRef
 }
