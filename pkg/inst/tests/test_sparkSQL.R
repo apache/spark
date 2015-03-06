@@ -40,6 +40,7 @@ test_that("test cache, uncache and clearCache", {
   cacheTable(sqlCtx, "table1")
   uncacheTable(sqlCtx, "table1")
   clearCache(sqlCtx)
+  dropTempTable(sqlCtx, "table1")
 })
 
 test_that("test tableNames and tables", {
@@ -48,6 +49,7 @@ test_that("test tableNames and tables", {
   expect_true(length(tableNames(sqlCtx)) == 1)
   df <- tables(sqlCtx)
   expect_true(count(df) == 1)
+  dropTempTable(sqlCtx, "table1")
 })
 
 test_that("registerTempTable() results in a queryable table and sql() results in a new DataFrame", {
@@ -56,12 +58,43 @@ test_that("registerTempTable() results in a queryable table and sql() results in
   newdf <- sql(sqlCtx, "SELECT * FROM table1 where name = 'Michael'")
   expect_true(inherits(newdf, "DataFrame"))
   expect_true(count(newdf) == 1)
+  dropTempTable(sqlCtx, "table1")
+})
+
+test_that("insertInto() on a registered table", {
+  df <- loadDF(sqlCtx, jsonPath, "json")
+  saveDF(df, parquetPath, "parquet", "overwrite")
+  dfParquet <- loadDF(sqlCtx, parquetPath, "parquet")
+
+  lines <- c("{\"name\":\"Bob\", \"age\":24}",
+             "{\"name\":\"James\", \"age\":35}")
+  jsonPath2 <- tempfile(pattern="jsonPath2", fileext=".tmp")
+  parquetPath2 <- tempfile(pattern = "parquetPath2", fileext = ".parquet")
+  writeLines(lines, jsonPath2)
+  df2 <- loadDF(sqlCtx, jsonPath2, "json")
+  saveDF(df2, parquetPath2, "parquet", "overwrite")
+  dfParquet2 <- loadDF(sqlCtx, parquetPath2, "parquet")
+
+  registerTempTable(dfParquet, "table1")
+  insertInto(dfParquet2, "table1")
+  expect_true(count(sql(sqlCtx, "select * from table1")) == 5)
+  expect_true(first(sql(sqlCtx, "select * from table1"))$name == "Michael")
+  dropTempTable(sqlCtx, "table1")
+
+  registerTempTable(dfParquet, "table1")
+  insertInto(dfParquet2, "table1", overwrite = TRUE)
+  expect_true(count(sql(sqlCtx, "select * from table1")) == 2)
+  expect_true(first(sql(sqlCtx, "select * from table1"))$name == "Bob")
+  dropTempTable(sqlCtx, "table1")
 })
 
 test_that("table() returns a new DataFrame", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  registerTempTable(df, "table1")
   tabledf <- table(sqlCtx, "table1")
   expect_true(inherits(tabledf, "DataFrame"))
   expect_true(count(tabledf) == 3)
+  dropTempTable(sqlCtx, "table1")
 })
 
 test_that("toRDD() returns an RRDD", {
@@ -428,6 +461,44 @@ test_that("showDF()", {
 test_that("isLocal()", {
   df <- jsonFile(sqlCtx, jsonPath)
   expect_false(isLocal(df))
+})
+
+test_that("unionAll(), subtract(), and intersect() on a DataFrame", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  
+  lines <- c("{\"name\":\"Bob\", \"age\":24}",
+             "{\"name\":\"Andy\", \"age\":30}",
+             "{\"name\":\"James\", \"age\":35}")
+  jsonPath2 <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  writeLines(lines, jsonPath2)
+  df2 <- loadDF(sqlCtx, jsonPath2, "json")
+  
+  unioned <- unionAll(df, df2)
+  expect_true(inherits(unioned, "DataFrame"))
+  expect_true(count(unioned) == 6)
+  expect_true(first(unioned)$name == "Michael")
+  
+  subtracted <- subtract(df, df2)
+  expect_true(inherits(unioned, "DataFrame"))
+  expect_true(count(subtracted) == 2)
+  expect_true(first(subtracted)$name == "Justin")
+  
+  intersected <- intersect(df, df2)
+  expect_true(inherits(unioned, "DataFrame"))
+  expect_true(count(intersected) == 1)
+  expect_true(first(intersected)$name == "Andy")
+})
+
+test_that("withColumn() and withColumnRenamed()", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  newDF <- withColumn(df, "newAge", df$age + 2)
+  expect_true(length(columns(newDF)) == 3)
+  expect_true(columns(newDF)[3] == "newAge")
+  expect_true(first(filter(newDF, df$name != "Michael"))$newAge == 32)
+  
+  newDF2 <- withColumnRenamed(df, "age", "newerAge")
+  expect_true(length(columns(newDF2)) == 2)
+  expect_true(columns(newDF2)[1] == "newerAge")
 })
 
 # TODO: Enable and test once the parquetFile PR has been merged

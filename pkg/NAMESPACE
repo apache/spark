@@ -92,6 +92,8 @@ exportMethods("columns",
               "filter",
               "groupBy",
               "head",
+              "insertInto",
+              "intersect",
               "isLocal",
               "limit",
               "orderBy",
@@ -108,9 +110,13 @@ exportMethods("columns",
               "selectExpr",
               "showDF",
               "sortDF",
+              "subtract",
               "toJSON",
               "toRDD",
-              "where")
+              "unionAll",
+              "where",
+              "withColumn",
+              "withColumnRenamed")
 
 exportClasses("Column")
 
@@ -141,6 +147,7 @@ exportMethods("agg")
 export("cacheTable",
        "clearCache",
        "createExternalTable",
+       "dropTempTable",
        "jsonFile",
        "jsonRDD",
        "loadDF",
