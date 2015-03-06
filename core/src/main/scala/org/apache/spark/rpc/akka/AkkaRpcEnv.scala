@@ -29,9 +29,7 @@ import scala.util.control.NonFatal
 
 import akka.actor.{ActorSystem, ExtendedActorSystem, Actor, ActorRef, Props, Address}
 import akka.pattern.{ask => akkaAsk}
-import akka.remote.{AssociatedEvent => AkkaAssociatedEvent}
-import akka.remote.{DisassociatedEvent => AkkaDisassociatedEvent}
-import akka.remote.{AssociationErrorEvent, RemotingLifecycleEvent}
+import akka.remote.{AssociationEvent, AssociatedEvent, DisassociatedEvent, AssociationErrorEvent}
 import org.apache.spark.{SparkException, Logging, SparkConf}
 import org.apache.spark.rpc._
 import org.apache.spark.util.{ActorLogReceive, AkkaUtils}
@@ -109,41 +107,30 @@ private[spark] class AkkaRpcEnv private (
 
         override def preStart(): Unit = {
           // Listen for remote client network events
-          context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
+          context.system.eventStream.subscribe(self, classOf[AssociationEvent])
           safelyCall(endpoint) {
             endpoint.onStart()
           }
         }
 
         override def receiveWithLogging: Receive = {
-          case AkkaAssociatedEvent(_, remoteAddress, _) =>
+          case AssociatedEvent(_, remoteAddress, _) =>
             safelyCall(endpoint) {
-              val event = AssociatedEvent(akkaAddressToRpcAddress(remoteAddress))
-              val pf = endpoint.receive
-              if (pf.isDefinedAt(event)) {
-                pf.apply(event)
-              }
+              endpoint.onConnected(akkaAddressToRpcAddress(remoteAddress))
             }
 
-          case AkkaDisassociatedEvent(_, remoteAddress, _) =>
+          case DisassociatedEvent(_, remoteAddress, _) =>
             safelyCall(endpoint) {
-              val event = DisassociatedEvent(akkaAddressToRpcAddress(remoteAddress))
-              val pf = endpoint.receive
-              if (pf.isDefinedAt(event)) {
-                pf.apply(event)
-              }
+              endpoint.onDisconnected(akkaAddressToRpcAddress(remoteAddress))
             }
 
           case AssociationErrorEvent(cause, localAddress, remoteAddress, inbound, _) =>
             safelyCall(endpoint) {
-              val event = NetworkErrorEvent(akkaAddressToRpcAddress(remoteAddress), cause)
-              val pf = endpoint.receive
-              if (pf.isDefinedAt(event)) {
-                pf.apply(event)
-              }
+              endpoint.onNetworkError(cause, akkaAddressToRpcAddress(remoteAddress))
             }
-          case e: RemotingLifecycleEvent =>
-          // TODO ignore?
+
+          case e: AssociationEvent =>
+            // TODO ignore?
 
           case AkkaMessage(message: Any, reply: Boolean)=>
             logDebug("Received RPC message: " + AkkaMessage(message, reply))

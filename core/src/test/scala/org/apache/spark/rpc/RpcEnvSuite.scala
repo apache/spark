@@ -508,14 +508,27 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
   }
 
   test("network events") {
-    val events = new mutable.ArrayBuffer[Any] with mutable.SynchronizedBuffer[Any]
+    val events = new mutable.ArrayBuffer[(Any, Any)] with mutable.SynchronizedBuffer[(Any, Any)]
     env.setupThreadSafeEndpoint("network-events", new RpcEndpoint {
       override val rpcEnv = env
 
       override def receive = {
         case "hello" =>
-        case m => events += m
+        case m => events += "receive" -> m
       }
+
+      override def onConnected(remoteAddress: RpcAddress): Unit = {
+        events += "onConnected" -> remoteAddress
+      }
+
+      override def onDisconnected(remoteAddress: RpcAddress): Unit = {
+        events += "onDisconnected" -> remoteAddress
+      }
+
+      override def onNetworkError(cause: Throwable, remoteAddress: RpcAddress): Unit = {
+        events += "onNetworkError" -> remoteAddress
+      }
+
     })
 
     val anotherEnv = createRpcEnv(new SparkConf(), "remote", 13345)
@@ -525,16 +538,16 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     val remoteAddress = anotherEnv.address
     rpcEndpointRef.send("hello")
     eventually(timeout(5 seconds), interval(5 millis)) {
-      assert(events === List(AssociatedEvent(remoteAddress)))
+      assert(events === List(("onConnected", remoteAddress)))
     }
 
     anotherEnv.shutdown()
     anotherEnv.awaitTermination()
     eventually(timeout(5 seconds), interval(5 millis)) {
-      assert(events.size == 3)
-      assert(events(0) === AssociatedEvent(remoteAddress))
-      assert(events(1).asInstanceOf[NetworkErrorEvent].address === remoteAddress)
-      assert(events(2) === DisassociatedEvent(remoteAddress))
+      assert(events === List(
+        ("onConnected", remoteAddress),
+        ("onNetworkError", remoteAddress),
+        ("onDisconnected", remoteAddress)))
     }
   }
 }

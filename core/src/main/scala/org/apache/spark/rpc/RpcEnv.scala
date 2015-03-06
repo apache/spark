@@ -185,8 +185,7 @@ private[spark] trait RpcEndpoint {
    * Process messages from [[RpcEndpointRef.send]] or [[RpcCallContext.reply)]]
    */
   def receive: PartialFunction[Any, Unit] = {
-    case _ =>
-      // network events will be passed here by default, so do nothing by default to avoid noise.
+    case _ => throw new SparkException(self + " does not implement 'receive'")
   }
 
   /**
@@ -217,6 +216,28 @@ private[spark] trait RpcEndpoint {
    * Invoked when [[RpcEndpoint]] is stopping.
    */
   def onStop(): Unit = {
+    // By default, do nothing.
+  }
+
+  /**
+   * Invoked when `remoteAddress` is connected to the current node.
+   */
+  def onConnected(remoteAddress: RpcAddress): Unit = {
+    // By default, do nothing.
+  }
+
+  /**
+   * Invoked when `remoteAddress` is lost.
+   */
+  def onDisconnected(remoteAddress: RpcAddress): Unit = {
+    // By default, do nothing.
+  }
+
+  /**
+   * Invoked when some network error happens in the connection between the current node and
+   * `remoteAddress`.
+   */
+  def onNetworkError(cause: Throwable, remoteAddress: RpcAddress): Unit = {
     // By default, do nothing.
   }
 
@@ -326,27 +347,6 @@ private[spark] object RpcAddress {
     RpcAddress(host, port)
   }
 }
-
-/**
- * Indicate that a new connection is established.
- *
- * @param address the remote address of the connection
- */
-private[spark] case class AssociatedEvent(address: RpcAddress)
-
-/**
- * Indicate a disconnection from a remote address.
- *
- * @param address the remote address of the connection
- */
-private[spark] case class DisassociatedEvent(address: RpcAddress)
-
-/**
- * Indicate a network error.
- * @param address the remote address of the connection which this error happens on.
- * @param cause the cause of the network error.
- */
-private[spark] case class NetworkErrorEvent(address: RpcAddress, cause: Throwable)
 
 /**
  * A callback that [[RpcEndpoint]] can use it to send back a message or failure.

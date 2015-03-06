@@ -20,7 +20,7 @@ package org.apache.spark.deploy.worker
 import akka.actor.AddressFromURIString
 import org.apache.spark.SparkConf
 import org.apache.spark.SecurityManager
-import org.apache.spark.rpc.{RpcAddress, RpcEnv, DisassociatedEvent}
+import org.apache.spark.rpc.{RpcAddress, RpcEnv}
 import org.scalatest.FunSuite
 
 class WorkerWatcherSuite extends FunSuite {
@@ -32,8 +32,8 @@ class WorkerWatcherSuite extends FunSuite {
     val workerWatcher = new WorkerWatcher(rpcEnv, targetWorkerUrl)
     workerWatcher.setTesting(testing = true)
     rpcEnv.setupEndpoint("worker-watcher", workerWatcher)
-    workerWatcher.receive(
-      DisassociatedEvent(RpcAddress(targetWorkerAddress.host.get, targetWorkerAddress.port.get)))
+    workerWatcher.onDisconnected(
+      RpcAddress(targetWorkerAddress.host.get, targetWorkerAddress.port.get))
     assert(workerWatcher.isShutDown)
     rpcEnv.shutdown()
   }
@@ -47,8 +47,7 @@ class WorkerWatcherSuite extends FunSuite {
     val workerWatcher = new WorkerWatcher(rpcEnv, targetWorkerUrl)
     workerWatcher.setTesting(testing = true)
     rpcEnv.setupEndpoint("worker-watcher", workerWatcher)
-    workerWatcher.receive(
-      DisassociatedEvent(RpcAddress(otherAkkaAddress.host.get, otherAkkaAddress.port.get)))
+    workerWatcher.onDisconnected(RpcAddress(otherAkkaAddress.host.get, otherAkkaAddress.port.get))
     assert(!workerWatcher.isShutDown)
     rpcEnv.shutdown()
   }

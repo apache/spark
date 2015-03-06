@@ -54,24 +54,29 @@ private[spark] class WorkerWatcher(override val rpcEnv: RpcEnv, workerUrl: Strin
   def exitNonZero() = if (isTesting) isShutDown = true else System.exit(-1)
 
   override def receive = {
-    case AssociatedEvent(remoteAddress) =>
-      if (isWorker(remoteAddress)) {
-        logInfo(s"Successfully connected to $workerUrl")
-      }
-    case DisassociatedEvent(remoteAddress) =>
-      if (isWorker(remoteAddress)) {
-        // This log message will never be seen
-        logError(s"Lost connection to worker actor $workerUrl. Exiting.")
-        exitNonZero()
-      }
-    case NetworkErrorEvent(remoteAddress, cause) =>
-      if (isWorker(remoteAddress)) {
-        // These logs may not be seen if the worker (and associated pipe) has died
-        logError(s"Could not initialize connection to worker $workerUrl. Exiting.")
-        logError(s"Error was: $cause")
-        exitNonZero()
-      }
     case e => logWarning(s"Received unexpected actor system event: $e")
   }
 
+  override def onConnected(remoteAddress: RpcAddress): Unit = {
+    if (isWorker(remoteAddress)) {
+      logInfo(s"Successfully connected to $workerUrl")
+    }
+  }
+
+  override def onDisconnected(remoteAddress: RpcAddress): Unit = {
+    if (isWorker(remoteAddress)) {
+      // This log message will never be seen
+      logError(s"Lost connection to worker actor $workerUrl. Exiting.")
+      exitNonZero()
+    }
+  }
+
+  override def onNetworkError(cause: Throwable, remoteAddress: RpcAddress): Unit = {
+    if (isWorker(remoteAddress)) {
+      // These logs may not be seen if the worker (and associated pipe) has died
+      logError(s"Could not initialize connection to worker $workerUrl. Exiting.")
+      logError(s"Error was: $cause")
+      exitNonZero()
+    }
+  }
 }
