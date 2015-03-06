@@ -867,14 +867,14 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     saveAsHadoopFile(path, keyClass, valueClass, fm.runtimeClass.asInstanceOf[Class[F]])
   }
 
-  class RDDMultipleTextOutputFormat() extends MultipleTextOutputFormat[Any, Any]() {
+  class RDDMultipleTextOutputFormat[K,V] extends MultipleTextOutputFormat[K, V]() {
 
-    override def generateActualKey(key: Any, value: Any): Any =
+    override def generateActualKey(key: K, value: V): K =
     {
-      NullWritable.get()
+      NullWritable.get().asInstanceOf[K]
     }
 
-    override def generateFileNameForKeyValue(key: Any, value: Any, name: String): String =
+    override def generateFileNameForKeyValue(key: K, value: V, name: String): String =
     {
       key.asInstanceOf[String]
     }
@@ -901,7 +901,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   def saveAsHadoopFileByKey[F <: OutputFormat[K, V]](path: String)(implicit fm: ClassTag[F]) {
     saveAsHadoopFile(path, ClassUtils.primitiveToWrapper(keyClass),
       ClassUtils.primitiveToWrapper(valueClass),
-      classOf[RDDMultipleTextOutputFormat])
+      classOf[RDDMultipleTextOutputFormat[K,V]])
   }
 
   /**
