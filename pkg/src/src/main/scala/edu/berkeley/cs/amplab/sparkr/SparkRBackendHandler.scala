@@ -165,7 +165,6 @@ class SparkRBackendHandler(server: SparkRBackend)
         }
       }
       if (!parameterWrapperType.isInstance(args(i))) {
-        System.err.println(s"arg $i not match: expected type $parameterWrapperType, but got ${args(i).getClass()}")
         return false
       }
     }
