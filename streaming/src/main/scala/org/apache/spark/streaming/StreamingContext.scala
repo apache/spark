@@ -553,10 +553,7 @@ class StreamingContext private[streaming] (
    */
   def stop(stopSparkContext: Boolean = true): Unit = synchronized {
     stop(stopSparkContext, false)
-    this.uiTab match  {
-      case Some(tab) =>  StreamingTab.detachStreamingTab(this, tab)
-      case None =>
-    }
+    this.uiTab.foreach(StreamingTab.detachStreamingTab(this, _))
   }
 
   /**

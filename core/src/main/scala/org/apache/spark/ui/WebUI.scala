@@ -17,17 +17,18 @@
 
 package org.apache.spark.ui
 
-import scala.collection.mutable.HashMap
 import javax.servlet.http.HttpServletRequest
+
+import scala.collection.mutable.HashMap
+import scala.collection.mutable.ArrayBuffer
+import scala.xml.Node
+
+import org.eclipse.jetty.servlet.ServletContextHandler
+import org.json4s.JsonAST.{JNothing, JValue}
 
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
-import org.eclipse.jetty.servlet.ServletContextHandler
-import org.json4s.JsonAST.{JNothing, JValue}
-
-import scala.collection.mutable.ArrayBuffer
-import scala.xml.Node
 
 /**
  * The top level component of the UI hierarchy that contains the server.
@@ -68,10 +69,7 @@ private[spark] abstract class WebUI(
   }
   
   def detachPage(page: WebUIPage) {
-    page2Handlers.remove(page) match {
-      case Some(handlers) => handlers.foreach(detachHandler)
-      case None =>
-    }
+    page2Handlers.remove(page).foreach(_.foreach(detachHandler))
   }
   
 
