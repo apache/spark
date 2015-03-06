@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler
 
+import com.fasterxml.jackson.core.JsonParseException
 import java.io.{InputStream, IOException}
 
 import scala.io.Source
@@ -40,15 +41,31 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
    *
    * @param logData Stream containing event log data.
    * @param sourceName Filename (or other source identifier) from whence @logData is being read
+   * @param sourceTruncated Indicate whether log file might be truncated (some abnormal situation 
+   *        encountered, log file not finish writing) or not
    */
-  def replay(logData: InputStream, sourceName: String): Unit = {
+  def replay(
+      logData: InputStream,
+      sourceName: String,
+      sourceTruncated: Boolean = false): Unit = {
     var currentLine: String = null
     var lineNumber: Int = 1
     try {
       val lines = Source.fromInputStream(logData).getLines()
-      lines.foreach { line =>
-        currentLine = line
-        postToAll(JsonProtocol.sparkEventFromJson(parse(line)))
+      while (lines.hasNext) {
+        currentLine = lines.next()
+        try {
+          postToAll(JsonProtocol.sparkEventFromJson(parse(currentLine)))
+        } catch {
+          case jpe: JsonParseException =>
+            // We can only ignore exception from last line of the file that might be truncated
+            if (!sourceTruncated || lines.hasNext) {
+              throw jpe
+            } else {
+              logWarning(s"Get json parse exception from log file $sourceName" + 
+                s" in line $lineNumber, the file might not finished writing.")
+            }
+        }
         lineNumber += 1
       }
     } catch {
