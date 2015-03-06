@@ -1053,10 +1053,12 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   test("SPARK-6145: ORDER BY test for nested fields") {
     jsonRDD(sparkContext.makeRDD(
       """{"a": {"b": 1, "a": {"a": 1}}, "c": [{"d": 1}]}""" :: Nil)).registerTempTable("nestedOrder")
-    // These should be successfully analyzed
-    sql("SELECT 1 FROM nestedOrder ORDER BY a.b").queryExecution.analyzed
-    sql("SELECT a.b FROM nestedOrder ORDER BY a.b").queryExecution.analyzed
-    sql("SELECT 1 FROM nestedOrder ORDER BY a.a.a").queryExecution.analyzed
-    sql("SELECT 1 FROM nestedOrder ORDER BY c[0].d").queryExecution.analyzed
+
+    checkAnswer(sql("SELECT 1 FROM nestedOrder ORDER BY a.b"), Row(1))
+    checkAnswer(sql("SELECT a.b FROM nestedOrder ORDER BY a.b"), Row(1))
+    checkAnswer(sql("SELECT 1 FROM nestedOrder ORDER BY a.a.a"), Row(1))
+    checkAnswer(sql("SELECT a.a.a FROM nestedOrder ORDER BY a.a.a"), Row(1))
+    checkAnswer(sql("SELECT 1 FROM nestedOrder ORDER BY c[0].d"), Row(1))
+    checkAnswer(sql("SELECT c[0].d FROM nestedOrder ORDER BY c[0].d"), Row(1))
   }
 }
