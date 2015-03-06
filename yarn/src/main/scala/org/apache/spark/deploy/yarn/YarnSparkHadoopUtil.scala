@@ -101,9 +101,8 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   }
 
   private[spark] override def scheduleLoginFromKeytab(): Unit = {
-    val principal = sparkConf.get("spark.yarn.principal")
-    val keytab = sparkConf.get("spark.yarn.keytab")
-    if (principal != null) {
+    sparkConf.getOption("spark.yarn.principal").foreach { principal =>
+      val keytab = sparkConf.get("spark.yarn.keytab")
       val delegationTokenRenewerRunnable =
         new Runnable {
           override def run(): Unit = {
@@ -155,8 +154,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
 
   override def updateCredentialsIfRequired(): Unit = {
     try {
-      val credentialsFile = sparkConf.get("spark.yarn.credentials.file")
-      if (credentialsFile != null && !credentialsFile.isEmpty) {
+      sparkConf.getOption("spark.yarn.credentials.file").foreach { credentialsFile =>
         val credentialsFilePath = new Path(credentialsFile)
         val remoteFs = FileSystem.get(conf)
         val stagingDirPath = new Path(remoteFs.getHomeDirectory, credentialsFilePath.getParent)
