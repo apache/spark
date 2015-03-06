@@ -20,9 +20,8 @@ package org.apache.spark.rpc.akka
 import java.net.URI
 import java.util.concurrent.{ConcurrentHashMap, CountDownLatch}
 
-import scala.concurrent.Await
+import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
-import scala.concurrent.Future
 import scala.language.postfixOps
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
@@ -139,7 +138,7 @@ private[spark] class AkkaRpcEnv private (
               val pf =
                 if (reply) {
                   endpoint.receiveAndReply(new RpcCallContext {
-                    override def fail(e: Throwable): Unit = {
+                    override def sendFailure(e: Throwable): Unit = {
                       s ! AkkaFailure(e)
                     }
 
@@ -329,9 +328,10 @@ private[akka] class AkkaRpcEndpointRef(
   override def sendWithReply[T: ClassTag](message: Any, timeout: FiniteDuration): Future[T] = {
     import scala.concurrent.ExecutionContext.Implicits.global
     actorRef.ask(AkkaMessage(message, true))(timeout).flatMap {
-      case AkkaMessage(message, reply) =>
+      case msg @ AkkaMessage(message, reply) =>
         if (reply) {
-          Future.failed(new SparkException("The sender cannot reply"))
+          logError(s"Receive $msg but the sender cannot reply")
+          Future.failed(new SparkException(s"Receive $msg but the sender cannot reply"))
         } else {
           Future.successful(message)
         }

@@ -192,7 +192,7 @@ private[spark] trait RpcEndpoint {
    * Process messages from [[RpcEndpointRef.sendWithReply]] or [[RpcCallContext.replyWithSender)]]
    */
   def receiveAndReply(response: RpcCallContext): PartialFunction[Any, Unit] = {
-    case _ => response.fail(new SparkException(self + " won't reply anything"))
+    case _ => response.sendFailure(new SparkException(self + " won't reply anything"))
   }
 
   /**
@@ -374,5 +374,5 @@ private[spark] trait RpcCallContext {
   /**
    * Report a failure to the sender.
    */
-  def fail(e: Throwable): Unit
+  def sendFailure(e: Throwable): Unit
 }

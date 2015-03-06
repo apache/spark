@@ -469,7 +469,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
       override val rpcEnv = env
 
       override def receiveAndReply(response: RpcCallContext) = {
-        case m => response.fail(new SparkException("Oops"))
+        case m => response.sendFailure(new SparkException("Oops"))
       }
     })
 
@@ -487,7 +487,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
       override val rpcEnv = env
 
       override def receiveAndReply(response: RpcCallContext) = {
-        case msg: String => response.fail(new SparkException("Oops"))
+        case msg: String => response.sendFailure(new SparkException("Oops"))
       }
     })
 
