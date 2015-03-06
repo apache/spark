@@ -151,7 +151,7 @@ private[spark] class AkkaRpcEnv private (
               val s = sender()
               val pf =
                 if (reply) {
-                  endpoint.receiveAndReply(new RpcResponse {
+                  endpoint.receiveAndReply(new RpcCallContext {
                     override def fail(e: Throwable): Unit = {
                       s ! AkkaFailure(e)
                     }

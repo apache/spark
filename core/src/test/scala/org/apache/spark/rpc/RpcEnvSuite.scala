@@ -93,7 +93,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     val endpoint = new RpcEndpoint {
       override val rpcEnv = env
 
-      override def receiveAndReply(response: RpcResponse) = {
+      override def receiveAndReply(response: RpcCallContext) = {
         case "Hello" => response.reply(self)
         case "Echo" => response.reply("Echo")
       }
@@ -109,7 +109,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     val rpcEndpointRef = env.setupEndpoint("ask-locally", new RpcEndpoint {
       override val rpcEnv = env
 
-      override def receiveAndReply(response: RpcResponse) = {
+      override def receiveAndReply(response: RpcCallContext) = {
         case msg: String => {
           response.reply(msg)
         }
@@ -123,7 +123,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     env.setupEndpoint("ask-remotely", new RpcEndpoint {
       override val rpcEnv = env
 
-      override def receiveAndReply(response: RpcResponse) = {
+      override def receiveAndReply(response: RpcCallContext) = {
         case msg: String => {
           response.reply(msg)
         }
@@ -146,7 +146,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     env.setupEndpoint("ask-timeout", new RpcEndpoint {
       override val rpcEnv = env
 
-      override def receiveAndReply(response: RpcResponse) = {
+      override def receiveAndReply(response: RpcCallContext) = {
         case msg: String => {
           Thread.sleep(100)
           response.reply(msg)
@@ -175,7 +175,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     val pongRef = env.setupEndpoint("pong", new RpcEndpoint {
       override val rpcEnv = env
 
-      override def receiveAndReply(response: RpcResponse) = {
+      override def receiveAndReply(response: RpcCallContext) = {
         case Ping(id) => response.replyWithSender(Pong(id), self)
       }
     })
@@ -183,9 +183,9 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     val pingRef = env.setupEndpoint("ping", new RpcEndpoint {
       override val rpcEnv = env
 
-      var requester: RpcResponse = _
+      var requester: RpcCallContext = _
 
-      override def receiveAndReply(response: RpcResponse) = {
+      override def receiveAndReply(response: RpcCallContext) = {
         case Start => {
           requester = response
           pongRef.sendWithReply(Ping(1), self)
@@ -430,7 +430,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     val endpointRef = env.setupEndpoint("sendWithReply", new RpcEndpoint {
       override val rpcEnv = env
 
-      override def receiveAndReply(response: RpcResponse) = {
+      override def receiveAndReply(response: RpcCallContext) = {
         case m => response.reply("ack")
       }
     })
@@ -446,7 +446,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     env.setupEndpoint("sendWithReply-remotely", new RpcEndpoint {
       override val rpcEnv = env
 
-      override def receiveAndReply(response: RpcResponse) = {
+      override def receiveAndReply(response: RpcCallContext) = {
         case m => response.reply("ack")
       }
     })
@@ -468,7 +468,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     val endpointRef = env.setupEndpoint("sendWithReply-error", new RpcEndpoint {
       override val rpcEnv = env
 
-      override def receiveAndReply(response: RpcResponse) = {
+      override def receiveAndReply(response: RpcCallContext) = {
         case m => response.fail(new SparkException("Oops"))
       }
     })
@@ -486,7 +486,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     env.setupEndpoint("sendWithReply-remotely-error", new RpcEndpoint {
       override val rpcEnv = env
 
-      override def receiveAndReply(response: RpcResponse) = {
+      override def receiveAndReply(response: RpcCallContext) = {
         case msg: String => response.fail(new SparkException("Oops"))
       }
     })

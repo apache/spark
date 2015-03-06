@@ -182,7 +182,7 @@ private[spark] trait RpcEndpoint {
   }
 
   /**
-   * Process messages from [[RpcEndpointRef.send]] or [[RpcResponse.reply)]]
+   * Process messages from [[RpcEndpointRef.send]] or [[RpcCallContext.reply)]]
    */
   def receive: PartialFunction[Any, Unit] = {
     case _ =>
@@ -190,9 +190,9 @@ private[spark] trait RpcEndpoint {
   }
 
   /**
-   * Process messages from [[RpcEndpointRef.sendWithReply]] or [[RpcResponse.replyWithSender)]]
+   * Process messages from [[RpcEndpointRef.sendWithReply]] or [[RpcCallContext.replyWithSender)]]
    */
-  def receiveAndReply(response: RpcResponse): PartialFunction[Any, Unit] = {
+  def receiveAndReply(response: RpcCallContext): PartialFunction[Any, Unit] = {
     case _ => response.fail(new SparkException(self + " won't reply anything"))
   }
 
@@ -281,7 +281,7 @@ private[spark] trait RpcEndpointRef {
    * Fire-and-forget semantics.
    *
    * The receiver will reply to sender's [[RpcEndpoint.receive]] or [[RpcEndpoint.receiveAndReply]]
-   * depending on which one of [[RpcResponse.reply]]s is called.
+   * depending on which one of [[RpcCallContext.reply]]s is called.
    */
   def sendWithReply(message: Any, sender: RpcEndpointRef): Unit
 
@@ -351,7 +351,7 @@ private[spark] case class NetworkErrorEvent(address: RpcAddress, cause: Throwabl
 /**
  * A callback that [[RpcEndpoint]] can use it to send back a message or failure.
  */
-private[spark] trait RpcResponse {
+private[spark] trait RpcCallContext {
 
   /**
    * Reply a message to the sender. If the sender is [[RpcEndpoint]], its [[RpcEndpoint.receive]]
