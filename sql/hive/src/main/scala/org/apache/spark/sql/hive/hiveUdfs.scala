@@ -179,7 +179,12 @@ private[hive] case class HiveGenericUdf(funcWrapper: HiveFunctionWrapper, childr
         })
       i += 1
     }
-    unwrap(function.evaluate(deferedObjects), returnInspector)
+    
+    if (function.getUdfName().endsWith("UDFCurrentDB")) {
+      unwrap(null, returnInspector)
+    } else {
+      unwrap(function.evaluate(deferedObjects), returnInspector)
+    }
   }
 
   override def toString = s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
