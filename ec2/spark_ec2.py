@@ -69,9 +69,10 @@ DEFAULT_SPARK_EC2_GITHUB_REPO = "https://github.com/mesos/spark-ec2"
 DEFAULT_SPARK_EC2_BRANCH = "branch-1.3"
 
 
-# Download external libraries that we need from PyPI to SPARK_EC2_DIR/lib/
-# and prepend them to our PATH.
 def setup_external_libs(libs):
+    """
+    Download external libraries from PyPI to SPARK_EC2_DIR/lib/ and prepend them to our PATH.
+    """
     PYPI_URL_PREFIX = "https://pypi.python.org/packages/source"
     SPARK_EC2_LIB_DIR = os.path.join(SPARK_EC2_DIR, "lib")
 
