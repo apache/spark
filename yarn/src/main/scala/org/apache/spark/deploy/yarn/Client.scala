@@ -24,9 +24,9 @@ import java.util.UUID
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap, ListBuffer, Map}
-import scala.util.{Random, Try, Success, Failure}
+import scala.util.{Try, Success, Failure}
 
-import com.google.common.base.Objects
+import com.google.common.base.{Preconditions, Objects}
 
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.conf.Configuration
@@ -43,8 +43,8 @@ import org.apache.hadoop.yarn.client.api.{YarnClient, YarnClientApplication}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.Records
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkException}
 import org.apache.spark.util.Utils
 
 private[spark] class Client(
@@ -67,10 +67,7 @@ private[spark] class Client(
   private val executorMemoryOverhead = args.executorMemoryOverhead // MB
   private val distCacheMgr = new ClientDistributedCacheManager()
   private val isClusterMode = args.isClusterMode
-
   private var loginFromKeytab = false
-  private var keytabFileName: String = null
-
 
   def stop(): Unit = yarnClient.stop()
 
@@ -221,10 +218,8 @@ private[spark] class Client(
     // and add them as local resources to the application master.
     val fs = FileSystem.get(hadoopConf)
     val dst = new Path(fs.getHomeDirectory(), appStagingDir)
-    val nns =
-      SparkHadoopUtil.get.asInstanceOf[YarnSparkHadoopUtil].getNameNodesToAccess(sparkConf) + dst
-    SparkHadoopUtil.get.asInstanceOf[YarnSparkHadoopUtil].
-      obtainTokensForNamenodes(nns, hadoopConf, credentials)
+    val nns = YarnSparkHadoopUtil.get.getNameNodesToAccess(sparkConf) + dst
+    YarnSparkHadoopUtil.get.obtainTokensForNamenodes(nns, hadoopConf, credentials)
 
     val replication = sparkConf.getInt("spark.yarn.submit.file.replication",
       fs.getDefaultReplication(dst)).toShort
@@ -249,8 +244,8 @@ private[spark] class Client(
       val destinationPath = copyFileToRemote(dst, localPath, replication)
       val destFs = FileSystem.get(destinationPath.toUri(), hadoopConf)
       distCacheMgr.addResource(
-        destFs, hadoopConf, destinationPath, localResources, LocalResourceType.FILE, keytabFileName,
-        statCache, appMasterOnly = true)
+        destFs, hadoopConf, destinationPath, localResources, LocalResourceType.FILE,
+        sparkConf.get("spark.yarn.keytab"), statCache, appMasterOnly = true)
     }
 
     /**
@@ -334,8 +329,11 @@ private[spark] class Client(
     env("SPARK_YARN_STAGING_DIR") = stagingDir
     env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
     if (loginFromKeytab) {
-      env("SPARK_PRINCIPAL") = args.principal
-      env("SPARK_KEYTAB") = keytabFileName
+      val remoteFs = FileSystem.get(hadoopConf)
+      val stagingDirPath = new Path(remoteFs.getHomeDirectory, stagingDir)
+      val credentialsFile = "credentials-" + UUID.randomUUID().toString
+      sparkConf.set(
+        "spark.yarn.credentials.file", new Path(stagingDirPath, credentialsFile).toString)
     }
 
     // Set the environment variables to be passed on to the executors.
@@ -573,13 +571,13 @@ private[spark] class Client(
       val f = new File(args.keytab)
       // Generate a file name that can be used for the keytab file, that does not conflict
       // with any user file.
-      keytabFileName = f.getName + "-" + UUID.randomUUID().toString
+      val keytabFileName = f.getName + "-" + UUID.randomUUID().toString
       val ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(args.principal, args.keytab)
       credentials = ugi.getCredentials
       loginFromKeytab = true
-      val credentialsFile = "credentials-" + UUID.randomUUID().toString
-      sparkConf.set("spark.yarn.credentials.file", credentialsFile)
-      logInfo("Successfully logged into Kerberos.")
+      sparkConf.set("spark.yarn.keytab", keytabFileName)
+      sparkConf.set("spark.yarn.principal", args.principal)
+      logInfo("Successfully logged into the KDC.")
     } else {
       credentials = UserGroupInformation.getCurrentUser.getCredentials
     }

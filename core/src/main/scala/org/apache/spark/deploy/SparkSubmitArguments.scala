@@ -517,6 +517,10 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         |  --num-executors NUM         Number of executors to launch (Default: 2).
         |  --archives ARCHIVES         Comma separated list of archives to be extracted into the
         |                              working directory of each executor.
+        |  --principal PRINCIPAL       Principal to be used to login to KDC, while running on
+        |                              secure HDFS.
+        |  --keytab KEYTAB             The full path to the file that contains the keytab for the
+        |                              principal specified above.
       """.stripMargin
     )
     SparkSubmit.exitFn()

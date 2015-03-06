@@ -40,7 +40,7 @@ import scala.collection.JavaConversions._
  */
 @DeveloperApi
 class SparkHadoopUtil extends Logging {
-  val sparkConf = new SparkConf()
+  protected val sparkConf = new SparkConf() // YarnSparkHadoopUtil requires this
   val conf: Configuration = newConfiguration(sparkConf)
   UserGroupInformation.setConfiguration(conf)
 

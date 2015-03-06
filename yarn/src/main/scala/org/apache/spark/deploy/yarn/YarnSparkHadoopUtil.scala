@@ -18,9 +18,9 @@
 package org.apache.spark.deploy.yarn
 
 import java.io._
-import java.net.URI
-import java.nio.ByteBuffer
-import java.util.concurrent.{ TimeUnit, Executors}
+import java.util
+import java.util.Comparator
+import java.util.concurrent.{Executors, TimeUnit}
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 
@@ -28,9 +28,9 @@ import scala.collection.mutable.HashMap
 import scala.collection.JavaConversions._
 import scala.util.Try
 
-import org.apache.hadoop.fs.Options.Rename
-import org.apache.hadoop.fs.{FileUtil, Path, FileSystem}
-import org.apache.hadoop.hdfs.DistributedFileSystem
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs._
+import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapred.{Master, JobConf}
@@ -40,10 +40,9 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.records.{Priority, ApplicationAccessType}
-import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.{SparkException, SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.util.Utils
 
 /**
@@ -51,17 +50,16 @@ import org.apache.spark.util.Utils
  */
 class YarnSparkHadoopUtil extends SparkHadoopUtil {
 
-  private var keytab: String = null
-  private var principal: String = null
   @volatile private var loggedInViaKeytab = false
   @volatile private var loggedInUGI: UserGroupInformation = null
-  @volatile private var lastCredentialsRefresh = 0L
+  private var lastCredentialsFileSuffix = 0
   private lazy val delegationTokenRenewer =
     Executors.newSingleThreadScheduledExecutor(
       Utils.namedThreadFactory("Delegation Token Refresh Thread"))
-  private lazy val delegationTokenExecuterUpdaterThread = new Runnable {
-    override def run(): Unit = updateCredentialsIfRequired()
-  }
+  private lazy val delegationTokenExecuterUpdaterRunnable =
+    new Runnable {
+      override def run(): Unit = Utils.logUncaughtExceptions(updateCredentialsIfRequired())
+    }
 
   override def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
     dest.addCredentials(source.getCredentials())
@@ -103,49 +101,13 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   }
 
   private[spark] override def scheduleLoginFromKeytab(): Unit = {
-    val principal = System.getenv("SPARK_PRINCIPAL")
-    val keytab = System.getenv("SPARK_KEYTAB")
+    val principal = sparkConf.get("spark.yarn.principal")
+    val keytab = sparkConf.get("spark.yarn.keytab")
     if (principal != null) {
-      val delegationTokenRenewerThread =
+      val delegationTokenRenewerRunnable =
         new Runnable {
           override def run(): Unit = {
-            if (!loggedInViaKeytab) {
-              // Keytab is copied by YARN to the working directory of the AM, so full path is
-              // not needed.
-              loggedInUGI = UserGroupInformation.loginUserFromKeytabAndReturnUGI(
-                principal, keytab)
-              loggedInViaKeytab = true
-            }
-            val nns = getNameNodesToAccess(sparkConf)
-            val newCredentials = loggedInUGI.getCredentials
-            obtainTokensForNamenodes(nns, conf, newCredentials)
-            val remoteFs = FileSystem.get(conf)
-            val stagingDirPath =
-              new Path(remoteFs.getHomeDirectory, System.getenv("SPARK_YARN_STAGING_DIR"))
-            val tokenPathStr = sparkConf.get("spark.yarn.credentials.file")
-            val tokenPath = new Path(stagingDirPath.toString, tokenPathStr)
-            val tempTokenPath = new Path(stagingDirPath.toString, tokenPathStr + ".tmp")
-            val stream = remoteFs.create(tempTokenPath, true)
-            // Now write this out to HDFS
-            newCredentials.writeTokenStorageToStream(stream)
-            stream.hflush()
-            stream.close()
-            // HDFS does reads by inodes now, so just doing a rename should be fine. But I could
-            // not find a clear explanation of when the blocks on HDFS are deleted. Ideally, we
-            // would not need this, but just be defensive to ensure we don't mess up the
-            // credentials. So create a file to show that we are currently updating - if the
-            // reader sees this file, they go away and come back later. Then delete old token and
-            // rename the old to new.
-            val updatingPath = new Path(stagingDirPath, "_UPDATING")
-            if (remoteFs.exists(updatingPath)) {
-              remoteFs.delete(updatingPath, true)
-            }
-            remoteFs.create(updatingPath).close()
-            if (remoteFs.exists(tokenPath)) {
-              remoteFs.delete(tokenPath, true)
-            }
-            remoteFs.rename(tempTokenPath, tokenPath)
-            remoteFs.delete(updatingPath, true)
+            renewCredentials(principal, keytab)
             delegationTokenRenewer.schedule(
               this, (0.75 * (getLatestValidity - System.currentTimeMillis())).toLong,
               TimeUnit.MILLISECONDS)
@@ -153,47 +115,85 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
         }
       val timeToRenewal = (0.75 * (getLatestValidity - System.currentTimeMillis())).toLong
       delegationTokenRenewer.schedule(
-        delegationTokenRenewerThread, timeToRenewal, TimeUnit.MILLISECONDS)
+        delegationTokenRenewerRunnable, timeToRenewal, TimeUnit.MILLISECONDS)
     }
+  }
+
+  private def renewCredentials(principal: String, keytab: String): Unit = {
+    if (!loggedInViaKeytab) {
+      // Keytab is copied by YARN to the working directory of the AM, so full path is
+      // not needed.
+      loggedInUGI = UserGroupInformation.loginUserFromKeytabAndReturnUGI(
+        principal, keytab)
+      loggedInViaKeytab = true
+    }
+    val nns = getNameNodesToAccess(sparkConf)
+    val newCredentials = loggedInUGI.getCredentials
+    obtainTokensForNamenodes(nns, conf, newCredentials)
+    val remoteFs = FileSystem.get(conf)
+    val nextSuffix = lastCredentialsFileSuffix + 1
+    val tokenPathStr =
+      sparkConf.get("spark.yarn.credentials.file") + "-" + nextSuffix
+    val tokenPath = new Path(tokenPathStr)
+    val tempTokenPath = new Path(tokenPathStr + ".tmp")
+    val stream = Option(remoteFs.create(tempTokenPath, true))
+    try {
+      stream.foreach { s =>
+        newCredentials.writeTokenStorageToStream(s)
+        s.hflush()
+        s.close()
+        remoteFs.rename(tempTokenPath, tokenPath)
+      }
+    } catch {
+      case e: Exception =>
+    } finally {
+      stream.foreach(_.close())
+    }
+
+    lastCredentialsFileSuffix = nextSuffix
   }
 
   override def updateCredentialsIfRequired(): Unit = {
     try {
       val credentialsFile = sparkConf.get("spark.yarn.credentials.file")
       if (credentialsFile != null && !credentialsFile.isEmpty) {
+        val credentialsFilePath = new Path(credentialsFile)
         val remoteFs = FileSystem.get(conf)
-        val sparkStagingDir = System.getenv("SPARK_YARN_STAGING_DIR")
-        val stagingDirPath = new Path(remoteFs.getHomeDirectory, sparkStagingDir)
-        val credentialsFilePath = new Path(stagingDirPath, credentialsFile)
-        // If an update is currently in progress, come back later!
-        if (remoteFs.exists( new Path(stagingDirPath, "_UPDATING"))) {
-          delegationTokenRenewer.schedule(delegationTokenExecuterUpdaterThread, 1, TimeUnit.HOURS)
-        }
-        // Now check if the file exists, if it does go get the credentials from there
-        if (remoteFs.exists(credentialsFilePath)) {
-          val status = remoteFs.getFileStatus(credentialsFilePath)
-          val modTimeAtStart = status.getModificationTime
-          if (modTimeAtStart > lastCredentialsRefresh) {
-            val newCredentials = getCredentialsFromHDFSFile(remoteFs, credentialsFilePath)
-            val newStatus = remoteFs.getFileStatus(credentialsFilePath)
-            // File was updated after we started reading it, lets come back later and try to read
-            // it.
-            if (newStatus.getModificationTime != modTimeAtStart) {
-              delegationTokenRenewer
-                .schedule(delegationTokenExecuterUpdaterThread, 1, TimeUnit.HOURS)
+        val stagingDirPath = new Path(remoteFs.getHomeDirectory, credentialsFilePath.getParent)
+        val fileStatuses =
+          remoteFs.listStatus(stagingDirPath,
+            new PathFilter {
+              override def accept(path: Path): Boolean = {
+                val name = path.getName
+                name.startsWith(credentialsFilePath.getName) && !name.endsWith(".tmp")
+              }
+            })
+        util.Arrays.sort(fileStatuses, new Comparator[FileStatus] {
+          override def compare(o1: FileStatus, o2: FileStatus): Int = {
+            // can't return this directly, as it might cause int to overflow
+            val diff = o1.getModificationTime - o2.getModificationTime
+            if (diff < 0) {
+              -1
             } else {
-              UserGroupInformation.getCurrentUser.addCredentials(newCredentials)
-              lastCredentialsRefresh = status.getModificationTime
-              val totalValidity = getLatestValidity - lastCredentialsRefresh
-              val timeToRunRenewal = lastCredentialsRefresh + (0.8 * totalValidity).toLong
-              val timeFromNowToRenewal = timeToRunRenewal - System.currentTimeMillis()
-              delegationTokenRenewer.schedule(delegationTokenExecuterUpdaterThread,
-                timeFromNowToRenewal, TimeUnit.MILLISECONDS)
+              1
             }
-          } else {
-            // Check every hour to see if new credentials arrived.
-            delegationTokenRenewer.schedule(delegationTokenExecuterUpdaterThread, 1, TimeUnit.HOURS)
           }
+        })
+        val credentialsStatus = fileStatuses(fileStatuses.length - 1)
+        val credentials = credentialsStatus.getPath
+        val suffix = credentials.getName.substring(credentials.getName.lastIndexOf("-") + 1).toInt
+        if (suffix > lastCredentialsFileSuffix) {
+          val newCredentials = getCredentialsFromHDFSFile(remoteFs, credentials)
+          UserGroupInformation.getCurrentUser.addCredentials(newCredentials)
+          val totalValidity = getLatestValidity - credentialsStatus.getModificationTime
+          val timeToRunRenewal =
+            credentialsStatus.getModificationTime + (0.8 * totalValidity).toLong
+          val timeFromNowToRenewal = timeToRunRenewal - System.currentTimeMillis()
+          delegationTokenRenewer.schedule(delegationTokenExecuterUpdaterRunnable,
+            timeFromNowToRenewal, TimeUnit.MILLISECONDS)
+        } else {
+          // Check every hour to see if new credentials arrived.
+          delegationTokenRenewer.schedule(delegationTokenExecuterUpdaterRunnable, 1, TimeUnit.HOURS)
         }
       }
     } catch {
@@ -202,14 +202,13 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
       case e: Exception =>
         logWarning(
           "Error encountered while trying to update credentials, will try again in 1 hour", e)
-        delegationTokenRenewer.schedule(delegationTokenExecuterUpdaterThread, 1, TimeUnit.HOURS)
+        delegationTokenRenewer.schedule(delegationTokenExecuterUpdaterRunnable, 1, TimeUnit.HOURS)
     }
   }
 
   private[spark] def getCredentialsFromHDFSFile(
-    remoteFs: FileSystem,
-    tokenPath: Path
-  ): Credentials = {
+      remoteFs: FileSystem,
+      tokenPath: Path): Credentials = {
     val stream = remoteFs.open(tokenPath)
     val newCredentials = new Credentials()
     newCredentials.readFields(stream)
@@ -294,6 +293,14 @@ object YarnSparkHadoopUtil {
   // request types (like map/reduce in hadoop for example)
   val RM_REQUEST_PRIORITY = Priority.newInstance(1)
 
+  def get: YarnSparkHadoopUtil = {
+    val yarnMode = java.lang.Boolean.valueOf(
+      System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))
+    if (!yarnMode) {
+      throw new SparkException("YarnSparkHadoopUtil is not available in non-YARN mode!")
+    }
+    SparkHadoopUtil.get.asInstanceOf[YarnSparkHadoopUtil]
+  }
   /**
    * Add a path variable to the given environment map.
    * If the map already contains this key, append the value to the existing value instead.
@@ -405,5 +412,5 @@ object YarnSparkHadoopUtil {
   def getClassPathSeparator(): String = {
     classPathSeparatorField.get(null).asInstanceOf[String]
   }
-
 }
+
