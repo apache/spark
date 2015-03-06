@@ -78,13 +78,13 @@ test_that("insertInto() on a registered table", {
   registerTempTable(dfParquet, "table1")
   insertInto(dfParquet2, "table1")
   expect_true(count(sql(sqlCtx, "select * from table1")) == 5)
-  expect_true(first(sql(sqlCtx, "select * from table1"))$name == "Michael")
+  expect_true(first(sql(sqlCtx, "select * from table1 order by age"))$name == "Michael")
   dropTempTable(sqlCtx, "table1")
 
   registerTempTable(dfParquet, "table1")
   insertInto(dfParquet2, "table1", overwrite = TRUE)
   expect_true(count(sql(sqlCtx, "select * from table1")) == 2)
-  expect_true(first(sql(sqlCtx, "select * from table1"))$name == "Bob")
+  expect_true(first(sql(sqlCtx, "select * from table1 order by age"))$name == "Bob")
   dropTempTable(sqlCtx, "table1")
 })
 
@@ -473,17 +473,17 @@ test_that("unionAll(), subtract(), and intersect() on a DataFrame", {
   writeLines(lines, jsonPath2)
   df2 <- loadDF(sqlCtx, jsonPath2, "json")
   
-  unioned <- unionAll(df, df2)
+  unioned <- sortDF(unionAll(df, df2), df$age)
   expect_true(inherits(unioned, "DataFrame"))
   expect_true(count(unioned) == 6)
   expect_true(first(unioned)$name == "Michael")
   
-  subtracted <- subtract(df, df2)
+  subtracted <- sortDF(subtract(df, df2), desc(df$age))
   expect_true(inherits(unioned, "DataFrame"))
   expect_true(count(subtracted) == 2)
   expect_true(first(subtracted)$name == "Justin")
   
-  intersected <- intersect(df, df2)
+  intersected <- sortDF(intersect(df, df2), df$age)
   expect_true(inherits(unioned, "DataFrame"))
   expect_true(count(intersected) == 1)
   expect_true(first(intersected)$name == "Andy")
