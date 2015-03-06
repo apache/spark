@@ -17,22 +17,21 @@
 
 package org.apache.spark.ml.attribute
 
-sealed trait FeatureType
-
-sealed trait ContinuousFeatureType extends FeatureType
-sealed trait CategoricalFeatureType extends FeatureType
-sealed trait DiscreteFeatureType extends ContinuousFeatureType
-
-case object Continuous extends ContinuousFeatureType
-case object Categorical extends CategoricalFeatureType
-case object Discrete extends DiscreteFeatureType
-case object Binary extends DiscreteFeatureType with CategoricalFeatureType
-
-object FeatureTypes {
-  def withName(name: String): FeatureType = name match {
-    case "CONTINUOUS" => Continuous
-    case "CATEGORICAL" => Categorical
-    case "DISCRETE" => Discrete
-    case "BINARY" => Binary
-  }
+/**
+ * Keys used to store attributes.
+ */
+private[attribute] object AttributeKeys {
+  final val ML_ATTR: String = "ml_attr"
+  final val TYPE: String = "type"
+  final val NAME: String = "name"
+  final val INDEX: String = "idx"
+  final val VALUES: String = "vals"
+  final val MIN: String = "min"
+  final val MAX: String = "max"
+  final val STD: String = "std"
+  final val SPARSITY: String = "sparsity"
+  final val ORDINAL: String = "ord"
+  final val CARDINALITY: String = "card"
+  final val ATTRIBUTES: String = "attrs"
+  final val NUM_ATTRIBUTES: String = "num_attrs"
 }
