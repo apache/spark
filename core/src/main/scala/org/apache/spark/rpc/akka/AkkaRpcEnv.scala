@@ -18,7 +18,7 @@
 package org.apache.spark.rpc.akka
 
 import java.net.URI
-import java.util.concurrent.{ConcurrentHashMap, CountDownLatch}
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
@@ -92,97 +92,94 @@ private[spark] class AkkaRpcEnv private (
   }
 
   override def setupThreadSafeEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef = {
-    val latch = new CountDownLatch(1)
-    try {
-      @volatile var endpointRef: AkkaRpcEndpointRef = null
-      val actorRef = actorSystem.actorOf(Props(new Actor with ActorLogReceive with Logging {
+    @volatile var endpointRef: AkkaRpcEndpointRef = null
+    // Use lazy because the Actor needs to use `endpointRef`.
+    // So `actorRef` should be created after assigning `endpointRef`.
+    lazy val actorRef = actorSystem.actorOf(Props(new Actor with ActorLogReceive with Logging {
 
-        // Wait until `endpointRef` is set. TODO better solution?
-        latch.await()
-        require(endpointRef != null)
-        registerEndpoint(endpoint, endpointRef)
+      require(endpointRef != null)
+      registerEndpoint(endpoint, endpointRef)
 
-        override def preStart(): Unit = {
-          // Listen for remote client network events
-          context.system.eventStream.subscribe(self, classOf[AssociationEvent])
-          safelyCall(endpoint) {
-            endpoint.onStart()
-          }
+      override def preStart(): Unit = {
+        // Listen for remote client network events
+        context.system.eventStream.subscribe(self, classOf[AssociationEvent])
+        safelyCall(endpoint) {
+          endpoint.onStart()
         }
+      }
 
-        override def receiveWithLogging: Receive = {
-          case AssociatedEvent(_, remoteAddress, _) =>
-            safelyCall(endpoint) {
-              endpoint.onConnected(akkaAddressToRpcAddress(remoteAddress))
-            }
+      override def receiveWithLogging: Receive = {
+        case AssociatedEvent(_, remoteAddress, _) =>
+          safelyCall(endpoint) {
+            endpoint.onConnected(akkaAddressToRpcAddress(remoteAddress))
+          }
 
-          case DisassociatedEvent(_, remoteAddress, _) =>
-            safelyCall(endpoint) {
-              endpoint.onDisconnected(akkaAddressToRpcAddress(remoteAddress))
-            }
+        case DisassociatedEvent(_, remoteAddress, _) =>
+          safelyCall(endpoint) {
+            endpoint.onDisconnected(akkaAddressToRpcAddress(remoteAddress))
+          }
 
-          case AssociationErrorEvent(cause, localAddress, remoteAddress, inbound, _) =>
-            safelyCall(endpoint) {
-              endpoint.onNetworkError(cause, akkaAddressToRpcAddress(remoteAddress))
-            }
+        case AssociationErrorEvent(cause, localAddress, remoteAddress, inbound, _) =>
+          safelyCall(endpoint) {
+            endpoint.onNetworkError(cause, akkaAddressToRpcAddress(remoteAddress))
+          }
 
-          case e: AssociationEvent =>
-            // TODO ignore?
+        case e: AssociationEvent =>
+          // TODO ignore?
 
-          case AkkaMessage(message: Any, reply: Boolean)=>
-            logDebug("Received RPC message: " + AkkaMessage(message, reply))
-            safelyCall(endpoint) {
-              val s = sender()
-              val pf =
-                if (reply) {
-                  endpoint.receiveAndReply(new RpcCallContext {
-                    override def sendFailure(e: Throwable): Unit = {
-                      s ! AkkaFailure(e)
-                    }
-
-                    override def reply(response: Any): Unit = {
-                      s ! AkkaMessage(response, false)
-                    }
-
-                    // Some RpcEndpoints need to know the sender's address
-                    override val sender: RpcEndpointRef =
-                      new AkkaRpcEndpointRef(defaultAddress, s, conf)
-                  })
-                } else {
-                  endpoint.receive
-                }
-              try {
-                if (pf.isDefinedAt(message)) {
-                  pf.apply(message)
-                }
-              } catch {
-                case NonFatal(e) =>
-                  if (reply) {
-                    // If the sender asks a reply, we should send the error back to the sender
+        case AkkaMessage(message: Any, reply: Boolean)=>
+          logDebug("Received RPC message: " + AkkaMessage(message, reply))
+          safelyCall(endpoint) {
+            val s = sender()
+            val pf =
+              if (reply) {
+                endpoint.receiveAndReply(new RpcCallContext {
+                  override def sendFailure(e: Throwable): Unit = {
                     s ! AkkaFailure(e)
-                  } else {
-                    throw e
                   }
+
+                  override def reply(response: Any): Unit = {
+                    s ! AkkaMessage(response, false)
+                  }
+
+                  // Some RpcEndpoints need to know the sender's address
+                  override val sender: RpcEndpointRef =
+                    new AkkaRpcEndpointRef(defaultAddress, s, conf)
+                })
+              } else {
+                endpoint.receive
               }
+            try {
+              if (pf.isDefinedAt(message)) {
+                pf.apply(message)
+              }
+            } catch {
+              case NonFatal(e) =>
+                if (reply) {
+                  // If the sender asks a reply, we should send the error back to the sender
+                  s ! AkkaFailure(e)
+                } else {
+                  throw e
+                }
             }
-          case message: Any => {
-            logWarning(s"Unknown message: $message")
           }
+        case message: Any => {
+          logWarning(s"Unknown message: $message")
         }
+      }
 
-        override def postStop(): Unit = {
-          unregisterEndpoint(endpoint.self)
-          safelyCall(endpoint) {
-            endpoint.onStop()
-          }
+      override def postStop(): Unit = {
+        unregisterEndpoint(endpoint.self)
+        safelyCall(endpoint) {
+          endpoint.onStop()
         }
+      }
 
-        }), name = name)
-      endpointRef = new AkkaRpcEndpointRef(defaultAddress, actorRef, conf)
-      endpointRef
-    } finally {
-      latch.countDown()
-    }
+      }), name = name)
+    endpointRef = new AkkaRpcEndpointRef(defaultAddress, actorRef, conf, initInConstructor = false)
+    // Now actorRef can be created safely
+    endpointRef.init()
+    endpointRef
   }
 
   /**
@@ -258,21 +255,36 @@ private[spark] object AkkaRpcEnv {
 
 private[akka] class AkkaRpcEndpointRef(
     @transient defaultAddress: RpcAddress,
-    val actorRef: ActorRef,
-    @transient conf: SparkConf) extends RpcEndpointRef with Serializable with Logging {
+    @transient _actorRef: => ActorRef,
+    @transient conf: SparkConf,
+    @transient initInConstructor: Boolean = true)
+  extends RpcEndpointRef with Serializable with Logging {
   // `defaultAddress` and `conf` won't be used after initialization. So it's safe to be transient.
 
   private[this] val maxRetries = conf.getInt("spark.akka.num.retries", 3)
   private[this] val retryWaitMs = conf.getLong("spark.akka.retry.wait", 3000)
   private[this] val defaultTimeout = conf.getLong("spark.akka.lookupTimeout", 30) seconds
 
-  override val address: RpcAddress = {
+  lazy val actorRef = _actorRef
+
+  override lazy val address: RpcAddress = {
     val akkaAddress = actorRef.path.address
     RpcAddress(akkaAddress.host.getOrElse(defaultAddress.host),
       akkaAddress.port.getOrElse(defaultAddress.port))
   }
 
-  override val name: String = actorRef.path.name
+  override lazy val name: String = actorRef.path.name
+
+  private[akka] def init(): Unit = {
+    // Initialize the lazy vals
+    actorRef
+    address
+    name
+  }
+
+  if (initInConstructor) {
+    init()
+  }
 
   override def askWithReply[T: ClassTag](message: Any): T = askWithReply(message, defaultTimeout)
 
