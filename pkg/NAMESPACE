@@ -113,7 +113,9 @@ exportMethods("columns",
               "toJSON",
               "toRDD",
               "unionAll",
-              "where")
+              "where",
+              "withColumn",
+              "withColumnRenamed")
 
 exportClasses("Column")
 

@@ -464,6 +464,18 @@ test_that("unionAll(), subtract(), and intersect() on a DataFrame", {
   expect_true(first(intersected)$name == "Andy")
 })
 
+test_that("withColumn() and withColumnRenamed()", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  newDF <- withColumn(df, "newAge", df$age + 2)
+  expect_true(length(columns(newDF)) == 3)
+  expect_true(columns(newDF)[3] == "newAge")
+  expect_true(first(filter(newDF, df$name != "Michael"))$newAge == 32)
+  
+  newDF2 <- withColumnRenamed(df, "age", "newerAge")
+  expect_true(length(columns(newDF2)) == 2)
+  expect_true(columns(newDF2)[1] == "newerAge")
+})
+
 # TODO: Enable and test once the parquetFile PR has been merged
 # test_that("saveAsParquetFile() on DataFrame and works with parquetFile", {
 #   df <- jsonFile(sqlCtx, jsonPath)

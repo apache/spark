@@ -815,6 +815,70 @@ setMethod("selectExpr",
             dataFrame(sdf)
           })
 
+#' WithColumn
+#'
+#' Return a new DataFrame with the specified column added.
+#'
+#' @param x A DataFrame
+#' @param colName A string containing the name of the new column.
+#' @param col A Column expression.
+#' @return A DataFrame with the new column added.
+#' @rdname withColumn
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' newDF <- withColumn(df, "newCol", df$col1 * 5)
+#' }
+setGeneric("withColumn", function(x, colName, col) { standardGeneric("withColumn") })
+
+#' @rdname withColumn
+#' @export
+setMethod("withColumn",
+          signature(x = "DataFrame", colName = "character", col = "Column"),
+          function(x, colName, col) {
+            select(x, x$"*", alias(col, colName))
+          })
+
+#' WithColumnRenamed
+#'
+#' Rename an existing column in a DataFrame.
+#'
+#' @param x A DataFrame
+#' @param existingCol The name of the column you want to change.
+#' @param newCol The new column name.
+#' @return A DataFrame with the column name changed.
+#' @rdname withColumnRenamed
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' newDF <- withColumnRenamed(df, "col1", "newCol1")
+#' }
+setGeneric("withColumnRenamed", function(x, existingCol, newCol) {
+  standardGeneric("withColumnRenamed") })
+
+#' @rdname withColumnRenamed
+#' @export
+setMethod("withColumnRenamed",
+          signature(x = "DataFrame", existingCol = "character", newCol = "character"),
+          function(x, existingCol, newCol) {
+            cols <- lapply(columns(x), function(c) {
+              if (c == existingCol) {
+                alias(col(c), newCol)
+              } else {
+                col(c)
+              }
+            })
+            select(x, cols)
+          })
+
 #' SortDF 
 #'
 #' Sort a DataFrame by the specified column(s).
