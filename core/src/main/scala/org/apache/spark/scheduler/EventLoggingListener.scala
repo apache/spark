@@ -202,13 +202,23 @@ private[spark] class EventLoggingListener(
       }
     }
     fileSystem.rename(new Path(logPath + IN_PROGRESS), target)
+    writer = None
   }
 
+  Runtime.getRuntime.addShutdownHook(new Thread("Renaming inprogress log to logPath") {
+    override def run(): Unit = Utils.logUncaughtExceptions {
+      if (writer != None && fileSystem.exists(new Path(logPath + IN_PROGRESS))) {
+        logDebug("Inprogressing event log exists. Application may be terminated abnormally.")
+        fileSystem.rename(new Path(logPath + IN_PROGRESS), new Path(logPath + ABNORMAL))
+      }
+    }
+  })
 }
 
 private[spark] object EventLoggingListener extends Logging {
   // Suffix applied to the names of files still being written by applications.
   val IN_PROGRESS = ".inprogress"
+  val ABNORMAL = ".abnormal"
   val DEFAULT_LOG_DIR = "/tmp/spark-events"
   val SPARK_VERSION_KEY = "SPARK_VERSION"
   val COMPRESSION_CODEC_KEY = "COMPRESSION_CODEC"
@@ -271,7 +281,7 @@ private[spark] object EventLoggingListener extends Logging {
 
     // Compression codec is encoded as an extension, e.g. app_123.lzf
     // Since we sanitize the app ID to not include periods, it is safe to split on it
-    val logName = log.getName.stripSuffix(IN_PROGRESS)
+    val logName = log.getName.stripSuffix(IN_PROGRESS).stripSuffix(ABNORMAL)
     val codecName: Option[String] = logName.split("\\.").tail.lastOption
     val codec = codecName.map { c =>
       codecMap.getOrElseUpdate(c, CompressionCodec.createCodec(new SparkConf, c))
