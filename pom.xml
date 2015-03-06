@@ -422,6 +422,13 @@
         <version>2.42.2</version>
         <scope>test</scope>
       </dependency>
+      <!-- Added for selenium only, and should match its dependent version: -->
+      <dependency>
+        <groupId>xml-apis</groupId>
+        <artifactId>xml-apis</artifactId>
+        <version>1.4.01</version>
+        <scope>test</scope>
+      </dependency>
       <dependency>
         <groupId>org.slf4j</groupId>
         <artifactId>slf4j-api</artifactId>
