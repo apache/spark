@@ -1475,8 +1475,8 @@ setMethod("zipWithUniqueId",
 #' the first partition gets index 0, and the last item in the last
 #' partition receives the largest index.
 #'
-#' This method needs to trigger a spark job when this RDD contains
-#' more than one partitions.
+#' This method needs to trigger a Spark job when this RDD contains
+#' more than one partition.
 #'
 #' @param x An RDD to be zipped.
 #' @return An RDD with zipped items.

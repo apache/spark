@@ -23,8 +23,8 @@ the first partition gets index 0, and the last item in the last
 partition receives the largest index.
 }
 \details{
-This method needs to trigger a spark job when this RDD contains
-more than one partitions.
+This method needs to trigger a Spark job when this RDD contains
+more than one partition.
 }
 \examples{
 \dontrun{
