@@ -256,11 +256,22 @@ class Analyzer(catalog: Catalog,
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
-        q transformExpressionsUp  {
+        q transformExpressionsUp {
           case u @ UnresolvedAttribute(name) if resolver(name, VirtualColumn.groupingIdName) &&
             q.isInstanceOf[GroupingAnalytics] =>
             // Resolve the virtual column GROUPING__ID for the operator GroupingAnalytics
             q.asInstanceOf[GroupingAnalytics].gid
+          case u @ UnresolvedAttribute(name) if q.isInstanceOf[Sort] =>
+            val s = q.asInstanceOf[Sort]
+            val input = s.child match {
+              case Project(list, c) => list.filter {
+                case Alias(g: GetField, _) => false
+                case Alias(g: GetItem, _) => false
+                case _ => true
+              }.map(_.toAttribute)
+              case _ => s.child.flatMap(_.output)
+            }
+            s.resolve(name, input, resolver).getOrElse(u)
           case u @ UnresolvedAttribute(name) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
             val result = q.resolveChildren(name, resolver).getOrElse(u)

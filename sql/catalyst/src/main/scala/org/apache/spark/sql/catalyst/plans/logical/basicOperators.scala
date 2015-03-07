@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.types._
@@ -153,18 +152,6 @@ case class Sort(
     global: Boolean,
     child: LogicalPlan) extends UnaryNode {
   override def output = child.output
-
-  override def resolveChildren(name: String, resolver: Resolver) = {
-    val input = child match {
-      case Project(list, c) => list.filter {
-        case Alias(g: GetField, _) => false
-        case Alias(g: GetItem, _) => false
-        case _ => true
-      }.map(_.toAttribute)
-      case _ => child.flatMap(_.output)
-    }
-    resolve(name, input, resolver)
-  }
 }
 
 case class Aggregate(
