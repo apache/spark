@@ -72,7 +72,11 @@
     });
     
     d3.selectAll("g.node").on("click", function(d){
-        call_modal(d, execution_date);
+        task = tasks[d];
+        if (task.task_type == "SubDagOperator")
+            call_modal(d, execution_date, true);
+        else
+            call_modal(d, execution_date);
     });
 
     $("g.node").tooltip({

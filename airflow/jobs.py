@@ -420,6 +420,9 @@ class BackfillJob(BaseJob):
                     del tasks_to_run[key]
         executor.end()
         session.close()
+        if failed:
+            raise Exception(
+                "Some tasks instances failed, here's the list:\n"+str(failed))
 
 
 class LocalTaskJob(BaseJob):
