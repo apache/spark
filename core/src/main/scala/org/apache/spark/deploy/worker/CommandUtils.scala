@@ -89,7 +89,7 @@ object CommandUtils extends Logging {
       newEnvironment,
       command.classPathEntries ++ classPath,
       Seq[String](), // library path already captured in environment variable
-      command.javaOpts)
+      command.javaOpts.map(substituteArguments))
   }
 
   /**
