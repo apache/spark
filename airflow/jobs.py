@@ -193,6 +193,73 @@ class MasterJob(BaseJob):
 
         self.heartrate = conf.getint('master', 'MASTER_HEARTBEAT_SEC')
 
+    def process_dag(self, dag, executor):
+        session = settings.Session()
+        TI = models.TaskInstance
+        logging.info(
+            "Getting latest instance "
+            "for all task in dag " + dag.dag_id)
+        sq = session.query(
+            TI.task_id,
+            func.max(TI.execution_date).label('max_ti')
+        ).filter(
+            TI.dag_id == dag.dag_id
+        ).group_by(TI.task_id).subquery('sq')
+
+        qry = session.query(TI).filter(
+            TI.dag_id == dag.dag_id,
+            TI.task_id == sq.c.task_id,
+            TI.execution_date == sq.c.max_ti,
+        )
+        latest_ti = qry.all()
+        ti_dict = {ti.task_id: ti for ti in latest_ti}
+        session.expunge_all()
+        session.commit()
+
+        for task in dag.tasks:
+            if task.adhoc:
+                continue
+            if task.task_id not in ti_dict:
+                # Brand new task, let's get started
+                ti = TI(task, task.start_date)
+                ti.refresh_from_db()
+                if ti.is_runnable():
+                    logging.debug(
+                        'First run for {ti}'.format(**locals()))
+                    cmd = ti.command(local=True)
+                    executor.queue_command(ti.key, cmd)
+            else:
+                ti = ti_dict[task.task_id]
+                ti.task = task  # Hacky but worky
+                if ti.state == State.RUNNING:
+                    continue  # Only one task at a time
+                elif ti.state == State.UP_FOR_RETRY:
+                    # If task instance if up for retry, make sure
+                    # the retry delay is met
+                    if ti.is_runnable():
+                        logging.debug('Queuing retry: ' + str(ti))
+                        cmd = ti.command(local=True)
+                        executor.queue_command(ti.key, cmd)
+                else:
+                    # Trying to run the next schedule
+                    next_schedule = (
+                        ti.execution_date + task.schedule_interval)
+                    if (
+                            ti.task.end_date and
+                            next_schedule > ti.task.end_date):
+                        continue
+                    ti = TI(
+                        task=task,
+                        execution_date=next_schedule,
+                    )
+                    ti.refresh_from_db()
+                    if ti.is_runnable():
+                        logging.debug('Queuing next run: ' + str(ti))
+                        cmd = ti.command(local=True)
+                        executor.queue_command(ti.key, cmd)
+            executor.heartbeat()
+        session.close()
+
     def _execute(self):
         dag_id = self.dag_id
 
@@ -208,8 +275,6 @@ class MasterJob(BaseJob):
         logging.basicConfig(level=logging.DEBUG)
         logging.info("Starting a master scheduler")
 
-        session = settings.Session()
-        TI = models.TaskInstance
 
         # This should get new code
         dagbag = models.DagBag(self.subdir)
@@ -225,69 +290,10 @@ class MasterJob(BaseJob):
             for dag in dags:
                 if dag.dag_id in paused_dag_ids:
                     continue
-                logging.info(
-                    "Getting latest instance "
-                    "for all task in dag " + dag.dag_id)
-                sq = session.query(
-                    TI.task_id,
-                    func.max(TI.execution_date).label('max_ti')
-                ).filter(
-                    TI.dag_id == dag.dag_id
-                ).group_by(TI.task_id).subquery('sq')
-
-                qry = session.query(TI).filter(
-                    TI.dag_id == dag.dag_id,
-                    TI.task_id == sq.c.task_id,
-                    TI.execution_date == sq.c.max_ti,
-                )
-                latest_ti = qry.all()
-                ti_dict = {ti.task_id: ti for ti in latest_ti}
-                session.expunge_all()
-                session.commit()
-
-                for task in dag.tasks:
-                    if task.adhoc:
-                        continue
-                    if task.task_id not in ti_dict:
-                        # Brand new task, let's get started
-                        ti = TI(task, task.start_date)
-                        ti.refresh_from_db()
-                        if ti.is_runnable():
-                            logging.debug(
-                                'First run for {ti}'.format(**locals()))
-                            cmd = ti.command(local=True)
-                            executor.queue_command(ti.key, cmd)
-                    else:
-                        ti = ti_dict[task.task_id]
-                        ti.task = task  # Hacky but worky
-                        if ti.state == State.RUNNING:
-                            continue  # Only one task at a time
-                        elif ti.state == State.UP_FOR_RETRY:
-                            # If task instance if up for retry, make sure
-                            # the retry delay is met
-                            if ti.is_runnable():
-                                logging.debug('Queuing retry: ' + str(ti))
-                                cmd = ti.command(local=True)
-                                executor.queue_command(ti.key, cmd)
-                        else:
-                            # Trying to run the next schedule
-                            next_schedule = (
-                                ti.execution_date + task.schedule_interval)
-                            if (
-                                    ti.task.end_date and
-                                    next_schedule > ti.task.end_date):
-                                continue
-                            ti = TI(
-                                task=task,
-                                execution_date=next_schedule,
-                            )
-                            ti.refresh_from_db()
-                            if ti.is_runnable():
-                                logging.debug('Queuing next run: ' + str(ti))
-                                cmd = ti.command(local=True)
-                                executor.queue_command(ti.key, cmd)
-                    executor.heartbeat()
-                session.close()
+                try:
+                    self.process_dag(dag, executor)
+                except Exception as e:
+                    logging.exeption(e)
         executor.end()
 
     def heartbeat_callback(self):
