@@ -11,6 +11,7 @@ class PostgresHook(object):
     def __init__(
             self, host=None, login=None,
             psw=None, db=None, port=None, postgres_conn_id=None):
+        self.autocommit = False
         if not postgres_conn_id:
             self.host = host
             self.login = login
