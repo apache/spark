@@ -20,9 +20,9 @@ package org.apache.spark.util.expression.quantity
  * Utility class used for handling time quantities and converting between various units
  * @param baseValue The Number of seconds
  */
-case class TimeAsSeconds(baseValue: Double) {
+private[spark] case class TimeAsSeconds(baseValue: Double) {
   def this(baseValue: Double, unitOfScale: String) =
-    this( baseValue * TimeAsSeconds.quantityScale(unitOfScale))
+    this( baseValue * TimeAsSeconds.quantityScale(unitOfScale.toLowerCase))
 
   override def hashCode = baseValue.hashCode
 
@@ -50,6 +50,7 @@ object TimeAsSeconds  {
   val weekSec = 7 * daySec
 
   val quantityScale: Map[String, Double] = Map(
+    "ms" -> 0.001,
     "s" -> 1, "sec" -> 1, "second" -> 1, "secs" -> 1, "seconds" -> 1,
     "m" -> minSec, "min" -> minSec, "minute" -> minSec, "mins" -> minSec, "minutes" -> minSec,
     "h" -> hourSec, "hour" -> hourSec, "hours" -> hourSec,

@@ -16,14 +16,12 @@
  */
 package org.apache.spark.util.expression.parserTrait
 
-import org.apache.spark.util.expression.quantity.{TimeAsSeconds, TimeAsMS}
-
-import scala.util.parsing.combinator.JavaTokenParsers
+import org.apache.spark.util.expression.quantity.TimeAsSeconds
 
 /**
  * A Trait that will match Time units and expand them into their equivalent number of seconds
  */
-trait TimeUnitSecParsing extends TimeUnitMSParsing {
+private[spark] trait TimeUnitSecParsing extends TimeUnitMSParsing {
   /**
    * An expression of time quantity eg 30 S, 4 Hours etc
    * returns number of bytes

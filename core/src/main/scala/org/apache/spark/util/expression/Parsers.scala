@@ -18,30 +18,30 @@ package org.apache.spark.util.expression
 
 import org.apache.spark.util.expression.parserTrait._
 
-import scala.collection.SortedMap
-
 /**
  * Factory method to produce various types of parsers
  */
-object Parsers {
+private[spark] object Parsers {
   /**
    * Basic parser that will evaluate expressions of integers and floats
    * Supports basic arithmetic (+-/star) operations with precedence and brackets,
    * The following JVMInfoFunctions functions are also supported (case insensitive)
    *
-   * numCores:          Number of cores assigned to the JVM
-   * totalMemoryBytes:  current bytes of memory allocated to the JVM
-   * maxMemoryBytes:    Maximum number of bytes of memory available to the JVM
-   * freeMemoryBytes:   maxMemoryBytes - totalMemoryBytes
+   * JVMnumCores:          Number of cores assigned to the JVM
+   * JVMtotalMemoryBytes:  current bytes of memory allocated to the JVM
+   * JVMmaxMemoryBytes:    Maximum number of bytes of memory available to the JVM
+   * JVMfreeMemoryBytes:   maxMemoryBytes - totalMemoryBytes
    */
-  def NumberParser = new BaseParser with JVMInfoFunctions
+  private[spark] def NumberParser = new BaseParser with JVMInfoFunctions with MachineInfoFunctions
 
   /**
    * A NumberParser that also supports expanding a caller-supplied dictionary of symbols
    * to their associated values (eg, a list of configuration variables)
-   * @param dict Map of symbol names to expand to their associated values
+   * @param dict Map of symbol names to expand to their associated values - longer symbols are
+   *             matched in preference to shorter ones
    */
-  def NumberDictParser(dict: SortedMap[String, Long]) = new BaseDictParser(dict) with JVMInfoFunctions
+  private[spark] def NumberDictParser(dict: Map[String, Long]) = new BaseDictParser(dict)
+    with JVMInfoFunctions with MachineInfoFunctions
 
   /**
    * A Parser that will evaluate expressions of integers, floats and byte quantities
@@ -49,30 +49,25 @@ object Parsers {
    * The ByteParser parser is used for parsing expressions of byte quantities eg:
    *
    * 3 MB
-   * totalMemoryBytes / 5
-   * (freeMemoryBytes - 50000) * 0.5
-   * numCores * 20 MB
+   * JVMtotalMemoryBytes / 5
+   * (JVMfreeMemoryBytes - 50000) * 0.5
+   * JVMnumCores * 20 MB
    *
    * Supports basic arithmetic (+-/star) operations with precedence and brackets,
    * all bytes units (case insensitive) (KB,MB,GB,TB,KiB,MiB,GiB,TiB etc) are expanded into
-   * their equivalent number of bytes
-   * The following JVMInfoFunctions functions are also supported (case insensitive)
-   *
-   * numCores:          Number of cores assigned to the JVM
-   * totalMemoryBytes:  current bytes of memory allocated to the JVM
-   * maxMemoryBytes:    Maximum number of bytes of memory available to the JVM
-   * freeMemoryBytes:   maxMemoryBytes - totalMemoryBytes
-   *
+   * their equivalent number of bytes. The same JVMInfoFunctions as NumberParser are supported
    */
-  def ByteParser = new BaseParser with ByteUnitParsing with JVMInfoFunctions
+  private[spark] def ByteParser = new BaseParser with ByteUnitParsing with JVMInfoFunctions
+    with MachineInfoFunctions
 
   /**
    * A ByteParser that also supports expanding a caller-supplied dictionary of symbols
    * to their associated values (eg, a list of configuration variables)
-   * @param dict Map of symbol names to expand to their associated values
+   * @param dict Map of symbol names to expand to their associated values - longer symbols are
+   *             matched in preference to shorter ones
    */
-  def ByteDictParser(dict: SortedMap[String, Long]) = new BaseDictParser(dict)
-    with ByteUnitParsing with JVMInfoFunctions with DictionaryExpansion
+  private[spark] def ByteDictParser(dict: Map[String, Long]) = new BaseDictParser(dict)
+    with ByteUnitParsing with JVMInfoFunctions with MachineInfoFunctions with DictionaryExpansion
 
   /**
    * A Parser that will evaluate expressions of integers, floats and time periods
@@ -83,24 +78,28 @@ object Parsers {
    * 5 seconds
    * 0.5 days
    */
-  def TimeAsMSParser = new BaseParser with TimeUnitMSParsing
+  private[spark] def TimeAsMSParser = new BaseParser with TimeUnitMSParsing
 
   /**
    * A TimeAsMSParser that also supports expanding a caller-supplied dictionary of symbols
    * to their associated values (eg, a list of configuration variables)
-   * @param dict Map of symbol names to expand to their associated values
+   * @param dict Map of symbol names to expand to their associated values - longer symbols are
+   *             matched in preference to shorter ones
    */
-  def TimeAsMSDictParser(dict: SortedMap[String, Long]) = new BaseDictParser(dict) with TimeUnitMSParsing
+  private[spark] def TimeAsMSDictParser(dict: Map[String, Long]) = new BaseDictParser(dict)
+    with TimeUnitMSParsing
 
   /**
    * A Time Parser that assumes that Numbers without any associated time units are Seconds
    */
-  def TimeAsSecParser = new BaseParser with TimeUnitSecParsing
+  private[spark] def TimeAsSecParser = new BaseParser with TimeUnitSecParsing
 
   /**
    * A TimeAsSecParser that also supports expanding a caller-supplied dictionary of symbols
    * to their associated values (eg, a list of configuration variables)
-   * @param dict Map of symbol names to expand to their associated values
+   * @param dict Map of symbol names to expand to their associated values - longer symbols are
+   *             matched in preference to shorter ones
    */
-  def TimeAsSecDictParser(dict: SortedMap[String, Long]) = new BaseDictParser(dict) with TimeUnitSecParsing
+  private[spark] def TimeAsSecDictParser(dict: Map[String, Long]) = new BaseDictParser(dict)
+    with TimeUnitSecParsing
 }

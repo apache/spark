@@ -18,10 +18,10 @@ package org.apache.spark.util.expression
 
 import org.apache.spark.util.expression.parserTrait.DictionaryExpansion
 
-import scala.collection.SortedMap
-
 /**
  * An extension of BaseParser that also expands out a user supplied dictionary of symbols
- * @param dict Symbols to expand into their numeric representation
+ * @param dict Symbols to expand into their numeric representation, longer symbols will be
+ *             matched in preference to shorter ones
  */
-class BaseDictParser(var dict: SortedMap[String, Long]) extends BaseParser with DictionaryExpansion
+private[spark] class BaseDictParser(val dict: Map[String, Long]) extends BaseParser
+  with DictionaryExpansion

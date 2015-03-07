@@ -21,14 +21,14 @@ import scala.util.matching.Regex
 /**
  * Utility class
  */
-object Utils {
+private[spark] object Utils {
   /**
    * Creates a regexp to match any of the passed list of keys
    * @param keys List of keys to match
    * @param caseInsensitive whether the match should be case insensitive
    * @return RegEx that will math any of the keys
    */
-  def createListRegexp(keys: List[String], caseInsensitive: Boolean = true): Regex = {
+  private[spark] def createListRegexp(keys: Iterable[String], caseInsensitive: Boolean = true): Regex = {
     val regexChars: Set[Char] = """[\^$.|?*+()""".toList.toSet
 
     def escapeRegExChars(word: String): String = {

@@ -22,11 +22,11 @@ import org.apache.spark.util.expression.quantity.TimeAsMS
 /**
  * A Trait that will match Time units and expand them into their equivalent number of milliseconds
  */
-trait TimeUnitMSParsing extends BaseParser {
+private[spark] trait TimeUnitMSParsing extends BaseParser {
   /**
    * Those expression that are unique to a TimeExpression
    */
-  abstract override def stackedExtensions = timeExpression | standAloneTimeUnit | super.stackedExtensions
+  protected abstract override def stackedExtensions = timeExpression | standAloneTimeUnit | super.stackedExtensions
 
   /**
    * An expression of time quantity eg 30 S, 4 Hours etc
