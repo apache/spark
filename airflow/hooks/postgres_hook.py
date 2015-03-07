@@ -74,5 +74,5 @@ class PostgresHook(object):
         cur.close()
         conn.close()
 
-    def setAutocommit(autocommit):
+    def setAutocommit(self, autocommit):
         self.autocommit = autocommit

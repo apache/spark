@@ -34,5 +34,5 @@ class PostgresOperator(BaseOperator):
         logging.info('Executing: ' + self.sql)
         self.hook.run(self.sql)
 
-    def setAutocommit(autocommit):
+    def setAutocommit(self, autocommit):
         self.hook.setAutocommit(autocommit)
