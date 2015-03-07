@@ -33,3 +33,6 @@ class PostgresOperator(BaseOperator):
     def execute(self, context):
         logging.info('Executing: ' + self.sql)
         self.hook.run(self.sql)
+
+    def setAutocommit(autocommit):
+        self.hook.setAutocommit(autocommit)

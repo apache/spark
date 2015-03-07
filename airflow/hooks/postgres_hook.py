@@ -10,14 +10,13 @@ class PostgresHook(object):
 
     def __init__(
             self, host=None, login=None,
-            psw=None, db=None, port=None, autocommit=False, postgres_conn_id=None):
+            psw=None, db=None, port=None, postgres_conn_id=None):
         if not postgres_conn_id:
             self.host = host
             self.login = login
             self.psw = psw
             self.db = db
             self.port = port
-            self.autocommit = autocommit
         else:
             session = settings.Session()
             db = session.query(
@@ -34,7 +33,6 @@ class PostgresHook(object):
             self.port = db.port
             session.commit()
             session.close()
-            self.autocommit = autocommit
 
     def get_conn(self):
         conn = psycopg2.connect(
@@ -75,3 +73,6 @@ class PostgresHook(object):
         conn.commit()
         cur.close()
         conn.close()
+
+    def setAutocommit(autocommit):
+        self.autocommit = autocommit
