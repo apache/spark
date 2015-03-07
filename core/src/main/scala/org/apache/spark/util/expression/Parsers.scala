@@ -41,7 +41,7 @@ private[spark] object Parsers {
    *             matched in preference to shorter ones
    */
   private[spark] def NumberDictParser(dict: Map[String, Long]) = new BaseDictParser(dict)
-    with JVMInfoFunctions with MachineInfoFunctions
+      with JVMInfoFunctions with MachineInfoFunctions
 
   /**
    * A Parser that will evaluate expressions of integers, floats and byte quantities
@@ -58,7 +58,7 @@ private[spark] object Parsers {
    * their equivalent number of bytes. The same JVMInfoFunctions as NumberParser are supported
    */
   private[spark] def ByteParser = new BaseParser with ByteUnitParsing with JVMInfoFunctions
-    with MachineInfoFunctions
+      with MachineInfoFunctions
 
   /**
    * A ByteParser that also supports expanding a caller-supplied dictionary of symbols
@@ -67,7 +67,7 @@ private[spark] object Parsers {
    *             matched in preference to shorter ones
    */
   private[spark] def ByteDictParser(dict: Map[String, Long]) = new BaseDictParser(dict)
-    with ByteUnitParsing with JVMInfoFunctions with MachineInfoFunctions with DictionaryExpansion
+      with ByteUnitParsing with JVMInfoFunctions with MachineInfoFunctions with DictionaryExpansion
 
   /**
    * A Parser that will evaluate expressions of integers, floats and time periods
@@ -87,10 +87,10 @@ private[spark] object Parsers {
    *             matched in preference to shorter ones
    */
   private[spark] def TimeAsMSDictParser(dict: Map[String, Long]) = new BaseDictParser(dict)
-    with TimeUnitMSParsing
+      with TimeUnitMSParsing
 
   /**
-   * A Time Parser that assumes that Numbers without any associated time units are Seconds
+   * A Time Parser that assumes that Numbers without any associated time units are seconds
    */
   private[spark] def TimeAsSecParser = new BaseParser with TimeUnitSecParsing
 
@@ -101,5 +101,5 @@ private[spark] object Parsers {
    *             matched in preference to shorter ones
    */
   private[spark] def TimeAsSecDictParser(dict: Map[String, Long]) = new BaseDictParser(dict)
-    with TimeUnitSecParsing
+      with TimeUnitSecParsing
 }

@@ -40,3 +40,4 @@ private[spark] trait FunctionExpansion extends BaseParser {
   protected abstract override def stackedExtensions: Parser[Double] = functionExpansion |
     super.stackedExtensions
 }
+

@@ -27,3 +27,4 @@ private[spark] trait JVMInfoFunctions extends FunctionExpansion {
     "JVMNumCores".toLowerCase -> (() => Runtime.getRuntime.availableProcessors * 1.0)
     ) ++ super.functions
 }
+

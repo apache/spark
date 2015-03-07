@@ -38,3 +38,4 @@ private[spark] trait TimeUnitSecParsing extends TimeUnitMSParsing {
     case timeUnit => TimeAsSeconds(1.0,timeUnit).toSecs
   }
 }
+

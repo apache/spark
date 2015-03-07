@@ -26,7 +26,8 @@ private[spark] trait TimeUnitMSParsing extends BaseParser {
   /**
    * Those expression that are unique to a TimeExpression
    */
-  protected abstract override def stackedExtensions = timeExpression | standAloneTimeUnit | super.stackedExtensions
+  protected abstract override def stackedExtensions = timeExpression | standAloneTimeUnit |
+    super.stackedExtensions
 
   /**
    * An expression of time quantity eg 30 S, 4 Hours etc
@@ -44,5 +45,7 @@ private[spark] trait TimeUnitMSParsing extends BaseParser {
     case timeUnit => TimeAsMS(1.0,timeUnit).toMs
   }
 
-  protected def timeUnit: Parser[String] = """^(((?i)(second|minute|hour|day|week|sec|min)s?)|(ms|s|m|h|d|w))""".r
+  protected def timeUnit: Parser[String] =
+    """^(((?i)(second|minute|hour|day|week|sec|min)s?)|(ms|s|m|h|d|w))""".r
 }
+

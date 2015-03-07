@@ -28,7 +28,9 @@ private[spark] object Utils {
    * @param caseInsensitive whether the match should be case insensitive
    * @return RegEx that will math any of the keys
    */
-  private[spark] def createListRegexp(keys: Iterable[String], caseInsensitive: Boolean = true): Regex = {
+  private[spark] def createListRegexp(keys: Iterable[String], caseInsensitive: Boolean = true):
+      Regex = {
+
     val regexChars: Set[Char] = """[\^$.|?*+()""".toList.toSet
 
     def escapeRegExChars(word: String): String = {
@@ -40,5 +42,5 @@ private[spark] object Utils {
 
     keys.map(escapeRegExChars).mkString(regexStart, "|", ")").r
   }
-
 }
+

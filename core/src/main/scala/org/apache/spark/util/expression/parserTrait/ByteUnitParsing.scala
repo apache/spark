@@ -28,7 +28,8 @@ private[spark] trait ByteUnitParsing extends BaseParser {
   /**
    * Those expression that are unique to a ByteExpression
    */
-  protected abstract override def stackedExtensions = byteExpression | standAloneByteUnit | super.stackedExtensions
+  protected abstract override def stackedExtensions = byteExpression | standAloneByteUnit |
+    super.stackedExtensions
 
   /**
    * An expression of byte quantity eg 30 MB, 4 KiB etc

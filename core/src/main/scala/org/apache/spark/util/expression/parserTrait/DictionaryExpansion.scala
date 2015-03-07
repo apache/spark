@@ -36,5 +36,7 @@ private[spark] trait DictionaryExpansion extends BaseParser {
     case dictKeysRegex => dict(dictKeysRegex.toLowerCase)
   }
 
-  protected abstract override def stackedExtensions: Parser[Double] = dictExpressionExpansion | super.stackedExtensions
+  protected abstract override def stackedExtensions: Parser[Double] = dictExpressionExpansion |
+    super.stackedExtensions
 }
+

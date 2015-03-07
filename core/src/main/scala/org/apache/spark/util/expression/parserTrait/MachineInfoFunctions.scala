@@ -57,3 +57,4 @@ private[spark] trait MachineInfoFunctions extends FunctionExpansion {
     }
   }
 }
+
