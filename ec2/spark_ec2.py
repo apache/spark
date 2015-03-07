@@ -1126,14 +1126,16 @@ def real_main():
         setup_cluster(conn, master_nodes, slave_nodes, opts, True)
 
     elif action == "destroy":
-        print "Are you sure you want to destroy the cluster %s?" % cluster_name
-        print "The following instances will be terminated:"
         (master_nodes, slave_nodes) = get_existing_cluster(
             conn, opts, cluster_name, die_on_error=False)
-        for inst in master_nodes + slave_nodes:
-            print "> %s" % inst.public_dns_name
 
-        msg = "ALL DATA ON ALL NODES WILL BE LOST!!\nDestroy cluster %s (y/N): " % cluster_name
+        if any(master_nodes + slave_nodes):
+            print "The following instances will be terminated:"
+            for inst in master_nodes + slave_nodes:
+                print "> %s" % inst.public_dns_name
+            print "ALL DATA ON ALL NODES WILL BE LOST!!"
+
+        msg = "Are you sure you want to destroy the cluster {c}? (y/N) ".format(c=cluster_name)
         response = raw_input(msg)
         if response == "y":
             print "Terminating master..."
@@ -1145,7 +1147,6 @@ def real_main():
 
             # Delete security groups as well
             if opts.delete_groups:
-                print "Deleting security groups (this will take some time)..."
                 group_names = [cluster_name + "-master", cluster_name + "-slaves"]
                 wait_for_cluster_state(
                     conn=conn,
@@ -1153,6 +1154,7 @@ def real_main():
                     cluster_instances=(master_nodes + slave_nodes),
                     cluster_state='terminated'
                 )
+                print "Deleting security groups (this will take some time)..."
                 attempt = 1
                 while attempt <= 3:
                     print "Attempt %d" % attempt
