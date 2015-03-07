@@ -27,7 +27,8 @@ private[spark] object Parsers {
    * Supports basic arithmetic (+-/star) operations with precedence and brackets,
    * The following JVMInfoFunctions functions are also supported (case insensitive)
    *
-   * JVMnumCores:          Number of cores assigned to the JVM
+   * numCores:             Number of cores assigned to the JVM
+   * physicalMemoryBytes:  Memory size of hosting machine
    * JVMtotalMemoryBytes:  current bytes of memory allocated to the JVM
    * JVMmaxMemoryBytes:    Maximum number of bytes of memory available to the JVM
    * JVMfreeMemoryBytes:   maxMemoryBytes - totalMemoryBytes
@@ -51,7 +52,7 @@ private[spark] object Parsers {
    * 3 MB
    * JVMtotalMemoryBytes / 5
    * (JVMfreeMemoryBytes - 50000) * 0.5
-   * JVMnumCores * 20 MB
+   * numCores * 20 MB
    *
    * Supports basic arithmetic (+-/star) operations with precedence and brackets,
    * all bytes units (case insensitive) (KB,MB,GB,TB,KiB,MiB,GiB,TiB etc) are expanded into
