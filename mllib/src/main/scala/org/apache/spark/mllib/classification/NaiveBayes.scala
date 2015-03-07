@@ -46,11 +46,11 @@ class NaiveBayesModel private[mllib] (
     val labels: Array[Double],
     val pi: Array[Double],
     val theta: Array[Array[Double]],
-    val modelType: NaiveBayes.ModelType)
+    val modelType: String)
   extends ClassificationModel with Serializable with Saveable {
 
   def this(labels: Array[Double], pi: Array[Double], theta: Array[Array[Double]]) =
-    this(labels, pi, theta, NaiveBayes.Multinomial)
+    this(labels, pi, theta, NaiveBayes.Multinomial.toString)
 
   private val brzPi = new BDV[Double](pi)
   private val brzTheta = new BDM(theta(0).length, theta.length, theta.flatten).t
@@ -58,7 +58,7 @@ class NaiveBayesModel private[mllib] (
   // Bernoulli scoring requires log(condprob) if 1 log(1-condprob) if 0
   // this precomputes log(1.0 - exp(theta)) and its sum for linear algebra application
   // of this condition in predict function
-  private val (brzNegTheta, brzNegThetaSum) = modelType match {
+  private val (brzNegTheta, brzNegThetaSum) = NaiveBayes.ModelType.fromString(modelType) match {
     case NaiveBayes.Multinomial => (None, None)
     case NaiveBayes.Bernoulli =>
       val negTheta = brzLog((brzExp(brzTheta.copy) :*= (-1.0)) :+= 1.0) // log(1.0 - exp(x))
@@ -74,7 +74,7 @@ class NaiveBayesModel private[mllib] (
   }
 
   override def predict(testData: Vector): Double = {
-    modelType match {
+    NaiveBayes.ModelType.fromString(modelType) match {
       case NaiveBayes.Multinomial =>
         labels (brzArgmax (brzPi + brzTheta * testData.toBreeze) )
       case NaiveBayes.Bernoulli =>
@@ -84,7 +84,7 @@ class NaiveBayesModel private[mllib] (
   }
 
   override def save(sc: SparkContext, path: String): Unit = {
-    val data = NaiveBayesModel.SaveLoadV1_0.Data(labels, pi, theta, modelType.toString)
+    val data = NaiveBayesModel.SaveLoadV1_0.Data(labels, pi, theta, modelType)
     NaiveBayesModel.SaveLoadV1_0.save(sc, path, data)
   }
 
@@ -137,15 +137,15 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
       val labels = data.getAs[Seq[Double]](0).toArray
       val pi = data.getAs[Seq[Double]](1).toArray
       val theta = data.getAs[Seq[Seq[Double]]](2).map(_.toArray).toArray
-      val modelType = NaiveBayes.ModelType.fromString(data.getString(3))
+      val modelType = NaiveBayes.ModelType.fromString(data.getString(3)).toString
       new NaiveBayesModel(labels, pi, theta, modelType)
     }
   }
 
   override def load(sc: SparkContext, path: String): NaiveBayesModel = {
-    def getModelType(metadata: JValue): NaiveBayes.ModelType = {
+    def getModelType(metadata: JValue): String = {
       implicit val formats = DefaultFormats
-      NaiveBayes.ModelType.fromString((metadata \ "modelType").extract[String])
+      NaiveBayes.ModelType.fromString((metadata \ "modelType").extract[String]).toString
     }
     val (loadedClassName, version, metadata) = loadMetadata(sc, path)
     val classNameV1_0 = SaveLoadV1_0.thisClassName
@@ -265,7 +265,7 @@ class NaiveBayes private (
       i += 1
     }
 
-    new NaiveBayesModel(labels, pi, theta, modelType)
+    new NaiveBayesModel(labels, pi, theta, modelType.toString)
   }
 }
 

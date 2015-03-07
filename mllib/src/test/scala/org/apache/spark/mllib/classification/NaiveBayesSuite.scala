@@ -52,7 +52,7 @@ object NaiveBayesSuite {
     sample: Int = 10): Seq[LabeledPoint] = {
     val D = theta(0).length
     val rnd = new Random(seed)
-
+c
     val _pi = pi.map(math.pow(math.E, _))
     val _theta = theta.map(row => row.map(math.pow(math.E, _)))
 
@@ -77,7 +77,7 @@ object NaiveBayesSuite {
 
   /** Binary labels, 3 features */
   private val binaryModel = new NaiveBayesModel(labels = Array(0.0, 1.0), pi = Array(0.2, 0.8),
-    theta = Array(Array(0.1, 0.3, 0.6), Array(0.2, 0.4, 0.4)), NaiveBayes.Bernoulli)
+    theta = Array(Array(0.1, 0.3, 0.6), Array(0.2, 0.4, 0.4)), NaiveBayes.Bernoulli.toString)
 }
 
 class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
@@ -111,7 +111,6 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
 
   test("Naive Bayes Multinomial") {
     val nPoints = 1000
-
     val pi = Array(0.5, 0.1, 0.4).map(math.log)
     val theta = Array(
       Array(0.70, 0.10, 0.10, 0.10), // label 0
@@ -120,7 +119,11 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
     ).map(_.map(math.log))
 
     val testData = NaiveBayesSuite.generateNaiveBayesInput(
-      pi, theta, nPoints, 42, NaiveBayes.Multinomial)
+      pi,
+      theta,
+      nPoints,
+      42,
+      NaiveBayes.Multinomial)
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
@@ -144,7 +147,6 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
 
   test("Naive Bayes Bernoulli") {
     val nPoints = 10000
-
     val pi = Array(0.5, 0.3, 0.2).map(math.log)
     val theta = Array(
       Array(0.50, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.40), // label 0
