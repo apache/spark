@@ -26,8 +26,7 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap, ListBuffer, Map}
 import scala.util.{Try, Success, Failure}
 
-import com.google.common.base.{Preconditions, Objects}
-
+import com.google.common.base.{Objects, Preconditions}
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
@@ -563,9 +562,8 @@ private[spark] class Client(
 
   def setupCredentials(): Unit = {
     if (args.principal != null) {
-      if (args.keytab == null) {
-        throw new SparkException("Keytab must be specified when principal is specified.")
-      }
+      Preconditions.checkNotNull(
+        args.keytab, "Keytab must be specified when principal is specified.")
       logInfo("Attempting to login to the Kerberos" +
         s" using principal: ${args.principal} and keytab: ${args.keytab}")
       val f = new File(args.keytab)

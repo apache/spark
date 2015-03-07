@@ -19,6 +19,7 @@ package org.apache.spark.deploy.yarn
 
 import java.io._
 import java.util
+import java.util.Arrays
 import java.util.Comparator
 import java.util.concurrent.{Executors, TimeUnit}
 import java.util.regex.Matcher
@@ -28,6 +29,7 @@ import scala.collection.mutable.HashMap
 import scala.collection.JavaConversions._
 import scala.util.Try
 
+import com.google.common.primitives.Longs
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.FileSystem
@@ -56,7 +58,9 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   private lazy val delegationTokenRenewer =
     Executors.newSingleThreadScheduledExecutor(
       Utils.namedThreadFactory("Delegation Token Refresh Thread"))
-  private lazy val delegationTokenExecuterUpdaterRunnable =
+
+  // On the executor, this thread wakes up and picks up new tokens from HDFS, if any.
+  private lazy val executorUpdaterRunnable =
     new Runnable {
       override def run(): Unit = Utils.logUncaughtExceptions(updateCredentialsIfRequired())
     }
@@ -100,13 +104,41 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     if (credentials != null) credentials.getSecretKey(new Text(key)) else null
   }
 
+  /*
+   * The following methods are primarily meant to make sure long-running apps like Spark
+   * Streaming apps can run without interruption while writing to secure HDFS. The
+   * scheduleLoginFromKeytab method is called on the driver when the
+   * CoarseGrainedScheduledBackend starts up. This method wakes up a thread that logs into the KDC
+   * once 75% of the expiry time of the original delegation tokens used for the container
+   * has elapsed. It then creates new delegation tokens and writes them to HDFS in a
+   * pre-specified location - the prefix of which is specified in the sparkConf by
+   * spark.yarn.credentials.file (so the file(s) would be named c-1, c-2 etc. - each update goes
+   * to a new file, with a monotonically increasing suffix). After this, the credentials are
+   * updated once 75% of the new tokens validity has elapsed.
+   *
+   * On the executor side, the updateCredentialsIfRequired method is called once 80% of the
+   * validity of the original tokens has elapsed. At that time the executor finds the
+   * credentials file with the latest timestamp and checks if it has read those credentials
+   * before (by keeping track of the suffix of the last file it read). If a new file has
+   * appeared, it will read the credentials and update the currently running UGI with it. This
+   * process happens again once 80% of the validity of this has expired.
+   */
   private[spark] override def scheduleLoginFromKeytab(): Unit = {
     sparkConf.getOption("spark.yarn.principal").foreach { principal =>
       val keytab = sparkConf.get("spark.yarn.keytab")
-      val delegationTokenRenewerRunnable =
+      // This thread periodically runs on the driver to update the delegation tokens on HDFS.
+      val driverTokenRenewerRunnable =
         new Runnable {
           override def run(): Unit = {
-            renewCredentials(principal, keytab)
+            try {
+              renewCredentials(principal, keytab)
+            } catch {
+              case e: Exception =>
+                logWarning("Failed to write out new credentials to HDFS, will try again in an " +
+                  "hour! If this happens too often tasks will fail.", e)
+                delegationTokenRenewer.schedule(this, 1, TimeUnit.HOURS)
+                return
+            }
             delegationTokenRenewer.schedule(
               this, (0.75 * (getLatestValidity - System.currentTimeMillis())).toLong,
               TimeUnit.MILLISECONDS)
@@ -114,7 +146,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
         }
       val timeToRenewal = (0.75 * (getLatestValidity - System.currentTimeMillis())).toLong
       delegationTokenRenewer.schedule(
-        delegationTokenRenewerRunnable, timeToRenewal, TimeUnit.MILLISECONDS)
+        driverTokenRenewerRunnable, timeToRenewal, TimeUnit.MILLISECONDS)
     }
   }
 
@@ -143,8 +175,6 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
         s.close()
         remoteFs.rename(tempTokenPath, tokenPath)
       }
-    } catch {
-      case e: Exception =>
     } finally {
       stream.foreach(_.close())
     }
@@ -166,32 +196,27 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
                 name.startsWith(credentialsFilePath.getName) && !name.endsWith(".tmp")
               }
             })
-        util.Arrays.sort(fileStatuses, new Comparator[FileStatus] {
+        Arrays.sort(fileStatuses, new Comparator[FileStatus] {
           override def compare(o1: FileStatus, o2: FileStatus): Int = {
-            // can't return this directly, as it might cause int to overflow
-            val diff = o1.getModificationTime - o2.getModificationTime
-            if (diff < 0) {
-              -1
-            } else {
-              1
-            }
+            Longs.compare(o1.getModificationTime, o2.getModificationTime)
           }
         })
-        val credentialsStatus = fileStatuses(fileStatuses.length - 1)
-        val credentials = credentialsStatus.getPath
-        val suffix = credentials.getName.substring(credentials.getName.lastIndexOf("-") + 1).toInt
-        if (suffix > lastCredentialsFileSuffix) {
-          val newCredentials = getCredentialsFromHDFSFile(remoteFs, credentials)
-          UserGroupInformation.getCurrentUser.addCredentials(newCredentials)
-          val totalValidity = getLatestValidity - credentialsStatus.getModificationTime
-          val timeToRunRenewal =
-            credentialsStatus.getModificationTime + (0.8 * totalValidity).toLong
-          val timeFromNowToRenewal = timeToRunRenewal - System.currentTimeMillis()
-          delegationTokenRenewer.schedule(delegationTokenExecuterUpdaterRunnable,
-            timeFromNowToRenewal, TimeUnit.MILLISECONDS)
-        } else {
-          // Check every hour to see if new credentials arrived.
-          delegationTokenRenewer.schedule(delegationTokenExecuterUpdaterRunnable, 1, TimeUnit.HOURS)
+        fileStatuses.lastOption.foreach { credentialsStatus =>
+          val credentials = credentialsStatus.getPath
+          val suffix = credentials.getName.substring(credentials.getName.lastIndexOf("-") + 1).toInt
+          if (suffix > lastCredentialsFileSuffix) {
+            val newCredentials = getCredentialsFromHDFSFile(remoteFs, credentials)
+            UserGroupInformation.getCurrentUser.addCredentials(newCredentials)
+            val totalValidity = getLatestValidity - credentialsStatus.getModificationTime
+            val timeToRunRenewal =
+              credentialsStatus.getModificationTime + (0.8 * totalValidity).toLong
+            val timeFromNowToRenewal = timeToRunRenewal - System.currentTimeMillis()
+            delegationTokenRenewer.schedule(executorUpdaterRunnable,
+              timeFromNowToRenewal, TimeUnit.MILLISECONDS)
+          } else {
+            // Check every hour to see if new credentials arrived.
+            delegationTokenRenewer.schedule(executorUpdaterRunnable, 1, TimeUnit.HOURS)
+          }
         }
       }
     } catch {
@@ -200,7 +225,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
       case e: Exception =>
         logWarning(
           "Error encountered while trying to update credentials, will try again in 1 hour", e)
-        delegationTokenRenewer.schedule(delegationTokenExecuterUpdaterRunnable, 1, TimeUnit.HOURS)
+        delegationTokenRenewer.schedule(executorUpdaterRunnable, 1, TimeUnit.HOURS)
     }
   }
 
@@ -208,30 +233,24 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
       remoteFs: FileSystem,
       tokenPath: Path): Credentials = {
     val stream = remoteFs.open(tokenPath)
-    val newCredentials = new Credentials()
-    newCredentials.readFields(stream)
-    newCredentials
+    try {
+      val newCredentials = new Credentials()
+      newCredentials.readFields(stream)
+      newCredentials
+    } finally {
+      stream.close()
+    }
   }
 
   private[spark] def getLatestValidity: Long = {
-    val creds = UserGroupInformation.getCurrentUser.getCredentials
-    var latestValidity: Long = 0
-    creds.getAllTokens
+    UserGroupInformation.getCurrentUser.getCredentials.getAllTokens
       .filter(_.getKind == DelegationTokenIdentifier.HDFS_DELEGATION_KIND)
-      .foreach { t =>
+      .map { t =>
         val identifier = new DelegationTokenIdentifier()
         identifier.readFields(new DataInputStream(new ByteArrayInputStream(t.getIdentifier)))
-        latestValidity = {
-          if (latestValidity < identifier.getMaxDate) {
-            identifier.getMaxDate
-          } else {
-            latestValidity
-          }
-        }
-      }
-    latestValidity
+        identifier.getMaxDate
+    }.foldLeft(0L)(math.max)
   }
-
   /**
    * Get the list of namenodes the user may access.
    */
