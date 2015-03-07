@@ -160,6 +160,15 @@ def parse_args():
         default=DEFAULT_SPARK_EC2_BRANCH,
         help="Github repo branch of spark-ec2 to use (default: %default)")
     parser.add_option(
+        "--deploy-root-dir",
+        default=None,
+        help="A directory to copy into / on the first master. " +
+             "Must be absolute. Note that a trailing slash is handled as per rsync: " +
+             "If you omit it, the last directory of the --deploy-root-dir path will be created " +
+             "in / before copying its contents. If you append the trailing slash, " +
+             "the directory is not created and its contents are copied directly into /. " +
+             "(default: %default).")
+    parser.add_option(
         "--hadoop-major-version", default="1",
         help="Major version of Hadoop (default: %default)")
     parser.add_option(
@@ -694,6 +703,14 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
         modules=modules
     )
 
+    if opts.deploy_root_dir is not None:
+        print "Deploying {s} to master...".format(s=opts.deploy_root_dir)
+        deploy_user_files(
+            root_dir=opts.deploy_root_dir,
+            opts=opts,
+            master_nodes=master_nodes
+        )
+
     print "Running setup on master..."
     setup_spark_cluster(master, opts)
     print "Done!"
@@ -931,6 +948,23 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
     shutil.rmtree(tmp_dir)
 
 
+# Deploy a given local directory to a cluster, WITHOUT parameter substitution.
+# Note that unlike deploy_files, this works for binary files.
+# Also, it is up to the user to add (or not) the trailing slash in root_dir.
+# Files are only deployed to the first master instance in the cluster.
+#
+# root_dir should be an absolute path.
+def deploy_user_files(root_dir, opts, master_nodes):
+    active_master = master_nodes[0].public_dns_name
+    command = [
+        'rsync', '-rv',
+        '-e', stringify_command(ssh_command(opts)),
+        "%s" % root_dir,
+        "%s@%s:/" % (opts.user, active_master)
+    ]
+    subprocess.check_call(command)
+
+
 def stringify_command(parts):
     if isinstance(parts, str):
         return parts
@@ -1097,6 +1131,14 @@ def real_main():
         print >> stderr, "spark-ec2-git-repo must be a github repo and it must not have a " \
                          "trailing / or .git. " \
                          "Furthermore, we currently only support forks named spark-ec2."
+        sys.exit(1)
+
+    if not (opts.deploy_root_dir is None or
+            (os.path.isabs(opts.deploy_root_dir) and
+             os.path.isdir(opts.deploy_root_dir) and
+             os.path.exists(opts.deploy_root_dir))):
+        print >> stderr, "--deploy-root-dir must be an absolute path to a directory that exists " \
+                         "on the local file system"
         sys.exit(1)
 
     try:
