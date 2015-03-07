@@ -192,7 +192,7 @@ class SizeEstimatorSuite
     assertResult(24)(SizeEstimator.estimate(new java.lang.Double(1.0d)))
   }
   
-  test("class field blocks rounding on 64-bit VM") {
+  test("class field blocks rounding on 64-bit VM without useCompressedOops") {
     assertResult(24)(SizeEstimator.estimate(new DummyClass5))
     assertResult(32)(SizeEstimator.estimate(new DummyClass6))
   }

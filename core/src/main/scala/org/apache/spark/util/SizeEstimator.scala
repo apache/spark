@@ -47,11 +47,11 @@ private[spark] object SizeEstimator extends Logging {
   private val FLOAT_SIZE   = 4
   private val DOUBLE_SIZE  = 8
 
-  // Fields can be primitive types, sizes are: 1, 2, 4, 8. Or fields can be pointers. The size of 
-  // a point is 4 or 8 depends on the JVM (32-bit or 64-bit) and UseCompressedOops flag.
+  // Fields can be primitive types, sizes are: 1, 2, 4, 8. Or fields can be pointers. The size of
+  // a pointer is 4 or 8 depending on the JVM (32-bit or 64-bit) and UseCompressedOops flag.
   // The sizes should be in descending order, as we will use that information for fields placement.
   private val fieldSizes = List(8, 4, 2, 1)
-  
+
   // Alignment boundary for objects
   // TODO: Is this arch dependent ?
   private val ALIGN_SIZE = 8
@@ -279,10 +279,6 @@ private[spark] object SizeEstimator extends Logging {
     val parent = getClassInfo(cls.getSuperclass)
     var shellSize = parent.shellSize
     var pointerFields = parent.pointerFields
-    
-    // we have only four sizes: 1, 2, 4, 8. pointerSize can be 4 or 8.
-    // we can just use an Array.fill(8 + 1) to hold all the size counting, but we
-    // can also use a HashMap to store size counting; Here we uses Array.
     val sizeCount = Array.fill(fieldSizes.max + 1)(0)
 
     // iterate through the fields of this class and gather information.
@@ -301,15 +297,15 @@ private[spark] object SizeEstimator extends Logging {
 
     // Based on the simulated field layout code in Aleksey Shipilev's report:
     // http://cr.openjdk.java.net/~shade/papers/2013-shipilev-fieldlayout-latest.pdf
-    // The code is in Figure 9. Aleksey Shiplev also leaders the development of JOL (Java Object 
-    // Layout) tool. The simulated code is also in the JOL. The simplified idea of field layout 
-    // consists of these parts (see more details in the report):
-    // 1. field alignment: HotSpot lay out the fields aligned by their size.
+    // The code is in Figure 9.
+    // The simplified idea of field layout consists of 4 parts (see more details in the report):
+    //
+    // 1. field alignment: HotSpot lays out the fields aligned by their size.
     // 2. object alignment: HotSpot rounds instance size up to 8 bytes
-    // 3. consistent field layouts throughout the hierarchy: This means we should layout 
-    // superclass first. And we use superclass's shellSize as a start point to layout the
+    // 3. consistent fields layouts throughout the hierarchy: This means we should layout
+    // superclass first. And we can use superclass's shellSize as a starting point to layout the
     // other fields in this class.
-    // 4. class alignment: HotSpot rounds field blocks upto to HeapOopSize not 4 bytes, confirmed
+    // 4. class alignment: HotSpot rounds field blocks up to to HeapOopSize not 4 bytes, confirmed
     // with Aleksey. see https://bugs.openjdk.java.net/browse/CODETOOLS-7901322
     //
     // The real world field layout is much more complicated. There are three kinds of fields
@@ -319,11 +315,11 @@ private[spark] object SizeEstimator extends Logging {
     var alignedSize = shellSize
     for (size <- fieldSizes if sizeCount(size) > 0) {
       val count = sizeCount(size)
-      // If there are internal gaps, smaller filed can fit in.
-      alignedSize = (alignSizeUp(shellSize, size) + size * count) max alignedSize
+      // If there are internal gaps, smaller field can fit in.
+      alignedSize = math.max(alignedSize, alignSizeUp(shellSize, size) + size * count)
       shellSize += size * count
     }
-    
+
     // we should choose a larger size and clearly alignedSize >= shellSize.
     shellSize = alignedSize
 
@@ -336,10 +332,7 @@ private[spark] object SizeEstimator extends Logging {
     newInfo
   }
 
-  private def alignSize(size: Long): Long = {
-    val rem = size % ALIGN_SIZE
-    if (rem == 0) size else (size + ALIGN_SIZE - rem)
-  }
+  private def alignSize(size: Long): Long = alignSizeUp(size, ALIGN_SIZE)
 
   private def alignSizeUp(size: Long, alignSize: Int): Long =
     (size + alignSize - 1) & ~(alignSize - 1)
