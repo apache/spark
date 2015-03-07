@@ -19,8 +19,6 @@ package org.apache.spark.util.expression.parserTrait
 import org.apache.spark.util.expression.BaseParser
 import org.apache.spark.util.expression.quantity.ByteQuantity
 
-import scala.util.parsing.combinator.JavaTokenParsers
-
 /**
  * A Trait that will match byte quantities and expand them into their equivalent number of bytes
  */

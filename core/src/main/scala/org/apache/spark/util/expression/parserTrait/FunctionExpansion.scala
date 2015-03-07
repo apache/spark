@@ -17,7 +17,7 @@
 package org.apache.spark.util.expression.parserTrait
 
 import org.apache.spark.util.expression.BaseParser
-import Utils.createListRegexp
+import org.apache.spark.util.expression.parserTrait.Utils.createListRegexp
 
 /**
  * Expands out user provided no-arg functions to their values
@@ -25,9 +25,8 @@ import Utils.createListRegexp
 private[spark] trait FunctionExpansion extends BaseParser {
   /**
    * Dictionary of functions - host class must provide a separate stacked track for those
-   * that extends FunctionExpansion (eg JVMInfoFunctins and MachineInfoFunctions)
-   * Symbols are matched case-insensitive. Longer symbols are matched
-   * matched in preference of longer ones
+   * that extends FunctionExpansion (eg JVMInfoFunctions and MachineInfoFunctions)
+   * Symbols are matched case-insensitive. Longer symbols are matched in preference of longer ones
    */
   protected def functions: Map[String, ()=>Double] = Map()
 

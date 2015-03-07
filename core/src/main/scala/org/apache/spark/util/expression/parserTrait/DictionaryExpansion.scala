@@ -17,7 +17,7 @@
 package org.apache.spark.util.expression.parserTrait
 
 import org.apache.spark.util.expression.BaseParser
-import Utils._
+import org.apache.spark.util.expression.parserTrait.Utils.createListRegexp
 
 /**
  * Expands out dictionary expressions to their provided values
