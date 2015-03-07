@@ -16,13 +16,12 @@
  */
 package org.apache.spark.util.expression
 
-import org.apache.spark.util.expression.parserTrait.ByteUnitParsing
 import org.apache.spark.util.expression.quantity.ByteQuantity
 import org.scalatest.FunSuite
 
 
 class ByteExpressionParserSuite extends FunSuite {
-  val parser = new ByteParser()
+  val parser = Parsers.ByteParser
 
   def testParser(in: String, expectedResult:ByteQuantity): Unit = {
     val parseResult = parser.parse(in)
@@ -38,7 +37,7 @@ class ByteExpressionParserSuite extends FunSuite {
   }
 
   test("jvm kbytes") {
-    testParser(in = "5 K", expectedResult = ByteQuantity(5 * 1000))
+    testParser(in = "5 K", expectedResult = ByteQuantity(5 * 1024))
   }
 
   test("kbytes2") {
@@ -50,7 +49,7 @@ class ByteExpressionParserSuite extends FunSuite {
   }
 
   test("jvm mbytes") {
-    testParser(in = "5 M", expectedResult =  ByteQuantity(5 * Math.pow(1000,2)))
+    testParser(in = "5 M", expectedResult =  ByteQuantity(5 * Math.pow(1024,2)))
   }
 
   test("gbytes") {
@@ -58,7 +57,7 @@ class ByteExpressionParserSuite extends FunSuite {
   }
 
   test("jvm gbytes") {
-    testParser(in = "5 G", expectedResult =  ByteQuantity(5 * Math.pow(1000,3)))
+    testParser(in = "5 G", expectedResult =  ByteQuantity(5 * Math.pow(1024,3)))
   }
 
   test("tbytes") {
@@ -66,7 +65,7 @@ class ByteExpressionParserSuite extends FunSuite {
   }
 
   test("jvm tbytes") {
-    testParser(in = "5 t", expectedResult =  ByteQuantity(5 * Math.pow(1000,4)))
+    testParser(in = "5 t", expectedResult =  ByteQuantity(5 * Math.pow(1024,4)))
   }
 
   test("pbytes") {
@@ -122,31 +121,40 @@ class ByteExpressionParserSuite extends FunSuite {
   }
 
   test("test totalMemoryBytes arith") {
-    testParser(in = "maxMemoryBytes*10", expectedResult = ByteQuantity(Runtime.getRuntime.maxMemory*10.0))
+    testParser(in = "JVMmaxMemoryBytes*10", expectedResult = ByteQuantity(Runtime.getRuntime.maxMemory*10.0))
   }
 
   test("test totalMemoryBytes arith2") {
-    testParser(in = "maxMemoryBytes/1", expectedResult = ByteQuantity(Runtime.getRuntime.maxMemory))
+    testParser(in = "JVMmaxMemoryBytes/1", expectedResult = ByteQuantity(Runtime.getRuntime.maxMemory))
   }
 
-  // The following tests are not strict as they involve them querying dynamic system state,
+  test("StandAlone byte quantity") {
+    testParser(in = "KB", expectedResult = ByteQuantity(1,"KB"))
+  }
+
+  // The following tests are not strict as they involve them querying system state,
   // and thus there is no reliable means to verify that the returned values are correct
   test("test totalMemoryBytes") {
-    val parseResult = parser.parse("totalMemoryBytes")
+    val parseResult = parser.parse("JVMTotalMemoryBytes")
     assert( parseResult.isDefined )
     assert( parseResult.get > 0 )
   }
 
   test("test totalFreeBytes") {
-    val parseResult = parser.parse("freeMemoryBytes")
+    val parseResult = parser.parse("JVMfreeMemoryBytes")
     assert( parseResult.isDefined )
     assert( parseResult.get > 0 )
   }
 
   test("test maxMemoryBytes") {
-    val parseResult = parser.parse("maxMemoryBytes")
+    val parseResult = parser.parse("JVMMaxMemoryBytes")
     assert( parseResult.isDefined )
     assert( parseResult.get > 0 )
   }
 
+  test("test physicalMemoryBytes") {
+    val parseResult = parser.parse("physicalMemoryBytes")
+    assert( parseResult.isDefined )
+    assert( parseResult.get > 0 )
+  }
 }

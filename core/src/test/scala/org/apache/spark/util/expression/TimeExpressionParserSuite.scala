@@ -16,13 +16,12 @@
  */
 package org.apache.spark.util.expression
 
-import org.apache.spark.util.expression.parserTrait.TimeUnitMSParsing
-import org.apache.spark.util.expression.quantity.TimeAsMS
 import org.scalatest.FunSuite
 
-
 class TimeExpressionParserSuite extends FunSuite {
-  val parser = new TimeAsMSParser()
+  val parser = Parsers.TimeAsMSParser
+
+  val secParser = Parsers.TimeAsSecParser
 
   val secMs = 1000.0
   val minMs = 60 * secMs
@@ -33,6 +32,11 @@ class TimeExpressionParserSuite extends FunSuite {
 
   def testParser(in: String, expectedResult: Double): Unit = {
     val parseResult = parser.parse(in)
+    assert(parseResult == Some(expectedResult))
+  }
+
+  def testSecParser(in: String, expectedResult: Double): Unit = {
+    val parseResult = secParser.parse(in)
     assert(parseResult == Some(expectedResult))
   }
 
@@ -78,5 +82,9 @@ class TimeExpressionParserSuite extends FunSuite {
 
   test("standalone ") {
     testParser(in = "5 + 5 ms", expectedResult = 10 )
+  }
+
+  test("SecondsParser Seconds ") {
+    testSecParser(in = "5 + 5 Sec", expectedResult = 10 )
   }
 }

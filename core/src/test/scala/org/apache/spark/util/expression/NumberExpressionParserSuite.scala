@@ -19,7 +19,7 @@ package org.apache.spark.util.expression
 import org.scalatest.FunSuite
 
 class NumberExpressionParserSuite extends FunSuite {
-  val parser = new NumberParser()
+  val parser = Parsers.NumberParser
 
   def testParser(in: String, expectedResult:Double): Unit = {
     val parseResult: Option[Double] = parser.parse(in)
@@ -84,11 +84,11 @@ class NumberExpressionParserSuite extends FunSuite {
 
   test("numCores") {
     val numCores = Runtime.getRuntime.availableProcessors() * 1.0
-    testParser(in="numCores", expectedResult=numCores)
+    testParser(in="JVMnumCores", expectedResult=numCores)
   }
 
   test("numCores fractional") {
     val numCores = Runtime.getRuntime.availableProcessors() * 1.0
-    testParser(in="numCores/2", expectedResult=numCores/2)
+    testParser(in="JVMnumCores/2", expectedResult=numCores/2)
   }
 }
