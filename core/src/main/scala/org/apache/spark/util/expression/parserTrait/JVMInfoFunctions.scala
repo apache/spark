@@ -23,8 +23,7 @@ private[spark] trait JVMInfoFunctions extends FunctionExpansion {
   protected abstract override def functions: Map[String, () => Double] = Map(
     "JVMTotalMemoryBytes".toLowerCase -> (() => Runtime.getRuntime.totalMemory() * 1.0),
     "JVMMaxMemoryBytes".toLowerCase -> (() => Runtime.getRuntime.maxMemory * 1.0),
-    "JVMFreeMemoryBytes".toLowerCase-> (() => Runtime.getRuntime.freeMemory * 1.0),
-    "JVMNumCores".toLowerCase -> (() => Runtime.getRuntime.availableProcessors * 1.0)
+    "JVMFreeMemoryBytes".toLowerCase-> (() => Runtime.getRuntime.freeMemory * 1.0)
     ) ++ super.functions
 }
 

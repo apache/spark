@@ -27,7 +27,8 @@ import org.apache.spark.util.expression.quantity.ByteQuantity
 private[spark] trait MachineInfoFunctions extends FunctionExpansion {
 
   protected abstract override def functions: Map[String, () => Double] = Map(
-    "physicalMemoryBytes".toLowerCase -> (() => inferDefaultMemory * 1.0)
+    "physicalMemoryBytes".toLowerCase -> (() => inferDefaultMemory * 1.0),
+    "NumCores".toLowerCase -> (() => Runtime.getRuntime.availableProcessors * 1.0)
   ) ++ super.functions
 
   private def DefaultMemSize = ByteQuantity(2, "GB")

@@ -84,11 +84,11 @@ class NumberExpressionParserSuite extends FunSuite {
 
   test("numCores") {
     val numCores = Runtime.getRuntime.availableProcessors() * 1.0
-    testParser(in="JVMnumCores", expectedResult=numCores)
+    testParser(in="numCores", expectedResult=numCores)
   }
 
   test("numCores fractional") {
     val numCores = Runtime.getRuntime.availableProcessors() * 1.0
-    testParser(in="JVMnumCores/2", expectedResult=numCores/2)
+    testParser(in="numCores/2", expectedResult=numCores/2)
   }
 }
