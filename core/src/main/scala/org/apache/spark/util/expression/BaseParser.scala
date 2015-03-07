@@ -16,37 +16,40 @@
  */
 package org.apache.spark.util.expression
 
-
-
 import scala.util.parsing.combinator.JavaTokenParsers
 
 /**
- * A simple parser of arithmetic expressions
- * Inspired by examples given in Ordesky, Spoon and Venners.
+ * The base parser provides for basic arithmetic support
  */
-trait ExpressionParser[T] extends JavaTokenParsers {
+private[spark] abstract class BaseParser extends JavaTokenParsers {
 
-  def expr: Parser[Double] = term ~ rep(add | subtract) ^^ {
+  // Stacked Trait extension point for more tokens/functions
+  protected def stackedExtensions: Parser[Double] = failure("BaseParser has no extensions")
+
+  private def expr: Parser[Double] = term ~ rep(add | subtract) ^^ {
     case h ~ t => h + t.sum
   }
 
-  def term: Parser[Double] = factor ~ rep(multi | div) ^^ {
+  private def term: Parser[Double] = factor ~ rep(multi | div) ^^ {
     case h ~ t => h * t.foldLeft(1.0)((a, b) => a * b)
   }
 
-  def factor: Parser[Double] = extensions | floatingPointNumber ^^ (_.toDouble) |
+  private def factor: Parser[Double] = stackedExtensions |
+    floatingPointNumber ^^ (_.toDouble) |
     "(" ~ expr ~ ")" ^^ {
       case "(" ~ expr ~ ")" => expr
     }
 
-  def extensions: Parser[Double]
+  private def multi: Parser[Double] = "*" ~ factor ^^ { case "*" ~ num => num}
 
-  def multi: Parser[Double] = "*" ~ factor ^^ { case "*" ~ num => num }
-  def div: Parser[Double] = "/" ~ factor ^^ { case "/" ~ num => 1.0 / num }
-  def add: Parser[Double] = "+" ~ term ^^ { case "+" ~ num => num }
-  def subtract: Parser[Double] = "-" ~ term ^^ { case "-" ~ num => - num }
+  private def div: Parser[Double] = "/" ~ factor ^^ { case "/" ~ num => 1.0 / num}
 
-  def parse(expression: String): Option[T]
+  private def add: Parser[Double] = "+" ~ term ^^ { case "+" ~ num => num}
+
+  private def subtract: Parser[Double] = "-" ~ term ^^ { case "-" ~ num => -num}
+
+  private[spark] def parse(expression: String) = parseAll(expr, expression) match {
+    case Success(result, _) => Some(result)
+    case _ => None
+  }
 }
-
-

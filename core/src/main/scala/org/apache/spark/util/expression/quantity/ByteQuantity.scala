@@ -14,11 +14,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.util.expression
+package org.apache.spark.util.expression.quantity
 
 import scala.collection.immutable.Map
 
-case class ByteQuantity(baseValue: Double) {
+/**
+ * A Utility class used for dealing in quantities of bytes
+ * and converting between the various units
+ * @param baseValue The number of bytes
+ */
+private[spark] case class ByteQuantity(baseValue: Double) {
+
   def this(baseValue: Double, unitOfScale: String) =
     this( baseValue * ByteQuantity.quantityScale(unitOfScale))
 
@@ -50,7 +56,7 @@ case class ByteQuantity(baseValue: Double) {
   }
 }
 
-object ByteQuantity {
+private[spark] object ByteQuantity {
   val KB = "KB"
   val MB = "MB"
   val GB = "GB"
@@ -81,7 +87,7 @@ object ByteQuantity {
   val jvmPrefix = List("K","M","G","T")
     .zip(Stream from 1)
     .map {
-    case (s, i) => s->math.pow(1000, i)
+    case (s, i) => s->math.pow(1024, i)
   }.toMap
 
   val quantityScale: Map[String,Double] = decimalPrefix ++ binaryPrefix ++ jvmPrefix
