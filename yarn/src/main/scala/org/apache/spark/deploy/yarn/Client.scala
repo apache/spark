@@ -563,7 +563,7 @@ private[spark] class Client(
   def setupCredentials(): Unit = {
     if (args.principal != null) {
       Preconditions.checkNotNull(
-        args.keytab, "Keytab must be specified when principal is specified.")
+        args.keytab, "Keytab must be specified when principal is specified.", Array.empty[Any])
       logInfo("Attempting to login to the Kerberos" +
         s" using principal: ${args.principal} and keytab: ${args.keytab}")
       val f = new File(args.keytab)
