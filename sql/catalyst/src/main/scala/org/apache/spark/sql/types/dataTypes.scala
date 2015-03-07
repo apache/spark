@@ -24,6 +24,7 @@ import scala.math._
 import scala.math.Numeric.{FloatAsIfIntegral, DoubleAsIfIntegral}
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{TypeTag, runtimeMirror, typeTag}
+import scala.util.Try
 import scala.util.parsing.combinator.RegexParsers
 
 import org.json4s._
@@ -39,6 +40,10 @@ import org.apache.spark.util.Utils
 
 
 object DataType {
+  private[sql] def fromString(raw: String) = {
+    Try(DataType.fromJson(raw)).getOrElse(DataType.fromCaseClassString(raw))
+  }
+
   def fromJson(json: String): DataType = parseDataType(parse(json))
 
   private object JSortedObject {
@@ -887,6 +892,11 @@ case class StructField(
 
 
 object StructType {
+  private[sql] def fromString(raw: String): StructType = DataType.fromString(raw) match {
+    case t: StructType => t
+    case _ => throw new RuntimeException(s"Failed parsing StructType: $raw")
+  }
+
   protected[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
     StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata)))
 

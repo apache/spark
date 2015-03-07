@@ -28,7 +28,7 @@ import parquet.example.data.simple.SimpleGroup
 import parquet.example.data.{Group, GroupWriter}
 import parquet.hadoop.api.WriteSupport
 import parquet.hadoop.api.WriteSupport.WriteContext
-import parquet.hadoop.metadata.{ParquetMetadata, FileMetaData, CompressionCodecName}
+import parquet.hadoop.metadata.{CompressionCodecName, FileMetaData, ParquetMetadata}
 import parquet.hadoop.{Footer, ParquetFileWriter, ParquetWriter}
 import parquet.io.api.RecordConsumer
 import parquet.schema.{MessageType, MessageTypeParser}
@@ -101,10 +101,8 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
   }
 
   test("fixed-length decimals") {
-
-    def makeDecimalRDD(decimal: DecimalType): DataFrame =
-      sparkContext
-        .parallelize(0 to 1000)
+    def makeDecimalDataFrame(decimal: DecimalType): DataFrame =
+      (0 to 1000)
         .map(i => Tuple1(i / 100.0))
         .toDF()
         // Parquet doesn't allow column names with spaces, have to add an alias here
@@ -112,7 +110,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
 
     for ((precision, scale) <- Seq((5, 2), (1, 0), (1, 1), (18, 10), (18, 17))) {
       withTempPath { dir =>
-        val data = makeDecimalRDD(DecimalType(precision, scale))
+        val data = makeDecimalDataFrame(DecimalType(precision, scale))
         data.saveAsParquetFile(dir.getCanonicalPath)
         checkAnswer(parquetFile(dir.getCanonicalPath), data.collect().toSeq)
       }
@@ -121,7 +119,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
     // Decimals with precision above 18 are not yet supported
     intercept[RuntimeException] {
       withTempPath { dir =>
-        makeDecimalRDD(DecimalType(19, 10)).saveAsParquetFile(dir.getCanonicalPath)
+        makeDecimalDataFrame(DecimalType(19, 10)).saveAsParquetFile(dir.getCanonicalPath)
         parquetFile(dir.getCanonicalPath).collect()
       }
     }
@@ -129,7 +127,7 @@ class ParquetIOSuiteBase extends QueryTest with ParquetTest {
     // Unlimited-length decimals are not yet supported
     intercept[RuntimeException] {
       withTempPath { dir =>
-        makeDecimalRDD(DecimalType.Unlimited).saveAsParquetFile(dir.getCanonicalPath)
+        makeDecimalDataFrame(DecimalType.Unlimited).saveAsParquetFile(dir.getCanonicalPath)
         parquetFile(dir.getCanonicalPath).collect()
       }
     }
