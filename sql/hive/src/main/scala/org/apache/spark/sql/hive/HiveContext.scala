@@ -83,7 +83,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     new this.QueryExecution(plan)
 
   override def sql(sqlText: String): DataFrame = {
-    dialectManager.buildDataFrame(sqlText)
+    val substituted = new VariableSubstitution().substitute(hiveconf, sqlText)
+    dialectManager.buildDataFrame(substituted)
   }
 
   /**
