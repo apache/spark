@@ -278,6 +278,8 @@ processClosure <- function(node, oldEnv, argNames, newEnv) {
         }
       } else if (nodeChar == "$") {  # Skip the field.
         processClosure(node[[2]], oldEnv, argNames, newEnv)
+      } else if (nodeChar == "::" || nodeChar == ":::") {
+        processClosure(node[[3]], oldEnv, argNames, newEnv)
       } else {
         for (i in 1:nodeLen) {
           processClosure(node[[i]], oldEnv, argNames, newEnv)
