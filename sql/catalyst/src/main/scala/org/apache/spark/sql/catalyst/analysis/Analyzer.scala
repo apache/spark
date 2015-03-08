@@ -269,7 +269,7 @@ class Analyzer(catalog: Catalog,
                 case Alias(g: GetItem, _) => false
                 case _ => true
               }.map(_.toAttribute)
-              case _ => s.child.flatMap(_.output)
+              case other => other.output
             }
             s.resolve(name, input, resolver).getOrElse(u)
           case u @ UnresolvedAttribute(name) =>
