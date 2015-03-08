@@ -1049,4 +1049,14 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     rdd.toDF().registerTempTable("distinctData")
     checkAnswer(sql("SELECT COUNT(DISTINCT key,value) FROM distinctData"), Row(2))
   }
+
+  test("SPARK-6145: ORDER BY test for nested fields") {
+    jsonRDD(sparkContext.makeRDD(
+      """{"a": {"b": 1, "a": {"a": 1}}, "c": [{"d": 1}]}""" :: Nil)).registerTempTable("nestedOrder")
+    // These should be successfully analyzed
+    sql("SELECT 1 FROM nestedOrder ORDER BY a.b").queryExecution.analyzed
+    sql("SELECT a.b FROM nestedOrder ORDER BY a.b").queryExecution.analyzed
+    sql("SELECT 1 FROM nestedOrder ORDER BY a.a.a").queryExecution.analyzed
+    sql("SELECT 1 FROM nestedOrder ORDER BY c[0].d").queryExecution.analyzed
+  }
 }

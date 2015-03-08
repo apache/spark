@@ -19,6 +19,8 @@ package org.apache.spark.sql.json
 
 import java.sql.{Date, Timestamp}
 
+import org.scalactic.Tolerance._
+
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.functions._
@@ -549,6 +551,32 @@ class JsonSuite extends QueryTest {
     assert(expectedSchema === jsonDF.schema)
 
     jsonDF.registerTempTable("jsonTable")
+  }
+
+  test("jsonFile should be based on JSONRelation") {
+    val file = getTempFilePath("json")
+    val path = file.toString
+    sparkContext.parallelize(1 to 100).map(i => s"""{"a": 1, "b": "str$i"}""").saveAsTextFile(path)
+    val jsonDF = jsonFile(path, 0.49)
+
+    val analyzed = jsonDF.queryExecution.analyzed
+    assert(
+      analyzed.isInstanceOf[LogicalRelation],
+      "The DataFrame returned by jsonFile should be based on JSONRelation.")
+    val relation = analyzed.asInstanceOf[LogicalRelation].relation
+    assert(
+      relation.isInstanceOf[JSONRelation],
+      "The DataFrame returned by jsonFile should be based on JSONRelation.")
+    assert(relation.asInstanceOf[JSONRelation].path === path)
+    assert(relation.asInstanceOf[JSONRelation].samplingRatio === (0.49 +- 0.001))
+
+    val schema = StructType(StructField("a", LongType, true) :: Nil)
+    val logicalRelation =
+      jsonFile(path, schema).queryExecution.analyzed.asInstanceOf[LogicalRelation]
+    val relationWithSchema = logicalRelation.relation.asInstanceOf[JSONRelation]
+    assert(relationWithSchema.path === path)
+    assert(relationWithSchema.schema === schema)
+    assert(relationWithSchema.samplingRatio > 0.99)
   }
 
   test("Loading a JSON dataset from a text file") {

@@ -29,11 +29,9 @@ import org.apache.spark.sql.hive.HiveShim
 import org.apache.spark.sql.SQLContext
 
 /**
- * :: DeveloperApi ::
- *
  * Implementation for "describe [extended] table".
  */
-@DeveloperApi
+private[hive]
 case class DescribeHiveTableCommand(
     table: MetastoreRelation,
     override val output: Seq[Attribute],
