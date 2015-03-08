@@ -60,9 +60,6 @@ fi
 #
 # For backwards-compatibility, we retain the old IPYTHON and IPYTHON_OPTS variables.
 
-export PYSPARK_DRIVER_PYTHON=ipython
-export PYSPARK_DRIVER_PYTHON_OPTS=notebook
-
 # Determine the Python executable to use if PYSPARK_PYTHON or PYSPARK_DRIVER_PYTHON isn't set:
 if hash python2.7 2>/dev/null; then
   # Attempt to use Python 2.7, if installed:

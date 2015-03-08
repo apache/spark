@@ -25,7 +25,7 @@ object LiveJournalPageRank {
   def main(args: Array[String]) {
     if (args.length < 1) {
       System.err.println(
-        "Usage: LiveJournalPageRank <edge_list_file> --numEPart=<num_edge_partitions>\n" +
+        "Usage: LiveJournalPageRank <edge_list_file>\n" +
           "    --numEPart=<num_edge_partitions>\n" +
           "        The number of partitions for the graph's edge RDD.\n" +
           "    [--tol=<tolerance>]\n" +
