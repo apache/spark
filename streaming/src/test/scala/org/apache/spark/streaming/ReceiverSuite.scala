@@ -161,50 +161,27 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     val maxRate = 100
     val conf = new SparkConf().set("spark.streaming.blockInterval", blockInterval.toString).
       set("spark.streaming.receiver.maxRate", maxRate.toString)
-    val blockGenerator = new BlockGenerator(blockGeneratorListener, 1, conf)
     val expectedBlocks = 20
     val waitTime = expectedBlocks * blockInterval
     val expectedMessages = maxRate * waitTime / 1000
-    val expectedMessagesPerBlock = maxRate * blockInterval / 1000
-    val generatedData = new ArrayBuffer[Int]
+    val generatedData = 0 until expectedMessages
 
     // Generate blocks
     val startTime = System.currentTimeMillis()
+    val blockGenerator = new BlockGenerator(blockGeneratorListener, 1, conf)
     blockGenerator.start()
-    var count = 0
-    while(System.currentTimeMillis - startTime < waitTime) {
-      blockGenerator.addData(count)
-      generatedData += count
-      count += 1
-      Thread.sleep(1)
-    }
+    generatedData.foreach(blockGenerator.addData(_))
     blockGenerator.stop()
+    val endTime = System.currentTimeMillis()
 
+    // should have been rate limited
+    assert(endTime - startTime >= waitTime, "Should have taken longer than the theoretical minimum time")
+
+    // we should get the same data
     val recordedBlocks = blockGeneratorListener.arrayBuffers
     val recordedData = recordedBlocks.flatten
     assert(blockGeneratorListener.arrayBuffers.size > 0, "No blocks received")
     assert(recordedData.toSet === generatedData.toSet, "Received data not same")
-
-    // recordedData size should be close to the expected rate
-    val minExpectedMessages = expectedMessages - 3
-    val maxExpectedMessages = expectedMessages + 1
-    val numMessages = recordedData.size
-    assert(
-      numMessages >= minExpectedMessages && numMessages <= maxExpectedMessages,
-      s"#records received = $numMessages, not between $minExpectedMessages and $maxExpectedMessages"
-    )
-
-    val minExpectedMessagesPerBlock = expectedMessagesPerBlock - 3
-    val maxExpectedMessagesPerBlock = expectedMessagesPerBlock + 1
-    val receivedBlockSizes = recordedBlocks.map { _.size }.mkString(",")
-    assert(
-      // the first and last block may be incomplete, so we slice them out
-      recordedBlocks.drop(1).dropRight(1).forall { block =>
-        block.size >= minExpectedMessagesPerBlock && block.size <= maxExpectedMessagesPerBlock
-      },
-      s"# records in received blocks = [$receivedBlockSizes], not between " +
-        s"$minExpectedMessagesPerBlock and $maxExpectedMessagesPerBlock"
-    )
   }
 
   /**
