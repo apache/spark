@@ -71,6 +71,8 @@ SPARK_TACHYON_MAP = {
     "1.2.1": "0.5.0",
 }
 
+DEFAULT_TACHYON_VERSION = "0.6.0"
+
 DEFAULT_SPARK_VERSION = SPARK_EC2_VERSION
 DEFAULT_SPARK_GITHUB_REPO = "https://github.com/apache/spark"
 
@@ -159,8 +161,9 @@ def parse_args():
         help="Version of Spark to use: 'X.Y.Z' or a specific git hash (default: %default)")
     parser.add_option(
         "--tachyon-version",
+        default=DEFAULT_TACHYON_VERSION,
         help="If --spark-version is a git hash, this will be used as the version of Tachyon. " +
-             "Otherwise, this field does not need to be specified")
+             "Otherwise, this field does not need to be specified. Default to 0.6.0")
     parser.add_option(
         "--spark-git-repo",
         default=DEFAULT_SPARK_GITHUB_REPO,
