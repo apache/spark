@@ -82,7 +82,7 @@ ________________________________________________________________________________
 
   2. Download the JAR of the artifact from Maven Central http://search.maven.org/,
      Group Id = org.apache.spark, Artifact Id = spark-streaming-kafka-assembly, Version = %s.
-     Then, innclude the jar in the spark-submit command as
+     Then, include the jar in the spark-submit command as
 
      $ bin/spark-submit --jars <spark-streaming-kafka-assembly.jar> ...
 
