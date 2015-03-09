@@ -88,7 +88,13 @@ class ExecutorClassLoader(conf: SparkConf, classUri: String, parent: ClassLoader
       connection.setConnectTimeout(httpUrlConnectionTimeoutMillis)
       connection.setReadTimeout(httpUrlConnectionTimeoutMillis)
     }
-    connection.getInputStream
+    connection.connect()
+    if (connection.getResponseCode != 200) {
+      connection.disconnect()
+      throw new ClassNotFoundException(s"Class file not found at URL $url")
+    } else {
+      connection.getInputStream
+    }
   }
 
   private def getClassFileInputStreamFromFileSystem(pathInDirectory: String): InputStream = {
@@ -125,7 +131,7 @@ class ExecutorClassLoader(conf: SparkConf, classUri: String, parent: ClassLoader
     } finally {
       if (inputStream != null) {
         try {
-          //inputStream.close()
+          inputStream.close()
         } catch {
           case e: Exception =>
             logError("Exception while closing inputStream", e)
