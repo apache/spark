@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.util.{TaskKilledListener, TaskKilledListenerException, TaskCompletionListener, TaskCompletionListenerException}
+import org.apache.spark.util.{TaskCompletionListener, TaskCompletionListenerException}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -34,9 +34,6 @@ private[spark] class TaskContextImpl(
 
   // For backwards-compatibility; this method is now deprecated as of 1.3.0.
   override def attemptId(): Long = taskAttemptId
-
-  // List of callback functions to execute when kill the task.
-  @transient private val onKilledCallbacks = new ArrayBuffer[TaskKilledListener]
 
   // List of callback functions to execute when the task completes.
   @transient private val onCompleteCallbacks = new ArrayBuffer[TaskCompletionListener]
@@ -59,18 +56,6 @@ private[spark] class TaskContextImpl(
     this
   }
 
-  override def addTaskKilledListener(listener: TaskKilledListener): this.type = {
-    onKilledCallbacks += listener
-    this
-  }
-
-  override def addTaskKilledListener(f: TaskContext => Unit): this.type = {
-    onKilledCallbacks += new TaskKilledListener {
-      override def onTaskKilled(context: TaskContext): Unit = f(context)
-    }
-    this
-  }
-
   @deprecated("use addTaskCompletionListener", "1.1.0")
   override def addOnCompleteCallback(f: () => Unit) {
     onCompleteCallbacks += new TaskCompletionListener {
@@ -81,8 +66,21 @@ private[spark] class TaskContextImpl(
   /** Marks the task as completed and triggers the listeners. */
   private[spark] def markTaskCompleted(): Unit = {
     completed = true
+    processCallBacks()
+  }
+
+  /** Marks the task for interruption, i.e. cancellation. */
+  private[spark] def markInterrupted(): Unit = {
+    interrupted = true
+    processCallBacks()
+  }
+
+  /**
+   * Process complete callbacks in the reverse order of registration.
+   * This may be called in all situation - success, failure, or cancellation.
+   */
+  private[spark] def processCallBacks() {
     val errorMsgs = new ArrayBuffer[String](2)
-    // Process complete callbacks in the reverse order of registration
     onCompleteCallbacks.reverse.foreach { listener =>
       try {
         listener.onTaskCompletion(this)
@@ -95,36 +93,6 @@ private[spark] class TaskContextImpl(
     if (errorMsgs.nonEmpty) {
       throw new TaskCompletionListenerException(errorMsgs)
     }
-  }
-
-  /**
-   * Marks the task as interruption, i.e. cancellation. We add this
-   * method for some more clean works. For example, we need to register
-   * a "kill" callback to completely stop a receiver supervisor. And more,
-   * we reuse the "interrupted" flag to indicate whether the corresponding
-   * task has been killed.
-   */
-  private[spark] def markTaskKilled(): Unit = {
-    interrupted = true
-    val errorMsgs = new ArrayBuffer[String](2)
-    // Process kill callbacks in the reverse order of registration
-    onKilledCallbacks.reverse.foreach { listener =>
-      try {
-        listener.onTaskKilled(this)
-      } catch {
-        case e: Throwable =>
-          errorMsgs += e.getMessage
-          logError("Error in TaskKilledListener", e)
-      }
-    }
-    if (errorMsgs.nonEmpty) {
-      throw new TaskKilledListenerException(errorMsgs)
-    }
-  }
-
-  /** Marks the task for interruption, i.e. cancellation. */
-  private[spark] def markInterrupted(): Unit = {
-    interrupted = true
   }
 
   override def isCompleted(): Boolean = completed
