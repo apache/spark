@@ -10,8 +10,6 @@ set :spark_jar_path, "hdfs://hadoop-production/user/sparkles"
 set :gateway, nil
 set :keep_releases, 5
 set :branch, fetch(:branch, `git symbolic-ref --short HEAD`.gsub("\s",""))
-# turns out that fetch(:sha), when combined with packserv, will show only the latest sha on packserv
-set :local_sha, `git rev-parse HEAD`.rstrip
 
 DATANODES = (2..47).map {|i| "dn%02d.chi.shopify.com" % i }
 OTHERNODES = ["hadoop-etl1.chi.shopify.com", "spark-etl1.chi.shopify.com", "reportify-etl4.chi.shopify.com", "platfora2.chi.shopify.com"]
@@ -29,37 +27,8 @@ namespace :deploy do
     run "ls -1dt /u/apps/spark/releases/* | tail -n +#{count + 1} | xargs rm -rf"
   end
 
-  #this needs to be re-enabled at some point. the problem with this is that if you test multiple SHAs of spark, you are potentially deleting production jars :/
-  task :clear_hdfs_executables, :roles => :uploader, :on_no_matching_servers => :continue do
-    count = fetch(:keep_releases, 5).to_i
-    existing_releases = capture "hdfs dfs -ls #{fetch(:spark_jar_path)}/spark-assembly-*.jar | sort -k6 | sed 's/\\s\\+/ /g' | cut -d' ' -f8"
-    existing_releases = existing_releases.split
-    # hashtag paranoid. let the uploader overwrite the latest.jar
-    existing_releases.reject! {|element| element.end_with?("spark-assembly-latest.jar")}
-    if existing_releases.count > count
-      existing_releases.shift(existing_releases.count - count).each do |path|
-        run "hdfs dfs -rm #{path}"
-      end
-    end
-  end
-
   task :upload_to_hdfs, :roles => :uploader, :on_no_matching_servers => :continue do
-    raw_binary_path = "./assembly/target/scala-2.10/spark-assembly-1.3.0-SNAPSHOT-hadoop2.5.0.jar"
-    modified_binary_path = "./lib/spark-assembly-#{fetch(:local_sha)}.jar"
-    if fetch(:branch) == "master"
-      run "hdfs dfs -copyFromLocal -f #{release_path}/lib/spark-assembly-*.jar hdfs://hadoop-production/user/sparkles/spark-assembly-#{fetch(:sha)}.jar"
-    else
-      unless File.exist?(modified_binary_path)
-        system("mvn package -DskipTests -Phadoop-2.4 -Dhadoop.version=2.5.0 -Pyarn -Phive")
-        system("mv #{raw_binary_path} #{modified_binary_path}")
-      end
-      system("hdfs dfs -copyFromLocal #{modified_binary_path} hdfs://nn01.chi.shopify.com/user/sparkles")
-    end
-  end
-
-  task :test_spark_jar, :roles => :uploader, :on_no_master_servers => :continue do
-    spark_yarn_jar_sha = fetch(:branch) == "master" ? fetch(:sha) : fetch(:local_sha)
-    run "sudo -u azkaban sh -c '. /u/virtualenvs/starscream/bin/activate && cd /u/apps/starscream/current && PYTHON_ENV=production SPARK_OPTS=\"spark.yarn.jar=hdfs://hadoop-production/user/sparkles/spark-assembly-#{spark_yarn_jar_sha}.jar\" exec python shopify/tools/canary.py'"
+    run "hdfs dfs -copyFromLocal -f #{release_path}/lib/spark-assembly-*.jar #{fetch(:spark_jar_path)}/spark-assembly-#{fetch(:sha)}.jar"
   end
 
   task :prevent_gateway do
@@ -85,7 +54,6 @@ namespace :deploy do
     puts "****************************************************************"
   end
 
-
   task :restart do
   end
 
@@ -93,7 +61,7 @@ namespace :deploy do
   before  'deploy:symlink_current', 'deploy:symlink_shared'
   before  'deploy:test_spark_jar', 'deploy:initialize_variables'
   before  'deploy:upload_to_hdfs', 'deploy:initialize_variables'
-  after  'deploy:download', 'deploy:upload_to_hdfs', 'deploy:test_spark_jar'
+  after  'deploy:unpack', 'deploy:upload_to_hdfs'
   after 'deploy:restart', 'deploy:cleanup'
   after 'deploy:cleanup', 'deploy:remind_us_to_update_starscream'
 end
