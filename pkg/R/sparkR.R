@@ -193,5 +193,10 @@ sparkR.init <- function(
     envir = .sparkREnv
   )
 
-  get(".sparkRjsc", envir = .sparkREnv)
+  sc <- get(".sparkRjsc", envir = .sparkREnv)
+
+  # Register a finalizer to sleep 1 seconds on R exit to make RStudio happy
+  reg.finalizer(.sparkREnv, function(x) { Sys.sleep(1) }, onexit = TRUE)
+
+  sc
 }
