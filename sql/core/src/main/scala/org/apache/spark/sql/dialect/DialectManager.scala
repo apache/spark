@@ -49,7 +49,7 @@ abstract class DialectManager(context: SQLContext) {
   def dropDialect(name: String)
 }
 
-class DefaultDialectManager(context: SQLContext)
+private[sql] class DefaultDialectManager(context: SQLContext)
   extends DialectManager(context) with Logging {
 
   val dialects = java.util.Collections.synchronizedMap(

@@ -51,6 +51,8 @@ class DialectCommandSuite extends QueryTest {
 
   test("create dialect") {
     val dialectName = "tql"
+
+    // dialect is a keyword
     sql(s"""CREATE DIALECT $dialectName USING org.apache.spark.sql.`dialect`.TestDialect""")
 
     checkAnswer(
@@ -82,3 +84,4 @@ class DialectCommandSuite extends QueryTest {
     intercept[RuntimeException](sql("create dialect test using "))
   }
 }
+
