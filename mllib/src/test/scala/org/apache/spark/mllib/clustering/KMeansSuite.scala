@@ -21,7 +21,8 @@ import scala.util.Random
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.util.Utils
+import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
 
@@ -255,6 +256,54 @@ class KMeansSuite extends FunSuite with MLlibTestSparkContext {
       assert(predicts(3) === predicts(4))
       assert(predicts(3) === predicts(5))
       assert(predicts(0) != predicts(3))
+    }
+  }
+
+  test("model save/load") {
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+
+    Array(true, false).foreach { case selector =>
+      val model = KMeansSuite.createModel(10, 3, selector)
+      // Save model, load it back, and compare.
+      try {
+        model.save(sc, path)
+        val sameModel = KMeansModel.load(sc, path)
+        KMeansSuite.checkEqual(model, sameModel, selector)
+      } finally {
+        Utils.deleteRecursively(tempDir)
+      }
+    }
+  }
+}
+
+object KMeansSuite extends FunSuite {
+  def createModel(dim: Int, k: Int, isSparse: Boolean): KMeansModel = {
+    val singlePoint = isSparse match {
+      case true =>
+        Vectors.sparse(dim, Array.empty[Int], Array.empty[Double])
+      case _ =>
+        Vectors.dense(Array.fill[Double](dim)(0.0))
+    }
+    new KMeansModel(Array.fill[Vector](k)(singlePoint))
+  }
+
+  def checkEqual(a: KMeansModel, b: KMeansModel, isSparse: Boolean): Unit = {
+    assert(a.k === b.k)
+    isSparse match {
+      case true =>
+        a.clusterCenters.zip(b.clusterCenters).foreach { case (pointA, pointB) =>
+          assert(pointA.asInstanceOf[SparseVector].size === pointB.asInstanceOf[SparseVector].size)
+          assert(
+            pointA.asInstanceOf[SparseVector].indices === pointB.asInstanceOf[SparseVector].indices)
+          assert(
+            pointA.asInstanceOf[SparseVector].values === pointB.asInstanceOf[SparseVector].values)
+        }
+      case _ =>
+        a.clusterCenters.zip(b.clusterCenters).foreach { case (pointA, pointB) =>
+          assert(
+            pointA.asInstanceOf[DenseVector].toArray === pointB.asInstanceOf[DenseVector].toArray)
+        }
     }
   }
 }

@@ -17,15 +17,22 @@
 
 package org.apache.spark.mllib.clustering
 
+import org.json4s._
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+
+import org.apache.spark.mllib.linalg._
+import org.apache.spark.mllib.util.{Loader, Saveable}
+import org.apache.spark.mllib.util.Loader._
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.SparkContext
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
-import org.apache.spark.SparkContext._
-import org.apache.spark.mllib.linalg.Vector
 
 /**
  * A clustering model for K-means. Each point belongs to the cluster with the closest center.
  */
-class KMeansModel (val clusterCenters: Array[Vector]) extends Serializable {
+class KMeansModel (val clusterCenters: Array[Vector]) extends Saveable with Serializable {
 
   /** Total number of clusters. */
   def k: Int = clusterCenters.length
@@ -58,4 +65,53 @@ class KMeansModel (val clusterCenters: Array[Vector]) extends Serializable {
 
   private def clusterCentersWithNorm: Iterable[VectorWithNorm] =
     clusterCenters.map(new VectorWithNorm(_))
+
+  override def save(sc: SparkContext, path: String): Unit = {
+    KMeansModel.SaveLoadV1_0.save(sc, this, path)
+  }
+
+  override protected def formatVersion: String = "1.0"
+}
+
+object KMeansModel extends Loader[KMeansModel] {
+  override def load(sc: SparkContext, path: String): KMeansModel = {
+    KMeansModel.SaveLoadV1_0.load(sc, path)
+  }
+
+  private[clustering]
+  object SaveLoadV1_0 {
+
+    private val thisFormatVersion = "1.0"
+
+    private[clustering]
+    val thisClassName = "org.apache.spark.mllib.clustering.KMeansModel"
+
+    /**
+     * Saves a [[KMeansModel]], where user features are saved under `data/users` and
+     * product features are saved under `data/products`.
+     */
+    def save(sc: SparkContext, model: KMeansModel, path: String): Unit = {
+      val sqlContext = new SQLContext(sc)
+      val wrapper = new VectorUDT()
+      val metadata = compact(render(
+        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ ("k" -> model.k)))
+      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+      val dataRDD = sc.parallelize(model.clusterCenters).map(wrapper.serialize)
+      sqlContext.createDataFrame(dataRDD, wrapper.sqlType).saveAsParquetFile(Loader.dataPath(path))
+    }
+
+    def load(sc: SparkContext, path: String): KMeansModel = {
+      implicit val formats = DefaultFormats
+      val sqlContext = new SQLContext(sc)
+      val wrapper = new VectorUDT()
+      val (className, formatVersion, metadata) = loadMetadata(sc, path)
+      assert(className == thisClassName)
+      assert(formatVersion == thisFormatVersion)
+      val k = (metadata \ "k").extract[Int]
+      val centriods = sqlContext.parquetFile(dataPath(path))
+      val localCentriods = centriods.collect()
+      assert(k == localCentriods.size)
+      new KMeansModel(localCentriods.map(wrapper.deserialize))
+    }
+  }
 }
