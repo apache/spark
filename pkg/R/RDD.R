@@ -97,7 +97,6 @@ PipelinedRDD <- function(prev, func) {
 
 
 # The jrdd accessor function.
-setGeneric("getJRDD", function(rdd, ...) { standardGeneric("getJRDD") })
 setMethod("getJRDD", signature(rdd = "RDD"), function(rdd) rdd@jrdd )
 setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
           function(rdd, dataSerialization = TRUE) {

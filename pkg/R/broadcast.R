@@ -28,15 +28,6 @@ Broadcast <- function(id, value, jBroadcastRef, objName) {
   new("Broadcast", id = id)
 }
 
-#' @description
-#' \code{value} can be used to get the value of a broadcast variable inside
-#' a distributed function.
-#'
-#' @param bcast The broadcast variable to get
-#' @rdname broadcast
-#' @export
-setGeneric("value", function(bcast) { standardGeneric("value") })
-
 #' @rdname broadcast
 #' @aliases value,Broadcast-method
 setMethod("value",

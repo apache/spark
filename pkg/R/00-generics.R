@@ -1,5 +1,8 @@
 ############ RDD Actions and Transformations ############
 
+# The jrdd accessor function.
+setGeneric("getJRDD", function(rdd, ...) { standardGeneric("getJRDD") })
+
 #' Persist an RDD
 #'
 #' Persist this RDD with the default storage level (MEMORY_ONLY).
@@ -1157,4 +1160,16 @@ setGeneric("sortByKey", function(x,
                                  numPartitions = 1L) {
   standardGeneric("sortByKey")
 })
+
+
+############ Broadcast Variable Methods ############
+
+#' @description
+#' \code{value} can be used to get the value of a broadcast variable inside
+#' a distributed function.
+#'
+#' @param bcast The broadcast variable to get
+#' @rdname broadcast
+#' @export
+setGeneric("value", function(bcast) { standardGeneric("value") })
 
