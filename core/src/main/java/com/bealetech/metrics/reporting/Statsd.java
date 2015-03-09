@@ -105,6 +105,8 @@ public class Statsd implements Closeable {
                 stringBuilder.append(rawName.substring(rawName.indexOf(DRIVER_MATCH)));
             } else if (EXECUTOR.equals(parts[2])) {
                 stringBuilder.append(rawName.substring(rawName.indexOf(EXECUTOR_MATCH)));
+            } else if ("".equals(parts[2])) {
+                stringBuilder.append(rawName.substring(rawName.indexOf("..")));
             } else {
                 throw new IllegalArgumentException("Unrecognized metric name pattern: " + rawName);
             }
