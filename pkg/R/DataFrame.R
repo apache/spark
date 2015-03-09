@@ -263,6 +263,36 @@ setMethod("registerTempTable",
               callJMethod(x@sdf, "registerTempTable", tableName)
           })
 
+#' insertInto
+#'
+#' Insert the contents of a DataFrame into a table registered in the current SQL Context.
+#'
+#' @param x A SparkSQL DataFrame
+#' @param tableName A character vector containing the name of the table
+#' @param overwrite A logical argument indicating whether or not to overwrite
+#' the existing rows in the table.
+#'
+#' @rdname insertInto
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' df <- loadDF(sqlCtx, path, "parquet")
+#' df2 <- loadDF(sqlCtx, path2, "parquet")
+#' registerTempTable(df, "table1")
+#' insertInto(df2, "table1", overwrite = TRUE)
+#'}
+setGeneric("insertInto", function(x, tableName, ...) { standardGeneric("insertInto") })
+
+#' @rdname insertInto
+#' @export
+setMethod("insertInto",
+          signature(x = "DataFrame", tableName = "character"),
+          function(x, tableName, overwrite = FALSE) {
+            callJMethod(x@sdf, "insertInto", tableName, overwrite)
+          })
+
 #' Cache
 #' 
 #' Persist with the default storage level (MEMORY_ONLY).
@@ -768,6 +798,20 @@ setMethod("select", signature(x = "DataFrame", col = "Column"),
             dataFrame(sdf)
           })
 
+setMethod("select",
+          signature(x = "DataFrame", col = "list"),
+          function(x, col) {
+            cols <- lapply(col, function(c) {
+              if (class(c)== "Column") {
+                c@jc
+              } else {
+                col(c)@jc
+              }
+            })
+            sdf <- callJMethod(x@sdf, "select", listToSeq(cols))
+            dataFrame(sdf)
+          })
+
 #' SelectExpr
 #'
 #' Select from a DataFrame using a set of SQL expressions.
@@ -796,6 +840,70 @@ setMethod("selectExpr",
             exprList <- list(expr, ...)
             sdf <- callJMethod(x@sdf, "selectExpr", listToSeq(exprList))
             dataFrame(sdf)
+          })
+
+#' WithColumn
+#'
+#' Return a new DataFrame with the specified column added.
+#'
+#' @param x A DataFrame
+#' @param colName A string containing the name of the new column.
+#' @param col A Column expression.
+#' @return A DataFrame with the new column added.
+#' @rdname withColumn
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' newDF <- withColumn(df, "newCol", df$col1 * 5)
+#' }
+setGeneric("withColumn", function(x, colName, col) { standardGeneric("withColumn") })
+
+#' @rdname withColumn
+#' @export
+setMethod("withColumn",
+          signature(x = "DataFrame", colName = "character", col = "Column"),
+          function(x, colName, col) {
+            select(x, x$"*", alias(col, colName))
+          })
+
+#' WithColumnRenamed
+#'
+#' Rename an existing column in a DataFrame.
+#'
+#' @param x A DataFrame
+#' @param existingCol The name of the column you want to change.
+#' @param newCol The new column name.
+#' @return A DataFrame with the column name changed.
+#' @rdname withColumnRenamed
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlCtx, path)
+#' newDF <- withColumnRenamed(df, "col1", "newCol1")
+#' }
+setGeneric("withColumnRenamed", function(x, existingCol, newCol) {
+  standardGeneric("withColumnRenamed") })
+
+#' @rdname withColumnRenamed
+#' @export
+setMethod("withColumnRenamed",
+          signature(x = "DataFrame", existingCol = "character", newCol = "character"),
+          function(x, existingCol, newCol) {
+            cols <- lapply(columns(x), function(c) {
+              if (c == existingCol) {
+                alias(col(c), newCol)
+              } else {
+                col(c)
+              }
+            })
+            select(x, cols)
           })
 
 #' SortDF 
@@ -939,6 +1047,92 @@ setMethod("join",
             dataFrame(sdf)
           })
 
+#' UnionAll
+#'
+#' Return a new DataFrame containing the union of rows in this DataFrame
+#' and another DataFrame. This is equivalent to `UNION ALL` in SQL.
+#'
+#' @param x A Spark DataFrame
+#' @param y A Spark DataFrame
+#' @return A DataFrame containing the result of the union.
+#' @rdname unionAll
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' df1 <- jsonFile(sqlCtx, path)
+#' df2 <- jsonFile(sqlCtx, path2)
+#' unioned <- unionAll(df, df2)
+#' }
+setGeneric("unionAll", function(x, y) { standardGeneric("unionAll") })
+
+#' @rdname unionAll
+#' @export
+setMethod("unionAll",
+          signature(x = "DataFrame", y = "DataFrame"),
+          function(x, y) {
+            unioned <- callJMethod(x@sdf, "unionAll", y@sdf)
+            dataFrame(unioned)
+          })
+
+#' Intersect
+#'
+#' Return a new DataFrame containing rows only in both this DataFrame
+#' and another DataFrame. This is equivalent to `INTERSECT` in SQL.
+#'
+#' @param x A Spark DataFrame
+#' @param y A Spark DataFrame
+#' @return A DataFrame containing the result of the intersect.
+#' @rdname intersect
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' df1 <- jsonFile(sqlCtx, path)
+#' df2 <- jsonFile(sqlCtx, path2)
+#' intersectDF <- intersect(df, df2)
+#' }
+setGeneric("intersect", function(x, y) { standardGeneric("intersect") })
+
+#' @rdname intersect
+#' @export
+setMethod("intersect",
+          signature(x = "DataFrame", y = "DataFrame"),
+          function(x, y) {
+            intersected <- callJMethod(x@sdf, "intersect", y@sdf)
+            dataFrame(intersected)
+          })
+
+#' Subtract
+#'
+#' Return a new DataFrame containing rows in this DataFrame
+#' but not in another DataFrame. This is equivalent to `EXCEPT` in SQL.
+#'
+#' @param x A Spark DataFrame
+#' @param y A Spark DataFrame
+#' @return A DataFrame containing the result of the subtract operation.
+#' @rdname subtract
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' df1 <- jsonFile(sqlCtx, path)
+#' df2 <- jsonFile(sqlCtx, path2)
+#' subtractDF <- subtract(df, df2)
+#' }
+setGeneric("subtract", function(x, y) { standardGeneric("subtract") })
+
+#' @rdname subtract
+#' @export
+setMethod("subtract",
+          signature(x = "DataFrame", y = "DataFrame"),
+          function(x, y) {
+            subtracted <- callJMethod(x@sdf, "except", y@sdf)
+            dataFrame(subtracted)
+          })
 
 #' Save the contents of the DataFrame to a data source
 #'

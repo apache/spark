@@ -230,6 +230,27 @@ clearCache <- function(sqlCtx) {
   callJMethod(sqlCtx, "clearCache")
 }
 
+#' Drop Temporary Table
+#'
+#' Drops the temporary table with the given table name in the catalog.
+#' If the table has been cached/persisted before, it's also unpersisted.
+#'
+#' @param sqlCtx SQLContext to use
+#' @param tableName The name of the SparkSQL table to be dropped.
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' df <- loadDF(sqlCtx, path, "parquet")
+#' registerTempTable(df, "table")
+#' dropTempTable(sqlCtx, "table")
+#' }
+
+dropTempTable <- function(sqlCtx, tableName) {
+  if (class(tableName) != "character") {
+    stop("tableName must be a string.")
+  }
+  callJMethod(sqlCtx, "dropTempTable", tableName)
+}
+
 #' Load an DataFrame
 #'
 #' Returns the dataset in a data source as a DataFrame
