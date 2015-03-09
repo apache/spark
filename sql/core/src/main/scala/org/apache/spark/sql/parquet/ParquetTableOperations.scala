@@ -278,7 +278,10 @@ private[sql] case class InsertIntoParquetTable(
     ParquetOutputFormat.setWriteSupportClass(job, writeSupport)
 
     val conf = ContextUtil.getConfiguration(job)
-    RowWriteSupport.setSchema(relation.output, conf)
+    // This is a hack. We always set nullable/containsNull/valueContainsNull to true
+    // for the schema of a parquet data.
+    val schema = StructType.fromAttributes(relation.output).asNullable
+    RowWriteSupport.setSchema(schema.toAttributes, conf)
 
     val fspath = new Path(relation.path)
     val fs = fspath.getFileSystem(conf)

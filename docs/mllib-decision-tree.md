@@ -293,11 +293,9 @@ DecisionTreeModel sameModel = DecisionTreeModel.load(sc.sc(), "myModelPath");
 
 <div data-lang="python">
 
-Note that the Python API does not yet support model save/load but will in the future.
-
 {% highlight python %}
 from pyspark.mllib.regression import LabeledPoint
-from pyspark.mllib.tree import DecisionTree
+from pyspark.mllib.tree import DecisionTree, DecisionTreeModel
 from pyspark.mllib.util import MLUtils
 
 # Load and parse the data file into an RDD of LabeledPoint.
@@ -317,6 +315,10 @@ testErr = labelsAndPredictions.filter(lambda (v, p): v != p).count() / float(tes
 print('Test Error = ' + str(testErr))
 print('Learned classification tree model:')
 print(model.toDebugString())
+
+# Save and load model
+model.save(sc, "myModelPath")
+sameModel = DecisionTreeModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 
@@ -440,11 +442,9 @@ DecisionTreeModel sameModel = DecisionTreeModel.load(sc.sc(), "myModelPath");
 
 <div data-lang="python">
 
-Note that the Python API does not yet support model save/load but will in the future.
-
 {% highlight python %}
 from pyspark.mllib.regression import LabeledPoint
-from pyspark.mllib.tree import DecisionTree
+from pyspark.mllib.tree import DecisionTree, DecisionTreeModel
 from pyspark.mllib.util import MLUtils
 
 # Load and parse the data file into an RDD of LabeledPoint.
@@ -464,6 +464,10 @@ testMSE = labelsAndPredictions.map(lambda (v, p): (v - p) * (v - p)).sum() / flo
 print('Test Mean Squared Error = ' + str(testMSE))
 print('Learned regression tree model:')
 print(model.toDebugString())
+
+# Save and load model
+model.save(sc, "myModelPath")
+sameModel = DecisionTreeModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 
