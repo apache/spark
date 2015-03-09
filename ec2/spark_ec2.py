@@ -1263,6 +1263,8 @@ def real_main():
         # Determine types of running instances
         existing_master_type = master_nodes[0].instance_type
         existing_slave_type = slave_nodes[0].instance_type
+        # Setting opts.master_instance_type to the empty string indicates we
+        # have the same instance type for the master and the slaves
         if existing_master_type == existing_slave_type:
             existing_master_type = ""
         opts.master_instance_type = existing_master_type
