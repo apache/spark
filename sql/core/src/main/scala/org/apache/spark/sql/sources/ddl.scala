@@ -18,6 +18,7 @@
 package org.apache.spark.sql.sources
 
 import scala.language.implicitConversions
+import scala.language.existentials
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.{SaveMode, DataFrame, SQLContext}
