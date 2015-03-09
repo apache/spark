@@ -391,11 +391,7 @@ private[spark] class Executor(
     }
   }
 
-  private val timeout = AkkaUtils.lookupTimeout(conf)
-  private val retryAttempts = AkkaUtils.numRetries(conf)
-  private val retryIntervalMs = AkkaUtils.retryWaitMs(conf)
-  private val heartbeatReceiverRef =
-    AkkaUtils.makeDriverRef("HeartbeatReceiver", conf, env.actorSystem)
+  private val heartbeatReceiverRef = RpcUtils.makeDriverRef("HeartbeatReceiver", conf, env.rpcEnv)
 
   /** Reports heartbeat and metrics for active tasks to the driver. */
   private def reportHeartBeat(): Unit = {
@@ -426,8 +422,7 @@ private[spark] class Executor(
 
     val message = Heartbeat(executorId, tasksMetrics.toArray, env.blockManager.blockManagerId)
     try {
-      val response = AkkaUtils.askWithReply[HeartbeatResponse](message, heartbeatReceiverRef,
-        retryAttempts, retryIntervalMs, timeout)
+      val response = heartbeatReceiverRef.askWithReply[HeartbeatResponse](message)
       if (response.reregisterBlockManager) {
         logWarning("Told to re-register on heartbeat")
         env.blockManager.reregister()

@@ -17,15 +17,15 @@
 
 package org.apache.spark
 
-import scala.concurrent.duration._
+import java.util.concurrent.{ScheduledFuture, TimeUnit, Executors}
+
 import scala.collection.mutable
 
-import akka.actor.{Actor, Cancellable}
-
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.rpc.{RpcEnv, RpcCallContext, RpcEndpoint}
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.scheduler.{SlaveLost, TaskScheduler}
-import org.apache.spark.util.ActorLogReceive
+import org.apache.spark.util.Utils
 
 /**
  * A heartbeat from executors to the driver. This is a shared message used by several internal
@@ -45,7 +45,9 @@ private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
  * Lives in the driver to receive heartbeats from executors..
  */
 private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskScheduler)
-  extends Actor with ActorLogReceive with Logging {
+  extends RpcEndpoint with Logging {
+
+  override val rpcEnv: RpcEnv = sc.env.rpcEnv
 
   // executor ID -> timestamp of when the last heartbeat from this executor was received
   private val executorLastSeen = new mutable.HashMap[String, Long]
@@ -61,24 +63,31 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
     sc.conf.getOption("spark.network.timeoutInterval").map(_.toLong * 1000).
       getOrElse(sc.conf.getLong("spark.storage.blockManagerTimeoutIntervalMs", 60000))
   
-  private var timeoutCheckingTask: Cancellable = null
-  
-  override def preStart(): Unit = {
-    import context.dispatcher
-    timeoutCheckingTask = context.system.scheduler.schedule(0.seconds,
-      checkTimeoutIntervalMs.milliseconds, self, ExpireDeadHosts)
-    super.preStart()
+  private var timeoutCheckingTask: ScheduledFuture[_] = null
+
+  private val messageScheduler = Executors.newSingleThreadScheduledExecutor(
+    Utils.namedThreadFactory("heart-beat-receiver-thread"))
+
+  override def onStart(): Unit = {
+    timeoutCheckingTask = messageScheduler.scheduleAtFixedRate(new Runnable {
+      override def run(): Unit = {
+        self.send(ExpireDeadHosts)
+      }
+    }, 0, checkTimeoutIntervalMs, TimeUnit.MILLISECONDS)
   }
-  
-  override def receiveWithLogging: PartialFunction[Any, Unit] = {
+
+  override def receive: PartialFunction[Any, Unit] = {
+    case ExpireDeadHosts =>
+      expireDeadHosts()
+  }
+
+  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case Heartbeat(executorId, taskMetrics, blockManagerId) =>
       val unknownExecutor = !scheduler.executorHeartbeatReceived(
         executorId, taskMetrics, blockManagerId)
       val response = HeartbeatResponse(reregisterBlockManager = unknownExecutor)
       executorLastSeen(executorId) = System.currentTimeMillis()
-      sender ! response
-    case ExpireDeadHosts =>
-      expireDeadHosts()
+      context.reply(response)
   }
 
   private def expireDeadHosts(): Unit = {
@@ -98,10 +107,9 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
     }
   }
   
-  override def postStop(): Unit = {
+  override def onStop(): Unit = {
     if (timeoutCheckingTask != null) {
-      timeoutCheckingTask.cancel()
+      timeoutCheckingTask.cancel(true)
     }
-    super.postStop()
   }
 }

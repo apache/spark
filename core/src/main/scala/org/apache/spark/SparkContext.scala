@@ -359,8 +359,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   // Create and start the scheduler
   private[spark] var (schedulerBackend, taskScheduler) =
     SparkContext.createTaskScheduler(this, master)
-  private val heartbeatReceiver = env.actorSystem.actorOf(
-    Props(new HeartbeatReceiver(this, taskScheduler)), "HeartbeatReceiver")
+  private val heartbeatReceiver = env.rpcEnv.setupThreadSafeEndpoint(
+    "HeartbeatReceiver", new HeartbeatReceiver(this, taskScheduler))
+
   @volatile private[spark] var dagScheduler: DAGScheduler = _
   try {
     dagScheduler = new DAGScheduler(this)
@@ -1406,7 +1407,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         dagScheduler = null
         listenerBus.stop()
         eventLogger.foreach(_.stop())
-        env.actorSystem.stop(heartbeatReceiver)
+        env.rpcEnv.stop(heartbeatReceiver)
         progressBar.foreach(_.stop())
         taskScheduler = null
         // TODO: Cache.stop()?
