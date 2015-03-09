@@ -27,7 +27,7 @@ import kafka.common.TopicAndPartition
 import kafka.consumer.{Consumer, ConsumerConfig, ConsumerConnector, KafkaStream}
 import kafka.message.MessageAndMetadata
 import kafka.serializer.Decoder
-import kafka.utils.{ZkUtils, ZKGroupTopicDirs, VerifiableProperties, ZKStringSerializer}
+import kafka.utils.{VerifiableProperties, ZKGroupTopicDirs, ZKStringSerializer, ZkUtils}
 import org.I0Itec.zkclient.ZkClient
 
 import org.apache.spark.{Logging, SparkEnv}
