@@ -41,6 +41,9 @@ in all templates
 Variable                            Description
 =================================   ====================================
 ``{{ ds }}``                        the execution date as ``YYYY-MM-DD``
+``{{ yesterday_ds }}``              yesterday's date as  ``YYYY-MM-DD``
+``{{ tomorrow_ds }}``               tomorrow's date as  ``YYYY-MM-DD``
+``{{ ds }}``                        the execution date as ``YYYY-MM-DD``
 ``{{ execution_date }}``            the execution_date, (datateime.datetime)
 ``{{ dag }}``                       the DAG object
 ``{{ task }}``                      the Task object

@@ -542,7 +542,7 @@ class Airflow(BaseView):
         code = "".join(open(dag.full_filepath, 'r').readlines())
         title = dag.filepath
         html_code = highlight(
-            code, PythonLexer(), HtmlFormatter(noclasses=True))
+            code, PythonLexer(), HtmlFormatter(linenos=True))
         return self.render(
             'airflow/dag_code.html', html_code=html_code, dag=dag, title=title)
 
@@ -696,7 +696,7 @@ class Airflow(BaseView):
                 html_dict[template_field] = highlight(
                     content,
                     special_attrs[template_field](),  # Lexer call
-                    HtmlFormatter(noclasses=True)
+                    HtmlFormatter(linenos=True),
                 )
             else:
                 html_dict[template_field] = (
@@ -784,7 +784,7 @@ class Airflow(BaseView):
                 special_attrs_rendered[attr_name] = highlight(
                     source,
                     special_attrs[attr_name](),  # Lexer call
-                    HtmlFormatter(noclasses=True)
+                    HtmlFormatter(linenos=True),
                 )
 
         return self.render(
@@ -867,6 +867,13 @@ class Airflow(BaseView):
     def tree(self):
         dag_id = request.args.get('dag_id')
         dag = dagbag.dags[dag_id]
+        root = request.args.get('root')
+        if root:
+            dag = dag.sub_dag(
+                task_regex=root,
+                include_downstream=False,
+                include_upstream=True)
+
         session = settings.Session()
 
         base_date = request.args.get('base_date')
@@ -946,6 +953,12 @@ class Airflow(BaseView):
             return redirect(url_for('index'))
 
         dag = dagbag.dags[dag_id]
+        root = request.args.get('root')
+        if root:
+            dag = dag.sub_dag(
+                task_regex=root,
+                include_downstream=False,
+                include_upstream=True)
 
         nodes = []
         edges = []

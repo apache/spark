@@ -11,7 +11,8 @@ import signal
 import socket
 
 from sqlalchemy import (
-    Column, Integer, String, DateTime, Text, Boolean, ForeignKey, PickleType)
+    Column, Integer, String, DateTime, Text, Boolean, ForeignKey, PickleType,
+    Index,)
 from sqlalchemy import func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.dialects.mysql import LONGTEXT
@@ -287,6 +288,11 @@ class TaskInstance(Base):
     unixname = Column(String(1000))
     job_id = Column(Integer)
 
+    __table_args__ = (
+        Index('ti_dag_state', dag_id, state),
+        Index('ti_state_lkp', dag_id, task_id, execution_date, state),
+    )
+
     def __init__(self, task, execution_date, job=None):
         self.dag_id = task.dag_id
         self.task_id = task.task_id
@@ -424,6 +430,8 @@ class TaskInstance(Base):
         if self.execution_date > datetime.now() - self.task.schedule_interval:
             return False
         elif self.state == State.UP_FOR_RETRY and not self.ready_for_retry():
+            return False
+        elif self.task.end_date and self.execution_date > self.task.end_date:
             return False
         elif self.state in State.runnable() and self.are_dependencies_met():
             return True
@@ -651,6 +659,8 @@ class TaskInstance(Base):
         if 'tables' in task.params:
             tables = task.params['tables']
         ds = self.execution_date.isoformat()[:10]
+        yesterday_ds = (self.execution_date - timedelta(1)).isoformat()[:10]
+        tomorrow_ds = (self.execution_date + timedelta(1)).isoformat()[:10]
         ds_nodash = ds.replace('-', '')
         ti_key_str = "{task.dag_id}__{task.task_id}__{ds_nodash}"
         ti_key_str = ti_key_str.format(**locals())
@@ -664,6 +674,8 @@ class TaskInstance(Base):
         return {
             'dag': task.dag,
             'ds': ds,
+            'yesterday_ds': yesterday_ds,
+            'tomorrow_ds': tomorrow_ds,
             'END_DATE': ds,
             'ds_nodash': ds_nodash,
             'end_date': ds,
@@ -818,7 +830,7 @@ class BaseOperator(Base):
             email_on_retry=True,
             email_on_failure=True,
             retries=0,
-            retry_delay=timedelta(seconds=10),
+            retry_delay=timedelta(seconds=300),
             start_date=None,
             end_date=None,
             schedule_interval=timedelta(days=1),
@@ -844,7 +856,11 @@ class BaseOperator(Base):
         self.wait_for_downstream = wait_for_downstream
         self._schedule_interval = schedule_interval
         self.retries = retries
-        self.retry_delay = retry_delay
+        if isinstance(retry_delay, timedelta):
+            self.retry_delay = retry_delay
+        else:
+            logging.info("retry_delay isn't timedelta object, assuming secs")
+            self.retry_delay = timedelta(seconds=retry_delay)
         self.params = params or {}  # Available in templates!
         self.adhoc = adhoc
         if dag:
@@ -980,15 +996,16 @@ class BaseOperator(Base):
             TI.execution_date <= end_date,
         ).order_by(TI.execution_date).all()
 
-    def get_flat_relatives(self, upstream=False):
+    def get_flat_relatives(self, upstream=False, l=None):
         """
         Get a flat list of relatives, either upstream or downstream.
         """
-        l = []
+        if not l:
+            l = []
         for t in self.get_direct_relatives(upstream):
             if t not in l:
                 l.append(t)
-                l += t.get_direct_relatives(upstream)
+                t.get_flat_relatives(upstream, l)
         return l
 
     def detect_downstream_cycle(self, task=None):
@@ -1199,20 +1216,18 @@ class DAG(Base):
         Returns a jinja2 Environment while taking into account the DAGs
         template_searchpath and user_defined_macros
         '''
-        if not hasattr(self, 'template_env') or not self.template_env:
-            searchpath = [self.folder]
-            if self.template_searchpath:
-                searchpath += self.template_searchpath
+        searchpath = [self.folder]
+        if self.template_searchpath:
+            searchpath += self.template_searchpath
 
-            env = jinja2.Environment(
-                loader=jinja2.FileSystemLoader(searchpath),
-                extensions=["jinja2.ext.do"],
-                cache_size=0)
-            if self.user_defined_macros:
-                env.globals.update(self.user_defined_macros)
+        env = jinja2.Environment(
+            loader=jinja2.FileSystemLoader(searchpath),
+            extensions=["jinja2.ext.do"],
+            cache_size=0)
+        if self.user_defined_macros:
+            env.globals.update(self.user_defined_macros)
 
-            self.template_env = env
-        return self.template_env
+        return env
 
     def set_dependency(self, upstream_task_id, downstream_task_id):
         """
@@ -1295,7 +1310,17 @@ class DAG(Base):
         based on a regex that should match one or many tasks, and includes
         upstream and downstream neighboors based on the flag passed.
         """
+
+        # Swiwtcharoo to go around deepcopying objects coming through the
+        # backdoor
+        user_defined_macros = self.user_defined_macros
+        params = self.params
+        delattr(self, 'user_defined_macros')
+        delattr(self, 'params')
         dag = copy.deepcopy(self)
+        self.user_defined_macros = user_defined_macros
+        self.params = params
+
         regex_match = [
             t for t in dag.tasks if re.findall(task_regex, t.task_id)]
         also_include = []
@@ -1304,7 +1329,6 @@ class DAG(Base):
                 also_include += t.get_flat_relatives(upstream=False)
             if include_upstream:
                 also_include += t.get_flat_relatives(upstream=True)
-
         # Compiling the unique list of tasks that made the cut
         tasks = list(set(regex_match + also_include))
         dag.tasks = tasks
