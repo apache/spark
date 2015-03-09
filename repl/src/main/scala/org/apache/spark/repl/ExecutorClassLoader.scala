@@ -42,6 +42,9 @@ class ExecutorClassLoader(conf: SparkConf, classUri: String, parent: ClassLoader
 
   val parentLoader = new ParentClassLoader(parent)
 
+  // Allows HTTP connect and read timeouts to be controlled for testing / debugging purposes
+  private[repl] var httpUrlConnectionTimeoutMillis: Int = -1
+
   // Hadoop FileSystem object for our URI, if it isn't using HTTP
   var fileSystem: FileSystem = {
     if (Set("http", "https", "ftp").contains(uri.getScheme)) {
@@ -80,12 +83,12 @@ class ExecutorClassLoader(conf: SparkConf, classUri: String, parent: ClassLoader
     }
     val connection: HttpURLConnection = Utils.setupSecureURLConnection(url.openConnection(),
       SparkEnv.get.securityManager).asInstanceOf[HttpURLConnection]
-    if (connection.getResponseCode != 200) {
-      connection.disconnect()
-      throw new ClassNotFoundException(s"Class file not found at URL $url")
-    } else {
-      connection.getInputStream
+    // Set the connection timeouts (for testing purposes)
+    if (httpUrlConnectionTimeoutMillis != -1) {
+      connection.setConnectTimeout(httpUrlConnectionTimeoutMillis)
+      connection.setReadTimeout(httpUrlConnectionTimeoutMillis)
     }
+    connection.getInputStream
   }
 
   private def getClassFileInputStreamFromFileSystem(pathInDirectory: String): InputStream = {
@@ -122,7 +125,7 @@ class ExecutorClassLoader(conf: SparkConf, classUri: String, parent: ClassLoader
     } finally {
       if (inputStream != null) {
         try {
-          inputStream.close()
+          //inputStream.close()
         } catch {
           case e: Exception =>
             logError("Exception while closing inputStream", e)
