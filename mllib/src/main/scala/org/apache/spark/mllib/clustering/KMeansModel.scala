@@ -21,13 +21,14 @@ import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.mllib.util.Loader._
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.SparkContext
-import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
+import org.apache.spark.SparkContext
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.Row
 
 /**
  * A clustering model for K-means. Each point belongs to the cluster with the closest center.
@@ -78,6 +79,14 @@ object KMeansModel extends Loader[KMeansModel] {
     KMeansModel.SaveLoadV1_0.load(sc, path)
   }
 
+  case class IndexedPoint(id: Int, point: Vector)
+
+  object IndexedPoint {
+    def apply(r: Row): IndexedPoint = {
+      IndexedPoint(r.getInt(0), r.getAs[Vector](1))
+    }
+  }
+
   private[clustering]
   object SaveLoadV1_0 {
 
@@ -88,26 +97,28 @@ object KMeansModel extends Loader[KMeansModel] {
 
     def save(sc: SparkContext, model: KMeansModel, path: String): Unit = {
       val sqlContext = new SQLContext(sc)
-      val wrapper = new VectorUDT()
+      import sqlContext.implicits._
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ ("k" -> model.k)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
-      val dataRDD = sc.parallelize(model.clusterCenters).map(wrapper.serialize)
-      sqlContext.createDataFrame(dataRDD, wrapper.sqlType).saveAsParquetFile(Loader.dataPath(path))
+      val dataRDD = sc.parallelize(model.clusterCenters.zipWithIndex).map { case (point, id) =>
+        IndexedPoint(id, point)
+      }.toDF()
+      dataRDD.saveAsParquetFile(Loader.dataPath(path))
     }
 
     def load(sc: SparkContext, path: String): KMeansModel = {
       implicit val formats = DefaultFormats
       val sqlContext = new SQLContext(sc)
-      val wrapper = new VectorUDT()
       val (className, formatVersion, metadata) = loadMetadata(sc, path)
       assert(className == thisClassName)
       assert(formatVersion == thisFormatVersion)
       val k = (metadata \ "k").extract[Int]
       val centriods = sqlContext.parquetFile(dataPath(path))
-      val localCentriods = centriods.collect()
+      Loader.checkSchema[IndexedPoint](centriods.schema)
+      val localCentriods = centriods.map(IndexedPoint.apply).collect()
       assert(k == localCentriods.size)
-      new KMeansModel(localCentriods.map(wrapper.deserialize))
+      new KMeansModel(localCentriods.sortBy(_.id).map(_.point))
     }
   }
 }

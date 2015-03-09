@@ -21,10 +21,10 @@ import scala.util.Random
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.util.Utils
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.util.Utils
 
 class KMeansSuite extends FunSuite with MLlibTestSparkContext {
 
