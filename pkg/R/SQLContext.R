@@ -237,7 +237,11 @@ clearCache <- function(sqlCtx) {
 #'
 #' @param sqlCtx SQLContext to use
 #' @param tableName The name of the SparkSQL table to be dropped.
-#' clearCache(sqlCtx)
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' df <- loadDF(sqlCtx, path, "parquet")
+#' registerTempTable(df, "table")
+#' dropTempTable(sqlCtx, "table")
 #' }
 
 dropTempTable <- function(sqlCtx, tableName) {
