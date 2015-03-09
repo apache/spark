@@ -213,8 +213,8 @@ case class DescribeCommand(
  */
 @DeveloperApi
 case class ShowDialectsCommand(
-                                isExtended: Boolean,
-                                isCurrent: Boolean) extends RunnableCommand {
+    isExtended: Boolean,
+    isCurrent: Boolean) extends RunnableCommand {
 
   override val output = {
     val schema = if (isExtended) {

@@ -20,8 +20,6 @@ package org.apache.spark.sql
 import java.beans.Introspector
 import java.util.Properties
 
-import org.apache.spark.sql.dialect.{DialectManager, DefaultDialectManager}
-
 import scala.collection.JavaConversions._
 import scala.collection.immutable
 import scala.language.implicitConversions
@@ -36,6 +34,7 @@ import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, NoRelation}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.{ScalaReflection, expressions}
+import org.apache.spark.sql.dialect.{DialectManager, DefaultDialectManager}
 import org.apache.spark.sql.execution.{Filter, _}
 import org.apache.spark.sql.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
 import org.apache.spark.sql.json._
