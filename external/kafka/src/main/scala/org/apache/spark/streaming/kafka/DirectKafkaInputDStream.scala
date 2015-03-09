@@ -24,8 +24,6 @@ import scala.reflect.ClassTag
 import kafka.common.TopicAndPartition
 import kafka.message.MessageAndMetadata
 import kafka.serializer.Decoder
-import kafka.utils.ZKStringSerializer
-import org.I0Itec.zkclient.ZkClient
 
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.streaming.{StreamingContext, Time}
@@ -83,9 +81,10 @@ class DirectKafkaInputDStream[
     }
   }
 
-  private val offsetMap = new mutable.HashMap[Time, Map[TopicAndPartition, Long]]()
   protected var currentOffsets = fromOffsets
 
+  // Map to manage the time -> topic/partition+offset
+  private val offsetMap = new mutable.HashMap[Time, Map[TopicAndPartition, Long]]()
   // Add to the listener bus for job completion hook
   context.addStreamingListener(new DirectKafkaStreamingListener)
 
@@ -175,29 +174,15 @@ class DirectKafkaInputDStream[
   private[streaming]
   class DirectKafkaStreamingListener extends StreamingListener {
 
-    val offsetCommitEnabled = context.conf.getBoolean("spark.streaming.kafka.offsetCommit", false)
-
-    val zkClientOpt = if (offsetCommitEnabled) {
-      kafkaParams.get("zookeeper.connect").map { zkConnect =>
-        val zkSessionTimeoutMs = kafkaParams.getOrElse("zookeeper.session.timeout.ms", "6000").toInt
-        val zkConnectionTimeoutMs =
-          kafkaParams.getOrElse("zookeeper.session.timeout.ms", "6000").toInt
-        new ZkClient(zkConnect, zkSessionTimeoutMs, zkConnectionTimeoutMs, ZKStringSerializer)
-      }
-    } else {
-      None
-    }
-
-    val groupId = "directKafkaConsumer"
+    val offsetUpdateEnabled = context.conf.getBoolean("spark.streaming.kafka.offsetUpdate", false)
+    val groupId = kafkaParams.getOrElse("group.id", "directKafkaConsumer")
 
     override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted) = synchronized {
-      if (offsetCommitEnabled) {
-        for (offsets <- offsetMap.get(batchCompleted.batchInfo.batchTime); client <- zkClientOpt) {
-          try {
-            SparkKafkaUtils.commitOffset(client, groupId, offsets)
-          } catch {
-            case e: Exception =>
-              logWarning(s"Fail to commit offsets ${offsets.mkString("{", ", ", "}")}")
+      if (offsetUpdateEnabled) {
+        for (offsets <- offsetMap.get(batchCompleted.batchInfo.batchTime)) {
+          val o = kc.setConsumerOffsets(groupId, offsets)
+          if (o.isLeft) {
+            logWarning(s"Error updating the offset to Kafka cluster: ${o.left.get}")
           }
         }
       }

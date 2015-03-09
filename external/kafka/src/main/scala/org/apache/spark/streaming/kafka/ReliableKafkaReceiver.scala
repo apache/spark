@@ -27,7 +27,7 @@ import kafka.common.TopicAndPartition
 import kafka.consumer.{Consumer, ConsumerConfig, ConsumerConnector, KafkaStream}
 import kafka.message.MessageAndMetadata
 import kafka.serializer.Decoder
-import kafka.utils.{VerifiableProperties, ZKStringSerializer}
+import kafka.utils.{ZkUtils, ZKGroupTopicDirs, VerifiableProperties, ZKStringSerializer}
 import org.I0Itec.zkclient.ZkClient
 
 import org.apache.spark.{Logging, SparkEnv}
@@ -239,7 +239,21 @@ class ReliableKafkaReceiver[
       return
     }
 
-    SparkKafkaUtils.commitOffset(zkClient, groupId, offsetMap)
+    for ((topicAndPart, offset) <- offsetMap) {
+      try {
+        val topicDirs = new ZKGroupTopicDirs(groupId, topicAndPart.topic)
+        val zkPath = s"${topicDirs.consumerOffsetDir}/${topicAndPart.partition}"
+
+        ZkUtils.updatePersistentPath(zkClient, zkPath, offset.toString)
+      } catch {
+        case e: Exception =>
+          logWarning(s"Exception during commit offset $offset for topic" +
+            s"${topicAndPart.topic}, partition ${topicAndPart.partition}", e)
+      }
+
+      logInfo(s"Committed offset $offset for topic ${topicAndPart.topic}, " +
+        s"partition ${topicAndPart.partition}")
+    }
   }
 
   /** Class to handle received Kafka message. */
