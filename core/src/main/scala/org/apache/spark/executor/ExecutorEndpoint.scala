@@ -17,10 +17,8 @@
 
 package org.apache.spark.executor
 
-import akka.actor.Actor
-import org.apache.spark.Logging
-
-import org.apache.spark.util.{Utils, ActorLogReceive}
+import org.apache.spark.rpc.{RpcEnv, RpcCallContext, RpcEndpoint}
+import org.apache.spark.util.Utils
 
 /**
  * Driver -> Executor message to trigger a thread dump.
@@ -31,11 +29,11 @@ private[spark] case object TriggerThreadDump
  * Actor that runs inside of executors to enable driver -> executor RPC.
  */
 private[spark]
-class ExecutorActor(executorId: String) extends Actor with ActorLogReceive with Logging {
+class ExecutorEndpoint(override val rpcEnv: RpcEnv, executorId: String) extends RpcEndpoint {
 
-  override def receiveWithLogging: PartialFunction[Any, Unit] = {
+  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case TriggerThreadDump =>
-      sender ! Utils.getThreadDump()
+      context.reply(Utils.getThreadDump())
   }
 
 }
