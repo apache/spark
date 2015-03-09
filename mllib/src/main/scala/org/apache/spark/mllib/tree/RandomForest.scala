@@ -501,6 +501,7 @@ object RandomForest extends Serializable with Logging {
    * Get the number of values to be stored for this node in the bin aggregates.
    * @param featureSubset  Indices of features which may be split at this node.
    *                       If None, then use all features.
+   * xxx
    */
   private[tree] def aggregateSizeForNode(
       metadata: DecisionTreeMetadata,
