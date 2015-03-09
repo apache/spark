@@ -1,7 +1,7 @@
 ---
 layout: global
-displayTitle: Spark SQL Programming Guide
-title: Spark SQL
+displayTitle: Spark SQL and DataFrame Guide
+title: Spark SQL and DataFrames
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -9,55 +9,24 @@ title: Spark SQL
 
 # Overview
 
-<div class="codetabs">
-<div data-lang="scala"  markdown="1">
+Spark SQL is a Spark module for structured data processing. It provides a programming abstraction called DataFrames and can also act as a distributed query engine.
 
-Spark SQL allows relational queries expressed in SQL, HiveQL, or Scala to be executed using
-Spark.  At the core of this component is a new type of RDD,
-[DataFrame](api/scala/index.html#org.apache.spark.sql.DataFrame).  DataFrames are composed of
-[Row](api/scala/index.html#org.apache.spark.sql.package@Row:org.apache.spark.sql.catalyst.expressions.Row.type) objects, along with
-a schema that describes the data types of each column in the row.  A DataFrame is similar to a table
-in a traditional relational database.  A DataFrame can be created from an existing RDD, a [Parquet](http://parquet.io)
-file, a JSON dataset, or by running HiveQL against data stored in [Apache Hive](http://hive.apache.org/).
 
-All of the examples on this page use sample data included in the Spark distribution and can be run in the `spark-shell`.
+# DataFrames
 
-</div>
+A DataFrame is a distributed collection of data organized into named columns. It is conceptually equivalent to a table in a relational database or a data frame in R/Python, but with richer optimizations under the hood. DataFrames can be constructed from a wide array of sources such as: structured data files, tables in Hive, external databases, or existing RDDs.
 
-<div data-lang="java"  markdown="1">
-Spark SQL allows relational queries expressed in SQL or HiveQL to be executed using
-Spark.  At the core of this component is a new type of RDD,
-[DataFrame](api/scala/index.html#org.apache.spark.sql.DataFrame).  DataFrames are composed of
-[Row](api/scala/index.html#org.apache.spark.sql.api.java.Row) objects, along with
-a schema that describes the data types of each column in the row.  A DataFrame is similar to a table
-in a traditional relational database.  A DataFrame can be created from an existing RDD, a [Parquet](http://parquet.io)
-file, a JSON dataset, or by running HiveQL against data stored in [Apache Hive](http://hive.apache.org/).
-</div>
+The DataFrame API is available in [Scala](api/scala/index.html#org.apache.spark.sql.DataFrame), [Java](api/java/index.html?org/apache/spark/sql/DataFrame.html), and [Python](api/python/pyspark.sql.html#pyspark.sql.DataFrame).
 
-<div data-lang="python"  markdown="1">
+All of the examples on this page use sample data included in the Spark distribution and can be run in the `spark-shell` or the `pyspark` shell.
 
-Spark SQL allows relational queries expressed in SQL or HiveQL to be executed using
-Spark.  At the core of this component is a new type of RDD,
-[DataFrame](api/python/pyspark.sql.html#pyspark.sql.DataFrame).  DataFrames are composed of
-[Row](api/python/pyspark.sql.Row-class.html) objects, along with
-a schema that describes the data types of each column in the row.  A DataFrame is similar to a table
-in a traditional relational database.  A DataFrame can be created from an existing RDD, a [Parquet](http://parquet.io)
-file, a JSON dataset, or by running HiveQL against data stored in [Apache Hive](http://hive.apache.org/).
 
-All of the examples on this page use sample data included in the Spark distribution and can be run in the `pyspark` shell.
-</div>
-</div>
-
-**Spark SQL is currently an alpha component. While we will minimize API changes, some APIs may change in future releases.**
-
-***************************************************************************************************
-
-# Getting Started
+## Starting Point: SQLContext
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
 
-The entry point into all relational functionality in Spark is the
+The entry point into all functionality in Spark SQL is the
 [SQLContext](api/scala/index.html#org.apache.spark.sql.SQLContext) class, or one of its
 descendants.  To create a basic SQLContext, all you need is a SparkContext.
 
@@ -69,38 +38,18 @@ val sqlContext = new org.apache.spark.sql.SQLContext(sc)
 import sqlContext.implicits._
 {% endhighlight %}
 
-In addition to the basic SQLContext, you can also create a HiveContext, which provides a
-superset of the functionality provided by the basic SQLContext. Additional features include
-the ability to write queries using the more complete HiveQL parser, access to HiveUDFs, and the
-ability to read data from Hive tables.  To use a HiveContext, you do not need to have an
-existing Hive setup, and all of the data sources available to a SQLContext are still available.
-HiveContext is only packaged separately to avoid including all of Hive's dependencies in the default
-Spark build.  If these dependencies are not a problem for your application then using HiveContext
-is recommended for the 1.2 release of Spark.  Future releases will focus on bringing SQLContext up to
-feature parity with a HiveContext.
-
 </div>
 
 <div data-lang="java" markdown="1">
 
-The entry point into all relational functionality in Spark is the
-[SQLContext](api/scala/index.html#org.apache.spark.sql.api.SQLContext) class, or one
-of its descendants.  To create a basic SQLContext, all you need is a JavaSparkContext.
+The entry point into all functionality in Spark SQL is the
+[SQLContext](api/java/index.html#org.apache.spark.sql.SQLContext) class, or one of its
+descendants.  To create a basic SQLContext, all you need is a SparkContext.
 
 {% highlight java %}
 JavaSparkContext sc = ...; // An existing JavaSparkContext.
 SQLContext sqlContext = new org.apache.spark.sql.SQLContext(sc);
 {% endhighlight %}
-
-In addition to the basic SQLContext, you can also create a HiveContext, which provides a strict
-super set of the functionality provided by the basic SQLContext. Additional features include
-the ability to write queries using the more complete HiveQL parser, access to HiveUDFs, and the
-ability to read data from Hive tables.  To use a HiveContext, you do not need to have an
-existing Hive setup, and all of the data sources available to a SQLContext are still available.
-HiveContext is only packaged separately to avoid including all of Hive's dependencies in the default
-Spark build.  If these dependencies are not a problem for your application then using HiveContext
-is recommended for the 1.2 release of Spark.  Future releases will focus on bringing SQLContext up to
-feature parity with a HiveContext.
 
 </div>
 
@@ -115,35 +64,266 @@ from pyspark.sql import SQLContext
 sqlContext = SQLContext(sc)
 {% endhighlight %}
 
-In addition to the basic SQLContext, you can also create a HiveContext, which provides a strict
-super set of the functionality provided by the basic SQLContext. Additional features include
-the ability to write queries using the more complete HiveQL parser, access to HiveUDFs, and the
+</div>
+</div>
+
+In addition to the basic SQLContext, you can also create a HiveContext, which provides a
+superset of the functionality provided by the basic SQLContext. Additional features include
+the ability to write queries using the more complete HiveQL parser, access to Hive UDFs, and the
 ability to read data from Hive tables.  To use a HiveContext, you do not need to have an
 existing Hive setup, and all of the data sources available to a SQLContext are still available.
 HiveContext is only packaged separately to avoid including all of Hive's dependencies in the default
 Spark build.  If these dependencies are not a problem for your application then using HiveContext
-is recommended for the 1.2 release of Spark.  Future releases will focus on bringing SQLContext up to
-feature parity with a HiveContext.
-
-</div>
-
-</div>
+is recommended for the 1.3 release of Spark.  Future releases will focus on bringing SQLContext up
+to feature parity with a HiveContext.
 
 The specific variant of SQL that is used to parse queries can also be selected using the
 `spark.sql.dialect` option.  This parameter can be changed using either the `setConf` method on
 a SQLContext or by using a `SET key=value` command in SQL.  For a SQLContext, the only dialect
 available is "sql" which uses a simple SQL parser provided by Spark SQL.  In a HiveContext, the
 default is "hiveql", though "sql" is also available.  Since the HiveQL parser is much more complete,
- this is recommended for most use cases.
+this is recommended for most use cases.
 
-# Data Sources
 
-Spark SQL supports operating on a variety of data sources through the `DataFrame` interface.
-A DataFrame can be operated on as normal RDDs and can also be registered as a temporary table.
-Registering a DataFrame as a table allows you to run SQL queries over its data.  This section
-describes the various methods for loading data into a DataFrame.
+## Creating DataFrames
 
-## RDDs
+With a `SQLContext`, applications can create `DataFrame`s from an <a href='#interoperating-with-rdds'>existing `RDD`</a>, from a Hive table, or from <a href='#data-sources'>data sources</a>.
+
+As an example, the following creates a `DataFrame` based on the content of a JSON file:
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+{% highlight scala %}
+val sc: SparkContext // An existing SparkContext.
+val sqlContext = new org.apache.spark.sql.SQLContext(sc)
+
+val df = sqlContext.jsonFile("examples/src/main/resources/people.json")
+
+// Displays the content of the DataFrame to stdout
+df.show() 
+{% endhighlight %}
+
+</div>
+
+<div data-lang="java" markdown="1">
+{% highlight java %}
+JavaSparkContext sc = ...; // An existing JavaSparkContext.
+SQLContext sqlContext = new org.apache.spark.sql.SQLContext(sc);
+
+DataFrame df = sqlContext.jsonFile("examples/src/main/resources/people.json");
+
+// Displays the content of the DataFrame to stdout
+df.show();
+{% endhighlight %}
+
+</div>
+
+<div data-lang="python"  markdown="1">
+{% highlight python %}
+from pyspark.sql import SQLContext
+sqlContext = SQLContext(sc)
+
+df = sqlContext.jsonFile("examples/src/main/resources/people.json")
+
+# Displays the content of the DataFrame to stdout
+df.show()
+{% endhighlight %}
+
+</div>
+</div>
+
+
+## DataFrame Operations
+
+DataFrames provide a domain-specific language for structured data manipulation in [Scala](api/scala/index.html#org.apache.spark.sql.DataFrame), [Java](api/java/index.html?org/apache/spark/sql/DataFrame.html), and [Python](api/python/pyspark.sql.html#pyspark.sql.DataFrame).
+
+Here we include some basic examples of structured data processing using DataFrames:
+
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+{% highlight scala %}
+val sc: SparkContext // An existing SparkContext.
+val sqlContext = new org.apache.spark.sql.SQLContext(sc)
+
+// Create the DataFrame
+val df = sqlContext.jsonFile("examples/src/main/resources/people.json")
+
+// Show the content of the DataFrame
+df.show()
+// age  name   
+// null Michael
+// 30   Andy   
+// 19   Justin 
+
+// Print the schema in a tree format
+df.printSchema()
+// root
+// |-- age: long (nullable = true)
+// |-- name: string (nullable = true)
+
+// Select only the "name" column
+df.select("name").show()
+// name   
+// Michael
+// Andy   
+// Justin 
+
+// Select everybody, but increment the age by 1
+df.select("name", df("age") + 1).show()
+// name    (age + 1)
+// Michael null     
+// Andy    31       
+// Justin  20       
+
+// Select people older than 21
+df.filter(df("name") > 21).show()
+// age name
+// 30  Andy
+
+// Count people by age
+df.groupBy("age").count().show()
+// age  count
+// null 1
+// 19   1
+// 30   1
+{% endhighlight %}
+
+</div>
+
+<div data-lang="java" markdown="1">
+{% highlight java %}
+val sc: JavaSparkContext // An existing SparkContext.
+val sqlContext = new org.apache.spark.sql.SQLContext(sc)
+
+// Create the DataFrame
+DataFrame df = sqlContext.jsonFile("examples/src/main/resources/people.json");
+
+// Show the content of the DataFrame
+df.show();
+// age  name   
+// null Michael
+// 30   Andy   
+// 19   Justin 
+
+// Print the schema in a tree format
+df.printSchema();
+// root
+// |-- age: long (nullable = true)
+// |-- name: string (nullable = true)
+
+// Select only the "name" column
+df.select("name").show();
+// name   
+// Michael
+// Andy   
+// Justin 
+
+// Select everybody, but increment the age by 1
+df.select("name", df.col("age").plus(1)).show();
+// name    (age + 1)
+// Michael null     
+// Andy    31       
+// Justin  20       
+
+// Select people older than 21
+df.filter(df("name") > 21).show();
+// age name
+// 30  Andy
+
+// Count people by age
+df.groupBy("age").count().show();
+// age  count
+// null 1
+// 19   1
+// 30   1
+{% endhighlight %}
+
+</div>
+
+<div data-lang="python"  markdown="1">
+{% highlight python %}
+from pyspark.sql import SQLContext
+sqlContext = SQLContext(sc)
+
+# Create the DataFrame
+df = sqlContext.jsonFile("examples/src/main/resources/people.json")
+
+# Show the content of the DataFrame
+df.show()
+## age  name   
+## null Michael
+## 30   Andy   
+## 19   Justin 
+
+# Print the schema in a tree format
+df.printSchema()
+## root
+## |-- age: long (nullable = true)
+## |-- name: string (nullable = true)
+
+# Select only the "name" column
+df.select("name").show()
+## name   
+## Michael
+## Andy   
+## Justin 
+
+# Select everybody, but increment the age by 1
+df.select("name", df.age + 1).show()
+## name    (age + 1)
+## Michael null     
+## Andy    31       
+## Justin  20       
+
+# Select people older than 21
+df.filter(df.name > 21).show()
+## age name
+## 30  Andy
+
+# Count people by age
+df.groupBy("age").count().show()
+## age  count
+## null 1
+## 19   1
+## 30   1
+
+{% endhighlight %}
+
+</div>
+</div>
+
+
+## Running SQL Queries Programmatically
+
+The `sql` function on a `SQLContext` enables applications to run SQL queries programmatically and returns the result as a `DataFrame`.
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+{% highlight scala %}
+val sqlContext = ...  // An existing SQLContext
+val df = sqlContext.sql("SELECT * FROM table")
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+{% highlight java %}
+val sqlContext = ...  // An existing SQLContext
+val df = sqlContext.sql("SELECT * FROM table")
+{% endhighlight %}
+</div>
+
+<div data-lang="python"  markdown="1">
+{% highlight python %}
+from pyspark.sql import SQLContext
+sqlContext = SQLContext(sc)
+df = sqlContext.sql("SELECT * FROM table")
+{% endhighlight %}
+</div>
+</div>
+
+
+## Interoperating with RDDs
 
 Spark SQL supports two different methods for converting existing RDDs into DataFrames.  The first
 method uses reflection to infer the schema of an RDD that contains specific types of objects.  This
@@ -373,12 +553,12 @@ by `SQLContext`.
 For example:
 {% highlight java %}
 // Import factory methods provided by DataType.
-import org.apache.spark.sql.api.java.DataType
+import org.apache.spark.sql.types.DataType;
 // Import StructType and StructField
-import org.apache.spark.sql.api.java.StructType
-import org.apache.spark.sql.api.java.StructField
+import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.types.StructField;
 // Import Row.
-import org.apache.spark.sql.api.java.Row
+import org.apache.spark.sql.Row;
 
 // sc is an existing JavaSparkContext.
 SQLContext sqlContext = new org.apache.spark.sql.SQLContext(sc);
@@ -472,10 +652,18 @@ for name in names.collect():
   print name
 {% endhighlight %}
 
-
 </div>
 
 </div>
+
+
+# Data Sources
+
+Spark SQL supports operating on a variety of data sources through the `DataFrame` interface.
+A DataFrame can be operated on as normal RDDs and can also be registered as a temporary table.
+Registering a DataFrame as a table allows you to run SQL queries over its data.  This section
+describes the various methods for loading data into a DataFrame.
+
 
 ## Parquet Files
 
@@ -904,15 +1092,14 @@ that these options will be deprecated in future release as more optimizations ar
   </tr>
 </table>
 
-# Other SQL Interfaces
+# Distributed Query Engine
 
-Spark SQL also supports interfaces for running SQL queries directly without the need to write any
-code.
+Spark SQL can also act as a distributed query engine using its JDBC/ODBC or command-line interface. In this mode, end-users or applications can interact with Spark SQL directly to run SQL queries, without the need to write any code.
 
 ## Running the Thrift JDBC/ODBC server
 
 The Thrift JDBC/ODBC server implemented here corresponds to the [`HiveServer2`](https://cwiki.apache.org/confluence/display/Hive/Setting+Up+HiveServer2)
-in Hive 0.12. You can test the JDBC server with the beeline script that comes with either Spark or Hive 0.12.
+in Hive 0.13. You can test the JDBC server with the beeline script that comes with either Spark or Hive 0.13.
 
 To start the JDBC/ODBC server, run the following in the Spark directory:
 
@@ -982,7 +1169,7 @@ Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
 You may run `./bin/spark-sql --help` for a complete list of all available
 options.
 
-# Compatibility with Other Systems
+# Migration Guide
 
 ## Migration Guide for Shark User
 
@@ -1139,33 +1326,10 @@ releases of Spark SQL.
   Hive can optionally merge the small files into fewer large files to avoid overflowing the HDFS
   metadata. Spark SQL does not support that.
 
-# Writing Language-Integrated Relational Queries
 
-**Language-Integrated queries are experimental and currently only supported in Scala.**
+# Data Types
 
-Spark SQL also supports a domain specific language for writing queries.  Once again,
-using the data from the above examples:
-
-{% highlight scala %}
-// sc is an existing SparkContext.
-val sqlContext = new org.apache.spark.sql.SQLContext(sc)
-// Importing the SQL context gives access to all the public SQL functions and implicit conversions.
-import sqlContext._
-val people: RDD[Person] = ... // An RDD of case class objects, from the first example.
-
-// The following is the same as 'SELECT name FROM people WHERE age >= 10 AND age <= 19'
-val teenagers = people.where('age >= 10).where('age <= 19).select('name)
-teenagers.map(t => "Name: " + t(0)).collect().foreach(println)
-{% endhighlight %}
-
-The DSL uses Scala symbols to represent columns in the underlying table, which are identifiers
-prefixed with a tick (`'`).  Implicit conversions turn these symbols into expressions that are
-evaluated by the SQL execution engine.  A full list of the functions supported can be found in the
-[ScalaDoc](api/scala/index.html#org.apache.spark.sql.DataFrame).
-
-<!-- TODO: Include the table of operations here. -->
-
-# Spark SQL DataType Reference
+Spark SQL and DataFrames support the following data types:
 
 * Numeric types
     - `ByteType`: Represents 1-byte signed integer numbers.
@@ -1208,10 +1372,10 @@ evaluated by the SQL execution engine.  A full list of the functions supported c
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
 
-All data types of Spark SQL are located in the package `org.apache.spark.sql`.
+All data types of Spark SQL are located in the package `org.apache.spark.sql.types`.
 You can access them by doing
 {% highlight scala %}
-import  org.apache.spark.sql._
+import  org.apache.spark.sql.types._
 {% endhighlight %}
 
 <table class="table">
@@ -1263,7 +1427,7 @@ import  org.apache.spark.sql._
 </tr>
 <tr>
   <td> <b>DecimalType</b> </td>
-  <td> scala.math.BigDecimal </td>
+  <td> java.math.BigDecimal </td>
   <td>
   DecimalType
   </td>
@@ -1457,7 +1621,7 @@ please use factory methods provided in
 </tr>
 <tr>
   <td> <b>StructType</b> </td>
-  <td> org.apache.spark.sql.api.java.Row </td>
+  <td> org.apache.spark.sql.Row </td>
   <td>
   DataTypes.createStructType(<i>fields</i>)<br />
   <b>Note:</b> <i>fields</i> is a List or an array of StructFields.
@@ -1478,10 +1642,10 @@ please use factory methods provided in
 
 <div data-lang="python"  markdown="1">
 
-All data types of Spark SQL are located in the package of `pyspark.sql`.
+All data types of Spark SQL are located in the package of `pyspark.sql.types`.
 You can access them by doing
 {% highlight python %}
-from pyspark.sql import *
+from pyspark.sql.types import *
 {% endhighlight %}
 
 <table class="table">
