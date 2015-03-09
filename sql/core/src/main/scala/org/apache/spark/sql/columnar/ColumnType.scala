@@ -454,7 +454,8 @@ private[sql] object ColumnType {
       case BinaryType => BINARY
       case DateType => DATE
       case TimestampType => TIMESTAMP
-      case DecimalType.Fixed(precision, scale) => FIXED_DECIMAL(precision, scale)
+      case DecimalType.Fixed(precision, scale) if precision < 19 =>
+        FIXED_DECIMAL(precision, scale)
       case _ => GENERIC
     }
   }

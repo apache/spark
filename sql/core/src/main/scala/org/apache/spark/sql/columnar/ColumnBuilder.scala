@@ -161,7 +161,7 @@ private[sql] object ColumnBuilder {
       case BinaryType => new BinaryColumnBuilder
       case DateType => new DateColumnBuilder
       case TimestampType => new TimestampColumnBuilder
-      case DecimalType.Fixed(precision, scale) =>
+      case DecimalType.Fixed(precision, scale) if precision < 19 =>
         new FixedDecimalColumnBuilder(precision, scale)
       case _ => new GenericColumnBuilder
     }

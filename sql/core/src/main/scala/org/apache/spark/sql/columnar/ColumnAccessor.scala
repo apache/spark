@@ -129,7 +129,7 @@ private[sql] object ColumnAccessor {
       case BinaryType => new BinaryColumnAccessor(dup)
       case DateType => new DateColumnAccessor(dup)
       case TimestampType => new TimestampColumnAccessor(dup)
-      case DecimalType.Fixed(precision, scale) =>
+      case DecimalType.Fixed(precision, scale) if precision < 19 =>
         new FixedDecimalColumnAccessor(dup, precision, scale)
       case _ => new GenericColumnAccessor(dup)
     }

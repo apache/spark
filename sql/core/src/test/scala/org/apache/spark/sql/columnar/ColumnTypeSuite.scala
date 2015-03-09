@@ -216,4 +216,16 @@ class ColumnTypeSuite extends FunSuite with Logging {
     if (sb.nonEmpty) sb.setLength(sb.length - 1)
     sb.toString()
   }
+
+  test("column type for decimal types with different precision") {
+    (1 to 18).foreach { i =>
+      assertResult(FIXED_DECIMAL(i, 0)) {
+        ColumnType(DecimalType(i, 0))
+      }
+    }
+
+    assertResult(GENERIC) {
+      ColumnType(DecimalType(19, 0))
+    }
+  }
 }
