@@ -102,7 +102,7 @@ class JavaEstimator(Estimator, JavaWrapper):
         """
         Fits a Java model to the input dataset.
         :param dataset: input dataset, which is an instance of
-                        :py:class:`pyspark.sql.SchemaRDD`
+                        :py:class:`pyspark.sql.DataFrame`
         :param params: additional params (overwriting embedded values)
         :return: fitted Java model
         """
