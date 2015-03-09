@@ -32,11 +32,11 @@ export FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 
 usage() {
   if [ -n "$1" ]; then
-    echo $1
+    echo "$1"
   fi
   echo "Usage: ./bin/spark-shell [options]"
   "$FWDIR"/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
-  exit $2
+  exit "$2"
 }
 export -f usage
 

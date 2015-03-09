@@ -23,10 +23,10 @@ SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 if ! type -t usage >/dev/null 2>&1; then
   usage() {
     if [ -n "$1" ]; then
-      echo $1
+      echo "$1"
     fi
     "$SPARK_HOME"/bin/spark-class org.apache.spark.deploy.SparkSubmit --help
-    exit $2
+    exit "$2"
   }
   export -f usage
 fi

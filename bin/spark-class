@@ -77,7 +77,7 @@ fi
 CMD=()
 while IFS= read -d '' -r ARG; do
   CMD+=("$ARG")
-done < <($RUNNER -cp "$SPARK_LAUNCHER_CP" org.apache.spark.launcher.Main "$@")
+done < <("$RUNNER" -cp "$SPARK_LAUNCHER_CP" org.apache.spark.launcher.Main "$@")
 
 if [ "${CMD[0]}" = "usage" ]; then
   "${CMD[@]}"

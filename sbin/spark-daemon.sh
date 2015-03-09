@@ -122,12 +122,12 @@ if [ "$SPARK_NICENESS" = "" ]; then
 fi
 
 run_command() {
-  mode=$1
+  mode="$1"
   shift
 
   mkdir -p "$SPARK_PID_DIR"
 
-  if [ -f $pid ]; then
+  if [ -f "$pid" ]; then
     TARGET_ID="$(cat "$pid")"
     if [[ $(ps -p "$TARGET_ID" -o args=) =~ $command ]]; then
       echo "$command running as process $TARGET_ID.  Stop it first."
@@ -137,21 +137,21 @@ run_command() {
 
   if [ "$SPARK_MASTER" != "" ]; then
     echo rsync from "$SPARK_MASTER"
-    rsync -a -e ssh --delete --exclude=.svn --exclude='logs/*' --exclude='contrib/hod/logs/*' $SPARK_MASTER/ "$SPARK_HOME"
+    rsync -a -e ssh --delete --exclude=.svn --exclude='logs/*' --exclude='contrib/hod/logs/*' "$SPARK_MASTER/" "$SPARK_HOME"
   fi
 
   spark_rotate_log "$log"
   echo "starting $command, logging to $log"
 
-  case $mode in
+  case "$mode" in
     (class)
-      nohup nice -n $SPARK_NICENESS "$SPARK_PREFIX"/bin/spark-class $command "$@" >> "$log" 2>&1 < /dev/null &
-      newpid=$!
+      nohup nice -n "$SPARK_NICENESS" "$SPARK_PREFIX"/bin/spark-class $command "$@" >> "$log" 2>&1 < /dev/null &
+      newpid="$!"
       ;;
 
     (submit)
-      nohup nice -n $SPARK_NICENESS "$SPARK_PREFIX"/bin/spark-submit --class $command "$@" >> "$log" 2>&1 < /dev/null &
-      newpid=$!
+      nohup nice -n "$SPARK_NICENESS" "$SPARK_PREFIX"/bin/spark-submit --class $command "$@" >> "$log" 2>&1 < /dev/null &
+      newpid="$!"
       ;;
 
     (*)
@@ -160,7 +160,7 @@ run_command() {
       ;;
   esac
 
-  echo $newpid > $pid
+  echo "$newpid" > "$pid"
   sleep 2
   # Check if the process has died; in that case we'll tail the log so the user can see
   if [[ ! $(ps -p "$newpid" -o args=) =~ $command ]]; then
