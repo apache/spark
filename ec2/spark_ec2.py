@@ -71,8 +71,6 @@ SPARK_TACHYON_MAP = {
     "1.2.1": "0.5.0",
 }
 
-DEFAULT_TACHYON_VERSION = "0.6.0"
-
 DEFAULT_SPARK_VERSION = SPARK_EC2_VERSION
 DEFAULT_SPARK_GITHUB_REPO = "https://github.com/apache/spark"
 
@@ -159,11 +157,6 @@ def parse_args():
     parser.add_option(
         "-v", "--spark-version", default=DEFAULT_SPARK_VERSION,
         help="Version of Spark to use: 'X.Y.Z' or a specific git hash (default: %default)")
-    parser.add_option(
-        "--tachyon-version",
-        default=DEFAULT_TACHYON_VERSION,
-        help="If --spark-version is a git hash, this will be used as the version of Tachyon. " +
-             "Otherwise, this field does not need to be specified. Default to 0.6.0")
     parser.add_option(
         "--spark-git-repo",
         default=DEFAULT_SPARK_GITHUB_REPO,
@@ -897,12 +890,9 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
     else:
         # Spark-only custom deploy
         spark_v = "%s|%s" % (opts.spark_git_repo, opts.spark_version)
-        if opts.tachyon_version is None:
-            print >>std_error,\
-                "You have used github hash as --spark-version, " + \
-                "need to manually specify --tachyon-version"
-            sys.exit(1)
-        tachyon_v = opts.tachyon_version
+        tachyon_v = ""
+        print "Deploy spark via git hash, Tachyon won't be set up"
+        modules = filter(lambda x: x != "tachyon", modules)
 
     template_vars = {
         "master_list": '\n'.join([i.public_dns_name for i in master_nodes]),
