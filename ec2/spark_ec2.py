@@ -891,7 +891,7 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
         # Spark-only custom deploy
         spark_v = "%s|%s" % (opts.spark_git_repo, opts.spark_version)
         tachyon_v = ""
-        print "Deploy spark via git hash, Tachyon won't be set up"
+        print "Deploying spark via git hash, Tachyon won't be set up"
         modules = filter(lambda x: x != "tachyon", modules)
 
     template_vars = {
