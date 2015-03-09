@@ -174,7 +174,8 @@ object LDAExample {
 
     // Get dataset of document texts
     // One document per line in each text file.
-    val textRDD: RDD[String] = sc.textFile(paths.mkString(",")).coalesce(sc.defaultParallelism)
+    // One partition each text file. Consider using coalesce as necessary.
+    val textRDD: RDD[String] = sc.textFile(paths.mkString(","))
 
     // Split text into words
     val tokenizer = new SimpleTokenizer(sc, stopwordFile)
