@@ -44,8 +44,8 @@ class Main {
    * "bin/spark-class2.cmd" batch script on Windows to execute the final command.
    * <p/>
    * On Unix-like systems, the output is a list of command arguments, separated by the NULL
-   * character. On Windows, the output is single command line suitable for direct execution
-   * form the script.
+   * character. On Windows, the output is a command line suitable for direct execution from the
+   * script.
    */
   public static void main(String[] argsArray) throws Exception {
     checkArgument(argsArray.length > 0, "Not enough arguments: missing class name.");
@@ -139,7 +139,7 @@ class Main {
   }
 
   /**
-   * Internal launcher used when command line parsing fails. This will behave differently depending
+   * Internal builder used when command line parsing fails. This will behave differently depending
    * on the platform:
    *
    * - On Unix-like systems, it will print a call to the "usage" function with two arguments: the

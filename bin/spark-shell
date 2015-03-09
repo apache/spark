@@ -41,7 +41,7 @@ usage() {
 export -f usage
 
 if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
-  usage 0
+  usage "" 0
 fi
 
 # SPARK-4161: scala does not assume use of the java classpath,
