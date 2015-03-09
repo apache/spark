@@ -124,16 +124,7 @@ datanucleus_jars="$(find "$datanucleus_dir" 2>/dev/null | grep "datanucleus-.*\\
 datanucleus_jars="$(echo "$datanucleus_jars" | tr "\n" : | sed s/:$//g)"
 
 if [ -n "$datanucleus_jars" ]; then
-  if [ $(command -v "$JAR_CMD") ] ; then
-    hive_files=$("$JAR_CMD" -tf "$ASSEMBLY_JAR" org/apache/hadoop/hive/ql/exec 2>/dev/null)
-    if [ -n "$hive_files" ]; then
-      echo "Spark assembly has been built with Hive, including Datanucleus jars on classpath" 1>&2
-      CLASSPATH="$CLASSPATH:$datanucleus_jars"
-    fi
-  else
-    echo "No jar command available; unable to check if assembly was built with Hive."
-    echo "Please install a JDK instead of a JRE."
-  fi
+  CLASSPATH="$CLASSPATH:$datanucleus_jars"
 fi
 
 # Add test classes if we're running from SBT or Maven with SPARK_TESTING set to 1
