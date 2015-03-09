@@ -52,7 +52,6 @@ object NaiveBayesSuite {
     sample: Int = 10): Seq[LabeledPoint] = {
     val D = theta(0).length
     val rnd = new Random(seed)
-c
     val _pi = pi.map(math.pow(math.E, _))
     val _theta = theta.map(row => row.map(math.pow(math.E, _)))
 
