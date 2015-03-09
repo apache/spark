@@ -733,7 +733,7 @@ One of the harder things about Spark is understanding the scope and life cycle o
 
 #### Example
 
-Consider the naive RDD element sum below, which behaves completely differently when running spark in `local` mode (e.g. via the shell) and when deploying a Spark application to a cluster (e.g. via spark-submit to YARN): 
+Consider the naive RDD element sum below, which behaves completely differently depending on whether execution is happening within the same JVM. A common example of this is when running spark in `local` mode (`--master = local[n]`) versus deploying a Spark application to a cluster (e.g. via spark-submit to YARN): 
 
 <div class="codetabs">
 
@@ -767,7 +767,7 @@ counter = 0
 rdd = sc.parallelize(data)
 
 # Wrong: Don't do this!!
-rdd.foreach(lambda x => counter+= x)
+rdd.foreach(lambda x => counter += x)
 
 print("Counter value: " + counter)
 
@@ -778,18 +778,18 @@ print("Counter value: " + counter)
 
 #### Local vs. cluster modes
 
-In local mode, the above code will correctly sum the values within the RDD and store it in **counter**. This is because both the RDD and the variable **counter** are in the same memory on the driver node. 
+The primary challenge is that the behavior of the above code is undefined. In local mode with a single JVM, the above code will sum the values within the RDD and store it in **counter**. This is because both the RDD and the variable **counter** are in the same memory space on the driver node. 
 
-However, in `cluster` mode, what happens is more complicated, and the above code will not work correctly. To execute jobs Spark breaks up the processing of RDD operations into tasks - each of which is operated on by an executor. Prior to execution, Spark computes the **closure**. The closure is those variables and methods which must be visible for the executor to perform its computations on the RDD (in this case `foreach()`). This closure is serialized and sent to each executor. In `local` mode, there is only the one executors so everything shares the same closure. In `remote` mode however, this is not the case and the executors running on seperate worker nodes each have their own copy of the closure.
+However, in `cluster` mode, what happens is more complicated, and the above may not work as intended. To execute jobs, Spark breaks up the processing of RDD operations into tasks - each of which is operated on by an executor. Prior to execution, Spark computes the **closure**. The closure is those variables and methods which must be visible for the executor to perform its computations on the RDD (in this case `foreach()`). This closure is serialized and sent to each executor. In `local` mode, there is only the one executors so everything shares the same closure. In `remote` mode however, this is not the case and the executors running on seperate worker nodes each have their own copy of the closure.
 
-The problem here is that the variables within the closure sent to each executor are now copies and thus, when **counter** is referenced within the `foreach` function, it's no longer the **counter** on the driver node. There is still a **counter** in the memory of the driver node but this is no longer visible to the executors! The executors only sees the copy from the serialized closure. Thus, the final value of **counter** will still be zero since all operations on **counter** were referencing the value within the serialized closure.  
+What is happening here is that the variables within the closure sent to each executor are now copies and thus, when **counter** is referenced within the `foreach` function, it's no longer the **counter** on the driver node. There is still a **counter** in the memory of the driver node but this is no longer visible to the executors! The executors only sees the copy from the serialized closure. Thus, the final value of **counter** will still be zero since all operations on **counter** were referencing the value within the serialized closure.  
 
-The one exception to this is when the variable being modified is an [`Accumulator`](#AccumLink). Accumulators in Spark are used specifically to provide a mechanism for safely updating a variable when execution is split up across worker nodes in a cluster. The Accumulators section of this guide discusses these in more detail.  
+To ensure well-defined behavior in these sorts of scenarios one should use an [`Accumulator`](#AccumLink). Accumulators in Spark are used specifically to provide a mechanism for safely updating a variable when execution is split up across worker nodes in a cluster. The Accumulators section of this guide discusses these in more detail.  
 
 In general, closures - constructs like loops or locally defined methods, should not be used to mutate some global state. Spark does not define or guarantee the behavior of mutations to objects referenced from outside of closures. Some code that does this may work in local mode, but that's just by accident and such code will not behave as expected in distributed mode. Use an accumulator instead if some global aggregation is needed.
 
 #### Printing elements of an RDD 
-Another common idiom is attempting to print out the elements of an RDD using `rdd.foreach(println)` or `rdd.map(println)`. Intuitively, it seems that this should work. But again, consider that in `cluster` mode, the output to `stdout` being called by the executors is now writing to the executor's `stdout` instead, not the one on the driver! Consequently, Spark will start writing to `stdout` on the worker node, potentially filling up `/tmp` storage rapdily. To avoid this, one can use the `collect()` method to first bring the RDD to the driver node thus: `rdd.collect().foreach(println)`. This can cause the driver to run out of memory, though, because collect() fetches the entire RDD to a single machine; a safer approach is to use the `take()` method to only get a few elements of the RDD: `rdd.take(100).foreach(println)`.
+Another common idiom is attempting to print out the elements of an RDD using `rdd.foreach(println)` or `rdd.map(println)`. On a single machine, this will generate the expected output and print all the RDD's elements. However, in `cluster` mode, the output to `stdout` being called by the executors is now writing to the executor's `stdout` instead, not the one on the driver, so `stdout` on the driver won't show these! To print all elements on the driver, one can use the `collect()` method to first bring the RDD to the driver node thus: `rdd.collect().foreach(println)`. This can cause the driver to run out of memory, though, because `collect()` fetches the entire RDD to a single machine; if you only need to print a few elements of the RDD, a safer approach is to use the `take()`: `rdd.take(100).foreach(println)`.
  
 ### Working with Key-Value Pairs
 
