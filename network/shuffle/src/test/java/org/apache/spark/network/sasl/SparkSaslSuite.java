@@ -17,12 +17,12 @@
 
 package org.apache.spark.network.sasl;
 
-import java.util.Map;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
-import com.google.common.collect.ImmutableMap;
 import org.junit.Test;
 
-import static org.junit.Assert.*;
 
 /**
  * Jointly tests SparkSaslClient and SparkSaslServer, as both are black boxes.

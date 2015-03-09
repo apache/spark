@@ -19,7 +19,9 @@
 Fuller unit tests for Python MLlib.
 """
 
+import os
 import sys
+import tempfile
 import array as pyarray
 
 from numpy import array, array_equal
@@ -195,7 +197,8 @@ class ListTests(PySparkTestCase):
 
     def test_classification(self):
         from pyspark.mllib.classification import LogisticRegressionWithSGD, SVMWithSGD, NaiveBayes
-        from pyspark.mllib.tree import DecisionTree, RandomForest, GradientBoostedTrees
+        from pyspark.mllib.tree import DecisionTree, DecisionTreeModel, RandomForest,\
+            RandomForestModel, GradientBoostedTrees, GradientBoostedTreesModel
         data = [
             LabeledPoint(0.0, [1, 0, 0]),
             LabeledPoint(1.0, [0, 1, 1]),
@@ -204,6 +207,8 @@ class ListTests(PySparkTestCase):
         ]
         rdd = self.sc.parallelize(data)
         features = [p.features.tolist() for p in data]
+
+        temp_dir = tempfile.mkdtemp()
 
         lr_model = LogisticRegressionWithSGD.train(rdd)
         self.assertTrue(lr_model.predict(features[0]) <= 0)
@@ -231,6 +236,11 @@ class ListTests(PySparkTestCase):
         self.assertTrue(dt_model.predict(features[2]) <= 0)
         self.assertTrue(dt_model.predict(features[3]) > 0)
 
+        dt_model_dir = os.path.join(temp_dir, "dt")
+        dt_model.save(self.sc, dt_model_dir)
+        same_dt_model = DecisionTreeModel.load(self.sc, dt_model_dir)
+        self.assertEqual(same_dt_model.toDebugString(), dt_model.toDebugString())
+
         rf_model = RandomForest.trainClassifier(
             rdd, numClasses=2, categoricalFeaturesInfo=categoricalFeaturesInfo, numTrees=100)
         self.assertTrue(rf_model.predict(features[0]) <= 0)
@@ -238,12 +248,27 @@ class ListTests(PySparkTestCase):
         self.assertTrue(rf_model.predict(features[2]) <= 0)
         self.assertTrue(rf_model.predict(features[3]) > 0)
 
+        rf_model_dir = os.path.join(temp_dir, "rf")
+        rf_model.save(self.sc, rf_model_dir)
+        same_rf_model = RandomForestModel.load(self.sc, rf_model_dir)
+        self.assertEqual(same_rf_model.toDebugString(), rf_model.toDebugString())
+
         gbt_model = GradientBoostedTrees.trainClassifier(
             rdd, categoricalFeaturesInfo=categoricalFeaturesInfo)
         self.assertTrue(gbt_model.predict(features[0]) <= 0)
         self.assertTrue(gbt_model.predict(features[1]) > 0)
         self.assertTrue(gbt_model.predict(features[2]) <= 0)
         self.assertTrue(gbt_model.predict(features[3]) > 0)
+
+        gbt_model_dir = os.path.join(temp_dir, "gbt")
+        gbt_model.save(self.sc, gbt_model_dir)
+        same_gbt_model = GradientBoostedTreesModel.load(self.sc, gbt_model_dir)
+        self.assertEqual(same_gbt_model.toDebugString(), gbt_model.toDebugString())
+
+        try:
+            os.removedirs(temp_dir)
+        except OSError:
+            pass
 
     def test_regression(self):
         from pyspark.mllib.regression import LinearRegressionWithSGD, LassoWithSGD, \

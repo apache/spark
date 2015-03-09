@@ -22,6 +22,7 @@
 from __future__ import with_statement
 
 import hashlib
+import itertools
 import logging
 import os
 import os.path
@@ -160,6 +161,15 @@ def parse_args():
         default=DEFAULT_SPARK_EC2_BRANCH,
         help="Github repo branch of spark-ec2 to use (default: %default)")
     parser.add_option(
+        "--deploy-root-dir",
+        default=None,
+        help="A directory to copy into / on the first master. " +
+             "Must be absolute. Note that a trailing slash is handled as per rsync: " +
+             "If you omit it, the last directory of the --deploy-root-dir path will be created " +
+             "in / before copying its contents. If you append the trailing slash, " +
+             "the directory is not created and its contents are copied directly into /. " +
+             "(default: %default).")
+    parser.add_option(
         "--hadoop-major-version", default="1",
         help="Major version of Hadoop (default: %default)")
     parser.add_option(
@@ -288,13 +298,6 @@ def get_validate_spark_version(version, repo):
             print >> stderr, "Received HTTP response code of {code}.".format(code=e.code)
             sys.exit(1)
         return version
-
-
-# Check whether a given EC2 instance object is in a state we consider active,
-# i.e. not terminating or terminated. We count both stopping and stopped as
-# active since we can restart stopped clusters.
-def is_active(instance):
-    return (instance.state in ['pending', 'running', 'stopping', 'stopped'])
 
 
 # Source: http://aws.amazon.com/amazon-linux-ami/instance-type-matrix/
@@ -564,8 +567,11 @@ def launch_cluster(conn, opts, cluster_name):
                                       placement_group=opts.placement_group,
                                       user_data=user_data_content)
                 slave_nodes += slave_res.instances
-                print "Launched %d slaves in %s, regid = %s" % (num_slaves_this_zone,
-                                                                zone, slave_res.id)
+                print "Launched {s} slave{plural_s} in {z}, regid = {r}".format(
+                    s=num_slaves_this_zone,
+                    plural_s=('' if num_slaves_this_zone == 1 else 's'),
+                    z=zone,
+                    r=slave_res.id)
             i += 1
 
     # Launch or resume masters
@@ -612,40 +618,47 @@ def launch_cluster(conn, opts, cluster_name):
     return (master_nodes, slave_nodes)
 
 
-# Get the EC2 instances in an existing cluster if available.
-# Returns a tuple of lists of EC2 instance objects for the masters and slaves
 def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
-    print "Searching for existing cluster " + cluster_name + " in region " \
-        + opts.region + "..."
-    reservations = conn.get_all_reservations()
-    master_nodes = []
-    slave_nodes = []
-    for res in reservations:
-        active = [i for i in res.instances if is_active(i)]
-        for inst in active:
-            group_names = [g.name for g in inst.groups]
-            if (cluster_name + "-master") in group_names:
-                master_nodes.append(inst)
-            elif (cluster_name + "-slaves") in group_names:
-                slave_nodes.append(inst)
-    if any((master_nodes, slave_nodes)):
-        print "Found %d master(s), %d slaves" % (len(master_nodes), len(slave_nodes))
-    if master_nodes != [] or not die_on_error:
-        return (master_nodes, slave_nodes)
-    else:
-        if master_nodes == [] and slave_nodes != []:
-            print >> sys.stderr, "ERROR: Could not find master in group " + cluster_name \
-                + "-master" + " in region " + opts.region
-        else:
-            print >> sys.stderr, "ERROR: Could not find any existing cluster" \
-                + " in region " + opts.region
+    """
+    Get the EC2 instances in an existing cluster if available.
+    Returns a tuple of lists of EC2 instance objects for the masters and slaves.
+    """
+    print "Searching for existing cluster {c} in region {r}...".format(
+        c=cluster_name, r=opts.region)
+
+    def get_instances(group_names):
+        """
+        Get all non-terminated instances that belong to any of the provided security groups.
+
+        EC2 reservation filters and instance states are documented here:
+            http://docs.aws.amazon.com/cli/latest/reference/ec2/describe-instances.html#options
+        """
+        reservations = conn.get_all_reservations(
+            filters={"instance.group-name": group_names})
+        instances = itertools.chain.from_iterable(r.instances for r in reservations)
+        return [i for i in instances if i.state not in ["shutting-down", "terminated"]]
+
+    master_instances = get_instances([cluster_name + "-master"])
+    slave_instances = get_instances([cluster_name + "-slaves"])
+
+    if any((master_instances, slave_instances)):
+        print "Found {m} master{plural_m}, {s} slave{plural_s}.".format(
+            m=len(master_instances),
+            plural_m=('' if len(master_instances) == 1 else 's'),
+            s=len(slave_instances),
+            plural_s=('' if len(slave_instances) == 1 else 's'))
+
+    if not master_instances and die_on_error:
+        print >> sys.stderr, \
+            "ERROR: Could not find a master for cluster {c} in region {r}.".format(
+                c=cluster_name, r=opts.region)
         sys.exit(1)
+
+    return (master_instances, slave_instances)
 
 
 # Deploy configuration files and run setup scripts on a newly launched
 # or started EC2 cluster.
-
-
 def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
     master = master_nodes[0].public_dns_name
     if deploy_ssh_key:
@@ -693,6 +706,14 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
         slave_nodes=slave_nodes,
         modules=modules
     )
+
+    if opts.deploy_root_dir is not None:
+        print "Deploying {s} to master...".format(s=opts.deploy_root_dir)
+        deploy_user_files(
+            root_dir=opts.deploy_root_dir,
+            opts=opts,
+            master_nodes=master_nodes
+        )
 
     print "Running setup on master..."
     setup_spark_cluster(master, opts)
@@ -931,6 +952,23 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
     shutil.rmtree(tmp_dir)
 
 
+# Deploy a given local directory to a cluster, WITHOUT parameter substitution.
+# Note that unlike deploy_files, this works for binary files.
+# Also, it is up to the user to add (or not) the trailing slash in root_dir.
+# Files are only deployed to the first master instance in the cluster.
+#
+# root_dir should be an absolute path.
+def deploy_user_files(root_dir, opts, master_nodes):
+    active_master = master_nodes[0].public_dns_name
+    command = [
+        'rsync', '-rv',
+        '-e', stringify_command(ssh_command(opts)),
+        "%s" % root_dir,
+        "%s@%s:/" % (opts.user, active_master)
+    ]
+    subprocess.check_call(command)
+
+
 def stringify_command(parts):
     if isinstance(parts, str):
         return parts
@@ -1099,6 +1137,14 @@ def real_main():
                          "Furthermore, we currently only support forks named spark-ec2."
         sys.exit(1)
 
+    if not (opts.deploy_root_dir is None or
+            (os.path.isabs(opts.deploy_root_dir) and
+             os.path.isdir(opts.deploy_root_dir) and
+             os.path.exists(opts.deploy_root_dir))):
+        print >> stderr, "--deploy-root-dir must be an absolute path to a directory that exists " \
+                         "on the local file system"
+        sys.exit(1)
+
     try:
         conn = ec2.connect_to_region(opts.region)
     except Exception as e:
@@ -1126,14 +1172,16 @@ def real_main():
         setup_cluster(conn, master_nodes, slave_nodes, opts, True)
 
     elif action == "destroy":
-        print "Are you sure you want to destroy the cluster %s?" % cluster_name
-        print "The following instances will be terminated:"
         (master_nodes, slave_nodes) = get_existing_cluster(
             conn, opts, cluster_name, die_on_error=False)
-        for inst in master_nodes + slave_nodes:
-            print "> %s" % inst.public_dns_name
 
-        msg = "ALL DATA ON ALL NODES WILL BE LOST!!\nDestroy cluster %s (y/N): " % cluster_name
+        if any(master_nodes + slave_nodes):
+            print "The following instances will be terminated:"
+            for inst in master_nodes + slave_nodes:
+                print "> %s" % inst.public_dns_name
+            print "ALL DATA ON ALL NODES WILL BE LOST!!"
+
+        msg = "Are you sure you want to destroy the cluster {c}? (y/N) ".format(c=cluster_name)
         response = raw_input(msg)
         if response == "y":
             print "Terminating master..."
@@ -1145,7 +1193,6 @@ def real_main():
 
             # Delete security groups as well
             if opts.delete_groups:
-                print "Deleting security groups (this will take some time)..."
                 group_names = [cluster_name + "-master", cluster_name + "-slaves"]
                 wait_for_cluster_state(
                     conn=conn,
@@ -1153,6 +1200,7 @@ def real_main():
                     cluster_instances=(master_nodes + slave_nodes),
                     cluster_state='terminated'
                 )
+                print "Deleting security groups (this will take some time)..."
                 attempt = 1
                 while attempt <= 3:
                     print "Attempt %d" % attempt
