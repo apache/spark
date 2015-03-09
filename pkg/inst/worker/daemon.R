@@ -1,11 +1,5 @@
 # Worker daemon
 
-# try to load `fork`, or install
-FORK_URI <- "http://cran.r-project.org/src/contrib/Archive/fork/fork_1.2.4.tar.gz"
-tryCatch(library(fork), error = function(err) {
-  install.packages(FORK_URI, repos = NULL, type = "source")
-})
-
 rLibDir <- Sys.getenv("SPARKR_RLIBDIR")
 script <- paste(rLibDir, "SparkR/worker/worker.R", sep = "/")
 
@@ -14,26 +8,50 @@ script <- paste(rLibDir, "SparkR/worker/worker.R", sep = "/")
 suppressPackageStartupMessages(library(SparkR))
 
 port <- as.integer(Sys.getenv("SPARKR_WORKER_PORT"))
-inputCon <- socketConnection(port = port, blocking = TRUE, open = "rb")
+inputCon <- socketConnection(port = port, open = "rb", blocking = TRUE, timeout = 3600)
+
+# Read from connection, retrying to read exactly 'size' bytes
+readBinFull <- function(con, size) {
+  # readBin() could be interruptted by signal, we have no way to tell
+  # if it's interruptted or the socket is closed, so we retry at most
+  # 20 times, to avoid the deadloop if the socket is closed
+  c <- 1
+  data <- readBin(con, raw(), size)
+  while (length(data) < size && c < 20) {
+    extra <- readBin(con, raw(), size - length(data))
+    data <- c(data, extra)
+    c <- c + 1
+  }
+  data
+}
+
+# Utility function to read the port with retry
+# Returns -1 if the socket was closed
+readPort <- function(con) {
+  data <- readBinFull(con, 4L)
+  if (length(data) != 4) {
+    -1
+  } else {
+    rc <- rawConnection(data)
+    ret <- SparkR:::readInt(rc)
+    close(rc)
+    ret
+  }
+}
 
 while (TRUE) {
-  ready <- socketSelect(list(inputCon), timeout = 1)
-  if (ready) {
-    inport <- SparkR:::readInt(inputCon)
-    if (length(inport) != 1) {
-      quit(save="no")
-    }
-    p <- fork::fork(NULL)
-    if (p == 0) {
-      close(inputCon)
-      Sys.setenv(SPARKR_WORKER_PORT = inport)
-      source(script)
-      fork::exit(0)
-    }
+  port <- readPort(inputCon)
+  if (port < 0) {
+    cat("quitting daemon\n")
+    quit(save = "no")
   }
-  # cleanup all the child process
-  status <- fork::wait(0, nohang = TRUE)
-  while (status[1] > 0) {
-    status <- fork::wait(0, nohang = TRUE)
+  p <- parallel:::mcfork()
+  if (inherits(p, "masterProcess")) {
+    close(inputCon)
+    Sys.setenv(SPARKR_WORKER_PORT = port)
+    source(script)
+    # Set SIGUSR1 so that child can exit
+    tools::pskill(Sys.getpid(), tools::SIGUSR1)
+    parallel:::mcexit(0L)
   }
 }
