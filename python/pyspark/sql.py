@@ -44,7 +44,7 @@ from itertools import imap
 from py4j.protocol import Py4JError
 from py4j.java_collections import ListConverter, MapConverter
 
-from pyspark.rdd import RDD
+from pyspark.rdd import RDD, _load_from_socket
 from pyspark.serializers import BatchedSerializer, AutoBatchedSerializer, PickleSerializer, \
     CloudPickleSerializer, UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
@@ -1996,9 +1996,11 @@ class SchemaRDD(RDD):
         [Row(field1=1, field2=u'row1'), ..., Row(field1=3, field2=u'row3')]
         """
         with SCCallSiteSync(self.context) as css:
-            bytesInJava = self._jschema_rdd.baseSchemaRDD().collectToPython().iterator()
+            rdd = self._jschema_rdd.baseSchemaRDD().javaToPython().rdd()
+            port = self._sc._jvm.PythonRDD.collectAndServe(rdd)
+        rs = list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
         cls = _create_cls(self.schema())
-        return map(cls, self._collect_iterator_through_file(bytesInJava))
+        return [cls(r) for r in rs]
 
     def take(self, num):
         """Take the first num rows of the RDD.

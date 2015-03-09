@@ -413,18 +413,6 @@ class SchemaRDD(
   }
 
   /**
-   * Serializes the Array[Row] returned by SchemaRDD's optimized collect(), using the same
-   * format as javaToPython. It is used by pyspark.
-   */
-  private[sql] def collectToPython: JList[Array[Byte]] = {
-    val fieldTypes = schema.fields.map(_.dataType)
-    val pickle = new Pickler
-    new java.util.ArrayList(collect().map { row =>
-      EvaluatePython.rowToArray(row, fieldTypes)
-    }.grouped(100).map(batched => pickle.dumps(batched.toArray)).toIterable)
-  }
-
-  /**
    * Creates SchemaRDD by applying own schema to derived RDD. Typically used to wrap return value
    * of base RDD functions that do not change schema.
    *
