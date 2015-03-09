@@ -105,8 +105,6 @@ setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
               return(rdd@env$jrdd_val)
             }
 
-            # TODO: This is to handle anonymous functions. Find out a
-            # better way to do this.
             computeFunc <- function(split, part) {
               rdd@func(split, part)
             }
