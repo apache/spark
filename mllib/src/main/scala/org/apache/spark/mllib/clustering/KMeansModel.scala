@@ -86,10 +86,6 @@ object KMeansModel extends Loader[KMeansModel] {
     private[clustering]
     val thisClassName = "org.apache.spark.mllib.clustering.KMeansModel"
 
-    /**
-     * Saves a [[KMeansModel]], where user features are saved under `data/users` and
-     * product features are saved under `data/products`.
-     */
     def save(sc: SparkContext, model: KMeansModel, path: String): Unit = {
       val sqlContext = new SQLContext(sc)
       val wrapper = new VectorUDT()
