@@ -83,6 +83,20 @@ test_that("cleanClosure on R functions", {
   env <- environment(newF)
   expect_equal(length(ls(env)), 0)  # "y" and "g" should not be included.
   
+  # Test for access operators `$`, `::` and `:::`.
+  l <- list(a = 1)
+  a <- 2
+  base <- c(1, 2, 3)
+  f <- function(x) {
+    z <- base::as.integer(x) + 1
+    l$a <- 3
+    z + l$a
+  }
+  newF <- cleanClosure(f)
+  env <- environment(newF)
+  expect_equal(ls(env), "l")  # "base" and "a" should not be included.
+  expect_equal(get("l", envir = env, inherits = FALSE), l)
+  
   # Test for overriding variables in base namespace (Issue: SparkR-196).
   nums <- as.list(1:10)
   rdd <- parallelize(sc, nums, 2L)
