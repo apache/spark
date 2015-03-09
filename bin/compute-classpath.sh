@@ -93,14 +93,17 @@ if [ "$num_jars" -gt "1" ]; then
   exit 1
 fi
 
-# Verify that versions of java used to build the jars and run Spark are compatible
-jar_error_check=$("$JAR_CMD" -tf "$ASSEMBLY_JAR" nonexistent/class/path 2>&1)
-if [[ "$jar_error_check" =~ "invalid CEN header" ]]; then
-  echo "Loading Spark jar with '$JAR_CMD' failed. " 1>&2
-  echo "This is likely because Spark was compiled with Java 7 and run " 1>&2
-  echo "with Java 6. (see SPARK-1703). Please use Java 7 to run Spark " 1>&2
-  echo "or build Spark with Java 6." 1>&2
-  exit 1
+# Only able to make this check if 'jar' command is available
+if [ $(command -v "$JAR_CMD") ] ; then
+  # Verify that versions of java used to build the jars and run Spark are compatible
+  jar_error_check=$("$JAR_CMD" -tf "$ASSEMBLY_JAR" nonexistent/class/path 2>&1)
+  if [[ "$jar_error_check" =~ "invalid CEN header" ]]; then
+    echo "Loading Spark jar with '$JAR_CMD' failed. " 1>&2
+    echo "This is likely because Spark was compiled with Java 7 and run " 1>&2
+    echo "with Java 6. (see SPARK-1703). Please use Java 7 to run Spark " 1>&2
+    echo "or build Spark with Java 6." 1>&2
+    exit 1
+  fi
 fi
 
 CLASSPATH="$CLASSPATH:$ASSEMBLY_JAR"
@@ -121,11 +124,7 @@ datanucleus_jars="$(find "$datanucleus_dir" 2>/dev/null | grep "datanucleus-.*\\
 datanucleus_jars="$(echo "$datanucleus_jars" | tr "\n" : | sed s/:$//g)"
 
 if [ -n "$datanucleus_jars" ]; then
-  hive_files=$("$JAR_CMD" -tf "$ASSEMBLY_JAR" org/apache/hadoop/hive/ql/exec 2>/dev/null)
-  if [ -n "$hive_files" ]; then
-    echo "Spark assembly has been built with Hive, including Datanucleus jars on classpath" 1>&2
-    CLASSPATH="$CLASSPATH:$datanucleus_jars"
-  fi
+  CLASSPATH="$CLASSPATH:$datanucleus_jars"
 fi
 
 # Add test classes if we're running from SBT or Maven with SPARK_TESTING set to 1
