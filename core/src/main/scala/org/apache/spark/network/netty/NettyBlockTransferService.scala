@@ -18,6 +18,7 @@
 package org.apache.spark.network.netty
 
 import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.concurrent.{Future, Promise}
 
 import org.apache.spark.{SecurityManager, SparkConf}
@@ -27,10 +28,12 @@ import org.apache.spark.network.client.{TransportClientBootstrap, RpcResponseCal
 import org.apache.spark.network.sasl.{SaslRpcHandler, SaslClientBootstrap}
 import org.apache.spark.network.server._
 import org.apache.spark.network.shuffle.{RetryingBlockFetcher, BlockFetchingListener, OneForOneBlockFetcher}
-import org.apache.spark.network.shuffle.protocol.UploadBlock
+import org.apache.spark.network.shuffle.protocol.{UploadPartialBlock, UploadBlock}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.util.Utils
+
+import scala.util.{Failure, Success}
 
 /**
  * A BlockTransferService that uses Netty to fetch a set of blocks at at time.
@@ -106,40 +109,57 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
       blockId: BlockId,
       blockData: ManagedBuffer,
       level: StorageLevel): Future[Unit] = {
-    val result = Promise[Unit]()
     val client = clientFactory.createClient(hostname, port)
 
     // StorageLevel is serialized as bytes using our JavaSerializer. Everything else is encoded
     // using our binary protocol.
     val levelBytes = serializer.newInstance().serialize(level).array()
 
-    // Convert or copy nio buffer into array in order to serialize it.
-    val nioBuffer = blockData.nioByteBuffer()
-    val array = if (nioBuffer.hasArray) {
-      nioBuffer.array()
-    } else {
-      val data = new Array[Byte](nioBuffer.remaining())
-      nioBuffer.get(data)
-      data
+    val largeByteBuffer = blockData.nioByteBuffer()
+    val bufferParts = largeByteBuffer.nioBuffers().asScala
+    val chunkOffsets: Seq[Long] = bufferParts.scanLeft(0L){
+      case(offset, buf) => offset + buf.limit()}
+
+    import scala.concurrent.ExecutionContext.Implicits.global
+    bufferParts.zipWithIndex.foldLeft(Future.successful(())){case (prevFuture,(buf,idx)) =>
+      prevFuture.flatMap{_ =>
+        // Convert or copy nio buffer into array in order to serialize it.
+        val partialBlockArray = if (buf.hasArray) {
+          buf.array()
+        } else {
+          val arr = new Array[Byte](buf.limit())
+          buf.get(arr)
+          arr
+        }
+        // Note: one major shortcoming of this is that it expects the incoming LargeByteBuffer to
+        // already be reasonably chunked -- in particular, the chunks cannot get too close to 2GB
+        // or else we'll still run into problems b/c there is some more overhead in the transfer
+        val msg = new UploadPartialBlock(appId, execId, blockId.toString, bufferParts.size, idx,
+          chunkOffsets(idx), levelBytes, partialBlockArray)
+
+        val result = Promise[Unit]()
+        client.sendRpc(msg.toByteArray,
+          new RpcResponseCallback {
+            override def onSuccess(response: Array[Byte]): Unit = {
+              logTrace(s"Successfully uploaded partial block $blockId," +
+                s" part $idx (out of ${bufferParts.size})")
+              result.success()
+            }
+
+            override def onFailure(e: Throwable): Unit = {
+              logError(s"Error while uploading partial block $blockId," +
+                s" part $idx (out of ${bufferParts.size})", e)
+              result.failure(e)
+            }
+          })
+        result.future
+      }
     }
-
-    client.sendRpc(new UploadBlock(appId, execId, blockId.toString, levelBytes, array).toByteArray,
-      new RpcResponseCallback {
-        override def onSuccess(response: Array[Byte]): Unit = {
-          logTrace(s"Successfully uploaded block $blockId")
-          result.success()
-        }
-        override def onFailure(e: Throwable): Unit = {
-          logError(s"Error while uploading block $blockId", e)
-          result.failure(e)
-        }
-      })
-
-    result.future
   }
 
   override def close(): Unit = {
     server.close()
     clientFactory.close()
+    transportContext.close()
   }
 }

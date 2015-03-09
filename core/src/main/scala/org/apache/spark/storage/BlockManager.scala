@@ -17,10 +17,11 @@
 
 package org.apache.spark.storage
 
-import java.io.{BufferedOutputStream, ByteArrayOutputStream, File, InputStream, OutputStream}
+import java.io.{BufferedOutputStream, File, InputStream, OutputStream}
 import java.nio.{ByteBuffer, MappedByteBuffer}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.JavaConverters._
 import scala.concurrent.{Await, Future}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
@@ -33,7 +34,7 @@ import org.apache.spark._
 import org.apache.spark.executor._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network._
-import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
+import org.apache.spark.network.buffer.{LargeByteBufferHelper, LargeByteBuffer, ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.ExternalShuffleClient
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
@@ -43,7 +44,7 @@ import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.util._
 
 private[spark] sealed trait BlockValues
-private[spark] case class ByteBufferValues(buffer: ByteBuffer) extends BlockValues
+private[spark] case class ByteBufferValues(buffer: LargeByteBuffer) extends BlockValues
 private[spark] case class IteratorValues(iterator: Iterator[Any]) extends BlockValues
 private[spark] case class ArrayValues(buffer: Array[Any]) extends BlockValues
 
@@ -304,7 +305,7 @@ private[spark] class BlockManager(
       shuffleManager.shuffleBlockManager.getBlockData(blockId.asInstanceOf[ShuffleBlockId])
     } else {
       val blockBytesOpt = doGetLocal(blockId, asBlockResult = false)
-        .asInstanceOf[Option[ByteBuffer]]
+        .asInstanceOf[Option[LargeByteBuffer]]
       if (blockBytesOpt.isDefined) {
         val buffer = blockBytesOpt.get
         new NioManagedBuffer(buffer)
@@ -434,7 +435,7 @@ private[spark] class BlockManager(
   /**
    * Get block from the local block manager as serialized bytes.
    */
-  def getLocalBytes(blockId: BlockId): Option[ByteBuffer] = {
+  def getLocalBytes(blockId: BlockId): Option[LargeByteBuffer] = {
     logDebug(s"Getting local block $blockId as bytes")
     // As an optimization for map output fetches, if the block is for a shuffle, return it
     // without acquiring a lock; the disk store never deletes (recent) items so this should work
@@ -448,7 +449,7 @@ private[spark] class BlockManager(
             blockId, s"Block $blockId not found on disk, though it should be")
       }
     } else {
-      doGetLocal(blockId, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
+      doGetLocal(blockId, asBlockResult = false).asInstanceOf[Option[LargeByteBuffer]]
     }
   }
 
@@ -513,7 +514,7 @@ private[spark] class BlockManager(
         // Look for block on disk, potentially storing it back in memory if required
         if (level.useDisk) {
           logDebug(s"Getting block $blockId from disk")
-          val bytes: ByteBuffer = diskStore.getBytes(blockId) match {
+          val bytes: LargeByteBuffer = diskStore.getBytes(blockId) match {
             case Some(b) => b
             case None =>
               throw new BlockException(
@@ -535,10 +536,10 @@ private[spark] class BlockManager(
               /* We'll store the bytes in memory if the block's storage level includes
                * "memory serialized", or if it should be cached as objects in memory
                * but we only requested its serialized bytes. */
-              val copyForMemory = ByteBuffer.allocate(bytes.limit)
+              val copyForMemory = LargeByteBufferHelper.allocate(bytes.limit)
               copyForMemory.put(bytes)
               memoryStore.putBytes(blockId, copyForMemory, level)
-              bytes.rewind()
+              bytes.position(0L)
             }
             if (!asBlockResult) {
               return Some(bytes)
@@ -581,9 +582,9 @@ private[spark] class BlockManager(
   /**
    * Get block from remote block managers as serialized bytes.
    */
-  def getRemoteBytes(blockId: BlockId): Option[ByteBuffer] = {
+  def getRemoteBytes(blockId: BlockId): Option[LargeByteBuffer] = {
     logDebug(s"Getting remote block $blockId as bytes")
-    doGetRemote(blockId, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
+    doGetRemote(blockId, asBlockResult = false).asInstanceOf[Option[LargeByteBuffer]]
   }
 
   private def doGetRemote(blockId: BlockId, asBlockResult: Boolean): Option[Any] = {
@@ -591,7 +592,8 @@ private[spark] class BlockManager(
     val locations = Random.shuffle(master.getLocations(blockId))
     for (loc <- locations) {
       logDebug(s"Getting remote block $blockId from $loc")
-      val data = blockTransferService.fetchBlockSync(
+      // the fetch will always be one byte buffer till we fix SPARK-5928
+      val data: LargeByteBuffer = blockTransferService.fetchBlockSync(
         loc.host, loc.port, loc.executorId, blockId.toString).nioByteBuffer()
 
       if (data != null) {
@@ -674,7 +676,7 @@ private[spark] class BlockManager(
    */
   def putBytes(
       blockId: BlockId,
-      bytes: ByteBuffer,
+      bytes: LargeByteBuffer,
       level: StorageLevel,
       tellMaster: Boolean = true,
       effectiveStorageLevel: Option[StorageLevel] = None): Seq[(BlockId, BlockStatus)] = {
@@ -736,7 +738,7 @@ private[spark] class BlockManager(
     var valuesAfterPut: Iterator[Any] = null
 
     // Ditto for the bytes after the put
-    var bytesAfterPut: ByteBuffer = null
+    var bytesAfterPut: LargeByteBuffer = null
 
     // Size of the block in bytes
     var size = 0L
@@ -787,7 +789,7 @@ private[spark] class BlockManager(
           case ArrayValues(array) =>
             blockStore.putArray(blockId, array, putLevel, returnValues)
           case ByteBufferValues(bytes) =>
-            bytes.rewind()
+            bytes.position(0L)
             blockStore.putBytes(blockId, bytes, putLevel)
         }
         size = result.size
@@ -884,7 +886,7 @@ private[spark] class BlockManager(
    * Replicate block to another node. Not that this is a blocking call that returns after
    * the block has been replicated.
    */
-  private def replicate(blockId: BlockId, data: ByteBuffer, level: StorageLevel): Unit = {
+  private def replicate(blockId: BlockId, data: LargeByteBuffer, level: StorageLevel): Unit = {
     val maxReplicationFailures = conf.getInt("spark.storage.maxReplicationFailures", 1)
     val numPeersToReplicateTo = level.replication - 1
     val peersForReplication = new ArrayBuffer[BlockManagerId]
@@ -938,7 +940,7 @@ private[spark] class BlockManager(
         case Some(peer) =>
           try {
             val onePeerStartTime = System.currentTimeMillis
-            data.rewind()
+            data.position(0L)
             logTrace(s"Trying to replicate $blockId of ${data.limit()} bytes to $peer")
             blockTransferService.uploadBlockSync(
               peer.host, peer.port, peer.executorId, blockId, new NioManagedBuffer(data), tLevel)
@@ -999,7 +1001,7 @@ private[spark] class BlockManager(
    */
   def dropFromMemory(
       blockId: BlockId,
-      data: Either[Array[Any], ByteBuffer]): Option[BlockStatus] = {
+      data: Either[Array[Any], LargeByteBuffer]): Option[BlockStatus] = {
 
     logInfo(s"Dropping block $blockId from memory")
     val info = blockInfo.get(blockId).orNull
@@ -1180,10 +1182,10 @@ private[spark] class BlockManager(
   def dataSerialize(
       blockId: BlockId,
       values: Iterator[Any],
-      serializer: Serializer = defaultSerializer): ByteBuffer = {
-    val byteStream = new ByteArrayOutputStream(4096)
+      serializer: Serializer = defaultSerializer): LargeByteBuffer = {
+    val byteStream = new LargeByteBufferOutputStream()
     dataSerializeStream(blockId, byteStream, values, serializer)
-    ByteBuffer.wrap(byteStream.toByteArray)
+    byteStream.largeBuffer
   }
 
   /**
@@ -1192,10 +1194,10 @@ private[spark] class BlockManager(
    */
   def dataDeserialize(
       blockId: BlockId,
-      bytes: ByteBuffer,
+      bytes: LargeByteBuffer,
       serializer: Serializer = defaultSerializer): Iterator[Any] = {
-    bytes.rewind()
-    val stream = wrapForCompression(blockId, new ByteBufferInputStream(bytes, true))
+    bytes.position(0);
+    val stream = wrapForCompression(blockId, new LargeByteBufferInputStream(bytes, true))
     serializer.newInstance().deserializeStream(stream).asIterator
   }
 
@@ -1242,6 +1244,12 @@ private[spark] object BlockManager extends Logging {
       if (buffer.asInstanceOf[DirectBuffer].cleaner() != null) {
         buffer.asInstanceOf[DirectBuffer].cleaner().clean()
       }
+    }
+  }
+
+  def dispose(buffer: LargeByteBuffer): Unit = {
+    if (buffer != null) {
+      buffer.nioBuffers().asScala.foreach { buf => dispose(buf)}
     }
   }
 

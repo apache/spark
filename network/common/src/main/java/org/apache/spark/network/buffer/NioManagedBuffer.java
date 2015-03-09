@@ -29,9 +29,9 @@ import io.netty.buffer.Unpooled;
  * A {@link ManagedBuffer} backed by {@link ByteBuffer}.
  */
 public final class NioManagedBuffer extends ManagedBuffer {
-  private final ByteBuffer buf;
+  private final LargeByteBuffer buf;
 
-  public NioManagedBuffer(ByteBuffer buf) {
+  public NioManagedBuffer(LargeByteBuffer buf) {
     this.buf = buf;
   }
 
@@ -41,13 +41,13 @@ public final class NioManagedBuffer extends ManagedBuffer {
   }
 
   @Override
-  public ByteBuffer nioByteBuffer() throws IOException {
+  public LargeByteBuffer nioByteBuffer() throws IOException {
     return buf.duplicate();
   }
 
   @Override
   public InputStream createInputStream() throws IOException {
-    return new ByteBufInputStream(Unpooled.wrappedBuffer(buf));
+    return new ByteBufInputStream(Unpooled.wrappedBuffer(buf.firstByteBuffer()));
   }
 
   @Override
@@ -62,7 +62,8 @@ public final class NioManagedBuffer extends ManagedBuffer {
 
   @Override
   public Object convertToNetty() throws IOException {
-    return Unpooled.wrappedBuffer(buf);
+    //TODO can we do anything sensible here when we're over 2gb?
+    return Unpooled.wrappedBuffer(buf.firstByteBuffer());
   }
 
   @Override

@@ -21,6 +21,7 @@ import java.io.IOException
 import java.nio.ByteBuffer
 
 import com.google.common.io.ByteStreams
+import org.apache.spark.network.buffer.{LargeByteBufferHelper, LargeByteBuffer}
 import tachyon.client.{ReadType, WriteType}
 
 import org.apache.spark.Logging
@@ -40,7 +41,10 @@ private[spark] class TachyonStore(
     tachyonManager.getFile(blockId.name).length
   }
 
-  override def putBytes(blockId: BlockId, bytes: ByteBuffer, level: StorageLevel): PutResult = {
+  override def putBytes(
+      blockId: BlockId,
+      bytes: LargeByteBuffer,
+      level: StorageLevel): PutResult = {
     putIntoTachyonStore(blockId, bytes, returnValues = true)
   }
 
@@ -64,17 +68,18 @@ private[spark] class TachyonStore(
 
   private def putIntoTachyonStore(
       blockId: BlockId,
-      bytes: ByteBuffer,
+      bytes: LargeByteBuffer,
       returnValues: Boolean): PutResult = {
     // So that we do not modify the input offsets !
     // duplicate does not copy buffer, so inexpensive
     val byteBuffer = bytes.duplicate()
-    byteBuffer.rewind()
+    byteBuffer.position(0L)
     logDebug(s"Attempting to put block $blockId into Tachyon")
     val startTime = System.currentTimeMillis
     val file = tachyonManager.getFile(blockId)
     val os = file.getOutStream(WriteType.TRY_CACHE)
-    os.write(byteBuffer.array())
+    // XXX not sure about the right fix for blocks over 2gb
+    os.write(byteBuffer.firstByteBuffer().array)
     os.close()
     val finishTime = System.currentTimeMillis
     logDebug("Block %s stored as %s file in Tachyon in %d ms".format(
@@ -100,7 +105,7 @@ private[spark] class TachyonStore(
     getBytes(blockId).map(buffer => blockManager.dataDeserialize(blockId, buffer))
   }
 
-  override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
+  override def getBytes(blockId: BlockId): Option[LargeByteBuffer] = {
     val file = tachyonManager.getFile(blockId)
     if (file == null || file.getLocationHosts.size == 0) {
       return None
@@ -109,9 +114,10 @@ private[spark] class TachyonStore(
     assert (is != null)
     try {
       val size = file.length
+      // XXX also broken here for > 2gb
       val bs = new Array[Byte](size.asInstanceOf[Int])
       ByteStreams.readFully(is, bs)
-      Some(ByteBuffer.wrap(bs))
+      Some(LargeByteBufferHelper.asLargeByteBuffer(bs))
     } catch {
       case ioe: IOException =>
         logWarning(s"Failed to fetch the block $blockId from Tachyon", ioe)

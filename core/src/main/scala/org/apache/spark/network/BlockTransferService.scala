@@ -18,15 +18,14 @@
 package org.apache.spark.network
 
 import java.io.Closeable
-import java.nio.ByteBuffer
 
 import scala.concurrent.{Promise, Await, Future}
 import scala.concurrent.duration.Duration
 
 import org.apache.spark.Logging
-import org.apache.spark.network.buffer.{NioManagedBuffer, ManagedBuffer}
+import org.apache.spark.network.buffer.{LargeByteBufferHelper, NioManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle.{ShuffleClient, BlockFetchingListener}
-import org.apache.spark.storage.{BlockManagerId, BlockId, StorageLevel}
+import org.apache.spark.storage.{BlockId, StorageLevel}
 
 private[spark]
 abstract class BlockTransferService extends ShuffleClient with Closeable with Logging {
@@ -92,9 +91,9 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
           result.failure(exception)
         }
         override def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit = {
-          val ret = ByteBuffer.allocate(data.size.toInt)
+          val ret = LargeByteBufferHelper.allocate(data.size)
           ret.put(data.nioByteBuffer())
-          ret.flip()
+          ret.position(0L)
           result.success(new NioManagedBuffer(ret))
         }
       })

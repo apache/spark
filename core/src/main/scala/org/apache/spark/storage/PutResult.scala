@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.nio.ByteBuffer
+import org.apache.spark.network.buffer.LargeByteBuffer
 
 /**
  * Result of adding a block into a BlockStore. This case class contains a few things:
@@ -28,5 +28,5 @@ import java.nio.ByteBuffer
  */
 private[spark] case class PutResult(
     size: Long,
-    data: Either[Iterator[_], ByteBuffer],
+    data: Either[Iterator[_], LargeByteBuffer],
     droppedBlocks: Seq[(BlockId, BlockStatus)] = Seq.empty)

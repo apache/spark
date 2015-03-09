@@ -15,22 +15,38 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle
+package org.apache.spark.util
 
-import org.apache.spark.network.buffer.{LargeByteBuffer, ManagedBuffer}
-import org.apache.spark.storage.ShuffleBlockId
+import java.io.OutputStream
+import java.nio.ByteBuffer
+
+import org.apache.spark.network.buffer.{WrappedLargeByteBuffer, LargeByteBuffer}
+import org.apache.spark.util.io.ByteArrayChunkOutputStream
 
 private[spark]
-trait ShuffleBlockManager {
-  type ShuffleId = Int
+class LargeByteBufferOutputStream(chunkSize: Int = 65536)
+  extends OutputStream {
 
-  /**
-   * Get shuffle block data managed by the local ShuffleBlockManager.
-   * @return Some(ByteBuffer) if block found, otherwise None.
-   */
-  def getBytes(blockId: ShuffleBlockId): Option[LargeByteBuffer]
+  val output = new ByteArrayChunkOutputStream(chunkSize)
 
-  def getBlockData(blockId: ShuffleBlockId): ManagedBuffer
+  private var _pos = 0
 
-  def stop(): Unit
+  override def write(b: Int): Unit = {
+    output.write(b)
+  }
+
+  override def write(bytes: Array[Byte], offs: Int, len: Int): Unit = {
+    output.write(bytes, offs, len)
+    _pos += len
+  }
+
+  def pos: Int = _pos
+
+  def largeBuffer: LargeByteBuffer = {
+    new WrappedLargeByteBuffer(output.toArrays.map{ByteBuffer.wrap})
+  }
+
+  override def close(): Unit = {
+    output.close()
+  }
 }

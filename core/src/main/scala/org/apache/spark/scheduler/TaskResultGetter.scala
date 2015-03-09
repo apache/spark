@@ -20,6 +20,8 @@ package org.apache.spark.scheduler
 import java.nio.ByteBuffer
 import java.util.concurrent.RejectedExecutionException
 
+import org.apache.spark.network.buffer.WrappedLargeByteBuffer
+
 import scala.language.existentials
 import scala.util.control.NonFatal
 
@@ -72,8 +74,10 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
                   taskSetManager, tid, TaskState.FINISHED, TaskResultLost)
                 return
               }
+              // Just blindly assume there is only one byte buffer here, b/c we expect
+              // task results to be small.
               val deserializedResult = serializer.get().deserialize[DirectTaskResult[_]](
-                serializedTaskResult.get)
+                serializedTaskResult.get.firstByteBuffer())
               sparkEnv.blockManager.master.removeBlock(blockId)
               (deserializedResult, size)
           }

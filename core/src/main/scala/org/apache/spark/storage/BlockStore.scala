@@ -17,18 +17,15 @@
 
 package org.apache.spark.storage
 
-import java.nio.ByteBuffer
-
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.Logging
+import org.apache.spark.network.buffer.LargeByteBuffer
 
 /**
  * Abstract class to store blocks.
  */
 private[spark] abstract class BlockStore(val blockManager: BlockManager) extends Logging {
 
-  def putBytes(blockId: BlockId, bytes: ByteBuffer, level: StorageLevel): PutResult
+  def putBytes(blockId: BlockId, bytes: LargeByteBuffer, level: StorageLevel) : PutResult
 
   /**
    * Put in a block and, possibly, also return its content as either bytes or another Iterator.
@@ -54,7 +51,7 @@ private[spark] abstract class BlockStore(val blockManager: BlockManager) extends
    */
   def getSize(blockId: BlockId): Long
 
-  def getBytes(blockId: BlockId): Option[ByteBuffer]
+  def getBytes(blockId: BlockId): Option[LargeByteBuffer]
 
   def getValues(blockId: BlockId): Option[Iterator[Any]]
 

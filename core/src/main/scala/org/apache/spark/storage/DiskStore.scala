@@ -22,6 +22,7 @@ import java.nio.ByteBuffer
 import java.nio.channels.FileChannel.MapMode
 
 import org.apache.spark.Logging
+import org.apache.spark.network.buffer.{LargeByteBufferHelper, LargeByteBuffer}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.Utils
 
@@ -38,17 +39,19 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     diskManager.getFile(blockId.name).length
   }
 
-  override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): PutResult = {
+  override def putBytes(
+      blockId: BlockId,
+      _bytes: LargeByteBuffer,
+      level: StorageLevel): PutResult = {
     // So that we do not modify the input offsets !
     // duplicate does not copy buffer, so inexpensive
     val bytes = _bytes.duplicate()
     logDebug(s"Attempting to put block $blockId")
     val startTime = System.currentTimeMillis
     val file = diskManager.getFile(blockId)
+    logTrace(s"Block $blockId will be written to $file")
     val channel = new FileOutputStream(file).getChannel
-    while (bytes.remaining > 0) {
-      channel.write(bytes)
-    }
+    bytes.writeTo(channel)
     channel.close()
     val finishTime = System.currentTimeMillis
     logDebug("Block %s stored as %s file on disk in %d ms".format(
@@ -73,6 +76,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     logDebug(s"Attempting to write values for block $blockId")
     val startTime = System.currentTimeMillis
     val file = diskManager.getFile(blockId)
+    logTrace(s"Block $blockId will be written to $file")
     val outputStream = new FileOutputStream(file)
     try {
       try {
@@ -104,7 +108,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     }
   }
 
-  private def getBytes(file: File, offset: Long, length: Long): Option[ByteBuffer] = {
+  private def getBytes(file: File, offset: Long, length: Long): Option[LargeByteBuffer] = {
     val channel = new RandomAccessFile(file, "r").getChannel
 
     try {
@@ -119,21 +123,22 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
           }
         }
         buf.flip()
-        Some(buf)
+        Some(LargeByteBufferHelper.asLargeByteBuffer(buf))
       } else {
-        Some(channel.map(MapMode.READ_ONLY, offset, length))
+        logTrace(s"mapping file: $file:$offset+$length")
+        Some(LargeByteBufferHelper.mapFile(channel, MapMode.READ_ONLY, offset, length))
       }
     } finally {
       channel.close()
     }
   }
 
-  override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
+  override def getBytes(blockId: BlockId): Option[LargeByteBuffer] = {
     val file = diskManager.getFile(blockId.name)
     getBytes(file, 0, file.length)
   }
 
-  def getBytes(segment: FileSegment): Option[ByteBuffer] = {
+  def getBytes(segment: FileSegment): Option[LargeByteBuffer] = {
     getBytes(segment.file, segment.offset, segment.length)
   }
 

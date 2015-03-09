@@ -20,6 +20,7 @@ package org.apache.spark.network.shuffle;
 import java.nio.ByteBuffer;
 import java.util.Iterator;
 
+import org.apache.spark.network.buffer.LargeByteBufferHelper;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -73,8 +74,8 @@ public class ExternalShuffleBlockHandlerSuite {
   public void testOpenShuffleBlocks() {
     RpcResponseCallback callback = mock(RpcResponseCallback.class);
 
-    ManagedBuffer block0Marker = new NioManagedBuffer(ByteBuffer.wrap(new byte[3]));
-    ManagedBuffer block1Marker = new NioManagedBuffer(ByteBuffer.wrap(new byte[7]));
+    ManagedBuffer block0Marker = new NioManagedBuffer(LargeByteBufferHelper.asLargeByteBuffer(new byte[3]));
+    ManagedBuffer block1Marker = new NioManagedBuffer(LargeByteBufferHelper.asLargeByteBuffer(new byte[7]));
     when(blockManager.getBlockData("app0", "exec1", "b0")).thenReturn(block0Marker);
     when(blockManager.getBlockData("app0", "exec1", "b1")).thenReturn(block1Marker);
     byte[] openBlocks = new OpenBlocks("app0", "exec1", new String[] { "b0", "b1" }).toByteArray();

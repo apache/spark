@@ -18,7 +18,6 @@
 package org.apache.spark.shuffle
 
 import java.io.File
-import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -26,7 +25,7 @@ import scala.collection.JavaConversions._
 
 import org.apache.spark.{Logging, SparkConf, SparkEnv}
 import org.apache.spark.executor.ShuffleWriteMetrics
-import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
+import org.apache.spark.network.buffer.{LargeByteBuffer, FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.FileShuffleBlockManager.ShuffleFileGroup
@@ -171,7 +170,7 @@ class FileShuffleBlockManager(conf: SparkConf)
     }
   }
 
-  override def getBytes(blockId: ShuffleBlockId): Option[ByteBuffer] = {
+  override def getBytes(blockId: ShuffleBlockId): Option[LargeByteBuffer] = {
     val segment = getBlockData(blockId)
     Some(segment.nioByteBuffer())
   }

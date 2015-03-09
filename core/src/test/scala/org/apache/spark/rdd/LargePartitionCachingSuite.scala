@@ -14,23 +14,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.rdd
 
-package org.apache.spark.shuffle
+import org.apache.spark.SharedSparkContext
+import org.apache.spark.storage.StorageLevel
+import org.scalatest.FunSuite
 
-import org.apache.spark.network.buffer.{LargeByteBuffer, ManagedBuffer}
-import org.apache.spark.storage.ShuffleBlockId
+class LargePartitionCachingSuite extends FunSuite with SharedSparkContext {
 
-private[spark]
-trait ShuffleBlockManager {
-  type ShuffleId = Int
+  def largePartitionRdd = sc.parallelize(1 to 1e6.toInt, 1).map{i => new Array[Byte](2.2e3.toInt)}
 
-  /**
-   * Get shuffle block data managed by the local ShuffleBlockManager.
-   * @return Some(ByteBuffer) if block found, otherwise None.
-   */
-  def getBytes(blockId: ShuffleBlockId): Option[LargeByteBuffer]
+  //just don't want to kill the test server
+  ignore("memory serialized cache large partitions") {
+    largePartitionRdd.persist(StorageLevel.MEMORY_ONLY_SER).count()
+  }
 
-  def getBlockData(blockId: ShuffleBlockId): ManagedBuffer
+  test("disk cache large partitions") {
+    largePartitionRdd.persist(StorageLevel.DISK_ONLY).count()
+  }
 
-  def stop(): Unit
+  test("disk cache large partitions with replications") {
+    pending
+  }
 }
