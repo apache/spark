@@ -319,6 +319,12 @@
       <artifactId>selenium-java</artifactId>
       <scope>test</scope>
     </dependency>
+    <!-- Added for selenium: -->
+    <dependency>
+      <groupId>xml-apis</groupId>
+      <artifactId>xml-apis</artifactId>
+      <scope>test</scope>
+    </dependency>
     <dependency>
       <groupId>org.mockito</groupId>
       <artifactId>mockito-all</artifactId>
