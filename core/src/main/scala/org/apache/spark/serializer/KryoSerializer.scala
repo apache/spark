@@ -158,7 +158,13 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends Serializ
 
   override def serialize[T: ClassTag](t: T): ByteBuffer = {
     output.clear()
-    kryo.writeClassAndObject(output, t)
+    try {
+      kryo.writeClassAndObject(output, t)
+    } catch {
+      case e: KryoException if e.getMessage.startsWith("Buffer overflow") =>
+        throw new SparkException(s"Kryo serialization failed: ${e.getMessage}. To avoid this, " +
+          "increase spark.kryoserializer.buffer.max.mb value.")
+    }
     ByteBuffer.wrap(output.toBytes)
   }
 
