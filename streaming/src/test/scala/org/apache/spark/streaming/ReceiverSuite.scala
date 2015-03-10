@@ -142,7 +142,7 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
 
       new Thread("Receiver Task") {
         override def run(): Unit = {
-          task.run(0)
+          task.run(0, 0)
         }
       }.start()
       Thread.sleep(2000)
