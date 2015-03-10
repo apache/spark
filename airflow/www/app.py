@@ -1314,9 +1314,10 @@ class ChartModelView(LoginMixin, ModelView):
         'sql',
         'default_params',)
     column_list = (
-        'label', 'conn_id', 'chart_type', 'owner',
+        'label', 'conn_id', 'chart_type', 'owner', 'last_modified',
         'show_datatable', 'show_sql',)
     column_formatters = dict(label=label_link)
+    column_default_sort = ('last_modified', True)
     create_template = 'airflow/chart/create.html'
     edit_template = 'airflow/chart/edit.html'
     column_filters = ('label', 'owner.username', 'conn_id')
@@ -1386,6 +1387,7 @@ class ChartModelView(LoginMixin, ModelView):
             model.iteration_no += 1
         if AUTHENTICATE and not model.user_id and flask_login.current_user:
             model.user_id = flask_login.current_user.id
+        model.last_modified = datetime.now()
 
 mv = ChartModelView(
     models.Chart, Session,

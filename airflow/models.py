@@ -1440,3 +1440,4 @@ class Chart(Base):
     x_is_date = Column(Boolean, default=True)
     db = relationship("Connection")
     iteration_no = Column(Integer, default=0)
+    last_modified = Column(DateTime, default=datetime.now())
