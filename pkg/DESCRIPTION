@@ -13,3 +13,17 @@ Suggests:
     testthat
 Description: R frontend for Spark
 License: Apache License (== 2.0)
+Collate:
+    'generics.R'
+    'jobj.R'
+    'RDD.R'
+    'pairRDD.R'
+    'broadcast.R'
+    'context.R'
+    'deserialize.R'
+    'serialize.R'
+    'sparkR.R'
+    'sparkRBackend.R'
+    'sparkRClient.R'
+    'utils.R'
+    'zzz.R'
