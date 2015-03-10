@@ -134,7 +134,13 @@ case class CreateTableAsSelect[T](
   override lazy val resolved = databaseName != None && childrenResolved
 }
 
-case class With(child: LogicalPlan, subQueries: Map[String, Subquery]) extends UnaryNode {
+/**
+ * @param child The final query of this CTE
+ * @param cteRelations Queries that this CTE defined,
+ *                     key is the alias of the CTE definition,
+ *                     value is the CTE definition.
+ */
+case class With(child: LogicalPlan, cteRelations: Map[String, Subquery]) extends UnaryNode {
   override def output = child.output
 }
 
