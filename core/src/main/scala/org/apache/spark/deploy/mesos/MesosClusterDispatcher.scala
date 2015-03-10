@@ -66,6 +66,8 @@ object MesosClusterDispatcher {
   def main(args: Array[String]) {
     val conf = new SparkConf
     val dispatcherArgs = new ClusterDispatcherArguments(args, conf)
+    conf.setMaster(dispatcherArgs.masterUrl)
+    conf.setAppName("Mesos Cluster Dispatcher")
     val scheduler = new MesosClusterScheduler(conf)
     scheduler.start()
     new MesosClusterDispatcher(
@@ -74,6 +76,10 @@ object MesosClusterDispatcher {
       dispatcherArgs.webUiPort,
       conf,
       scheduler).start()
+    this.synchronized {
+      // block indefinitely
+      this.wait() // TODO: bad
+    }
   }
 
   class ClusterDispatcherArguments(args: Array[String], conf: SparkConf) {
@@ -103,7 +109,7 @@ object MesosClusterDispatcher {
           System.err.println("Cluster dispatcher only supports mesos (uri begins with mesos://)")
           System.exit(1)
         }
-        masterUrl = value
+        masterUrl = value.stripPrefix("mesos://")
         parse(tail)
 
       case ("--help") :: tail =>

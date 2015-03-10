@@ -55,7 +55,7 @@ class DriverOutputPage(parent: MesosClusterUI) extends WebUIPage("") {
     <tr>
       <td>{submission.submissionId}</td>
       <td>{submission.submitDate}</td>
-      <td>{submission.desc.command.mainClass}</td>
+      <td>{submission.req.desc.command.mainClass}</td>
     </tr>
   }
 
@@ -63,7 +63,7 @@ class DriverOutputPage(parent: MesosClusterUI) extends WebUIPage("") {
     <tr>
       <td>{state.submission.submissionId}</td>
       <td>{state.submission.submitDate}</td>
-      <td>{state.submission.desc.command.mainClass}</td>
+      <td>{state.submission.req.desc.command.mainClass}</td>
       <td>{state.startDate}</td>
       <td>{state.slaveId}</td>
       <td>{state.taskId}</td>

@@ -18,30 +18,28 @@
 package org.apache.spark.scheduler.cluster.mesos
 
 import java.text.SimpleDateFormat
-
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 import java.util.{List => JList}
 import java.util.{Collections, Date}
-
 import org.apache.mesos.{SchedulerDriver, Scheduler}
 import org.apache.mesos.Protos._
-
 import org.apache.spark.deploy.DriverDescription
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.master.DriverState.DriverState
-
 import org.apache.spark.SparkConf
 import org.apache.spark.util.Utils
-
 import scala.collection.mutable
 import scala.collection.JavaConversions._
 import org.apache.mesos.Protos.Environment.Variable
+import org.apache.spark.SparkException
+import java.io.File
 
+case class DriverRequest(desc: DriverDescription, conf: SparkConf)
 
 private[spark] class DriverSubmission(
     val submissionId: String,
-    val desc: DriverDescription,
+    val req: DriverRequest,
     val submitDate: Date) {
 
   def canEqual(other: Any): Boolean = other.isInstanceOf[DriverSubmission]
@@ -76,7 +74,7 @@ private[spark] case class ClusterSchedulerState(
     finishedDrivers: Iterable[ClusterTaskState])
 
 private[spark] trait ClusterScheduler {
-  def submitDriver(desc: DriverDescription): SubmitResponse
+  def submitDriver(desc: DriverRequest): SubmitResponse
   def killDriver(submissionId: String): KillResponse
   def getStatus(submissionId: String): StatusResponse
   def getState(): ClusterSchedulerState
@@ -88,7 +86,6 @@ private[spark] class MesosClusterScheduler(conf: SparkConf)
   val master = conf.get("spark.master")
   val appName = conf.get("spark.app.name")
   val capacity = conf.getInt("spark.mesos.driver.capacity", 200)
-  val executorUri = conf.getOption("spark.executor.uri")
   val stateLock = new Object
   val launchedDrivers = new mutable.HashMap[String, ClusterTaskState]()
 
@@ -105,10 +102,10 @@ private[spark] class MesosClusterScheduler(conf: SparkConf)
         createDateFormat.format(submitDate), nextDriverNumber.incrementAndGet())
   }
 
-  def submitDriver(desc: DriverDescription): SubmitResponse = {
+  def submitDriver(req: DriverRequest): SubmitResponse = {
     val submitDate: Date = new Date()
     val submissionId: String = newDriverId(submitDate)
-    val submission = new DriverSubmission(submissionId, desc, submitDate)
+    val submission = new DriverSubmission(submissionId, req, submitDate)
     if (queue.offer(submission)) {
       SubmitResponse(submissionId, true, None)
     } else {
@@ -147,9 +144,16 @@ private[spark] class MesosClusterScheduler(conf: SparkConf)
     markRegistered()
   }
 
-  private def buildCommand(desc: DriverDescription): CommandInfo = {
+  private def buildCommand(req: DriverRequest): CommandInfo = {
+
+    val desc = req.desc
+
+    val cleanedJarUrl = desc.jarUrl.stripPrefix("file:")
+
+    logInfo(s"jarUrl: $cleanedJarUrl")
+
     val builder = CommandInfo.newBuilder()
-      .addUris(CommandInfo.URI.newBuilder().setValue(desc.jarUrl).build())
+      .addUris(CommandInfo.URI.newBuilder().setValue(cleanedJarUrl).build())
 
     val entries =
       (conf.getOption("spark.executor.extraLibraryPath").toList ++ desc.command.libraryPathEntries)
@@ -160,11 +164,7 @@ private[spark] class MesosClusterScheduler(conf: SparkConf)
       ""
     }
 
-    val stringBuilder = new StringBuilder
-    stringBuilder
-      .append(desc.command.mainClass)
-      .append(" ")
-      .append(desc.command.arguments.mkString("\"", "\"", "\""))
+    // TODO: add support for more spark-submit parameters
 
     val envBuilder = Environment.newBuilder()
     desc.command.environment.foreach {
@@ -175,14 +175,35 @@ private[spark] class MesosClusterScheduler(conf: SparkConf)
 
     builder.setEnvironment(envBuilder.build())
 
+    val executorUri = req.conf.getOption("spark.executor.uri")
     if (executorUri.isDefined) {
       builder.addUris(CommandInfo.URI.newBuilder().setValue(executorUri.get).build())
+
       val basename = executorUri.get.split('/').last.split('.').head
+      val cmd =
+        Seq("bin/spark-submit",
+            "--class", desc.command.mainClass,
+            "--master", s"mesos://${conf.get("spark.master")}",
+            s"../${desc.jarUrl.split("/").last}")
+            .mkString(" ")
+
       builder.setValue(
-        s"cd $basename*; $prefixEnv ${stringBuilder.toString()}")
+        s"cd $basename*; $prefixEnv $cmd")
     } else {
+      val executorSparkHome = req.conf.getOption("spark.mesos.executor.home")
+        .getOrElse {
+          throw new SparkException("Executor Spark home `spark.mesos.executor.home` is not set!")
+        }
+
+      val cmd =
+        Seq(new File(executorSparkHome, "./bin/spark-submit"),
+            "--class", desc.command.mainClass,
+            "--master", s"mesos://${conf.get("spark.master")}",
+            desc.jarUrl.split("/").last)
+            .mkString(" ")
+
       builder.setValue(
-        s"$prefixEnv ${stringBuilder.toString()}")
+        s"$prefixEnv $cmd")
     }
 
     builder.build
@@ -203,8 +224,8 @@ private[spark] class MesosClusterScheduler(conf: SparkConf)
 
     var remainingOffers = offers
 
-    val driverCpu = submission.desc.cores
-    val driverMem = submission.desc.mem
+    val driverCpu = submission.req.desc.cores
+    val driverMem = submission.req.desc.mem
 
     // Should use the passed in driver cpu and memory.
     val offerOption = offers.find { o =>
@@ -216,15 +237,18 @@ private[spark] class MesosClusterScheduler(conf: SparkConf)
       val taskId = TaskID.newBuilder().setValue(submission.submissionId).build()
 
       val cpuResource = Resource.newBuilder()
-        .setName("cpus").setScalar(Value.Scalar.newBuilder().setValue(driverCpu)).build()
+        .setName("cpus").setType(Value.Type.SCALAR)
+        .setScalar(Value.Scalar.newBuilder().setValue(driverCpu)).build()
 
       val memResource = Resource.newBuilder()
-        .setName("mem").setScalar(Value.Scalar.newBuilder().setValue(driverMem)).build()
+        .setName("mem").setType(Value.Type.SCALAR)
+        .setScalar(Value.Scalar.newBuilder().setValue(driverMem)).build()
 
-      val commandInfo = buildCommand(submission.desc)
+      val commandInfo = buildCommand(submission.req)
 
       val taskInfo = TaskInfo.newBuilder()
         .setTaskId(taskId)
+        .setName(s"driver for ${submission.req.desc.command.mainClass}")
         .setSlaveId(offer.getSlaveId)
         .setCommand(commandInfo)
         .addResources(cpuResource)

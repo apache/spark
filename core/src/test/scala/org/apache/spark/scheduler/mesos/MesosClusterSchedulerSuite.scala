@@ -21,6 +21,7 @@ import org.scalatest.FunSuite
 import org.apache.spark.{SparkConf, LocalSparkContext}
 import org.scalatest.mock.MockitoSugar
 import org.apache.spark.scheduler.cluster.mesos.MesosClusterScheduler
+import org.apache.spark.scheduler.cluster.mesos.DriverRequest
 import org.apache.spark.deploy.{Command, DriverDescription}
 
 class MesosClusterSchedulerSuite extends FunSuite with LocalSparkContext with MockitoSugar {
@@ -35,11 +36,11 @@ class MesosClusterSchedulerSuite extends FunSuite with LocalSparkContext with Mo
     conf.setAppName("spark mesos")
     val scheduler = new MesosClusterScheduler(conf)
     val response =
-      scheduler.submitDriver(new DriverDescription("jar", 1000, 1, true, createCommand))
+      scheduler.submitDriver(DriverRequest(new DriverDescription("jar", 1000, 1, true, createCommand), new SparkConf))
     assert(response.success)
 
     val response2 =
-      scheduler.submitDriver(new DriverDescription("jar", 1000, 1, true, createCommand))
+      scheduler.submitDriver(DriverRequest(new DriverDescription("jar", 1000, 1, true, createCommand), new SparkConf))
     assert(response2.success)
 
     val state = scheduler.getState()
@@ -53,7 +54,7 @@ class MesosClusterSchedulerSuite extends FunSuite with LocalSparkContext with Mo
     conf.setAppName("spark mesos")
     val scheduler = new MesosClusterScheduler(conf)
     val response =
-      scheduler.submitDriver(new DriverDescription("jar", 1000, 1, true, createCommand))
+      scheduler.submitDriver(DriverRequest(new DriverDescription("jar", 1000, 1, true, createCommand), new SparkConf))
     assert(response.success)
 
     val killResponse = scheduler.killDriver(response.id)

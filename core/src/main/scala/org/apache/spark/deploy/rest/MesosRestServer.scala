@@ -23,10 +23,10 @@ import javax.servlet.http.HttpServletResponse
 import org.apache.spark.deploy.DriverDescription
 import org.apache.spark.deploy.ClientArguments._
 import org.apache.spark.deploy.Command
-
 import org.apache.spark.{SparkConf, SPARK_VERSION => sparkVersion}
 import org.apache.spark.util.Utils
 import org.apache.spark.scheduler.cluster.mesos.ClusterScheduler
+import org.apache.spark.scheduler.cluster.mesos.DriverRequest
 
 /**
  * A server that responds to requests submitted by the [[RestClient]].
@@ -74,7 +74,7 @@ class MesosSubmitRequestServlet(
    * This does not currently consider fields used by python applications since python
    * is not supported in mesos cluster mode yet.
    */
-  private def buildDriverDescription(request: CreateSubmissionRequest): DriverDescription = {
+  private def buildDriverRequest(request: CreateSubmissionRequest): DriverRequest = {
     // Required fields, including the main class because python is not yet supported
     val appResource = Option(request.appResource).getOrElse {
       throw new SubmitRestMissingFieldException("Application jar is missing.")
@@ -109,8 +109,9 @@ class MesosSubmitRequestServlet(
     val actualDriverMemory = driverMemory.map(Utils.memoryStringToMb).getOrElse(DEFAULT_MEMORY)
     val actualDriverCores = driverCores.map(_.toInt).getOrElse(DEFAULT_CORES)
 
-    new DriverDescription(
-      appResource, actualDriverMemory, actualDriverCores, actualSuperviseDriver, command)
+    DriverRequest(new DriverDescription(
+      appResource, actualDriverMemory, actualDriverCores, actualSuperviseDriver, command),
+      conf)
   }
 
   protected override def handleSubmit(
@@ -119,7 +120,7 @@ class MesosSubmitRequestServlet(
       responseServlet: HttpServletResponse): SubmitRestProtocolResponse = {
     requestMessage match {
       case submitRequest: CreateSubmissionRequest =>
-        val driverDescription = buildDriverDescription(submitRequest)
+        val driverDescription = buildDriverRequest(submitRequest)
         val response = scheduler.submitDriver(driverDescription)
         val submitResponse = new CreateSubmissionResponse
         submitResponse.serverSparkVersion = sparkVersion
