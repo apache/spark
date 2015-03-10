@@ -18,7 +18,7 @@ package org.apache.spark.deploy.history
 
 import java.io.{IOException, FileInputStream, FileWriter, File}
 import java.net.{HttpURLConnection, URL}
-import javax.servlet.http.HttpServletResponse
+import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import org.apache.commons.io.{FileUtils, IOUtils}
 
@@ -154,7 +154,7 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     val ui = mock[SparkUI]
     val link = "/history/app1"
     val info = new ApplicationHistoryInfo("app1", "app1", 0, 2, 1, "xxx", true)
-    when(historyServer.getApplicationList()).thenReturn(Seq(info))
+    when(historyServer.getApplicationList(true)).thenReturn(Seq(info))
     when(ui.basePath).thenReturn(link)
     when(historyServer.getProviderConfig()).thenReturn(Map[String, String]())
     val page = new HistoryPage(historyServer)

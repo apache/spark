@@ -104,7 +104,7 @@ object AllStagesResource {
       inputRecords = 0, //fix after SPARK-4874
       outputBytes = stageUiData.outputBytes,
       outputRecords = 0, //fix after SPARK-4874
-      shuffleReadBytes = stageUiData.shuffleReadBytes,
+      shuffleReadBytes = stageUiData.shuffleReadTotalBytes,
       shuffleReadRecords = 0, //fix after SPARK-4874
       shuffleWriteBytes = stageUiData.shuffleWriteBytes,
       shuffleWriteRecords = 0, //fix after SPARK-4874
