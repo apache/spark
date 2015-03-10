@@ -37,12 +37,13 @@ import org.apache.spark.api.java.function.Function;
 
 public class JavaKafkaRDDSuite implements Serializable {
   private transient JavaSparkContext sc = null;
-  private transient KafkaStreamSuiteBase suiteBase = null;
+  private transient KafkaTestUtils kafkaTestUtils = null;
 
   @Before
   public void setUp() {
-    suiteBase = new KafkaStreamSuiteBase() { };
-    suiteBase.setupKafka();
+    kafkaTestUtils = new KafkaTestUtils();
+    kafkaTestUtils.setupEmbeddedZookeeper();
+    kafkaTestUtils.setupEmbeddedKafkaServer();
     System.clearProperty("spark.driver.port");
     SparkConf sparkConf = new SparkConf()
       .setMaster("local[4]").setAppName(this.getClass().getSimpleName());
@@ -51,10 +52,16 @@ public class JavaKafkaRDDSuite implements Serializable {
 
   @After
   public void tearDown() {
-    sc.stop();
-    sc = null;
+    if (sc != null) {
+      sc.stop();
+      sc = null;
+    }
     System.clearProperty("spark.driver.port");
-    suiteBase.tearDownKafka();
+
+    if (kafkaTestUtils != null) {
+      kafkaTestUtils.tearDownEmbeddedServers();
+      kafkaTestUtils = null;
+    }
   }
 
   @Test
@@ -66,7 +73,7 @@ public class JavaKafkaRDDSuite implements Serializable {
     String[] topic2data = createTopicAndSendData(topic2);
 
     HashMap<String, String> kafkaParams = new HashMap<String, String>();
-    kafkaParams.put("metadata.broker.list", suiteBase.brokerAddress());
+    kafkaParams.put("metadata.broker.list", kafkaTestUtils.brokerAddress());
 
     OffsetRange[] offsetRanges = {
       OffsetRange.create(topic1, 0, 0, 1),
@@ -144,8 +151,8 @@ public class JavaKafkaRDDSuite implements Serializable {
 
   private  String[] createTopicAndSendData(String topic) {
     String[] data = { topic + "-1", topic + "-2", topic + "-3"};
-    suiteBase.createTopic(topic);
-    suiteBase.sendMessages(topic, data);
+    kafkaTestUtils.createTopic(topic);
+    kafkaTestUtils.sendMessages(topic, data);
     return data;
   }
 }

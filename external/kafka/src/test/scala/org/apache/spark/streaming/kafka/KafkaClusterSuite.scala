@@ -20,28 +20,36 @@ package org.apache.spark.streaming.kafka
 import scala.util.Random
 
 import kafka.common.TopicAndPartition
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.{FunSuite, BeforeAndAfterAll}
 
-class KafkaClusterSuite extends KafkaStreamSuiteBase with BeforeAndAfterAll {
+class KafkaClusterSuite extends FunSuite with BeforeAndAfterAll {
   val topic = "kcsuitetopic" + Random.nextInt(10000)
   val topicAndPartition = TopicAndPartition(topic, 0)
   var kc: KafkaCluster = null
 
+  var kafkaTestUtils: KafkaTestUtils = _
+
   override def beforeAll() {
-    setupKafka()
-    createTopic(topic)
-    sendMessages(topic, Map("a" -> 1))
-    kc = new KafkaCluster(Map("metadata.broker.list" -> s"$brokerAddress"))
+    kafkaTestUtils = new KafkaTestUtils
+    kafkaTestUtils.setupEmbeddedZookeeper()
+    kafkaTestUtils.setupEmbeddedKafkaServer()
+
+    kafkaTestUtils.createTopic(topic)
+    kafkaTestUtils.sendMessages(topic, Map("a" -> 1))
+    kc = new KafkaCluster(Map("metadata.broker.list" -> s"${kafkaTestUtils.brokerAddress}"))
   }
 
   override def afterAll() {
-    tearDownKafka()
+    if (kafkaTestUtils != null) {
+      kafkaTestUtils.tearDownEmbeddedServers()
+      kafkaTestUtils = null
+    }
   }
 
   test("metadata apis") {
     val leader = kc.findLeaders(Set(topicAndPartition)).right.get(topicAndPartition)
     val leaderAddress = s"${leader._1}:${leader._2}"
-    assert(leaderAddress === brokerAddress, "didn't get leader")
+    assert(leaderAddress === kafkaTestUtils.brokerAddress, "didn't get leader")
 
     val parts = kc.getPartitions(Set(topic)).right.get
     assert(parts(topicAndPartition), "didn't get partitions")

@@ -23,13 +23,16 @@ import unittest
 import tempfile
 import struct
 
+from py4j.java_collections import MapConverter
+
 from pyspark.context import SparkConf, SparkContext, RDD
 from pyspark.streaming.context import StreamingContext
+from pyspark.streaming.kafka import KafkaUtils
 
 
 class PySparkStreamingTestCase(unittest.TestCase):
 
-    timeout = 10  # seconds
+    timeout = 20  # seconds
     duration = 1
 
     def setUp(self):
@@ -555,6 +558,44 @@ class CheckpointTests(PySparkStreamingTestCase):
         ssc.start()
         check_output(3)
 
+
+class KafkaStreamTests(PySparkStreamingTestCase):
+
+    def setUp(self):
+        super(KafkaStreamTests, self).setUp()
+
+        kafkaTestUtilsClz = self.ssc._jvm.java.lang.Thread.currentThread().getContextClassLoader()\
+            .loadClass("org.apache.spark.streaming.kafka.KafkaTestUtils")
+        self._kafkaTestUtils = kafkaTestUtilsClz.newInstance()
+        self._kafkaTestUtils.setupEmbeddedZookeeper()
+        self._kafkaTestUtils.setupEmbeddedKafkaServer()
+
+    def tearDown(self):
+        if self._kafkaTestUtils is not None:
+            self._kafkaTestUtils.tearDownEmbeddedServers()
+            self._kafkaTestUtils = None
+
+        super(KafkaStreamTests, self).tearDown()
+
+    def test_kafka_stream(self):
+        """Test the Python Kafka stream API."""
+        topic = "topic1"
+        sendData = {"a": 3, "b": 5, "c": 10}
+        jSendData = MapConverter().convert(sendData,
+                                           self.ssc.sparkContext._gateway._gateway_client)
+
+        self._kafkaTestUtils.createTopic(topic)
+        self._kafkaTestUtils.sendMessages(topic, jSendData)
+
+        stream = KafkaUtils.createStream(self.ssc, self._kafkaTestUtils.zkAddress(),
+                                         "test-streaming-consumer", {topic: 1},
+                                         {"auto.offset.reset": "smallest"})
+
+        result = {}
+        for i in sum(self._collect(stream.map(lambda x: x[1]), 18), []):
+            result[i] = result.get(i, 0) + 1
+
+        self.assertEqual(sendData, result)
 
 if __name__ == "__main__":
     unittest.main()

@@ -27,6 +27,8 @@ cd "$FWDIR/python"
 FAILED=0
 LOG_FILE=unit-tests.log
 
+. "$FWDIR"/bin/load-spark-env.sh
+
 rm -f $LOG_FILE
 
 # Remove the metastore and warehouse directory created by the HiveContext tests in Spark SQL
@@ -35,7 +37,7 @@ rm -rf metastore warehouse
 function run_test() {
     echo "Running test: $1" | tee -a $LOG_FILE
 
-    SPARK_TESTING=1 time "$FWDIR"/bin/pyspark $1 > $LOG_FILE 2>&1
+    SPARK_TESTING=1 time "$FWDIR"/bin/pyspark $1 $2 > $LOG_FILE 2>&1
 
     FAILED=$((PIPESTATUS[0]||$FAILED))
 
@@ -57,7 +59,7 @@ function run_core_tests() {
     PYSPARK_DOC_TEST=1 run_test "pyspark/broadcast.py"
     PYSPARK_DOC_TEST=1 run_test "pyspark/accumulators.py"
     run_test "pyspark/serializers.py"
-    run_test "pyspark/profiler.py" 
+    run_test "pyspark/profiler.py"
     run_test "pyspark/shuffle.py"
     run_test "pyspark/tests.py"
 }
@@ -97,8 +99,20 @@ function run_ml_tests() {
 
 function run_streaming_tests() {
     echo "Run streaming tests ..."
+
+    KAFKA_ASSEMBLY_DIR="$FWDIR"/external/kafka-assembly
+    JAR_PATH="${KAFKA_ASSEMBLY_DIR}/target/scala-${SPARK_SCALA_VERSION}"
+    for f in "${JAR_PATH}"/spark-streaming-kafka-assembly-*.jar; do
+      if [[ ! -e "$f" ]]; then
+        echo "Failed to find Spark Streaming Kafka assembly jar in $KAFKA_ASSEMBLY_DIR" 1>&2
+        echo "You need to build Spark before running this program" 1>&2
+        exit 1
+      fi
+      KAFKA_ASSEMBLY_JAR="$f"
+    done
+
     run_test "pyspark/streaming/util.py"
-    run_test "pyspark/streaming/tests.py"
+    run_test "pyspark/streaming/tests.py" "--jars ${KAFKA_ASSEMBLY_JAR}"
 }
 
 echo "Running PySpark tests. Output is in python/$LOG_FILE."
