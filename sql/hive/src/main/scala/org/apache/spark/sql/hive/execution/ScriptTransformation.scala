@@ -21,15 +21,12 @@ import java.io.{BufferedReader, InputStreamReader}
 import java.io.{DataInputStream, DataOutputStream, EOFException}
 import java.util.Properties
 
+import scala.collection.JavaConversions._
+
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.AbstractSerDe
-import org.apache.hadoop.hive.serde2.Serializer
-import org.apache.hadoop.hive.serde2.Deserializer
 import org.apache.hadoop.hive.serde2.objectinspector._
-import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory.ObjectInspectorOptions
-import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.execution._
@@ -38,19 +35,14 @@ import org.apache.spark.sql.hive.{HiveContext, HiveInspectors}
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.util.Utils
 
-
-/* Implicit conversions */
-import scala.collection.JavaConversions._
-
 /**
- * :: DeveloperApi ::
  * Transforms the input by forking and running the specified script.
  *
  * @param input the set of expression that should be passed to the script.
  * @param script the command that should be executed.
  * @param output the attributes that are produced by the script.
  */
-@DeveloperApi
+private[hive]
 case class ScriptTransformation(
     input: Seq[Expression],
     script: String,
@@ -175,6 +167,7 @@ case class ScriptTransformation(
 /**
  * The wrapper class of Hive input and output schema properties
  */
+private[hive]
 case class HiveScriptIOSchema (
     inputRowFormat: Seq[(String, String)],
     outputRowFormat: Seq[(String, String)],

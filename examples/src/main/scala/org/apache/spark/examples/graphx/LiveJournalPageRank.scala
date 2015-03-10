@@ -17,11 +17,6 @@
 
 package org.apache.spark.examples.graphx
 
-import org.apache.spark.SparkContext._
-import org.apache.spark._
-import org.apache.spark.graphx._
-
-
 /**
  * Uses GraphX to run PageRank on a LiveJournal social network graph. Download the dataset from
  * http://snap.stanford.edu/data/soc-LiveJournal1.html.
@@ -31,13 +26,13 @@ object LiveJournalPageRank {
     if (args.length < 1) {
       System.err.println(
         "Usage: LiveJournalPageRank <edge_list_file>\n" +
+          "    --numEPart=<num_edge_partitions>\n" +
+          "        The number of partitions for the graph's edge RDD.\n" +
           "    [--tol=<tolerance>]\n" +
           "        The tolerance allowed at convergence (smaller => more accurate). Default is " +
           "0.001.\n" +
           "    [--output=<output_file>]\n" +
           "        If specified, the file to write the ranks to.\n" +
-          "    [--numEPart=<num_edge_partitions>]\n" +
-          "        The number of partitions for the graph's edge RDD. Default is 4.\n" +
           "    [--partStrategy=RandomVertexCut | EdgePartition1D | EdgePartition2D | " +
           "CanonicalRandomVertexCut]\n" +
           "        The way edges are assigned to edge partitions. Default is RandomVertexCut.")

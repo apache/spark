@@ -18,7 +18,7 @@
 import numpy as np
 import warnings
 
-from pyspark.mllib.common import callMLlibFunc
+from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper, inherit_doc
 from pyspark.mllib.linalg import Vectors, SparseVector, _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint
 
@@ -191,6 +191,17 @@ class Saveable(object):
         raise NotImplementedError
 
 
+@inherit_doc
+class JavaSaveable(Saveable):
+    """
+    Mixin for models that provide save() through their Scala
+    implementation.
+    """
+
+    def save(self, sc, path):
+        self._java_model.save(sc._jsc.sc(), path)
+
+
 class Loader(object):
     """
     Mixin for classes which can load saved models from files.
@@ -210,6 +221,7 @@ class Loader(object):
         raise NotImplemented
 
 
+@inherit_doc
 class JavaLoader(Loader):
     """
     Mixin for classes which can load saved models using its Scala
@@ -217,13 +229,30 @@ class JavaLoader(Loader):
     """
 
     @classmethod
-    def load(cls, sc, path):
+    def _java_loader_class(cls):
+        """
+        Returns the full class name of the Java loader. The default
+        implementation replaces "pyspark" by "org.apache.spark" in
+        the Python full class name.
+        """
         java_package = cls.__module__.replace("pyspark", "org.apache.spark")
-        java_class = ".".join([java_package, cls.__name__])
+        return ".".join([java_package, cls.__name__])
+
+    @classmethod
+    def _load_java(cls, sc, path):
+        """
+        Load a Java model from the given path.
+        """
+        java_class = cls._java_loader_class()
         java_obj = sc._jvm
         for name in java_class.split("."):
             java_obj = getattr(java_obj, name)
-        return cls(java_obj.load(sc._jsc.sc(), path))
+        return java_obj.load(sc._jsc.sc(), path)
+
+    @classmethod
+    def load(cls, sc, path):
+        java_model = cls._load_java(sc, path)
+        return cls(java_model)
 
 
 def _test():

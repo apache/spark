@@ -70,7 +70,9 @@ each line consists of a key and a value separated by whitespace. For example:
 Any values specified as flags or in the properties file will be passed on to the application
 and merged with those specified through SparkConf. Properties set directly on the SparkConf
 take highest precedence, then flags passed to `spark-submit` or `spark-shell`, then options
-in the `spark-defaults.conf` file.
+in the `spark-defaults.conf` file. A few configuration keys have been renamed since earlier
+versions of Spark; in such cases, the older key names are still accepted, but take lower
+precedence than any instance of the newer key.
 
 ## Viewing Spark Properties
 
