@@ -1336,25 +1336,28 @@ Accumulators do not change the lazy evaluation model of Spark. If they are being
 
 <div data-lang="scala"  markdown="1">
 {% highlight scala %}
-val acc = sc.accumulator(0)
-data.map(x => acc += x; f(x))
-// Here, acc is still 0 because no actions have cause the `map` to be computed.
+val accum = sc.accumulator(0)
+data.map { x => accum += x; f(x) }
+// Here, accum is still 0 because no actions have caused the `map` to be computed.
 {% endhighlight %}
 </div>
 
 <div data-lang="java"  markdown="1">
 {% highlight java %}
 Accumulator<Integer> accum = sc.accumulator(0);
-data.map(x -> accum.add(x); f(x););
-// Here, accum is still 0 because no actions have cause the `map` to be computed.
+data.map(x -> { accum.add(x); return f(x); });
+// Here, accum is still 0 because no actions have caused the `map` to be computed.
 {% endhighlight %}
 </div>
 
 <div data-lang="python"  markdown="1">
 {% highlight python %}
 accum = sc.accumulator(0)
-data.map(lambda x => acc.add(x); f(x))
-# Here, acc is still 0 because no actions have cause the `map` to be computed.
+def g(x):
+  accum.add(x)
+  return f(x)
+data.map(g)
+# Here, accum is still 0 because no actions have caused the `map` to be computed.
 {% endhighlight %}
 </div>
 

@@ -51,6 +51,7 @@ import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.executor.TriggerThreadDump
 import org.apache.spark.input.{StreamInputFormat, PortableDataStream, WholeTextFileInputFormat,
   FixedLengthBinaryInputFormat}
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
 import org.apache.spark.scheduler._
@@ -233,6 +234,14 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       None
     }
   }
+  private[spark] val eventLogCodec: Option[String] = {
+    val compress = conf.getBoolean("spark.eventLog.compress", false)
+    if (compress && isEventLogEnabled) {
+      Some(CompressionCodec.getCodecName(conf)).map(CompressionCodec.getShortName)
+    } else {
+      None
+    }
+  }
 
   // Generate the random name for a temp folder in Tachyon
   // Add a timestamp as the suffix here to make it more safe
@@ -351,7 +360,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private[spark] var (schedulerBackend, taskScheduler) =
     SparkContext.createTaskScheduler(this, master)
   private val heartbeatReceiver = env.actorSystem.actorOf(
-    Props(new HeartbeatReceiver(taskScheduler)), "HeartbeatReceiver")
+    Props(new HeartbeatReceiver(this, taskScheduler)), "HeartbeatReceiver")
   @volatile private[spark] var dagScheduler: DAGScheduler = _
   try {
     dagScheduler = new DAGScheduler(this)
@@ -398,7 +407,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private val dynamicAllocationTesting = conf.getBoolean("spark.dynamicAllocation.testing", false)
   private[spark] val executorAllocationManager: Option[ExecutorAllocationManager] =
     if (dynamicAllocationEnabled) {
-      assert(master.contains("yarn") || dynamicAllocationTesting,
+      assert(supportDynamicAllocation,
         "Dynamic allocation of executors is currently only supported in YARN mode")
       Some(new ExecutorAllocationManager(this, listenerBus, conf))
     } else {
@@ -1123,6 +1132,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
+   * Return whether dynamically adjusting the amount of resources allocated to
+   * this application is supported. This is currently only available for YARN.
+   */
+  private[spark] def supportDynamicAllocation = 
+    master.contains("yarn") || dynamicAllocationTesting
+
+  /**
    * :: DeveloperApi ::
    * Register a listener to receive up-calls from events that happen during execution.
    */
@@ -1155,7 +1171,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   @DeveloperApi
   override def requestExecutors(numAdditionalExecutors: Int): Boolean = {
-    assert(master.contains("yarn") || dynamicAllocationTesting,
+    assert(supportDynamicAllocation,
       "Requesting executors is currently only supported in YARN mode")
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
@@ -1173,7 +1189,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   @DeveloperApi
   override def killExecutors(executorIds: Seq[String]): Boolean = {
-    assert(master.contains("yarn") || dynamicAllocationTesting,
+    assert(supportDynamicAllocation,
       "Killing executors is currently only supported in YARN mode")
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
@@ -1376,23 +1392,23 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /** Shut down the SparkContext. */
   def stop() {
     SparkContext.SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
-      postApplicationEnd()
-      ui.foreach(_.stop())
       if (!stopped) {
         stopped = true
+        postApplicationEnd()
+        ui.foreach(_.stop())
         env.metricsSystem.report()
         metadataCleaner.cancel()
-        env.actorSystem.stop(heartbeatReceiver)
         cleaner.foreach(_.stop())
         dagScheduler.stop()
         dagScheduler = null
+        listenerBus.stop()
+        eventLogger.foreach(_.stop())
+        env.actorSystem.stop(heartbeatReceiver)
         progressBar.foreach(_.stop())
         taskScheduler = null
         // TODO: Cache.stop()?
         env.stop()
         SparkEnv.set(null)
-        listenerBus.stop()
-        eventLogger.foreach(_.stop())
         logInfo("Successfully stopped SparkContext")
         SparkContext.clearActiveContext()
       } else {

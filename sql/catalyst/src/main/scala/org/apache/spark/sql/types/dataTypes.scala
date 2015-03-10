@@ -181,7 +181,7 @@ object DataType {
   /**
    * Compares two types, ignoring nullability of ArrayType, MapType, StructType.
    */
-  private[sql] def equalsIgnoreNullability(left: DataType, right: DataType): Boolean = {
+  private[types] def equalsIgnoreNullability(left: DataType, right: DataType): Boolean = {
     (left, right) match {
       case (ArrayType(leftElementType, _), ArrayType(rightElementType, _)) =>
         equalsIgnoreNullability(leftElementType, rightElementType)
@@ -196,6 +196,43 @@ object DataType {
               left.name == right.name && equalsIgnoreNullability(left.dataType, right.dataType)
           }
       case (left, right) => left == right
+    }
+  }
+
+  /**
+   * Compares two types, ignoring compatible nullability of ArrayType, MapType, StructType.
+   *
+   * Compatible nullability is defined as follows:
+   *   - If `from` and `to` are ArrayTypes, `from` has a compatible nullability with `to`
+   *   if and only if `to.containsNull` is true, or both of `from.containsNull` and
+   *   `to.containsNull` are false.
+   *   - If `from` and `to` are MapTypes, `from` has a compatible nullability with `to`
+   *   if and only if `to.valueContainsNull` is true, or both of `from.valueContainsNull` and
+   *   `to.valueContainsNull` are false.
+   *   - If `from` and `to` are StructTypes, `from` has a compatible nullability with `to`
+   *   if and only if for all every pair of fields, `to.nullable` is true, or both
+   *   of `fromField.nullable` and `toField.nullable` are false.
+   */
+  private[sql] def equalsIgnoreCompatibleNullability(from: DataType, to: DataType): Boolean = {
+    (from, to) match {
+      case (ArrayType(fromElement, fn), ArrayType(toElement, tn)) =>
+        (tn || !fn) && equalsIgnoreCompatibleNullability(fromElement, toElement)
+
+      case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
+        (tn || !fn) &&
+          equalsIgnoreCompatibleNullability(fromKey, toKey) &&
+          equalsIgnoreCompatibleNullability(fromValue, toValue)
+
+      case (StructType(fromFields), StructType(toFields)) =>
+        fromFields.size == toFields.size &&
+          fromFields.zip(toFields).forall {
+            case (fromField, toField) =>
+              fromField.name == toField.name &&
+                (toField.nullable || !fromField.nullable) &&
+                equalsIgnoreCompatibleNullability(fromField.dataType, toField.dataType)
+          }
+
+      case (fromDataType, toDataType) => fromDataType == toDataType
     }
   }
 }
@@ -230,6 +267,17 @@ abstract class DataType {
   def prettyJson: String = pretty(render(jsonValue))
 
   def simpleString: String = typeName
+
+  /** Check if `this` and `other` are the same data type when ignoring nullability
+   *  (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
+   */
+  private[spark] def sameType(other: DataType): Boolean =
+    DataType.equalsIgnoreNullability(this, other)
+
+  /** Returns the same data type but set all nullability fields are true
+   * (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
+   */
+  private[spark] def asNullable: DataType
 }
 
 /**
@@ -245,6 +293,8 @@ class NullType private() extends DataType {
   // this type. Otherwise, the companion object would be of type "NullType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
   override def defaultSize: Int = 1
+
+  private[spark] override def asNullable: NullType = this
 }
 
 case object NullType extends NullType
@@ -310,6 +360,8 @@ class StringType private() extends NativeType with PrimitiveType {
    * The default size of a value of the StringType is 4096 bytes.
    */
   override def defaultSize: Int = 4096
+
+  private[spark] override def asNullable: StringType = this
 }
 
 case object StringType extends StringType
@@ -344,6 +396,8 @@ class BinaryType private() extends NativeType with PrimitiveType {
    * The default size of a value of the BinaryType is 4096 bytes.
    */
   override def defaultSize: Int = 4096
+
+  private[spark] override def asNullable: BinaryType = this
 }
 
 case object BinaryType extends BinaryType
@@ -369,6 +423,8 @@ class BooleanType private() extends NativeType with PrimitiveType {
    * The default size of a value of the BooleanType is 1 byte.
    */
   override def defaultSize: Int = 1
+
+  private[spark] override def asNullable: BooleanType = this
 }
 
 case object BooleanType extends BooleanType
@@ -399,6 +455,8 @@ class TimestampType private() extends NativeType {
    * The default size of a value of the TimestampType is 12 bytes.
    */
   override def defaultSize: Int = 12
+
+  private[spark] override def asNullable: TimestampType = this
 }
 
 case object TimestampType extends TimestampType
@@ -427,6 +485,8 @@ class DateType private() extends NativeType {
    * The default size of a value of the DateType is 4 bytes.
    */
   override def defaultSize: Int = 4
+
+  private[spark] override def asNullable: DateType = this
 }
 
 case object DateType extends DateType
@@ -485,6 +545,8 @@ class LongType private() extends IntegralType {
   override def defaultSize: Int = 8
 
   override def simpleString = "bigint"
+
+  private[spark] override def asNullable: LongType = this
 }
 
 case object LongType extends LongType
@@ -514,6 +576,8 @@ class IntegerType private() extends IntegralType {
   override def defaultSize: Int = 4
 
   override def simpleString = "int"
+
+  private[spark] override def asNullable: IntegerType = this
 }
 
 case object IntegerType extends IntegerType
@@ -543,6 +607,8 @@ class ShortType private() extends IntegralType {
   override def defaultSize: Int = 2
 
   override def simpleString = "smallint"
+
+  private[spark] override def asNullable: ShortType = this
 }
 
 case object ShortType extends ShortType
@@ -572,6 +638,8 @@ class ByteType private() extends IntegralType {
   override def defaultSize: Int = 1
 
   override def simpleString = "tinyint"
+
+  private[spark] override def asNullable: ByteType = this
 }
 
 case object ByteType extends ByteType
@@ -638,6 +706,8 @@ case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalT
     case Some(PrecisionInfo(precision, scale)) => s"decimal($precision,$scale)"
     case None => "decimal(10,0)"
   }
+
+  private[spark] override def asNullable: DecimalType = this
 }
 
 
@@ -696,6 +766,8 @@ class DoubleType private() extends FractionalType {
    * The default size of a value of the DoubleType is 8 bytes.
    */
   override def defaultSize: Int = 8
+
+  private[spark] override def asNullable: DoubleType = this
 }
 
 case object DoubleType extends DoubleType
@@ -724,6 +796,8 @@ class FloatType private() extends FractionalType {
    * The default size of a value of the FloatType is 4 bytes.
    */
   override def defaultSize: Int = 4
+
+  private[spark] override def asNullable: FloatType = this
 }
 
 case object FloatType extends FloatType
@@ -772,6 +846,9 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
   override def defaultSize: Int = 100 * elementType.defaultSize
 
   override def simpleString = s"array<${elementType.simpleString}>"
+
+  private[spark] override def asNullable: ArrayType =
+    ArrayType(elementType.asNullable, containsNull = true)
 }
 
 
@@ -1017,6 +1094,15 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    */
   private[sql] def merge(that: StructType): StructType =
     StructType.merge(this, that).asInstanceOf[StructType]
+
+  private[spark] override def asNullable: StructType = {
+    val newFields = fields.map {
+      case StructField(name, dataType, nullable, metadata) =>
+        StructField(name, dataType.asNullable, nullable = true, metadata)
+    }
+
+    StructType(newFields)
+  }
 }
 
 
@@ -1069,6 +1155,9 @@ case class MapType(
   override def defaultSize: Int = 100 * (keyType.defaultSize + valueType.defaultSize)
 
   override def simpleString = s"map<${keyType.simpleString},${valueType.simpleString}>"
+
+  private[spark] override def asNullable: MapType =
+    MapType(keyType.asNullable, valueType.asNullable, valueContainsNull = true)
 }
 
 
@@ -1122,4 +1211,10 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
    * The default size of a value of the UserDefinedType is 4096 bytes.
    */
   override def defaultSize: Int = 4096
+
+  /**
+   * For UDT, asNullable will not change the nullability of its internal sqlType and just returns
+   * itself.
+   */
+  private[spark] override def asNullable: UserDefinedType[UserType] = this
 }

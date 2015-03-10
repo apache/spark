@@ -10,6 +10,7 @@ kramdown:
 
 include:
   - _static
+  - _modules
 
 # These allow the documentation to be updated with newer releases
 # of Spark, Scala, and Mesos.

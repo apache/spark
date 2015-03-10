@@ -39,10 +39,9 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
    * error is thrown by this method.
    *
    * @param logData Stream containing event log data.
-   * @param version Spark version that generated the events.
    * @param sourceName Filename (or other source identifier) from whence @logData is being read
    */
-  def replay(logData: InputStream, version: String, sourceName: String) {
+  def replay(logData: InputStream, sourceName: String): Unit = {
     var currentLine: String = null
     var lineNumber: Int = 1
     try {
