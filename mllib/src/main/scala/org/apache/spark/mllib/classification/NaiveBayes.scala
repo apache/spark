@@ -166,6 +166,9 @@ class NaiveBayes private (private var lambda: Double) extends Serializable with 
     this
   }
 
+  /** Get the smoothing parameter. Default: 1.0. */
+  def getLambda: Double = lambda
+
   /**
    * Run the algorithm with the configured parameters on an input RDD of LabeledPoint entries.
    *
