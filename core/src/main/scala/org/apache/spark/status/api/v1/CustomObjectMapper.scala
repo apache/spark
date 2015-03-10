@@ -17,13 +17,13 @@
 package org.apache.spark.status.api.v1
 
 import java.text.SimpleDateFormat
-import java.util.{SimpleTimeZone, Calendar}
+import java.util.{Calendar, SimpleTimeZone}
 import javax.ws.rs.Produces
 import javax.ws.rs.core.MediaType
 import javax.ws.rs.ext.{ContextResolver, Provider}
 
 import com.fasterxml.jackson.annotation.JsonInclude
-import com.fasterxml.jackson.databind.{SerializationFeature, ObjectMapper}
+import com.fasterxml.jackson.databind.{ObjectMapper, SerializationFeature}
 
 @Provider
 @Produces(Array(MediaType.APPLICATION_JSON))

@@ -16,10 +16,10 @@
  */
 package org.apache.spark.status.api.v1
 
-import javax.ws.rs.{PathParam, GET, Produces}
+import javax.ws.rs.{GET, PathParam, Produces}
 import javax.ws.rs.core.MediaType
 
-import org.apache.spark.storage.{StorageUtils, StorageStatus, RDDInfo}
+import org.apache.spark.storage.{RDDInfo, StorageStatus, StorageUtils}
 import org.apache.spark.ui.storage.StorageListener
 
 @Produces(Array(MediaType.APPLICATION_JSON))

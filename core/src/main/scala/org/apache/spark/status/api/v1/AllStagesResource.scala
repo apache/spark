@@ -17,20 +17,14 @@
 package org.apache.spark.status.api.v1
 
 import java.util.Date
-import javax.ws.rs.{QueryParam, PathParam, GET, Produces}
+import javax.ws.rs.{GET, PathParam, Produces, QueryParam}
 import javax.ws.rs.core.MediaType
 
-import org.apache.spark.executor.{
-TaskMetrics => InternalTaskMetrics,
-InputMetrics => InternalInputMetrics,
-OutputMetrics => InternalOutputMetrics,
-ShuffleReadMetrics => InternalShuffleReadMetrics,
-ShuffleWriteMetrics => InternalShuffleWriteMetrics
-}
+import org.apache.spark.executor.{InputMetrics => InternalInputMetrics, OutputMetrics => InternalOutputMetrics, ShuffleReadMetrics => InternalShuffleReadMetrics, ShuffleWriteMetrics => InternalShuffleWriteMetrics, TaskMetrics => InternalTaskMetrics}
 import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.status.api._
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.ui.jobs.UIData.{TaskUIData, StageUIData}
+import org.apache.spark.ui.jobs.UIData.{StageUIData, TaskUIData}
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 class AllStagesResource(uiRoot: UIRoot) {

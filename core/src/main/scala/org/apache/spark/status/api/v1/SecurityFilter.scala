@@ -19,7 +19,7 @@ package org.apache.spark.status.api.v1
 import javax.ws.rs.WebApplicationException
 import javax.ws.rs.core.Response
 
-import com.sun.jersey.spi.container.{ContainerRequest,ContainerRequestFilter}
+import com.sun.jersey.spi.container.{ContainerRequest, ContainerRequestFilter}
 
 class SecurityFilter extends ContainerRequestFilter with UIRootFromServletContext {
   def filter(req: ContainerRequest): ContainerRequest = {

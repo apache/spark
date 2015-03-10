@@ -17,8 +17,8 @@
 package org.apache.spark.status.api.v1
 
 import java.util.Date
+import javax.ws.rs.{DefaultValue, GET, Produces, QueryParam}
 import javax.ws.rs.core.MediaType
-import javax.ws.rs.{DefaultValue, QueryParam, Produces, GET}
 
 import org.apache.spark.deploy.history.ApplicationHistoryInfo
 import org.apache.spark.deploy.master.{ApplicationInfo => InternalApplicationInfo}

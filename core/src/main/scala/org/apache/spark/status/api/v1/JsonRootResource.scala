@@ -18,18 +18,15 @@ package org.apache.spark.status.api.v1
 
 import javax.servlet.ServletContext
 import javax.ws.rs._
-import javax.ws.rs.core.{Response, Context}
+import javax.ws.rs.core.{Context, Response}
 
 import com.sun.jersey.api.core.ResourceConfig
 import com.sun.jersey.spi.container.servlet.ServletContainer
-
 import org.eclipse.jetty.server.handler.ContextHandler
-import org.eclipse.jetty.servlet.{ServletHolder, ServletContextHandler}
-import org.glassfish.jersey.jackson._
+import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
 import org.apache.spark.SecurityManager
 import org.apache.spark.ui.SparkUI
-
 
 @Path("/v1")
 class JsonRootResource extends UIRootFromServletContext {

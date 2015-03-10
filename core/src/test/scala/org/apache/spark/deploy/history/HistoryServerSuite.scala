@@ -16,19 +16,16 @@
  */
 package org.apache.spark.deploy.history
 
-import java.io.{IOException, FileInputStream, FileWriter, File}
+import java.io.{File, FileInputStream, FileWriter, IOException}
 import java.net.{HttpURLConnection, URL}
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import org.apache.commons.io.{FileUtils, IOUtils}
-
-import org.apache.spark.{SecurityManager, SparkConf}
-import org.scalatest.{BeforeAndAfter, Matchers, FunSuite}
-
-import org.apache.hadoop.fs.Path
-import org.mockito.Mockito.{when}
+import org.mockito.Mockito.when
+import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
 import org.scalatest.mock.MockitoSugar
 
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.ui.SparkUI
 
 class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with MockitoSugar {

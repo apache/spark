@@ -17,9 +17,9 @@
 
 package org.apache.spark.status.api.v1
 
-import org.apache.spark.status.api.StageStatus
-
 import scala.collection.Map
+
+import org.apache.spark.status.api.StageStatus
 
 case class StageData(
   status: StageStatus,
