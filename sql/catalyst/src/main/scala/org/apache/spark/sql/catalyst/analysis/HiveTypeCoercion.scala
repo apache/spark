@@ -69,6 +69,7 @@ trait HiveTypeCoercion {
   val typeCoercionRules =
     PropagateTypes ::
     ConvertNaNs ::
+    PromoteToStrings ::
     WidenTypes ::
     PromoteStrings ::
     DecimalPrecision ::
@@ -233,7 +234,7 @@ trait HiveTypeCoercion {
             case Some(dt) => findTightestCommonType(dt, c)
           }) match {
             // If there is no applicable conversion, leave expression unchanged.
-            case None => i.makeCopy(Array(a, b))
+            case None => i
             case Some(dt) => i.makeCopy(Array(Cast(a, dt), b.map(Cast(_, dt))))
           }
       }
@@ -286,14 +287,6 @@ trait HiveTypeCoercion {
         i.makeCopy(Array(Cast(a, StringType), b.map(Cast(_, StringType))))
       case i @ In(a, b) if a.dataType == TimestampType && b.forall(_.dataType == DateType) =>
         i.makeCopy(Array(Cast(a, StringType), b.map(Cast(_, StringType))))
-      case i @ In(a, b) if a.dataType == StringType
-        && b.exists(_.dataType.isInstanceOf[NumericType]) =>
-        i.makeCopy(Array(Cast(a, DoubleType), b))
-      case i @ In(a, b) if b.exists(_.dataType == StringType)
-        && a.dataType.isInstanceOf[NumericType] =>
-        i.makeCopy(Array(a, b.map(_.dataType match{
-          case StringType => Cast(a, DoubleType)
-        })))
 
       case Sum(e) if e.dataType == StringType =>
         Sum(Cast(e, DoubleType))
@@ -301,6 +294,27 @@ trait HiveTypeCoercion {
         Average(Cast(e, DoubleType))
       case Sqrt(e) if e.dataType == StringType =>
         Sqrt(Cast(e, DoubleType))
+    }
+  }
+
+  /**
+   * Promotes strings that appear in arithmetic expressions.
+   */
+  object PromoteToStrings extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      // For In we need to promote numeric as strings
+      case i @ In(a, b) if a.dataType == StringType
+        && b.exists(_.dataType.isInstanceOf[NumericType]) =>
+        i.makeCopy(Array(a, b.map(exp => exp.dataType match {
+          case n: NumericType => Cast(exp, StringType)
+          case _ =>
+        })))
+      case i @ In(a, b) if b.exists(_.dataType == StringType)
+        && a.dataType.isInstanceOf[NumericType] =>
+        i.makeCopy(Array(Cast(a, StringType), b.map(exp => exp.dataType match {
+          case n: NumericType => Cast(exp, StringType)
+          case _ =>
+        })))
     }
   }
 
