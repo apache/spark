@@ -46,7 +46,7 @@ private[spark] abstract class WebUI(
 
   protected val tabs = ArrayBuffer[WebUITab]()
   protected val handlers = ArrayBuffer[ServletContextHandler]()
-  protected val page2Handlers = new HashMap[WebUIPage, ArrayBuffer[ServletContextHandler]]
+  protected val pageToHandlers = new HashMap[WebUIPage, ArrayBuffer[ServletContextHandler]]
   protected var serverInfo: Option[ServerInfo] = None
   protected val localHostName = Utils.localHostName()
   protected val publicHostName = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(localHostName)
@@ -69,9 +69,8 @@ private[spark] abstract class WebUI(
   }
   
   def detachPage(page: WebUIPage) {
-    page2Handlers.remove(page).foreach(_.foreach(detachHandler))
+    pageToHandlers.remove(page).foreach(_.foreach(detachHandler))
   }
-  
 
   /** Attach a page to this UI. */
   def attachPage(page: WebUIPage) {
@@ -82,9 +81,9 @@ private[spark] abstract class WebUI(
       (request: HttpServletRequest) => page.renderJson(request), securityManager, basePath)
     attachHandler(renderHandler)
     attachHandler(renderJsonHandler)
-    page2Handlers.getOrElseUpdate(page, ArrayBuffer[ServletContextHandler]())
+    pageToHandlers.getOrElseUpdate(page, ArrayBuffer[ServletContextHandler]())
       .append(renderHandler)
-    page2Handlers.getOrElseUpdate(page, ArrayBuffer[ServletContextHandler]())
+    pageToHandlers.getOrElseUpdate(page, ArrayBuffer[ServletContextHandler]())
       .append(renderJsonHandler)
     
   }

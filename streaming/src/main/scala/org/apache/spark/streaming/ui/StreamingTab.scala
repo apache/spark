@@ -44,6 +44,7 @@ private[spark] object StreamingTab {
       throw new SparkException("Parent SparkUI to attach this tab to not found!")
     }
   }
+  
   def detachStreamingTab(ssc: StreamingContext, tab: SparkUITab) {
     getSparkUI(ssc).detachTab(tab)
   }
