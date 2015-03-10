@@ -42,6 +42,9 @@ class GangliaSink(val property: Properties, val registry: MetricRegistry,
   val GANGLIA_KEY_TTL = "ttl"
   val GANGLIA_DEFAULT_TTL = 1
 
+  // Either HOST + PORT or SERVERS for ganglia gmond addresses.
+  // SERVERS is more robust. While using in ganglia unicast mode, you can configure more gmond
+  // addresses like `*.sink.ganglia.servers=host1:port1,host2,port2` to avoid SPOF.
   val GANGLIA_KEY_HOST = "host"
   val GANGLIA_KEY_PORT = "port"
 
@@ -50,29 +53,27 @@ class GangliaSink(val property: Properties, val registry: MetricRegistry,
 
   def propertyToOption(prop: String): Option[String] = Option(property.getProperty(prop))
 
-  if (!propertyToOption(GANGLIA_KEY_SERVERS).isDefined) {
-    logWarning("Using *.sink.ganglia.host and *.sink.ganglia.port to set sink of gmond is " +
-      "deprecated, please use *.sink.ganglia.servers instead.")
-
-    if (!propertyToOption(GANGLIA_KEY_HOST).isDefined) {
-      throw new Exception("Ganglia sink requires 'host' property.")
-    }
-
-    if (!propertyToOption(GANGLIA_KEY_PORT).isDefined) {
-      throw new Exception("Ganglia sink requires 'port' property.")
-    }
-  }
-
-  val host = propertyToOption(GANGLIA_KEY_HOST).get
-  val port = propertyToOption(GANGLIA_KEY_PORT).get.toInt
-
-  val serversString = propertyToOption(GANGLIA_KEY_SERVERS).get
   val servers =
-    if (serversString == null || serversString == "") {
+    if (!propertyToOption(GANGLIA_KEY_SERVERS).isDefined) {
+      logWarning("Using *.sink.ganglia.host and *.sink.ganglia.port to set sink of gmond is " +
+        "deprecated, please use *.sink.ganglia.servers instead.")
+
+      if (!propertyToOption(GANGLIA_KEY_HOST).isDefined) {
+        throw new Exception("Ganglia sink requires 'host' property.")
+      }
+
+      if (!propertyToOption(GANGLIA_KEY_PORT).isDefined) {
+        throw new Exception("Ganglia sink requires 'port' property.")
+      }
+      val host = propertyToOption(GANGLIA_KEY_HOST).get
+      val port = propertyToOption(GANGLIA_KEY_PORT).get.toInt
+
       logInfo(s"Using *.sink.ganglia.host = $host and *.sink.ganglia.port = $port")
       host + ":" + port
-    }
-    else {
+
+    } else {
+      val serversString = propertyToOption(GANGLIA_KEY_SERVERS).get
+
       logInfo(s"Using *.sink.ganglia.servers = $serversString")
       serversString
     }
