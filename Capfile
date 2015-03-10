@@ -12,7 +12,7 @@ set :keep_releases, 5
 set :branch, fetch(:branch, `git symbolic-ref --short HEAD`.gsub("\s",""))
 
 DATANODES = (2..48).map {|i| "dn%02d.chi.shopify.com" % i }
-OTHERNODES = ["hadoop-etl1.chi.shopify.com", "spark-etl1.chi.shopify.com", "reportify-etl4.chi.shopify.com", "platfora2.chi.shopify.com"]
+OTHERNODES = ["hadoop-etl1.chi.shopify.com", "spark-etl1.chi.shopify.com", "reportify-etl4.chi.shopify.com"]
 BROKEN = [] # Node is down don't try to send code
 
 task :production do
