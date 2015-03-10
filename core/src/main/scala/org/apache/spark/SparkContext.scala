@@ -1889,7 +1889,7 @@ object SparkContext extends Logging {
 
   private[spark] val SPARK_JOB_INTERRUPT_ON_CANCEL = "spark.job.interruptOnCancel"
 
-  private[spark] val DRIVER_IDENTIFIER = "<driver>"
+  private[spark] val DRIVER_IDENTIFIER = "driver"
 
   // The following deprecated objects have already been copied to `object AccumulatorParam` to
   // make the compiler find them automatically. They are duplicate codes only for backward

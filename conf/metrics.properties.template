@@ -140,3 +140,29 @@
 
 #executor.source.jvm.class=org.apache.spark.metrics.source.JvmSource
 
+
+# Enable GangliaSink for instance master, worker, driver and executor
+#*.sink.ganglia.class=org.apache.spark.metrics.sink.GangliaSink
+master.sink.ganglia.class=org.apache.spark.metrics.sink.GangliaSink
+worker.sink.ganglia.class=org.apache.spark.metrics.sink.GangliaSink
+driver.sink.ganglia.class=org.apache.spark.metrics.sink.GangliaSink
+executor.sink.ganglia.class=org.apache.spark.metrics.sink.GangliaSink
+
+*.sink.ganglia.period=30
+*.sink.ganglia.unit=seconds
+
+#For multicast mode configuration
+*.sink.ganglia.host=239.2.11.71
+*.sink.ganglia.port=8649
+*.sink.ganglia.ttl=1
+*.sink.ganglia.mode=multicast
+
+
+#For unicast mode configuration
+#*.sink.ganglia.host=node1.example  #hostname or ip of gmond node for gathering metrics from other nodes
+#*.sink.ganglia.port=8649    #port of gmond node for gathering metrics from other nodes
+#or
+#*.sink.ganglia.servers=node1:8649,node2:9649
+
+#*.sink.ganglia.mode=unicast
+
