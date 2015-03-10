@@ -1069,7 +1069,7 @@ for details.
 <tr>
   <td> <b>foreach</b>(<i>func</i>) </td>
   <td> Run a function <i>func</i> on each element of the dataset. This is usually done for side effects such as updating an <a href="#AccumLink">Accumulator</a> or interacting with external storage systems. 
-  <br /><b>Note</b>: modifying variables other than Accumulators outside of the <code>foreach()</code> may results in undefined behavior. See <a href="#ClosuresLink">Understanding closures </a> for more details.</td>
+  <br /><b>Note</b>: modifying variables other than Accumulators outside of the <code>foreach()</code> may result in undefined behavior. See <a href="#ClosuresLink">Understanding closures </a> for more details.</td>
 </tr>
 </table>
 
