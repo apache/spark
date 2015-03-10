@@ -50,8 +50,7 @@ object SerDe {
   def readBytes(in: DataInputStream) = {
     val len = readInt(in)
     val out = new Array[Byte](len)
-    val bytesRead = in.read(out, 0, len)
-    assert(len == bytesRead)
+    val bytesRead = in.readFully(out)
     out
   }
 
@@ -66,7 +65,7 @@ object SerDe {
   def readString(in: DataInputStream) = {
     val len = in.readInt()
     val asciiBytes = new Array[Byte](len)
-    in.read(asciiBytes, 0, len)
+    in.readFully(asciiBytes)
     assert(asciiBytes(len - 1) == 0)
     val str = new String(asciiBytes.dropRight(1).map(_.toChar))
     str
