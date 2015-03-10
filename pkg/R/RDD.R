@@ -727,7 +727,6 @@ setMethod("take",
             resList
           })
 
-setClassUnion("missingOrInteger", c("missing", "integer"))
 #' Removes the duplicates from RDD.
 #'
 #' This function returns a new RDD containing the distinct elements in the
@@ -742,13 +741,10 @@ setClassUnion("missingOrInteger", c("missing", "integer"))
 #' sort(unlist(collect(distinct(rdd)))) # c(1, 2, 3)
 #'}
 #' @rdname distinct
-#' @aliases distinct,RDD,missingOrInteger-method
+#' @aliases distinct,RDD-method
 setMethod("distinct",
-          signature(x = "RDD", numPartitions = "missingOrInteger"),
-          function(x, numPartitions) {
-            if (missing(numPartitions)) {
-              numPartitions <- SparkR::numPartitions(x)
-            }
+          signature(x = "RDD"),
+          function(x, numPartitions = SparkR::numPartitions(x)) {
             identical.mapped <- lapply(x, function(x) { list(x, NULL) })
             reduced <- reduceByKey(identical.mapped,
                                    function(x, y) { x },

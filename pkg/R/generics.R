@@ -110,7 +110,7 @@ setGeneric("take", function(x, num) { standardGeneric("take") })
 #' @rdname distinct
 #' @export
 setGeneric("distinct",
-           function(x, numPartitions) { standardGeneric("distinct") })
+           function(x, numPartitions = 1L) { standardGeneric("distinct") })
 
 #' @rdname sampleRDD
 #' @export
