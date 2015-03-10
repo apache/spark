@@ -92,9 +92,11 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
   }
 
   /**
+   * :: DeveloperApi ::
    * Set the gradient function (of the loss function of one single data example)
    * to be used for L-BFGS.
    */
+  @DeveloperApi
   def setGradient(gradient: Gradient): this.type = {
     this.gradient = gradient
     this
@@ -110,6 +112,13 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
     this
   }
 
+  /**
+   * :: DeveloperApi ::
+   * @param data  Training dataset of (label, feature vector) tuples
+   * @param initialWeights  Initial point from which to start optimization
+   * @return solution vector
+   */
+  @DeveloperApi
   override def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector = {
     val (weights, _) = LBFGS.runLBFGS(
       data,
