@@ -62,6 +62,16 @@ VALID_SPARK_VERSIONS = set([
     "1.2.1",
 ])
 
+SPARK_TACHYON_MAP = {
+    "1.0.0": "0.4.1",
+    "1.0.1": "0.4.1",
+    "1.0.2": "0.4.1",
+    "1.1.0": "0.5.0",
+    "1.1.1": "0.5.0",
+    "1.2.0": "0.5.0",
+    "1.2.1": "0.5.0",
+}
+
 DEFAULT_SPARK_VERSION = SPARK_EC2_VERSION
 DEFAULT_SPARK_GITHUB_REPO = "https://github.com/apache/spark"
 
@@ -368,6 +378,10 @@ EC2_INSTANCE_TYPES = {
     "t2.micro":    "hvm",
     "t2.small":    "hvm",
 }
+
+
+def get_tachyon_version(spark_version):
+    return SPARK_TACHYON_MAP.get(spark_version, "")
 
 
 # Attempt to resolve an appropriate AMI given the architecture and region of the request.
@@ -919,9 +933,13 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
     if "." in opts.spark_version:
         # Pre-built Spark deploy
         spark_v = get_validate_spark_version(opts.spark_version, opts.spark_git_repo)
+        tachyon_v = get_tachyon_version(spark_v)
     else:
         # Spark-only custom deploy
         spark_v = "%s|%s" % (opts.spark_git_repo, opts.spark_version)
+        tachyon_v = ""
+        print "Deploying Spark via git hash; Tachyon won't be set up"
+        modules = filter(lambda x: x != "tachyon", modules)
 
     template_vars = {
         "master_list": '\n'.join([i.public_dns_name for i in master_nodes]),
@@ -934,6 +952,7 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
         "swap": str(opts.swap),
         "modules": '\n'.join(modules),
         "spark_version": spark_v,
+        "tachyon_version": tachyon_v,
         "hadoop_major_version": opts.hadoop_major_version,
         "spark_worker_instances": "%d" % opts.worker_instances,
         "spark_master_opts": opts.master_opts
