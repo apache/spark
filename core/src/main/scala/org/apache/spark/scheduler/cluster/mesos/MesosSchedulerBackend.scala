@@ -47,14 +47,7 @@ private[spark] class MesosSchedulerBackend(
     master: String)
   extends SchedulerBackend
   with MScheduler
-  with Logging {
-
-  // Lock used to wait for scheduler to be registered
-  var isRegistered = false
-  val registeredLock = new Object()
-
-  // Driver for talking to Mesos
-  var driver: SchedulerDriver = null
+  with MesosSchedulerHelper {
 
   // Which slave IDs we have executors on
   val slaveIdsWithExecutors = new HashSet[String]
@@ -73,26 +66,9 @@ private[spark] class MesosSchedulerBackend(
   @volatile var appId: String = _
 
   override def start() {
-    synchronized {
-      classLoader = Thread.currentThread.getContextClassLoader
-
-      new Thread("MesosSchedulerBackend driver") {
-        setDaemon(true)
-        override def run() {
-          val scheduler = MesosSchedulerBackend.this
-          val fwInfo = FrameworkInfo.newBuilder().setUser(sc.sparkUser).setName(sc.appName).build()
-          driver = new MesosSchedulerDriver(scheduler, fwInfo, master)
-          try {
-            val ret = driver.run()
-            logInfo("driver.run() returned with code " + ret)
-          } catch {
-            case e: Exception => logError("driver.run() failed", e)
-          }
-        }
-      }.start()
-
-      waitForRegister()
-    }
+    val fwInfo = FrameworkInfo.newBuilder().setUser(sc.sparkUser).setName(sc.appName).build()
+    classLoader = Thread.currentThread.getContextClassLoader
+    startScheduler("MesosSchedulerBackend", master, MesosSchedulerBackend.this, fwInfo)
   }
 
   def createExecutorInfo(execId: String): MesosExecutorInfo = {
@@ -181,18 +157,7 @@ private[spark] class MesosSchedulerBackend(
     inClassLoader() {
       appId = frameworkId.getValue
       logInfo("Registered as framework ID " + appId)
-      registeredLock.synchronized {
-        isRegistered = true
-        registeredLock.notifyAll()
-      }
-    }
-  }
-
-  def waitForRegister() {
-    registeredLock.synchronized {
-      while (!isRegistered) {
-        registeredLock.wait()
-      }
+      markRegistered()
     }
   }
 
@@ -285,14 +250,6 @@ private[spark] class MesosSchedulerBackend(
       // Decline offers we ruled out immediately
       unUsableOffers.foreach(o => d.declineOffer(o.getId))
     }
-  }
-
-  /** Helper function to pull out a resource from a Mesos Resources protobuf */
-  def getResource(res: JList[Resource], name: String): Double = {
-    for (r <- res if r.getName == name) {
-      return r.getScalar.getValue
-    }
-    0
   }
 
   /** Turn a Spark TaskDescription into a Mesos task */

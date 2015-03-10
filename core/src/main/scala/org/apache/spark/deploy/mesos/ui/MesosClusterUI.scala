@@ -17,28 +17,23 @@
 
 package org.apache.spark.deploy.mesos.ui
 
-import java.io.File
 import org.apache.spark.ui.{SparkUI, WebUI}
 import org.apache.spark.SparkConf
 import org.apache.spark.SecurityManager
-import akka.pattern.AskableActorRef
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.util.AkkaUtils
-import org.apache.spark.deploy.worker.ui.{ActiveWebUiUrlAccessor, LogPage}
+import org.apache.spark.deploy.worker.ui.ActiveWebUiUrlAccessor
+import org.apache.spark.scheduler.cluster.mesos.ClusterScheduler
 
 /**
  * UI that displays driver results from the [[org.apache.spark.deploy.mesos.MesosClusterDispatcher]]
  */
 private [spark] class MesosClusterUI(
-    val dispatcherActorRef: AskableActorRef,
     securityManager: SecurityManager,
     port: Int,
     conf: SparkConf,
-    workDir: File,
-    dispatcherPublicAddress: String)
+    dispatcherPublicAddress: String,
+    val scheduler: ClusterScheduler)
   extends WebUI(securityManager, port, conf) with ActiveWebUiUrlAccessor {
-
-  val timeout = AkkaUtils.askTimeout(conf)
 
   initialize()
 
@@ -46,7 +41,6 @@ private [spark] class MesosClusterUI(
 
   override def initialize() {
     attachPage(new DriverOutputPage(this))
-    attachPage(new LogPage(this, workDir))
     attachHandler(createStaticHandler(MesosClusterUI.STATIC_RESOURCE_DIR, "/static"))
   }
 }

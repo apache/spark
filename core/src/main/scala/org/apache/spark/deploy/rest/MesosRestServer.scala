@@ -17,17 +17,16 @@
 
 package org.apache.spark.deploy.rest
 
-import akka.actor.ActorRef
-
 import java.io.File
 import javax.servlet.http.HttpServletResponse
 
-import org.apache.spark.deploy.{DriverDescription, DeployMessages}
+import org.apache.spark.deploy.DriverDescription
 import org.apache.spark.deploy.ClientArguments._
 import org.apache.spark.deploy.Command
 
 import org.apache.spark.{SparkConf, SPARK_VERSION => sparkVersion}
-import org.apache.spark.util.{Utils, AkkaUtils}
+import org.apache.spark.util.Utils
+import org.apache.spark.scheduler.cluster.mesos.ClusterScheduler
 
 /**
  * A server that responds to requests submitted by the [[RestClient]].
@@ -47,27 +46,24 @@ import org.apache.spark.util.{Utils, AkkaUtils}
  *
  * @param host the address this server should bind to
  * @param requestedPort the port this server will attempt to bind to
- * @param dispatcherActor reference to the Dispatcher actor to which requests can be sent
- * @param masterUrl the URL of the Master new drivers will attempt to connect to
  * @param masterConf the conf used by the Master
+ * @param scheduler the scheduler that handles driver requests
  */
 private [spark] class MesosRestServer(
     host: String,
     requestedPort: Int,
-    dispatcherActor: ActorRef,
     masterConf: SparkConf,
-    masterUrl: String)
+    scheduler: ClusterScheduler)
   extends RestServer(
     host,
     requestedPort,
     masterConf,
-    new MesosSubmitRequestServlet(dispatcherActor, masterUrl, masterConf),
-    new MesosKillRequestServlet(dispatcherActor, masterConf),
-    new MesosStatusRequestServlet(dispatcherActor, masterConf)) {}
+    new MesosSubmitRequestServlet(scheduler, masterConf),
+    new MesosKillRequestServlet(scheduler, masterConf),
+    new MesosStatusRequestServlet(scheduler, masterConf)) {}
 
 class MesosSubmitRequestServlet(
-    dispatcherActor: ActorRef,
-    masterUrl: String,
+    scheduler: ClusterScheduler,
     conf: SparkConf)
   extends SubmitRequestServlet {
 
@@ -94,29 +90,27 @@ class MesosSubmitRequestServlet(
     val driverExtraLibraryPath = sparkProperties.get("spark.driver.extraLibraryPath")
     val superviseDriver = sparkProperties.get("spark.driver.supervise")
     val driverMemory = sparkProperties.get("spark.driver.memory")
+    val driverCores = sparkProperties.get("spark.driver.cores")
     val appArgs = request.appArgs
     val environmentVariables = request.environmentVariables
 
     // Construct driver description
     val conf = new SparkConf(false)
       .setAll(sparkProperties)
-      .set("spark.master", masterUrl)
+
     val extraClassPath = driverExtraClassPath.toSeq.flatMap(_.split(File.pathSeparator))
     val extraLibraryPath = driverExtraLibraryPath.toSeq.flatMap(_.split(File.pathSeparator))
     val extraJavaOpts = driverExtraJavaOptions.map(Utils.splitCommandString).getOrElse(Seq.empty)
     val sparkJavaOpts = Utils.sparkJavaOpts(conf)
     val javaOpts = sparkJavaOpts ++ extraJavaOpts
     val command = new Command(
-      "org.apache.spark.deploy.SparkSubmit",
-      Seq("--master", masterUrl, "--class", mainClass, "{{USER_JAR}}") ++ appArgs,
-      environmentVariables, extraClassPath, extraLibraryPath, javaOpts)
+      mainClass, appArgs, environmentVariables, extraClassPath, extraLibraryPath, javaOpts)
     val actualSuperviseDriver = superviseDriver.map(_.toBoolean).getOrElse(DEFAULT_SUPERVISE)
     val actualDriverMemory = driverMemory.map(Utils.memoryStringToMb).getOrElse(DEFAULT_MEMORY)
+    val actualDriverCores = driverCores.map(_.toInt).getOrElse(DEFAULT_CORES)
 
-    // Cores and memory are ignored in Mesos mode. We override the memory to be driver memory
-    // as the memory is used for JVM heap size of the driver later.
     new DriverDescription(
-      appResource, actualDriverMemory, 0, actualSuperviseDriver, command)
+      appResource, actualDriverMemory, actualDriverCores, actualSuperviseDriver, command)
   }
 
   protected override def handleSubmit(
@@ -125,15 +119,13 @@ class MesosSubmitRequestServlet(
       responseServlet: HttpServletResponse): SubmitRestProtocolResponse = {
     requestMessage match {
       case submitRequest: CreateSubmissionRequest =>
-        val askTimeout = AkkaUtils.askTimeout(conf)
         val driverDescription = buildDriverDescription(submitRequest)
-        val response = AkkaUtils.askWithReply[DeployMessages.SubmitDriverResponse](
-          DeployMessages.RequestSubmitDriver(driverDescription), dispatcherActor, askTimeout)
+        val response = scheduler.submitDriver(driverDescription)
         val submitResponse = new CreateSubmissionResponse
         submitResponse.serverSparkVersion = sparkVersion
-        submitResponse.message = response.message
+        submitResponse.message = response.message.orNull
         submitResponse.success = response.success
-        submitResponse.submissionId = response.driverId.orNull
+        submitResponse.submissionId = response.id
         val unknownFields = findUnknownFields(requestMessageJson, requestMessage)
         if (unknownFields.nonEmpty) {
           // If there are fields that the server does not know about, warn the client
@@ -147,36 +139,30 @@ class MesosSubmitRequestServlet(
   }
 }
 
-class MesosKillRequestServlet(
-    dispatcherActor: ActorRef,
-    conf: SparkConf) extends KillRequestServlet {
+class MesosKillRequestServlet(scheduler: ClusterScheduler, conf: SparkConf)
+  extends KillRequestServlet {
   protected override def handleKill(submissionId: String): KillSubmissionResponse = {
-    val askTimeout = AkkaUtils.askTimeout(conf)
-    val response = AkkaUtils.askWithReply[DeployMessages.KillDriverResponse](
-      DeployMessages.RequestKillDriver(submissionId), dispatcherActor, askTimeout)
+    val response = scheduler.killDriver(submissionId)
     val k = new KillSubmissionResponse
     k.serverSparkVersion = sparkVersion
-    k.message = response.message
+    k.message = response.message.orNull
     k.submissionId = submissionId
     k.success = response.success
     k
   }
 }
 
-class MesosStatusRequestServlet(
-    dispatcherActor: ActorRef,
-    conf: SparkConf) extends StatusRequestServlet {
+class MesosStatusRequestServlet(scheduler: ClusterScheduler, conf: SparkConf)
+  extends StatusRequestServlet {
   protected override def handleStatus(submissionId: String): SubmissionStatusResponse = {
-    val askTimeout = AkkaUtils.askTimeout(conf)
-    val response = AkkaUtils.askWithReply[DeployMessages.DriverStatusResponse](
-      DeployMessages.RequestDriverStatus(submissionId), dispatcherActor, askTimeout)
-    val message = response.exception.map { s"Exception from the cluster:\n" + formatException(_) }
+    val response = scheduler.getStatus(submissionId)
+    //val message = response.exception.map { s"Exception from the cluster:\n" + formatException(_) }
     val d = new SubmissionStatusResponse
     d.serverSparkVersion = sparkVersion
-    d.submissionId = submissionId
-    d.success = response.found
-    d.driverState = response.state.map(_.toString).orNull
-    d.message = message.orNull
+    d.submissionId = response.id
+    d.success = response.success
+    //d.driverState = response.state.map(_.toString).orNull
+    d.message = response.message.orNull
     d
   }
 }
