@@ -24,7 +24,7 @@ class MySqlOperator(BaseOperator):
     ui_color = '#ededed'
 
     @apply_defaults
-    def __init__(self, sql, mysql_conn_id, *args, **kwargs):
+    def __init__(self, sql, mysql_conn_id='mysql_default', *args, **kwargs):
         super(MySqlOperator, self).__init__(*args, **kwargs)
 
         self.hook = MySqlHook(mysql_conn_id=mysql_conn_id)
