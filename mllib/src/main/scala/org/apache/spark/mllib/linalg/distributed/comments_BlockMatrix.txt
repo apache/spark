@@ -20,6 +20,7 @@
       iii) i = the index over which the function operates (producing one item per i)
     [3] In our case, Iterator.tabulate(numRowBlocks)(i => ((i, blockColIndex, blockRowIndex), block))
       i) n = other.numColBlocks
+      ii) f is a function that uses Scala collections notation. Collections in Scala can be created via parentheses. In this case, the collection is a set of pairs (one pair for each i) in which the first element of the pair is a triple. 
       
 
 3. External package
