@@ -42,8 +42,8 @@ import org.apache.spark.util.Utils
 class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
 
   private val batchDuration = Milliseconds(500)
-  private val master: String = "local[2]"
-  private val framework: String = this.getClass.getSimpleName
+  private val master = "local[2]"
+  private val framework = this.getClass.getSimpleName
   private val freePort = findFreePort()
   private val brokerUri = "//localhost:" + freePort
   private val topic = "def"
@@ -69,7 +69,7 @@ class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
 
   test("mqtt input stream") {
     val sendMessage = "MQTT demo for spark streaming"
-    val receiveStream: ReceiverInputDStream[String] =
+    val receiveStream =
       MQTTUtils.createStream(ssc, "tcp:" + brokerUri, topic, StorageLevel.MEMORY_ONLY)
     @volatile var receiveMessage: List[String] = List()
     receiveStream.foreachRDD { rdd =>
@@ -123,12 +123,12 @@ class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
   def publishData(data: String): Unit = {
     var client: MqttClient = null
     try {
-      val persistence: MqttClientPersistence = new MqttDefaultFilePersistence(persistenceDir.getAbsolutePath)
+      val persistence = new MqttDefaultFilePersistence(persistenceDir.getAbsolutePath)
       client = new MqttClient("tcp:" + brokerUri, MqttClient.generateClientId(), persistence)
       client.connect()
       if (client.isConnected) {
-        val msgTopic: MqttTopic = client.getTopic(topic)
-        val message: MqttMessage = new MqttMessage(data.getBytes("utf-8"))
+        val msgTopic = client.getTopic(topic)
+        val message = new MqttMessage(data.getBytes("utf-8"))
         message.setQos(1)
         message.setRetained(true)
 

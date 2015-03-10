@@ -29,7 +29,7 @@ class DDLScanSource extends RelationProvider {
 }
 
 case class SimpleDDLScan(from: Int, to: Int)(@transient val sqlContext: SQLContext)
-  extends TableScan {
+  extends BaseRelation with TableScan {
 
   override def schema =
     StructType(Seq(

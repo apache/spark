@@ -48,6 +48,9 @@ _functions = {
     'lit': 'Creates a :class:`Column` of literal value.',
     'col': 'Returns a :class:`Column` based on the given column name.',
     'column': 'Returns a :class:`Column` based on the given column name.',
+    'asc': 'Returns a sort expression based on the ascending order of the given column name.',
+    'desc': 'Returns a sort expression based on the descending order of the given column name.',
+
     'upper': 'Converts a string expression to upper case.',
     'lower': 'Converts a string expression to upper case.',
     'sqrt': 'Computes the square root of the specified float value.',
@@ -69,6 +72,7 @@ for _name, _doc in _functions.items():
     globals()[_name] = _create_function(_name, _doc)
 del _name, _doc
 __all__ += _functions.keys()
+__all__.sort()
 
 
 def countDistinct(col, *cols):
