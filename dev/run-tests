@@ -55,6 +55,33 @@ function handle_error () {
   fi
 }
 
+# Build against the right version of Scala.
+{
+  if [ -n "$AMPLAB_JENKINS_BUILD_SCALA_VERSION" ]; then
+    if [ "$AMPLAB_JENKINS_BUILD_SCALA_VERSION" = "2.10" ]; then
+      export SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Pscala-2.10"
+    elif [ "$AMPLAB_JENKINS_BUILD_SCALA_VERSION" = "2.11" ]; then
+      export SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Pscala-2.11"
+    fi
+  fi
+
+  # Defaults to Scala 2.10
+}
+
+# Build against the right version of Hive.
+{
+  if [ -n "$AMPLAB_JENKINS_BUILD_HIVE_VERSION" ]; then
+    if [ "$AMPLAB_JENKINS_BUILD_HIVE_VERSION" = "0.12.0" ]; then
+      export SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive-0.12.0"
+    elif [ "$AMPLAB_JENKINS_BUILD_HIVE_VERSION" = "0.13.1" ]; then
+      export SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive-0.13.1"
+    fi
+  fi
+
+  # Defaults to Hive 0.13.1
+}
+
+
 export SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Pkinesis-asl"
 
 # Determine Java path and version.
@@ -142,15 +169,14 @@ CURRENT_BLOCK=$BLOCK_BUILD
 
 {
   HIVE_BUILD_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-thriftserver"
-  HIVE_12_BUILD_ARGS="$HIVE_BUILD_ARGS -Phive-0.12.0"
 
   # First build with Hive 0.12.0 to ensure patches do not break the Hive 0.12.0 build
-  echo "[info] Compile with Hive 0.12.0"
+  echo "[info] Compile with Hive $AMPLAB_JENKINS_BUILD_HIVE_VERSION"
   [ -d "lib_managed" ] && rm -rf lib_managed
-  echo "[info] Building Spark with these arguments: $HIVE_12_BUILD_ARGS"
+  echo "[info] Building Spark with these arguments: $HIVE_BUILD_ARGS"
 
   if [ "${AMPLAB_JENKINS_BUILD_TOOL}" == "maven" ]; then
-    build/mvn $HIVE_12_BUILD_ARGS clean package -DskipTests
+    build/mvn $HIVE_BUILD_ARGS clean package -DskipTests
   else
     # NOTE: echo "q" is needed because sbt on encountering a build file with failure
     # (either resolution or compilation) prompts the user for input either q, r, etc
@@ -160,20 +186,7 @@ CURRENT_BLOCK=$BLOCK_BUILD
     # QUESTION: Why doesn't 'yes "q"' work?
     # QUESTION: Why doesn't 'grep -v -e "^\[info\] Resolving"' work?
     echo -e "q\n" \
-      | build/sbt $HIVE_12_BUILD_ARGS clean hive/compile hive-thriftserver/compile \
-      | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
-  fi
-
-  # Then build with default Hive version (0.13.1) because tests are based on this version
-  echo "[info] Compile with Hive 0.13.1"
-  [ -d "lib_managed" ] && rm -rf lib_managed
-  echo "[info] Building Spark with these arguments: $HIVE_BUILD_ARGS"
-
-  if [ "${AMPLAB_JENKINS_BUILD_TOOL}" == "maven" ]; then
-    build/mvn $HIVE_BUILD_ARGS clean package -DskipTests
-  else
-    echo -e "q\n" \
-      | build/sbt $HIVE_BUILD_ARGS package assembly/assembly  \
+      | build/sbt $HIVE_BUILD_ARGS clean assembly/assembly \
       | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
   fi
 }
