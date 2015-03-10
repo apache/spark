@@ -40,11 +40,12 @@ class OneStageResource(uiRoot: UIRoot) {
         case Some((status,stageInfo)) =>
           val stageUiData = listener.synchronized{
             listener.stageIdToData.get((stageInfo.stageId, stageInfo.attemptId)).
-              getOrElse{ throw new SparkException("failed to get full stage data for stage: " + stageInfo.stageId +
-              ":" + stageInfo.attemptId)
+              getOrElse{ throw new SparkException("failed to get full stage data for stage: " +
+              stageInfo.stageId + ":" + stageInfo.attemptId)
             }
           }
-          AllStagesResource.stageUiToStageData(status, stageInfo, stageUiData, includeDetails = true)
+          AllStagesResource.stageUiToStageData(status, stageInfo, stageUiData,
+            includeDetails = true)
         case None =>
           throw new NotFoundException("unknown stage: " + stageId)
       }

@@ -38,7 +38,8 @@ private[ui] class ExecutorsPage(
     val maxMem = storageStatusList.map(_.maxMem).sum
     val memUsed = storageStatusList.map(_.memUsed).sum
     val diskUsed = storageStatusList.map(_.diskUsed).sum
-    val execInfo = for (statusId <- 0 until storageStatusList.size) yield ExecutorsPage.getExecInfo(listener, statusId)
+    val execInfo = for (statusId <- 0 until storageStatusList.size) yield
+      ExecutorsPage.getExecInfo(listener, statusId)
     val execInfoSorted = execInfo.sortBy(_.id)
     val logsExist = execInfo.filter(_.executorLogs.nonEmpty).nonEmpty
 

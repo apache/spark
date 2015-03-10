@@ -46,7 +46,8 @@ class ApplicationListResource(uiRoot: UIRoot) {
     allApps.filter{app =>
       val statusOk = (app.completed && includeCompleted) ||
         (!app.completed && includeRunning)
-      val dateOk = app.startTime.getTime >= minDate.timestamp && app.startTime.getTime <= maxDate.timestamp
+      val dateOk = app.startTime.getTime >= minDate.timestamp &&
+        app.startTime.getTime <= maxDate.timestamp
       statusOk && dateOk
     }
   }
@@ -64,7 +65,9 @@ object ApplicationsListResource {
     )
   }
 
-  def convertApplicationInfo(internal: InternalApplicationInfo, completed: Boolean): ApplicationInfo = {
+  def convertApplicationInfo(
+      internal: InternalApplicationInfo,
+      completed: Boolean): ApplicationInfo = {
     ApplicationInfo(
       id = internal.id,
       name = internal.desc.name,

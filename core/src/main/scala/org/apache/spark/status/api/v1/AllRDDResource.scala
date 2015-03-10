@@ -30,11 +30,12 @@ class AllRDDResource(uiRoot: UIRoot) {
     @PathParam("appId") appId: String
   ): Seq[RDDStorageInfo] = {
     uiRoot.withSparkUI(appId) { ui =>
-      //should all access on storageListener also be synchronized?
+      // should all access on storageListener also be synchronized?
       val storageStatusList = ui.storageListener.storageStatusList
       val rddInfos = ui.storageListener.rddInfoList
       rddInfos.map{rddInfo =>
-        AllRDDResource.getRDDStorageInfo(rddInfo.id, rddInfo, storageStatusList, includeDetails = false)
+        AllRDDResource.getRDDStorageInfo(rddInfo.id, rddInfo, storageStatusList,
+          includeDetails = false)
       }
 
     }
@@ -44,7 +45,10 @@ class AllRDDResource(uiRoot: UIRoot) {
 
 object AllRDDResource {
 
-  def getRDDStorageInfo(rddId: Int, listener: StorageListener, includeDetails: Boolean): Option[RDDStorageInfo] = {
+  def getRDDStorageInfo(
+      rddId: Int,
+      listener: StorageListener,
+      includeDetails: Boolean): Option[RDDStorageInfo] = {
     val storageStatusList = listener.storageStatusList
     listener.rddInfoList.find(_.id == rddId).map{rddInfo =>
       getRDDStorageInfo(rddId, rddInfo, storageStatusList, includeDetails)

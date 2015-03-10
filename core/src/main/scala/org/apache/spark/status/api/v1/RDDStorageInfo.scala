@@ -16,8 +16,8 @@
  */
 package org.apache.spark.status.api.v1
 
-//Q: should Tachyon size go in here as well?  currently the UI only shows it on the overall storage page ... does
-// anybody pay attention to it?
+// Q: should Tachyon size go in here as well?  currently the UI only shows it on the overall storage
+// page ... does anybody pay attention to it?
 case class RDDStorageInfo(
   id: Int,
   name: String,

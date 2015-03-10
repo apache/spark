@@ -91,7 +91,8 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
               </h4> ++
               appTable
             } else {
-              <h4>No {if (requestedIncomplete) "running" else "completed"} applications found!</h4> ++
+              <h4>No {if (requestedIncomplete) "running" else "completed"}
+                applications found!</h4> ++
               <p>Did you specify the correct logging directory?
                 Please verify your setting of <span style="font-style:italic">
                 spark.history.fs.logDirectory</span> and whether you have the permissions to
