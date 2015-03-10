@@ -28,10 +28,11 @@ import org.apache.spark._
 
 class KafkaRDDSuite extends FunSuite with BeforeAndAfterAll {
 
-  var kafkaTestUtils: KafkaTestUtils = _
+  private var kafkaTestUtils: KafkaTestUtils = _
 
-  val sparkConf = new SparkConf().setMaster("local[4]").setAppName(this.getClass.getSimpleName)
-  var sc: SparkContext = _
+  private val sparkConf = new SparkConf().setMaster("local[4]")
+    .setAppName(this.getClass.getSimpleName)
+  private var sc: SparkContext = _
 
   override def beforeAll {
     sc = new SparkContext(sparkConf)

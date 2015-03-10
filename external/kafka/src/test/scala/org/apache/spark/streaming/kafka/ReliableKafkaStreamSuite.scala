@@ -38,18 +38,18 @@ import org.apache.spark.util.Utils
 
 class ReliableKafkaStreamSuite extends FunSuite with BeforeAndAfter with Eventually {
 
-  val sparkConf = new SparkConf()
+  private val sparkConf = new SparkConf()
     .setMaster("local[4]")
     .setAppName(this.getClass.getSimpleName)
     .set("spark.streaming.receiver.writeAheadLog.enable", "true")
-  val data = Map("a" -> 10, "b" -> 10, "c" -> 10)
+  private val data = Map("a" -> 10, "b" -> 10, "c" -> 10)
 
-  var kafkaTestUtils: KafkaTestUtils = _
+  private var kafkaTestUtils: KafkaTestUtils = _
 
-  var groupId: String = _
-  var kafkaParams: Map[String, String] = _
-  var ssc: StreamingContext = _
-  var tempDirectory: File = null
+  private var groupId: String = _
+  private var kafkaParams: Map[String, String] = _
+  private var ssc: StreamingContext = _
+  private var tempDirectory: File = null
 
   before {
     kafkaTestUtils = new KafkaTestUtils

@@ -24,7 +24,6 @@ import java.util.Random;
 
 import scala.Predef;
 import scala.Tuple2;
-import scala.collection.JavaConverters;
 
 import kafka.serializer.StringDecoder;
 import org.junit.After;
@@ -84,11 +83,7 @@ public class JavaKafkaStreamSuite implements Serializable {
     sent.put("c", 10);
 
     kafkaTestUtils.createTopic(topic);
-    HashMap<String, Object> tmp = new HashMap<String, Object>(sent);
-    kafkaTestUtils.sendMessages(topic,
-        JavaConverters.mapAsScalaMapConverter(tmp).asScala().toMap(
-            Predef.<Tuple2<String, Object>>conforms())
-    );
+    kafkaTestUtils.sendMessages(topic, sent);
 
     HashMap<String, String> kafkaParams = new HashMap<String, String>();
     kafkaParams.put("zookeeper.connect", kafkaTestUtils.zkAddress());

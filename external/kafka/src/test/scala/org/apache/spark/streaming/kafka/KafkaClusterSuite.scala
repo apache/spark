@@ -23,11 +23,11 @@ import kafka.common.TopicAndPartition
 import org.scalatest.{FunSuite, BeforeAndAfterAll}
 
 class KafkaClusterSuite extends FunSuite with BeforeAndAfterAll {
-  val topic = "kcsuitetopic" + Random.nextInt(10000)
-  val topicAndPartition = TopicAndPartition(topic, 0)
-  var kc: KafkaCluster = null
+  private val topic = "kcsuitetopic" + Random.nextInt(10000)
+  private val topicAndPartition = TopicAndPartition(topic, 0)
+  private var kc: KafkaCluster = null
 
-  var kafkaTestUtils: KafkaTestUtils = _
+  private var kafkaTestUtils: KafkaTestUtils = _
 
   override def beforeAll() {
     kafkaTestUtils = new KafkaTestUtils

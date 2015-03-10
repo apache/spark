@@ -34,8 +34,8 @@ import kafka.producer.{KeyedMessage, Producer, ProducerConfig}
 import kafka.serializer.StringEncoder
 import kafka.server.{KafkaConfig, KafkaServer}
 import kafka.utils.ZKStringSerializer
-import org.I0Itec.zkclient.ZkClient
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
+import org.I0Itec.zkclient.ZkClient
 
 import org.apache.spark.Logging
 import org.apache.spark.streaming.Time
@@ -151,12 +151,13 @@ private class KafkaTestUtils extends Logging {
     waitUntilMetadataIsPropagated(topic, 0)
   }
 
+  /** Java function for sending messages to the Kafka broker */
   def sendMessages(topic: String, messageToFreq: JMap[String, JInt]): Unit = {
     import scala.collection.JavaConversions._
     sendMessages(topic, Map(messageToFreq.mapValues(_.intValue()).toSeq: _*))
   }
 
-  /** Send the messages with its duplications to the Kafka broker */
+  /** Send the messages to the Kafka broker */
   def sendMessages(topic: String, messageToFreq: Map[String, Int]): Unit = {
     val messages = messageToFreq.flatMap { case (s, freq) => Seq.fill(freq)(s) }.toArray
     sendMessages(topic, messages)

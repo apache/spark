@@ -46,11 +46,11 @@ class DirectKafkaStreamSuite
     .setMaster("local[4]")
     .setAppName(this.getClass.getSimpleName)
 
-  var sc: SparkContext = _
-  var ssc: StreamingContext = _
-  var testDir: File = _
+  private var sc: SparkContext = _
+  private var ssc: StreamingContext = _
+  private var testDir: File = _
 
-  var kafkaTestUtils: KafkaTestUtils = _
+  private var kafkaTestUtils: KafkaTestUtils = _
 
   override def beforeAll {
     kafkaTestUtils = new KafkaTestUtils
