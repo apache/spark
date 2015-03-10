@@ -148,7 +148,11 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 
   override def getAppUI(appId: String): Option[SparkUI] = {
     try {
-      applications.get(appId).map { info =>
+      val appOpt = applications.get(appId).orElse {
+        getListing(true)
+        applications.get(appId)
+      }
+      appOpt.map { info =>
         val replayBus = new ReplayListenerBus()
         val ui = {
           val conf = this.conf.clone()
