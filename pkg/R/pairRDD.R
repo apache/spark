@@ -11,8 +11,6 @@
 #' @param x The RDD to collect
 #' @param key The key to look up for
 #' @return a list of values in this RDD for key key
-#' @rdname lookup
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -20,6 +18,7 @@
 #' rdd <- parallelize(sc, pairs)
 #' lookup(rdd, 1) # list(1, 3)
 #'}
+#' @rdname lookup
 #' @aliases lookup,RDD-method
 setMethod("lookup",
           signature(x = "RDD", key = "ANY"),
@@ -39,14 +38,13 @@ setMethod("lookup",
 #'
 #' @param x The RDD to count keys.
 #' @return list of (key, count) pairs, where count is number of each key in rdd.
-#' @rdname countByKey
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, list(c("a", 1), c("b", 1), c("a", 1)))
 #' countByKey(rdd) # ("a", 2L), ("b", 1L)
 #'}
+#' @rdname countByKey
 #' @aliases countByKey,RDD-method
 setMethod("countByKey",
           signature(x = "RDD"),
@@ -58,14 +56,13 @@ setMethod("countByKey",
 #' Return an RDD with the keys of each tuple.
 #'
 #' @param x The RDD from which the keys of each tuple is returned.
-#' @rdname keys
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, list(list(1, 2), list(3, 4)))
 #' collect(keys(rdd)) # list(1, 3)
 #'}
+#' @rdname keys
 #' @aliases keys,RDD
 setMethod("keys",
           signature(x = "RDD"),
@@ -79,14 +76,13 @@ setMethod("keys",
 #' Return an RDD with the values of each tuple.
 #'
 #' @param x The RDD from which the values of each tuple is returned.
-#' @rdname values
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, list(list(1, 2), list(3, 4)))
 #' collect(values(rdd)) # list(2, 4)
 #'}
+#' @rdname values
 #' @aliases values,RDD
 setMethod("values",
           signature(x = "RDD"),
@@ -104,8 +100,6 @@ setMethod("values",
 #' @param X The RDD to apply the transformation.
 #' @param FUN the transformation to apply on the value of each element.
 #' @return a new RDD created by the transformation.
-#' @rdname mapValues
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -114,6 +108,7 @@ setMethod("values",
 #' collect(mapValues(makePairs, function(x) { x * 2) })
 #' Output: list(list(1,2), list(2,4), list(3,6), ...)
 #'}
+#' @rdname mapValues
 #' @aliases mapValues,RDD,function-method
 setMethod("mapValues",
           signature(X = "RDD", FUN = "function"),
@@ -132,8 +127,6 @@ setMethod("mapValues",
 #' @param X The RDD to apply the transformation.
 #' @param FUN the transformation to apply on the value of each element.
 #' @return a new RDD created by the transformation.
-#' @rdname flatMapValues
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -141,6 +134,7 @@ setMethod("mapValues",
 #' collect(flatMapValues(rdd, function(x) { x }))
 #' Output: list(list(1,1), list(1,2), list(2,3), list(2,4))
 #'}
+#' @rdname flatMapValues
 #' @aliases flatMapValues,RDD,function-method
 setMethod("flatMapValues",
           signature(X = "RDD", FUN = "function"),
@@ -168,8 +162,6 @@ setMethod("flatMapValues",
 #' @param partitionFunc The partition function to use. Uses a default hashCode
 #'                      function if not provided
 #' @return An RDD partitioned using the specified partitioner.
-#' @rdname partitionBy
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -178,6 +170,7 @@ setMethod("flatMapValues",
 #' parts <- partitionBy(rdd, 2L)
 #' collectPartition(parts, 0L) # First partition should contain list(1, 2) and list(1, 4)
 #'}
+#' @rdname partitionBy
 #' @aliases partitionBy,RDD,integer-method
 setMethod("partitionBy",
           signature(x = "RDD", numPartitions = "integer"),
@@ -234,8 +227,6 @@ setMethod("partitionBy",
 #' @param numPartitions Number of partitions to create.
 #' @return An RDD where each element is list(K, list(V))
 #' @seealso reduceByKey
-#' @rdname groupByKey
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -245,6 +236,7 @@ setMethod("partitionBy",
 #' grouped <- collect(parts)
 #' grouped[[1]] # Should be a list(1, list(2, 4))
 #'}
+#' @rdname groupByKey
 #' @aliases groupByKey,RDD,integer-method
 setMethod("groupByKey",
           signature(x = "RDD", numPartitions = "integer"),
@@ -294,9 +286,7 @@ setMethod("groupByKey",
 #' @param numPartitions Number of partitions to create.
 #' @return An RDD where each element is list(K, V') where V' is the merged
 #'         value
-#' @rdname reduceByKey
 #' @seealso groupByKey
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -306,6 +296,7 @@ setMethod("groupByKey",
 #' reduced <- collect(parts)
 #' reduced[[1]] # Should be a list(1, 6)
 #'}
+#' @rdname reduceByKey
 #' @aliases reduceByKey,RDD,integer-method
 setMethod("reduceByKey",
           signature(x = "RDD", combineFunc = "ANY", numPartitions = "integer"),
@@ -336,9 +327,7 @@ setMethod("reduceByKey",
 #'             list(K, V) or c(K, V).
 #' @param combineFunc The associative reduce function to use.
 #' @return A list of elements of type list(K, V') where V' is the merged value for each key
-#' @rdname reduceByKeyLocally
 #' @seealso reduceByKey
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -347,6 +336,7 @@ setMethod("reduceByKey",
 #' reduced <- reduceByKeyLocally(rdd, "+")
 #' reduced # list(list(1, 6), list(1.1, 3))
 #'}
+#' @rdname reduceByKeyLocally
 #' @aliases reduceByKeyLocally,RDD,integer-method
 setMethod("reduceByKeyLocally",
           signature(x = "RDD", combineFunc = "ANY"),
@@ -402,9 +392,7 @@ setMethod("reduceByKeyLocally",
 #' @param numPartitions Number of partitions to create.
 #' @return An RDD where each element is list(K, C) where C is the combined type
 #'
-#' @rdname combineByKey
 #' @seealso groupByKey, reduceByKey
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -414,6 +402,7 @@ setMethod("reduceByKeyLocally",
 #' combined <- collect(parts)
 #' combined[[1]] # Should be a list(1, 6)
 #'}
+#' @rdname combineByKey
 #' @aliases combineByKey,RDD,ANY,ANY,ANY,integer-method
 setMethod("combineByKey",
           signature(x = "RDD", createCombiner = "ANY", mergeValue = "ANY",
@@ -463,9 +452,7 @@ setMethod("combineByKey",
 #'              a different result type from the type of the values.
 #' @param combOp A function to aggregate results of seqOp.
 #' @return An RDD containing the aggregation result.
-#' @rdname aggregateByKey
 #' @seealso foldByKey, combineByKey
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -476,6 +463,7 @@ setMethod("combineByKey",
 #' aggregateByKey(rdd, zeroValue, seqOp, combOp, 2L) 
 #'   # list(list(1, list(3, 2)), list(2, list(7, 2)))
 #'}
+#' @rdname aggregateByKey
 #' @aliases aggregateByKey,RDD,ANY,ANY,ANY,integer-method
 setMethod("aggregateByKey",
           signature(x = "RDD", zeroValue = "ANY", seqOp = "ANY",
@@ -499,15 +487,14 @@ setMethod("aggregateByKey",
 #' @param zeroValue A neutral "zero value".
 #' @param func An associative function for folding values of each key.
 #' @return An RDD containing the aggregation result.
-#' @rdname foldByKey
 #' @seealso aggregateByKey, combineByKey
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, list(list(1, 1), list(1, 2), list(2, 3), list(2, 4)))
 #' foldByKey(rdd, 0, "+", 2L) # list(list(1, 3), list(2, 7))
 #'}
+#' @rdname foldByKey
 #' @aliases foldByKey,RDD,ANY,ANY,integer-method
 setMethod("foldByKey",
           signature(x = "RDD", zeroValue = "ANY",
@@ -532,8 +519,6 @@ setMethod("foldByKey",
 #' @param numPartitions Number of partitions to create.
 #' @return a new RDD containing all pairs of elements with matching keys in
 #'         two input RDDs.
-#' @rdname join-methods
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -541,6 +526,7 @@ setMethod("foldByKey",
 #' rdd2 <- parallelize(sc, list(list(1, 2), list(1, 3)))
 #' join(rdd1, rdd2, 2L) # list(list(1, list(1, 2)), list(1, list(1, 3))
 #'}
+#' @rdname join-methods
 #' @aliases join,RDD,RDD-method
 setMethod("join",
           signature(x = "RDD", y = "RDD", numPartitions = "integer"),
@@ -569,8 +555,6 @@ setMethod("join",
 #' @return For each element (k, v) in x, the resulting RDD will either contain 
 #'         all pairs (k, (v, w)) for (k, w) in rdd2, or the pair (k, (v, NULL)) 
 #'         if no elements in rdd2 have key k.
-#' @rdname join-methods
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -579,6 +563,7 @@ setMethod("join",
 #' leftOuterJoin(rdd1, rdd2, 2L)
 #' # list(list(1, list(1, 2)), list(1, list(1, 3)), list(2, list(4, NULL)))
 #'}
+#' @rdname join-methods
 #' @aliases leftOuterJoin,RDD,RDD-method
 setMethod("leftOuterJoin",
           signature(x = "RDD", y = "RDD", numPartitions = "integer"),
@@ -607,8 +592,6 @@ setMethod("leftOuterJoin",
 #' @return For each element (k, w) in y, the resulting RDD will either contain
 #'         all pairs (k, (v, w)) for (k, v) in x, or the pair (k, (NULL, w))
 #'         if no elements in x have key k.
-#' @rdname join-methods
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -617,6 +600,7 @@ setMethod("leftOuterJoin",
 #' rightOuterJoin(rdd1, rdd2, 2L)
 #' # list(list(1, list(2, 1)), list(1, list(3, 1)), list(2, list(NULL, 4)))
 #'}
+#' @rdname join-methods
 #' @aliases rightOuterJoin,RDD,RDD-method
 setMethod("rightOuterJoin",
           signature(x = "RDD", y = "RDD", numPartitions = "integer"),
@@ -646,8 +630,6 @@ setMethod("rightOuterJoin",
 #'         will contain all pairs (k, (v, w)) for both (k, v) in x and
 #'         (k, w) in y, or the pair (k, (NULL, w))/(k, (v, NULL)) if no elements 
 #'         in x/y have key k.
-#' @rdname join-methods
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -658,6 +640,7 @@ setMethod("rightOuterJoin",
 #'                               #      list(2, list(NULL, 4)))
 #'                               #      list(3, list(3, NULL)),
 #'}
+#' @rdname join-methods
 #' @aliases fullOuterJoin,RDD,RDD-method
 setMethod("fullOuterJoin",
           signature(x = "RDD", y = "RDD", numPartitions = "integer"),
@@ -679,8 +662,6 @@ setMethod("fullOuterJoin",
 #' @param numPartitions Number of partitions to create.
 #' @return a new RDD containing all pairs of elements with values in a list
 #' in all RDDs.
-#' @rdname cogroup
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -689,6 +670,7 @@ setMethod("fullOuterJoin",
 #' cogroup(rdd1, rdd2, numPartitions = 2L) 
 #' # list(list(1, list(1, list(2, 3))), list(2, list(list(4), list()))
 #'}
+#' @rdname cogroup
 #' @aliases cogroup,RDD-method
 setMethod("cogroup",
           "RDD",
@@ -735,14 +717,13 @@ setMethod("cogroup",
 #' @param ascending A flag to indicate whether the sorting is ascending or descending.
 #' @param numPartitions Number of partitions to create.
 #' @return An RDD where all (k, v) pair elements are sorted.
-#' @rdname sortByKey
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, list(list(3, 1), list(2, 2), list(1, 3)))
 #' collect(sortByKey(rdd)) # list (list(1, 3), list(2, 2), list(3, 1))
 #'}
+#' @rdname sortByKey
 #' @aliases sortByKey,RDD,RDD-method
 setMethod("sortByKey",
           signature(x = "RDD"),

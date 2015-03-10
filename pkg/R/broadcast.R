@@ -34,7 +34,6 @@ Broadcast <- function(id, value, jBroadcastRef, objName) {
 #'
 #' @param bcast The broadcast variable to get
 #' @rdname broadcast
-#' @export
 #' @aliases value,Broadcast-method
 setMethod("value",
           signature(bcast = "Broadcast"),
