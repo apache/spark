@@ -81,7 +81,7 @@ execRunner () {
     echo ""
   }
 
-  exec "$@"
+  "$@"
 }
 
 addJava () {

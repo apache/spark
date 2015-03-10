@@ -146,6 +146,23 @@ object TestJsonData {
           ]]
       }""" :: Nil)
 
+  val mapType1 =
+    TestSQLContext.sparkContext.parallelize(
+      """{"map": {"a": 1}}""" ::
+      """{"map": {"b": 2}}""" ::
+      """{"map": {"c": 3}}""" ::
+      """{"map": {"c": 1, "d": 4}}""" ::
+      """{"map": {"e": null}}""" :: Nil)
+
+  val mapType2 =
+    TestSQLContext.sparkContext.parallelize(
+      """{"map": {"a": {"field1": [1, 2, 3, null]}}}""" ::
+      """{"map": {"b": {"field2": 2}}}""" ::
+      """{"map": {"c": {"field1": [], "field2": 4}}}""" ::
+      """{"map": {"c": {"field2": 3}, "d": {"field1": [null]}}}""" ::
+      """{"map": {"e": null}}""" ::
+      """{"map": {"f": {"field1": null}}}""" :: Nil)
+
   val nullsInArrays =
     TestSQLContext.sparkContext.parallelize(
       """{"field1":[[null], [[["Test"]]]]}""" ::

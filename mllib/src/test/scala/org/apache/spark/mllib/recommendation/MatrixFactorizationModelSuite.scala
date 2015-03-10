@@ -22,6 +22,7 @@ import org.scalatest.FunSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.Utils
 
 class MatrixFactorizationModelSuite extends FunSuite with MLlibTestSparkContext {
 
@@ -51,6 +52,24 @@ class MatrixFactorizationModelSuite extends FunSuite with MLlibTestSparkContext 
     val prodFeatures1 = sc.parallelize(Seq((2, Array(5.0))))
     intercept[IllegalArgumentException] {
       new MatrixFactorizationModel(rank, userFeatures, prodFeatures1)
+    }
+  }
+
+  test("save/load") {
+    val model = new MatrixFactorizationModel(rank, userFeatures, prodFeatures)
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+    def collect(features: RDD[(Int, Array[Double])]): Set[(Int, Seq[Double])] = {
+      features.mapValues(_.toSeq).collect().toSet
+    }
+    try {
+      model.save(sc, path)
+      val newModel = MatrixFactorizationModel.load(sc, path)
+      assert(newModel.rank === rank)
+      assert(collect(newModel.userFeatures) === collect(userFeatures))
+      assert(collect(newModel.productFeatures) === collect(prodFeatures))
+    } finally {
+      Utils.deleteRecursively(tempDir)
     }
   }
 }

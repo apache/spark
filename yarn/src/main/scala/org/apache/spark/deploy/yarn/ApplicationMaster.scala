@@ -19,9 +19,9 @@ package org.apache.spark.deploy.yarn
 
 import scala.util.control.NonFatal
 
-import java.io.IOException
+import java.io.{File, IOException}
 import java.lang.reflect.InvocationTargetException
-import java.net.Socket
+import java.net.{Socket, URL}
 import java.util.concurrent.atomic.AtomicReference
 
 import akka.actor._
@@ -38,7 +38,8 @@ import org.apache.spark.deploy.{PythonRunner, SparkHadoopUtil}
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.scheduler.cluster.YarnSchedulerBackend
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
+import org.apache.spark.util.{AkkaUtils, ChildFirstURLClassLoader, MutableURLClassLoader,
+  SignalLogger, Utils}
 
 /**
  * Common application master functionality for Spark on Yarn.
@@ -67,8 +68,8 @@ private[spark] class ApplicationMaster(
   @volatile private var finalMsg: String = ""
   @volatile private var userClassThread: Thread = _
 
-  private var reporterThread: Thread = _
-  private var allocator: YarnAllocator = _
+  @volatile private var reporterThread: Thread = _
+  @volatile private var allocator: YarnAllocator = _
 
   // Fields used in client mode.
   private var actorSystem: ActorSystem = null
@@ -244,7 +245,6 @@ private[spark] class ApplicationMaster(
       host: String,
       port: String,
       isClusterMode: Boolean): Unit = {
-    
     val driverUrl = AkkaUtils.address(
       AkkaUtils.protocol(actorSystem),
       SparkEnv.driverActorSystemName,
@@ -453,12 +453,24 @@ private[spark] class ApplicationMaster(
   private def startUserApplication(): Thread = {
     logInfo("Starting the user application in a separate Thread")
     System.setProperty("spark.executor.instances", args.numExecutors.toString)
+
+    val classpath = Client.getUserClasspath(sparkConf)
+    val urls = classpath.map { entry =>
+      new URL("file:" + new File(entry.getPath()).getAbsolutePath())
+    }
+    val userClassLoader =
+      if (Client.isUserClassPathFirst(sparkConf, isDriver = true)) {
+        new ChildFirstURLClassLoader(urls, Utils.getContextOrSparkClassLoader)
+      } else {
+        new MutableURLClassLoader(urls, Utils.getContextOrSparkClassLoader)
+      }
+
     if (args.primaryPyFile != null && args.primaryPyFile.endsWith(".py")) {
       System.setProperty("spark.submit.pyFiles",
         PythonRunner.formatPaths(args.pyFiles).mkString(","))
     }
-    val mainMethod = Class.forName(args.userClass, false,
-      Thread.currentThread.getContextClassLoader).getMethod("main", classOf[Array[String]])
+    val mainMethod = userClassLoader.loadClass(args.userClass)
+      .getMethod("main", classOf[Array[String]])
 
     val userThread = new Thread {
       override def run() {
@@ -473,16 +485,16 @@ private[spark] class ApplicationMaster(
             e.getCause match {
               case _: InterruptedException =>
                 // Reporter thread can interrupt to stop user class
-              case e: Exception =>
+              case cause: Throwable =>
+                logError("User class threw exception: " + cause.getMessage, cause)
                 finish(FinalApplicationStatus.FAILED,
                   ApplicationMaster.EXIT_EXCEPTION_USER_CLASS,
-                  "User class threw exception: " + e.getMessage)
-                // re-throw to get it logged
-                throw e
+                  "User class threw exception: " + cause.getMessage)
             }
         }
       }
     }
+    userThread.setContextClassLoader(userClassLoader)
     userThread.setName("Driver")
     userThread.start()
     userThread

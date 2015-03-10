@@ -25,7 +25,13 @@ import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.scalatest.{BeforeAndAfter, Matchers, FunSuite}
 
-class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers {
+import org.apache.hadoop.fs.Path
+import org.mockito.Mockito.{when}
+import org.scalatest.mock.MockitoSugar
+
+import org.apache.spark.ui.SparkUI
+
+class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with MockitoSugar {
 
   private val logDir = new File("src/test/resources/spark-events")
   private val expRoot = new File("src/test/resources/HistoryServerExpectations/")
@@ -142,6 +148,29 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers {
 
   }
 
+  test("generate history page with relative links") {
+    val historyServer = mock[HistoryServer]
+    val request = mock[HttpServletRequest]
+    val ui = mock[SparkUI]
+    val link = "/history/app1"
+    val info = new ApplicationHistoryInfo("app1", "app1", 0, 2, 1, "xxx", true)
+    when(historyServer.getApplicationList()).thenReturn(Seq(info))
+    when(ui.basePath).thenReturn(link)
+    when(historyServer.getProviderConfig()).thenReturn(Map[String, String]())
+    val page = new HistoryPage(historyServer)
+
+    //when
+    val response = page.render(request)
+
+    //then
+    val links = response \\ "a"
+    val justHrefs = for {
+      l <- links
+      attrs <- l.attribute("href")
+    } yield (attrs.toString)
+    justHrefs should contain(link)
+  }
+
   def getContentAndCode(path: String, port: Int = port): (Int, Option[String], Option[String]) = {
     val url = new URL(s"http://localhost:$port/json/v1/$path")
     val connection = url.openConnection().asInstanceOf[HttpURLConnection]
@@ -201,3 +230,4 @@ object HistoryServerSuite {
     }
   }
 }
+

@@ -57,20 +57,23 @@ class SparkSubmitUtilsSuite extends FunSuite with BeforeAndAfterAll {
 
   test("create repo resolvers") {
     val resolver1 = SparkSubmitUtils.createRepoResolvers(None)
-    // should have central by default
-    assert(resolver1.getResolvers.size() === 1)
+    // should have central and spark-packages by default
+    assert(resolver1.getResolvers.size() === 2)
     assert(resolver1.getResolvers.get(0).asInstanceOf[IBiblioResolver].getName === "central")
+    assert(resolver1.getResolvers.get(1).asInstanceOf[IBiblioResolver].getName === "spark-packages")
 
     val repos = "a/1,b/2,c/3"
     val resolver2 = SparkSubmitUtils.createRepoResolvers(Option(repos))
-    assert(resolver2.getResolvers.size() === 4)
+    assert(resolver2.getResolvers.size() === 5)
     val expected = repos.split(",").map(r => s"$r/")
     resolver2.getResolvers.toArray.zipWithIndex.foreach { case (resolver: IBiblioResolver, i) =>
       if (i == 0) {
         assert(resolver.getName === "central")
+      } else if (i == 1) {
+        assert(resolver.getName === "spark-packages")
       } else {
-        assert(resolver.getName === s"repo-$i")
-        assert(resolver.getRoot === expected(i - 1))
+        assert(resolver.getName === s"repo-${i - 1}")
+        assert(resolver.getRoot === expected(i - 2))
       }
     }
   }
@@ -114,8 +117,20 @@ class SparkSubmitUtilsSuite extends FunSuite with BeforeAndAfterAll {
   }
 
   test("neglects Spark and Spark's dependencies") {
-    val path = SparkSubmitUtils.resolveMavenCoordinates(
-      "org.apache.spark:spark-core_2.10:1.2.0", None, None, true)
+    val components = Seq("bagel_", "catalyst_", "core_", "graphx_", "hive_", "mllib_", "repl_",
+      "sql_", "streaming_", "yarn_", "network-common_", "network-shuffle_", "network-yarn_")
+
+    val coordinates =
+      components.map(comp => s"org.apache.spark:spark-${comp}2.10:1.2.0").mkString(",") +
+      ",org.apache.spark:spark-core_fake:1.2.0"
+
+    val path = SparkSubmitUtils.resolveMavenCoordinates(coordinates, None, None, true)
     assert(path === "", "should return empty path")
+    // Should not exclude the following dependency. Will throw an error, because it doesn't exist,
+    // but the fact that it is checking means that it wasn't excluded.
+    intercept[RuntimeException] {
+      SparkSubmitUtils.resolveMavenCoordinates(coordinates +
+        ",org.apache.spark:spark-streaming-kafka-assembly_2.10:1.2.0", None, None, true)
+    }
   }
 }

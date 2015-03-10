@@ -149,4 +149,18 @@ object Statistics {
   def chiSqTest(data: RDD[LabeledPoint]): Array[ChiSqTestResult] = {
     ChiSqTest.chiSquaredFeatures(data)
   }
+
+  /**
+   * Given an empirical distribution defined by the input RDD of samples, estimate its density at
+   * each of the given evaluation points using a Gaussian kernel.
+   *
+   * @param samples The samples RDD used to define the empirical distribution.
+   * @param standardDeviation The standard deviation of the kernel Gaussians.
+   * @param evaluationPoints The points at which to estimate densities.
+   * @return An array the same size as evaluationPoints with the density at each point.
+   */
+  def kernelDensity(samples: RDD[Double], standardDeviation: Double,
+      evaluationPoints: Iterable[Double]): Array[Double] = {
+    KernelDensity.estimate(samples, standardDeviation, evaluationPoints.toArray)
+  }
 }

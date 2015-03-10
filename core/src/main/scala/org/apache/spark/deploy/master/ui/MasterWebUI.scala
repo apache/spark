@@ -33,6 +33,7 @@ class MasterWebUI(val master: Master, requestedPort: Int)
 
   val masterActorRef = master.self
   val timeout = AkkaUtils.askTimeout(master.conf)
+  val killEnabled = master.conf.getBoolean("spark.ui.killEnabled", true)
 
   val masterPage = new MasterPage(this)
 
@@ -40,12 +41,16 @@ class MasterWebUI(val master: Master, requestedPort: Int)
 
   /** Initialize all components of the server. */
   def initialize() {
+    val masterPage = new MasterPage(this)
     attachPage(new ApplicationPage(this))
     attachPage(new HistoryNotFoundPage(this))
     attachPage(masterPage)
     attachHandler(createStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR, "/static"))
-
     attachHandler(JsonRootResource.getJsonServlet(this))
+    attachHandler(
+      createRedirectHandler("/app/kill", "/", masterPage.handleAppKillRequest))
+    attachHandler(
+      createRedirectHandler("/driver/kill", "/", masterPage.handleDriverKillRequest))
   }
 
   /** Attach a reconstructed UI to this Master UI. Only valid after bind(). */
