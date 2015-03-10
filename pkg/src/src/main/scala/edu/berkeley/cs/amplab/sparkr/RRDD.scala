@@ -307,13 +307,11 @@ private[sparkr] class BufferedStreamThread(
 }
 
 object RRDD {
-
   // Because forking processes from Java is expensive, we prefer to launch
   // a single R daemon (daemon.R) and tell it to fork new workers for our tasks.
   // This daemon currently only works on UNIX-based systems now, so we should
   // also fall back to launching workers (worker.R) directly.
-  // TODO(davies): make it configurable
-  val useDaemon = !System.getProperty("os.name").startsWith("Windows")
+  val inWindows = System.getProperty("os.name").startsWith("Windows")
   private[this] var errThread: BufferedStreamThread = _
   private[this] var daemonSocket: Socket = _
   private[this] var daemonChannel: DataOutputStream = _
@@ -345,6 +343,7 @@ object RRDD {
     for ((name, value) <- sparkExecutorEnvMap) {
       sparkConf.setExecutorEnv(name.asInstanceOf[String], value.asInstanceOf[String])
     }
+
     new JavaSparkContext(sparkConf)
   }
 
@@ -381,7 +380,8 @@ object RRDD {
    * ProcessBuilder used to launch worker R processes.
    */
   def createRWorker(rLibDir: String, port: Int) = {
-    if (useDaemon) {
+    val useDaemon = SparkEnv.get.conf.getBoolean("spark.sparkr.use.daemon", true)
+    if (!inWindows && useDaemon) {
       synchronized {
         if (daemonSocket == null) {
           // we expect one connections
