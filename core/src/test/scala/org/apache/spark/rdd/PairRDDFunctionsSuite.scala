@@ -35,12 +35,17 @@ import org.scalatest.FunSuite
 
 class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
   test("saveAsHadoopFileByKey should generate a text file per key") {
-    val pairs = sc.parallelize((1 to 20).zipWithIndex)
+    val keys = 1 to 20
+    val pairs = sc.parallelize(keys.zipWithIndex)
     val fs = FileSystem.get(new Configuration())
     val basePath = sc.conf.get("spark.local.dir", "/tmp")
     val fullPath = basePath + "testPath"
     fs.delete(new Path(fullPath), true)
     pairs.saveAsHadoopFileByKey(fullPath)
+
+    // Test that a file was created for each key
+
+
     fs.delete(new Path(fullPath), true)
   }
 

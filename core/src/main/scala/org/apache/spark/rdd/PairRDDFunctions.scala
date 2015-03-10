@@ -60,7 +60,7 @@ class RDDMultipleTextOutputFormat[K,V]() extends MultipleTextOutputFormat[K, V](
 
   override def generateFileNameForKeyValue(key: K, value: V, name: String): String =
   {
-    key.asInstanceOf[String]
+    key.toString()
   }
 }
 
