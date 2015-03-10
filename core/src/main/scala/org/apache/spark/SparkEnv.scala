@@ -41,7 +41,7 @@ import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinato
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleMemoryManager, ShuffleManager}
 import org.apache.spark.storage._
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.{AkkaUtils, RpcUtils, Utils}
 
 /**
  * :: DeveloperApi ::
@@ -300,7 +300,7 @@ object SparkEnv extends Logging {
         logInfo("Registering " + name)
         rpcEnv.setupEndpoint(name, endpointCreator)
       } else {
-        rpcEnv.setupDriverEndpointRef(name)
+        RpcUtils.makeDriverRef(name, conf, rpcEnv)
       }
     }
 

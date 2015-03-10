@@ -59,11 +59,6 @@ private[spark] trait RpcEnv {
   def setupThreadSafeEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef
 
   /**
-   * Retrieve a [[RpcEndpointRef]] which is located in the driver via its name.
-   */
-  def setupDriverEndpointRef(name: String): RpcEndpointRef
-
-  /**
    * Retrieve the [[RpcEndpointRef]] represented by `url`.
    */
   def setupEndpointRefByUrl(url: String): RpcEndpointRef

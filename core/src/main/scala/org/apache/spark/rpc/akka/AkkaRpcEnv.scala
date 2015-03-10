@@ -210,12 +210,8 @@ private[spark] class AkkaRpcEnv private (
       address.port.getOrElse(defaultAddress.port))
   }
 
-  override def setupDriverEndpointRef(name: String): RpcEndpointRef = {
-    new AkkaRpcEndpointRef(defaultAddress, AkkaUtils.makeDriverRef(name, conf, actorSystem), conf)
-  }
-
   override def setupEndpointRefByUrl(url: String): RpcEndpointRef = {
-    val timeout = Duration.create(conf.getLong("spark.akka.lookupTimeout", 30), "seconds")
+    val timeout = AkkaUtils.lookupTimeout(conf)
     val ref = Await.result(actorSystem.actorSelection(url).resolveOne(timeout), timeout)
     // TODO defaultAddress is wrong
     new AkkaRpcEndpointRef(defaultAddress, ref, conf)
