@@ -95,13 +95,13 @@ object AllStagesResource {
       numFailedTasks = stageUiData.numFailedTasks,
       executorRunTime = stageUiData.executorRunTime,
       inputBytes = stageUiData.inputBytes,
-      inputRecords = 0, //fix after SPARK-4874
+      inputRecords = stageUiData.inputRecords,
       outputBytes = stageUiData.outputBytes,
-      outputRecords = 0, //fix after SPARK-4874
+      outputRecords = stageUiData.outputRecords,
       shuffleReadBytes = stageUiData.shuffleReadTotalBytes,
-      shuffleReadRecords = 0, //fix after SPARK-4874
+      shuffleReadRecords = stageUiData.shuffleReadRecords,
       shuffleWriteBytes = stageUiData.shuffleWriteBytes,
-      shuffleWriteRecords = 0, //fix after SPARK-4874
+      shuffleWriteRecords = stageUiData.shuffleWriteRecords,
       memoryBytesSpilled = stageUiData.memoryBytesSpilled,
       diskBytesSpilled = stageUiData.diskBytesSpilled,
       schedulingPool = stageUiData.schedulingPool,
@@ -159,14 +159,14 @@ object AllStagesResource {
   def convertInputMetrics(internal: InternalInputMetrics): InputMetrics = {
     InputMetrics(
       bytesRead = internal.bytesRead,
-      recordsRead = 0 //fix after SPARK-4874
+      recordsRead = internal.recordsRead
     )
   }
 
   def convertOutputMetrics(internal: InternalOutputMetrics): OutputMetrics = {
     OutputMetrics(
       bytesWritten = internal.bytesWritten,
-      recordsWritten = 0  //fix after SPARK-4874
+      recordsWritten = internal.recordsWritten
     )
   }
 
@@ -177,7 +177,7 @@ object AllStagesResource {
       fetchWaitTime = internal.fetchWaitTime,
       remoteBytesRead = internal.remoteBytesRead,
       totalBlocksFetched = internal.totalBlocksFetched,
-      recordsRead = 0 //fix after SPARK-4874
+      recordsRead = internal.recordsRead
     )
   }
 
@@ -185,7 +185,7 @@ object AllStagesResource {
     ShuffleWriteMetrics(
       bytesWritten = internal.shuffleBytesWritten,
       writeTime = internal.shuffleWriteTime,
-      recordsWritten = 0  //fix after SPARK-4874
+      recordsWritten = internal.shuffleRecordsWritten
     )
   }
 
