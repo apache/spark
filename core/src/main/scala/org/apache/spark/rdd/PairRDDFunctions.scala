@@ -52,6 +52,18 @@ import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.CompactBuffer
 import org.apache.spark.util.random.StratifiedSamplingUtils
 
+class RDDMultipleTextOutputFormat[K,V]() extends MultipleTextOutputFormat[K, V]() {
+  override def generateActualKey(key: K, value: V): K =
+  {
+    NullWritable.get().asInstanceOf[K]
+  }
+
+  override def generateFileNameForKeyValue(key: K, value: V, name: String): String =
+  {
+    key.asInstanceOf[String]
+  }
+}
+
 /**
  * Extra functions available on RDDs of (key, value) pairs through an implicit conversion.
  */
@@ -867,22 +879,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     saveAsHadoopFile(path, keyClass, valueClass, fm.runtimeClass.asInstanceOf[Class[F]])
   }
 
-  class RDDMultipleTextOutputFormat[K,V] extends MultipleTextOutputFormat[K, V]() {
-
-    override def generateActualKey(key: K, value: V): K =
-    {
-      NullWritable.get().asInstanceOf[K]
-    }
-
-    override def generateFileNameForKeyValue(key: K, value: V, name: String): String =
-    {
-      key.asInstanceOf[String]
-    }
-  }
-
-  /**
-   * TODO: This only works if the key is a java Object (can't work with primitive types)
-   *
+  /*
    * Output the RDD to multiple files by key on any Hadoop-supported file system, using a Hadoop
    * `OutputFormat` class supporting the key and value types K and V in this RDD.
    *
@@ -894,8 +891,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    */
   def saveAsHadoopFileByKey[F <: OutputFormat[K, V]](path: String, numPartitions : Int)
                                                     (implicit fm: ClassTag[F]) {
-    partitionBy(new HashPartitioner(numPartitions)).
-      saveAsHadoopFileByKey(path)
+    partitionBy(new HashPartitioner(numPartitions))
+      .saveAsHadoopFileByKey(path)
   }
 
   def saveAsHadoopFileByKey[F <: OutputFormat[K, V]](path: String)(implicit fm: ClassTag[F]) {

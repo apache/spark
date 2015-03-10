@@ -1581,42 +1581,4 @@ public class JavaAPISuite implements Serializable {
     Assert.assertTrue(future.isDone());
   }
 
-
-  /**
-   * Test for SPARK-3647. This test needs to use the maven-built assembly to trigger the issue,
-   * since that's the only artifact where Guava classes have been relocated.
-   */
-  @Test
-  public void testGuavaOptional() {
-    // Stop the context created in setUp() and start a local-cluster one, to force usage of the
-    // assembly.
-    sc.stop();
-    JavaSparkContext localCluster = new JavaSparkContext("local-cluster[1,1,512]", "JavaAPISuite");
-    try {
-      JavaRDD<Integer> rdd1 = localCluster.parallelize(Arrays.asList(1, 2, null), 3);
-      JavaRDD<Optional<Integer>> rdd2 = rdd1.map(
-        new Function<Integer, Optional<Integer>>() {
-          @Override
-          public Optional<Integer> call(Integer i) {
-            return Optional.fromNullable(i);
-          }
-        });
-      rdd2.collect();
-    } finally {
-      localCluster.stop();
-    }
-  }
-
-  static class Class1 {}
-  static class Class2 {}
-
-  @Test
-  public void testRegisterKryoClasses() {
-    SparkConf conf = new SparkConf();
-    conf.registerKryoClasses(new Class<?>[]{ Class1.class, Class2.class });
-    Assert.assertEquals(
-        Class1.class.getName() + "," + Class2.class.getName(),
-        conf.get("spark.kryo.classesToRegister"));
-  }
-
 }
