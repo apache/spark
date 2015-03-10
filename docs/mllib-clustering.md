@@ -173,6 +173,7 @@ to the algorithm. We then output the parameters of the mixture model.
 
 {% highlight scala %}
 import org.apache.spark.mllib.clustering.GaussianMixture
+import org.apache.spark.mllib.clustering.GaussianMixtureModel
 import org.apache.spark.mllib.linalg.Vectors
 
 // Load and parse the data
@@ -181,6 +182,10 @@ val parsedData = data.map(s => Vectors.dense(s.trim.split(' ').map(_.toDouble)))
 
 // Cluster the data into two classes using GaussianMixture
 val gmm = new GaussianMixture().setK(2).run(parsedData)
+
+// Save and load model
+gmm.save(sc, "myGMMModel")
+val sameModel = GaussianMixtureModel.load(sc, "myGMMModel")
 
 // output parameters of max-likelihood model
 for (i <- 0 until gmm.k) {
