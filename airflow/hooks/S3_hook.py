@@ -5,13 +5,13 @@ import ConfigParser
 from urlparse import urlparse
 
 from airflow.models import Connection
-from airflow.configuration import conf
 from airflow import settings
 
 from airflow.hooks.base_hook import BaseHook
 
 import boto
 from boto.s3.connection import S3Connection
+from boto.sts import STSConnection
 boto.set_stream_logger('boto')
 logging.getLogger("boto").setLevel(logging.INFO)
 
@@ -81,7 +81,7 @@ class S3Hook(BaseHook):
             raise Exception("The conn_id you provided isn't defined")
         else:
             db = db.all()[0]
-        # Get S3 credentials
+        # Get AWS credentials
         self.profile = None
         try:
             extra_params = json.loads(db.extra)
@@ -89,6 +89,12 @@ class S3Hook(BaseHook):
             s3_config_file = extra_params['s3_config_file']
             if 'profile' in extra_params:
                 self.profile = extra_params['profile']
+            sts_conn_required = 'aws_account_id' in extra_params
+            if sts_conn_required:
+                aws_account_id = extra_params['aws_account_id']
+                aws_iam_role = extra_params['aws_iam_role']
+                role_arn = "arn:aws:iam::" + aws_account_id + ":role/"
+                role_arn += aws_iam_role
         except TypeError as e:
             raise Exception("S3 connection needs to set config params in extra")
         except KeyError as e:
@@ -96,8 +102,23 @@ class S3Hook(BaseHook):
                             "{p} in extra".format(p=e.message))
         a_key, s_key = _parse_s3_config(s3_config_file, s3_config_format,
                                         self.profile)
-        self.connection = S3Connection(aws_access_key_id=a_key,
-                                       aws_secret_access_key=s_key)
+        if sts_conn_required:
+            sts_connection = STSConnection(aws_access_key_id=a_key,
+                                           aws_secret_access_key=s_key,
+                                           profile_name=self.profile)
+            assumed_role_object = sts_connection.assume_role(
+                role_arn=role_arn,
+                role_session_name="Airflow_" + s3_conn_id
+                )
+            creds = assumed_role_object.credentials
+            self.connection = S3Connection(
+                aws_access_key_id=creds.access_key,
+                aws_secret_access_key=creds.secret_key,
+                security_token=creds.session_token
+                )
+        else:
+            self.connection = S3Connection(aws_access_key_id=a_key,
+                                           aws_secret_access_key=s_key)
         session.commit()
         session.close()
 
@@ -154,8 +175,8 @@ class S3Hook(BaseHook):
         b = self.get_bucket(bucket_name)
         plist = b.list(prefix=prefix, delimiter=delimiter)
         prefix_names = [p.name for p in plist
-                  if isinstance(p, boto.s3.prefix.Prefix)]
-        return prefix_names if prefix_names !=[] else None
+                          if isinstance(p, boto.s3.prefix.Prefix)]
+        return prefix_names if prefix_names != [] else None
 
     def check_for_key(self, key, bucket_name=None):
         '''
