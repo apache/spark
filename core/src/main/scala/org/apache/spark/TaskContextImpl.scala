@@ -79,7 +79,7 @@ private[spark] class TaskContextImpl(
    * Process complete callbacks in the reverse order of registration.
    * This may be called in all situation - success, failure, or cancellation.
    */
-  private[spark] def processCallBacks() {
+  private[spark] def processCallBacks(): Unit = {
     val errorMsgs = new ArrayBuffer[String](2)
     onCompleteCallbacks.reverse.foreach { listener =>
       try {
