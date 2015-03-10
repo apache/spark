@@ -71,18 +71,14 @@ object LogLoss extends Loss {
    * Method to calculate loss when the predictions are already known.
    * Note: This method is used in the method evaluateEachIteration to avoid recomputing the
    * predicted values from previously fit trees.
-   * @param data Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
-   * @param prediction: RDD[Double] of predicted labels.
-   * @return Mean log loss of model on data
+   * @param datum: LabeledPoint
+   * @param prediction: Predicted label.
+   * @return log loss of model on the datapoint.
    */
-  override def computeError(data: RDD[LabeledPoint], prediction: RDD[Double]): Double = {
-    val errorAcrossSamples = (data zip prediction) map {
-      case (yTrue, yPred) =>
-        val margin = 2.0 * yTrue.label * yPred
-        // The following is equivalent to 2.0 * log(1 + exp(-margin)) but more numerically stable.
-        2.0 * MLUtils.log1pExp(-margin)
-    }
-    errorAcrossSamples.mean()
+  override def computeError(datum: LabeledPoint, prediction: Double): Double = {
+    val margin = 2.0 * datum.label * prediction
+    // The following is equivalent to 2.0 * log(1 + exp(-margin)) but more numerically stable.
+    2.0 * MLUtils.log1pExp(-margin)
   }
 
 }

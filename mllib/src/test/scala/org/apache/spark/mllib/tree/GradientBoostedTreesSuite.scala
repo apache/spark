@@ -179,8 +179,7 @@ class GradientBoostedTreesSuite extends FunSuite with MLlibTestSparkContext {
         assert(numTrees !== numIterations)
 
         // Test that it performs better on the validation dataset.
-        val gbtModel = new GradientBoostedTrees(boostingStrategy)
-        val gbt = gbtModel.run(trainRdd)
+        val gbt = new GradientBoostedTrees(boostingStrategy).run(trainRdd)
         val (errorWithoutValidation, errorWithValidation) = {
           if (algo == Classification) {
             val remappedRdd = validateRdd.map(x => new LabeledPoint(2 * x.label - 1, x.features))
@@ -193,7 +192,7 @@ class GradientBoostedTreesSuite extends FunSuite with MLlibTestSparkContext {
 
         // Test that results from evaluateEachIteration comply with runWithValidation.
         // Note that convergenceTol is set to 0.0
-        val evaluationArray = gbtModel.evaluateEachIteration(validateRdd)
+        val evaluationArray = gbt.evaluateEachIteration(validateRdd, loss)
         assert(evaluationArray.length === numIterations)
         assert(evaluationArray(numTrees) > evaluationArray(numTrees - 1))
         var i = 1

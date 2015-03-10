@@ -66,18 +66,13 @@ object AbsoluteError extends Loss {
    * Method to calculate loss when the predictions are already known.
    * Note: This method is used in the method evaluateEachIteration to avoid recomputing the
    * predicted values from previously fit trees.
-   * @param data Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
-   * @param prediction: RDD[Double] of predicted labels.
-   * @return  Mean absolute error of model on data
+   * @param datum: LabeledPoint
+   * @param prediction: Predicted label.
+   * @return  Absolute error of model on the given datapoint.
    */
-  override def computeError(data: RDD[LabeledPoint], prediction: RDD[Double]): Double = {
-    val errorAcrossSamples = (data zip prediction) map {
-      case (yTrue, yPred) => {
-        val err = yTrue.label - yPred
-        math.abs(err)
-      }
-    }
-    errorAcrossSamples.mean()
+  override def computeError(datum: LabeledPoint, prediction: Double): Double = {
+    val err = datum.label - prediction
+    math.abs(err)
   }
 
 }
