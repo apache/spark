@@ -14,9 +14,13 @@ while (TRUE) {
   ready <- socketSelect(list(inputCon))
   if (ready) {
     port <- SparkR:::readInt(inputCon)
+    # There is a small chance that it could be interrupted by signal, retry one time
     if (length(port) == 0) {
-      cat("quitting daemon", "\n")
-      quit(save = "no")
+      port <- SparkR:::readInt(inputCon)
+      if (length(port) == 0) {
+        cat("quitting daemon\n")
+        quit(save = "no")
+      }
     }
     p <- parallel:::mcfork()
     if (inherits(p, "masterProcess")) {

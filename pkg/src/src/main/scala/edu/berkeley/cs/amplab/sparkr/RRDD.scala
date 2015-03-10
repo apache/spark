@@ -1,7 +1,7 @@
 package edu.berkeley.cs.amplab.sparkr
 
 import java.io._
-import java.net.{Socket, ServerSocket}
+import java.net.ServerSocket
 import java.util.{Map => JMap}
 
 import scala.collection.JavaConversions._
@@ -9,11 +9,10 @@ import scala.io.Source
 import scala.reflect.ClassTag
 import scala.util.Try
 
-import org.apache.spark.{SparkEnv, Partition, SparkException, TaskContext, SparkConf}
-import org.apache.spark.api.java.{JavaSparkContext, JavaRDD, JavaPairRDD}
+import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-
+import org.apache.spark.{Partition, SparkConf, SparkEnv, SparkException, TaskContext}
 
 private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
     parent: RDD[T],
@@ -313,7 +312,6 @@ object RRDD {
   // also fall back to launching workers (worker.R) directly.
   val inWindows = System.getProperty("os.name").startsWith("Windows")
   private[this] var errThread: BufferedStreamThread = _
-  private[this] var daemonSocket: Socket = _
   private[this] var daemonChannel: DataOutputStream = _
 
   def createSparkContext(
@@ -383,19 +381,29 @@ object RRDD {
     val useDaemon = SparkEnv.get.conf.getBoolean("spark.sparkr.use.daemon", true)
     if (!inWindows && useDaemon) {
       synchronized {
-        if (daemonSocket == null) {
+        if (daemonChannel == null) {
           // we expect one connections
           val serverSocket = new ServerSocket(0, 1)
-          val daemonPort = serverSocket.getLocalPort()
+          val daemonPort = serverSocket.getLocalPort
           errThread = createRProcess(rLibDir, daemonPort, "daemon.R")
           // the socket used to send out the input of task
           serverSocket.setSoTimeout(10000)
-          daemonSocket = serverSocket.accept()
-          daemonChannel = new DataOutputStream(daemonSocket.getOutputStream)
+          val sock = serverSocket.accept()
+          daemonChannel = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
           serverSocket.close()
         }
-        daemonChannel.writeInt(port)
-        daemonChannel.flush()
+        try {
+          daemonChannel.writeInt(port)
+          daemonChannel.flush()
+        } catch {
+          case e: IOException =>
+            // daemon process died
+            daemonChannel.close()
+            daemonChannel = null
+            errThread = null
+            // fail the current task, retry by scheduler
+            throw e
+        }
         errThread
       }
     } else {
