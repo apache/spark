@@ -24,9 +24,11 @@ public class Statsd implements Closeable {
     private static final Pattern WHITESPACE = Pattern.compile("[\\s]+");
 
     private static final String DRIVER = "driver";
+    private static final String FENCED_DRIVER = "<driver>";
     private static final String EXECUTOR = "executor";
 
     private static final String DRIVER_MATCH = ".driver.";
+    private static final String FENCED_DRIVER_MATCH = ".<driver>.";
     private static final String EXECUTOR_MATCH = ".executor.";
 
     public static enum StatType { COUNTER, TIMER, GAUGE }
@@ -103,6 +105,8 @@ public class Statsd implements Closeable {
             if (DRIVER.equals(parts[2])) {
                 // e.g. spark.application_1418834509223_0044.driver.jvm.non-heap.used
                 stringBuilder.append(rawName.substring(rawName.indexOf(DRIVER_MATCH)));
+            } else if (FENCED_DRIVER.equals(parts[2])) {
+                stringBuilder.append(rawName.substring(rawName.indexOf(FENCED_DRIVER_MATCH)));
             } else if (EXECUTOR.equals(parts[2])) {
                 stringBuilder.append(rawName.substring(rawName.indexOf(EXECUTOR_MATCH)));
             } else if ("".equals(parts[2])) {
