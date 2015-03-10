@@ -25,7 +25,7 @@
     <version>14</version>
   </parent>
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-parent</artifactId>
+  <artifactId>spark-parent_2.10</artifactId>
   <version>1.3.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
@@ -420,6 +420,13 @@
         <groupId>org.seleniumhq.selenium</groupId>
         <artifactId>selenium-java</artifactId>
         <version>2.42.2</version>
+        <scope>test</scope>
+      </dependency>
+      <!-- Added for selenium only, and should match its dependent version: -->
+      <dependency>
+        <groupId>xml-apis</groupId>
+        <artifactId>xml-apis</artifactId>
+        <version>1.4.01</version>
         <scope>test</scope>
       </dependency>
       <dependency>
