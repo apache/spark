@@ -55,6 +55,14 @@ private[spark] trait RpcEnv {
   /**
    * Register a [[RpcEndpoint]] with a name and return its [[RpcEndpointRef]]. [[RpcEnv]] should
    * make sure thread-safely sending messages to [[RpcEndpoint]].
+   *
+   * Thread-safety means processing of one message happens before processing of the next message by
+   * the same [[RpcEndpoint]]. In the other words, changes to internal fields of a [[RpcEndpoint]]
+   * are visible when processing the next message, and fields in the [[RpcEndpoint]] need not be
+   * volatile or equivalent.
+   *
+   * However, there is no guarantee that the same thread will be executing the same [[RpcEndpoint]]
+   * for different messages.
    */
   def setupThreadSafeEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef
 
