@@ -70,34 +70,60 @@ DEFAULT_SPARK_EC2_GITHUB_REPO = "https://github.com/mesos/spark-ec2"
 DEFAULT_SPARK_EC2_BRANCH = "branch-1.3"
 
 
-def setup_boto():
-    # Download Boto if it's not already present in the SPARK_EC2_DIR/lib folder:
-    version = "boto-2.34.0"
-    md5 = "5556223d2d0cc4d06dd4829e671dcecd"
-    url = "https://pypi.python.org/packages/source/b/boto/%s.tar.gz" % version
-    lib_dir = os.path.join(SPARK_EC2_DIR, "lib")
-    if not os.path.exists(lib_dir):
-        os.mkdir(lib_dir)
-    boto_lib_dir = os.path.join(lib_dir, version)
-    if not os.path.isdir(boto_lib_dir):
-        tgz_file_path = os.path.join(lib_dir, "%s.tar.gz" % version)
-        print "Downloading Boto from PyPi"
-        download_stream = urllib2.urlopen(url)
-        with open(tgz_file_path, "wb") as tgz_file:
-            tgz_file.write(download_stream.read())
-        with open(tgz_file_path) as tar:
-            if hashlib.md5(tar.read()).hexdigest() != md5:
-                print >> stderr, "ERROR: Got wrong md5sum for Boto"
-                sys.exit(1)
-        tar = tarfile.open(tgz_file_path)
-        tar.extractall(path=lib_dir)
-        tar.close()
-        os.remove(tgz_file_path)
-        print "Finished downloading Boto"
-    sys.path.insert(0, boto_lib_dir)
+def setup_external_libs(libs):
+    """
+    Download external libraries from PyPI to SPARK_EC2_DIR/lib/ and prepend them to our PATH.
+    """
+    PYPI_URL_PREFIX = "https://pypi.python.org/packages/source"
+    SPARK_EC2_LIB_DIR = os.path.join(SPARK_EC2_DIR, "lib")
+
+    if not os.path.exists(SPARK_EC2_LIB_DIR):
+        print "Downloading external libraries that spark-ec2 needs from PyPI to {path}...".format(
+            path=SPARK_EC2_LIB_DIR
+        )
+        print "This should be a one-time operation."
+        os.mkdir(SPARK_EC2_LIB_DIR)
+
+    for lib in libs:
+        versioned_lib_name = "{n}-{v}".format(n=lib["name"], v=lib["version"])
+        lib_dir = os.path.join(SPARK_EC2_LIB_DIR, versioned_lib_name)
+
+        if not os.path.isdir(lib_dir):
+            tgz_file_path = os.path.join(SPARK_EC2_LIB_DIR, versioned_lib_name + ".tar.gz")
+            print " - Downloading {lib}...".format(lib=lib["name"])
+            download_stream = urllib2.urlopen(
+                "{prefix}/{first_letter}/{lib_name}/{lib_name}-{lib_version}.tar.gz".format(
+                    prefix=PYPI_URL_PREFIX,
+                    first_letter=lib["name"][:1],
+                    lib_name=lib["name"],
+                    lib_version=lib["version"]
+                )
+            )
+            with open(tgz_file_path, "wb") as tgz_file:
+                tgz_file.write(download_stream.read())
+            with open(tgz_file_path) as tar:
+                if hashlib.md5(tar.read()).hexdigest() != lib["md5"]:
+                    print >> stderr, "ERROR: Got wrong md5sum for {lib}.".format(lib=lib["name"])
+                    sys.exit(1)
+            tar = tarfile.open(tgz_file_path)
+            tar.extractall(path=SPARK_EC2_LIB_DIR)
+            tar.close()
+            os.remove(tgz_file_path)
+            print " - Finished downloading {lib}.".format(lib=lib["name"])
+        sys.path.insert(1, lib_dir)
 
 
-setup_boto()
+# Only PyPI libraries are supported.
+external_libs = [
+    {
+        "name": "boto",
+        "version": "2.34.0",
+        "md5": "5556223d2d0cc4d06dd4829e671dcecd"
+    }
+]
+
+setup_external_libs(external_libs)
+
 import boto
 from boto.ec2.blockdevicemapping import BlockDeviceMapping, BlockDeviceType, EBSBlockDeviceType
 from boto import ec2
@@ -136,7 +162,7 @@ def parse_args():
         help="Master instance type (leave empty for same as instance-type)")
     parser.add_option(
         "-r", "--region", default="us-east-1",
-        help="EC2 region used to launch instances in, or to find them in")
+        help="EC2 region used to launch instances in, or to find them in (default: %default)")
     parser.add_option(
         "-z", "--zone", default="",
         help="Availability zone to launch instances in, or 'all' to spread " +
@@ -230,7 +256,7 @@ def parse_args():
              "(e.g -Dspark.worker.timeout=180)")
     parser.add_option(
         "--user-data", type="string", default="",
-        help="Path to a user-data file (most AMI's interpret this as an initialization script)")
+        help="Path to a user-data file (most AMIs interpret this as an initialization script)")
     parser.add_option(
         "--authorized-address", type="string", default="0.0.0.0/0",
         help="Address to authorize on created security groups (default: %default)")
