@@ -11,9 +11,9 @@ set :gateway, nil
 set :keep_releases, 5
 set :branch, fetch(:branch, `git symbolic-ref --short HEAD`.gsub("\s",""))
 
-DATANODES = (2..47).map {|i| "dn%02d.chi.shopify.com" % i }
+DATANODES = (2..48).map {|i| "dn%02d.chi.shopify.com" % i }
 OTHERNODES = ["hadoop-etl1.chi.shopify.com", "spark-etl1.chi.shopify.com", "reportify-etl4.chi.shopify.com", "platfora2.chi.shopify.com"]
-BROKEN = ["dn09.chi.shopify.com", "dn16.chi.shopify.com"] # Node is down don't try to send code
+BROKEN = [] # Node is down don't try to send code
 
 task :production do
   role :app, *(DATANODES + OTHERNODES - BROKEN)
@@ -58,10 +58,10 @@ namespace :deploy do
   end
 
   after 'deploy:initialize_variables', 'deploy:prevent_gateway' # capistrano recipes packserv deploy always uses a gateway
-  before  'deploy:symlink_current', 'deploy:symlink_shared'
-  before  'deploy:test_spark_jar', 'deploy:initialize_variables'
-  before  'deploy:upload_to_hdfs', 'deploy:initialize_variables'
-  after  'deploy:unpack', 'deploy:upload_to_hdfs'
+  before 'deploy:symlink_current', 'deploy:symlink_shared'
+  before 'deploy:test_spark_jar', 'deploy:initialize_variables'
+  before 'deploy:upload_to_hdfs', 'deploy:initialize_variables'
+  after 'deploy:unpack', 'deploy:upload_to_hdfs'
   after 'deploy:restart', 'deploy:cleanup'
   after 'deploy:cleanup', 'deploy:remind_us_to_update_starscream'
 end
