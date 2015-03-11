@@ -19,13 +19,11 @@ import sys
 import itertools
 import warnings
 import random
-import os
-from tempfile import NamedTemporaryFile
 
 from py4j.java_collections import ListConverter, MapConverter
 
 from pyspark.context import SparkContext
-from pyspark.rdd import RDD
+from pyspark.rdd import RDD, _load_from_socket
 from pyspark.serializers import BatchedSerializer, PickleSerializer, UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
@@ -310,14 +308,8 @@ class DataFrame(object):
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
         with SCCallSiteSync(self._sc) as css:
-            bytesInJava = self._jdf.javaToPython().collect().iterator()
-        tempFile = NamedTemporaryFile(delete=False, dir=self._sc._temp_dir)
-        tempFile.close()
-        self._sc._writeToFile(bytesInJava, tempFile.name)
-        # Read the data into Python and deserialize it:
-        with open(tempFile.name, 'rb') as tempFile:
-            rs = list(BatchedSerializer(PickleSerializer()).load_stream(tempFile))
-        os.unlink(tempFile.name)
+            port = self._sc._jvm.PythonRDD.collectAndServe(self._jdf.javaToPython().rdd())
+        rs = list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
         cls = _create_cls(self.schema)
         return [cls(r) for r in rs]
 
