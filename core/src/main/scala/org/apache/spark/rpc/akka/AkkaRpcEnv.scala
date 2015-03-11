@@ -132,6 +132,12 @@ private[spark] class AkkaRpcEnv private (
           safelyCall(endpoint) {
             processMessage(endpoint, m, sender)
           }
+        case AkkaFailure(e) =>
+          try {
+            endpoint.onError(e)
+          } catch {
+            case NonFatal(e) => logError(s"Ignore error: ${e.getMessage}", e)
+          }
         case message: Any => {
           logWarning(s"Unknown message: $message")
         }
