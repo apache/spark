@@ -4,7 +4,7 @@ TODO
 * Backfill wizard
 
 #### unittests
-* Increase coverage, now 70ish%
+* Increase coverage, now 80ish%
 
 #### Command line
 * `airflow task_state dag_id task_id YYYY-MM-DD`
@@ -14,14 +14,8 @@ TODO
 * S3Sensor
 * BaseDataTransferOperator
 * File2MySqlOperator
-* PythonOperator
 * DagTaskSensor for cross dag dependencies
 * PIG
-
-#### Macros
-* Previous execution timestamp
-* Previous ds
-* ...
 
 #### Frontend
 *
@@ -29,10 +23,8 @@ TODO
 #### Backend
 * Callbacks
 * Master auto dag refresh at time intervals
-* Set default args at the DAG level?
 * Prevent timezone chagne on import
 * Add decorator to timeout imports on master process [lib](https://github.com/pnpnpn/timeout-decorator)
-* Mysql port should carry through (using default now)
 * Make authentication universal
 
 #### Misc

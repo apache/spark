@@ -1,43 +1,25 @@
 import MySQLdb
-from airflow import settings
-from airflow.models import Connection
+
+from airflow.hooks.base_hook import BaseHook
 
 
-class MySqlHook(object):
+class MySqlHook(BaseHook):
     '''
     Interact with MySQL.
     '''
 
     def __init__(
-            self, host=None, login=None,
-            psw=None, db=None, mysql_conn_id=None):
-        if not mysql_conn_id:
-            self.host = host
-            self.login = login
-            self.psw = psw
-            self.db = db
-        else:
-            session = settings.Session()
-            db = session.query(
-                Connection).filter(
-                    Connection.conn_id == mysql_conn_id)
-            if db.count() == 0:
-                raise Exception("The mysql_dbid you provided isn't defined")
-            else:
-                db = db.all()[0]
-            self.host = db.host
-            self.login = db.login
-            self.psw = db.password
-            self.db = db.schema
-            session.commit()
-            session.close()
+            self, mysql_conn_id=None):
+
+        conn = self.get_connection(mysql_conn_id)
+        self.conn = conn
 
     def get_conn(self):
         conn = MySQLdb.connect(
-            self.host,
-            self.login,
-            self.psw,
-            self.db)
+            self.conn.host,
+            self.conn.login,
+            self.conn.password,
+            self.conn.schema)
         return conn
 
     def get_records(self, sql):
