@@ -35,7 +35,6 @@ from pyspark import SparkContext
 from pyspark.streaming import StreamingContext
 from pyspark.sql import SQLContext, Row
 
-# Lazily instantiated singleton instance of SQLContext
 
 def getSqlContextInstance(sparkContext):
     if ('sqlContextSingletonInstance' not in globals()):
@@ -72,8 +71,8 @@ if __name__ == "__main__":
             wordsDataFrame.registerTempTable("words")
 
             # Do word count on table using SQL and print it
-            wordCountsDataFrame = sqlContext.sql( \
-                "select word, count(*) as total from words group by word")
+            wordCountsDataFrame = \
+                sqlContext.sql("select word, count(*) as total from words group by word")
             wordCountsDataFrame.show()
         except:
             pass
