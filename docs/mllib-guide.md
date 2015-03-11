@@ -107,6 +107,7 @@ In the `spark.mllib` package, there were several breaking changes.  The first ch
     * In `DecisionTree`, the deprecated class method `train` has been removed.  (The object/static `train` methods remain.)
     * In `Strategy`, the `checkpointDir` parameter has been removed.  Checkpointing is still supported, but the checkpoint directory must be set before calling tree and tree ensemble training.
 * `PythonMLlibAPI` (the interface between Scala/Java and Python for MLlib) was a public API but is now private, declared `private[python]`.  This was never meant for external use.
+* In linear regression (including Lasso and ridge regression), we scaled the squared loss by 0.5. So in order to produce the same result as in 1.2, the step size you chose needs to be scaled by 2.
 
 ## Previous Spark Versions
 
