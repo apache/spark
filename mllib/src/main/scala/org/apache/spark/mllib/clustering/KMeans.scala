@@ -93,8 +93,10 @@ class KMeans private (
   }
 
   /**
+   * :: Experimental ::
    * Number of runs of the algorithm to execute in parallel.
    */
+  @Experimental
   def getRuns: Int = runs
 
   /**
