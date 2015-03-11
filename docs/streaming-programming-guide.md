@@ -189,15 +189,15 @@ Next, we want to count these words.
 
 {% highlight java %}
 // Count each word in each batch
-JavaPairDStream<String, Integer> pairs = words.map(
+JavaPairDStream<String, Integer> pairs = words.mapToPair(
   new PairFunction<String, String, Integer>() {
-    @Override public Tuple2<String, Integer> call(String s) throws Exception {
+    @Override public Tuple2<String, Integer> call(String s) {
       return new Tuple2<String, Integer>(s, 1);
     }
   });
 JavaPairDStream<String, Integer> wordCounts = pairs.reduceByKey(
   new Function2<Integer, Integer, Integer>() {
-    @Override public Integer call(Integer i1, Integer i2) throws Exception {
+    @Override public Integer call(Integer i1, Integer i2) {
       return i1 + i2;
     }
   });
@@ -1041,7 +1041,7 @@ val windowedWordCounts = pairs.reduceByKeyAndWindow((a:Int,b:Int) => (a + b), Se
 {% highlight java %}
 // Reduce function adding two integers, defined separately for clarity
 Function2<Integer, Integer, Integer> reduceFunc = new Function2<Integer, Integer, Integer>() {
-  @Override public Integer call(Integer i1, Integer i2) throws Exception {
+  @Override public Integer call(Integer i1, Integer i2) {
     return i1 + i2;
   }
 };
