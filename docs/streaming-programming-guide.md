@@ -1119,8 +1119,6 @@ said two parameters - <i>windowLength</i> and <i>slideInterval</i>.
 <tr><td></td><td></td></tr>
 </table>
 
-***
-
 #### Join Operations
 {:.no_toc}
 Finally, its worth highlighting how easily you can perform different kinds of joins in Spark Streaming.
@@ -1419,6 +1417,178 @@ Note that the connections in the pool should be lazily created on demand and tim
 - DStreams are executed lazily by the output operations, just like RDDs are lazily executed by RDD actions. Specifically, RDD actions inside the DStream output operations force the processing of the received data. Hence, if your application does not have any output operation, or has output operations like `dstream.foreachRDD()` without any RDD action inside them, then nothing will get executed. The system will simply receive the data and discard it.
 
 - By default, output operations are executed one-at-a-time. And they are executed in the order they are defined in the application.
+
+***
+
+## DataFrame and SQL Operations
+You can easily use [DataFrames and SQL](sql-programming-guide.html) operations on streaming data. You have to create a SQLContext using the SparkContext that the StreamingContext is using. Furthermore this has to done such that it can be restarted on driver failures. This is done by creating a lazily instantiated singleton instance of SQLContext. This is shown in the following example. It modifies the earlier [word count example](#a-quick-example) to generate word counts using DataFrames and SQL. Each RDD is converted to a DataFrame, registered as a temporary table and then queried it using SQL.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+
+/** Lazily instantiated singleton instance of SQLContext */
+object SQLContextSingleton {
+  @transient private var instance: SQLContext = null
+
+  // Instantiate SQLContext on demand
+  def getInstance(sparkContext: SparkContext): SQLContext = synchronized {
+    if (instance == null) {
+      instance = new SQLContext(sparkContext)
+    }
+    instance
+  }
+}
+
+...
+
+/** Case class for converting RDD to DataFrame */
+case class Row(word: String)
+
+...
+
+/** DataFrame operations inside your streaming program */
+
+val words: DStream[String] = ...
+
+words.foreachRDD { rdd =>
+
+  // Get the singleton instance of SQLContext
+  val sqlContext = SQLContextSingleton.getInstance(rdd.sparkContext)
+  import sqlContext.implicits._
+
+  // Convert RDD[String] to RDD[case class] to DataFrame
+  val wordsDataFrame = rdd.map(w => Row(w)).toDF()
+
+  // Register as table
+  wordsDataFrame.registerTempTable("words")
+
+  // Do word count on DataFrame using SQL and print it
+  val wordCountsDataFrame = 
+    sqlContext.sql("select word, count(*) as total from words group by word")
+  wordCountsDataFrame.show()
+}
+
+{% endhighlight %}
+
+See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/SqlNetworkWordCount.scala).
+</div>
+<div data-lang="java" markdown="1">
+{% highlight java %}
+
+/** Lazily instantiated singleton instance of SQLContext */
+class JavaSQLContextSingleton {
+  static private transient SQLContext instance = null;
+  static public SQLContext getInstance(SparkContext sparkContext) {
+    if (instance == null) {
+      instance = new SQLContext(sparkContext);
+    }
+    return instance;
+  }
+}
+
+...
+
+/** Java Bean class for converting RDD to DataFrame */
+public class JavaRow implements java.io.Serializable {
+  private String word;
+
+  public String getWord() {
+    return word;
+  }
+
+  public void setWord(String word) {
+    this.word = word;
+  }
+}
+
+...
+
+/** DataFrame operations inside your streaming program */
+
+JavaDStream<String> words = ... 
+
+words.foreachRDD(
+  new Function2<JavaRDD<String>, Time, Void>() {
+    @Override
+    public Void call(JavaRDD<String> rdd, Time time) {
+      SQLContext sqlContext = JavaSQLContextSingleton.getInstance(rdd.context());
+
+      // Convert RDD[String] to RDD[case class] to DataFrame
+      JavaRDD<JavaRow> rowRDD = rdd.map(new Function<String, JavaRow>() {
+        public JavaRow call(String word) {
+          JavaRow record = new JavaRow();
+          record.setWord(word);
+          return record;
+        }
+      });
+      DataFrame wordsDataFrame = sqlContext.createDataFrame(rowRDD, JavaRow.class);
+
+      // Register as table
+      wordsDataFrame.registerTempTable("words");
+
+      // Do word count on table using SQL and print it
+      DataFrame wordCountsDataFrame =
+          sqlContext.sql("select word, count(*) as total from words group by word");
+      wordCountsDataFrame.show();
+      return null;
+    }
+  }
+);
+{% endhighlight %}
+
+See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaSqlNetworkWordCount.java).
+</div>
+<div data-lang="python" markdown="1">
+{% highlight python %}
+
+# Lazily instantiated global instance of SQLContext
+def getSqlContextInstance(sparkContext):
+    if ('sqlContextSingletonInstance' not in globals()):
+        globals()['sqlContextSingletonInstance'] = SQLContext(sparkContext)
+    return globals()['sqlContextSingletonInstance']
+
+...
+
+# DataFrame operations inside your streaming program
+
+words = ... # DStream of strings
+
+def process(time, rdd):
+    print "========= %s =========" % str(time)
+    try:
+        # Get the singleton instance of SQLContext
+        sqlContext = getSqlContextInstance(rdd.context)
+
+        # Convert RDD[String] to RDD[Row] to DataFrame
+        rowRdd = rdd.map(lambda w: Row(word=w))
+        wordsDataFrame = sqlContext.createDataFrame(rowRdd)
+
+        # Register as table
+        wordsDataFrame.registerTempTable("words")
+
+        # Do word count on table using SQL and print it
+        wordCountsDataFrame = sqlContext.sql("select word, count(*) as total from words group by word")
+        wordCountsDataFrame.show()
+    except:
+        pass
+
+words.foreachRDD(process)
+{% endhighlight %}
+
+See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/python/streaming/sql_network_wordcount.py).
+
+</div>
+</div>
+
+You can also run SQL queries on tables defined on streaming data from a different thread (that is, asynchronous to the running StreamingContext). Just make sure that you set the StreamingContext to remember sufficient amount of streaming data such that query can run. Otherwise the StreamingContext, which is unaware of the any asynchronous SQL queries, will delete off old streaming data before the query can complete. For example, if you want to query the last batch, but your query can take 5 minutes to run, then call `streamingContext.remember(Minutes(5))` (in Scala, or equivalent in other languages).
+
+See the [DataFrames and SQL](sql-programming-guide.html) guide to learn more about DataFrames.
+
+***
+
+## MLlib Operations
+You can also easily use machine learning algorithms provided by [MLlib](mllib-guide.html). First of all, there are streaming machine learning algorithms (e.g. (Streaming Linear Regression](mllib-linear-methods.html#streaming-linear-regression), [Streaming KMeans](file:///Users/tdas/Projects/Spark/spark/docs/_site/mllib-clustering.html#streaming-k-means), etc.) which can simultaneously learn from the streaming data as well as apply the model on the streaming data. Beyond these, for a much larger class of machine learning algorithms, you can learn a learning model offline (i.e. using historical data) and then apply the model online on streaming data. See the [MLlib](mllib-guide.html) guide for more details.
 
 ***
 
@@ -2030,8 +2200,8 @@ The following table summarizes the semantics under failures:
   </tr>
   <tr>
     <td>
-      <b>Spark 1.1 or earlier, OR</b><br/>
-      <b>Spark 1.2 or later without write ahead logs</b>
+      <i>Spark 1.1 or earlier,</i> OR<br/>
+      <i>Spark 1.2 or later without write ahead logs</i>
     </td>
     <td>
       Buffered data lost with unreliable receivers<br/>
@@ -2045,7 +2215,7 @@ The following table summarizes the semantics under failures:
     </td>
   </tr>
   <tr>
-    <td><b>Spark 1.2 or later with write ahead logs</b></td>
+    <td><i>Spark 1.2 or later with write ahead logs</i></td>
     <td>
         Zero data loss with reliable receivers<br/>
         At-least once semantics
