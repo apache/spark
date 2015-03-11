@@ -1033,4 +1033,11 @@ class JsonSuite extends QueryTest {
     assert(!logicalRelation2.sameResult(logicalRelation3),
       s"$logicalRelation2 and $logicalRelation3 should be considered not having the same result.")
   }
+
+  test("SPARK-6245 JsonRDD.inferSchema on empty RDD") {
+    // This is really a test that it doesn't throw an exception
+    val emptySchema = JsonRDD.inferSchema(empty, 1.0, "")
+    assert(StructType(Seq()) === emptySchema)
+  }
+
 }
