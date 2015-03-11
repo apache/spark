@@ -19,11 +19,14 @@ package org.apache.spark.deploy.mesos
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.util.{IntParam, Utils}
+
 import java.io.File
+import java.util.concurrent.CountDownLatch
+
 import org.apache.spark.deploy.mesos.ui.MesosClusterUI
 import org.apache.spark.deploy.rest.MesosRestServer
 import org.apache.spark.scheduler.cluster.mesos.{ClusterScheduler, MesosClusterScheduler}
-import java.util.concurrent.CountDownLatch
+
 
 /*
  * A dispatcher actor that is responsible for managing drivers, that is intended to
@@ -34,26 +37,18 @@ import java.util.concurrent.CountDownLatch
 private [spark] class MesosClusterDispatcher(
     host: String,
     serverPort: Int,
-    webUiPort: Int,
     conf: SparkConf,
+    webUi: MesosClusterUI,
     scheduler: ClusterScheduler) extends Logging {
 
   val server = new MesosRestServer(host, serverPort, conf, scheduler)
-
-  val dispatcherPublicAddress = {
-    val envVar = System.getenv("SPARK_PUBLIC_DNS")
-    if (envVar != null) envVar else host
-  }
-
-  val webUi = new MesosClusterUI(
-    new SecurityManager(conf), webUiPort, conf, dispatcherPublicAddress, scheduler)
 
   val sparkHome =
     new File(sys.env.get("SPARK_HOME").getOrElse("."))
 
   def start() {
     server.start()
-    webUi.bind()
+    // We assume web ui is already started as the scheduler needs the bound port.
   }
 
   def stop() {
@@ -63,6 +58,10 @@ private [spark] class MesosClusterDispatcher(
 }
 
 object MesosClusterDispatcher {
+  def dispatcherPublicAddress(conf: SparkConf, host: String): String = {
+    val envVar = conf.getenv("SPARK_PUBLIC_DNS")
+    if (envVar != null) envVar else host
+  }
 
   val shutdownLatch = new CountDownLatch(1)
 
@@ -72,12 +71,27 @@ object MesosClusterDispatcher {
     conf.setMaster(dispatcherArgs.masterUrl)
     conf.setAppName("Mesos Cluster Dispatcher")
     val scheduler = new MesosClusterScheduler(conf)
+
+    // We have to create the webui and bind it early as we need to
+    // pass the framework web ui url to Mesos which is before the
+    // scheduler starts.
+    val webUi =
+      new MesosClusterUI(
+        new SecurityManager(conf),
+        dispatcherArgs.webUiPort,
+        conf,
+        dispatcherPublicAddress(conf, dispatcherArgs.host),
+        scheduler)
+
+    webUi.bind()
+
+    scheduler.frameworkUrl = webUi.activeWebUiUrl
     scheduler.start()
     new MesosClusterDispatcher(
       dispatcherArgs.host,
       dispatcherArgs.port,
-      dispatcherArgs.webUiPort,
       conf,
+      webUi,
       scheduler).start()
 
     shutdownLatch.await()
