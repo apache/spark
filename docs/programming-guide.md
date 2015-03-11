@@ -1369,6 +1369,11 @@ The [application submission guide](submitting-applications.html) describes how t
 In short, once you package your application into a JAR (for Java/Scala) or a set of `.py` or `.zip` files (for Python),
 the `bin/spark-submit` script lets you submit it to any supported cluster manager.
 
+# Launching Spark jobs from Java / Scala
+
+The [org.apache.spark.launcher](api/java/index.html?org/apache/spark/launcher/package-summary.html)
+package provides classes for launching Spark jobs as child processes using a simple Java API.
+
 # Unit Testing
 
 Spark is friendly to unit testing with any popular unit test framework.

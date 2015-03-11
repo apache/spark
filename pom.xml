@@ -105,6 +105,7 @@
     <module>external/zeromq</module>
     <module>examples</module>
     <module>repl</module>
+    <module>launcher</module>
   </modules>
 
   <properties>
@@ -1195,7 +1196,7 @@
             </environmentVariables>
             <systemProperties>
               <java.awt.headless>true</java.awt.headless>
-              <spark.test.home>${session.executionRootDirectory}</spark.test.home>
+              <spark.test.home>${spark.test.home}</spark.test.home>
               <spark.testing>1</spark.testing>
               <spark.ui.enabled>false</spark.ui.enabled>
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
