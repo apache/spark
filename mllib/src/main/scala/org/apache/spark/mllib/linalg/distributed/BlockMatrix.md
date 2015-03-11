@@ -4,10 +4,19 @@ BlockMatrix.scala
 GridPartitioner
 ---------------
 
-1. There is one class and one object both called "GridPartitioner"
+1. A class *GridPartitioner* and an object *GridPartitioner*
 
-2. The class GridPartitioner
-  * It is a package-private class which can only be accessed under directory mllib. By default, classes (and its members) and objects are all public.
+2. The class *GridPartitioner*
+
+  1. Access modifiers
+    * Here, *private[mllib]* is a package-private class which can only be accessed by all classes and objects within the directory mllib.
+	* Members of packages, classes, or objects can be labeled with the access modifiers private and protected. These modifiers restrict accesses to the members to certain regions of code. Every member not labeled private or protected is public. There is no explicit modifier for public members.
+	* Access modifiers in Scala can be augmented with qualifiers. A modifier of the form private[X] or protected[X] means that access is private or protected “up to” X, where X designates some enclosing package, class or singleton object.
+	* This technique is quite useful in large projects that span several packages. It allows you to define things that are visible in several sub-packages of your project but that remain hidden from clients external to your project.
+	
+  2. Variable declaration and definition
+    * Here, *val rows: Int* is a variable declaration in the constructor arguments of *GridPartitioner*
+	
   * "val" means the variable cannot change its value after first assignment (like constant variable), while "var" means the variable can change its value many times (like dynamic variable).
   * You can extend a base scala class in similar way in Java but there are two restrictions: (i) method overriding requires the "override" keyword; (ii) only the primary constructor can pass parameters to the base constructor
   * This class extends a Spark base class called "Partitioner":
