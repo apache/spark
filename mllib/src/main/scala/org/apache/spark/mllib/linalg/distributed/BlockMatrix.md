@@ -38,9 +38,9 @@ BlockMatrix
   * "multiply": multiply two "BlockMatrix"s - This method leverages Iterator.tabulate()
     + Note that Scala defines both an Iterator trait and object. The multiply method uses an Iterator object. 
     + Iterator.tabulate(n)(i => f(i)) will iterate through the index i to compute f(i) for some function f and produce n items
-      i. n = number of items in the returned collection
-      ii. f = a function applied to each item
-      iii. i = the index over which the function operates (producing one item per i)
+      1. n = number of items in the returned collection
+      2. f = a function applied to each item
+      3. i = the index over which the function operates (producing one item per i)
     + In our case, Iterator.tabulate(numRowBlocks)(i => ((i, blockColIndex, blockRowIndex), block))
       1. n = other.numColBlocks
       2. f is a function that uses Scala collections notation. Collections in Scala can be created via parentheses. In this case, the collection is a set of pairs (one pair for each i) in which the first element of the pair is a triple. 
