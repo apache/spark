@@ -1,5 +1,130 @@
 # SQLcontext.R: SQLContext-driven functions
 
+infer_type <- function(x) {
+  if (is.null(x)) {
+    stop("can not infer type from NULL")
+  }
+  type <- switch(class(x),
+                 integer = "long",
+                 character = "string",
+                 logical = "boolean",
+                 double = "double",
+                 numeric = "double",
+                 raw = "binary",
+                 list = "array",
+                 environment = "map",
+                 stop("Unsupported type for DataFrame"))
+
+  if (type == "map") {
+    stopifnot(length(x) > 0)
+    key <- ls(x)[[1]]
+    list(type = "map",
+         keyType = "string",
+         valueType = infer_type(get(key, x)),
+         valueContainsNull = TRUE)
+  } else if (type == "array") {
+    stopifnot(length(x) > 0)
+    names <- names(x)
+    if (is.null(names)) {
+      list(type = "array", elementType = infer_type(x[[1]]), containsNull = TRUE)
+    } else {
+      # StructType
+      types <- lapply(x, infer_type)
+      fields <- lapply(1:length(x), function(i) {
+        list(name = names[[i]], type = types[[i]], nullable = TRUE)
+      })
+      list(type = "struct", fields = fields)
+    }
+  } else if (length(x) > 1) {
+    list(type = "array", elementType = type, containsNull = TRUE)
+  } else {
+    type
+  }
+}
+
+
+#' Create a DataFrame from an RDD
+#'
+#' Converts an RDD to a DataFrame by infer the types.
+#'
+#' @param sqlCtx A SQLContext
+#' @param x An RDD
+#' @param schema a list of column names or named list (StructType), optional
+#' @return an DataFrame
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' rdd <- lapply(parallelize(sc, 1:10), function(x) list(a=x, b=as.character(x)))
+#' df <- createDataFrame(sqlCtx, rdd)
+#' }
+
+# TODO(davies): support sampling and infer type from NA
+createDataFrame <- function(sqlCtx, rdd, schema = NULL, samplingRatio = 1.0) {
+  stopifnot(inherits(rdd, "RDD"))
+  if (is.null(schema) || is.null(names(schema))) {
+    row <- first(rdd)
+    names <- if (is.null(schema)) {
+      names(row)
+    } else {
+      schema
+    }
+    if (is.null(names)) {
+      names <- lapply(1:length(row), function(x) {
+       paste("_", as.character(x), sep="")
+      })
+    }
+
+    types <- lapply(row, infer_type)
+    fields <- lapply(1:length(row), function(i) {
+      list(name = names[[i]], type = types[[i]], nullable = TRUE)
+    })
+    schema <- list(type = "struct", fields = fields)
+  }
+
+  stopifnot(class(schema) == "list")
+  stopifnot(schema$type == "struct")
+  stopifnot(class(schema$fields) == "list")
+  schemaString <- as.character(jsonlite::toJSON(schema, auto_unbox = TRUE))
+
+  jrdd <- getJRDD(lapply(rdd, function(x) x), "row")
+  srdd <- callJMethod(jrdd, "rdd")
+  sdf <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "createDF",
+                     srdd, schemaString, sqlCtx)
+  dataFrame(sdf)
+}
+
+#' toDF()
+#'
+#' Converts an RDD to a DataFrame by infer the types.
+#'
+#' @param x An RDD
+#'
+#' @rdname DataFrame
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' rdd <- lapply(parallelize(sc, 1:10), function(x) list(a=x, b=as.character(x)))
+#' df <- toDF(rdd)
+#' }
+
+setGeneric("toDF", function(x, ...) { standardGeneric("toDF") })
+
+setMethod("toDF", signature(x = "RDD"),
+          function(x, ...) {
+            sqlCtx <- if (exists(".sparkRHivesc", envir = .sparkREnv)) {
+              get(".sparkRHivesc", envir = .sparkREnv)
+            } else if (exists(".sparkRSQLsc", envir = .sparkREnv)) {
+              get(".sparkRSQLsc", envir = .sparkREnv)
+            } else {
+              stop("no SQL context available")
+            }
+            createDataFrame(sqlCtx, x, ...)
+          })
+
 #' Create a DataFrame from a JSON file.
 #'
 #' Loads a JSON file (one object per line), returning the result as a DataFrame 

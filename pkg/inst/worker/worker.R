@@ -25,11 +25,8 @@ splitIndex <- SparkR:::readInt(inputCon)
 execLen <- SparkR:::readInt(inputCon)
 execFunctionName <- unserialize(SparkR:::readRawLen(inputCon, execLen))
 
-# read the inputSerialization bit value
-inputSerialization <- SparkR:::readString(inputCon)
-
-# read the isOutputSerialized bit flag
-isOutputSerialized <- SparkR:::readInt(inputCon)
+deserializer <- SparkR:::readString(inputCon)
+serializer <- SparkR:::readString(inputCon)
 
 # Redirect stdout to stderr to prevent print statements from
 # interfering with outputStream
@@ -68,27 +65,29 @@ isEmpty <- SparkR:::readInt(inputCon)
 if (isEmpty != 0) {
 
   if (numPartitions == -1) {
-    if (inputSerialization == "byte") {
+    if (deserializer == "byte") {
       # Now read as many characters as described in funcLen
       data <- SparkR:::readDeserialize(inputCon)
-    } else if (inputSerialization == "string") {
+    } else if (deserializer == "string") {
       data <- readLines(inputCon)
-    } else if (inputSerialization == "row") {
+    } else if (deserializer == "row") {
       data <- SparkR:::readDeserializeRows(inputCon)
     }
     output <- do.call(execFunctionName, list(splitIndex, data))
-    if (isOutputSerialized) {
+    if (serializer == "byte") {
       SparkR:::writeRawSerialize(outputCon, output)
+    } else if (serializer == "row") {
+      SparkR:::writeRowSerialize(outputCon, output)
     } else {
       SparkR:::writeStrings(outputCon, output)
     }
   } else {
-    if (inputSerialization == "byte") {
+    if (deserializer == "byte") {
       # Now read as many characters as described in funcLen
       data <- SparkR:::readDeserialize(inputCon)
-    } else if (inputSerialization == "string") {
+    } else if (deserializer == "string") {
       data <- readLines(inputCon)
-    } else if (inputSerialization == "row") {
+    } else if (deserializer == "row") {
       data <- SparkR:::readDeserializeRows(inputCon)
     }
 
@@ -121,7 +120,7 @@ if (isEmpty != 0) {
 }
 
 # End of output
-if (isOutputSerialized) {
+if (serializer %in% c("byte", "row")) {
   SparkR:::writeInt(outputCon, 0L)
 }
 

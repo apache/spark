@@ -55,6 +55,29 @@ writeRawSerialize <- function(outputCon, batch) {
   writeRaw(outputCon, outputSer)
 }
 
+writeRowSerialize <- function(outputCon, rows) {
+  lapply(rows, function(r) {
+    bytes <- serializeRow(r)
+    writeRaw(outputCon, bytes)
+  })
+  invisible()
+}
+
+serializeRow <- function(row) {
+  rawObj <- rawConnection(raw(0), "wb")
+  on.exit(close(rawObj))
+  SparkR:::writeRow(rawObj, row)
+  rawConnectionValue(rawObj)
+}
+
+writeRow <- function(con, row) {
+  numCols <- length(row)
+  writeInt(con, numCols)
+  for (i in 1:numCols) {
+    writeObject(con, row[[i]])
+  }
+}
+
 writeRaw <- function(con, batch) {
   writeInt(con, length(batch))
   writeBin(batch, con, endian = "big")

@@ -107,11 +107,12 @@ readDeserializeRows <- function(inputCon) {
   # the number of rows varies, we put the readRow function in a while loop
   # that termintates when the next row is empty.
   data <- list()
-  numCols <- readInt(inputCon)
-  # We write a length for each row out
-  while(length(numCols) > 0 && numCols > 0) {
-    data[[length(data) + 1L]] <- readRow(inputCon, numCols)
-    numCols <- readInt(inputCon)
+  while(TRUE) {
+    row <- readRow(inputCon, numCols)
+    if (length(row) == 0) {
+      break
+    }
+    data[[length(data) + 1L]] <- row
   }
   data # this is a list of named lists now
 }
@@ -122,21 +123,24 @@ readRowList <- function(obj) {
   # the numCols bytes inside the read function in order to correctly
   # deserialize the row.
   rawObj <- rawConnection(obj, "r+")
-  numCols <- SparkR:::readInt(rawObj)
-  rowOut <- SparkR:::readRow(rawObj, numCols)
-  close(rawObj)
-  rowOut
+  on.exit(close(rawObj))
+  SparkR:::readRow(rawObj, numCols)
 }
 
 readRow <- function(inputCon, numCols) {
-  lapply(1:numCols, function(x) {
-    obj <- readObject(inputCon)
-    if (is.null(obj)) {
-      NA
-    } else {
-      obj
-    }
-  }) # each row is a list now
+  numCols <- readInt(inputCon)
+  if (length(numCols) > 0 && numCols > 0) {
+    lapply(1:numCols, function(x) {
+      obj <- readObject(inputCon)
+      if (is.null(obj)) {
+        NA
+      } else {
+        obj
+      }
+    }) # each row is a list now
+  } else {
+    list()
+  }
 }
 
 # Take a single column as Array[Byte] and deserialize it into an atomic vector

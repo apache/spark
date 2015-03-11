@@ -1,13 +1,12 @@
 package edu.berkeley.cs.amplab.sparkr
 
-import java.io.ByteArrayOutputStream
-import java.io.DataOutputStream
-
-import org.apache.spark.rdd.RDD
-import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
-import org.apache.spark.sql.{SQLContext, DataFrame, Row, SaveMode}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
 import edu.berkeley.cs.amplab.sparkr.SerDe._
+import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.{DataFrame, Row, SQLContext, SaveMode}
 
 object SQLUtils {
   def createSQLContext(jsc: JavaSparkContext): SQLContext = {
@@ -18,8 +17,24 @@ object SQLUtils {
     arr.toSeq
   }
 
+  def createDF(rdd: RDD[Array[Byte]], schemaString: String, sqlContext: SQLContext): DataFrame = {
+    val schema = DataType.fromJson(schemaString).asInstanceOf[StructType]
+    val num = schema.fields.size
+    val rowRDD: RDD[Row] = rdd.map(bytesToRow)
+    sqlContext.createDataFrame(rowRDD, schema)
+  }
+
   def dfToRowRDD(df: DataFrame): JavaRDD[Array[Byte]] = {
     df.map(r => rowToRBytes(r))
+  }
+
+  private[this] def bytesToRow(bytes: Array[Byte]) = Row {
+    val bis = new ByteArrayInputStream(bytes)
+    val dis = new DataInputStream(bis)
+    val num = readInt(dis)
+    Row((0 until num).map { i =>
+      readObject(dis)
+    }.toSeq)
   }
 
   private[this] def rowToRBytes(row: Row): Array[Byte] = {

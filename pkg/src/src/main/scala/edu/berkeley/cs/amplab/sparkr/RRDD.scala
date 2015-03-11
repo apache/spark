@@ -16,8 +16,8 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
     parent: RDD[T],
     numPartitions: Int,
     func: Array[Byte],
-    parentSerializedMode: String,
-    dataSerialized: Boolean,
+    deserializer: String,
+    serializer: String,
     functionDependencies: Array[Byte],
     packageNames: Array[Byte],
     rLibDir: String,
@@ -127,18 +127,16 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
           dataOut.writeInt(splitIndex)
 
           dataOut.writeInt(func.length)
-          dataOut.write(func, 0, func.length)
+          dataOut.write(func)
 
-          // R worker process input serialization flag
-          SerDe.writeString(dataOut, parentSerializedMode)
-          // R worker process output serialization flag
-          dataOut.writeInt(if (dataSerialized) 1 else 0)
+          SerDe.writeString(dataOut, deserializer)
+          SerDe.writeString(dataOut, serializer)
 
           dataOut.writeInt(packageNames.length)
-          dataOut.write(packageNames, 0, packageNames.length)
+          dataOut.write(packageNames)
 
           dataOut.writeInt(functionDependencies.length)
-          dataOut.write(functionDependencies, 0, functionDependencies.length)
+          dataOut.write(functionDependencies)
 
           dataOut.writeInt(broadcastVars.length)
           broadcastVars.foreach { broadcast =>
@@ -159,14 +157,14 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
           }
 
           for (elem <- iter) {
-            if (parentSerializedMode == SerializationFormats.BYTE) {
+            if (deserializer == SerializationFormats.BYTE) {
               val elemArr = elem.asInstanceOf[Array[Byte]]
               dataOut.writeInt(elemArr.length)
               dataOut.write(elemArr, 0, elemArr.length)
-            } else if (parentSerializedMode == SerializationFormats.ROW) {
+            } else if (deserializer == SerializationFormats.ROW) {
                 val rowArr = elem.asInstanceOf[Array[Byte]]
                 dataOut.write(rowArr, 0, rowArr.length)
-            } else if (parentSerializedMode == SerializationFormats.STRING) {
+            } else if (deserializer == SerializationFormats.STRING) {
                 printOut.println(elem)
             }
           }
@@ -210,13 +208,14 @@ private class PairwiseRRDD[T: ClassTag](
     parent: RDD[T],
     numPartitions: Int,
     hashFunc: Array[Byte],
-    parentSerializedMode: String,
+    deserializer: String,
     functionDependencies: Array[Byte],
     packageNames: Array[Byte],
     rLibDir: String,
     broadcastVars: Array[Object])
-  extends BaseRRDD[T, (Int, Array[Byte])](parent, numPartitions, hashFunc, parentSerializedMode,
-                                          true, functionDependencies, packageNames, rLibDir,
+  extends BaseRRDD[T, (Int, Array[Byte])](parent, numPartitions, hashFunc, deserializer,
+                                          SerializationFormats.BYTE, functionDependencies,
+                                          packageNames, rLibDir,
                                           broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])) {
 
   private var dataStream: DataInputStream = _
@@ -255,14 +254,15 @@ private class PairwiseRRDD[T: ClassTag](
 private class RRDD[T: ClassTag](
     parent: RDD[T],
     func: Array[Byte],
-    parentSerializedMode: String,
+    deserializer: String,
+    serializeMode: String,
     functionDependencies: Array[Byte],
     packageNames: Array[Byte],
     rLibDir: String,
     broadcastVars: Array[Object])
-  extends BaseRRDD[T, Array[Byte]](parent, -1, func, parentSerializedMode,
-                                true, functionDependencies, packageNames, rLibDir,
-                                broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])) {
+  extends BaseRRDD[T, Array[Byte]](parent, -1, func, deserializer,
+                                   serializeMode, functionDependencies, packageNames, rLibDir,
+                                   broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])) {
 
   private var dataStream: DataInputStream = _
 
@@ -298,14 +298,14 @@ private class RRDD[T: ClassTag](
 private class StringRRDD[T: ClassTag](
     parent: RDD[T],
     func: Array[Byte],
-    parentSerializedMode: String,
+    deserializer: String,
     functionDependencies: Array[Byte],
     packageNames: Array[Byte],
     rLibDir: String,
     broadcastVars: Array[Object])
-  extends BaseRRDD[T, String](parent, -1, func, parentSerializedMode,
-                           false, functionDependencies, packageNames, rLibDir,
-                           broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])) {
+  extends BaseRRDD[T, String](parent, -1, func, deserializer, SerializationFormats.STRING,
+                              functionDependencies, packageNames, rLibDir,
+                              broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])) {
 
   private var dataStream: BufferedReader = _
 
