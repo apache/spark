@@ -24,32 +24,6 @@ import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo}
 import org.apache.spark.deploy.worker.ExecutorRunner
 
 private[spark] object JsonProtocol {
- def writeWorkerInfo(obj: WorkerInfo) = {
-   ("id" -> obj.id) ~
-   ("host" -> obj.host) ~
-   ("port" -> obj.port) ~
-   ("webuiaddress" -> obj.webUiAddress) ~
-   ("cores" -> obj.cores) ~
-   ("coresused" -> obj.coresUsed) ~
-   ("coresfree" -> obj.coresFree) ~
-   ("memory" -> obj.memory) ~
-   ("memoryused" -> obj.memoryUsed) ~
-   ("memoryfree" -> obj.memoryFree) ~
-   ("state" -> obj.state.toString) ~
-   ("lastheartbeat" -> obj.lastHeartbeat)
- }
-
-  def writeApplicationInfo(obj: ApplicationInfo) = {
-    ("starttime" -> obj.startTime) ~
-    ("id" -> obj.id) ~
-    ("name" -> obj.desc.name) ~
-    ("cores" -> obj.desc.maxCores) ~
-    ("user" ->  obj.desc.user) ~
-    ("memoryperslave" -> obj.desc.memoryPerSlave) ~
-    ("submitdate" -> obj.submitDate.toString) ~
-    ("state" -> obj.state.toString) ~
-    ("duration" -> obj.duration)
-  }
 
   def writeApplicationDescription(obj: ApplicationDescription) = {
     ("name" -> obj.name) ~
@@ -64,27 +38,6 @@ private[spark] object JsonProtocol {
     ("memory" -> obj.memory) ~
     ("appid" -> obj.appId) ~
     ("appdesc" -> writeApplicationDescription(obj.appDesc))
-  }
-
-  def writeDriverInfo(obj: DriverInfo) = {
-    ("id" -> obj.id) ~
-    ("starttime" -> obj.startTime.toString) ~
-    ("state" -> obj.state.toString) ~
-    ("cores" -> obj.desc.cores) ~
-    ("memory" -> obj.desc.mem)
-  }
-
-  def writeMasterState(obj: MasterStateResponse) = {
-    ("url" -> obj.uri) ~
-    ("workers" -> obj.workers.toList.map(writeWorkerInfo)) ~
-    ("cores" -> obj.workers.map(_.cores).sum) ~
-    ("coresused" -> obj.workers.map(_.coresUsed).sum) ~
-    ("memory" -> obj.workers.map(_.memory).sum) ~
-    ("memoryused" -> obj.workers.map(_.memoryUsed).sum) ~
-    ("activeapps" -> obj.activeApps.toList.map(writeApplicationInfo)) ~
-    ("completedapps" -> obj.completedApps.toList.map(writeApplicationInfo)) ~
-    ("activedrivers" -> obj.activeDrivers.toList.map(writeDriverInfo)) ~
-    ("status" -> obj.status.toString)
   }
 
   def writeWorkerState(obj: WorkerStateResponse) = {
