@@ -234,7 +234,13 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
         val outputPath = FileOutputFormat.getOutputPath(conf.value)
         assert(outputPath != null, "Undefined job output-path")
         val workPath = new Path(outputPath, dynamicPartPath.stripPrefix("/"))
-        new Path(workPath, getOutputName)
+        val path = new Path(workPath, getOutputName)
+        val fs = path.getFileSystem(conf.value)
+        // this judgement is added for SPARK-6067
+        if (fs.exists(path) && path.toUri.toString.indexOf("part-") > 0) {
+          fs.delete(path, false) // only delete the duplicat file, not dir
+        }
+        path
       }
 
       HiveFileFormatUtils.getHiveRecordWriter(
