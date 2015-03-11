@@ -38,7 +38,13 @@ import org.scalatest.FunSuite
 class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
   test("saveAsHadoopFileByKey should generate a text file per key") {
     val keys = 1 to 20
-    val pairs = sc.parallelize(keys).map(s => (s, s*s))
+    val testValues = 1 to 5
+    // Generate the cartesian product of keys by test values
+    val pairsLocal = keys.map(k => (k, testValues)).flatMap(kv => {
+      kv._2.map(v => (kv._1, v*kv._1))
+    })
+
+    val pairs = sc.parallelize(pairsLocal)
     val fs = FileSystem.get(new Configuration())
     val basePath = sc.conf.get("spark.local.dir", "/tmp")
     val fullPath = basePath + "/testPath"
@@ -50,10 +56,14 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
       val testPath = new Path(fullPath + "/" + key)
       assert(fs.exists(testPath))
 
-      // Read the file and test that the contents are the value
+      // Read the file and test that the contents are the values matching that key split by line
       val input = fs.open(testPath)
-      val firstLine = new BufferedReader(new InputStreamReader(input)).readLine()
-      assert(firstLine.toInt.equals(key*key))
+      val reader = new BufferedReader(new InputStreamReader(input))
+      val values = new HashSet[Int]
+      val lines = Stream.continually(reader.readLine()).takeWhile(_ != null)
+      lines.foreach(s => values += s.toInt)
+
+      testValues.foreach(v => assert(values.contains(v*key)))
     })
 
     fs.delete(new Path(fullPath), true)
