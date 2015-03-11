@@ -52,18 +52,6 @@ import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.CompactBuffer
 import org.apache.spark.util.random.StratifiedSamplingUtils
 
-class RDDMultipleTextOutputFormat[K,V]() extends MultipleTextOutputFormat[K, V]() {
-  override def generateActualKey(key: K, value: V): K =
-  {
-    NullWritable.get().asInstanceOf[K]
-  }
-
-  override def generateFileNameForKeyValue(key: K, value: V, name: String): String =
-  {
-    key.toString()
-  }
-}
-
 /**
  * Extra functions available on RDDs of (key, value) pairs through an implicit conversion.
  */
