@@ -1207,6 +1207,12 @@ than shipping a copy of it with tasks. They can be used, for example, to give ev
 large input dataset in an efficient manner. Spark also attempts to distribute broadcast variables
 using efficient broadcast algorithms to reduce communication cost.
 
+Spark actions are executed through a set of stages, separated by distributed "shuffle" operations.
+Spark automatically broadcasts the common data needed by tasks within each stage. The data
+broadcasted this way is cached in serialized form and deserialized before running each task. This
+means that explicitly creating broadcast variables is only useful when tasks across multiple stages
+need the same data or when caching the data in deserialized form is important.
+
 Broadcast variables are created from a variable `v` by calling `SparkContext.broadcast(v)`. The
 broadcast variable is a wrapper around `v`, and its value can be accessed by calling the `value`
 method. The code below shows this:
