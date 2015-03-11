@@ -337,9 +337,8 @@ class SQLContext(object):
                                  "but got %r" % type(first))
             for i, s in enumerate(schema):
                 if "." in s:
-                    warnings.warn("cannot use \".\" in column names. replacing column "
-                                  "name: \"%s\" with \"%s\"" % (s, s.replace(".", "_")))
-                    schema[i] = s.replace(".", "_")
+                    warnings.warn("cannot use \".\" in column names. "
+                                  "Consider changing column name: \"%s\"" % s)
             row_cls = Row(*schema)
             schema = self._inferSchema(data.map(lambda r: row_cls(*r)), samplingRatio)
 
