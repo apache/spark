@@ -122,17 +122,23 @@ private[spark] class MesosClusterScheduler(conf: SparkConf)
   def killDriver(submissionId: String): KillResponse = {
     stateLock.synchronized {
       if (launchedDrivers.contains(submissionId)) {
-        // Kill the JOB!!!!
-        return KillResponse(submissionId, true, Option("Killing running driver"))
+        // Check if submission is running
+        val task = launchedDrivers(submissionId)
+        driver.killTask(task.taskId)
+        Some(KillResponse(submissionId, true, Option("Killing running driver")))
+      } else {
+        None
       }
+    }.orElse {
+      // Check if submission is queued
+      if (queue.remove(new DriverSubmission(submissionId, null, null))) {
+        Some(KillResponse(submissionId, true, Option("Removed driver while it's still pending")))
+      } else {
+        None
+      }
+    }.getOrElse{
+      KillResponse(submissionId, false, Option("Cannot find driver"))
     }
-
-    // Check if submission is queued
-    if (queue.remove(new DriverSubmission(submissionId, null, null))) {
-      return KillResponse(submissionId, true, Option("Removed driver while it's still pending"))
-    }
-
-    KillResponse(submissionId, false, Option("Cannot find driver"))
   }
 
   def start() {
