@@ -127,7 +127,7 @@ private[hive] object HiveQl {
     
     "TOK_SWITCHDATABASE",
     
-    "TOK_UNLOCKTABLE
+    "TOK_UNLOCKTABLE"
   )
 
   // Commands that we do not need to explain.
