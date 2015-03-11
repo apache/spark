@@ -259,12 +259,7 @@ private[akka] class AkkaRpcEndpointRef(
     @transient _actorRef: => ActorRef,
     @transient conf: SparkConf,
     @transient initInConstructor: Boolean = true)
-  extends RpcEndpointRef with Serializable with Logging {
-  // `defaultAddress` and `conf` won't be used after initialization. So it's safe to be transient.
-
-  private[this] val maxRetries = conf.getInt("spark.akka.num.retries", 3)
-  private[this] val retryWaitMs = conf.getLong("spark.akka.retry.wait", 3000)
-  private[this] val defaultTimeout = conf.getLong("spark.akka.lookupTimeout", 30) seconds
+  extends RpcEndpointRef(conf) with Logging {
 
   lazy val actorRef = _actorRef
 
@@ -287,34 +282,6 @@ private[akka] class AkkaRpcEndpointRef(
     init()
   }
 
-  override def askWithReply[T: ClassTag](message: Any): T = askWithReply(message, defaultTimeout)
-
-  override def askWithReply[T: ClassTag](message: Any, timeout: FiniteDuration): T = {
-    // TODO: Consider removing multiple attempts
-    var attempts = 0
-    var lastException: Exception = null
-    while (attempts < maxRetries) {
-      attempts += 1
-      try {
-        val future = sendWithReply[T](message, timeout)
-        val result = Await.result(future, timeout)
-        if (result == null) {
-          throw new SparkException("Actor returned null")
-        }
-        return result
-      } catch {
-        case ie: InterruptedException => throw ie
-        case e: Exception =>
-          lastException = e
-          logWarning(s"Error sending message [message = $message] in $attempts attempts", e)
-      }
-      Thread.sleep(retryWaitMs)
-    }
-
-    throw new SparkException(
-      s"Error sending message [message = $message]", lastException)
-  }
-
   override def send(message: Any): Unit = {
     actorRef ! AkkaMessage(message, false)
   }
@@ -328,11 +295,6 @@ private[akka] class AkkaRpcEndpointRef(
         sender.asInstanceOf[AkkaRpcEndpointRef].actorRef
       }
     actorRef ! AkkaMessage(message, true)
-  }
-
-
-  override def sendWithReply[T: ClassTag](message: Any): Future[T] = {
-    sendWithReply(message, defaultTimeout)
   }
 
   override def sendWithReply[T: ClassTag](message: Any, timeout: FiniteDuration): Future[T] = {

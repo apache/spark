@@ -19,11 +19,12 @@ package org.apache.spark.rpc
 
 import java.net.URI
 
-import scala.concurrent.Future
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.{Await, Future}
+import scala.concurrent.duration._
+import scala.language.postfixOps
 import scala.reflect.ClassTag
 
-import org.apache.spark.{SparkException, SecurityManager, SparkConf}
+import org.apache.spark.{Logging, SparkException, SecurityManager, SparkConf}
 import org.apache.spark.util.Utils
 
 /**
@@ -257,7 +258,12 @@ private[spark] trait RpcEndpoint {
 /**
  * A reference for a remote [[RpcEndpoint]]. [[RpcEndpointRef]] is thread-safe.
  */
-private[spark] trait RpcEndpointRef {
+private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
+  extends Serializable with Logging {
+
+  private[this] val maxRetries = conf.getInt("spark.akka.num.retries", 3)
+  private[this] val retryWaitMs = conf.getLong("spark.akka.retry.wait", 3000)
+  private[this] val defaultTimeout = conf.getLong("spark.akka.lookupTimeout", 30) seconds
 
   /**
    * return the address for the [[RpcEndpointRef]]
@@ -277,7 +283,7 @@ private[spark] trait RpcEndpointRef {
    * @tparam T type of the reply message
    * @return the reply message from the corresponding [[RpcEndpoint]]
    */
-  def askWithReply[T: ClassTag](message: Any): T
+  def askWithReply[T: ClassTag](message: Any): T = askWithReply(message, defaultTimeout)
 
   /**
    * Send a message to the corresponding [[RpcEndpoint.receive]] and get its result within a
@@ -292,7 +298,31 @@ private[spark] trait RpcEndpointRef {
    * @tparam T type of the reply message
    * @return the reply message from the corresponding [[RpcEndpoint]]
    */
-  def askWithReply[T: ClassTag](message: Any, timeout: FiniteDuration): T
+  def askWithReply[T: ClassTag](message: Any, timeout: FiniteDuration): T = {
+    // TODO: Consider removing multiple attempts
+    var attempts = 0
+    var lastException: Exception = null
+    while (attempts < maxRetries) {
+      attempts += 1
+      try {
+        val future = sendWithReply[T](message, timeout)
+        val result = Await.result(future, timeout)
+        if (result == null) {
+          throw new SparkException("Actor returned null")
+        }
+        return result
+      } catch {
+        case ie: InterruptedException => throw ie
+        case e: Exception =>
+          lastException = e
+          logWarning(s"Error sending message [message = $message] in $attempts attempts", e)
+      }
+      Thread.sleep(retryWaitMs)
+    }
+
+    throw new SparkException(
+      s"Error sending message [message = $message]", lastException)
+  }
 
   /**
    * Sends a one-way asynchronous message. Fire-and-forget semantics.
@@ -312,7 +342,7 @@ private[spark] trait RpcEndpointRef {
    * Send a message to the corresponding [[RpcEndpoint.receiveAndReply)]] and return a `Future` to
    * receive the reply within a default timeout.
    */
-  def sendWithReply[T: ClassTag](message: Any): Future[T]
+  def sendWithReply[T: ClassTag](message: Any): Future[T] = sendWithReply(message, defaultTimeout)
 
   /**
    * Send a message to the corresponding [[RpcEndpoint.receiveAndReply)]] and return a `Future` to
