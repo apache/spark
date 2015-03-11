@@ -99,5 +99,3 @@ object SQLContextSingleton {
     instance
   }
 }
-
-

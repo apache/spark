@@ -29,5 +29,3 @@ public class JavaRecord implements java.io.Serializable {
     this.word = word;
   }
 }
-
-

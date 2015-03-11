@@ -120,4 +120,3 @@ class JavaSQLContextSingleton {
     return instance;
   }
 }
-
