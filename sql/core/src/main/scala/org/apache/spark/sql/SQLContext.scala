@@ -114,7 +114,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
     new Analyzer(catalog, functionRegistry, caseSensitive = true) {
       override val extendedResolutionRules =
         ExtractPythonUdfs ::
-        sources.PreWriteCheck(catalog) ::
         sources.PreInsertCastAndRename ::
         Nil
     }
@@ -543,20 +542,16 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group specificdata
    */
   @Experimental
-  def jsonFile(path: String, schema: StructType): DataFrame = {
-    val json = sparkContext.textFile(path)
-    jsonRDD(json, schema)
-  }
+  def jsonFile(path: String, schema: StructType): DataFrame =
+    load("json", schema, Map("path" -> path))
 
   /**
    * :: Experimental ::
    * @group specificdata
    */
   @Experimental
-  def jsonFile(path: String, samplingRatio: Double): DataFrame = {
-    val json = sparkContext.textFile(path)
-    jsonRDD(json, samplingRatio)
-  }
+  def jsonFile(path: String, samplingRatio: Double): DataFrame =
+    load("json", Map("path" -> path, "samplingRatio" -> samplingRatio.toString))
 
   /**
    * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
@@ -1057,6 +1052,13 @@ class SQLContext(@transient val sparkContext: SparkContext)
       Batch("Add exchange", Once, AddExchange(self)) :: Nil
   }
 
+  @transient
+  protected[sql] lazy val checkAnalysis = new CheckAnalysis {
+    override val extendedCheckRules = Seq(
+      sources.PreWriteCheck(catalog)
+    )
+  }
+
   /**
    * :: DeveloperApi ::
    * The primary workflow for executing relational queries using Spark.  Designed to allow easy
@@ -1064,9 +1066,13 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @DeveloperApi
   protected[sql] class QueryExecution(val logical: LogicalPlan) {
+    def assertAnalyzed(): Unit = checkAnalysis(analyzed)
 
     lazy val analyzed: LogicalPlan = analyzer(logical)
-    lazy val withCachedData: LogicalPlan = cacheManager.useCachedData(analyzed)
+    lazy val withCachedData: LogicalPlan = {
+      assertAnalyzed
+      cacheManager.useCachedData(analyzed)
+    }
     lazy val optimizedPlan: LogicalPlan = optimizer(withCachedData)
 
     // TODO: Don't just pick the first one...

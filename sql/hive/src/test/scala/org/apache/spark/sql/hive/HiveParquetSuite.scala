@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.parquet
+package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.{SQLConf, QueryTest}
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.parquet.ParquetTest
+import org.apache.spark.sql.{QueryTest, SQLConf}
 
 case class Cases(lower: String, UPPER: String)
 
