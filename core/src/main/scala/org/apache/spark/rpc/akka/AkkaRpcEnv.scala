@@ -43,7 +43,7 @@ import org.apache.spark.util.{ActorLogReceive, AkkaUtils}
  * @param conf
  * @param boundPort
  */
-private[spark] class AkkaRpcEnv private (
+private[spark] class AkkaRpcEnv private[akka] (
     val actorSystem: ActorSystem, conf: SparkConf, boundPort: Int) extends RpcEnv with Logging {
 
   private val defaultAddress: RpcAddress = {
@@ -250,14 +250,13 @@ private[spark] class AkkaRpcEnv private (
   override def toString = s"${getClass.getSimpleName}($actorSystem)"
 }
 
-private[spark] object AkkaRpcEnv {
+private[spark] class AkkaRpcEnvFactory extends RpcEnvFactory {
 
-  def apply(config: RpcEnvConfig): RpcEnv = {
+  def create(config: RpcEnvConfig): RpcEnv = {
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(
-        config.name, config.host, config.port, config.conf, config.securityManager)
+      config.name, config.host, config.port, config.conf, config.securityManager)
     new AkkaRpcEnv(actorSystem, config.conf, boundPort)
   }
-
 }
 
 private[akka] class AkkaRpcEndpointRef(

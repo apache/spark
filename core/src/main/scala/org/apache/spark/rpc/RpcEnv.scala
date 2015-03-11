@@ -111,27 +111,18 @@ private[spark] case class RpcEnvConfig(
     securityManager: SecurityManager)
 
 /**
- * A RpcEnv implementation must have a companion object with an
- * `apply(config: RpcEnvConfig): RpcEnv` method so that it can be created via Reflection.
- *
- * {{{
- * object MyCustomRpcEnv {
- *   def apply(config: RpcEnvConfig): RpcEnv = {
- *     ...
- *   }
- * }
- * }}}
+ * A RpcEnv implementation must have a [[RpcEnvFactory]] implementation with an empty constructor
+ * so that it can be created via Reflection.
  */
 private[spark] object RpcEnv {
 
-  private def getRpcEnvCompanion(conf: SparkConf): AnyRef = {
+  private def getRpcEnvFactory(conf: SparkConf): RpcEnvFactory = {
     // Add more RpcEnv implementations here
-    val rpcEnvNames = Map("akka" -> "org.apache.spark.rpc.akka.AkkaRpcEnv")
+    val rpcEnvNames = Map("akka" -> "org.apache.spark.rpc.akka.AkkaRpcEnvFactory")
     val rpcEnvName = conf.get("spark.rpc", "akka")
-    val rpcEnvClassName = rpcEnvNames.getOrElse(rpcEnvName.toLowerCase, rpcEnvName)
-    val companion = Class.forName(
-      rpcEnvClassName + "$", true, Utils.getContextOrSparkClassLoader).getField("MODULE$").get(null)
-    companion
+    val rpcEnvFactoryClassName = rpcEnvNames.getOrElse(rpcEnvName.toLowerCase, rpcEnvName)
+    Class.forName(rpcEnvFactoryClassName, true, Utils.getContextOrSparkClassLoader).
+      newInstance().asInstanceOf[RpcEnvFactory]
   }
 
   def create(
@@ -142,11 +133,18 @@ private[spark] object RpcEnv {
       securityManager: SecurityManager): RpcEnv = {
     // Using Reflection to create the RpcEnv to avoid to depend on Akka directly
     val config = RpcEnvConfig(conf, name, host, port, securityManager)
-    val companion = getRpcEnvCompanion(conf)
-    companion.getClass.getMethod("apply", classOf[RpcEnvConfig]).
-      invoke(companion, config).asInstanceOf[RpcEnv]
+    getRpcEnvFactory(conf).create(config)
   }
 
+}
+
+/**
+ * A factory class to create the [[RpcEnv]]. It must have an empty constructor so that it can be
+ * created using Reflection.
+ */
+private[spark] trait RpcEnvFactory {
+
+  def create(config: RpcEnvConfig): RpcEnv
 }
 
 /**
