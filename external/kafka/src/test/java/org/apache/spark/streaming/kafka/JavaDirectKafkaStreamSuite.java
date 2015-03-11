@@ -41,7 +41,6 @@ import org.apache.spark.streaming.api.java.JavaStreamingContext;
 
 public class JavaDirectKafkaStreamSuite implements Serializable {
   private transient JavaStreamingContext ssc = null;
-  private transient Random random = new Random();
   private transient KafkaTestUtils kafkaTestUtils = null;
 
   @Before
