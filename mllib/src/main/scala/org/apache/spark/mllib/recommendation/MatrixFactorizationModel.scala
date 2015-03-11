@@ -199,12 +199,12 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       assert(formatVersion == thisFormatVersion)
       val rank = (metadata \ "rank").extract[Int]
       val userFeatures = sqlContext.parquetFile(userPath(path))
-        .map { case Row(id: Int, features: Seq[Double]) =>
-          (id, features.toArray)
+        .map { case Row(id: Int, features: Seq[_]) =>
+          (id, features.asInstanceOf[Seq[Double]].toArray)
         }
       val productFeatures = sqlContext.parquetFile(productPath(path))
-        .map { case Row(id: Int, features: Seq[Double]) =>
-        (id, features.toArray)
+        .map { case Row(id: Int, features: Seq[_]) =>
+        (id, features.asInstanceOf[Seq[Double]].toArray)
       }
       new MatrixFactorizationModel(rank, userFeatures, productFeatures)
     }
