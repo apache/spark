@@ -58,7 +58,7 @@ object NaiveBayesSuite {
     for (i <- 0 until nPoints) yield {
       val y = calcLabel(rnd.nextDouble(), _pi)
       val xi = dataModel match {
-        case NaiveBayes.Bernoulli => Array.tabulate[Double] (D) {j =>
+        case NaiveBayes.Bernoulli => Array.tabulate[Double] (D) { j =>
             if (rnd.nextDouble () < _theta(y)(j) ) 1 else 0
         }
         case NaiveBayes.Multinomial =>
@@ -118,11 +118,7 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
     ).map(_.map(math.log))
 
     val testData = NaiveBayesSuite.generateNaiveBayesInput(
-      pi,
-      theta,
-      nPoints,
-      42,
-      NaiveBayes.Multinomial)
+      pi, theta, nPoints, 42, NaiveBayes.Multinomial)
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
@@ -130,11 +126,7 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
     validateModelFit(pi, theta, model)
 
     val validationData = NaiveBayesSuite.generateNaiveBayesInput(
-      pi,
-      theta,
-      nPoints,
-      17,
-      NaiveBayes.Multinomial)
+      pi, theta, nPoints, 17, NaiveBayes.Multinomial)
     val validationRDD = sc.parallelize(validationData, 2)
 
     // Test prediction on RDD.

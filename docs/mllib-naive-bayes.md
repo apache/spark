@@ -15,12 +15,12 @@ and use it for prediction.
 MLlib supports [multinomial naive
 Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier#Multinomial_naive_Bayes)
 and [Bernoulli naive Bayes] (http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html).
-Which are typically used for [document classification]
+These models are typically used for [document classification]
 (http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html).
 Within that context, each observation is a document and each
 feature represents a term whose value is the frequency of the term (in multinomial naive Bayes) or
 a zero or one indicating whether the term was found in the document (in Bernoulli naive Bayes).
-Feature values must be nonnegative.The model type is selected with on optional parameter
+Feature values must be nonnegative. The model type is selected with an optional parameter
 "Multinomial" or "Bernoulli" with "Multinomial" as the default.
 [Additive smoothing](http://en.wikipedia.org/wiki/Lidstone_smoothing) can be used by
 setting the parameter $\lambda$ (default to $1.0$). For document classification, the input feature

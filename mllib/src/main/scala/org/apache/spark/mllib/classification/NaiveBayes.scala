@@ -49,15 +49,15 @@ class NaiveBayesModel private[mllib] (
     val modelType: String)
   extends ClassificationModel with Serializable with Saveable {
 
-  def this(labels: Array[Double], pi: Array[Double], theta: Array[Array[Double]]) =
+  private[mllib] def this(labels: Array[Double], pi: Array[Double], theta: Array[Array[Double]]) =
     this(labels, pi, theta, NaiveBayes.Multinomial.toString)
 
   private val brzPi = new BDV[Double](pi)
   private val brzTheta = new BDM(theta(0).length, theta.length, theta.flatten).t
 
-  // Bernoulli scoring requires log(condprob) if 1 log(1-condprob) if 0
-  // this precomputes log(1.0 - exp(theta)) and its sum for linear algebra application
-  // of this condition in predict function
+  // Bernoulli scoring requires log(condprob) if 1, log(1-condprob) if 0.
+  // This precomputes log(1.0 - exp(theta)) and its sum  which are used for the  linear algebra
+  // application of this condition (in predict function).
   private val (brzNegTheta, brzNegThetaSum) = NaiveBayes.ModelType.fromString(modelType) match {
     case NaiveBayes.Multinomial => (None, None)
     case NaiveBayes.Bernoulli =>
@@ -186,8 +186,6 @@ class NaiveBayes private (
     private var lambda: Double,
     private var modelType: NaiveBayes.ModelType) extends Serializable with Logging {
 
-  def this(lambda: Double) = this(lambda, NaiveBayes.Multinomial)
-
   def this() = this(1.0, NaiveBayes.Multinomial)
 
   /** Set the smoothing parameter. Default: 1.0. */
@@ -202,6 +200,7 @@ class NaiveBayes private (
     this
   }
 
+  def getModelType(): NaiveBayes.ModelType = this.modelType
 
   /**
    * Run the algorithm with the configured parameters on an input RDD of LabeledPoint entries.
@@ -301,9 +300,8 @@ object NaiveBayes {
    * @param lambda The smoothing parameter
    */
   def train(input: RDD[LabeledPoint], lambda: Double): NaiveBayesModel = {
-    new NaiveBayes(lambda).run(input)
+    new NaiveBayes(lambda, NaiveBayes.Multinomial).run(input)
   }
-
 
   /**
    * Trains a Naive Bayes model given an RDD of `(label, features)` pairs.
@@ -327,11 +325,7 @@ object NaiveBayes {
     new NaiveBayes(lambda, MODELTYPE.fromString(modelType)).run(input)
   }
 
-
-  /**
-   * Model types supported in Naive Bayes:
-   * multinomial and Bernoulli currently supported
-   */
+  /** Provides static methods for using ModelType. */
   sealed abstract class ModelType
 
   object MODELTYPE {
@@ -348,10 +342,12 @@ object NaiveBayes {
 
   final val ModelType = MODELTYPE
 
+  /** Constant for specifying ModelType parameter: multinomial model */
   final val Multinomial: ModelType = new ModelType {
     override def toString: String = ModelType.MULTINOMIAL_STRING
   }
 
+  /** Constant for specifying ModelType parameter: bernoulli model */
   final val Bernoulli: ModelType = new ModelType {
     override def toString: String = ModelType.BERNOULLI_STRING
   }
