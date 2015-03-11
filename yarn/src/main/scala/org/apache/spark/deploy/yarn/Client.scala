@@ -211,6 +211,9 @@ private[spark] class Client(
     val fs = FileSystem.get(hadoopConf)
     val dst = new Path(fs.getHomeDirectory(), appStagingDir)
     val nns = getNameNodesToAccess(sparkConf) + dst
+    // Used to keep track of URIs added to the distributed cache. If the same URI is added
+    // multiple times, YARN will fail to launch containers for the app with an internal
+    // error.
     val distributedUris = new HashSet[String]
     obtainTokensForNamenodes(nns, hadoopConf, credentials)
 
@@ -229,13 +232,15 @@ private[spark] class Client(
           "for alternatives.")
     }
 
-    def addDistributedUri(uri: URI): Unit = {
+    def addDistributedUri(uri: URI): Boolean = {
       val uriStr = uri.toString()
       if (distributedUris.contains(uriStr)) {
-        throw new IllegalArgumentException(
-          s"Resource $uri added multiple times to distributed cache.")
+        logWarning(s"Resource $uri added multiple times to distributed cache.")
+        false
+      } else {
+        distributedUris += uriStr
+        true
       }
-      distributedUris += uriStr
     }
 
     /**
@@ -255,12 +260,13 @@ private[spark] class Client(
       if (!localPath.isEmpty()) {
         val localURI = new URI(localPath)
         if (localURI.getScheme != LOCAL_SCHEME) {
-          addDistributedUri(localURI)
-          val src = getQualifiedLocalPath(localURI, hadoopConf)
-          val destPath = copyFileToRemote(dst, src, replication)
-          val destFs = FileSystem.get(destPath.toUri(), hadoopConf)
-          distCacheMgr.addResource(destFs, hadoopConf, destPath,
-            localResources, LocalResourceType.FILE, destName, statCache)
+          if (addDistributedUri(localURI)) {
+            val src = getQualifiedLocalPath(localURI, hadoopConf)
+            val destPath = copyFileToRemote(dst, src, replication)
+            val destFs = FileSystem.get(destPath.toUri(), hadoopConf)
+            distCacheMgr.addResource(destFs, hadoopConf, destPath,
+              localResources, LocalResourceType.FILE, destName, statCache)
+          }
         } else if (confKey != null) {
           // If the resource is intended for local use only, handle this downstream
           // by setting the appropriate property
@@ -299,13 +305,11 @@ private[spark] class Client(
     fs.mkdirs(hadoopConfPath)
 
     hadoopConfFiles.foreach { case (name, file) =>
-      addDistributedUri(file.toURI())
-      val destPath = copyFileToRemote(hadoopConfPath, new Path(file.toURI()), replication)
-      distCacheMgr.addResource(fs, hadoopConf, destPath,
-        localResources,
-        LocalResourceType.FILE,
-        HADOOP_CONF_DIR + Path.SEPARATOR + name,
-        statCache)
+      if (addDistributedUri(file.toURI())) {
+        val destPath = copyFileToRemote(hadoopConfPath, new Path(file.toURI()), replication)
+        distCacheMgr.addResource(fs, hadoopConf, destPath, localResources, LocalResourceType.FILE,
+          HADOOP_CONF_DIR + Path.SEPARATOR + name, statCache)
+      }
     }
 
     /**
@@ -325,14 +329,15 @@ private[spark] class Client(
         flist.split(',').foreach { file =>
           val localURI = new URI(file.trim())
           if (localURI.getScheme != LOCAL_SCHEME) {
-            addDistributedUri(localURI)
-            val localPath = new Path(localURI)
-            val linkname = Option(localURI.getFragment()).getOrElse(localPath.getName())
-            val destPath = copyFileToRemote(dst, localPath, replication)
-            distCacheMgr.addResource(
-              fs, hadoopConf, destPath, localResources, resType, linkname, statCache)
-            if (addToClasspath) {
-              cachedSecondaryJarLinks += linkname
+            if (addDistributedUri(localURI)) {
+              val localPath = new Path(localURI)
+              val linkname = Option(localURI.getFragment()).getOrElse(localPath.getName())
+              val destPath = copyFileToRemote(dst, localPath, replication)
+              distCacheMgr.addResource(
+                fs, hadoopConf, destPath, localResources, resType, linkname, statCache)
+              if (addToClasspath) {
+                cachedSecondaryJarLinks += linkname
+              }
             }
           } else if (addToClasspath) {
             // Resource is intended for local use only and should be added to the class path
@@ -725,7 +730,7 @@ object Client extends Logging {
   // Distribution-defined classpath to add to processes
   val ENV_DIST_CLASSPATH = "SPARK_DIST_CLASSPATH"
 
-  // Subdirectory where the user's hadoop config files are written in the job staging dir.
+  // Subdirectory where the user's hadoop config files are written in the app staging dir.
   val HADOOP_CONF_DIR = "__hadoop_conf_dir__"
 
   /**
