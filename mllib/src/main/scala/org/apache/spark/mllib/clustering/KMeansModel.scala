@@ -22,9 +22,8 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.mllib.linalg._
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.util.{Loader, Saveable}
-import org.apache.spark.mllib.util.Loader._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.SQLContext
@@ -79,11 +78,11 @@ object KMeansModel extends Loader[KMeansModel] {
     KMeansModel.SaveLoadV1_0.load(sc, path)
   }
 
-  case class IndexedPoint(id: Int, point: Vector)
+  private case class Cluster(id: Int, point: Vector)
 
-  object IndexedPoint {
-    def apply(r: Row): IndexedPoint = {
-      IndexedPoint(r.getInt(0), r.getAs[Vector](1))
+  private object Cluster {
+    def apply(r: Row): Cluster = {
+      Cluster(r.getInt(0), r.getAs[Vector](1))
     }
   }
 
@@ -102,7 +101,7 @@ object KMeansModel extends Loader[KMeansModel] {
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ ("k" -> model.k)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
       val dataRDD = sc.parallelize(model.clusterCenters.zipWithIndex).map { case (point, id) =>
-        IndexedPoint(id, point)
+        Cluster(id, point)
       }.toDF()
       dataRDD.saveAsParquetFile(Loader.dataPath(path))
     }
@@ -110,13 +109,13 @@ object KMeansModel extends Loader[KMeansModel] {
     def load(sc: SparkContext, path: String): KMeansModel = {
       implicit val formats = DefaultFormats
       val sqlContext = new SQLContext(sc)
-      val (className, formatVersion, metadata) = loadMetadata(sc, path)
+      val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
       assert(className == thisClassName)
       assert(formatVersion == thisFormatVersion)
       val k = (metadata \ "k").extract[Int]
-      val centriods = sqlContext.parquetFile(dataPath(path))
-      Loader.checkSchema[IndexedPoint](centriods.schema)
-      val localCentriods = centriods.map(IndexedPoint.apply).collect()
+      val centriods = sqlContext.parquetFile(Loader.dataPath(path))
+      Loader.checkSchema[Cluster](centriods.schema)
+      val localCentriods = centriods.map(Cluster.apply).collect()
       assert(k == localCentriods.size)
       new KMeansModel(localCentriods.sortBy(_.id).map(_.point))
     }
