@@ -17,6 +17,9 @@
 
 package org.apache.spark.mllib.fpm
 
+import org.apache.spark.SparkContext
+import org.apache.spark.SparkContext._
+
 import java.{util => ju}
 import java.lang.{Iterable => JavaIterable}
 
