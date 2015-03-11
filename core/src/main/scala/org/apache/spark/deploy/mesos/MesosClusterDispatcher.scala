@@ -19,11 +19,11 @@ package org.apache.spark.deploy.mesos
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.util.{IntParam, Utils}
-
 import java.io.File
 import org.apache.spark.deploy.mesos.ui.MesosClusterUI
 import org.apache.spark.deploy.rest.MesosRestServer
 import org.apache.spark.scheduler.cluster.mesos.{ClusterScheduler, MesosClusterScheduler}
+import java.util.concurrent.CountDownLatch
 
 /*
  * A dispatcher actor that is responsible for managing drivers, that is intended to
@@ -63,6 +63,9 @@ private [spark] class MesosClusterDispatcher(
 }
 
 object MesosClusterDispatcher {
+
+  val shutdownLatch = new CountDownLatch(1)
+
   def main(args: Array[String]) {
     val conf = new SparkConf
     val dispatcherArgs = new ClusterDispatcherArguments(args, conf)
@@ -76,10 +79,8 @@ object MesosClusterDispatcher {
       dispatcherArgs.webUiPort,
       conf,
       scheduler).start()
-    this.synchronized {
-      // block indefinitely
-      this.wait() // TODO: bad
-    }
+
+    shutdownLatch.await()
   }
 
   class ClusterDispatcherArguments(args: Array[String], conf: SparkConf) {
