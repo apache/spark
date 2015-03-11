@@ -103,6 +103,12 @@ case class Join(
         left.output ++ right.output
     }
   }
+
+  def selfJoinResolved = {
+    childrenResolved && AttributeSet(left).intersect(AttributeSet(right)).isEmpty
+  }
+
+  override lazy val resolved: Boolean = selfJoinResolved && !expressions.exists(!_.resolved)
 }
 
 case class Except(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
