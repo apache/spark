@@ -113,47 +113,52 @@ class GradientBoostedTreesModel(
 
   /**
    * Method to compute error or loss for every iteration of gradient boosting.
-   * @param data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
-   * @param loss: evaluation metric.
+   * @param data RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
+   * @param loss evaluation metric.
    * @return an array with index i having the losses or errors for the ensemble
    *         containing trees 1 to i + 1
    */
   def evaluateEachIteration(
       data: RDD[LabeledPoint],
-      loss: Loss) : Array[Double] = {
+      loss: Loss): Array[Double] = {
 
     val sc = data.sparkContext
     val remappedData = algo match {
       case Classification => data.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
       case _ => data
     }
-    val initialTree = trees(0)
+
     val numIterations = trees.length
     val evaluationArray = Array.fill(numIterations)(0.0)
 
-    // Initial weight is 1.0
-    var predictionErrorModel = remappedData.map {i =>
-      val pred = initialTree.predict(i.features)
-      val error = loss.computeError(i, pred)
+    var predictionAndError: RDD[(Double, Double)] = remappedData.map { i =>
+      val pred = treeWeights(0) * trees(0).predict(i.features)
+      val error = loss.computeError(pred, i)
       (pred, error)
     }
-    evaluationArray(0) = predictionErrorModel.values.mean()
+    evaluationArray(0) = predictionAndError.values.mean()
 
     // Avoid the model being copied across numIterations.
     val broadcastTrees = sc.broadcast(trees)
     val broadcastWeights = sc.broadcast(treeWeights)
 
-    (1 until numIterations).map {nTree =>
-      predictionErrorModel = (remappedData zip predictionErrorModel) map {
-        case (point, (pred, error)) => {
-          val newPred = pred + (
-            broadcastTrees.value(nTree).predict(point.features) * broadcastWeights.value(nTree))
-          val newError = loss.computeError(point, newPred)
-          (newPred, newError)
+    (1 until numIterations).map { nTree =>
+      val currentTree = broadcastTrees.value(nTree)
+      val currentTreeWeight = broadcastWeights.value(nTree)
+      predictionAndError = remappedData.zip(predictionAndError).mapPartitions { iter =>
+        iter map {
+          case (point, (pred, error)) => {
+            val newPred = pred + currentTree.predict(point.features) * currentTreeWeight
+            val newError = loss.computeError(newPred, point)
+            (newPred, newError)
+          }
         }
       }
-      evaluationArray(nTree) = predictionErrorModel.values.mean()
+      evaluationArray(nTree) = predictionAndError.values.mean()
     }
+
+    broadcastTrees.unpersist()
+    broadcastWeights.unpersist()
     evaluationArray
   }
 

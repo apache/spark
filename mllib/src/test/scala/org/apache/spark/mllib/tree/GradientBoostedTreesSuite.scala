@@ -197,7 +197,7 @@ class GradientBoostedTreesSuite extends FunSuite with MLlibTestSparkContext {
         assert(evaluationArray(numTrees) > evaluationArray(numTrees - 1))
         var i = 1
         while (i < numTrees) {
-          assert(evaluationArray(i) < evaluationArray(i - 1))
+          assert(evaluationArray(i) <= evaluationArray(i - 1))
           i += 1
         }
       }

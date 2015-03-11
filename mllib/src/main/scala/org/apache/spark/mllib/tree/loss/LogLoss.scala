@@ -51,31 +51,14 @@ object LogLoss extends Loss {
   }
 
   /**
-   * Method to calculate loss of the base learner for the gradient boosting calculation.
-   * Note: This method is not used by the gradient boosting algorithm but is useful for debugging
-   * purposes.
-   * @param model Ensemble model
-   * @param data Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
-   * @return Mean log loss of model on data
-   */
-  override def computeError(model: TreeEnsembleModel, data: RDD[LabeledPoint]): Double = {
-    data.map { case point =>
-      val prediction = model.predict(point.features)
-      val margin = 2.0 * point.label * prediction
-      // The following is equivalent to 2.0 * log(1 + exp(-margin)) but more numerically stable.
-      2.0 * MLUtils.log1pExp(-margin)
-    }.mean()
-  }
-
-  /**
    * Method to calculate loss when the predictions are already known.
    * Note: This method is used in the method evaluateEachIteration to avoid recomputing the
    * predicted values from previously fit trees.
-   * @param datum: LabeledPoint
-   * @param prediction: Predicted label.
+   * @param prediction Predicted label.
+   * @param datum LabeledPoint
    * @return log loss of model on the datapoint.
    */
-  override def computeError(datum: LabeledPoint, prediction: Double): Double = {
+  override def computeError(prediction: Double, datum: LabeledPoint): Double = {
     val margin = 2.0 * datum.label * prediction
     // The following is equivalent to 2.0 * log(1 + exp(-margin)) but more numerically stable.
     2.0 * MLUtils.log1pExp(-margin)

@@ -48,29 +48,14 @@ object AbsoluteError extends Loss {
   }
 
   /**
-   * Method to calculate loss of the base learner for the gradient boosting calculation.
-   * Note: This method is not used by the gradient boosting algorithm but is useful for debugging
-   * purposes.
-   * @param model Ensemble model
-   * @param data Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
-   * @return  Mean absolute error of model on data
-   */
-  override def computeError(model: TreeEnsembleModel, data: RDD[LabeledPoint]): Double = {
-    data.map { y =>
-      val err = model.predict(y.features) - y.label
-      math.abs(err)
-    }.mean()
-  }
-
-  /**
    * Method to calculate loss when the predictions are already known.
    * Note: This method is used in the method evaluateEachIteration to avoid recomputing the
    * predicted values from previously fit trees.
-   * @param datum: LabeledPoint
-   * @param prediction: Predicted label.
-   * @return  Absolute error of model on the given datapoint.
+   * @param prediction Predicted label.
+   * @param datum LabeledPoint.
+   * @return Absolute error of model on the given datapoint.
    */
-  override def computeError(datum: LabeledPoint, prediction: Double): Double = {
+  override def computeError(prediction: Double, datum: LabeledPoint): Double = {
     val err = datum.label - prediction
     math.abs(err)
   }

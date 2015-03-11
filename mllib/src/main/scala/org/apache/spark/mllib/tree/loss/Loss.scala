@@ -47,16 +47,18 @@ trait Loss extends Serializable {
    * @param data Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    * @return Measure of model error on data
    */
-  def computeError(model: TreeEnsembleModel, data: RDD[LabeledPoint]): Double
+  def computeError(model: TreeEnsembleModel, data: RDD[LabeledPoint]): Double = {
+    data.map(point => computeError(model.predict(point.features), point)).mean()
+  }
 
   /**
    * Method to calculate loss when the predictions are already known.
    * Note: This method is used in the method evaluateEachIteration to avoid recomputing the
    * predicted values from previously fit trees.
-   * @param datum: LabeledPoint
-   * @param prediction: Predicted label.
+   * @param prediction Predicted label.
+   * @param datum LabeledPoint
    * @return Measure of model error on datapoint.
    */
-  def computeError(datum: LabeledPoint, prediction: Double) : Double
+  def computeError(prediction: Double, datum: LabeledPoint): Double
 
 }
