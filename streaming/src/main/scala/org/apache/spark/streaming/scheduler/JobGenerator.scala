@@ -76,6 +76,8 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   // last batch whose completion,checkpointing and metadata cleanup has been completed
   private var lastProcessedBatch: Time = null
 
+  private var lastCompletedBatch: Time = null
+
   /** Start generation of jobs */
   def start(): Unit = synchronized {
     if (eventActor != null) return // generator has already been started
@@ -157,6 +159,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
    * Callback called when a batch has been completely processed.
    */
   def onBatchCompletion(time: Time) {
+    lastCompletedBatch = time
     eventActor ! ClearMetadata(time)
   }
 
@@ -260,9 +263,10 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       // If checkpointing is not enabled, then delete metadata information about
       // received blocks (block data not saved in any case). Otherwise, wait for
       // checkpointing of this batch to complete.
-      val maxRememberDuration = graph.getMaxInputStreamRememberDuration()
-      jobScheduler.receiverTracker.cleanupOldBlocksAndBatches(time - maxRememberDuration)
       markBatchFullyProcessed(time)
+      val maxRememberDuration = graph.getMaxInputStreamRememberDuration()
+      jobScheduler.receiverTracker
+        .cleanupOldBlocksAndBatches(lastProcessedBatch - maxRememberDuration)
     }
   }
 
@@ -270,11 +274,13 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   private def clearCheckpointData(time: Time) {
     ssc.graph.clearCheckpointData(time)
 
+    markBatchFullyProcessed(time)
     // All the checkpoint information about which batches have been processed, etc have
     // been saved to checkpoints, so its safe to delete block metadata and data WAL files
     val maxRememberDuration = graph.getMaxInputStreamRememberDuration()
-    jobScheduler.receiverTracker.cleanupOldBlocksAndBatches(time - maxRememberDuration)
-    markBatchFullyProcessed(time)
+    jobScheduler.receiverTracker
+      .cleanupOldBlocksAndBatches(lastProcessedBatch - maxRememberDuration)
+
   }
 
   /** Perform checkpoint for the give `time`. */
@@ -287,6 +293,11 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   }
 
   private def markBatchFullyProcessed(time: Time) {
-    lastProcessedBatch = time
+
+    // The checkpoint that called this may have been started before the batch was completed (from
+    // the generateJobs method - in which case, don't update it, since the batch has not been
+    // completed yet. The batch is truely processed only when the checkpoint after the batch is
+    // completed is written out.
+    lastProcessedBatch = Seq(lastCompletedBatch, time).min
   }
 }
