@@ -11,7 +11,6 @@ class PostgresHook(object):
     def __init__(
             self, host=None, login=None,
             psw=None, db=None, port=None, postgres_conn_id=None):
-        self.autocommit = False
         if not postgres_conn_id:
             self.host = host
             self.login = login
@@ -66,14 +65,11 @@ class PostgresHook(object):
         conn.close()
         return df
 
-    def run(self, sql):
+    def run(self, sql, autocommit=False):
         conn = self.get_conn()
-        conn.autocommit = self.autocommit
+        conn.autocommit = autocommit
         cur = conn.cursor()
         cur.execute(sql)
         conn.commit()
         cur.close()
         conn.close()
-
-    def setAutocommit(self, autocommit):
-        self.autocommit = autocommit

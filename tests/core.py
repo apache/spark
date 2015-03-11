@@ -245,6 +245,29 @@ class MySqlTest(unittest.TestCase):
             task_id='basic_mysql', sql=sql, dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
+class PostgresTest(unittest.TestCase):
+
+    def setUp(self):
+        configuration.test_mode()
+        utils.initdb()
+        args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
+        dag = DAG('hive_test', default_args=args)
+        self.dag = dag
+
+    def postgres_operator_test(self):
+        sql = """
+        CREATE TABLE IF NOT EXISTS test_airflow (
+            dummy VARCHAR(50)
+        );
+        """
+        t = operators.PostgresOperator(
+            task_id='basic_postgres', sql=sql, dag=self.dag)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
+        autocommitTask = operators.PostgresOperator(
+            task_id='basic_postgres_with_autocommit', sql=sql, dag=self.dag, autocommit=True)
+        autocommitTask.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
 
 if __name__ == '__main__':
     unittest.main()
