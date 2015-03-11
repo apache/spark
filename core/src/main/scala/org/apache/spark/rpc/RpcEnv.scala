@@ -152,8 +152,7 @@ private[spark] object RpcEnv {
 /**
  * An end point for the RPC that defines what functions to trigger given a message.
  *
- * RpcEndpoint will be guaranteed that `onStart`, `receive` and `onStop` will
- * be called in sequence.
+ * It is guaranteed that `onStart`, `receive` and `onStop` will be called in sequence.
  *
  * The lift-cycle will be:
  *
@@ -245,7 +244,7 @@ private[spark] trait RpcEndpoint {
   }
 
   /**
-   * An convenient method to stop [[RpcEndpoint]].
+   * A convenient method to stop [[RpcEndpoint]].
    */
   final def stop(): Unit = {
     val _self = self
