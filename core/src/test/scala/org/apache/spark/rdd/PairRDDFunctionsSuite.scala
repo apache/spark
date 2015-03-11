@@ -17,12 +17,14 @@
 
 package org.apache.spark.rdd
 
+import java.io.{BufferedReader, InputStreamReader}
+
 import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.sys.process._
 import scala.util.Random
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
-import org.apache.hadoop.fs.{Path, FileSystem}
+import org.apache.hadoop.fs.{FSDataInputStream, Path, FileSystem}
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapreduce.{JobContext => NewJobContext, OutputCommitter => NewOutputCommitter,
 OutputFormat => NewOutputFormat, RecordWriter => NewRecordWriter,
@@ -36,15 +38,23 @@ import org.scalatest.FunSuite
 class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
   test("saveAsHadoopFileByKey should generate a text file per key") {
     val keys = 1 to 20
-    val pairs = sc.parallelize(keys.zipWithIndex)
+    val pairs = sc.parallelize(keys).map(s => (s, s*s))
     val fs = FileSystem.get(new Configuration())
     val basePath = sc.conf.get("spark.local.dir", "/tmp")
-    val fullPath = basePath + "testPath"
+    val fullPath = basePath + "/testPath"
     fs.delete(new Path(fullPath), true)
     pairs.saveAsHadoopFileByKey(fullPath)
 
     // Test that a file was created for each key
+    keys.foreach(key => {
+      val testPath = new Path(fullPath + "/" + key)
+      assert(fs.exists(testPath))
 
+      // Read the file and test that the contents are the value
+      val input = fs.open(testPath)
+      val firstLine = new BufferedReader(new InputStreamReader(input)).readLine()
+      assert(firstLine.toInt.equals(key*key))
+    })
 
     fs.delete(new Path(fullPath), true)
   }
