@@ -335,6 +335,11 @@ class SQLContext(object):
             if not isinstance(first, (list, tuple)):
                 raise ValueError("each row in `rdd` should be list or tuple, "
                                  "but got %r" % type(first))
+            for i, s in enumerate(schema):
+                if "." in s:
+                    warnings.warn("cannot use \".\" in column names. replacing column "
+                                  "name: \"%s\" with \"%s\"" % (s, s.replace(".", "_")))
+                    schema[i] = s.replace(".", "_")
             row_cls = Row(*schema)
             schema = self._inferSchema(data.map(lambda r: row_cls(*r)), samplingRatio)
 
