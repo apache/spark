@@ -310,14 +310,12 @@ public class ArrayReflect {
   public static void setFloat(Object array, int index, float f) {
     if (array instanceof float[]) {
       ((float[])array)[index] = f;
-    } else {
-    if (array instanceof double[]) {
+    } else if (array instanceof double[]) {
       ((double[])array)[index] = f;
     } else {
       throw badArray(array);
     }
   }
-
 
   public static void setDouble(Object array, int index, double d) {
     if (array instanceof double[]) {
