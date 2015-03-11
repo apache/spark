@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy
 
-private[deploy] class DriverDescription(
+private[spark] case class DriverDescription(
     val jarUrl: String,
     val mem: Int,
     val cores: Int,

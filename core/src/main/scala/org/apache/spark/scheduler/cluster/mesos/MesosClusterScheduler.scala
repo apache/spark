@@ -164,8 +164,6 @@ private[spark] class MesosClusterScheduler(conf: SparkConf)
       ""
     }
 
-    // TODO: add support for more spark-submit parameters
-
     val envBuilder = Environment.newBuilder()
     desc.command.environment.foreach {
       case (k, v) =>
@@ -175,38 +173,47 @@ private[spark] class MesosClusterScheduler(conf: SparkConf)
 
     builder.setEnvironment(envBuilder.build())
 
+    val cmdOptions = generateCmdOption(req)
+
     val executorUri = req.conf.getOption("spark.executor.uri")
-    if (executorUri.isDefined) {
+    val cmd = if (executorUri.isDefined) {
       builder.addUris(CommandInfo.URI.newBuilder().setValue(executorUri.get).build())
 
-      val basename = executorUri.get.split('/').last.split('.').head
-      val cmd =
-        Seq("bin/spark-submit",
-            "--class", desc.command.mainClass,
-            "--master", s"mesos://${conf.get("spark.master")}",
-            s"../${desc.jarUrl.split("/").last}")
-            .mkString(" ")
+      val folderBasename = executorUri.get.split('/').last.split('.').head
 
-      builder.setValue(
-        s"cd $basename*; $prefixEnv $cmd")
+      val cmdExecutable = s"cd $folderBasename*; $prefixEnv bin/spark-submit"
+
+      val cmdJar = s"../${desc.jarUrl.split("/").last}"
+
+      s"$cmdExecutable ${cmdOptions.mkString(" ")} $cmdJar"
     } else {
       val executorSparkHome = req.conf.getOption("spark.mesos.executor.home")
         .getOrElse {
           throw new SparkException("Executor Spark home `spark.mesos.executor.home` is not set!")
         }
 
-      val cmd =
-        Seq(new File(executorSparkHome, "./bin/spark-submit"),
-            "--class", desc.command.mainClass,
-            "--master", s"mesos://${conf.get("spark.master")}",
-            desc.jarUrl.split("/").last)
-            .mkString(" ")
+      val cmdExecutable = new File(executorSparkHome, "./bin/spark-submit").getCanonicalPath
 
-      builder.setValue(
-        s"$prefixEnv $cmd")
+      val cmdJar = desc.jarUrl.split("/").last
+
+      s"$cmdExecutable ${cmdOptions.mkString(" ")} $cmdJar"
     }
 
+    builder.setValue(cmd)
+
     builder.build
+  }
+
+  private def generateCmdOption(req: DriverRequest): Seq[String] = {
+    Seq(
+        "--name", req.conf.get("spark.app.name"),
+        "--class", req.desc.command.mainClass,
+        "--master", s"mesos://${conf.get("spark.master")}",
+        "--driver-cores", req.desc.cores.toString,
+        "--driver-memory", s"${req.desc.mem}M",
+        "--executor-memory", req.conf.get("spark.executor.memory"),
+        "--total-executor-cores", req.conf.get("spark.cores.max")
+        )
   }
 
   override def resourceOffers(driver: SchedulerDriver, offers: JList[Offer]): Unit = {
