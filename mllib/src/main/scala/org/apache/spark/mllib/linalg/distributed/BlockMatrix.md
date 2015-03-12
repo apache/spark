@@ -37,12 +37,12 @@ GridPartitioner
     * It has two member methods: *def numPartitions: Int* and *def getPartition(key: Any): Int*
     * Other existing classes in Spark extending Partitioner:
       - The class *HashPartitioner*
-	  
+``` scala
     def numPartitions = partitions
     def getPartition(key: Any): Int = key match {
       case null => 0
       case _ => Utils.nonNegativeMod(key.hashCode, numPartitions) }
-  
+```
 	
   
   6. Checking preconditions
