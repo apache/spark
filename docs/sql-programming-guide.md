@@ -914,14 +914,14 @@ table, data are usually stored in different directories, with partitioning colum
 the path of each partition directory.  The Parquet data source is now able to discover and infer
 partitioning information automatically.  For exmaple, we can store all our previously used
 population data into a partitioned table using the following directory structure, with two extra
-columns, `sex` and `country` as partitioning columns:
+columns, `gender` and `country` as partitioning columns:
 
 {% highlight text %}
 
 path
 └── to
     └── table
-        ├── sex=0
+        ├── gender=male
         │   ├── ...
         │   │
         │   ├── country=US
@@ -929,7 +929,7 @@ path
         │   ├── country=CN
         │   │   └── data.parquet
         │   └── ...
-        └── sex=1
+        └── gender=female
             ├── ...
             │
             ├── country=US
@@ -949,7 +949,7 @@ DataFrame becomes:
 root
 |-- name: string (nullable = true)
 |-- age: long (nullable = true)
-|-- sex: string (nullable = true)
+|-- gender: string (nullable = true)
 |-- country: string (nullable = true)
 
 {% endhighlight %}
