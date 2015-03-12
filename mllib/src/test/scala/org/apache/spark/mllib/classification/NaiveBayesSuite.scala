@@ -146,11 +146,7 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
     ).map(_.map(math.log))
 
     val testData = NaiveBayesSuite.generateNaiveBayesInput(
-      pi,
-      theta,
-      nPoints,
-      45,
-      NaiveBayes.Bernoulli)
+      pi, theta, nPoints, 45, NaiveBayes.Bernoulli)
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
@@ -158,11 +154,7 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
     validateModelFit(pi, theta, model)
 
     val validationData = NaiveBayesSuite.generateNaiveBayesInput(
-      pi,
-      theta,
-      nPoints,
-      20,
-      NaiveBayes.Bernoulli)
+      pi, theta, nPoints, 20, NaiveBayes.Bernoulli)
     val validationRDD = sc.parallelize(validationData, 2)
 
     // Test prediction on RDD.

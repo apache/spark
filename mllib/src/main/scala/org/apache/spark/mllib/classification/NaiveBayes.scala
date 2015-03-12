@@ -186,6 +186,8 @@ class NaiveBayes private (
     private var lambda: Double,
     private var modelType: NaiveBayes.ModelType) extends Serializable with Logging {
 
+  private def this(lambda: Double) = this(lambda, NaiveBayes.Multinomial)
+
   def this() = this(1.0, NaiveBayes.Multinomial)
 
   /** Set the smoothing parameter. Default: 1.0. */
