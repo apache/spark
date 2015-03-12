@@ -37,6 +37,7 @@ GridPartitioner
     * It has two member methods: *def numPartitions: Int* and *def getPartition(key: Any): Int*
     * Other existing classes in Spark extending Partitioner:
       - The class *HashPartitioner*
+	  
     def numPartitions = partitions
     def getPartition(key: Any): Int = key match {
       case null => 0
