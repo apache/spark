@@ -181,7 +181,7 @@ private[hive] case class HiveGenericUdf(funcWrapper: HiveFunctionWrapper, childr
         })
       i += 1
     }
-      unwrap(function.evaluate(deferedObjects), returnInspector)
+    unwrap(function.evaluate(deferedObjects), returnInspector)
   }
 
   override def toString = s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
