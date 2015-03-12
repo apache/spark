@@ -232,6 +232,8 @@ class Connection(Base):
             return hooks.HiveHook(hive_conn_id=self.conn_id)
         elif self.conn_type == 'presto':
             return hooks.PrestoHook(presto_conn_id=self.conn_id)
+        elif self.conn_type == 'hiveserver2':
+            return hooks.HiveServer2Hook(hiveserver2_conn_id=self.conn_id)
 
     def __repr__(self):
         return self.conn_id

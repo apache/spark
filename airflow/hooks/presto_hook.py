@@ -89,7 +89,11 @@ class PrestoHook(BaseHook):
         import pandas
         cursor = self.get_cursor()
         cursor.execute(self._strip_sql(hql), parameters)
-        data = cursor.fetchall()
+        try:
+            data = cursor.fetchall()
+        except DatabaseError as e:
+            obj = eval(str(e))
+            raise PrestoException(obj['message'])
         column_descriptions = cursor.description
         if data:
             df = pandas.DataFrame(data)
