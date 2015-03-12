@@ -42,4 +42,16 @@ public class JavaVectorsSuite implements Serializable {
         new Tuple2<Integer, Double>(2, 3.0)));
     assertArrayEquals(new double[]{2.0, 0.0, 3.0}, v.toArray(), 0.0);
   }
+
+  @Test
+  public void vectorsConcat() {
+    Vector v = Vectors.concat(Vectors.dense(1.0, 2.0), Vectors.dense(3.0));
+    assertArrayEquals(new double[]{1.0, 2.0, 3.0}, v.toArray(), 0.0);
+  }
+
+  @Test
+  public void vectorsSum() {
+    Vector v = Vectors.sum(Vectors.dense(1.0, 2.0), Vectors.dense(3.0));
+    assertArrayEquals(new double[]{4.0, 2.0}, v.toArray(), 0.0);
+  }
 }

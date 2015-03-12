@@ -268,4 +268,38 @@ class VectorsSuite extends FunSuite {
     assert(Vectors.norm(sv, 3.7) ~== math.pow(sv.toArray.foldLeft(0.0)((a, v) =>
       a + math.pow(math.abs(v), 3.7)), 1.0 / 3.7) relTol 1E-8)
   }
+
+  test("vector scaling") {
+    val dv = Vectors.dense(arr)
+      .scale(-1d)
+      .asInstanceOf[DenseVector]
+
+    val sv = Vectors.sparse(n, indices.zip(values).reverse)
+      .scale(-1d)
+      .asInstanceOf[SparseVector]
+
+    assert(dv.values === arr.map(_ * -1d))
+    assert(sv.size === n)
+    assert(sv.indices === indices)
+    assert(sv.values === values.map(_ * -1d))
+  }
+
+  test("vectors concat") {
+    val dv = Vectors.dense(arr)
+    val sv = Vectors.sparse(n, indices.zip(values).reverse)
+
+    val concat = Vectors.concat(dv, sv)
+
+    assert(concat.toArray.take(dv.size) === dv.toArray)
+    assert(concat.toArray.drop(dv.size) === sv.toArray)
+  }
+
+  test("vectors sum") {
+    val dv = Vectors.dense(1, 2, 1)
+    val sv = Vectors.sparse(5, Array((0, 7d), (2, 1d), (4, 3d)))
+
+    val sum = Vectors.sum(dv, sv)
+
+    assert(sum.toArray === Array(8d, 2d, 2d, 0d, 3d))
+  }
 }

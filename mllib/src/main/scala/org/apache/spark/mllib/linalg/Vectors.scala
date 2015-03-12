@@ -32,6 +32,8 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.types._
 
+import scala.collection.mutable
+
 /**
  * Represents a numeric vector, whose index type is Int and value type is Double.
  *
@@ -99,6 +101,11 @@ sealed trait Vector extends Serializable {
   def copy: Vector = {
     throw new NotImplementedError(s"copy is not implemented for ${this.getClass}.")
   }
+
+  /**
+   * Multiplication vectors by scalar.
+   */
+  def scale(scalar: Double): Vector
 
   /**
    * Applies a function `f` to all the active elements of dense and sparse vector.
@@ -462,6 +469,132 @@ object Vectors {
     }
     allEqual
   }
+
+  /**
+   * Concating vectors to single vector.
+   */
+  def concat(vectors: Iterable[Vector]): Vector = {
+    var elements: List[(Int, Double)] = Nil
+    var idx = 0
+
+    vectors.foreach {
+      case SparseVector(size, indices, values) =>
+        var i = 0
+        for (sv_idx <- indices) {
+          elements ::=(idx + sv_idx, values(i))
+          i += 1
+        }
+        idx += size
+
+      case DenseVector(values) =>
+        for (elm <- values) {
+          elements ::=(idx, elm)
+          idx += 1
+        }
+
+      case vector =>
+        throw new IllegalArgumentException(f"Don't support vector type ${vector.getClass}")
+    }
+
+    Vectors.sparse(idx, elements)
+  }
+
+  /**
+   * Concating vectors to single vector.
+   */
+  @varargs
+  def concat(firstVector: Vector, otherVectors: Vector*): Vector=
+    concat(firstVector +: otherVectors)
+
+  /**
+   * Adding vectors together.
+   */
+  def sum(vectors: Iterable[Vector]): Vector = {
+    val sparse_size = vectors.map {
+      case SparseVector(size, _, _) =>
+        size
+      case _ =>
+        0
+    }.max
+
+    val dense_size = vectors.map {
+      case DenseVector(values) =>
+        values.length
+      case _ =>
+        0
+    }.max
+
+    if (dense_size >= sparse_size / 2)
+      denseSum(vectors)
+    else
+      sparseSum(vectors)
+  }
+
+  /**
+   * Adding vectors together.
+   */
+  @varargs
+  def sum(firstVector: Vector, otherVectors: Vector*): Vector=
+    sum(firstVector +: otherVectors)
+
+  private[mllib] def sparseSum(vectors: Iterable[Vector]): SparseVector = {
+    val size = vectors.map(_.size).max
+    val elements = new mutable.HashMap[Int, Double]()
+
+    vectors.foreach {
+      case SparseVector(_, indices, values) =>
+        var i = 0
+        for (idx <- indices) {
+          if (elements.contains(idx))
+            elements(idx) += values(i)
+          else
+            elements(idx) = values(i)
+          i += 1
+        }
+
+      case DenseVector(values) =>
+        var i = 0
+        for (elm <- values) {
+          if (elements.contains(i))
+            elements(i) += elm
+          else
+            elements(i) = elm
+          i += 1
+        }
+
+      case vector =>
+        throw new IllegalArgumentException(f"Don't support vector type ${vector.getClass}")
+    }
+
+    Vectors.sparse(size, elements.toSeq).asInstanceOf[SparseVector]
+  }
+
+  private[mllib] def denseSum(vectors: Iterable[Vector]): DenseVector = {
+    val size = vectors.map(_.size).max
+    val sum_values: Array[Double] = new Array(size)
+
+    vectors.foreach {
+      case SparseVector(_, indices, values) =>
+        var i = 0
+        for (idx <- indices) {
+          sum_values(idx) += values(i)
+          i += 1
+        }
+
+      case DenseVector(values) =>
+        var i = 0
+        for (elm <- values) {
+          sum_values(i) += elm
+          i += 1
+        }
+
+      case vector =>
+        throw new IllegalArgumentException(f"Don't support vector type ${vector.getClass}")
+    }
+
+    Vectors.dense(sum_values).asInstanceOf[DenseVector]
+  }
+
 }
 
 /**
@@ -483,6 +616,9 @@ class DenseVector(val values: Array[Double]) extends Vector {
   override def copy: DenseVector = {
     new DenseVector(values.clone())
   }
+
+  override def scale(scalar: Double): Vector =
+    new DenseVector(values.map(_ * scalar))
 
   private[spark] override def foreachActive(f: (Int, Double) => Unit) = {
     var i = 0
@@ -533,6 +669,9 @@ class SparseVector(
   override def copy: SparseVector = {
     new SparseVector(size, indices.clone(), values.clone())
   }
+
+  override def scale(scalar: Double): Vector =
+    new SparseVector(size, indices, values.map(_ * scalar))
 
   private[mllib] override def toBreeze: BV[Double] = new BSV[Double](indices, values, size)
 
