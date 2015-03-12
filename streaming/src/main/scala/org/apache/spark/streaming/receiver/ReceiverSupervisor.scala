@@ -48,6 +48,9 @@ private[streaming] abstract class ReceiverSupervisor(
   /** Receiver id */
   protected val streamId = receiver.streamId
 
+  /** Indicate whether to terminate `ReceiverSupervisor` */
+  private var isTerminated = false
+
   /** The context of task that is running a receiver */
   private var taskContext: Option[TaskContext] = None
 
@@ -110,6 +113,7 @@ private[streaming] abstract class ReceiverSupervisor(
     stoppingError = error.orNull
     stopReceiver(message, error)
     onStop(message, error)
+    isTerminated = true
   }
 
   /** Start receiver */
@@ -179,23 +183,23 @@ private[streaming] abstract class ReceiverSupervisor(
   /**
    * Due to SPARK-5205, we need to check if the task is interrupted to stop the
    * `receiver` properly. If `taskContext` is not set, we just need to check
-   * the `receiverState`.
+   * the `isTerminated`.
    */
   def checkTermination(): Boolean = {
     taskContext match {
-      case Some(context) => context.isInterrupted || isReceiverStopped()
-      case None => isReceiverStopped()
+      case Some(context) => context.isInterrupted || isTerminated
+      case None => isTerminated
     }
   }
 
   /** Wait the thread until the supervisor is stopped */
   def awaitTermination() {
     while (!checkTermination()) {
-      Thread.sleep(500)
+      Thread.sleep(100)
     }
     // This may occur when `TaskContext` is interrupted but `ReceiverSupervisor` has
     // no time to do `stop` work properly.
-    if (!isReceiverStopped()) {
+    if (!isTerminated) {
       stop("Killed by user.", None)
     }
     logInfo("Waiting for executor stop is over")
