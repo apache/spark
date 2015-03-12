@@ -194,7 +194,7 @@ private[streaming] abstract class ReceiverSupervisor(
       Thread.sleep(500)
     }
     if (!isReceiverStopped()) {
-      stopReceiver()
+      stop("Killed by user.", None)
     }
     logInfo("Waiting for executor stop is over")
     if (stoppingError != null) {
