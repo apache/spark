@@ -168,7 +168,7 @@ setGeneric("showDF", function(x,...) { standardGeneric("showDF") })
 setMethod("showDF",
           signature(x = "DataFrame"),
           function(x, numRows = 20) {
-            cat(callJMethod(x@sdf, "showString", numToInt(numRows)))
+            cat(callJMethod(x@sdf, "showString", numToInt(numRows)), "\n")
           })
 
 #' DataTypes
@@ -560,10 +560,8 @@ setMethod("collect",
               close(objRaw)
               col
             })
-            colNames <- callJMethod(x@sdf, "columns")
-            names(cols) <- colNames
-            dfOut <- do.call(cbind.data.frame, list(cols, stringsAsFactors = stringsAsFactors))
-            dfOut
+            names(cols) <- columns(x)
+            do.call(cbind.data.frame, list(cols, stringsAsFactors = stringsAsFactors))
           })
 
 #' Limit

@@ -26,10 +26,12 @@ readTypedObject <- function(con, type) {
     "b" = readBoolean(con),
     "d" = readDouble(con),
     "r" = readRaw(con),
+    "D" = readDate(con),
+    "t" = readTime(con),
     "l" = readList(con),
     "n" = NULL,
     "j" = getJobj(readString(con)),
-    stop("Unsupported type for deserialization"))
+    stop(paste("Unsupported type for deserialization", type)))
 }
 
 readString <- function(con) {
@@ -52,6 +54,15 @@ readBoolean <- function(con) {
 
 readType <- function(con) {
   rawToChar(readBin(con, "raw", n = 1L))
+}
+
+readDate <- function(con) {
+  as.Date(readInt(con), origin = "1970-01-01")
+}
+
+readTime <- function(con) {
+  t <- readDouble(con)
+  as.POSIXct(t, origin = "1970-01-01")
 }
 
 # We only support lists where all elements are of same type
@@ -145,9 +156,10 @@ readRow <- function(inputCon, numCols) {
 
 # Take a single column as Array[Byte] and deserialize it into an atomic vector
 readCol <- function(inputCon, numRows) {
-  sapply(1:numRows, function(x) {
+  # sapply can not work with POSIXlt
+  do.call(c, lapply(1:numRows, function(x) {
     value <- readObject(inputCon)
-    # Replace NULL with NA so we can coerce to vectors
+    # Replace NULL with NA so we can chboerce to vectors
     if (is.null(value)) NA else value
-  }) # each column is an atomic vector now
+  }))
 }

@@ -10,7 +10,11 @@ import org.apache.spark.sql.{DataFrame, Row, SQLContext, SaveMode}
 
 object SQLUtils {
   def createSQLContext(jsc: JavaSparkContext): SQLContext = {
-    new SQLContext(jsc.sc)
+    new SQLContext(jsc)
+  }
+
+  def getJavaSparkContext(sqlCtx: SQLContext): JavaSparkContext = {
+    new JavaSparkContext(sqlCtx.sparkContext)
   }
 
   def toSeq[T](arr: Array[T]): Seq[T] = {
@@ -20,19 +24,21 @@ object SQLUtils {
   def createDF(rdd: RDD[Array[Byte]], schemaString: String, sqlContext: SQLContext): DataFrame = {
     val schema = DataType.fromJson(schemaString).asInstanceOf[StructType]
     val num = schema.fields.size
-    val rowRDD: RDD[Row] = rdd.map(bytesToRow)
-    sqlContext.createDataFrame(rowRDD, schema)
+    val rowRDD = rdd.map(bytesToRow)
+    val df = sqlContext.createDataFrame(rowRDD, schema)
+    // ./df.show()
+    df
   }
 
   def dfToRowRDD(df: DataFrame): JavaRDD[Array[Byte]] = {
     df.map(r => rowToRBytes(r))
   }
 
-  private[this] def bytesToRow(bytes: Array[Byte]) = Row {
+  private[this] def bytesToRow(bytes: Array[Byte]): Row = {
     val bis = new ByteArrayInputStream(bytes)
     val dis = new DataInputStream(bis)
     val num = readInt(dis)
-    Row((0 until num).map { i =>
+    Row.fromSeq((0 until num).map { i =>
       readObject(dis)
     }.toSeq)
   }

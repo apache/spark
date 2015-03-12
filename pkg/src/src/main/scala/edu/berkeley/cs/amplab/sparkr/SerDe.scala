@@ -1,9 +1,9 @@
 package edu.berkeley.cs.amplab.sparkr
 
-import scala.collection.JavaConversions._
+import java.io.{DataInputStream, DataOutputStream}
+import java.sql.{Date, Time}
 
-import java.io.DataInputStream
-import java.io.DataOutputStream
+import scala.collection.JavaConversions._
 
 /**
  * Utility functions to serialize, deserialize objects to / from R
@@ -42,6 +42,8 @@ object SerDe {
       case 'e' => readMap(dis)
       case 'r' => readBytes(dis)
       case 'l' => readList(dis)
+      case 'D' => readDate(dis)
+      case 't' => readTime(dis)
       case 'j' => JVMObjectTracker.getObject(readString(dis))
       case _ => throw new IllegalArgumentException(s"Invalid type $dataType")
     }
@@ -75,6 +77,15 @@ object SerDe {
   def readBoolean(in: DataInputStream) = {
     val intVal = in.readInt()
     if (intVal == 0) false else true
+  }
+  def readDate(in: DataInputStream) = {
+    val d = in.readInt()
+    new Date(d.toLong * 24 * 3600 * 1000)
+  }
+
+  def readTime(in: DataInputStream) = {
+    val t = in.readDouble()
+    new Time((t * 1000L).toLong)
   }
 
   def readBytesArr(in: DataInputStream) = {
@@ -153,6 +164,8 @@ object SerDe {
       case "double" => dos.writeByte('d')
       case "integer" => dos.writeByte('i')
       case "logical" => dos.writeByte('b')
+      case "date" => dos.writeByte('D')
+      case "time" => dos.writeByte('t')
       case "raw" => dos.writeByte('r')
       case "list" => dos.writeByte('l')
       case "jobj" => dos.writeByte('j')
@@ -180,6 +193,12 @@ object SerDe {
         case "boolean" | "java.lang.Boolean" =>
           writeType(dos, "logical")
           writeBoolean(dos, value.asInstanceOf[Boolean])
+        case "java.sql.Date" =>
+          writeType(dos, "date")
+          writeDate(dos, value.asInstanceOf[Date])
+        case "java.sql.Time" =>
+          writeType(dos, "time")
+          writeTime(dos, value.asInstanceOf[Time])
         case "[B" =>
           writeType(dos, "raw")
           writeBytes(dos, value.asInstanceOf[Array[Byte]])
@@ -233,6 +252,14 @@ object SerDe {
     val intValue = if (value) 1 else 0
     out.writeInt(intValue)
   }
+  def writeDate(out: DataOutputStream, value: Date) {
+    out.writeInt((value.getTime / 1000 / 3600 / 24).toInt)
+  }
+
+  def writeTime(out: DataOutputStream, value: Time) {
+    out.writeDouble(value.getTime.toDouble / 1000.0)
+  }
+
 
   // NOTE: Only works for ASCII right now
   def writeString(out: DataOutputStream, value: String) {

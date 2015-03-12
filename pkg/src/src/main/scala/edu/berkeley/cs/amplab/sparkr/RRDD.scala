@@ -255,13 +255,13 @@ private class RRDD[T: ClassTag](
     parent: RDD[T],
     func: Array[Byte],
     deserializer: String,
-    serializeMode: String,
+    serializer: String,
     functionDependencies: Array[Byte],
     packageNames: Array[Byte],
     rLibDir: String,
     broadcastVars: Array[Object])
   extends BaseRRDD[T, Array[Byte]](parent, -1, func, deserializer,
-                                   serializeMode, functionDependencies, packageNames, rLibDir,
+                                   serializer, functionDependencies, packageNames, rLibDir,
                                    broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])) {
 
   private var dataStream: DataInputStream = _

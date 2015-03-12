@@ -4,8 +4,10 @@ infer_type <- function(x) {
   if (is.null(x)) {
     stop("can not infer type from NULL")
   }
-  type <- switch(class(x),
-                 integer = "long",
+
+  # class of POSIXlt is c("POSIXlt" "POSIXt")
+  type <- switch(class(x)[[1]],
+                 integer = "integer",
                  character = "string",
                  logical = "boolean",
                  double = "double",
@@ -13,7 +15,10 @@ infer_type <- function(x) {
                  raw = "binary",
                  list = "array",
                  environment = "map",
-                 stop("Unsupported type for DataFrame"))
+                 Date = "date",
+                 POSIXlt = "timestamp",
+                 POSIXct = "timestamp",
+                 stop(paste("Unsupported type for DataFrame:", class(x))))
 
   if (type == "map") {
     stopifnot(length(x) > 0)
@@ -48,7 +53,7 @@ infer_type <- function(x) {
 #' Converts an RDD to a DataFrame by infer the types.
 #'
 #' @param sqlCtx A SQLContext
-#' @param x An RDD
+#' @param data An RDD or list or data.frame
 #' @param schema a list of column names or named list (StructType), optional
 #' @return an DataFrame
 #' @export
@@ -61,18 +66,40 @@ infer_type <- function(x) {
 #' }
 
 # TODO(davies): support sampling and infer type from NA
-createDataFrame <- function(sqlCtx, rdd, schema = NULL, samplingRatio = 1.0) {
-  stopifnot(inherits(rdd, "RDD"))
+createDataFrame <- function(sqlCtx, data, schema = NULL, samplingRatio = 1.0) {
+  if (is.data.frame(data)) {
+      schema <- names(data)
+      n <- nrow(data)
+      m <- ncol(data)
+      # get rid of factor type
+      dropFactor <- function(x) {
+        if (is.factor(x)) {
+          levels(x)[x]
+        } else {
+          x
+        }
+      }
+      data <- lapply(1:n, function(i) {
+        lapply(1:m, function(j) { dropFactor(data[i,j]) })
+      })
+  }
+  if (is.list(data)) {
+    sc <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "getJavaSparkContext", sqlCtx)
+    data <- parallelize(sc, data)
+  }
+  stopifnot(inherits(data, "RDD"))
+
+  rdd <- data
   if (is.null(schema) || is.null(names(schema))) {
     row <- first(rdd)
     names <- if (is.null(schema)) {
       names(row)
     } else {
-      schema
+      as.list(schema)
     }
     if (is.null(names)) {
       names <- lapply(1:length(row), function(x) {
-       paste("_", as.character(x), sep="")
+       paste("_", as.character(x), sep = "")
       })
     }
 

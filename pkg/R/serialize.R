@@ -16,10 +16,11 @@ writeObject <- function(con, object, writeType = TRUE) {
   # NOTE: In R vectors have same type as objects. So we don't support
   # passing in vectors as arrays and instead require arrays to be passed
   # as lists.
+  type <- class(object)[[1]]  # class of POSIXlt is c("POSIXlt", "POSIXt")
   if (writeType) {
-    writeType(con, class(object))
+    writeType(con, type)
   }
-  switch(class(object),
+  switch(type,
          integer = writeInt(con, object),
          character = writeString(con, object),
          logical = writeBoolean(con, object),
@@ -29,6 +30,9 @@ writeObject <- function(con, object, writeType = TRUE) {
          list = writeList(con, object),
          jobj = writeString(con, object$id),
          environment = writeEnv(con, object),
+         Date = writeDate(con, object),
+         POSIXlt = writeTime(con, object),
+         POSIXct = writeTime(con, object),
          stop("Unsupported type for serialization"))
 }
 
@@ -56,11 +60,10 @@ writeRawSerialize <- function(outputCon, batch) {
 }
 
 writeRowSerialize <- function(outputCon, rows) {
-  lapply(rows, function(r) {
+  invisible(lapply(rows, function(r) {
     bytes <- serializeRow(r)
     writeRaw(outputCon, bytes)
-  })
-  invisible()
+  }))
 }
 
 serializeRow <- function(row) {
@@ -94,6 +97,9 @@ writeType <- function(con, class) {
                  list = "l",
                  jobj = "j",
                  environment = "e",
+                 Date = "D",
+                 POSIXlt = 't',
+                 POSIXct = 't',
                  stop("Unsupported type for serialization"))
   writeBin(charToRaw(type), con)
 }
@@ -130,6 +136,14 @@ writeEnv <- function(con, env) {
     vals <- lapply(ls(env), function(x) { env[[x]] })
     writeList(con, as.list(vals))
   }
+}
+
+writeDate <- function(con, date) {
+  writeInt(con, as.integer(date))
+}
+
+writeTime <- function(con, time) {
+  writeDouble(con, as.double(time))
 }
 
 # Used to serialize in a list of objects where each

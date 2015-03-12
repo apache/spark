@@ -64,9 +64,11 @@ cat > /tmp/sparkR.profile << EOF
   .libPaths(c(paste(projecHome,"/..", sep=""), .libPaths()))
   require(SparkR)
   sc <- sparkR.init()
+  sqlCtx <- sparkRSQL.init(sc)
   assign("sc", sc, envir=.GlobalEnv)
+  assign("sqlCtx", sqlCtx, envir=.GlobalEnv)
   cat("\n Welcome to SparkR!")
-  cat("\n Spark context is available as sc\n")
+  cat("\n Spark context is available as sc, SQL Context is available as sqlCtx\n")
 }
 EOF
   R
