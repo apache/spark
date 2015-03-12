@@ -38,16 +38,6 @@ import org.apache.spark.util.collection.OpenHashSet
  */
 private[spark] object SizeEstimator extends Logging {
 
-  // Sizes of primitive types
-  private val BYTE_SIZE    = 1
-  private val BOOLEAN_SIZE = 1
-  private val CHAR_SIZE    = 2
-  private val SHORT_SIZE   = 2
-  private val INT_SIZE     = 4
-  private val LONG_SIZE    = 8
-  private val FLOAT_SIZE   = 4
-  private val DOUBLE_SIZE  = 8
-
   // Alignment boundary for objects
   // TODO: Is this arch dependent ?
   private val ALIGN_SIZE = 8
@@ -186,13 +176,12 @@ private[spark] object SizeEstimator extends Logging {
   private def visitArray(array: AnyRef, cls: Class[_], state: SearchState) {
     val castedArray: CastedArray = CastedArray.castAndWrap(array)
     val length = castedArray.getLength
-    val elementClass = cls.getComponentType
 
     // Arrays have object header and length field which is an integer
-    var arrSize: Long = alignSize(objectSize + INT_SIZE)
+    var arrSize: Long = alignSize(objectSize + PrimitiveSizes.INT_SIZE)
 
-    if (elementClass.isPrimitive) {
-      arrSize += alignSize(length * primitiveSize(elementClass))
+    if (castedArray.isPrimitiveArray()) {
+      arrSize += alignSize(length * castedArray.getElementSize())
       state.size += arrSize
     } else {
       arrSize += alignSize(length * pointerSize)
@@ -223,21 +212,21 @@ private[spark] object SizeEstimator extends Logging {
 
   private def primitiveSize(cls: Class[_]): Long = {
     if (cls == classOf[Byte]) {
-      BYTE_SIZE
+      PrimitiveSizes.BYTE_SIZE
     } else if (cls == classOf[Boolean]) {
-      BOOLEAN_SIZE
+      PrimitiveSizes.BOOLEAN_SIZE
     } else if (cls == classOf[Char]) {
-      CHAR_SIZE
+      PrimitiveSizes.CHAR_SIZE
     } else if (cls == classOf[Short]) {
-      SHORT_SIZE
+      PrimitiveSizes.SHORT_SIZE
     } else if (cls == classOf[Int]) {
-      INT_SIZE
+      PrimitiveSizes.INT_SIZE
     } else if (cls == classOf[Long]) {
-      LONG_SIZE
+      PrimitiveSizes.LONG_SIZE
     } else if (cls == classOf[Float]) {
-      FLOAT_SIZE
+      PrimitiveSizes.FLOAT_SIZE
     } else if (cls == classOf[Double]) {
-      DOUBLE_SIZE
+      PrimitiveSizes.DOUBLE_SIZE
     } else {
       throw new IllegalArgumentException(
       "Non-primitive class " + cls + " passed to primitiveSize()")
