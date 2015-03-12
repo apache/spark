@@ -4,7 +4,7 @@ BlockMatrix.scala
 GridPartitioner
 ---------------
 
-1. A class *GridPartitioner* and an object *GridPartitioner*
+1. A class ***GridPartitioner*** and an object *GridPartitioner*
 
 2. The class *GridPartitioner*
 
@@ -44,6 +44,7 @@ GridPartitioner
         case _ => Utils.nonNegativeMod(key.hashCode, numPartitions) 
       }
       ```
+      - The class **
 
   6. Checking preconditions
     * Here, four *require* functions are called inside the class body to check the validation of input values to the class parameters. Tt is the best way to approach the problem caused by the abbreviation of the primary constructor
