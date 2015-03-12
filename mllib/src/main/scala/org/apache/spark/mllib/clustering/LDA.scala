@@ -250,7 +250,6 @@ class LDA private (
 
   /**
    * Learn an LDA model using the given dataset, using online variational Bayes (VB) algorithm.
-   * Hoffman, Blei and Bach, “Online Learning for Latent Dirichlet Allocation.” NIPS, 2010.
    *
    * @param documents  RDD of documents, which are term (word) count vectors paired with IDs.
    *                   The term count vectors are "bags of words" with a fixed-size vocabulary
@@ -444,7 +443,7 @@ private[clustering] object LDA {
     private val D = documents.count().toInt
     val actualBatchNumber = Math.ceil(D.toDouble / batchSize).toInt
 
-    //Initialize the variational distribution q(beta|lambda)
+    // Initialize the variational distribution q(beta|lambda)
     var lambda = getGammaMatrix(k, vocabSize)               // K * V
     private var Elogbeta = dirichlet_expectation(lambda)    // K * V
     private var expElogbeta = exp(Elogbeta)                 // K * V
