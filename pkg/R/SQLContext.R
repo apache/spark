@@ -1,5 +1,6 @@
 # SQLcontext.R: SQLContext-driven functions
 
+#' infer the SQL type
 infer_type <- function(x) {
   if (is.null(x)) {
     stop("can not infer type from NULL")
@@ -47,6 +48,7 @@ infer_type <- function(x) {
   }
 }
 
+#' dump the schema into JSON string
 tojson <- function(x) {
   if (is.list(x)) {
     names <- names(x)

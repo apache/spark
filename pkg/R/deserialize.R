@@ -159,7 +159,7 @@ readCol <- function(inputCon, numRows) {
   # sapply can not work with POSIXlt
   do.call(c, lapply(1:numRows, function(x) {
     value <- readObject(inputCon)
-    # Replace NULL with NA so we can chboerce to vectors
+    # Replace NULL with NA so we can coerce to vectors
     if (is.null(value)) NA else value
   }))
 }

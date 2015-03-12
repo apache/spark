@@ -25,9 +25,7 @@ object SQLUtils {
     val schema = DataType.fromJson(schemaString).asInstanceOf[StructType]
     val num = schema.fields.size
     val rowRDD = rdd.map(bytesToRow)
-    val df = sqlContext.createDataFrame(rowRDD, schema)
-    // ./df.show()
-    df
+    sqlContext.createDataFrame(rowRDD, schema)
   }
 
   def dfToRowRDD(df: DataFrame): JavaRDD[Array[Byte]] = {
