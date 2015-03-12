@@ -89,15 +89,17 @@ private[spark] class MesosClusterScheduler(conf: SparkConf)
   var frameworkUrl: String = _
   val master = conf.get("spark.master")
   val appName = conf.get("spark.app.name")
-  val capacity = conf.getInt("spark.mesos.driver.capacity", 200)
+  val queuedCapacity = conf.getInt("spark.deploy.mesos.queuedDrivers", 200)
+  val retainedDrivers = conf.getInt("spark.deploy.retainedDrivers", 200)
+
   val stateLock = new Object
   val launchedDrivers = new mutable.HashMap[String, ClusterTaskState]()
 
-  // TODO: Bound this finished drivers map or make it a array
-  val finishedDrivers = new mutable.HashMap[String, ClusterTaskState]()
+  val finishedDrivers = new mutable.ArrayBuffer[ClusterTaskState](retainedDrivers)
   val nextDriverNumber: AtomicLong = new AtomicLong(0)
   var appId: String = _
-  private val queue = new LinkedBlockingQueue[DriverSubmission](capacity)
+
+  private val queue = new LinkedBlockingQueue[DriverSubmission](queuedCapacity)
 
   def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")  // For application IDs
 
@@ -319,7 +321,7 @@ private[spark] class MesosClusterScheduler(conf: SparkConf)
       ClusterSchedulerState(
         queueCopy,
         copyDriverStates(launchedDrivers.values),
-        copyDriverStates(finishedDrivers.values))
+        copyDriverStates(finishedDrivers))
     }
   }
 
@@ -378,11 +380,18 @@ private[spark] class MesosClusterScheduler(conf: SparkConf)
         val driverState = getDriverState(status.getState)
         val state = if (isFinished(status.getState)) {
           val launchedState = launchedDrivers.remove(taskId).get
-          finishedDrivers(taskId) = launchedState
+          if (finishedDrivers.size >= retainedDrivers) {
+            val toRemove = math.max(retainedDrivers / 10, 1)
+            finishedDrivers.trimStart(toRemove)
+          }
+
+          finishedDrivers += launchedState
+
           launchedState
         } else {
           launchedDrivers(taskId)
         }
+
         state.taskState = Option(status)
         state.driverState = driverState
       } else {
