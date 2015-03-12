@@ -57,7 +57,7 @@ private[spark] abstract class AsynchronousListenerBus[L <: AnyRef, E](name: Stri
 
   private val listenerThread = new Thread(name) {
     setDaemon(true)
-    override def run(): Unit = Utils.logUncaughtExceptions {
+    override def run(): Unit = Utils.tryOrExit {
       while (true) {
         eventLock.acquire()
         self.synchronized {
