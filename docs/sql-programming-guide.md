@@ -100,7 +100,7 @@ val sqlContext = new org.apache.spark.sql.SQLContext(sc)
 val df = sqlContext.jsonFile("examples/src/main/resources/people.json")
 
 // Displays the content of the DataFrame to stdout
-df.show() 
+df.show()
 {% endhighlight %}
 
 </div>
@@ -151,10 +151,10 @@ val df = sqlContext.jsonFile("examples/src/main/resources/people.json")
 
 // Show the content of the DataFrame
 df.show()
-// age  name   
+// age  name
 // null Michael
-// 30   Andy   
-// 19   Justin 
+// 30   Andy
+// 19   Justin
 
 // Print the schema in a tree format
 df.printSchema()
@@ -164,17 +164,17 @@ df.printSchema()
 
 // Select only the "name" column
 df.select("name").show()
-// name   
+// name
 // Michael
-// Andy   
-// Justin 
+// Andy
+// Justin
 
 // Select everybody, but increment the age by 1
 df.select("name", df("age") + 1).show()
 // name    (age + 1)
-// Michael null     
-// Andy    31       
-// Justin  20       
+// Michael null
+// Andy    31
+// Justin  20
 
 // Select people older than 21
 df.filter(df("name") > 21).show()
@@ -201,10 +201,10 @@ DataFrame df = sqlContext.jsonFile("examples/src/main/resources/people.json");
 
 // Show the content of the DataFrame
 df.show();
-// age  name   
+// age  name
 // null Michael
-// 30   Andy   
-// 19   Justin 
+// 30   Andy
+// 19   Justin
 
 // Print the schema in a tree format
 df.printSchema();
@@ -214,17 +214,17 @@ df.printSchema();
 
 // Select only the "name" column
 df.select("name").show();
-// name   
+// name
 // Michael
-// Andy   
-// Justin 
+// Andy
+// Justin
 
 // Select everybody, but increment the age by 1
 df.select("name", df.col("age").plus(1)).show();
 // name    (age + 1)
-// Michael null     
-// Andy    31       
-// Justin  20       
+// Michael null
+// Andy    31
+// Justin  20
 
 // Select people older than 21
 df.filter(df("name") > 21).show();
@@ -251,10 +251,10 @@ df = sqlContext.jsonFile("examples/src/main/resources/people.json")
 
 # Show the content of the DataFrame
 df.show()
-## age  name   
+## age  name
 ## null Michael
-## 30   Andy   
-## 19   Justin 
+## 30   Andy
+## 19   Justin
 
 # Print the schema in a tree format
 df.printSchema()
@@ -264,17 +264,17 @@ df.printSchema()
 
 # Select only the "name" column
 df.select("name").show()
-## name   
+## name
 ## Michael
-## Andy   
-## Justin 
+## Andy
+## Justin
 
 # Select everybody, but increment the age by 1
 df.select("name", df.age + 1).show()
 ## name    (age + 1)
-## Michael null     
-## Andy    31       
-## Justin  20       
+## Michael null
+## Andy    31
+## Justin  20
 
 # Select people older than 21
 df.filter(df.name > 21).show()
@@ -907,6 +907,129 @@ SELECT * FROM parquetTable
 
 </div>
 
+### Partition discovery
+
+Table partitioning is a common optimization approach used in systems like Hive.  In a partitioned
+table, data are usually stored in different directories, with partitioning column values encoded in
+the path of each partition directory.  The Parquet data source is now able to discover and infer
+partitioning information automatically.  For exmaple, we can store all our previously used
+population data into a partitioned table using the following directory structure, with two extra
+columns, `sex` and `country` as partitioning columns:
+
+{% highlight text %}
+
+path
+└── to
+    └── table
+        ├── sex=0
+        │   ├── ...
+        │   │
+        │   ├── country=US
+        │   │   └── data.parquet
+        │   ├── country=CN
+        │   │   └── data.parquet
+        │   └── ...
+        └── sex=1
+            ├── ...
+            │
+            ├── country=US
+            │   └── data.parquet
+            ├── country=CN
+            │   └── data.parquet
+            └── ...
+
+{% endhighlight %}
+
+By passing `path/to/table` to either `SQLContext.parquetFile` or `SQLContext.load`, Spark SQL will
+automatically extract the partitioning information from the paths.  Now the schema of the returned
+DataFrame becomes:
+
+{% highlight text %}
+
+root
+|-- name: string (nullable = true)
+|-- age: long (nullable = true)
+|-- sex: string (nullable = true)
+|-- country: string (nullable = true)
+
+{% endhighlight %}
+
+Notice that the data types of the partitioning columns are automatically inferred.  Currently,
+numeric data types and string type are supported.
+
+### Schema merging
+
+Like ProtocolBuffer, Avro, and Thrift, Parquet also supports schema evolution.  Users can start with
+a simple schema, and gradually add more columns to the schema as needed.  In this way, users may end
+up with multiple Parquet files with different but mutually compatible schemas.  The Parquet data
+source is now able to automatically detect this case and merge schemas of all these files.
+
+<div class="codetabs">
+
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+// sqlContext from the previous example is used in this example.
+// This is used to implicitly convert an RDD to a DataFrame.
+import sqlContext.implicits._
+
+// Create a simple DataFrame, stored into a partition directory
+val df1 = sparkContext.makeRDD(1 to 5).map(i => (i, i * 2)).toDF("single", "double")
+df1.saveAsParquetFile("data/test_table/key=1")
+
+// Create another DataFrame in a new partition directory,
+// adding a new column and dropping an existing column
+val df2 = sparkContext.makeRDD(6 to 10).map(i => (i, i * 3)).toDF("single", "triple")
+df2.saveAsParquetFile("data/test_table/key=2")
+
+// Read the partitioned table
+val df3 = sqlContext.parquetFile("data/test_table")
+df3.printSchema()
+
+// The final schema consists of all 3 columns in the Parquet files together
+// with the partiioning column appeared in the partition directory paths.
+// root
+// |-- single: int (nullable = true)
+// |-- double: int (nullable = true)
+// |-- triple: int (nullable = true)
+// |-- key : int (nullable = true)
+{% endhighlight %}
+
+</div>
+
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+# sqlContext from the previous example is used in this example.
+
+# Create a simple DataFrame, stored into a partition directory
+df1 = sqlContext.createDataFrame(sc.parallelize(range(1, 6))\
+                                   .map(lambda i: Row(single=i, double=i * 2)))
+df1.save("data/test_table/key=1", "parquet")
+
+# Create another DataFrame in a new partition directory,
+# adding a new column and dropping an existing column
+df2 = sqlContext.createDataFrame(sc.parallelize(range(6, 11))
+                                   .map(lambda i: Row(single=i, triple=i * 3)))
+df2.save("data/test_table/key=2", "parquet")
+
+# Read the partitioned table
+df3 = sqlContext.parquetFile("data/test_table")
+df3.printSchema()
+
+# The final schema consists of all 3 columns in the Parquet files together
+# with the partiioning column appeared in the partition directory paths.
+# root
+# |-- single: int (nullable = true)
+# |-- double: int (nullable = true)
+# |-- triple: int (nullable = true)
+# |-- key : int (nullable = true)
+{% endhighlight %}
+
+</div>
+
+</div>
+
 ### Configuration
 
 Configuration of Parquet can be done using the `setConf` method on `SQLContext` or by running
@@ -1429,10 +1552,10 @@ Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
 
 You may also use the beeline script that comes with Hive.
 
-Thrift JDBC server also supports sending thrift RPC messages over HTTP transport. 
-Use the following setting to enable HTTP mode as system property or in `hive-site.xml` file in `conf/`: 
+Thrift JDBC server also supports sending thrift RPC messages over HTTP transport.
+Use the following setting to enable HTTP mode as system property or in `hive-site.xml` file in `conf/`:
 
-    hive.server2.transport.mode - Set this to value: http 
+    hive.server2.transport.mode - Set this to value: http
     hive.server2.thrift.http.port - HTTP port number fo listen on; default is 10001
     hive.server2.http.endpoint - HTTP endpoint; default is cliservice
 
