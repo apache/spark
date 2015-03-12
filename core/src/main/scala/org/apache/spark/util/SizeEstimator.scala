@@ -155,7 +155,7 @@ private[spark] object SizeEstimator extends Logging {
   private def visitSingleObject(obj: AnyRef, state: SearchState) {
     val cls = obj.getClass
     if (cls.isArray) {
-      visitArray(obj, cls, state)
+      visitArray(obj, state)
     } else if (obj.isInstanceOf[ClassLoader] || obj.isInstanceOf[Class[_]]) {
       // Hadoop JobConfs created in the interpreter have a ClassLoader, which greatly confuses
       // the size estimator since it references the whole REPL. Do nothing in this case. In
@@ -173,7 +173,7 @@ private[spark] object SizeEstimator extends Logging {
   private val ARRAY_SIZE_FOR_SAMPLING = 200
   private val ARRAY_SAMPLE_SIZE = 100 // should be lower than ARRAY_SIZE_FOR_SAMPLING
 
-  private def visitArray(array: AnyRef, cls: Class[_], state: SearchState) {
+  private def visitArray(array: AnyRef, state: SearchState) {
     val castedArray: CastedArray = CastedArray.castAndWrap(array)
     val length = castedArray.getLength
 
