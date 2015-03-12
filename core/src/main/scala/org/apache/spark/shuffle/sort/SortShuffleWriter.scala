@@ -90,10 +90,8 @@ private[spark] class SortShuffleWriter[K, V, C](
       if (sorter != null) {
         val startTime = System.nanoTime()
         sorter.stop()
-        context.taskMetrics().shuffleWriteMetrics.getOrElse({
-          metrics : ShuffleWriteMetrics =>
-            metrics.incShuffleWriteTime(System.nanoTime()-startTime)
-        },Nil)
+        context.taskMetrics.shuffleWriteMetrics.foreach(
+          _.incShuffleWriteTime(System.nanoTime - startTime))
         sorter = null
       }
     }
