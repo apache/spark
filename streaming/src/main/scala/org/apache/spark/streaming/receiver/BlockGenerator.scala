@@ -132,7 +132,8 @@ private[streaming] class BlockGenerator(
   /** Change the buffer to which single records are added to. */
   private def updateCurrentBuffer(time: Long): Unit = synchronized {
     try {
-      val newBlock = for (x <- 0L until math.min(maxBlockSize, dataQueue.size)) yield dataQueue.dequeue()
+      val blockSize = math.min(maxBlockSize, dataQueue.size)
+      val newBlock = for (x <- 0L until blockSize) yield dataQueue.dequeue()
       val newBlockBuffer = newBlock.to[ArrayBuffer]
 
       if (newBlockBuffer.size > 0) {
