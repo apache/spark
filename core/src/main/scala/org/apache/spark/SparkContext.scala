@@ -1092,8 +1092,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def addFile(path: String, recursive: Boolean): Unit = {
     val uri = new URI(path)
+    val file = new File(path)
     val schemeCorrectedPath = uri.getScheme match {
-      case null | "local" => "file:" + uri.getPath
+      case null | "local" => "file:" + file.getCanonicalPath
       case _              => path
     }
 
