@@ -75,8 +75,11 @@ private[spark] case class ClusterSchedulerState(
 
 private[spark] trait ClusterScheduler {
   def submitDriver(desc: DriverRequest): SubmitResponse
+
   def killDriver(submissionId: String): KillResponse
+
   def getStatus(submissionId: String): StatusResponse
+
   def getState(): ClusterSchedulerState
 }
 
@@ -225,65 +228,84 @@ private[spark] class MesosClusterScheduler(conf: SparkConf)
         )
   }
 
+  private [spark] case class ResourceOffer(val offer: Offer, var cpu: Double, var mem: Double)
+
   override def resourceOffers(driver: SchedulerDriver, offers: JList[Offer]): Unit = {
-    // We should try to schedule all the drivers if the offers fit.
+    var submission = queue.peek
 
-    // Non-blocking poll.
-    val submissionOption = Option(queue.poll(0, TimeUnit.SECONDS))
+    val usedOffers = new mutable.HashSet[OfferID]
 
-    if (submissionOption.isEmpty) {
-      offers.foreach(o => driver.declineOffer(o.getId))
-      return
+    val currentOffers = offers.map {
+      o =>
+        ResourceOffer(
+          o,
+          getResource(o.getResourcesList, "cpus"),
+          getResource(o.getResourcesList, "mem"))
     }
 
-    val submission = submissionOption.get
+    var canSchedule = true
 
-    var remainingOffers = offers
+    while (canSchedule && submission != null) {
+      val driverCpu = submission.req.desc.cores
+      val driverMem = submission.req.desc.mem
 
-    val driverCpu = submission.req.desc.cores
-    val driverMem = submission.req.desc.mem
-
-    // Should use the passed in driver cpu and memory.
-    val offerOption = offers.find { o =>
-      getResource(o.getResourcesList, "cpus") >= driverCpu &&
-        getResource(o.getResourcesList, "mem") >= driverMem
-    }
-
-    offerOption.foreach { offer =>
-      val taskId = TaskID.newBuilder().setValue(submission.submissionId).build()
-
-      val cpuResource = Resource.newBuilder()
-        .setName("cpus").setType(Value.Type.SCALAR)
-        .setScalar(Value.Scalar.newBuilder().setValue(driverCpu)).build()
-
-      val memResource = Resource.newBuilder()
-        .setName("mem").setType(Value.Type.SCALAR)
-        .setScalar(Value.Scalar.newBuilder().setValue(driverMem)).build()
-
-      val commandInfo = buildCommand(submission.req)
-
-      val taskInfo = TaskInfo.newBuilder()
-        .setTaskId(taskId)
-        .setName(s"driver for ${submission.req.desc.command.mainClass}")
-        .setSlaveId(offer.getSlaveId)
-        .setCommand(commandInfo)
-        .addResources(cpuResource)
-        .addResources(memResource)
-        .build
-
-      //TODO: logDebug("")
-      driver.launchTasks(Collections.singleton(offer.getId), Collections.singleton(taskInfo))
-
-      stateLock.synchronized {
-        launchedDrivers(submission.submissionId) =
-          ClusterTaskState(submission, taskId, offer.getSlaveId,
-            None, DriverState.SUBMITTED, new Date())
+      val offerOption = currentOffers.find { o =>
+        o.cpu >= driverCpu && o.mem >= driverMem
       }
 
-      remainingOffers = offers.filter(o => o.getId.equals(offer.getId))
+      if (offerOption.isDefined) {
+        val offer = offerOption.get
+
+        offer.cpu -= driverCpu
+        offer.mem -= driverMem
+
+        val taskId = TaskID.newBuilder().setValue(submission.submissionId).build()
+
+        val cpuResource = Resource.newBuilder()
+          .setName("cpus").setType(Value.Type.SCALAR)
+          .setScalar(Value.Scalar.newBuilder().setValue(driverCpu)).build()
+
+        val memResource = Resource.newBuilder()
+          .setName("mem").setType(Value.Type.SCALAR)
+          .setScalar(Value.Scalar.newBuilder().setValue(driverMem)).build()
+
+        val commandInfo = buildCommand(submission.req)
+
+        val taskInfo = TaskInfo.newBuilder()
+          .setTaskId(taskId)
+          .setName(s"driver for ${submission.req.desc.command.mainClass}")
+          .setSlaveId(offer.offer.getSlaveId)
+          .setCommand(commandInfo)
+          .addResources(cpuResource)
+          .addResources(memResource)
+          .build
+
+        logDebug(s"Launching task ${taskInfo}, with offer: ${offer.offer}")
+        driver.launchTasks(Collections.singleton(offer.offer.getId), Collections.singleton(taskInfo))
+
+        stateLock.synchronized {
+          launchedDrivers(submission.submissionId) =
+            ClusterTaskState(submission, taskId, offer.offer.getSlaveId,
+              None, DriverState.SUBMITTED, new Date())
+        }
+
+        usedOffers += offer.offer.getId
+
+        // remove driver from queue.
+        queue.poll(0, TimeUnit.SECONDS)
+
+        submission = queue.peek
+      } else {
+        // We can stop at very first driver that we cannot schedule on.
+        // TODO: We should remove the top driver that cannot be scheduled
+        // over a configurable time period.
+        canSchedule = false
+      }
     }
 
-    remainingOffers.foreach(o => driver.declineOffer(o.getId))
+    offers
+      .filter(o => !usedOffers.contains(o.getId))
+      .foreach(o => driver.declineOffer(o.getId))
   }
 
   def getState(): ClusterSchedulerState = {
