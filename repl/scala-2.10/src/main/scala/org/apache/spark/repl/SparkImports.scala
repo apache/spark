@@ -57,7 +57,8 @@ private[repl] trait SparkImports {
     importHandlers filter (_.importsWildcard) map (_.targetType) distinct
   }
   def wildcardTypes = languageWildcards ++ sessionWildcards
-
+  def mapReqHandlers    = allReqAndHandlers.filter(x => x._1.definedNames.nonEmpty)
+    .map(x => x._1.definedNames.head -> x._2).toMap
   def languageSymbols        = languageWildcardSyms flatMap membersAtPickler
   def sessionImportedSymbols = importHandlers flatMap (_.importedSymbols)
   def importedSymbols        = languageSymbols ++ sessionImportedSymbols
@@ -150,6 +151,7 @@ private[repl] trait SparkImports {
     }
 
     val code, trailingBraces, accessPath = new StringBuilder
+    var importMap = mutable.LinkedHashMap[String, String]()
     val currentImps = mutable.HashSet[Name]()
 
     // add code for a new object to hold some imports
@@ -160,11 +162,6 @@ private[repl] trait SparkImports {
       accessPath append ("." + impname)
 
       currentImps.clear
-      // code append "object %s {\n".format(impname)
-      // trailingBraces append "}\n"
-      // accessPath append ("." + impname)
-
-      // currentImps.clear
     }
 
     addWrapper()
@@ -178,7 +175,8 @@ private[repl] trait SparkImports {
           if (x.importsWildcard || currentImps.exists(x.importedNames contains _))
             addWrapper()
 
-          code append (x.member + "\n")
+          // code append (x.member + "\n")
+          importMap += (x.importString -> (x.member + "\n"))
 
           // give wildcard imports a import wrapper all to their own
           if (x.importsWildcard) addWrapper()
@@ -190,33 +188,47 @@ private[repl] trait SparkImports {
         // the name of the variable, so that we don't need to
         // handle quoting keywords separately.
         case x: ClassHandler if !fallback =>
-        // I am trying to guess if the import is a defined class
-        // This is an ugly hack, I am not 100% sure of the consequences.
-        // Here we, let everything but "defined classes" use the import with val.
-        // The reason for this is, otherwise the remote executor tries to pull the
-        // classes involved and may fail.
+          // If its a defined class and does not refers a val outside, then we can import it
+          // directly, however if it refers an outside val we have to use a different import
+          // strategy.
+
+          // Checks whether this class referred an outside val.
+          val refersVal = x.referencedNames.exists(y => mapReqHandlers.getOrElse(y, x).isInstanceOf[ValHandler])
           for (imv <- x.definedNames) {
+            if (importMap.contains(imv.decoded)) {
+              importMap.remove(imv.decoded)
+            }
             val objName = req.lineRep.readPath
-            code.append("import " + objName + ".INSTANCE" + req.accessPath + ".`" + imv + "`\n")
+            if (!refersVal) {
+              importMap += (imv.decoded -> s"""
+                   |import $objName.INSTANCE${req.accessPath}.`$imv`
+                 """.stripMargin)
+            } else {
+              val valName = "$VAL" + newValId()
+              importMap += (imv.decoded -> s"""
+                  |val $valName = $objName.INSTANCE
+                  |import $valName${req.accessPath}.`$imv`
+                  |""".stripMargin)
+            }
+            currentImps += imv
           }
 
         case x =>
           for (imv <- x.definedNames) {
-            if (currentImps contains imv) addWrapper()
+            if (importMap.contains(imv.decoded)) {
+              importMap.remove(imv.decoded)
+            }
             val objName = req.lineRep.readPath
             val valName = "$VAL" + newValId()
-
-            if(!code.toString.endsWith(".`" + imv + "`;\n")) { // Which means already imported
-                code.append("val " + valName + " = " + objName + ".INSTANCE;\n")
-                code.append("import " + valName + req.accessPath + ".`" + imv + "`;\n")
-            }
-            // code.append("val " + valName + " = " + objName + ".INSTANCE;\n")
-            // code.append("import " + valName + req.accessPath + ".`" + imv + "`;\n")
-            // code append ("import " + (req fullPath imv) + "\n")
+            importMap.put(imv.decoded, s"""
+                  |val $valName = $objName.INSTANCE
+                  |import $valName${req.accessPath}.`$imv`
+                  |""".stripMargin)
             currentImps += imv
           }
       }
     }
+    for ((_, c) <- importMap) yield code.append(c)
     // add one extra wrapper, to prevent warnings in the common case of
     // redefining the value bound in the last interpreter request.
     addWrapper()

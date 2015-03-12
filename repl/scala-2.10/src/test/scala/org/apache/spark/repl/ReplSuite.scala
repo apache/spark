@@ -281,6 +281,17 @@ class ReplSuite extends FunSuite {
     assertDoesNotContain("Exception", output)
   }
 
+  test("SPARK-3200 Class defined with reference to external variables") {
+    val output = runInterpreter("local",
+      """
+        |val a = sc.parallelize(1 to 100).count
+        |case class A(i: Int) { val j = a}
+        |sc.parallelize(1 to 10).map(A(_)).collect()
+      """.stripMargin)
+    assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
+  }
+
   if (System.getenv("MESOS_NATIVE_LIBRARY") != null) {
     test("running on Mesos") {
       val output = runInterpreter("localquiet",
