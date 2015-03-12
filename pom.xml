@@ -105,6 +105,7 @@
     <module>external/zeromq</module>
     <module>examples</module>
     <module>repl</module>
+    <module>launcher</module>
   </modules>
 
   <properties>
@@ -156,6 +157,7 @@
     <codehaus.jackson.version>1.8.8</codehaus.jackson.version>
     <fasterxml.jackson.version>2.4.4</fasterxml.jackson.version>
     <snappy.version>1.1.1.6</snappy.version>
+    <netlib.java.version>1.1.2</netlib.java.version>
 
     <!--
       Dependency scopes that can be overridden by enabling certain profiles. These profiles are
@@ -1195,7 +1197,7 @@
             </environmentVariables>
             <systemProperties>
               <java.awt.headless>true</java.awt.headless>
-              <spark.test.home>${session.executionRootDirectory}</spark.test.home>
+              <spark.test.home>${spark.test.home}</spark.test.home>
               <spark.testing>1</spark.testing>
               <spark.ui.enabled>false</spark.ui.enabled>
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>

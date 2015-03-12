@@ -23,8 +23,6 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConversions._
 
-import org.apache.spark.util.ParentClassLoader
-
 /**
  * URL class loader that exposes the `addURL` and `getURLs` methods in URLClassLoader.
  */
