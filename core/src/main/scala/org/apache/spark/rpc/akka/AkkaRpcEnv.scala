@@ -291,17 +291,6 @@ private[akka] class AkkaRpcEndpointRef(
     actorRef ! AkkaMessage(message, false)
   }
 
-  override def sendWithReply(message: Any, sender: RpcEndpointRef): Unit = {
-    implicit val actorSender: ActorRef =
-      if (sender == null) {
-        Actor.noSender
-      } else {
-        require(sender.isInstanceOf[AkkaRpcEndpointRef])
-        sender.asInstanceOf[AkkaRpcEndpointRef].actorRef
-      }
-    actorRef ! AkkaMessage(message, true)
-  }
-
   override def sendWithReply[T: ClassTag](message: Any, timeout: FiniteDuration): Future[T] = {
     import scala.concurrent.ExecutionContext.Implicits.global
     actorRef.ask(AkkaMessage(message, true))(timeout).flatMap {

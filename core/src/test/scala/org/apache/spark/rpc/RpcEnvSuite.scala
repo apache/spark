@@ -171,39 +171,6 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     }
   }
 
-  test("ping pong") {
-    val pongRef = env.setupEndpoint("pong", new RpcEndpoint {
-      override val rpcEnv = env
-
-      override def receiveAndReply(context: RpcCallContext) = {
-        case Ping(id) => context.sender.sendWithReply(Pong(id), self)
-      }
-    })
-
-    val pingRef = env.setupEndpoint("ping", new RpcEndpoint {
-      override val rpcEnv = env
-
-      var requester: RpcCallContext = _
-
-      override def receiveAndReply(context: RpcCallContext) = {
-        case Start => {
-          requester = context
-          pongRef.sendWithReply(Ping(1), self)
-        }
-        case p @ Pong(id) => {
-          if (id < 10) {
-            context.sender.sendWithReply(Ping(id + 1), self)
-          } else {
-            requester.reply(p)
-          }
-        }
-      }
-    })
-
-    val reply = pingRef.askWithReply[Pong](Start)
-    assert(Pong(10) === reply)
-  }
-
   test("onStart and onStop") {
     val stopLatch = new CountDownLatch(1)
     val calledMethods = mutable.ArrayBuffer[String]()

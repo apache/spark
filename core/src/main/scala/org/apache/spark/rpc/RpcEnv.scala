@@ -327,15 +327,6 @@ private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
   def send(message: Any): Unit
 
   /**
-   * Send a message to the corresponding [[RpcEndpoint.receiveAndReply]] asynchronously.
-   * Fire-and-forget semantics.
-   *
-   * The receiver will reply to sender's [[RpcEndpoint.receive]] or [[RpcEndpoint.receiveAndReply]]
-   * depending on which one of [[RpcCallContext.reply]]s is called.
-   */
-  def sendWithReply(message: Any, sender: RpcEndpointRef): Unit
-
-  /**
    * Send a message to the corresponding [[RpcEndpoint.receiveAndReply)]] and return a `Future` to
    * receive the reply within a default timeout.
    */
