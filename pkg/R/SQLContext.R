@@ -47,6 +47,26 @@ infer_type <- function(x) {
   }
 }
 
+tojson <- function(x) {
+  if (is.list(x)) {
+    names <- names(x)
+    if (!is.null(names)) {
+      items <- lapply(names, function(n) {
+        safe_n <- gsub('"', '\\"', n)
+        paste(tojson(safe_n), ':', tojson(x[[n]]), sep = '')
+      })
+      d <- paste(items, collapse = ', ')
+      paste('{', d, '}', sep = '')
+    } else {
+      l <- paste(lapply(x, tojson), collapse = ', ')
+      paste('[', l, ']', sep = '')
+    }
+  } else if (is.character(x)) {
+    paste('"', x, '"', sep = '')
+  } else if (is.logical(x)) {
+    if (x) "true" else "false"
+  }
+}
 
 #' Create a DataFrame from an RDD
 #'
@@ -113,7 +133,7 @@ createDataFrame <- function(sqlCtx, data, schema = NULL, samplingRatio = 1.0) {
   stopifnot(class(schema) == "list")
   stopifnot(schema$type == "struct")
   stopifnot(class(schema$fields) == "list")
-  schemaString <- as.character(jsonlite::toJSON(schema, auto_unbox = TRUE))
+  schemaString <- as.character(tojson(schema))
 
   jrdd <- getJRDD(lapply(rdd, function(x) x), "row")
   srdd <- callJMethod(jrdd, "rdd")
