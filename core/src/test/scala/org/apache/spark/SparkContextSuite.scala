@@ -106,6 +106,35 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
       sc.stop()
     }
   }
+  
+  test("addFile works with relative path") {
+    val pluto = Utils.createTempDir()
+    val file = File.createTempFile("someprefix", "somesuffix", pluto)
+    val relativePath = file.getParent + "/../" + file.getParentFile.getName + "/" + file.getName
+    val absolutePath = file.getAbsolutePath
+    try {
+      Files.write("somewords", file, UTF_8)
+      val length = file.length()
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+      sc.addFile(relativePath)
+      sc.parallelize(Array(1), 1).map(x => {
+        val gotten = new File(SparkFiles.get(file.getName))
+        if (!gotten.exists()) {
+          throw new SparkException("file doesn't exist")
+        }
+        if (length != gotten.length()) {
+          throw new SparkException(
+            s"file has different length $length than added file ${gotten.length()}")
+        }
+        if (absolutePath == gotten.getAbsolutePath) {
+          throw new SparkException("file should have been copied")
+        }
+        x
+      }).count()
+    } finally {
+      sc.stop()
+    }
+  }
 
   test("addFile recursive works") {
     val pluto = Utils.createTempDir()
