@@ -121,8 +121,10 @@ object CastedArray {
     override def get(i: Int): Object = arr(i)
     override def getLength(): Int = arr.length
     override def isPrimitiveArray(): Boolean = false
-    override def getElementSize(): Int = throw new UnsupportedOperationException("Cannot introspect " +
-      " the size of an element in an object array.")
+    override def getElementSize(): Int = {
+      throw new UnsupportedOperationException("Cannot introspect " +
+        " the size of an element in an object array.")
+    }
   }
 
   private class ShortCastedArray(val arr: Array[Short]) extends AnyVal with CastedArray {
