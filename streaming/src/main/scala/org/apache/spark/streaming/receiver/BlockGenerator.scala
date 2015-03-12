@@ -19,6 +19,8 @@ package org.apache.spark.streaming.receiver
 
 import java.util.concurrent.{ArrayBlockingQueue, TimeUnit}
 
+import scala.collection.immutable.IndexedSeq
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{Logging, SparkConf}
@@ -80,13 +82,15 @@ private[streaming] class BlockGenerator(
 
   private val clock = new SystemClock()
   private val blockInterval = conf.getLong("spark.streaming.blockInterval", 200)
+  private val maxBlockSize = conf.getLong("spark.streaming.maxBlockSize", Long.MaxValue)
   private val blockIntervalTimer =
     new RecurringTimer(clock, blockInterval, updateCurrentBuffer, "BlockGenerator")
   private val blockQueueSize = conf.getInt("spark.streaming.blockQueueSize", 10)
   private val blocksForPushing = new ArrayBlockingQueue[Block](blockQueueSize)
   private val blockPushingThread = new Thread() { override def run() { keepPushingBlocks() } }
 
-  @volatile private var currentBuffer = new ArrayBuffer[Any]
+  private var dataQueue = new mutable.Queue[Any]
+
   @volatile private var stopped = false
 
   /** Start block generating and pushing threads. */
@@ -112,7 +116,7 @@ private[streaming] class BlockGenerator(
    */
   def addData (data: Any): Unit = synchronized {
     waitToPush()
-    currentBuffer += data
+    dataQueue += data
   }
 
   /**
@@ -122,15 +126,16 @@ private[streaming] class BlockGenerator(
    */
   def addDataWithCallback(data: Any, metadata: Any) = synchronized {
     waitToPush()
-    currentBuffer += data
+    dataQueue += data
     listener.onAddData(data, metadata)
   }
 
   /** Change the buffer to which single records are added to. */
   private def updateCurrentBuffer(time: Long): Unit = synchronized {
     try {
-      val newBlockBuffer = currentBuffer
-      currentBuffer = new ArrayBuffer[Any]
+      val newBlock = for (x <- 0L until math.min(maxBlockSize, dataQueue.size)) yield dataQueue.dequeue()
+      val newBlockBuffer = newBlock.to[mutable.ArrayBuffer]
+
       if (newBlockBuffer.size > 0) {
         val blockId = StreamBlockId(receiverId, time - blockInterval)
         val newBlock = new Block(blockId, newBlockBuffer)

@@ -159,8 +159,11 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     val blockGeneratorListener = new FakeBlockGeneratorListener
     val blockInterval = 100
     val maxRate = 100
-    val conf = new SparkConf().set("spark.streaming.blockInterval", blockInterval.toString).
-      set("spark.streaming.receiver.maxRate", maxRate.toString)
+    val maxBlockSize = 10
+    val conf = new SparkConf()
+      .set("spark.streaming.blockInterval", blockInterval.toString)
+      .set("spark.streaming.receiver.maxRate", maxRate.toString)
+      .set("spark.streaming.maxBlockSize", maxBlockSize.toString)
     val expectedBlocks = 20
     val waitTime = expectedBlocks * blockInterval
     val expectedMessages = maxRate * waitTime / 1000
@@ -171,17 +174,25 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     val blockGenerator = new BlockGenerator(blockGeneratorListener, 1, conf)
     blockGenerator.start()
     generatedData.foreach(blockGenerator.addData(_))
-    blockGenerator.stop()
     val endTime = System.currentTimeMillis()
 
     // should have been rate limited
-    assert(endTime - startTime >= waitTime, "Should have taken longer than the theoretical minimum time")
+    assert(endTime - startTime >= waitTime-10, "Should have taken longer than the theoretical minimum time")
 
-    // we should get the same data
-    val recordedBlocks = blockGeneratorListener.arrayBuffers
-    val recordedData = recordedBlocks.flatten
-    assert(blockGeneratorListener.arrayBuffers.size > 0, "No blocks received")
-    assert(recordedData.toSet === generatedData.toSet, "Received data not same")
+    // once all the blocks have arrived
+    eventually {
+      // we get the same data back
+      val recordedBlocks = blockGeneratorListener.arrayBuffers
+      val recordedData = recordedBlocks.flatten
+      assert(recordedData.toSet === generatedData.toSet, s"Received data not the same")
+      assert(recordedBlocks.size >= expectedBlocks, "We should have created at least the expected number of blocks")
+
+      // the block sizes are limited by maxBlockSize
+      val receivedBlockSizes = recordedBlocks.map { _.size }
+      assert(receivedBlockSizes.forall(_ <= maxBlockSize),
+        s"# records in received blocks = [$receivedBlockSizes], not bounded above by $maxBlockSize")
+    }
+    blockGenerator.stop()
   }
 
   /**
