@@ -23,7 +23,6 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{TaskContext, Logging, SparkConf}
 import org.apache.spark.storage.StreamBlockId
-import java.util.concurrent.CountDownLatch
 import scala.concurrent._
 import ExecutionContext.Implicits.global
 
@@ -49,7 +48,7 @@ private[streaming] abstract class ReceiverSupervisor(
   /** Receiver id */
   protected val streamId = receiver.streamId
 
-  /** The context of task that is running a `Receiver` */
+  /** The context of task that is running a receiver */
   private var taskContext: Option[TaskContext] = None
 
   /** Time between a receiver is stopped and started again */
