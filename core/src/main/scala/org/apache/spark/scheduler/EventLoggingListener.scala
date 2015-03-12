@@ -44,6 +44,7 @@ import org.apache.spark.util.{JsonProtocol, Utils}
  *   spark.eventLog.overwrite - Whether to overwrite any existing files.
  *   spark.eventLog.dir - Path to the directory in which events are logged.
  *   spark.eventLog.buffer.kb - Buffer size to use when writing to output streams
+ *   spark.eventLog.permissions - What permissions to set on event log files
  */
 private[spark] class EventLoggingListener(
     appId: String,
@@ -62,6 +63,10 @@ private[spark] class EventLoggingListener(
   private val testing = sparkConf.getBoolean("spark.eventLog.testing", false)
   private val outputBufferSize = sparkConf.getInt("spark.eventLog.buffer.kb", 100) * 1024
   private val fileSystem = Utils.getHadoopFileSystem(new URI(logBaseDir), hadoopConf)
+  private val logFilePermissions = {
+    val permissionsValue = sparkConf.get("spark.eventLog.permissions", DEFAULT_LOG_FILE_PERMISSIONS)
+    new FsPermission(Integer.parseInt(permissionsValue, 8).toShort)
+  }
   private val compressionCodec =
     if (shouldCompress) {
       Some(CompressionCodec.createCodec(sparkConf))
@@ -125,7 +130,7 @@ private[spark] class EventLoggingListener(
       val bstream = new BufferedOutputStream(cstream, outputBufferSize)
 
       EventLoggingListener.initEventLog(bstream)
-      fileSystem.setPermission(path, LOG_FILE_PERMISSIONS)
+      fileSystem.setPermission(path, logFilePermissions)
       writer = Some(new PrintWriter(bstream))
       logInfo("Logging events to %s".format(logPath))
     } catch {
@@ -213,7 +218,7 @@ private[spark] object EventLoggingListener extends Logging {
   val SPARK_VERSION_KEY = "SPARK_VERSION"
   val COMPRESSION_CODEC_KEY = "COMPRESSION_CODEC"
 
-  private val LOG_FILE_PERMISSIONS = new FsPermission(Integer.parseInt("770", 8).toShort)
+  private val DEFAULT_LOG_FILE_PERMISSIONS = "770"
 
   // A cache for compression codecs to avoid creating the same codec many times
   private val codecMap = new mutable.HashMap[String, CompressionCodec]
