@@ -12,11 +12,11 @@
 
 {% block body %}
   <h2>Ad Hoc Query</h2>
-  <form method="get">
+  <form method="get" id="query_form">
     <div class="form-inline">
       {{ form.conn_id }}
-      <input type="submit" class="btn btn-default" value="Run!"><br>
-    </div>
+      <input type="submit" class="btn btn-default" value="Run!">
+      <span id="results"></span><br>
   <div id='ace_container'>
   {{ form.sql(rows=10) }}
   </div>
@@ -51,6 +51,9 @@
         });
         $('select').addClass("form-control");
         sync();
+        $("#query_form").submit(function(event){
+            $("#results").html("<img width='25'src='{{ url_for('static', filename='loading.gif') }}'>");
+        });
     });
   </script>
 {% endblock %}
