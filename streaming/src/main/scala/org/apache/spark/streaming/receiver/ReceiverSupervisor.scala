@@ -193,6 +193,8 @@ private[streaming] abstract class ReceiverSupervisor(
     while (!checkTermination()) {
       Thread.sleep(500)
     }
+    // This may occur when `TaskContext` is interrupted but `ReceiverSupervisor` has
+    // no time to do `stop` work properly.
     if (!isReceiverStopped()) {
       stop("Killed by user.", None)
     }
