@@ -21,14 +21,14 @@ The DataFrame API is available in [Scala](api/scala/index.html#org.apache.spark.
 All of the examples on this page use sample data included in the Spark distribution and can be run in the `spark-shell` or the `pyspark` shell.
 
 
-## Starting Point: SQLContext
+## Starting Point: `SQLContext`
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
 
 The entry point into all functionality in Spark SQL is the
-[SQLContext](api/scala/index.html#org.apache.spark.sql.SQLContext) class, or one of its
-descendants.  To create a basic SQLContext, all you need is a SparkContext.
+[`SQLContext`](api/scala/index.html#org.apache.spark.sql.`SQLContext`) class, or one of its
+descendants.  To create a basic `SQLContext`, all you need is a SparkContext.
 
 {% highlight scala %}
 val sc: SparkContext // An existing SparkContext.
@@ -43,8 +43,8 @@ import sqlContext.implicits._
 <div data-lang="java" markdown="1">
 
 The entry point into all functionality in Spark SQL is the
-[SQLContext](api/java/index.html#org.apache.spark.sql.SQLContext) class, or one of its
-descendants.  To create a basic SQLContext, all you need is a SparkContext.
+[`SQLContext`](api/java/index.html#org.apache.spark.sql.SQLContext) class, or one of its
+descendants.  To create a basic `SQLContext`, all you need is a SparkContext.
 
 {% highlight java %}
 JavaSparkContext sc = ...; // An existing JavaSparkContext.
@@ -56,8 +56,8 @@ SQLContext sqlContext = new org.apache.spark.sql.SQLContext(sc);
 <div data-lang="python"  markdown="1">
 
 The entry point into all relational functionality in Spark is the
-[SQLContext](api/python/pyspark.sql.SQLContext-class.html) class, or one
-of its decedents.  To create a basic SQLContext, all you need is a SparkContext.
+[`SQLContext`](api/python/pyspark.sql.SQLContext-class.html) class, or one
+of its decedents.  To create a basic `SQLContext`, all you need is a SparkContext.
 
 {% highlight python %}
 from pyspark.sql import SQLContext
@@ -67,20 +67,20 @@ sqlContext = SQLContext(sc)
 </div>
 </div>
 
-In addition to the basic SQLContext, you can also create a HiveContext, which provides a
-superset of the functionality provided by the basic SQLContext. Additional features include
+In addition to the basic `SQLContext`, you can also create a `HiveContext`, which provides a
+superset of the functionality provided by the basic `SQLContext`. Additional features include
 the ability to write queries using the more complete HiveQL parser, access to Hive UDFs, and the
-ability to read data from Hive tables.  To use a HiveContext, you do not need to have an
-existing Hive setup, and all of the data sources available to a SQLContext are still available.
-HiveContext is only packaged separately to avoid including all of Hive's dependencies in the default
-Spark build.  If these dependencies are not a problem for your application then using HiveContext
-is recommended for the 1.3 release of Spark.  Future releases will focus on bringing SQLContext up
-to feature parity with a HiveContext.
+ability to read data from Hive tables.  To use a `HiveContext`, you do not need to have an
+existing Hive setup, and all of the data sources available to a `SQLContext` are still available.
+`HiveContext` is only packaged separately to avoid including all of Hive's dependencies in the default
+Spark build.  If these dependencies are not a problem for your application then using `HiveContext`
+is recommended for the 1.3 release of Spark.  Future releases will focus on bringing `SQLContext` up
+to feature parity with a `HiveContext`.
 
 The specific variant of SQL that is used to parse queries can also be selected using the
 `spark.sql.dialect` option.  This parameter can be changed using either the `setConf` method on
-a SQLContext or by using a `SET key=value` command in SQL.  For a SQLContext, the only dialect
-available is "sql" which uses a simple SQL parser provided by Spark SQL.  In a HiveContext, the
+a `SQLContext` or by using a `SET key=value` command in SQL.  For a `SQLContext`, the only dialect
+available is "sql" which uses a simple SQL parser provided by Spark SQL.  In a `HiveContext`, the
 default is "hiveql", though "sql" is also available.  Since the HiveQL parser is much more complete,
 this is recommended for most use cases.
 
@@ -797,7 +797,7 @@ When working with a `HiveContext`, `DataFrames` can also be saved as persistent 
 contents of the dataframe and create a pointer to the data in the HiveMetastore.  Persistent tables
 will still exist even after your Spark program has restarted, as long as you maintain your connection
 to the same metastore.  A DataFrame for a persistent table can be created by calling the `table`
-method on a SQLContext with the name of the table.
+method on a `SQLContext` with the name of the table.
 
 By default `saveAsTable` will create a "managed table", meaning that the location of the data will
 be controlled by the metastore.  Managed tables will also have their data deleted automatically
@@ -909,7 +909,7 @@ SELECT * FROM parquetTable
 
 ### Configuration
 
-Configuration of Parquet can be done using the `setConf` method on SQLContext or by running
+Configuration of Parquet can be done using the `setConf` method on `SQLContext` or by running
 `SET key=value` commands using SQL.
 
 <table class="table">
@@ -972,7 +972,7 @@ Configuration of Parquet can be done using the `setConf` method on SQLContext or
 
 <div data-lang="scala"  markdown="1">
 Spark SQL can automatically infer the schema of a JSON dataset and load it as a DataFrame.
-This conversion can be done using one of two methods in a SQLContext:
+This conversion can be done using one of two methods in a `SQLContext`:
 
 * `jsonFile` - loads data from a directory of JSON files where each line of the files is a JSON object.
 * `jsonRDD` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
@@ -1014,7 +1014,7 @@ val anotherPeople = sqlContext.jsonRDD(anotherPeopleRDD)
 
 <div data-lang="java"  markdown="1">
 Spark SQL can automatically infer the schema of a JSON dataset and load it as a DataFrame.
-This conversion can be done using one of two methods in a SQLContext :
+This conversion can be done using one of two methods in a `SQLContext` :
 
 * `jsonFile` - loads data from a directory of JSON files where each line of the files is a JSON object.
 * `jsonRDD` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
@@ -1056,7 +1056,7 @@ DataFrame anotherPeople = sqlContext.jsonRDD(anotherPeopleRDD);
 
 <div data-lang="python"  markdown="1">
 Spark SQL can automatically infer the schema of a JSON dataset and load it as a DataFrame.
-This conversion can be done using one of two methods in a SQLContext:
+This conversion can be done using one of two methods in a `SQLContext`:
 
 * `jsonFile` - loads data from a directory of JSON files where each line of the files is a JSON object.
 * `jsonRDD` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
@@ -1085,7 +1085,7 @@ people.printSchema()
 # Register this DataFrame as a table.
 people.registerTempTable("people")
 
-# SQL statements can be run by using the sql methods provided by sqlContext.
+# SQL statements can be run by using the sql methods provided by `sqlContext`.
 teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
 
 # Alternatively, a DataFrame can be created for a JSON dataset represented by
@@ -1131,7 +1131,7 @@ Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
 
 When working with Hive one must construct a `HiveContext`, which inherits from `SQLContext`, and
 adds support for finding tables in the MetaStore and writing queries using HiveQL. Users who do
-not have an existing Hive deployment can still create a HiveContext.  When not configured by the
+not have an existing Hive deployment can still create a `HiveContext`.  When not configured by the
 hive-site.xml, the context automatically creates `metastore_db` and `warehouse` in the current
 directory.
 
@@ -1318,7 +1318,7 @@ Spark SQL can cache tables using an in-memory columnar format by calling `sqlCon
 Then Spark SQL will scan only required columns and will automatically tune compression to minimize
 memory usage and GC pressure. You can call `sqlContext.uncacheTable("tableName")` to remove the table from memory.
 
-Configuration of in-memory caching can be done using the `setConf` method on SQLContext or by running
+Configuration of in-memory caching can be done using the `setConf` method on `SQLContext` or by running
 `SET key=value` commands using SQL.
 
 <table class="table">
@@ -1506,7 +1506,7 @@ When using function inside of the DSL (now replaced with the `DataFrame` API) us
 Spark 1.3 removes the type aliases that were present in the base sql package for `DataType`. Users
 should instead import the classes in `org.apache.spark.sql.types`
 
-#### UDF Registration Moved to sqlContext.udf (Java & Scala)
+#### UDF Registration Moved to `sqlContext.udf` (Java & Scala)
 
 Functions that are used to register UDFs, either for use in the DataFrame DSL or SQL, have been
 moved into the udf object in `SQLContext`.
