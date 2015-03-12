@@ -651,7 +651,7 @@ private[deploy] object SparkSubmitUtils {
    * @param artifactId the artifactId of the coordinate
    * @param version the version of the coordinate
    */
-  case class MavenCoordinate(groupId: String, artifactId: String, version: String)
+  private case class MavenCoordinate(groupId: String, artifactId: String, version: String)
 
 /**
  * Extracts maven coordinates from a comma-delimited string. Coordinates should be provided
