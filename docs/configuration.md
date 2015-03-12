@@ -1440,6 +1440,7 @@ compute `SPARK_LOCAL_IP` by looking up the IP of a specific network interface.
 Spark uses [log4j](http://logging.apache.org/log4j/) for logging. You can configure it by adding a
 `log4j.properties` file in the `conf` directory. One way to start is to copy the existing
 `log4j.properties.template` located there.
+You can also use [spark with log4j2](building-spark.html#building-with-log4j2).
 
 # Overriding configuration directory
 

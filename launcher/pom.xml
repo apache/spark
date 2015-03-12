@@ -38,11 +38,6 @@
   <dependencies>
     <!-- NOTE: only test-scope dependencies are allowed in this module. -->
     <dependency>
-      <groupId>log4j</groupId>
-      <artifactId>log4j</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
       <scope>test</scope>
@@ -62,12 +57,6 @@
       <artifactId>slf4j-api</artifactId>
       <scope>test</scope>
     </dependency>
-    <dependency>
-      <groupId>org.slf4j</groupId>
-      <artifactId>slf4j-log4j12</artifactId>
-      <scope>test</scope>
-    </dependency>
-
     <!-- Not needed by the test code, but referenced by SparkSubmit which is used by the tests. -->
     <dependency>
       <groupId>org.apache.hadoop</groupId>
