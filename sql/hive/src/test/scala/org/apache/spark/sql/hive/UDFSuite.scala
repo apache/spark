@@ -32,5 +32,6 @@ class UDFSuite extends QueryTest {
     assert(sql("SELECT RANDOM0() FROM src LIMIT 1").head().getDouble(0) >= 0.0)
     assert(sql("SELECT RANDOm1() FROM src LIMIT 1").head().getDouble(0) >= 0.0)
     assert(sql("SELECT strlenscala('test', 1) FROM src LIMIT 1").head().getInt(0) === 5)
+    assert(sql("SELECT current_database()").head().getString(0) === "default")
   }
 }
