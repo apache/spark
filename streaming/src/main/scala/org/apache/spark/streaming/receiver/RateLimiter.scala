@@ -18,6 +18,7 @@
 package org.apache.spark.streaming.receiver
 
 import com.google.common.util.concurrent.RateLimiter
+
 import org.apache.spark.{Logging, SparkConf}
 
 /** Provides waitToPush() method to limit the rate at which receivers consume data.

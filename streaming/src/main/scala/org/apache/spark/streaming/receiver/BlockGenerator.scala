@@ -19,8 +19,7 @@ package org.apache.spark.streaming.receiver
 
 import java.util.concurrent.{ArrayBlockingQueue, TimeUnit}
 
-import scala.collection.immutable.IndexedSeq
-import scala.collection.mutable
+import scala.collection.mutable.Queue
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{Logging, SparkConf}
@@ -89,7 +88,7 @@ private[streaming] class BlockGenerator(
   private val blocksForPushing = new ArrayBlockingQueue[Block](blockQueueSize)
   private val blockPushingThread = new Thread() { override def run() { keepPushingBlocks() } }
 
-  private var dataQueue = new mutable.Queue[Any]
+  private var dataQueue = new Queue[Any]
 
   @volatile private var stopped = false
 
@@ -134,7 +133,7 @@ private[streaming] class BlockGenerator(
   private def updateCurrentBuffer(time: Long): Unit = synchronized {
     try {
       val newBlock = for (x <- 0L until math.min(maxBlockSize, dataQueue.size)) yield dataQueue.dequeue()
-      val newBlockBuffer = newBlock.to[mutable.ArrayBuffer]
+      val newBlockBuffer = newBlock.to[ArrayBuffer]
 
       if (newBlockBuffer.size > 0) {
         val blockId = StreamBlockId(receiverId, time - blockInterval)
