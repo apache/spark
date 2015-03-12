@@ -127,28 +127,6 @@ private[spark] case class SparkListenerLogStart(sparkVersion: String) extends Sp
 
 /**
  * :: DeveloperApi ::
- * Interface for filtering the events from the Spark scheduler.
- */
-@DeveloperApi
-class DefaultSparkListenerEventFilter {
-
-  def validate(event: SparkListenerEvent): Boolean = {
-    event match {
-      case SparkListenerBlockUpdate(blockManagerId: BlockManagerId, blockId: BlockId,
-        blockStatus: BlockStatus) =>
-        if (blockId.isBroadcast) {
-          true
-        } else {
-          false
-        }
-      case _ =>
-        true
-    }
-  }
-}
-
-/**
- * :: DeveloperApi ::
  * Interface for listening to events from the Spark scheduler. Note that this is an internal
  * interface which might change in different Spark releases. Java clients should extend
  * {@link JavaSparkListener}
