@@ -125,7 +125,7 @@ admin = Admin(
 
 admin.add_link(
     base.MenuLink(
-        category='Tools',
+        category='Data Profiling',
         name='Ad Hoc Query',
         url='/admin/airflow/query'))
 
@@ -1392,7 +1392,7 @@ class ChartModelView(LoginMixin, ModelView):
 
 mv = ChartModelView(
     models.Chart, Session,
-    name="Charts", category="Tools")
+    name="Charts", category="Data Profiling")
 admin.add_view(mv)
 
 admin.add_link(
