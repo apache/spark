@@ -30,6 +30,21 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   self: Product =>
 
   /**
+   * Duplicate the current logical plan for resolving the self join
+   */
+  def newInstance: this.type = {
+    assert(resolved)
+
+    val newArgs = this.productIterator.map {
+      case x: LogicalPlan => x.newInstance
+      case a => a.asInstanceOf[AnyRef]
+    }.toArray
+
+    val defaultCtor = getClass.getConstructors.find(_.getParameterTypes.size != 0).head
+    defaultCtor.newInstance(newArgs: _*).asInstanceOf[this.type]
+  }
+
+  /**
    * Computes [[Statistics]] for this plan. The default implementation assumes the output
    * cardinality is the product of of all child plan's cardinality, i.e. applies in the case
    * of cartesian joins.

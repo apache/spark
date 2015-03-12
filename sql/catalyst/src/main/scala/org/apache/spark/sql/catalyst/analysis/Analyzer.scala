@@ -236,9 +236,7 @@ class Analyzer(catalog: Catalog,
 
       // Special handling for cases when self-join introduce duplicate expression ids.
       case j @ Join(left, right, _, _) if j.selfJoinResolved == false =>
-        // reset the expr id for self join
-        val projectList = right.output.map(a => Alias(a, a.name)(qualifiers = a.qualifiers))
-        j.copy(right = Project(projectList, right))
+        j.copy(right = right.newInstance)
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
