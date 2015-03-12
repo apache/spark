@@ -18,7 +18,6 @@
 package org.apache.spark.util
 
 import java.lang.management.ManagementFactory
-import org.apache.spark.util.{ArrayReflect => JArray}
 import java.lang.reflect.Field
 import java.lang.reflect.Modifier
 import java.util.IdentityHashMap
@@ -185,7 +184,8 @@ private[spark] object SizeEstimator extends Logging {
   private val ARRAY_SAMPLE_SIZE = 100 // should be lower than ARRAY_SIZE_FOR_SAMPLING
 
   private def visitArray(array: AnyRef, cls: Class[_], state: SearchState) {
-    val length = JArray.getLength(array)
+    val reflectArrayGetter = ReflectArrayGetter.create(array)
+    val length = reflectArrayGetter.getLength
     val elementClass = cls.getComponentType
 
     // Arrays have object header and length field which is an integer
@@ -200,7 +200,7 @@ private[spark] object SizeEstimator extends Logging {
 
       if (length <= ARRAY_SIZE_FOR_SAMPLING) {
         for (i <- 0 until length) {
-          state.enqueue(JArray.get(array, i))
+          state.enqueue(reflectArrayGetter.get(i))
         }
       } else {
         // Estimate the size of a large array by sampling elements without replacement.
@@ -213,7 +213,7 @@ private[spark] object SizeEstimator extends Logging {
             index = rand.nextInt(length)
           } while (drawn.contains(index))
           drawn.add(index)
-          val elem = JArray.get(array, index)
+          val elem = reflectArrayGetter.get(index)
           size += SizeEstimator.estimate(elem, state.visited)
         }
         state.size += ((length / (ARRAY_SAMPLE_SIZE * 1.0)) * size).toLong
