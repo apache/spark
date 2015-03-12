@@ -11,7 +11,7 @@ import org.apache.hadoop.hive.ql.session.SessionState
 class sqlUDFCurrentDB extends UDFCurrentDB {
 
   // This function just throws an exception in hive0.13
-  override def evaluate(arguments: Array[DeferredObject]): Any = {
+  override def evaluate(arguments: Array[DeferredObject]): Object = {
     SessionState.get().getCurrentDatabase()
   }
 }
