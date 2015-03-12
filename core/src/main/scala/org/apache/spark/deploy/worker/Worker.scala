@@ -125,7 +125,7 @@ private[worker] class Worker(
   private val shuffleService = new StandaloneWorkerShuffleService(conf, securityMgr)
 
   private val publicAddress = {
-    val envVar = System.getenv("SPARK_PUBLIC_DNS")
+    val envVar = conf.getenv("SPARK_PUBLIC_DNS")
     if (envVar != null) envVar else host
   }
   private var webUi: WorkerWebUI = null

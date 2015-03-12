@@ -99,7 +99,7 @@ private[master] class Master(
   private val webUi = new MasterWebUI(this, webUiPort)
 
   private val masterPublicAddress = {
-    val envVar = System.getenv("SPARK_PUBLIC_DNS")
+    val envVar = conf.getenv("SPARK_PUBLIC_DNS")
     if (envVar != null) envVar else host
   }
 
