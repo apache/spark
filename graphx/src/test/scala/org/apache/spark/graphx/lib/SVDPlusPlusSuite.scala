@@ -32,11 +32,11 @@ class SVDPlusPlusSuite extends FunSuite with LocalSparkContext {
         Edge(fields(0).toLong * 2, fields(1).toLong * 2 + 1, fields(2).toDouble)
       }
       val conf = new SVDPlusPlus.Conf(10, 2, 0.0, 5.0, 0.007, 0.007, 0.005, 0.015) // 2 iterations
-      var (graph, u) = SVDPlusPlus.runSVDPlusPlus(edges, conf)
+      val (graph, _) = SVDPlusPlus.run(edges, conf)
       graph.cache()
-      val err = graph.vertices.collect().map{ case (vid, vd) =>
+      val err = graph.vertices.map { case (vid, vd) =>
         if (vid % 2 == 1) vd._4 else 0.0
-      }.reduce(_ + _) / graph.triplets.collect().size
+      }.reduce(_ + _) / graph.numEdges
       assert(err <= svdppErr)
     }
   }

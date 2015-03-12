@@ -15,23 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy
+package org.apache.spark.launcher
 
-import org.apache.spark.deploy.worker.CommandUtils
-import org.apache.spark.util.Utils
-
-import org.scalatest.{FunSuite, Matchers}
-
-class CommandUtilsSuite extends FunSuite with Matchers {
-
-  test("set libraryPath correctly") {
-    val appId = "12345-worker321-9876"
-    val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
-    val cmd = new Command("mainClass", Seq(), Map(), Seq(), Seq("libraryPathToB"), Seq())
-    val builder = CommandUtils.buildProcessBuilder(cmd, 512, sparkHome, t => t)
-    val libraryPath = Utils.libraryPathEnvName
-    val env = builder.environment
-    env.keySet should contain(libraryPath)
-    assert(env.get(libraryPath).startsWith("libraryPathToB"))
-  }
-}
+/**
+ * This class makes SparkSubmitOptionParser visible for Spark code outside of the `launcher`
+ * package, since Java doesn't have a feature similar to `private[spark]`, and we don't want
+ * that class to be public.
+ */
+private[spark] abstract class SparkSubmitArgumentsParser extends SparkSubmitOptionParser

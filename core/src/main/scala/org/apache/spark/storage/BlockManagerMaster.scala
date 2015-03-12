@@ -61,7 +61,7 @@ class BlockManagerMaster(
       tachyonSize: Long): Boolean = {
     val res = askDriverWithReply[Boolean](
       UpdateBlockInfo(blockManagerId, blockId, storageLevel, memSize, diskSize, tachyonSize))
-    logInfo("Updated info of block " + blockId)
+    logDebug(s"Updated info of block $blockId")
     res
   }
 
