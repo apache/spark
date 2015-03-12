@@ -739,6 +739,11 @@ class RDDTests(ReusedPySparkTestCase):
         converted_rdd = RDD(data_python_rdd, self.sc)
         self.assertEqual(2, converted_rdd.count())
 
+    # Regression test for SPARK-6294
+    def test_take_on_jrdd(self):
+        rdd = self.sc.parallelize(range(1 << 20)).map(lambda x: str(x))
+        rdd._jrdd.first()
+
 
 class ProfilerTests(PySparkTestCase):
 
