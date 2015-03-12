@@ -181,6 +181,8 @@ private[spark] class MesosClusterScheduler(conf: SparkConf)
     val cmdOptions = generateCmdOption(req)
 
     val executorUri = req.conf.getOption("spark.executor.uri")
+      .orElse(req.desc.command.environment.get("SPARK_EXECUTOR_URI"))
+
     val cmd = if (executorUri.isDefined) {
       builder.addUris(CommandInfo.URI.newBuilder().setValue(executorUri.get).build())
 
