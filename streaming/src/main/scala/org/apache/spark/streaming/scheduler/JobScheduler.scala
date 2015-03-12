@@ -141,21 +141,21 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     logInfo("Starting job " + job.id + " from job set of time " + jobSet.time)
   }
 
-  private def handleJobCompletion(job: Job) {
+  private def handleJobCompletion(job: Job): Unit = {
+    val jobSet = jobSets.get(job.time)
+    jobSet.handleJobCompletion(job)
+    if (jobSet.hasCompleted) {
+      jobSets.remove(jobSet.time)
+      jobGenerator.onBatchCompletion(jobSet.time)
+      logInfo("Total delay: %.3f s for time %s (execution: %.3f s)".format(
+        jobSet.totalDelay / 1000.0, jobSet.time.toString,
+        jobSet.processingDelay / 1000.0
+      ))
+      listenerBus.post(StreamingListenerBatchCompleted(jobSet.toBatchInfo))
+    }
     job.result match {
       case Success(_) =>
-        val jobSet = jobSets.get(job.time)
-        jobSet.handleJobCompletion(job)
-        logInfo("Finished job " + job.id + " from job set of time " + jobSet.time)
-        if (jobSet.hasCompleted) {
-          jobSets.remove(jobSet.time)
-          jobGenerator.onBatchCompletion(jobSet.time)
-          logInfo("Total delay: %.3f s for time %s (execution: %.3f s)".format(
-            jobSet.totalDelay / 1000.0, jobSet.time.toString,
-            jobSet.processingDelay / 1000.0
-          ))
-          listenerBus.post(StreamingListenerBatchCompleted(jobSet.toBatchInfo))
-        }
+        logInfo(s"Finished job ${job.id} from job set of time ${jobSet.time}")
       case Failure(e) =>
         reportError("Error running job " + job, e)
     }
