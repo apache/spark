@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import scala.collection.JavaConversions._
+
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
@@ -35,7 +37,7 @@ import org.apache.spark.scheduler.{SparkListenerApplicationEnd, SparkListener}
  */
 object HiveThriftServer2 extends Logging {
   var LOG = LogFactory.getLog(classOf[HiveServer2])
-
+  var connectors = Seq("cassandra")
   /**
    * :: DeveloperApi ::
    * Starts a new thrift server with the given context.
@@ -46,6 +48,19 @@ object HiveThriftServer2 extends Logging {
     server.init(sqlContext.hiveconf)
     server.start()
     sqlContext.sparkContext.addSparkListener(new HiveThriftServer2Listener(server))
+  }
+
+  def setConnectorConf() {
+    for ((key, value) <- System.getProperties.toMap; if connectorConfKey(key)) {
+      SparkSQLEnv.hiveContext.hiveconf.set(key, value)
+    }
+  }
+
+  def connectorConfKey(key: String): Boolean = {
+    for (connector <- connectors; if (key.startsWith(connector + "."))) {
+      return true
+    }
+    false
   }
 
   def main(args: Array[String]) {
@@ -67,6 +82,7 @@ object HiveThriftServer2 extends Logging {
 
     try {
       val server = new HiveThriftServer2(SparkSQLEnv.hiveContext)
+      setConnectorConf
       server.init(SparkSQLEnv.hiveContext.hiveconf)
       server.start()
       logInfo("HiveThriftServer2 started")
