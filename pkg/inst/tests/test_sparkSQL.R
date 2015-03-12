@@ -283,6 +283,27 @@ test_that("sampleDF on a DataFrame", {
   expect_true(count(sampled2) < 3)
 })
 
+test_that("select operators", {
+  df <- select(jsonFile(sqlCtx, jsonPath), "name", "age")
+  expect_true(inherits(df$name, "Column"))
+  expect_true(inherits(df[[2]], "Column"))
+  expect_true(inherits(df[["age"]], "Column"))
+
+  expect_true(inherits(df[,1], "DataFrame"))
+  expect_equal(columns(df[,1]), c("name"))
+  expect_equal(columns(df[,"age"]), c("age"))
+  df2 <- df[,c("age", "name")]
+  expect_true(inherits(df2, "DataFrame"))
+  expect_equal(columns(df2), c("age", "name"))
+
+  df$age2 <- df$age
+  expect_equal(columns(df), c("name", "age", "age2"))
+  expect_equal(count(where(df, df$age2 == df$age)), 2)
+  df$age2 <- df$age * 2
+  expect_equal(columns(df), c("name", "age", "age2"))
+  expect_equal(count(where(df, df$age2 == df$age * 2)), 2)
+})
+
 test_that("select with column", {
   df <- jsonFile(sqlCtx, jsonPath)
   df1 <- select(df, "name")
