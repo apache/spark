@@ -44,7 +44,9 @@ import scala.collection.JavaConversions._
 
 private[hive] abstract class HiveFunctionRegistry
   extends analysis.FunctionRegistry with HiveInspectors {
-
+  
+  FunctionRegistry.registerGenericUDF(false, "current_database", classOf[sqlUDFCurrentDB])
+  
   def getFunctionInfo(name: String) = FunctionRegistry.getFunctionInfo(name)
 
   def lookupFunction(name: String, children: Seq[Expression]): Expression = {
@@ -179,12 +181,7 @@ private[hive] case class HiveGenericUdf(funcWrapper: HiveFunctionWrapper, childr
         })
       i += 1
     }
-    
-    if (function.getUdfName().endsWith("UDFCurrentDB")) {
-      unwrap(null, returnInspector)
-    } else {
       unwrap(function.evaluate(deferedObjects), returnInspector)
-    }
   }
 
   override def toString = s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
