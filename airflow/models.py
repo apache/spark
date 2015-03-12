@@ -226,6 +226,8 @@ class Connection(Base):
         from airflow import hooks
         if self.conn_type == 'mysql':
             return hooks.MySqlHook(mysql_conn_id=self.conn_id)
+        elif self.conn_type == 'postgres':
+            return hooks.PostgresHook(postgres_conn_id=self.conn_id)
         elif self.conn_type == 'hive':
             return hooks.HiveHook(hive_conn_id=self.conn_id)
         elif self.conn_type == 'presto':

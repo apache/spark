@@ -12,7 +12,8 @@ BaseOperator documentation for more details.
     :show-inheritance:
     :members: 
         HiveOperator, 
-        MySqlOperator, 
+        MySqlOperator,
+        PostgresOperator, 
         BashOperator, 
         PythonOperator, 
         ExternalTaskSensor, 
@@ -93,7 +94,7 @@ Hooks
 -----
 .. automodule:: airflow.hooks
     :show-inheritance:
-    :members: MySqlHook, PrestoHook, HiveCliHook, HiveServer2Hook, HiveMetastoreHook
+    :members: MySqlHook, PostgresHook, PrestoHook, HiveCliHook, HiveServer2Hook, HiveMetastoreHook
 
 Executors
 ---------

@@ -1252,6 +1252,7 @@ class ConnectionModelView(LoginMixin, ModelView):
             ('hive_metastore', 'Hive Metastore Thrift',),
             ('hiveserver2', 'Hive Server 2 Thrift',),
             ('mysql', 'MySQL',),
+            ('postgres', 'Postgres',),
             ('oracle', 'Oracle',),
             ('presto', 'Presto',),
             ('s3', 'S3',),

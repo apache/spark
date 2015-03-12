@@ -1,4 +1,5 @@
 from airflow.hooks.mysql_hook import MySqlHook
+from airflow.hooks.postgres_hook import PostgresHook
 from airflow.hooks.hive_hooks import HiveCliHook
 from airflow.hooks.hive_hooks import HiveMetastoreHook
 from airflow.hooks.hive_hooks import HiveServer2Hook
