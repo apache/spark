@@ -37,13 +37,13 @@ GridPartitioner
     * It has two member methods: *def numPartitions: Int* and *def getPartition(key: Any): Int*
     * Other existing classes in Spark extending Partitioner:
       - The class *HashPartitioner*
-```
-def numPartitions = partitions
-def getPartition(key: Any): Int = key match {
-  case null => 0
-  case _ => Utils.nonNegativeMod(key.hashCode, numPartitions) 
-}
-```
+      ```
+      def numPartitions = partitions
+      def getPartition(key: Any): Int = key match {
+        case null => 0
+        case _ => Utils.nonNegativeMod(key.hashCode, numPartitions) 
+      }
+      ```
 
   6. Checking preconditions
     * Here, four *require* functions are called inside the class body to check the validation of input values to the class parameters. Tt is the best way to approach the problem caused by the abbreviation of the primary constructor
@@ -54,7 +54,7 @@ def getPartition(key: Any): Int = key match {
     * Here, *GridPartitioner* overrides the method in *Partitioner* via a field
 	* Scala treats fields and methods more uniformly than Java. Fields and methods belong to the same namespace. This makes it possible for a field to override a parameterless method. For instance, you could change the implementation of contents in class *Partitioner* from a method to a field without having to modify the abstract method definition of contents in class *Element*.
 	
-  7. Summary
+  100. Summary
 
 3. The object "GridPartitioner"
 
