@@ -80,29 +80,28 @@ class SparkRBackendHandler(server: SparkRBackend)
       dis: DataInputStream,
       dos: DataOutputStream) {
     var obj: Object = null
-    var cls: Option[Class[_]] = None
     try {
-      if (isStatic) {
-        cls = Some(Class.forName(objId))
+      val cls = if (isStatic) {
+        Class.forName(objId)
       } else {
         JVMObjectTracker.get(objId) match {
           case None => throw new IllegalArgumentException("Object not found " + objId)
           case Some(o) =>
-            cls = Some(o.getClass)
             obj = o
+            o.getClass
         }
       }
 
       val args = readArgs(numArgs, dis)
 
-      val methods = cls.get.getMethods
+      val methods = cls.getMethods
       val selectedMethods = methods.filter(m => m.getName == methodName)
       if (selectedMethods.length > 0) {
         val methods = selectedMethods.filter { x =>
           matchMethod(numArgs, args, x.getParameterTypes)
         }
         if (methods.isEmpty) {
-          System.err.println(s"cannot find matching method ${cls.get}.$methodName. "
+          System.err.println(s"cannot find matching method ${cls}.$methodName. "
             + s"Candidates are:")
           selectedMethods.foreach { method =>
             System.err.println(s"$methodName(${method.getParameterTypes.mkString(",")})")
@@ -116,7 +115,7 @@ class SparkRBackendHandler(server: SparkRBackend)
         writeObject(dos, ret.asInstanceOf[AnyRef])
       } else if (methodName == "<init>") {
         // methodName should be "<init>" for constructor
-        val ctor = cls.get.getConstructors.filter { x =>
+        val ctor = cls.getConstructors.filter { x =>
           matchMethod(numArgs, args, x.getParameterTypes)
         }.head
 
