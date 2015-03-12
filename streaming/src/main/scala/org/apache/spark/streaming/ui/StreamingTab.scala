@@ -36,16 +36,16 @@ private[spark] class StreamingTab(ssc: StreamingContext)
   ssc.addStreamingListener(listener)
   attachPage(new StreamingPage(this))
   parent.attachTab(this)
+
+  def detach() {
+    getSparkUI(ssc).detachTab(this)
+  }
 }
 
-private[spark] object StreamingTab {
+private object StreamingTab {
   def getSparkUI(ssc: StreamingContext): SparkUI = {
     ssc.sc.ui.getOrElse {
       throw new SparkException("Parent SparkUI to attach this tab to not found!")
     }
-  }
-  
-  def detachStreamingTab(ssc: StreamingContext, tab: SparkUITab) {
-    getSparkUI(ssc).detachTab(tab)
   }
 }
