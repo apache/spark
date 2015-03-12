@@ -66,20 +66,8 @@ private[spark] class TaskContextImpl(
   /** Marks the task as completed and triggers the listeners. */
   private[spark] def markTaskCompleted(): Unit = {
     completed = true
-    processCallBacks()
-  }
-
-  /** Marks the task for interruption, i.e. cancellation. */
-  private[spark] def markInterrupted(): Unit = {
-    interrupted = true
-  }
-
-  /**
-   * Process complete callbacks in the reverse order of registration.
-   * This may be called in all situation - success, failure, or cancellation.
-   */
-  private[spark] def processCallBacks(): Unit = {
     val errorMsgs = new ArrayBuffer[String](2)
+    // Process complete callbacks in the reverse order of registration
     onCompleteCallbacks.reverse.foreach { listener =>
       try {
         listener.onTaskCompletion(this)
@@ -92,6 +80,11 @@ private[spark] class TaskContextImpl(
     if (errorMsgs.nonEmpty) {
       throw new TaskCompletionListenerException(errorMsgs)
     }
+  }
+
+  /** Marks the task for interruption, i.e. cancellation. */
+  private[spark] def markInterrupted(): Unit = {
+    interrupted = true
   }
 
   override def isCompleted(): Boolean = completed
