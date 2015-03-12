@@ -53,6 +53,12 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
 
     sql(
       """
+        |SELECT x.stringCol2, y.intCol
+        |FROM test x JOIN test y ON (x.stringCol1 = y.stringCol1)
+      """.stripMargin).explain()
+
+    sql(
+      """
         |SELECT x.stringCol2, avg(y.intCol), sum(x.doubleCol)
         |FROM test x JOIN test y ON (x.stringCol1 = y.stringCol1)
         |GROUP BY x.stringCol2

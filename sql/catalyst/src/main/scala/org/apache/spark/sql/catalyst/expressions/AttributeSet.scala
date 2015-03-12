@@ -37,7 +37,7 @@ object AttributeSet {
     new AttributeSet(Set(new AttributeEquals(a)))
 
   /** Construct a [[AttributeSet]] given a QueryPlan for its direct output attributes */
-  def apply(plan: QueryPlan) = new AttributeSet(plan.output.map(new AttributeEquals(_)).toSet)
+  def apply(plan: QueryPlan[_]) = new AttributeSet(plan.output.map(new AttributeEquals(_)).toSet)
 
   /** Constructs a new [[AttributeSet]] given a sequence of [[Expression Expressions]]. */
   def apply(baseSet: Seq[Expression]) =
