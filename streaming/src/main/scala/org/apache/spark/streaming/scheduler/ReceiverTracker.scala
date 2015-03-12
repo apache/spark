@@ -20,12 +20,11 @@ package org.apache.spark.streaming.scheduler
 
 import scala.collection.mutable.{HashMap, SynchronizedMap}
 import scala.language.existentials
+import scala.Some
 
 import akka.actor._
 
-import scala.Some
 import org.apache.spark._
-import org.apache.spark.SparkContext._
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.receiver.{CleanupOldBlocks, Receiver, ReceiverSupervisorImpl, StopReceiver}
 
@@ -298,13 +297,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         val supervisor = new ReceiverSupervisorImpl(
           receiver, SparkEnv.get, serializableHadoopConf.value, checkpointDirOption)
 
-        // Due to SPARK-5205, `Receiver` stage can not be stopped properly, we need to add a
-        // callback to do some more clean works.
-        context.addTaskCompletionListener { context =>
-          if(context.isInterrupted()) {
-            supervisor.stop("Receiver was killed.", None)
-          }
-        }
+        supervisor.setTaskContext(context)
         supervisor.start()
         supervisor.awaitTermination()
       }

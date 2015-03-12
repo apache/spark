@@ -21,7 +21,7 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.{TaskContext, Logging, SparkConf}
 import org.apache.spark.storage.StreamBlockId
 import java.util.concurrent.CountDownLatch
 import scala.concurrent._
@@ -49,8 +49,8 @@ private[streaming] abstract class ReceiverSupervisor(
   /** Receiver id */
   protected val streamId = receiver.streamId
 
-  /** Has the receiver been marked for stop. */
-  private val stopLatch = new CountDownLatch(1)
+  /** The context of task that is running a `Receiver` */
+  private var taskContext: Option[TaskContext] = None
 
   /** Time between a receiver is stopped and started again */
   private val defaultRestartDelay = conf.getInt("spark.streaming.receiverRestartDelay", 2000)
@@ -111,7 +111,6 @@ private[streaming] abstract class ReceiverSupervisor(
     stoppingError = error.orNull
     stopReceiver(message, error)
     onStop(message, error)
-    stopLatch.countDown()
   }
 
   /** Start receiver */
@@ -161,22 +160,43 @@ private[streaming] abstract class ReceiverSupervisor(
     }
   }
 
-  /** Check if receiver has been marked for stopping */
+  /** Check if receiver has been marked for stopping. */
   def isReceiverStarted() = {
     logDebug("state = " + receiverState)
     receiverState == Started
   }
 
-  /** Check if receiver has been marked for stopping */
+  /** Check if receiver has been marked for stopping. */
   def isReceiverStopped() = {
     logDebug("state = " + receiverState)
     receiverState == Stopped
   }
 
+  /** Due to SPARK-5205, we need `TaskContext` to check if the task is interrupted. */
+  def setTaskContext(context: TaskContext) = {
+    taskContext = Some(context)
+  }
+
+  /**
+   * Due to SPARK-5205, we need to check if the task is interrupted to stop the
+   * `receiver` properly. If `taskContext` is not set, we just need to check
+   * the `receiverState`.
+   */
+  def checkTermination(): Boolean = {
+    taskContext match {
+      case Some(context) => context.isInterrupted || isReceiverStopped()
+      case None => isReceiverStopped()
+    }
+  }
 
   /** Wait the thread until the supervisor is stopped */
   def awaitTermination() {
-    stopLatch.await()
+    while (!checkTermination()) {
+      Thread.sleep(500)
+    }
+    if (!isReceiverStopped()) {
+      stopReceiver()
+    }
     logInfo("Waiting for executor stop is over")
     if (stoppingError != null) {
       logError("Stopped executor with error: " + stoppingError)

@@ -119,7 +119,7 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     }
 
     // Verify that stopping actually stops the thread
-    failAfter(100 millis) {
+    failAfter(1000 millis) {
       receiver.stop("test")
       assert(receiver.isStopped)
       assert(!receiver.otherThread.isAlive)
@@ -145,23 +145,26 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
           task.run(0, 0)
         }
       }.start()
-      Thread.sleep(2000)
 
-      // Verify that receiver was started
-      assert(receiver.onStartCalled)
-      assert(executor.isReceiverStarted)
-      assert(receiver.isStarted)
-      assert(!receiver.isStopped())
-      assert(receiver.otherThread.isAlive)
+      eventually(timeout(500 millis), interval(100 millis)) {
+        // Verify that receiver was started
+        assert(receiver.onStartCalled)
+        assert(executor.isReceiverStarted)
+        assert(receiver.isStarted)
+        assert(!receiver.isStopped())
+        assert(receiver.otherThread.isAlive)
+      }
 
       task.kill(false)
 
-      // Verify that receiver was stopped
-      assert(receiver.onStopCalled)
-      assert(executor.isReceiverStopped)
-      assert(receiver.isStopped)
-      assert(!receiver.isStarted())
-      assert(!receiver.otherThread.isAlive)
+      eventually(timeout(500 millis), interval(100 millis)) {
+        // Verify that receiver was stopped
+        assert(receiver.onStopCalled)
+        assert(executor.isReceiverStopped)
+        assert(receiver.isStopped)
+        assert(!receiver.isStarted())
+        assert(!receiver.otherThread.isAlive)
+      }
     }
   }
 
@@ -341,7 +344,7 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     prefLocs: Seq[TaskLocation] = Nil) extends Task[Unit](stageId, 0) {
     override def runTask(context: TaskContext): Unit = {
       context.addTaskCompletionListener { context =>
-        if(context.isInterrupted()) {
+        if (context.isInterrupted()) {
           executor.stop("Receiver was killed.", None)
         }
       }

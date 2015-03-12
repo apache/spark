@@ -72,7 +72,6 @@ private[spark] class TaskContextImpl(
   /** Marks the task for interruption, i.e. cancellation. */
   private[spark] def markInterrupted(): Unit = {
     interrupted = true
-    processCallBacks()
   }
 
   /**
