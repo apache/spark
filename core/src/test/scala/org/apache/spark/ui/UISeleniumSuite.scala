@@ -338,7 +338,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
         // check whether new page exists
         go to (sc.ui.get.appUIAddress.stripSuffix("/") + "/foo")
-        find(cssSelector("b")).get.text.contains("magic")
+        find(cssSelector("b")).get.text should include ("html magic")
       }
       sparkUI.detachTab(newTab)
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
