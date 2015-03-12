@@ -1345,9 +1345,9 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.streaming.receiver.maxRate</code></td>
-  <td>infinite</td>
+  <td>not set</td>
   <td>
-    Maximum number records per second at which each receiver will receive data.
+    Maximum rate (number of records per second) at which each receiver will receive data.
     Effectively, each stream will consume at most this number of records per second.
     Setting this configuration to 0 or a negative number will put no limit on the rate.
     See the <a href="streaming-programming-guide.html#deploying-applications">deployment guide</a>
@@ -1373,6 +1373,16 @@ Apart from these, the following properties are also available, and may be useful
     Setting this to false will allow the raw data and persisted RDDs to be accessible outside the
     streaming application as they will not be cleared automatically. But it comes at the cost of
     higher memory usage in Spark.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.streaming.kafka.maxRatePerPartition</code></td>
+  <td>not set</td>
+  <td>
+    Maximum rate (number of records per second) at which data will be read from each Kafka
+    partition when using the new Kafka direct stream API. See the
+    <a href="streaming-kafka-integration.html">Kafka Integration guide</a>
+    for more details.
   </td>
 </tr>
 </table>

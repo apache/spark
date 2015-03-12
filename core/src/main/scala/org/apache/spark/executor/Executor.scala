@@ -49,7 +49,6 @@ private[spark] class Executor(
     isLocal: Boolean = false)
   extends Logging
 {
-
   logInfo(s"Starting executor ID $executorId on host $executorHostname")
 
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
