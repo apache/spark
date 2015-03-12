@@ -320,11 +320,9 @@ private[spark] object SizeEstimator extends Logging {
       shellSize += size * count
     }
 
-    // we should choose a larger size and clearly alignedSize >= shellSize.
-    shellSize = alignedSize
-
-    // round up instance filed blocks
-    shellSize = alignSizeUp(shellSize, pointerSize)
+    // Should choose a larger size to be new shellSize and clearly alignedSize >= shellSize, and
+    // round up the instance filed blocks
+    shellSize = alignSizeUp(alignedSize, pointerSize)
 
     // Create and cache a new ClassInfo
     val newInfo = new ClassInfo(shellSize, pointerFields)
@@ -334,6 +332,13 @@ private[spark] object SizeEstimator extends Logging {
 
   private def alignSize(size: Long): Long = alignSizeUp(size, ALIGN_SIZE)
 
+  /**
+   * Compute aligned size. The alignSize must be 2^n, otherwise the result will be wrong.
+   * When alignSize = 2^n, alignSize - 1 = 2^n - 1. The binary representation of (alignSize - 1)
+   * will only have n trailing 1s(0b00...001..1). ~(alignSize - 1) will be 0b11..110..0. Hence,
+   * (size + alignSize - 1) & ~(alignSize - 1) will set the last n bits to zeros, which leads to
+   * multiple of alignSize.
+   */
   private def alignSizeUp(size: Long, alignSize: Int): Long =
     (size + alignSize - 1) & ~(alignSize - 1)
 }
