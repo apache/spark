@@ -44,8 +44,7 @@ def getPartition(key: Any): Int = key match {
   case _ => Utils.nonNegativeMod(key.hashCode, numPartitions) 
 }
 ```
-	
-  
+
   6. Checking preconditions
     * Here, four *require* functions are called inside the class body to check the validation of input values to the class parameters. Tt is the best way to approach the problem caused by the abbreviation of the primary constructor
     * The require method takes one boolean parameter. If the passed value is true, require will return normally. Otherwise, require will prevent the object from being constructed by throwing an IllegalArgumentException
