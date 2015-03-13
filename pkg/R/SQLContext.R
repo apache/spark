@@ -90,6 +90,7 @@ tojson <- function(x) {
 # TODO(davies): support sampling and infer type from NA
 createDataFrame <- function(sqlCtx, data, schema = NULL, samplingRatio = 1.0) {
   if (is.data.frame(data)) {
+      # get the names of columns, they will be put into RDD
       schema <- names(data)
       n <- nrow(data)
       m <- ncol(data)
