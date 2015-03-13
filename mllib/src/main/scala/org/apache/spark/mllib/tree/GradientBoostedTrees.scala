@@ -251,9 +251,15 @@ object GradientBoostedTrees extends Logging {
 
     logInfo("Internal timing for DecisionTree:")
     logInfo(s"$timer")
-
-    new GradientBoostedTreesModel(
-      boostingStrategy.treeStrategy.algo, baseLearners, baseLearnerWeights)
+    if (validate) {
+      new GradientBoostedTreesModel(
+        boostingStrategy.treeStrategy.algo,
+        baseLearners.slice(0, bestM),
+        baseLearnerWeights.slice(0, bestM))
+    } else {
+      new GradientBoostedTreesModel(
+        boostingStrategy.treeStrategy.algo, baseLearners, baseLearnerWeights)
+    }
   }
 
 }

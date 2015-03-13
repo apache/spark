@@ -66,6 +66,7 @@ recommendation model by measuring the Mean Squared Error of rating prediction.
 
 {% highlight scala %}
 import org.apache.spark.mllib.recommendation.ALS
+import org.apache.spark.mllib.recommendation.MatrixFactorizationModel
 import org.apache.spark.mllib.recommendation.Rating
 
 // Load and parse the data
@@ -95,6 +96,10 @@ val MSE = ratesAndPreds.map { case ((user, product), (r1, r2)) =>
   err * err
 }.mean()
 println("Mean Squared Error = " + MSE)
+
+// Save and load model
+model.save(sc, "myModelPath")
+val sameModel = MatrixFactorizationModel.load(sc, "myModelPath")
 {% endhighlight %}
 
 If the rating matrix is derived from another source of information (e.g., it is inferred from
@@ -181,6 +186,10 @@ public class CollaborativeFiltering {
       }
     ).rdd()).mean();
     System.out.println("Mean Squared Error = " + MSE);
+
+    // Save and load model
+    model.save(sc.sc(), "myModelPath");
+    MatrixFactorizationModel sameModel = MatrixFactorizationModel.load(sc.sc(), "myModelPath");
   }
 }
 {% endhighlight %}
@@ -192,7 +201,7 @@ We use the default ALS.train() method which assumes ratings are explicit. We eva
 recommendation by measuring the Mean Squared Error of rating prediction.
 
 {% highlight python %}
-from pyspark.mllib.recommendation import ALS, Rating
+from pyspark.mllib.recommendation import ALS, MatrixFactorizationModel, Rating
 
 # Load and parse the data
 data = sc.textFile("data/mllib/als/test.data")
@@ -209,6 +218,10 @@ predictions = model.predictAll(testdata).map(lambda r: ((r[0], r[1]), r[2]))
 ratesAndPreds = ratings.map(lambda r: ((r[0], r[1]), r[2])).join(predictions)
 MSE = ratesAndPreds.map(lambda r: (r[1][0] - r[1][1])**2).reduce(lambda x, y: x + y) / ratesAndPreds.count()
 print("Mean Squared Error = " + str(MSE))
+
+# Save and load model
+model.save(sc, "myModelPath")
+sameModel = MatrixFactorizationModel.load(sc, "myModelPath")
 {% endhighlight %}
 
 If the rating matrix is derived from other source of information (i.e., it is inferred from other

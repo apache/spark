@@ -49,7 +49,6 @@ private[spark] class Executor(
     isLocal: Boolean = false)
   extends Logging
 {
-
   logInfo(s"Starting executor ID $executorId on host $executorHostname")
 
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
@@ -91,6 +90,12 @@ private[spark] class Executor(
   // Create an actor for receiving RPCs from the driver
   private val executorActor = env.actorSystem.actorOf(
     Props(new ExecutorActor(executorId)), "ExecutorActor")
+
+  // Whether to load classes in user jars before those in Spark jars
+  private val userClassPathFirst: Boolean = {
+    conf.getBoolean("spark.executor.userClassPathFirst",
+      conf.getBoolean("spark.files.userClassPathFirst", false))
+  }
 
   // Create our ClassLoader
   // do this after SparkEnv creation so can access the SecurityManager
@@ -309,7 +314,7 @@ private[spark] class Executor(
     val urls = userClassPath.toArray ++ currentJars.keySet.map { uri =>
       new File(uri.split("/").last).toURI.toURL
     }
-    if (conf.getBoolean("spark.executor.userClassPathFirst", false)) {
+    if (userClassPathFirst) {
       new ChildFirstURLClassLoader(urls, currentLoader)
     } else {
       new MutableURLClassLoader(urls, currentLoader)
@@ -324,14 +329,13 @@ private[spark] class Executor(
     val classUri = conf.get("spark.repl.class.uri", null)
     if (classUri != null) {
       logInfo("Using REPL class URI: " + classUri)
-      val userClassPathFirst: java.lang.Boolean =
-        conf.getBoolean("spark.executor.userClassPathFirst", false)
       try {
+        val _userClassPathFirst: java.lang.Boolean = userClassPathFirst
         val klass = Class.forName("org.apache.spark.repl.ExecutorClassLoader")
           .asInstanceOf[Class[_ <: ClassLoader]]
         val constructor = klass.getConstructor(classOf[SparkConf], classOf[String],
           classOf[ClassLoader], classOf[Boolean])
-        constructor.newInstance(conf, classUri, parent, userClassPathFirst)
+        constructor.newInstance(conf, classUri, parent, _userClassPathFirst)
       } catch {
         case _: ClassNotFoundException =>
           logError("Could not find org.apache.spark.repl.ExecutorClassLoader on classpath!")

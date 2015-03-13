@@ -20,6 +20,7 @@ package test.org.apache.spark.sql;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import org.apache.spark.sql.*;
@@ -80,5 +81,13 @@ public class JavaDataFrameSuite {
     df.groupBy().agg(countDistinct("key", "value"));
     df.groupBy().agg(countDistinct(col("key"), col("value")));
     df.select(coalesce(col("key")));
+  }
+
+  @Ignore
+  public void testShow() {
+    // This test case is intended ignored, but to make sure it compiles correctly
+    DataFrame df = context.table("testData");
+    df.show();
+    df.show(1000);
   }
 }

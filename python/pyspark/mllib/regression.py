@@ -21,8 +21,10 @@ from numpy import array
 from pyspark.mllib.common import callMLlibFunc, inherit_doc
 from pyspark.mllib.linalg import SparseVector, _convert_to_vector
 
-__all__ = ['LabeledPoint', 'LinearModel', 'LinearRegressionModel', 'RidgeRegressionModel',
-           'LinearRegressionWithSGD', 'LassoWithSGD', 'RidgeRegressionWithSGD']
+__all__ = ['LabeledPoint', 'LinearModel',
+           'LinearRegressionModel', 'LinearRegressionWithSGD',
+           'RidgeRegressionModel', 'RidgeRegressionWithSGD',
+           'LassoModel', 'LassoWithSGD']
 
 
 class LabeledPoint(object):
@@ -31,8 +33,11 @@ class LabeledPoint(object):
     The features and labels of a data point.
 
     :param label: Label for this data point.
-    :param features: Vector of features for this point (NumPy array, list,
-        pyspark.mllib.linalg.SparseVector, or scipy.sparse column matrix)
+    :param features: Vector of features for this point (NumPy array,
+             list, pyspark.mllib.linalg.SparseVector, or scipy.sparse
+             column matrix)
+
+    Note: 'label' and 'features' are accessible as class attributes.
     """
 
     def __init__(self, label, features):
