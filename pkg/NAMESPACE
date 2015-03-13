@@ -6,6 +6,7 @@ exportMethods(
               "aggregateRDD",
               "cache",
               "checkpoint",
+              "coalesce",
               "cogroup",
               "collect",
               "collectAsMap",
@@ -48,6 +49,7 @@ exportMethods(
               "reduce",
               "reduceByKey",
               "reduceByKeyLocally",
+              "repartition",
               "rightOuterJoin",
               "sampleRDD",
               "saveAsTextFile",
@@ -61,7 +63,9 @@ exportMethods(
               "unionRDD",
               "unpersist",
               "value",
-              "values"
+              "values",
+              "zipWithIndex",
+              "zipWithUniqueId"
              )
 
 # S3 methods exported

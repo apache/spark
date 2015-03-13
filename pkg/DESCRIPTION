@@ -15,6 +15,7 @@ Suggests:
 Description: R frontend for Spark
 License: Apache License (== 2.0)
 Collate:
+    'generics.R'
     'jobj.R'
     'SQLTypes.R'
     'RDD.R'
