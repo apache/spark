@@ -165,7 +165,15 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
    * Callback called when a batch has been completely processed.
    */
   def onBatchCompletion(time: Time) {
-    lastCompletedBatch = time
+    // Update the lastCompletedBatch only if this batch is actually newer than the previously
+    // completed ones.
+    lastCompletedBatch = {
+      if (lastCompletedBatch < time) {
+        time
+      } else {
+        lastCompletedBatch
+      }
+    }
     eventActor ! ClearMetadata(time)
   }
 
