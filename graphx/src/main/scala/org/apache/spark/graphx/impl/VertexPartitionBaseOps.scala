@@ -90,7 +90,7 @@ private[graphx] abstract class VertexPartitionBaseOps
 
   /**
    * Hides vertices that are the same between this and other. For vertices that are different, keeps
-   * the values from `other`.
+   * the values from `other`. The indices of `this` and `other` must be the same.
    */
   def diff(other: Self[VD]): Self[VD] = {
     if (self.index != other.index) {
