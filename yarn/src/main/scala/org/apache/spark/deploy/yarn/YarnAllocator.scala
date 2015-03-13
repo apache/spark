@@ -85,8 +85,9 @@ private[yarn] class YarnAllocator(
 
   @volatile private var targetNumExecutors = args.numExecutors
 
-  // Keep track of which container is running which executor to remove the executors later
-  private val executorIdToContainer = new HashMap[String, Container]
+  // Keep track of which container is running which executor to remove the executors later.
+  // Visible for testing.
+  private[yarn] val executorIdToContainer = new HashMap[String, Container]
 
   // Executor memory in MB.
   protected val executorMemory = args.executorMemory
@@ -137,6 +138,9 @@ private[yarn] class YarnAllocator(
    * be killed.
    */
   def requestTotalExecutors(requestedTotal: Int): Unit = synchronized {
+    if (requestedTotal < numExecutorsRunning) {
+      throw new IllegalArgumentException("Refusing request to reduce number of running executors.")
+    }
     targetNumExecutors = requestedTotal
   }
 
@@ -217,13 +221,15 @@ private[yarn] class YarnAllocator(
       }
     } else if (missing < 0) {
       val numToCancel = math.min(numPendingAllocate, -missing)
-      logInfo(s"Canceling requests for $numToCancel executor containers")
+      if (numToCancel > 0) {
+        logInfo(s"Canceling requests for $numToCancel executor containers")
 
-      val matchingRequests = amClient.getMatchingRequests(RM_REQUEST_PRIORITY, ANY_HOST, resource)
-      if (!matchingRequests.isEmpty) {
-        matchingRequests.head.take(numToCancel).foreach(amClient.removeContainerRequest)
-      } else {
-        logWarning("Expected to find pending requests, but found none.")
+        val matchingRequests = amClient.getMatchingRequests(RM_REQUEST_PRIORITY, ANY_HOST, resource)
+        if (!matchingRequests.isEmpty) {
+          matchingRequests.head.take(numToCancel).foreach(amClient.removeContainerRequest)
+        } else {
+          logWarning("Expected to find pending requests, but found none.")
+        }
       }
     }
   }
@@ -351,7 +357,7 @@ private[yarn] class YarnAllocator(
     }
   }
 
-  private def processCompletedContainers(completedContainers: Seq[ContainerStatus]): Unit = {
+  private[yarn] def processCompletedContainers(completedContainers: Seq[ContainerStatus]): Unit = {
     for (completedContainer <- completedContainers) {
       val containerId = completedContainer.getContainerId
 

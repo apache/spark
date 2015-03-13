@@ -211,6 +211,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
           CoarseGrainedSchedulerBackend.this.synchronized {
+            addressToExecutorId -= executorInfo.executorAddress
             executorDataMap -= executorId
             executorsPendingToRemove -= executorId
           }
@@ -340,7 +341,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
     }
     numPendingExecutors =
       math.max(numExecutors - numExistingExecutors + executorsPendingToRemove.size, 0)
-    doRequestTotalExecutors(numExecutors)
+    if (numPendingExecutors > 0) {
+      doRequestTotalExecutors(numExecutors)
+    } else {
+      true
+    }
   }
 
   /**

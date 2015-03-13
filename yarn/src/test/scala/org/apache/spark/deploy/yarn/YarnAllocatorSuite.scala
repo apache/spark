@@ -184,15 +184,11 @@ class YarnAllocatorSuite extends FunSuite with Matchers with BeforeAndAfterEach 
     handler.getNumPendingAllocate should be (1)
   }
 
-  test("decrease total requested executors to less than currently running") {
+  test("SPARK-6325: try to decrease total requested executors to less than running count") {
     val handler = createAllocator(4)
     handler.updateResourceRequests()
     handler.getNumExecutorsRunning should be (0)
     handler.getNumPendingAllocate should be (4)
-
-    handler.requestTotalExecutors(3)
-    handler.updateResourceRequests()
-    handler.getNumPendingAllocate should be (3)
 
     val container1 = createContainer("host1")
     val container2 = createContainer("host2")
@@ -200,10 +196,33 @@ class YarnAllocatorSuite extends FunSuite with Matchers with BeforeAndAfterEach 
 
     handler.getNumExecutorsRunning should be (2)
 
-    handler.requestTotalExecutors(1)
-    handler.updateResourceRequests()
-    handler.getNumPendingAllocate should be (0)
+    // SPARK-6325: it's illegal to request less executors than currently running.
+    intercept[IllegalArgumentException] {
+      handler.requestTotalExecutors(1)
+    }
     handler.getNumExecutorsRunning should be (2)
+  }
+
+  test("kill executors") {
+    val handler = createAllocator(4)
+    handler.updateResourceRequests()
+    handler.getNumExecutorsRunning should be (0)
+    handler.getNumPendingAllocate should be (4)
+
+    val container1 = createContainer("host1")
+    val container2 = createContainer("host2")
+    handler.handleAllocatedContainers(Array(container1, container2))
+
+    val executorId = handler.executorIdToContainer
+      .collectFirst { case (k, v) if v == container1 => k }
+      .get
+    handler.killExecutor(executorId)
+
+    val c1Status = ContainerStatus.newInstance(container1.getId(), ContainerState.COMPLETE,
+      "Finished", 0)
+    handler.processCompletedContainers(Seq(c1Status))
+    handler.getNumExecutorsRunning should be (1)
+    handler.getNumPendingAllocate should be (2)
   }
 
   test("memory exceeded diagnostic regexes") {
