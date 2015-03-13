@@ -398,17 +398,16 @@ object ALS extends Logging {
       var i = 0
       var pos = 0
       var a = 0.0
-      val data = ata.data
       while (i < rank) {
         var j = 0
         while (j <= i) {
           a = triAtA(pos)
-          data(i * rank + j) = a
-          data(j * rank + i) = a
+          ata(i,j) = a
+          ata(j,i) = a
           pos += 1
           j += 1
         }
-        data(i * rank + i) += lambda
+        ata(i,i) += lambda
         i += 1
       }
     }

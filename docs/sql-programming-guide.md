@@ -358,7 +358,7 @@ import sqlContext.implicits._
 case class Person(name: String, age: Int)
 
 // Create an RDD of Person objects and register it as a table.
-val people = sc.textFile("examples/src/main/resources/people.txt").map(_.split(",")).map(p => Person(p(0), p(1).trim.toInt))
+val people = sc.textFile("examples/src/main/resources/people.txt").map(_.split(",")).map(p => Person(p(0), p(1).trim.toInt)).toDF()
 people.registerTempTable("people")
 
 // SQL statements can be run by using the sql methods provided by sqlContext.

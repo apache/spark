@@ -452,12 +452,7 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
     val (ratings, _) = genImplicitTestData(numUsers = 20, numItems = 40, rank = 2, noiseStd = 0.01)
     val (userFactors, itemFactors) = ALS.train(ratings, rank = 2, maxIter = 4, nonnegative = true)
     def isNonnegative(factors: RDD[(Int, Array[Float])]): Boolean = {
-      factors.values.map { factor =>
-        factor.forall { x =>
-          if (abs(x) >= 1e-4) println(x)
-          abs(x) >= 1e-4
-        }
-      }.reduce(_ && _)
+      factors.values.map(_.forall(_ >= 0.0)).reduce(_ && _)
     }
     assert(isNonnegative(userFactors))
     assert(isNonnegative(itemFactors))

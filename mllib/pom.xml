@@ -59,6 +59,7 @@
       <groupId>org.jblas</groupId>
       <artifactId>jblas</artifactId>
       <version>${jblas.version}</version>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.scalanlp</groupId>
@@ -116,7 +117,7 @@
         <dependency>
           <groupId>com.github.fommil.netlib</groupId>
           <artifactId>all</artifactId>
-          <version>1.1.2</version>
+          <version>${netlib.java.version}</version>
           <type>pom</type>
         </dependency>
       </dependencies>
