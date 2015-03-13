@@ -27,6 +27,11 @@ col <- function(x) {
   column(callJStatic("org.apache.spark.sql.functions", "col", x))
 }
 
+setMethod("show", "Column",
+          function(object) {
+            cat("Column", callJMethod(object@jc, "toString"), "\n")
+          })
+
 # TODO(davies): like, rlike, startwith, substr, getField, getItem
 operators <- list(
   "+" = "plus", "-" = "minus", "*" = "multiply", "/" = "divide", "%%" = "mod",

@@ -389,7 +389,7 @@ test_that("group by", {
   expect_true(1 == count(df1))
   df1 <- agg(df, age2 = max(df$age))
   expect_true(1 == count(df1))
-  expect_true(columns(df1) == c("age2"))
+  expect_equal(columns(df1), c("age2"))
 
   gd <- groupBy(df, "name")
   expect_true(inherits(gd, "GroupedData"))
@@ -400,6 +400,11 @@ test_that("group by", {
   df3 <- agg(gd, age = "sum")
   expect_true(inherits(df3, "DataFrame"))
   expect_true(3 == count(df3))
+
+  df3 <- agg(gd, age = sum(df$age))
+  expect_true(inherits(df3, "DataFrame"))
+  expect_true(3 == count(df3))
+  expect_equal(columns(df3), c("name", "age"))
 
   df4 <- sum(gd, "age")
   expect_true(inherits(df4, "DataFrame"))

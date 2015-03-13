@@ -1,19 +1,46 @@
-############################## GroupedData ########################################
+# group.R - GroupedData class and methods implemented in S4 OO classes
 
+setOldClass("jobj")
+
+#' @title S4 class that represents a GroupedData
+#' @description GroupedDatas can be created using groupBy() on a DataFrame
+#' @rdname GroupedData
+#' @seealso groupBy
+#'
+#' @param sgd A Java object reference to the backing Scala GroupedData
+#' @export
 setClass("GroupedData",
-         slots = list(env = "environment",
-                      sgd = "jobj"))
+         slots = list(sgd = "jobj"))
 
 setMethod("initialize", "GroupedData", function(.Object, sgd) {
-  .Object@env <- new.env()
   .Object@sgd <- sgd
   .Object
 })
 
+#' @rdname DataFrame
 groupedData <- function(sgd) {
   new("GroupedData", sgd)
 }
 
+
+# TODO(davies): show better message
+setMethod("show", "GroupedData",
+          function(object) {
+            cat("GroupedData\n")
+          })
+
+#' Count
+#'
+#' Count the number of rows for each group.
+#' The resulting DataFrame will also contain the grouping columns.
+#'
+#' @param x a GroupedData
+#' @return a DataFrame
+#' @export
+#' @examples
+#' \dontrun {
+#'   count(groupBy(df, "name"))
+#' }
 setMethod("count",
           signature(x = "GroupedData"),
           function(x) {
@@ -23,9 +50,13 @@ setMethod("count",
 #' Agg
 #'
 #' Aggregates on the entire DataFrame without groups.
+#' The resulting DataFrame will also contain the grouping columns.
 #'
 #' df2 <- agg(df, <column> = <aggFunction>)
 #' df2 <- agg(df, newColName = aggFunction(column))
+#'
+#' @param x a GroupedData
+#' @return a DataFrame
 #' @examples
 #' \dontrun{
 #'  df2 <- agg(df, age = "sum")  # new column name will be created as 'SUM(age#0)'
@@ -51,15 +82,17 @@ setMethod("agg",
                 }
               }
               jcols <- lapply(cols, function(c) { c@jc })
-              sdf <- callJMethod(x@sgd, "agg", jcols[[1]], listToSeq(jcols[-1]))
+              # the GroupedData.agg(col, cols*) API does not contain grouping Column
+              sdf <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "aggWithGrouping",
+                                 x@sgd, listToSeq(jcols))
             } else {
               stop("agg can only support Column or character")
             }
             dataFrame(sdf)
           })
 
-#' sum/mean/avg/min/max
 
+# sum/mean/avg/min/max
 methods <- c("sum", "mean", "avg", "min", "max")
 
 createMethod <- function(name) {

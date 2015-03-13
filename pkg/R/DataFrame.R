@@ -171,6 +171,15 @@ setMethod("showDF",
             cat(callJMethod(x@sdf, "showString", numToInt(numRows)))
           })
 
+setMethod("show", "DataFrame",
+          function(object) {
+            cols <- lapply(dtypes(object), function(l) {
+              paste(l, collapse = ":")
+            })
+            s <- paste(cols, collapse = ", ")
+            cat(paste("DataFrame[", s, "]\n", sep = ""))
+          })
+
 #' DataTypes
 #' 
 #' Return all column names and their data types as a list
@@ -697,8 +706,23 @@ setMethod("toRDD",
 #'
 #' Groups the DataFrame using the specified columns, so we can run aggregation on them.
 #'
+#' @param x a DataFrame
+#' @return a GroupedData
+#' @seealso GroupedData
+#' @rdname DataFrame
+#' @export
+#' @examples
+#' \dontrun {
+#'   # Compute the average for all numeric columns grouped by department.
+#'   avg(groupBy(df, "department"))
+#'
+#'   # Compute the max age and average salary, grouped by department and gender.
+#'   agg(groupBy(df, "department", "gender"), salary="avg", "age" -> "max")
+#' }
 setGeneric("groupBy", function(x, ...) { standardGeneric("groupBy") })
 
+#' @rdname DataFrame
+#' @export
 setMethod("groupBy",
            signature(x = "DataFrame"),
            function(x, ...) {
@@ -712,7 +736,12 @@ setMethod("groupBy",
              groupedData(sgd)
            })
 
-
+#' Agg
+#'
+#' Compute aggregates by specifying a list of columns
+#'
+#' @rdname DataFrame
+#' @export
 setMethod("agg",
           signature(x = "DataFrame"),
           function(x, ...) {
