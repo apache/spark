@@ -31,7 +31,7 @@ class KafkaClusterSuite extends FunSuite with BeforeAndAfterAll {
 
   override def beforeAll() {
     kafkaTestUtils = new KafkaTestUtils
-    kafkaTestUtils.setupEmbeddedServers()
+    kafkaTestUtils.setup()
 
     kafkaTestUtils.createTopic(topic)
     kafkaTestUtils.sendMessages(topic, Map("a" -> 1))
@@ -40,7 +40,7 @@ class KafkaClusterSuite extends FunSuite with BeforeAndAfterAll {
 
   override def afterAll() {
     if (kafkaTestUtils != null) {
-      kafkaTestUtils.teardownEmbeddedServers()
+      kafkaTestUtils.teardown()
       kafkaTestUtils = null
     }
   }

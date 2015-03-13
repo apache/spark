@@ -126,14 +126,14 @@ private class KafkaTestUtils extends Logging {
     brokerReady = true
   }
 
-  /** setup thw whole embedded servers, including Zookeeper and Kafka brokers */
-  def setupEmbeddedServers(): Unit = {
+  /** setup the whole embedded servers, including Zookeeper and Kafka brokers */
+  def setup(): Unit = {
     setupEmbeddedZookeeper()
     setupEmbeddedKafkaServer()
   }
 
-  /** Tear down the whole servers, including Kafka broker and Zookeeper */
-  def teardownEmbeddedServers(): Unit = {
+  /** Teardown the whole servers, including Kafka broker and Zookeeper */
+  def teardown(): Unit = {
     brokerReady = false
     zkReady = false
 

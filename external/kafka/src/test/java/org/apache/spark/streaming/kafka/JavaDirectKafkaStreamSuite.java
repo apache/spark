@@ -46,7 +46,7 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
   @Before
   public void setUp() {
     kafkaTestUtils = new KafkaTestUtils();
-    kafkaTestUtils.setupEmbeddedServers();
+    kafkaTestUtils.setup();
     System.clearProperty("spark.driver.port");
     SparkConf sparkConf = new SparkConf()
       .setMaster("local[4]").setAppName(this.getClass().getSimpleName());
@@ -63,7 +63,7 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     System.clearProperty("spark.driver.port");
 
     if (kafkaTestUtils != null) {
-      kafkaTestUtils.teardownEmbeddedServers();
+      kafkaTestUtils.teardown();
       kafkaTestUtils = null;
     }
   }

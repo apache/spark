@@ -37,7 +37,7 @@ class KafkaRDDSuite extends FunSuite with BeforeAndAfterAll {
   override def beforeAll {
     sc = new SparkContext(sparkConf)
     kafkaTestUtils = new KafkaTestUtils
-    kafkaTestUtils.setupEmbeddedServers()
+    kafkaTestUtils.setup()
   }
 
   override def afterAll {
@@ -47,7 +47,7 @@ class KafkaRDDSuite extends FunSuite with BeforeAndAfterAll {
     }
 
     if (kafkaTestUtils != null) {
-      kafkaTestUtils.teardownEmbeddedServers()
+      kafkaTestUtils.teardown()
       kafkaTestUtils = null
     }
   }

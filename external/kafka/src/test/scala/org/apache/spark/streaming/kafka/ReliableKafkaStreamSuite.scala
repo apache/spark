@@ -53,7 +53,7 @@ class ReliableKafkaStreamSuite extends FunSuite
 
   override def beforeAll() : Unit = {
     kafkaTestUtils = new KafkaTestUtils
-    kafkaTestUtils.setupEmbeddedServers()
+    kafkaTestUtils.setup()
 
     groupId = s"test-consumer-${Random.nextInt(10000)}"
     kafkaParams = Map(
@@ -72,7 +72,7 @@ class ReliableKafkaStreamSuite extends FunSuite
     }
 
     if (kafkaTestUtils != null) {
-      kafkaTestUtils.teardownEmbeddedServers()
+      kafkaTestUtils.teardown()
       kafkaTestUtils = null
     }
   }

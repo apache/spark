@@ -173,7 +173,7 @@ CURRENT_BLOCK=$BLOCK_BUILD
     build/mvn $HIVE_BUILD_ARGS clean package -DskipTests
   else
     echo -e "q\n" \
-      | build/sbt $HIVE_BUILD_ARGS package assembly/assembly  streaming-kafka-assembly/assembly \
+      | build/sbt $HIVE_BUILD_ARGS package assembly/assembly streaming-kafka-assembly/assembly \
       | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
   fi
 }

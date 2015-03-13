@@ -36,7 +36,7 @@ class KafkaStreamSuite extends FunSuite with Eventually with BeforeAndAfterAll {
 
   override def beforeAll(): Unit = {
     kafkaTestUtils = new KafkaTestUtils
-    kafkaTestUtils.setupEmbeddedServers()
+    kafkaTestUtils.setup()
   }
 
   override def afterAll(): Unit = {
@@ -46,7 +46,7 @@ class KafkaStreamSuite extends FunSuite with Eventually with BeforeAndAfterAll {
     }
 
     if (kafkaTestUtils != null) {
-      kafkaTestUtils.teardownEmbeddedServers()
+      kafkaTestUtils.teardown()
       kafkaTestUtils = null
     }
   }
@@ -84,4 +84,3 @@ class KafkaStreamSuite extends FunSuite with Eventually with BeforeAndAfterAll {
     }
   }
 }
-
