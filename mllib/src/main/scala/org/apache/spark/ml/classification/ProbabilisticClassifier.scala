@@ -177,6 +177,8 @@ abstract class ProbabilisticClassificationModel[
    * Predict the probability of each class given the features.
    * These predictions are also called class conditional probabilities.
    *
+   * See BinaryClassificationMetrics.calibration to assess calibration.
+   *
    * This internal method is used to implement [[transform()]] and output [[probabilityCol]].
    *
    * @return Estimated class conditional probabilities
