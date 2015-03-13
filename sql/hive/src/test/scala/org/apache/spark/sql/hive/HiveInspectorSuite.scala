@@ -30,6 +30,7 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.expressions.{Literal, Row}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.ScalaReflection
 
 class HiveInspectorSuite extends FunSuite with HiveInspectors {
   test("Test wrap SettableStructObjectInspector") {
@@ -89,6 +90,9 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
 
   val row = data.map(_.eval(null))
   val dataTypes = data.map(_.dataType)
+  val reflectedRow = row.zip(dataTypes).map {
+    case (data, dt) => ScalaReflection.convertToScala(data, dt)
+  }
 
   def toWritableInspector(dataType: DataType): ObjectInspector = dataType match {
     case ArrayType(tpe, _) =>
@@ -224,5 +228,24 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
     checkValue(null, unwrap(wrap(null, toInspector(dt)), toInspector(dt)))
     checkValue(d, unwrap(wrap(d, toInspector(Literal(d, dt))), toInspector(Literal(d, dt))))
     checkValue(d, unwrap(wrap(null, toInspector(Literal(d, dt))), toInspector(Literal(d, dt))))
+  }
+
+  test("wrap / unwrap Scala Reflected data") {
+
+    val ois = dataTypes.map(toInspector)
+    checkValues(row, reflectedRow.zip(ois).map {
+      case (data, oi) => unwrap(wrap(data, oi), oi)
+    })
+  }
+
+  test("wrapFor / unwrap Scala Reflected data") {
+
+    val ois = dataTypes.map(toInspector)
+    val wrappers = ois.map(wrapperFor)
+    checkValues(row, reflectedRow.zip(wrappers).map {
+      case (data, wrapper) => wrapper(data)
+    }.zip(ois).map {
+      case (wrap, oi) => unwrap(wrap, oi)
+    })
   }
 }

@@ -343,7 +343,10 @@ private[hive] trait HiveInspectors {
       (o: Any) => new HiveVarchar(o.asInstanceOf[String], o.asInstanceOf[String].size)
 
     case _: JavaHiveDecimalObjectInspector =>
-      (o: Any) => HiveShim.createDecimal(o.asInstanceOf[Decimal].toJavaBigDecimal)
+      (o: Any) => o match {
+        case b: java.math.BigDecimal => HiveShim.createDecimal(b)
+        case d: Decimal => HiveShim.createDecimal(d.toJavaBigDecimal)
+      }
 
     case _: JavaDateObjectInspector =>
       (o: Any) => DateUtils.toJavaDate(o.asInstanceOf[Int])
@@ -426,8 +429,10 @@ private[hive] trait HiveInspectors {
       case _: ByteObjectInspector => a.asInstanceOf[java.lang.Byte]
       case _: HiveDecimalObjectInspector if x.preferWritable() =>
         HiveShim.getDecimalWritable(a.asInstanceOf[Decimal])
-      case _: HiveDecimalObjectInspector =>
-        HiveShim.createDecimal(a.asInstanceOf[Decimal].toJavaBigDecimal)
+      case _: HiveDecimalObjectInspector => a match {
+        case b: java.math.BigDecimal => HiveShim.createDecimal(b)
+        case d: Decimal => HiveShim.createDecimal(d.toJavaBigDecimal)
+      }
       case _: BinaryObjectInspector if x.preferWritable() => HiveShim.getBinaryWritable(a)
       case _: BinaryObjectInspector => a.asInstanceOf[Array[Byte]]
       case _: DateObjectInspector if x.preferWritable() => HiveShim.getDateWritable(a)
