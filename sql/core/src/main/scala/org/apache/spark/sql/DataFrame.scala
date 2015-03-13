@@ -64,7 +64,7 @@ private[sql] object DataFrame {
  *   val people = sqlContext.parquetFile("...")
  *
  *   // Create a DataFrame from data sources
- *   val df =
+ *   val df = sqlContext.load("...", "json")
  * }}}
  *
  * Once created, it can be manipulated using the various domain-specific-language (DSL) functions
@@ -80,9 +80,10 @@ private[sql] object DataFrame {
  * {{{
  *   // The following creates a new column that increases everybody's age by 10.
  *   people("age") + 10  // in Scala
+ *   people.col("age").plus(10);  // in Java
  * }}}
  *
- * A more concrete example:
+ * A more concrete example in Scala:
  * {{{
  *   // To create DataFrame using SQLContext
  *   val people = sqlContext.parquetFile("...")
@@ -94,6 +95,18 @@ private[sql] object DataFrame {
  *     .agg(avg(people("salary")), max(people("age")))
  * }}}
  *
+ * and in Java:
+ * {{{
+ *   // To create DataFrame using SQLContext
+ *   DataFrame people = sqlContext.parquetFile("...");
+ *   DataFrame department = sqlContext.parquetFile("...");
+ *
+ *   people.filter("age".gt(30))
+ *     .join(department, people.col("deptId").equalTo(department("id")))
+ *     .groupBy(department.col("name"), "gender")
+ *     .agg(avg(people.col("salary")), max(people.col("age")));
+ * }}}
+ *
  * @groupname basic Basic DataFrame functions
  * @groupname dfops Language Integrated Queries
  * @groupname rdd RDD Operations
@@ -102,7 +115,7 @@ private[sql] object DataFrame {
  */
 // TODO: Improve documentation.
 @Experimental
-class DataFrame protected[sql](
+class DataFrame private[sql](
     @transient val sqlContext: SQLContext,
     @DeveloperApi @transient val queryExecution: SQLContext#QueryExecution)
   extends RDDApi[Row] with Serializable {
@@ -295,12 +308,14 @@ class DataFrame protected[sql](
    *   1984  04    0.450090        0.483521
    * }}}
    * @param numRows Number of rows to show
-   * @group basic
+   *
+   * @group action
    */
   def show(numRows: Int): Unit = println(showString(numRows))
 
   /**
    * Displays the top 20 rows of [[DataFrame]] in a tabular form.
+   * @group action
    */
   def show(): Unit = show(20)
 
@@ -738,16 +753,19 @@ class DataFrame protected[sql](
 
   /**
    * Returns the first `n` rows.
+   * @group action
    */
   def head(n: Int): Array[Row] = limit(n).collect()
 
   /**
    * Returns the first row.
+   * @group action
    */
   def head(): Row = head(1).head
 
   /**
    * Returns the first row. Alias for head().
+   * @group action
    */
   override def first(): Row = head()
 
@@ -834,6 +852,11 @@ class DataFrame protected[sql](
   /**
    * @group basic
    */
+  override def cache(): this.type = persist()
+
+  /**
+   * @group basic
+   */
   override def persist(newLevel: StorageLevel): this.type = {
     sqlContext.cacheManager.cacheQuery(this, None, newLevel)
     this
@@ -846,6 +869,11 @@ class DataFrame protected[sql](
     sqlContext.cacheManager.tryUncacheQuery(this, blocking)
     this
   }
+
+  /**
+   * @group basic
+   */
+  override def unpersist(): this.type = unpersist(blocking = false)
 
   /////////////////////////////////////////////////////////////////////////////
   // I/O

@@ -39,7 +39,7 @@ class Estimator(Params):
         Fits a model to the input dataset with optional parameters.
 
         :param dataset: input dataset, which is an instance of
-                        :py:class:`pyspark.sql.SchemaRDD`
+                        :py:class:`pyspark.sql.DataFrame`
         :param params: an optional param map that overwrites embedded
                        params
         :returns: fitted model
@@ -62,7 +62,7 @@ class Transformer(Params):
         Transforms the input dataset with optional parameters.
 
         :param dataset: input dataset, which is an instance of
-                        :py:class:`pyspark.sql.SchemaRDD`
+                        :py:class:`pyspark.sql.DataFrame`
         :param params: an optional param map that overwrites embedded
                        params
         :returns: transformed dataset

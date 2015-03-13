@@ -542,20 +542,16 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group specificdata
    */
   @Experimental
-  def jsonFile(path: String, schema: StructType): DataFrame = {
-    val json = sparkContext.textFile(path)
-    jsonRDD(json, schema)
-  }
+  def jsonFile(path: String, schema: StructType): DataFrame =
+    load("json", schema, Map("path" -> path))
 
   /**
    * :: Experimental ::
    * @group specificdata
    */
   @Experimental
-  def jsonFile(path: String, samplingRatio: Double): DataFrame = {
-    val json = sparkContext.textFile(path)
-    jsonRDD(json, samplingRatio)
-  }
+  def jsonFile(path: String, samplingRatio: Double): DataFrame =
+    load("json", Map("path" -> path, "samplingRatio" -> samplingRatio.toString))
 
   /**
    * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a

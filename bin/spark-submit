@@ -17,58 +17,18 @@
 # limitations under the License.
 #
 
-# NOTE: Any changes in this file must be reflected in SparkSubmitDriverBootstrapper.scala!
+SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 
-export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
-ORIG_ARGS=("$@")
-
-# Set COLUMNS for progress bar
-export COLUMNS=`tput cols`
-
-while (($#)); do
-  if [ "$1" = "--deploy-mode" ]; then
-    SPARK_SUBMIT_DEPLOY_MODE=$2
-  elif [ "$1" = "--properties-file" ]; then
-    SPARK_SUBMIT_PROPERTIES_FILE=$2
-  elif [ "$1" = "--driver-memory" ]; then
-    export SPARK_SUBMIT_DRIVER_MEMORY=$2
-  elif [ "$1" = "--driver-library-path" ]; then
-    export SPARK_SUBMIT_LIBRARY_PATH=$2
-  elif [ "$1" = "--driver-class-path" ]; then
-    export SPARK_SUBMIT_CLASSPATH=$2
-  elif [ "$1" = "--driver-java-options" ]; then
-    export SPARK_SUBMIT_OPTS=$2
-  elif [ "$1" = "--master" ]; then
-    export MASTER=$2
-  fi
-  shift
-done
-
-if [ -z "$SPARK_CONF_DIR" ]; then
-  export SPARK_CONF_DIR="$SPARK_HOME/conf"
-fi
-DEFAULT_PROPERTIES_FILE="$SPARK_CONF_DIR/spark-defaults.conf"
-if [ "$MASTER" == "yarn-cluster" ]; then
-  SPARK_SUBMIT_DEPLOY_MODE=cluster
-fi
-export SPARK_SUBMIT_DEPLOY_MODE=${SPARK_SUBMIT_DEPLOY_MODE:-"client"}
-export SPARK_SUBMIT_PROPERTIES_FILE=${SPARK_SUBMIT_PROPERTIES_FILE:-"$DEFAULT_PROPERTIES_FILE"}
-
-# For client mode, the driver will be launched in the same JVM that launches
-# SparkSubmit, so we may need to read the properties file for any extra class
-# paths, library paths, java options and memory early on. Otherwise, it will
-# be too late by the time the driver JVM has started.
-
-if [[ "$SPARK_SUBMIT_DEPLOY_MODE" == "client" && -f "$SPARK_SUBMIT_PROPERTIES_FILE" ]]; then
-  # Parse the properties file only if the special configs exist
-  contains_special_configs=$(
-    grep -e "spark.driver.extra*\|spark.driver.memory" "$SPARK_SUBMIT_PROPERTIES_FILE" | \
-    grep -v "^[[:space:]]*#"
-  )
-  if [ -n "$contains_special_configs" ]; then
-    export SPARK_SUBMIT_BOOTSTRAP_DRIVER=1
-  fi
+# Only define a usage function if an upstream script hasn't done so.
+if ! type -t usage >/dev/null 2>&1; then
+  usage() {
+    if [ -n "$1" ]; then
+      echo "$1"
+    fi
+    "$SPARK_HOME"/bin/spark-class org.apache.spark.deploy.SparkSubmit --help
+    exit "$2"
+  }
+  export -f usage
 fi
 
-exec "$SPARK_HOME"/bin/spark-class org.apache.spark.deploy.SparkSubmit "${ORIG_ARGS[@]}"
-
+exec "$SPARK_HOME"/bin/spark-class org.apache.spark.deploy.SparkSubmit "$@"

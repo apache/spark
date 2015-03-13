@@ -34,11 +34,11 @@ object BuildCommons {
 
   val allProjects@Seq(bagel, catalyst, core, graphx, hive, hiveThriftServer, mllib, repl,
     sql, networkCommon, networkShuffle, streaming, streamingFlumeSink, streamingFlume, streamingKafka,
-    streamingMqtt, streamingTwitter, streamingZeromq) =
+    streamingMqtt, streamingTwitter, streamingZeromq, launcher) =
     Seq("bagel", "catalyst", "core", "graphx", "hive", "hive-thriftserver", "mllib", "repl",
       "sql", "network-common", "network-shuffle", "streaming", "streaming-flume-sink",
       "streaming-flume", "streaming-kafka", "streaming-mqtt", "streaming-twitter",
-      "streaming-zeromq").map(ProjectRef(buildLocation, _))
+      "streaming-zeromq", "launcher").map(ProjectRef(buildLocation, _))
 
   val optionallyEnabledProjects@Seq(yarn, yarnStable, java8Tests, sparkGangliaLgpl,
     sparkKinesisAsl) = Seq("yarn", "yarn-stable", "java8-tests", "ganglia-lgpl",
@@ -155,8 +155,9 @@ object SparkBuild extends PomBuild {
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
 
   // TODO: Add Sql to mima checks
+  // TODO: remove launcher from this list after 1.3.
   allProjects.filterNot(x => Seq(spark, sql, hive, hiveThriftServer, catalyst, repl,
-    networkCommon, networkShuffle, networkYarn).contains(x)).foreach {
+    networkCommon, networkShuffle, networkYarn, launcher).contains(x)).foreach {
       x => enable(MimaBuild.mimaSettings(sparkHome, x))(x)
     }
 
@@ -357,6 +358,21 @@ object Unidoc {
     names.map(s => "org.apache.spark." + s).mkString(":")
   }
 
+  private def ignoreUndocumentedPackages(packages: Seq[Seq[File]]): Seq[Seq[File]] = {
+    packages
+      .map(_.filterNot(_.getName.contains("$")))
+      .map(_.filterNot(_.getCanonicalPath.contains("akka")))
+      .map(_.filterNot(_.getCanonicalPath.contains("deploy")))
+      .map(_.filterNot(_.getCanonicalPath.contains("network")))
+      .map(_.filterNot(_.getCanonicalPath.contains("shuffle")))
+      .map(_.filterNot(_.getCanonicalPath.contains("executor")))
+      .map(_.filterNot(_.getCanonicalPath.contains("python")))
+      .map(_.filterNot(_.getCanonicalPath.contains("collection")))
+      .map(_.filterNot(_.getCanonicalPath.contains("sql/catalyst")))
+      .map(_.filterNot(_.getCanonicalPath.contains("sql/execution")))
+      .map(_.filterNot(_.getCanonicalPath.contains("sql/hive/test")))
+  }
+
   lazy val settings = scalaJavaUnidocSettings ++ Seq (
     publish := {},
 
@@ -368,22 +384,12 @@ object Unidoc {
     // Skip actual catalyst, but include the subproject.
     // Catalyst is not public API and contains quasiquotes which break scaladoc.
     unidocAllSources in (ScalaUnidoc, unidoc) := {
-      (unidocAllSources in (ScalaUnidoc, unidoc)).value
-        .map(_.filterNot(_.getCanonicalPath.contains("sql/catalyst")))
+      ignoreUndocumentedPackages((unidocAllSources in (ScalaUnidoc, unidoc)).value)
     },
 
     // Skip class names containing $ and some internal packages in Javadocs
     unidocAllSources in (JavaUnidoc, unidoc) := {
-      (unidocAllSources in (JavaUnidoc, unidoc)).value
-        .map(_.filterNot(_.getName.contains("$")))
-        .map(_.filterNot(_.getCanonicalPath.contains("akka")))
-        .map(_.filterNot(_.getCanonicalPath.contains("deploy")))
-        .map(_.filterNot(_.getCanonicalPath.contains("network")))
-        .map(_.filterNot(_.getCanonicalPath.contains("shuffle")))
-        .map(_.filterNot(_.getCanonicalPath.contains("executor")))
-        .map(_.filterNot(_.getCanonicalPath.contains("python")))
-        .map(_.filterNot(_.getCanonicalPath.contains("collection")))
-        .map(_.filterNot(_.getCanonicalPath.contains("sql/catalyst")))
+      ignoreUndocumentedPackages((unidocAllSources in (JavaUnidoc, unidoc)).value)
     },
 
     // Javadoc options: create a window title, and group key packages on index page
@@ -402,7 +408,8 @@ object Unidoc {
         "mllib.tree.impurity", "mllib.tree.model", "mllib.util",
         "mllib.evaluation", "mllib.feature", "mllib.random", "mllib.stat.correlation",
         "mllib.stat.test", "mllib.tree.impl", "mllib.tree.loss",
-        "ml", "ml.classification", "ml.evaluation", "ml.feature", "ml.param", "ml.tuning"
+        "ml", "ml.attribute", "ml.classification", "ml.evaluation", "ml.feature", "ml.param",
+        "ml.tuning"
       ),
       "-group", "Spark SQL", packageList("sql.api.java", "sql.api.java.types", "sql.hive.api.java"),
       "-noqualifier", "java.lang"
