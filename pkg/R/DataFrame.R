@@ -177,7 +177,7 @@ setMethod("show", "DataFrame",
               paste(l, collapse = ":")
             })
             s <- paste(cols, collapse = ", ")
-            cat(paste("DataFrame[", s, "]\n"))
+            cat(paste("DataFrame[", s, "]\n", sep = ""))
           })
 
 #' DataTypes
