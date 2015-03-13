@@ -117,7 +117,9 @@ class CheckpointWriter(
   private var fs_ : FileSystem = _
 
   class CheckpointWriteHandler(
-      checkpointTime: Time, bytes: Array[Byte], clearCheckpointDataLater: Boolean) extends Runnable {
+      checkpointTime: Time,
+      bytes: Array[Byte],
+      clearCheckpointDataLater: Boolean) extends Runnable {
     def run() {
       var attempts = 0
       val startTime = System.currentTimeMillis()
