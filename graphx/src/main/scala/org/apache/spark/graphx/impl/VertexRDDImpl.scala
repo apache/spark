@@ -104,7 +104,7 @@ class VertexRDDImpl[VD] private[graphx] (
     this.mapVertexPartitions(_.map(f))
 
   override def diff(other: RDD[(VertexId, VD)]): VertexRDD[VD] = {
-    diff(VertexRDD(other))
+    diff(this.aggregateUsingIndex(other, (a: VD, b: VD) => a))
   }
 
   override def diff(other: VertexRDD[VD]): VertexRDD[VD] = {
