@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedGetField, Resolver}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedGetField, Resolver}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
@@ -41,7 +41,14 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
     }.toArray
 
     val defaultCtor = getClass.getConstructors.find(_.getParameterTypes.size != 0).head
-    defaultCtor.newInstance(newArgs: _*).asInstanceOf[this.type]
+    defaultCtor.newInstance(newArgs: _*).asInstanceOf[this.type].transformExpressionsUp {
+      case a: AttributeReference =>
+        // roll back the attribute references as unresolved
+        UnresolvedAttribute((a.qualifiers ++ Seq(a.name)).mkString("."))
+      case a: Alias =>
+        // change the exprId for the existed Alias
+        Alias(a.child, a.name)(qualifiers = a.qualifiers)
+    }
   }
 
   /**
