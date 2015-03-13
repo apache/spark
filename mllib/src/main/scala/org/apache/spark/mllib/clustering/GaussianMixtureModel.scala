@@ -101,7 +101,7 @@ class GaussianMixtureModel(
 @Experimental
 object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
 
-  object SaveLoadV1_0 {
+  private object SaveLoadV1_0 {
 
     case class Data(weights: Array[Double], mus: Array[Vector], sigmas: Array[Array[Double]])
 
@@ -113,7 +113,7 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
         sc: SparkContext,
         path: String,
         weights: Array[Double],
-        gaussians: Array[MultivariateGaussian]) : Unit = {
+        gaussians: Array[MultivariateGaussian]): Unit = {
 
       val sqlContext = new SQLContext(sc)
       import sqlContext.implicits._

@@ -49,7 +49,7 @@ class GaussianMixtureSuite extends FunSuite with MLlibTestSparkContext {
   }
   
   test("two clusters") {
-    val data = GaussianTestData.data
+    val data = sc.parallelize(GaussianTestData.data)
 
     // we set an initial gaussian to induce expected results
     val initialGmm = new GaussianMixtureModel(
@@ -100,7 +100,7 @@ class GaussianMixtureSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("two clusters with sparse data") {
-    val data = GaussianTestData.data
+    val data = sc.parallelize(GaussianTestData.data)
     val sparseData = data.map(point => Vectors.sparse(1, Array(0), point.toArray))
     // we set an initial gaussian to induce expected results
     val initialGmm = new GaussianMixtureModel(
@@ -128,7 +128,7 @@ class GaussianMixtureSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("model save / load") {
-    val data = GaussianTestData.data
+    val data = sc.parallelize(GaussianTestData.data)
 
     val gmm = new GaussianMixture().setK(2).setSeed(0).run(data)
     val tempDir = Utils.createTempDir()
@@ -149,13 +149,13 @@ class GaussianMixtureSuite extends FunSuite with MLlibTestSparkContext {
 
   object GaussianTestData {
 
-    val data = sc.parallelize(Array(
+    val data = Array(
       Vectors.dense(-5.1971), Vectors.dense(-2.5359), Vectors.dense(-3.8220),
       Vectors.dense(-5.2211), Vectors.dense(-5.0602), Vectors.dense( 4.7118),
       Vectors.dense( 6.8989), Vectors.dense( 3.4592), Vectors.dense( 4.6322),
       Vectors.dense( 5.7048), Vectors.dense( 4.6567), Vectors.dense( 5.5026),
       Vectors.dense( 4.5605), Vectors.dense( 5.2043), Vectors.dense( 6.2734)
-    ))
+    )
 
   }
 }
