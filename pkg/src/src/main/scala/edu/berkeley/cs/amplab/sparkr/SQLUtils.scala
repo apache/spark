@@ -16,8 +16,9 @@ object SQLUtils {
   }
 
   // A helper to include grouping columns in Agg()
+  // TODO(davies): use internal API after merged into Spark
   def aggWithGrouping(gd: GroupedData, exprs: Column*): DataFrame = {
-    val aggExprs = exprs.map{ col =>
+    val aggExprs = exprs.map { col =>
       val f = col.getClass.getDeclaredField("expr")
       f.setAccessible(true)
       val expr = f.get(col).asInstanceOf[Expression]

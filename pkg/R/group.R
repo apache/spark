@@ -23,6 +23,12 @@ groupedData <- function(sgd) {
 }
 
 
+# TODO(davies): show better message
+setMethod("show", "GroupedData",
+          function(object) {
+            cat("GroupedData\n")
+          })
+
 #' Count
 #'
 #' Count the number of rows for each group.
@@ -33,6 +39,7 @@ groupedData <- function(sgd) {
 #' @export
 #' @examples
 #' \dontrun {
+#'   count(groupBy(df, "name"))
 #' }
 setMethod("count",
           signature(x = "GroupedData"),

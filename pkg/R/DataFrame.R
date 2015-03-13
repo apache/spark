@@ -171,6 +171,15 @@ setMethod("showDF",
             cat(callJMethod(x@sdf, "showString", numToInt(numRows)))
           })
 
+setMethod("show", "DataFrame",
+          function(object) {
+            cols <- lapply(dtypes(object), function(l) {
+              paste(l, collapse = ":")
+            })
+            s <- paste(cols, collapse = ", ")
+            cat(paste("DataFrame[", s, "]\n"))
+          })
+
 #' DataTypes
 #' 
 #' Return all column names and their data types as a list
@@ -707,7 +716,7 @@ setMethod("toRDD",
 #'   # Compute the average for all numeric columns grouped by department.
 #'   avg(groupBy(df, "department"))
 #'
-#'   // Compute the max age and average salary, grouped by department and gender.
+#'   # Compute the max age and average salary, grouped by department and gender.
 #'   agg(groupBy(df, "department", "gender"), salary="avg", "age" -> "max")
 #' }
 setGeneric("groupBy", function(x, ...) { standardGeneric("groupBy") })
