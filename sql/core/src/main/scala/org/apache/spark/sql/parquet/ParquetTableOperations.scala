@@ -379,6 +379,8 @@ private[sql] case class InsertIntoParquetTable(
  */
 private[parquet] class AppendingParquetOutputFormat(offset: Int)
   extends parquet.hadoop.ParquetOutputFormat[Row] {
+  var committer: OutputCommitter = null
+
   // override to accept existing directories as valid output directory
   override def checkOutputSpecs(job: JobContext): Unit = {}
 
@@ -402,6 +404,27 @@ private[parquet] class AppendingParquetOutputFormat(offset: Int)
   // the opcode of method call for class is INVOKEVIRTUAL and for interface is INVOKEINTERFACE.
   private def getTaskAttemptID(context: TaskAttemptContext): TaskAttemptID = {
     context.getClass.getMethod("getTaskAttemptID").invoke(context).asInstanceOf[TaskAttemptID]
+  }
+
+  // override to choose between ParquetOutputCommitter and DirectParquetOutputCommitter
+  override def getOutputCommitter(context: TaskAttemptContext): OutputCommitter = {
+    if (committer == null) {
+      val output = getOutputPath(context)
+      val marker = "spark.sql.parquet.useDirectParquetOutputCommitter"
+      committer = context.getConfiguration.getBoolean(marker, false) match {
+        case true  => new DirectParquetOutputCommitter(output, context)
+        case false => new ParquetOutputCommitter(output, context)
+      }
+    }
+    committer
+  }
+
+  // FileOutputFormat.getOutputPath takes JobConf in hadoop-1 but JobContext in hadoop-2
+  private def getOutputPath(context: TaskAttemptContext): Path = {
+    context.getConfiguration().get("mapred.output.dir") match {
+      case null => null
+      case name => new Path(name)
+    }
   }
 }
 
