@@ -54,13 +54,12 @@ class DirectKafkaStreamSuite
 
   override def beforeAll {
     kafkaTestUtils = new KafkaTestUtils
-    kafkaTestUtils.setupEmbeddedZookeeper()
-    kafkaTestUtils.setupEmbeddedKafkaServer()
+    kafkaTestUtils.setupEmbeddedServers()
   }
 
   override def afterAll {
     if (kafkaTestUtils != null) {
-      kafkaTestUtils.tearDownEmbeddedServers()
+      kafkaTestUtils.teardownEmbeddedServers()
       kafkaTestUtils = null
     }
   }
@@ -88,7 +87,7 @@ class DirectKafkaStreamSuite
     }
     val totalSent = data.values.sum * topics.size
     val kafkaParams = Map(
-      "metadata.broker.list" -> s"${kafkaTestUtils.brokerAddress}",
+      "metadata.broker.list" -> kafkaTestUtils.brokerAddress,
       "auto.offset.reset" -> "smallest"
     )
 
@@ -134,7 +133,7 @@ class DirectKafkaStreamSuite
     val data = Map("a" -> 10)
     kafkaTestUtils.createTopic(topic)
     val kafkaParams = Map(
-      "metadata.broker.list" -> s"${kafkaTestUtils.brokerAddress}",
+      "metadata.broker.list" -> kafkaTestUtils.brokerAddress,
       "auto.offset.reset" -> "largest"
     )
     val kc = new KafkaCluster(kafkaParams)
@@ -179,7 +178,7 @@ class DirectKafkaStreamSuite
     val data = Map("a" -> 10)
     kafkaTestUtils.createTopic(topic)
     val kafkaParams = Map(
-      "metadata.broker.list" -> s"${kafkaTestUtils.brokerAddress}",
+      "metadata.broker.list" -> kafkaTestUtils.brokerAddress,
       "auto.offset.reset" -> "largest"
     )
     val kc = new KafkaCluster(kafkaParams)
@@ -225,7 +224,7 @@ class DirectKafkaStreamSuite
     testDir = Utils.createTempDir()
 
     val kafkaParams = Map(
-      "metadata.broker.list" -> s"${kafkaTestUtils.brokerAddress}",
+      "metadata.broker.list" -> kafkaTestUtils.brokerAddress,
       "auto.offset.reset" -> "smallest"
     )
 

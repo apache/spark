@@ -17,7 +17,6 @@
 
 package org.apache.spark.streaming.kafka
 
-
 import java.io.File
 
 import scala.collection.mutable
@@ -28,7 +27,7 @@ import scala.util.Random
 import kafka.serializer.StringDecoder
 import kafka.utils.{ZKGroupTopicDirs, ZkUtils}
 import org.apache.commons.io.FileUtils
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.SparkConf
@@ -36,7 +35,8 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Milliseconds, StreamingContext}
 import org.apache.spark.util.Utils
 
-class ReliableKafkaStreamSuite extends FunSuite with BeforeAndAfter with Eventually {
+class ReliableKafkaStreamSuite extends FunSuite
+    with BeforeAndAfterAll with BeforeAndAfter with Eventually {
 
   private val sparkConf = new SparkConf()
     .setMaster("local[4]")
@@ -51,10 +51,9 @@ class ReliableKafkaStreamSuite extends FunSuite with BeforeAndAfter with Eventua
   private var ssc: StreamingContext = _
   private var tempDirectory: File = null
 
-  before {
+  override def beforeAll() : Unit = {
     kafkaTestUtils = new KafkaTestUtils
-    kafkaTestUtils.setupEmbeddedZookeeper()
-    kafkaTestUtils.setupEmbeddedKafkaServer()
+    kafkaTestUtils.setupEmbeddedServers()
 
     groupId = s"test-consumer-${Random.nextInt(10000)}"
     kafkaParams = Map(
@@ -62,31 +61,33 @@ class ReliableKafkaStreamSuite extends FunSuite with BeforeAndAfter with Eventua
       "group.id" -> groupId,
       "auto.offset.reset" -> "smallest"
     )
-
-    ssc = new StreamingContext(sparkConf, Milliseconds(500))
-    tempDirectory = Utils.createTempDir()
-    ssc.checkpoint(tempDirectory.getAbsolutePath)
-  }
-
-  after {
-    if (ssc != null) {
-      ssc.stop()
-    }
-<<<<<<< HEAD
     Utils.deleteRecursively(tempDirectory)
     tearDownKafka()
-=======
+  }
 
+  override def afterAll(): Unit = {
     if (tempDirectory != null && tempDirectory.exists()) {
       FileUtils.deleteDirectory(tempDirectory)
       tempDirectory = null
     }
 
     if (kafkaTestUtils != null) {
-      kafkaTestUtils.tearDownEmbeddedServers()
+      kafkaTestUtils.teardownEmbeddedServers()
       kafkaTestUtils = null
     }
->>>>>>> Refactor the Kafka unit test and add Python Kafka unittest support
+  }
+
+  before {
+    ssc = new StreamingContext(sparkConf, Milliseconds(500))
+    tempDirectory = Files.createTempDir()
+    ssc.checkpoint(tempDirectory.getAbsolutePath)
+  }
+
+  after {
+    if (ssc != null) {
+      ssc.stop()
+      ssc = null
+    }
   }
 
 
@@ -146,9 +147,8 @@ class ReliableKafkaStreamSuite extends FunSuite with BeforeAndAfter with Eventua
 
   /** Getting partition offset from Zookeeper. */
   private def getCommitOffset(groupId: String, topic: String, partition: Int): Option[Long] = {
-    assert(kafkaTestUtils.zkClient != null, "Zookeeper client is not initialized")
     val topicDirs = new ZKGroupTopicDirs(groupId, topic)
     val zkPath = s"${topicDirs.consumerOffsetDir}/$partition"
-    ZkUtils.readDataMaybeNull(kafkaTestUtils.zkClient, zkPath)._1.map(_.toLong)
+    ZkUtils.readDataMaybeNull(kafkaTestUtils.zookeeperClient, zkPath)._1.map(_.toLong)
   }
 }

@@ -22,7 +22,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Random;
 
-import scala.Predef;
 import scala.Tuple2;
 
 import kafka.serializer.StringDecoder;
@@ -48,8 +47,7 @@ public class JavaKafkaStreamSuite implements Serializable {
   @Before
   public void setUp() {
     kafkaTestUtils = new KafkaTestUtils();
-    kafkaTestUtils.setupEmbeddedZookeeper();
-    kafkaTestUtils.setupEmbeddedKafkaServer();
+    kafkaTestUtils.setupEmbeddedServers();
     System.clearProperty("spark.driver.port");
     SparkConf sparkConf = new SparkConf()
       .setMaster("local[4]").setAppName(this.getClass().getSimpleName());
@@ -66,7 +64,7 @@ public class JavaKafkaStreamSuite implements Serializable {
     System.clearProperty("spark.driver.port");
 
     if (kafkaTestUtils != null) {
-      kafkaTestUtils.tearDownEmbeddedServers();
+      kafkaTestUtils.teardownEmbeddedServers();
       kafkaTestUtils = null;
     }
   }

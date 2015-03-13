@@ -23,31 +23,30 @@ import scala.language.postfixOps
 import scala.util.Random
 
 import kafka.serializer.StringDecoder
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.{BeforeAndAfterAll, FunSuite}
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.SparkConf
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Milliseconds, StreamingContext}
 
-class KafkaStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
+class KafkaStreamSuite extends FunSuite with Eventually with BeforeAndAfterAll {
   private var ssc: StreamingContext = _
   private var kafkaTestUtils: KafkaTestUtils = _
 
-  before {
+  override def beforeAll(): Unit = {
     kafkaTestUtils = new KafkaTestUtils
-    kafkaTestUtils.setupEmbeddedZookeeper()
-    kafkaTestUtils.setupEmbeddedKafkaServer()
+    kafkaTestUtils.setupEmbeddedServers()
   }
 
-  after {
+  override def afterAll(): Unit = {
     if (ssc != null) {
       ssc.stop()
       ssc = null
     }
 
     if (kafkaTestUtils != null) {
-      kafkaTestUtils.tearDownEmbeddedServers()
+      kafkaTestUtils.teardownEmbeddedServers()
       kafkaTestUtils = null
     }
   }

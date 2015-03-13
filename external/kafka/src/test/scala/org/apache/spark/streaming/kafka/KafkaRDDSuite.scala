@@ -22,7 +22,7 @@ import scala.util.Random
 import kafka.serializer.StringDecoder
 import kafka.common.TopicAndPartition
 import kafka.message.MessageAndMetadata
-import org.scalatest.{FunSuite, BeforeAndAfterAll}
+import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 import org.apache.spark._
 
@@ -37,8 +37,7 @@ class KafkaRDDSuite extends FunSuite with BeforeAndAfterAll {
   override def beforeAll {
     sc = new SparkContext(sparkConf)
     kafkaTestUtils = new KafkaTestUtils
-    kafkaTestUtils.setupEmbeddedZookeeper()
-    kafkaTestUtils.setupEmbeddedKafkaServer()
+    kafkaTestUtils.setupEmbeddedServers()
   }
 
   override def afterAll {
@@ -48,7 +47,7 @@ class KafkaRDDSuite extends FunSuite with BeforeAndAfterAll {
     }
 
     if (kafkaTestUtils != null) {
-      kafkaTestUtils.tearDownEmbeddedServers()
+      kafkaTestUtils.teardownEmbeddedServers()
       kafkaTestUtils = null
     }
   }

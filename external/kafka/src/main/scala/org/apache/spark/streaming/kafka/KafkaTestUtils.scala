@@ -27,6 +27,7 @@ import java.util.concurrent.TimeoutException
 import scala.annotation.tailrec
 import scala.language.postfixOps
 import scala.util.Random
+import scala.util.control.NonFatal
 
 import kafka.admin.AdminUtils
 import kafka.common.KafkaException
@@ -44,6 +45,8 @@ import org.apache.spark.util.Utils
 /**
  * This is a helper class for Kafka test suites. This has the functionality to set up
  * and tear down local Kafka servers, and to push data using Kafka producers.
+ *
+ * The reason to put Kafka test utility class in src is to test Python related Kafka APIs.
  */
 private class KafkaTestUtils extends Logging {
 
@@ -55,7 +58,7 @@ private class KafkaTestUtils extends Logging {
 
   private var zookeeper: EmbeddedZookeeper = _
 
-  var zkClient: ZkClient = _
+  private var zkClient: ZkClient = _
 
   // Kafka broker related configurations
   private val brokerHost = "localhost"
@@ -82,18 +85,25 @@ private class KafkaTestUtils extends Logging {
     s"$brokerHost:$brokerPort"
   }
 
-  /** Set up the Embedded Zookeeper server and get the proper Zookeeper port */
-  def setupEmbeddedZookeeper(): Unit = {
+  def zookeeperClient: ZkClient = {
+    assert(zkReady, "Zookeeper not setup yet or already torn down, cannot get zookeeper client")
+    Option(zkClient).getOrElse(
+      throw new IllegalStateException("Zookeeper client is not yet initialized"))
+  }
+
+  // Set up the Embedded Zookeeper server and get the proper Zookeeper port
+  private def setupEmbeddedZookeeper(): Unit = {
     // Zookeeper server startup
     zookeeper = new EmbeddedZookeeper(s"$zkHost:$zkPort")
     // Get the actual zookeeper binding port
     zkPort = zookeeper.actualPort
+    zkClient = new ZkClient(s"$zkHost:$zkPort", zkSessionTimeout, zkConnectionTimeout,
+      ZKStringSerializer)
     zkReady = true
-    zkClient = new ZkClient(zkAddress, zkSessionTimeout, zkConnectionTimeout, ZKStringSerializer)
   }
 
-  /** Set up the Embedded Kafka server */
-  def setupEmbeddedKafkaServer(): Unit = {
+  // Set up the Embedded Kafka server
+  private def setupEmbeddedKafkaServer(): Unit = {
     assert(zkReady, "Zookeeper should be set up beforehand")
     // Kafka broker startup
     var bindSuccess: Boolean = false
@@ -116,8 +126,14 @@ private class KafkaTestUtils extends Logging {
     brokerReady = true
   }
 
+  /** setup thw whole embedded servers, including Zookeeper and Kafka brokers */
+  def setupEmbeddedServers(): Unit = {
+    setupEmbeddedZookeeper()
+    setupEmbeddedKafkaServer()
+  }
+
   /** Tear down the whole servers, including Kafka broker and Zookeeper */
-  def tearDownEmbeddedServers(): Unit = {
+  def teardownEmbeddedServers(): Unit = {
     brokerReady = false
     zkReady = false
 
@@ -151,7 +167,7 @@ private class KafkaTestUtils extends Logging {
     waitUntilMetadataIsPropagated(topic, 0)
   }
 
-  /** Java function for sending messages to the Kafka broker */
+  /** Java-friendly function for sending messages to the Kafka broker */
   def sendMessages(topic: String, messageToFreq: JMap[String, JInt]): Unit = {
     import scala.collection.JavaConversions._
     sendMessages(topic, Map(messageToFreq.mapValues(_.intValue()).toSeq: _*))
@@ -191,6 +207,37 @@ private class KafkaTestUtils extends Logging {
   }
 
   private def waitUntilMetadataIsPropagated(topic: String, partition: Int): Unit = {
+    // A simplified version of scalatest eventually, rewrite here is to avoid adding extra test
+    // dependency
+    def eventually[T](timeout: Time, interval: Time)(func: => T): T = {
+      def makeAttempt(): Either[Throwable, T] = {
+        try {
+          Right(func)
+        } catch {
+          case e if NonFatal(e) => Left(e)
+        }
+      }
+
+      val startTime = System.currentTimeMillis()
+      @tailrec
+      def tryAgain(attempt: Int): T = {
+        makeAttempt() match {
+          case Right(result) => result
+          case Left(e) =>
+            val duration = System.currentTimeMillis() - startTime
+            if (duration < timeout.milliseconds) {
+              Thread.sleep(interval.milliseconds)
+            } else {
+              throw new TimeoutException(e.getMessage)
+            }
+
+            tryAgain(attempt + 1)
+        }
+      }
+
+      tryAgain(1)
+    }
+
     eventually(Time(10000), Time(100)) {
       assert(
         server.apis.metadataCache.containsTopicAndPartition(topic, partition),
@@ -199,38 +246,7 @@ private class KafkaTestUtils extends Logging {
     }
   }
 
-  // A simplified version of scalatest eventually, rewrite here is to avoid adding extra test
-  // dependency
-  private def eventually[T](timeout: Time, interval: Time)(func: => T): T = {
-    def makeAttempt(): Either[Throwable, T] = {
-      try {
-        Right(func)
-      } catch {
-        case e: Throwable => Left(e)
-      }
-    }
-
-    val startTime = System.currentTimeMillis()
-    @tailrec
-    def tryAgain(attempt: Int): T = {
-      makeAttempt() match {
-        case Right(result) => result
-        case Left(e) =>
-          val duration = System.currentTimeMillis() - startTime
-          if (duration < timeout.milliseconds) {
-            Thread.sleep(interval.milliseconds)
-          } else {
-            throw new TimeoutException(e.getMessage)
-          }
-
-          tryAgain(attempt + 1)
-      }
-    }
-
-    tryAgain(1)
-  }
-
-  class EmbeddedZookeeper(val zkConnect: String) {
+  private class EmbeddedZookeeper(val zkConnect: String) {
     val random = new Random()
     val snapshotDir = Utils.createTempDir()
     val logDir = Utils.createTempDir()

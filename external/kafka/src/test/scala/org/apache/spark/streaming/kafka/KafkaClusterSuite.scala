@@ -20,7 +20,7 @@ package org.apache.spark.streaming.kafka
 import scala.util.Random
 
 import kafka.common.TopicAndPartition
-import org.scalatest.{FunSuite, BeforeAndAfterAll}
+import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 class KafkaClusterSuite extends FunSuite with BeforeAndAfterAll {
   private val topic = "kcsuitetopic" + Random.nextInt(10000)
@@ -31,17 +31,16 @@ class KafkaClusterSuite extends FunSuite with BeforeAndAfterAll {
 
   override def beforeAll() {
     kafkaTestUtils = new KafkaTestUtils
-    kafkaTestUtils.setupEmbeddedZookeeper()
-    kafkaTestUtils.setupEmbeddedKafkaServer()
+    kafkaTestUtils.setupEmbeddedServers()
 
     kafkaTestUtils.createTopic(topic)
     kafkaTestUtils.sendMessages(topic, Map("a" -> 1))
-    kc = new KafkaCluster(Map("metadata.broker.list" -> s"${kafkaTestUtils.brokerAddress}"))
+    kc = new KafkaCluster(Map("metadata.broker.list" -> kafkaTestUtils.brokerAddress))
   }
 
   override def afterAll() {
     if (kafkaTestUtils != null) {
-      kafkaTestUtils.tearDownEmbeddedServers()
+      kafkaTestUtils.teardownEmbeddedServers()
       kafkaTestUtils = null
     }
   }
