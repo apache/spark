@@ -108,8 +108,11 @@ private[sql] class SQLConf extends Serializable {
   /** The number of rows that will be  */
   private[spark] def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE, "10000").toInt
 
-  /** Number of partitions to use for shuffle operators. */
-  private[spark] def numShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS, "200").toInt
+  /** Number of partitions to use for shuffle operators. If no value has been set, we must specify
+    * a default value */
+  private[spark] def numShufflePartitions(defaultValue: Int): Int = {
+    getConf(SHUFFLE_PARTITIONS, defaultValue.toString).toInt
+  }
 
   /** When true predicates will be passed to the parquet record reader when possible. */
   private[spark] def parquetFilterPushDown =

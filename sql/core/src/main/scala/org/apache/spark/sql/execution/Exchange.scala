@@ -123,7 +123,9 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
  */
 private[sql] case class AddExchange(sqlContext: SQLContext) extends Rule[SparkPlan] {
   // TODO: Determine the number of partitions.
-  def numPartitions = sqlContext.conf.numShufflePartitions
+  def numPartitions = {
+    sqlContext.conf.numShufflePartitions(sqlContext.sparkContext.defaultParallelism)
+  }
 
   def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
     case operator: SparkPlan =>

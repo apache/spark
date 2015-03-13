@@ -33,7 +33,9 @@ object TestSQLContext
 
   /** Fewer partitions to speed up testing. */
   protected[sql] override lazy val conf: SQLConf = new SQLConf {
-    override def numShufflePartitions: Int = this.getConf(SQLConf.SHUFFLE_PARTITIONS, "5").toInt
+    override def numShufflePartitions(unused: Int): Int = {
+      this.getConf(SQLConf.SHUFFLE_PARTITIONS, "5").toInt
+    }
   }
 
   /**

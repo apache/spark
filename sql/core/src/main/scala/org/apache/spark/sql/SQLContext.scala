@@ -977,7 +977,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     def codegenEnabled = self.conf.codegenEnabled
 
-    def numPartitions = self.conf.numShufflePartitions
+    def numPartitions = self.conf.numShufflePartitions(sparkContext.defaultParallelism)
 
     def strategies: Seq[Strategy] =
       experimental.extraStrategies ++ (

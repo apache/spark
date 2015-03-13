@@ -98,7 +98,8 @@ case class SetCommand(
       logWarning(
         s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
           s"showing ${SQLConf.SHUFFLE_PARTITIONS} instead.")
-      Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS}=${sqlContext.conf.numShufflePartitions}"))
+      Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS}=" +
+        s"${sqlContext.conf.numShufflePartitions(sqlContext.sparkContext.defaultParallelism)}"))
 
     // Queries a single property.
     case Some((key, None)) =>
