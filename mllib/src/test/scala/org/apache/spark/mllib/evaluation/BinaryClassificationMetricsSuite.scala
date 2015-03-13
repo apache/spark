@@ -28,7 +28,7 @@ class BinaryClassificationMetricsSuite extends SparkFunSuite with MLlibTestSpark
   private def pairsWithinEpsilon(x: ((Double, Double), (Double, Double))): Boolean =
     (x._1._1 ~= x._2._1 absTol 1E-5) && (x._1._2 ~= x._2._2 absTol 1E-5)
 
-  private def pairPairsWithinEpsilon(x: (((Double, Double), (Double, Int)), ((Double, Double), (Double, Int)))): Boolean =
+  private def pairPairsWithinEpsilon(x: (((Double, Double), (Double, Long)), ((Double, Double), (Double, Long)))): Boolean =
     (x._1._1._1 ~= x._2._1._1 absTol 1E-5) && (x._1._1._2 ~= x._2._1._2 absTol 1E-5) &&
       (x._1._2._1 ~= x._2._2._1 absTol 1E-5) && x._1._2._2 == x._2._2._2
 
@@ -41,8 +41,8 @@ class BinaryClassificationMetricsSuite extends SparkFunSuite with MLlibTestSpark
     assert(left.zip(right).forall(pairsWithinEpsilon))
   }
 
-  private def assertTupleTupleSequencesMatch(left: Seq[((Double, Double), (Double, Int))],
-       right: Seq[((Double, Double), (Double, Int))]): Unit = {
+  private def assertTupleTupleSequencesMatch(left: Seq[((Double, Double), (Double, Long))],
+       right: Seq[((Double, Double), (Double, Long))]): Unit = {
     assert(left.zip(right).forall(pairPairsWithinEpsilon))
   }
 
@@ -54,7 +54,7 @@ class BinaryClassificationMetricsSuite extends SparkFunSuite with MLlibTestSpark
       expectedFmeasures2: Seq[Double],
       expectedPrecisions: Seq[Double],
       expectedRecalls: Seq[Double],
-      expectedCalibration: Seq[((Double, Double), (Double, Int))]) = {
+      expectedCalibration: Seq[((Double, Double), (Double, Long))]) = {
 
     assertSequencesMatch(metrics.thresholds().collect(), expectedThresholds)
     assertTupleSequencesMatch(metrics.roc().collect(), expectedROCCurve)
@@ -91,8 +91,8 @@ class BinaryClassificationMetricsSuite extends SparkFunSuite with MLlibTestSpark
     val prCurve = Seq((0.0, 1.0)) ++ pr
     val f1 = pr.map { case (r, p) => 2.0 * (p * r) / (p + r)}
     val f2 = pr.map { case (r, p) => 5.0 * (p * r) / (4.0 * p + r)}
-    val calibration = Seq(((0.1, 0.1), (0.5, 2)), ((0.4, 0.4), (0.0, 1)), ((0.6, 0.6), (2/3.0, 3)),
-      ((0.8, 0.8), (1.0, 1)))
+    val calibration = Seq(((0.1, 0.1), (0.5, 2L)), ((0.4, 0.4), (0.0, 1L)), ((0.6, 0.6), (2/3.0, 3L)),
+      ((0.8, 0.8), (1.0, 1L)))
 
     validateMetrics(metrics, thresholds, rocCurve, prCurve, f1, f2, precisions, recalls,
       calibration)
@@ -111,7 +111,7 @@ class BinaryClassificationMetricsSuite extends SparkFunSuite with MLlibTestSpark
     val prCurve = Seq((0.0, 1.0)) ++ pr
     val f1 = pr.map { case (r, p) => 2.0 * (p * r) / (p + r)}
     val f2 = pr.map { case (r, p) => 5.0 * (p * r) / (4.0 * p + r)}
-    val calibration = Seq(((0.5, 0.5), (1.0, 2)))
+    val calibration = Seq(((0.5, 0.5), (1.0, 2L)))
 
     validateMetrics(metrics, thresholds, rocCurve, prCurve, f1, f2, precisions, recalls,
       calibration)
@@ -137,7 +137,7 @@ class BinaryClassificationMetricsSuite extends SparkFunSuite with MLlibTestSpark
       case (r, p) => 5.0 * (p * r) / (4.0 * p + r)
     }
 
-    val calibration = Seq(((0.5, 0.5), (0.0, 2)))
+    val calibration = Seq(((0.5, 0.5), (0.0, 2L)))
 
     validateMetrics(metrics, thresholds, rocCurve, prCurve, f1, f2, precisions, recalls,
       calibration)
@@ -177,8 +177,8 @@ class BinaryClassificationMetricsSuite extends SparkFunSuite with MLlibTestSpark
       ) ==
       downsampledROC)
 
-    val calibration = Seq(((0.1, 0.2), (0.0, 2)), ((0.3, 0.4), (0.5, 2)), ((0.5, 0.6), (0.5, 2)),
-      ((0.7, 0.9), (2/3.0, 3)))
+    val calibration = Seq(((0.1, 0.2), (0.0, 2L)), ((0.3, 0.4), (0.5, 2L)), ((0.5, 0.6), (0.5, 2L)),
+      ((0.7, 0.9), (2/3.0, 3L)))
     assert(calibration == downsampled.calibration().collect())
   }
 
