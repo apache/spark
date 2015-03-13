@@ -122,8 +122,11 @@ abstract class VertexRDD[VD](
   def mapValues[VD2: ClassTag](f: (VertexId, VD) => VD2): VertexRDD[VD2]
 
   /**
-   * Hides vertices that are the same between `this` and `other`; for vertices that are different,
-   * keeps the values from `other`.
+   * For each vertex present in both `this` and `other`, `diff` returns only those vertices with
+   * differing values; for values that are different, keeps the values from `other`. This is
+   * only guaranteed to work if the VertexRDDs share a common ancestor.
+   *
+   * @param other the other VertexRDD with which to diff against.
    */
   def diff(other: VertexRDD[VD]): VertexRDD[VD]
 
