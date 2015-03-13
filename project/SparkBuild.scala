@@ -269,7 +269,7 @@ object SQL {
         |import org.apache.spark.sql.catalyst.plans.logical._
         |import org.apache.spark.sql.catalyst.rules._
         |import org.apache.spark.sql.catalyst.util._
-        |import org.apache.spark.sql.Dsl._
+        |import org.apache.spark.sql.functions._
         |import org.apache.spark.sql.execution
         |import org.apache.spark.sql.test.TestSQLContext._
         |import org.apache.spark.sql.types._
@@ -300,7 +300,7 @@ object Hive {
         |import org.apache.spark.sql.catalyst.plans.logical._
         |import org.apache.spark.sql.catalyst.rules._
         |import org.apache.spark.sql.catalyst.util._
-        |import org.apache.spark.sql.Dsl._
+        |import org.apache.spark.sql.functions._
         |import org.apache.spark.sql.execution
         |import org.apache.spark.sql.hive._
         |import org.apache.spark.sql.hive.test.TestHive._
