@@ -5,6 +5,8 @@ title: Spark Streaming + Flume Integration Guide
 
 [Apache Flume](https://flume.apache.org/) is a distributed, reliable, and available service for efficiently collecting, aggregating, and moving large amounts of log data. Here we explain how to configure Flume and Spark Streaming to receive data from Flume. There are two approaches to this.
 
+<span class="badge" style="background-color: grey">Python API</span> Flume is not yet available in the Python API.
+
 ## Approach 1: Flume-style Push-based Approach
 Flume is designed to push data between Flume agents. In this approach, Spark Streaming essentially sets up a receiver that acts an Avro agent for Flume, to which Flume can push the data. Here are the configuration steps.
 

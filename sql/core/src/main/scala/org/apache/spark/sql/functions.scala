@@ -74,25 +74,7 @@ object functions {
       case _ =>  // continue
     }
 
-    val literalExpr = literal match {
-      case v: Boolean => Literal(v, BooleanType)
-      case v: Byte => Literal(v, ByteType)
-      case v: Short => Literal(v, ShortType)
-      case v: Int => Literal(v, IntegerType)
-      case v: Long => Literal(v, LongType)
-      case v: Float => Literal(v, FloatType)
-      case v: Double => Literal(v, DoubleType)
-      case v: String => Literal(v, StringType)
-      case v: BigDecimal => Literal(Decimal(v), DecimalType.Unlimited)
-      case v: java.math.BigDecimal => Literal(Decimal(v), DecimalType.Unlimited)
-      case v: Decimal => Literal(v, DecimalType.Unlimited)
-      case v: java.sql.Timestamp => Literal(v, TimestampType)
-      case v: java.sql.Date => Literal(v, DateType)
-      case v: Array[Byte] => Literal(v, BinaryType)
-      case null => Literal(null, NullType)
-      case _ =>
-        throw new RuntimeException("Unsupported literal type " + literal.getClass + " " + literal)
-    }
+    val literalExpr = Literal(literal)
     Column(literalExpr)
   }
 

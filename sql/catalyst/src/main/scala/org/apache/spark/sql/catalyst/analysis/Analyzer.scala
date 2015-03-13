@@ -310,7 +310,7 @@ class Analyzer(catalog: Catalog,
   }
 
   /**
-   * In many dialects of SQL is it valid to sort by attributes that are not present in the SELECT
+   * In many dialects of SQL it is valid to sort by attributes that are not present in the SELECT
    * clause.  This rule detects such queries and adds the required attributes to the original
    * projection, so that they will be available during sorting. Another projection is added to
    * remove these attributes after sorting.
@@ -321,7 +321,8 @@ class Analyzer(catalog: Catalog,
           if !s.resolved && p.resolved =>
         val unresolved = ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name })
         val resolved = unresolved.flatMap(child.resolve(_, resolver))
-        val requiredAttributes = AttributeSet(resolved.collect { case a: Attribute => a })
+        val requiredAttributes =
+          AttributeSet(resolved.flatMap(_.collect { case a: Attribute => a }))
 
         val missingInProject = requiredAttributes -- p.output
         if (missingInProject.nonEmpty) {

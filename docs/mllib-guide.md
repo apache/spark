@@ -80,11 +80,6 @@ include `netlib-java`'s native proxies by default. To configure
 [netlib-java](https://github.com/fommil/netlib-java) documentation for
 your platform's additional installation instructions.
 
-MLlib also uses [jblas](https://github.com/mikiobraun/jblas) which
-will require you to install the
-[gfortran runtime library](https://github.com/mikiobraun/jblas/wiki/Missing-Libraries)
-if it is not already present on your nodes.
-
 To use MLlib in Python, you will need [NumPy](http://www.numpy.org)
 version 1.4 or newer.
 
