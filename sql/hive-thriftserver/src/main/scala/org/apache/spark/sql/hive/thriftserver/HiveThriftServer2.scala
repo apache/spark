@@ -98,22 +98,20 @@ private[hive] class HiveThriftServer2(hiveContext: HiveContext)
     setSuperField(this, "cliService", sparkSqlCliService)
     addService(sparkSqlCliService)
 
-    if (isHTTPTransportMode(hiveConf)) {
-      val thriftCliService = new ThriftHttpCLIService(sparkSqlCliService)
-      setSuperField(this, "thriftCLIService", thriftCliService)
-      addService(thriftCliService)
+    val thriftCliService = if (isHTTPTransportMode(hiveConf)){
+      new ThriftHttpCLIService(sparkSqlCliService)
     } else {
-      val thriftCliService = new ThriftBinaryCLIService(sparkSqlCliService)
-      setSuperField(this, "thriftCLIService", thriftCliService)
-      addService(thriftCliService)
+      new ThriftBinaryCLIService(sparkSqlCliService)
     }
 
+    setSuperField(this, "thriftCLIService", thriftCliService)
+    addService(thriftCliService)
     initCompositeService(hiveConf)
   }
 
   private def isHTTPTransportMode(hiveConf: HiveConf): Boolean = {
     val transportMode: String = hiveConf.getVar(ConfVars.HIVE_SERVER2_TRANSPORT_MODE)
-    transportMode.equalsIgnoreCase("http")
+    transportMode.toLowerCase().equals("http")
   }
 
 }
