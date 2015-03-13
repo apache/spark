@@ -114,7 +114,7 @@ object PageRank extends Logging {
       // Set the vertex attributes to the initial pagerank values
       .mapVertices( (id, attr) => resetProb )
 
-    val personalized = if (srcId isDefined) true else false
+    val personalized = srcId isDefined
     val src:VertexId = srcId.getOrElse(-1L)
     def delta(u:VertexId, v:VertexId):Double = { if (u == v) 1.0 else 0.0 }
 
@@ -204,8 +204,8 @@ object PageRank extends Logging {
       .mapVertices( (id, attr) => (0.0, 0.0) )
       .cache()
 
-    val personalized = if (srcId isDefined) true else false
-    val src:VertexId = srcId.getOrElse(-1L)
+    val personalized = srcId isDefined
+    val src: VertexId = srcId.getOrElse(-1L)
 
     // Define the three functions needed to implement PageRank in the GraphX
     // version of Pregel
