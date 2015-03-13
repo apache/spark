@@ -61,6 +61,29 @@ import org.apache.spark.graphx._
  */
 object PageRank extends Logging {
 
+
+  /**
+   * Run PageRank for a fixed number of iterations returning a graph
+   * with vertex attributes containing the PageRank and edge
+   * attributes the normalized edge weight.
+   *
+   * @tparam VD the original vertex attribute (not used)
+   * @tparam ED the original edge attribute (not used)
+   *
+   * @param graph the graph on which to compute PageRank
+   * @param numIter the number of iterations of PageRank to run
+   * @param resetProb the random reset probability (alpha)
+   *
+   * @return the graph containing with each vertex containing the PageRank and each edge
+   *         containing the normalized weight.
+   */
+
+  def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED], numIter: Int,
+    resetProb: Double = 0.15): Graph[Double, Double] =
+  {
+    runWithOptions(graph, numIter, resetProb)
+  }
+
   /**
    * Run PageRank for a fixed number of iterations returning a graph
    * with vertex attributes containing the PageRank and edge
@@ -78,7 +101,8 @@ object PageRank extends Logging {
    *         containing the normalized weight.
    *
    */
-  def run[VD: ClassTag, ED: ClassTag](
+
+  def runWithOptions[VD: ClassTag, ED: ClassTag](
       graph: Graph[VD, ED], numIter: Int, resetProb: Double = 0.15,
       srcId: Option[VertexId] = None): Graph[Double, Double] =
   {
@@ -140,12 +164,34 @@ object PageRank extends Logging {
    * @param graph the graph on which to compute PageRank
    * @param tol the tolerance allowed at convergence (smaller => more accurate).
    * @param resetProb the random reset probability (alpha)
+   *
+   * @return the graph containing with each vertex containing the PageRank and each edge
+   *         containing the normalized weight.
+   */
+
+  def runUntilConvergence[VD: ClassTag, ED: ClassTag](
+     graph: Graph[VD, ED], tol: Double, resetProb: Double = 0.15): Graph[Double, Double] =
+  {
+      runUntilConvergenceWithOptions(graph, tol, resetProb)
+  }
+
+  /**
+   * Run a dynamic version of PageRank returning a graph with vertex attributes containing the
+   * PageRank and edge attributes containing the normalized edge weight.
+   *
+   * @tparam VD the original vertex attribute (not used)
+   * @tparam ED the original edge attribute (not used)
+   *
+   * @param graph the graph on which to compute PageRank
+   * @param tol the tolerance allowed at convergence (smaller => more accurate).
+   * @param resetProb the random reset probability (alpha)
    * @param srcId the source vertex for a Personalized Page Rank (optional)
    *
    * @return the graph containing with each vertex containing the PageRank and each edge
    *         containing the normalized weight.
    */
-  def runUntilConvergence[VD: ClassTag, ED: ClassTag](
+
+  def runUntilConvergenceWithOptions[VD: ClassTag, ED: ClassTag](
       graph: Graph[VD, ED], tol: Double, resetProb: Double = 0.15,
        srcId: Option[VertexId] = None): Graph[Double, Double] =
   {
