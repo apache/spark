@@ -26,7 +26,6 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map, Stack}
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import akka.pattern.ask
@@ -497,7 +496,7 @@ class DAGScheduler(
     waiter
   }
 
-  def runJob[T, U: ClassTag](
+  def runJob[T, U](
       rdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int],
