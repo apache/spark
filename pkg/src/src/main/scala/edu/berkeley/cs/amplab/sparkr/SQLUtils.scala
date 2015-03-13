@@ -2,11 +2,13 @@ package edu.berkeley.cs.amplab.sparkr
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
-import edu.berkeley.cs.amplab.sparkr.SerDe._
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, NamedExpression}
 import org.apache.spark.sql.types.{DataType, StructType}
-import org.apache.spark.sql.{DataFrame, Row, SQLContext, SaveMode}
+import org.apache.spark.sql.{Column, DataFrame, GroupedData, Row, SQLContext, SaveMode}
+
+import edu.berkeley.cs.amplab.sparkr.SerDe._
 
 object SQLUtils {
   def createSQLContext(jsc: JavaSparkContext): SQLContext = {
@@ -26,6 +28,23 @@ object SQLUtils {
     val num = schema.fields.size
     val rowRDD = rdd.map(bytesToRow)
     sqlContext.createDataFrame(rowRDD, schema)
+  }
+
+  // A helper to include grouping columns in Agg()
+  // TODO(davies): use internal API after merged into Spark
+  def aggWithGrouping(gd: GroupedData, exprs: Column*): DataFrame = {
+    val aggExprs = exprs.map { col =>
+      val f = col.getClass.getDeclaredField("expr")
+      f.setAccessible(true)
+      val expr = f.get(col).asInstanceOf[Expression]
+      expr match {
+        case expr: NamedExpression => expr
+        case expr: Expression => Alias(expr, expr.simpleString)()
+      }
+    }
+    val toDF = gd.getClass.getDeclaredMethods.filter(f => f.getName == "toDF").head
+    toDF.setAccessible(true)
+    toDF.invoke(gd, aggExprs).asInstanceOf[DataFrame]
   }
 
   def dfToRowRDD(df: DataFrame): JavaRDD[Array[Byte]] = {

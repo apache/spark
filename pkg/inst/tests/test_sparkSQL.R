@@ -404,6 +404,27 @@ test_that("sampleDF on a DataFrame", {
   expect_true(count(sampled2) < 3)
 })
 
+test_that("select operators", {
+  df <- select(jsonFile(sqlCtx, jsonPath), "name", "age")
+  expect_true(inherits(df$name, "Column"))
+  expect_true(inherits(df[[2]], "Column"))
+  expect_true(inherits(df[["age"]], "Column"))
+
+  expect_true(inherits(df[,1], "DataFrame"))
+  expect_equal(columns(df[,1]), c("name"))
+  expect_equal(columns(df[,"age"]), c("age"))
+  df2 <- df[,c("age", "name")]
+  expect_true(inherits(df2, "DataFrame"))
+  expect_equal(columns(df2), c("age", "name"))
+
+  df$age2 <- df$age
+  expect_equal(columns(df), c("name", "age", "age2"))
+  expect_equal(count(where(df, df$age2 == df$age)), 2)
+  df$age2 <- df$age * 2
+  expect_equal(columns(df), c("name", "age", "age2"))
+  expect_equal(count(where(df, df$age2 == df$age * 2)), 2)
+})
+
 test_that("select with column", {
   df <- jsonFile(sqlCtx, jsonPath)
   df1 <- select(df, "name")
@@ -489,7 +510,7 @@ test_that("group by", {
   expect_true(1 == count(df1))
   df1 <- agg(df, age2 = max(df$age))
   expect_true(1 == count(df1))
-  expect_true(columns(df1) == c("age2"))
+  expect_equal(columns(df1), c("age2"))
 
   gd <- groupBy(df, "name")
   expect_true(inherits(gd, "GroupedData"))
@@ -500,6 +521,11 @@ test_that("group by", {
   df3 <- agg(gd, age = "sum")
   expect_true(inherits(df3, "DataFrame"))
   expect_true(3 == count(df3))
+
+  df3 <- agg(gd, age = sum(df$age))
+  expect_true(inherits(df3, "DataFrame"))
+  expect_true(3 == count(df3))
+  expect_equal(columns(df3), c("name", "age"))
 
   df4 <- sum(gd, "age")
   expect_true(inherits(df4, "DataFrame"))

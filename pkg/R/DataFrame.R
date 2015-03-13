@@ -171,6 +171,15 @@ setMethod("showDF",
             cat(callJMethod(x@sdf, "showString", numToInt(numRows)), "\n")
           })
 
+setMethod("show", "DataFrame",
+          function(object) {
+            cols <- lapply(dtypes(object), function(l) {
+              paste(l, collapse = ":")
+            })
+            s <- paste(cols, collapse = ", ")
+            cat(paste("DataFrame[", s, "]\n", sep = ""))
+          })
+
 #' DataTypes
 #' 
 #' Return all column names and their data types as a list
@@ -695,8 +704,23 @@ setMethod("toRDD",
 #'
 #' Groups the DataFrame using the specified columns, so we can run aggregation on them.
 #'
+#' @param x a DataFrame
+#' @return a GroupedData
+#' @seealso GroupedData
+#' @rdname DataFrame
+#' @export
+#' @examples
+#' \dontrun {
+#'   # Compute the average for all numeric columns grouped by department.
+#'   avg(groupBy(df, "department"))
+#'
+#'   # Compute the max age and average salary, grouped by department and gender.
+#'   agg(groupBy(df, "department", "gender"), salary="avg", "age" -> "max")
+#' }
 setGeneric("groupBy", function(x, ...) { standardGeneric("groupBy") })
 
+#' @rdname DataFrame
+#' @export
 setMethod("groupBy",
            signature(x = "DataFrame"),
            function(x, ...) {
@@ -710,7 +734,12 @@ setMethod("groupBy",
              groupedData(sgd)
            })
 
-
+#' Agg
+#'
+#' Compute aggregates by specifying a list of columns
+#'
+#' @rdname DataFrame
+#' @export
 setMethod("agg",
           signature(x = "DataFrame"),
           function(x, ...) {
@@ -772,21 +801,85 @@ setMethod("foreachPartition",
           })
 
 
-############################## DSL ##################################
+############################## SELECT ##################################
+
+getColumn <- function(x, c) {
+  column(callJMethod(x@sdf, "col", c))
+}
 
 setMethod("$", signature(x = "DataFrame"),
           function(x, name) {
-            column(callJMethod(x@sdf, "col", name))
+            getColumn(x, name)
           })
 
+setMethod("$<-", signature(x = "DataFrame"),
+          function(x, name, value) {
+            stopifnot(class(value) == "Column")
+            cols <- columns(x)
+            if (name %in% cols) {
+              cols <- lapply(cols, function(c) {
+                if (c == name) {
+                  alias(value, name)
+                } else {
+                  col(c)
+                }
+              })
+              nx <- select(x, cols)
+            } else {
+              nx <- withColumn(x, name, value)
+            }
+            x@sdf <- nx@sdf
+            x
+          })
+
+setMethod("[[", signature(x = "DataFrame"),
+          function(x, i) {
+            if (is.numeric(i)) {
+              cols <- columns(x)
+              i <- cols[[i]]
+            }
+            getColumn(x, i)
+          })
+
+setMethod("[", signature(x = "DataFrame", i = "missing"),
+          function(x, i, j, ...) {
+            if (is.numeric(j)) {
+              cols <- columns(x)
+              j <- cols[j]
+            }
+            if (length(j) > 1) {
+              j <- as.list(j)
+            }
+            select(x, j)
+          })
+
+#' Select
+#'
+#' Selects a set of columns with names or Column expressions.
+#' @param x A DataFrame
+#' @param col A list of columns or single Column or name
+#' @return A new DataFrame with selected columns
+#' @export
+#' @examples
+#' \dontrun{
+#'   select(df, "*")
+#'   select(df, "col1", "col2")
+#'   select(df, df$name, df$age + 1)
+#'   select(df, c("col1", "col2"))
+#'   select(df, list(df$name, df$age + 1))
+#' }
 setGeneric("select", function(x, col, ...) { standardGeneric("select") } )
 
+#' @rdname select
+#' @export
 setMethod("select", signature(x = "DataFrame", col = "character"),
           function(x, col, ...) {
             sdf <- callJMethod(x@sdf, "select", col, toSeq(...))
             dataFrame(sdf)
           })
 
+#' @rdname select
+#' @export
 setMethod("select", signature(x = "DataFrame", col = "Column"),
           function(x, col, ...) {
             jcols <- lapply(list(col, ...), function(c) {
@@ -796,6 +889,8 @@ setMethod("select", signature(x = "DataFrame", col = "Column"),
             dataFrame(sdf)
           })
 
+#' @rdname select
+#' @export
 setMethod("select",
           signature(x = "DataFrame", col = "list"),
           function(x, col) {
