@@ -18,16 +18,15 @@
 package org.apache.spark.util
 
 import java.lang.management.ManagementFactory
-import java.lang.reflect.Field
-import java.lang.reflect.Modifier
-import java.util.IdentityHashMap
-import java.util.Random
+import java.lang.reflect.{Field, Modifier}
+import java.util.{IdentityHashMap, Random}
 import java.util.concurrent.ConcurrentHashMap
-
-import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Logging
 import org.apache.spark.util.collection.OpenHashSet
+
+import scala.collection.mutable.ArrayBuffer
+import scala.runtime.ScalaRunTime
 
 /**
  * Estimates the sizes of Java objects (number of bytes of memory they occupy), for use in
@@ -37,6 +36,16 @@ import org.apache.spark.util.collection.OpenHashSet
  * http://www.javaworld.com/javaworld/javaqa/2003-12/02-qa-1226-sizeof.html
  */
 private[spark] object SizeEstimator extends Logging {
+
+  // Sizes of primitive types
+  private val BYTE_SIZE    = 1
+  private val BOOLEAN_SIZE = 1
+  private val CHAR_SIZE    = 2
+  private val SHORT_SIZE   = 2
+  private val INT_SIZE     = 4
+  private val LONG_SIZE    = 8
+  private val FLOAT_SIZE   = 4
+  private val DOUBLE_SIZE  = 8
 
   // Alignment boundary for objects
   // TODO: Is this arch dependent ?
@@ -155,7 +164,7 @@ private[spark] object SizeEstimator extends Logging {
   private def visitSingleObject(obj: AnyRef, state: SearchState) {
     val cls = obj.getClass
     if (cls.isArray) {
-      visitArray(obj, state)
+      visitArray(obj, cls, state)
     } else if (obj.isInstanceOf[ClassLoader] || obj.isInstanceOf[Class[_]]) {
       // Hadoop JobConfs created in the interpreter have a ClassLoader, which greatly confuses
       // the size estimator since it references the whole REPL. Do nothing in this case. In
@@ -173,15 +182,15 @@ private[spark] object SizeEstimator extends Logging {
   private val ARRAY_SIZE_FOR_SAMPLING = 200
   private val ARRAY_SAMPLE_SIZE = 100 // should be lower than ARRAY_SIZE_FOR_SAMPLING
 
-  private def visitArray(array: AnyRef, state: SearchState) {
-    val castedArray: CastedArray = CastedArray.castAndWrap(array)
-    val length = castedArray.getLength
+  private def visitArray(array: AnyRef, arrayClass: Class[_], state: SearchState) {
+    val length = ScalaRunTime.array_length(array)
+    val elementClass = arrayClass.getComponentType()
 
     // Arrays have object header and length field which is an integer
-    var arrSize: Long = alignSize(objectSize + PrimitiveSizes.INT_SIZE)
+    var arrSize: Long = alignSize(objectSize + INT_SIZE)
 
-    if (castedArray.isPrimitiveArray()) {
-      arrSize += alignSize(length * castedArray.getElementSize())
+    if (elementClass.isPrimitive()) {
+      arrSize += alignSize(length * primitiveSize(elementClass))
       state.size += arrSize
     } else {
       arrSize += alignSize(length * pointerSize)
@@ -189,7 +198,7 @@ private[spark] object SizeEstimator extends Logging {
 
       if (length <= ARRAY_SIZE_FOR_SAMPLING) {
         for (i <- 0 until length) {
-          state.enqueue(castedArray.get(i))
+          state.enqueue(ScalaRunTime.array_apply(array, i).asInstanceOf[AnyRef])
         }
       } else {
         // Estimate the size of a large array by sampling elements without replacement.
@@ -202,7 +211,7 @@ private[spark] object SizeEstimator extends Logging {
             index = rand.nextInt(length)
           } while (drawn.contains(index))
           drawn.add(index)
-          val elem = castedArray.get(index)
+          val elem = ScalaRunTime.array_apply(array, index).asInstanceOf[AnyRef]
           size += SizeEstimator.estimate(elem, state.visited)
         }
         state.size += ((length / (ARRAY_SAMPLE_SIZE * 1.0)) * size).toLong
@@ -212,21 +221,21 @@ private[spark] object SizeEstimator extends Logging {
 
   private def primitiveSize(cls: Class[_]): Long = {
     if (cls == classOf[Byte]) {
-      PrimitiveSizes.BYTE_SIZE
+      BYTE_SIZE
     } else if (cls == classOf[Boolean]) {
-      PrimitiveSizes.BOOLEAN_SIZE
+      BOOLEAN_SIZE
     } else if (cls == classOf[Char]) {
-      PrimitiveSizes.CHAR_SIZE
+      CHAR_SIZE
     } else if (cls == classOf[Short]) {
-      PrimitiveSizes.SHORT_SIZE
+      SHORT_SIZE
     } else if (cls == classOf[Int]) {
-      PrimitiveSizes.INT_SIZE
+      INT_SIZE
     } else if (cls == classOf[Long]) {
-      PrimitiveSizes.LONG_SIZE
+      LONG_SIZE
     } else if (cls == classOf[Float]) {
-      PrimitiveSizes.FLOAT_SIZE
+      FLOAT_SIZE
     } else if (cls == classOf[Double]) {
-      PrimitiveSizes.DOUBLE_SIZE
+      DOUBLE_SIZE
     } else {
       throw new IllegalArgumentException(
       "Non-primitive class " + cls + " passed to primitiveSize()")
