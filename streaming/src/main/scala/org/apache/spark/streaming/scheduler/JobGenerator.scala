@@ -17,9 +17,10 @@
 
 package org.apache.spark.streaming.scheduler
 
-import java.util.{Comparator, HashMap, TreeSet}
+import java.util.{Comparator, HashMap}
 
 import scala.collection.JavaConversions._
+import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 import akka.actor.{Actor, ActorRef, Props}
@@ -34,7 +35,8 @@ import org.apache.spark.util.{Clock, ManualClock}
 private[scheduler] sealed trait JobGeneratorEvent
 private[scheduler] case class GenerateJobs(time: Time) extends JobGeneratorEvent
 private[scheduler] case class ClearMetadata(time: Time) extends JobGeneratorEvent
-private[scheduler] case class DoCheckpoint(time: Time) extends JobGeneratorEvent
+private[scheduler] case class DoCheckpoint(
+    time: Time, clearCheckpointDataLater: Boolean) extends JobGeneratorEvent
 private[scheduler] case class ClearCheckpointData(time: Time) extends JobGeneratorEvent
 
 /**
@@ -48,7 +50,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   private val conf = ssc.conf
   private val graph = ssc.graph
   private lazy val completedBothCheckpoints = new HashMap[Time, Boolean]()
-  private lazy val batchesGenerated = new TreeSet[Time](new TimeComparator)
+  private lazy val batchesGenerated = new mutable.TreeSet[Time]()
   private val noConcurrentJobs = ssc.sc.conf.getInt("spark.streaming.concurrentJobs", 1) == 1
 
   val clock = {
@@ -174,13 +176,10 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   /**
    * Callback called when the checkpoint of a batch has been written.
    */
-  def onCheckpointCompletion(time: Time): Unit = synchronized {
-    if (completedBothCheckpoints.containsKey(time)) {
-      completedBothCheckpoints(time) = true
-    } else {
-      completedBothCheckpoints(time) = false
+  def onCheckpointCompletion(time: Time, clearCheckpointDataLater: Boolean) {
+    if (clearCheckpointDataLater) {
+      eventActor ! ClearCheckpointData(time)
     }
-    eventActor ! ClearCheckpointData(time)
   }
 
   /** Processes all events */
@@ -189,7 +188,8 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     event match {
       case GenerateJobs(time) => generateJobs(time)
       case ClearMetadata(time) => clearMetadata(time)
-      case DoCheckpoint(time) => doCheckpoint(time)
+      case DoCheckpoint(time, clearCheckpointDataLater) =>
+        doCheckpoint(time, clearCheckpointDataLater)
       case ClearCheckpointData(time) => clearCheckpointData(time)
     }
   }
@@ -262,7 +262,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       case Failure(e) =>
         jobScheduler.reportError("Error generating jobs for time " + time, e)
     }
-    eventActor ! DoCheckpoint(time)
+    eventActor ! DoCheckpoint(time, clearCheckpointDataLater = false)
   }
 
   /** Clear DStream metadata for the given `time`. */
@@ -272,7 +272,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     // If checkpointing is enabled, then checkpoint,
     // else mark batch to be fully processed
     if (isCheckpointRequired(time)) {
-      eventActor ! DoCheckpoint(time)
+      eventActor ! DoCheckpoint(time, clearCheckpointDataLater = true)
     } else {
       // If checkpointing is not enabled, then delete metadata information about
       // received blocks (block data not saved in any case). Otherwise, wait for
@@ -302,11 +302,11 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   }
 
   /** Perform checkpoint for the give `time`. */
-  private def doCheckpoint(time: Time) {
+  private def doCheckpoint(time: Time, clearCheckpointDataLater: Boolean) {
     if (isCheckpointRequired(time)) {
       logInfo("Checkpointing graph for time " + time)
       ssc.graph.updateCheckpointData(time)
-      checkpointWriter.write(new Checkpoint(ssc, time))
+      checkpointWriter.write(new Checkpoint(ssc, time), clearCheckpointDataLater)
     }
   }
 
@@ -339,12 +339,12 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     if (!isCheckpointRequired(time)) {
       // If checkpoint is not enabled, the lastProcessedBatch is
       // the one which is the oldest.
-      if (!shouldCheckpoint && batchesGenerated.first() == time) {
+      if (!shouldCheckpoint && batchesGenerated.firstKey == time) {
         lastProcessedBatch = Some(time)
       }
       batchesGenerated -= time
     } else {
-      val iter = batchesGenerated.iterator()
+      val iter = batchesGenerated.iterator
       var continueIterating = true
       while (iter.hasNext && continueIterating) {
         val t = iter.next()
