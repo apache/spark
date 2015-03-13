@@ -1,13 +1,13 @@
 {% extends "airflow/master.html" %}
 
-{% block title %}Airflow - DAGs{% endblock %}
+{% block title %}Airflow - DAG {{ dag.dag_id }}{% endblock %}
 
 {% block head_css %}
 {{ super() }}
 {% endblock %}
 
 {% block body %}
-  <h2>DAG: {{ dag.dag_id }}</h2>
+<h3><span style='color:#AAA;'>DAG:</span> <span>{{ dag.dag_id }}</span></h3>
   <ul class="nav nav-pills">
     <li><a href="{{ url_for("airflow.graph", dag_id=dag.dag_id) }}">
         <span class="glyphicon glyphicon-certificate" aria-hidden="true"></span>
@@ -69,7 +69,7 @@
           </button>
           <hr/>
           <button id="btn_clear" type="button" class="btn btn-primary">
-              <span class="glyphicon glyphicon-trash" aria-hidden="true"></span> Clear
+              Clear
           </button>
           <span class="btn-group">
             <button id="btn_past"
@@ -142,7 +142,8 @@
     $("#btn_task").click(function(){
       url = "{{ url_for('airflow.task') }}" +
         "?task_id=" + task_id +
-        "&dag_id=" + dag_id;
+        "&dag_id=" + dag_id +
+        "&execution_date=" + execution_date;
       window.location = url;
     });
 

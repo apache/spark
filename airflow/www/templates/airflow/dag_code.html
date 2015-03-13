@@ -1,9 +1,9 @@
-{% extends "airflow/dag.html" %}
+{% extends "airflow/task_instance.html" %}
 {% block title %}Airflow - DAGs{% endblock %}
 
 {% block body %}
     {{ super() }}
-    <h2>{{ title }}</h2>
+    <h4>{{ title }}</h4>
     {% if html_code %}
         {{ html_code|safe }}
     {% endif %}
@@ -13,13 +13,13 @@
 
     {% if code_dict %}
         {% for k, v in code_dict.iteritems() %}
-            <h4>{{ k }}</h4>
+            <h5>{{ k }}</h5>
             <pre>{{ v }}</pre>
         {% endfor %}
     {% endif %}
     {% if html_dict %}
         {% for k, v in html_dict.iteritems() %}
-            <h4>{{ k }}</h4>
+            <h5>{{ k }}</h5>
             {{ v|safe }}
         {% endfor %}
     {% endif %}

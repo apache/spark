@@ -1,15 +1,15 @@
-{% extends "airflow/dag.html" %}
+{% extends "airflow/task_instance.html" %}
 {% block title %}Airflow - DAGs{% endblock %}
 
 {% block body %}
     {{ super() }}
-    <h2>{{ title }}</h2>
+    <h4>{{ title }}</h4>
     <div>
         {% for attr, value in special_attrs_rendered.items() %}
-            <h4>Attribute: {{ attr }}</h4>
+            <h5>Attribute: {{ attr }}</h5>
             {{ value|safe }}
         {% endfor %}
-        <h4>Attributes</h4>
+        <h5>Attributes</h5>
         <table class="table table-striped table-bordered">
             <tr>
                 <th>Attribute</th>
