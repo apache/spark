@@ -77,7 +77,6 @@ object PageRank extends Logging {
    * @return the graph containing with each vertex containing the PageRank and each edge
    *         containing the normalized weight.
    */
-
   def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED], numIter: Int,
     resetProb: Double = 0.15): Graph[Double, Double] =
   {
@@ -101,7 +100,6 @@ object PageRank extends Logging {
    *         containing the normalized weight.
    *
    */
-
   def runWithOptions[VD: ClassTag, ED: ClassTag](
       graph: Graph[VD, ED], numIter: Int, resetProb: Double = 0.15,
       srcId: Option[VertexId] = None): Graph[Double, Double] =
@@ -168,7 +166,6 @@ object PageRank extends Logging {
    * @return the graph containing with each vertex containing the PageRank and each edge
    *         containing the normalized weight.
    */
-
   def runUntilConvergence[VD: ClassTag, ED: ClassTag](
      graph: Graph[VD, ED], tol: Double, resetProb: Double = 0.15): Graph[Double, Double] =
   {
@@ -190,7 +187,6 @@ object PageRank extends Logging {
    * @return the graph containing with each vertex containing the PageRank and each edge
    *         containing the normalized weight.
    */
-
   def runUntilConvergenceWithOptions[VD: ClassTag, ED: ClassTag](
       graph: Graph[VD, ED], tol: Double, resetProb: Double = 0.15,
        srcId: Option[VertexId] = None): Graph[Double, Double] =
