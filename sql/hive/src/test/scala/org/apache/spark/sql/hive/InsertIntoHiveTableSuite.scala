@@ -191,13 +191,13 @@ class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter {
     sql("DROP TABLE hiveTableWithStructValue")
   }
 
-  test("SPARK-5498:partition schema does not match table schema"){
+  test("SPARK-5498:partition schema does not match table schema") {
     val testData = TestHive.sparkContext.parallelize(
-      (1 to 10).map(i => TestData(i, i.toString)))
+      (1 to 10).map(i => TestData(i, i.toString))).toDF()
     testData.registerTempTable("testData")
 
     val testDatawithNull = TestHive.sparkContext.parallelize(
-      (1 to 10).map(i => ThreeCloumntable(i, i.toString,null)))
+      (1 to 10).map(i => ThreeCloumntable(i, i.toString,null))).toDF()
 
     val tmpDir = Files.createTempDir()
     sql(s"CREATE TABLE table_with_partition(key int,value string) PARTITIONED by (ds string) location '${tmpDir.toURI.toString}' ")
@@ -206,25 +206,25 @@ class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter {
     // test schema the same between partition and table
     sql("ALTER TABLE table_with_partition CHANGE COLUMN key key BIGINT")
     checkAnswer(sql("select key,value from table_with_partition where ds='1' "),
-      testData.toDataFrame.collect.toSeq
+      testData.collect.toSeq
     )
     
     // test difference type of field
     sql("ALTER TABLE table_with_partition CHANGE COLUMN key key BIGINT")
     checkAnswer(sql("select key,value from table_with_partition where ds='1' "),
-      testData.toDataFrame.collect.toSeq
+      testData.collect.toSeq
     )
 
     // add column to table
     sql("ALTER TABLE table_with_partition ADD COLUMNS(key1 string)")
     checkAnswer(sql("select key,value,key1 from table_with_partition where ds='1' "),
-      testDatawithNull.toDataFrame.collect.toSeq
+      testDatawithNull.collect.toSeq
     )
 
     // change column name to table
     sql("ALTER TABLE table_with_partition CHANGE COLUMN key keynew BIGINT")
     checkAnswer(sql("select keynew,value from table_with_partition where ds='1' "),
-      testData.toDataFrame.collect.toSeq
+      testData.collect.toSeq
     )
 
     sql("DROP TABLE table_with_partition")
