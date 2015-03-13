@@ -39,7 +39,7 @@ private[ui] class BroadcastPage(parent: StorageTab) extends StorageDetailPage("b
       (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
     }
     (UIUtils.listingTable(blockHeader, blockRow, blocks, 
-      id = Some("broadcast-storage-by-worker-table")), blocks.size)
+      id = Some("broadcast-storage-by-block-table")), blocks.size)
   }
 
   protected override def generateContent(objectId: Long): (String, Seq[Node]) = {
@@ -55,6 +55,10 @@ private[ui] class BroadcastPage(parent: StorageTab) extends StorageDetailPage("b
       <div class="row-fluid">
         <div class="span12">
           <ul class="unstyled">
+            <li>
+              <strong>Storage Level:</strong>
+              {objectInfo.storageLevel.description}
+            </li>
             <li>
               <strong>Memory Size:</strong>
               {Utils.bytesToString(objectInfo.memSize)}

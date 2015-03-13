@@ -39,7 +39,7 @@ private[ui] class RDDPage(parent: StorageTab) extends StorageDetailPage("rdd", p
       .map { case (blockId, status) =>
       (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
     }
-    (UIUtils.listingTable(blockHeader, blockRow, blocks, id = Some("rdd-storage-by-worker-table")),
+    (UIUtils.listingTable(blockHeader, blockRow, blocks, id = Some("rdd-storage-by-block-table")),
       blocks.size)
   }
   

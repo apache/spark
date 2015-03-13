@@ -93,7 +93,9 @@ class StorageListener(storageStatusListener: StorageStatusListener) extends Spar
     broadcastIdOpt.map(broadcastBlockId => {
       val broadcastId = broadcastBlockId.broadcastId
       val broadcastInfoToUpdate = _broadcastInfoMap.getOrElseUpdate(
-        broadcastId, new BroadcastInfo(broadcastId, "broadcast_%d".format(broadcastId)))
+        broadcastId, 
+        new BroadcastInfo(broadcastId, "broadcast_%d".format(broadcastId), 
+          blockUpdateEvent.blockStatus.storageLevel))
       StorageUtils.updateBroadcastInfo(broadcastInfoToUpdate, storageStatusList)
       if (broadcastInfoToUpdate.memSize == 0 && broadcastInfoToUpdate.diskSize == 0 &&
         broadcastInfoToUpdate.tachyonSize == 0) {

@@ -61,7 +61,8 @@ private[spark] object RDDInfo {
 @DeveloperApi
 class BroadcastInfo(
     val id: Long,
-    val name: String) extends Ordered[BroadcastInfo] with StorageObjectInfo {
+    val name: String, 
+    var storageLevel: StorageLevel) extends Ordered[BroadcastInfo] with StorageObjectInfo {
 
   var memSize = 0L
   var diskSize = 0L
@@ -69,9 +70,10 @@ class BroadcastInfo(
 
   override def toString = {
     import Utils.bytesToString
-    ("%s\" (%d) ; " +
+    ("%s\" (%d) StorageLevel: %s; " +
       "MemorySize: %s; TachyonSize: %s; DiskSize: %s").format(
-        name, id, bytesToString(memSize), bytesToString(tachyonSize), bytesToString(diskSize))
+        name, id, storageLevel, bytesToString(memSize), bytesToString(tachyonSize), 
+        bytesToString(diskSize))
   }
 
   override def compare(that: BroadcastInfo): Int = {

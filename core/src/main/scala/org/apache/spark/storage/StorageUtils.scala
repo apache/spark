@@ -17,6 +17,8 @@
 
 package org.apache.spark.storage
 
+import org.apache.spark.SparkException
+
 import scala.collection.{mutable, Map}
 
 import org.apache.spark.annotation.DeveloperApi
@@ -56,7 +58,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
    * non-RDD blocks contains only the first 3 fields (in the same order).
    */
   private val _rddStorageInfo = new mutable.HashMap[Long, (Long, Long, Long, StorageLevel)]
-  private val _broadcastStorageInfo = new mutable.HashMap[Long, (Long, Long, Long)]
+  private val _broadcastStorageInfo = new mutable.HashMap[Long, (Long, Long, Long, StorageLevel)]
   private var _nonRddNorBroadcastStorageInfo: (Long, Long, Long) = (0L, 0L, 0L)
 
   /** Create a storage status with an initial set of blocks, leaving the source unmodified. */
@@ -126,6 +128,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   private def getIdAndBlockMap(blockId: BlockId) = blockId match {
     case RDDBlockId(rddId, _) => (rddId.toLong, _rddBlocks)
     case BroadcastBlockId(broadcastId, _) => (broadcastId, _broadcastBlocks)
+    case x => throw new SparkException(s"unsupported blockid type $x")
   }
 
   /** Remove the given block from this storage status. */
@@ -263,6 +266,12 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   /** Return the storage level, if any, used by the given RDD in this block manager. */
   def rddStorageLevel(rddId: Int): Option[StorageLevel] = _rddStorageInfo.get(rddId).map(_._4)
 
+  private def getIdAndStorageInfo(blockId: BlockId) = blockId match {
+    case RDDBlockId(rddId, _) => (rddId.toLong, _rddStorageInfo)
+    case BroadcastBlockId(broadcastId, _) => (broadcastId, _broadcastStorageInfo)
+    case x => throw new SparkException(s"unsupported blockid type $x")
+  }
+  
   /**
    * Update the relevant storage info, taking into account any existing status for this block.
    */
@@ -275,13 +284,10 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
 
     // Compute new info from old info
     val (oldMem, oldDisk, oldTachyon) = blockId match {
-      case RDDBlockId(rddId, _) =>
-        _rddStorageInfo.get(rddId)
+      case rddOrBroadcastBlockId @ (_: RDDBlockId | _: BroadcastBlockId) =>
+        val (id, storageInfo) = getIdAndStorageInfo(rddOrBroadcastBlockId)
+        storageInfo.get(id)
           .map { case (mem, disk, tachyon, _) => (mem, disk, tachyon) }
-          .getOrElse((0L, 0L, 0L))
-      case BroadcastBlockId(broadcastId, _) =>
-        _broadcastStorageInfo.get(broadcastId)
-          .map { case (mem, disk, tachyon) => (mem, disk, tachyon) }
           .getOrElse((0L, 0L, 0L))
       case _ =>
         _nonRddNorBroadcastStorageInfo
@@ -293,18 +299,12 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
 
     // Set the correct info
     blockId match {
-      case RDDBlockId(rddId, _) =>
-        // If this RDD is no longer persisted, remove it
+      case rddOrBroadcastBlockId @ (_: RDDBlockId | _: BroadcastBlockId) =>
+        val (id, storageInfo) = getIdAndStorageInfo(rddOrBroadcastBlockId)
         if (newMem + newDisk + newTachyon == 0) {
-          _rddStorageInfo.remove(rddId)
+          storageInfo.remove(id)
         } else {
-          _rddStorageInfo(rddId) = (newMem, newDisk, newTachyon, level)
-        }
-      case BroadcastBlockId(broadcastId, _) =>
-        if (newMem + newDisk + newTachyon == 0) {
-          _broadcastStorageInfo.remove(broadcastId)
-        } else {
-          _broadcastStorageInfo(broadcastId) = (newMem, newDisk, newTachyon)
+          storageInfo(id) = (newMem, newDisk, newTachyon, level)
         }
       case _ =>
         _nonRddNorBroadcastStorageInfo = (newMem, newDisk, newTachyon)
