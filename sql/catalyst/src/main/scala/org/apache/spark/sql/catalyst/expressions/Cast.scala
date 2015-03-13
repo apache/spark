@@ -394,10 +394,16 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     val casts = from.fields.zip(to.fields).map {
       case (fromField, toField) => cast(fromField.dataType, toField.dataType)
     }
-    // TODO: This is very slow!
-    buildCast[Row](_, row => Row(row.toSeq.zip(casts).map {
-      case (v, cast) => if (v == null) null else cast(v)
-    }: _*))
+    // TODO: Could be faster?
+    buildCast[Row](_, row => {
+      var i = 0
+      val fields = row.toSeq.map {(v) =>
+        val f = if (v == null) null else casts(i)(v)
+        i += 1
+        f
+      }
+      Row(fields: _*)
+    })
   }
 
   private[this] def cast(from: DataType, to: DataType): Any => Any = to match {
