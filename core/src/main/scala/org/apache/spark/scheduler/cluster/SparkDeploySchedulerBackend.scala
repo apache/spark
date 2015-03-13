@@ -95,7 +95,7 @@ private[spark] class SparkDeploySchedulerBackend(
       args, sc.executorEnvs, classPathEntries ++ testingClassPath, libraryPathEntries, javaOpts)
     val appUIAddress = sc.ui.map(_.appUIAddress).getOrElse("")
     val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
-      appUIAddress, sc.eventLogDir)
+      appUIAddress, sc.eventLogDir, sc.eventLogCodec)
     appDesc.coreNumPerTask = coreNumPerTask
     client = new AppClient(sc.env.actorSystem, masters, appDesc, this, conf)
     client.start()
