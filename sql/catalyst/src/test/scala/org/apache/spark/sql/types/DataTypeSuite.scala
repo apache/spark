@@ -115,4 +115,87 @@ class DataTypeSuite extends FunSuite {
   checkDefaultSize(MapType(IntegerType, StringType, true), 410000)
   checkDefaultSize(MapType(IntegerType, ArrayType(DoubleType), false), 80400)
   checkDefaultSize(structType, 812)
+
+  def checkEqualsIgnoreCompatibleNullability(
+      from: DataType,
+      to: DataType,
+      expected: Boolean): Unit = {
+    val testName =
+      s"equalsIgnoreCompatibleNullability: (from: ${from}, to: ${to})"
+    test(testName) {
+      assert(DataType.equalsIgnoreCompatibleNullability(from, to) === expected)
+    }
+  }
+
+  checkEqualsIgnoreCompatibleNullability(
+    from = ArrayType(DoubleType, containsNull = true),
+    to = ArrayType(DoubleType, containsNull = true),
+    expected = true)
+  checkEqualsIgnoreCompatibleNullability(
+    from = ArrayType(DoubleType, containsNull = false),
+    to = ArrayType(DoubleType, containsNull = false),
+    expected = true)
+  checkEqualsIgnoreCompatibleNullability(
+    from = ArrayType(DoubleType, containsNull = false),
+    to = ArrayType(DoubleType, containsNull = true),
+    expected = true)
+  checkEqualsIgnoreCompatibleNullability(
+    from = ArrayType(DoubleType, containsNull = true),
+    to = ArrayType(DoubleType, containsNull = false),
+    expected = false)
+  checkEqualsIgnoreCompatibleNullability(
+    from = ArrayType(DoubleType, containsNull = false),
+    to = ArrayType(StringType, containsNull = false),
+    expected = false)
+
+  checkEqualsIgnoreCompatibleNullability(
+    from = MapType(StringType, DoubleType, valueContainsNull = true),
+    to = MapType(StringType, DoubleType, valueContainsNull = true),
+    expected = true)
+  checkEqualsIgnoreCompatibleNullability(
+    from = MapType(StringType, DoubleType, valueContainsNull = false),
+    to = MapType(StringType, DoubleType, valueContainsNull = false),
+    expected = true)
+  checkEqualsIgnoreCompatibleNullability(
+    from = MapType(StringType, DoubleType, valueContainsNull = false),
+    to = MapType(StringType, DoubleType, valueContainsNull = true),
+    expected = true)
+  checkEqualsIgnoreCompatibleNullability(
+    from = MapType(StringType, DoubleType, valueContainsNull = true),
+    to = MapType(StringType, DoubleType, valueContainsNull = false),
+    expected = false)
+  checkEqualsIgnoreCompatibleNullability(
+    from = MapType(StringType, ArrayType(IntegerType, true), valueContainsNull = true),
+    to = MapType(StringType,  ArrayType(IntegerType, false), valueContainsNull = true),
+    expected = false)
+  checkEqualsIgnoreCompatibleNullability(
+    from = MapType(StringType, ArrayType(IntegerType, false), valueContainsNull = true),
+    to = MapType(StringType,  ArrayType(IntegerType, true), valueContainsNull = true),
+    expected = true)
+
+
+  checkEqualsIgnoreCompatibleNullability(
+    from = StructType(StructField("a", StringType, nullable = true) :: Nil),
+    to = StructType(StructField("a", StringType, nullable = true) :: Nil),
+    expected = true)
+  checkEqualsIgnoreCompatibleNullability(
+    from = StructType(StructField("a", StringType, nullable = false) :: Nil),
+    to = StructType(StructField("a", StringType, nullable = false) :: Nil),
+    expected = true)
+  checkEqualsIgnoreCompatibleNullability(
+    from = StructType(StructField("a", StringType, nullable = false) :: Nil),
+    to = StructType(StructField("a", StringType, nullable = true) :: Nil),
+    expected = true)
+  checkEqualsIgnoreCompatibleNullability(
+    from = StructType(StructField("a", StringType, nullable = true) :: Nil),
+    to = StructType(StructField("a", StringType, nullable = false) :: Nil),
+    expected = false)
+  checkEqualsIgnoreCompatibleNullability(
+    from = StructType(
+      StructField("a", StringType, nullable = false) ::
+      StructField("b", StringType, nullable = true) :: Nil),
+    to = StructType(
+      StructField("a", StringType, nullable = false) ::
+      StructField("b", StringType, nullable = false) :: Nil),
+    expected = false)
 }

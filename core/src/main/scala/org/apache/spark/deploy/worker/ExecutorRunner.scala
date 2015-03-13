@@ -44,6 +44,7 @@ private[spark] class ExecutorRunner(
     val workerId: String,
     val host: String,
     val webUiPort: Int,
+    val publicAddress: String,
     val sparkHome: File,
     val executorDir: File,
     val workerUrl: String,
@@ -140,7 +141,8 @@ private[spark] class ExecutorRunner(
       builder.environment.put("SPARK_LAUNCH_WITH_SCALA", "0")
 
       // Add webUI log urls
-      val baseUrl = s"http://$host:$webUiPort/logPage/?appId=$appId&executorId=$execId&logType="
+      val baseUrl =
+        s"http://$publicAddress:$webUiPort/logPage/?appId=$appId&executorId=$execId&logType="
       builder.environment.put("SPARK_LOG_URL_STDERR", s"${baseUrl}stderr")
       builder.environment.put("SPARK_LOG_URL_STDOUT", s"${baseUrl}stdout")
 
