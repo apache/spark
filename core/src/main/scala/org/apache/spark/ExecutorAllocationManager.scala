@@ -257,12 +257,7 @@ private[spark] class ExecutorAllocationManager(
     if (maxNeeded < currentTarget) {
       // The target number exceeds the number we actually need, so stop adding new
       // executors and inform the cluster manager to cancel the extra pending requests.
-      //
-      // Since the backend will not kill existing executors if the updated count goes below
-      // the number of running executors, avoid that situation. Existing, running executors
-      // will be killed separately when they've been idle for a certain period.
-      val runningExecutors = executorIds.size - executorsPendingToRemove.size
-      val newTotalExecutors = Seq(maxNeeded, minNumExecutors, runningExecutors).max
+      val newTotalExecutors = math.max(maxNeeded, minNumExecutors)
       client.requestTotalExecutors(newTotalExecutors)
       numExecutorsToAdd = 1
       updateNumExecutorsPending(newTotalExecutors)

@@ -85,7 +85,7 @@ private[yarn] class YarnAllocator(
 
   @volatile private var targetNumExecutors = args.numExecutors
 
-  // Keep track of which container is running which executor to remove the executors later.
+  // Keep track of which container is running which executor to remove the executors later
   // Visible for testing.
   private[yarn] val executorIdToContainer = new HashMap[String, Container]
 
@@ -138,9 +138,6 @@ private[yarn] class YarnAllocator(
    * be killed.
    */
   def requestTotalExecutors(requestedTotal: Int): Unit = synchronized {
-    if (requestedTotal < numExecutorsRunning) {
-      throw new IllegalArgumentException("Refusing request to reduce number of running executors.")
-    }
     targetNumExecutors = requestedTotal
   }
 
@@ -152,8 +149,6 @@ private[yarn] class YarnAllocator(
       val container = executorIdToContainer.remove(executorId).get
       internalReleaseContainer(container)
       numExecutorsRunning -= 1
-      targetNumExecutors -= 1
-      assert(targetNumExecutors >= 0, "Allocator killed more executors than are allocated!")
     } else {
       logWarning(s"Attempted to kill unknown executor $executorId!")
     }
@@ -221,15 +216,13 @@ private[yarn] class YarnAllocator(
       }
     } else if (missing < 0) {
       val numToCancel = math.min(numPendingAllocate, -missing)
-      if (numToCancel > 0) {
-        logInfo(s"Canceling requests for $numToCancel executor containers")
+      logInfo(s"Canceling requests for $numToCancel executor containers")
 
-        val matchingRequests = amClient.getMatchingRequests(RM_REQUEST_PRIORITY, ANY_HOST, resource)
-        if (!matchingRequests.isEmpty) {
-          matchingRequests.head.take(numToCancel).foreach(amClient.removeContainerRequest)
-        } else {
-          logWarning("Expected to find pending requests, but found none.")
-        }
+      val matchingRequests = amClient.getMatchingRequests(RM_REQUEST_PRIORITY, ANY_HOST, resource)
+      if (!matchingRequests.isEmpty) {
+        matchingRequests.head.take(numToCancel).foreach(amClient.removeContainerRequest)
+      } else {
+        logWarning("Expected to find pending requests, but found none.")
       }
     }
   }
@@ -357,6 +350,7 @@ private[yarn] class YarnAllocator(
     }
   }
 
+  // Visible for testing.
   private[yarn] def processCompletedContainers(completedContainers: Seq[ContainerStatus]): Unit = {
     for (completedContainer <- completedContainers) {
       val containerId = completedContainer.getContainerId
