@@ -82,7 +82,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   // last batch whose completion,checkpointing and metadata cleanup has been completed
   private var lastProcessedBatch: Option[Time] = None
 
-  private var lastCompletedBatch: Time = null
+  private var lastCompletedBatch: Option[Time] = None
 
   /** Start generation of jobs */
   def start(): Unit = synchronized {
@@ -141,7 +141,11 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
       // Wait for the jobs to complete and checkpoints to be written
       def haveAllBatchesBeenProcessed = {
-        batchesToBeCheckpointed.isEmpty && lastCompletedBatch.milliseconds == stopTime
+        if (lastCompletedBatch.isDefined) {
+          batchesToBeCheckpointed.isEmpty && lastCompletedBatch.get.milliseconds == stopTime
+        } else {
+          batchesToBeCheckpointed.isEmpty
+        }
       }
       logInfo("Waiting for jobs to be processed and checkpoints to be written")
       while (!hasTimedOut && !haveAllBatchesBeenProcessed) {
@@ -167,13 +171,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   def onBatchCompletion(time: Time) {
     // Update the lastCompletedBatch only if this batch is actually newer than the previously
     // completed ones.
-    lastCompletedBatch = {
-      if (lastCompletedBatch < time) {
-        time
-      } else {
-        lastCompletedBatch
-      }
-    }
+    lastCompletedBatch = lastCompletedBatch.map(_.min(time)).orElse(Some(time))
     eventActor ! ClearMetadata(time)
   }
 
