@@ -245,68 +245,47 @@ class BinaryClassificationMetrics @Since("1.3.0") (
    * Ira Cohen, Moises Goldszmidt.
    * http://www.hpl.hp.com/techreports/2004/HPL-2004-22R1.pdf
    */
-  def calibration(): RDD[((Double, Double), (Double, Int))] = {
-    val calibrationCurve = assessedCalibration
-    val sc = confusions.context
-    sc.makeRDD(calibrationCurve, 1)
+  def calibration(): RDD[((Double, Double), (Double, Long))] = {
+    assessedCalibration
   }
   
-  private lazy val assessedCalibration: Seq[((Double, Double), (Double, Int))] = {
-//  val distinctScoreAndLabels = scoreAndLabels.combineByKey(
-//    createCombiner = (label: Double) => new BinaryLabelCounter(0L, 0L) += label,
-//    mergeValue = (c: BinaryLabelCounter, label: Double) => c += label,
-//    mergeCombiners = (c1: BinaryLabelCounter, c2: BinaryLabelCounter) => c1 += c2
-//  ).sortByKey(ascending = true)
-//
-//  val binnedCounts =
-//    if (numBins == 0) {
-//      counts
-//    } else {
-//      val countsSize = counts.count()
-//
-//      var grouping = countsSize / numBins
-//      if (grouping < 2) {
-//        logInfo(s"Curve is too small ($countsSize) for $numBins bins to be useful")
-//        counts
-//      } else {
-//        if (grouping >= Int.MaxValue) {
-//          logWarning(
-//            s"Curve too large ($countsSize) for $numBins bins; capping at ${Int.MaxValue}")
-//          grouping = Int.MaxValue
-//        }
-//        counts.mapPartitions(_.grouped(grouping.toInt).map { pairs =>
-//          // The score of the combined point will be just the first one's score
-//          // I THINK WE WANT THE AVERAGE OF SCORE OVER THE BIN HERE
-//          val firstScore = pairs.head._1
-//          // The point will contain all counts in this chunk
-//          val agg = new BinaryLabelCounter()
-//          pairs.foreach(pair => agg += pair._2)
-//          (firstScore, agg)
-//        })
-//      }
-//    }
-//
-//  val agg = binnedCounts.values.mapPartitions { iter =>
-//    val agg = new BinaryLabelCounter()
-//    iter.foreach(agg += _)
-//    Iterator(agg)
-//  }.collect()
-//  val partitionwiseCumulativeCounts =
-//    agg.scanLeft(new BinaryLabelCounter())(
-//      (agg: BinaryLabelCounter, c: BinaryLabelCounter) => agg.clone() += c)
-//  val totalCount = partitionwiseCumulativeCounts.last
-//  logInfo(s"Total counts: $totalCount")
-//  // WE WANT PER-BIN COUNTS HERE, NOT CUMULATIVE
-//  val correctCounts = binnedCounts.mapPartitionsWithIndex(
-//    (index: Int, iter: Iterator[(Double, BinaryLabelCounter)]) => {
-//      val cumCount = partitionwiseCumulativeCounts(index)
-//      iter.map { case (score, c) =>
-//        cumCount += c
-//        (score, cumCount.clone())
-//      }
-//    }, preservesPartitioning = true)
-//  correctCounts.persist()
-//  correctCounts
-    Seq(((0.0, 0.0), (0.0, 0)), ((1.0, 1.0), (1.0, 0)))
+  private lazy val assessedCalibration: RDD[((Double, Double), (Double, Long))] = {
+    val distinctScoresAndLabelCounts = scoreAndLabels.combineByKey(
+      createCombiner = (label: Double) => new BinaryLabelCounter(0L, 0L) += label,
+      mergeValue = (c: BinaryLabelCounter, label: Double) => c += label,
+      mergeCombiners = (c1: BinaryLabelCounter, c2: BinaryLabelCounter) => c1 += c2
+    ).sortByKey(ascending = true)
+  
+    val binnedDistinctScoresAndLabelCounts =
+      if (numBins == 0) {
+        distinctScoresAndLabelCounts.map { pair => ((pair._1, pair._1), pair._2) }
+      } else {
+        val distinctScoresCount = distinctScoresAndLabelCounts.count()
+  
+        var groupCount = distinctScoresCount / numBins
+        if (groupCount < 2) {
+          logInfo(s"Too few distinct scores ($distinctScoresCount) for $numBins bins to be useful")
+          distinctScoresAndLabelCounts.map { pair => ((pair._1, pair._1), pair._2) }
+        } else {
+          if (groupCount >= Int.MaxValue) {
+            val n = distinctScoresCount
+            logWarning(
+              s"Too many distinct scores ($n) for $numBins bins; capping at ${Int.MaxValue}")
+            groupCount = Int.MaxValue
+          }
+          distinctScoresAndLabelCounts.mapPartitions(_.grouped(groupCount.toInt).map { pairs =>
+            val firstScore = pairs.head._1
+            val lastScore = pairs.last._1
+            val agg = new BinaryLabelCounter()
+            pairs.foreach(pair => agg += pair._2)
+            ((firstScore, lastScore), agg)
+          })
+        }
+      }
+  
+    binnedDistinctScoresAndLabelCounts.map { pair =>
+      val n = pair._2.numPositives + pair._2.numNegatives
+      (pair._1, (pair._2.numPositives / n.toDouble, n))
+    }
   }
 }
