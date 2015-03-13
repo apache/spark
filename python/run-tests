@@ -105,7 +105,8 @@ function run_streaming_tests() {
     for f in "${JAR_PATH}"/spark-streaming-kafka-assembly-*.jar; do
       if [[ ! -e "$f" ]]; then
         echo "Failed to find Spark Streaming Kafka assembly jar in $KAFKA_ASSEMBLY_DIR" 1>&2
-        echo "You need to build Spark before running this program" 1>&2
+        echo "You need to build Spark with sbt streaming-kafka-assembly/assembly or mvn package" \
+              "before running this program" 1>&2
         exit 1
       fi
       KAFKA_ASSEMBLY_JAR="$f"

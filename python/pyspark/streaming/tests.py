@@ -567,12 +567,11 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         kafkaTestUtilsClz = self.ssc._jvm.java.lang.Thread.currentThread().getContextClassLoader()\
             .loadClass("org.apache.spark.streaming.kafka.KafkaTestUtils")
         self._kafkaTestUtils = kafkaTestUtilsClz.newInstance()
-        self._kafkaTestUtils.setupEmbeddedZookeeper()
-        self._kafkaTestUtils.setupEmbeddedKafkaServer()
+        self._kafkaTestUtils.setupEmbeddedServers()
 
     def tearDown(self):
         if self._kafkaTestUtils is not None:
-            self._kafkaTestUtils.tearDownEmbeddedServers()
+            self._kafkaTestUtils.teardownEmbeddedServers()
             self._kafkaTestUtils = None
 
         super(KafkaStreamTests, self).tearDown()
