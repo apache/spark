@@ -49,8 +49,6 @@ class StorageListener(storageStatusListener: StorageStatusListener) extends Spar
     _rddInfoMap.values.filter(_.numCachedPartitions > 0).toSeq
   }
     
-
-  /** Filter broadcast info to include only those with cached partitions */
   def broadcastInfoList = _broadcastInfoMap.values.toSeq
 
   /** Update the storage info of the RDDs whose blocks are among the given updated blocks */
@@ -89,10 +87,11 @@ class StorageListener(storageStatusListener: StorageStatusListener) extends Spar
   }
 
   override def onBlockUpdate(blockUpdateEvent: SparkListenerBlockUpdate) = synchronized {
-    // only update broadcast for now, need to be modified if want to track other blocks
+    // only update broadcast for now as RDD blocks has been logged in StageCompleted event, 
+    // we ignore other types of blocks for now
     val broadcastIdOpt = blockUpdateEvent.blockId.asBroadcastId
-    if (broadcastIdOpt.isDefined) {
-      val broadcastId = broadcastIdOpt.get.broadcastId
+    broadcastIdOpt.map(broadcastBlockId => {
+      val broadcastId = broadcastBlockId.broadcastId
       val broadcastInfoToUpdate = _broadcastInfoMap.getOrElseUpdate(
         broadcastId, new BroadcastInfo(broadcastId, "broadcast_%d".format(broadcastId)))
       StorageUtils.updateBroadcastInfo(broadcastInfoToUpdate, storageStatusList)
@@ -101,5 +100,6 @@ class StorageListener(storageStatusListener: StorageStatusListener) extends Spar
         _broadcastInfoMap.remove(broadcastId)
       }
     }
+    )
   }
 }

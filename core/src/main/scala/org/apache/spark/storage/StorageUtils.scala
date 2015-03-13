@@ -123,7 +123,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
     addBlock(blockId, blockStatus)
   }
   
-  private def getIdAndBlockMap(blockId: BlockId) = blockId match { 
+  private def getIdAndBlockMap(blockId: BlockId) = blockId match {
     case RDDBlockId(rddId, _) => (rddId.toLong, _rddBlocks)
     case BroadcastBlockId(broadcastId, _) => (broadcastId, _broadcastBlocks)
   }
@@ -134,9 +134,8 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
     blockId match {
       case rddOrBroadcastBlockId @ (_: BroadcastBlockId | _: RDDBlockId) =>
         val (id, blockMap) = getIdAndBlockMap(rddOrBroadcastBlockId)
-        var removed: Option[BlockStatus] = None
         if (blockMap.contains(id)) {
-          removed = blockMap(id).remove(blockId)
+          val removed = blockMap(id).remove(blockId)
           if (blockMap(id).isEmpty) {
             blockMap.remove(id)
           }
@@ -199,15 +198,17 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
 
 
   /**
-   * Return the number of Broadcast blocks stored in this block manager in O(RDDs) time.
-   * Note that this is much faster than `this.rddBlocks.size`, which is O(RDD blocks) time.
+   * Return the number of Broadcast blocks stored in this block manager in O(Broadcast variables) 
+   * time. 
+   * Note that this is much faster than `this.broadcastBlocks.size`, which is O(broadcast blocks) 
+   * time.
    */
   def numBroadcastBlocks: Int = _broadcastBlocks.values.map(_.size).sum
 
   /**
    * Return the number of blocks that belong to the given Broadcast variable in O(1) time.
-   * Note that this is much faster than `this.rddBlocksById(rddId).size`, which is
-   * O(blocks in this RDD) time.
+   * Note that this is much faster than `this.broadcastBlocksById(broadcastId).size`, which is
+   * O(blocks in this Broadcast variable) time.
    */
   def numBroadcastBlocksById(broadcastId: Long): Int = _broadcastBlocks.get(broadcastId).
     map(_.size).getOrElse(0)

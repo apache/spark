@@ -90,8 +90,12 @@ class StorageStatusListener extends SparkListener {
 
   override def onBlockUpdate(blockUpdateEvent: SparkListenerBlockUpdate) = synchronized {
     val executorId = blockUpdateEvent.blockManagerId.executorId
-    updateStorageStatus(executorId, Seq((blockUpdateEvent.blockId,
-      blockUpdateEvent.blockStatus)))
+    // we only log Broadcast block update for now, as RDD blocks have been logged as part of
+    // StateCompleted event
+    if (blockUpdateEvent.blockId.isBroadcast) {
+      updateStorageStatus(executorId, Seq((blockUpdateEvent.blockId,
+        blockUpdateEvent.blockStatus)))
+    }
   }
 
   /**

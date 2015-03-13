@@ -182,7 +182,8 @@ private[spark] class EventLoggingListener(
   override def onExecutorRemoved(event: SparkListenerExecutorRemoved) =
     logEvent(event, flushLogger = true)
   override def onBlockUpdate(event: SparkListenerBlockUpdate) = {
-    // we only log Broadcast block update for now
+    // we only log Broadcast block update for now, as RDD blocks have been logged as part of 
+    // StateCompleted event
     if (event.blockId.isBroadcast) {
       logEvent(event, flushLogger = true)
     }

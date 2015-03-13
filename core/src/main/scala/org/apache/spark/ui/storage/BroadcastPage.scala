@@ -25,7 +25,7 @@ import scala.xml.Node
 
 private[ui] class BroadcastPage(parent: StorageTab) extends StorageDetailPage("broadcast", parent){
 
-  protected override val workerTableID: String = "broadcast-storage-by-block-table"
+  protected override val workerTableID: String = "broadcast-storage-by-worker-table"
   
   protected override def objectList = listener.broadcastInfoList
 
@@ -38,8 +38,8 @@ private[ui] class BroadcastPage(parent: StorageTab) extends StorageDetailPage("b
       .map { case (blockId, status) =>
       (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
     }
-    (UIUtils.listingTable(blockHeader, blockRow, blocks, id = Some("rdd-storage-by-block-table")),
-      blocks.size)
+    (UIUtils.listingTable(blockHeader, blockRow, blocks, 
+      id = Some("broadcast-storage-by-worker-table")), blocks.size)
   }
 
   protected override def generateContent(objectId: Long): (String, Seq[Node]) = {

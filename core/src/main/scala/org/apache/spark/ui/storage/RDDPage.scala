@@ -26,7 +26,7 @@ import org.apache.spark.util.Utils
 /** Page showing storage details for a given RDD */
 private[ui] class RDDPage(parent: StorageTab) extends StorageDetailPage("rdd", parent) {
 
-  protected override val workerTableID: String = "rdd-storage-by-block-table"
+  protected override val workerTableID: String = "rdd-storage-by-worker-table"
   
   protected override def objectList = listener.rddInfoList
 
@@ -39,7 +39,7 @@ private[ui] class RDDPage(parent: StorageTab) extends StorageDetailPage("rdd", p
       .map { case (blockId, status) =>
       (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
     }
-    (UIUtils.listingTable(blockHeader, blockRow, blocks, id = Some("rdd-storage-by-block-table")),
+    (UIUtils.listingTable(blockHeader, blockRow, blocks, id = Some("rdd-storage-by-worker-table")),
       blocks.size)
   }
   
