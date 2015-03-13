@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.types.{ArrayType, StructField, StructType, IntegerType}
+import org.apache.spark.sql.types._
 
 /**
  * A trivial [[Analyzer]] with an [[EmptyCatalog]] and [[EmptyFunctionRegistry]]. Used for testing
@@ -50,53 +50,24 @@ class Analyzer(catalog: Catalog,
   /**
    * Override to provide additional rules for the "Resolution" batch.
    */
-  val extendedRules: Seq[Rule[LogicalPlan]] = Nil
+  val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Nil
 
   lazy val batches: Seq[Batch] = Seq(
-    Batch("MultiInstanceRelations", Once,
-      NewRelationInstances),
     Batch("Resolution", fixedPoint,
-      ResolveReferences ::
       ResolveRelations ::
+      ResolveReferences ::
       ResolveGroupingAnalytics ::
       ResolveSortReferences ::
-      NewRelationInstances ::
       ImplicitGenerate ::
       ResolveFunctions ::
       GlobalAggregates ::
       UnresolvedHavingClauseAttributes ::
       TrimGroupingAliases ::
       typeCoercionRules ++
-      extendedRules : _*),
-    Batch("Check Analysis", Once,
-      CheckResolution ::
-      CheckAggregation ::
-      Nil: _*),
-    Batch("AnalysisOperators", fixedPoint,
-      EliminateAnalysisOperators)
+      extendedResolutionRules : _*),
+    Batch("Remove SubQueries", fixedPoint,
+      EliminateSubQueries)
   )
-
-  /**
-   * Makes sure all attributes and logical plans have been resolved.
-   */
-  object CheckResolution extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = {
-      plan.transformUp {
-        case p if p.expressions.exists(!_.resolved) =>
-          val missing = p.expressions.filterNot(_.resolved).map(_.prettyString).mkString(",")
-          val from = p.inputSet.map(_.name).mkString("{", ", ", "}")
-
-          throw new AnalysisException(s"Cannot resolve '$missing' given input columns $from")
-        case p if !p.resolved && p.childrenResolved =>
-          throw new AnalysisException(s"Unresolved operator in the query plan ${p.simpleString}")
-      } match {
-        // As a backstop, use the root node to check that the entire plan tree is resolved.
-        case p if !p.resolved =>
-          throw new AnalysisException(s"Unresolved operator in the query plan ${p.simpleString}")
-        case p => p
-      }
-    }
-  }
 
   /**
    * Removes no-op Alias expressions from the plan.
@@ -196,46 +167,24 @@ class Analyzer(catalog: Catalog,
   }
 
   /**
-   * Checks for non-aggregated attributes with aggregation
-   */
-  object CheckAggregation extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = {
-      plan.transform {
-        case aggregatePlan @ Aggregate(groupingExprs, aggregateExprs, child) =>
-          def isValidAggregateExpression(expr: Expression): Boolean = expr match {
-            case _: AggregateExpression => true
-            case e: Attribute => groupingExprs.contains(e)
-            case e if groupingExprs.contains(e) => true
-            case e if e.references.isEmpty => true
-            case e => e.children.forall(isValidAggregateExpression)
-          }
-
-          aggregateExprs.find { e =>
-            !isValidAggregateExpression(e.transform {
-              // Should trim aliases around `GetField`s. These aliases are introduced while
-              // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
-              // (Should we just turn `GetField` into a `NamedExpression`?)
-              case Alias(g: GetField, _) => g
-            })
-          }.foreach { e =>
-            throw new TreeNodeException(plan, s"Expression not in GROUP BY: $e")
-          }
-
-          aggregatePlan
-      }
-    }
-  }
-
-  /**
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
    */
   object ResolveRelations extends Rule[LogicalPlan] {
+    def getTable(u: UnresolvedRelation) = {
+      try {
+        catalog.lookupRelation(u.tableIdentifier, u.alias)
+      } catch {
+        case _: NoSuchTableException =>
+          u.failAnalysis(s"no such table ${u.tableIdentifier}")
+      }
+    }
+
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case i @ InsertIntoTable(UnresolvedRelation(tableIdentifier, alias), _, _, _) =>
+      case i @ InsertIntoTable(u: UnresolvedRelation, _, _, _) =>
         i.copy(
-          table = EliminateAnalysisOperators(catalog.lookupRelation(tableIdentifier, alias)))
-      case UnresolvedRelation(tableIdentifier, alias) =>
-        catalog.lookupRelation(tableIdentifier, alias)
+          table = EliminateSubQueries(getTable(u)))
+      case u: UnresolvedRelation =>
+        getTable(u)
     }
   }
 
@@ -284,6 +233,27 @@ class Analyzer(catalog: Catalog,
             case o => o :: Nil
           }
         )
+
+      // Special handling for cases when self-join introduce duplicate expression ids.
+      case j @ Join(left, right, _, _) if left.outputSet.intersect(right.outputSet).nonEmpty =>
+        val conflictingAttributes = left.outputSet.intersect(right.outputSet)
+
+        val (oldRelation, newRelation, attributeRewrites) = right.collect {
+          case oldVersion: MultiInstanceRelation
+              if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+            val newVersion = oldVersion.newInstance()
+            val newAttributes = AttributeMap(oldVersion.output.zip(newVersion.output))
+            (oldVersion, newVersion, newAttributes)
+        }.head // Only handle first case found, others will be fixed on the next pass.
+
+        val newRight = right transformUp {
+          case r if r == oldRelation => newRelation
+          case other => other transformExpressions {
+            case a: Attribute => attributeRewrites.get(a).getOrElse(a)
+          }
+        }
+
+        j.copy(right = newRight)
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
@@ -340,7 +310,7 @@ class Analyzer(catalog: Catalog,
   }
 
   /**
-   * In many dialects of SQL is it valid to sort by attributes that are not present in the SELECT
+   * In many dialects of SQL it is valid to sort by attributes that are not present in the SELECT
    * clause.  This rule detects such queries and adds the required attributes to the original
    * projection, so that they will be available during sorting. Another projection is added to
    * remove these attributes after sorting.
@@ -351,7 +321,8 @@ class Analyzer(catalog: Catalog,
           if !s.resolved && p.resolved =>
         val unresolved = ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name })
         val resolved = unresolved.flatMap(child.resolve(_, resolver))
-        val requiredAttributes = AttributeSet(resolved.collect { case a: Attribute => a })
+        val requiredAttributes =
+          AttributeSet(resolved.flatMap(_.collect { case a: Attribute => a }))
 
         val missingInProject = requiredAttributes -- p.output
         if (missingInProject.nonEmpty) {
@@ -459,7 +430,7 @@ class Analyzer(catalog: Catalog,
  * only required to provide scoping information for attributes and can be removed once analysis is
  * complete.
  */
-object EliminateAnalysisOperators extends Rule[LogicalPlan] {
+object EliminateSubQueries extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Subquery(_, child) => child
   }

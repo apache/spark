@@ -152,7 +152,7 @@ case class MultiAlias(child: Expression, names: Seq[String])
 
   override lazy val resolved = false
 
-  override def newInstance = this
+  override def newInstance() = this
 
   override def withNullability(newNullability: Boolean) = this
 

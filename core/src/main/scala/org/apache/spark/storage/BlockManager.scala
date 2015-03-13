@@ -1074,7 +1074,7 @@ private[spark] class BlockManager(
    * Remove all blocks belonging to the given broadcast.
    */
   def removeBroadcast(broadcastId: Long, tellMaster: Boolean): Int = {
-    logInfo(s"Removing broadcast $broadcastId")
+    logDebug(s"Removing broadcast $broadcastId")
     val blocksToRemove = blockInfo.keys.collect {
       case bid @ BroadcastBlockId(`broadcastId`, _) => bid
     }
@@ -1086,7 +1086,7 @@ private[spark] class BlockManager(
    * Remove a block from both memory and disk.
    */
   def removeBlock(blockId: BlockId, tellMaster: Boolean = true): Unit = {
-    logInfo(s"Removing block $blockId")
+    logDebug(s"Removing block $blockId")
     val info = blockInfo.get(blockId).orNull
     if (info != null) {
       info.synchronized {

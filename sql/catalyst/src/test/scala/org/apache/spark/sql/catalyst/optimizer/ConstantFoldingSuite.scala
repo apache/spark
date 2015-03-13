@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedGetField, EliminateAnalysisOperators}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedGetField, EliminateSubQueries}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -33,7 +33,7 @@ class ConstantFoldingSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("AnalysisNodes", Once,
-        EliminateAnalysisOperators) ::
+        EliminateSubQueries) ::
       Batch("ConstantFolding", Once,
         ConstantFolding,
         BooleanSimplification) :: Nil

@@ -33,7 +33,7 @@ class SimpleScanSource extends RelationProvider {
 }
 
 case class SimpleScan(from: Int, to: Int)(@transient val sqlContext: SQLContext)
-  extends TableScan {
+  extends BaseRelation with TableScan {
 
   override def schema =
     StructType(StructField("i", IntegerType, nullable = false) :: Nil)
@@ -51,10 +51,11 @@ class AllDataTypesScanSource extends SchemaRelationProvider {
 }
 
 case class AllDataTypesScan(
-  from: Int,
-  to: Int,
-  userSpecifiedSchema: StructType)(@transient val sqlContext: SQLContext)
-  extends TableScan {
+    from: Int,
+    to: Int,
+    userSpecifiedSchema: StructType)(@transient val sqlContext: SQLContext)
+  extends BaseRelation
+  with TableScan {
 
   override def schema = userSpecifiedSchema
 

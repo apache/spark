@@ -20,20 +20,21 @@ package org.apache.spark.streaming.kafka
 import java.io.File
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-import kafka.serializer.StringDecoder
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
-import org.scalatest.concurrent.{Eventually, Timeouts}
-
-import org.apache.spark.{SparkContext, SparkConf}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.{Milliseconds, StreamingContext, Time}
-import org.apache.spark.streaming.dstream.{DStream, InputDStream}
-import org.apache.spark.util.Utils
 import kafka.common.TopicAndPartition
 import kafka.message.MessageAndMetadata
+import kafka.serializer.StringDecoder
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
+import org.scalatest.concurrent.Eventually
+
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.streaming.{Milliseconds, StreamingContext, Time}
+import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.util.Utils
 
 class DirectKafkaStreamSuite extends KafkaStreamSuiteBase
   with BeforeAndAfter with BeforeAndAfterAll with Eventually {
@@ -74,6 +75,7 @@ class DirectKafkaStreamSuite extends KafkaStreamSuiteBase
       createTopic(t)
       sendMessages(t, data)
     }
+    val totalSent = data.values.sum * topics.size
     val kafkaParams = Map(
       "metadata.broker.list" -> s"$brokerAddress",
       "auto.offset.reset" -> "smallest"
@@ -84,7 +86,8 @@ class DirectKafkaStreamSuite extends KafkaStreamSuiteBase
       KafkaUtils.createDirectStream[String, String, StringDecoder, StringDecoder](
         ssc, kafkaParams, topics)
     }
-    var total = 0L
+
+    val allReceived = new ArrayBuffer[(String, String)]
 
     stream.foreachRDD { rdd =>
     // Get the offset ranges in the RDD
@@ -104,11 +107,12 @@ class DirectKafkaStreamSuite extends KafkaStreamSuiteBase
       collected.foreach { case (partSize, rangeSize) =>
         assert(partSize === rangeSize, "offset ranges are wrong")
       }
-      total += collected.size  // Add up all the collected items
     }
+    stream.foreachRDD { rdd => allReceived ++= rdd.collect() }
     ssc.start()
     eventually(timeout(20000.milliseconds), interval(200.milliseconds)) {
-      assert(total === data.values.sum * topics.size, "didn't get all messages")
+      assert(allReceived.size === totalSent,
+        "didn't get expected number of messages, messages:\n" + allReceived.mkString("\n"))
     }
     ssc.stop()
   }

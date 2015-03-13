@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.types.NativeType
+import org.apache.spark.sql.types.{StructType, NativeType}
 
 
 /**
@@ -147,6 +147,10 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
   }
 
   def copy() = this
+}
+
+class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
+  extends GenericRow(values) {
 }
 
 class GenericMutableRow(v: Array[Any]) extends GenericRow(v) with MutableRow {

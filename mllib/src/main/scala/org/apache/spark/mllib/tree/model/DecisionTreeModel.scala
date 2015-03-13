@@ -19,7 +19,11 @@ package org.apache.spark.mllib.tree.model
 
 import scala.collection.mutable
 
-import org.apache.spark.SparkContext
+import org.json4s._
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+
+import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.Vector
@@ -28,6 +32,7 @@ import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.util.Utils
 
 /**
  * :: Experimental ::
@@ -111,7 +116,7 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
   override protected def formatVersion: String = "1.0"
 }
 
-object DecisionTreeModel extends Loader[DecisionTreeModel] {
+object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
 
   private[tree] object SaveLoadV1_0 {
 
@@ -183,17 +188,39 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] {
       val sqlContext = new SQLContext(sc)
       import sqlContext.implicits._
 
+      // SPARK-6120: We do a hacky check here so users understand why save() is failing
+      //             when they run the ML guide example.
+      // TODO: Fix this issue for real.
+      val memThreshold = 768
+      if (sc.isLocal) {
+        val driverMemory = sc.getConf.getOption("spark.driver.memory")
+          .orElse(Option(System.getenv("SPARK_DRIVER_MEMORY")))
+          .map(Utils.memoryStringToMb)
+          .getOrElse(512)
+        if (driverMemory <= memThreshold) {
+          logWarning(s"$thisClassName.save() was called, but it may fail because of too little" +
+            s" driver memory (${driverMemory}m)." +
+            s"  If failure occurs, try setting driver-memory ${memThreshold}m (or larger).")
+        }
+      } else {
+        if (sc.executorMemory <= memThreshold) {
+          logWarning(s"$thisClassName.save() was called, but it may fail because of too little" +
+            s" executor memory (${sc.executorMemory}m)." +
+            s"  If failure occurs try setting executor-memory ${memThreshold}m (or larger).")
+        }
+      }
+
       // Create JSON metadata.
-      val metadataRDD = sc.parallelize(
-        Seq((thisClassName, thisFormatVersion, model.algo.toString, model.numNodes)), 1)
-        .toDataFrame("class", "version", "algo", "numNodes")
-      metadataRDD.toJSON.saveAsTextFile(Loader.metadataPath(path))
+      val metadata = compact(render(
+        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
+          ("algo" -> model.algo.toString) ~ ("numNodes" -> model.numNodes)))
+      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       // Create Parquet data.
       val nodes = model.topNode.subtreeIterator.toSeq
       val dataRDD: DataFrame = sc.parallelize(nodes)
         .map(NodeData.apply(0, _))
-        .toDataFrame
+        .toDF()
       dataRDD.saveAsParquetFile(Loader.dataPath(path))
     }
 
@@ -269,20 +296,10 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] {
   }
 
   override def load(sc: SparkContext, path: String): DecisionTreeModel = {
+    implicit val formats = DefaultFormats
     val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)
-    val (algo: String, numNodes: Int) = try {
-      val algo_numNodes = metadata.select("algo", "numNodes").collect()
-      assert(algo_numNodes.length == 1)
-      algo_numNodes(0) match {
-        case Row(a: String, n: Int) => (a, n)
-      }
-    } catch {
-      // Catch both Error and Exception since the checks above can throw either.
-      case e: Throwable =>
-        throw new Exception(
-          s"Unable to load DecisionTreeModel metadata from: ${Loader.metadataPath(path)}."
-          + s"  Error message: ${e.getMessage}")
-    }
+    val algo = (metadata \ "algo").extract[String]
+    val numNodes = (metadata \ "numNodes").extract[Int]
     val classNameV1_0 = SaveLoadV1_0.thisClassName
     (loadedClassName, version) match {
       case (className, "1.0") if className == classNameV1_0 =>

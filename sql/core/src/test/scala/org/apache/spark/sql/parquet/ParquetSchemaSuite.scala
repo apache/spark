@@ -36,8 +36,8 @@ class ParquetSchemaSuite extends FunSuite with ParquetTest {
   private def testSchema[T <: Product: ClassTag: TypeTag](
       testName: String, messageType: String, isThriftDerived: Boolean = false): Unit = {
     test(testName) {
-      val actual = ParquetTypesConverter.convertFromAttributes(ScalaReflection.attributesFor[T], 
-                                                               isThriftDerived)
+      val actual = ParquetTypesConverter.convertFromAttributes(
+        ScalaReflection.attributesFor[T], isThriftDerived)
       val expected = MessageTypeParser.parseMessageType(messageType)
       actual.checkContains(expected)
       expected.checkContains(actual)

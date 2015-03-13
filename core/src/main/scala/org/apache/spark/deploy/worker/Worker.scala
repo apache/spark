@@ -121,7 +121,7 @@ private[spark] class Worker(
   val shuffleService = new StandaloneWorkerShuffleService(conf, securityMgr)
 
   val publicAddress = {
-    val envVar = System.getenv("SPARK_PUBLIC_DNS")
+    val envVar = conf.getenv("SPARK_PUBLIC_DNS")
     if (envVar != null) envVar else host
   }
   var webUi: WorkerWebUI = null
@@ -345,11 +345,11 @@ private[spark] class Worker(
           }
 
           // Create local dirs for the executor. These are passed to the executor via the
-          // SPARK_LOCAL_DIRS environment variable, and deleted by the Worker when the
+          // SPARK_EXECUTOR_DIRS environment variable, and deleted by the Worker when the
           // application finishes.
           val appLocalDirs = appDirectories.get(appId).getOrElse {
             Utils.getOrCreateLocalRootDirs(conf).map { dir =>
-              Utils.createDirectory(dir).getAbsolutePath()
+              Utils.createDirectory(dir, namePrefix = "executor").getAbsolutePath()
             }.toSeq
           }
           appDirectories(appId) = appLocalDirs
@@ -362,7 +362,8 @@ private[spark] class Worker(
             self,
             workerId,
             host,
-            webUiPort,
+            webUi.boundPort,
+            publicAddress,
             sparkHome,
             executorDir,
             akkaUrl,
@@ -538,10 +539,10 @@ private[spark] object Worker extends Logging {
       memory: Int,
       masterUrls: Array[String],
       workDir: String,
-      workerNumber: Option[Int] = None): (ActorSystem, Int) = {
+      workerNumber: Option[Int] = None,
+      conf: SparkConf = new SparkConf): (ActorSystem, Int) = {
 
     // The LocalSparkCluster runs multiple local sparkWorkerX actor systems
-    val conf = new SparkConf
     val systemName = "sparkWorker" + workerNumber.map(_.toString).getOrElse("")
     val actorName = "Worker"
     val securityMgr = new SecurityManager(conf)

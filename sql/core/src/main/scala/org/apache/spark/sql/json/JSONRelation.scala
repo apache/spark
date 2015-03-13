@@ -20,9 +20,10 @@ package org.apache.spark.sql.json
 import java.io.IOException
 
 import org.apache.hadoop.fs.Path
-import org.apache.spark.sql.{DataFrame, SQLContext}
+
+import org.apache.spark.sql.{SaveMode, DataFrame, SQLContext}
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, StructType}
 
 
 private[sql] class DefaultSource
@@ -36,7 +37,7 @@ private[sql] class DefaultSource
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
-    val path = parameters.getOrElse("path", sys.error("Option 'path' not specified"))
+    val path = checkPath(parameters)
     val samplingRatio = parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
 
     JSONRelation(path, samplingRatio, None)(sqlContext)
@@ -47,7 +48,7 @@ private[sql] class DefaultSource
       sqlContext: SQLContext,
       parameters: Map[String, String],
       schema: StructType): BaseRelation = {
-    val path = parameters.getOrElse("path", sys.error("Option 'path' not specified"))
+    val path = checkPath(parameters)
     val samplingRatio = parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
 
     JSONRelation(path, samplingRatio, Some(schema))(sqlContext)
@@ -89,7 +90,10 @@ private[sql] case class JSONRelation(
     samplingRatio: Double,
     userSpecifiedSchema: Option[StructType])(
     @transient val sqlContext: SQLContext)
-  extends TableScan with InsertableRelation {
+  extends BaseRelation
+  with TableScan
+  with InsertableRelation {
+
   // TODO: Support partitioned JSON relation.
   private def baseRDD = sqlContext.sparkContext.textFile(path)
 
@@ -130,7 +134,7 @@ private[sql] case class JSONRelation(
 
   override def equals(other: Any): Boolean = other match {
     case that: JSONRelation =>
-      (this.path == that.path) && (this.schema == that.schema)
+      (this.path == that.path) && this.schema.sameType(that.schema)
     case _ => false
   }
 }

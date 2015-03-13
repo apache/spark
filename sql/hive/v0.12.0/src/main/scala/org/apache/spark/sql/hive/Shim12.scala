@@ -43,7 +43,9 @@ import org.apache.hadoop.mapred.InputFormat
 
 import org.apache.spark.sql.types.{Decimal, DecimalType}
 
-case class HiveFunctionWrapper(functionClassName: String) extends java.io.Serializable {
+private[hive] case class HiveFunctionWrapper(functionClassName: String)
+  extends java.io.Serializable {
+
   // for Serialization
   def this() = this(null)
 
@@ -250,8 +252,13 @@ private[hive] object HiveShim {
   def prepareWritable(w: Writable): Writable = {
     w
   }
+
+  def setTblNullFormat(crtTbl: CreateTableDesc, tbl: Table) = {}
 }
 
-class ShimFileSinkDesc(var dir: String, var tableInfo: TableDesc, var compressed: Boolean)
+private[hive] class ShimFileSinkDesc(
+    var dir: String,
+    var tableInfo: TableDesc,
+    var compressed: Boolean)
   extends FileSinkDesc(dir, tableInfo, compressed) {
 }

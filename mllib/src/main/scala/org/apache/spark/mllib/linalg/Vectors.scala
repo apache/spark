@@ -182,6 +182,8 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
       case _ => false
     }
   }
+
+  private[spark] override def asNullable: VectorUDT = this
 }
 
 /**
@@ -247,7 +249,7 @@ object Vectors {
   }
 
   /**
-   * Creates a dense vector of all zeros.
+   * Creates a vector of all zeros.
    *
    * @param size vector size
    * @return a zero vector
