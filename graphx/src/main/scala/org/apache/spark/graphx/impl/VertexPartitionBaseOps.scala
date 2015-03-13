@@ -93,8 +93,20 @@ private[graphx] abstract class VertexPartitionBaseOps
    * the values from `other`.
    */
   def diff(other: Self[VD]): Self[VD] = {
-    // SPARK-4600: Use bitmask operations to only show the values in `other`.
-    other.withMask((self.mask & other.mask) ^ other.mask)
+    if (self.index != other.index) {
+      logWarning("Diffing two VertexPartitions with different indexes is slow.")
+      diff(createUsingIndex(other.iterator))
+    } else {
+      val newMask = self.mask & other.mask
+      var i = newMask.nextSetBit(0)
+      while (i >= 0) {
+        if (self.values(i) == other.values(i)) {
+          newMask.unset(i)
+        }
+        i = newMask.nextSetBit(i + 1)
+      }
+      this.withValues(other.values).withMask(newMask)
+    }
   }
 
   /** Left outer join another VertexPartition. */
@@ -160,7 +172,7 @@ private[graphx] abstract class VertexPartitionBaseOps
     val newMask = new BitSet(self.capacity)
     val newValues = new Array[VD2](self.capacity)
     iter.foreach { pair =>
-      var pos = self.index.getPos(pair._1)
+      val pos = self.index.getPos(pair._1)
       if (pos >= 0) {
         newMask.set(pos)
         newValues(pos) = pair._2
