@@ -23,17 +23,10 @@ import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.util.Sorting
 import scala.util.hashing.byteswap64
-
-import com.github.fommil.netlib.BLAS.{getInstance => blas}
-import com.github.fommil.netlib.LAPACK.{getInstance => lapack}
-import org.jblas.DoubleMatrix
-import org.netlib.util.intW
-
 import org.apache.spark.{Logging, Partitioner}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
-import org.apache.spark.mllib.optimization.NNLS
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
@@ -42,7 +35,12 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.{OpenHashMap, OpenHashSet, SortDataFormat, Sorter}
 import org.apache.spark.util.random.XORShiftRandom
-
+import breeze.optimize.linear.NNLS
+import breeze.optimize.proximal.QuadraticMinimizer
+import breeze.optimize.proximal.Constraint._
+import breeze.linalg.{DenseMatrix => BrzMatrix}
+import breeze.linalg.{DenseVector => BrzVector}
+import com.github.fommil.netlib.BLAS.{getInstance => blas}
 /**
  * Common params for ALS.
  */
@@ -317,64 +315,67 @@ object ALS extends Logging {
     def solve(ne: NormalEquation, lambda: Double): Array[Float]
   }
 
-  /** Cholesky solver for least square problems. */
-  private[recommendation] class CholeskySolver extends LeastSquaresNESolver {
-
-    private val upper = "U"
-
+  /** QuadraticMinimization solver for least square problems. */
+  private[recommendation] class QuadraticSolver(rank: Int) extends LeastSquaresNESolver {
+    val quadraticMinimizer = QuadraticMinimizer(rank, SMOOTH)
     /**
-     * Solves a least squares problem with L2 regularization:
-     *
-     *   min norm(A x - b)^2^ + lambda * n * norm(x)^2^
-     *
-     * @param ne a [[NormalEquation]] instance that contains AtA, Atb, and n (number of instances)
-     * @param lambda regularization constant, which will be scaled by n
-     * @return the solution x
+     * Given a triangular matrix in the order of fillXtX above, compute the full symmetric square
+     * matrix that it represents, storing it into destMatrix.
      */
-    override def solve(ne: NormalEquation, lambda: Double): Array[Float] = {
-      val k = ne.k
-      // Add scaled lambda to the diagonals of AtA.
-      val scaledlambda = lambda * ne.n
+    private def fillAtA(triAtA: Array[Double], lambda: Double) {
       var i = 0
-      var j = 2
-      while (i < ne.triK) {
-        ne.ata(i) += scaledlambda
-        i += j
-        j += 1
-      }
-      val info = new intW(0)
-      lapack.dppsv(upper, k, 1, ne.ata, ne.atb, k, info)
-      val code = info.`val`
-      assert(code == 0, s"lapack.dppsv returned $code.")
-      val x = new Array[Float](k)
-      i = 0
-      while (i < k) {
-        x(i) = ne.atb(i).toFloat
+      var pos = 0
+      var a = 0.0
+      while (i < rank) {
+        var j = 0
+        while (j <= i) {
+          a = triAtA(pos)
+          if (i == j) {
+            quadraticMinimizer.updateGram(i, j, a + lambda)
+          } else {
+            quadraticMinimizer.updateGram(i, j, a)
+            quadraticMinimizer.updateGram(j, i, a)
+          }
+          pos += 1
+          j += 1
+        }
         i += 1
       }
+    }
+
+    /** Quadratic Minimization solver for least square problems with non-smooth constraints (L1)
+      *
+      * minimize 0.5x'Hx + c'x + g(z)
+      * s.t Aeq x = beq
+      *
+      * Affine constraints are optional, Supported g(z) are one of the following
+      *
+      * 1. z >= 0
+      * 2. lb <= z <= ub
+      * 3. 1'z = s, s>=0
+      * 4. lambda*L1(z)
+      *
+      * TO DO: Add the remaining constraints
+      *
+      * @param ne a [[NormalEquation]] instance that contains AtA, Atb, and n (number of instances)
+      * @param lambda regularization constant, which will be scaled by n
+      * @return the solution x
+      */
+    override def solve(ne: NormalEquation, lambda: Double): Array[Float] = {
+      require(ne.k == rank, s"ALS:QuadraticSolver rank $rank expected ${ne.k}")
+      fillAtA(ne.ata, lambda * ne.n)
+      val q = new BrzVector(ne.atb)
+      q *= -1.0
+      val x = quadraticMinimizer.minimize(q)
       ne.reset()
-      x
+      x.data.map(x => x.toFloat)
     }
   }
 
   /** NNLS solver. */
-  private[recommendation] class NNLSSolver extends LeastSquaresNESolver {
-    private var rank: Int = -1
-    private var workspace: NNLS.Workspace = _
-    private var ata: DoubleMatrix = _
-    private var initialized: Boolean = false
-
-    private def initialize(rank: Int): Unit = {
-      if (!initialized) {
-        this.rank = rank
-        workspace = NNLS.createWorkspace(rank)
-        ata = new DoubleMatrix(rank, rank)
-        initialized = true
-      } else {
-        require(this.rank == rank)
-      }
-    }
-
+  private[recommendation] class NNLSSolver(rank: Int) extends LeastSquaresNESolver {
+    val ata = new BrzMatrix[Double](rank, rank)
+    val nnls = new NNLS()
     /**
      * Solves a nonnegative least squares problem with L2 regularizatin:
      *
@@ -382,10 +383,9 @@ object ALS extends Logging {
      *   subject to x >= 0
      */
     override def solve(ne: NormalEquation, lambda: Double): Array[Float] = {
-      val rank = ne.k
-      initialize(rank)
+      require(ne.k == rank, s"ALS:NNLSSolver built with rank $rank expected ${ne.k}")
       fillAtA(ne.ata, lambda * ne.n)
-      val x = NNLS.solve(ata, new DoubleMatrix(rank, 1, ne.atb: _*), workspace)
+      val x = nnls.minimize(ata, new BrzVector(ne.atb)).data
       ne.reset()
       x.map(x => x.toFloat)
     }
@@ -505,7 +505,7 @@ object ALS extends Logging {
     val itemPart = new ALSPartitioner(numItemBlocks)
     val userLocalIndexEncoder = new LocalIndexEncoder(userPart.numPartitions)
     val itemLocalIndexEncoder = new LocalIndexEncoder(itemPart.numPartitions)
-    val solver = if (nonnegative) new NNLSSolver else new CholeskySolver
+    val solver = if (nonnegative) new NNLSSolver(rank) else new QuadraticSolver(rank)
     val blockRatings = partitionRatings(ratings, userPart, itemPart)
       .persist(intermediateRDDStorageLevel)
     val (userInBlocks, userOutBlocks) =
