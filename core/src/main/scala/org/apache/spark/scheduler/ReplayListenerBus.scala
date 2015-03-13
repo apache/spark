@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler
 
+import com.fasterxml.jackson.core.JsonParseException
 import java.io.{InputStream, IOException}
 
 import scala.io.Source
