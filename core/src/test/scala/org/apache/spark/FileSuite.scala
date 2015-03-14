@@ -177,7 +177,7 @@ class FileSuite extends FunSuite with LocalSparkContext {
     
     val nums = sc.makeRDD(1 to 4)
     nums.saveAsObjectFile(normalDir)
-    nums.saveAsObjectFile(compressedOutputDir, classOf[DefaultCodec])
+    nums.saveAsObjectFile(compressedOutputDir, Option(classOf[DefaultCodec]))
     
     // Try reading the output back as an object file
     val normalFile = new File(normalDir, "part-00000")
@@ -188,7 +188,6 @@ class FileSuite extends FunSuite with LocalSparkContext {
     val compressedContent = sc.objectFile[Int](compressedOutputDir)
     assert(compressedContent.collect().toList === List(1, 2, 3, 4))
     assert(compressedFile.length < normalFile.length)
-    
   }
   
   test("object files of complex types") {
