@@ -27,6 +27,7 @@ cat > /tmp/sparkR.profile << EOF
   projecHome <- Sys.getenv("PROJECT_HOME")
   Sys.setenv(NOAWT=1)
   .libPaths(c(paste(projecHome,"/lib", sep=""), .libPaths()))
+  require(utils)
   require(SparkR)
   sc <- sparkR.init(Sys.getenv("MASTER", unset = ""))
   assign("sc", sc, envir=.GlobalEnv)
