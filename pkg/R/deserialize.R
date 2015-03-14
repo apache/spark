@@ -9,6 +9,8 @@
 # Double -> double
 # Long -> double
 # Array[Byte] -> raw
+# Date -> Date
+# Time -> POSIXct
 #
 # Array[T] -> list()
 # Object -> jobj

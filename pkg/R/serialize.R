@@ -1,12 +1,15 @@
 # Utility functions to serialize R objects so they can be read in Java.
 
 # Type mapping from R to Java
-#  
+#
+# NULL -> Void
 # integer -> Int
 # character -> String
 # logical -> Boolean
 # double, numeric -> Double
 # raw -> Array[Byte]
+# Date -> Date
+# POSIXct,POSIXlt -> Time
 #
 # list[T] -> Array[T], where T is one of above mentioned types
 # environment -> Map[String, T], where T is a native type
@@ -21,6 +24,7 @@ writeObject <- function(con, object, writeType = TRUE) {
     writeType(con, type)
   }
   switch(type,
+         NULL = writeVoid(con),
          integer = writeInt(con, object),
          character = writeString(con, object),
          logical = writeBoolean(con, object),
@@ -34,6 +38,10 @@ writeObject <- function(con, object, writeType = TRUE) {
          POSIXlt = writeTime(con, object),
          POSIXct = writeTime(con, object),
          stop(paste("Unsupported type for serialization", type)))
+}
+
+writeVoid <- function(con) {
+  # no value for NULL
 }
 
 writeString <- function(con, value) {
@@ -88,6 +96,7 @@ writeRaw <- function(con, batch) {
 
 writeType <- function(con, class) {
   type <- switch(class,
+                 NULL = "n",
                  integer = "i",
                  character = "c",
                  logical = "b",

@@ -12,6 +12,7 @@ object SerDe {
 
   // Type mapping from R to Java
   //
+  // NULL -> void
   // integer -> Int
   // character -> String
   // logical -> Boolean
@@ -35,6 +36,7 @@ object SerDe {
       dis: DataInputStream,
       dataType: Char): Object = {
     dataType match {
+      case 'n' => null
       case 'i' => new java.lang.Integer(readInt(dis))
       case 'd' => new java.lang.Double(readDouble(dis))
       case 'b' => new java.lang.Boolean(readBoolean(dis))
