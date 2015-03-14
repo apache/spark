@@ -91,18 +91,36 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
   }
 
   test("from checkpoint") {
-    val myConf = SparkContext.updatedConf(new SparkConf(false), master, appName)
+    // Create Checkpoint and verify whether SparkConf configuration is captured
+    val myConf = SparkContext.updatedConf(new SparkConf(loadDefaults = false), master, appName)
     myConf.set("spark.cleaner.ttl", "10")
-    val ssc1 = new StreamingContext(myConf, batchDuration)
-    addInputStream(ssc1).register()
-    ssc1.start()
-    val cp = new Checkpoint(ssc1, Time(1000))
+    ssc = new StreamingContext(myConf, batchDuration)
+    addInputStream(ssc).register()
+    ssc.start()
+    val cp = new Checkpoint(ssc, Time(1000))
+    ssc.stop()
     assert(cp.sparkConfPairs.toMap.getOrElse("spark.cleaner.ttl", "-1") === "10")
-    ssc1.stop()
+
+    // Verify SparkConf recreated from Checkpoint has the same configuration
     val newCp = Utils.deserialize[Checkpoint](Utils.serialize(cp))
     assert(newCp.sparkConf.getInt("spark.cleaner.ttl", -1) === 10)
     ssc = new StreamingContext(null, newCp, null)
     assert(ssc.conf.getInt("spark.cleaner.ttl", -1) === 10)
+    assert(ssc.conf.get("spark.master") === master)
+    ssc.stop()
+
+    // Verify SparkConf recreated from Checkpoint picks up new master
+    try {
+      val newMaster = "local[100]"
+      System.setProperty("spark.master", newMaster)
+      val anotherNewCp = Utils.deserialize[Checkpoint](Utils.serialize(cp))
+      ssc = new StreamingContext(null, anotherNewCp, null)
+      assert(ssc.conf.getInt("spark.cleaner.ttl", -1) === 10)
+      assert(ssc.conf.get("spark.master") === newMaster)
+      ssc.stop()
+    } finally {
+      System.clearProperty("spark.master")
+    }
   }
 
   test("start and stop state check") {
