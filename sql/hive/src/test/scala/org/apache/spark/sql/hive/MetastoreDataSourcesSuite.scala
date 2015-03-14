@@ -154,7 +154,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
   }
 
   test("check change without refresh") {
-    val tempDir = File.createTempFile("sparksql", "json")
+    val tempDir = File.createTempFile("sparksql", "json", Utils.createTempDir())
     tempDir.delete()
     sparkContext.parallelize(("a", "b") :: Nil).toDF()
       .toJSON.saveAsTextFile(tempDir.getCanonicalPath)
@@ -192,7 +192,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
   }
 
   test("drop, change, recreate") {
-    val tempDir = File.createTempFile("sparksql", "json")
+    val tempDir = File.createTempFile("sparksql", "json", Utils.createTempDir())
     tempDir.delete()
     sparkContext.parallelize(("a", "b") :: Nil).toDF()
       .toJSON.saveAsTextFile(tempDir.getCanonicalPath)

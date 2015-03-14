@@ -81,10 +81,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     Utils.registerShutdownDeleteDir(new File(metastorePath))
   }
 
-  val testTempDir = File.createTempFile("testTempFiles", "spark.hive.tmp")
-  testTempDir.delete()
-  testTempDir.mkdir()
-  Utils.registerShutdownDeleteDir(testTempDir)
+  val testTempDir = Utils.createTempDir()
 
   // For some hive test case which contain ${system:test.tmp.dir}
   System.setProperty("test.tmp.dir", testTempDir.getCanonicalPath)

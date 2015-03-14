@@ -207,7 +207,7 @@ class CheckpointSuite extends TestSuiteBase {
   }
 
   test("recovery with saveAsHadoopFiles operation") {
-    val tempDir = Files.createTempDir()
+    val tempDir = Utils.createTempDir()
     try {
       testCheckpointedOperation(
         Seq(Seq("a", "a", "b"), Seq("", ""), Seq(), Seq("a", "a", "b"), Seq("", ""), Seq()),
@@ -230,7 +230,7 @@ class CheckpointSuite extends TestSuiteBase {
   }
 
   test("recovery with saveAsNewAPIHadoopFiles operation") {
-    val tempDir = Files.createTempDir()
+    val tempDir = Utils.createTempDir()
     try {
       testCheckpointedOperation(
         Seq(Seq("a", "a", "b"), Seq("", ""), Seq(), Seq("a", "a", "b"), Seq("", ""), Seq()),
@@ -268,7 +268,7 @@ class CheckpointSuite extends TestSuiteBase {
     //
     // After SPARK-5079 is addressed, should be able to remove this test since a strengthened
     // version of the other saveAsHadoopFile* tests would prevent regressions for this issue.
-    val tempDir = Files.createTempDir()
+    val tempDir = Utils.createTempDir()
     try {
       testCheckpointedOperation(
         Seq(Seq("a", "a", "b"), Seq("", ""), Seq(), Seq("a", "a", "b"), Seq("", ""), Seq()),
