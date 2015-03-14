@@ -36,8 +36,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.Dsl._
 import org.apache.spark.sql.execution
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.types._
