@@ -225,48 +225,57 @@ class WebUiTests(unittest.TestCase):
     def tearDown(self):
         pass
 
+if 'MySqlOperator' in dir(operators):
+    # Only testing if the operator is installed
+    class MySqlTest(unittest.TestCase):
 
-class MySqlTest(unittest.TestCase):
+        def setUp(self):
+            configuration.test_mode()
+            utils.initdb()
+            args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
+            dag = DAG('hive_test', default_args=args)
+            self.dag = dag
 
-    def setUp(self):
-        configuration.test_mode()
-        utils.initdb()
-        args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
-        dag = DAG('hive_test', default_args=args)
-        self.dag = dag
+        def mysql_operator_test(self):
+            sql = """
+            CREATE TABLE IF NOT EXISTS test_airflow (
+                dummy VARCHAR(50)
+            );
+            """
+            t = operators.MySqlOperator(
+                task_id='basic_mysql', sql=sql, dag=self.dag)
+            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
-    def mysql_operator_test(self):
-        sql = """
-        CREATE TABLE IF NOT EXISTS test_airflow (
-            dummy VARCHAR(50)
-        );
-        """
-        t = operators.MySqlOperator(
-            task_id='basic_mysql', sql=sql, dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+if 'PostgresOperator' in dir(operators):
+    # Only testing if the operator is installed
+    class PostgresTest(unittest.TestCase):
 
-class PostgresTest(unittest.TestCase):
+        def setUp(self):
+            configuration.test_mode()
+            utils.initdb()
+            args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
+            dag = DAG('hive_test', default_args=args)
+            self.dag = dag
 
-    def setUp(self):
-        configuration.test_mode()
-        utils.initdb()
-        args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
-        dag = DAG('hive_test', default_args=args)
-        self.dag = dag
+        def postgres_operator_test(self):
+            sql = """
+            CREATE TABLE IF NOT EXISTS test_airflow (
+                dummy VARCHAR(50)
+            );
+            """
+            t = operators.PostgresOperator(
+                task_id='basic_postgres', sql=sql, dag=self.dag)
+            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
-    def postgres_operator_test(self):
-        sql = """
-        CREATE TABLE IF NOT EXISTS test_airflow (
-            dummy VARCHAR(50)
-        );
-        """
-        t = operators.PostgresOperator(
-            task_id='basic_postgres', sql=sql, dag=self.dag)
-        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
-
-        autocommitTask = operators.PostgresOperator(
-            task_id='basic_postgres_with_autocommit', sql=sql, dag=self.dag, autocommit=True)
-        autocommitTask.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+            autocommitTask = operators.PostgresOperator(
+                task_id='basic_postgres_with_autocommit',
+                sql=sql,
+                dag=self.dag,
+                autocommit=True)
+            autocommitTask.run(
+                start_date=DEFAULT_DATE,
+                end_date=DEFAULT_DATE,
+                force=True)
 
 
 if __name__ == '__main__':
