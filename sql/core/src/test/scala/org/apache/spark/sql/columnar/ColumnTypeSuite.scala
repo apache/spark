@@ -34,7 +34,7 @@ class ColumnTypeSuite extends FunSuite with Logging {
   test("defaultSize") {
     val checks = Map(
       INT -> 4, SHORT -> 2, LONG -> 8, BYTE -> 1, DOUBLE -> 8, FLOAT -> 4,
-      FIXED_DECIMAL(20, 10) -> 8, BOOLEAN -> 1, STRING -> 8, DATE -> 4, TIMESTAMP -> 12,
+      FIXED_DECIMAL(15, 10) -> 8, BOOLEAN -> 1, STRING -> 8, DATE -> 4, TIMESTAMP -> 12,
       BINARY -> 16, GENERIC -> 16)
 
     checks.foreach { case (columnType, expectedSize) =>
@@ -63,7 +63,7 @@ class ColumnTypeSuite extends FunSuite with Logging {
     checkActualSize(BYTE, Byte.MaxValue, 1)
     checkActualSize(DOUBLE, Double.MaxValue, 8)
     checkActualSize(FLOAT, Float.MaxValue, 4)
-    checkActualSize(FIXED_DECIMAL(20, 10), Decimal(0, 20, 10), 8)
+    checkActualSize(FIXED_DECIMAL(15, 10), Decimal(0, 15, 10), 8)
     checkActualSize(BOOLEAN, true, 1)
     checkActualSize(STRING, "hello", 4 + "hello".getBytes("utf-8").length)
     checkActualSize(DATE, 0, 4)
@@ -96,12 +96,12 @@ class ColumnTypeSuite extends FunSuite with Logging {
   testNativeColumnType[DoubleType.type](DOUBLE, _.putDouble(_), _.getDouble)
 
   testNativeColumnType[DecimalType](
-    FIXED_DECIMAL(20, 10),
+    FIXED_DECIMAL(15, 10),
     (buffer: ByteBuffer, decimal: Decimal) => {
       buffer.putLong(decimal.toUnscaledLong)
     },
     (buffer: ByteBuffer) => {
-      Decimal(buffer.getLong(), 20, 10)
+      Decimal(buffer.getLong(), 15, 10)
     })
 
   testNativeColumnType[FloatType.type](FLOAT, _.putFloat(_), _.getFloat)

@@ -21,7 +21,7 @@ import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.test.TestSQLContext.implicits._
-import org.apache.spark.sql.types.Decimal
+import org.apache.spark.sql.types.{DecimalType, Decimal}
 import org.apache.spark.sql.{QueryTest, TestData}
 import org.apache.spark.storage.StorageLevel.MEMORY_ONLY
 
@@ -119,14 +119,17 @@ class InMemoryColumnarQuerySuite extends QueryTest {
   }
 
   test("decimal type") {
-    (1 to 10)
-      .map(i => Tuple1(Decimal(i, 20, 10)))
+    // Casting is required here because ScalaReflection can't capture decimal precision information.
+    val df = (1 to 10)
+      .map(i => Tuple1(Decimal(i, 15, 10)))
       .toDF("dec")
-      .cache()
-      .registerTempTable("test_fixed_decimal")
+      .select($"dec" cast DecimalType(15, 10))
 
+    assert(df.schema.head.dataType === DecimalType(15, 10))
+
+    df.cache().registerTempTable("test_fixed_decimal")
     checkAnswer(
       sql("SELECT * FROM test_fixed_decimal"),
-      (1 to 10).map(i => Row(Decimal(i, 20, 10).toJavaBigDecimal)))
+      (1 to 10).map(i => Row(Decimal(i, 15, 10).toJavaBigDecimal)))
   }
 }
