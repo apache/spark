@@ -147,6 +147,7 @@ exportMethods("agg")
 
 export("cacheTable",
        "clearCache",
+       "createDataFrame",
        "createExternalTable",
        "dropTempTable",
        "jsonFile",
@@ -157,6 +158,7 @@ export("cacheTable",
        "table",
        "tableNames",
        "tables",
+       "toDF",
        "uncacheTable")
 
 export("sparkRSQL.init",

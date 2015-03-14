@@ -1,5 +1,184 @@
 # SQLcontext.R: SQLContext-driven functions
 
+#' infer the SQL type
+infer_type <- function(x) {
+  if (is.null(x)) {
+    stop("can not infer type from NULL")
+  }
+
+  # class of POSIXlt is c("POSIXlt" "POSIXt")
+  type <- switch(class(x)[[1]],
+                 integer = "integer",
+                 character = "string",
+                 logical = "boolean",
+                 double = "double",
+                 numeric = "double",
+                 raw = "binary",
+                 list = "array",
+                 environment = "map",
+                 Date = "date",
+                 POSIXlt = "timestamp",
+                 POSIXct = "timestamp",
+                 stop(paste("Unsupported type for DataFrame:", class(x))))
+
+  if (type == "map") {
+    stopifnot(length(x) > 0)
+    key <- ls(x)[[1]]
+    list(type = "map",
+         keyType = "string",
+         valueType = infer_type(get(key, x)),
+         valueContainsNull = TRUE)
+  } else if (type == "array") {
+    stopifnot(length(x) > 0)
+    names <- names(x)
+    if (is.null(names)) {
+      list(type = "array", elementType = infer_type(x[[1]]), containsNull = TRUE)
+    } else {
+      # StructType
+      types <- lapply(x, infer_type)
+      fields <- lapply(1:length(x), function(i) {
+        list(name = names[[i]], type = types[[i]], nullable = TRUE)
+      })
+      list(type = "struct", fields = fields)
+    }
+  } else if (length(x) > 1) {
+    list(type = "array", elementType = type, containsNull = TRUE)
+  } else {
+    type
+  }
+}
+
+#' dump the schema into JSON string
+tojson <- function(x) {
+  if (is.list(x)) {
+    names <- names(x)
+    if (!is.null(names)) {
+      items <- lapply(names, function(n) {
+        safe_n <- gsub('"', '\\"', n)
+        paste(tojson(safe_n), ':', tojson(x[[n]]), sep = '')
+      })
+      d <- paste(items, collapse = ', ')
+      paste('{', d, '}', sep = '')
+    } else {
+      l <- paste(lapply(x, tojson), collapse = ', ')
+      paste('[', l, ']', sep = '')
+    }
+  } else if (is.character(x)) {
+    paste('"', x, '"', sep = '')
+  } else if (is.logical(x)) {
+    if (x) "true" else "false"
+  } else {
+    stop(paste("unexpected type:", class(x)))
+  }
+}
+
+#' Create a DataFrame from an RDD
+#'
+#' Converts an RDD to a DataFrame by infer the types.
+#'
+#' @param sqlCtx A SQLContext
+#' @param data An RDD or list or data.frame
+#' @param schema a list of column names or named list (StructType), optional
+#' @return an DataFrame
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' rdd <- lapply(parallelize(sc, 1:10), function(x) list(a=x, b=as.character(x)))
+#' df <- createDataFrame(sqlCtx, rdd)
+#' }
+
+# TODO(davies): support sampling and infer type from NA
+createDataFrame <- function(sqlCtx, data, schema = NULL, samplingRatio = 1.0) {
+  if (is.data.frame(data)) {
+      # get the names of columns, they will be put into RDD
+      schema <- names(data)
+      n <- nrow(data)
+      m <- ncol(data)
+      # get rid of factor type
+      dropFactor <- function(x) {
+        if (is.factor(x)) {
+          as.character(x)
+        } else {
+          x
+        }
+      }
+      data <- lapply(1:n, function(i) {
+        lapply(1:m, function(j) { dropFactor(data[i,j]) })
+      })
+  }
+  if (is.list(data)) {
+    sc <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "getJavaSparkContext", sqlCtx)
+    rdd <- parallelize(sc, data)
+  } else if (inherits(data, "RDD")) {
+    rdd <- data
+  } else {
+    stop(paste("unexpected type:", class(data)))
+  }
+
+  if (is.null(schema) || is.null(names(schema))) {
+    row <- first(rdd)
+    names <- if (is.null(schema)) {
+      names(row)
+    } else {
+      as.list(schema)
+    }
+    if (is.null(names)) {
+      names <- lapply(1:length(row), function(x) {
+       paste("_", as.character(x), sep = "")
+      })
+    }
+
+    types <- lapply(row, infer_type)
+    fields <- lapply(1:length(row), function(i) {
+      list(name = names[[i]], type = types[[i]], nullable = TRUE)
+    })
+    schema <- list(type = "struct", fields = fields)
+  }
+
+  stopifnot(class(schema) == "list")
+  stopifnot(schema$type == "struct")
+  stopifnot(class(schema$fields) == "list")
+  schemaString <- tojson(schema)
+
+  jrdd <- getJRDD(lapply(rdd, function(x) x), "row")
+  srdd <- callJMethod(jrdd, "rdd")
+  sdf <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "createDF",
+                     srdd, schemaString, sqlCtx)
+  dataFrame(sdf)
+}
+
+#' toDF()
+#'
+#' Converts an RDD to a DataFrame by infer the types.
+#'
+#' @param x An RDD
+#'
+#' @rdname DataFrame
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' rdd <- lapply(parallelize(sc, 1:10), function(x) list(a=x, b=as.character(x)))
+#' df <- toDF(rdd)
+#' }
+
+setGeneric("toDF", function(x, ...) { standardGeneric("toDF") })
+
+setMethod("toDF", signature(x = "RDD"),
+          function(x, ...) {
+            sqlCtx <- if (exists(".sparkRHivesc", envir = .sparkREnv)) {
+              get(".sparkRHivesc", envir = .sparkREnv)
+            } else if (exists(".sparkRSQLsc", envir = .sparkREnv)) {
+              get(".sparkRSQLsc", envir = .sparkREnv)
+            } else {
+              stop("no SQL context available")
+            }
+            createDataFrame(sqlCtx, x, ...)
+          })
+
 #' Create a DataFrame from a JSON file.
 #'
 #' Loads a JSON file (one object per line), returning the result as a DataFrame 

@@ -222,7 +222,6 @@ sparkR.init <- function(
 
 sparkRSQL.init <- function(jsc) {
   if (exists(".sparkRSQLsc", envir = .sparkREnv)) {
-    cat("Re-using existing SparkSQL Context. Please restart R to create a new SparkSQL Context\n")
     return(get(".sparkRSQLsc", envir = .sparkREnv))
   }
 
@@ -247,7 +246,6 @@ sparkRSQL.init <- function(jsc) {
 
 sparkRHive.init <- function(jsc) {
   if (exists(".sparkRHivesc", envir = .sparkREnv)) {
-    cat("Re-using existing HiveContext. Please restart R to create a new HiveContext\n")
     return(get(".sparkRHivesc", envir = .sparkREnv))
   }
 
