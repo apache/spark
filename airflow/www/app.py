@@ -1223,14 +1223,12 @@ class JobModelView(ModelViewOnly):
         'job_type', 'dag_id', 'state',
         'unixname', 'hostname', 'start_date', 'end_date', 'latest_heartbeat')
 mv = JobModelView(jobs.BaseJob, Session, name="Jobs", category="Browse")
-
 admin.add_view(mv)
 
 
 class LogModelView(ModelViewOnly):
     column_default_sort = ('dttm', True)
     column_filters = ('dag_id', 'task_id', 'execution_date')
-
 mv = LogModelView(
     models.Log, Session, name="Logs", category="Browse")
 admin.add_view(mv)
@@ -1249,6 +1247,8 @@ class TaskInstanceModelView(ModelViewOnly):
 mv = TaskInstanceModelView(
     models.TaskInstance, Session, name="Task Instances", category="Browse")
 admin.add_view(mv)
+
+
 
 admin.add_link(
     base.MenuLink(
@@ -1286,14 +1286,6 @@ mv = UserModelView(models.User, Session, name="Users", category="Admin")
 admin.add_view(mv)
 
 
-class DagModelView(ModelView):
-    column_list = ('dag_id', 'is_paused')
-    column_editable_list = ('is_paused',)
-mv = DagModelView(
-    models.DAG, Session, name="Pause DAGs", category="Admin")
-admin.add_view(mv)
-
-
 class ReloadTaskView(BaseView):
     @expose('/')
     def index(self):
@@ -1302,6 +1294,14 @@ class ReloadTaskView(BaseView):
         dagbag.merge_dags()
         return redirect(url_for('index'))
 admin.add_view(ReloadTaskView(name='Reload DAGs', category="Admin"))
+
+
+class DagModelView(ModelView):
+    column_list = ('dag_id', 'is_paused')
+    column_editable_list = ('is_paused',)
+mv = DagModelView(
+    models.DAG, Session, name="Pause DAGs", category="Admin")
+admin.add_view(mv)
 
 
 def label_link(v, c, m, p):
@@ -1420,3 +1420,28 @@ admin.add_link(
         category='Docs',
         name='Github',
         url='https://github.com/mistercrunch/Airflow'))
+
+
+class KnowEventView(LoginMixin, ModelView):
+    form_columns = (
+        'label',
+        'event_type',
+        'start_date',
+        'end_date',
+        'reported_by',
+        'description')
+    column_list = (
+        'label', 'event_type', 'start_date', 'end_date', 'reported_by')
+mv = KnowEventView(
+    models.KnownEvent, Session, name="Known Events", category="Data Profiling")
+admin.add_view(mv)
+
+
+class KnowEventTypeView(LoginMixin, ModelView):
+    pass
+'''
+mv = KnowEventTypeView(
+    models.KnownEventType,
+    Session, name="Known Event Types", category="Manage")
+admin.add_view(mv)
+'''

@@ -113,6 +113,19 @@ def initdb():
                 port=10001))
         session.commit()
 
+    # Known event types
+    KET = models.KnownEventType
+    if not session.query(KET).filter(KET.know_event_type == 'Holiday').first():
+        session.add(KET(know_event_type='Holiday'))
+    if not session.query(KET).filter(KET.know_event_type == 'Outage').first():
+        session.add(KET(know_event_type='Outage'))
+    if not session.query(KET).filter(KET.know_event_type == 'Natural Disaster').first():
+        session.add(KET(know_event_type='Natural Disaster'))
+    if not session.query(KET).filter(KET.know_event_type == 'Marketing Campain').first():
+        session.add(KET(know_event_type='Marketing Campain'))
+    session.commit()
+    session.close()
+
 
 def resetdb():
     '''
