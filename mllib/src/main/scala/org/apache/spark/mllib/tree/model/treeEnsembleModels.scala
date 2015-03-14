@@ -133,7 +133,7 @@ class GradientBoostedTreesModel(
 
     var predictionAndError: RDD[(Double, Double)] = remappedData.map { i =>
       val pred = treeWeights(0) * trees(0).predict(i.features)
-      val error = loss.computeError(pred, i)
+      val error = loss.computeError(pred, i.label)
       (pred, error)
     }
     evaluationArray(0) = predictionAndError.values.mean()
@@ -143,13 +143,13 @@ class GradientBoostedTreesModel(
     val broadcastWeights = sc.broadcast(treeWeights)
 
     (1 until numIterations).map { nTree =>
-      val currentTree = broadcastTrees.value(nTree)
-      val currentTreeWeight = broadcastWeights.value(nTree)
       predictionAndError = remappedData.zip(predictionAndError).mapPartitions { iter =>
-        iter map {
+        val currentTree = broadcastTrees.value(nTree)
+        val currentTreeWeight = broadcastWeights.value(nTree)
+        iter.map {
           case (point, (pred, error)) => {
             val newPred = pred + currentTree.predict(point.features) * currentTreeWeight
-            val newError = loss.computeError(newPred, point)
+            val newError = loss.computeError(newPred, point.label)
             (newPred, newError)
           }
         }

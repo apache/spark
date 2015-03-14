@@ -50,16 +50,8 @@ object LogLoss extends Loss {
     - 4.0 * point.label / (1.0 + math.exp(2.0 * point.label * prediction))
   }
 
-  /**
-   * Method to calculate loss when the predictions are already known.
-   * Note: This method is used in the method evaluateEachIteration to avoid recomputing the
-   * predicted values from previously fit trees.
-   * @param prediction Predicted label.
-   * @param datum LabeledPoint
-   * @return log loss of model on the datapoint.
-   */
-  override def computeError(prediction: Double, datum: LabeledPoint): Double = {
-    val margin = 2.0 * datum.label * prediction
+  override def computeError(prediction: Double, label: Double): Double = {
+    val margin = 2.0 * label * prediction
     // The following is equivalent to 2.0 * log(1 + exp(-margin)) but more numerically stable.
     2.0 * MLUtils.log1pExp(-margin)
   }

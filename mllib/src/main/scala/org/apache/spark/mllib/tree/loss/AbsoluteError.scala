@@ -47,16 +47,8 @@ object AbsoluteError extends Loss {
     if ((point.label - model.predict(point.features)) < 0) 1.0 else -1.0
   }
 
-  /**
-   * Method to calculate loss when the predictions are already known.
-   * Note: This method is used in the method evaluateEachIteration to avoid recomputing the
-   * predicted values from previously fit trees.
-   * @param prediction Predicted label.
-   * @param datum LabeledPoint.
-   * @return Absolute error of model on the given datapoint.
-   */
-  override def computeError(prediction: Double, datum: LabeledPoint): Double = {
-    val err = datum.label - prediction
+  override def computeError(prediction: Double, label: Double): Double = {
+    val err = label - prediction
     math.abs(err)
   }
 

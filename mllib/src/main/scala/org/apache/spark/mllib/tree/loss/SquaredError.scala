@@ -47,16 +47,8 @@ object SquaredError extends Loss {
     2.0 * (model.predict(point.features) - point.label)
   }
 
-  /**
-   * Method to calculate loss when the predictions are already known.
-   * Note: This method is used in the method evaluateEachIteration to avoid recomputing the
-   * predicted values from previously fit trees.
-   * @param prediction Predicted label.
-   * @param datum LabeledPoint
-   * @return Mean squared error of model on datapoint.
-   */
-  override def computeError(prediction: Double, datum: LabeledPoint): Double = {
-    val err = prediction - datum.label
+  override def computeError(prediction: Double, label: Double): Double = {
+    val err = prediction - label
     err * err
   }
 

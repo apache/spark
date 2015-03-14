@@ -48,7 +48,7 @@ trait Loss extends Serializable {
    * @return Measure of model error on data
    */
   def computeError(model: TreeEnsembleModel, data: RDD[LabeledPoint]): Double = {
-    data.map(point => computeError(model.predict(point.features), point)).mean()
+    data.map(point => computeError(model.predict(point.features), point.label)).mean()
   }
 
   /**
@@ -56,9 +56,9 @@ trait Loss extends Serializable {
    * Note: This method is used in the method evaluateEachIteration to avoid recomputing the
    * predicted values from previously fit trees.
    * @param prediction Predicted label.
-   * @param datum LabeledPoint
+   * @param label True label.
    * @return Measure of model error on datapoint.
    */
-  def computeError(prediction: Double, datum: LabeledPoint): Double
+  def computeError(prediction: Double, label: Double): Double
 
 }
