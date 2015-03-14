@@ -1156,8 +1156,7 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Execute a block of code that evaluates to Unit, forwarding any uncaught exceptions to the
-   * default UncaughtExceptionHandler
+   * Execute a block of code that evaluates to Unit, stop SparkContext is any uncaught exception
    */
   def tryOrStopSparkContext(sc: SparkContext)(block: => Unit) {
     try {
