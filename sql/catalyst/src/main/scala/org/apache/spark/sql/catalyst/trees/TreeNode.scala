@@ -343,7 +343,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   }.mkString(", ")
 
   /** String representation of this node without any children */
-  def simpleString = s"$nodeName $argString"
+  def simpleString = s"$nodeName $argString".trim
 
   override def toString: String = treeString
 
