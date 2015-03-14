@@ -1156,6 +1156,19 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Execute a block of code that evaluates to Unit, forwarding any uncaught exceptions to the
+   * default UncaughtExceptionHandler
+   */
+  def tryOrStopSparkContext(sc: SparkContext)(block: => Unit) {
+    try {
+      block
+    } catch {
+      case e: ControlThrowable => throw e
+      case t: Throwable => sc.stop()
+    }
+  }
+
+  /**
    * Execute a block of code that evaluates to Unit, re-throwing any non-fatal uncaught
    * exceptions as IOException.  This is used when implementing Externalizable and Serializable's
    * read and write methods, since Java's serializer will not report non-IOExceptions properly;

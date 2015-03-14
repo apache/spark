@@ -1736,7 +1736,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         }
     }
 
-    listenerBus.start()
+    listenerBus.start(this)
   }
 
   /** Post the application start event */
