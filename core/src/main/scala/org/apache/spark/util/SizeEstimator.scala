@@ -21,12 +21,12 @@ import java.lang.management.ManagementFactory
 import java.lang.reflect.{Field, Modifier}
 import java.util.{IdentityHashMap, Random}
 import java.util.concurrent.ConcurrentHashMap
+import scala.collection.mutable.ArrayBuffer
+import scala.runtime.ScalaRunTime
 
 import org.apache.spark.Logging
 import org.apache.spark.util.collection.OpenHashSet
 
-import scala.collection.mutable.ArrayBuffer
-import scala.runtime.ScalaRunTime
 
 /**
  * Estimates the sizes of Java objects (number of bytes of memory they occupy), for use in
