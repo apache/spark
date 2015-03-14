@@ -103,7 +103,7 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
 
   private object SaveLoadV1_0 {
 
-    case class Data(weights: Array[Double], mus: Array[Vector], sigmas: Array[Array[Double]])
+    case class Data(weights: Array[Double], mus: Array[Vector], sigmas: Array[Double])
 
     def formatVersionV1_0 = "1.0"
 
@@ -120,7 +120,7 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
 
       // DataFrame does not recognize MultiVariateGaussian or Matrix as of now.
       val mus = gaussians.map(i => i.mu)
-      val sigmas = gaussians.map(i => i.sigma.toArray)
+      val sigmas = gaussians.flatMap(i => i.sigma.toArray)
 
       // Create JSON metadata.
       val metadata = compact(render
@@ -143,15 +143,16 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
       val data = dataArray(0)
       val weights = data.getAs[Seq[Double]](0).toArray
       val mus = data.getAs[Seq[Vector]](1).toArray
-      val sigmas = data.getAs[Seq[Seq[Double]]](2).toArray
+      val sigmas = data.getAs[Seq[Double]](2).toArray
       val numFeatures = mus(0).size
 
-      val gaussians = mus.zip(sigmas) map {
-        case (mu, sigma) => {
-          val mat = Matrices.dense(numFeatures, numFeatures, sigma.toArray)
-          new MultivariateGaussian(mu, mat)
-        }
+      val gaussians = Array.tabulate(weights.length) { i =>
+        val startIndex = i * numFeatures * numFeatures
+        val stopIndex = startIndex + numFeatures
+        val mat = Matrices.dense(numFeatures, numFeatures, sigmas.slice(startIndex, stopIndex))
+        new MultivariateGaussian(mus(i), mat)
       }
+
       return new GaussianMixtureModel(weights, gaussians)
     }
   }
