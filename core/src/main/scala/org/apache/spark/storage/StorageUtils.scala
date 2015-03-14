@@ -36,7 +36,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   /**
    * Internal representation of the blocks stored in this block manager.
    *
-   * We store RDD blocks, broadcastBlocks and non-RDD blocks separately to allow quick
+   * We store RDD blocks, broadcastBlocks and other types of  blocks separately to allow quick
    * retrievals of RDD and broadcast blocks. These collections should only be mutated through the
    * add/update/removeBlock methods.
    */
@@ -48,7 +48,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
    * Storage information of the blocks that entails memory, disk, and off-heap memory usage.
    *
    * As with the block maps, we store the storage information separately for RDD blocks,
-   * broadcastBlocks and non-RDD blocks for the same reason. In particular, RDD storage
+   * broadcastBlocks and other types of  blocks for the same reason. In particular, RDD storage
    * information is stored in a map indexed by the RDD ID to the following 4-tuple:
    *
    *   (memory size, disk size, off-heap size, storage level)
