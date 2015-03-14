@@ -563,7 +563,7 @@ setMethod("join",
 #' @rdname join-methods
 #' @aliases leftOuterJoin,RDD,RDD-method
 setMethod("leftOuterJoin",
-          signature(x = "RDD", y = "RDD"),
+          signature(x = "RDD", y = "RDD", numPartitions = "integer"),
           function(x, y, numPartitions) {
             xTagged <- lapply(x, function(i) { list(i[[1]], list(1L, i[[2]])) })
             yTagged <- lapply(y, function(i) { list(i[[1]], list(2L, i[[2]])) })
@@ -572,8 +572,7 @@ setMethod("leftOuterJoin",
               joinTaggedList(v, list(FALSE, TRUE))
             }
             
-            joined <- flatMapValues(groupByKey(unionRDD(xTagged, yTagged), numToInt(numPartitions)),
-                                    doJoin)
+            joined <- flatMapValues(groupByKey(unionRDD(xTagged, yTagged), numPartitions), doJoin)
           })
 
 #' Right outer join two RDDs
@@ -601,7 +600,7 @@ setMethod("leftOuterJoin",
 #' @rdname join-methods
 #' @aliases rightOuterJoin,RDD,RDD-method
 setMethod("rightOuterJoin",
-          signature(x = "RDD", y = "RDD"),
+          signature(x = "RDD", y = "RDD", numPartitions = "integer"),
           function(x, y, numPartitions) {
             xTagged <- lapply(x, function(i) { list(i[[1]], list(1L, i[[2]])) })
             yTagged <- lapply(y, function(i) { list(i[[1]], list(2L, i[[2]])) })
@@ -610,8 +609,7 @@ setMethod("rightOuterJoin",
               joinTaggedList(v, list(TRUE, FALSE))
             }
             
-            joined <- flatMapValues(groupByKey(unionRDD(xTagged, yTagged), numToInt(numPartitions)),
-                                    doJoin)
+            joined <- flatMapValues(groupByKey(unionRDD(xTagged, yTagged), numPartitions), doJoin)
           })
 
 #' Full outer join two RDDs
@@ -642,7 +640,7 @@ setMethod("rightOuterJoin",
 #' @rdname join-methods
 #' @aliases fullOuterJoin,RDD,RDD-method
 setMethod("fullOuterJoin",
-          signature(x = "RDD", y = "RDD"),
+          signature(x = "RDD", y = "RDD", numPartitions = "integer"),
           function(x, y, numPartitions) {
             xTagged <- lapply(x, function(i) { list(i[[1]], list(1L, i[[2]])) })
             yTagged <- lapply(y, function(i) { list(i[[1]], list(2L, i[[2]])) })
@@ -651,8 +649,7 @@ setMethod("fullOuterJoin",
               joinTaggedList(v, list(TRUE, TRUE))
             }
 
-            joined <- flatMapValues(groupByKey(unionRDD(xTagged, yTagged), numToInt(numPartitions)),
-                                    doJoin)
+            joined <- flatMapValues(groupByKey(unionRDD(xTagged, yTagged), numPartitions), doJoin)
           })
 
 #' For each key k in several RDDs, return a resulting RDD that

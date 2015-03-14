@@ -762,15 +762,11 @@ setMethod("first",
 #' rdd <- parallelize(sc, c(1,2,2,3,3,3))
 #' sort(unlist(collect(distinct(rdd)))) # c(1, 2, 3)
 #'}
-setClassUnion("missingOrInteger", c("missing", "integer"))
 #' @rdname distinct
 #' @aliases distinct,RDD-method
 setMethod("distinct",
-          signature(x = "RDD", numPartitions = "missingOrInteger"),
-          function(x, numPartitions) {
-            if (missing(numPartitions)) {
-              numPartitions <- SparkR::numPartitions(x)
-            }
+          signature(x = "RDD"),
+          function(x, numPartitions = SparkR::numPartitions(x)) {
             identical.mapped <- lapply(x, function(x) { list(x, NULL) })
             reduced <- reduceByKey(identical.mapped,
                                    function(x, y) { x },
@@ -1282,149 +1278,6 @@ setMethod("setName",
             x
           })
 
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' rdd <- parallelize(sc, list(10, 1, 2, 9, 3, 4, 5, 6, 7))
-#' top(rdd, 6L) # list(10, 9, 7, 6, 5, 4)
-#'}
-#' @rdname top
-#' @aliases top,RDD,RDD-method
-setMethod("top",
-          signature(x = "RDD", num = "integer"),
-          function(x, num) {          
-            takeOrderedElem(x, num, FALSE)
-          })
-
-#' Fold an RDD using a given associative function and a neutral "zero value".
-#'
-#' Aggregate the elements of each partition, and then the results for all the
-#' partitions, using a given associative function and a neutral "zero value".
-#' 
-#' @param x An RDD.
-#' @param zeroValue A neutral "zero value".
-#' @param op An associative function for the folding operation.
-#' @return The folding result.
-#' @seealso reduce
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' rdd <- parallelize(sc, list(1, 2, 3, 4, 5))
-#' fold(rdd, 0, "+") # 15
-#'}
-#' @rdname fold
-#' @aliases fold,RDD,RDD-method
-setMethod("fold",
-          signature(x = "RDD", zeroValue = "ANY", op = "ANY"),
-          function(x, zeroValue, op) {
-            aggregateRDD(x, zeroValue, op, op)
-          })
-
-#' Aggregate an RDD using the given combine functions and a neutral "zero value".
-#'
-#' Aggregate the elements of each partition, and then the results for all the
-#' partitions, using given combine functions and a neutral "zero value".
-#' 
-#' @param x An RDD.
-#' @param zeroValue A neutral "zero value".
-#' @param seqOp A function to aggregate the RDD elements. It may return a different
-#'              result type from the type of the RDD elements.
-#' @param combOp A function to aggregate results of seqOp.
-#' @return The aggregation result.
-#' @seealso reduce
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' rdd <- parallelize(sc, list(1, 2, 3, 4))
-#' zeroValue <- list(0, 0)
-#' seqOp <- function(x, y) { list(x[[1]] + y, x[[2]] + 1) }
-#' combOp <- function(x, y) { list(x[[1]] + y[[1]], x[[2]] + y[[2]]) }
-#' aggregateRDD(rdd, zeroValue, seqOp, combOp) # list(10, 4)
-#'}
-#' @rdname aggregateRDD
-#' @aliases aggregateRDD,RDD,RDD-method
-setMethod("aggregateRDD",
-          signature(x = "RDD", zeroValue = "ANY", seqOp = "ANY", combOp = "ANY"),
-          function(x, zeroValue, seqOp, combOp) {        
-            partitionFunc <- function(part) {
-              Reduce(seqOp, part, zeroValue)
-            }
-            
-            partitionList <- collect(lapplyPartition(x, partitionFunc),
-                                     flatten = FALSE)
-            Reduce(combOp, partitionList, zeroValue)
-          })
-
-#' Pipes elements to a forked external process.
-#'
-#' The same as 'pipe()' in Spark.
-#'
-#' @param x The RDD whose elements are piped to the forked external process.
-#' @param command The command to fork an external process.
-#' @param env A named list to set environment variables of the external process.
-#' @return A new RDD created by piping all elements to a forked external process.
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' rdd <- parallelize(sc, 1:10)
-#' collect(pipeRDD(rdd, "more")
-#' Output: c("1", "2", ..., "10")
-#'}
-#' @rdname pipeRDD
-#' @aliases pipeRDD,RDD,character-method
-setMethod("pipeRDD",
-          signature(x = "RDD", command = "character"),
-          function(x, command, env = list()) {
-            func <- function(part) {
-              trim.trailing.func <- function(x) {
-                sub("[\r\n]*$", "", toString(x))
-              }
-              input <- unlist(lapply(part, trim.trailing.func))
-              res <- system2(command, stdout = TRUE, input = input, env = env)
-              lapply(res, trim.trailing.func)
-            }
-            lapplyPartition(x, func)
-          })
-
-# TODO: Consider caching the name in the RDD's environment
-#' Return an RDD's name.
-#'
-#' @param x The RDD whose name is returned.
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' rdd <- parallelize(sc, list(1,2,3))
-#' name(rdd) # NULL (if not set before)
-#'}
-#' @rdname name
-#' @aliases name,RDD
-setMethod("name",
-          signature(x = "RDD"),
-          function(x) {
-            callJMethod(getJRDD(x), "name")
-          })
-
-#' Set an RDD's name.
-#'
-#' @param x The RDD whose name is to be set.
-#' @param name The RDD name to be set.
-#' @return a new RDD renamed.
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' rdd <- parallelize(sc, list(1,2,3))
-#' setName(rdd, "myRDD")
-#' name(rdd) # "myRDD"
-#'}
-#' @rdname setName
-#' @aliases setName,RDD
-setMethod("setName",
-          signature(x = "RDD", name = "character"),
-          function(x, name) {
-            callJMethod(getJRDD(x), "setName", name)
-            x
-          })
-
 #' Zip an RDD with generated unique Long IDs.
 #'
 #' Items in the kth partition will get ids k, n+k, 2*n+k, ..., where
@@ -1517,7 +1370,6 @@ setMethod("zipWithIndex",
 
 
 ############ Binary Functions #############
-
 
 #' Return the union RDD of two RDDs.
 #' The same as union() in Spark.

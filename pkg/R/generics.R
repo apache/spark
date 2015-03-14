@@ -297,15 +297,15 @@ setGeneric("join", function(x, y, ...) { standardGeneric("join") })
 
 #' @rdname join-methods
 #' @export
-setGeneric("leftOuterJoin", function(x, y, ...) { standardGeneric("leftOuterJoin") })
+setGeneric("leftOuterJoin", function(x, y, numPartitions) { standardGeneric("leftOuterJoin") })
 
 #' @rdname join-methods
 #' @export
-setGeneric("rightOuterJoin", function(x, y, ...) { standardGeneric("rightOuterJoin") })
+setGeneric("rightOuterJoin", function(x, y, numPartitions) { standardGeneric("rightOuterJoin") })
 
 #' @rdname join-methods
 #' @export
-setGeneric("fullOuterJoin", function(x, y, ...) { standardGeneric("fullOuterJoin") })
+setGeneric("fullOuterJoin", function(x, y, numPartitions) { standardGeneric("fullOuterJoin") })
 
 #' @rdname cogroup
 #' @export
