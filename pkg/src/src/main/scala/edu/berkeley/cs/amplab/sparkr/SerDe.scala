@@ -18,6 +18,8 @@ object SerDe {
   // logical -> Boolean
   // double, numeric -> Double
   // raw -> Array[Byte]
+  // Date -> Date
+  // POSIXlt/POSIXct -> Time
   //
   // list[T] -> Array[T], where T is one of above mentioned types
   // environment -> Map[String, T], where T is a native type
@@ -79,6 +81,7 @@ object SerDe {
     val intVal = in.readInt()
     if (intVal == 0) false else true
   }
+
   def readDate(in: DataInputStream) = {
     val d = in.readInt()
     new Date(d.toLong * 24 * 3600 * 1000)
@@ -154,6 +157,8 @@ object SerDe {
   // Double -> double
   // Long -> double
   // Array[Byte] -> raw
+  // Date -> Date
+  // Time -> POSIXct
   //
   // Array[T] -> list()
   // Object -> jobj
@@ -253,6 +258,7 @@ object SerDe {
     val intValue = if (value) 1 else 0
     out.writeInt(intValue)
   }
+
   def writeDate(out: DataOutputStream, value: Date) {
     out.writeInt((value.getTime / 1000 / 3600 / 24).toInt)
   }

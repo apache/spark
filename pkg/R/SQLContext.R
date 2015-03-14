@@ -67,6 +67,8 @@ tojson <- function(x) {
     paste('"', x, '"', sep = '')
   } else if (is.logical(x)) {
     if (x) "true" else "false"
+  } else {
+    stop(paste("unexpected type:", class(x)))
   }
 }
 
@@ -97,7 +99,7 @@ createDataFrame <- function(sqlCtx, data, schema = NULL, samplingRatio = 1.0) {
       # get rid of factor type
       dropFactor <- function(x) {
         if (is.factor(x)) {
-          levels(x)[x]
+          as.character(x)
         } else {
           x
         }
@@ -108,11 +110,13 @@ createDataFrame <- function(sqlCtx, data, schema = NULL, samplingRatio = 1.0) {
   }
   if (is.list(data)) {
     sc <- callJStatic("edu.berkeley.cs.amplab.sparkr.SQLUtils", "getJavaSparkContext", sqlCtx)
-    data <- parallelize(sc, data)
+    rdd <- parallelize(sc, data)
+  } else if (inherits(data, "RDD")) {
+    rdd <- data
+  } else {
+    stop(paste("unexpected type:", class(data)))
   }
-  stopifnot(inherits(data, "RDD"))
 
-  rdd <- data
   if (is.null(schema) || is.null(names(schema))) {
     row <- first(rdd)
     names <- if (is.null(schema)) {
@@ -136,7 +140,7 @@ createDataFrame <- function(sqlCtx, data, schema = NULL, samplingRatio = 1.0) {
   stopifnot(class(schema) == "list")
   stopifnot(schema$type == "struct")
   stopifnot(class(schema$fields) == "list")
-  schemaString <- as.character(tojson(schema))
+  schemaString <- tojson(schema)
 
   jrdd <- getJRDD(lapply(rdd, function(x) x), "row")
   srdd <- callJMethod(jrdd, "rdd")
@@ -237,17 +241,15 @@ jsonRDD <- function(sqlCtx, rdd, schema = NULL, samplingRatio = 1.0) {
 #' Loads a Parquet file, returning the result as a DataFrame.
 #'
 #' @param sqlCtx SQLContext to use
-#' @param path Path of file to read. A vector of multiple paths is allowed.
+#' @param ... Path(s) of parquet file(s) to read.
 #' @return DataFrame
 #' @export
 
 # TODO: Implement saveasParquetFile and write examples for both
-parquetFile <- function(sqlCtx, path) {
+parquetFile <- function(sqlCtx, ...) {
   # Allow the user to have a more flexible definiton of the text file path
-  path <- normalizePath(path)
-  # Convert a string vector of paths to a string containing comma separated paths
-  path <- paste(path, collapse = ",")
-  sdf <- callJMethod(sqlCtx, "parquetFile", path)
+  paths <- lapply(list(...), normalizePath)
+  sdf <- callJMethod(sqlCtx, "parquetFile", paths)
   dataFrame(sdf)
 }
 

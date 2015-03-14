@@ -648,15 +648,23 @@ test_that("withColumn() and withColumnRenamed()", {
   expect_true(columns(newDF2)[1] == "newerAge")
 })
 
-# TODO: Enable and test once the parquetFile PR has been merged
-# test_that("saveAsParquetFile() on DataFrame and works with parquetFile", {
-#   df <- jsonFile(sqlCtx, jsonPath)
-#   parquetPath <- tempfile(pattern="spark-test", fileext=".tmp")
-#   saveAsParquetFile(df, parquetPath)
-#   parquetDF <- parquetFile(sqlCtx, parquetPath)
-#   expect_true(inherits(parquetDF, "DataFrame"))
-#   expect_equal(collect(df), collect(parquetDF))
-#   unlink(parquetPath)
-# })
+test_that("saveDF() on DataFrame and works with parquetFile", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  saveDF(df, parquetPath, "parquet", mode="overwrite")
+  parquetDF <- parquetFile(sqlCtx, parquetPath)
+  expect_true(inherits(parquetDF, "DataFrame"))
+  expect_equal(collect(df), collect(parquetDF))
+})
 
+test_that("parquetFile works with multiple input paths", {
+  df <- jsonFile(sqlCtx, jsonPath)
+  saveDF(df, parquetPath, "parquet", mode="overwrite")
+  parquetPath2 <- tempfile(pattern = "parquetPath2", fileext = ".parquet")
+  saveDF(df, parquetPath2, "parquet", mode="overwrite")
+  parquetDF <- parquetFile(sqlCtx, parquetPath, parquetPath2)
+  expect_true(inherits(parquetDF, "DataFrame"))
+  expect_true(count(parquetDF) == count(df)*2)
+})
+
+unlink(parquetPath)
 unlink(jsonPath)
