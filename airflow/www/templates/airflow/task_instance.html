@@ -16,6 +16,8 @@
               <input type="hidden" value="{{ dag.dag_id }}" name="dag_id">
             </span>
             [{{ execution_date }}]
+		    {{ form.execution_date(class_="form-control") | safe }}
+
     </div>
 </form>
   </h4>
@@ -41,14 +43,14 @@
       function date_change(){
           execution_date = $("input#execution_date").val().replace(' ', 'T');
           loc = window.location.href.replace('{{ execution_date }}', execution_date);
-          console.log(loc);
-          //window.location = loc;
+          window.location = loc;
       }
-      $("input#execution_date").on("change", function(){
+      $("input#execution_date").on("change.daterangepicker", function(){
           date_change();
       });  
-      $("button.applyBtn").click(function(){date_change();});  
-      console.log($("button.applyBtn"));
+      $("input#execution_date").on("apply.daterangepicker", function(){
+          date_change();
+      });  
     });
   </script>
 {% endblock %}
