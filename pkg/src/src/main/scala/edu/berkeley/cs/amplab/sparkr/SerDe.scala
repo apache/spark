@@ -78,6 +78,7 @@ object SerDe {
     val intVal = in.readInt()
     if (intVal == 0) false else true
   }
+
   def readDate(in: DataInputStream) = {
     val d = in.readInt()
     new Date(d.toLong * 24 * 3600 * 1000)
@@ -252,6 +253,7 @@ object SerDe {
     val intValue = if (value) 1 else 0
     out.writeInt(intValue)
   }
+
   def writeDate(out: DataOutputStream, value: Date) {
     out.writeInt((value.getTime / 1000 / 3600 / 24).toInt)
   }
