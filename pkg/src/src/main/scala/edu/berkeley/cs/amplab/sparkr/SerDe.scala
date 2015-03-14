@@ -17,6 +17,8 @@ object SerDe {
   // logical -> Boolean
   // double, numeric -> Double
   // raw -> Array[Byte]
+  // Date -> Date
+  // POSIXlt/POSIXct -> Time
   //
   // list[T] -> Array[T], where T is one of above mentioned types
   // environment -> Map[String, T], where T is a native type
@@ -154,6 +156,8 @@ object SerDe {
   // Double -> double
   // Long -> double
   // Array[Byte] -> raw
+  // Date -> Date
+  // Time -> POSIXct
   //
   // Array[T] -> list()
   // Object -> jobj
