@@ -262,7 +262,14 @@ class BinaryClassificationMetrics @Since("1.3.0") (
       } else {
         val distinctScoresCount = distinctScoresAndLabelCounts.count()
   
-        var groupCount = distinctScoresCount / numBins
+        var groupCount =
+          if (distinctScoresCount % numBins == 0) {
+            distinctScoresCount / numBins
+          } else {
+            // prevent the last bin from being very small compared to the others
+            distinctScoresCount / numBins + 1
+          }
+        
         if (groupCount < 2) {
           logInfo(s"Too few distinct scores ($distinctScoresCount) for $numBins bins to be useful")
           distinctScoresAndLabelCounts.map { pair => ((pair._1, pair._1), pair._2) }

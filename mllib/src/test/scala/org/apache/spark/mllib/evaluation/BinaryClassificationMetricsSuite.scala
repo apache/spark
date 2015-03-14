@@ -177,9 +177,8 @@ class BinaryClassificationMetricsSuite extends SparkFunSuite with MLlibTestSpark
       ) ==
       downsampledROC)
 
-    val calibration = Seq(((0.1, 0.2), (0.0, 2L)), ((0.3, 0.4), (0.5, 2L)), ((0.5, 0.6), (0.5, 2L)),
-      ((0.7, 0.9), (2/3.0, 3L)))
-    assert(calibration == downsampled.calibration().collect())
+    val calibration = Array(((0.1, 0.3), (1/3.0, 3L)), ((0.4, 0.6), (1/3.0, 3L)), ((0.7, 0.9), (2/3.0, 3L)))
+    assertTupleTupleSequencesMatch(calibration, downsampled.calibration().collect())
   }
 
 }
