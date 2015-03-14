@@ -1318,7 +1318,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Save this RDD as a SequenceFile of serialized objects.
    */
-  def saveAsObjectFile(path: String) {
+  def saveAsObjectFile(path: String, codec: Option[Class[_ <: CompressionCodec]] = None) {
     this.mapPartitions(iter => iter.grouped(10).map(_.toArray))
       .map(x => (NullWritable.get(), new BytesWritable(Utils.serialize(x))))
       .saveAsSequenceFile(path)
