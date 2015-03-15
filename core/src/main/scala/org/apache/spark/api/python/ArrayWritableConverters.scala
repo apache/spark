@@ -67,7 +67,7 @@ private[python] class DoubleArrayToWritableConverter extends Converter[Any, Writ
       daw.set(arr.asInstanceOf[Array[Double]].map(new DoubleWritable(_)))
       daw
     case other => throw new SparkException(s"Data of type $other is not supported")
-  }
+    }
   }
 }
 

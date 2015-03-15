@@ -87,12 +87,6 @@ private[python] class TestOutputValueConverter extends Converter[Any, Any] {
   }
 }
 
-
-
-
-
-
-
 /**
  * This object contains method to generate SequenceFile test data and write it to a
  * given directory (probably a temp directory)
@@ -162,8 +156,6 @@ object WriteInputFormatTestDataGenerator {
        (new IntWritable(k), nested)
     }.saveAsNewAPIHadoopFile[SequenceFileOutputFormat[IntWritable, NestedDoubleArrayWritable]](
         narrPath)
-
-
 
 
     // Create test data for MapWritable, with keys DoubleWritable and values Text
