@@ -203,6 +203,9 @@ regularization, as well as L2 regularizer.
 recommended.
 * `maxNumIterations` is the maximal number of iterations that L-BFGS can be run.
 * `regParam` is the regularization parameter when using regularization.
+* `convergenceTol` designates the end of iterations based on relative comparison
+of adjusted values. This value is used by [Breeze LBFGS](https://github.com/scalanlp/breeze),
+and it looks at both average improvement and the norm of gradient.
 
 The `return` is a tuple containing two elements. The first element is a column matrix
 containing weights for every feature, and the second element is an array containing 
