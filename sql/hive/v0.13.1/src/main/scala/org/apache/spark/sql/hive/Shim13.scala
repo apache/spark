@@ -51,7 +51,7 @@ import org.apache.spark.sql.types.{Decimal, DecimalType}
 /**
  * This class provides the UDF creation and also the UDF instance serialization and
  * de-serialization cross process boundary.
- * 
+ *
  * Detail discussion can be found at https://github.com/apache/spark/pull/3640
  *
  * @param functionClassName UDF class name
@@ -301,11 +301,6 @@ private[hive] object HiveShim {
 
   def getStatsSetupConstRawDataSize = StatsSetupConst.RAW_DATA_SIZE
 
-  def createDefaultDBIfNeeded(context: HiveContext) = {
-    context.runSqlHive("CREATE DATABASE IF NOT EXISTS default")
-    context.runSqlHive("USE default")
-  }
-
   def getCommandProcessor(cmd: Array[String], conf: HiveConf) = {
     CommandProcessorFactory.get(cmd, conf)
   }
@@ -400,7 +395,7 @@ private[hive] object HiveShim {
       Decimal(hdoi.getPrimitiveJavaObject(data).bigDecimalValue(), hdoi.precision(), hdoi.scale())
     }
   }
- 
+
   /*
    * Bug introduced in hive-0.13. AvroGenericRecordWritable has a member recordReaderID that
    * is needed to initialize before serialization.
