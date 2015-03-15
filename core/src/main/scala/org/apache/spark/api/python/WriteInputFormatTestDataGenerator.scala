@@ -18,6 +18,7 @@
 package org.apache.spark.api.python
 
 import java.io.{DataOutput, DataInput}
+import java.util.ArrayList
 
 import com.google.common.base.Charsets.UTF_8
 
@@ -25,6 +26,9 @@ import org.apache.hadoop.io._
 import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat
 import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.{SparkContext, SparkException}
+
+import scala.collection.JavaConversions
+
 
 /**
  * A class to test Pyrolite serialization on the Scala side, that will be deserialized
@@ -83,24 +87,11 @@ private[python] class TestOutputValueConverter extends Converter[Any, Any] {
   }
 }
 
-private[python] class DoubleArrayWritable extends ArrayWritable(classOf[DoubleWritable])
 
-private[python] class DoubleArrayToWritableConverter extends Converter[Any, Writable] {
-  override def convert(obj: Any) = obj match {
-    case arr if arr.getClass.isArray && arr.getClass.getComponentType == classOf[Double] =>
-      val daw = new DoubleArrayWritable
-      daw.set(arr.asInstanceOf[Array[Double]].map(new DoubleWritable(_)))
-      daw
-    case other => throw new SparkException(s"Data of type $other is not supported")
-  }
-}
 
-private[python] class WritableToDoubleArrayConverter extends Converter[Any, Array[Double]] {
-  override def convert(obj: Any): Array[Double] = obj match {
-    case daw : DoubleArrayWritable => daw.get().map(_.asInstanceOf[DoubleWritable].get())
-    case other => throw new SparkException(s"Data of type $other is not supported")
-  }
-}
+
+
+
 
 /**
  * This object contains method to generate SequenceFile test data and write it to a
@@ -122,6 +113,7 @@ object WriteInputFormatTestDataGenerator {
     val intPath = s"$basePath/sfint/"
     val doublePath = s"$basePath/sfdouble/"
     val arrPath = s"$basePath/sfarray/"
+    val narrPath = s"$basePath/sfnarray/"
     val mapPath = s"$basePath/sfmap/"
     val classPath = s"$basePath/sfclass/"
     val bytesPath = s"$basePath/sfbytes/"
@@ -144,7 +136,7 @@ object WriteInputFormatTestDataGenerator {
       (new IntWritable(k), NullWritable.get())
     }.saveAsSequenceFile(nullPath)
 
-    // Create test data for ArrayWritable
+    // Create test data for DoubleArrayWritable
     val data = Seq(
       (1, Array()),
       (2, Array(3.0, 4.0, 5.0)),
@@ -156,6 +148,23 @@ object WriteInputFormatTestDataGenerator {
         va.set(v.map(new DoubleWritable(_)))
         (new IntWritable(k), va)
     }.saveAsNewAPIHadoopFile[SequenceFileOutputFormat[IntWritable, DoubleArrayWritable]](arrPath)
+
+    // Create test data for NestedDoubleArrayWritable
+    val nestedDoubleArrayData =
+      Seq((1, Array(Array(-9.9, -8.8), Array(-7.7, -6.6, -5.5), Array(-4.4, -3.3, -2.2, -1.1))),
+          (2, Array(Array(1.1, 2.2, 3.3, 4.4, 5.5), Array(6.6), Array(7.7, 8.8))))
+
+    val ndaConverter = new NestedDoubleArrayToWritableConverter
+
+    sc.parallelize(nestedDoubleArrayData, numSlices = 2)
+      .map{ case (k, v) =>
+      val nested = ndaConverter.convert(v)
+       (new IntWritable(k), nested)
+    }.saveAsNewAPIHadoopFile[SequenceFileOutputFormat[IntWritable, NestedDoubleArrayWritable]](
+        narrPath)
+
+
+
 
     // Create test data for MapWritable, with keys DoubleWritable and values Text
     val mapData = Seq(
@@ -186,6 +195,4 @@ object WriteInputFormatTestDataGenerator {
       classOf[Text], classOf[TestWritable],
       classOf[SequenceFileOutputFormat[Text, TestWritable]])
   }
-
-
 }

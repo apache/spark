@@ -46,16 +46,21 @@ else:
 
 from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
-from pyspark.rdd import RDD
 from pyspark.files import SparkFiles
 from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, PickleSerializer, \
-    CloudPickleSerializer, CompressedSerializer, UTF8Deserializer, NoOpSerializer
+    CloudPickleSerializer, CompressedSerializer
 from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, ExternalSorter
+from pyspark.sql import SQLContext, IntegerType, Row, ArrayType, StructType, StructField, \
+    UserDefinedType, DoubleType
 from pyspark import shuffle
-from pyspark.profiler import BasicProfiler
+
+
+from sequence_file_helper import convert_from_numpy, convert_to_numpy, convert_from_nested_numpy, convert_to_nested_numpy
+
 
 _have_scipy = False
 _have_numpy = False
+_have_pandas = False
 try:
     import scipy.sparse
     _have_scipy = True
@@ -68,9 +73,33 @@ try:
 except:
     # No NumPy, but that's okay, we'll skip those tests
     pass
+try:
+    import pandas as pd
+    _have_pandas = True
+except:
+    # No Pandas, but that's okay, we'll skip those tests
+    pass
 
 
 SPARK_HOME = os.environ["SPARK_HOME"]
+
+
+def flatten(x):
+    result = []
+    for el in x:
+        try:
+            iter(el)
+            result.extend(flatten(el))
+        except TypeError:
+            result.append(el)
+
+    return result
+
+def flatten_jagged(jagged):
+    return np.array(flatten(jagged.tolist()))
+
+
+
 
 
 class MergerTests(unittest.TestCase):
@@ -128,7 +157,6 @@ class MergerTests(unittest.TestCase):
                          self.N * 10)
         m._cleanup()
 
-
 class SorterTests(unittest.TestCase):
     def test_in_memory_sort(self):
         l = range(1024)
@@ -165,7 +193,6 @@ class SorterTests(unittest.TestCase):
         rdd = sc.parallelize(l, 10)
         self.assertEquals(sorted(l), rdd.sortBy(lambda x: x).collect())
         sc.stop()
-
 
 class SerializationTestCase(unittest.TestCase):
 
@@ -313,7 +340,6 @@ class CheckpointTests(ReusedPySparkTestCase):
                                             flatMappedRDD._jrdd_deserializer)
         self.assertEquals([1, 2, 3, 4], recovered.collect())
 
-
 class AddFileTests(PySparkTestCase):
 
     def test_add_py_file(self):
@@ -378,7 +404,6 @@ class AddFileTests(PySparkTestCase):
             return SimpleHTTPServer.__name__
 
         self.assertEqual(["My Server"], self.sc.parallelize(range(1)).map(func).collect())
-
 
 class RDDTests(ReusedPySparkTestCase):
 
@@ -533,15 +558,6 @@ class RDDTests(ReusedPySparkTestCase):
         a = a._reserialize(BatchedSerializer(PickleSerializer(), 2))
         b = b._reserialize(MarshalSerializer())
         self.assertEqual(a.zip(b).collect(), [(0, 100), (1, 101), (2, 102), (3, 103), (4, 104)])
-        # regression test for SPARK-4841
-        path = os.path.join(SPARK_HOME, "python/test_support/hello.txt")
-        t = self.sc.textFile(path)
-        cnt = t.count()
-        self.assertEqual(cnt, t.zip(t).count())
-        rdd = t.map(str)
-        self.assertEqual(cnt, t.zip(rdd).count())
-        # regression test for bug in _reserializer()
-        self.assertEqual(cnt, t.zip(rdd).count())
 
     def test_zip_with_different_number_of_items(self):
         a = self.sc.parallelize(range(5), 2)
@@ -714,32 +730,6 @@ class RDDTests(ReusedPySparkTestCase):
         wr_s21 = rdd.sample(True, 0.4, 21).collect()
         self.assertNotEqual(set(wr_s11), set(wr_s21))
 
-    def test_null_in_rdd(self):
-        jrdd = self.sc._jvm.PythonUtils.generateRDDWithNull(self.sc._jsc)
-        rdd = RDD(jrdd, self.sc, UTF8Deserializer())
-        self.assertEqual([u"a", None, u"b"], rdd.collect())
-        rdd = RDD(jrdd, self.sc, NoOpSerializer())
-        self.assertEqual(["a", None, "b"], rdd.collect())
-
-    def test_multiple_python_java_RDD_conversions(self):
-        # Regression test for SPARK-5361
-        data = [
-            (u'1', {u'director': u'David Lean'}),
-            (u'2', {u'director': u'Andrew Dominik'})
-        ]
-        from pyspark.rdd import RDD
-        data_rdd = self.sc.parallelize(data)
-        data_java_rdd = data_rdd._to_java_object_rdd()
-        data_python_rdd = self.sc._jvm.SerDe.javaToPython(data_java_rdd)
-        converted_rdd = RDD(data_python_rdd, self.sc)
-        self.assertEqual(2, converted_rdd.count())
-
-        # conversion between python and java RDD threw exceptions
-        data_java_rdd = converted_rdd._to_java_object_rdd()
-        data_python_rdd = self.sc._jvm.SerDe.javaToPython(data_java_rdd)
-        converted_rdd = RDD(data_python_rdd, self.sc)
-        self.assertEqual(2, converted_rdd.count())
-
 
 class ProfilerTests(PySparkTestCase):
 
@@ -750,12 +740,16 @@ class ProfilerTests(PySparkTestCase):
         self.sc = SparkContext('local[4]', class_name, conf=conf)
 
     def test_profiler(self):
-        self.do_computation()
 
-        profilers = self.sc.profiler_collector.profilers
-        self.assertEqual(1, len(profilers))
-        id, profiler, _ = profilers[0]
-        stats = profiler.stats()
+        def heavy_foo(x):
+            for i in range(1 << 20):
+                x = 1
+        rdd = self.sc.parallelize(range(100))
+        rdd.foreach(heavy_foo)
+        profiles = self.sc._profile_stats
+        self.assertEqual(1, len(profiles))
+        id, acc, _ = profiles[0]
+        stats = acc.value
         self.assertTrue(stats is not None)
         width, stat_list = stats.get_print_list([])
         func_names = [func_name for fname, n, func_name in stat_list]
@@ -766,30 +760,227 @@ class ProfilerTests(PySparkTestCase):
         self.sc.dump_profiles(d)
         self.assertTrue("rdd_%d.pstats" % id in os.listdir(d))
 
-    def test_custom_profiler(self):
-        class TestCustomProfiler(BasicProfiler):
-            def show(self, id):
-                self.result = "Custom formatting"
 
-        self.sc.profiler_collector.profiler_cls = TestCustomProfiler
+class ExamplePointUDT(UserDefinedType):
+    """
+    User-defined type (UDT) for ExamplePoint.
+    """
 
-        self.do_computation()
+    @classmethod
+    def sqlType(self):
+        return ArrayType(DoubleType(), False)
 
-        profilers = self.sc.profiler_collector.profilers
-        self.assertEqual(1, len(profilers))
-        _, profiler, _ = profilers[0]
-        self.assertTrue(isinstance(profiler, TestCustomProfiler))
+    @classmethod
+    def module(cls):
+        return 'pyspark.tests'
 
-        self.sc.show_profiles()
-        self.assertEqual("Custom formatting", profiler.result)
+    @classmethod
+    def scalaUDT(cls):
+        return 'org.apache.spark.sql.test.ExamplePointUDT'
 
-    def do_computation(self):
-        def heavy_foo(x):
-            for i in range(1 << 20):
-                x = 1
+    def serialize(self, obj):
+        return [obj.x, obj.y]
 
-        rdd = self.sc.parallelize(range(100))
-        rdd.foreach(heavy_foo)
+    def deserialize(self, datum):
+        return ExamplePoint(datum[0], datum[1])
+
+
+class ExamplePoint:
+    """
+    An example class to demonstrate UDT in Scala, Java, and Python.
+    """
+
+    __UDT__ = ExamplePointUDT()
+
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+    def __repr__(self):
+        return "ExamplePoint(%s,%s)" % (self.x, self.y)
+
+    def __str__(self):
+        return "(%s,%s)" % (self.x, self.y)
+
+    def __eq__(self, other):
+        return isinstance(other, ExamplePoint) and \
+            other.x == self.x and other.y == self.y
+
+
+class SQLTests(ReusedPySparkTestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        ReusedPySparkTestCase.setUpClass()
+        cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
+        os.unlink(cls.tempdir.name)
+
+    @classmethod
+    def tearDownClass(cls):
+        ReusedPySparkTestCase.tearDownClass()
+        shutil.rmtree(cls.tempdir.name, ignore_errors=True)
+
+    def setUp(self):
+        self.sqlCtx = SQLContext(self.sc)
+
+    def test_udf(self):
+        self.sqlCtx.registerFunction("twoArgs", lambda x, y: len(x) + y, IntegerType())
+        [row] = self.sqlCtx.sql("SELECT twoArgs('test', 1)").collect()
+        self.assertEqual(row[0], 5)
+
+    def test_udf2(self):
+        self.sqlCtx.registerFunction("strlen", lambda string: len(string), IntegerType())
+        self.sqlCtx.inferSchema(self.sc.parallelize([Row(a="test")])).registerTempTable("test")
+        [res] = self.sqlCtx.sql("SELECT strlen(a) FROM test WHERE strlen(a) > 1").collect()
+        self.assertEqual(4, res[0])
+
+    def test_udf_with_array_type(self):
+        d = [Row(l=range(3), d={"key": range(5)})]
+        rdd = self.sc.parallelize(d)
+        srdd = self.sqlCtx.inferSchema(rdd).registerTempTable("test")
+        self.sqlCtx.registerFunction("copylist", lambda l: list(l), ArrayType(IntegerType()))
+        self.sqlCtx.registerFunction("maplen", lambda d: len(d), IntegerType())
+        [(l1, l2)] = self.sqlCtx.sql("select copylist(l), maplen(d) from test").collect()
+        self.assertEqual(range(3), l1)
+        self.assertEqual(1, l2)
+
+    def test_broadcast_in_udf(self):
+        bar = {"a": "aa", "b": "bb", "c": "abc"}
+        foo = self.sc.broadcast(bar)
+        self.sqlCtx.registerFunction("MYUDF", lambda x: foo.value[x] if x else '')
+        [res] = self.sqlCtx.sql("SELECT MYUDF('c')").collect()
+        self.assertEqual("abc", res[0])
+        [res] = self.sqlCtx.sql("SELECT MYUDF('')").collect()
+        self.assertEqual("", res[0])
+
+    def test_basic_functions(self):
+        rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
+        srdd = self.sqlCtx.jsonRDD(rdd)
+        srdd.count()
+        srdd.collect()
+        srdd.schemaString()
+        srdd.schema()
+
+        # cache and checkpoint
+        self.assertFalse(srdd.is_cached)
+        srdd.persist()
+        srdd.unpersist()
+        srdd.cache()
+        self.assertTrue(srdd.is_cached)
+        self.assertFalse(srdd.isCheckpointed())
+        self.assertEqual(None, srdd.getCheckpointFile())
+
+        srdd = srdd.coalesce(2, True)
+        srdd = srdd.repartition(3)
+        srdd = srdd.distinct()
+        srdd.intersection(srdd)
+        self.assertEqual(2, srdd.count())
+
+        srdd.registerTempTable("temp")
+        srdd = self.sqlCtx.sql("select foo from temp")
+        srdd.count()
+        srdd.collect()
+
+    def test_distinct(self):
+        rdd = self.sc.parallelize(['{"a": 1}', '{"b": 2}', '{"c": 3}']*10, 10)
+        srdd = self.sqlCtx.jsonRDD(rdd)
+        self.assertEquals(srdd.getNumPartitions(), 10)
+        self.assertEquals(srdd.distinct().count(), 3)
+        result = srdd.distinct(5)
+        self.assertEquals(result.getNumPartitions(), 5)
+        self.assertEquals(result.count(), 3)
+
+    def test_apply_schema_to_row(self):
+        srdd = self.sqlCtx.jsonRDD(self.sc.parallelize(["""{"a":2}"""]))
+        srdd2 = self.sqlCtx.applySchema(srdd.map(lambda x: x), srdd.schema())
+        self.assertEqual(srdd.collect(), srdd2.collect())
+
+        rdd = self.sc.parallelize(range(10)).map(lambda x: Row(a=x))
+        srdd3 = self.sqlCtx.applySchema(rdd, srdd.schema())
+        self.assertEqual(10, srdd3.count())
+
+    def test_serialize_nested_array_and_map(self):
+        d = [Row(l=[Row(a=1, b='s')], d={"key": Row(c=1.0, d="2")})]
+        rdd = self.sc.parallelize(d)
+        srdd = self.sqlCtx.inferSchema(rdd)
+        row = srdd.first()
+        self.assertEqual(1, len(row.l))
+        self.assertEqual(1, row.l[0].a)
+        self.assertEqual("2", row.d["key"].d)
+
+        l = srdd.map(lambda x: x.l).first()
+        self.assertEqual(1, len(l))
+        self.assertEqual('s', l[0].b)
+
+        d = srdd.map(lambda x: x.d).first()
+        self.assertEqual(1, len(d))
+        self.assertEqual(1.0, d["key"].c)
+
+        row = srdd.map(lambda x: x.d["key"]).first()
+        self.assertEqual(1.0, row.c)
+        self.assertEqual("2", row.d)
+
+    def test_infer_schema(self):
+        d = [Row(l=[], d={}),
+             Row(l=[Row(a=1, b='s')], d={"key": Row(c=1.0, d="2")}, s="")]
+        rdd = self.sc.parallelize(d)
+        srdd = self.sqlCtx.inferSchema(rdd)
+        self.assertEqual([], srdd.map(lambda r: r.l).first())
+        self.assertEqual([None, ""], srdd.map(lambda r: r.s).collect())
+        srdd.registerTempTable("test")
+        result = self.sqlCtx.sql("SELECT l[0].a from test where d['key'].d = '2'")
+        self.assertEqual(1, result.first()[0])
+
+        srdd2 = self.sqlCtx.inferSchema(rdd, 1.0)
+        self.assertEqual(srdd.schema(), srdd2.schema())
+        self.assertEqual({}, srdd2.map(lambda r: r.d).first())
+        self.assertEqual([None, ""], srdd2.map(lambda r: r.s).collect())
+        srdd2.registerTempTable("test2")
+        result = self.sqlCtx.sql("SELECT l[0].a from test2 where d['key'].d = '2'")
+        self.assertEqual(1, result.first()[0])
+
+    def test_convert_row_to_dict(self):
+        row = Row(l=[Row(a=1, b='s')], d={"key": Row(c=1.0, d="2")})
+        self.assertEqual(1, row.asDict()['l'][0].a)
+        rdd = self.sc.parallelize([row])
+        srdd = self.sqlCtx.inferSchema(rdd)
+        srdd.registerTempTable("test")
+        row = self.sqlCtx.sql("select l, d from test").first()
+        self.assertEqual(1, row.asDict()["l"][0].a)
+        self.assertEqual(1.0, row.asDict()['d']['key'].c)
+
+    def test_infer_schema_with_udt(self):
+        from pyspark.tests import ExamplePoint, ExamplePointUDT
+        row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
+        rdd = self.sc.parallelize([row])
+        srdd = self.sqlCtx.inferSchema(rdd)
+        schema = srdd.schema()
+        field = [f for f in schema.fields if f.name == "point"][0]
+        self.assertEqual(type(field.dataType), ExamplePointUDT)
+        srdd.registerTempTable("labeled_point")
+        point = self.sqlCtx.sql("SELECT point FROM labeled_point").first().point
+        self.assertEqual(point, ExamplePoint(1.0, 2.0))
+
+    def test_apply_schema_with_udt(self):
+        from pyspark.tests import ExamplePoint, ExamplePointUDT
+        row = (1.0, ExamplePoint(1.0, 2.0))
+        rdd = self.sc.parallelize([row])
+        schema = StructType([StructField("label", DoubleType(), False),
+                             StructField("point", ExamplePointUDT(), False)])
+        srdd = self.sqlCtx.applySchema(rdd, schema)
+        point = srdd.first().point
+        self.assertEquals(point, ExamplePoint(1.0, 2.0))
+
+    def test_parquet_with_udt(self):
+        from pyspark.tests import ExamplePoint
+        row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
+        rdd = self.sc.parallelize([row])
+        srdd0 = self.sqlCtx.inferSchema(rdd)
+        output_dir = os.path.join(self.tempdir.name, "labeled_point")
+        srdd0.saveAsParquetFile(output_dir)
+        srdd1 = self.sqlCtx.parquetFile(output_dir)
+        point = srdd1.first().point
+        self.assertEquals(point, ExamplePoint(1.0, 2.0))
 
 
 class InputFormatTests(ReusedPySparkTestCase):
@@ -875,15 +1066,25 @@ class InputFormatTests(ReusedPySparkTestCase):
         self.assertEqual(tuples, et)
 
         # with custom converters, primitive arrays can stay as arrays
-        arrays = sorted(self.sc.sequenceFile(
+        arrays = self.sc.sequenceFile(
             basepath + "/sftestdata/sfarray/",
             "org.apache.hadoop.io.IntWritable",
             "org.apache.spark.api.python.DoubleArrayWritable",
-            valueConverter="org.apache.spark.api.python.WritableToDoubleArrayConverter").collect())
+            valueConverter="org.apache.spark.api.python.WritableToDoubleArrayConverter").collect()
         ea = [(1, array('d')),
               (2, array('d', [3.0, 4.0, 5.0])),
               (3, array('d', [4.0, 5.0, 6.0]))]
-        self.assertEqual(arrays, ea)
+        self.assertAlmostEquals(arrays, ea, 1.0E-7)
+
+        nested_arrays = self.sc.sequenceFile(
+            basepath + "/sftestdata/sfnarray",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.spark.api.python.NestedDoubleArrayWritable",
+            valueConverter="org.apache.spark.api.python.WritableToNestedDoubleArrayConverter").collect()
+        ena = [(1, (array('d', [-9.9, -8.8]), array('d', [-7.7, -6.6, -5.5]), array('d', [-4.4, -3.3, -2.2, -1.1]))),
+               (2, (array('d', [1.1, 2.2, 3.3, 4.4, 5.5]), array('d', [6.6]), array('d', [7.7, 8.8])))]
+
+        self.assertAlmostEquals(nested_arrays, ena, 1.0E-7)
 
         clazz = sorted(self.sc.sequenceFile(basepath + "/sftestdata/sfclass/",
                                             "org.apache.hadoop.io.Text",
@@ -1058,6 +1259,7 @@ class OutputFormatTests(ReusedPySparkTestCase):
         maps = sorted(self.sc.sequenceFile(basepath + "/sfmap/").collect())
         self.assertEqual(maps, em)
 
+
     def test_oldhadoop(self):
         basepath = self.tempdir.name
         dict_data = [(1, {}),
@@ -1089,6 +1291,7 @@ class OutputFormatTests(ReusedPySparkTestCase):
             "org.apache.hadoop.io.MapWritable",
             conf=input_conf).collect())
         self.assertEqual(old_dataset, dict_data)
+
 
     def test_newhadoop(self):
         basepath = self.tempdir.name
@@ -1150,6 +1353,7 @@ class OutputFormatTests(ReusedPySparkTestCase):
             "mapred.output.value.class": "org.apache.spark.api.python.DoubleArrayWritable",
             "mapred.output.dir": basepath + "/newdataset/"
         }
+
         self.sc.parallelize(array_data).saveAsNewAPIHadoopDataset(
             conf,
             valueConverter="org.apache.spark.api.python.DoubleArrayToWritableConverter")
@@ -1161,6 +1365,59 @@ class OutputFormatTests(ReusedPySparkTestCase):
             valueConverter="org.apache.spark.api.python.WritableToDoubleArrayConverter",
             conf=input_conf).collect())
         self.assertEqual(new_dataset, array_data)
+
+
+    def test_newhadoop_with_list(self):
+        basepath = self.tempdir.name
+
+        double_list_out = [(1, [-0.49, -0.09, 0.92,  0.02, -1.79, 1.28,  1.80, -0.69]),
+                           (2, [-0.49, -0.09, 0.92, -0.47,  0.18, 0.02, -1.79,  1.28, 1.80, -0.69])]
+
+        double_list_output_path = basepath + "/newhadoopArray/"
+        self.sc.parallelize(double_list_out).saveAsNewAPIHadoopFile(
+            double_list_output_path,
+            "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.spark.api.python.DoubleArrayWritable",
+            valueConverter = "org.apache.spark.api.python.DoubleArrayListToWritableConverter")
+
+        input_conf = {"mapred.input.dir": double_list_output_path}
+        double_list_in = self.sc.newAPIHadoopRDD(
+            "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.spark.api.python.DoubleArrayWritable",
+            valueConverter="org.apache.spark.api.python.WritableToDoubleArrayListConverter",
+            conf=input_conf).collect()
+
+        lists_equal = all([np.allclose(x[0][1], x[1][1]) and (x[0][0] == x[1][0]) for x in zip(double_list_in, double_list_out)])
+        self.assertTrue(lists_equal)
+
+
+
+    def test_newhadoop_with_nested_double_list(self):
+        basepath = self.tempdir.name
+
+        nested_double_list_out = [(1, [[-0.49, -0.09, 0.92], [0.02, -1.79, 1.28, 1.80, -0.69]]),
+                                  (2, [[-0.49, -0.09, 0.92, -0.47, 0.18], [0.02, -1.79, 1.28, 1.80, -0.69]])]
+
+        nested_double_list_output_path = basepath + "/newhadoopArrayNested/"
+        self.sc.parallelize(nested_double_list_out).saveAsNewAPIHadoopFile(
+            nested_double_list_output_path,
+            "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.spark.api.python.NestedDoubleArrayListWritable",
+            valueConverter="org.apache.spark.api.python.NestedDoubleArrayListToWritableConverter")
+
+        input_conf = {"mapred.input.dir": nested_double_list_output_path}
+        nested_double_list_in = self.sc.newAPIHadoopRDD(
+            "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.spark.api.python.NestedDoubleArrayListWritable",
+            valueConverter="org.apache.spark.api.python.WritableToNestedDoubleArrayListConverter",
+            conf=input_conf).collect()
+
+        self.assertAlmostEqual(nested_double_list_in, nested_double_list_out, 1.0E-7)
+
 
     def test_newolderror(self):
         basepath = self.tempdir.name
@@ -1564,10 +1821,47 @@ class SciPyTests(PySparkTestCase):
         self.assertEqual(expected, observed)
 
 
+
+class SequenceFileHelperTest(unittest.TestCase):
+
+    """Tests conversion of numpy and Pandas structure to pure python types we can store in Sequence files """
+
+    def test_numpy_array_conversion(self):
+        test_data_out = [(1, np.array([-0.49, -0.09, 0.92,  0.02, -1.79, 1.28,  1.80, -0.69])),
+                         (2, np.array([-0.49, -0.09, 0.92, -0.47,  0.18, 0.02, -1.79,  1.28, 1.80, -0.69]))]
+
+        converted = convert_from_numpy(test_data_out)
+        test_data_in = convert_to_numpy(converted)
+
+        lists_equal = all([(x[0][0] == x[1][0] and np.allclose(x[0][1], x[1][1])) for x in zip(test_data_in, test_data_out)])
+        self.assertTrue(lists_equal)
+
+
+    def test_numpy_nested_array_conversion(self):
+
+        test_data_out = [(1, np.array([np.array([-0.49, -0.09,  0.92]), np.array([0.02, -1.79,  1.28, 1.80, -0.69])])),
+                         (2, np.array([np.array([-0.49, -0.09, -0.47]), np.array([0.18,  0.02, -1.79, 1.28,  1.80, -0.69])]))]
+
+        converted = convert_from_nested_numpy(test_data_out)
+        test_data_in = convert_to_nested_numpy(converted)
+
+        is_equal = all([np.allclose(flatten_jagged(x[0][1]), flatten_jagged(x[1][1])) and
+                        len(x[0][1]) == len(x[1][1]) and
+                        x[0][0] == x[1][0] for x in zip(test_data_in, test_data_out)])
+        self.assertTrue(is_equal)
+
 @unittest.skipIf(not _have_numpy, "NumPy not installed")
-class NumPyTests(PySparkTestCase):
+class NumPyTests(ReusedPySparkTestCase):
 
     """General PySpark tests that depend on numpy """
+
+    def setUp(self):
+
+        self.tempdir = tempfile.NamedTemporaryFile(delete=False)
+        os.unlink(self.tempdir.name)
+
+    def tearDown(self):
+        shutil.rmtree(self.tempdir.name, ignore_errors=True)
 
     def test_statcounter_array(self):
         x = self.sc.parallelize([np.array([1.0, 1.0]), np.array([2.0, 2.0]), np.array([3.0, 3.0])])
@@ -1577,6 +1871,72 @@ class NumPyTests(PySparkTestCase):
         self.assertSequenceEqual([3.0, 3.0], s.max().tolist())
         self.assertSequenceEqual([1.0, 1.0], s.sampleStdev().tolist())
 
+
+    def test_numpy(self):
+        basepath = self.tempdir.name
+
+        double_list_out = [(1, np.array([-0.49, -0.09, 0.92,  0.02, -1.79, 1.28,  1.80, -0.69])),
+                           (2, np.array([-0.49, -0.09, 0.92, -0.47,  0.18, 0.02, -1.79,  1.28, 1.80, -0.69]))]
+
+        converted = convert_from_numpy(double_list_out)
+
+        double_list_output_path = basepath + "/newhadoopNumpyArray/"
+        double_list_rdd_out = self.sc.parallelize(converted)
+
+        double_list_rdd_out.saveAsNewAPIHadoopFile(
+            double_list_output_path,
+            "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.spark.api.python.DoubleArrayWritable",
+            valueConverter = "org.apache.spark.api.python.DoubleArrayToWritableConverter")
+
+
+        input_conf = {"mapred.input.dir": double_list_output_path}
+        double_list_rdd_in = self.sc.newAPIHadoopRDD(
+            "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.spark.api.python.DoubleArrayWritable",
+            valueConverter="org.apache.spark.api.python.WritableToDoubleArrayConverter",
+            conf=input_conf)
+
+        double_list_in = convert_to_numpy(double_list_rdd_in.collect())
+
+        lists_equal = all([np.allclose(x[0][1], x[1][1]) and (x[0][0] == x[1][0]) for x in zip(double_list_in, double_list_out)])
+        self.assertTrue(lists_equal)
+
+
+    def test_nested_numpy(self):
+        basepath = self.tempdir.name
+
+        test_data_out = [(1, np.array([np.array([-0.49, -0.09,  0.92]), np.array([0.02, -1.79,  1.28, 1.80, -0.69])])),
+                         (2, np.array([np.array([-0.49, -0.09, -0.47]), np.array([0.18,  0.02, -1.79, 1.28,  1.80, -0.69])]))]
+
+
+        converted = convert_from_nested_numpy(test_data_out)
+        nested_double_list_output_path = basepath + "/newhadoopNestedNumpyArray/"
+        nested_double_list_rdd_out = self.sc.parallelize(converted)
+
+        nested_double_list_rdd_out.saveAsNewAPIHadoopFile(
+            nested_double_list_output_path,
+            "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.spark.api.python.NestedDoubleArrayListWritable",
+            valueConverter = "org.apache.spark.api.python.NestedDoubleArrayListToWritableConverter")
+
+        input_conf = {"mapred.input.dir": nested_double_list_output_path}
+        nested_double_list_rdd_in = self.sc.newAPIHadoopRDD(
+            "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.spark.api.python.DoubleArrayListWritable",
+            valueConverter="org.apache.spark.api.python.WritableToNestedDoubleArrayListConverter",
+            conf=input_conf)
+
+        test_data_in = convert_to_nested_numpy(nested_double_list_rdd_in.collect())
+        zipped = zip(test_data_in, test_data_out)
+        lists_equal = all([np.allclose(flatten_jagged(x[0][1]), flatten_jagged(x[1][1])) and
+                          len(x[0][1]) == len(x[1][1]) and
+                          x[0][0] == x[1][0] for x in zipped])
+        self.assertTrue(lists_equal)
 
 if __name__ == "__main__":
     if not _have_scipy:

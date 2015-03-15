@@ -17,6 +17,9 @@
 
 package org.apache.spark.api.python
 
+
+import java.util
+
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
@@ -25,6 +28,10 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io._
 import scala.util.{Failure, Success, Try}
 import org.apache.spark.annotation.Experimental
+
+import com.google.common.primitives.{Doubles, Longs}
+
+import java.nio.{ByteBuffer, DoubleBuffer}
 
 
 /**
@@ -56,6 +63,38 @@ private[python] object Converter extends Logging {
   }
 }
 
+//private[python] class DoubleArrayToWritableConverter extends Converter[Any, Writable] {
+//
+//  override def convert(obj: Any) = obj match {
+//    case arr if arr.getClass.isArray && arr.getClass.getComponentType == classOf[Double] =>
+//      val ad = arr.asInstanceOf[Array[Double]]
+//      convert(ad)
+//
+//    case al: java.util.ArrayList[_] => {
+//      import scala.collection.JavaConversions._
+//      val list = asScalaBuffer(al).toList
+//
+//      try {
+//        val ad = list.map(_.asInstanceOf[Double]).toArray
+//        convert(ad)
+//      }
+//      catch {
+//        case cce: ClassCastException =>
+//          throw new SparkException(s"Data of type $al is not supported")
+//      }
+//    }
+//    case other => throw new SparkException(s"Data of type $other is not supported")
+//  }
+//
+//  private def convert(arr: Array[Double]): DoubleArrayWritable = {
+//    val daw = new DoubleArrayWritable
+//    daw.set(arr.asInstanceOf[Array[Double]].map(new DoubleWritable(_)))
+//    daw
+//  }
+//}
+
+
+
 /**
  * A converter that handles conversion of common [[org.apache.hadoop.io.Writable]] objects.
  * Other objects are passed through without conversion.
@@ -81,6 +120,12 @@ private[python] class WritableToJavaConverter(
         System.arraycopy(byw.getBytes(), 0, bytes, 0, byw.getLength)
         bytes
       case n: NullWritable => null
+      //case ndaw: NestedDoubleArrayWritable =>
+      //  val daw = ndaw.get()
+      //  daw.map(convertWritable(_))
+      //case daw: DoubleArrayWritable =>
+      //  val da = daw.get()
+      //  da.map(convertWritable(_))
       case aw: ArrayWritable =>
         // Due to erasure, all arrays appear as Object[] and they get pickled to Python tuples.
         // Since we can't determine element types for empty arrays, we will not attempt to
@@ -138,11 +183,6 @@ private[python] class JavaToWritableConverter extends Converter[Any, Writable] {
           mapWritable.put(convertToWritable(k), convertToWritable(v))
         }
         mapWritable
-      case array: Array[Any] => {
-        val arrayWriteable = new ArrayWritable(classOf[Writable])
-        arrayWriteable.set(array.map(convertToWritable(_)))
-        arrayWriteable
-      }
       case other => throw new SparkException(
         s"Data of type ${other.getClass.getName} cannot be used")
     }
