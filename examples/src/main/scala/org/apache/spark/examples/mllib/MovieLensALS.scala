@@ -46,6 +46,7 @@ object MovieLensALS {
       rank: Int = 10,
       numUserBlocks: Int = -1,
       numProductBlocks: Int = -1,
+      nonNegative: Boolean = false,
       implicitPrefs: Boolean = false) extends AbstractParams[Params]
 
   def main(args: Array[String]) {
@@ -74,6 +75,9 @@ object MovieLensALS {
       opt[Unit]("implicitPrefs")
         .text("use implicit preference")
         .action((_, c) => c.copy(implicitPrefs = true))
+      opt[Unit]("nonNegative")
+        .text("nonnegative factors")
+        .action((_, c) => c.copy(nonNegative = true))  
       arg[String]("<input>")
         .required()
         .text("input paths to a MovieLens dataset of ratings")
@@ -165,6 +169,7 @@ object MovieLensALS {
       .setImplicitPrefs(params.implicitPrefs)
       .setUserBlocks(params.numUserBlocks)
       .setProductBlocks(params.numProductBlocks)
+      .setNonnegative(params.nonNegative)
       .run(training)
 
     val rmse = computeRmse(model, test, params.implicitPrefs)

@@ -16,9 +16,8 @@
  */
 
 package org.apache.spark.ml.recommendation
-
 import java.{util => ju}
-
+import org.netlib.util.intW
 import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.util.Sorting
@@ -35,12 +34,16 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.{OpenHashMap, OpenHashSet, SortDataFormat, Sorter}
 import org.apache.spark.util.random.XORShiftRandom
-import breeze.optimize.linear.NNLS
+import breeze.optimize.linear.{NNLS=>BrzNNLS}
+import org.apache.spark.mllib.optimization.NNLS
 import breeze.optimize.proximal.QuadraticMinimizer
 import breeze.optimize.proximal.Constraint._
 import breeze.linalg.{DenseMatrix => BrzMatrix}
 import breeze.linalg.{DenseVector => BrzVector}
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
+import com.github.fommil.netlib.LAPACK.{getInstance => lapack}
+import org.jblas.DoubleMatrix
+
 /**
  * Common params for ALS.
  */
@@ -372,10 +375,24 @@ object ALS extends Logging {
     }
   }
 
-  /** NNLS solver. */
-  private[recommendation] class NNLSSolver(rank: Int) extends LeastSquaresNESolver {
-    val ata = new BrzMatrix[Double](rank, rank)
-    val nnls = new NNLS()
+  /** Breeze NNLS solver. */
+  private[recommendation] class BrzNNLSSolver extends LeastSquaresNESolver {
+    private var rank: Int = -1
+    private var ata: BrzMatrix[Double] = _
+    private var initialized: Boolean = false
+    private var nnls: BrzNNLS = _
+
+    private def initialize(rank: Int): Unit = {
+      if (!initialized) {
+        this.rank = rank
+        ata = new BrzMatrix[Double](rank, rank)
+        nnls = new BrzNNLS()
+        initialized = true
+      } else {
+        require(this.rank == rank)
+      }
+    }
+
     /**
      * Solves a nonnegative least squares problem with L2 regularizatin:
      *
@@ -383,9 +400,10 @@ object ALS extends Logging {
      *   subject to x >= 0
      */
     override def solve(ne: NormalEquation, lambda: Double): Array[Float] = {
-      require(ne.k == rank, s"ALS:NNLSSolver built with rank $rank expected ${ne.k}")
+      val rank = ne.k
+      initialize(rank)
       fillAtA(ne.ata, lambda * ne.n)
-      val x = nnls.minimize(ata, new BrzVector(ne.atb)).data
+      val x = nnls.minimize(ata, new BrzVector[Double](ne.atb)).data
       ne.reset()
       x.map(x => x.toFloat)
     }
@@ -402,12 +420,109 @@ object ALS extends Logging {
         var j = 0
         while (j <= i) {
           a = triAtA(pos)
-          ata(i,j) = a
-          ata(j,i) = a
+          ata(i, j) = a
+          ata(j, i) = a
           pos += 1
           j += 1
         }
-        ata(i,i) += lambda
+        ata(i, i) += lambda
+        i += 1
+      }
+    }
+  }
+
+  /** Cholesky solver for least square problems. */
+  private[recommendation] class CholeskySolver extends LeastSquaresNESolver {
+
+    private val upper = "U"
+
+    /**
+     * Solves a least squares problem with L2 regularization:
+     *
+     *   min norm(A x - b)^2^ + lambda * n * norm(x)^2^
+     *
+     * @param ne a [[NormalEquation]] instance that contains AtA, Atb, and n (number of instances)
+     * @param lambda regularization constant, which will be scaled by n
+     * @return the solution x
+     */
+    override def solve(ne: NormalEquation, lambda: Double): Array[Float] = {
+      val k = ne.k
+      // Add scaled lambda to the diagonals of AtA.
+      val scaledlambda = lambda * ne.n
+      var i = 0
+      var j = 2
+      while (i < ne.triK) {
+        ne.ata(i) += scaledlambda
+        i += j
+        j += 1
+      }
+      val info = new intW(0)
+      lapack.dppsv(upper, k, 1, ne.ata, ne.atb, k, info)
+      val code = info.`val`
+      assert(code == 0, s"lapack.dppsv returned $code.")
+      val x = new Array[Float](k)
+      i = 0
+      while (i < k) {
+        x(i) = ne.atb(i).toFloat
+        i += 1
+      }
+      ne.reset()
+      x
+    }
+  }
+
+  /** NNLS solver. */
+  private[recommendation] class NNLSSolver extends LeastSquaresNESolver {
+    private var rank: Int = -1
+    private var workspace: NNLS.Workspace = _
+    private var ata: DoubleMatrix = _
+    private var initialized: Boolean = false
+
+    private def initialize(rank: Int): Unit = {
+      if (!initialized) {
+        this.rank = rank
+        workspace = NNLS.createWorkspace(rank)
+        ata = new DoubleMatrix(rank, rank)
+        initialized = true
+      } else {
+        require(this.rank == rank)
+      }
+    }
+
+    /**
+     * Solves a nonnegative least squares problem with L2 regularizatin:
+     *
+     *   min_x_  norm(A x - b)^2^ + lambda * n * norm(x)^2^
+     *   subject to x >= 0
+     */
+    override def solve(ne: NormalEquation, lambda: Double): Array[Float] = {
+      val rank = ne.k
+      initialize(rank)
+      fillAtA(ne.ata, lambda * ne.n)
+      val x = NNLS.solve(ata, new DoubleMatrix(rank, 1, ne.atb: _*), workspace)
+      ne.reset()
+      x.map(x => x.toFloat)
+    }
+
+    /**
+     * Given a triangular matrix in the order of fillXtX above, compute the full symmetric square
+     * matrix that it represents, storing it into destMatrix.
+     */
+    private def fillAtA(triAtA: Array[Double], lambda: Double) {
+      var i = 0
+      var pos = 0
+      var a = 0.0
+      val data = ata.data
+      while (i < rank) {
+        var j = 0
+        while (j <= i) {
+          a = triAtA(pos)
+          data(i * rank + j) = a
+          data(j * rank + i) = a
+          pos += 1
+          j += 1
+        }
+        data(i * rank + i) += lambda
         i += 1
       }
     }
@@ -504,7 +619,21 @@ object ALS extends Logging {
     val itemPart = new ALSPartitioner(numItemBlocks)
     val userLocalIndexEncoder = new LocalIndexEncoder(userPart.numPartitions)
     val itemLocalIndexEncoder = new LocalIndexEncoder(itemPart.numPartitions)
-    val solver = if (nonnegative) new NNLSSolver(rank) else new QuadraticSolver(rank)
+
+    val solver = if (nonnegative) {
+      if (System.getenv("solver") == "breeze") {
+        println("Running Breeze NNLSSolver")
+        new BrzNNLSSolver()
+      }
+      else new NNLSSolver()
+    } else {
+      if (System.getenv("solver") == "breeze") {
+        println("Running Breeze QuadraticSolver")
+        new QuadraticSolver(rank)
+      }
+      else new CholeskySolver()
+    }
+
     val blockRatings = partitionRatings(ratings, userPart, itemPart)
       .persist(intermediateRDDStorageLevel)
     val (userInBlocks, userOutBlocks) =
@@ -1071,6 +1200,7 @@ object ALS extends Logging {
     dstInBlocks.join(merged).mapValues {
       case (InBlock(dstIds, srcPtrs, srcEncodedIndices, ratings), srcFactors) =>
         val sortedSrcFactors = new Array[FactorBlock](numSrcBlocks)
+        var solveTime = 0.0
         srcFactors.foreach { case (srcBlockId, factors) =>
           sortedSrcFactors(srcBlockId) = factors
         }
@@ -1096,9 +1226,12 @@ object ALS extends Logging {
             }
             i += 1
           }
+          val startTime = System.nanoTime()
           dstFactors(j) = solver.solve(ls, regParam)
+          solveTime += System.nanoTime() - startTime
           j += 1
         }
+        logInfo(s"solveTime ${solveTime/1e6} ms")
         dstFactors
     }
   }
