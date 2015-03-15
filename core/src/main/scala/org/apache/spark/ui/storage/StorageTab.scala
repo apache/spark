@@ -90,11 +90,11 @@ class StorageListener(storageStatusListener: StorageStatusListener) extends Spar
     // only update broadcast for now as RDD blocks has been logged in StageCompleted event, 
     // we ignore other types of blocks for now
     val broadcastIdOpt = blockUpdateEvent.blockId.asBroadcastId
-    broadcastIdOpt.map(broadcastBlockId => {
+    broadcastIdOpt.foreach { broadcastBlockId =>
       val broadcastId = broadcastBlockId.broadcastId
       val broadcastInfoToUpdate = _broadcastInfoMap.getOrElseUpdate(
-        broadcastId, 
-        new BroadcastInfo(broadcastId, "broadcast_%d".format(broadcastId), 
+        broadcastId,
+        new BroadcastInfo(broadcastId, "broadcast_%d".format(broadcastId),
           blockUpdateEvent.blockStatus.storageLevel))
       StorageUtils.updateBroadcastInfo(broadcastInfoToUpdate, storageStatusList)
       if (broadcastInfoToUpdate.memSize == 0 && broadcastInfoToUpdate.diskSize == 0 &&
@@ -102,6 +102,5 @@ class StorageListener(storageStatusListener: StorageStatusListener) extends Spar
         _broadcastInfoMap.remove(broadcastId)
       }
     }
-    )
   }
 }
