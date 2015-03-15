@@ -673,7 +673,11 @@ private[sql] object ParquetRelation2 {
         .getKeyValueMetaData
         .toMap
         .get(RowReadSupport.SPARK_METADATA_KEY)
-        .map(DataType.fromJson(_).asInstanceOf[StructType])
+        .map { serializedSchema =>
+          Try(DataType.fromJson(serializedSchema))
+            .getOrElse(DataType.fromCaseClassString(serializedSchema))
+            .asInstanceOf[StructType]
+        }
 
       maybeSparkSchema.getOrElse {
         // Falls back to Parquet schema if Spark SQL schema is absent.
