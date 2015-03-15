@@ -28,11 +28,15 @@ import com.google.common.base.Objects
 
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
+import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
+import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapred.Master
 import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.apache.hadoop.security.token.Token
 import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
@@ -217,6 +221,7 @@ private[spark] class Client(
     val dst = new Path(fs.getHomeDirectory(), appStagingDir)
     val nns = getNameNodesToAccess(sparkConf) + dst
     obtainTokensForNamenodes(nns, hadoopConf, credentials)
+    obtainTokenForHiveMetastore(hadoopConf, credentials)
 
     val replication = sparkConf.getInt("spark.yarn.submit.file.replication",
       fs.getDefaultReplication(dst)).toShort
@@ -899,6 +904,30 @@ object Client extends Logging {
         logDebug("getting token for namenode: " + dst)
         dstFs.addDelegationTokens(delegTokenRenewer, creds)
       }
+    }
+  }
+
+  /**
+   * Obtains token for the Hive metastore and adds them to the credentials.
+   */
+  private def obtainTokenForHiveMetastore(conf: Configuration, credentials: Credentials) {
+    if (UserGroupInformation.isSecurityEnabled /* And Hive is enabled */) {
+      val hc = org.apache.hadoop.hive.ql.metadata.Hive.get
+      val principal = hc.getConf().get(HiveConf.ConfVars.METASTORE_KERBEROS_PRINCIPAL.varname)
+      val username = UserGroupInformation.getCurrentUser().getUserName
+
+      if (principal == null) {
+        val errorMessage = "Required hive metastore principal is not configured!"
+        logError(errorMessage)
+        throw new IllegalArgumentException(errorMessage)
+      }
+
+      val tokenStr = hc.getDelegationToken(username,principal)
+      val hive2Token = new Token[DelegationTokenIdentifier]()
+      hive2Token.decodeFromUrlString(tokenStr)
+      credentials.addToken(new Text("hive.server2.delegation.token"), hive2Token)
+      logDebug("Added the Hive Server 2 token to conf.")
+      org.apache.hadoop.hive.ql.metadata.Hive.closeCurrent
     }
   }
 
