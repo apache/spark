@@ -73,7 +73,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   lazy val warehousePath = getTempFilePath("sparkHiveWarehouse").getCanonicalPath
   lazy val metastorePath = getTempFilePath("sparkHiveMetastore").getCanonicalPath
 
-  /** Sets up the system initially or after a RESET command */
+  /** Overrides metastore and warehouse paths */
   override protected def overrideHiveConf(conf: HiveConf): HiveConf = {
     conf.set(
       "javax.jdo.option.ConnectionURL",
