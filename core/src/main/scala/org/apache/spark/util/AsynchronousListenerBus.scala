@@ -92,6 +92,8 @@ private[spark] abstract class AsynchronousListenerBus[L <: AnyRef, E](name: Stri
    * This first sends out all buffered events posted before this listener bus has started, then
    * listens for any additional events asynchronously while the listener bus is still running.
    * This should only be called once.
+   *
+   * @param sc Used to stop the SparkContext in case the listener thread dies.
    */
   def start(sc: SparkContext) {
     if (started.compareAndSet(false, true)) {

@@ -1145,6 +1145,8 @@ private[spark] object Utils extends Logging {
   /**
    * Execute a block of code that evaluates to Unit, forwarding any uncaught exceptions to the
    * default UncaughtExceptionHandler
+   * 
+   * NOTE: This method is to be called by the spark-started JVM process.
    */
   def tryOrExit(block: => Unit) {
     try {
@@ -1156,14 +1158,24 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Execute a block of code that evaluates to Unit, stop SparkContext is any uncaught exception
+   * Execute a block of code that evaluates to Unit, stop SparkContext is there is any uncaught 
+   * exception
+   *  
+   * NOTE: This method is to be called by the driver-side components to avoid stopping the 
+   * user-started JVM process completely; in contrast, tryOrExit is to be called in the 
+   * spark-started JVM process .
    */
   def tryOrStopSparkContext(sc: SparkContext)(block: => Unit) {
     try {
       block
     } catch {
       case e: ControlThrowable => throw e
-      case t: Throwable => sc.stop()
+      case t: Throwable =>
+        if (sc != null) {
+          logError(s"uncaught error in thread ${Thread.currentThread().getName}, stopping " +
+            "SparkContext", t)
+          sc.stop()
+        }
     }
   }
 
