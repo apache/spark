@@ -17,8 +17,10 @@
 
 package org.apache.spark.repl
 
-import java.io.{ByteArrayOutputStream, InputStream}
+import java.io.{IOException, ByteArrayOutputStream, InputStream}
 import java.net.{HttpURLConnection, URI, URL, URLEncoder}
+
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
@@ -89,11 +91,23 @@ class ExecutorClassLoader(conf: SparkConf, classUri: String, parent: ClassLoader
       connection.setReadTimeout(httpUrlConnectionTimeoutMillis)
     }
     connection.connect()
-    if (connection.getResponseCode != 200) {
-      connection.disconnect()
-      throw new ClassNotFoundException(s"Class file not found at URL $url")
-    } else {
-      connection.getInputStream
+    try {
+      if (connection.getResponseCode != 200) {
+        // Close the error stream so that the connection is eligible for re-use
+        try {
+          connection.getErrorStream.close()
+        } catch {
+          case ioe: IOException =>
+            logError("Exception while closing error stream", ioe)
+        }
+        throw new ClassNotFoundException(s"Class file not found at URL $url")
+      } else {
+        connection.getInputStream
+      }
+    } catch {
+      case NonFatal(e) if !e.isInstanceOf[ClassNotFoundException] =>
+        connection.disconnect()
+        throw e
     }
   }
 
