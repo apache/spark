@@ -48,7 +48,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   private val conf = ssc.conf
   private val graph = ssc.graph
   private val completedBothCheckpoints = new TreeMap[Time, Boolean](new TimeComparator)
-  private val batchesToBeCheckpointed = new TreeSet[Time](new TimeComparator)
+  private val batchesGenerated = new TreeSet[Time](new TimeComparator)
 
   val clock = {
     val clockClass = ssc.sc.conf.get(
@@ -81,8 +81,6 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
   // last batch whose completion,checkpointing and metadata cleanup has been completed
   private var lastProcessedBatch: Option[Time] = None
-
-  private var lastCompletedBatch: Option[Time] = None
 
   /** Start generation of jobs */
   def start(): Unit = synchronized {
@@ -135,18 +133,16 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       logInfo("Waited for all received blocks to be consumed for job generation")
 
       // Stop generating jobs
-      val stopTime = timer.stop(interruptTimer = false)
+      timer.stop(interruptTimer = false)
       graph.stop()
       logInfo("Stopped generation timer")
 
       // Wait for the jobs to complete and checkpoints to be written
-      def haveAllBatchesBeenProcessed = {
-        if (lastCompletedBatch.isDefined) {
-          batchesToBeCheckpointed.isEmpty && lastCompletedBatch.get.milliseconds == stopTime
-        } else {
-          batchesToBeCheckpointed.isEmpty
-        }
-      }
+      // At this point, since the timer is stopped, we don't have to worry about batches being
+      // added to be batchesGenerated set, but this is synchronized since the
+      // updateLastProcessedBatch might be iterating on the set
+      def haveAllBatchesBeenProcessed = synchronized(batchesGenerated.isEmpty)
+
       logInfo("Waiting for jobs to be processed and checkpoints to be written")
       while (!hasTimedOut && !haveAllBatchesBeenProcessed) {
         Thread.sleep(pollTime)
@@ -168,17 +164,16 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   /**
    * Callback called when a batch has been completely processed.
    */
-  def onBatchCompletion(time: Time) {
+  def onBatchCompletion(time: Time): Unit = synchronized {
     // Update the lastCompletedBatch only if this batch is actually newer than the previously
     // completed ones.
-    lastCompletedBatch = lastCompletedBatch.map(_.min(time)).orElse(Some(time))
     eventActor ! ClearMetadata(time)
   }
 
   /**
    * Callback called when the checkpoint of a batch has been written.
    */
-  def onCheckpointCompletion(time: Time) {
+  def onCheckpointCompletion(time: Time): Unit = synchronized {
     if (completedBothCheckpoints.containsKey(time)) {
       completedBothCheckpoints(time) = true
     } else {
@@ -262,9 +257,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
         val receivedBlockInfos =
           jobScheduler.receiverTracker.getBlocksOfBatch(time).mapValues { _.toArray }
         jobScheduler.submitJobSet(JobSet(time, jobs, receivedBlockInfos))
-        if (isCheckpointRequired(time)) {
-          batchesToBeCheckpointed += time
-        }
+        synchronized(batchesGenerated += time)
       case Failure(e) =>
         jobScheduler.reportError("Error generating jobs for time " + time, e)
     }
@@ -277,13 +270,14 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
     // If checkpointing is enabled, then checkpoint,
     // else mark batch to be fully processed
-    if (shouldCheckpoint) {
+    if (isCheckpointRequired(time)) {
       eventActor ! DoCheckpoint(time)
     } else {
       // If checkpointing is not enabled, then delete metadata information about
       // received blocks (block data not saved in any case). Otherwise, wait for
       // checkpointing of this batch to complete.
-      lastProcessedBatch = Some(time)
+      // This is synchronized so that multiple batches completing update this only one by one
+      updateLastProcessedBatch(time)
       cleanupOldBlocksAndBatches()
     }
   }
@@ -291,11 +285,12 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   /** Clear DStream checkpoint data for the given `time`. */
   private def clearCheckpointData(time: Time) {
     ssc.graph.clearCheckpointData(time)
-    updateLastProcessedBatch()
+    updateLastProcessedBatch(time)
     cleanupOldBlocksAndBatches()
   }
 
-  private def cleanupOldBlocksAndBatches(): Unit = {
+  // Needs to be synchronized because the lastProcessedBatch can be updated from another thread
+  private def cleanupOldBlocksAndBatches(): Unit = synchronized {
     // All the checkpoint information about which batches have been processed, etc have
     // been saved to checkpoints, so its safe to delete block metadata and data WAL files
     lastProcessedBatch.foreach { lastProcessedTime =>
@@ -318,7 +313,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     shouldCheckpoint && (time - graph.zeroTime).isMultipleOf(ssc.checkpointDuration)
   }
 
-  private def updateLastProcessedBatch() {
+  private def updateLastProcessedBatch(time: Time): Unit = {
     /*
      * When is a batch fully processed?
      *  - For batches which are not to be checkpointed, they are fully processed as soon as they
@@ -340,18 +335,27 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     // an older one. Ex: Two batches - times 1 and 2, 1 takes longer to process than 2, so 2 gets
     // checkpointed twice before 1. Now, 2 can't be updated as the lastProcessed since 1 is not
     // done. So when 1 is done, we update the lastProcessedBatch to 2 (since both 1 and 2 are done).
-    val iter = batchesToBeCheckpointed.iterator()
-    var continueIterating = true
-    while (iter.hasNext && continueIterating) {
-      val t = iter.next()
-      // Have both checkpoints bee written out for this batch? If yes, update lastProcessed, else
-      // stop and keep all WAL files for this batch.
-      if (completedBothCheckpoints.containsKey(t) && completedBothCheckpoints(t)) {
-        completedBothCheckpoints -= t
-        lastProcessedBatch = Option(t)
-        iter.remove()
-      } else {
-        continueIterating = false
+    if (!isCheckpointRequired(time)) {
+      // If checkpoint is not enabled, the lastProcessedBatch is
+      // the one which is the oldest.
+      if (!shouldCheckpoint && batchesGenerated.first() == time) {
+        lastProcessedBatch = Some(time)
+      }
+      batchesGenerated -= time
+    } else {
+      val iter = batchesGenerated.iterator()
+      var continueIterating = true
+      while (iter.hasNext && continueIterating) {
+        val t = iter.next()
+        // Have both checkpoints bee written out for this batch? If yes, update lastProcessed, else
+        // stop and keep all WAL files for this batch.
+        if (completedBothCheckpoints.containsKey(t) && completedBothCheckpoints(t)) {
+          completedBothCheckpoints -= t
+          lastProcessedBatch = Some(t)
+          iter.remove()
+        } else {
+          continueIterating = false
+        }
       }
     }
   }
