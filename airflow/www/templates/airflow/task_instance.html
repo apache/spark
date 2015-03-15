@@ -41,7 +41,8 @@
     $( document ).ready(function() {
       function date_change(){
           execution_date = $("input#execution_date").val().replace(' ', 'T');
-          loc = window.location.href.replace('{{ execution_date }}', execution_date);
+          loc = decodeURIComponent(window.location.href);
+          loc = loc.replace('{{ execution_date }}', execution_date);
           window.location = loc;
       }
       $("input#execution_date").on("change.daterangepicker", function(){

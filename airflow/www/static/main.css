@@ -39,8 +39,15 @@ div.linenodiv {
     padding-right: 1px !important;
 }
 .linenos {
-    width: 40px;
+    width: 43px;
     border: none;
+}
+div.linenodiv  pre {
+    padding-left: 4px;
+    padding-right: 4px;
+    color: #AAA;
+    background-color: #FCFCFC;
+    text-align:right;
 }
 
 pre {
