@@ -19,12 +19,8 @@ package org.apache.spark.graphx
 
 import org.scalatest.FunSuite
 
-<<<<<<< HEAD
-import org.apache.spark.rdd.RDD
-import org.apache.spark.SparkContext
-=======
 import org.apache.spark.{HashPartitioner, SparkContext}
->>>>>>> upstream/master
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
 class VertexRDDSuite extends FunSuite with LocalSparkContext {
