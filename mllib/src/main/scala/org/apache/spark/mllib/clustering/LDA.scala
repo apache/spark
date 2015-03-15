@@ -19,7 +19,9 @@ package org.apache.spark.mllib.clustering
 
 import java.util.Random
 
-import breeze.linalg.{DenseVector => BDV, normalize, axpy => brzAxpy}
+import breeze.linalg.{DenseVector => BDV, normalize, kron, sum, axpy => brzAxpy, DenseMatrix => BDM}
+import breeze.numerics.{exp, abs, digamma}
+import breeze.stats.distributions.Gamma
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
@@ -27,7 +29,7 @@ import org.apache.spark.api.java.JavaPairRDD
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.GraphImpl
 import org.apache.spark.mllib.impl.PeriodicGraphCheckpointer
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.{Vector, DenseVector, SparseVector, Matrices}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
@@ -245,6 +247,36 @@ class LDA private (
     new DistributedLDAModel(state, iterationTimes)
   }
 
+
+  /**
+   * Learn an LDA model using the given dataset, using online variational Bayes (VB) algorithm.
+   *
+   * @param documents  RDD of documents, which are term (word) count vectors paired with IDs.
+   *                   The term count vectors are "bags of words" with a fixed-size vocabulary
+   *                   (where the vocabulary size is the length of the vector).
+   *                   Document IDs must be unique and >= 0.
+   * @param batchNumber Number of batches. For each batch, recommendation size is [4, 16384].
+   *                    -1 for automatic batchNumber.
+   * @return  Inferred LDA model
+   */
+  def runOnlineLDA(documents: RDD[(Long, Vector)], batchNumber: Int = -1): LDAModel = {
+    val D = documents.count().toInt
+    val batchSize =
+      if (batchNumber == -1) { // auto mode
+        if (D / 100 > 16384) 16384
+        else if (D / 100 < 4) 4
+        else D / 100
+      }
+      else {
+        require(batchNumber > 0, "batchNumber should be positive or -1")
+        D / batchNumber
+      }
+
+    val onlineLDA = new LDA.OnlineLDAOptimizer(documents, k, batchSize)
+    (0 until onlineLDA.actualBatchNumber).map(_ => onlineLDA.next())
+    new LocalLDAModel(Matrices.fromBreeze(onlineLDA.lambda).transpose)
+  }
+
   /** Java-friendly version of [[run()]] */
   def run(documents: JavaPairRDD[java.lang.Long, Vector]): DistributedLDAModel = {
     run(documents.rdd.asInstanceOf[RDD[(Long, Vector)]])
@@ -396,6 +428,102 @@ private[clustering] object LDA {
       graph.vertices.filter(isTermVertex).values.fold(BDV.zeros[Double](numTopics))(_ += _)
     }
 
+  }
+
+  /**
+   * Optimizer for Online LDA algorithm which breaks corpus into mini-batches and scans only once.
+   * Hoffman, Blei and Bach, "Online Learning for Latent Dirichlet Allocation." NIPS, 2010.
+   */
+  private[clustering] class OnlineLDAOptimizer(
+      private val documents: RDD[(Long, Vector)],
+      private val k: Int,
+      private val batchSize: Int) extends Serializable{
+
+    private val vocabSize = documents.first._2.size
+    private val D = documents.count().toInt
+    val actualBatchNumber = Math.ceil(D.toDouble / batchSize).toInt
+
+    // Initialize the variational distribution q(beta|lambda)
+    var lambda = getGammaMatrix(k, vocabSize)               // K * V
+    private var Elogbeta = dirichlet_expectation(lambda)    // K * V
+    private var expElogbeta = exp(Elogbeta)                 // K * V
+
+    private var batchId = 0
+    def next(): Unit = {
+      require(batchId < actualBatchNumber)
+      // weight of the mini-batch. 1024 down weights early iterations
+      val weight = math.pow(1024 + batchId, -0.5)
+      val batch = documents.sample(true, batchSize.toDouble / D)
+      batch.cache()
+      // Given a mini-batch of documents, estimates the parameters gamma controlling the
+      // variational distribution over the topic weights for each document in the mini-batch.
+      var stat = BDM.zeros[Double](k, vocabSize)
+      stat = batch.aggregate(stat)(seqOp, _ += _)
+      stat = stat :* expElogbeta
+
+      // Update lambda based on documents.
+      lambda = lambda * (1 - weight) + (stat * D.toDouble / batchSize.toDouble + 1.0 / k) * weight
+      Elogbeta = dirichlet_expectation(lambda)
+      expElogbeta = exp(Elogbeta)
+      batchId += 1
+    }
+
+    // for each document d update that document's gamma and phi
+    private def seqOp(stat: BDM[Double], doc: (Long, Vector)): BDM[Double] = {
+      val termCounts = doc._2
+      val (ids, cts) = termCounts match {
+        case v: DenseVector => (((0 until v.size).toList), v.values)
+        case v: SparseVector => (v.indices.toList, v.values)
+        case v => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
+      }
+
+      // Initialize the variational distribution q(theta|gamma) for the mini-batch
+      var gammad = new Gamma(100, 1.0 / 100.0).samplesVector(k).t // 1 * K
+      var Elogthetad = vector_dirichlet_expectation(gammad.t).t   // 1 * K
+      var expElogthetad = exp(Elogthetad.t).t                     // 1 * K
+      val expElogbetad = expElogbeta(::, ids).toDenseMatrix       // K * ids
+
+      var phinorm = expElogthetad * expElogbetad + 1e-100         // 1 * ids
+      var meanchange = 1D
+      val ctsVector = new BDV[Double](cts).t                      // 1 * ids
+
+      // Iterate between gamma and phi until convergence
+      while (meanchange > 1e-6) {
+        val lastgamma = gammad
+        //        1*K                  1 * ids               ids * k
+        gammad = (expElogthetad :* ((ctsVector / phinorm) * (expElogbetad.t))) + 1.0/k
+        Elogthetad = vector_dirichlet_expectation(gammad.t).t
+        expElogthetad = exp(Elogthetad.t).t
+        phinorm = expElogthetad * expElogbetad + 1e-100
+        meanchange = sum(abs((gammad - lastgamma).t)) / gammad.t.size.toDouble
+      }
+
+      val m1 = expElogthetad.t.toDenseMatrix.t
+      val m2 = (ctsVector / phinorm).t.toDenseMatrix
+      val outerResult = kron(m1, m2) // K * ids
+      for (i <- 0 until ids.size) {
+        stat(::, ids(i)) := (stat(::, ids(i)) + outerResult(::, i))
+      }
+      stat
+    }
+
+    private def getGammaMatrix(row:Int, col:Int): BDM[Double] ={
+      val gammaRandomGenerator = new Gamma(100, 1.0 / 100.0)
+      val temp = gammaRandomGenerator.sample(row * col).toArray
+      (new BDM[Double](col, row, temp)).t
+    }
+
+    private def dirichlet_expectation(alpha : BDM[Double]): BDM[Double] = {
+      val rowSum =  sum(alpha(breeze.linalg.*, ::))
+      val digAlpha = digamma(alpha)
+      val digRowSum = digamma(rowSum)
+      val result = digAlpha(::, breeze.linalg.*) - digRowSum
+      result
+    }
+
+    private def vector_dirichlet_expectation(v : BDV[Double]): (BDV[Double]) ={
+      digamma(v) - digamma(sum(v))
+    }
   }
 
   /**
