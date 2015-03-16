@@ -341,11 +341,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
     }
     numPendingExecutors =
       math.max(numExecutors - numExistingExecutors + executorsPendingToRemove.size, 0)
-    if (numPendingExecutors > 0) {
-      doRequestTotalExecutors(numExecutors)
-    } else {
-      true
-    }
+    doRequestTotalExecutors(numExecutors)
   }
 
   /**

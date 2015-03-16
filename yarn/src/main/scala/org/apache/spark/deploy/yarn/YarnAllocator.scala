@@ -138,7 +138,10 @@ private[yarn] class YarnAllocator(
    * be killed.
    */
   def requestTotalExecutors(requestedTotal: Int): Unit = synchronized {
-    targetNumExecutors = requestedTotal
+    if (requestedTotal != targetNumExecutors) {
+      logInfo(s"Driver requested a total number of $requestedTotal executor(s).")
+      targetNumExecutors = requestedTotal
+    }
   }
 
   /**
