@@ -94,6 +94,11 @@ object JsonRootResource {
 private[spark] trait UIRoot {
   def getSparkUI(appKey: String): Option[SparkUI]
   def getApplicationInfoList: Seq[ApplicationInfo]
+
+  /**
+   * Get the spark UI with the given appID, and apply a function
+   * to it.  If there is no such app, throw an appropriate exception
+   */
   def withSparkUI[T](appId: String)(f: SparkUI => T): T = {
     getSparkUI(appId) match {
       case Some(ui) => f(ui)
