@@ -83,7 +83,7 @@ object AllRDDResource {
       None
     }
     val partitions = if (includeDetails) {
-      Some(blocks.map { case(id, block, locations) =>
+      Some(blocks.map { case (id, block, locations) =>
         new RDDPartitionInfo(
           blockName = id.name,
           storageLevel = block.storageLevel.description,

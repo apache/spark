@@ -82,8 +82,8 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
 
   //run a bunch of characterization tests -- just verify the behavior is the same as what is saved in the test
   // resource folder
-  cases.foreach{case(name, path) =>
-      test(name){
+  cases.foreach { case (name, path) =>
+      test(name) {
         val (code, jsonOpt, errOpt) = getContentAndCode(path)
         code should be (HttpServletResponse.SC_OK)
         jsonOpt should be ('defined)

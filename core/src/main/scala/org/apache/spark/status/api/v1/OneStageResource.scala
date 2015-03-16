@@ -37,7 +37,7 @@ class OneStageResource(uiRoot: UIRoot) {
         matched.map { status -> _ }
       }.headOption
       oneStage match {
-        case Some((status,stageInfo)) =>
+        case Some((status, stageInfo)) =>
           val stageUiData = listener.synchronized {
             listener.stageIdToData.get((stageInfo.stageId, stageInfo.attemptId)).
               getOrElse(throw new SparkException("failed to get full stage data for stage: " +

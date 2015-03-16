@@ -66,12 +66,12 @@ object AllStagesResource {
   ): StageData = {
 
     val taskData = if(includeDetails) {
-      Some(stageUiData.taskData.map { case(k,v) => k -> convertTaskData(v) } )
+      Some(stageUiData.taskData.map { case (k, v) => k -> convertTaskData(v) } )
     } else {
       None
     }
     val executorSummary = if(includeDetails) {
-      Some(stageUiData.executorSummary.map { case(k,summary) =>
+      Some(stageUiData.executorSummary.map { case (k, summary) =>
         k -> new ExecutorStageSummary(
           taskTime = summary.taskTime,
           failedTasks = summary.failedTasks,
