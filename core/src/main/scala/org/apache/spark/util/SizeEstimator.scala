@@ -207,8 +207,8 @@ private[spark] object SizeEstimator extends Logging {
         var size = 0.0
         val rand = new Random(42)
         val drawn = new OpenHashSet[Int](ARRAY_SAMPLE_SIZE)
-        var num_elements_drawn = 0
-        while (num_elements_drawn < ARRAY_SAMPLE_SIZE) {
+        var numElementsDrawn = 0
+        while (numElementsDrawn < ARRAY_SAMPLE_SIZE) {
           var index = 0
           do {
             index = rand.nextInt(length)
@@ -216,7 +216,7 @@ private[spark] object SizeEstimator extends Logging {
           drawn.add(index)
           val elem = ScalaRunTime.array_apply(array, index).asInstanceOf[AnyRef]
           size += SizeEstimator.estimate(elem, state.visited)
-          num_elements_drawn += 1
+          numElementsDrawn += 1
         }
         state.size += ((length / (ARRAY_SAMPLE_SIZE * 1.0)) * size).toLong
       }
