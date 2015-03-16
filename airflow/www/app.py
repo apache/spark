@@ -704,7 +704,7 @@ class Airflow(BaseView):
                     "<pre><code>" + content + "</pre></code>")
 
         return self.render(
-            'airflow/dag_code.html',
+            'airflow/ti_code.html',
             html_dict=html_dict,
             dag=dag,
             task_id=task_id,
@@ -761,7 +761,7 @@ class Airflow(BaseView):
         title = "Log"
 
         return self.render(
-            'airflow/dag_code.html',
+            'airflow/ti_code.html',
             code=log, dag=dag, title=title, task_id=task_id,
             execution_date=execution_date, form=form)
 
