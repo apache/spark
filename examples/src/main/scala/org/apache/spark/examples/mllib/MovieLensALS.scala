@@ -141,7 +141,8 @@ object MovieLensALS {
 
     println(s"Got $numRatings ratings from $numUsers users on $numMovies movies.")
 
-    val splits = ratings.randomSplit(Array(0.8, 0.2))
+    val splits = ratings.randomSplit(weights=Array(0.8, 0.2),seed=0L)
+
     val training = splits(0).cache()
     val test = if (params.implicitPrefs) {
       /*

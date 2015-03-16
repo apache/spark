@@ -376,23 +376,10 @@ object ALS extends Logging {
   }
 
   /** Breeze NNLS solver. */
-  private[recommendation] class BrzNNLSSolver extends LeastSquaresNESolver {
-    private var rank: Int = -1
-    private var ata: BrzMatrix[Double] = _
-    private var initialized: Boolean = false
-    private var nnls: BrzNNLS = _
-
-    private def initialize(rank: Int): Unit = {
-      if (!initialized) {
-        this.rank = rank
-        ata = new BrzMatrix[Double](rank, rank)
-        nnls = new BrzNNLS()
-        initialized = true
-      } else {
-        require(this.rank == rank)
-      }
-    }
-
+  private[recommendation] class BrzNNLSSolver(rank: Int) extends LeastSquaresNESolver {
+    private val ata = new BrzMatrix[Double](rank, rank)
+    private val nnls = new BrzNNLS()
+    private val init = nnls.initialState(rank)
     /**
      * Solves a nonnegative least squares problem with L2 regularizatin:
      *
@@ -400,10 +387,8 @@ object ALS extends Logging {
      *   subject to x >= 0
      */
     override def solve(ne: NormalEquation, lambda: Double): Array[Float] = {
-      val rank = ne.k
-      initialize(rank)
       fillAtA(ne.ata, lambda * ne.n)
-      val x = nnls.minimize(ata, new BrzVector[Double](ne.atb)).data
+      val x = nnls.minimize(ata, new BrzVector(ne.atb),init.reset()).data
       ne.reset()
       x.map(x => x.toFloat)
     }
@@ -623,7 +608,7 @@ object ALS extends Logging {
     val solver = if (nonnegative) {
       if (System.getenv("solver") == "breeze") {
         println("Running Breeze NNLSSolver")
-        new BrzNNLSSolver()
+        new BrzNNLSSolver(rank)
       }
       else new NNLSSolver()
     } else {

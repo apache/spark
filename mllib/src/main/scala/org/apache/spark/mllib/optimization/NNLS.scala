@@ -95,6 +95,7 @@ private[spark] object NNLS {
     var lastWall = 0 // Last iteration when we hit a bound constraint.
     var i = 0
     while (iterno < iterMax) {
+      val startTime = System.nanoTime()
       // find the residual
       SimpleBlas.gemv(1.0, ata, x, 0.0, res)
       SimpleBlas.axpy(-1.0, atb, res)
@@ -161,6 +162,9 @@ private[spark] object NNLS {
       iterno = iterno + 1
       SimpleBlas.copy(dir, lastDir)
       lastNorm = ngrad
+
+      val endTime = System.nanoTime() - startTime
+      println(s"iter $iterno time $endTime")
     }
     x.data.clone
   }
