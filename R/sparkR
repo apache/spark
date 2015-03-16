@@ -1,0 +1,42 @@
+#!/bin/bash
+
+FWDIR="$(cd `dirname $0`; pwd)"
+
+export PROJECT_HOME="$FWDIR"
+
+unset JAVA_HOME
+
+export R_PROFILE_USER="/tmp/sparkR.profile"
+
+if [ $# -gt 0 ]; then
+  # If we are running an R program, only set libPaths and use Rscript
+cat > /tmp/sparkR.profile << EOF
+.First <- function() {
+  projecHome <- Sys.getenv("PROJECT_HOME")
+  .libPaths(c(paste(projecHome,"/lib", sep=""), .libPaths()))
+  Sys.setenv(NOAWT=1)
+}
+EOF
+
+  Rscript "$@"
+else
+
+  # If we don't have an R file to run, initialize context and run R
+cat > /tmp/sparkR.profile << EOF
+.First <- function() {
+  projecHome <- Sys.getenv("PROJECT_HOME")
+  Sys.setenv(NOAWT=1)
+  .libPaths(c(paste(projecHome,"/lib", sep=""), .libPaths()))
+  require(utils)
+  require(SparkR)
+  sc <- sparkR.init(Sys.getenv("MASTER", unset = ""))
+  assign("sc", sc, envir=.GlobalEnv)
+  sqlCtx <- sparkRSQL.init(sc)
+  assign("sqlCtx", sqlCtx, envir=.GlobalEnv)
+  cat("\n Welcome to SparkR!")
+  cat("\n Spark context is available as sc, SQL context is available as sqlCtx\n")
+}
+EOF
+
+  R
+fi
