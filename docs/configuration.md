@@ -746,6 +746,18 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.files.useFetchCache</code></td>
+  <td>true</td>
+  <td>
+    If file fetching should use local caching. The improves performance when running multiple
+    executors on the one host and is enabled by default (see
+    <a href="https://issues.apache.org/jira/browse/SPARK-6313">SPARK-6313</a> for more details).
+    When set to true (default) caching is enabled. When set to false, caching optimizations are
+    switched off and no lock files are created, this allows fetchFiles store to reside on a NFS
+    mount.
+  </td>
+</tr>
+<tr>
   <td><code>spark.files.overwrite</code></td>
   <td>false</td>
   <td>
