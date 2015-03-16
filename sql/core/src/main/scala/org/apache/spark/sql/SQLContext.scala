@@ -306,7 +306,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     /** Creates a DataFrame from an RDD[Row]. */
     implicit def rowRddToDataFrameHolder(data: RDD[Row]): DataFrameHolder = {
       val schema = data.first().schema
-       DataFrameHolder(self.createDataFrame(data, schema))
+      DataFrameHolder(self.createDataFrame(data, schema))
     }
   }
 
