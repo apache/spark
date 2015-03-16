@@ -119,6 +119,9 @@ Scala 2.11 support in Spark does not support a few features due to dependencies
 which are themselves not Scala 2.11 ready. Specifically, Spark's external 
 Kafka library and JDBC component are not yet supported in Scala 2.11 builds.
 
+# Building with log4j2
+mvn -Plog4j2 -DskipTests clean package
+
 # Spark Tests in Maven
 
 Tests are run by default via the [ScalaTest Maven plugin](http://www.scalatest.org/user_guide/using_the_scalatest_maven_plugin).

@@ -1707,6 +1707,43 @@
         <jline.groupid>jline</jline.groupid>
       </properties>
     </profile>
+    <profile>
+        <id>log4j2</id>
+        <activation>
+            <property><name>log4j2</name></property>
+        </activation>
+        <properties>
+            <log4j2.version>2.1</log4j2.version>
+        </properties>
+        <dependencies>
+            <dependency>
+                <groupId>log4j</groupId>
+                <artifactId>log4j</artifactId>
+                <scope>provided</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-log4j12</artifactId>
+                <scope>provided</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-slf4j-impl</artifactId>
+                <version>2.1</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-api</artifactId>
+                <version>2.1</version>
+            </dependency>
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>log4j-over-slf4j</artifactId>
+                <version>1.7.9</version>
+            </dependency>
+        </dependencies>
+    </profile>
+
 
     <!--
       These empty profiles are available in some sub-modules. Declare them here so that
