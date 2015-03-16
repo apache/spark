@@ -252,7 +252,7 @@ class SparkILoop(
       case xs       => xs find (_.name == cmd)
     }
   }
-  private var fallbackMode = false 
+  private var fallbackMode = false
 
   private def toggleFallbackMode() {
     val old = fallbackMode
@@ -260,9 +260,9 @@ class SparkILoop(
     System.setProperty("spark.repl.fallback", fallbackMode.toString)
     echo(s"""
       |Switched ${if (old) "off" else "on"} fallback mode without restarting.
-      |       If you have defined classes in the repl, it would 
+      |       If you have defined classes in the repl, it would
       |be good to redefine them incase you plan to use them. If you still run
-      |into issues it would be good to restart the repl and turn on `:fallback` 
+      |into issues it would be good to restart the repl and turn on `:fallback`
       |mode as first command.
       """.stripMargin)
   }
@@ -314,6 +314,20 @@ class SparkILoop(
   private var currentPrompt = Properties.shellPromptString
 
   /**
+   *
+   */
+  @DeveloperApi
+  def bindValue(name: String, x: Any): IR.Result = {
+    intp.bindValue(name, x)
+  }
+
+  /**
+   *
+   */
+  @DeveloperApi
+  def classServerUri = intp.classServerUri
+
+  /**
    * Sets the prompt string used by the REPL.
    *
    * @param prompt The new prompt string
@@ -349,7 +363,7 @@ class SparkILoop(
     shCommand,
     nullary("silent", "disable/enable automatic printing of results", verbosity),
     nullary("fallback", """
-                           |disable/enable advanced repl changes, these fix some issues but may introduce others. 
+                           |disable/enable advanced repl changes, these fix some issues but may introduce others.
                            |This mode will be removed once these fixes stablize""".stripMargin, toggleFallbackMode),
     cmd("type", "[-v] <expr>", "display the type of an expression without evaluating it", typeCommand),
     nullary("warnings", "show the suppressed warnings from the most recent line which had any", warningsCommand)
@@ -1024,7 +1038,7 @@ class SparkILoop(
     val loader = Utils.getContextOrSparkClassLoader
     try {
       sqlContext = loader.loadClass(name).getConstructor(classOf[SparkContext])
-        .newInstance(sparkContext).asInstanceOf[SQLContext] 
+        .newInstance(sparkContext).asInstanceOf[SQLContext]
       logInfo("Created sql context (with Hive support)..")
     }
     catch {

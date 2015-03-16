@@ -234,6 +234,20 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter)
   /** Prompt to print when awaiting input */
   def prompt = currentPrompt
 
+  /**
+   *
+   */
+  @DeveloperApi
+  def bind(name: String, x: Any): IR.Result = {
+    intp.bind((name, x))
+  }
+
+  /**
+   *
+   */
+  @DeveloperApi
+  def classServerUri = intp.classServerUri
+
   import LoopCommand.{ cmd, nullary }
 
   /** Standard commands **/

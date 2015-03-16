@@ -970,7 +970,7 @@ import org.apache.spark.annotation.DeveloperApi
   private def bind[T: ru.TypeTag : ClassTag](name: String, value: T): IR.Result = bind((name, value))
   private def bindSyntheticValue(x: Any): IR.Result                             = bindValue(freshInternalVarName(), x)
   private def bindValue(x: Any): IR.Result                                      = bindValue(freshUserVarName(), x)
-  private def bindValue(name: String, x: Any): IR.Result                        = bind(name, TypeStrings.fromValue(x), x)
+  private[repl] def bindValue(name: String, x: Any): IR.Result                        = bind(name, TypeStrings.fromValue(x), x)
 
   /**
    * Reset this interpreter, forgetting all user-specified requests.
