@@ -147,7 +147,7 @@ object AllStagesResource {
   }
 
   def convertAccumulableInfo(acc: InternalAccumulableInfo): AccumulableInfo = {
-    new AccumulableInfo(acc.id, acc.name, acc.value)
+    new AccumulableInfo(acc.id, acc.name, acc.update, acc.value)
   }
 
 

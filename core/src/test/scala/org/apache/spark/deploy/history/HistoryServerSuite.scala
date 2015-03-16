@@ -76,6 +76,8 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     "complete stage list json" -> "applications/local-1422981780767/stages?status=complete",
     "failed stage list json" -> "applications/local-1422981780767/stages?status=failed",
     "one stage json" -> "applications/local-1422981780767/stages/1",
+    "stage list with accumulable json" -> "applications/local-1426533911241/stages",
+    "stage with accumulable json" -> "applications/local-1426533911241/stages/0",
     "rdd list storage json" -> "applications/local-1422981780767/storage/rdd",
     "one rdd storage json" -> "applications/local-1422981780767/storage/rdd/0"
   )

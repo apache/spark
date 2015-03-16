@@ -196,7 +196,7 @@ class ShuffleWriteMetrics(
 class AccumulableInfo (
   val id: Long,
   val name: String,
-  //no partial updates, since they aren't logged.  We can add them later
+  val update: Option[String],
   val value: String) {
 
   override def equals(other: Any): Boolean = other match {
