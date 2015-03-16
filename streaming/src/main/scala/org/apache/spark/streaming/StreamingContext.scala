@@ -22,23 +22,23 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.Map
 import scala.collection.mutable.Queue
-import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 import akka.actor.{Props, SupervisorStrategy}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.io.{LongWritable, Text}
+import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 import org.apache.spark._
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.input.FixedLengthBinaryInputFormat
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream._
-import org.apache.spark.streaming.receiver.{ActorSupervisorStrategy, ActorReceiver, Receiver}
+import org.apache.spark.streaming.receiver.{ActorReceiver, ActorSupervisorStrategy, Receiver}
 import org.apache.spark.streaming.scheduler._
-import org.apache.spark.streaming.ui.StreamingTab
-import org.apache.spark.util.MetadataCleaner
+import org.apache.spark.streaming.ui.{StreamingJobProgressListener, StreamingTab}
 
 /**
  * Main entry point for Spark Streaming functionality. It provides methods used to create
@@ -48,7 +48,7 @@ import org.apache.spark.util.MetadataCleaner
  * The associated SparkContext can be accessed using `context.sparkContext`. After
  * creating and transforming DStreams, the streaming computation can be started and stopped
  * using `context.start()` and `context.stop()`, respectively.
- * `context.awaitTransformation()` allows the current thread to wait for the termination
+ * `context.awaitTermination()` allows the current thread to wait for the termination
  * of the context by `stop()` or by an exception.
  */
 class StreamingContext private[streaming] (
@@ -98,8 +98,14 @@ class StreamingContext private[streaming] (
    * @param hadoopConf Optional, configuration object if necessary for reading from
    *                   HDFS compatible filesystems
    */
-  def this(path: String, hadoopConf: Configuration = new Configuration) =
+  def this(path: String, hadoopConf: Configuration) =
     this(null, CheckpointReader.read(path, new SparkConf(), hadoopConf).get, null)
+
+  /**
+   * Recreate a StreamingContext from a checkpoint file.
+   * @param path Path to the directory that was specified as the checkpoint directory
+   */
+  def this(path: String) = this(path, new Configuration)
 
   if (sc_ == null && cp_ == null) {
     throw new Exception("Spark Streaming cannot be initialized with " +
@@ -114,6 +120,11 @@ class StreamingContext private[streaming] (
     } else {
       sc_
     }
+  }
+
+  if (sc.conf.get("spark.master") == "local" || sc.conf.get("spark.master") == "local[1]") {
+    logWarning("spark.master should be set as local[n], n > 1 in local mode if you have receivers" +
+      " to get data, otherwise Spark jobs will not get resources to process the received data.")
   }
 
   private[streaming] val conf = sc.conf
@@ -152,7 +163,14 @@ class StreamingContext private[streaming] (
 
   private[streaming] val waiter = new ContextWaiter
 
-  private[streaming] val uiTab = new StreamingTab(this)
+  private[streaming] val progressListener = new StreamingJobProgressListener(this)
+
+  private[streaming] val uiTab: Option[StreamingTab] =
+    if (conf.getBoolean("spark.ui.enabled", true)) {
+      Some(new StreamingTab(this))
+    } else {
+      None
+    }
 
   /** Register streaming source to metrics system */
   private val streamingSource = new StreamingSource(this)
@@ -175,7 +193,7 @@ class StreamingContext private[streaming] (
   /**
    * Set each DStreams in this context to remember RDDs it generated in the last given duration.
    * DStreams remember RDDs only for a limited duration of time and releases them for garbage
-   * collection. This method allows the developer to specify how to long to remember the RDDs (
+   * collection. This method allows the developer to specify how long to remember the RDDs (
    * if the developer wishes to query old data outside the DStream computation).
    * @param duration Minimum duration that each DStream should remember its RDDs
    */
@@ -234,7 +252,7 @@ class StreamingContext private[streaming] (
    * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
    * @param props Props object defining creation of the actor
    * @param name Name of the actor
-   * @param storageLevel RDD storage level. Defaults to memory-only.
+   * @param storageLevel RDD storage level (default: StorageLevel.MEMORY_AND_DISK_SER_2)
    *
    * @note An important point to note:
    *       Since Actor may exist outside the spark framework, It is thus user's responsibility
@@ -345,6 +363,30 @@ class StreamingContext private[streaming] (
 
   /**
    * Create a input stream that monitors a Hadoop-compatible filesystem
+   * for new files and reads them using the given key-value types and input format.
+   * Files must be written to the monitored directory by "moving" them from another
+   * location within the same file system. File names starting with . are ignored.
+   * @param directory HDFS directory to monitor for new file
+   * @param filter Function to filter paths to process
+   * @param newFilesOnly Should process only new files and ignore existing files in the directory
+   * @param conf Hadoop configuration
+   * @tparam K Key type for reading HDFS file
+   * @tparam V Value type for reading HDFS file
+   * @tparam F Input format for reading HDFS file
+   */
+  def fileStream[
+    K: ClassTag,
+    V: ClassTag,
+    F <: NewInputFormat[K, V]: ClassTag
+  ] (directory: String,
+     filter: Path => Boolean,
+     newFilesOnly: Boolean,
+     conf: Configuration): InputDStream[(K, V)] = {
+    new FileInputDStream[K, V, F](this, directory, filter, newFilesOnly, Option(conf))
+  }
+
+  /**
+   * Create a input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them as text files (using key as LongWritable, value
    * as Text and input format as TextInputFormat). Files must be written to the
    * monitored directory by "moving" them from another location within the same
@@ -353,6 +395,37 @@ class StreamingContext private[streaming] (
    */
   def textFileStream(directory: String): DStream[String] = {
     fileStream[LongWritable, Text, TextInputFormat](directory).map(_._2.toString)
+  }
+
+  /**
+   * :: Experimental ::
+   *
+   * Create an input stream that monitors a Hadoop-compatible filesystem
+   * for new files and reads them as flat binary files, assuming a fixed length per record,
+   * generating one byte array per record. Files must be written to the monitored directory
+   * by "moving" them from another location within the same file system. File names
+   * starting with . are ignored.
+   *
+   * '''Note:''' We ensure that the byte array for each record in the
+   * resulting RDDs of the DStream has the provided record length.
+   *
+   * @param directory HDFS directory to monitor for new file
+   * @param recordLength length of each record in bytes
+   */
+  @Experimental
+  def binaryRecordsStream(
+      directory: String,
+      recordLength: Int): DStream[Array[Byte]] = {
+    val conf = sc_.hadoopConfiguration
+    conf.setInt(FixedLengthBinaryInputFormat.RECORD_LENGTH_PROPERTY, recordLength)
+    val br = fileStream[LongWritable, BytesWritable, FixedLengthBinaryInputFormat](
+      directory, FileInputDStream.defaultFilter : Path => Boolean, newFilesOnly=true, conf)
+    val data = br.map { case (k, v) =>
+      val bytes = v.getBytes
+      assert(bytes.length == recordLength, "Byte array does not have correct length")
+      bytes
+    }
+    data
   }
 
   /**
@@ -424,10 +497,10 @@ class StreamingContext private[streaming] (
 
   /**
    * Start the execution of the streams.
+   *
+   * @throws SparkException if the context has already been started or stopped.
    */
   def start(): Unit = synchronized {
-    // Throw exception if the context has already been started once
-    // or if a stopped context is being started again
     if (state == Started) {
       throw new SparkException("StreamingContext has already been started")
     }
@@ -435,6 +508,7 @@ class StreamingContext private[streaming] (
       throw new SparkException("StreamingContext has already been stopped")
     }
     validate()
+    sparkContext.setCallSite(DStream.getCreationSite())
     scheduler.start()
     state = Started
   }
@@ -452,15 +526,30 @@ class StreamingContext private[streaming] (
    * will be thrown in this thread.
    * @param timeout time to wait in milliseconds
    */
+  @deprecated("Use awaitTerminationOrTimeout(Long) instead", "1.3.0")
   def awaitTermination(timeout: Long) {
+    waiter.waitForStopOrError(timeout)
+  }
+
+  /**
+   * Wait for the execution to stop. Any exceptions that occurs during the execution
+   * will be thrown in this thread.
+   *
+   * @param timeout time to wait in milliseconds
+   * @return `true` if it's stopped; or throw the reported error during the execution; or `false`
+   *         if the waiting time elapsed before returning from the method.
+   */
+  def awaitTerminationOrTimeout(timeout: Long): Boolean = {
     waiter.waitForStopOrError(timeout)
   }
 
   /**
    * Stop the execution of the streams immediately (does not wait for all received data
    * to be processed).
-   * @param stopSparkContext Stop the associated SparkContext or not
    *
+   * @param stopSparkContext if true, stops the associated SparkContext. The underlying SparkContext
+   *                         will be stopped regardless of whether this StreamingContext has been
+   *                         started.
    */
   def stop(stopSparkContext: Boolean = true): Unit = synchronized {
     stop(stopSparkContext, false)
@@ -469,25 +558,27 @@ class StreamingContext private[streaming] (
   /**
    * Stop the execution of the streams, with option of ensuring all received data
    * has been processed.
-   * @param stopSparkContext Stop the associated SparkContext or not
-   * @param stopGracefully Stop gracefully by waiting for the processing of all
+   *
+   * @param stopSparkContext if true, stops the associated SparkContext. The underlying SparkContext
+   *                         will be stopped regardless of whether this StreamingContext has been
+   *                         started.
+   * @param stopGracefully if true, stops gracefully by waiting for the processing of all
    *                       received data to be completed
    */
   def stop(stopSparkContext: Boolean, stopGracefully: Boolean): Unit = synchronized {
-    // Warn (but not fail) if context is stopped twice,
-    // or context is stopped before starting
-    if (state == Initialized) {
-      logWarning("StreamingContext has not been started yet")
-      return
+    state match {
+      case Initialized => logWarning("StreamingContext has not been started yet")
+      case Stopped => logWarning("StreamingContext has already been stopped")
+      case Started =>
+        scheduler.stop(stopGracefully)
+        logInfo("StreamingContext stopped successfully")
+        waiter.notifyStop()
     }
-    if (state == Stopped) {
-      logWarning("StreamingContext has already been stopped")
-      return
-    } // no need to throw an exception as its okay to stop twice
-    scheduler.stop(stopGracefully)
-    logInfo("StreamingContext stopped successfully")
-    waiter.notifyStop()
+    // Even if the streaming context has not been started, we still need to stop the SparkContext.
+    // Even if we have already stopped, we still need to attempt to stop the SparkContext because
+    // a user might stop(stopSparkContext = false) and then call stop(stopSparkContext = true).
     if (stopSparkContext) sc.stop()
+    // The state should always be Stopped after calling `stop()`, even if we haven't started yet:
     state = Stopped
   }
 }
@@ -501,9 +592,11 @@ object StreamingContext extends Logging {
 
   private[streaming] val DEFAULT_CLEANER_TTL = 3600
 
-  implicit def toPairDStreamFunctions[K, V](stream: DStream[(K, V)])
+  @deprecated("Replaced by implicit functions in the DStream companion object. This is " +
+    "kept here only for backward compatibility.", "1.3.0")
+  def toPairDStreamFunctions[K, V](stream: DStream[(K, V)])
       (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null) = {
-    new PairDStreamFunctions[K, V](stream)
+    DStream.toPairDStreamFunctions(stream)(kt, vt, ord)
   }
 
   /**

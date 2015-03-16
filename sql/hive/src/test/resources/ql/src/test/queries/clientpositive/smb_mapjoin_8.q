@@ -5,7 +5,7 @@ set hive.exec.reducers.max = 1;
 
 
 create table smb_bucket_input (key int, value string) stored as rcfile;
-load data local inpath '../data/files/smb_bucket_input.rc' into table smb_bucket_input;
+load data local inpath '../../data/files/smb_bucket_input.rc' into table smb_bucket_input;
 
 
 CREATE TABLE smb_bucket4_1(key int, value string) CLUSTERED BY (key) SORTED BY (key) INTO 1 BUCKETS;

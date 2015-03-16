@@ -8,21 +8,21 @@ create table test2 (key string, value string) clustered by (value) sorted by (va
 create table test3 (key string, value string) clustered by (key, value) sorted by (key, value) into 3 buckets;
 create table test4 (key string, value string) clustered by (value, key) sorted by (value, key) into 3 buckets;
 
-load data local inpath '../data/files/srcbucket20.txt' INTO TABLE test1;
-load data local inpath '../data/files/srcbucket21.txt' INTO TABLE test1;
-load data local inpath '../data/files/srcbucket22.txt' INTO TABLE test1;
+load data local inpath '../../data/files/srcbucket20.txt' INTO TABLE test1;
+load data local inpath '../../data/files/srcbucket21.txt' INTO TABLE test1;
+load data local inpath '../../data/files/srcbucket22.txt' INTO TABLE test1;
 
-load data local inpath '../data/files/srcbucket20.txt' INTO TABLE test2;
-load data local inpath '../data/files/srcbucket21.txt' INTO TABLE test2;
-load data local inpath '../data/files/srcbucket22.txt' INTO TABLE test2;
+load data local inpath '../../data/files/srcbucket20.txt' INTO TABLE test2;
+load data local inpath '../../data/files/srcbucket21.txt' INTO TABLE test2;
+load data local inpath '../../data/files/srcbucket22.txt' INTO TABLE test2;
 
-load data local inpath '../data/files/srcbucket20.txt' INTO TABLE test3;
-load data local inpath '../data/files/srcbucket21.txt' INTO TABLE test3;
-load data local inpath '../data/files/srcbucket22.txt' INTO TABLE test3;
+load data local inpath '../../data/files/srcbucket20.txt' INTO TABLE test3;
+load data local inpath '../../data/files/srcbucket21.txt' INTO TABLE test3;
+load data local inpath '../../data/files/srcbucket22.txt' INTO TABLE test3;
 
-load data local inpath '../data/files/srcbucket20.txt' INTO TABLE test4;
-load data local inpath '../data/files/srcbucket21.txt' INTO TABLE test4;
-load data local inpath '../data/files/srcbucket22.txt' INTO TABLE test4;
+load data local inpath '../../data/files/srcbucket20.txt' INTO TABLE test4;
+load data local inpath '../../data/files/srcbucket21.txt' INTO TABLE test4;
+load data local inpath '../../data/files/srcbucket22.txt' INTO TABLE test4;
 
 set hive.optimize.bucketmapjoin = true;
 -- should be allowed

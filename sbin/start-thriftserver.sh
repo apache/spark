@@ -24,8 +24,10 @@
 set -o posix
 
 # Figure out where Spark is installed
-FWDIR="$(cd `dirname $0`/..; pwd)"
+FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 
+# NOTE: This exact class name is matched downstream by SparkSubmit.
+# Any changes need to be reflected there.
 CLASS="org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"
 
 function usage {
@@ -37,42 +39,17 @@ function usage {
   pattern+="\|======="
   pattern+="\|--help"
 
-  $FWDIR/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
+  "$FWDIR"/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
   echo
   echo "Thrift server options:"
-  $FWDIR/bin/spark-class $CLASS --help 2>&1 | grep -v "$pattern" 1>&2
+  "$FWDIR"/bin/spark-class $CLASS --help 2>&1 | grep -v "$pattern" 1>&2
 }
 
-function ensure_arg_number {
-  arg_number=$1
-  at_least=$2
-
-  if [[ $arg_number -lt $at_least ]]; then
-    usage
-    exit 1
-  fi
-}
-
-if [[ "$@" = --help ]] || [[ "$@" = -h ]]; then
+if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
   usage
   exit 0
 fi
 
-THRIFT_SERVER_ARGS=()
-SUBMISSION_ARGS=()
+export SUBMIT_USAGE_FUNCTION=usage
 
-while (($#)); do
-  case $1 in
-    --hiveconf)
-      ensure_arg_number $# 2
-      THRIFT_SERVER_ARGS+=($1); shift
-      THRIFT_SERVER_ARGS+=($1); shift
-      ;;
-
-    *)
-      SUBMISSION_ARGS+=($1); shift
-      ;;
-  esac
-done
-
-eval exec "$FWDIR"/bin/spark-submit --class $CLASS ${SUBMISSION_ARGS[*]} spark-internal ${THRIFT_SERVER_ARGS[*]}
+exec "$FWDIR"/sbin/spark-daemon.sh submit $CLASS 1 "$@"

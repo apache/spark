@@ -17,14 +17,18 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
+import scala.collection.immutable.HashSet
+
+import org.scalactic.TripleEqualsSupport.Spread
 import org.scalatest.FunSuite
+import org.scalatest.Matchers._
 
-import org.apache.spark.sql.catalyst.types._
-
-/* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.analysis.UnresolvedGetField
+import org.apache.spark.sql.types._
+
 
 class ExpressionEvaluationSuite extends FunSuite {
 
@@ -34,6 +38,21 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Literal(0L), 0L)
     checkEvaluation(Literal("test"), "test")
     checkEvaluation(Literal(1) + Literal(1), 2)
+  }
+
+  test("unary BitwiseNOT") {
+    checkEvaluation(BitwiseNot(1), -2)
+    assert(BitwiseNot(1).dataType === IntegerType)
+    assert(BitwiseNot(1).eval(EmptyRow).isInstanceOf[Int])
+    checkEvaluation(BitwiseNot(1.toLong), -2.toLong)
+    assert(BitwiseNot(1.toLong).dataType === LongType)
+    assert(BitwiseNot(1.toLong).eval(EmptyRow).isInstanceOf[Long])
+    checkEvaluation(BitwiseNot(1.toShort), -2.toShort)
+    assert(BitwiseNot(1.toShort).dataType === ShortType)
+    assert(BitwiseNot(1.toShort).eval(EmptyRow).isInstanceOf[Short])
+    checkEvaluation(BitwiseNot(1.toByte), -2.toByte)
+    assert(BitwiseNot(1.toByte).dataType === ByteType)
+    assert(BitwiseNot(1.toByte).eval(EmptyRow).isInstanceOf[Byte])
   }
 
   /**
@@ -129,11 +148,76 @@ class ExpressionEvaluationSuite extends FunSuite {
     }
   }
 
+  def checkDoubleEvaluation(expression: Expression, expected: Spread[Double], inputRow: Row = EmptyRow): Unit = {
+    val actual = try evaluate(expression, inputRow) catch {
+      case e: Exception => fail(s"Exception evaluating $expression", e)
+    }
+    actual.asInstanceOf[Double] shouldBe expected
+  }
+
   test("IN") {
     checkEvaluation(In(Literal(1), Seq(Literal(1), Literal(2))), true)
     checkEvaluation(In(Literal(2), Seq(Literal(1), Literal(2))), true)
     checkEvaluation(In(Literal(3), Seq(Literal(1), Literal(2))), false)
     checkEvaluation(In(Literal(1), Seq(Literal(1), Literal(2))) && In(Literal(2), Seq(Literal(1), Literal(2))), true)
+  }
+
+  test("Divide") {
+    checkEvaluation(Divide(Literal(2), Literal(1)), 2)
+    checkEvaluation(Divide(Literal(1.0), Literal(2.0)), 0.5)
+    checkEvaluation(Divide(Literal(1), Literal(2)), 0)
+    checkEvaluation(Divide(Literal(1), Literal(0)), null)
+    checkEvaluation(Divide(Literal(1.0), Literal(0.0)), null)
+    checkEvaluation(Divide(Literal(0.0), Literal(0.0)), null)
+    checkEvaluation(Divide(Literal(0), Literal(null, IntegerType)), null)
+    checkEvaluation(Divide(Literal(1), Literal(null, IntegerType)), null)
+    checkEvaluation(Divide(Literal(null, IntegerType), Literal(0)), null)
+    checkEvaluation(Divide(Literal(null, DoubleType), Literal(0.0)), null)
+    checkEvaluation(Divide(Literal(null, IntegerType), Literal(1)), null)
+    checkEvaluation(Divide(Literal(null, IntegerType), Literal(null, IntegerType)), null)
+  }
+
+  test("Remainder") {
+    checkEvaluation(Remainder(Literal(2), Literal(1)), 0)
+    checkEvaluation(Remainder(Literal(1.0), Literal(2.0)), 1.0)
+    checkEvaluation(Remainder(Literal(1), Literal(2)), 1)
+    checkEvaluation(Remainder(Literal(1), Literal(0)), null)
+    checkEvaluation(Remainder(Literal(1.0), Literal(0.0)), null)
+    checkEvaluation(Remainder(Literal(0.0), Literal(0.0)), null)
+    checkEvaluation(Remainder(Literal(0), Literal(null, IntegerType)), null)
+    checkEvaluation(Remainder(Literal(1), Literal(null, IntegerType)), null)
+    checkEvaluation(Remainder(Literal(null, IntegerType), Literal(0)), null)
+    checkEvaluation(Remainder(Literal(null, DoubleType), Literal(0.0)), null)
+    checkEvaluation(Remainder(Literal(null, IntegerType), Literal(1)), null)
+    checkEvaluation(Remainder(Literal(null, IntegerType), Literal(null, IntegerType)), null)
+  }
+
+  test("INSET") {
+    val hS = HashSet[Any]() + 1 + 2
+    val nS = HashSet[Any]() + 1 + 2 + null
+    val one = Literal(1)
+    val two = Literal(2)
+    val three = Literal(3)
+    val nl = Literal(null)
+    val s = Seq(one, two)
+    val nullS = Seq(one, two, null)
+    checkEvaluation(InSet(one, hS), true)
+    checkEvaluation(InSet(two, hS), true)
+    checkEvaluation(InSet(two, nS), true)
+    checkEvaluation(InSet(nl, nS), true)
+    checkEvaluation(InSet(three, hS), false)
+    checkEvaluation(InSet(three, nS), false)
+    checkEvaluation(InSet(one, hS) && InSet(two, hS), true)
+  }
+
+  test("MaxOf") {
+    checkEvaluation(MaxOf(1, 2), 2)
+    checkEvaluation(MaxOf(2, 1), 2)
+    checkEvaluation(MaxOf(1L, 2L), 2L)
+    checkEvaluation(MaxOf(2L, 1L), 2L)
+
+    checkEvaluation(MaxOf(Literal(null, IntegerType), 2), 2)
+    checkEvaluation(MaxOf(2, Literal(null, IntegerType)), 2)
   }
 
   test("LIKE literal Regular Expression") {
@@ -151,6 +235,9 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation("abc" like "a%", true)
     checkEvaluation("abc"  like "b%", false)
     checkEvaluation("abc"  like "bc%", false)
+    checkEvaluation("a\nb" like "a_b", true)
+    checkEvaluation("ab" like "a%b", true)
+    checkEvaluation("a\nb" like "a%b", true)
   }
 
   test("LIKE Non-literal Regular Expression") {
@@ -167,6 +254,9 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation("abc" like regEx, true, new GenericRow(Array[Any]("a%")))
     checkEvaluation("abc" like regEx, false, new GenericRow(Array[Any]("b%")))
     checkEvaluation("abc" like regEx, false, new GenericRow(Array[Any]("bc%")))
+    checkEvaluation("a\nb" like regEx, true, new GenericRow(Array[Any]("a_b")))
+    checkEvaluation("ab" like regEx, true, new GenericRow(Array[Any]("a%b")))
+    checkEvaluation("a\nb" like regEx, true, new GenericRow(Array[Any]("a%b")))
 
     checkEvaluation(Literal(null, StringType) like regEx, null, new GenericRow(Array[Any]("bc%")))
   }
@@ -212,31 +302,44 @@ class ExpressionEvaluationSuite extends FunSuite {
 
   test("data type casting") {
 
-    val sts = "1970-01-01 00:00:01.1"
-    val ts = Timestamp.valueOf(sts)
+    val sd = "1970-01-01"
+    val d = Date.valueOf(sd)
+    val zts = sd + " 00:00:00"
+    val sts = sd + " 00:00:02"
+    val nts = sts + ".1"
+    val ts = Timestamp.valueOf(nts)
 
     checkEvaluation("abdef" cast StringType, "abdef")
-    checkEvaluation("abdef" cast DecimalType, null)
+    checkEvaluation("abdef" cast DecimalType.Unlimited, null)
     checkEvaluation("abdef" cast TimestampType, null)
-    checkEvaluation("12.65" cast DecimalType, BigDecimal(12.65))
+    checkEvaluation("12.65" cast DecimalType.Unlimited, Decimal(12.65))
 
     checkEvaluation(Literal(1) cast LongType, 1)
-    checkEvaluation(Cast(Literal(1) cast TimestampType, LongType), 1)
+    checkEvaluation(Cast(Literal(1000) cast TimestampType, LongType), 1.toLong)
+    checkEvaluation(Cast(Literal(-1200) cast TimestampType, LongType), -2.toLong)
+    checkEvaluation(Cast(Literal(1.toDouble) cast TimestampType, DoubleType), 1.toDouble)
     checkEvaluation(Cast(Literal(1.toDouble) cast TimestampType, DoubleType), 1.toDouble)
 
-    checkEvaluation(Cast(Literal(sts) cast TimestampType, StringType), sts)
+    checkEvaluation(Cast(Literal(sd) cast DateType, StringType), sd)
+    checkEvaluation(Cast(Literal(d) cast StringType, DateType), 0)
+    checkEvaluation(Cast(Literal(nts) cast TimestampType, StringType), nts)
     checkEvaluation(Cast(Literal(ts) cast StringType, TimestampType), ts)
+    // all convert to string type to check
+    checkEvaluation(
+      Cast(Cast(Literal(nts) cast TimestampType, DateType), StringType), sd)
+    checkEvaluation(
+      Cast(Cast(Literal(ts) cast DateType, TimestampType), StringType), zts)
 
     checkEvaluation(Cast("abdef" cast BinaryType, StringType), "abdef")
 
     checkEvaluation(Cast(Cast(Cast(Cast(
       Cast("5" cast ByteType, ShortType), IntegerType), FloatType), DoubleType), LongType), 5)
-    checkEvaluation(Cast(Cast(Cast(Cast(
-      Cast("5" cast ByteType, TimestampType), DecimalType), LongType), StringType), ShortType), 5)
-    checkEvaluation(Cast(Cast(Cast(Cast(
-      Cast("5" cast TimestampType, ByteType), DecimalType), LongType), StringType), ShortType), null)
-    checkEvaluation(Cast(Cast(Cast(Cast(
-      Cast("5" cast DecimalType, ByteType), TimestampType), LongType), StringType), ShortType), 5)
+    checkEvaluation(Cast(Cast(Cast(Cast(Cast("5" cast
+      ByteType, TimestampType), DecimalType.Unlimited), LongType), StringType), ShortType), 0)
+    checkEvaluation(Cast(Cast(Cast(Cast(Cast("5" cast
+      TimestampType, ByteType), DecimalType.Unlimited), LongType), StringType), ShortType), null)
+    checkEvaluation(Cast(Cast(Cast(Cast(Cast("5" cast
+      DecimalType.Unlimited, ByteType), TimestampType), LongType), StringType), ShortType), 0)
     checkEvaluation(Literal(true) cast IntegerType, 1)
     checkEvaluation(Literal(false) cast IntegerType, 0)
     checkEvaluation(Cast(Literal(1) cast BooleanType, IntegerType), 1)
@@ -244,7 +347,7 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation("23" cast DoubleType, 23d)
     checkEvaluation("23" cast IntegerType, 23)
     checkEvaluation("23" cast FloatType, 23f)
-    checkEvaluation("23" cast DecimalType, 23: BigDecimal)
+    checkEvaluation("23" cast DecimalType.Unlimited, Decimal(23))
     checkEvaluation("23" cast ByteType, 23.toByte)
     checkEvaluation("23" cast ShortType, 23.toShort)
     checkEvaluation("2012-12-11" cast DoubleType, null)
@@ -253,7 +356,7 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Literal(23d) + Cast(true, DoubleType), 24d)
     checkEvaluation(Literal(23) + Cast(true, IntegerType), 24)
     checkEvaluation(Literal(23f) + Cast(true, FloatType), 24f)
-    checkEvaluation(Literal(BigDecimal(23)) + Cast(true, DecimalType), 24: BigDecimal)
+    checkEvaluation(Literal(Decimal(23)) + Cast(true, DecimalType.Unlimited), Decimal(24))
     checkEvaluation(Literal(23.toByte) + Cast(true, ByteType), 24.toByte)
     checkEvaluation(Literal(23.toShort) + Cast(true, ShortType), 24.toShort)
 
@@ -267,11 +370,86 @@ class ExpressionEvaluationSuite extends FunSuite {
     assert(("abcdef" cast IntegerType).nullable === true)
     assert(("abcdef" cast ShortType).nullable === true)
     assert(("abcdef" cast ByteType).nullable === true)
-    assert(("abcdef" cast DecimalType).nullable === true)
+    assert(("abcdef" cast DecimalType.Unlimited).nullable === true)
+    assert(("abcdef" cast DecimalType(4, 2)).nullable === true)
     assert(("abcdef" cast DoubleType).nullable === true)
     assert(("abcdef" cast FloatType).nullable === true)
 
     checkEvaluation(Cast(Literal(null, IntegerType), ShortType), null)
+  }
+
+  test("date") {
+    val d1 = DateUtils.fromJavaDate(Date.valueOf("1970-01-01"))
+    val d2 = DateUtils.fromJavaDate(Date.valueOf("1970-01-02"))
+    checkEvaluation(Literal(d1) < Literal(d2), true)
+  }
+
+  test("casting to fixed-precision decimals") {
+    // Overflow and rounding for casting to fixed-precision decimals:
+    // - Values should round with HALF_UP mode by default when you lower scale
+    // - Values that would overflow the target precision should turn into null
+    // - Because of this, casts to fixed-precision decimals should be nullable
+
+    assert(Cast(Literal(123), DecimalType.Unlimited).nullable === false)
+    assert(Cast(Literal(10.03f), DecimalType.Unlimited).nullable === true)
+    assert(Cast(Literal(10.03), DecimalType.Unlimited).nullable === true)
+    assert(Cast(Literal(Decimal(10.03)), DecimalType.Unlimited).nullable === false)
+
+    assert(Cast(Literal(123), DecimalType(2, 1)).nullable === true)
+    assert(Cast(Literal(10.03f), DecimalType(2, 1)).nullable === true)
+    assert(Cast(Literal(10.03), DecimalType(2, 1)).nullable === true)
+    assert(Cast(Literal(Decimal(10.03)), DecimalType(2, 1)).nullable === true)
+
+    checkEvaluation(Cast(Literal(123), DecimalType.Unlimited), Decimal(123))
+    checkEvaluation(Cast(Literal(123), DecimalType(3, 0)), Decimal(123))
+    checkEvaluation(Cast(Literal(123), DecimalType(3, 1)), null)
+    checkEvaluation(Cast(Literal(123), DecimalType(2, 0)), null)
+
+    checkEvaluation(Cast(Literal(10.03), DecimalType.Unlimited), Decimal(10.03))
+    checkEvaluation(Cast(Literal(10.03), DecimalType(4, 2)), Decimal(10.03))
+    checkEvaluation(Cast(Literal(10.03), DecimalType(3, 1)), Decimal(10.0))
+    checkEvaluation(Cast(Literal(10.03), DecimalType(2, 0)), Decimal(10))
+    checkEvaluation(Cast(Literal(10.03), DecimalType(1, 0)), null)
+    checkEvaluation(Cast(Literal(10.03), DecimalType(2, 1)), null)
+    checkEvaluation(Cast(Literal(10.03), DecimalType(3, 2)), null)
+    checkEvaluation(Cast(Literal(Decimal(10.03)), DecimalType(3, 1)), Decimal(10.0))
+    checkEvaluation(Cast(Literal(Decimal(10.03)), DecimalType(3, 2)), null)
+
+    checkEvaluation(Cast(Literal(10.05), DecimalType.Unlimited), Decimal(10.05))
+    checkEvaluation(Cast(Literal(10.05), DecimalType(4, 2)), Decimal(10.05))
+    checkEvaluation(Cast(Literal(10.05), DecimalType(3, 1)), Decimal(10.1))
+    checkEvaluation(Cast(Literal(10.05), DecimalType(2, 0)), Decimal(10))
+    checkEvaluation(Cast(Literal(10.05), DecimalType(1, 0)), null)
+    checkEvaluation(Cast(Literal(10.05), DecimalType(2, 1)), null)
+    checkEvaluation(Cast(Literal(10.05), DecimalType(3, 2)), null)
+    checkEvaluation(Cast(Literal(Decimal(10.05)), DecimalType(3, 1)), Decimal(10.1))
+    checkEvaluation(Cast(Literal(Decimal(10.05)), DecimalType(3, 2)), null)
+
+    checkEvaluation(Cast(Literal(9.95), DecimalType(3, 2)), Decimal(9.95))
+    checkEvaluation(Cast(Literal(9.95), DecimalType(3, 1)), Decimal(10.0))
+    checkEvaluation(Cast(Literal(9.95), DecimalType(2, 0)), Decimal(10))
+    checkEvaluation(Cast(Literal(9.95), DecimalType(2, 1)), null)
+    checkEvaluation(Cast(Literal(9.95), DecimalType(1, 0)), null)
+    checkEvaluation(Cast(Literal(Decimal(9.95)), DecimalType(3, 1)), Decimal(10.0))
+    checkEvaluation(Cast(Literal(Decimal(9.95)), DecimalType(1, 0)), null)
+
+    checkEvaluation(Cast(Literal(-9.95), DecimalType(3, 2)), Decimal(-9.95))
+    checkEvaluation(Cast(Literal(-9.95), DecimalType(3, 1)), Decimal(-10.0))
+    checkEvaluation(Cast(Literal(-9.95), DecimalType(2, 0)), Decimal(-10))
+    checkEvaluation(Cast(Literal(-9.95), DecimalType(2, 1)), null)
+    checkEvaluation(Cast(Literal(-9.95), DecimalType(1, 0)), null)
+    checkEvaluation(Cast(Literal(Decimal(-9.95)), DecimalType(3, 1)), Decimal(-10.0))
+    checkEvaluation(Cast(Literal(Decimal(-9.95)), DecimalType(1, 0)), null)
+
+    checkEvaluation(Cast(Literal(Double.NaN), DecimalType.Unlimited), null)
+    checkEvaluation(Cast(Literal(1.0 / 0.0), DecimalType.Unlimited), null)
+    checkEvaluation(Cast(Literal(Float.NaN), DecimalType.Unlimited), null)
+    checkEvaluation(Cast(Literal(1.0f / 0.0f), DecimalType.Unlimited), null)
+
+    checkEvaluation(Cast(Literal(Double.NaN), DecimalType(2, 1)), null)
+    checkEvaluation(Cast(Literal(1.0 / 0.0), DecimalType(2, 1)), null)
+    checkEvaluation(Cast(Literal(Float.NaN), DecimalType(2, 1)), null)
+    checkEvaluation(Cast(Literal(1.0f / 0.0f), DecimalType(2, 1)), null)
   }
 
   test("timestamp") {
@@ -281,26 +459,281 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Literal(ts1) < Literal(ts2), true)
   }
 
+  test("date casting") {
+    val d = Date.valueOf("1970-01-01")
+    checkEvaluation(Cast(Literal(d), ShortType), null)
+    checkEvaluation(Cast(Literal(d), IntegerType), null)
+    checkEvaluation(Cast(Literal(d), LongType), null)
+    checkEvaluation(Cast(Literal(d), FloatType), null)
+    checkEvaluation(Cast(Literal(d), DoubleType), null)
+    checkEvaluation(Cast(Literal(d), DecimalType.Unlimited), null)
+    checkEvaluation(Cast(Literal(d), DecimalType(10, 2)), null)
+    checkEvaluation(Cast(Literal(d), StringType), "1970-01-01")
+    checkEvaluation(Cast(Cast(Literal(d), TimestampType), StringType), "1970-01-01 00:00:00")
+  }
+
   test("timestamp casting") {
     val millis = 15 * 1000 + 2
+    val seconds = millis * 1000 + 2
     val ts = new Timestamp(millis)
-    val ts1 = new Timestamp(15 * 1000)  // a timestamp without the milliseconds part
+    val tss = new Timestamp(seconds)
     checkEvaluation(Cast(ts, ShortType), 15)
     checkEvaluation(Cast(ts, IntegerType), 15)
     checkEvaluation(Cast(ts, LongType), 15)
     checkEvaluation(Cast(ts, FloatType), 15.002f)
     checkEvaluation(Cast(ts, DoubleType), 15.002)
-    checkEvaluation(Cast(Cast(ts, ShortType), TimestampType), ts1)
-    checkEvaluation(Cast(Cast(ts, IntegerType), TimestampType), ts1)
-    checkEvaluation(Cast(Cast(ts, LongType), TimestampType), ts1)
+    checkEvaluation(Cast(Cast(tss, ShortType), TimestampType), ts)
+    checkEvaluation(Cast(Cast(tss, IntegerType), TimestampType), ts)
+    checkEvaluation(Cast(Cast(tss, LongType), TimestampType), ts)
     checkEvaluation(Cast(Cast(millis.toFloat / 1000, TimestampType), FloatType),
       millis.toFloat / 1000)
     checkEvaluation(Cast(Cast(millis.toDouble / 1000, TimestampType), DoubleType),
       millis.toDouble / 1000)
-    checkEvaluation(Cast(Literal(BigDecimal(1)) cast TimestampType, DecimalType), 1)
+    checkEvaluation(Cast(Literal(Decimal(1)) cast TimestampType, DecimalType.Unlimited), Decimal(1))
 
     // A test for higher precision than millis
     checkEvaluation(Cast(Cast(0.00000001, TimestampType), DoubleType), 0.00000001)
+
+    checkEvaluation(Cast(Literal(Double.NaN), TimestampType), null)
+    checkEvaluation(Cast(Literal(1.0 / 0.0), TimestampType), null)
+    checkEvaluation(Cast(Literal(Float.NaN), TimestampType), null)
+    checkEvaluation(Cast(Literal(1.0f / 0.0f), TimestampType), null)
+  }
+
+  test("array casting") {
+    val array = Literal(Seq("123", "abc", "", null), ArrayType(StringType, containsNull = true))
+    val array_notNull = Literal(Seq("123", "abc", ""), ArrayType(StringType, containsNull = false))
+
+    {
+      val cast = Cast(array, ArrayType(IntegerType, containsNull = true))
+      assert(cast.resolved === true)
+      checkEvaluation(cast, Seq(123, null, null, null))
+    }
+    {
+      val cast = Cast(array, ArrayType(IntegerType, containsNull = false))
+      assert(cast.resolved === false)
+    }
+    {
+      val cast = Cast(array, ArrayType(BooleanType, containsNull = true))
+      assert(cast.resolved === true)
+      checkEvaluation(cast, Seq(true, true, false, null))
+    }
+    {
+      val cast = Cast(array, ArrayType(BooleanType, containsNull = false))
+      assert(cast.resolved === false)
+    }
+
+    {
+      val cast = Cast(array_notNull, ArrayType(IntegerType, containsNull = true))
+      assert(cast.resolved === true)
+      checkEvaluation(cast, Seq(123, null, null))
+    }
+    {
+      val cast = Cast(array_notNull, ArrayType(IntegerType, containsNull = false))
+      assert(cast.resolved === false)
+    }
+    {
+      val cast = Cast(array_notNull, ArrayType(BooleanType, containsNull = true))
+      assert(cast.resolved === true)
+      checkEvaluation(cast, Seq(true, true, false))
+    }
+    {
+      val cast = Cast(array_notNull, ArrayType(BooleanType, containsNull = false))
+      assert(cast.resolved === true)
+      checkEvaluation(cast, Seq(true, true, false))
+    }
+
+    {
+      val cast = Cast(array, IntegerType)
+      assert(cast.resolved === false)
+    }
+  }
+
+  test("map casting") {
+    val map = Literal(
+      Map("a" -> "123", "b" -> "abc", "c" -> "", "d" -> null),
+      MapType(StringType, StringType, valueContainsNull = true))
+    val map_notNull = Literal(
+      Map("a" -> "123", "b" -> "abc", "c" -> ""),
+      MapType(StringType, StringType, valueContainsNull = false))
+
+    {
+      val cast = Cast(map, MapType(StringType, IntegerType, valueContainsNull = true))
+      assert(cast.resolved === true)
+      checkEvaluation(cast, Map("a" -> 123, "b" -> null, "c" -> null, "d" -> null))
+    }
+    {
+      val cast = Cast(map, MapType(StringType, IntegerType, valueContainsNull = false))
+      assert(cast.resolved === false)
+    }
+    {
+      val cast = Cast(map, MapType(StringType, BooleanType, valueContainsNull = true))
+      assert(cast.resolved === true)
+      checkEvaluation(cast, Map("a" -> true, "b" -> true, "c" -> false, "d" -> null))
+    }
+    {
+      val cast = Cast(map, MapType(StringType, BooleanType, valueContainsNull = false))
+      assert(cast.resolved === false)
+    }
+    {
+      val cast = Cast(map, MapType(IntegerType, StringType, valueContainsNull = true))
+      assert(cast.resolved === false)
+    }
+
+    {
+      val cast = Cast(map_notNull, MapType(StringType, IntegerType, valueContainsNull = true))
+      assert(cast.resolved === true)
+      checkEvaluation(cast, Map("a" -> 123, "b" -> null, "c" -> null))
+    }
+    {
+      val cast = Cast(map_notNull, MapType(StringType, IntegerType, valueContainsNull = false))
+      assert(cast.resolved === false)
+    }
+    {
+      val cast = Cast(map_notNull, MapType(StringType, BooleanType, valueContainsNull = true))
+      assert(cast.resolved === true)
+      checkEvaluation(cast, Map("a" -> true, "b" -> true, "c" -> false))
+    }
+    {
+      val cast = Cast(map_notNull, MapType(StringType, BooleanType, valueContainsNull = false))
+      assert(cast.resolved === true)
+      checkEvaluation(cast, Map("a" -> true, "b" -> true, "c" -> false))
+    }
+    {
+      val cast = Cast(map_notNull, MapType(IntegerType, StringType, valueContainsNull = true))
+      assert(cast.resolved === false)
+    }
+
+    {
+      val cast = Cast(map, IntegerType)
+      assert(cast.resolved === false)
+    }
+  }
+
+  test("struct casting") {
+    val struct = Literal(
+      Row("123", "abc", "", null),
+      StructType(Seq(
+        StructField("a", StringType, nullable = true),
+        StructField("b", StringType, nullable = true),
+        StructField("c", StringType, nullable = true),
+        StructField("d", StringType, nullable = true))))
+    val struct_notNull = Literal(
+      Row("123", "abc", ""),
+      StructType(Seq(
+        StructField("a", StringType, nullable = false),
+        StructField("b", StringType, nullable = false),
+        StructField("c", StringType, nullable = false))))
+
+    {
+      val cast = Cast(struct, StructType(Seq(
+        StructField("a", IntegerType, nullable = true),
+        StructField("b", IntegerType, nullable = true),
+        StructField("c", IntegerType, nullable = true),
+        StructField("d", IntegerType, nullable = true))))
+      assert(cast.resolved === true)
+      checkEvaluation(cast, Row(123, null, null, null))
+    }
+    {
+      val cast = Cast(struct, StructType(Seq(
+        StructField("a", IntegerType, nullable = true),
+        StructField("b", IntegerType, nullable = true),
+        StructField("c", IntegerType, nullable = false),
+        StructField("d", IntegerType, nullable = true))))
+      assert(cast.resolved === false)
+    }
+    {
+      val cast = Cast(struct, StructType(Seq(
+        StructField("a", BooleanType, nullable = true),
+        StructField("b", BooleanType, nullable = true),
+        StructField("c", BooleanType, nullable = true),
+        StructField("d", BooleanType, nullable = true))))
+      assert(cast.resolved === true)
+      checkEvaluation(cast, Row(true, true, false, null))
+    }
+    {
+      val cast = Cast(struct, StructType(Seq(
+        StructField("a", BooleanType, nullable = true),
+        StructField("b", BooleanType, nullable = true),
+        StructField("c", BooleanType, nullable = false),
+        StructField("d", BooleanType, nullable = true))))
+      assert(cast.resolved === false)
+    }
+
+    {
+      val cast = Cast(struct_notNull, StructType(Seq(
+        StructField("a", IntegerType, nullable = true),
+        StructField("b", IntegerType, nullable = true),
+        StructField("c", IntegerType, nullable = true))))
+      assert(cast.resolved === true)
+      checkEvaluation(cast, Row(123, null, null))
+    }
+    {
+      val cast = Cast(struct_notNull, StructType(Seq(
+        StructField("a", IntegerType, nullable = true),
+        StructField("b", IntegerType, nullable = true),
+        StructField("c", IntegerType, nullable = false))))
+      assert(cast.resolved === false)
+    }
+    {
+      val cast = Cast(struct_notNull, StructType(Seq(
+        StructField("a", BooleanType, nullable = true),
+        StructField("b", BooleanType, nullable = true),
+        StructField("c", BooleanType, nullable = true))))
+      assert(cast.resolved === true)
+      checkEvaluation(cast, Row(true, true, false))
+    }
+    {
+      val cast = Cast(struct_notNull, StructType(Seq(
+        StructField("a", BooleanType, nullable = true),
+        StructField("b", BooleanType, nullable = true),
+        StructField("c", BooleanType, nullable = false))))
+      assert(cast.resolved === true)
+      checkEvaluation(cast, Row(true, true, false))
+    }
+
+    {
+      val cast = Cast(struct, StructType(Seq(
+        StructField("a", StringType, nullable = true),
+        StructField("b", StringType, nullable = true),
+        StructField("c", StringType, nullable = true))))
+      assert(cast.resolved === false)
+    }
+    {
+      val cast = Cast(struct, IntegerType)
+      assert(cast.resolved === false)
+    }
+  }
+
+  test("complex casting") {
+    val complex = Literal(
+      Row(
+        Seq("123", "abc", ""),
+        Map("a" -> "123", "b" -> "abc", "c" -> ""),
+        Row(0)),
+      StructType(Seq(
+        StructField("a",
+          ArrayType(StringType, containsNull = false), nullable = true),
+        StructField("m",
+          MapType(StringType, StringType, valueContainsNull = false), nullable = true),
+        StructField("s",
+          StructType(Seq(
+            StructField("i", IntegerType, nullable = true)))))))
+
+    val cast = Cast(complex, StructType(Seq(
+      StructField("a",
+        ArrayType(IntegerType, containsNull = true), nullable = true),
+      StructField("m",
+        MapType(StringType, BooleanType, valueContainsNull = false), nullable = true),
+      StructField("s",
+        StructType(Seq(
+          StructField("l", LongType, nullable = true)))))))
+
+    assert(cast.resolved === true)
+    checkEvaluation(cast, Row(
+      Seq(123, null, null),
+      Map("a" -> true, "b" -> true, "c" -> false),
+      Row(0L)))
   }
 
   test("null checking") {
@@ -414,23 +847,33 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(GetItem(BoundReference(4, typeArray, true),
       Literal(null, IntegerType)), null, row)
 
-    checkEvaluation(GetField(BoundReference(2, typeS, nullable = true), "a"), "aa", row)
-    checkEvaluation(GetField(Literal(null, typeS), "a"), null, row)
+    def quickBuildGetField(expr: Expression, fieldName: String) = {
+      expr.dataType match {
+        case StructType(fields) =>
+          val field = fields.find(_.name == fieldName).get
+          StructGetField(expr, field, fields.indexOf(field))
+      }
+    }
+
+    def quickResolve(u: UnresolvedGetField) = quickBuildGetField(u.child, u.fieldName)
+
+    checkEvaluation(quickBuildGetField(BoundReference(2, typeS, nullable = true), "a"), "aa", row)
+    checkEvaluation(quickBuildGetField(Literal(null, typeS), "a"), null, row)
 
     val typeS_notNullable = StructType(
       StructField("a", StringType, nullable = false)
         :: StructField("b", StringType, nullable = false) :: Nil
     )
 
-    assert(GetField(BoundReference(2,typeS, nullable = true), "a").nullable === true)
-    assert(GetField(BoundReference(2, typeS_notNullable, nullable = false), "a").nullable === false)
+    assert(quickBuildGetField(BoundReference(2,typeS, nullable = true), "a").nullable === true)
+    assert(quickBuildGetField(BoundReference(2, typeS_notNullable, nullable = false), "a").nullable === false)
 
-    assert(GetField(Literal(null, typeS), "a").nullable === true)
-    assert(GetField(Literal(null, typeS_notNullable), "a").nullable === true)
+    assert(quickBuildGetField(Literal(null, typeS), "a").nullable === true)
+    assert(quickBuildGetField(Literal(null, typeS_notNullable), "a").nullable === true)
 
     checkEvaluation('c.map(typeMap).at(3).getItem("aa"), "bb", row)
     checkEvaluation('c.array(typeArray.elementType).at(4).getItem(1), "bb", row)
-    checkEvaluation('c.struct(typeS).at(2).getField("a"), "aa", row)
+    checkEvaluation(quickResolve('c.struct(typeS).at(2).getField("a")), "aa", row)
   }
 
   test("arithmetic") {
@@ -455,6 +898,29 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(c1 * c2, 2, row)
     checkEvaluation(c1 / c2, 0, row)
     checkEvaluation(c1 % c2, 1, row)
+  }
+
+  test("fractional arithmetic") {
+    val row = new GenericRow(Array[Any](1.1, 2.0, 3.1, null))
+    val c1 = 'a.double.at(0)
+    val c2 = 'a.double.at(1)
+    val c3 = 'a.double.at(2)
+    val c4 = 'a.double.at(3)
+
+    checkEvaluation(UnaryMinus(c1), -1.1, row)
+    checkEvaluation(UnaryMinus(Literal(100.0, DoubleType)), -100.0)
+    checkEvaluation(Add(c1, c4), null, row)
+    checkEvaluation(Add(c1, c2), 3.1, row)
+    checkEvaluation(Add(c1, Literal(null, DoubleType)), null, row)
+    checkEvaluation(Add(Literal(null, DoubleType), c2), null, row)
+    checkEvaluation(Add(Literal(null, DoubleType), Literal(null, DoubleType)), null, row)
+
+    checkEvaluation(-c1, -1.1, row)
+    checkEvaluation(c1 + c2, 3.1, row)
+    checkDoubleEvaluation(c1 - c2, (-0.9 +- 0.001), row)
+    checkDoubleEvaluation(c1 * c2, (2.2 +- 0.001), row)
+    checkDoubleEvaluation(c1 / c2, (0.55 +- 0.001), row)
+    checkDoubleEvaluation(c3 % c2, (1.1 +- 0.001), row)
   }
 
   test("BinaryComparison") {
@@ -566,5 +1032,52 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(s.substr(0), "example", row)
     checkEvaluation(s.substring(0, 2), "ex", row)
     checkEvaluation(s.substring(0), "example", row)
+  }
+
+  test("SQRT") {
+    val inputSequence = (1 to (1<<24) by 511).map(_ * (1L<<24))
+    val expectedResults = inputSequence.map(l => math.sqrt(l.toDouble))
+    val rowSequence = inputSequence.map(l => new GenericRow(Array[Any](l.toDouble)))
+    val d = 'a.double.at(0)
+
+    for ((row, expected) <- rowSequence zip expectedResults) {
+      checkEvaluation(Sqrt(d), expected, row)
+    }
+
+    checkEvaluation(Sqrt(Literal(null, DoubleType)), null, new GenericRow(Array[Any](null)))
+    checkEvaluation(Sqrt(-1), null, EmptyRow)
+    checkEvaluation(Sqrt(-1.5), null, EmptyRow)
+  }
+
+  test("Bitwise operations") {
+    val row = new GenericRow(Array[Any](1, 2, 3, null))
+    val c1 = 'a.int.at(0)
+    val c2 = 'a.int.at(1)
+    val c3 = 'a.int.at(2)
+    val c4 = 'a.int.at(3)
+
+    checkEvaluation(BitwiseAnd(c1, c4), null, row)
+    checkEvaluation(BitwiseAnd(c1, c2), 0, row)
+    checkEvaluation(BitwiseAnd(c1, Literal(null, IntegerType)), null, row)
+    checkEvaluation(BitwiseAnd(Literal(null, IntegerType), Literal(null, IntegerType)), null, row)
+
+    checkEvaluation(BitwiseOr(c1, c4), null, row)
+    checkEvaluation(BitwiseOr(c1, c2), 3, row)
+    checkEvaluation(BitwiseOr(c1, Literal(null, IntegerType)), null, row)
+    checkEvaluation(BitwiseOr(Literal(null, IntegerType), Literal(null, IntegerType)), null, row)
+
+    checkEvaluation(BitwiseXor(c1, c4), null, row)
+    checkEvaluation(BitwiseXor(c1, c2), 3, row)
+    checkEvaluation(BitwiseXor(c1, Literal(null, IntegerType)), null, row)
+    checkEvaluation(BitwiseXor(Literal(null, IntegerType), Literal(null, IntegerType)), null, row)
+
+    checkEvaluation(BitwiseNot(c4), null, row)
+    checkEvaluation(BitwiseNot(c1), -2, row)
+    checkEvaluation(BitwiseNot(Literal(null, IntegerType)), null, row)
+
+    checkEvaluation(c1 & c2, 0, row)
+    checkEvaluation(c1 | c2, 3, row)
+    checkEvaluation(c1 ^ c2, 3, row)
+    checkEvaluation(~c1, -2, row)
   }
 }

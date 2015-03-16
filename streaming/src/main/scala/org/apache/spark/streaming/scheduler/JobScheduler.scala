@@ -22,6 +22,7 @@ import scala.collection.JavaConversions._
 import java.util.concurrent.{TimeUnit, ConcurrentHashMap, Executors}
 import akka.actor.{ActorRef, Actor, Props}
 import org.apache.spark.{SparkException, Logging, SparkEnv}
+import org.apache.spark.rdd.PairRDDFunctions
 import org.apache.spark.streaming._
 
 
@@ -72,7 +73,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     logDebug("Stopping JobScheduler")
 
     // First, stop receiving
-    receiverTracker.stop()
+    receiverTracker.stop(processAllReceivedData)
 
     // Second, stop generating jobs. If it has to process all received data,
     // then this will wait for all the processing through JobScheduler to be over.
@@ -138,7 +139,6 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     }
     jobSet.handleJobStart(job)
     logInfo("Starting job " + job.id + " from job set of time " + jobSet.time)
-    SparkEnv.set(ssc.env)
   }
 
   private def handleJobCompletion(job: Job) {
@@ -169,7 +169,12 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   private class JobHandler(job: Job) extends Runnable {
     def run() {
       eventActor ! JobStarted(job)
-      job.run()
+      // Disable checks for existing output directories in jobs launched by the streaming scheduler,
+      // since we may need to write output to an existing directory during checkpoint recovery;
+      // see SPARK-4835 for more details.
+      PairRDDFunctions.disableOutputSpecValidation.withValue(true) {
+        job.run()
+      }
       eventActor ! JobCompleted(job)
     }
   }

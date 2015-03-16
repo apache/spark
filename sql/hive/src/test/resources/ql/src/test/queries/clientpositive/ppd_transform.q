@@ -36,3 +36,12 @@ FROM (
   CLUSTER BY tkey 
 ) tmap
 SELECT tmap.tkey, tmap.tvalue WHERE tmap.tkey < 100;
+
+-- test described in HIVE-4598
+
+EXPLAIN
+FROM (
+    FROM ( SELECT * FROM src ) mapout REDUCE * USING 'cat' AS x,y
+) reduced
+insert overwrite local directory '/tmp/a' select * where x='a' or x='b'
+insert overwrite local directory '/tmp/b' select * where x='c' or x='d';

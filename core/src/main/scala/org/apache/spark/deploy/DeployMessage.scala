@@ -71,6 +71,8 @@ private[deploy] object DeployMessages {
 
   case class RegisterWorkerFailed(message: String) extends DeployMessage
 
+  case class ReconnectWorker(masterUrl: String) extends DeployMessage
+
   case class KillExecutor(masterUrl: String, appId: String, execId: Int) extends DeployMessage
 
   case class LaunchExecutor(
@@ -86,9 +88,13 @@ private[deploy] object DeployMessages {
 
   case class KillDriver(driverId: String) extends DeployMessage
 
+  case class ApplicationFinished(id: String)
+
   // Worker internal
 
   case object WorkDirCleanup      // Sent to Worker actor periodically for cleaning up app folders
+
+  case object ReregisterWithMaster // used when a worker attempts to reconnect to a master
 
   // AppClient to Master
 
@@ -142,15 +148,22 @@ private[deploy] object DeployMessages {
 
   // Master to MasterWebUI
 
-  case class MasterStateResponse(host: String, port: Int, workers: Array[WorkerInfo],
-    activeApps: Array[ApplicationInfo], completedApps: Array[ApplicationInfo],
-    activeDrivers: Array[DriverInfo], completedDrivers: Array[DriverInfo],
-    status: MasterState) {
+  case class MasterStateResponse(
+      host: String,
+      port: Int,
+      restPort: Option[Int],
+      workers: Array[WorkerInfo],
+      activeApps: Array[ApplicationInfo],
+      completedApps: Array[ApplicationInfo],
+      activeDrivers: Array[DriverInfo],
+      completedDrivers: Array[DriverInfo],
+      status: MasterState) {
 
     Utils.checkHost(host, "Required hostname")
     assert (port > 0)
 
     def uri = "spark://" + host + ":" + port
+    def restUri: Option[String] = restPort.map { p => "spark://" + host + ":" + p }
   }
 
   //  WorkerWebUI to Worker
@@ -171,4 +184,5 @@ private[deploy] object DeployMessages {
   // Liveness checks in various places
 
   case object SendHeartbeat
+
 }

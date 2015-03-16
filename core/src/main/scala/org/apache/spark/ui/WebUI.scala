@@ -47,9 +47,10 @@ private[spark] abstract class WebUI(
   protected val handlers = ArrayBuffer[ServletContextHandler]()
   protected var serverInfo: Option[ServerInfo] = None
   protected val localHostName = Utils.localHostName()
-  protected val publicHostName = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(localHostName)
+  protected val publicHostName = Option(conf.getenv("SPARK_PUBLIC_DNS")).getOrElse(localHostName)
   private val className = Utils.getFormattedClassName(this)
 
+  def getBasePath: String = basePath
   def getTabs: Seq[WebUITab] = tabs.toSeq
   def getHandlers: Seq[ServletContextHandler] = handlers.toSeq
   def getSecurityManager: SecurityManager = securityManager
@@ -81,7 +82,7 @@ private[spark] abstract class WebUI(
   }
 
   /** Detach a handler from this UI. */
-  def detachHandler(handler: ServletContextHandler) {
+  protected def detachHandler(handler: ServletContextHandler) {
     handlers -= handler
     serverInfo.foreach { info =>
       info.rootHandler.removeHandler(handler)
@@ -135,6 +136,8 @@ private[spark] abstract class WebUITab(parent: WebUI, val prefix: String) {
 
   /** Get a list of header tabs from the parent UI. */
   def headerTabs: Seq[WebUITab] = parent.getTabs
+
+  def basePath: String = parent.getBasePath
 }
 
 

@@ -1,1 +1,0 @@
-printf(String format, Obj... args) - function that can format strings according to printf-style format strings

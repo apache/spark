@@ -139,7 +139,8 @@ class MultivariateOnlineSummarizerSuite extends FunSuite {
     assert(summarizer.numNonzeros ~== Vectors.dense(3, 5, 2) absTol 1E-5, "numNonzeros mismatch")
 
     assert(summarizer.variance ~==
-      Vectors.dense(3.857666666666, 7.0456666666666, 2.48166666666666) absTol 1E-5, "variance mismatch")
+      Vectors.dense(3.857666666666, 7.0456666666666, 2.48166666666666) absTol 1E-5,
+      "variance mismatch")
 
     assert(summarizer.count === 6)
   }
@@ -167,7 +168,8 @@ class MultivariateOnlineSummarizerSuite extends FunSuite {
     assert(summarizer.numNonzeros ~== Vectors.dense(3, 5, 2) absTol 1E-5, "numNonzeros mismatch")
 
     assert(summarizer.variance ~==
-      Vectors.dense(3.857666666666, 7.0456666666666, 2.48166666666666) absTol 1E-5, "variance mismatch")
+      Vectors.dense(3.857666666666, 7.0456666666666, 2.48166666666666) absTol 1E-5,
+      "variance mismatch")
 
     assert(summarizer.count === 6)
   }
@@ -205,5 +207,16 @@ class MultivariateOnlineSummarizerSuite extends FunSuite {
     assert(summarizer1.variance ~== Vectors.dense(0, 0, 0) absTol 1E-5, "variance mismatch")
 
     assert(summarizer2.variance ~== Vectors.dense(0, 0, 0) absTol 1E-5, "variance mismatch")
+  }
+
+  test("merging summarizer when one side has zero mean (SPARK-4355)") {
+    val s0 = new MultivariateOnlineSummarizer()
+      .add(Vectors.dense(2.0))
+      .add(Vectors.dense(2.0))
+    val s1 = new MultivariateOnlineSummarizer()
+      .add(Vectors.dense(1.0))
+      .add(Vectors.dense(-1.0))
+    s0.merge(s1)
+    assert(s0.mean(0) ~== 1.0 absTol 1e-14)
   }
 }

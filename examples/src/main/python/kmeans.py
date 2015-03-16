@@ -77,3 +77,5 @@ if __name__ == "__main__":
             kPoints[x] = y
 
     print "Final centers: " + str(kPoints)
+
+    sc.stop()

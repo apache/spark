@@ -15,20 +15,22 @@
 # limitations under the License.
 #
 
+import atexit
 import os
-import sys
+import select
 import signal
 import shlex
+import socket
 import platform
 from subprocess import Popen, PIPE
-from threading import Thread
 from py4j.java_gateway import java_import, JavaGateway, GatewayClient
+
+from pyspark.serializers import read_int
 
 
 def launch_gateway():
     SPARK_HOME = os.environ["SPARK_HOME"]
 
-    gateway_port = -1
     if "PYSPARK_GATEWAY_PORT" in os.environ:
         gateway_port = int(os.environ["PYSPARK_GATEWAY_PORT"])
     else:
@@ -39,43 +41,58 @@ def launch_gateway():
         submit_args = os.environ.get("PYSPARK_SUBMIT_ARGS")
         submit_args = submit_args if submit_args is not None else ""
         submit_args = shlex.split(submit_args)
-        command = [os.path.join(SPARK_HOME, script)] + submit_args + ["pyspark-shell"]
+        command = [os.path.join(SPARK_HOME, script)] + submit_args
+
+        # Start a socket that will be used by PythonGatewayServer to communicate its port to us
+        callback_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        callback_socket.bind(('127.0.0.1', 0))
+        callback_socket.listen(1)
+        callback_host, callback_port = callback_socket.getsockname()
+        env = dict(os.environ)
+        env['_PYSPARK_DRIVER_CALLBACK_HOST'] = callback_host
+        env['_PYSPARK_DRIVER_CALLBACK_PORT'] = str(callback_port)
+
+        # Launch the Java gateway.
+        # We open a pipe to stdin so that the Java gateway can die when the pipe is broken
         if not on_windows:
             # Don't send ctrl-c / SIGINT to the Java gateway:
             def preexec_func():
                 signal.signal(signal.SIGINT, signal.SIG_IGN)
-            proc = Popen(command, stdout=PIPE, stdin=PIPE, preexec_fn=preexec_func)
+            proc = Popen(command, stdin=PIPE, preexec_fn=preexec_func, env=env)
         else:
             # preexec_fn not supported on Windows
-            proc = Popen(command, stdout=PIPE, stdin=PIPE)
+            proc = Popen(command, stdin=PIPE, env=env)
 
-        try:
-            # Determine which ephemeral port the server started on:
-            gateway_port = proc.stdout.readline()
-            gateway_port = int(gateway_port)
-        except ValueError:
-            (stdout, _) = proc.communicate()
-            exit_code = proc.poll()
-            error_msg = "Launching GatewayServer failed"
-            error_msg += " with exit code %d! " % exit_code if exit_code else "! "
-            error_msg += "(Warning: unexpected output detected.)\n\n"
-            error_msg += gateway_port + stdout
-            raise Exception(error_msg)
+        gateway_port = None
+        # We use select() here in order to avoid blocking indefinitely if the subprocess dies
+        # before connecting
+        while gateway_port is None and proc.poll() is None:
+            timeout = 1  # (seconds)
+            readable, _, _ = select.select([callback_socket], [], [], timeout)
+            if callback_socket in readable:
+                gateway_connection = callback_socket.accept()[0]
+                # Determine which ephemeral port the server started on:
+                gateway_port = read_int(gateway_connection.makefile())
+                gateway_connection.close()
+                callback_socket.close()
+        if gateway_port is None:
+            raise Exception("Java gateway process exited before sending the driver its port number")
 
-        # Create a thread to echo output from the GatewayServer, which is required
-        # for Java log output to show up:
-        class EchoOutputThread(Thread):
-
-            def __init__(self, stream):
-                Thread.__init__(self)
-                self.daemon = True
-                self.stream = stream
-
-            def run(self):
-                while True:
-                    line = self.stream.readline()
-                    sys.stderr.write(line)
-        EchoOutputThread(proc.stdout).start()
+        # In Windows, ensure the Java child processes do not linger after Python has exited.
+        # In UNIX-based systems, the child process can kill itself on broken pipe (i.e. when
+        # the parent process' stdin sends an EOF). In Windows, however, this is not possible
+        # because java.lang.Process reads directly from the parent process' stdin, contending
+        # with any opportunity to read an EOF from the parent. Note that this is only best
+        # effort and will not take effect if the python process is violently terminated.
+        if on_windows:
+            # In Windows, the child process here is "spark-submit.cmd", not the JVM itself
+            # (because the UNIX "exec" command is not available). This means we cannot simply
+            # call proc.kill(), which kills only the "spark-submit.cmd" process but not the
+            # JVMs. Instead, we use "taskkill" with the tree-kill option "/t" to terminate all
+            # child processes in the tree (http://technet.microsoft.com/en-us/library/bb491009.aspx)
+            def killChild():
+                Popen(["cmd", "/c", "taskkill", "/f", "/t", "/pid", str(proc.pid)])
+            atexit.register(killChild)
 
     # Connect to the gateway
     gateway = JavaGateway(GatewayClient(port=gateway_port), auto_convert=False)
@@ -85,10 +102,9 @@ def launch_gateway():
     java_import(gateway.jvm, "org.apache.spark.api.java.*")
     java_import(gateway.jvm, "org.apache.spark.api.python.*")
     java_import(gateway.jvm, "org.apache.spark.mllib.api.python.*")
-    java_import(gateway.jvm, "org.apache.spark.sql.SQLContext")
-    java_import(gateway.jvm, "org.apache.spark.sql.hive.HiveContext")
-    java_import(gateway.jvm, "org.apache.spark.sql.hive.LocalHiveContext")
-    java_import(gateway.jvm, "org.apache.spark.sql.hive.TestHiveContext")
+    # TODO(davies): move into sql
+    java_import(gateway.jvm, "org.apache.spark.sql.*")
+    java_import(gateway.jvm, "org.apache.spark.sql.hive.*")
     java_import(gateway.jvm, "scala.Tuple2")
 
     return gateway

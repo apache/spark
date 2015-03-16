@@ -204,7 +204,7 @@ class RangePartitioner[K : Ordering : ClassTag, V](
   }
 
   @throws(classOf[IOException])
-  private def writeObject(out: ObjectOutputStream) {
+  private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
     val sfactory = SparkEnv.get.serializer
     sfactory match {
       case js: JavaSerializer => out.defaultWriteObject()
@@ -222,7 +222,7 @@ class RangePartitioner[K : Ordering : ClassTag, V](
   }
 
   @throws(classOf[IOException])
-  private def readObject(in: ObjectInputStream) {
+  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     val sfactory = SparkEnv.get.serializer
     sfactory match {
       case js: JavaSerializer => in.defaultReadObject()

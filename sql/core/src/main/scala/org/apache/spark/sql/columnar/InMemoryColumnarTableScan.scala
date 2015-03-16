@@ -19,43 +19,117 @@ package org.apache.spark.sql.columnar
 
 import java.nio.ByteBuffer
 
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, Attribute}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.{SparkPlan, LeafNode}
-import org.apache.spark.sql.Row
-import org.apache.spark.SparkConf
+import scala.collection.mutable.ArrayBuffer
 
-object InMemoryRelation {
-  def apply(useCompression: Boolean, batchSize: Int, child: SparkPlan): InMemoryRelation =
-    new InMemoryRelation(child.output, useCompression, batchSize, child)()
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
+import org.apache.spark.sql.execution.{LeafNode, SparkPlan}
+import org.apache.spark.storage.StorageLevel
+
+private[sql] object InMemoryRelation {
+  def apply(
+      useCompression: Boolean,
+      batchSize: Int,
+      storageLevel: StorageLevel,
+      child: SparkPlan,
+      tableName: Option[String]): InMemoryRelation =
+    new InMemoryRelation(child.output, useCompression, batchSize, storageLevel, child, tableName)()
 }
+
+private[sql] case class CachedBatch(buffers: Array[Array[Byte]], stats: Row)
 
 private[sql] case class InMemoryRelation(
     output: Seq[Attribute],
     useCompression: Boolean,
     batchSize: Int,
-    child: SparkPlan)
-    (private var _cachedColumnBuffers: RDD[Array[ByteBuffer]] = null)
+    storageLevel: StorageLevel,
+    child: SparkPlan,
+    tableName: Option[String])(
+    private var _cachedColumnBuffers: RDD[CachedBatch] = null,
+    private var _statistics: Statistics = null)
   extends LogicalPlan with MultiInstanceRelation {
+
+  private val batchStats =
+    child.sqlContext.sparkContext.accumulableCollection(ArrayBuffer.empty[Row])
+
+  val partitionStatistics = new PartitionStatistics(output)
+
+  private def computeSizeInBytes = {
+    val sizeOfRow: Expression =
+      BindReferences.bindReference(
+        output.map(a => partitionStatistics.forAttribute(a).sizeInBytes).reduce(Add),
+        partitionStatistics.schema)
+
+    batchStats.value.map(row => sizeOfRow.eval(row).asInstanceOf[Long]).sum
+  }
+
+  // Statistics propagation contracts:
+  // 1. Non-null `_statistics` must reflect the actual statistics of the underlying data
+  // 2. Only propagate statistics when `_statistics` is non-null
+  private def statisticsToBePropagated = if (_statistics == null) {
+    val updatedStats = statistics
+    if (_statistics == null) null else updatedStats
+  } else {
+    _statistics
+  }
+
+  override def statistics = if (_statistics == null) {
+    if (batchStats.value.isEmpty) {
+      // Underlying columnar RDD hasn't been materialized, no useful statistics information
+      // available, return the default statistics.
+      Statistics(sizeInBytes = child.sqlContext.conf.defaultSizeInBytes)
+    } else {
+      // Underlying columnar RDD has been materialized, required information has also been collected
+      // via the `batchStats` accumulator, compute the final statistics, and update `_statistics`.
+      _statistics = Statistics(sizeInBytes = computeSizeInBytes)
+      _statistics
+    }
+  } else {
+    // Pre-computed statistics
+    _statistics
+  }
 
   // If the cached column buffers were not passed in, we calculate them in the constructor.
   // As in Spark, the actual work of caching is lazy.
   if (_cachedColumnBuffers == null) {
+    buildBuffers()
+  }
+
+  def recache() = {
+    _cachedColumnBuffers.unpersist()
+    _cachedColumnBuffers = null
+    buildBuffers()
+  }
+
+  private def buildBuffers(): Unit = {
     val output = child.output
-    val cached = child.execute().mapPartitions { baseIterator =>
-      new Iterator[Array[ByteBuffer]] {
+    val cached = child.execute().mapPartitions { rowIterator =>
+      new Iterator[CachedBatch] {
         def next() = {
           val columnBuilders = output.map { attribute =>
-            ColumnBuilder(ColumnType(attribute.dataType).typeId, 0, attribute.name, useCompression)
+            val columnType = ColumnType(attribute.dataType)
+            val initialBufferSize = columnType.defaultSize * batchSize
+            ColumnBuilder(attribute.dataType, initialBufferSize, attribute.name, useCompression)
           }.toArray
 
-          var row: Row = null
           var rowCount = 0
+          while (rowIterator.hasNext && rowCount < batchSize) {
+            val row = rowIterator.next()
 
-          while (baseIterator.hasNext && rowCount < batchSize) {
-            row = baseIterator.next()
+            // Added for SPARK-6082. This assertion can be useful for scenarios when something
+            // like Hive TRANSFORM is used. The external data generation script used in TRANSFORM
+            // may result malformed rows, causing ArrayIndexOutOfBoundsException, which is somewhat
+            // hard to decipher.
+            assert(
+              row.size == columnBuilders.size,
+              s"""Row column number mismatch, expected ${output.size} columns, but got ${row.size}.
+                 |Row content: $row
+               """.stripMargin)
+
             var i = 0
             while (i < row.length) {
               columnBuilders(i).appendFrom(row, i)
@@ -64,78 +138,192 @@ private[sql] case class InMemoryRelation(
             rowCount += 1
           }
 
-          columnBuilders.map(_.build())
+          val stats = Row.merge(columnBuilders.map(_.columnStats.collectedStatistics) : _*)
+
+          batchStats += stats
+          CachedBatch(columnBuilders.map(_.build().array()), stats)
         }
 
-        def hasNext = baseIterator.hasNext
+        def hasNext = rowIterator.hasNext
       }
-    }.cache()
+    }.persist(storageLevel)
 
-    cached.setName(child.toString)
+    cached.setName(tableName.map(n => s"In-memory table $n").getOrElse(child.toString))
     _cachedColumnBuffers = cached
   }
 
+  def withOutput(newOutput: Seq[Attribute]): InMemoryRelation = {
+    InMemoryRelation(
+      newOutput, useCompression, batchSize, storageLevel, child, tableName)(
+      _cachedColumnBuffers, statisticsToBePropagated)
+  }
 
   override def children = Seq.empty
 
-  override def references = Set.empty
-
   override def newInstance() = {
     new InMemoryRelation(
-      output.map(_.newInstance),
+      output.map(_.newInstance()),
       useCompression,
       batchSize,
-      child)(
-      _cachedColumnBuffers).asInstanceOf[this.type]
+      storageLevel,
+      child,
+      tableName)(
+      _cachedColumnBuffers,
+      statisticsToBePropagated).asInstanceOf[this.type]
   }
 
   def cachedColumnBuffers = _cachedColumnBuffers
+
+  override protected def otherCopyArgs: Seq[AnyRef] =
+    Seq(_cachedColumnBuffers, statisticsToBePropagated)
 }
 
 private[sql] case class InMemoryColumnarTableScan(
     attributes: Seq[Attribute],
+    predicates: Seq[Expression],
     relation: InMemoryRelation)
   extends LeafNode {
 
   override def output: Seq[Attribute] = attributes
 
+  private def statsFor(a: Attribute) = relation.partitionStatistics.forAttribute(a)
+
+  // Returned filter predicate should return false iff it is impossible for the input expression
+  // to evaluate to `true' based on statistics collected about this partition batch.
+  val buildFilter: PartialFunction[Expression, Expression] = {
+    case And(lhs: Expression, rhs: Expression)
+      if buildFilter.isDefinedAt(lhs) || buildFilter.isDefinedAt(rhs) =>
+      (buildFilter.lift(lhs) ++ buildFilter.lift(rhs)).reduce(_ && _)
+
+    case Or(lhs: Expression, rhs: Expression)
+      if buildFilter.isDefinedAt(lhs) && buildFilter.isDefinedAt(rhs) =>
+      buildFilter(lhs) || buildFilter(rhs)
+
+    case EqualTo(a: AttributeReference, l: Literal) =>
+      statsFor(a).lowerBound <= l && l <= statsFor(a).upperBound
+    case EqualTo(l: Literal, a: AttributeReference) =>
+      statsFor(a).lowerBound <= l && l <= statsFor(a).upperBound
+
+    case LessThan(a: AttributeReference, l: Literal) => statsFor(a).lowerBound < l
+    case LessThan(l: Literal, a: AttributeReference) => l < statsFor(a).upperBound
+
+    case LessThanOrEqual(a: AttributeReference, l: Literal) => statsFor(a).lowerBound <= l
+    case LessThanOrEqual(l: Literal, a: AttributeReference) => l <= statsFor(a).upperBound
+
+    case GreaterThan(a: AttributeReference, l: Literal) => l < statsFor(a).upperBound
+    case GreaterThan(l: Literal, a: AttributeReference) => statsFor(a).lowerBound < l
+
+    case GreaterThanOrEqual(a: AttributeReference, l: Literal) => l <= statsFor(a).upperBound
+    case GreaterThanOrEqual(l: Literal, a: AttributeReference) => statsFor(a).lowerBound <= l
+
+    case IsNull(a: Attribute)    => statsFor(a).nullCount > 0
+    case IsNotNull(a: Attribute) => statsFor(a).count - statsFor(a).nullCount > 0
+  }
+
+  val partitionFilters = {
+    predicates.flatMap { p =>
+      val filter = buildFilter.lift(p)
+      val boundFilter =
+        filter.map(
+          BindReferences.bindReference(
+            _,
+            relation.partitionStatistics.schema,
+            allowFailures = true))
+
+      boundFilter.foreach(_ =>
+        filter.foreach(f => logInfo(s"Predicate $p generates partition filter: $f")))
+
+      // If the filter can't be resolved then we are missing required statistics.
+      boundFilter.filter(_.resolved)
+    }
+  }
+
+  // Accumulators used for testing purposes
+  val readPartitions = sparkContext.accumulator(0)
+  val readBatches = sparkContext.accumulator(0)
+
+  private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
+
   override def execute() = {
-    relation.cachedColumnBuffers.mapPartitions { iterator =>
-      // Find the ordinals of the requested columns.  If none are requested, use the first.
-      val requestedColumns =
-        if (attributes.isEmpty) {
-          Seq(0)
-        } else {
-          attributes.map(a => relation.output.indexWhere(_.exprId == a.exprId))
-        }
+    readPartitions.setValue(0)
+    readBatches.setValue(0)
 
-      new Iterator[Row] {
-        private[this] var columnBuffers: Array[ByteBuffer] = null
-        private[this] var columnAccessors: Seq[ColumnAccessor] = null
-        nextBatch()
+    relation.cachedColumnBuffers.mapPartitions { cachedBatchIterator =>
+      val partitionFilter = newPredicate(
+        partitionFilters.reduceOption(And).getOrElse(Literal(true)),
+        relation.partitionStatistics.schema)
 
-        private[this] val nextRow = new GenericMutableRow(columnAccessors.length)
-
-        def nextBatch() = {
-          columnBuffers = iterator.next()
-          columnAccessors = requestedColumns.map(columnBuffers(_)).map(ColumnAccessor(_))
-        }
-
-        override def next() = {
-          if (!columnAccessors.head.hasNext) {
-            nextBatch()
+      // Find the ordinals and data types of the requested columns.  If none are requested, use the
+      // narrowest (the field with minimum default element size).
+      val (requestedColumnIndices, requestedColumnDataTypes) = if (attributes.isEmpty) {
+        val (narrowestOrdinal, narrowestDataType) =
+          relation.output.zipWithIndex.map { case (a, ordinal) =>
+            ordinal -> a.dataType
+          } minBy { case (_, dataType) =>
+            ColumnType(dataType).defaultSize
           }
-
-          var i = 0
-          while (i < nextRow.length) {
-            columnAccessors(i).extractTo(nextRow, i)
-            i += 1
-          }
-          nextRow
-        }
-
-        override def hasNext = columnAccessors.head.hasNext || iterator.hasNext
+        Seq(narrowestOrdinal) -> Seq(narrowestDataType)
+      } else {
+        attributes.map { a =>
+          relation.output.indexWhere(_.exprId == a.exprId) -> a.dataType
+        }.unzip
       }
+
+      val nextRow = new SpecificMutableRow(requestedColumnDataTypes)
+
+      def cachedBatchesToRows(cacheBatches: Iterator[CachedBatch]) = {
+        val rows = cacheBatches.flatMap { cachedBatch =>
+          // Build column accessors
+          val columnAccessors = requestedColumnIndices.map { batchColumnIndex =>
+            ColumnAccessor(
+              relation.output(batchColumnIndex).dataType,
+              ByteBuffer.wrap(cachedBatch.buffers(batchColumnIndex)))
+          }
+
+          // Extract rows via column accessors
+          new Iterator[Row] {
+            private[this] val rowLen = nextRow.length
+            override def next() = {
+              var i = 0
+              while (i < rowLen) {
+                columnAccessors(i).extractTo(nextRow, i)
+                i += 1
+              }
+              nextRow
+            }
+
+            override def hasNext = columnAccessors(0).hasNext
+          }
+        }
+
+        if (rows.hasNext) {
+          readPartitions += 1
+        }
+
+        rows
+      }
+
+      // Do partition batch pruning if enabled
+      val cachedBatchesToScan =
+        if (inMemoryPartitionPruningEnabled) {
+          cachedBatchIterator.filter { cachedBatch =>
+            if (!partitionFilter(cachedBatch.stats)) {
+              def statsString = relation.partitionStatistics.schema
+                .zip(cachedBatch.stats.toSeq)
+                .map { case (a, s) => s"${a.name}: $s" }
+                .mkString(", ")
+              logInfo(s"Skipping partition based on stats $statsString")
+              false
+            } else {
+              readBatches += 1
+              true
+            }
+          }
+        } else {
+          cachedBatchIterator
+        }
+
+      cachedBatchesToRows(cachedBatchesToScan)
     }
   }
 }

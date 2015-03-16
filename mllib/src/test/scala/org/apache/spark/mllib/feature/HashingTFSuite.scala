@@ -20,9 +20,9 @@ package org.apache.spark.mllib.feature
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-class HashingTFSuite extends FunSuite with LocalSparkContext {
+class HashingTFSuite extends FunSuite with MLlibTestSparkContext {
 
   test("hashing tf on a single doc") {
     val hashingTF = new HashingTF(1000)

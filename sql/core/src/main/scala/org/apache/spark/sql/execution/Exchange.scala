@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.{HashPartitioner, RangePartitioner, SparkConf}
+import org.apache.spark.shuffle.sort.SortShuffleManager
+import org.apache.spark.{SparkEnv, HashPartitioner, RangePartitioner, SparkConf}
 import org.apache.spark.rdd.ShuffledRDD
 import org.apache.spark.sql.{SQLContext, Row}
 import org.apache.spark.sql.catalyst.errors.attachTree
@@ -35,18 +36,36 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
 
   override def outputPartitioning = newPartitioning
 
-  def output = child.output
+  override def output = child.output
 
-  def execute() = attachTree(this , "execute") {
+  /** We must copy rows when sort based shuffle is on */
+  protected def sortBasedShuffleOn = SparkEnv.get.shuffleManager.isInstanceOf[SortShuffleManager]
+
+  private val bypassMergeThreshold =
+    child.sqlContext.sparkContext.conf.getInt("spark.shuffle.sort.bypassMergeThreshold", 200)
+
+  override def execute() = attachTree(this , "execute") {
     newPartitioning match {
       case HashPartitioning(expressions, numPartitions) =>
         // TODO: Eliminate redundant expressions in grouping key and value.
-        val rdd = child.execute().mapPartitions { iter =>
-          @transient val hashExpressions =
-            newMutableProjection(expressions, child.output)()
-
-          val mutablePair = new MutablePair[Row, Row]()
-          iter.map(r => mutablePair.update(hashExpressions(r), r))
+        // This is a workaround for SPARK-4479. When:
+        //  1. sort based shuffle is on, and
+        //  2. the partition number is under the merge threshold, and
+        //  3. no ordering is required
+        // we can avoid the defensive copies to improve performance. In the long run, we probably
+        // want to include information in shuffle dependencies to indicate whether elements in the
+        // source RDD should be copied.
+        val rdd = if (sortBasedShuffleOn && numPartitions > bypassMergeThreshold) {
+          child.execute().mapPartitions { iter =>
+            val hashExpressions = newMutableProjection(expressions, child.output)()
+            iter.map(r => (hashExpressions(r).copy(), r.copy()))
+          }
+        } else {
+          child.execute().mapPartitions { iter =>
+            val hashExpressions = newMutableProjection(expressions, child.output)()
+            val mutablePair = new MutablePair[Row, Row]()
+            iter.map(r => mutablePair.update(hashExpressions(r), r))
+          }
         }
         val part = new HashPartitioner(numPartitions)
         val shuffled = new ShuffledRDD[Row, Row, Row](rdd, part)
@@ -54,13 +73,18 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
         shuffled.map(_._2)
 
       case RangePartitioning(sortingExpressions, numPartitions) =>
+        val rdd = if (sortBasedShuffleOn) {
+          child.execute().mapPartitions { iter => iter.map(row => (row.copy(), null))}
+        } else {
+          child.execute().mapPartitions { iter =>
+            val mutablePair = new MutablePair[Row, Null](null, null)
+            iter.map(row => mutablePair.update(row, null))
+          }
+        }
+
         // TODO: RangePartitioner should take an Ordering.
         implicit val ordering = new RowOrdering(sortingExpressions, child.output)
 
-        val rdd = child.execute().mapPartitions { iter =>
-          val mutablePair = new MutablePair[Row, Null](null, null)
-          iter.map(row => mutablePair.update(row, null))
-        }
         val part = new RangePartitioner(numPartitions, rdd, ascending = true)
         val shuffled = new ShuffledRDD[Row, Null, Null](rdd, part)
         shuffled.setSerializer(new SparkSqlSerializer(new SparkConf(false)))
@@ -68,9 +92,17 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
         shuffled.map(_._1)
 
       case SinglePartition =>
-        val rdd = child.execute().mapPartitions { iter =>
-          val mutablePair = new MutablePair[Null, Row]()
-          iter.map(r => mutablePair.update(null, r))
+        // SPARK-4479: Can't turn off defensive copy as what we do for `HashPartitioning`, since
+        // operators like `TakeOrdered` may require an ordering within the partition, and currently
+        // `SinglePartition` doesn't include ordering information.
+        // TODO Add `SingleOrderedPartition` for operators like `TakeOrdered`
+        val rdd = if (sortBasedShuffleOn) {
+          child.execute().mapPartitions { iter => iter.map(r => (null, r.copy())) }
+        } else {
+          child.execute().mapPartitions { iter =>
+            val mutablePair = new MutablePair[Null, Row]()
+            iter.map(r => mutablePair.update(null, r))
+          }
         }
         val partitioner = new HashPartitioner(1)
         val shuffled = new ShuffledRDD[Null, Row, Row](rdd, partitioner)
@@ -91,7 +123,7 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
  */
 private[sql] case class AddExchange(sqlContext: SQLContext) extends Rule[SparkPlan] {
   // TODO: Determine the number of partitions.
-  def numPartitions = sqlContext.numShufflePartitions
+  def numPartitions = sqlContext.conf.numShufflePartitions
 
   def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
     case operator: SparkPlan =>

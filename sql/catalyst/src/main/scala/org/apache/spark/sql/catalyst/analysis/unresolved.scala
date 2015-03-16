@@ -34,8 +34,7 @@ class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: Str
  * Holds the name of a relation that has yet to be looked up in a [[Catalog]].
  */
 case class UnresolvedRelation(
-    databaseName: Option[String],
-    tableName: String,
+    tableIdentifier: Seq[String],
     alias: Option[String] = None) extends LeafNode {
   override def output = Nil
   override lazy val resolved = false
@@ -51,9 +50,10 @@ case class UnresolvedAttribute(name: String) extends Attribute with trees.LeafNo
   override def qualifiers = throw new UnresolvedException(this, "qualifiers")
   override lazy val resolved = false
 
-  override def newInstance = this
+  override def newInstance() = this
   override def withNullability(newNullability: Boolean) = this
   override def withQualifiers(newQualifiers: Seq[String]) = this
+  override def withName(newName: String) = UnresolvedAttribute(name)
 
   // Unresolved attributes are transient at compile time and don't get evaluated during execution.
   override def eval(input: Row = null): EvaluatedType =
@@ -66,7 +66,6 @@ case class UnresolvedFunction(name: String, children: Seq[Expression]) extends E
   override def dataType = throw new UnresolvedException(this, "dataType")
   override def foldable = throw new UnresolvedException(this, "foldable")
   override def nullable = throw new UnresolvedException(this, "nullable")
-  override def references = children.flatMap(_.references).toSet
   override lazy val resolved = false
 
   // Unresolved functions are transient at compile time and don't get evaluated during execution.
@@ -78,45 +77,115 @@ case class UnresolvedFunction(name: String, children: Seq[Expression]) extends E
 
 /**
  * Represents all of the input attributes to a given relational operator, for example in
- * "SELECT * FROM ...".
- *
- * @param table an optional table that should be the target of the expansion.  If omitted all
- *              tables' columns are produced.
+ * "SELECT * FROM ...". A [[Star]] gets automatically expanded during analysis.
  */
-case class Star(
-    table: Option[String],
-    mapFunction: Attribute => Expression = identity[Attribute])
-  extends Attribute with trees.LeafNode[Expression] {
+trait Star extends Attribute with trees.LeafNode[Expression] {
+  self: Product =>
 
-  override def name = throw new UnresolvedException(this, "exprId")
+  override def name = throw new UnresolvedException(this, "name")
   override def exprId = throw new UnresolvedException(this, "exprId")
   override def dataType = throw new UnresolvedException(this, "dataType")
   override def nullable = throw new UnresolvedException(this, "nullable")
   override def qualifiers = throw new UnresolvedException(this, "qualifiers")
   override lazy val resolved = false
 
-  override def newInstance = this
+  override def newInstance() = this
   override def withNullability(newNullability: Boolean) = this
   override def withQualifiers(newQualifiers: Seq[String]) = this
-
-  def expand(input: Seq[Attribute]): Seq[NamedExpression] = {
-    val expandedAttributes: Seq[Attribute] = table match {
-      // If there is no table specified, use all input attributes.
-      case None => input
-      // If there is a table, pick out attributes that are part of this table.
-      case Some(t) => input.filter(_.qualifiers contains t)
-    }
-    val mappedAttributes = expandedAttributes.map(mapFunction).zip(input).map {
-      case (n: NamedExpression, _) => n
-      case (e, originalAttribute) =>
-        Alias(e, originalAttribute.name)(qualifiers = originalAttribute.qualifiers)
-    }
-    mappedAttributes
-  }
+  override def withName(newName: String) = this
 
   // Star gets expanded at runtime so we never evaluate a Star.
   override def eval(input: Row = null): EvaluatedType =
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 
+  def expand(input: Seq[Attribute], resolver: Resolver): Seq[NamedExpression]
+}
+
+
+/**
+ * Represents all of the input attributes to a given relational operator, for example in
+ * "SELECT * FROM ...".
+ *
+ * @param table an optional table that should be the target of the expansion.  If omitted all
+ *              tables' columns are produced.
+ */
+case class UnresolvedStar(table: Option[String]) extends Star {
+
+  override def expand(input: Seq[Attribute], resolver: Resolver): Seq[NamedExpression] = {
+    val expandedAttributes: Seq[Attribute] = table match {
+      // If there is no table specified, use all input attributes.
+      case None => input
+      // If there is a table, pick out attributes that are part of this table.
+      case Some(t) => input.filter(_.qualifiers.filter(resolver(_, t)).nonEmpty)
+    }
+    expandedAttributes.zip(input).map {
+      case (n: NamedExpression, _) => n
+      case (e, originalAttribute) =>
+        Alias(e, originalAttribute.name)(qualifiers = originalAttribute.qualifiers)
+    }
+  }
+
   override def toString = table.map(_ + ".").getOrElse("") + "*"
+}
+
+/**
+ * Used to assign new names to Generator's output, such as hive udtf.
+ * For example the SQL expression "stack(2, key, value, key, value) as (a, b)" could be represented
+ * as follows:
+ *  MultiAlias(stack_function, Seq(a, b))
+
+ * @param child the computation being performed
+ * @param names the names to be associated with each output of computing [[child]].
+ */
+case class MultiAlias(child: Expression, names: Seq[String])
+  extends Attribute with trees.UnaryNode[Expression] {
+
+  override def name = throw new UnresolvedException(this, "name")
+
+  override def exprId = throw new UnresolvedException(this, "exprId")
+
+  override def dataType = throw new UnresolvedException(this, "dataType")
+
+  override def nullable = throw new UnresolvedException(this, "nullable")
+
+  override def qualifiers = throw new UnresolvedException(this, "qualifiers")
+
+  override lazy val resolved = false
+
+  override def newInstance() = this
+
+  override def withNullability(newNullability: Boolean) = this
+
+  override def withQualifiers(newQualifiers: Seq[String]) = this
+
+  override def withName(newName: String) = this
+
+  override def eval(input: Row = null): EvaluatedType =
+    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
+
+  override def toString: String = s"$child AS $names"
+
+}
+
+/**
+ * Represents all the resolved input attributes to a given relational operator. This is used
+ * in the data frame DSL.
+ *
+ * @param expressions Expressions to expand.
+ */
+case class ResolvedStar(expressions: Seq[NamedExpression]) extends Star {
+  override def expand(input: Seq[Attribute], resolver: Resolver): Seq[NamedExpression] = expressions
+  override def toString = expressions.mkString("ResolvedStar(", ", ", ")")
+}
+
+case class UnresolvedGetField(child: Expression, fieldName: String) extends UnaryExpression {
+  override def dataType = throw new UnresolvedException(this, "dataType")
+  override def foldable = throw new UnresolvedException(this, "foldable")
+  override def nullable = throw new UnresolvedException(this, "nullable")
+  override lazy val resolved = false
+
+  override def eval(input: Row = null): EvaluatedType =
+    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
+
+  override def toString = s"$child.$fieldName"
 }

@@ -19,43 +19,55 @@ package org.apache.spark.sql.catalyst.trees
 
 import org.apache.spark.sql.catalyst.errors._
 
-object TreeNode {
-  private val currentId = new java.util.concurrent.atomic.AtomicLong
-  protected def nextId() = currentId.getAndIncrement()
-}
-
 /** Used by [[TreeNode.getNodeNumbered]] when traversing the tree for a given number */
 private class MutableInt(var i: Int)
 
+case class Origin(
+  line: Option[Int] = None,
+  startPosition: Option[Int] = None)
+
+/**
+ * Provides a location for TreeNodes to ask about the context of their origin.  For example, which
+ * line of code is currently being parsed.
+ */
+object CurrentOrigin {
+  private val value = new ThreadLocal[Origin]() {
+    override def initialValue: Origin = Origin()
+  }
+
+  def get = value.get()
+  def set(o: Origin) = value.set(o)
+
+  def reset() = value.set(Origin())
+
+  def setPosition(line: Int, start: Int) = {
+    value.set(
+      value.get.copy(line = Some(line), startPosition = Some(start)))
+  }
+
+  def withOrigin[A](o: Origin)(f: => A): A = {
+    set(o)
+    val ret = try f finally { reset() }
+    reset()
+    ret
+  }
+}
+
 abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   self: BaseType with Product =>
+
+  val origin = CurrentOrigin.get
 
   /** Returns a Seq of the children of this node */
   def children: Seq[BaseType]
 
   /**
-   * A globally unique id for this specific instance. Not preserved across copies.
-   * Unlike `equals`, `id` can be used to differentiate distinct but structurally
-   * identical branches of a tree.
-   */
-  val id = TreeNode.nextId()
-
-  /**
-   * Returns true if other is the same [[catalyst.trees.TreeNode TreeNode]] instance.  Unlike
-   * `equals` this function will return false for different instances of structurally identical
-   * trees.
-   */
-  def sameInstance(other: TreeNode[_]): Boolean = {
-    this.id == other.id
-  }
-
-  /**
    * Faster version of equality which short-circuits when two treeNodes are the same instance.
-   * We don't just override Object.Equals, as doing so prevents the scala compiler from from
+   * We don't just override Object.equals, as doing so prevents the scala compiler from
    * generating case class `equals` methods
    */
   def fastEquals(other: TreeNode[_]): Boolean = {
-    sameInstance(other) || this == other
+    this.eq(other) || this == other
   }
 
   /**
@@ -65,6 +77,15 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   def foreach(f: BaseType => Unit): Unit = {
     f(this)
     children.foreach(_.foreach(f))
+  }
+
+  /**
+   * Runs the given function recursively on [[children]] then on this node.
+   * @param f the function to be applied to each node in the tree.
+   */
+  def foreachUp(f: BaseType => Unit): Unit = {
+    children.foreach(_.foreach(f))
+    f(this)
   }
 
   /**
@@ -162,7 +183,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
    * @param rule the function used to transform this nodes children
    */
   def transformDown(rule: PartialFunction[BaseType, BaseType]): BaseType = {
-    val afterRule = rule.applyOrElse(this, identity[BaseType])
+    val afterRule = CurrentOrigin.withOrigin(origin) {
+      rule.applyOrElse(this, identity[BaseType])
+    }
+
     // Check if unchanged and then possibly return old copy to avoid gc churn.
     if (this fastEquals afterRule) {
       transformChildrenDown(rule)
@@ -222,9 +246,13 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   def transformUp(rule: PartialFunction[BaseType, BaseType]): BaseType = {
     val afterRuleOnChildren = transformChildrenUp(rule);
     if (this fastEquals afterRuleOnChildren) {
-      rule.applyOrElse(this, identity[BaseType])
+      CurrentOrigin.withOrigin(origin) {
+        rule.applyOrElse(this, identity[BaseType])
+      }
     } else {
-      rule.applyOrElse(afterRuleOnChildren, identity[BaseType])
+      CurrentOrigin.withOrigin(origin) {
+        rule.applyOrElse(afterRuleOnChildren, identity[BaseType])
+      }
     }
   }
 
@@ -280,11 +308,14 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
    */
   def makeCopy(newArgs: Array[AnyRef]): this.type = attachTree(this, "makeCopy") {
     try {
-      val defaultCtor = getClass.getConstructors.head
-      if (otherCopyArgs.isEmpty) {
-        defaultCtor.newInstance(newArgs: _*).asInstanceOf[this.type]
-      } else {
-        defaultCtor.newInstance((newArgs ++ otherCopyArgs).toArray: _*).asInstanceOf[this.type]
+      CurrentOrigin.withOrigin(origin) {
+        // Skip no-arg constructors that are just there for kryo.
+        val defaultCtor = getClass.getConstructors.find(_.getParameterTypes.size != 0).head
+        if (otherCopyArgs.isEmpty) {
+          defaultCtor.newInstance(newArgs: _*).asInstanceOf[this.type]
+        } else {
+          defaultCtor.newInstance((newArgs ++ otherCopyArgs).toArray: _*).asInstanceOf[this.type]
+        }
       }
     } catch {
       case e: java.lang.IllegalArgumentException =>
@@ -312,7 +343,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   }.mkString(", ")
 
   /** String representation of this node without any children */
-  def simpleString = s"$nodeName $argString"
+  def simpleString = s"$nodeName $argString".trim
 
   override def toString: String = treeString
 
@@ -392,3 +423,4 @@ trait UnaryNode[BaseType <: TreeNode[BaseType]] {
   def child: BaseType
   def children = child :: Nil
 }
+

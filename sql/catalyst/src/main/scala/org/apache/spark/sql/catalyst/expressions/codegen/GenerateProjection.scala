@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 
 
 /**
@@ -53,8 +53,8 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
     val nullFunctions =
       q"""
         private[this] var nullBits = new Array[Boolean](${expressions.size})
-        final def setNullAt(i: Int) = { nullBits(i) = true }
-        final def isNullAt(i: Int) = nullBits(i)
+        override def setNullAt(i: Int) = { nullBits(i) = true }
+        override def isNullAt(i: Int) = nullBits(i)
       """.children
 
     val tupleElements = expressions.zipWithIndex.flatMap {
@@ -69,18 +69,12 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
           ..${evaluatedExpression.code}
           if(${evaluatedExpression.nullTerm})
             setNullAt($iLit)
-          else
+          else {
+            nullBits($iLit) = false
             $elementName = ${evaluatedExpression.primitiveTerm}
+          }
         }
         """.children : Seq[Tree]
-    }
-
-    val iteratorFunction = {
-      val allColumns = (0 until expressions.size).map { i =>
-        val iLit = ru.Literal(Constant(i))
-        q"if(isNullAt($iLit)) { null } else { ${newTermName(s"c$i")} }"
-      }
-      q"final def iterator = Iterator[Any](..$allColumns)"
     }
 
     val accessorFailure = q"""scala.sys.error("Invalid ordinal:" + i)"""
@@ -92,7 +86,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
 
         q"if(i == $ordinal) { if(isNullAt($i)) return null else return $elementName }"
       }
-      q"final def apply(i: Int): Any = { ..$cases; $accessorFailure }"
+      q"override def apply(i: Int): Any = { ..$cases; $accessorFailure }"
     }
 
     val updateFunction = {
@@ -106,12 +100,13 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
             if(value == null) {
               setNullAt(i)
             } else {
+              nullBits(i) = false
               $elementName = value.asInstanceOf[${termForType(e.dataType)}]
-              return
             }
+            return
           }"""
       }
-      q"final def update(i: Int, value: Any): Unit = { ..$cases; $accessorFailure }"
+      q"override def update(i: Int, value: Any): Unit = { ..$cases; $accessorFailure }"
     }
 
     val specificAccessorFunctions = NativeType.all.map { dataType =>
@@ -125,7 +120,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       }
 
       q"""
-      final def ${accessorForType(dataType)}(i: Int):${termForType(dataType)} = {
+      override def ${accessorForType(dataType)}(i: Int):${termForType(dataType)} = {
         ..$ifStatements;
         $accessorFailure
       }"""
@@ -137,12 +132,12 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
           val elementName = newTermName(s"c$i")
           // TODO: The string of ifs gets pretty inefficient as the row grows in size.
           // TODO: Optional null checks?
-          q"if(i == $i) { $elementName = value; return }" :: Nil
+          q"if(i == $i) { nullBits($i) = false; $elementName = value; return }" :: Nil
         case _ => Nil
       }
 
       q"""
-      final def ${mutatorForType(dataType)}(i: Int, value: ${termForType(dataType)}): Unit = {
+      override def ${mutatorForType(dataType)}(i: Int, value: ${termForType(dataType)}): Unit = {
         ..$ifStatements;
         $accessorFailure
       }"""
@@ -188,20 +183,26 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         }
       """
 
+    val allColumns = (0 until expressions.size).map { i =>
+      val iLit = ru.Literal(Constant(i))
+      q"if(isNullAt($iLit)) { null } else { ${newTermName(s"c$i")} }"
+    }
+
     val copyFunction =
-      q"""
-        final def copy() = new $genericRowType(this.toArray)
-      """
+      q"override def copy() = new $genericRowType(Array[Any](..$allColumns))"
+
+    val toSeqFunction =
+      q"override def toSeq: Seq[Any] = Seq(..$allColumns)"
 
     val classBody =
       nullFunctions ++ (
         lengthDef +:
-        iteratorFunction +:
         applyFunction +:
         updateFunction +:
         equalsFunction +:
         hashCodeFunction +:
         copyFunction +:
+        toSeqFunction +:
         (tupleElements ++ specificAccessorFunctions ++ specificMutatorFunctions))
 
     val code = q"""

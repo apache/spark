@@ -19,6 +19,7 @@ package org.apache.spark.api.python
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SerializableWritable, SparkException}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io._
@@ -42,7 +43,7 @@ private[python] object Converter extends Logging {
                   defaultConverter: Converter[Any, Any]): Converter[Any, Any] = {
     converterClass.map { cc =>
       Try {
-        val c = Class.forName(cc).newInstance().asInstanceOf[Converter[Any, Any]]
+        val c = Utils.classForName(cc).newInstance().asInstanceOf[Converter[Any, Any]]
         logInfo(s"Loaded converter: $cc")
         c
       } match {
@@ -60,8 +61,7 @@ private[python] object Converter extends Logging {
  * Other objects are passed through without conversion.
  */
 private[python] class WritableToJavaConverter(
-    conf: Broadcast[SerializableWritable[Configuration]],
-    batchSize: Int) extends Converter[Any, Any] {
+    conf: Broadcast[SerializableWritable[Configuration]]) extends Converter[Any, Any] {
 
   /**
    * Converts a [[org.apache.hadoop.io.Writable]] to the underlying primitive, String or
@@ -93,8 +93,7 @@ private[python] class WritableToJavaConverter(
           map.put(convertWritable(k), convertWritable(v))
         }
         map
-      case w: Writable =>
-        if (batchSize > 1) WritableUtils.clone(w, conf.value.value) else w
+      case w: Writable => WritableUtils.clone(w, conf.value.value)
       case other => other
     }
   }
@@ -139,6 +138,11 @@ private[python] class JavaToWritableConverter extends Converter[Any, Writable] {
           mapWritable.put(convertToWritable(k), convertToWritable(v))
         }
         mapWritable
+      case array: Array[Any] => {
+        val arrayWriteable = new ArrayWritable(classOf[Writable])
+        arrayWriteable.set(array.map(convertToWritable(_)))
+        arrayWriteable
+      }
       case other => throw new SparkException(
         s"Data of type ${other.getClass.getName} cannot be used")
     }

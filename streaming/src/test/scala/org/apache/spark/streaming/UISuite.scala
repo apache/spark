@@ -18,19 +18,27 @@
 package org.apache.spark.streaming
 
 import scala.io.Source
-import scala.language.postfixOps
 
 import org.scalatest.FunSuite
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.SparkConf
+
 class UISuite extends FunSuite {
 
   // Ignored: See SPARK-1530
   ignore("streaming tab in spark UI") {
-    val ssc = new StreamingContext("local", "test", Seconds(1))
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("test")
+      .set("spark.ui.enabled", "true")
+    val ssc = new StreamingContext(conf, Seconds(1))
+    assert(ssc.sc.ui.isDefined, "Spark UI is not started!")
+    val ui = ssc.sc.ui.get
+
     eventually(timeout(10 seconds), interval(50 milliseconds)) {
-      val html = Source.fromURL(ssc.sparkContext.ui.appUIAddress).mkString
+      val html = Source.fromURL(ui.appUIAddress).mkString
       assert(!html.contains("random data that should not be present"))
       // test if streaming tab exist
       assert(html.toLowerCase.contains("streaming"))
@@ -39,8 +47,7 @@ class UISuite extends FunSuite {
     }
 
     eventually(timeout(10 seconds), interval(50 milliseconds)) {
-      val html = Source.fromURL(
-        ssc.sparkContext.ui.appUIAddress.stripSuffix("/") + "/streaming").mkString
+      val html = Source.fromURL(ui.appUIAddress.stripSuffix("/") + "/streaming").mkString
       assert(html.toLowerCase.contains("batch"))
       assert(html.toLowerCase.contains("network"))
     }

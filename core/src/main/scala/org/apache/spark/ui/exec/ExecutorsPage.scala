@@ -17,16 +17,17 @@
 
 package org.apache.spark.ui.exec
 
+import java.net.URLEncoder
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
 /** Summary information about an executor to display in the UI. */
-private case class ExecutorSummaryInfo(
+// Needs to be private[ui] because of a false positive MiMa failure.
+private[ui] case class ExecutorSummaryInfo(
     id: String,
     hostPort: String,
     rddBlocks: Int,
@@ -40,11 +41,13 @@ private case class ExecutorSummaryInfo(
     totalInputBytes: Long,
     totalShuffleRead: Long,
     totalShuffleWrite: Long,
-    maxMemory: Long)
+    maxMemory: Long,
+    executorLogs: Map[String, String])
 
-private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
-  private val appName = parent.appName
-  private val basePath = parent.basePath
+private[ui] class ExecutorsPage(
+    parent: ExecutorsTab,
+    threadDumpEnabled: Boolean)
+  extends WebUIPage("") {
   private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
@@ -54,9 +57,10 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
     val diskUsed = storageStatusList.map(_.diskUsed).sum
     val execInfo = for (statusId <- 0 until storageStatusList.size) yield getExecInfo(statusId)
     val execInfoSorted = execInfo.sortBy(_.id)
+    val logsExist = execInfo.filter(_.executorLogs.nonEmpty).nonEmpty
 
     val execTable =
-      <table class={UIUtils.TABLE_CLASS}>
+      <table class={UIUtils.TABLE_CLASS_STRIPED}>
         <thead>
           <th>Executor ID</th>
           <th>Address</th>
@@ -78,9 +82,11 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
               Shuffle Write
             </span>
           </th>
+          {if (logsExist) <th class="sorttable_nosort">Logs</th> else Seq.empty}
+          {if (threadDumpEnabled) <th class="sorttable_nosort">Thread Dump</th> else Seq.empty}
         </thead>
         <tbody>
-          {execInfoSorted.map(execRow)}
+          {execInfoSorted.map(execRow(_, logsExist))}
         </tbody>
       </table>
 
@@ -101,12 +107,11 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
         </div>
       </div>;
 
-    UIUtils.headerSparkPage(content, basePath, appName, "Executors (" + execInfo.size + ")",
-      parent.headerTabs, parent)
+    UIUtils.headerSparkPage("Executors (" + execInfo.size + ")", content, parent)
   }
 
   /** Render an HTML row representing an executor */
-  private def execRow(info: ExecutorSummaryInfo): Seq[Node] = {
+  private def execRow(info: ExecutorSummaryInfo, logsExist: Boolean): Seq[Node] = {
     val maximumMemory = info.maxMemory
     val memoryUsed = info.memoryUsed
     val diskUsed = info.diskUsed
@@ -137,6 +142,31 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
       <td sorttable_customkey={info.totalShuffleWrite.toString}>
         {Utils.bytesToString(info.totalShuffleWrite)}
       </td>
+      {
+        if (logsExist) {
+          <td>
+            {
+              info.executorLogs.map { case (logName, logUrl) =>
+                <div>
+                  <a href={logUrl}>
+                    {logName}
+                  </a>
+                </div>
+              }
+            }
+          </td>
+        }
+      }
+      {
+        if (threadDumpEnabled) {
+          val encodedId = URLEncoder.encode(info.id, "UTF-8")
+          <td>
+            <a href={s"threadDump/?executorId=${encodedId}"}>Thread Dump</a>
+          </td>
+        } else {
+          Seq.empty
+        }
+      }
     </tr>
   }
 
@@ -157,6 +187,7 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
     val totalInputBytes = listener.executorToInputBytes.getOrElse(execId, 0L)
     val totalShuffleRead = listener.executorToShuffleRead.getOrElse(execId, 0L)
     val totalShuffleWrite = listener.executorToShuffleWrite.getOrElse(execId, 0L)
+    val executorLogs = listener.executorToLogUrls.getOrElse(execId, Map.empty)
 
     new ExecutorSummaryInfo(
       execId,
@@ -172,7 +203,8 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
       totalInputBytes,
       totalShuffleRead,
       totalShuffleWrite,
-      maxMem
+      maxMem,
+      executorLogs
     )
   }
 }

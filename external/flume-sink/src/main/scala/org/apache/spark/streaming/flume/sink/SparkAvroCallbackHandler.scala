@@ -16,8 +16,10 @@
  */
 package org.apache.spark.streaming.flume.sink
 
-import java.util.concurrent.{ConcurrentHashMap, Executors}
+import java.util.concurrent.{CountDownLatch, Executors}
 import java.util.concurrent.atomic.AtomicLong
+
+import scala.collection.mutable
 
 import org.apache.flume.Channel
 import org.apache.commons.lang.RandomStringUtils
@@ -45,7 +47,8 @@ private[flume] class SparkAvroCallbackHandler(val threads: Int, val channel: Cha
   val transactionExecutorOpt = Option(Executors.newFixedThreadPool(threads,
     new ThreadFactoryBuilder().setDaemon(true)
       .setNameFormat("Spark Sink Processor Thread - %d").build()))
-  private val processorMap = new ConcurrentHashMap[CharSequence, TransactionProcessor]()
+  // Protected by `sequenceNumberToProcessor`
+  private val sequenceNumberToProcessor = mutable.HashMap[CharSequence, TransactionProcessor]()
   // This sink will not persist sequence numbers and reuses them if it gets restarted.
   // So it is possible to commit a transaction which may have been meant for the sink before the
   // restart.
@@ -55,6 +58,12 @@ private[flume] class SparkAvroCallbackHandler(val threads: Int, val channel: Cha
   private val seqBase = RandomStringUtils.randomAlphanumeric(8)
   private val seqCounter = new AtomicLong(0)
 
+  // Protected by `sequenceNumberToProcessor`
+  private var stopped = false
+
+  @volatile private var isTest = false
+  private var testLatch: CountDownLatch = null
+
   /**
    * Returns a bunch of events to Spark over Avro RPC.
    * @param n Maximum number of events to return in a batch
@@ -63,18 +72,36 @@ private[flume] class SparkAvroCallbackHandler(val threads: Int, val channel: Cha
   override def getEventBatch(n: Int): EventBatch = {
     logDebug("Got getEventBatch call from Spark.")
     val sequenceNumber = seqBase + seqCounter.incrementAndGet()
-    val processor = new TransactionProcessor(channel, sequenceNumber,
-      n, transactionTimeout, backOffInterval, this)
-    transactionExecutorOpt.foreach(executor => {
-      executor.submit(processor)
-    })
-    // Wait until a batch is available - will be an error if error message is non-empty
-    val batch = processor.getEventBatch
-    if (!SparkSinkUtils.isErrorBatch(batch)) {
-      processorMap.put(sequenceNumber.toString, processor)
-      logDebug("Sending event batch with sequence number: " + sequenceNumber)
+    createProcessor(sequenceNumber, n) match {
+      case Some(processor) =>
+        transactionExecutorOpt.foreach(_.submit(processor))
+        // Wait until a batch is available - will be an error if error message is non-empty
+        val batch = processor.getEventBatch
+        if (SparkSinkUtils.isErrorBatch(batch)) {
+          // Remove the processor if it is an error batch since no ACK is sent.
+          removeAndGetProcessor(sequenceNumber)
+          logWarning("Received an error batch - no events were received from channel! ")
+        }
+        batch
+      case None =>
+        new EventBatch("Spark sink has been stopped!", "", java.util.Collections.emptyList())
     }
-    batch
+  }
+
+  private def createProcessor(seq: String, n: Int): Option[TransactionProcessor] = {
+    sequenceNumberToProcessor.synchronized {
+      if (!stopped) {
+        val processor = new TransactionProcessor(
+          channel, seq, n, transactionTimeout, backOffInterval, this)
+        sequenceNumberToProcessor.put(seq, processor)
+        if (isTest) {
+          processor.countDownWhenBatchAcked(testLatch)
+        }
+        Some(processor)
+      } else {
+        None
+      }
+    }
   }
 
   /**
@@ -104,7 +131,7 @@ private[flume] class SparkAvroCallbackHandler(val threads: Int, val channel: Cha
    * @param success Whether the batch was successful or not.
    */
   private def completeTransaction(sequenceNumber: CharSequence, success: Boolean) {
-    Option(removeAndGetProcessor(sequenceNumber)).foreach(processor => {
+    removeAndGetProcessor(sequenceNumber).foreach(processor => {
       processor.batchProcessed(success)
     })
   }
@@ -112,11 +139,19 @@ private[flume] class SparkAvroCallbackHandler(val threads: Int, val channel: Cha
   /**
    * Helper method to remove the TxnProcessor for a Sequence Number. Can be used to avoid a leak.
    * @param sequenceNumber
-   * @return The transaction processor for the corresponding batch. Note that this instance is no
-   *         longer tracked and the caller is responsible for that txn processor.
+   * @return An `Option` of the transaction processor for the corresponding batch. Note that this
+   *         instance is no longer tracked and the caller is responsible for that txn processor.
    */
-  private[sink] def removeAndGetProcessor(sequenceNumber: CharSequence): TransactionProcessor = {
-    processorMap.remove(sequenceNumber.toString) // The toString is required!
+  private[sink] def removeAndGetProcessor(sequenceNumber: CharSequence):
+      Option[TransactionProcessor] = {
+    sequenceNumberToProcessor.synchronized {
+      sequenceNumberToProcessor.remove(sequenceNumber.toString)
+    }
+  }
+
+  private[sink] def countDownWhenBatchAcked(latch: CountDownLatch) {
+    testLatch = latch
+    isTest = true
   }
 
   /**
@@ -124,8 +159,10 @@ private[flume] class SparkAvroCallbackHandler(val threads: Int, val channel: Cha
    */
   def shutdown() {
     logInfo("Shutting down Spark Avro Callback Handler")
-    transactionExecutorOpt.foreach(executor => {
-      executor.shutdownNow()
-    })
+    sequenceNumberToProcessor.synchronized {
+      stopped = true
+      sequenceNumberToProcessor.values.foreach(_.shutdown())
+    }
+    transactionExecutorOpt.foreach(_.shutdownNow())
   }
 }

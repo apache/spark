@@ -17,7 +17,8 @@ Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier#Multinomial_naive_Bay
 which is typically used for [document
 classification](http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html).
 Within that context, each observation is a document and each
-feature represents a term whose value is the frequency of the term. 
+feature represents a term whose value is the frequency of the term.
+Feature values must be nonnegative to represent term frequencies.
 [Additive smoothing](http://en.wikipedia.org/wiki/Lidstone_smoothing) can be used by
 setting the parameter $\lambda$ (default to $1.0$). For document classification, the input feature
 vectors are usually sparse, and sparse vectors should be supplied as input to take advantage of
@@ -36,7 +37,7 @@ smoothing parameter `lambda` as input, and output a
 can be used for evaluation and prediction.
 
 {% highlight scala %}
-import org.apache.spark.mllib.classification.NaiveBayes
+import org.apache.spark.mllib.classification.{NaiveBayes, NaiveBayesModel}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 
@@ -54,6 +55,10 @@ val model = NaiveBayes.train(training, lambda = 1.0)
 
 val predictionAndLabel = test.map(p => (model.predict(p.features), p.label))
 val accuracy = 1.0 * predictionAndLabel.filter(x => x._1 == x._2).count() / test.count()
+
+// Save and load model
+model.save(sc, "myModelPath")
+val sameModel = NaiveBayesModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 
@@ -87,11 +92,15 @@ JavaPairRDD<Double, Double> predictionAndLabel =
       return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
     }
   });
-double accuracy = 1.0 * predictionAndLabel.filter(new Function<Tuple2<Double, Double>, Boolean>() {
+double accuracy = predictionAndLabel.filter(new Function<Tuple2<Double, Double>, Boolean>() {
     @Override public Boolean call(Tuple2<Double, Double> pl) {
-      return pl._1() == pl._2();
+      return pl._1().equals(pl._2());
     }
-  }).count() / test.count();
+  }).count() / (double) test.count();
+
+// Save and load model
+model.save(sc.sc(), "myModelPath");
+NaiveBayesModel sameModel = NaiveBayesModel.load(sc.sc(), "myModelPath");
 {% endhighlight %}
 </div>
 
@@ -104,22 +113,30 @@ smoothing parameter `lambda` as input, and output a
 [NaiveBayesModel](api/python/pyspark.mllib.classification.NaiveBayesModel-class.html), which can be
 used for evaluation and prediction.
 
-<!-- TODO: Make Python's example consistent with Scala's and Java's. -->
-{% highlight python %}
-from pyspark.mllib.regression import LabeledPoint
-from pyspark.mllib.classification import NaiveBayes
+Note that the Python API does not yet support model save/load but will in the future.
 
-# an RDD of LabeledPoint
-data = sc.parallelize([
-  LabeledPoint(0.0, [0.0, 0.0])
-  ... # more labeled points
-])
+{% highlight python %}
+from pyspark.mllib.classification import NaiveBayes
+from pyspark.mllib.linalg import Vectors
+from pyspark.mllib.regression import LabeledPoint
+
+def parseLine(line):
+    parts = line.split(',')
+    label = float(parts[0])
+    features = Vectors.dense([float(x) for x in parts[1].split(' ')])
+    return LabeledPoint(label, features)
+
+data = sc.textFile('data/mllib/sample_naive_bayes_data.txt').map(parseLine)
+
+# Split data aproximately into training (60%) and test (40%)
+training, test = data.randomSplit([0.6, 0.4], seed = 0)
 
 # Train a naive Bayes model.
-model = NaiveBayes.train(data, 1.0)
+model = NaiveBayes.train(training, 1.0)
 
-# Make prediction.
-prediction = model.predict([0.0, 0.0])
+# Make prediction and test accuracy.
+predictionAndLabel = test.map(lambda p : (model.predict(p.features), p.label))
+accuracy = 1.0 * predictionAndLabel.filter(lambda (x, v): x == v).count() / test.count()
 {% endhighlight %}
 
 </div>

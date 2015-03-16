@@ -18,25 +18,26 @@
 package org.apache.spark.sql.parquet
 
 import java.io.IOException
+import java.util.logging.Level
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.fs.permission.FsAction
-
-import parquet.hadoop.ParquetOutputFormat
+import org.apache.spark.sql.types.{StructType, DataType}
+import parquet.hadoop.{ParquetOutputCommitter, ParquetOutputFormat}
 import parquet.hadoop.metadata.CompressionCodecName
 import parquet.schema.MessageType
 
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedException}
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LeafNode}
+import org.apache.spark.sql.catalyst.expressions.{AttributeMap, Attribute}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 
 /**
  * Relation that consists of data stored in a Parquet columnar format.
  *
- * Users should interact with parquet files though a SchemaRDD, created by a [[SQLContext]] instead
- * of using this class directly.
+ * Users should interact with parquet files though a [[DataFrame]], created by a [[SQLContext]]
+ * instead of using this class directly.
  *
  * {{{
  *   val parquetRDD = sqlContext.parquetFile("path/to/parquet.file")
@@ -47,7 +48,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LeafNode}
 private[sql] case class ParquetRelation(
     path: String,
     @transient conf: Option[Configuration],
-    @transient sqlContext: SQLContext)
+    @transient sqlContext: SQLContext,
+    partitioningAttributes: Seq[Attribute] = Nil)
   extends LeafNode with MultiInstanceRelation {
 
   self: Product =>
@@ -60,9 +62,16 @@ private[sql] case class ParquetRelation(
       .getSchema
 
   /** Attributes */
-  override val output = ParquetTypesConverter.readSchemaFromFile(new Path(path), conf)
+  override val output =
+    partitioningAttributes ++
+    ParquetTypesConverter.readSchemaFromFile(
+      new Path(path.split(",").head),
+      conf,
+      sqlContext.conf.isParquetBinaryAsString,
+      sqlContext.conf.isParquetINT96AsTimestamp)
+  lazy val attributeMap = AttributeMap(output.map(o => o -> o))
 
-  override def newInstance = ParquetRelation(path, conf, sqlContext).asInstanceOf[this.type]
+  override def newInstance() = ParquetRelation(path, conf, sqlContext).asInstanceOf[this.type]
 
   // Equals must also take into account the output attributes so that we can distinguish between
   // different instances of the same relation,
@@ -73,12 +82,27 @@ private[sql] case class ParquetRelation(
   }
 
   // TODO: Use data from the footers.
-  override lazy val statistics = Statistics(sizeInBytes = sqlContext.defaultSizeInBytes)
+  override lazy val statistics = Statistics(sizeInBytes = sqlContext.conf.defaultSizeInBytes)
 }
 
 private[sql] object ParquetRelation {
 
   def enableLogForwarding() {
+    // Note: the parquet.Log class has a static initializer that
+    // sets the java.util.logging Logger for "parquet". This
+    // checks first to see if there's any handlers already set
+    // and if not it creates them. If this method executes prior
+    // to that class being loaded then:
+    //  1) there's no handlers installed so there's none to
+    // remove. But when it IS finally loaded the desired affect
+    // of removing them is circumvented.
+    //  2) The parquet.Log static initializer calls setUseParentHanders(false)
+    // undoing the attempt to override the logging here.
+    //
+    // Therefore we need to force the class to be loaded.
+    // This should really be resolved by Parquet.
+    Class.forName(classOf[parquet.Log].getName)
+
     // Note: Logger.getLogger("parquet") has a default logger
     // that appends to Console which needs to be cleared.
     val parquetLogger = java.util.logging.Logger.getLogger("parquet")
@@ -86,6 +110,11 @@ private[sql] object ParquetRelation {
     // TODO(witgo): Need to set the log level ?
     // if(parquetLogger.getLevel != null) parquetLogger.setLevel(null)
     if (!parquetLogger.getUseParentHandlers) parquetLogger.setUseParentHandlers(true)
+
+    // Disables WARN log message in ParquetOutputCommitter.
+    // See https://issues.apache.org/jira/browse/SPARK-5968 for details
+    Class.forName(classOf[ParquetOutputCommitter].getName)
+    java.util.logging.Logger.getLogger(classOf[ParquetOutputCommitter].getName).setLevel(Level.OFF)
   }
 
   // The element type for the RDDs that this relation maps to.
@@ -94,8 +123,13 @@ private[sql] object ParquetRelation {
   // The compression type
   type CompressionType = parquet.hadoop.metadata.CompressionCodecName
 
-  // The default compression
-  val defaultCompression = CompressionCodecName.GZIP
+  // The parquet compression short names
+  val shortParquetCompressionCodecNames = Map(
+    "NONE"         -> CompressionCodecName.UNCOMPRESSED,
+    "UNCOMPRESSED" -> CompressionCodecName.UNCOMPRESSED,
+    "SNAPPY"       -> CompressionCodecName.SNAPPY,
+    "GZIP"         -> CompressionCodecName.GZIP,
+    "LZO"          -> CompressionCodecName.LZO)
 
   /**
    * Creates a new ParquetRelation and underlying Parquetfile for the given LogicalPlan. Note that
@@ -135,13 +169,17 @@ private[sql] object ParquetRelation {
                   conf: Configuration,
                   sqlContext: SQLContext): ParquetRelation = {
     val path = checkPath(pathString, allowExisting, conf)
-    if (conf.get(ParquetOutputFormat.COMPRESSION) == null) {
-      conf.set(ParquetOutputFormat.COMPRESSION, ParquetRelation.defaultCompression.name())
-    }
+    conf.set(ParquetOutputFormat.COMPRESSION, shortParquetCompressionCodecNames.getOrElse(
+      sqlContext.conf.parquetCompressionCodec.toUpperCase, CompressionCodecName.UNCOMPRESSED)
+      .name())
     ParquetRelation.enableLogForwarding()
-    ParquetTypesConverter.writeMetaData(attributes, path, conf)
+    // This is a hack. We always set nullable/containsNull/valueContainsNull to true
+    // for the schema of a parquet data.
+    val schema = StructType.fromAttributes(attributes).asNullable
+    val newAttributes = schema.toAttributes
+    ParquetTypesConverter.writeMetaData(newAttributes, path, conf)
     new ParquetRelation(path.toString, Some(conf), sqlContext) {
-      override val output = attributes
+      override val output = newAttributes
     }
   }
 

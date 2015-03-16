@@ -72,13 +72,13 @@ private[spark] class HttpBroadcast[T: ClassTag](
   }
 
   /** Used by the JVM when serializing this object. */
-  private def writeObject(out: ObjectOutputStream) {
+  private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
     assertValid()
     out.defaultWriteObject()
   }
 
   /** Used by the JVM when deserializing this object. */
-  private def readObject(in: ObjectInputStream) {
+  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
     HttpBroadcast.synchronized {
       SparkEnv.get.blockManager.getSingle(blockId) match {
@@ -151,9 +151,10 @@ private[broadcast] object HttpBroadcast extends Logging {
   }
 
   private def createServer(conf: SparkConf) {
-    broadcastDir = Utils.createTempDir(Utils.getLocalDir(conf))
+    broadcastDir = Utils.createTempDir(Utils.getLocalDir(conf), "broadcast")
     val broadcastPort = conf.getInt("spark.broadcast.port", 0)
-    server = new HttpServer(broadcastDir, securityManager, broadcastPort, "HTTP broadcast server")
+    server =
+      new HttpServer(conf, broadcastDir, securityManager, broadcastPort, "HTTP broadcast server")
     server.start()
     serverUri = server.uri
     logInfo("Broadcast server started at " + serverUri)
@@ -163,18 +164,23 @@ private[broadcast] object HttpBroadcast extends Logging {
 
   private def write(id: Long, value: Any) {
     val file = getFile(id)
-    val out: OutputStream = {
-      if (compress) {
-        compressionCodec.compressedOutputStream(new FileOutputStream(file))
-      } else {
-        new BufferedOutputStream(new FileOutputStream(file), bufferSize)
+    val fileOutputStream = new FileOutputStream(file)
+    try {
+      val out: OutputStream = {
+        if (compress) {
+          compressionCodec.compressedOutputStream(fileOutputStream)
+        } else {
+          new BufferedOutputStream(fileOutputStream, bufferSize)
+        }
       }
+      val ser = SparkEnv.get.serializer.newInstance()
+      val serOut = ser.serializeStream(out)
+      serOut.writeObject(value)
+      serOut.close()
+      files += file
+    } finally {
+      fileOutputStream.close()
     }
-    val ser = SparkEnv.get.serializer.newInstance()
-    val serOut = ser.serializeStream(out)
-    serOut.writeObject(value)
-    serOut.close()
-    files += file
   }
 
   private def read[T: ClassTag](id: Long): T = {
@@ -186,11 +192,14 @@ private[broadcast] object HttpBroadcast extends Logging {
       logDebug("broadcast security enabled")
       val newuri = Utils.constructURIForAuthentication(new URI(url), securityManager)
       uc = newuri.toURL.openConnection()
+      uc.setConnectTimeout(httpReadTimeout)
       uc.setAllowUserInteraction(false)
     } else {
       logDebug("broadcast not using security")
       uc = new URL(url).openConnection()
+      uc.setConnectTimeout(httpReadTimeout)
     }
+    Utils.setupSecureURLConnection(uc, securityManager)
 
     val in = {
       uc.setReadTimeout(httpReadTimeout)

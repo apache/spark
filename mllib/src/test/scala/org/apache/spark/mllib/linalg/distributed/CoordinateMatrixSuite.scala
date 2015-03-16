@@ -21,10 +21,10 @@ import org.scalatest.FunSuite
 
 import breeze.linalg.{DenseMatrix => BDM}
 
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.linalg.Vectors
 
-class CoordinateMatrixSuite extends FunSuite with LocalSparkContext {
+class CoordinateMatrixSuite extends FunSuite with MLlibTestSparkContext {
 
   val m = 5
   val n = 4
@@ -73,6 +73,11 @@ class CoordinateMatrixSuite extends FunSuite with LocalSparkContext {
     assert(mat.toBreeze() === expected)
   }
 
+  test("transpose") {
+    val transposed = mat.transpose()
+    assert(mat.toBreeze().t === transposed.toBreeze())
+  }
+
   test("toIndexedRowMatrix") {
     val indexedRowMatrix = mat.toIndexedRowMatrix()
     val expected = BDM(
@@ -94,5 +99,19 @@ class CoordinateMatrixSuite extends FunSuite with LocalSparkContext {
       Vectors.dense(7.0, 0.0, 0.0, 8.0),
       Vectors.dense(0.0, 9.0, 0.0, 0.0))
     assert(rows === expected)
+  }
+
+  test("toBlockMatrix") {
+    val blockMat = mat.toBlockMatrix(2, 2)
+    assert(blockMat.numRows() === m)
+    assert(blockMat.numCols() === n)
+    assert(blockMat.toBreeze() === mat.toBreeze())
+
+    intercept[IllegalArgumentException] {
+      mat.toBlockMatrix(-1, 2)
+    }
+    intercept[IllegalArgumentException] {
+      mat.toBlockMatrix(2, 0)
+    }
   }
 }
