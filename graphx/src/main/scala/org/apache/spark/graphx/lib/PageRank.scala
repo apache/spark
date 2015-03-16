@@ -216,7 +216,8 @@ object PageRank extends Logging {
       (newPR, newPR - oldPR)
     }
 
-    def personalizedVertexProgram(id: VertexId, attr: (Double, Double), msgSum: Double): (Double, Double) = {
+    def personalizedVertexProgram(id: VertexId, attr: (Double, Double),
+      msgSum: Double): (Double, Double) = {
       val (oldPR, lastDelta) = attr
       var teleport = oldPR
       val delta = if (src==id) 1.0 else 0.0
