@@ -19,11 +19,10 @@ package org.apache.spark.ui.storage
 
 import javax.servlet.http.HttpServletRequest
 
-import org.apache.spark.status.api.v1.{RDDPartitionInfo, RDDDataDistribution, AllRDDResource}
-
 import scala.xml.Node
 
-import org.apache.spark.ui.{WebUIPage, UIUtils}
+import org.apache.spark.status.api.v1.{AllRDDResource, RDDDataDistribution, RDDPartitionInfo}
+import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
 /** Page showing storage details for a given RDD */

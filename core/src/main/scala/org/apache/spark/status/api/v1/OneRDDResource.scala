@@ -28,9 +28,9 @@ class OneRDDResource(uiRoot: UIRoot) {
       @PathParam("rddId") rddId: Int
     ): RDDStorageInfo  = {
       uiRoot.withSparkUI(appId) { ui =>
-        AllRDDResource.getRDDStorageInfo(rddId, ui.storageListener, true).getOrElse{
+        AllRDDResource.getRDDStorageInfo(rddId, ui.storageListener, true).getOrElse(
           throw new IllegalArgumentException("no rdd found w/ id " + rddId)
-        }
+        )
       }
     }
 

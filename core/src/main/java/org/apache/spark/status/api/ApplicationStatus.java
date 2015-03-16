@@ -17,16 +17,12 @@
 
 package org.apache.spark.status.api;
 
-import com.google.common.base.Joiner;
-
-import java.util.Arrays;
-
 public enum ApplicationStatus {
-    COMPLETED,
-    RUNNING;
+  COMPLETED,
+  RUNNING;
 
-    public static ApplicationStatus fromString(String str) {
-        return EnumUtil.parseIgnoreCase(ApplicationStatus.class, str);
-    }
+  public static ApplicationStatus fromString(String str) {
+    return EnumUtil.parseIgnoreCase(ApplicationStatus.class, str);
+  }
 
 }

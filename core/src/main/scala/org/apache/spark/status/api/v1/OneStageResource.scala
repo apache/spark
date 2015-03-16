@@ -32,17 +32,17 @@ class OneStageResource(uiRoot: UIRoot) {
     uiRoot.withSparkUI(appId) { ui =>
       val listener = ui.stagesTab.listener
       val stageAndStatus = AllStagesResource.stagesAndStatus(ui)
-      val oneStage = stageAndStatus.flatMap{case (status, stages) =>
-        val matched = stages.find{_.stageId == stageId}
-        matched.map{status -> _}
+      val oneStage = stageAndStatus.flatMap { case (status, stages) =>
+        val matched = stages.find { _.stageId == stageId }
+        matched.map { status -> _ }
       }.headOption
       oneStage match {
         case Some((status,stageInfo)) =>
-          val stageUiData = listener.synchronized{
+          val stageUiData = listener.synchronized {
             listener.stageIdToData.get((stageInfo.stageId, stageInfo.attemptId)).
-              getOrElse{ throw new SparkException("failed to get full stage data for stage: " +
+              getOrElse(throw new SparkException("failed to get full stage data for stage: " +
               stageInfo.stageId + ":" + stageInfo.attemptId)
-            }
+              )
           }
           AllStagesResource.stageUiToStageData(status, stageInfo, stageUiData,
             includeDetails = true)

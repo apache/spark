@@ -43,7 +43,7 @@ class ApplicationListResource(uiRoot: UIRoot) {
     }
     val includeCompleted = adjStatus.contains(ApplicationStatus.COMPLETED)
     val includeRunning = adjStatus.contains(ApplicationStatus.RUNNING)
-    allApps.filter{app =>
+    allApps.filter { app =>
       val statusOk = (app.completed && includeCompleted) ||
         (!app.completed && includeRunning)
       val dateOk = app.startTime.getTime >= minDate.timestamp &&

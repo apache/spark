@@ -70,15 +70,15 @@ class MasterWebUI(val master: Master, requestedPort: Int)
     val state = masterPage.getMasterState
     val activeApps = state.activeApps.sortBy(_.startTime).reverse
     val completedApps = state.completedApps.sortBy(_.endTime).reverse
-    activeApps.map{ApplicationsListResource.convertApplicationInfo(_, false)} ++
-      completedApps.map{ApplicationsListResource.convertApplicationInfo(_, true)}
+    activeApps.map { ApplicationsListResource.convertApplicationInfo(_, false) } ++
+      completedApps.map { ApplicationsListResource.convertApplicationInfo(_, true) }
   }
 
   def getSparkUI(appId: String): Option[SparkUI] = {
     val state = masterPage.getMasterState
     val activeApps = state.activeApps.sortBy(_.startTime).reverse
     val completedApps = state.completedApps.sortBy(_.endTime).reverse
-    (activeApps ++ completedApps).find{_.id == appId}.flatMap{
+    (activeApps ++ completedApps).find { _.id == appId }.flatMap {
       master.rebuildSparkUI
     }
   }

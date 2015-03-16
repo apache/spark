@@ -25,17 +25,17 @@ import scala.util.Try
 
 private[api] class SimpleDateParam(val originalValue: String) {
   val timestamp: Long = {
-    SimpleDateParam.formats.collectFirst{
-      case fmt if Try{fmt.parse(originalValue)}.isSuccess =>
+    SimpleDateParam.formats.collectFirst {
+      case fmt if Try{ fmt.parse(originalValue) }.isSuccess =>
         fmt.parse(originalValue).getTime()
-    }.getOrElse{
+    }.getOrElse(
       throw new WebApplicationException(
         Response
           .status(Status.BAD_REQUEST)
           .entity("Couldn't parse date: " + originalValue)
           .build()
       )
-    }
+    )
   }
 }
 
@@ -43,5 +43,5 @@ private[api] object SimpleDateParam {
   val formats = Seq(
     "yyyy-MM-dd'T'HH:mm:ss.SSSz",
     "yyyy-MM-dd"
-  ).map{new SimpleDateFormat(_)}
+  ).map { new SimpleDateFormat(_) }
 }

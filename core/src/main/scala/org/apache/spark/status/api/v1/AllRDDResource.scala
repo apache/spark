@@ -50,7 +50,7 @@ object AllRDDResource {
       listener: StorageListener,
       includeDetails: Boolean): Option[RDDStorageInfo] = {
     val storageStatusList = listener.storageStatusList
-    listener.rddInfoList.find(_.id == rddId).map{rddInfo =>
+    listener.rddInfoList.find { _.id == rddId }.map { rddInfo =>
       getRDDStorageInfo(rddId, rddInfo, storageStatusList, includeDetails)
     }
   }
@@ -61,29 +61,29 @@ object AllRDDResource {
     storageStatusList: Seq[StorageStatus],
     includeDetails: Boolean
   ): RDDStorageInfo = {
-    val workers = storageStatusList.map((rddId, _))
+    val workers = storageStatusList.map { (rddId, _) }
     val blockLocations = StorageUtils.getRddBlockLocations(rddId, storageStatusList)
     val blocks = storageStatusList
-      .flatMap(_.rddBlocksById(rddId))
-      .sortWith(_._1.name < _._1.name)
+      .flatMap { _.rddBlocksById(rddId) }
+      .sortWith { _._1.name < _._1.name }
       .map { case (blockId, status) =>
       (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
     }
 
 
     val dataDistribution = if (includeDetails) {
-      Some(storageStatusList.map{status =>
+      Some(storageStatusList.map { status =>
         RDDDataDistribution(
           address = status.blockManagerId.hostPort,
           memoryUsed = status.memUsedByRdd(rddId),
           memoryRemaining = status.memRemaining,
           diskUsed = status.diskUsedByRdd(rddId)
-        )})
+        ) } )
     } else {
       None
     }
     val partitions = if (includeDetails) {
-      Some(blocks.map{ case(id, block, locations) =>
+      Some(blocks.map { case(id, block, locations) =>
         RDDPartitionInfo(
           blockName = id.name,
           storageLevel = block.storageLevel.description,
@@ -91,7 +91,7 @@ object AllRDDResource {
           diskUsed = block.diskSize,
           executors = locations
         )
-      })
+      } )
     } else {
       None
     }

@@ -73,7 +73,6 @@ class HistoryServer(
     protected override def doGet(req: HttpServletRequest, res: HttpServletResponse): Unit = {
       val parts = Option(req.getPathInfo()).getOrElse("").split("/")
       if (parts.length < 2) {
-        logError("bad path info!")
         res.sendError(HttpServletResponse.SC_BAD_REQUEST,
           s"Unexpected path info in request (URI = ${req.getRequestURI()}")
         return
@@ -163,7 +162,7 @@ class HistoryServer(
   def getApplicationList(refresh: Boolean) = provider.getListing(refresh)
 
   def getApplicationInfoList: Seq[ApplicationInfo] = {
-    getApplicationList(true).map{ApplicationsListResource.appHistoryInfoToPublicAppInfo}.toSeq
+    getApplicationList(true).map { ApplicationsListResource.appHistoryInfoToPublicAppInfo }.toSeq
   }
 
   /**

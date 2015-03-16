@@ -32,8 +32,8 @@ class AllJobsResource(uiRoot: UIRoot) {
     @PathParam("appId") appId: String,
     @QueryParam("status") statuses: java.util.List[JobExecutionStatus]
   ): Seq[JobData] = {
-    uiRoot.withSparkUI(appId){ui =>
-      val statusToJobs = ui.jobProgressListener.synchronized{
+    uiRoot.withSparkUI(appId) { ui =>
+      val statusToJobs = ui.jobProgressListener.synchronized {
         Seq(
           JobExecutionStatus.RUNNING -> ui.jobProgressListener.activeJobs.values.toSeq,
           JobExecutionStatus.SUCCEEDED -> ui.jobProgressListener.completedJobs.toSeq,
@@ -70,8 +70,8 @@ object AllJobsResource {
       val lastStageData = lastStageInfo.flatMap { s =>
         listener.stageIdToData.get((s.stageId, s.attemptId))
       }
-      val lastStageName = lastStageInfo.map(_.name).getOrElse("(Unknown Stage Name)")
-      val lastStageDescription = lastStageData.flatMap(_.description)
+      val lastStageName = lastStageInfo.map { _.name }.getOrElse("(Unknown Stage Name)")
+      val lastStageDescription = lastStageData.flatMap { _.description }
       JobData(
         jobId = job.jobId,
         name = lastStageName,

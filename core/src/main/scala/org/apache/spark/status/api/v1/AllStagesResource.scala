@@ -66,13 +66,13 @@ object AllStagesResource {
   ): StageData = {
 
     val taskData = if(includeDetails) {
-      Some(stageUiData.taskData.map{case(k,v) => k -> convertTaskData(v)})
+      Some(stageUiData.taskData.map { case(k,v) => k -> convertTaskData(v) } )
     } else {
       None
     }
     val executorSummary = if(includeDetails) {
-      Some(stageUiData.executorSummary.map{case(k,summary) => k ->
-        ExecutorStageSummary(
+      Some(stageUiData.executorSummary.map { case(k,summary) =>
+        k -> ExecutorStageSummary(
           taskTime = summary.taskTime,
           failedTasks = summary.failedTasks,
           succeededTasks = summary.succeededTasks,
@@ -114,7 +114,7 @@ object AllStagesResource {
 
   def stagesAndStatus(ui: SparkUI): Seq[(StageStatus, Seq[StageInfo])] = {
     val listener = ui.stagesTab.listener
-    listener.synchronized{
+    listener.synchronized {
       Seq(
         StageStatus.Active -> listener.activeStages.values.toSeq,
         StageStatus.Complete -> listener.completedStages.reverse.toSeq,
@@ -136,7 +136,7 @@ object AllStagesResource {
       taskLocality = uiData.taskInfo.taskLocality.toString(),
       speculative = uiData.taskInfo.speculative,
       errorMessage = uiData.errorMessage,
-      taskMetrics = uiData.taskMetrics.map{convertUiTaskMetrics}
+      taskMetrics = uiData.taskMetrics.map { convertUiTaskMetrics }
     )
   }
 
@@ -149,10 +149,10 @@ object AllStagesResource {
       resultSerializationTime = internal.resultSerializationTime,
       memoryBytesSpilled = internal.memoryBytesSpilled,
       diskBytesSpilled = internal.diskBytesSpilled,
-      inputMetrics = internal.inputMetrics.map{convertInputMetrics},
-      outputMetrics = Option(internal.outputMetrics).flatten.map{convertOutputMetrics},
-      shuffleReadMetrics = internal.shuffleReadMetrics.map{convertShuffleReadMetrics},
-      shuffleWriteMetrics = internal.shuffleWriteMetrics.map{convertShuffleWriteMetrics}
+      inputMetrics = internal.inputMetrics.map { convertInputMetrics },
+      outputMetrics = Option(internal.outputMetrics).flatten.map { convertOutputMetrics },
+      shuffleReadMetrics = internal.shuffleReadMetrics.map { convertShuffleReadMetrics },
+      shuffleWriteMetrics = internal.shuffleWriteMetrics.map { convertShuffleWriteMetrics }
     )
   }
 
