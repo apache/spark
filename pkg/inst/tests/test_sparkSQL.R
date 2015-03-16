@@ -509,7 +509,7 @@ test_that("string operators", {
   expect_equal(count(where(df, like(df$name, "A%"))), 1)
   expect_equal(count(where(df, startsWith(df$name, "A"))), 1)
   expect_equal(first(select(df, substr(df$name, 1, 2)))[[1]], "Mi")
-  expect_equal(first(select(df, cast(df$age, "string")))[[1]], "NA")
+  expect_equal(collect(select(df, cast(df$age, "string")))[[2, 1]], "30")
 })
 
 test_that("group by", {
