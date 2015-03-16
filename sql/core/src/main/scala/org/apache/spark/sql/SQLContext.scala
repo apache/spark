@@ -63,8 +63,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
 
-  // Note that this is a lazy val so we can override the default value in subclasses.
-  protected[sql] lazy val conf: SQLConf = new SQLConf
+  /**
+   * @return Spark SQL configuration
+   */
+  protected[sql] def conf = tlSession.get().conf
 
   /**
    * Set Spark SQL configuration properties.
@@ -103,9 +105,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   def getAllConfs: immutable.Map[String, String] = conf.getAllConfs
 
+  // TODO how to handle the temp table per user session?
   @transient
   protected[sql] lazy val catalog: Catalog = new SimpleCatalog(true)
 
+  // TODO how to handle the temp function per user session?
   @transient
   protected[sql] lazy val functionRegistry: FunctionRegistry = new SimpleFunctionRegistry(true)
 
@@ -137,6 +141,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] def executeSql(sql: String): this.QueryExecution = executePlan(parseSql(sql))
 
   protected[sql] def executePlan(plan: LogicalPlan) = new this.QueryExecution(plan)
+
+  @transient
+  protected[sql] val tlSession = new ThreadLocal[SQLSession]() {
+    override def initialValue = defaultSession
+  }
+
+  @transient
+  protected[sql] val defaultSession = createSession()
 
   sparkContext.getConf.getAll.foreach {
     case (key, value) if key.startsWith("spark.sql") => setConf(key, value)
@@ -194,6 +206,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * }}}
    *
    * @group basic
+   * TODO move to SQLSession?
    */
   @transient
   val udf: UDFRegistration = new UDFRegistration(this)
@@ -1057,6 +1070,32 @@ class SQLContext(@transient val sparkContext: SparkContext)
     override val extendedCheckRules = Seq(
       sources.PreWriteCheck(catalog)
     )
+  }
+
+
+  protected[sql] def openSession(): SQLSession = {
+    detachSession()
+    val session = createSession()
+    tlSession.set(session)
+
+    session
+  }
+
+  protected[sql] def currentSession(): SQLSession = {
+    tlSession.get()
+  }
+
+  protected[sql] def createSession(): SQLSession = {
+    new this.SQLSession()
+  }
+
+  protected[sql] def detachSession(): Unit = {
+    tlSession.remove()
+  }
+
+  protected[sql] class SQLSession {
+    // Note that this is a lazy val so we can override the default value in subclasses.
+    protected[sql] lazy val conf: SQLConf = new SQLConf
   }
 
   /**
