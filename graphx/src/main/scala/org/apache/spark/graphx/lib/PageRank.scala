@@ -207,15 +207,20 @@ object PageRank extends Logging {
     val personalized = srcId isDefined
     val src: VertexId = srcId.getOrElse(-1L)
 
+
     // Define the three functions needed to implement PageRank in the GraphX
     // version of Pregel
     def vertexProgram(id: VertexId, attr: (Double, Double), msgSum: Double): (Double, Double) = {
       val (oldPR, lastDelta) = attr
+      val newPR = oldPR + (1.0 - resetProb) * msgSum
+      (newPR, newPR - oldPR)
+    }
+
+    def personalizedVertexProgram(id: VertexId, attr: (Double, Double), msgSum: Double): (Double, Double) = {
+      val (oldPR, lastDelta) = attr
       var teleport = oldPR
-      if (personalized) {
-        val delta = if (src==id) 1.0 else 0.0
-        teleport = oldPR*delta
-      }
+      val delta = if (src==id) 1.0 else 0.0
+      teleport = oldPR*delta
 
       val newPR = teleport + (1.0 - resetProb) * msgSum
       (newPR, newPR - oldPR)
@@ -235,9 +240,16 @@ object PageRank extends Logging {
     val initialMessage = resetProb / (1.0 - resetProb)
 
     // Execute a dynamic version of Pregel.
-    Pregel(pagerankGraph, initialMessage, activeDirection = EdgeDirection.Out)(
-      vertexProgram, sendMessage, messageCombiner)
-      .mapVertices((vid, attr) => attr._1)
+    if (personalized) {
+      Pregel(pagerankGraph, initialMessage, activeDirection = EdgeDirection.Out)(
+        personalizedVertexProgram, sendMessage, messageCombiner)
+        .mapVertices((vid, attr) => attr._1)
+    } else {
+      Pregel(pagerankGraph, initialMessage, activeDirection = EdgeDirection.Out)(
+        vertexProgram, sendMessage, messageCombiner)
+        .mapVertices((vid, attr) => attr._1)
+    }
+
   } // end of deltaPageRank
 
 }
