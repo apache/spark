@@ -81,6 +81,18 @@ case class Time(private val millis: Long) {
 
   override def toString: String = (millis.toString + " ms")
 
+  override def hashCode: Int = {
+    milliseconds.hashCode()
+  }
+
+  override def equals(o2: Any): Boolean = {
+    if (o2 == null || !o2.isInstanceOf[Time]) {
+      false
+    } else {
+      o2.asInstanceOf[Time].millis == millis
+    }
+  }
+
 }
 
 object Time {

@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.scheduler
 
-import java.util.{Comparator, TreeMap, TreeSet}
+import java.util.{Comparator, HashMap, TreeSet}
 
 import scala.collection.JavaConversions._
 import scala.util.{Failure, Success, Try}
@@ -47,8 +47,9 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   private val ssc = jobScheduler.ssc
   private val conf = ssc.conf
   private val graph = ssc.graph
-  private val completedBothCheckpoints = new TreeMap[Time, Boolean](new TimeComparator)
-  private val batchesGenerated = new TreeSet[Time](new TimeComparator)
+  private lazy val completedBothCheckpoints = new HashMap[Time, Boolean]()
+  private lazy val batchesGenerated = new TreeSet[Time](new TimeComparator)
+  private val noConcurrentJobs = ssc.sc.conf.getInt("spark.streaming.concurrentJobs", 1) == 1
 
   val clock = {
     val clockClass = ssc.sc.conf.get(
