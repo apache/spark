@@ -21,6 +21,7 @@ import javax.ws.rs.{GET, PathParam, Produces, QueryParam}
 import javax.ws.rs.core.MediaType
 
 import org.apache.spark.executor.{InputMetrics => InternalInputMetrics, OutputMetrics => InternalOutputMetrics, ShuffleReadMetrics => InternalShuffleReadMetrics, ShuffleWriteMetrics => InternalShuffleWriteMetrics, TaskMetrics => InternalTaskMetrics}
+import org.apache.spark.scheduler.{AccumulableInfo => InternalAccumulableInfo}
 import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.status.api._
 import org.apache.spark.ui.SparkUI
@@ -87,6 +88,9 @@ object AllStagesResource {
     } else {
       None
     }
+
+    val accumulableInfo = stageUiData.accumulables.values.map { convertAccumulableInfo }.toSeq
+
     new StageData(
       status = status,
       stageId = stageInfo.stageId,
@@ -107,6 +111,7 @@ object AllStagesResource {
       schedulingPool = stageUiData.schedulingPool,
       name = stageInfo.name,
       details = stageInfo.details,
+      accumulatorUpdates = accumulableInfo,
       tasks = taskData,
       executorSummary = executorSummary
     )
@@ -135,10 +140,16 @@ object AllStagesResource {
       host = uiData.taskInfo.host,
       taskLocality = uiData.taskInfo.taskLocality.toString(),
       speculative = uiData.taskInfo.speculative,
+      accumulatorUpdates = uiData.taskInfo.accumulables.map { convertAccumulableInfo },
       errorMessage = uiData.errorMessage,
       taskMetrics = uiData.taskMetrics.map { convertUiTaskMetrics }
     )
   }
+
+  def convertAccumulableInfo(acc: InternalAccumulableInfo): AccumulableInfo = {
+    new AccumulableInfo(acc.id, acc.name, acc.value)
+  }
+
 
   def convertUiTaskMetrics(internal: InternalTaskMetrics): TaskMetrics = {
     new TaskMetrics(

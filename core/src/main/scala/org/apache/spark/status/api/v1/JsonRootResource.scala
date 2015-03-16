@@ -101,7 +101,8 @@ private[spark] trait UIRoot {
    */
   def withSparkUI[T](appId: String)(f: SparkUI => T): T = {
     getSparkUI(appId) match {
-      case Some(ui) => f(ui)
+      case Some(ui) =>
+        f(ui)
       case None => throw new NotFoundException("no such app: " + appId)
     }
   }

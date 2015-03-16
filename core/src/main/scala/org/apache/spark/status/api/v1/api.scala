@@ -135,7 +135,7 @@ class StageData(
   val details: String,
   val schedulingPool: String,
 
-  //TODO what to do about accumulables?
+  val accumulatorUpdates: Seq[AccumulableInfo],
   val tasks: Option[Map[Long, TaskData]],
   val executorSummary:Option[Map[String,ExecutorStageSummary]]
 )
@@ -149,6 +149,7 @@ class TaskData(
   val host: String,
   val taskLocality: String,
   val speculative: Boolean,
+  val accumulatorUpdates: Seq[AccumulableInfo],
   val errorMessage: Option[String] = None,
   val taskMetrics: Option[TaskMetrics] = None
 )
@@ -191,3 +192,18 @@ class ShuffleWriteMetrics(
   val writeTime: Long,
   val recordsWritten: Long
 )
+
+class AccumulableInfo (
+  val id: Long,
+  val name: String,
+  //no partial updates, since they aren't logged.  We can add them later
+  val value: String) {
+
+  override def equals(other: Any): Boolean = other match {
+    case acc: AccumulableInfo =>
+      this.id == acc.id && this.name == acc.name &&
+        this.value == acc.value
+    case _ => false
+  }
+}
+

@@ -18,6 +18,7 @@
   "name" : "map at <console>:14",
   "details" : "org.apache.spark.rdd.RDD.map(RDD.scala:271)\n$line10.$read$$iwC$$iwC$$iwC$$iwC.<init>(<console>:14)\n$line10.$read$$iwC$$iwC$$iwC.<init>(<console>:19)\n$line10.$read$$iwC$$iwC.<init>(<console>:21)\n$line10.$read$$iwC.<init>(<console>:23)\n$line10.$read.<init>(<console>:25)\n$line10.$read$.<init>(<console>:29)\n$line10.$read$.<clinit>(<console>)\n$line10.$eval$.<init>(<console>:7)\n$line10.$eval$.<clinit>(<console>)\n$line10.$eval.$print(<console>)\nsun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)\nsun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:57)\nsun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)\njava.lang.reflect.Method.invoke(Method.java:606)\norg.apache.spark.repl.SparkIMain$ReadEvalPrint.call(SparkIMain.scala:852)\norg.apache.spark.repl.SparkIMain$Request.loadAndRun(SparkIMain.scala:1125)\norg.apache.spark.repl.SparkIMain.loadAndRunReq$1(SparkIMain.scala:674)\norg.apache.spark.repl.SparkIMain.interpret(SparkIMain.scala:705)\norg.apache.spark.repl.SparkIMain.interpret(SparkIMain.scala:669)",
   "schedulingPool" : "default",
+  "accumulatorUpdates" : [ ],
   "tasks" : {
     "8" : {
       "taskId" : 8,
@@ -28,6 +29,7 @@
       "host" : "localhost",
       "taskLocality" : "PROCESS_LOCAL",
       "speculative" : false,
+      "accumulatorUpdates" : [ ],
       "taskMetrics" : {
         "executorDeserializeTime" : 1,
         "executorRunTime" : 435,
@@ -56,6 +58,7 @@
       "host" : "localhost",
       "taskLocality" : "PROCESS_LOCAL",
       "speculative" : false,
+      "accumulatorUpdates" : [ ],
       "taskMetrics" : {
         "executorDeserializeTime" : 2,
         "executorRunTime" : 434,
@@ -84,6 +87,7 @@
       "host" : "localhost",
       "taskLocality" : "PROCESS_LOCAL",
       "speculative" : false,
+      "accumulatorUpdates" : [ ],
       "taskMetrics" : {
         "executorDeserializeTime" : 2,
         "executorRunTime" : 434,
@@ -112,6 +116,7 @@
       "host" : "localhost",
       "taskLocality" : "PROCESS_LOCAL",
       "speculative" : false,
+      "accumulatorUpdates" : [ ],
       "taskMetrics" : {
         "executorDeserializeTime" : 2,
         "executorRunTime" : 434,
@@ -140,6 +145,7 @@
       "host" : "localhost",
       "taskLocality" : "PROCESS_LOCAL",
       "speculative" : false,
+      "accumulatorUpdates" : [ ],
       "taskMetrics" : {
         "executorDeserializeTime" : 2,
         "executorRunTime" : 434,
@@ -168,6 +174,7 @@
       "host" : "localhost",
       "taskLocality" : "PROCESS_LOCAL",
       "speculative" : false,
+      "accumulatorUpdates" : [ ],
       "taskMetrics" : {
         "executorDeserializeTime" : 1,
         "executorRunTime" : 436,
@@ -196,6 +203,7 @@
       "host" : "localhost",
       "taskLocality" : "PROCESS_LOCAL",
       "speculative" : false,
+      "accumulatorUpdates" : [ ],
       "taskMetrics" : {
         "executorDeserializeTime" : 2,
         "executorRunTime" : 434,
@@ -224,6 +232,7 @@
       "host" : "localhost",
       "taskLocality" : "PROCESS_LOCAL",
       "speculative" : false,
+      "accumulatorUpdates" : [ ],
       "taskMetrics" : {
         "executorDeserializeTime" : 1,
         "executorRunTime" : 435,
