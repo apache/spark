@@ -20,11 +20,12 @@ from numpy import array
 from pyspark import RDD
 from pyspark import SparkContext
 from pyspark.mllib.common import callMLlibFunc, callJavaFunc, _py2java, _java2py
-from pyspark.mllib.linalg import DenseVector, SparseVector, _convert_to_vector
+from pyspark.mllib.linalg import SparseVector, _convert_to_vector
 from pyspark.mllib.stat.distribution import MultivariateGaussian
 from pyspark.mllib.util import Saveable, Loader, inherit_doc
 
 __all__ = ['KMeansModel', 'KMeans', 'GaussianMixtureModel', 'GaussianMixture']
+
 
 @inherit_doc
 class KMeansModel(Saveable, Loader):
