@@ -19,16 +19,13 @@ package org.apache.spark.network.sasl;
 
 import java.util.concurrent.ConcurrentMap;
 
-import com.google.common.base.Charsets;
 import com.google.common.collect.Maps;
-import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
-import org.apache.spark.network.protocol.Encodable;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
 

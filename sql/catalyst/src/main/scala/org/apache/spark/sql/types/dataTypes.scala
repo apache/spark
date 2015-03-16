@@ -240,7 +240,6 @@ object DataType {
 
 /**
  * :: DeveloperApi ::
- *
  * The base type of all Spark SQL data types.
  *
  * @group dataType
@@ -282,7 +281,6 @@ abstract class DataType {
 
 /**
  * :: DeveloperApi ::
- *
  * The data type representing `NULL` values. Please use the singleton [[DataTypes.NullType]].
  *
  * @group dataType
@@ -342,7 +340,6 @@ protected[sql] abstract class NativeType extends DataType {
 
 /**
  * :: DeveloperApi ::
- *
  * The data type representing `String` values. Please use the singleton [[DataTypes.StringType]].
  *
  * @group dataType
@@ -369,7 +366,6 @@ case object StringType extends StringType
 
 /**
  * :: DeveloperApi ::
- *
  * The data type representing `Array[Byte]` values.
  * Please use the singleton [[DataTypes.BinaryType]].
  *
@@ -405,7 +401,6 @@ case object BinaryType extends BinaryType
 
 /**
  * :: DeveloperApi ::
- *
  * The data type representing `Boolean` values. Please use the singleton [[DataTypes.BooleanType]].
  *
  *@group dataType
@@ -432,7 +427,6 @@ case object BooleanType extends BooleanType
 
 /**
  * :: DeveloperApi ::
- *
  * The data type representing `java.sql.Timestamp` values.
  * Please use the singleton [[DataTypes.TimestampType]].
  *
@@ -464,7 +458,6 @@ case object TimestampType extends TimestampType
 
 /**
  * :: DeveloperApi ::
- *
  * The data type representing `java.sql.Date` values.
  * Please use the singleton [[DataTypes.DateType]].
  *
@@ -492,6 +485,12 @@ class DateType private() extends NativeType {
 case object DateType extends DateType
 
 
+/**
+ * :: DeveloperApi ::
+ * Numeric data types.
+ *
+ * @group dataType
+ */
 abstract class NumericType extends NativeType with PrimitiveType {
   // Unfortunately we can't get this implicitly as that breaks Spark Serialization. In order for
   // implicitly[Numeric[JvmType]] to be valid, we have to change JvmType from a type variable to a
@@ -523,7 +522,6 @@ protected[sql] sealed abstract class IntegralType extends NumericType {
 
 /**
  * :: DeveloperApi ::
- *
  * The data type representing `Long` values. Please use the singleton [[DataTypes.LongType]].
  *
  * @group dataType
@@ -554,7 +552,6 @@ case object LongType extends LongType
 
 /**
  * :: DeveloperApi ::
- *
  * The data type representing `Int` values. Please use the singleton [[DataTypes.IntegerType]].
  *
  * @group dataType
@@ -585,7 +582,6 @@ case object IntegerType extends IntegerType
 
 /**
  * :: DeveloperApi ::
- *
  * The data type representing `Short` values. Please use the singleton [[DataTypes.ShortType]].
  *
  * @group dataType
@@ -616,7 +612,6 @@ case object ShortType extends ShortType
 
 /**
  * :: DeveloperApi ::
- *
  * The data type representing `Byte` values. Please use the singleton [[DataTypes.ByteType]].
  *
  * @group dataType
@@ -666,7 +661,6 @@ case class PrecisionInfo(precision: Int, scale: Int)
 
 /**
  * :: DeveloperApi ::
- *
  * The data type representing `java.math.BigDecimal` values.
  * A Decimal that might have fixed precision and scale, or unlimited values for these.
  *
@@ -745,7 +739,6 @@ object DecimalType {
 
 /**
  * :: DeveloperApi ::
- *
  * The data type representing `Double` values. Please use the singleton [[DataTypes.DoubleType]].
  *
  * @group dataType
@@ -775,7 +768,6 @@ case object DoubleType extends DoubleType
 
 /**
  * :: DeveloperApi ::
- *
  * The data type representing `Float` values. Please use the singleton [[DataTypes.FloatType]].
  *
  * @group dataType
@@ -811,7 +803,6 @@ object ArrayType {
 
 /**
  * :: DeveloperApi ::
- *
  * The data type for collections of multiple values.
  * Internally these are represented as columns that contain a ``scala.collection.Seq``.
  *
@@ -854,7 +845,6 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
 
 /**
  * A field inside a StructType.
- *
  * @param name The name of this field.
  * @param dataType The data type of this field.
  * @param nullable Indicates if values of this field can be `null` values.
@@ -949,7 +939,6 @@ object StructType {
 
 /**
  * :: DeveloperApi ::
- *
  * A [[StructType]] object can be constructed by
  * {{{
  * StructType(fields: Seq[StructField])
@@ -1118,7 +1107,6 @@ object MapType {
 
 /**
  * :: DeveloperApi ::
- *
  * The data type for Maps. Keys in a map are not allowed to have `null` values.
  *
  * Please use [[DataTypes.createMapType()]] to create a specific instance.

@@ -18,34 +18,22 @@
 #
 
 # Figure out where Spark is installed
-FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
+export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 
-# Export this as SPARK_HOME
-export SPARK_HOME="$FWDIR"
-
-source "$FWDIR/bin/utils.sh"
-
-source "$FWDIR"/bin/load-spark-env.sh
+source "$SPARK_HOME"/bin/load-spark-env.sh
 
 function usage() {
+  if [ -n "$1" ]; then
+    echo $1
+  fi
   echo "Usage: ./bin/pyspark [options]" 1>&2
-  "$FWDIR"/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
-  exit 0
+  "$SPARK_HOME"/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
+  exit $2
 }
+export -f usage
 
 if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
   usage
-fi
-
-# Exit if the user hasn't compiled Spark
-if [ ! -f "$FWDIR/RELEASE" ]; then
-  # Exit if the user hasn't compiled Spark
-  ls "$FWDIR"/assembly/target/scala-$SPARK_SCALA_VERSION/spark-assembly*hadoop*.jar >& /dev/null
-  if [[ $? != 0 ]]; then
-    echo "Failed to find Spark assembly in $FWDIR/assembly/target" 1>&2
-    echo "You need to build Spark before running this program" 1>&2
-    exit 1
-  fi
 fi
 
 # In Spark <= 1.1, setting IPYTHON=1 would cause the driver to be launched using the `ipython`
@@ -95,26 +83,13 @@ export PYTHONPATH="$SPARK_HOME/python/lib/py4j-0.8.2.1-src.zip:$PYTHONPATH"
 
 # Load the PySpark shell.py script when ./pyspark is used interactively:
 export OLD_PYTHONSTARTUP="$PYTHONSTARTUP"
-export PYTHONSTARTUP="$FWDIR/python/pyspark/shell.py"
-
-# Build up arguments list manually to preserve quotes and backslashes.
-# We export Spark submit arguments as an environment variable because shell.py must run as a
-# PYTHONSTARTUP script, which does not take in arguments. This is required for IPython notebooks.
-SUBMIT_USAGE_FUNCTION=usage
-gatherSparkSubmitOpts "$@"
-PYSPARK_SUBMIT_ARGS=""
-whitespace="[[:space:]]"
-for i in "${SUBMISSION_OPTS[@]}"; do
-  if [[ $i =~ \" ]]; then i=$(echo $i | sed 's/\"/\\\"/g'); fi
-  if [[ $i =~ $whitespace ]]; then i=\"$i\"; fi
-  PYSPARK_SUBMIT_ARGS="$PYSPARK_SUBMIT_ARGS $i"
-done
-export PYSPARK_SUBMIT_ARGS
+export PYTHONSTARTUP="$SPARK_HOME/python/pyspark/shell.py"
 
 # For pyspark tests
 if [[ -n "$SPARK_TESTING" ]]; then
   unset YARN_CONF_DIR
   unset HADOOP_CONF_DIR
+  export PYSPARK_SUBMIT_ARGS=pyspark-shell
   if [[ -n "$PYSPARK_DOC_TEST" ]]; then
     exec "$PYSPARK_DRIVER_PYTHON" -m doctest $1
   else
@@ -123,14 +98,6 @@ if [[ -n "$SPARK_TESTING" ]]; then
   exit
 fi
 
-# If a python file is provided, directly run spark-submit.
-if [[ "$1" =~ \.py$ ]]; then
-  echo -e "\nWARNING: Running python applications through ./bin/pyspark is deprecated as of Spark 1.0." 1>&2
-  echo -e "Use ./bin/spark-submit <python file>\n" 1>&2
-  primary="$1"
-  shift
-  gatherSparkSubmitOpts "$@"
-  exec "$FWDIR"/bin/spark-submit "${SUBMISSION_OPTS[@]}" "$primary" "${APPLICATION_OPTS[@]}"
-else
-  exec "$PYSPARK_DRIVER_PYTHON" $PYSPARK_DRIVER_PYTHON_OPTS
-fi
+export PYSPARK_DRIVER_PYTHON
+export PYSPARK_DRIVER_PYTHON_OPTS
+exec "$SPARK_HOME"/bin/spark-submit pyspark-shell-main "$@"
