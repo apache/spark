@@ -26,7 +26,6 @@ import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.axpy
-import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.spark.rdd.RDD
 
 /**
@@ -69,8 +68,17 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
 
   /**
    * Set the maximal number of iterations for L-BFGS. Default 100.
+   * @deprecated use [[LBFGS#setNumIterations]] instead
    */
+  @deprecated("use setNumIterations instead", "1.1.0")
   def setMaxNumIterations(iters: Int): this.type = {
+    this.setNumIterations(iters)
+  }
+
+  /**
+   * Set the maximal number of iterations for L-BFGS. Default 100.
+   */
+  def setNumIterations(iters: Int): this.type = {
     this.maxNumIterations = iters
     this
   }

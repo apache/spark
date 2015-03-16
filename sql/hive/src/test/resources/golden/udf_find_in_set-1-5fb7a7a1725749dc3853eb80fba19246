@@ -1,7 +1,0 @@
-find_in_set(str,str_array) - Returns the first occurrence  of str in str_array where str_array is a comma-delimited string. Returns null if either argument is null. Returns 0 if the first argument has any commas.
-Example:
-  > SELECT find_in_set('ab','abc,b,ab,c,def') FROM src LIMIT 1;
-  3
-  > SELECT * FROM src1 WHERE NOT find_in_set(key,'311,128,345,956')=0;
-  311  val_311
-  128

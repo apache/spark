@@ -18,11 +18,13 @@
 package org.apache.spark.mllib.regression
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.mllib.feature.StandardScaler
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.mllib.util.MLUtils._
+import org.apache.spark.storage.StorageLevel
 
 /**
  * :: DeveloperApi ::
@@ -73,6 +75,8 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
   def predict(testData: Vector): Double = {
     predictPoint(testData, weights, intercept)
   }
+
+  override def toString() = "(weights=%s, intercept=%s)".format(weights, intercept)
 }
 
 /**
@@ -93,6 +97,44 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   protected var addIntercept: Boolean = false
 
   protected var validateData: Boolean = true
+
+  /**
+   * In `GeneralizedLinearModel`, only single linear predictor is allowed for both weights
+   * and intercept. However, for multinomial logistic regression, with K possible outcomes,
+   * we are training K-1 independent binary logistic regression models which requires K-1 sets
+   * of linear predictor.
+   *
+   * As a result, the workaround here is if more than two sets of linear predictors are needed,
+   * we construct bigger `weights` vector which can hold both weights and intercepts.
+   * If the intercepts are added, the dimension of `weights` will be
+   * (numOfLinearPredictor) * (numFeatures + 1) . If the intercepts are not added,
+   * the dimension of `weights` will be (numOfLinearPredictor) * numFeatures.
+   *
+   * Thus, the intercepts will be encapsulated into weights, and we leave the value of intercept
+   * in GeneralizedLinearModel as zero.
+   */
+  protected var numOfLinearPredictor: Int = 1
+
+  /**
+   * Whether to perform feature scaling before model training to reduce the condition numbers
+   * which can significantly help the optimizer converging faster. The scaling correction will be
+   * translated back to resulting model weights, so it's transparent to users.
+   * Note: This technique is used in both libsvm and glmnet packages. Default false.
+   */
+  private var useFeatureScaling = false
+
+  /**
+   * The dimension of training features.
+   */
+  protected var numFeatures: Int = -1
+
+  /**
+   * Set if the algorithm should use feature scaling to improve the convergence during optimization.
+   */
+  private[mllib] def setFeatureScaling(useFeatureScaling: Boolean): this.type = {
+    this.useFeatureScaling = useFeatureScaling
+    this
+  }
 
   /**
    * Create a model given the weights and intercept
@@ -121,8 +163,30 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    * RDD of LabeledPoint entries.
    */
   def run(input: RDD[LabeledPoint]): M = {
-    val numFeatures: Int = input.first().features.size
-    val initialWeights = Vectors.dense(new Array[Double](numFeatures))
+    if (numFeatures < 0) {
+      numFeatures = input.map(_.features.size).first()
+    }
+
+    /**
+     * When `numOfLinearPredictor > 1`, the intercepts are encapsulated into weights,
+     * so the `weights` will include the intercepts. When `numOfLinearPredictor == 1`,
+     * the intercept will be stored as separated value in `GeneralizedLinearModel`.
+     * This will result in different behaviors since when `numOfLinearPredictor == 1`,
+     * users have no way to set the initial intercept, while in the other case, users
+     * can set the intercepts as part of weights.
+     *
+     * TODO: See if we can deprecate `intercept` in `GeneralizedLinearModel`, and always
+     * have the intercept as part of weights to have consistent design.
+     */
+    val initialWeights = {
+      if (numOfLinearPredictor == 1) {
+        Vectors.dense(new Array[Double](numFeatures))
+      } else if (addIntercept) {
+        Vectors.dense(new Array[Double]((numFeatures + 1) * numOfLinearPredictor))
+      } else {
+        Vectors.dense(new Array[Double](numFeatures * numOfLinearPredictor))
+      }
+    }
     run(input, initialWeights)
   }
 
@@ -132,33 +196,123 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    */
   def run(input: RDD[LabeledPoint], initialWeights: Vector): M = {
 
+    if (input.getStorageLevel == StorageLevel.NONE) {
+      logWarning("The input data is not directly cached, which may hurt performance if its"
+        + " parent RDDs are also uncached.")
+    }
+
     // Check the data properties before running the optimizer
     if (validateData && !validators.forall(func => func(input))) {
       throw new SparkException("Input validation failed.")
     }
 
-    // Prepend an extra variable consisting of all 1.0's for the intercept.
-    val data = if (addIntercept) {
-      input.map(labeledPoint => (labeledPoint.label, appendBias(labeledPoint.features)))
+    /*
+     * Scaling columns to unit variance as a heuristic to reduce the condition number:
+     *
+     * During the optimization process, the convergence (rate) depends on the condition number of
+     * the training dataset. Scaling the variables often reduces this condition number
+     * heuristically, thus improving the convergence rate. Without reducing the condition number,
+     * some training datasets mixing the columns with different scales may not be able to converge.
+     *
+     * GLMNET and LIBSVM packages perform the scaling to reduce the condition number, and return
+     * the weights in the original scale.
+     * See page 9 in http://cran.r-project.org/web/packages/glmnet/glmnet.pdf
+     *
+     * Here, if useFeatureScaling is enabled, we will standardize the training features by dividing
+     * the variance of each column (without subtracting the mean), and train the model in the
+     * scaled space. Then we transform the coefficients from the scaled space to the original scale
+     * as GLMNET and LIBSVM do.
+     *
+     * Currently, it's only enabled in LogisticRegressionWithLBFGS
+     */
+    val scaler = if (useFeatureScaling) {
+      new StandardScaler(withStd = true, withMean = false).fit(input.map(_.features))
     } else {
-      input.map(labeledPoint => (labeledPoint.label, labeledPoint.features))
+      null
     }
 
-    val initialWeightsWithIntercept = if (addIntercept) {
+    // Prepend an extra variable consisting of all 1.0's for the intercept.
+    // TODO: Apply feature scaling to the weight vector instead of input data.
+    val data =
+      if (addIntercept) {
+        if (useFeatureScaling) {
+          input.map(lp => (lp.label, appendBias(scaler.transform(lp.features)))).cache()
+        } else {
+          input.map(lp => (lp.label, appendBias(lp.features))).cache()
+        }
+      } else {
+        if (useFeatureScaling) {
+          input.map(lp => (lp.label, scaler.transform(lp.features))).cache()
+        } else {
+          input.map(lp => (lp.label, lp.features))
+        }
+      }
+
+    /**
+     * TODO: For better convergence, in logistic regression, the intercepts should be computed
+     * from the prior probability distribution of the outcomes; for linear regression,
+     * the intercept should be set as the average of response.
+     */
+    val initialWeightsWithIntercept = if (addIntercept && numOfLinearPredictor == 1) {
       appendBias(initialWeights)
     } else {
+      /** If `numOfLinearPredictor > 1`, initialWeights already contains intercepts. */
       initialWeights
     }
 
     val weightsWithIntercept = optimizer.optimize(data, initialWeightsWithIntercept)
 
-    val intercept = if (addIntercept) weightsWithIntercept(weightsWithIntercept.size - 1) else 0.0
-    val weights =
-      if (addIntercept) {
-        Vectors.dense(weightsWithIntercept.toArray.slice(0, weightsWithIntercept.size - 1))
+    val intercept = if (addIntercept && numOfLinearPredictor == 1) {
+      weightsWithIntercept(weightsWithIntercept.size - 1)
+    } else {
+      0.0
+    }
+
+    var weights = if (addIntercept && numOfLinearPredictor == 1) {
+      Vectors.dense(weightsWithIntercept.toArray.slice(0, weightsWithIntercept.size - 1))
+    } else {
+      weightsWithIntercept
+    }
+
+    /**
+     * The weights and intercept are trained in the scaled space; we're converting them back to
+     * the original scale.
+     *
+     * Math shows that if we only perform standardization without subtracting means, the intercept
+     * will not be changed. w_i = w_i' / v_i where w_i' is the coefficient in the scaled space, w_i
+     * is the coefficient in the original space, and v_i is the variance of the column i.
+     */
+    if (useFeatureScaling) {
+      if (numOfLinearPredictor == 1) {
+        weights = scaler.transform(weights)
       } else {
-        weightsWithIntercept
+        /**
+         * For `numOfLinearPredictor > 1`, we have to transform the weights back to the original
+         * scale for each set of linear predictor. Note that the intercepts have to be explicitly
+         * excluded when `addIntercept == true` since the intercepts are part of weights now.
+         */
+        var i = 0
+        val n = weights.size / numOfLinearPredictor
+        val weightsArray = weights.toArray
+        while (i < numOfLinearPredictor) {
+          val start = i * n
+          val end = (i + 1) * n - { if (addIntercept) 1 else 0 }
+
+          val partialWeightsArray = scaler.transform(
+            Vectors.dense(weightsArray.slice(start, end))).toArray
+
+          System.arraycopy(partialWeightsArray, 0, weightsArray, start, partialWeightsArray.size)
+          i += 1
+        }
+        weights = Vectors.dense(weightsArray)
       }
+    }
+
+    // Warn at the end of the run as well, for increased visibility.
+    if (input.getStorageLevel == StorageLevel.NONE) {
+      logWarning("The input data was not directly cached, which may hurt performance if its"
+        + " parent RDDs are also uncached.")
+    }
 
     createModel(weights, intercept)
   }

@@ -22,8 +22,8 @@ import com.codahale.metrics.{Gauge, MetricRegistry}
 import org.apache.spark.metrics.source.Source
 
 class ApplicationSource(val application: ApplicationInfo) extends Source {
-  val metricRegistry = new MetricRegistry()
-  val sourceName = "%s.%s.%s".format("application", application.desc.name,
+  override val metricRegistry = new MetricRegistry()
+  override val sourceName = "%s.%s.%s".format("application", application.desc.name,
     System.currentTimeMillis())
 
   metricRegistry.register(MetricRegistry.name("status"), new Gauge[String] {

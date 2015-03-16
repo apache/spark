@@ -44,9 +44,9 @@ PR_REMOTE_NAME = os.environ.get("PR_REMOTE_NAME", "apache-github")
 # Remote name which points to Apache git
 PUSH_REMOTE_NAME = os.environ.get("PUSH_REMOTE_NAME", "apache")
 # ASF JIRA username
-JIRA_USERNAME = os.environ.get("JIRA_USERNAME", "")
+JIRA_USERNAME = os.environ.get("JIRA_USERNAME", "pwendell")
 # ASF JIRA password
-JIRA_PASSWORD = os.environ.get("JIRA_PASSWORD", "")
+JIRA_PASSWORD = os.environ.get("JIRA_PASSWORD", "35500")
 
 GITHUB_BASE = "https://github.com/apache/spark/pull"
 GITHUB_API_BASE = "https://api.github.com/repos/apache/spark"
@@ -73,11 +73,10 @@ def fail(msg):
 
 
 def run_cmd(cmd):
+    print cmd
     if isinstance(cmd, list):
-        print " ".join(cmd)
         return subprocess.check_output(cmd)
     else:
-        print cmd
         return subprocess.check_output(cmd.split(" "))
 
 
@@ -215,14 +214,9 @@ def fix_version_from_branch(branch, versions):
         return filter(lambda x: x.name.startswith(branch_ver), versions)[-1]
 
 
-def resolve_jira(title, merge_branches, comment):
+def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
     asf_jira = jira.client.JIRA({'server': JIRA_API_BASE},
                                 basic_auth=(JIRA_USERNAME, JIRA_PASSWORD))
-
-    default_jira_id = ""
-    search = re.findall("SPARK-[0-9]{4,5}", title)
-    if len(search) > 0:
-        default_jira_id = search[0]
 
     jira_id = raw_input("Enter a JIRA id [%s]: " % default_jira_id)
     if jira_id == "":
@@ -250,6 +244,8 @@ def resolve_jira(title, merge_branches, comment):
     versions = asf_jira.project_versions("SPARK")
     versions = sorted(versions, key=lambda x: x.name, reverse=True)
     versions = filter(lambda x: x.raw['released'] is False, versions)
+    # Consider only x.y.z versions
+    versions = filter(lambda x: re.match('\d+\.\d+\.\d+', x.name), versions)
 
     default_fix_versions = map(lambda x: fix_version_from_branch(x, versions).name, merge_branches)
     for v in default_fix_versions:
@@ -279,6 +275,15 @@ def resolve_jira(title, merge_branches, comment):
         jira_id, resolve["id"], fixVersions=jira_fix_versions, comment=comment)
 
     print "Succesfully resolved %s with fixVersions=%s!" % (jira_id, fix_versions)
+
+
+def resolve_jira_issues(title, merge_branches, comment):
+    jira_ids = re.findall("SPARK-[0-9]{4,5}", title)
+
+    if len(jira_ids) == 0:
+        resolve_jira_issue(merge_branches, comment)
+    for jira_id in jira_ids:
+        resolve_jira_issue(merge_branches, comment, jira_id)
 
 
 branches = get_json("%s/branches" % GITHUB_API_BASE)
@@ -339,7 +344,7 @@ if JIRA_IMPORTED:
     if JIRA_USERNAME and JIRA_PASSWORD:
         continue_maybe("Would you like to update an associated JIRA?")
         jira_comment = "Issue resolved by pull request %s\n[%s/%s]" % (pr_num, GITHUB_BASE, pr_num)
-        resolve_jira(title, merged_refs, jira_comment)
+        resolve_jira_issues(title, merged_refs, jira_comment)
     else:
         print "JIRA_USERNAME and JIRA_PASSWORD not set"
         print "Exiting without trying to close the associated JIRA."

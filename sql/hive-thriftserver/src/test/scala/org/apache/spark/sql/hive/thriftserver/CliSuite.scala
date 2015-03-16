@@ -18,41 +18,109 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.io.{BufferedReader, InputStreamReader, PrintWriter}
+import java.io._
+
+import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.duration._
+import scala.concurrent.{Await, Promise}
+import scala.sys.process.{Process, ProcessLogger}
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
-class CliSuite extends FunSuite with BeforeAndAfterAll with TestUtils {
-  val WAREHOUSE_PATH = TestUtils.getWarehousePath("cli")
-  val METASTORE_PATH = TestUtils.getMetastorePath("cli")
+import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.util.getTempFilePath
 
-  override def beforeAll() {
-    val jdbcUrl = s"jdbc:derby:;databaseName=$METASTORE_PATH;create=true"
-    val commands =
-      s"""../../bin/spark-sql
+class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
+  def runCliWithin(
+      timeout: FiniteDuration,
+      extraArgs: Seq[String] = Seq.empty)(
+      queriesAndExpectedAnswers: (String, String)*) {
+
+    val (queries, expectedAnswers) = queriesAndExpectedAnswers.unzip
+    val warehousePath = getTempFilePath("warehouse")
+    val metastorePath = getTempFilePath("metastore")
+    val cliScript = "../../bin/spark-sql".split("/").mkString(File.separator)
+
+    val command = {
+      val jdbcUrl = s"jdbc:derby:;databaseName=$metastorePath;create=true"
+      s"""$cliScript
          |  --master local
-         |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}="$jdbcUrl"
-         |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$WAREHOUSE_PATH
-       """.stripMargin.split("\\s+")
+         |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$jdbcUrl
+         |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
+         |  --driver-class-path ${sys.props("java.class.path")}
+       """.stripMargin.split("\\s+").toSeq ++ extraArgs
+    }
 
-    val pb = new ProcessBuilder(commands: _*)
-    process = pb.start()
-    outputWriter = new PrintWriter(process.getOutputStream, true)
-    inputReader = new BufferedReader(new InputStreamReader(process.getInputStream))
-    errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream))
-    waitForOutput(inputReader, "spark-sql>")
+    var next = 0
+    val foundAllExpectedAnswers = Promise.apply[Unit]()
+    val queryStream = new ByteArrayInputStream(queries.mkString("\n").getBytes)
+    val buffer = new ArrayBuffer[String]()
+    val lock = new Object
+
+    def captureOutput(source: String)(line: String): Unit = lock.synchronized {
+      buffer += s"$source> $line"
+      // If we haven't found all expected answers and another expected answer comes up...
+      if (next < expectedAnswers.size && line.startsWith(expectedAnswers(next))) {
+        next += 1
+        // If all expected answers have been found...
+        if (next == expectedAnswers.size) {
+          foundAllExpectedAnswers.trySuccess(())
+        }
+      }
+    }
+
+    // Searching expected output line from both stdout and stderr of the CLI process
+    val process = (Process(command, None) #< queryStream).run(
+      ProcessLogger(captureOutput("stdout"), captureOutput("stderr")))
+
+    try {
+      Await.result(foundAllExpectedAnswers.future, timeout)
+    } catch { case cause: Throwable =>
+      logError(
+        s"""
+           |=======================
+           |CliSuite failure output
+           |=======================
+           |Spark SQL CLI command line: ${command.mkString(" ")}
+           |
+           |Executed query $next "${queries(next)}",
+           |But failed to capture expected output "${expectedAnswers(next)}" within $timeout.
+           |
+           |${buffer.mkString("\n")}
+           |===========================
+           |End CliSuite failure output
+           |===========================
+         """.stripMargin, cause)
+      throw cause
+    } finally {
+      warehousePath.delete()
+      metastorePath.delete()
+      process.destroy()
+    }
   }
 
-  override def afterAll() {
-    process.destroy()
-    process.waitFor()
+  test("Simple commands") {
+    val dataFilePath =
+      Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
+
+    runCliWithin(3.minute)(
+      "CREATE TABLE hive_test(key INT, val STRING);"
+        -> "OK",
+      "SHOW TABLES;"
+        -> "hive_test",
+      s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE hive_test;"
+        -> "OK",
+      "CACHE TABLE hive_test;"
+        -> "Time taken: ",
+      "SELECT COUNT(*) FROM hive_test;"
+        -> "5",
+      "DROP TABLE hive_test;"
+        -> "Time taken: "
+    )
   }
 
-  test("simple commands") {
-    val dataFilePath = getDataFile("data/files/small_kv.txt")
-    executeQuery("create table hive_test1(key int, val string);")
-    executeQuery("load data local inpath '" + dataFilePath+ "' overwrite into table hive_test1;")
-    executeQuery("cache table hive_test1", "Time taken")
+  test("Single command with -e") {
+    runCliWithin(1.minute, Seq("-e", "SHOW DATABASES;"))("" -> "OK")
   }
 }

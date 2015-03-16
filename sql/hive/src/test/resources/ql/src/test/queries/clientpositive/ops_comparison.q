@@ -1,3 +1,4 @@
+set hive.fetch.task.conversion=more;
 
 select 1.0 < 2.0 from src limit 1;
 select 2.0 < 2.0 from src limit 1;

@@ -9,7 +9,7 @@ CREATE TABLE table1 (
 DESCRIBE table1;
 DESCRIBE EXTENDED table1;
 
-LOAD DATA LOCAL INPATH '../data/files/create_nested_type.txt' OVERWRITE INTO TABLE table1;
+LOAD DATA LOCAL INPATH '../../data/files/create_nested_type.txt' OVERWRITE INTO TABLE table1;
 
 SELECT * from table1;
 

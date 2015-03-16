@@ -17,40 +17,7 @@ rem See the License for the specific language governing permissions and
 rem limitations under the License.
 rem
 
-set SPARK_HOME=%~dp0..
-set ORIG_ARGS=%*
+rem This is the entry point for running Spark submit. To avoid polluting the
+rem environment, it just launches a new cmd to do the real work.
 
-rem Clear the values of all variables used
-set DEPLOY_MODE=
-set DRIVER_MEMORY=
-set SPARK_SUBMIT_LIBRARY_PATH=
-set SPARK_SUBMIT_CLASSPATH=
-set SPARK_SUBMIT_OPTS=
-set SPARK_DRIVER_MEMORY=
-
-:loop
-if [%1] == [] goto continue
-  if [%1] == [--deploy-mode] (
-    set DEPLOY_MODE=%2
-  ) else if [%1] == [--driver-memory] (
-    set DRIVER_MEMORY=%2
-  ) else if [%1] == [--driver-library-path] (
-    set SPARK_SUBMIT_LIBRARY_PATH=%2
-  ) else if [%1] == [--driver-class-path] (
-    set SPARK_SUBMIT_CLASSPATH=%2
-  ) else if [%1] == [--driver-java-options] (
-    set SPARK_SUBMIT_OPTS=%2
-  )
-  shift
-goto loop
-:continue
-
-if [%DEPLOY_MODE%] == [] (
-  set DEPLOY_MODE=client
-)
-
-if not [%DRIVER_MEMORY%] == [] if [%DEPLOY_MODE%] == [client] (
-  set SPARK_DRIVER_MEMORY=%DRIVER_MEMORY%
-)
-
-cmd /V /E /C %SPARK_HOME%\bin\spark-class.cmd org.apache.spark.deploy.SparkSubmit %ORIG_ARGS%
+cmd /V /E /C %~dp0spark-submit2.cmd %*

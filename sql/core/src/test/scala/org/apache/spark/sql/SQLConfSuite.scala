@@ -17,18 +17,27 @@
 
 package org.apache.spark.sql
 
+import org.scalatest.FunSuiteLike
+
 import org.apache.spark.sql.test._
 
 /* Implicits */
 import TestSQLContext._
 
-class SQLConfSuite extends QueryTest {
+class SQLConfSuite extends QueryTest with FunSuiteLike {
 
   val testKey = "test.key.0"
   val testVal = "test.val.0"
 
+  test("propagate from spark conf") {
+    // We create a new context here to avoid order dependence with other tests that might call
+    // clear().
+    val newContext = new SQLContext(TestSQLContext.sparkContext)
+    assert(newContext.getConf("spark.sql.testkey", "false") == "true")
+  }
+
   test("programmatic ways of basic setting and getting") {
-    clear()
+    conf.clear()
     assert(getAllConfs.size === 0)
 
     setConf(testKey, testVal)
@@ -42,11 +51,11 @@ class SQLConfSuite extends QueryTest {
     assert(TestSQLContext.getConf(testKey, testVal + "_") == testVal)
     assert(TestSQLContext.getAllConfs.contains(testKey))
 
-    clear()
+    conf.clear()
   }
 
   test("parse SQL set commands") {
-    clear()
+    conf.clear()
     sql(s"set $testKey=$testVal")
     assert(getConf(testKey, testVal + "_") == testVal)
     assert(TestSQLContext.getConf(testKey, testVal + "_") == testVal)
@@ -64,11 +73,11 @@ class SQLConfSuite extends QueryTest {
     sql(s"set $key=")
     assert(getConf(key, "0") == "")
 
-    clear()
+    conf.clear()
   }
 
   test("deprecated property") {
-    clear()
+    conf.clear()
     sql(s"set ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}=10")
     assert(getConf(SQLConf.SHUFFLE_PARTITIONS) == "10")
   }

@@ -80,3 +80,5 @@ if __name__ == "__main__":
         w -= points.map(lambda m: gradient(m, w)).reduce(add)
 
     print "Final w: " + str(w)
+
+    sc.stop()

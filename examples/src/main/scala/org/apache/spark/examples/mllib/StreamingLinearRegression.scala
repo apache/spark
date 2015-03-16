@@ -18,8 +18,7 @@
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.mllib.regression.StreamingLinearRegressionWithSGD
+import org.apache.spark.mllib.regression.{LabeledPoint, StreamingLinearRegressionWithSGD}
 import org.apache.spark.SparkConf
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 
@@ -36,8 +35,7 @@ import org.apache.spark.streaming.{Seconds, StreamingContext}
  *
  * To run on your local machine using the two directories `trainingDir` and `testDir`,
  * with updates every 5 seconds, and 2 features per data point, call:
- *    $ bin/run-example \
- *        org.apache.spark.examples.mllib.StreamingLinearRegression trainingDir testDir 5 2
+ *    $ bin/run-example mllib.StreamingLinearRegression trainingDir testDir 5 2
  *
  * As you add text files to `trainingDir` the model will continuously update.
  * Anytime you add text files to `testDir`, you'll see predictions from the current model.
@@ -56,14 +54,14 @@ object StreamingLinearRegression {
     val conf = new SparkConf().setMaster("local").setAppName("StreamingLinearRegression")
     val ssc = new StreamingContext(conf, Seconds(args(2).toLong))
 
-    val trainingData = MLUtils.loadStreamingLabeledPoints(ssc, args(0))
-    val testData = MLUtils.loadStreamingLabeledPoints(ssc, args(1))
+    val trainingData = ssc.textFileStream(args(0)).map(LabeledPoint.parse)
+    val testData = ssc.textFileStream(args(1)).map(LabeledPoint.parse)
 
     val model = new StreamingLinearRegressionWithSGD()
-      .setInitialWeights(Vectors.dense(Array.fill[Double](args(3).toInt)(0)))
+      .setInitialWeights(Vectors.zeros(args(3).toInt))
 
     model.trainOn(trainingData)
-    model.predictOn(testData).print()
+    model.predictOnValues(testData.map(lp => (lp.label, lp.features))).print()
 
     ssc.start()
     ssc.awaitTermination()

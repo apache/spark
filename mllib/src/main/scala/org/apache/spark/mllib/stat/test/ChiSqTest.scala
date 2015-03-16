@@ -18,12 +18,14 @@
 package org.apache.spark.mllib.stat.test
 
 import breeze.linalg.{DenseMatrix => BDM}
-import cern.jet.stat.Probability.chiSquareComplemented
+import org.apache.commons.math3.distribution.ChiSquaredDistribution
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkException, Logging}
 import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
+
+import scala.collection.mutable
 
 /**
  * Conduct the chi-squared test for the input RDDs using the specified method.
@@ -31,7 +33,7 @@ import org.apache.spark.rdd.RDD
  * on an input of type `Matrix` in which independence between columns is assessed.
  * We also provide a method for computing the chi-squared statistic between each feature and the
  * label for an input `RDD[LabeledPoint]`, return an `Array[ChiSquaredTestResult]` of size =
- * number of features in the inpuy RDD.
+ * number of features in the input RDD.
  *
  * Supported methods for goodness of fit: `pearson` (default)
  * Supported methods for independence: `pearson` (default)
@@ -56,7 +58,7 @@ private[stat] object ChiSqTest extends Logging {
   object NullHypothesis extends Enumeration {
     type NullHypothesis = Value
     val goodnessOfFit = Value("observed follows the same distribution as expected.")
-    val independence = Value("observations in each column are statistically independent.")
+    val independence = Value("the occurrence of the outcomes is statistically independent.")
   }
 
   // Method identification based on input methodName string
@@ -75,21 +77,42 @@ private[stat] object ChiSqTest extends Logging {
    */
   def chiSquaredFeatures(data: RDD[LabeledPoint],
       methodName: String = PEARSON.name): Array[ChiSqTestResult] = {
+    val maxCategories = 10000
     val numCols = data.first().features.size
     val results = new Array[ChiSqTestResult](numCols)
     var labels: Map[Double, Int] = null
-    // At most 100 columns at a time
-    val batchSize = 100
+    // at most 1000 columns at a time
+    val batchSize = 1000
     var batch = 0
     while (batch * batchSize < numCols) {
       // The following block of code can be cleaned up and made public as
       // chiSquared(data: RDD[(V1, V2)])
       val startCol = batch * batchSize
       val endCol = startCol + math.min(batchSize, numCols - startCol)
-      val pairCounts = data.flatMap { p =>
-        // assume dense vectors
-        p.features.toArray.slice(startCol, endCol).zipWithIndex.map { case (feature, col) =>
-          (col, feature, p.label)
+      val pairCounts = data.mapPartitions { iter =>
+        val distinctLabels = mutable.HashSet.empty[Double]
+        val allDistinctFeatures: Map[Int, mutable.HashSet[Double]] =
+          Map((startCol until endCol).map(col => (col, mutable.HashSet.empty[Double])): _*)
+        var i = 1
+        iter.flatMap { case LabeledPoint(label, features) =>
+          if (i % 1000 == 0) {
+            if (distinctLabels.size > maxCategories) {
+              throw new SparkException(s"Chi-square test expect factors (categorical values) but "
+                + s"found more than $maxCategories distinct label values.")
+            }
+            allDistinctFeatures.foreach { case (col, distinctFeatures) =>
+              if (distinctFeatures.size > maxCategories) {
+                throw new SparkException(s"Chi-square test expect factors (categorical values) but "
+                  + s"found more than $maxCategories distinct values in column $col.")
+              }
+            }
+          }
+          i += 1
+          distinctLabels += label
+          features.toArray.view.zipWithIndex.slice(startCol, endCol).map { case (feature, col) =>
+            allDistinctFeatures(col) += feature
+            (col, feature, label)
+          }
         }
       }.countByValue()
 
@@ -116,7 +139,7 @@ private[stat] object ChiSqTest extends Logging {
   }
 
   /*
-   * Pearon's goodness of fit test on the input observed and expected counts/relative frequencies.
+   * Pearson's goodness of fit test on the input observed and expected counts/relative frequencies.
    * Uniform distribution is assumed when `expected` is not passed in.
    */
   def chiSquared(observed: Vector,
@@ -165,12 +188,12 @@ private[stat] object ChiSqTest extends Logging {
       }
     }
     val df = size - 1
-    val pValue = chiSquareComplemented(df, statistic)
+    val pValue = 1.0 - new ChiSquaredDistribution(df).cumulativeProbability(statistic)
     new ChiSqTestResult(pValue, df, statistic, PEARSON.name, NullHypothesis.goodnessOfFit.toString)
   }
 
   /*
-   * Pearon's independence test on the input contingency matrix.
+   * Pearson's independence test on the input contingency matrix.
    * TODO: optimize for SparseMatrix when it becomes supported.
    */
   def chiSquaredMatrix(counts: Matrix, methodName:String = PEARSON.name): ChiSqTestResult = {
@@ -215,7 +238,13 @@ private[stat] object ChiSqTest extends Logging {
       j += 1
     }
     val df = (numCols - 1) * (numRows - 1)
-    val pValue = chiSquareComplemented(df, statistic)
-    new ChiSqTestResult(pValue, df, statistic, methodName, NullHypothesis.independence.toString)
+    if (df == 0) {
+      // 1 column or 1 row. Constant distribution is independent of anything.
+      // pValue = 1.0 and statistic = 0.0 in this case.
+      new ChiSqTestResult(1.0, 0, 0.0, methodName, NullHypothesis.independence.toString)
+    } else {
+      val pValue = 1.0 - new ChiSquaredDistribution(df).cumulativeProbability(statistic)
+      new ChiSqTestResult(pValue, df, statistic, methodName, NullHypothesis.independence.toString)
+    }
   }
 }

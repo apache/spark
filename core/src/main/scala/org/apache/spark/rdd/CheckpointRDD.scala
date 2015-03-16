@@ -95,7 +95,8 @@ private[spark] object CheckpointRDD extends Logging {
 
     val finalOutputName = splitIdToFile(ctx.partitionId)
     val finalOutputPath = new Path(outputDir, finalOutputName)
-    val tempOutputPath = new Path(outputDir, "." + finalOutputName + "-attempt-" + ctx.attemptId)
+    val tempOutputPath =
+      new Path(outputDir, "." + finalOutputName + "-attempt-" + ctx.attemptNumber)
 
     if (fs.exists(tempOutputPath)) {
       throw new IOException("Checkpoint failed: temporary path " +
@@ -119,7 +120,7 @@ private[spark] object CheckpointRDD extends Logging {
         logInfo("Deleting tempOutputPath " + tempOutputPath)
         fs.delete(tempOutputPath, false)
         throw new IOException("Checkpoint failed: failed to save output of task: "
-          + ctx.attemptId + " and final output path does not exist")
+          + ctx.attemptNumber + " and final output path does not exist")
       } else {
         // Some other copy of this task must've finished before us and renamed it
         logInfo("Final output path " + finalOutputPath + " already exists; not overwriting it")
@@ -141,7 +142,7 @@ private[spark] object CheckpointRDD extends Logging {
     val deserializeStream = serializer.deserializeStream(fileInputStream)
 
     // Register an on-task-completion callback to close the input stream.
-    context.addOnCompleteCallback(() => deserializeStream.close())
+    context.addTaskCompletionListener(context => deserializeStream.close())
 
     deserializeStream.asIterator.asInstanceOf[Iterator[T]]
   }
@@ -157,7 +158,7 @@ private[spark] object CheckpointRDD extends Logging {
     val sc = new SparkContext(cluster, "CheckpointRDD Test")
     val rdd = sc.makeRDD(1 to 10, 10).flatMap(x => 1 to 10000)
     val path = new Path(hdfsPath, "temp")
-    val conf = SparkHadoopUtil.get.newConfiguration()
+    val conf = SparkHadoopUtil.get.newConfiguration(new SparkConf())
     val fs = path.getFileSystem(conf)
     val broadcastedConf = sc.broadcast(new SerializableWritable(conf))
     sc.runJob(rdd, CheckpointRDD.writeToFile[Int](path.toString, broadcastedConf, 1024) _)

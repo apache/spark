@@ -1,6 +1,8 @@
 ---
 layout: global
-title: Spark Overview
+displayTitle: Spark Overview
+title: Overview
+description: Apache Spark SPARK_VERSION_SHORT documentation homepage
 ---
 
 Apache Spark is a fast and general-purpose cluster computing system.
@@ -12,7 +14,7 @@ It also supports a rich set of higher-level tools including [Spark SQL](sql-prog
 
 Get Spark from the [downloads page](http://spark.apache.org/downloads.html) of the project website. This documentation is for Spark version {{site.SPARK_VERSION}}. The downloads page 
 contains Spark packages for many popular HDFS versions. If you'd like to build Spark from 
-scratch, visit [building Spark with Maven](building-with-maven.html).
+scratch, visit [Building Spark](building-spark.html).
 
 Spark runs on both Windows and UNIX-like systems (e.g. Linux, Mac OS). It's easy to run
 locally on one machine --- all you need is to have `java` installed on your system `PATH`,
@@ -72,7 +74,7 @@ options for deployment:
   in all supported languages (Scala, Java, Python)
 * Modules built on Spark:
   * [Spark Streaming](streaming-programming-guide.html): processing real-time data streams
-  * [Spark SQL](sql-programming-guide.html): support for structured data and relational queries
+  * [Spark SQL and DataFrames](sql-programming-guide.html): support for structured data and relational queries
   * [MLlib](mllib-guide.html): built-in machine learning library
   * [GraphX](graphx-programming-guide.html): Spark's new API for graph processing
   * [Bagel (Pregel on Spark)](bagel-programming-guide.html): older, simple graph processing model
@@ -103,12 +105,18 @@ options for deployment:
 * [Security](security.html): Spark security support
 * [Hardware Provisioning](hardware-provisioning.html): recommendations for cluster hardware
 * [3<sup>rd</sup> Party Hadoop Distributions](hadoop-third-party-distributions.html): using common Hadoop distributions
-* [Building Spark with Maven](building-with-maven.html): build Spark using the Maven system
+* Integration with other storage systems:
+  * [OpenStack Swift](storage-openstack-swift.html)
+* [Building Spark](building-spark.html): build Spark using the Maven system
 * [Contributing to Spark](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark)
+* [Supplemental Projects](https://cwiki.apache.org/confluence/display/SPARK/Supplemental+Spark+Projects): related third party Spark projects
 
 **External Resources:**
 
 * [Spark Homepage](http://spark.apache.org)
+* [Spark Wiki](https://cwiki.apache.org/confluence/display/SPARK)
+* [Spark Community](http://spark.apache.org/community.html) resources, including local meetups
+* [StackOverflow tag `apache-spark`](http://stackoverflow.com/questions/tagged/apache-spark)
 * [Mailing Lists](http://spark.apache.org/mailing-lists.html): ask questions about Spark here
 * [AMP Camps](http://ampcamp.berkeley.edu/): a series of training camps at UC Berkeley that featured talks and
   exercises about Spark, Spark Streaming, Mesos, and more. [Videos](http://ampcamp.berkeley.edu/3/),
@@ -117,11 +125,3 @@ options for deployment:
 * [Code Examples](http://spark.apache.org/examples.html): more are also available in the `examples` subfolder of Spark ([Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
  [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples),
  [Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python))
-
-# Community
-
-To get help using Spark or keep up with Spark development, sign up for the [user mailing list](http://spark.apache.org/mailing-lists.html).
-
-If you're in the San Francisco Bay Area, there's a regular [Spark meetup](http://www.meetup.com/spark-users/) every few weeks. Come by to meet the developers and other users.
-
-Finally, if you'd like to contribute code to Spark, read [how to contribute](contributing-to-spark.html).

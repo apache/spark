@@ -22,11 +22,10 @@ import scala.collection.mutable.ArrayBuffer
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.types.{StringType, NullType}
+import org.apache.spark.sql.types.{StringType, NullType}
 
 case class Dummy(optKey: Option[Expression]) extends Expression {
   def children = optKey.toSeq
-  def references = Set.empty[Attribute]
   def nullable = true
   def dataType = NullType
   override lazy val resolved = true
@@ -52,7 +51,10 @@ class TreeNodeSuite extends FunSuite {
     val after = before transform { case Literal(5, _) => Literal(1)}
 
     assert(before === after)
-    assert(before.map(_.id) === after.map(_.id))
+    // Ensure that the objects after are the same objects before the transformation.
+    before.map(identity[Expression]).zip(after.map(identity[Expression])).foreach {
+      case (b, a) => assert(b eq a)
+    }
   }
 
   test("collect") {
@@ -101,5 +103,19 @@ class TreeNodeSuite extends FunSuite {
     actual = dummy2 transform toZero
     assert(actual === Dummy(None))
   }
+
+  test("preserves origin") {
+    CurrentOrigin.setPosition(1,1)
+    val add = Add(Literal(1), Literal(1))
+    CurrentOrigin.reset()
+
+    val transformed = add transform {
+      case Literal(1, _) => Literal(2)
+    }
+
+    assert(transformed.origin.line.isDefined)
+    assert(transformed.origin.startPosition.isDefined)
+  }
+
 
 }

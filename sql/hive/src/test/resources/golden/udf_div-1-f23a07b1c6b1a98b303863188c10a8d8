@@ -1,4 +1,0 @@
-a div b - Divide a by b rounded to the long integer
-Example:
-  > SELECT 3 div 2 FROM src LIMIT 1;
-  1

@@ -52,10 +52,7 @@ class HistoryServer(
 
   private val appLoader = new CacheLoader[String, SparkUI] {
     override def load(key: String): SparkUI = {
-      val ui = provider.getAppUI(key)
-      if (ui == null) {
-        throw new NoSuchElementException()
-      }
+      val ui = provider.getAppUI(key).getOrElse(throw new NoSuchElementException())
       attachSparkUI(ui)
       ui
     }
@@ -98,6 +95,10 @@ class HistoryServer(
           case cause: Exception => throw cause
         }
       }
+    }
+    // SPARK-5983 ensure TRACE is not supported
+    protected override def doTrace(req: HttpServletRequest, res: HttpServletResponse): Unit = {
+      res.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED)
     }
   }
 
@@ -161,11 +162,12 @@ class HistoryServer(
 
 /**
  * The recommended way of starting and stopping a HistoryServer is through the scripts
- * start-history-server.sh and stop-history-server.sh. The path to a base log directory
- * is must be specified, while the requested UI port is optional. For example:
+ * start-history-server.sh and stop-history-server.sh. The path to a base log directory,
+ * as well as any other relevant history server configuration, should be specified via
+ * the $SPARK_HISTORY_OPTS environment variable. For example:
  *
- *   ./sbin/spark-history-server.sh /tmp/spark-events
- *   ./sbin/spark-history-server.sh hdfs://1.2.3.4:9000/spark-events
+ *   export SPARK_HISTORY_OPTS="-Dspark.history.fs.logDirectory=/tmp/spark-events"
+ *   ./sbin/start-history-server.sh
  *
  * This launches the HistoryServer as a Spark daemon.
  */

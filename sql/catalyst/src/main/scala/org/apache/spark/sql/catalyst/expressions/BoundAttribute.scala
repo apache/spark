@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.errors.attachTree
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.trees
 
 /**
@@ -32,20 +32,26 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
 
   type EvaluatedType = Any
 
-  override def references = Set.empty
-
   override def toString = s"input[$ordinal]"
 
   override def eval(input: Row): Any = input(ordinal)
 }
 
 object BindReferences extends Logging {
-  def bindReference[A <: Expression](expression: A, input: Seq[Attribute]): A = {
+
+  def bindReference[A <: Expression](
+      expression: A,
+      input: Seq[Attribute],
+      allowFailures: Boolean = false): A = {
     expression.transform { case a: AttributeReference =>
       attachTree(a, "Binding attribute") {
         val ordinal = input.indexWhere(_.exprId == a.exprId)
         if (ordinal == -1) {
-          sys.error(s"Couldn't find $a in ${input.mkString("[", ",", "]")}")
+          if (allowFailures) {
+            a
+          } else {
+            sys.error(s"Couldn't find $a in ${input.mkString("[", ",", "]")}")
+          }
         } else {
           BoundReference(ordinal, a.dataType, a.nullable)
         }

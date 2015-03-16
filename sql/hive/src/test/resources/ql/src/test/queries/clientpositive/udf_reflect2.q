@@ -1,3 +1,5 @@
+set hive.fetch.task.conversion=more;
+
 DESCRIBE FUNCTION reflect2;
 DESCRIBE FUNCTION EXTENDED reflect2;
 

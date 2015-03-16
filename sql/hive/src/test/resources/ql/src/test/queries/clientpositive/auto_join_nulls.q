@@ -1,7 +1,7 @@
 set hive.auto.convert.join = true;
 
 CREATE TABLE myinput1(key int, value int);
-LOAD DATA LOCAL INPATH '../data/files/in1.txt' INTO TABLE myinput1;
+LOAD DATA LOCAL INPATH '../../data/files/in1.txt' INTO TABLE myinput1;
 
 SELECT sum(hash(a.key,a.value,b.key,b.value)) FROM myinput1 a JOIN myinput1 b;
 SELECT sum(hash(a.key,a.value,b.key,b.value)) FROM myinput1 a LEFT OUTER JOIN myinput1 b;
