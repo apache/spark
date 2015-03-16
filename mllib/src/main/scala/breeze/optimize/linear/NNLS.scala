@@ -51,8 +51,6 @@ class NNLS(val maxIters: Int = -1) extends SerializableLogging {
   private def steplen(ata: BDM, dir: BDV, res: BDV,
               tmp: BDV): Double = {
     val top = dir.dot(res)
-    //tmp := mult(ata, dir)
-    //tmp := ata * dir
     gemv(1.0, ata, dir, 0.0, tmp)
     // Push the denominator upward very slightly to avoid infinities and silliness
     top / (tmp.dot(dir) + 1e-20)
@@ -113,7 +111,6 @@ class NNLS(val maxIters: Int = -1) extends SerializableLogging {
       val iterMax = if (maxIters < 0) Math.max(400, 20 * n) else maxIters
 
       // find the residual
-      //res := ata * x
       gemv(1.0, ata, x, 0.0, res)
       res -= atb
       grad := res
@@ -181,7 +178,8 @@ class NNLS(val maxIters: Int = -1) extends SerializableLogging {
     iterations(ata, atb).last
   }
 
-  def minimize(ata: DenseMatrix[Double], atb: DenseVector[Double]): DenseVector[Double] = {
+  def minimize(ata: DenseMatrix[Double],
+               atb: DenseVector[Double]): DenseVector[Double] = {
     minimizeAndReturnState(ata, atb).x
   }
 
