@@ -61,13 +61,26 @@ test_that("cleanClosure on R functions", {
   actual <- get("g", envir = env, inherits = FALSE)
   expect_equal(actual, g)
 
-  # Test for recursive closure capture for a free variable of a function.
+  base <- c(1, 2, 3)
+  l <- list(field = matrix(1))
+  field <- matrix(2)
+  defUse <- 3
   g <- function(x) { x + y }
-  f <- function(x) { lapply(x, g) + 1 }
+  f <- function(x) {
+    defUse <- base::as.integer(x) + 1  # Test for access operators `::`.
+    lapply(x, g) + 1  # Test for capturing function call "g"'s closure as a argument of lapply.
+    l$field[1,1] <- 3  # Test for access operators `$`.
+    res <- defUse + l$field[1,]  # Test for def-use chain of "defUse", and "" symbol.
+    f(res)  # Test for recursive calls.
+  }
   newF <- cleanClosure(f)
   env <- environment(newF)
-  expect_equal(length(ls(env)), 1)  # Only "g". "y" should be in the environemnt of g.
-  expect_equal(ls(env), "g")
+  expect_equal(length(ls(env)), 3)  # Only "g", "l" and "f". No "base", "field" or "defUse".
+  expect_true("g" %in% ls(env))
+  expect_true("l" %in% ls(env))
+  expect_true("f" %in% ls(env))
+  expect_equal(get("l", envir = env, inherits = FALSE), l)
+  # "y" should be in the environemnt of g.
   newG <- get("g", envir = env, inherits = FALSE)
   env <- environment(newG)
   expect_equal(length(ls(env)), 1)
@@ -82,20 +95,6 @@ test_that("cleanClosure on R functions", {
   newF <- cleanClosure(f)
   env <- environment(newF)
   expect_equal(length(ls(env)), 0)  # "y" and "g" should not be included.
-  
-  # Test for access operators `$`, `::` and `:::`.
-  l <- list(a = 1)
-  a <- 2
-  base <- c(1, 2, 3)
-  f <- function(x) {
-    z <- base::as.integer(x) + 1
-    l$a <- 3
-    z + l$a
-  }
-  newF <- cleanClosure(f)
-  env <- environment(newF)
-  expect_equal(ls(env), "l")  # "base" and "a" should not be included.
-  expect_equal(get("l", envir = env, inherits = FALSE), l)
   
   # Test for overriding variables in base namespace (Issue: SparkR-196).
   nums <- as.list(1:10)
