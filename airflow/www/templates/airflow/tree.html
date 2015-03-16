@@ -23,7 +23,6 @@
 $('span.status_square').tooltip({html: true});
 
 var data = {{ data|safe }};
-console.log(data);
 var barHeight = 20;
 var axisHeight = 20;
 var square_x = 300;
@@ -39,6 +38,11 @@ var i = 0,
 
 var tree = d3.layout.tree().nodeSize([0, 25]);
 var nodes = tree.nodes(data);
+var nodeobj = {};
+for (i=0; i<nodes.length; i++) {
+    node = nodes[i];
+    nodeobj[node.name] = node;
+}
 
 var diagonal = d3.svg.diagonal()
     .projection(function(d) { return [d.y, d.x]; });
@@ -160,7 +164,10 @@ function update(source) {
       .enter()
       .append('rect')
       .on("click", function(d){
-        call_modal(d.task_id, d.execution_date);
+        if(nodeobj[d.task_id].operator=='SubDagOperator')
+            call_modal(d.task_id, d.execution_date, true);
+        else
+            call_modal(d.task_id, d.execution_date);
       })
       .attr("class", function(d) {return "state " + d.state})
       .attr("data-toggle", "tooltip")
@@ -280,8 +287,6 @@ function toggles(clicked_d) {
 }
 // Toggle children on click.
 function click(d) {
-  console.log(d);
-
   if (d.children || d._children){
     if (d.children) {
       d._children = d.children;

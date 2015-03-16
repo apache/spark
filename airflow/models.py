@@ -93,8 +93,8 @@ class DagBag(object):
         dttm = datetime.fromtimestamp(os.path.getmtime(filepath))
         mod_name, file_ext = os.path.splitext(os.path.split(filepath)[-1])
 
-        # Skip file if no obvious references to airflow or DAG are found.
         if safe_mode:
+            # Skip file if no obvious references to airflow or DAG are found.
             f = open(filepath, 'r')
             content = f.read()
             f.close()
@@ -111,18 +111,29 @@ class DagBag(object):
             except:
                 logging.error("Failed to import: " + filepath)
                 self.file_last_changed[filepath] = dttm
-                # logging.error("Exception: " + str(sys.exc_info()))
-                # traceback.print_exc(file=sys.stdout)
                 return
 
             for dag in m.__dict__.values():
                 if type(dag) == DAG:
                     dag.full_filepath = filepath
-                    self.dags[dag.dag_id] = dag
-                    dag.resolve_template_files()
-                    logging.info('Loaded DAG {dag}'.format(**locals()))
+                    self.bag_dag(dag)
 
             self.file_last_changed[filepath] = dttm
+
+    def bag_dag(self, dag):
+        '''
+        Adds the DAG into the bag, recurses into sub dags.
+        '''
+        self.dags[dag.dag_id] = dag
+        dag.resolve_template_files()
+        for task in dag.tasks:
+            # Late import to prevent circular imports
+            from airflow.operators import SubDagOperator
+            if isinstance(task, SubDagOperator):
+                task.subdag.full_filepath = dag.full_filepath
+                task.subdag.parent_dag = dag
+                self.bag_dag(task.subdag)
+        logging.info('Loaded DAG {dag}'.format(**locals()))
 
     def collect_dags(
             self,
@@ -819,6 +830,7 @@ class BaseOperator(Base):
     template_ext = []
     # Defines the color in the UI
     ui_color = '#fff'
+    ui_fgcolor = '#000'
 
     __tablename__ = "task"
 
@@ -1170,6 +1182,7 @@ class DAG(Base):
         self.user_defined_macros = user_defined_macros
         self.default_args = default_args or {}
         self.params = params
+        self.parent_dag = None  # Gets set when DAGs are loaded
 
     def __repr__(self):
         return "<DAG: {self.dag_id}>".format(self=self)
@@ -1419,11 +1432,11 @@ class DAG(Base):
 
     def run(
             self, start_date=None, end_date=None, mark_success=False,
-            include_adhoc=False, local=False):
+            include_adhoc=False, local=False, executor=None):
         from airflow.jobs import BackfillJob
-        if local:
+        if not executor and local:
             executor = LocalExecutor()
-        else:
+        elif not executor:
             executor = DEFAULT_EXECUTOR
         job = BackfillJob(
             self,

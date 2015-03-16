@@ -80,7 +80,6 @@
       d3.json("{{ url_for('airflow.dag_stats') }}", function(error, json) {
         for(var dag_id in json) {
             states = json[dag_id];
-            console.log(states);
             g = d3.select('svg#' + dag_id)
               .attr('height', diameter + (stroke_width_hover * 2))
               .attr('width', 4 * (diameter + stroke_width_hover))

@@ -16,3 +16,4 @@ from sensors import TimeSensor
 from email_operator import EmailOperator
 from dummy_operator import DummyOperator
 from hive2samba_operator import Hive2SambaOperator
+from subdag_operator import SubDagOperator

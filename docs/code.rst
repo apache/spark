@@ -11,22 +11,23 @@ BaseOperator documentation for more details.
 .. automodule:: airflow.operators
     :show-inheritance:
     :members: 
-        HiveOperator, 
+        BashOperator,
+        DummyOperator,
+        EmailOperator,
+        ExternalTaskSensor,
+        HdfsSensor,
+        Hive2SambaOperator,
+        HiveOperator,
+        HivePartitionSensor,
         MySqlOperator,
         PostgresOperator, 
-        BashOperator, 
-        PythonOperator, 
-        ExternalTaskSensor, 
-        SqlSensor, 
-        HivePartitionSensor, 
-        HdfsSensor,
-        TimeSensor,
         PrestoCheckOperator,
         PrestoIntervalCheckOperator,
         PrestoValueCheckOperator,
-        Hive2SambaOperator,
-        DummyOperator,
-        EmailOperator
+        PythonOperator,
+        SqlSensor,
+        SubDagOperator,
+        TimeSensor
 
 Macros
 ---------

@@ -114,7 +114,9 @@ class HomeView(AdminIndexView):
     """
     @expose("/")
     def index(self):
-        dags = sorted(dagbag.dags.values(), key=lambda dag: dag.dag_id)
+        dags = dagbag.dags.values()
+        dags = [dag for dag in dags if not dag.parent_dag]
+        dags = sorted(dags, key=lambda dag: dag.dag_id)
         return self.render('airflow/dags.html', dags=dags)
 
 admin = Admin(
@@ -982,6 +984,7 @@ class Airflow(BaseView):
                 'id': task.task_id,
                 'value': {
                     'label': task.task_id,
+                    'labelStyle': "fill:{0};".format(task.ui_fgcolor),
                     'style': "fill:{0};".format(task.ui_color),
                 }
             })
