@@ -1,36 +1,21 @@
 # Worker class
 
-# NOTE: We use "stdin" to get the process stdin instead of the command line
-inputConStdin  <- file("stdin", open = "rb")
-
-outputFileName <- readLines(inputConStdin, n = 1)
-outputCon <- file(outputFileName, open="wb")
-
+rLibDir <- Sys.getenv("SPARKR_RLIBDIR")
 # Set libPaths to include SparkR package as loadNamespace needs this
 # TODO: Figure out if we can avoid this by not loading any objects that require
 # SparkR namespace
-rLibDir <- readLines(inputConStdin, n = 1)
 .libPaths(c(rLibDir, .libPaths()))
-
 suppressPackageStartupMessages(library(SparkR))
 
-inFileName <- readLines(inputConStdin, n = 1)
-
-inputCon <- file(inFileName, open = "rb")
+port <- as.integer(Sys.getenv("SPARKR_WORKER_PORT"))
+inputCon <- socketConnection(port = port, blocking = TRUE, open = "rb")
+outputCon <- socketConnection(port = port, blocking = TRUE, open = "wb")
 
 # read the index of the current partition inside the RDD
 splitIndex <- SparkR:::readInt(inputCon)
 
-# read the function; if used for pairwise RRDD, this is the hash function.
-execLen <- SparkR:::readInt(inputCon)
-execFunctionName <- unserialize(SparkR:::readRawLen(inputCon, execLen))
-
 deserializer <- SparkR:::readString(inputCon)
 serializer <- SparkR:::readString(inputCon)
-
-# Redirect stdout to stderr to prevent print statements from
-# interfering with outputStream
-sink(stderr())
 
 # Include packages as required
 packageNames <- unserialize(SparkR:::readRaw(inputCon))
@@ -39,12 +24,10 @@ for (pkg in packageNames) {
 }
 
 # read function dependencies
-depsLen <- SparkR:::readInt(inputCon)
-if (depsLen > 0) {
-  execFunctionDeps <- SparkR:::readRawLen(inputCon, depsLen)
-  # load the dependencies into current environment
-  load(rawConnection(execFunctionDeps, open='rb'))
-}
+funcLen <- SparkR:::readInt(inputCon)
+computeFunc <- unserialize(SparkR:::readRawLen(inputCon, funcLen))
+env <- environment(computeFunc)
+parent.env(env) <- .GlobalEnv  # Attach under global environment.
 
 # Read and set broadcast variables
 numBroadcastVars <- SparkR:::readInt(inputCon)
@@ -73,7 +56,7 @@ if (isEmpty != 0) {
     } else if (deserializer == "row") {
       data <- SparkR:::readDeserializeRows(inputCon)
     }
-    output <- do.call(execFunctionName, list(splitIndex, data))
+    output <- computeFunc(splitIndex, data)
     if (serializer == "byte") {
       SparkR:::writeRawSerialize(outputCon, output)
     } else if (serializer == "row") {
@@ -96,7 +79,7 @@ if (isEmpty != 0) {
     # Step 1: hash the data to an environment
     hashTupleToEnvir <- function(tuple) {
       # NOTE: execFunction is the hash function here
-      hashVal <- do.call(execFunctionName, list(tuple[[1]]))
+      hashVal <- computeFunc(tuple[[1]])
       bucket <- as.character(hashVal %% numPartitions)
       acc <- res[[bucket]]
       # Create a new accumulator
@@ -126,10 +109,3 @@ if (serializer %in% c("byte", "row")) {
 
 close(outputCon)
 close(inputCon)
-unlink(inFileName)
-
-# Restore stdout
-sink()
-
-# Finally print the name of the output file
-cat(outputFileName, "\n")

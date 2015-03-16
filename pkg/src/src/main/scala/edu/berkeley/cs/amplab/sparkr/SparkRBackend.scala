@@ -1,8 +1,10 @@
 package edu.berkeley.cs.amplab.sparkr
 
-import java.io.IOException
-import java.net.InetSocketAddress
+import java.io.{File, FileOutputStream, DataOutputStream, IOException}
+import java.net.{ServerSocket, InetSocketAddress, Socket}
 import java.util.concurrent.TimeUnit
+
+import scala.util.control.NonFatal
 
 import io.netty.bootstrap.ServerBootstrap
 import io.netty.channel.ChannelFuture
@@ -24,9 +26,7 @@ class SparkRBackend {
   var bootstrap: ServerBootstrap = null
   var bossGroup: EventLoopGroup = null
 
-  def init(port: Int) {
-    val socketAddr = new InetSocketAddress(port)
-
+  def init(): Int = {
     bossGroup = new NioEventLoopGroup(SparkRConf.numServerThreads)
     val workerGroup = bossGroup
     val handler = new SparkRBackendHandler(this)
@@ -51,9 +51,9 @@ class SparkRBackend {
       }
     })
 
-    channelFuture = bootstrap.bind(socketAddr)
+    channelFuture = bootstrap.bind(new InetSocketAddress(0))
     channelFuture.syncUninterruptibly()
-    println("SparkR Backend server started on port :" + port)
+    channelFuture.channel().localAddress().asInstanceOf[InetSocketAddress].getPort()
   }
 
   def run() = {
@@ -80,18 +80,51 @@ class SparkRBackend {
 object SparkRBackend {
   def main(args: Array[String]) {
     if (args.length < 1) {
-      System.err.println("Usage: SparkRBackend <port>")
+      System.err.println("Usage: SparkRBackend <tempFilePath>")
       System.exit(-1)
     }
     val sparkRBackend = new SparkRBackend()
     try {
-      sparkRBackend.init(args(0).toInt)
+      // bind to random port
+      val boundPort = sparkRBackend.init()
+      val serverSocket = new ServerSocket(0, 1)
+      val listenPort = serverSocket.getLocalPort()
+
+      // tell the R process via temporary file
+      val path = args(0)
+      val f = new File(path + ".tmp")
+      val dos = new DataOutputStream(new FileOutputStream(f))
+      dos.writeInt(boundPort)
+      dos.writeInt(listenPort)
+      dos.close()
+      f.renameTo(new File(path))
+
+      // wait for the end of stdin, then exit
+      new Thread("wait for socket to close") {
+        setDaemon(true)
+        override def run(): Unit = {
+          // any un-catched exception will also shutdown JVM
+          val buf = new Array[Byte](1024)
+          // shutdown JVM if R does not connect back in 10 seconds
+          serverSocket.setSoTimeout(10000)
+          try {
+            val inSocket = serverSocket.accept()
+            serverSocket.close()
+            // wait for the end of socket, closed if R process die
+            inSocket.getInputStream().read(buf)
+          } finally {
+            sparkRBackend.close()
+            System.exit(0)
+          }
+        }
+      }.start()
+
       sparkRBackend.run()
     } catch {
       case e: IOException =>
         System.err.println("Server shutting down: failed with exception ", e)
         sparkRBackend.close()
-        System.exit(0)
+        System.exit(1)
     }
     System.exit(0)
   }

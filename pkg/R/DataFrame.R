@@ -393,10 +393,6 @@ setMethod("unpersist",
 #' df <- jsonFile(sqlCtx, path)
 #' newDF <- repartition(df, 2L)
 #'}
-setGeneric("repartition", function(x, numPartitions) { standardGeneric("repartition") })
-
-#' @rdname repartition
-#' @export
 setMethod("repartition",
           signature(x = "DataFrame", numPartitions = "numeric"),
           function(x, numPartitions) {
