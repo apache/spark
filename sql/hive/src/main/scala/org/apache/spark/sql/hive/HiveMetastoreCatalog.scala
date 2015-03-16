@@ -739,6 +739,10 @@ private[hive] case class MetastoreRelation
     }
   }
 
+  override def partResult(plan: LogicalPlan): Boolean = {
+    this.sameResult(plan)
+  }
+
   val tableDesc = HiveShim.getTableDesc(
     Class.forName(
       hiveQlTable.getSerializationLib,
