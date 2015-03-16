@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.dialect.DialectDesc
 import org.apache.spark.sql.types.{BooleanType, StructField, StructType, StringType}
 import org.apache.spark.sql.{DataFrame, SQLConf, SQLContext}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
@@ -204,6 +205,87 @@ case class DescribeCommand(
       val comment = if (field.metadata.contains(cmtKey)) field.metadata.getString(cmtKey) else ""
       Row(field.name, field.dataType.simpleString, comment)
     }
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
+case class ShowDialectsCommand(
+    isExtended: Boolean,
+    isCurrent: Boolean) extends RunnableCommand {
+
+  override val output = {
+    val schema = if (isExtended) {
+      StructType(
+        StructField("dialectName", StringType, false) ::
+          StructField("className", StringType, false) ::
+          StructField("description", StringType, true) :: Nil)
+    } else {
+      StructType(
+        StructField("dialectName", StringType, false) :: Nil)
+    }
+
+    schema.toAttributes
+  }
+
+  override def run(sqlContext: SQLContext) = {
+    val dialects = if (isCurrent) {
+      Seq(sqlContext.dialectManager.getCurrentDialect)
+    } else {
+      sqlContext.dialectManager.getAvailableDialects.map { dialect =>
+        DialectDesc(dialect._1, dialect._2)
+      }.toSeq
+    }
+
+    val rows = if (isExtended) {
+      dialects.map { desc =>
+        Row(desc.name, getClassName(desc.dialect), desc.dialect.description)
+      }
+    } else {
+      dialects.map(desc => Row(desc.name))
+    }
+
+    rows
+  }
+
+  private def getClassName(obj: Any): String = {
+    val fullName = obj.getClass.getCanonicalName
+    if (fullName.endsWith("$")) fullName.dropRight(1) else fullName
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
+case class SwitchDialectCommand(name: String) extends RunnableCommand {
+  override def run(sqlContext: SQLContext) = {
+    sqlContext.dialectManager.switchDialect(name)
+    Seq.empty
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
+case class AddDialectCommand(name: String, fullClassName: String) extends RunnableCommand {
+  override def run(sqlContext: SQLContext) = {
+    sqlContext.dialectManager.registerDialect(name, fullClassName)
+    Seq.empty
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
+case class DropDialectCommand(name: String) extends RunnableCommand {
+  override def run(sqlContext: SQLContext) = {
+    sqlContext.dialectManager.dropDialect(name)
+    Seq.empty
   }
 }
 

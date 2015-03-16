@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, NoRelation}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.{ScalaReflection, expressions}
+import org.apache.spark.sql.dialect.{DialectManager, DefaultDialectManager}
 import org.apache.spark.sql.execution.{Filter, _}
 import org.apache.spark.sql.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
 import org.apache.spark.sql.json._
@@ -122,16 +123,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] lazy val optimizer: Optimizer = DefaultOptimizer
 
   @transient
-  protected[sql] val ddlParser = new DDLParser(sqlParser.apply(_))
-
-  @transient
-  protected[sql] val sqlParser = {
-    val fallback = new catalyst.SqlParser
-    new SparkSQLParser(fallback(_))
-  }
+  protected[sql] val dialectManager: DialectManager = new DefaultDialectManager(this)
 
   protected[sql] def parseSql(sql: String): LogicalPlan = {
-    ddlParser(sql, false).getOrElse(sqlParser(sql))
+    dialectManager.parse(sql)
   }
 
   protected[sql] def executeSql(sql: String): this.QueryExecution = executePlan(parseSql(sql))
@@ -911,11 +906,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group basic
    */
   def sql(sqlText: String): DataFrame = {
-    if (conf.dialect == "sql") {
-      DataFrame(this, parseSql(sqlText))
-    } else {
-      sys.error(s"Unsupported SQL dialect: ${conf.dialect}")
-    }
+    dialectManager.buildDataFrame(sqlText)
   }
 
   /**
