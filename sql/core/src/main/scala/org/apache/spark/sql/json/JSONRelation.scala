@@ -67,10 +67,13 @@ private[sql] class DefaultSource
         case SaveMode.Append =>
           sys.error(s"Append mode is not supported by ${this.getClass.getCanonicalName}")
         case SaveMode.Overwrite => {
-          if (!fs.delete(filesystemPath, true)) {
-            sys.error(
-              s"Unable to clear output directory ${filesystemPath.toString} prior"
-                + s" to CREATE a JSON table AS SELECT")
+          try {
+            fs.delete(filesystemPath, true)
+          } catch {
+            case e: IOException =>
+              throw new IOException(
+                s"Unable to clear output directory ${filesystemPath.toString} prior"
+                  + s" to INSERT OVERWRITE a JSON table:\n${e.toString}")
           }
           true
         }
@@ -114,10 +117,13 @@ private[sql] case class JSONRelation(
     val fs = filesystemPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
 
     if (overwrite) {
-      if (!fs.delete(filesystemPath, true)) {
-        sys.error(
-          s"Unable to clear output directory ${filesystemPath.toString} prior"
-            + s" to CREATE a JSON table AS SELECT")
+      try {
+        fs.delete(filesystemPath, true)
+      } catch {
+        case e: IOException =>
+          throw new IOException(
+            s"Unable to clear output directory ${filesystemPath.toString} prior"
+              + s" to INSERT OVERWRITE a JSON table:\n${e.toString}")
       }
       // Write the data.
       data.toJSON.saveAsTextFile(path)
