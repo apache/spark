@@ -316,6 +316,7 @@ object ALS extends Logging {
   private[recommendation] trait LeastSquaresNESolver extends Serializable {
     /** Solves a least squares problem (possibly with other constraints). */
     def solve(ne: NormalEquation, lambda: Double): Array[Float]
+    def solveTime: Long = 0L
   }
 
   /** QuadraticMinimization solver for least square problems. */
@@ -380,15 +381,18 @@ object ALS extends Logging {
     private val ata = new BrzMatrix[Double](rank, rank)
     private val nnls = new BrzNNLS()
     private val init = nnls.initialState(rank)
+    private var innerSolve = 0L
     /**
      * Solves a nonnegative least squares problem with L2 regularizatin:
      *
-     *   min_x_  norm(A x - b)^2^ + lambda * n * norm(x)^2^
-     *   subject to x >= 0
+     * min_x_  norm(A x - b)^2^ + lambda * n * norm(x)^2^
+     * subject to x >= 0
      */
     override def solve(ne: NormalEquation, lambda: Double): Array[Float] = {
       fillAtA(ne.ata, lambda * ne.n)
-      val x = nnls.minimize(ata, new BrzVector(ne.atb),init.reset()).data
+      val resultState = nnls.minimizeAndReturnState(ata, new BrzVector(ne.atb), init.reset())
+      val x = resultState.x.data
+      innerSolve += resultState.solveTime
       ne.reset()
       x.map(x => x.toFloat)
     }
@@ -414,6 +418,8 @@ object ALS extends Logging {
         i += 1
       }
     }
+
+    override def solveTime = innerSolve
   }
 
   /** Cholesky solver for least square problems. */
@@ -1217,6 +1223,7 @@ object ALS extends Logging {
           j += 1
         }
         logInfo(s"solveTime ${solveTime/1e6} ms")
+        logInfo(s"innerTime ${solver.solveTime/1e6} ms")
         dstFactors
     }
   }
