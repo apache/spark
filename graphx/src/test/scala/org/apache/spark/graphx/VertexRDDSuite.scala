@@ -19,7 +19,7 @@ package org.apache.spark.graphx
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{HashPartitioner, SparkContext}
 import org.apache.spark.storage.StorageLevel
 
 class VertexRDDSuite extends FunSuite with LocalSparkContext {
@@ -58,6 +58,16 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("diff vertices with the non-equal number of partitions") {
+    withSpark { sc =>
+      val vertexA = VertexRDD(sc.parallelize(0 until 24, 3).map(i => (i.toLong, 0)))
+      val vertexB = VertexRDD(sc.parallelize(8 until 16, 2).map(i => (i.toLong, 1)))
+      assert(vertexA.partitions.size != vertexB.partitions.size)
+      val vertexC = vertexA.diff(vertexB)
+      assert(vertexC.map(_._1).collect.toSet === (8 until 16).toSet)
+    }
+  }
+
   test("leftJoin") {
     withSpark { sc =>
       val n = 100
@@ -73,6 +83,19 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("leftJoin vertices with the non-equal number of partitions") {
+    withSpark { sc =>
+      val vertexA = VertexRDD(sc.parallelize(0 until 100, 2).map(i => (i.toLong, 1)))
+      val vertexB = VertexRDD(
+        vertexA.filter(v => v._1 % 2 == 0).partitionBy(new HashPartitioner(3)))
+      assert(vertexA.partitions.size != vertexB.partitions.size)
+      val vertexC = vertexA.leftJoin(vertexB) { (vid, old, newOpt) =>
+        old - newOpt.getOrElse(0)
+      }
+      assert(vertexC.filter(v => v._2 != 0).map(_._1).collect.toSet == (1 to 99 by 2).toSet)
+    }
+  }
+
   test("innerJoin") {
     withSpark { sc =>
       val n = 100
@@ -85,6 +108,19 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
       val evensRDD = evens.map(identity)
       assert(verts.innerJoin(evensRDD) { (id, a, b) => a - b }.collect.toSet ===
         (0 to n by 2).map(x => (x.toLong, 0)).toSet)    }
+  }
+
+  test("innerJoin vertices with the non-equal number of partitions") {
+    withSpark { sc =>
+      val vertexA = VertexRDD(sc.parallelize(0 until 100, 2).map(i => (i.toLong, 1)))
+      val vertexB = VertexRDD(
+        vertexA.filter(v => v._1 % 2 == 0).partitionBy(new HashPartitioner(3)))
+      assert(vertexA.partitions.size != vertexB.partitions.size)
+      val vertexC = vertexA.innerJoin(vertexB) { (vid, old, newVal) =>
+        old - newVal
+      }
+      assert(vertexC.filter(v => v._2 == 0).map(_._1).collect.toSet == (0 to 98 by 2).toSet)
+    }
   }
 
   test("aggregateUsingIndex") {

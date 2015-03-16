@@ -1391,9 +1391,11 @@ Apart from these, the following properties are also available, and may be useful
 Each cluster manager in Spark has additional configuration options. Configurations
 can be found on the pages for each mode:
 
- * [YARN](running-on-yarn.html#configuration)
- * [Mesos](running-on-mesos.html)
- * [Standalone Mode](spark-standalone.html#cluster-launch-scripts)
+##### [YARN](running-on-yarn.html#configuration)
+
+##### [Mesos](running-on-mesos.html#configuration)
+
+##### [Standalone Mode](spark-standalone.html#cluster-launch-scripts)
 
 # Environment Variables
 
