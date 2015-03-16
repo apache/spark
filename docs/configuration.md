@@ -749,12 +749,12 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.files.useFetchCache</code></td>
   <td>true</td>
   <td>
-    If file fetching should use local caching. The improves performance when running multiple
-    executors on the one host and is enabled by default (see
+    If set to true (default), file fetching will use a local cache that is shared by executors
+    that belong to the same application, which can improve task launching performance when
+    running many executors on the same host. If set to false, these caching optimizations will
+    be disabled and all executors will fetch their own copies of files. This optimization may be
+    disabled in order to use Spark local directories that reside on NFS filesystems (see
     <a href="https://issues.apache.org/jira/browse/SPARK-6313">SPARK-6313</a> for more details).
-    When set to true (default) caching is enabled. When set to false, caching optimizations are
-    switched off and no lock files are created, this allows fetchFiles store to reside on a NFS
-    mount.
   </td>
 </tr>
 <tr>
