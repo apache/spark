@@ -137,8 +137,8 @@ class MatricesSuite extends FunSuite {
     val spMat1 = new SparseMatrix(m, n, colPtrs, rowIndices, values)
     val deMat1 = new DenseMatrix(m, n, allValues)
 
-    val spMat2 = deMat1.toSparse()
-    val deMat2 = spMat1.toDense()
+    val spMat2 = deMat1.toSparse
+    val deMat2 = spMat1.toDense
 
     assert(spMat1.toBreeze === spMat2.toBreeze)
     assert(deMat1.toBreeze === deMat2.toBreeze)
@@ -185,8 +185,8 @@ class MatricesSuite extends FunSuite {
     assert(!dA.toArray.eq(dAT.toArray), "has to have a new array")
     assert(dA.values.eq(dAT.transpose.asInstanceOf[DenseMatrix].values), "should not copy array")
 
-    assert(dAT.toSparse().toBreeze === sATexpected.toBreeze)
-    assert(sAT.toDense().toBreeze === dATexpected.toBreeze)
+    assert(dAT.toSparse.toBreeze === sATexpected.toBreeze)
+    assert(sAT.toDense.toBreeze === dATexpected.toBreeze)
   }
 
   test("foreachActive") {

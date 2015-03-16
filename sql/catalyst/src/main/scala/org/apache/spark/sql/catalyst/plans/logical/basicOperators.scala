@@ -23,6 +23,16 @@ import org.apache.spark.sql.types._
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
   def output = projectList.map(_.toAttribute)
+
+  override lazy val resolved: Boolean = {
+    val containsAggregatesOrGenerators = projectList.exists ( _.collect {
+        case agg: AggregateExpression => agg
+        case generator: Generator => generator
+      }.nonEmpty
+    )
+
+    !expressions.exists(!_.resolved) && childrenResolved && !containsAggregatesOrGenerators
+  }
 }
 
 /**
@@ -110,7 +120,8 @@ case class InsertIntoTable(
   override def output = child.output
 
   override lazy val resolved = childrenResolved && child.output.zip(table.output).forall {
-    case (childAttr, tableAttr) => childAttr.dataType == tableAttr.dataType
+    case (childAttr, tableAttr) =>
+      DataType.equalsIgnoreCompatibleNullability(childAttr.dataType, tableAttr.dataType)
   }
 }
 

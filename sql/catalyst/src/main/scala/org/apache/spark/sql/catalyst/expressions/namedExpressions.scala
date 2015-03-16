@@ -40,6 +40,17 @@ abstract class NamedExpression extends Expression {
 
   def name: String
   def exprId: ExprId
+
+  /**
+   * All possible qualifiers for the expression.
+   *
+   * For now, since we do not allow using original table name to qualify a column name once the
+   * table is aliased, this can only be:
+   *
+   * 1. Empty Seq: when an attribute doesn't have a qualifier,
+   *    e.g. top level attributes aliased in the SELECT clause, or column from a LocalRelation.
+   * 2. Single element: either the table name or the alias name of the table.
+   */
   def qualifiers: Seq[String]
 
   def toAttribute: Attribute
@@ -75,7 +86,7 @@ abstract class Attribute extends NamedExpression {
 /**
  * Used to assign a new name to a computation.
  * For example the SQL expression "1 + 1 AS a" could be represented as follows:
- *  Alias(Add(Literal(1), Literal(1), "a")()
+ *  Alias(Add(Literal(1), Literal(1)), "a")()
  *
  * Note that exprId and qualifiers are in a separate parameter list because
  * we only pattern match on child and name.
@@ -188,6 +199,26 @@ case class AttributeReference(
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 
   override def toString: String = s"$name#${exprId.id}$typeSuffix"
+}
+
+/**
+ * A place holder used when printing expressions without debugging information such as the
+ * expression id or the unresolved indicator.
+ */
+case class PrettyAttribute(name: String) extends Attribute with trees.LeafNode[Expression] {
+  type EvaluatedType = Any
+
+  override def toString = name
+
+  override def withNullability(newNullability: Boolean): Attribute = ???
+  override def newInstance(): Attribute = ???
+  override def withQualifiers(newQualifiers: Seq[String]): Attribute = ???
+  override def withName(newName: String): Attribute = ???
+  override def qualifiers: Seq[String] = ???
+  override def exprId: ExprId = ???
+  override def eval(input: Row): EvaluatedType = ???
+  override def nullable: Boolean = ???
+  override def dataType: DataType = NullType
 }
 
 object VirtualColumn {

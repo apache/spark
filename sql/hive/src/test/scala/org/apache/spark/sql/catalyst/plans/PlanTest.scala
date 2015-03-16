@@ -35,11 +35,9 @@ class PlanTest extends FunSuite {
    * we must normalize them to check if two different queries are identical.
    */
   protected def normalizeExprIds(plan: LogicalPlan) = {
-    val list = plan.flatMap(_.expressions.flatMap(_.references).map(_.exprId.id))
-    val minId = if (list.isEmpty) 0 else list.min
     plan transformAllExpressions {
       case a: AttributeReference =>
-        AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(a.exprId.id - minId))
+        AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(0))
     }
   }
 

@@ -21,6 +21,8 @@ import sys
 from threading import Lock
 from tempfile import NamedTemporaryFile
 
+from py4j.java_collections import ListConverter
+
 from pyspark import accumulators
 from pyspark.accumulators import Accumulator
 from pyspark.broadcast import Broadcast
@@ -30,11 +32,10 @@ from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer, \
     PairDeserializer, AutoBatchedSerializer, NoOpSerializer
 from pyspark.storagelevel import StorageLevel
-from pyspark.rdd import RDD
+from pyspark.rdd import RDD, _load_from_socket
 from pyspark.traceback_utils import CallSite, first_spark_call
+from pyspark.status import StatusTracker
 from pyspark.profiler import ProfilerCollector, BasicProfiler
-
-from py4j.java_collections import ListConverter
 
 
 __all__ = ['SparkContext']
@@ -58,11 +59,12 @@ class SparkContext(object):
 
     _gateway = None
     _jvm = None
-    _writeToFile = None
     _next_accum_id = 0
     _active_spark_context = None
     _lock = Lock()
     _python_includes = None  # zip and egg files that need to be added to PYTHONPATH
+
+    PACKAGE_EXTENSIONS = ('.zip', '.egg', '.jar')
 
     def __init__(self, master=None, appName=None, sparkHome=None, pyFiles=None,
                  environment=None, batchSize=0, serializer=PickleSerializer(), conf=None,
@@ -185,14 +187,15 @@ class SparkContext(object):
         for path in self._conf.get("spark.submit.pyFiles", "").split(","):
             if path != "":
                 (dirname, filename) = os.path.split(path)
-                if filename.lower().endswith("zip") or filename.lower().endswith("egg"):
+                if filename[-4:].lower() in self.PACKAGE_EXTENSIONS:
                     self._python_includes.append(filename)
                     sys.path.insert(1, os.path.join(SparkFiles.getRootDirectory(), filename))
 
         # Create a temporary directory inside spark.local.dir:
         local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir(self._jsc.sc().conf())
         self._temp_dir = \
-            self._jvm.org.apache.spark.util.Utils.createTempDir(local_dir).getAbsolutePath()
+            self._jvm.org.apache.spark.util.Utils.createTempDir(local_dir, "pyspark") \
+                .getAbsolutePath()
 
         # profiling stats collected for each PythonRDD
         if self._conf.get("spark.python.profile", "false") == "true":
@@ -217,7 +220,6 @@ class SparkContext(object):
             if not SparkContext._gateway:
                 SparkContext._gateway = gateway or launch_gateway()
                 SparkContext._jvm = SparkContext._gateway.jvm
-                SparkContext._writeToFile = SparkContext._jvm.PythonRDD.writeToFile
 
             if instance:
                 if (SparkContext._active_spark_context and
@@ -704,7 +706,7 @@ class SparkContext(object):
         self.addFile(path)
         (dirname, filename) = os.path.split(path)  # dirname may be directory or HDFS/S3 prefix
 
-        if filename.endswith('.zip') or filename.endswith('.ZIP') or filename.endswith('.egg'):
+        if filename[-4:].lower() in self.PACKAGE_EXTENSIONS:
             self._python_includes.append(filename)
             # for tests in local mode
             sys.path.insert(1, os.path.join(SparkFiles.getRootDirectory(), filename))
@@ -807,6 +809,12 @@ class SparkContext(object):
         """
         self._jsc.sc().cancelAllJobs()
 
+    def statusTracker(self):
+        """
+        Return :class:`StatusTracker` object
+        """
+        return StatusTracker(self._jsc.statusTracker())
+
     def runJob(self, rdd, partitionFunc, partitions=None, allowLocal=False):
         """
         Executes the given partitionFunc on the specified set of partitions,
@@ -830,8 +838,9 @@ class SparkContext(object):
         # by runJob() in order to avoid having to pass a Python lambda into
         # SparkContext#runJob.
         mappedRDD = rdd.mapPartitions(partitionFunc)
-        it = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, javaPartitions, allowLocal)
-        return list(mappedRDD._collect_iterator_through_file(it))
+        port = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, javaPartitions,
+                                          allowLocal)
+        return list(_load_from_socket(port, mappedRDD._jrdd_deserializer))
 
     def show_profiles(self):
         """ Print the profile stats to stdout """

@@ -235,11 +235,23 @@ private[spark] object BLAS extends Serializable with Logging {
    * @param x the vector x that contains the n elements.
    * @param A the symmetric matrix A. Size of n x n.
    */
-  def syr(alpha: Double, x: DenseVector, A: DenseMatrix) {
+  def syr(alpha: Double, x: Vector, A: DenseMatrix) {
     val mA = A.numRows
     val nA = A.numCols
-    require(mA == nA, s"A is not a symmetric matrix. A: $mA x $nA")
+    require(mA == nA, s"A is not a square matrix (and hence is not symmetric). A: $mA x $nA")
     require(mA == x.size, s"The size of x doesn't match the rank of A. A: $mA x $nA, x: ${x.size}")
+
+    x match {
+      case dv: DenseVector => syr(alpha, dv, A)
+      case sv: SparseVector => syr(alpha, sv, A)
+      case _ =>
+        throw new IllegalArgumentException(s"syr doesn't support vector type ${x.getClass}.")
+    }
+  }
+
+  private def syr(alpha: Double, x: DenseVector, A: DenseMatrix) {
+    val nA = A.numRows
+    val mA = A.numCols
 
     nativeBLAS.dsyr("U", x.size, alpha, x.values, 1, A.values, nA)
 
@@ -253,6 +265,26 @@ private[spark] object BLAS extends Serializable with Logging {
       }
       i += 1
     }    
+  }
+
+  private def syr(alpha: Double, x: SparseVector, A: DenseMatrix) {
+    val mA = A.numCols
+    val xIndices = x.indices
+    val xValues = x.values
+    val nnz = xValues.length
+    val Avalues = A.values
+
+    var i = 0
+    while (i < nnz) {
+      val multiplier = alpha * xValues(i)
+      val offset = xIndices(i) * mA
+      var j = 0
+      while (j < nnz) {
+        Avalues(xIndices(j) + offset) += multiplier * xValues(j)
+        j += 1
+      }
+      i += 1
+    }
   }
 
   /**

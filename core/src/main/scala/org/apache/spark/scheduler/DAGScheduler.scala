@@ -26,7 +26,6 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map, Stack}
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import akka.pattern.ask
@@ -38,7 +37,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
-import org.apache.spark.util.{CallSite, EventLoop, SystemClock, Clock, Utils}
+import org.apache.spark.util._
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
 
 /**
@@ -63,7 +62,7 @@ class DAGScheduler(
     mapOutputTracker: MapOutputTrackerMaster,
     blockManagerMaster: BlockManagerMaster,
     env: SparkEnv,
-    clock: Clock = SystemClock)
+    clock: Clock = new SystemClock())
   extends Logging {
 
   def this(sc: SparkContext, taskScheduler: TaskScheduler) = {
@@ -98,7 +97,13 @@ class DAGScheduler(
 
   private[scheduler] val activeJobs = new HashSet[ActiveJob]
 
-  // Contains the locations that each RDD's partitions are cached on
+  /**
+   * Contains the locations that each RDD's partitions are cached on.  This map's keys are RDD ids
+   * and its values are arrays indexed by partition numbers. Each array value is the set of
+   * locations where that RDD partition is cached.
+   *
+   * All accesses to this map should be guarded by synchronizing on it (see SPARK-4454).
+   */
   private val cacheLocs = new HashMap[Int, Array[Seq[TaskLocation]]]
 
   // For tracking failed nodes, we use the MapOutputTracker's epoch number, which is sent with
@@ -125,6 +130,8 @@ class DAGScheduler(
 
   private[scheduler] val eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
   taskScheduler.setDAGScheduler(this)
+
+  private val outputCommitCoordinator = env.outputCommitCoordinator
 
   // Called by TaskScheduler to report task's starting.
   def taskStarted(task: Task[_], taskInfo: TaskInfo) {
@@ -181,7 +188,8 @@ class DAGScheduler(
     eventProcessLoop.post(TaskSetFailed(taskSet, reason))
   }
 
-  private def getCacheLocs(rdd: RDD[_]): Array[Seq[TaskLocation]] = {
+  private def getCacheLocs(rdd: RDD[_]): Array[Seq[TaskLocation]] = cacheLocs.synchronized {
+    // Note: this doesn't use `getOrElse()` because this method is called O(num tasks) times
     if (!cacheLocs.contains(rdd.id)) {
       val blockIds = rdd.partitions.indices.map(index => RDDBlockId(rdd.id, index)).toArray[BlockId]
       val locs = BlockManager.blockIdsToBlockManagers(blockIds, env, blockManagerMaster)
@@ -192,7 +200,7 @@ class DAGScheduler(
     cacheLocs(rdd.id)
   }
 
-  private def clearCacheLocs() {
+  private def clearCacheLocs(): Unit = cacheLocs.synchronized {
     cacheLocs.clear()
   }
 
@@ -488,7 +496,7 @@ class DAGScheduler(
     waiter
   }
 
-  def runJob[T, U: ClassTag](
+  def runJob[T, U](
       rdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int],
@@ -648,7 +656,7 @@ class DAGScheduler(
       // completion events or stage abort
       stageIdToStage -= s.id
       jobIdToStageIds -= job.jobId
-      listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTime(), jobResult))
+      listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), jobResult))
     }
   }
 
@@ -697,7 +705,7 @@ class DAGScheduler(
         stage.latestInfo.stageFailed(stageFailedMessage)
         listenerBus.post(SparkListenerStageCompleted(stage.latestInfo))
       }
-      listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTime(), JobFailed(error)))
+      listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobFailed(error)))
     }
   }
 
@@ -736,7 +744,7 @@ class DAGScheduler(
       logInfo("Missing parents: " + getMissingParentStages(finalStage))
       val shouldRunLocally =
         localExecutionEnabled && allowLocal && finalStage.parents.isEmpty && partitions.length == 1
-      val jobSubmissionTime = clock.getTime()
+      val jobSubmissionTime = clock.getTimeMillis()
       if (shouldRunLocally) {
         // Compute very short actions like first() or take() with no parent stages locally.
         listenerBus.post(
@@ -808,6 +816,7 @@ class DAGScheduler(
     // will be posted, which should always come after a corresponding SparkListenerStageSubmitted
     // event.
     stage.latestInfo = StageInfo.fromStage(stage, Some(partitionsToCompute.size))
+    outputCommitCoordinator.stageStart(stage.id)
     listenerBus.post(SparkListenerStageSubmitted(stage.latestInfo, properties))
 
     // TODO: Maybe we can keep the taskBinary in Stage to avoid serializing it multiple times.
@@ -861,10 +870,11 @@ class DAGScheduler(
       logDebug("New pending tasks: " + stage.pendingTasks)
       taskScheduler.submitTasks(
         new TaskSet(tasks.toArray, stage.id, stage.newAttemptId(), stage.jobId, properties))
-      stage.latestInfo.submissionTime = Some(clock.getTime())
+      stage.latestInfo.submissionTime = Some(clock.getTimeMillis())
     } else {
       // Because we posted SparkListenerStageSubmitted earlier, we should post
       // SparkListenerStageCompleted here in case there are no tasks to run.
+      outputCommitCoordinator.stageEnd(stage.id)
       listenerBus.post(SparkListenerStageCompleted(stage.latestInfo))
       logDebug("Stage " + stage + " is actually done; %b %d %d".format(
         stage.isAvailable, stage.numAvailableOutputs, stage.numPartitions))
@@ -879,8 +889,16 @@ class DAGScheduler(
     if (event.accumUpdates != null) {
       try {
         Accumulators.add(event.accumUpdates)
+
         event.accumUpdates.foreach { case (id, partialValue) =>
-          val acc = Accumulators.originals(id).asInstanceOf[Accumulable[Any, Any]]
+          // In this instance, although the reference in Accumulators.originals is a WeakRef,
+          // it's guaranteed to exist since the event.accumUpdates Map exists
+
+          val acc = Accumulators.originals(id).get match {
+            case Some(accum) => accum.asInstanceOf[Accumulable[Any, Any]]
+            case None => throw new NullPointerException("Non-existent reference to Accumulator")
+          }
+
           // To avoid UI cruft, ignore cases where value wasn't updated
           if (acc.name.isDefined && partialValue != acc.zero) {
             val name = acc.name.get
@@ -909,6 +927,9 @@ class DAGScheduler(
     val stageId = task.stageId
     val taskType = Utils.getFormattedClassName(task)
 
+    outputCommitCoordinator.taskCompleted(stageId, task.partitionId,
+      event.taskInfo.attempt, event.reason)
+
     // The success case is dealt with separately below, since we need to compute accumulator
     // updates before posting.
     if (event.reason != Success) {
@@ -921,16 +942,17 @@ class DAGScheduler(
       // Skip all the actions if the stage has been cancelled.
       return
     }
+
     val stage = stageIdToStage(task.stageId)
 
     def markStageAsFinished(stage: Stage, errorMessage: Option[String] = None) = {
       val serviceTime = stage.latestInfo.submissionTime match {
-        case Some(t) => "%.03f".format((clock.getTime() - t) / 1000.0)
+        case Some(t) => "%.03f".format((clock.getTimeMillis() - t) / 1000.0)
         case _ => "Unknown"
       }
       if (errorMessage.isEmpty) {
         logInfo("%s (%s) finished in %s s".format(stage, stage.name, serviceTime))
-        stage.latestInfo.completionTime = Some(clock.getTime())
+        stage.latestInfo.completionTime = Some(clock.getTimeMillis())
       } else {
         stage.latestInfo.stageFailed(errorMessage.get)
         logInfo("%s (%s) failed in %s s".format(stage, stage.name, serviceTime))
@@ -956,7 +978,7 @@ class DAGScheduler(
                     markStageAsFinished(stage)
                     cleanupStateForJobAndIndependentStages(job)
                     listenerBus.post(
-                      SparkListenerJobEnd(job.jobId, clock.getTime(), JobSucceeded))
+                      SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobSucceeded))
                   }
 
                   // taskSucceeded runs some user code that might throw an exception. Make sure
@@ -1073,6 +1095,9 @@ class DAGScheduler(
           handleExecutorLost(bmAddress.executorId, fetchFailed = true, Some(task.epoch))
         }
 
+      case commitDenied: TaskCommitDenied =>
+        // Do nothing here, left up to the TaskScheduler to decide how to handle denied commits
+
       case ExceptionFailure(className, description, stackTrace, fullStackTrace, metrics) =>
         // Do nothing here, left up to the TaskScheduler to decide how to handle user failures
 
@@ -1169,7 +1194,7 @@ class DAGScheduler(
     }
     val dependentJobs: Seq[ActiveJob] =
       activeJobs.filter(job => stageDependsOn(job.finalStage, failedStage)).toSeq
-    failedStage.latestInfo.completionTime = Some(clock.getTime())
+    failedStage.latestInfo.completionTime = Some(clock.getTimeMillis())
     for (job <- dependentJobs) {
       failJobAndIndependentStages(job, s"Job aborted due to stage failure: $reason")
     }
@@ -1224,7 +1249,7 @@ class DAGScheduler(
     if (ableToCancelStages) {
       job.listener.jobFailed(error)
       cleanupStateForJobAndIndependentStages(job)
-      listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTime(), JobFailed(error)))
+      listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobFailed(error)))
     }
   }
 
@@ -1265,17 +1290,26 @@ class DAGScheduler(
   }
 
   /**
-   * Synchronized method that might be called from other threads.
+   * Gets the locality information associated with a partition of a particular RDD.
+   *
+   * This method is thread-safe and is called from both DAGScheduler and SparkContext.
+   *
    * @param rdd whose partitions are to be looked at
    * @param partition to lookup locality information for
    * @return list of machines that are preferred by the partition
    */
   private[spark]
-  def getPreferredLocs(rdd: RDD[_], partition: Int): Seq[TaskLocation] = synchronized {
+  def getPreferredLocs(rdd: RDD[_], partition: Int): Seq[TaskLocation] = {
     getPreferredLocsInternal(rdd, partition, new HashSet)
   }
 
-  /** Recursive implementation for getPreferredLocs. */
+  /**
+   * Recursive implementation for getPreferredLocs.
+   *
+   * This method is thread-safe because it only accesses DAGScheduler state through thread-safe
+   * methods (getCacheLocs()); please be careful when modifying this method, because any new
+   * DAGScheduler state accessed by it may require additional synchronization.
+   */
   private def getPreferredLocsInternal(
       rdd: RDD[_],
       partition: Int,

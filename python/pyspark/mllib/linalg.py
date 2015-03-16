@@ -29,7 +29,7 @@ import copy_reg
 
 import numpy as np
 
-from pyspark.sql import UserDefinedType, StructField, StructType, ArrayType, DoubleType, \
+from pyspark.sql.types import UserDefinedType, StructField, StructType, ArrayType, DoubleType, \
     IntegerType, ByteType
 
 
@@ -151,6 +151,9 @@ class VectorUDT(UserDefinedType):
             return DenseVector(datum[3])
         else:
             raise ValueError("do not recognize type %r" % tpe)
+
+    def simpleString(self):
+        return "vector"
 
 
 class Vector(object):
