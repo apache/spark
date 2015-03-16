@@ -66,7 +66,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /**
    * @return Spark SQL configuration
    */
-  protected[sql] def conf = tss.get().conf
+  protected[sql] def conf = tlSession.get().conf
 
   /**
    * Set Spark SQL configuration properties.
@@ -143,7 +143,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] def executePlan(plan: LogicalPlan) = new this.QueryExecution(plan)
 
   @transient
-  protected[sql] val tss = new ThreadLocal[SQLSession]() {
+  protected[sql] val tlSession = new ThreadLocal[SQLSession]() {
     override def initialValue = defaultSession
   }
 
@@ -1076,13 +1076,13 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] def openSession(): SQLSession = {
     detachSession()
     val session = createSession()
-    tss.set(session)
+    tlSession.set(session)
 
     session
   }
 
   protected[sql] def currentSession(): SQLSession = {
-    tss.get()
+    tlSession.get()
   }
 
   protected[sql] def createSession(): SQLSession = {
@@ -1090,7 +1090,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   protected[sql] def detachSession(): Unit = {
-    tss.remove()
+    tlSession.remove()
   }
 
   protected[sql] class SQLSession {
