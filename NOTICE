@@ -373,16 +373,6 @@ source copyright:
 Copyright 2010-2012 CS Systèmes d'Information
 ===============================================================================
 
-Proximal algorithms outlined in Proximal.scala (package breeze.optimize.proximal)
-are based on https://github.com/cvxgrp/proximal (see LICENSE for details) and distributed with 
-Copyright (c) 2014 by Debasish Das (Verizon), all rights reserved.
-===============================================================================
-
-QuadraticMinimizer class in package breeze.optimize.proximal and it’s applications to ALS class
-in package org.apache.spark.mllib.recommendation is distributed with Copyright (c) 2014, Debasish Das (Verizon), 
-all rights reserved.
-===============================================================================
-
 The creation of the package "o.a.c.m.analysis.integration.gauss" was inspired
 by an original code donated by Sébastien Brisard.
 ===============================================================================

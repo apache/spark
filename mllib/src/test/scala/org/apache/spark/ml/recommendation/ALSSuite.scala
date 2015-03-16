@@ -19,8 +19,6 @@ package org.apache.spark.ml.recommendation
 
 import java.util.Random
 
-import breeze.numerics.abs
-
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -129,7 +127,7 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
     assert(Vectors.dense(ne0.atb) ~== Vectors.dense(2.5, 5.0) relTol 1e-8)
   }
 
-  test("QuadraticSolver") {
+  test("CholeskySolver") {
     val k = 2
     val ne0 = new NormalEquation(k)
       .add(Array(1.0f, 2.0f), 4.0f)
@@ -138,9 +136,8 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
     val ne1 = new NormalEquation(k)
       .merge(ne0)
 
-    val qm = new QuadraticSolver(2)
-    val x0 = qm.solve(ne0, 0.0).map(_.toDouble)
-
+    val chol = new CholeskySolver
+    val x0 = chol.solve(ne0, 0.0).map(_.toDouble)
     // NumPy code that computes the expected solution:
     // A = np.matrix("1 2; 1 3; 1 4")
     // b = b = np.matrix("3; 6")
@@ -151,7 +148,7 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
     assert(ne0.ata.forall(_ == 0.0))
     assert(ne0.atb.forall(_ == 0.0))
 
-    val x1 = qm.solve(ne1, 0.5).map(_.toDouble)
+    val x1 = chol.solve(ne1, 0.5).map(_.toDouble)
     // NumPy code that computes the expected solution, where lambda is scaled by n:
     // x0 = np.linalg.solve(A.transpose() * A + 0.5 * 3 * np.eye(2), A.transpose() * b)
     assert(Vectors.dense(x1) ~== Vectors.dense(-0.1155556, 3.28) relTol 1e-6)
@@ -452,7 +449,7 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
     val (ratings, _) = genImplicitTestData(numUsers = 20, numItems = 40, rank = 2, noiseStd = 0.01)
     val (userFactors, itemFactors) = ALS.train(ratings, rank = 2, maxIter = 4, nonnegative = true)
     def isNonnegative(factors: RDD[(Int, Array[Float])]): Boolean = {
-      factors.values.map(_.forall(_ >= 0.0)).reduce(_ && _)
+      factors.values.map { _.forall(_ >= 0.0) }.reduce(_ && _)
     }
     assert(isNonnegative(userFactors))
     assert(isNonnegative(itemFactors))

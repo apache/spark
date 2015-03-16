@@ -36,8 +36,6 @@ import org.apache.spark.util.collection.{OpenHashMap, OpenHashSet, SortDataForma
 import org.apache.spark.util.random.XORShiftRandom
 import breeze.optimize.linear.{NNLS=>BrzNNLS}
 import org.apache.spark.mllib.optimization.NNLS
-import breeze.optimize.proximal.QuadraticMinimizer
-import breeze.optimize.proximal.Constraint._
 import breeze.linalg.{DenseMatrix => BrzMatrix}
 import breeze.linalg.{DenseVector => BrzVector}
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
@@ -319,63 +317,6 @@ object ALS extends Logging {
     def solveTime: Long = 0L
   }
 
-  /** QuadraticMinimization solver for least square problems. */
-  private[recommendation] class QuadraticSolver(rank: Int) extends LeastSquaresNESolver {
-    val quadraticMinimizer = QuadraticMinimizer(rank, SMOOTH)
-    /**
-     * Given a triangular matrix in the order of fillXtX above, compute the full symmetric square
-     * matrix that it represents, storing it into destMatrix.
-     */
-    private def fillAtA(triAtA: Array[Double], lambda: Double) {
-      var i = 0
-      var pos = 0
-      var a = 0.0
-      while (i < rank) {
-        var j = 0
-        while (j <= i) {
-          a = triAtA(pos)
-          if (i == j) {
-            quadraticMinimizer.updateGram(i, j, a + lambda)
-          } else {
-            quadraticMinimizer.updateGram(i, j, a)
-            quadraticMinimizer.updateGram(j, i, a)
-          }
-          pos += 1
-          j += 1
-        }
-        i += 1
-      }
-    }
-
-    /** Quadratic Minimization solver for least square problems with non-smooth constraints (L1)
-      *
-      * minimize 0.5x'Hx + c'x + g(z)
-      * s.t Aeq x = beq
-      *
-      * Affine constraints are optional, Supported g(z) are one of the following
-      *
-      * 1. z >= 0
-      * 2. lb <= z <= ub
-      * 3. 1'z = s, s>=0
-      * 4. lambda*L1(z)
-      *
-      * TO DO: Add the remaining constraints
-      *
-      * @param ne a [[NormalEquation]] instance that contains AtA, Atb, and n (number of instances)
-      * @param lambda regularization constant, which will be scaled by n
-      * @return the solution x
-      */
-    override def solve(ne: NormalEquation, lambda: Double): Array[Float] = {
-      require(ne.k == rank, s"ALS:QuadraticSolver rank $rank expected ${ne.k}")
-      fillAtA(ne.ata, lambda * ne.n)
-      val q = new BrzVector(ne.atb)
-      q *= -1.0
-      val x = quadraticMinimizer.minimize(q)
-      ne.reset()
-      x.data.map(x => x.toFloat)
-    }
-  }
-
   /** Breeze NNLS solver. */
   private[recommendation] class BrzNNLSSolver(rank: Int) extends LeastSquaresNESolver {
     private val ata = new BrzMatrix[Double](rank, rank)
@@ -616,14 +557,9 @@ object ALS extends Logging {
         println("Running Breeze NNLSSolver")
         new BrzNNLSSolver(rank)
       }
-      else new NNLSSolver()
-    } else {
-      if (System.getenv("solver") == "breeze") {
-        println("Running Breeze QuadraticSolver")
-        new QuadraticSolver(rank)
-      }
-      else new CholeskySolver()
-    }
+      else
+        new NNLSSolver()
+    } else new CholeskySolver()
 
     val blockRatings = partitionRatings(ratings, userPart, itemPart)
       .persist(intermediateRDDStorageLevel)
