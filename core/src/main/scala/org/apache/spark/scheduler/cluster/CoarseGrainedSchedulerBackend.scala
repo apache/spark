@@ -378,8 +378,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
     }
     // Killing executors means effectively that we want less executors than before, so also update
     // the target number of executors to avoid having the backend allocate new ones.
-    val newTotal = numExistingExecutors + numPendingExecutors - executorsPendingToRemove.size
-      - filteredExecutorIds.size
+    val newTotal = (numExistingExecutors + numPendingExecutors - executorsPendingToRemove.size
+      - filteredExecutorIds.size)
     doRequestTotalExecutors(newTotal)
 
     executorsPendingToRemove ++= filteredExecutorIds
