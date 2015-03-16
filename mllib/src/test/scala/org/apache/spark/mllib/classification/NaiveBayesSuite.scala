@@ -85,6 +85,14 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
     assert(numOfPredictions < input.length / 5)
   }
 
+  test("get, set params") {
+    val nb = new NaiveBayes()
+    nb.setLambda(2.0)
+    assert(nb.getLambda === 2.0)
+    nb.setLambda(3.0)
+    assert(nb.getLambda === 3.0)
+  }
+
   test("Naive Bayes") {
     val nPoints = 10000
 

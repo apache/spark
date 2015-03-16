@@ -1093,7 +1093,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   def addFile(path: String, recursive: Boolean): Unit = {
     val uri = new URI(path)
     val schemeCorrectedPath = uri.getScheme match {
-      case null | "local" => "file:" + uri.getPath
+      case null | "local" => new File(path).getCanonicalFile.toURI.toString
       case _              => path
     }
 
@@ -1104,7 +1104,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       if (!fs.exists(hadoopPath)) {
         throw new FileNotFoundException(s"Added file $hadoopPath does not exist.")
       }
-      val isDir = fs.isDirectory(hadoopPath)
+      val isDir = fs.getFileStatus(hadoopPath).isDir
       if (!isLocal && scheme == "file" && isDir) {
         throw new SparkException(s"addFile does not support local directories when not running " +
           "local mode.")

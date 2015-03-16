@@ -631,11 +631,11 @@ class DataFrame(object):
         for all the available aggregate functions.
 
         >>> df.groupBy().avg().collect()
-        [Row(AVG(age#0)=3.5)]
+        [Row(AVG(age)=3.5)]
         >>> df.groupBy('name').agg({'age': 'mean'}).collect()
-        [Row(name=u'Bob', AVG(age#0)=5.0), Row(name=u'Alice', AVG(age#0)=2.0)]
+        [Row(name=u'Bob', AVG(age)=5.0), Row(name=u'Alice', AVG(age)=2.0)]
         >>> df.groupBy(df.name).avg().collect()
-        [Row(name=u'Bob', AVG(age#0)=5.0), Row(name=u'Alice', AVG(age#0)=2.0)]
+        [Row(name=u'Bob', AVG(age)=5.0), Row(name=u'Alice', AVG(age)=2.0)]
         """
         jcols = ListConverter().convert([_to_java_column(c) for c in cols],
                                         self._sc._gateway._gateway_client)
@@ -647,10 +647,10 @@ class DataFrame(object):
         (shorthand for df.groupBy.agg()).
 
         >>> df.agg({"age": "max"}).collect()
-        [Row(MAX(age#0)=5)]
+        [Row(MAX(age)=5)]
         >>> from pyspark.sql import functions as F
         >>> df.agg(F.min(df.age)).collect()
-        [Row(MIN(age#0)=2)]
+        [Row(MIN(age)=2)]
         """
         return self.groupBy().agg(*exprs)
 
@@ -766,7 +766,7 @@ class GroupedData(object):
 
         >>> from pyspark.sql import functions as F
         >>> gdf.agg(F.min(df.age)).collect()
-        [Row(MIN(age#0)=5), Row(MIN(age#0)=2)]
+        [Row(MIN(age)=5), Row(MIN(age)=2)]
         """
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):
@@ -795,9 +795,9 @@ class GroupedData(object):
         for each group. This is an alias for `avg`.
 
         >>> df.groupBy().mean('age').collect()
-        [Row(AVG(age#0)=3.5)]
+        [Row(AVG(age)=3.5)]
         >>> df3.groupBy().mean('age', 'height').collect()
-        [Row(AVG(age#4L)=3.5, AVG(height#5L)=82.5)]
+        [Row(AVG(age)=3.5, AVG(height)=82.5)]
         """
 
     @df_varargs_api
@@ -806,9 +806,9 @@ class GroupedData(object):
         for each group.
 
         >>> df.groupBy().avg('age').collect()
-        [Row(AVG(age#0)=3.5)]
+        [Row(AVG(age)=3.5)]
         >>> df3.groupBy().avg('age', 'height').collect()
-        [Row(AVG(age#4L)=3.5, AVG(height#5L)=82.5)]
+        [Row(AVG(age)=3.5, AVG(height)=82.5)]
         """
 
     @df_varargs_api
@@ -817,9 +817,9 @@ class GroupedData(object):
         each group.
 
         >>> df.groupBy().max('age').collect()
-        [Row(MAX(age#0)=5)]
+        [Row(MAX(age)=5)]
         >>> df3.groupBy().max('age', 'height').collect()
-        [Row(MAX(age#4L)=5, MAX(height#5L)=85)]
+        [Row(MAX(age)=5, MAX(height)=85)]
         """
 
     @df_varargs_api
@@ -828,9 +828,9 @@ class GroupedData(object):
         each group.
 
         >>> df.groupBy().min('age').collect()
-        [Row(MIN(age#0)=2)]
+        [Row(MIN(age)=2)]
         >>> df3.groupBy().min('age', 'height').collect()
-        [Row(MIN(age#4L)=2, MIN(height#5L)=80)]
+        [Row(MIN(age)=2, MIN(height)=80)]
         """
 
     @df_varargs_api
@@ -839,9 +839,9 @@ class GroupedData(object):
         group.
 
         >>> df.groupBy().sum('age').collect()
-        [Row(SUM(age#0)=7)]
+        [Row(SUM(age)=7)]
         >>> df3.groupBy().sum('age', 'height').collect()
-        [Row(SUM(age#4L)=7, SUM(height#5L)=165)]
+        [Row(SUM(age)=7, SUM(height)=165)]
         """
 
 

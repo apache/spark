@@ -281,7 +281,7 @@ class ReplSuite extends FunSuite {
     assertDoesNotContain("Exception", output)
   }
 
-  if (System.getenv("MESOS_NATIVE_LIBRARY") != null) {
+  if (System.getenv("MESOS_NATIVE_JAVA_LIBRARY") != null) {
     test("running on Mesos") {
       val output = runInterpreter("localquiet",
         """
