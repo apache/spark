@@ -321,13 +321,61 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
     : Graph[VD, ED]
 
   /**
+   * Restricts the graph to only the vertices and edges satisfying the predicates. The resulting
+   * subgraph satisifies
+   *
+   * {{{
+   * V' = {v : for all v in V where vpred(v)}
+   * E' = {(u,v): for all (u,v) in E where epred((u,v)) && vpred(u) && vpred(v)}
+   * }}}
+   *
+   * @param epred the edge predicate, which takes a triplet and
+   * evaluates to true if the edge is to remain in the subgraph.  Note
+   * that only edges where both vertices satisfy the vertex
+   * predicate are considered.
+   *
+   * @param vpred the vertex predicate, which takes a vertex object and
+   * evaluates to true if the vertex is to be included in the subgraph
+   *
+   * @param updateRoutingTable whether to rebuild the routingTable in
+   * VertexRDD to reduce the shuffle when shipping VertexAttributes.
+   *
+   * @return the subgraph containing only the vertices and edges that
+   * satisfy the predicates
+   */
+  def subgraph(
+      epred: EdgeTriplet[VD,ED] => Boolean,
+      vpred: (VertexId, VD) => Boolean,
+      updateRoutingTable: Boolean)
+  : Graph[VD, ED]
+
+  /**
    * Restricts the graph to only the vertices and edges that are also in `other`, but keeps the
    * attributes from this graph.
    * @param other the graph to project this graph onto
+   *
    * @return a graph with vertices and edges that exist in both the current graph and `other`,
    * with vertex and edge data from the current graph
    */
-  def mask[VD2: ClassTag, ED2: ClassTag](other: Graph[VD2, ED2]): Graph[VD, ED]
+  def mask[VD2: ClassTag, ED2: ClassTag](
+      other: Graph[VD2, ED2])
+    : Graph[VD, ED]
+
+  /**
+   * Restricts the graph to only the vertices and edges that are also in `other`, but keeps the
+   * attributes from this graph.
+   * @param other the graph to project this graph onto
+   *
+   * @param updateRoutingTable whether to rebuild the routingTable in VertexRDD to reduce the
+   * shuffle when shipping VertexAttributes.
+   *
+   * @return a graph with vertices and edges that exist in both the current graph and `other`,
+   * with vertex and edge data from the current graph
+   */
+  def mask[VD2: ClassTag, ED2: ClassTag](
+      other: Graph[VD2, ED2],
+      updateRoutingTable: Boolean)
+  : Graph[VD, ED]
 
   /**
    * Merges multiple edges between two vertices into a single edge. For correct results, the graph
@@ -339,6 +387,20 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * @return The resulting graph with a single edge for each (source, dest) vertex pair.
    */
   def groupEdges(merge: (ED, ED) => ED): Graph[VD, ED]
+
+  /**
+   * Merges multiple edges between two vertices into a single edge. For correct results, the graph
+   * must have been partitioned using [[partitionBy]].
+   *
+   * @param merge the user-supplied commutative associative function to merge edge attributes
+   *              for duplicate edges.
+   *
+   * @param updateRoutingTable whether to rebuild the routingTable in VertexRDD to reduce the
+   * shuffle when shipping VertexAttributes.
+   *
+   * @return The resulting graph with a single edge for each (source, dest) vertex pair.
+   */
+  def groupEdges(merge: (ED, ED) => ED, updateRoutingTable: Boolean): Graph[VD, ED]
 
   /**
    * Aggregates values from the neighboring edges and vertices of each vertex.  The user supplied
