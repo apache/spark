@@ -244,12 +244,12 @@ private[sql] case class ParquetRelation2(
      * Refreshes `FileStatus`es, footers, partition spec, and table schema.
      */
     def refresh(): Unit = {
-      val fs = FileSystem.get(sparkContext.hadoopConfiguration)
-
       // Support either reading a collection of raw Parquet part-files, or a collection of folders
       // containing Parquet files (e.g. partitioned Parquet table).
       val baseStatuses = paths.distinct.map { p =>
-        val qualified = fs.makeQualified(new Path(p))
+        val path = new Path(p)
+        val fs = path.getFileSystem(sparkContext.hadoopConfiguration)
+        val qualified = fs.makeQualified(path)
 
         if (!fs.exists(qualified) && maybeSchema.isDefined) {
           fs.mkdirs(qualified)
@@ -262,6 +262,7 @@ private[sql] case class ParquetRelation2(
 
       // Lists `FileStatus`es of all leaf nodes (files) under all base directories.
       val leaves = baseStatuses.flatMap { f =>
+        val fs = f.getPath.getFileSystem(sparkContext.hadoopConfiguration)
         SparkHadoopUtil.get.listLeafStatuses(fs, f.getPath).filter { f =>
           isSummaryFile(f.getPath) ||
             !(f.getPath.getName.startsWith("_") || f.getPath.getName.startsWith("."))
