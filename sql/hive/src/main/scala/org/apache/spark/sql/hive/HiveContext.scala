@@ -210,9 +210,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     }
   }
 
-  protected[hive] def sessionState = tss.get().asInstanceOf[this.SQLSession].sessionState
+  protected[hive] def sessionState = tlSession.get().asInstanceOf[this.SQLSession].sessionState
 
-  protected[hive] def hiveconf = tss.get().asInstanceOf[this.SQLSession].hiveconf
+  protected[hive] def hiveconf = tlSession.get().asInstanceOf[this.SQLSession].hiveconf
 
   override def setConf(key: String, value: String): Unit = {
     super.setConf(key, value)
