@@ -263,15 +263,17 @@ class Analyzer(catalog: Catalog,
             q.asInstanceOf[GroupingAnalytics].gid
           case u @ UnresolvedAttribute(name) if q.isInstanceOf[Sort] =>
             val s = q.asInstanceOf[Sort]
-            val input = s.child match {
-              case Project(list, c) => list.filter {
-                case Alias(g: GetField, _) => false
-                case Alias(g: GetItem, _) => false
-                case _ => true
-              }.map(_.toAttribute)
-              case other => other.output
+            val newChild = s.child match {
+              case Project(list, c) =>
+                val newList = list.filter {
+                  case Alias(g: GetField, _) => false
+                  case Alias(g: GetItem, _) => false
+                  case _ => true
+                }
+                Project(newList, c)
+              case other => other
             }
-            s.resolve(name, input, resolver).getOrElse(u)
+            Sort(s.order, s.global, newChild).resolveChildren(name, resolver).getOrElse(u)
           case u @ UnresolvedAttribute(name) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
             val result = q.resolveChildren(name, resolver).getOrElse(u)
