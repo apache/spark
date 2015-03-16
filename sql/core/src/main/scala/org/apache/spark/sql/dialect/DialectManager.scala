@@ -95,19 +95,8 @@ private[sql] class DefaultDialectManager(context: SQLContext)
   }
 
   override def registerDialect(name: String, fullClassName: String): Unit = {
-    try {
-      // TODO: support  singleton object
-      val clazz = Class.forName(fullClassName)
-      val dialect = clazz.newInstance().asInstanceOf[Dialect]
-
-      registerDialect(name, dialect)
-    } catch {
-      case _: ClassNotFoundException =>
-        sys.error(s"Dialect class $fullClassName not found!")
-      case _: ClassCastException =>
-        sys.error(s"Class $fullClassName is not a subclass of " +
-          s"org.apache.spark.sql.dialect.Dialect")
-    }
+    val dialect = DefaultDialectManager.buildDialect(fullClassName)
+    registerDialect(name, dialect)
   }
 
   override def dropDialect(name: String) = {
@@ -132,6 +121,33 @@ private[sql] class DefaultDialectManager(context: SQLContext)
 }
 
 object DefaultDialectManager {
+  import scala.reflect.runtime.{universe => ru}
+  import scala.util.Try
+
   val CONF_MARKER = "spark.sql.dialects"
+
+  private[this] val rm = ru.runtimeMirror(getClass.getClassLoader)
+
+  def buildDialect(fullClassName: String): Dialect = {
+    try {
+      Try(reflectObject(fullClassName).asInstanceOf[Dialect])
+        .getOrElse(reflectClass(fullClassName).asInstanceOf[Dialect])
+    } catch {
+      case e: Throwable =>
+        sys.error(s"Failed to build class $fullClassName as a Dialect")
+    }
+  }
+
+  def reflectObject(fullClassName: String): Any = {
+    val module = rm.staticModule(fullClassName)
+    rm.reflectModule(module).instance
+  }
+
+  def reflectClass(fullClassName: String): Any = {
+    val cs = rm.staticClass(fullClassName)
+    val cons = cs.typeSignature.declaration(ru.nme.CONSTRUCTOR).asMethod
+    val cm = rm.reflectClass(cs)
+    cm.reflectConstructor(cons)()
+  }
 }
 
