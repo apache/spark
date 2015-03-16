@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.rdd.EmptyRDD
 import org.apache.spark.sql.test.TestSQLContext.{sparkContext => sc}
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 
@@ -51,5 +52,12 @@ class DataFrameImplicitsSuite extends QueryTest {
     checkAnswer(
       sc.parallelize(1 to 10).map(_.toString).toDF("stringCol"),
       (1 to 10).map(i => Row(i.toString)))
+  }
+
+  test("RDD[Row]") {
+    val rdd = (1 to 10).map(i => (i, i.toString)).toDF("intCol", "strCol").rdd
+    checkAnswer(
+      rdd.toDF("intCol", "strCol"),
+      (1 to 10).map(i => Row(i, i.toString)))
   }
 }
