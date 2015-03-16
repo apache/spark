@@ -140,11 +140,16 @@ private[sql] class CacheManager(sqlContext: SQLContext) extends Logging {
     cachedData.find(cd => plan.sameResult(cd.plan))
   }
 
+  /** Optionally returns cached data containing the given LogicalPlan. */
+  private[sql] def lookupPartofCachedData(plan: LogicalPlan): Option[CachedData] = readLock {
+    cachedData.find(cd => cd.plan.partResult(plan))
+  }
+
   /** Replaces segments of the given logical plan with cached versions where possible. */
   private[sql] def useCachedData(plan: LogicalPlan): LogicalPlan = {
     plan transformDown {
       case currentFragment =>
-        lookupCachedData(currentFragment)
+        lookupPartofCachedData(currentFragment)
           .map(_.cachedRepresentation.withOutput(currentFragment.output))
           .getOrElse(currentFragment)
     }

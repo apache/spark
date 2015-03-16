@@ -55,6 +55,15 @@ class CachedTableSuite extends QueryTest {
     uncacheTable("tempTable")
   }
 
+  test("replace the plan which is part of cached query") {
+    testData.select('key, 'value).registerTempTable("testTable")
+    testData.select('key).registerTempTable("partTable")
+    assertCached(sql("SELECT COUNT(*) FROM partTable"), 0)
+    cacheTable("testTable")
+    assertCached(sql("SELECT COUNT(*) FROM partTable"))
+    uncacheTable("testTable")
+  }
+
   test("unpersist an uncached table will not raise exception") {
     assert(None == cacheManager.lookupCachedData(testData))
     testData.unpersist(blocking = true)

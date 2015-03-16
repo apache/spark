@@ -81,6 +81,33 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
     (plan.children, children).zipped.forall(_ sameResult _)
   }
 
+  /**
+   * Returns true when the given logical plan will return part of the results of this logical plan.
+   *
+   * Since its likely undecideable to generally determine if the given plan will produce part of
+   * the results of another plan, it is okay for this function to return false, even if the results
+   * are actually one part of another. Such behavior will not affect correctness, only the
+   * application of performance enhancements like caching.  However, it is not acceptable to return
+   * true if the results could possibly be not of part of another.
+   *
+   * By default this function performs a modified version of equality that is tolerant of cosmetic
+   * differences like attribute naming and or expression id differences.  Logical operators that
+   * can do better should override this function.
+   */
+  def partResult(plan: LogicalPlan): Boolean = {
+    plan.getClass == this.getClass &&
+    plan.children.size == children.size && {
+      logDebug(s"[${plan.cleanArgs.mkString(", ")}] is part of [${cleanArgs.mkString(", ")}]")
+      !plan.cleanArgs.exists {
+        case s: Seq[_] =>
+            !cleanArgs.collect { case ss: Seq[_] if s.exists(!ss.contains(_)) => true }.isEmpty
+        case o =>
+            !cleanArgs.contains(o)
+      }
+    } &&
+    (children, plan.children).zipped.forall(_ partResult _)
+  }
+
   /** Args that have cleaned such that differences in expression id should not affect equality */
   protected lazy val cleanArgs: Seq[Any] = {
     val input = children.flatMap(_.output)
