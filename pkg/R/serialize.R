@@ -32,7 +32,7 @@ writeObject <- function(con, object, writeType = TRUE) {
          numeric = writeDouble(con, object),
          raw = writeRaw(con, object),
          list = writeList(con, object),
-         jobj = writeString(con, object$id),
+         jobj = writeJobj(con, object),
          environment = writeEnv(con, object),
          Date = writeDate(con, object),
          POSIXlt = writeTime(con, object),
@@ -42,6 +42,13 @@ writeObject <- function(con, object, writeType = TRUE) {
 
 writeVoid <- function(con) {
   # no value for NULL
+}
+
+writeJobj <- function(con, value) {
+  if (!isValidJobj(value)) {
+    stop("invalid jobj ", value$id)
+  }
+  writeString(con, value$id)
 }
 
 writeString <- function(con, value) {

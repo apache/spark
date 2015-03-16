@@ -13,6 +13,10 @@ isInstanceOf <- function(jobj, className) {
 # from the SparkRBackend.
 callJMethod <- function(objId, methodName, ...) {
   stopifnot(class(objId) == "jobj")
+  if (!isValidJobj(objId)) {
+    stop("Invalid jobj ", objId$id,
+         ". If SparkR was restarted, Spark operations need to be re-executed.")
+  }
   invokeJava(isStatic = FALSE, objId$id, methodName, ...)
 }
 

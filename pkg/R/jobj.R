@@ -8,6 +8,15 @@
 # List of object ids to be removed
 .toRemoveJobjs <- new.env(parent = emptyenv())
 
+# Check if jobj was created with the current SparkContext
+isValidJobj <- function(jobj) {
+  if (exists(".scStartTime", envir = .sparkREnv)) {
+    jobj$appId == get(".scStartTime", envir = .sparkREnv)
+  } else {
+    FALSE
+  }
+}
+
 getJobj <- function(objId) {
   newObj <- jobj(objId)
   if (exists(objId, .validJobjs)) {
@@ -27,6 +36,8 @@ jobj <- function(objId) {
   # finalizers for environments or external references pointers.
   obj <- structure(new.env(parent = emptyenv()), class = "jobj")
   obj$id <- objId
+  obj$appId <- get(".scStartTime", envir = .sparkREnv)
+
   # Register a finalizer to remove the Java object when this reference
   # is garbage collected in R
   reg.finalizer(obj, cleanup.jobj)
@@ -47,14 +58,24 @@ print.jobj <- function(x, ...) {
 }
 
 cleanup.jobj <- function(jobj) {
-  objId <- jobj$id
-  .validJobjs[[objId]] <- .validJobjs[[objId]] - 1
+  if (isValidJobj(jobj)) {
+    objId <- jobj$id
+    .validJobjs[[objId]] <- .validJobjs[[objId]] - 1
 
-  if (.validJobjs[[objId]] == 0) {
-    rm(list = objId, envir = .validJobjs)
-    # NOTE: We cannot call removeJObject here as the finalizer may be run
-    # in the middle of another RPC. Thus we queue up this object Id to be removed
-    # and then run all the removeJObject when the next RPC is called.
-    .toRemoveJobjs[[objId]] <- 1
+    if (.validJobjs[[objId]] == 0) {
+      rm(list = objId, envir = .validJobjs)
+      # NOTE: We cannot call removeJObject here as the finalizer may be run
+      # in the middle of another RPC. Thus we queue up this object Id to be removed
+      # and then run all the removeJObject when the next RPC is called.
+      .toRemoveJobjs[[objId]] <- 1
+    }
   }
+}
+
+clearJobjs <- function() {
+  valid <- ls(.validJobjs)
+  rm(list = valid, envir = .validJobjs)
+
+  removeList <- ls(.toRemoveJobjs)
+  rm(list = removeList, envir = .toRemoveJobjs)
 }
